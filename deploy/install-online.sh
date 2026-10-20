@@ -1,7 +1,29 @@
 #!/bin/sh
 # 从 GitHub Release 安装，或按本机清单卸载。目标机器不编译源码。
+# 通过 curl 管道喂给 sh 时，先把脚本落到文件再执行，避免静默下载拖断网页终端。
+if [ -z "${MIGATE_BOOTSTRAPPED:-}" ]; then
+  case "$0" in
+    sh|bash|dash|*/sh|*/bash|*/dash)
+      printf '%s\n' "正在下载 MiGate 安装脚本..." >&2
+      _migate_tmp=$(mktemp)
+      _migate_url=${MIGATE_INSTALLER_URL:-https://raw.githubusercontent.com/shusfun/MiSub/main/deploy/install-online.sh}
+      if ! curl -fL --connect-timeout 20 --retry 3 --retry-delay 2 -o "$_migate_tmp" "$_migate_url"; then
+        printf '%s\n' "无法下载安装脚本。请检查这台机器到 GitHub 的网络后重试。" >&2
+        rm -f "$_migate_tmp"
+        exit 1
+      fi
+      chmod 700 "$_migate_tmp"
+      MIGATE_BOOTSTRAPPED=1
+      if [ -r /dev/tty ] && [ -w /dev/tty ]; then
+        exec sh "$_migate_tmp" "$@" < /dev/tty
+      fi
+      exec sh "$_migate_tmp" "$@" < /dev/null
+      ;;
+  esac
+fi
 set -eu
 umask 077
+printf '%s\n' "MiGate 安装脚本已启动。" >&2
 
 repo=${MIGATE_GITHUB_REPO:-shusfun/MiSub}
 token=${MIGATE_GITHUB_TOKEN:-}
@@ -187,10 +209,11 @@ fetch_url() {
   while [ "$hops" -lt 4 ]; do
     check_url "$url" || die "下载地址被拒绝"
     header=$workdir/headers
+    printf '%s\n' "正在下载 $url" >&2
     if [ -n "$token" ]; then
-      code=$("$curl_bin" -sS --proto '=https' --config "$token_config" --max-redirs 0 -D "$header" -o "$dest" -w '%{http_code}' "$url") || die "下载失败"
+      code=$("$curl_bin" -fL --connect-timeout 20 --retry 3 --retry-delay 2 --proto '=https' --config "$token_config" --max-redirs 0 -D "$header" -o "$dest" -w '%{http_code}' "$url") || die "下载失败"
     else
-      code=$("$curl_bin" -sS --proto '=https' --max-redirs 0 -D "$header" -o "$dest" -w '%{http_code}' "$url") || die "下载失败"
+      code=$("$curl_bin" -fL --connect-timeout 20 --retry 3 --retry-delay 2 --proto '=https' --max-redirs 0 -D "$header" -o "$dest" -w '%{http_code}' "$url") || die "下载失败"
     fi
     case "$code" in
       200) return 0 ;;
