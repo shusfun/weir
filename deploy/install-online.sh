@@ -113,6 +113,15 @@ read_tty() {
   REPLY=${REPLY//$'\r'/}
 }
 
+prompt_tty() {
+  if [[ -n ${MIGATE_DEV_TTY:-} ]]; then
+    printf '%s' "$1" >&2
+  else
+    printf '%s' "$1" >/dev/tty
+  fi
+  read_tty
+}
+
 select_language() {
   if ! is_interactive; then
     LANG_CHOICE=zh
@@ -125,7 +134,7 @@ select_language() {
   echo "  1) $(msg lang_zh) (默认/default)"
   echo "  2) $(msg lang_en)"
   echo ""
-  read_tty
+  prompt_tty "$(msg enter_choice) [1]: "
   case "$REPLY" in
     2|en|EN|english|English) LANG_CHOICE=en ;;
     *) LANG_CHOICE=zh ;;
@@ -156,20 +165,12 @@ ask_role() {
   echo -e "${CYAN}  $(msg role_title)${NC}"
   echo "  1) $(msg role_control) (默认/default)"
   echo "  2) $(msg role_gate)"
-  read_tty
+  echo ""
+  prompt_tty "$(msg enter_choice) [1]: "
   case "$REPLY" in
     2|gate|Gate) ROLE=gate ;;
     *) ROLE=control ;;
   esac
-}
-
-prompt_tty() {
-  if [[ -n ${MIGATE_DEV_TTY:-} ]]; then
-    read_tty
-    return
-  fi
-  read -p "$1" REPLY < /dev/tty || REPLY=""
-  REPLY=${REPLY//$'\r'/}
 }
 
 configure_control() {
@@ -228,16 +229,20 @@ fetch_url() {
     esac
     print_info "$(msg downloading) $url"
     header=$WORKDIR/headers
+    local curl_config=()
     if [[ -n ${MIGATE_GITHUB_TOKEN:-} ]]; then
       printf 'header = "Authorization: Bearer %s"\n' "$MIGATE_GITHUB_TOKEN" > "$WORKDIR/curl-config"
       chmod 600 "$WORKDIR/curl-config"
-      code=$("$CURL_BIN" -fL --connect-timeout 20 --retry 3 --retry-delay 2 --proto '=https' --config "$WORKDIR/curl-config" --max-redirs 0 -D "$header" -o "$dest" -w '%{http_code}' "$url") || { print_error "下载失败"; exit 1; }
-    else
-      code=$("$CURL_BIN" -fL --connect-timeout 20 --retry 3 --retry-delay 2 --proto '=https' --max-redirs 0 -D "$header" -o "$dest" -w '%{http_code}' "$url") || { print_error "下载失败"; exit 1; }
+      curl_config=(--config "$WORKDIR/curl-config")
     fi
+    code=$("$CURL_BIN" --silent --show-error --connect-timeout 20 --proto '=https' "${curl_config[@]}" -D "$header" -o "$dest" -w '%{http_code}' "$url") || { print_error "下载失败"; exit 1; }
+    code=${code//$'\n'/}
     case "$code" in
       200) return 0 ;;
-      301|302|303|307|308) url=$(grep -i '^location:' "$header" | tail -n 1 | awk '{print $2}' | tr -d '\r') ;;
+      301|302|303|307|308)
+        url=$(grep -i '^location:' "$header" | tail -n 1 | awk '{print $2}' | tr -d '\r')
+        [[ -n $url ]] || { print_error "下载失败"; exit 1; }
+        ;;
       *) print_error "下载失败"; exit 1 ;;
     esac
     hops=$((hops + 1))
