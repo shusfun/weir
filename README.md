@@ -6,41 +6,39 @@
 
 ## 安装
 
-交互安装会询问角色。中心还会询问监听地址和公共 URL，直接回车使用 `127.0.0.1:19810` 与 `http://127.0.0.1:19810`。
-
-网页终端容易在静默下载时断开。请先把脚本保存下来再执行，这样能看到下载进度：
+和 Sub2API 一样，直接把脚本交给 Bash。有终端时会先选语言，再问中心的监听地址和端口；直接回车使用 `127.0.0.1:19810`。
 
 ```sh
-curl -fL --connect-timeout 20 --retry 3 -o /tmp/migate-install.sh https://raw.githubusercontent.com/shusfun/MiSub/main/deploy/install-online.sh
-sh /tmp/migate-install.sh
+curl -sSL https://raw.githubusercontent.com/shusfun/MiSub/main/deploy/install-online.sh | bash
 ```
 
-也可以直接指定：
+常用命令：
 
 ```sh
-sh /tmp/migate-install.sh control 127.0.0.1:19810 https://你的域名
-sh /tmp/migate-install.sh gate
-sh /tmp/migate-install.sh --version v0.1.1 control
+bash install-online.sh install -v v0.1.1
+bash install-online.sh upgrade
+bash install-online.sh rollback v0.1.1
+bash install-online.sh list-versions
 ```
 
-没有终端时使用上面的参数，不再提问。Gate 装好以后，后续版本由中心校验并推送，不需要再到 Gate 的机器上更新。
+没有终端时使用默认监听地址，不再提问。Gate 装好以后，后续版本由中心校验并推送。
 
 ## 卸载
 
-交互卸载会先确认，再选择范围。直接回车保留配置、初始化锁、数据和托管内核。
+交互卸载会先确认。确认后询问是否清除配置和数据，直接回车保留。
 
 ```sh
-sh /tmp/migate-install.sh uninstall
+curl -sSL https://raw.githubusercontent.com/shusfun/MiSub/main/deploy/install-online.sh | bash -s -- uninstall
 ```
 
-没有终端时必须写出 `-y`。清除范围也必须显式写出：
+没有终端时必须写出 `-y`。清除数据或托管内核必须显式写出：
 
 ```sh
-sh /tmp/migate-install.sh uninstall control -y
-sh /tmp/migate-install.sh uninstall gate --with-cores -y
-sh /tmp/migate-install.sh uninstall control --purge -y
+bash install-online.sh uninstall control -y
+bash install-online.sh uninstall gate --with-cores -y
+bash install-online.sh uninstall control --purge -y
 ```
 
-`--with-cores` 只移除清单中的托管内核。`--purge` 先备份本项目数据，再移除这些数据。数据库实例、数据库账号、1Panel、反代和 x-ui 会保留。
+`--with-cores` 只移除清单中的托管内核。`--purge` 先备份本项目数据，再移除这些数据。数据库实例、数据库账号、1Panel、反代和 x-ui 会保留。默认卸载会去掉安装锁，下次安装重新进入 setup。
 
 管理员也可以在中心的「版本发布」里卸载指定 Gate。旧 Gate 没有对应能力时保持待执行。移除内核或清除数据需要再次确认。

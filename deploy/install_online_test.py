@@ -13,17 +13,17 @@ import unittest
 
 def shell_program():
     if os.name != "nt":
-        found = shutil.which("sh")
+        found = shutil.which("bash")
         if not found:
-            raise unittest.SkipTest("sh is not installed")
+            raise unittest.SkipTest("bash is not installed")
         return found
-    candidate = pathlib.Path(r"C:\Program Files\Git\bin\sh.exe")
+    candidate = pathlib.Path(r"C:\Program Files\Git\bin\bash.exe")
     if candidate.exists():
         return str(candidate)
-    found = shutil.which("sh")
+    found = shutil.which("bash")
     if found and "system32" not in found.lower():
         return found
-    raise unittest.SkipTest("sh is not installed")
+    raise unittest.SkipTest("bash is not installed")
 
 
 def archive(version):
@@ -133,9 +133,9 @@ class OnlineInstallTests(unittest.TestCase):
         self.assertIn("没有终端", completed.stderr)
 
     def test_interactive_cancel_does_not_uninstall(self):
-        completed = self.run_script("uninstall", "control", tty="n\n")
-        self.assertNotEqual(completed.returncode, 0)
-        self.assertIn("卸载已取消", completed.stderr)
+        completed = self.run_script("uninstall", "control", tty="1\nn\n")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("卸载已取消", completed.stdout + completed.stderr)
 
     def test_interactive_retain_omits_destructive_flags(self):
         manifest = self.root / "manifest.json"
@@ -145,7 +145,7 @@ class OnlineInstallTests(unittest.TestCase):
         manager.chmod(manager.stat().st_mode | stat.S_IEXEC)
         self.env["MIGATE_MANIFEST"] = manifest.as_posix()
         self.env["MIGATE_MANAGE"] = manager.as_posix()
-        completed = self.run_script("uninstall", "gate", tty="y\n\n")
+        completed = self.run_script("uninstall", "gate", tty="1\ny\nn\n")
         self.assertEqual(completed.returncode, 0, completed.stderr)
         recorded = self.install_log.read_text(encoding="utf-8")
         self.assertIn("--confirm gate:uninstall", recorded)

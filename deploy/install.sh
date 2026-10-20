@@ -115,7 +115,13 @@ ln -sfn "releases/$version" "$base/current"
 if [ "$role" = control ]; then
  listen=${2:-127.0.0.1:19810}
  public=${3:-http://localhost:19810}
+ need_init=0
  if [ ! -f "$config/config.json" ]; then
+  need_init=1
+ elif ! grep -Eq '"installed"[[:space:]]*:[[:space:]]*true' "$config/config.json"; then
+  need_init=1
+ fi
+ if [ "$need_init" = 1 ]; then
   "$base/current/migate-control" --config "$config/config.json" --listen "$listen" --public-url "$public" --init > "$config/initialization.txt"
   chmod 0600 "$config/initialization.txt"
  fi
