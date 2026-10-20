@@ -1,10 +1,10 @@
 # MiGate
 
-中心和 Gate 使用同一份 GitHub Release。目标机器不编译源码。
+开源仓库：https://github.com/shusfun/MiSub
+
+中心和 Gate 使用同一份 GitHub Release。目标机器不编译源码。公开仓库安装不需要令牌。
 
 ## 安装
-
-私有仓库先在当前终端设置 `MIGATE_GITHUB_TOKEN`。不要把令牌写进命令历史以外的文件，也不要提交到仓库。
 
 交互安装会询问角色。中心还会询问监听地址和公共 URL，直接回车使用 `127.0.0.1:19810` 与 `http://127.0.0.1:19810`。
 
@@ -17,7 +17,7 @@ curl -fsSL https://raw.githubusercontent.com/shusfun/MiSub/main/deploy/install-o
 ```sh
 curl -fsSL https://raw.githubusercontent.com/shusfun/MiSub/main/deploy/install-online.sh | sh -s -- control 127.0.0.1:19810 https://你的域名
 curl -fsSL https://raw.githubusercontent.com/shusfun/MiSub/main/deploy/install-online.sh | sh -s -- gate
-curl -fsSL https://raw.githubusercontent.com/shusfun/MiSub/main/deploy/install-online.sh | sh -s -- --version v0.2.0 control
+curl -fsSL https://raw.githubusercontent.com/shusfun/MiSub/main/deploy/install-online.sh | sh -s -- --version v0.1.1 control
 ```
 
 没有终端时使用上面的参数，不再提问。Gate 装好以后，后续版本由中心校验并推送，不需要再到 Gate 的机器上更新。
