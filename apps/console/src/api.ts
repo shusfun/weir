@@ -170,6 +170,13 @@ subscription_naming_changed:"前缀与地区设置已被修改，请取消并重
     "输出模板缺失、无效或有多个同格式模板，请检查订阅组分配。",
   format_conversion_failed:
     "当前节点、筛选结果或模板无法转换为此客户端格式，请检查协议兼容性与空策略组。",
+  release_confirmation_required: "请确认后再拉取 Release。",
+  release_tag_refused: "版本标签不符合 9.99.999 规则。",
+  release_request_failed: "发布请求没有写入，请稍后重试。",
+  uninstall_confirmation_required: "请确认后再卸载 Gate。",
+  uninstall_mode_refused: "卸载范围无效。",
+  uninstall_scope_confirmation_required: "移除内核或清除数据需要再次确认。",
+  uninstall_request_failed: "卸载请求没有写入，请稍后重试。",
 };
 export async function api(
   path: string,

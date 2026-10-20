@@ -1,0 +1,122 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to verify
+        required: true
+        type: string
+      dry_run:
+        description: Build without publishing or changing VERSION
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      dry_run: ${{ steps.version.outputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - id: version
+        shell: bash
+        run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          python3 deploy/version.py match VERSION "$tag"
+          echo "version=$(python3 deploy/version.py check VERSION)" >> "$GITHUB_OUTPUT"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then echo "dry_run=true" >> "$GITHUB_OUTPUT"; else echo "dry_run=false" >> "$GITHUB_OUTPUT"; fi
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/cache/restore@v4
+        id: go-cache
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: release-go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            release-go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum') }}-
+            release-go-${{ runner.os }}-${{ runner.arch }}-
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Package linux/amd64
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          release="dist/migate-${VERSION}-linux-amd64"
+          mkdir -p "$release"
+          revision="$(git rev-parse HEAD)"
+          flags="-s -w -X github.com/imzyb/MiGate/internal/buildinfo.Version=${VERSION} -X github.com/imzyb/MiGate/internal/buildinfo.Revision=${revision}"
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "$flags" -o "$release/migate-control" ./apps/control
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "$flags" -o "$release/migate-gate" ./apps/gate
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "$flags" -o "$release/migate-manage" ./apps/manage
+          cp deploy/install.sh deploy/sources.json deploy/github-update.sh deploy/release_fetch.py deploy/version.py "$release/"
+          cp VERSION "$release/VERSION"
+          python3 deploy/package_release.py "$VERSION"
+      - if: steps.go-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: migate-linux-amd64
+          path: |
+            dist/migate-*-linux-amd64.tar.gz
+            dist/checksums.txt
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: migate-linux-amd64
+          path: dist
+      - name: Publish release
+        if: needs.build.outputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v${VERSION}"
+          test -s "dist/migate-${VERSION}-linux-amd64.tar.gz"
+          test -s dist/checksums.txt
+          gh release create "$tag" "dist/migate-${VERSION}-linux-amd64.tar.gz" dist/checksums.txt --title "$tag" --verify-tag

@@ -216,7 +216,13 @@ func HelperHandler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"applied":true}`))
 	})
+	mux.HandleFunc("/release-replace", releaseReplaceHandler("/opt/migate-gate", restartGateService))
+	mux.HandleFunc("/uninstall", uninstallHandler(runGateUninstall))
 	return mux
+}
+
+func restartGateService() error {
+	return runtimecmd.NewRealCommandRunner(30*time.Second).Run(context.Background(), "systemctl", "restart", "migate-gate.service")
 }
 
 func HelperHealth(ctx context.Context) error {

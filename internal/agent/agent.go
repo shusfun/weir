@@ -390,6 +390,8 @@ func (a *Agent) execute(ctx context.Context, t contracts.Task) contracts.Result 
 	var observation map[string]any
 	versionOperation := t.Operation == "core.install" || t.Operation == "core.rollback" || t.Operation == "core.clean"
 	certificateCleanup := t.Operation == "certificate.clean"
+	releaseReplace := t.Operation == releaseReplaceOperation
+	uninstalling := t.Operation == lifecycleUninstallOperation
 	if err == nil && certificateCleanup {
 		observation, err = a.cleanCertificateHistory(ctx, t)
 	}
@@ -418,7 +420,13 @@ func (a *Agent) execute(ctx context.Context, t contracts.Task) contracts.Result 
 	if err == nil && t.Operation == "outbound.catalog.probe" {
 		observation, err = a.probeCatalog(ctx, t)
 	}
-	if err == nil && !readOnly && !stateOnly && !versionOperation && !certificateCleanup {
+	if err == nil && releaseReplace {
+		observation, err = a.replaceRelease(ctx, t)
+	}
+	if err == nil && uninstalling {
+		observation, err = a.uninstallLocal(ctx, t)
+	}
+	if err == nil && !readOnly && !stateOnly && !versionOperation && !certificateCleanup && !releaseReplace && !uninstalling {
 		err = a.apply(ctx)
 	}
 	if err != nil {
@@ -754,7 +762,7 @@ func (a *Agent) mutate(t contracts.Task) error {
 		if len(t.Payload) != 1 || fmtText(t.Payload["core"]) != "xray" && fmtText(t.Payload["core"]) != "sing-box" {
 			return errors.New("invalid_managed_core")
 		}
-	case "core.restart", "core.status", "core.install", "core.rollback", "core.clean", "certificate.clean":
+	case "core.restart", "core.status", "core.install", "core.rollback", "core.clean", "certificate.clean", releaseReplaceOperation, lifecycleUninstallOperation:
 		return nil
 	default:
 		return errors.New("operation_capability_not_yet_enabled")
@@ -887,7 +895,7 @@ func (a *Agent) sendHeartbeat(ctx context.Context) {
 	if err != nil {
 		observation = map[string]any{"source": "gate-helper", "observed_at": time.Now().UTC().Format(time.RFC3339), "validity": "unknown"}
 	}
-	a.request(ctx, "POST", "/agent/heartbeat", map[string]any{"version": buildinfo.Version, "hostname": a.Config.Name, "traffic_status": status, "inbounds": inbounds, "core_status": observation, "host_status": a.observeHost(), "capabilities": []string{"core.control.v1", "core.inspect.v1", "core.diagnostics.v1", "core.versions.v1", "certificate.delivery.v1", "certificate.bind.v1", "certificate.history.v1", "routing.order.v1", "outbound.transport.v1", "outbound.trust.v1", "outbound.pool.v1", "outbound.tools.v1", "resource.enabled.v1", "inbound.enabled.v1", "host.observation.v1", "host.cpu.v1"}}, nil, true)
+	a.request(ctx, "POST", "/agent/heartbeat", map[string]any{"version": buildinfo.Version, "hostname": a.Config.Name, "traffic_status": status, "inbounds": inbounds, "core_status": observation, "host_status": a.observeHost(), "capabilities": []string{"core.control.v1", "core.inspect.v1", "core.diagnostics.v1", "core.versions.v1", "certificate.delivery.v1", "certificate.bind.v1", "certificate.history.v1", "routing.order.v1", "outbound.transport.v1", "outbound.trust.v1", "outbound.pool.v1", "outbound.tools.v1", "resource.enabled.v1", "inbound.enabled.v1", "host.observation.v1", "host.cpu.v1", "release.replace.v1", "lifecycle.uninstall.v1"}}, nil, true)
 }
 func (a *Agent) report(ctx context.Context) {
 	a.mu.Lock()

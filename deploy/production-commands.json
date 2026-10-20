@@ -80,6 +80,11 @@
     ],
     "recovery": "read-only form, canceled without saving"
   },
+  "uninstall-production.py": {
+    "scope": "none",
+    "impacts": ["lifecycle"],
+    "recovery": "Explicit user-requested default removal, not a test fixture. Manifest preview validates application-only scope; external backups precede removal; config/data/cores retained. Persist per-host outcome; resume manually from recorded scope on failure."
+  },
   "inspect-pool-tasks.py": {
     "scope": "none",
     "impacts": [

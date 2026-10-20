@@ -1,8 +1,9 @@
-param([string]$Version = '0.2.0-dev', [string]$Batch = 'B0')
+param([string]$Batch = 'B0')
 $ErrorActionPreference = 'Stop'
-if ($Version -notmatch '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$') { throw 'Invalid version' }
 $repoRoot = Split-Path $PSScriptRoot -Parent
 Push-Location $repoRoot
+$Version = (python deploy/version.py check VERSION).Trim()
+if ($LASTEXITCODE) { throw 'VERSION refused' }
 $oldGoos = $env:GOOS; $oldGoarch = $env:GOARCH; $oldCgo = $env:CGO_ENABLED
 try {
  pnpm build
@@ -16,7 +17,7 @@ try {
   go build -trimpath -ldflags $linkFlags -o (Join-Path $releaseDir "migate-$app") "./apps/$app"
   if ($LASTEXITCODE) { throw "$app compilation failed" }
  }
- Copy-Item deploy/install.sh,deploy/sources.json $releaseDir
+ Copy-Item deploy/install.sh,deploy/sources.json,deploy/github-update.sh,deploy/release_fetch.py,deploy/version.py $releaseDir
  python deploy/package-cores.py $releaseDir
  if ($LASTEXITCODE) {throw 'Pinned core packaging failed'}
  New-Item -ItemType Directory -Force (Join-Path $releaseDir 'third_party') | Out-Null

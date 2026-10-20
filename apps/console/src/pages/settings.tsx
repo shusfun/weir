@@ -1,3 +1,4 @@
+import { ReleaseUpdateCard } from "../components/release-update";
 import {SubscriptionNamingEditor} from "../components/subscription-naming";
 import {SubscriptionDefaultsEditor} from "../components/subscription-defaults";
 import {AnnouncementEditor} from "../components/global-announcement";
@@ -71,6 +72,7 @@ type Draft = {
   clear_laya_key: boolean;
 };
 const sections = [
+  {key:"release",label:"版本发布",icon:RefreshCw,description:"校验 GitHub Release 并推送 Gate"},
   {key:"subscription",label:"订阅默认处理",icon:Inbox,description:"默认处理链与订阅组覆盖"},
   {key:"announcement",label:"全局公告",icon:Inbox,description:"通知内容、发布与显示受众"},
   {key:"clients",label:"客户端目录",icon:Inbox,description:"下载、格式、平台和显示顺序"},
@@ -266,6 +268,7 @@ function SettingsEditor({
             {error}
           </p>
         )}
+        {tab === "release" && <ReleaseUpdateCard />}
         {tab === "security" && (
           <Card>
             <CardContent className="stack">

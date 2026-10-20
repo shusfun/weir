@@ -110,6 +110,14 @@ func TestCheckComparesSemanticVersions(t *testing.T) {
 			messageContains: "高于最新发布版本",
 		},
 		{
+			name:            "release candidate is unknown",
+			current:         "0.2.0-rc114",
+			latest:          "v0.2.0",
+			updateAvailable: false,
+			status:          "unknown",
+			messageContains: "无法解析",
+		},
+		{
 			name:            "unparseable current",
 			current:         "dev-build",
 			latest:          "v1.3.3",
@@ -186,23 +194,13 @@ func TestStartUsesStateAndTestMode(t *testing.T) {
 		TestMode: true,
 		Now:      func() time.Time { return time.Date(2026, 6, 19, 1, 2, 3, 0, time.UTC) },
 	}
-	response, _, started, err := service.Start(context.Background(), "v1.0.0")
-	if err != nil {
-		t.Fatalf("Start returned error: %v", err)
+	_, _, started, err := service.Start(context.Background(), "v1.0.0")
+	serviceErr, ok := err.(Error)
+	if started || !ok || serviceErr.Code != "updater_unavailable" {
+		t.Fatalf("service start must stay unavailable, started=%v err=%v", started, err)
 	}
-	if !started || response.Status != "updating" || response.Command != installerCommand {
-		t.Fatalf("unexpected response started=%v response=%#v", started, response)
-	}
-	status := service.Status()
-	if status.Status != "started" || status.CurrentVersion != "v1.0.0" {
-		t.Fatalf("unexpected status: %#v", status)
-	}
-	data, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("read log: %v", err)
-	}
-	if !strings.Contains(string(data), "WebUI requested MiGate update from v1.0.0") {
-		t.Fatalf("missing log entry: %s", string(data))
+	if status := service.Status(); status.Status != "idle" {
+		t.Fatalf("unavailable start must not change status: %#v", status)
 	}
 }
 
@@ -212,12 +210,13 @@ func TestStartReturnsConflictStatusWhenRunning(t *testing.T) {
 	if _, ok := state.Start("v1.0.0", now); !ok {
 		t.Fatal("initial start failed")
 	}
-	_, status, started, err := (Service{State: state, TestMode: true, LogPath: filepath.Join(t.TempDir(), "update.log")}).Start(context.Background(), "v1.0.1")
-	if err != nil {
-		t.Fatalf("Start returned error: %v", err)
+	_, _, started, err := (Service{State: state, TestMode: true, LogPath: filepath.Join(t.TempDir(), "update.log")}).Start(context.Background(), "v1.0.1")
+	serviceErr, ok := err.(Error)
+	if started || !ok || serviceErr.Code != "updater_unavailable" {
+		t.Fatalf("running state must not be started by the service process, started=%v err=%v", started, err)
 	}
-	if started || status.CurrentVersion != "v1.0.0" {
-		t.Fatalf("expected conflict status, started=%v status=%#v", started, status)
+	if status := state.Snapshot(); status.CurrentVersion != "v1.0.0" {
+		t.Fatalf("existing status changed: %#v", status)
 	}
 }
 
@@ -268,10 +267,10 @@ func TestStartHonorsContextCanceledDuringValidation(t *testing.T) {
 	}
 	_, _, started, err := service.Start(ctx, "v1.0.0")
 	if started {
-		t.Fatal("request canceled during validation must not start update")
+		t.Fatal("service process must not start update")
 	}
 	serviceErr, ok := err.(Error)
-	if !ok || serviceErr.Code != "request_canceled" {
+	if !ok || serviceErr.Code != "updater_unavailable" {
 		t.Fatalf("unexpected error: %#v", err)
 	}
 	if status := state.Snapshot(); status.Status != "idle" {
@@ -333,33 +332,14 @@ func TestStartNonTestModeUsesBackgroundCommandContext(t *testing.T) {
 		},
 	}
 	requestCtx, cancel := context.WithCancel(context.Background())
-	response, _, started, err := service.Start(requestCtx, "v1.0.0")
+	_, _, started, err := service.Start(requestCtx, "v1.0.0")
 	cancel()
-	if err != nil {
-		t.Fatalf("Start returned error: %v", err)
+	serviceErr, ok := err.(Error)
+	if started || !ok || serviceErr.Code != "updater_unavailable" {
+		t.Fatalf("service process must not run systemd-run, started=%v err=%v", started, err)
 	}
-	if !started || response.Status != "updating" {
-		t.Fatalf("unexpected start result started=%v response=%#v", started, response)
-	}
-	select {
-	case <-runner.entered:
-	case <-time.After(2 * time.Second):
-		t.Fatal("runner was not called")
-	}
-	runner.mu.Lock()
-	commandCtx := runner.ctxs[0]
-	runner.mu.Unlock()
-	defer close(runner.release)
-	if commandCtx == nil {
-		t.Fatal("runner context is nil")
-	}
-	if _, ok := commandCtx.Deadline(); !ok {
-		t.Fatal("runner context must have an update timeout")
-	}
-	select {
-	case <-commandCtx.Done():
-		t.Fatal("runner context must not be canceled by request cancellation")
-	default:
+	if len(runner.calls) != 0 {
+		t.Fatalf("runner calls = %#v", runner.calls)
 	}
 }
 

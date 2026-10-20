@@ -7,16 +7,16 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/imzyb/MiGate/internal/buildinfo"
 	runtimecmd "github.com/imzyb/MiGate/internal/runtime/command"
 )
 
-const DefaultCheckURL = "https://api.github.com/repos/imzyb/MiGate/releases/latest"
+const DefaultCheckURL = "https://api.github.com/repos/shusfun/MiSub/releases/latest"
 const DefaultLogPath = "/var/log/migate-update.log"
 const DefaultStatusPath = "/var/lib/migate/update-status.json"
 const stalePersistentStatusAfter = 15 * time.Minute
@@ -190,31 +190,11 @@ func (s Service) Logs(lines string) LogsResponse {
 }
 
 func (s Service) Start(ctx context.Context, currentVersion string) (StartResponse, RuntimeStatus, bool, error) {
-	current := normalizeMiGateVersionInput(currentVersion)
 	if err := ctx.Err(); err != nil {
 		return StartResponse{}, RuntimeStatus{}, false, Error{Code: "request_canceled", Detail: err.Error()}
 	}
-	if !s.TestMode {
-		if err := s.ValidateUpdaterAvailable(); err != nil {
-			return StartResponse{}, RuntimeStatus{}, false, Error{Code: "updater_unavailable", Detail: err.Error()}
-		}
-	}
-	if err := ctx.Err(); err != nil {
-		return StartResponse{}, RuntimeStatus{}, false, Error{Code: "request_canceled", Detail: err.Error()}
-	}
-	status, started := s.state().Start(current, s.now())
-	if !started {
-		return StartResponse{}, status, false, nil
-	}
-	_ = s.appendLog(fmt.Sprintf("\n[%s] WebUI requested MiGate update from %s\n", s.now().Format(time.RFC3339), current))
-	response := StartResponse{Status: "updating", Command: installerCommand, Message: status.Message}
-	if s.TestMode {
-		s.state().Finish("started", "update command accepted in test mode", s.now())
-		return response, status, true, nil
-	}
-	updateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	go s.runUpdateCommand(updateCtx, cancel)
-	return response, status, true, nil
+	_ = currentVersion
+	return StartResponse{}, RuntimeStatus{}, false, Error{Code: "updater_unavailable", Detail: "中心进程不执行替换；请由 root 更新单元拉取 Release"}
 }
 
 func (s Service) ValidateUpdaterAvailable() error {
@@ -261,8 +241,6 @@ func NormalizeMiGateVersion(version string) string {
 	return version
 }
 
-var semanticVersionPattern = regexp.MustCompile(`^([0-9]+)\.([0-9]+)\.([0-9]+)$`)
-
 func CompareMiGateVersions(current, latest string) (int, bool) {
 	currentParts, ok := parseMiGateVersion(current)
 	if !ok {
@@ -285,19 +263,11 @@ func CompareMiGateVersions(current, latest string) (int, bool) {
 
 func parseMiGateVersion(version string) ([3]int, bool) {
 	var parts [3]int
-	normalized := NormalizeMiGateVersion(version)
-	matches := semanticVersionPattern.FindStringSubmatch(normalized)
-	if matches == nil {
+	parsed, ok := buildinfo.ParseScheme(version)
+	if !ok {
 		return parts, false
 	}
-	for i := range parts {
-		value, err := strconv.Atoi(matches[i+1])
-		if err != nil {
-			return parts, false
-		}
-		parts[i] = value
-	}
-	return parts, true
+	return [3]int{parsed.Major, parsed.Minor, parsed.Patch}, true
 }
 
 func (s Service) readLogs(lines string) (string, error) {

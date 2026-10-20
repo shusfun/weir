@@ -226,6 +226,8 @@ func (s *Server) Router() *gin.Engine {
 	admin.GET("/subscription-defaults", s.getSubscriptionDefaults)
 	admin.PUT("/subscription-defaults", s.putSubscriptionDefaults)
 	admin.GET("/settings", s.getSettings)
+	admin.GET("/release", s.releaseStatus)
+	admin.POST("/release", s.requestRelease)
 	admin.POST("/announcement/preview", s.previewNotice)
 	admin.GET("/announcement", s.getAnnouncement)
 	admin.PUT("/announcement", s.putAnnouncement)

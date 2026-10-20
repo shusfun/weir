@@ -147,6 +147,30 @@ UNIT
  id migate-control >/dev/null 2>&1 || useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin migate-control
  sed -i 's/DynamicUser=yes/User=migate-control\nGroup=migate-control/' /etc/systemd/system/migate-control.service
  chown -R migate-control:migate-control "$config" "$data"
+ if [ -f "$package/github-update.sh" ]; then install -m 0755 "$package/github-update.sh" /usr/local/bin/migate-install; fi
+ if [ -f "$package/release_fetch.py" ]; then
+  install -d -m 0755 /usr/local/lib/migate
+  install -m 0644 "$package/release_fetch.py" "$package/version.py" /usr/local/lib/migate/
+ fi
+ cat > /etc/systemd/system/migate-control-update.service <<'UNIT'
+[Unit]
+Description=MiGate verified GitHub release update
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/bin/migate-install --apply-request
+UNIT
+ cat > /etc/systemd/system/migate-control-update.path <<'UNIT'
+[Unit]
+Description=Watch MiGate release request
+[Path]
+PathExists=/var/lib/migate-control/release-request.json
+Unit=migate-control-update.service
+[Install]
+WantedBy=multi-user.target
+UNIT
+ systemctl daemon-reload
+ systemctl enable --now migate-control-update.path >/dev/null 2>&1 || true
 else
  id migate-gate >/dev/null 2>&1 || useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin migate-gate
  install -d -m 0750 "$config/cores" "$config/certs" "$base/cores"
@@ -184,7 +208,7 @@ ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
 NoNewPrivileges=yes
-ReadWritePaths=/run/migate /etc/migate-gate/cores /etc/migate-gate/certs /opt/migate-gate/cores
+ReadWritePaths=/run/migate /etc/migate-gate/cores /etc/migate-gate/certs /opt/migate-gate/cores /opt/migate-gate
 [Install]
 WantedBy=multi-user.target
 UNIT

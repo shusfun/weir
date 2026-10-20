@@ -107,6 +107,9 @@ func (s *Server) retryMail(c *gin.Context) {
 	c.JSON(202, gin.H{"status": "queued"})
 }
 func (s *Server) Workers(ctx context.Context) {
+	if s.Config.Installed {
+		s.enqueueGateRelease(ctx)
+	}
 	go s.modelWorker(ctx)
 	go s.securityWorker(ctx)
 	go s.sourceWorker(ctx)

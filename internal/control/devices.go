@@ -52,6 +52,7 @@ func (s *Server) deviceRoutes(ready, admin *gin.RouterGroup) {
 	admin.GET("/devices", s.listDevices)
 	admin.POST("/devices/:id/approve", s.approveDevice)
 	admin.POST("/devices/:id/revoke", s.revokeDevice)
+	admin.POST("/devices/:id/uninstall", s.uninstallGate)
 	admin.GET("/tasks", s.listTasks)
 	admin.POST("/devices/:id/tasks", s.createTask)
 	admin.GET("/grants", s.listGrants)
@@ -570,6 +571,12 @@ func (s *Server) taskResult(c *gin.Context) {
 	if _, err = tx.Task.UpdateOne(t).SetStatus(req.Status).SetResult(req.Data).Save(ctx); err != nil {
 		failure(c, 500, "save_failed")
 		return
+	}
+	if ShouldRevokeAfterUninstall(t.Operation, req.Status) {
+		if _, err = tx.Device.UpdateOneID(t.DeviceID).SetStatus("revoked").SetPairCode("").SetPairExpires(time.Now().UTC()).Save(ctx); err != nil {
+			failure(c, 500, "save_failed")
+			return
+		}
 	}
 	if strings.HasPrefix(t.Operation, "grant.") {
 		gid := int(number(t.Payload["grant_id"]))
