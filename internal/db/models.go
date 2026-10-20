@@ -141,6 +141,7 @@ type Inbound struct {
 	RealityPublicKey      string   `json:"reality_public_key"`
 	SSMethod              string   `json:"ss_method"`
 	TLSCertFile           string   `json:"tls_cert_file"`
+	CertificateID         int64    `json:"certificate_id,omitempty"`
 	TLSKeyFile            string   `json:"tls_key_file"`
 	TLSSNI                string   `json:"tls_sni"`
 	TLSFingerprint        string   `json:"tls_fingerprint"`
@@ -301,21 +302,28 @@ func (c Client) PasswordValue() string {
 }
 
 type OutboundSettings struct {
-	Security      string   `json:"security,omitempty"`
-	Network       string   `json:"network,omitempty"`
-	TLS           bool     `json:"tls,omitempty"`
-	Reality       bool     `json:"reality,omitempty"`
-	SNI           string   `json:"sni,omitempty"`
-	Host          string   `json:"host,omitempty"`
-	Path          string   `json:"path,omitempty"`
-	Flow          string   `json:"flow,omitempty"`
-	Fingerprint   string   `json:"fp,omitempty"`
-	PublicKey     string   `json:"pbk,omitempty"`
-	ShortID       string   `json:"sid,omitempty"`
-	ALPN          []string `json:"alpn,omitempty"`
-	Method        string   `json:"method,omitempty"`
-	ServiceName   string   `json:"service_name,omitempty"`
-	AllowInsecure bool     `json:"allow_insecure,omitempty"`
+	Obfs               string   `json:"obfs,omitempty"`
+	ObfsPassword       string   `json:"obfs_password,omitempty"`
+	CongestionControl  string   `json:"congestion_control,omitempty"`
+	ZeroRTT            bool     `json:"zero_rtt,omitempty"`
+	SPKI               string   `json:"spki,omitempty"`
+	ShadowTLSVersion   int      `json:"shadowtls_version,omitempty"`
+	Security           string   `json:"security,omitempty"`
+	Network            string   `json:"network,omitempty"`
+	TLS                bool     `json:"tls,omitempty"`
+	Reality            bool     `json:"reality,omitempty"`
+	SNI                string   `json:"sni,omitempty"`
+	Host               string   `json:"host,omitempty"`
+	Path               string   `json:"path,omitempty"`
+	Flow               string   `json:"flow,omitempty"`
+	Fingerprint        string   `json:"fp,omitempty"`
+	PublicKey          string   `json:"pbk,omitempty"`
+	ShortID            string   `json:"sid,omitempty"`
+	ALPN               []string `json:"alpn,omitempty"`
+	Method             string   `json:"method,omitempty"`
+	ServiceName        string   `json:"service_name,omitempty"`
+	AllowInsecure      bool     `json:"allow_insecure,omitempty"`
+	TrustedCertificate string   `json:"trusted_certificate,omitempty"`
 }
 
 func ParseOutboundSettings(raw string) OutboundSettings {

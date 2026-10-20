@@ -1,0 +1,5 @@
+React Flow @xyflow/react 12.11.1
+Source: https://github.com/xyflow/xyflow
+Used for the retained MiGate read-only topology canvas.
+UIAble controls and cards remain the business component foundation.
+The topology graph adapter derives from MiGate commit 0998448e185b629bcb34334bee3a7188257c6240.

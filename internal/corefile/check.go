@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"golang.org/x/sys/unix"
 )
 
 // PathKind is the expected filesystem object type for a path.
@@ -91,7 +89,7 @@ func CheckPath(path string, req Requirement) Status {
 	}
 
 	if req.Readable {
-		if err := unix.Access(status.Path, unix.R_OK); err != nil {
+		if err := access(status.Path, 4); err != nil {
 			status.Err = err
 			status.Code = "read_permission_denied"
 			return status
@@ -99,7 +97,7 @@ func CheckPath(path string, req Requirement) Status {
 		status.Readable = true
 	}
 	if req.Writable {
-		if err := unix.Access(status.Path, unix.W_OK); err != nil {
+		if err := access(status.Path, 2); err != nil {
 			status.Err = err
 			status.Code = "write_permission_denied"
 			return status
@@ -107,7 +105,7 @@ func CheckPath(path string, req Requirement) Status {
 		status.Writable = true
 	}
 	if req.Executable {
-		if err := unix.Access(status.Path, unix.X_OK); err != nil {
+		if err := access(status.Path, 1); err != nil {
 			status.Err = err
 			status.Code = "execute_permission_denied"
 			return status

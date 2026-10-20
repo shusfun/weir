@@ -1,1 +1,0 @@
-function e(e){return`inbound-${e.id}-${String(e.protocol||``).trim().toLowerCase()}`}export{e as t};

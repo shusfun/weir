@@ -1,0 +1,27 @@
+name: migate-local-test
+# Explicit benchmark-only subnet avoids exhausting Docker Desktop's default
+# pools when unrelated workspaces keep their own networks. Override if needed.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${MIGATE_TEST_SUBNET:-198.18.191.0/28}
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: gate
+      POSTGRES_USER: gate
+      POSTGRES_PASSWORD: local-test-only
+    ports: ["127.0.0.1:25432:5432"]
+    tmpfs: ["/var/lib/postgresql"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gate -d gate"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--aclfile", "/etc/redis/test.acl"]
+    volumes: ["./test-redis.acl:/etc/redis/test.acl:ro"]
+    ports: ["127.0.0.1:26379:6379"]

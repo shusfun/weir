@@ -68,7 +68,7 @@ func TestParseLinksReturnsSkippedEntries(t *testing.T) {
 	if len(result.Nodes) != 1 || len(result.Skipped) != 2 {
 		t.Fatalf("unexpected parse result: %+v", result)
 	}
-	if result.Skipped[0].Protocol != "vmess" || !strings.Contains(result.Skipped[0].Reason, "not supported") {
+	if result.Skipped[0].Protocol != "vmess" || !strings.Contains(result.Skipped[0].Reason, "invalid vmess") {
 		t.Fatalf("expected vmess skip reason, got %+v", result.Skipped[0])
 	}
 }

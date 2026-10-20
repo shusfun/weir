@@ -1,0 +1,10 @@
+{
+  "B0": {
+    "description": "Close the existing guestbook/cache/delete-transaction and naming-selector fixes",
+    "workflows": ["browser-guestbook.cjs", "browser-subscription-naming.cjs"]
+  },
+  "B1": {
+    "description": "Subscription protocols and complete outbound pool interaction, task receipts, failures and ownership",
+    "workflows": ["browser-outbound-pools.cjs", "browser-protocols.cjs"]
+  }
+}

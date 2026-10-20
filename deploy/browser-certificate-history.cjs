@@ -1,0 +1,41 @@
+require('./production-guard.cjs');
+const { chromium } = require('playwright');
+const fs = require('fs'), path = require('path');
+let browser;
+(async () => {
+  const state = JSON.parse(fs.readFileSync(path.join(process.env.LOCALAPPDATA, 'MiGate/operations/deployment.json'), 'utf8'));
+  browser = await chromium.launch({ channel: 'chrome', args: ['--no-proxy-server', '--host-resolver-rules=MAP sub.caowo.baby 127.0.0.1:19443'] });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  await context.addCookies([{ name: 'migate_session', value: state.admin_cookie.slice('migate_session='.length), domain: 'sub.caowo.baby', path: '/', secure: true, httpOnly: true }]);
+  const page = await context.newPage(), errors = [], checks = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto(`https://sub.caowo.baby/devices/${state.device_id}?tab=certificates`);
+  const panel = page.getByRole('heading', { name: '证书历史版本', exact: true }).locator('xpath=ancestor::*[@data-slot="card"][1]');
+  const cleanup = panel.getByRole('button', { name: /^清理历史版本/ });
+  await cleanup.waitFor();
+  if (!(await cleanup.isEnabled())) throw Error('Actual registered history has no cleanup candidates');
+  for (const width of [1440, 1280, 768, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await panel.scrollIntoViewIfNeeded();
+    await page.waitForFunction(() => document.documentElement.scrollWidth <= innerWidth, null, { timeout: 2000 });
+    await page.screenshot({ path: `docs/evidence/certificate-history-${width}.png`, fullPage: true });
+  }
+  await cleanup.click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('heading', { name: '确认清理证书历史', exact: true }).waitFor();
+  await page.screenshot({ path: 'docs/evidence/certificate-history-confirm-390.png', fullPage: true });
+  const response = page.waitForResponse(r => /\/devices\/\d+\/tasks$/.test(r.url()) && r.request().method() === 'POST');
+  await dialog.getByRole('button', { name: '确认清理历史', exact: true }).click();
+  const result = await response;
+  if (result.status() !== 202) throw Error('Cleanup did not queue an actual task');
+  const task = await result.json();
+  await panel.getByRole('status').filter({ hasText: `任务 #${task.id}` }).waitFor();
+  checks.push('actual registered history displayed four widths, preservation states, confirmation and 202 queued status; no optimistic deletion');
+  await panel.getByRole('status').filter({ hasText: `任务 #${task.id}` }).filter({ hasText: '已完成' }).waitFor({ timeout: 90000 });
+  await page.screenshot({ path: 'docs/evidence/certificate-history-applied-390.png', fullPage: true });
+  checks.push('actual device applied receipt shown in panel after task polling');
+  if (errors.length) throw Error('Certificate history runtime error');
+  fs.writeFileSync('docs/evidence/certificate-history-ui.json', JSON.stringify({ version: await page.evaluate(async () => (await (await fetch('/api/v1/admin/overview')).json()).version), date: new Date().toISOString(), task_id: task.id, checks, visual: 'captured; human review pending' }, null, 2));
+  await browser.close();
+  console.log('Actual certificate history, confirmation and queued task UI passed');
+})().catch(async e => { if (browser) await browser.close(); console.error(e.message); process.exitCode = 1; });

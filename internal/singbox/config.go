@@ -88,14 +88,16 @@ type ObfsConfig struct {
 
 // TLSConfig holds TLS settings for the inbound.
 type TLSConfig struct {
-	Enabled         bool           `json:"enabled"`
-	CertificatePath string         `json:"certificate_path,omitempty"`
-	KeyPath         string         `json:"key_path,omitempty"`
-	ServerName      string         `json:"server_name,omitempty"`
-	ALPN            []string       `json:"alpn,omitempty"`
-	UTLS            *UTLSConfig    `json:"utls,omitempty"`
-	Reality         *RealityConfig `json:"reality,omitempty"`
-	Insecure        bool           `json:"insecure,omitempty"`
+	CertificatePublicKeySHA256 []string       `json:"certificate_public_key_sha256,omitempty"`
+	Certificate                []string       `json:"certificate,omitempty"`
+	Enabled                    bool           `json:"enabled"`
+	CertificatePath            string         `json:"certificate_path,omitempty"`
+	KeyPath                    string         `json:"key_path,omitempty"`
+	ServerName                 string         `json:"server_name,omitempty"`
+	ALPN                       []string       `json:"alpn,omitempty"`
+	UTLS                       *UTLSConfig    `json:"utls,omitempty"`
+	Reality                    *RealityConfig `json:"reality,omitempty"`
+	Insecure                   bool           `json:"insecure,omitempty"`
 }
 
 type UTLSConfig struct {
@@ -111,17 +113,22 @@ type RealityConfig struct {
 
 // OutboundConfig is a sing-box outbound configuration.
 type OutboundConfig struct {
-	Type       string           `json:"type"`
-	Tag        string           `json:"tag"`
-	Server     string           `json:"server,omitempty"`
-	ServerPort int              `json:"server_port,omitempty"`
-	Username   string           `json:"username,omitempty"`
-	Password   string           `json:"password,omitempty"`
-	Method     string           `json:"method,omitempty"`
-	UUID       string           `json:"uuid,omitempty"`
-	Flow       string           `json:"flow,omitempty"`
-	TLS        *TLSConfig       `json:"tls,omitempty"`
-	Transport  *TransportConfig `json:"transport,omitempty"`
+	Obfs              *ObfsConfig      `json:"obfs,omitempty"`
+	CongestionControl string           `json:"congestion_control,omitempty"`
+	ZeroRTTHandshake  bool             `json:"zero_rtt_handshake,omitempty"`
+	Version           int              `json:"version,omitempty"`
+	Type              string           `json:"type"`
+	Tag               string           `json:"tag"`
+	Server            string           `json:"server,omitempty"`
+	ServerPort        int              `json:"server_port,omitempty"`
+	Username          string           `json:"username,omitempty"`
+	Password          string           `json:"password,omitempty"`
+	Method            string           `json:"method,omitempty"`
+	UUID              string           `json:"uuid,omitempty"`
+	Flow              string           `json:"flow,omitempty"`
+	Security          string           `json:"security,omitempty"`
+	TLS               *TLSConfig       `json:"tls,omitempty"`
+	Transport         *TransportConfig `json:"transport,omitempty"`
 }
 
 type TransportConfig struct {
@@ -141,7 +148,9 @@ type RouteRule struct {
 	IPCIDR   []string `json:"ip_cidr,omitempty"`
 	Port     []int    `json:"port,omitempty"`
 	Protocol []string `json:"protocol,omitempty"`
-	Outbound string   `json:"outbound"`
+	Outbound string   `json:"outbound,omitempty"`
+	Action   string   `json:"action,omitempty"`
+	User     []string `json:"auth_user,omitempty"`
 }
 
 type ExperimentalConfig struct {
@@ -410,10 +419,17 @@ func BuildConfigWithOutboundsOptions(inbounds []db.Inbound, outbounds []db.Outbo
 			if !db.OutboundSupportsCore(outbound, db.CoreSingbox) {
 				return Config{}, fmt.Errorf("routing rule %d targets outbound %q that does not support sing-box", rule.ID, outbound.Tag)
 			}
-			if isRemovedSingboxOutbound(outbound) {
-				continue
-			}
 			sr := RouteRule{Outbound: db.GeneratedOutboundTag(db.CoreSingbox, outbound.ID, rule.OutboundTag)}
+			if isRemovedSingboxOutbound(outbound) {
+				if db.NormalizeOutboundProtocol(outbound.Protocol) != "blackhole" {
+					return Config{}, fmt.Errorf("unsupported route action")
+				}
+				sr.Outbound = ""
+				sr.Action = "reject"
+			}
+			if rule.ClientID > 0 {
+				sr.User = []string{fmt.Sprintf("grant-%d", rule.ClientID)}
+			}
 			if rule.InboundID > 0 {
 				if actual, ok := inboundTagsByID[rule.InboundID]; ok {
 					sr.Inbound = []string{actual}
@@ -628,9 +644,26 @@ func buildOutbound(outbound db.Outbound) (OutboundConfig, error) {
 	case "dns":
 		return OutboundConfig{}, fmt.Errorf("dns outbound is not supported by sing-box 1.13+; use route rule actions instead")
 	case "socks":
-		return OutboundConfig{Type: "socks", Tag: tag, Server: outbound.Address, ServerPort: outbound.Port, Username: strings.TrimSpace(outbound.Username), Password: outbound.Password}, nil
+		cfg := OutboundConfig{Type: "socks", Tag: tag, Server: outbound.Address, ServerPort: outbound.Port, Username: strings.TrimSpace(outbound.Username), Password: outbound.Password}
+		applyOutboundSettings(&cfg, db.ParseOutboundSettings(outbound.SettingsJSON))
+		return cfg, nil
 	case "http", "https":
-		return OutboundConfig{Type: "http", Tag: tag, Server: outbound.Address, ServerPort: outbound.Port, Username: strings.TrimSpace(outbound.Username), Password: outbound.Password}, nil
+		cfg := OutboundConfig{Type: "http", Tag: tag, Server: outbound.Address, ServerPort: outbound.Port, Username: strings.TrimSpace(outbound.Username), Password: outbound.Password}
+		settings := db.ParseOutboundSettings(outbound.SettingsJSON)
+		if protocol == "https" && settings.Security == "" {
+			settings.Security = "tls"
+			settings.TLS = true
+		}
+		if (settings.Security == "tls" || settings.TLS) && len(settings.ALPN) == 0 {
+			settings.ALPN = []string{"http/1.1"}
+		}
+		applyOutboundSettings(&cfg, settings)
+		return cfg, nil
+	case "vmess":
+		cfg := OutboundConfig{Type: "vmess", Tag: tag, Server: outbound.Address, ServerPort: outbound.Port, UUID: strings.TrimSpace(outbound.Username), Security: "auto"}
+		cfg.Security = firstNonEmpty(db.ParseOutboundSettings(outbound.SettingsJSON).Method, "auto")
+		applyOutboundSettings(&cfg, db.ParseOutboundSettings(outbound.SettingsJSON))
+		return cfg, nil
 	case "vless":
 		settings := db.ParseOutboundSettings(outbound.SettingsJSON)
 		cfg := OutboundConfig{Type: "vless", Tag: tag, Server: outbound.Address, ServerPort: outbound.Port, UUID: strings.TrimSpace(outbound.Username), Flow: strings.TrimSpace(settings.Flow)}
@@ -645,12 +678,33 @@ func buildOutbound(outbound db.Outbound) (OutboundConfig, error) {
 		cfg := OutboundConfig{Type: "shadowsocks", Tag: tag, Server: outbound.Address, ServerPort: outbound.Port, Method: firstNonEmpty(outbound.Username, settings.Method, "aes-128-gcm"), Password: outbound.Password}
 		applyOutboundSettings(&cfg, settings)
 		return cfg, nil
-	case "hysteria2":
-		return OutboundConfig{Type: "hysteria2", Tag: tag, Server: outbound.Address, ServerPort: outbound.Port, Password: firstNonEmpty(outbound.Password, outbound.Username)}, nil
-	case "tuic":
-		return OutboundConfig{Type: "tuic", Tag: tag, Server: outbound.Address, ServerPort: outbound.Port, UUID: strings.TrimSpace(outbound.Username), Password: outbound.Password}, nil
-	case "shadowtls":
-		return OutboundConfig{Type: "shadowtls", Tag: tag, Server: outbound.Address, ServerPort: outbound.Port, Password: firstNonEmpty(outbound.Password, outbound.Username)}, nil
+	case "hysteria2", "tuic", "shadowtls", "anytls":
+		settings, err := db.ManagedOutboundSettings(outbound)
+		if err != nil {
+			return OutboundConfig{}, err
+		}
+		// Legacy basic profiles still need protocol-required TLS defaults.
+		if !settings.TLS {
+			settings.TLS = true
+			settings.Security = "tls"
+		}
+		cfg := OutboundConfig{Type: protocol, Tag: tag, Server: outbound.Address, ServerPort: outbound.Port, Password: outbound.Password}
+		if protocol == "tuic" {
+			cfg.UUID = outbound.Username
+			cfg.CongestionControl = settings.CongestionControl
+			cfg.ZeroRTTHandshake = settings.ZeroRTT
+		}
+		if protocol == "shadowtls" {
+			cfg.Version = settings.ShadowTLSVersion
+			if cfg.Version == 0 {
+				cfg.Version = 3
+			}
+		}
+		if settings.Obfs != "" {
+			cfg.Obfs = &ObfsConfig{Type: settings.Obfs, Password: settings.ObfsPassword}
+		}
+		applyOutboundSettings(&cfg, settings)
+		return cfg, nil
 	default:
 		return OutboundConfig{}, fmt.Errorf("unsupported outbound protocol: %s", outbound.Protocol)
 	}
@@ -667,11 +721,17 @@ func applyOutboundSettings(cfg *OutboundConfig, settings db.OutboundSettings) {
 	}
 	if security == "tls" || security == "reality" {
 		tls := &TLSConfig{Enabled: true}
+		if settings.SPKI != "" {
+			tls.CertificatePublicKeySHA256 = []string{settings.SPKI}
+		}
 		if settings.SNI != "" {
 			tls.ServerName = settings.SNI
 		}
 		if len(settings.ALPN) > 0 {
 			tls.ALPN = settings.ALPN
+		}
+		if settings.TrustedCertificate != "" {
+			tls.Certificate = strings.Split(strings.TrimSpace(settings.TrustedCertificate), "\n")
 		}
 		if settings.AllowInsecure {
 			tls.Insecure = true

@@ -1,0 +1,3 @@
+# Disposable localhost test container only; never use this credential in production.
+user default on nopass ~* &* +@all
+user migate on >local-test-only ~migate:* &migate:* -@all +ping +hello +get +set +del +getdel +incr +expire +scan +eval +evalsha +script|load +pttl +dump +restore +unlink +client|setinfo

@@ -1,0 +1,34 @@
+[
+  {
+    "core": "xray",
+    "version": "26.3.27",
+    "recommended": true,
+    "file": "dist/cores/v26.3.27/xray",
+    "sha256": "8255dd939c34cf966cc91517b6324dd3c8d0bcf49ffac8beca049a38c46845ed",
+    "source": "https://github.com/XTLS/Xray-core/tree/v26.3.27",
+    "license": "MPL-2.0",
+    "changes": "Unmodified official linux-amd64 binary"
+  },
+  {
+    "core": "xray",
+    "version": "26.10.17",
+    "compatibility": "REALITY 需要 MLKEM 握手；sing-box 1.14.3 REALITY 客户端不兼容。混合使用 Xray / sing-box 客户端时保留 26.3.27。仅 Xray 客户端已单独验证。",
+    "file": "dist/cores/v26.10.17/xray",
+    "sha256": "6771b2b2700dee175357024738ad579de1c3f2c49eec0257e737d5aa38d12fed",
+    "archive_sha256": "ecdd54eccd24c4c21a8f00968e7dbf7f5996da92383d2321170b560dc4a95158",
+    "archive": "https://github.com/XTLS/Xray-core/releases/download/v26.10.17/Xray-linux-64.zip",
+    "source": "https://github.com/XTLS/Xray-core/tree/v26.10.17",
+    "license": "MPL-2.0",
+    "changes": "Unmodified official linux-amd64 binary"
+  },
+  {
+    "core": "sing-box",
+    "version": "1.14.3-migate.stats1",
+    "file": "dist/cores/sing-box-1.14.3-stats/sing-box",
+    "sha256": "2a5d01fffe5ef934eb6ea227796b160df4ca45fe05fb25939a6ced89de1018a1",
+    "source": "https://github.com/SagerNet/sing-box/tree/v1.14.3",
+    "module_sum": "h1:cBg8TP5SPWoMAlWqTqbSNdHGKPUciZisjQbLtqFlMZA=",
+    "license": "GPL-3.0-or-later",
+    "changes": "Build tags with_quic,with_utls,with_v2ray_api; version label; corresponding source/build bundle included"
+  }
+]

@@ -1,0 +1,2 @@
+import {Monitor,Smartphone,Globe,Shield} from "lucide-react";
+export function ClientIcon({icon,data}:{icon:string;data?:string}){if((data?.startsWith("data:image/png;base64,")||data?.startsWith("data:image/jpeg;base64,")))return <img src={data} alt="" width={28} height={28} className="catalog-uploaded-icon"/>;const Icon=icon==="phone"?Smartphone:icon==="shield"?Shield:icon==="globe"?Globe:Monitor;return <Icon size={22}/>;}

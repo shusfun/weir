@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -209,6 +210,28 @@ func TestNewGRPCStatsClientHonorsCanceledContext(t *testing.T) {
 	cancel()
 	if _, err := NewGRPCStatsClientWithEngineAndService(ctx, "127.0.0.1:10085", "xray", "xray.app.stats.command.StatsService"); err != context.Canceled {
 		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+}
+
+func TestGRPCTrailersOnlyAndMissingStatusFailClosed(t *testing.T) {
+	for _, status := range []string{"12", ""} {
+		t.Run("status_"+status, func(t *testing.T) {
+			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/grpc")
+				if status != "" {
+					w.Header().Set("Grpc-Status", status)
+					w.Header().Set("Grpc-Message", "unknown%20service")
+				}
+				w.WriteHeader(200)
+			}))
+			server.EnableHTTP2 = true
+			server.StartTLS()
+			defer server.Close()
+			client := &GRPCStatsClient{baseURL: server.URL, addr: server.URL, service: "missing", engine: "singbox", transport: server.Client().Transport}
+			if _, err := client.QueryAllStats(context.Background()); err == nil {
+				t.Fatal("missing gRPC service accepted as healthy zero traffic")
+			}
+		})
 	}
 }
 

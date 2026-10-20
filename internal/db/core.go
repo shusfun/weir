@@ -26,6 +26,7 @@ var singboxInboundProtocols = map[string]bool{
 }
 
 var sharedOutboundProtocols = map[string]bool{
+	"vmess":       true,
 	"socks":       true,
 	"socks5":      true,
 	"http":        true,
@@ -36,6 +37,7 @@ var sharedOutboundProtocols = map[string]bool{
 }
 
 var singboxOnlyOutboundProtocols = map[string]bool{
+	"anytls":    true,
 	"hysteria2": true,
 	"tuic":      true,
 	"shadowtls": true,
@@ -57,6 +59,8 @@ var fullOutboundProtocols = map[string]bool{
 }
 
 var basicOutboundProtocols = map[string]bool{
+	"anytls":      true,
+	"vmess":       true,
 	"vless":       true,
 	"trojan":      true,
 	"shadowsocks": true,
@@ -177,11 +181,11 @@ func ValidateOutboundProfile(outbound Outbound) error {
 		}
 	}
 	switch protocol {
-	case "vless":
+	case "vless", "vmess":
 		if !IsUUID(outbound.Username) {
 			return fmt.Errorf("vless outbound requires valid uuid in username")
 		}
-	case "trojan":
+	case "trojan", "anytls":
 		if strings.TrimSpace(outbound.Password) == "" {
 			return fmt.Errorf("trojan outbound requires password")
 		}

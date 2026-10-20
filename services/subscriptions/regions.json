@@ -1,0 +1,1172 @@
+[
+  {
+    "name": "香港",
+    "keywords": [
+      "HK",
+      "HKG",
+      "HKT",
+      "香港",
+      "Hong Kong",
+      "HongKong"
+    ],
+    "emoji": "🇭🇰"
+  },
+  {
+    "name": "台湾",
+    "keywords": [
+      "TW",
+      "TPE",
+      "台湾",
+      "台北",
+      "Taiwan",
+      "Taipei"
+    ],
+    "emoji": "🇨🇳"
+  },
+  {
+    "name": "新加坡",
+    "keywords": [
+      "SG",
+      "SIN",
+      "新加坡",
+      "Singapore"
+    ],
+    "emoji": "🇸🇬"
+  },
+  {
+    "name": "日本",
+    "keywords": [
+      "JP",
+      "JPN",
+      "NRT",
+      "HND",
+      "KIX",
+      "FUK",
+      "东京",
+      "大阪",
+      "日本",
+      "Japan",
+      "Tokyo",
+      "Osaka",
+      "Fukuoka",
+      "Yokohama"
+    ],
+    "emoji": "🇯🇵"
+  },
+  {
+    "name": "美国",
+    "keywords": [
+      "US",
+      "USA",
+      "LAX",
+      "SFO",
+      "SEA",
+      "JFK",
+      "NYC",
+      "ORD",
+      "DFW",
+      "IAD",
+      "美国",
+      "United States",
+      "America",
+      "Los Angeles",
+      "New York",
+      "San Francisco",
+      "Seattle",
+      "Chicago",
+      "洛杉矶",
+      "纽约",
+      "旧金山",
+      "西雅图",
+      "芝加哥"
+    ],
+    "emoji": "🇺🇸"
+  },
+  {
+    "name": "韩国",
+    "keywords": [
+      "KR",
+      "KOR",
+      "ICN",
+      "韩国",
+      "首尔",
+      "Korea",
+      "Seoul"
+    ],
+    "emoji": "🇰🇷"
+  },
+  {
+    "name": "英国",
+    "keywords": [
+      "UK",
+      "GB",
+      "LHR",
+      "LGW",
+      "LON",
+      "英国",
+      "Britain",
+      "London",
+      "Manchester",
+      "伦敦",
+      "曼彻斯特"
+    ],
+    "emoji": "🇬🇧"
+  },
+  {
+    "name": "德国",
+    "keywords": [
+      "DE",
+      "DEU",
+      "FRA",
+      "MUC",
+      "德国",
+      "Germany",
+      "Frankfurt",
+      "Berlin",
+      "Munich",
+      "法兰克福",
+      "柏林",
+      "慕尼黑"
+    ],
+    "emoji": "🇩🇪"
+  },
+  {
+    "name": "法国",
+    "keywords": [
+      "FR",
+      "CDG",
+      "ORY",
+      "法国",
+      "France",
+      "Paris",
+      "Lyon",
+      "Marseille",
+      "巴黎",
+      "里昂",
+      "马赛"
+    ],
+    "emoji": "🇫🇷"
+  },
+  {
+    "name": "加拿大",
+    "keywords": [
+      "CA",
+      "CAN",
+      "YVR",
+      "YYZ",
+      "加拿大",
+      "Canada",
+      "Toronto",
+      "Vancouver",
+      "Montreal",
+      "多伦多",
+      "温哥华",
+      "蒙特利尔"
+    ],
+    "emoji": "🇨🇦"
+  },
+  {
+    "name": "澳大利亚",
+    "keywords": [
+      "AU",
+      "AUS",
+      "SYD",
+      "MEL",
+      "BNE",
+      "PER",
+      "澳大利亚",
+      "Australia",
+      "Sydney",
+      "Melbourne",
+      "Brisbane",
+      "Perth",
+      "悉尼",
+      "墨尔本",
+      "布里斯班",
+      "珀斯"
+    ],
+    "emoji": "🇦🇺"
+  },
+  {
+    "name": "荷兰",
+    "keywords": [
+      "NL",
+      "NLD",
+      "AMS",
+      "荷兰",
+      "Netherlands",
+      "Amsterdam",
+      "Rotterdam",
+      "阿姆斯特丹",
+      "鹿特丹"
+    ],
+    "emoji": "🇳🇱"
+  },
+  {
+    "name": "俄罗斯",
+    "keywords": [
+      "RU",
+      "RUS",
+      "SVO",
+      "DME",
+      "俄罗斯",
+      "Russia",
+      "Moscow",
+      "Saint Petersburg",
+      "莫斯科",
+      "圣彼得堡"
+    ],
+    "emoji": "🇷🇺"
+  },
+  {
+    "name": "印度",
+    "keywords": [
+      "IN",
+      "IND",
+      "BOM",
+      "DEL",
+      "BLR",
+      "印度",
+      "India",
+      "Mumbai",
+      "Delhi",
+      "Bangalore",
+      "孟买",
+      "德里",
+      "班加罗尔"
+    ],
+    "emoji": "🇮🇳"
+  },
+  {
+    "name": "土耳其",
+    "keywords": [
+      "TR",
+      "TUR",
+      "IST",
+      "土耳其",
+      "Turkey",
+      "Istanbul",
+      "Ankara",
+      "伊斯坦布尔",
+      "安卡拉"
+    ],
+    "emoji": "🇹🇷"
+  },
+  {
+    "name": "孟加拉",
+    "keywords": [
+      "BD",
+      "BGD",
+      "DAC",
+      "孟加拉",
+      "孟加拉国",
+      "Bangladesh",
+      "Dhaka",
+      "达卡"
+    ],
+    "emoji": "🇧🇩"
+  },
+  {
+    "name": "巴基斯坦",
+    "keywords": [
+      "PK",
+      "PAK",
+      "ISB",
+      "LHE",
+      "巴基斯坦",
+      "Pakistan",
+      "Islamabad",
+      "Lahore",
+      "伊斯兰堡",
+      "拉合尔"
+    ],
+    "emoji": "🇵🇰"
+  },
+  {
+    "name": "马来西亚",
+    "keywords": [
+      "MY",
+      "MYS",
+      "KUL",
+      "马来西亚",
+      "Malaysia",
+      "Kuala Lumpur",
+      "吉隆坡"
+    ],
+    "emoji": "🇲🇾"
+  },
+  {
+    "name": "泰国",
+    "keywords": [
+      "TH",
+      "THA",
+      "BKK",
+      "泰国",
+      "Thailand",
+      "Bangkok",
+      "Pattaya",
+      "曼谷",
+      "芭提雅"
+    ],
+    "emoji": "🇹🇭"
+  },
+  {
+    "name": "越南",
+    "keywords": [
+      "VN",
+      "VNM",
+      "SGN",
+      "HAN",
+      "越南",
+      "Vietnam",
+      "Ho Chi Minh City",
+      "Hanoi",
+      "胡志明市",
+      "河内"
+    ],
+    "emoji": "🇻🇳"
+  },
+  {
+    "name": "菲律宾",
+    "keywords": [
+      "PH",
+      "PHL",
+      "MNL",
+      "CEB",
+      "菲律宾",
+      "Philippines",
+      "Manila",
+      "Cebu",
+      "马尼拉",
+      "宿务"
+    ],
+    "emoji": "🇵🇭"
+  },
+  {
+    "name": "印尼",
+    "keywords": [
+      "ID",
+      "IDN",
+      "CGK",
+      "印尼",
+      "印度尼西亚",
+      "Indonesia",
+      "Jakarta",
+      "Surabaya",
+      "Bandung",
+      "雅加达",
+      "泗水",
+      "万隆"
+    ],
+    "emoji": "🇮🇩"
+  },
+  {
+    "name": "文莱",
+    "keywords": [
+      "BN",
+      "BRN",
+      "BWN",
+      "文莱",
+      "Brunei",
+      "Bandar Seri Begawan",
+      "斯里巴加湾市"
+    ],
+    "emoji": "🇧🇳"
+  },
+  {
+    "name": "柬埔寨",
+    "keywords": [
+      "KH",
+      "KHM",
+      "PNH",
+      "柬埔寨",
+      "Cambodia",
+      "Phnom Penh",
+      "金边"
+    ],
+    "emoji": "🇰🇭"
+  },
+  {
+    "name": "老挝",
+    "keywords": [
+      "LA",
+      "LAO",
+      "VTE",
+      "老挝",
+      "Laos",
+      "Vientiane",
+      "万象"
+    ],
+    "emoji": "🇱🇦"
+  },
+  {
+    "name": "缅甸",
+    "keywords": [
+      "MM",
+      "MMR",
+      "RGN",
+      "缅甸",
+      "Myanmar",
+      "Burma",
+      "Yangon",
+      "Rangoon",
+      "仰光"
+    ],
+    "emoji": "🇲🇲"
+  },
+  {
+    "name": "瑞士",
+    "keywords": [
+      "CH",
+      "CHE",
+      "ZRH",
+      "GVA",
+      "瑞士",
+      "Switzerland",
+      "Zurich",
+      "Geneva",
+      "苏黎世",
+      "日内瓦"
+    ],
+    "emoji": "🇨🇭"
+  },
+  {
+    "name": "意大利",
+    "keywords": [
+      "IT",
+      "ITA",
+      "FCO",
+      "MXP",
+      "意大利",
+      "Italy",
+      "Rome",
+      "Milan",
+      "Naples",
+      "罗马",
+      "米兰",
+      "那不勒斯"
+    ],
+    "emoji": "🇮🇹"
+  },
+  {
+    "name": "西班牙",
+    "keywords": [
+      "ES",
+      "ESP",
+      "MAD",
+      "BCN",
+      "西班牙",
+      "Spain",
+      "Madrid",
+      "Barcelona",
+      "马德里",
+      "巴塞罗那"
+    ],
+    "emoji": "🇪🇸"
+  },
+  {
+    "name": "巴西",
+    "keywords": [
+      "BR",
+      "BRA",
+      "GRU",
+      "GIG",
+      "巴西",
+      "Brazil",
+      "São Paulo",
+      "Rio de Janeiro",
+      "圣保罗",
+      "里约"
+    ],
+    "emoji": "🇧🇷"
+  },
+  {
+    "name": "阿根廷",
+    "keywords": [
+      "AR",
+      "ARG",
+      "EZE",
+      "阿根廷",
+      "Argentina",
+      "Buenos Aires",
+      "布宜诺斯艾利斯"
+    ],
+    "emoji": "🇦🇷"
+  },
+  {
+    "name": "墨西哥",
+    "keywords": [
+      "MX",
+      "MEX",
+      "墨西哥",
+      "Mexico",
+      "Mexico City",
+      "墨西哥城"
+    ],
+    "emoji": "🇲🇽"
+  },
+  {
+    "name": "哥伦比亚",
+    "keywords": [
+      "CO",
+      "COL",
+      "BOG",
+      "哥伦比亚",
+      "Colombia",
+      "Bogota",
+      "Bogotá",
+      "波哥大"
+    ],
+    "emoji": "🇨🇴"
+  },
+  {
+    "name": "秘鲁",
+    "keywords": [
+      "PE",
+      "PER",
+      "LIM",
+      "秘鲁",
+      "Peru",
+      "Lima",
+      "利马"
+    ],
+    "emoji": "🇵🇪"
+  },
+  {
+    "name": "南非",
+    "keywords": [
+      "ZA",
+      "ZAF",
+      "JNB",
+      "CPT",
+      "南非",
+      "South Africa",
+      "Johannesburg",
+      "Cape Town",
+      "约翰内斯堡",
+      "开普敦"
+    ],
+    "emoji": "🇿🇦"
+  },
+  {
+    "name": "埃及",
+    "keywords": [
+      "EG",
+      "EGY",
+      "CAI",
+      "埃及",
+      "Egypt",
+      "Cairo",
+      "开罗"
+    ],
+    "emoji": "🇪🇬"
+  },
+  {
+    "name": "以色列",
+    "keywords": [
+      "IL",
+      "ISR",
+      "TLV",
+      "以色列",
+      "Israel",
+      "Tel Aviv",
+      "Jerusalem",
+      "特拉维夫",
+      "耶路撒冷"
+    ],
+    "emoji": "🇮🇱"
+  },
+  {
+    "name": "阿联酋",
+    "keywords": [
+      "AE",
+      "ARE",
+      "DXB",
+      "AUH",
+      "阿联酋",
+      "UAE",
+      "Dubai",
+      "Abu Dhabi",
+      "Sharjah",
+      "迪拜",
+      "阿布扎比",
+      "沙迦"
+    ],
+    "emoji": "🇦🇪"
+  },
+  {
+    "name": "阿曼",
+    "keywords": [
+      "OM",
+      "OMN",
+      "MCT",
+      "阿曼",
+      "Oman",
+      "Muscat",
+      "马斯喀特"
+    ],
+    "emoji": "🇴🇲"
+  },
+  {
+    "name": "沙特",
+    "keywords": [
+      "SA",
+      "SAU",
+      "RUH",
+      "JED",
+      "沙特",
+      "Saudi Arabia",
+      "Riyadh",
+      "Jeddah",
+      "利雅得",
+      "吉达"
+    ],
+    "emoji": "🇸🇦"
+  },
+  {
+    "name": "波兰",
+    "keywords": [
+      "PL",
+      "POL",
+      "WAW",
+      "波兰",
+      "Poland",
+      "Warsaw",
+      "Krakow",
+      "华沙",
+      "克拉科夫"
+    ],
+    "emoji": "🇵🇱"
+  },
+  {
+    "name": "捷克",
+    "keywords": [
+      "CZ",
+      "CZE",
+      "PRG",
+      "捷克",
+      "Czech Republic",
+      "Prague",
+      "布拉格"
+    ],
+    "emoji": "🇨🇿"
+  },
+  {
+    "name": "匈牙利",
+    "keywords": [
+      "HU",
+      "HUN",
+      "BUD",
+      "匈牙利",
+      "Hungary",
+      "Budapest",
+      "布达佩斯"
+    ],
+    "emoji": "🇭🇺"
+  },
+  {
+    "name": "罗马尼亚",
+    "keywords": [
+      "RO",
+      "ROU",
+      "OTP",
+      "罗马尼亚",
+      "Romania",
+      "Bucharest",
+      "布加勒斯特"
+    ],
+    "emoji": "🇷🇴"
+  },
+  {
+    "name": "保加利亚",
+    "keywords": [
+      "BG",
+      "BGR",
+      "SOF",
+      "保加利亚",
+      "Bulgaria",
+      "Sofia",
+      "索非亚"
+    ],
+    "emoji": ""
+  },
+  {
+    "name": "希腊",
+    "keywords": [
+      "GR",
+      "GRC",
+      "ATH",
+      "希腊",
+      "Greece",
+      "Athens",
+      "Thessaloniki",
+      "雅典",
+      "塞萨洛尼基"
+    ],
+    "emoji": "🇬🇷"
+  },
+  {
+    "name": "葡萄牙",
+    "keywords": [
+      "PT",
+      "PRT",
+      "LIS",
+      "葡萄牙",
+      "Portugal",
+      "Lisbon",
+      "Porto",
+      "里斯本",
+      "波尔图"
+    ],
+    "emoji": "🇵🇹"
+  },
+  {
+    "name": "瑞典",
+    "keywords": [
+      "SE",
+      "SWE",
+      "ARN",
+      "瑞典",
+      "Sweden",
+      "Stockholm",
+      "Gothenburg",
+      "斯德哥尔摩",
+      "哥德堡"
+    ],
+    "emoji": "🇸🇪"
+  },
+  {
+    "name": "挪威",
+    "keywords": [
+      "NO",
+      "NOR",
+      "OSL",
+      "挪威",
+      "Norway",
+      "Oslo",
+      "Bergen",
+      "奥斯陆",
+      "卑尔根"
+    ],
+    "emoji": "🇳🇴"
+  },
+  {
+    "name": "丹麦",
+    "keywords": [
+      "DK",
+      "DNK",
+      "CPH",
+      "丹麦",
+      "Denmark",
+      "Copenhagen",
+      "Aarhus",
+      "哥本哈根",
+      "奥胡斯"
+    ],
+    "emoji": "🇩🇰"
+  },
+  {
+    "name": "芬兰",
+    "keywords": [
+      "FI",
+      "FIN",
+      "HEL",
+      "芬兰",
+      "Finland",
+      "Helsinki",
+      "赫尔辛基"
+    ],
+    "emoji": "🇫🇮"
+  },
+  {
+    "name": "奥地利",
+    "keywords": [
+      "AT",
+      "AUT",
+      "VIE",
+      "奥地利",
+      "Austria",
+      "Vienna",
+      "Salzburg",
+      "维也纳",
+      "萨尔茨堡"
+    ],
+    "emoji": "🇦🇹"
+  },
+  {
+    "name": "爱尔兰",
+    "keywords": [
+      "IE",
+      "IRL",
+      "DUB",
+      "爱尔兰",
+      "Ireland",
+      "Dublin",
+      "都柏林"
+    ],
+    "emoji": "🇮🇪"
+  },
+  {
+    "name": "冰岛",
+    "keywords": [
+      "IS",
+      "ISL",
+      "KEF",
+      "冰岛",
+      "Iceland",
+      "Reykjavik",
+      "雷克雅未克"
+    ],
+    "emoji": "🇮🇸"
+  },
+  {
+    "name": "卢森堡",
+    "keywords": [
+      "LU",
+      "LUX",
+      "卢森堡",
+      "Luxembourg",
+      "Luxembourg City",
+      "卢森堡市"
+    ],
+    "emoji": "🇱🇺"
+  },
+  {
+    "name": "马耳他",
+    "keywords": [
+      "MT",
+      "MLT",
+      "MLA",
+      "马耳他",
+      "Malta",
+      "Valletta",
+      "瓦莱塔"
+    ],
+    "emoji": "🇲🇹"
+  },
+  {
+    "name": "斯洛伐克",
+    "keywords": [
+      "SK",
+      "SVK",
+      "BTS",
+      "斯洛伐克",
+      "Slovakia",
+      "Bratislava",
+      "布拉迪斯拉发"
+    ],
+    "emoji": "🇸🇰"
+  },
+  {
+    "name": "斯洛文尼亚",
+    "keywords": [
+      "SI",
+      "SVN",
+      "LJU",
+      "斯洛文尼亚",
+      "Slovenia",
+      "Ljubljana",
+      "卢布尔雅那"
+    ],
+    "emoji": "🇸🇮"
+  },
+  {
+    "name": "克罗地亚",
+    "keywords": [
+      "HR",
+      "HRV",
+      "ZAG",
+      "克罗地亚",
+      "Croatia",
+      "Zagreb",
+      "萨格勒布"
+    ],
+    "emoji": "🇭🇷"
+  },
+  {
+    "name": "拉脱维亚",
+    "keywords": [
+      "LV",
+      "LVA",
+      "RIX",
+      "拉脱维亚",
+      "Latvia",
+      "Riga",
+      "里加"
+    ],
+    "emoji": "🇱🇻"
+  },
+  {
+    "name": "立陶宛",
+    "keywords": [
+      "LT",
+      "LTU",
+      "VNO",
+      "立陶宛",
+      "Lithuania",
+      "Vilnius",
+      "维尔纽斯"
+    ],
+    "emoji": "🇱🇹"
+  },
+  {
+    "name": "爱沙尼亚",
+    "keywords": [
+      "EE",
+      "EST",
+      "TLL",
+      "爱沙尼亚",
+      "Estonia",
+      "Tallinn",
+      "塔林"
+    ],
+    "emoji": "🇪🇪"
+  },
+  {
+    "name": "塞浦路斯",
+    "keywords": [
+      "CY",
+      "CYP",
+      "LCA",
+      "塞浦路斯",
+      "Cyprus",
+      "Nicosia",
+      "尼科西亚"
+    ],
+    "emoji": "🇨🇾"
+  },
+  {
+    "name": "列支敦士登",
+    "keywords": [
+      "LI",
+      "LIE",
+      "列支敦士登",
+      "Liechtenstein",
+      "Vaduz",
+      "瓦杜兹"
+    ],
+    "emoji": "🇱🇮"
+  },
+  {
+    "name": "阿尔巴尼亚",
+    "keywords": [
+      "AL",
+      "ALB",
+      "TIA",
+      "阿尔巴尼亚",
+      "Albania",
+      "Tirana",
+      "地拉那"
+    ],
+    "emoji": "🇦🇱"
+  },
+  {
+    "name": "安道尔",
+    "keywords": [
+      "AD",
+      "AND",
+      "安道尔",
+      "Andorra",
+      "Andorra la Vella",
+      "安道尔城"
+    ],
+    "emoji": "🇦🇩"
+  },
+  {
+    "name": "白俄罗斯",
+    "keywords": [
+      "BY",
+      "BLR",
+      "MSQ",
+      "白俄罗斯",
+      "Belarus",
+      "Minsk",
+      "明斯克"
+    ],
+    "emoji": "🇧🇾"
+  },
+  {
+    "name": "波黑",
+    "keywords": [
+      "BA",
+      "BIH",
+      "SJJ",
+      "波黑",
+      "波斯尼亚",
+      "Bosnia",
+      "Bosnia and Herzegovina",
+      "Sarajevo",
+      "萨拉热窝"
+    ],
+    "emoji": "🇧🇦"
+  },
+  {
+    "name": "摩尔多瓦",
+    "keywords": [
+      "MD",
+      "MDA",
+      "KIV",
+      "摩尔多瓦",
+      "Moldova",
+      "Chisinau",
+      "Chișinău",
+      "基希讷乌"
+    ],
+    "emoji": "🇲🇩"
+  },
+  {
+    "name": "摩纳哥",
+    "keywords": [
+      "MC",
+      "MCO",
+      "摩纳哥",
+      "Monaco",
+      "Monte Carlo",
+      "蒙特卡洛"
+    ],
+    "emoji": "🇲🇨"
+  },
+  {
+    "name": "黑山",
+    "keywords": [
+      "ME",
+      "MNE",
+      "TGD",
+      "黑山",
+      "Montenegro",
+      "Podgorica",
+      "波德戈里察"
+    ],
+    "emoji": "🇲🇪"
+  },
+  {
+    "name": "北马其顿",
+    "keywords": [
+      "MK",
+      "MKD",
+      "SKP",
+      "北马其顿",
+      "North Macedonia",
+      "Macedonia",
+      "Skopje",
+      "斯科普里"
+    ],
+    "emoji": "🇲🇰"
+  },
+  {
+    "name": "塞尔维亚",
+    "keywords": [
+      "RS",
+      "SRB",
+      "BEG",
+      "塞尔维亚",
+      "Serbia",
+      "Belgrade",
+      "贝尔格莱德"
+    ],
+    "emoji": "🇷🇸"
+  },
+  {
+    "name": "乌克兰",
+    "keywords": [
+      "UA",
+      "UKR",
+      "KBP",
+      "乌克兰",
+      "Ukraine",
+      "Kyiv",
+      "Kiev",
+      "基辅"
+    ],
+    "emoji": "🇺🇦"
+  },
+  {
+    "name": "科索沃",
+    "keywords": [
+      "XK",
+      "XKS",
+      "PRN",
+      "科索沃",
+      "Kosovo",
+      "Pristina",
+      "普里什蒂纳"
+    ],
+    "emoji": "🇽🇰"
+  },
+  {
+    "name": "圣马力诺",
+    "keywords": [
+      "SM",
+      "SMR",
+      "圣马力诺",
+      "San Marino"
+    ],
+    "emoji": "🇸🇲"
+  },
+  {
+    "name": "梵蒂冈",
+    "keywords": [
+      "VA",
+      "VAT",
+      "梵蒂冈",
+      "Vatican",
+      "Vatican City",
+      "梵蒂冈城"
+    ],
+    "emoji": "🇻🇦"
+  },
+  {
+    "name": "格鲁吉亚",
+    "keywords": [
+      "GE",
+      "GEO",
+      "TBS",
+      "格鲁吉亚",
+      "Georgia",
+      "Tbilisi",
+      "第比利斯"
+    ],
+    "emoji": "🇬🇪"
+  },
+  {
+    "name": "亚美尼亚",
+    "keywords": [
+      "AM",
+      "ARM",
+      "EVN",
+      "亚美尼亚",
+      "Armenia",
+      "Yerevan",
+      "埃里温"
+    ],
+    "emoji": "🇦🇲"
+  },
+  {
+    "name": "阿塞拜疆",
+    "keywords": [
+      "AZ",
+      "AZE",
+      "GYD",
+      "阿塞拜疆",
+      "Azerbaijan",
+      "Baku",
+      "巴库"
+    ],
+    "emoji": "🇦🇿"
+  },
+  {
+    "name": "比利时",
+    "keywords": [
+      "BE",
+      "BEL",
+      "BRU",
+      "比利时",
+      "Belgium",
+      "Brussels",
+      "安特卫普",
+      "布鲁塞尔",
+      "Antwerp"
+    ],
+    "emoji": "🇧🇪"
+  }
+]

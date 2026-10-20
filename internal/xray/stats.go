@@ -391,8 +391,15 @@ func (c *GRPCStatsClient) queryStats(ctx context.Context, pattern string, reset 
 	if readErr != nil {
 		return nil, fmt.Errorf("stats grpc query %s: read response: %w", c.addr, readErr)
 	}
-	if status := resp.Trailer.Get("Grpc-Status"); status != "" && status != "0" {
-		msg := resp.Trailer.Get("Grpc-Message")
+	status := resp.Trailer.Get("Grpc-Status")
+	msg := resp.Trailer.Get("Grpc-Message")
+	// gRPC trailers-only errors (e.g. unknown service) arrive as response
+	// headers. Treating their empty body as success bypasses meter readiness.
+	if status == "" {
+		status = resp.Header.Get("Grpc-Status")
+		msg = resp.Header.Get("Grpc-Message")
+	}
+	if status != "0" {
 		if decoded, err := url.QueryUnescape(msg); err == nil {
 			msg = decoded
 		}
@@ -401,6 +408,9 @@ func (c *GRPCStatsClient) queryStats(ctx context.Context, pattern string, reset 
 	messages, err := decodeGRPCFrames(body)
 	if err != nil {
 		return nil, fmt.Errorf("stats grpc query %s: %w", c.addr, err)
+	}
+	if len(messages) != 1 {
+		return nil, fmt.Errorf("stats grpc query %s: expected one response", c.addr)
 	}
 	stats := make([]struct {
 		Name  string `json:"name"`

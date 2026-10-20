@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "name": "MiGate",
+      "url": "https://github.com/imzyb/MiGate",
+      "commit": "0998448e185b629bcb34334bee3a7188257c6240",
+      "use": "internal runtime, core builders, database and subscription parsers; original tests retained",
+      "changes": "Windows process/access/file-lock adapters; new outbound Agent and center; rc77 topologyGraph.ts and relationship tests adapted from web/src/routes/topologyGraph.ts / topologyGraph.test.ts, React Flow canvas reuses original interaction; traffic absent remains unknown, conditional-route default fallback retained; B1 source-backed outbound pools use one atomic Agent task, full connection identity, encrypted previews and route-reference guards instead of positional fallback"
+    },
+    {
+      "name": "Sub2API",
+      "url": "https://github.com/Wei-Shaw/sub2api",
+      "commit": "b0a02a3304a0a78cdd003ddda1dd23ba02c03084",
+      "license": "LGPL-3.0",
+      "use": "AES-GCM, SMTP message and transport; adapted tests; authentication flow reference",
+      "changes": "Remove payment/model proxy dependencies; standalone secret and SMTP packages; React UX adaptation; AuthLayout/Login/Register/ForgotPassword UX adapted to independently routed React forms with UIAble, no Vue runtime"
+    },
+    {
+      "name": "UIAble",
+      "url": "https://github.com/codedthemes/uiable",
+      "commit": "e182f747a5597cc2e856f4eaffdeacefcea72f2a",
+      "license": "MIT",
+      "use": "packages/ui component sources",
+      "changes": "Relative component imports; local cn utility; Vite aliases and Tailwind theme; R2 Checkbox copied from src/components/ui/checkbox.tsx unchanged; rc61 Chart copied from src/components/ui/chart.tsx, cn import adapted to local module; fixed Recharts 3.9.2 matches upstream; only fixed local config passed to ChartStyle"
+    },
+    {
+      "name": "MiSub",
+      "url": "https://github.com/imzyb/MiSub",
+      "commit": "4952c16fef2423b2881c8aeecc63647526f42bda",
+      "license": "MIT",
+      "use": "Restricted DSL adaptation and reference comparison fixtures; region keyword metadata, scoped templates, regex captures and comparator; partial operator pipeline; full migration still pending",
+      "changes": "Bounded Go interpreter and RE2 patterns; ordered regions.json generated from pinned geo-utils.mjs; explicit errors for unsupported variants; deterministic en-US natural sort with 56 upstream comparisons; rc88 ClientSettings.vue / client-handler.js catalog UX and default metadata adapted to Go/React, fixed icon and import policies; rc86 protective node-cache shrink threshold adapted from node-cache-service.js with fixed-source Node oracle, Go max-age enforced; complete metadata/template/output parity pending; rc91 metadata-extractor name/cleanName/multiplier port and occurrence-based source group/provider context; local Node oracle only; not billing; rc93 raster icon upload reimplemented with bounded PNG/JPEG decode and canonical PNG, no SVG/remote image; rc94 github-proxy-handler / PublicProfilesView version UX adapted to fixed-host Go metadata request, enabled catalog lookup, Redis shared cache and lease, explicit unknown on failure, no download or user credentials; rc96 bounded official GitHub repository rename redirects; rc97 AnnouncementCard UX adapted to public-page title/type/dismissible content revisions, pure text and visible browser preference failure; global announcement distribution pending; rc99 AnnouncementSettings global audience distribution adapted to explicit authenticated/public publication with reauth/CAS and shared React UIAble notice; plaintext only, original restricted rich text still tracked; rc100 AnnouncementCard restricted markup adapted to Go validated node tree and React allowlisted rendering, stricter quoted attributes/HTTPS links/no class, rejects unsupported markup instead of silently stripping; rc101 GroupManagementModal/useManualNodes group rename, dissolve-to-ungrouped and persistent group order adapted to React UIAble with native drag + accessible move buttons, Go owned-table transaction/snapshot guard, existing-name merge explicitly rejected; rc104 ProfileCard/MySubscriptionsView draft ordering and output workflow adapted to React UIAble cards, exact-membership Go transaction and eight actual preview/copy/download targets; original global token sharing deliberately separated into explicit publication contract; rc105 ProfileCard copy/QR/access-log workflow safely reimplemented as explicit administrator reauthenticated expiring encrypted snapshots, separate from user subscription grants and upstream global token; snapshots replace automatic global public inventory; rc106 PublicProfiles/ProfileCard subscription directory adapted to explicit per-page publication generation binding, separate admin reauth/CAS; token-free anonymous metadata and validated snapshot downloads, no implicit inventory disclosure; rc108 GlobalSettings defaultOperators fallback adapted to shared Go profile resolver and existing React OperatorEditor; empty independent chain fallback, explicit skip option, admin reauth/CAS and fail-closed reads; prefix/region overrides still pending; rc109 GlobalSettings prefix and region override workflow adapted to React UIAble; name-only prefix with group inheritance, bounded RE2 first match for automatic template regions; legacy output defaults remain disabled explicitly documented; rc110 GuestbookModal/GuestbookManagement/guestbook-handler workflow migrated to per-page Go transactions and React UIAble, default disabled/audit, real anonymous setting enforcement, fixed status/actions, public projection, bounded pagination/rate and owned deletion; Telegram independent; B1 Snell/WireGuard URI, Clash and strict INI adaptation; modern sing-box WireGuard endpoint output; unchanged url-to-clash.js copied solely as local pinned oracle, no server JavaScript runtime"
+    },
+    {
+      "name": "React Flow",
+      "url": "https://github.com/xyflow/xyflow",
+      "version": "@xyflow/react 12.11.1",
+      "license": "MIT",
+      "use": "Gate read-only topology canvas, zoom, panning and minimap",
+      "changes": "UIAble has no graph canvas in fixed component catalog; original MiGate graph library retained. Controls and cards compose existing UIAble."
+    }
+  ],
+  "template_reference": "MiSub 4952c16: template-model.js, template-pipeline.js and render-singbox.js/render-egern.js copied unchanged to third_party/misub/reference. Go bounded templates cover groups, ordered local rules, encrypted DNS and explicit HTTPS remote rule-set declarations (Clash yaml/text; sing-box source/binary). Credential-bearing URLs and arbitrary paths reject. Full renderer and preset parity pending. Explicit region/protocol automatic groups use the pinned geo-utils metadata; only authorized links expand; name collisions preserve existing groups.",
+  "ini_reference": "MiSub 4952c16: builtin-surge-generator.js, builtin-loon-generator.js and builtin-quanx-generator.js copied unchanged, MIT. Node mapper functions exercised by local vm-only oracle (never on application server). 17 conversions compared ignoring decorative remote icons; unsupported fields and incompatible protocols reject. Commercial clients not yet validated.",
+  "distribution": "Preserve notices and corresponding modified source. Review LGPL obligations before publishing binaries. Locked Go and pnpm dependencies are part of source distribution.",
+  "public_page_reference": "MiSub 4952c16 src/views/PublicProfilesView.vue and components/public/ProfileCard.vue: hero, announcement, card grid and share interaction reference. Reimplemented in React + UIAble without Vue runtime. Security adaptation: directory only selects explicitly published text pages; no private inventory/token/anonymous subscription export, guestbook or executable custom renderer. Full migration still pending.",
+  "ini_import_reference": "MiSub 4952c16 functions/modules/utils/node-parser.js parseSurgeOrQxLine adapted to internal/subscription/inventory_ini.go (MIT). Strict options/quotes/conflicts; only local proxy sections imported; rules/policies not applied; unknown protocols/options reject. 19 existing Go renderer roundtrips; full upstream parser parity and commercial clients pending.",
+  "source_name_options_reference": "MiSub 4952c16 functions/modules/utils/node-cleaner.js copied unchanged (MIT), local vm oracle only. Go URI fragment plusAsSpace opt-in preserves credentials/query/%2B and structured/VMess names; deliberately no repeated percent decoding. 8 fixed-source name comparisons; full source-filter/metadata parity pending.",
+  "source_filters_reference": "MiSub 4952c16 node-cleaner.js parseFilterRuleText/buildRuleSet/filterNodeUrls/applyFilterRules; unchanged fixed reference, local vm oracle. 24 filter combinations compared. Go strict RE2/limits/unknown protocol rejection; VMess decoded names instead of missing fragment URL. React UIAble visual keyword/protocol/preset chips and advanced text; no Vue runtime.",
+  "session_directory_reference": "Sub2API fixed user/account security interaction and existing MiGate session identity. React + UIAble shared paged directory for self/admin; stable sort, IP search, scoped self revocation. Go implementation original, reuses existing Redis sessions; no authentication policy reduction. Legacy no-page response preserved. Bounded full Redis scan remains a scale limitation.",
+  "loon_wireguard_reference": "MiSub 4952c16 render-loon.js copied unchanged (MIT), local Node VM comparison only. Go bounded nested peer grammar preserves dual-stack, DNS, PSK, allowed IPs, MTU and reserved; old builtin subset compatible, keepalive and excess DNS explicitly refused. No commercial Loon device claim.",
+  "outbound_pool_tools_reference": "MiGate fixed OutboundsPage / ProxyPoolModal and outbound_subscriptions: manual full-snapshot order, pool display priority/prepend, explicit armed auto materialization, per-pool refresh results. Public SOCKS/HTTP/HTTPS directory uses only fixed official EDT-Pages GitHub paths (replacing the third-party mirror); bounded encrypted metadata cache. TCP-only Agent probe validates committed inventory/public numeric IP, pins DNS, never arbitrary commands or throughput claims."
+}

@@ -1,0 +1,90 @@
+{
+  "verify-live-outbound-pools.py": {
+    "scope": "outbound-pool",
+    "impacts": [
+      "business",
+      "kernel",
+      "final"
+    ],
+    "recovery": "Prefixed sources/pools/manual inventory, registered fixed catalog tags, dependent routes for acceptance grants and exact transient fixture; only empty-baseline full collection order. Runner disarms auto-sync and restores/verifies exact baseline."
+  },
+  "capture-deployment.py": {
+    "scope": "none",
+    "impacts": [
+      "observe"
+    ],
+    "recovery": "read-only capture"
+  },
+  "verify-runtime-health.py": {
+    "scope": "none",
+    "impacts": [
+      "observe"
+    ],
+    "recovery": "read-only domain, permissions, Gate heartbeat and service readiness"
+  },
+  "verify-production-lock.py": {
+    "scope": "none",
+    "impacts": [
+      "observe"
+    ],
+    "recovery": "read-only lock contention probe"
+  },
+  "verify-production-cleanup.py": {
+    "scope": "guestbook",
+    "impacts": [
+      "observe"
+    ],
+    "recovery": "runner-owned page baseline"
+  },
+  "verify-production-interruption.py": {
+    "scope": "guestbook",
+    "impacts": [
+      "observe"
+    ],
+    "recovery": "deliberate runner termination; next acquisition must recover persistent owned baseline"
+  },
+  "deploy-release.py": {
+    "scope": "none",
+    "impacts": [
+      "page",
+      "business",
+      "kernel",
+      "lifecycle",
+      "final"
+    ],
+    "recovery": "installer persists backup/manifest and restores failed service startup"
+  },
+  "verify-live-rollback.py": {
+    "scope": "none",
+    "impacts": [
+      "kernel",
+      "lifecycle",
+      "final"
+    ],
+    "recovery": "owned installation manifest/previous release; failed-start rollback harness"
+  },
+  "browser-guestbook.cjs": {
+    "scope": "guestbook",
+    "impacts": [
+      "page",
+      "business",
+      "final"
+    ],
+    "recovery": "runner-owned page baseline"
+  },
+  "browser-naming-labels.cjs": {
+    "scope": "none",
+    "impacts": [
+      "page",
+      "final"
+    ],
+    "recovery": "read-only form, canceled without saving"
+  },
+  "inspect-pool-tasks.py": {
+    "scope": "none",
+    "impacts": [
+      "observe"
+    ],
+    "recovery": "Bounded read-only task metadata without payload/result/credentials"
+  }
+}

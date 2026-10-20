@@ -1,11 +1,17 @@
 {
-  "name": "migate",
+  "name": "migate-monorepo",
   "private": true,
+  "packageManager": "pnpm@10.17.1",
   "scripts": {
-    "dev": "bash scripts/dev.sh",
-    "start": "npm run dev",
-    "test": "cd web && npm test",
-    "check": "bash scripts/check.sh",
-    "build": "make go-build"
+    "dev": "pnpm --filter @migate/console dev",
+    "build": "pnpm --filter @migate/console build",
+    "check": "pnpm --filter @migate/console check",
+    "test": "node deploy/test.cjs",
+    "test:local": "go test ./internal/control ./internal/agent ./internal/lifecycle ./internal/mailer ./internal/secrets ./services/subscriptions",
+    "release": "powershell -NoProfile -File deploy/build.ps1"
+  },
+  "devDependencies": {
+    "playwright": "^1.64.1",
+    "prettier": "^3.9.10"
   }
 }

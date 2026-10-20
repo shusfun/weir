@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"os/exec"
-	"syscall"
 	"time"
 )
 
@@ -51,7 +50,7 @@ func (r RealCommandRunner) RunOutput(ctx context.Context, name string, args ...s
 	cmd := exec.Command(name, args...)
 	// Run commands in their own process group so a timeout kills child
 	// processes spawned by shells (for example: sh -c "sleep 1").
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	prepareProcess(cmd)
 	out := NewLimitedBuffer(r.outputLimit())
 	cmd.Stdout = out
 	cmd.Stderr = out
@@ -64,7 +63,7 @@ func (r RealCommandRunner) RunOutput(ctx context.Context, name string, args ...s
 	case err := <-waitCh:
 		return out.Bytes(), err
 	case <-ctx.Done():
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		killProcess(cmd)
 		<-waitCh
 		return out.Bytes(), ctx.Err()
 	}

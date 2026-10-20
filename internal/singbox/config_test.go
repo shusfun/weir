@@ -443,8 +443,8 @@ func TestBuildConfigWithOutboundsSkipsLegacyDNSOutboundForSingbox113(t *testing.
 	}
 }
 
-func TestBuildConfigWithOutboundsSkipsRoutingRuleTargetingLegacyDNSOutbound(t *testing.T) {
-	cfg, err := BuildConfigWithOutbounds([]db.Inbound{{
+func TestBuildConfigWithOutboundsRejectsRoutingRuleTargetingLegacyDNSOutbound(t *testing.T) {
+	_, err := BuildConfigWithOutbounds([]db.Inbound{{
 		ID: 2, Remark: "hy2", Protocol: "hysteria2", Core: db.CoreSingbox, Port: 8443, Enabled: true,
 	}}, []db.Outbound{
 		{ID: 3, Tag: "dns", Protocol: "dns", Enabled: true},
@@ -452,11 +452,8 @@ func TestBuildConfigWithOutboundsSkipsRoutingRuleTargetingLegacyDNSOutbound(t *t
 	}, []db.RoutingRule{
 		{ID: 1, InboundTag: "inbound-2-hysteria2", OutboundID: 3, OutboundTag: "dns", Protocol: "dns", Enabled: true},
 	})
-	if err != nil {
-		t.Fatalf("dns routing rule should be skipped for sing-box 1.13: %v", err)
-	}
-	if cfg.Route != nil && len(cfg.Route.Rules) > 0 {
-		t.Fatalf("dns routing rule should not target removed outbound: %+v", cfg.Route.Rules)
+	if err == nil {
+		t.Fatal("unsupported DNS route silently dropped")
 	}
 }
 

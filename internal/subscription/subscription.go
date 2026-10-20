@@ -27,6 +27,10 @@ const (
 )
 
 type ParsedLink struct {
+	// Transformation provenance is internal; it never changes endpoint credentials.
+	OriginalName string
+	SourceGroup  string
+	SourceName   string
 	Identity     string
 	Remark       string
 	Protocol     string
@@ -50,32 +54,70 @@ type ParseResult struct {
 }
 
 type Settings struct {
-	Security         string   `json:"security,omitempty"`
-	Network          string   `json:"network,omitempty"`
-	TLS              bool     `json:"tls,omitempty"`
-	Reality          bool     `json:"reality,omitempty"`
-	SNI              string   `json:"sni,omitempty"`
-	Host             string   `json:"host,omitempty"`
-	Path             string   `json:"path,omitempty"`
-	Flow             string   `json:"flow,omitempty"`
-	Fingerprint      string   `json:"fp,omitempty"`
-	PublicKey        string   `json:"pbk,omitempty"`
-	ShortID          string   `json:"sid,omitempty"`
-	ALPN             []string `json:"alpn,omitempty"`
-	Method           string   `json:"method,omitempty"`
-	ServiceName      string   `json:"service_name,omitempty"`
-	AllowInsecure    bool     `json:"allow_insecure,omitempty"`
-	VmessUnsupported bool     `json:"vmess_unsupported,omitempty"`
+	Snell             *SnellSettings     `json:"snell,omitempty"`
+	WireGuard         *WireGuardSettings `json:"wireguard,omitempty"`
+	Security          string             `json:"security,omitempty"`
+	Network           string             `json:"network,omitempty"`
+	TLS               bool               `json:"tls,omitempty"`
+	Reality           bool               `json:"reality,omitempty"`
+	SNI               string             `json:"sni,omitempty"`
+	Host              string             `json:"host,omitempty"`
+	Path              string             `json:"path,omitempty"`
+	Flow              string             `json:"flow,omitempty"`
+	Fingerprint       string             `json:"fp,omitempty"`
+	PublicKey         string             `json:"pbk,omitempty"`
+	ShortID           string             `json:"sid,omitempty"`
+	ALPN              []string           `json:"alpn,omitempty"`
+	Method            string             `json:"method,omitempty"`
+	ServiceName       string             `json:"service_name,omitempty"`
+	AllowInsecure     bool               `json:"allow_insecure,omitempty"`
+	VmessUnsupported  bool               `json:"vmess_unsupported,omitempty"`
+	UnsupportedFields []string           `json:"unsupported_fields,omitempty"`
+	Obfs              string             `json:"obfs,omitempty"`
+	ObfsPassword      string             `json:"obfs_password,omitempty"`
+	CongestionControl string             `json:"congestion_control,omitempty"`
+	ZeroRTT           bool               `json:"zero_rtt,omitempty"`
+	SPKI              string             `json:"spki,omitempty"`
+	CertificatePin    string             `json:"certificate_pin,omitempty"`
 }
 
 type HTTPFetcher struct {
-	Client *http.Client
+	Client    *http.Client
+	UserAgent string
+}
+
+func ValidateUserAgent(value string) error {
+	if len(value) > 512 {
+		return errors.New("invalid subscription user agent")
+	}
+	for _, c := range value {
+		if c < 32 || c > 126 {
+			return errors.New("invalid subscription user agent")
+		}
+	}
+	return nil
 }
 
 func (f HTTPFetcher) Fetch(ctx context.Context, rawURL string, allowPrivate bool) ([]byte, error) {
+	body, _, err := f.fetch(ctx, rawURL, allowPrivate)
+	return body, err
+}
+
+func (f HTTPFetcher) FetchInventory(ctx context.Context, rawURL string, allowPrivate bool) (FetchedInventory, error) {
+	body, header, err := f.fetch(ctx, rawURL, allowPrivate)
+	if err != nil {
+		return FetchedInventory{}, err
+	}
+	return FetchedInventory{Body: body, Usage: ParseUsageMetadata(header.Values("Subscription-Userinfo"))}, nil
+}
+
+func (f HTTPFetcher) fetch(ctx context.Context, rawURL string, allowPrivate bool) ([]byte, http.Header, error) {
+	if err := ValidateUserAgent(f.UserAgent); err != nil {
+		return nil, nil, err
+	}
 	parsed, err := validateFetchURL(ctx, rawURL, allowPrivate)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	client := safeHTTPClient(allowPrivate)
 	if f.Client != nil {
@@ -102,25 +144,28 @@ func (f HTTPFetcher) Fetch(ctx context.Context, rawURL string, allowPrivate bool
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	req.Header.Set("User-Agent", UserAgent)
+	if f.UserAgent != "" {
+		req.Header.Set("User-Agent", f.UserAgent)
+	}
 	resp, err := copyClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("subscription upstream returned %d", resp.StatusCode)
+		return nil, nil, fmt.Errorf("subscription upstream returned %d", resp.StatusCode)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxBodyBytes+1))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(body) > MaxBodyBytes {
-		return nil, fmt.Errorf("subscription body exceeds %d bytes", MaxBodyBytes)
+		return nil, nil, fmt.Errorf("subscription body exceeds %d bytes", MaxBodyBytes)
 	}
-	return body, nil
+	return body, resp.Header.Clone(), nil
 }
 
 func safeHTTPClient(allowPrivate bool) *http.Client {
@@ -203,7 +248,21 @@ func ParseLink(raw string) (ParsedLink, error) {
 	case strings.HasPrefix(lower, "ss://"):
 		return parseSSLink(raw)
 	case strings.HasPrefix(lower, "vmess://"):
-		return ParsedLink{}, errors.New("vmess links are not supported yet")
+		return parseVMessLink(raw)
+	case strings.HasPrefix(lower, "hysteria2://"), strings.HasPrefix(lower, "hy2://"):
+		return parseURLLink(raw, "hysteria2")
+	case strings.HasPrefix(lower, "tuic://"):
+		return parseURLLink(raw, "tuic")
+	case strings.HasPrefix(lower, "anytls://"):
+		return parseURLLink(raw, "anytls")
+	case strings.HasPrefix(lower, "snell://"):
+		return parseExtendedLink(raw, "snell")
+	case strings.HasPrefix(lower, "wireguard://"):
+		return parseExtendedLink(raw, "wireguard")
+	case strings.HasPrefix(lower, "http://"), strings.HasPrefix(lower, "https://"):
+		return parseURLLink(raw, "http")
+	case strings.HasPrefix(lower, "socks5://"), strings.HasPrefix(lower, "socks://"), strings.HasPrefix(lower, "socks5-tls://"):
+		return parseURLLink(raw, "socks5")
 	default:
 		return ParsedLink{}, fmt.Errorf("unsupported link")
 	}
@@ -282,23 +341,69 @@ func parseURLLink(raw string, protocol string) (ParsedLink, error) {
 	}
 	address := strings.TrimSpace(u.Hostname())
 	port, _ := strconv.Atoi(u.Port())
+	if port == 0 && u.Port() == "" && protocol == "http" {
+		port = 80
+		if strings.EqualFold(u.Scheme, "https") {
+			port = 443
+		}
+	}
 	if address == "" || port <= 0 || port > 65535 {
 		return ParsedLink{}, fmt.Errorf("invalid endpoint")
 	}
-	settings := settingsFromQuery(u.Query(), address)
+	query, err := url.ParseQuery(u.RawQuery)
+	if err != nil {
+		return ParsedLink{}, errors.New("invalid query encoding")
+	}
+	settings, err := settingsFromQuery(query, address)
+	if err != nil {
+		return ParsedLink{}, err
+	}
+	if u.Path != "" && u.Path != "/" {
+		settings.UnsupportedFields = append(settings.UnsupportedFields, "uri_path")
+	}
 	username := ""
 	password := ""
 	switch protocol {
 	case "vless":
 		username = strings.TrimSpace(u.User.Username())
 	case "trojan":
+		if settings.Security == "" {
+			settings.Security = "tls"
+			settings.TLS = true
+		}
 		password, _ = u.User.Password()
 		if password == "" {
-			password = strings.TrimSpace(u.User.Username())
+			password = u.User.Username()
+		}
+	case "hysteria2":
+		password = userInfoString(u.User)
+		settings.Security = "tls"
+		settings.TLS = true
+	case "tuic":
+		username = u.User.Username()
+		password, _ = u.User.Password()
+		settings.Security = "tls"
+		settings.TLS = true
+	case "anytls":
+		password = userInfoString(u.User)
+		settings.Security = "tls"
+		settings.TLS = true
+	case "http", "socks5":
+		username = u.User.Username()
+		password, _ = u.User.Password()
+		if strings.EqualFold(u.Scheme, "https") || strings.EqualFold(u.Scheme, "socks5-tls") {
+			settings.Security = "tls"
+			settings.TLS = true
 		}
 	}
+	if protocol != "http" && protocol != "socks5" && (username == "" && password == "" || protocol == "tuic" && (username == "" || password == "")) {
+		return ParsedLink{}, errors.New("missing credentials")
+	}
+	if settings.TLS && settings.SNI == "" {
+		settings.SNI = address
+	}
 	settingsJSON, _ := json.Marshal(settings)
-	remark, _ := url.QueryUnescape(strings.TrimPrefix(u.Fragment, "#"))
+	remark := u.Fragment
 	item := ParsedLink{
 		Remark: strings.TrimSpace(remark), Protocol: protocol, Address: address, Port: port, Username: username, Password: password,
 		RawLink: raw, SettingsJSON: string(settingsJSON),
@@ -312,7 +417,7 @@ func parseSSLink(raw string) (ParsedLink, error) {
 	if err != nil {
 		return ParsedLink{}, err
 	}
-	remark, _ := url.QueryUnescape(strings.TrimPrefix(u.Fragment, "#"))
+	remark := u.Fragment
 	address := strings.TrimSpace(u.Hostname())
 	port, _ := strconv.Atoi(u.Port())
 	userInfo := ""
@@ -347,7 +452,17 @@ func parseSSLink(raw string) (ParsedLink, error) {
 	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
 		return ParsedLink{}, fmt.Errorf("invalid ss credentials")
 	}
-	settings := settingsFromQuery(u.Query(), address)
+	if err := validateSS2022(strings.TrimSpace(parts[0]), parts[1]); err != nil {
+		return ParsedLink{}, err
+	}
+	query, err := url.ParseQuery(u.RawQuery)
+	if err != nil {
+		return ParsedLink{}, errors.New("invalid query encoding")
+	}
+	settings, err := settingsFromQuery(query, address)
+	if err != nil {
+		return ParsedLink{}, err
+	}
 	settings.Method = strings.TrimSpace(parts[0])
 	settingsJSON, _ := json.Marshal(settings)
 	item := ParsedLink{
@@ -370,7 +485,40 @@ func userInfoString(user *url.Userinfo) string {
 	return username
 }
 
-func settingsFromQuery(values url.Values, address string) Settings {
+func settingsFromQuery(values url.Values, address string) (Settings, error) {
+	// url.ParseQuery has already decoded each value. Reject ambiguity instead of
+	// allowing aliases or repeated keys to silently select different credentials.
+	for _, entries := range values {
+		if len(entries) != 1 {
+			return Settings{}, errors.New("duplicate subscription parameter")
+		}
+	}
+	for _, aliases := range [][]string{
+		{"security", "tls"}, {"type", "network"}, {"sni", "servername", "serverName", "peer"},
+		{"fp", "fingerprint"}, {"pbk", "publicKey"}, {"sid", "shortId"},
+		{"serviceName", "service_name"}, {"obfs-password", "obfs_password"},
+		{"allowInsecure", "allow_insecure", "skip-cert-verify", "insecure"},
+	} {
+		var previous string
+		seen := false
+		for _, alias := range aliases {
+			if entries, ok := values[alias]; ok {
+				if seen && entries[0] != previous {
+					return Settings{}, errors.New("conflicting subscription aliases")
+				}
+				seen, previous = true, entries[0]
+			}
+		}
+	}
+	for _, key := range []string{"allowInsecure", "allow_insecure", "skip-cert-verify", "insecure", "zero_rtt_handshake"} {
+		if entries, ok := values[key]; ok {
+			switch strings.ToLower(entries[0]) {
+			case "", "0", "false", "no", "off", "1", "true", "yes", "on":
+			default:
+				return Settings{}, errors.New("invalid subscription boolean")
+			}
+		}
+	}
 	security := strings.ToLower(firstQuery(values, "security", "tls"))
 	network := strings.ToLower(firstQuery(values, "type", "network"))
 	settings := Settings{
@@ -384,8 +532,28 @@ func settingsFromQuery(values url.Values, address string) Settings {
 		PublicKey:     firstQuery(values, "pbk", "publicKey"),
 		ShortID:       firstQuery(values, "sid", "shortId"),
 		ServiceName:   firstQuery(values, "serviceName", "service_name"),
-		AllowInsecure: truthy(firstQuery(values, "allowInsecure", "allow_insecure", "skip-cert-verify")),
+		AllowInsecure: truthy(firstQuery(values, "allowInsecure", "allow_insecure", "skip-cert-verify", "insecure")),
+		Obfs:          firstQuery(values, "obfs"), ObfsPassword: firstQuery(values, "obfs-password", "obfs_password"), CongestionControl: firstQuery(values, "congestion_control"), ZeroRTT: truthy(firstQuery(values, "zero_rtt_handshake")), SPKI: firstQuery(values, "spki"), CertificatePin: firstQuery(values, "pinSHA256"),
 	}
+	for key, value := range values {
+		if len(value) == 0 || value[0] == "" {
+			continue
+		}
+		switch key {
+		case "security", "tls", "type", "network", "sni", "servername", "serverName", "peer", "host", "path", "flow", "fp", "fingerprint", "pbk", "publicKey", "sid", "shortId", "serviceName", "service_name", "allowInsecure", "allow_insecure", "skip-cert-verify", "insecure", "alpn", "obfs", "obfs-password", "obfs_password", "congestion_control", "zero_rtt_handshake", "spki", "pinSHA256":
+		case "encryption":
+			if value[0] != "none" {
+				settings.UnsupportedFields = append(settings.UnsupportedFields, key)
+			}
+		case "headerType":
+			if value[0] != "none" {
+				settings.UnsupportedFields = append(settings.UnsupportedFields, key)
+			}
+		default:
+			settings.UnsupportedFields = append(settings.UnsupportedFields, key)
+		}
+	}
+	sort.Strings(settings.UnsupportedFields)
 	if settings.SNI == "" && security != "" && security != "none" {
 		settings.SNI = address
 	}
@@ -398,7 +566,7 @@ func settingsFromQuery(values url.Values, address string) Settings {
 	if alpn := firstQuery(values, "alpn"); alpn != "" {
 		settings.ALPN = splitList(alpn)
 	}
-	return settings
+	return settings, nil
 }
 
 func validateFetchURL(ctx context.Context, rawURL string, allowPrivate bool) (*url.URL, error) {
@@ -489,10 +657,7 @@ func padBase64(s string) string {
 
 func firstQuery(values url.Values, keys ...string) string {
 	for _, key := range keys {
-		if value := strings.TrimSpace(values.Get(key)); value != "" {
-			if decoded, err := url.QueryUnescape(value); err == nil {
-				return strings.TrimSpace(decoded)
-			}
+		if value := values.Get(key); value != "" {
 			return value
 		}
 	}

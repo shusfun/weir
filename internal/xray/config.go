@@ -741,9 +741,10 @@ func buildOutbound(ob db.Outbound) (OutboundConfig, error) {
 			servers[0]["users"] = users
 		}
 		return OutboundConfig{
-			Tag:      tag,
-			Protocol: protocol,
-			Settings: map[string]interface{}{"servers": servers},
+			Tag:            tag,
+			Protocol:       protocol,
+			Settings:       map[string]interface{}{"servers": servers},
+			StreamSettings: buildOutboundStreamSettings(db.ParseOutboundSettings(ob.SettingsJSON)),
 		}, nil
 	case "http", "https":
 		users := []map[string]interface{}{}
@@ -764,10 +765,15 @@ func buildOutbound(ob db.Outbound) (OutboundConfig, error) {
 			servers[0]["users"] = users
 		}
 		return OutboundConfig{
-			Tag:      tag,
-			Protocol: "http",
-			Settings: map[string]interface{}{"servers": servers},
+			Tag:            tag,
+			Protocol:       "http",
+			Settings:       map[string]interface{}{"servers": servers},
+			StreamSettings: buildOutboundStreamSettings(httpOutboundSettings(ob)),
 		}, nil
+	case "vmess":
+		settings := db.ParseOutboundSettings(ob.SettingsJSON)
+		users := []map[string]interface{}{{"id": strings.TrimSpace(ob.Username), "alterId": 0, "security": firstNonEmpty(settings.Method, "auto")}}
+		return OutboundConfig{Tag: tag, Protocol: "vmess", Settings: map[string]interface{}{"vnext": []map[string]interface{}{{"address": ob.Address, "port": ob.Port, "users": users}}}, StreamSettings: buildOutboundStreamSettings(settings)}, nil
 	case "vless":
 		outboundSettings := db.ParseOutboundSettings(ob.SettingsJSON)
 		user := map[string]interface{}{
@@ -803,6 +809,18 @@ func buildOutbound(ob db.Outbound) (OutboundConfig, error) {
 	default:
 		return OutboundConfig{}, fmt.Errorf("unsupported outbound protocol: %s", ob.Protocol)
 	}
+}
+
+func httpOutboundSettings(out db.Outbound) db.OutboundSettings {
+	s := db.ParseOutboundSettings(out.SettingsJSON)
+	if out.Protocol == "https" && s.Security == "" {
+		s.Security = "tls"
+		s.TLS = true
+	}
+	if (s.Security == "tls" || s.TLS) && len(s.ALPN) == 0 {
+		s.ALPN = []string{"http/1.1"}
+	}
+	return s
 }
 
 func buildOutboundStreamSettings(settings db.OutboundSettings) map[string]interface{} {
@@ -859,6 +877,9 @@ func buildOutboundStreamSettings(settings db.OutboundSettings) map[string]interf
 		}
 		if settings.AllowInsecure {
 			tlsSettings["allowInsecure"] = true
+		}
+		if settings.TrustedCertificate != "" {
+			tlsSettings["certificates"] = []map[string]interface{}{{"certificate": strings.Split(strings.TrimSpace(settings.TrustedCertificate), "\n"), "usage": "verify"}}
 		}
 		if len(tlsSettings) > 0 {
 			stream["tlsSettings"] = tlsSettings
