@@ -32,7 +32,12 @@ FORCE_YES=false
 PURGE=false
 WITH_CORES=false
 WORKDIR=""
+MIRRORS=()
 trap '[[ -n ${WORKDIR:-} && -d ${WORKDIR:-} ]] && rm -rf "$WORKDIR"' EXIT
+# 中断时同样经由 EXIT 清理临时下载目录
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 declare -A MSG=(
   [zh.info]="信息" [zh.success]="成功" [zh.warning]="警告" [zh.error]="错误"
@@ -61,6 +66,12 @@ declare -A MSG=(
   [zh.cmd_rollback]="回退到指定版本"
   [zh.cmd_versions]="列出 GitHub Release"
   [zh.cmd_uninstall]="卸载程序，默认保留数据"
+  [zh.direct_slow]="直连 GitHub 下载过慢或失败，改用加速镜像"
+  [zh.mirror_failed]="镜像不可用"
+  [zh.mirror_bad_sum]="镜像返回的安装包校验不一致，已丢弃"
+  [zh.final_direct]="继续直连 GitHub 下载，速度可能较慢"
+  [zh.checksum_failed]="压缩包校验失败"
+  [zh.bad_mirrors]="MIGATE_GITHUB_MIRRORS 只能是 off 或逗号分隔的主机名"
   [en.info]="info" [en.success]="success" [en.warning]="warning" [en.error]="error"
   [en.select_lang]="请选择语言 / Select language"
   [en.lang_zh]="中文" [en.lang_en]="English" [en.enter_choice]="Enter choice"
@@ -87,6 +98,12 @@ declare -A MSG=(
   [en.cmd_rollback]="Roll back to a version"
   [en.cmd_versions]="List GitHub releases"
   [en.cmd_uninstall]="Uninstall the program and keep data by default"
+  [en.direct_slow]="Direct GitHub download is slow or failed; trying mirrors"
+  [en.mirror_failed]="Mirror unavailable"
+  [en.mirror_bad_sum]="Mirror archive checksum mismatch; discarded"
+  [en.final_direct]="Continuing direct GitHub download; this may be slow"
+  [en.checksum_failed]="Archive checksum verification failed"
+  [en.bad_mirrors]="MIGATE_GITHUB_MIRRORS must be off or comma-separated hostnames"
 )
 
 msg() { printf '%s' "${MSG[$LANG_CHOICE.$1]}"; }
@@ -211,8 +228,9 @@ configure_control() {
   print_info "$(msg summary): ${LISTEN_HOST}:${LISTEN_PORT}"
 }
 
-fetch_url() {
-  local dest=$1 url=$2 hops=0 code header
+# 下载失败返回非零，地址不合规直接退出。参数：目标 地址 [最低速度 B/s] [持续秒数] [重试次数]
+try_fetch_url() {
+  local dest=$1 url=$2 speed_limit=${3:-1024} speed_time=${4:-60} retries=${5:-3} hops=0 code header
   while (( hops < 4 )); do
     case "$url" in
       https://*) ;;
@@ -244,25 +262,29 @@ fetch_url() {
       chmod 600 "$WORKDIR/curl-config"
       curl_config=(--config "$WORKDIR/curl-config")
     fi
-    # 有终端时显示附件下载进度；低于 1 KiB/s 持续 60 秒视为卡住，中止并重试
+    # 有终端时显示附件下载进度；速度持续低于下限视为卡住，中止并按次数重试
     local progress=(--silent)
     if [[ $signed == true ]] && is_interactive; then
       progress=(--progress-bar)
     fi
-    code=$("$CURL_BIN" "${progress[@]}" --show-error --connect-timeout 20 --speed-limit 1024 --speed-time 60 --retry 3 --retry-delay 3 --proto '=https' "${curl_config[@]}" -D "$header" -o "$dest" -w '%{http_code}' "$url") || { print_error "下载失败，请检查服务器到 GitHub 的网络"; exit 1; }
+    code=$("$CURL_BIN" "${progress[@]}" --show-error --connect-timeout 20 --speed-limit "$speed_limit" --speed-time "$speed_time" --retry "$retries" --retry-delay 3 --proto '=https' "${curl_config[@]}" -D "$header" -o "$dest" -w '%{http_code}' "$url") || return 1
     code=${code//$'\n'/}
     case "$code" in
       200) return 0 ;;
       301|302|303|307|308)
         url=$(grep -i '^location:' "$header" | tail -n 1 | awk '{print $2}' | tr -d '\r')
-        [[ -n $url ]] || { print_error "下载失败"; exit 1; }
+        [[ -n $url ]] || return 1
         ;;
-      *) print_error "下载失败"; exit 1 ;;
+      *) return 1 ;;
     esac
     hops=$((hops + 1))
   done
   print_error "下载重定向过多"
   exit 1
+}
+
+fetch_url() {
+  try_fetch_url "$@" || { print_error "下载失败，请检查服务器到 GitHub 的网络"; exit 1; }
 }
 
 resolve_version() {
@@ -278,22 +300,70 @@ resolve_version() {
   valid_version "$TARGET_VERSION" || { print_error "发布版本无效"; exit 1; }
 }
 
+# 加速镜像列表：MIGATE_GITHUB_MIRRORS=off 关闭，或写逗号分隔的主机名替换默认列表
+load_mirrors() {
+  local raw=${MIGATE_GITHUB_MIRRORS:-gh-proxy.com,ghfast.top,ghproxy.net,gh.llkk.cc} item
+  local pattern='^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$'
+  local -a items
+  MIRRORS=()
+  [[ $raw == off ]] && return 0
+  IFS=, read -ra items <<< "$raw"
+  for item in "${items[@]}"; do
+    [[ $item =~ $pattern ]] || { print_error "$(msg bad_mirrors)"; exit 1; }
+    MIRRORS+=("$item")
+  done
+}
+
+# 经镜像下载压缩包：不跟随跳转、不发送令牌；完整性由直连 GitHub 获取的 checksums.txt 保证
+fetch_mirror() {
+  local dest=$1 mirror=$2 url=$3 code
+  local progress=(--silent)
+  if is_interactive; then
+    progress=(--progress-bar)
+  fi
+  print_info "$(msg downloading) https://${mirror}/${url}"
+  code=$("$CURL_BIN" "${progress[@]}" --show-error --connect-timeout 10 --speed-limit 102400 --speed-time 15 --proto '=https' -o "$dest" -w '%{http_code}' "https://${mirror}/${url}") || return 1
+  [[ ${code//$'\n'/} == 200 ]]
+}
+
+verify_archive() {
+  [[ -s $1 && $(sha256sum "$1" | awk '{print $1}') == "$2" ]]
+}
+
 download_package() {
   WORKDIR=$(mktemp -d "${TMPDIR:-/tmp}/migate-install-XXXXXX")
+  load_mirrors
   resolve_version
   local name=migate-${TARGET_VERSION}-linux-amd64.tar.gz
   local base=https://github.com/${GITHUB_REPO}/releases/download/v${TARGET_VERSION}
+  # 校验和始终直连 GitHub 获取，镜像只提供压缩包
   fetch_url "$WORKDIR/checksums.txt" "$base/checksums.txt"
-  fetch_url "$WORKDIR/$name" "$base/$name"
-  print_info "$(msg verifying)"
-  local expected actual
+  local expected mirror got=false archive=$WORKDIR/$name
   expected=$(awk -v archive="$name" '$2==archive {print $1}' "$WORKDIR/checksums.txt")
-  actual=$(sha256sum "$WORKDIR/$name" | awk '{print $1}')
-  if [[ -z $expected || $expected != "$actual" ]]; then
-    print_error "压缩包校验失败"
-    exit 1
+  [[ $expected =~ ^[0-9a-f]{64}$ ]] || { print_error "$(msg checksum_failed)"; exit 1; }
+  # 先直连：低于 100 KiB/s 持续 15 秒视为网络不佳，依次换镜像，都不行再慢速直连
+  if try_fetch_url "$archive" "$base/$name" 102400 15 0 && verify_archive "$archive" "$expected"; then
+    got=true
+  elif (( ${#MIRRORS[@]} > 0 )); then
+    print_warning "$(msg direct_slow)"
+    for mirror in "${MIRRORS[@]}"; do
+      if ! fetch_mirror "$archive" "$mirror" "$base/$name"; then
+        print_warning "$(msg mirror_failed): $mirror"
+      elif verify_archive "$archive" "$expected"; then
+        got=true
+        break
+      else
+        print_warning "$(msg mirror_bad_sum): $mirror"
+      fi
+    done
   fi
-  tar -xzf "$WORKDIR/$name" -C "$WORKDIR"
+  if [[ $got != true ]]; then
+    print_warning "$(msg final_direct)"
+    fetch_url "$archive" "$base/$name"
+    verify_archive "$archive" "$expected" || { print_error "$(msg checksum_failed)"; exit 1; }
+  fi
+  print_info "$(msg verifying)"
+  tar -xzf "$archive" -C "$WORKDIR"
   ( cd "$WORKDIR" && sha256sum -c SHA256SUMS >/dev/null )
 }
 
@@ -454,6 +524,9 @@ show_help() {
   echo "  -y, --yes            没有终端时确认卸载"
   echo "  --purge              卸载时清除本项目数据"
   echo "  --with-cores         卸载时移除托管内核"
+  echo ""
+  echo "Environment:"
+  echo "  MIGATE_GITHUB_MIRRORS  加速镜像主机名，逗号分隔；off 关闭"
   echo ""
   echo "Examples:"
   echo "  curl -sSL https://raw.githubusercontent.com/shusfun/MiSub/main/deploy/install-online.sh | bash"

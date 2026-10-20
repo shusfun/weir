@@ -23,6 +23,8 @@ bash install-online.sh list-versions
 
 没有终端时使用默认监听地址，不再提问。Gate 装好以后，后续版本由中心校验并推送。
 
+安装包先直连 GitHub 下载；低于 100 KiB/s 持续 15 秒或失败时，依次改用 `gh-proxy.com`、`ghfast.top`、`ghproxy.net`、`gh.llkk.cc`，都不行再慢速直连。`checksums.txt` 始终直连 GitHub 获取，镜像返回的包校验不一致即丢弃；令牌不会发给镜像。`MIGATE_GITHUB_MIRRORS=off` 关闭镜像，也可写逗号分隔的主机名替换默认列表。中途按 Ctrl+C 会清理临时下载目录。
+
 安装完成后可以直接使用二进制：
 
 ```sh
