@@ -65,10 +65,12 @@ class OnlineInstallTests(unittest.TestCase):
         curl.write_text(textwrap.dedent("""\
             #!/bin/sh
             out=""
+            dump=""
             prev=""
             url=""
             for arg in "$@"; do
               if [ "$prev" = "-o" ]; then out=$arg; fi
+              if [ "$prev" = "-D" ]; then dump=$arg; fi
               case "$arg" in
                 https://*) url=$arg ;;
               esac
@@ -76,10 +78,20 @@ class OnlineInstallTests(unittest.TestCase):
             done
             printf '%s\\n' "$url" >> "$CURL_LOG"
             printf '%s\\n' "$*" >> "$CURL_ARGV"
+            : > "$dump"
+            # 模拟 GitHub 附件 302 到带签名查询串的存储地址
+            case "$url" in
+              https://github.com/*/releases/download/*)
+                file=${url##*/}
+                printf 'HTTP/1.1 302 Found\\r\\nLocation: https://release-assets.githubusercontent.com/asset/%s?sp=r&sig=abc%%3D\\r\\n\\r\\n' "$file" > "$dump"
+                printf '302'
+                exit 0 ;;
+            esac
             case "$url" in
               */releases/latest) cp "$CURL_FIXTURE/latest.json" "$out" ;;
-              */checksums.txt) cp "$CURL_FIXTURE/checksums.txt" "$out" ;;
-              */migate-*-linux-amd64.tar.gz) cp "$CURL_FIXTURE"/migate-*-linux-amd64.tar.gz "$out" ;;
+              *'/releases?per_page=20') cp "$CURL_FIXTURE/latest.json" "$out" ;;
+              */asset/checksums.txt\\?*) cp "$CURL_FIXTURE/checksums.txt" "$out" ;;
+              */asset/migate-*-linux-amd64.tar.gz\\?*) cp "$CURL_FIXTURE"/migate-*-linux-amd64.tar.gz "$out" ;;
               *) printf 'unexpected\\n' >> "$CURL_LOG"; exit 1 ;;
             esac
             printf '200'
@@ -115,6 +127,40 @@ class OnlineInstallTests(unittest.TestCase):
         self.assertIn("control 127.0.0.1:19810 https://example.test", self.install_log.read_text(encoding="utf-8"))
         self.assertNotIn("sentinel-token-value", completed.stdout + completed.stderr)
         self.assertNotIn("sentinel-token-value", (self.root / "curl-argv.log").read_text(encoding="utf-8"))
+
+    def test_release_asset_redirect_to_signed_url(self):
+        completed = self.run_script("gate")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        urls = (self.root / "curl.log").read_text(encoding="utf-8")
+        self.assertIn("https://release-assets.githubusercontent.com/asset/checksums.txt?sp=r&sig=abc%3D", urls)
+        self.assertNotIn("sig=abc", completed.stdout + completed.stderr)
+        # 令牌配置不得转发到签名存储主机
+        for line in (self.root / "curl-argv.log").read_text(encoding="utf-8").splitlines():
+            if "release-assets.githubusercontent.com" in line:
+                self.assertNotIn("--config", line)
+            elif "api.github.com" in line:
+                self.assertIn("--config", line)
+
+    def test_query_rejected_outside_signed_hosts(self):
+        (self.root / "latest.json").write_text('{"tag_name":"v0.2.0"}', encoding="utf-8")
+        curl = self.root / "curl"
+        curl.write_text("#!/bin/sh\nfor a in \"$@\"; do case \"$a\" in -D) d=1 ;; *) [ -n \"$d\" ] && { printf 'Location: https://github.com/x?y=1\\r\\n' > \"$a\"; d=; } ;; esac; done\nprintf '302'\n", encoding="utf-8")
+        completed = self.run_script("gate")
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("下载地址被拒绝", completed.stderr)
+        self.assertFalse(self.install_log.exists())
+
+    def test_list_versions_allows_fixed_page_query(self):
+        completed = self.run_script("list-versions")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("v0.2.0", completed.stdout)
+
+    def test_interactive_prompts_reach_terminal(self):
+        completed = self.run_script(tty="1\n1\n\n\n")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("请输入选项 [1]: ", completed.stderr)
+        self.assertIn("监听地址 [127.0.0.1]: ", completed.stderr)
+        self.assertIn("control 127.0.0.1:19810", self.install_log.read_text(encoding="utf-8"))
 
     def test_bad_checksum_does_not_install(self):
         (self.root / "checksums.txt").write_text("0" * 64 + "  " + self.name + "\n", encoding="utf-8")

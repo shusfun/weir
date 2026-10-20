@@ -219,18 +219,27 @@ fetch_url() {
       *) print_error "下载地址被拒绝"; exit 1 ;;
     esac
     case "$url" in
-      *\?*|*'@'*|*' '*|*'#'*) print_error "下载地址被拒绝"; exit 1 ;;
+      *'@'*|*' '*|*'#'*|*$'\n'*|*$'\r'*) print_error "下载地址被拒绝"; exit 1 ;;
     esac
     local host=${url#https://}
     host=${host%%/*}
+    local signed=false
     case "$host" in
-      api.github.com|github.com|release-assets.githubusercontent.com|objects.githubusercontent.com|github-releases.githubusercontent.com) ;;
+      api.github.com|github.com) ;;
+      # GitHub 附件跳转到带签名查询串的存储地址
+      release-assets.githubusercontent.com|objects.githubusercontent.com|github-releases.githubusercontent.com) signed=true ;;
       *) print_error "下载地址被拒绝"; exit 1 ;;
     esac
-    print_info "$(msg downloading) $url"
+    # 查询串仅允许签名附件地址与固定的发布列表分页
+    if [[ $url == *\?* && $signed != true && $url != "https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=20" ]]; then
+      print_error "下载地址被拒绝"
+      exit 1
+    fi
+    print_info "$(msg downloading) ${url%%\?*}"
     header=$WORKDIR/headers
     local curl_config=()
-    if [[ -n ${MIGATE_GITHUB_TOKEN:-} ]]; then
+    # 令牌只发送给 GitHub 自身，不转发到签名存储主机
+    if [[ -n ${MIGATE_GITHUB_TOKEN:-} && $signed != true ]]; then
       printf 'header = "Authorization: Bearer %s"\n' "$MIGATE_GITHUB_TOKEN" > "$WORKDIR/curl-config"
       chmod 600 "$WORKDIR/curl-config"
       curl_config=(--config "$WORKDIR/curl-config")
