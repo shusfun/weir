@@ -136,6 +136,8 @@ class OnlineInstallTests(unittest.TestCase):
         self.assertNotIn("sig=abc", completed.stdout + completed.stderr)
         # 令牌配置不得转发到签名存储主机
         for line in (self.root / "curl-argv.log").read_text(encoding="utf-8").splitlines():
+            # 每次下载都必须带卡住检测，避免无限等待
+            self.assertIn("--speed-limit 1024 --speed-time 60", line)
             if "release-assets.githubusercontent.com" in line:
                 self.assertNotIn("--config", line)
             elif "api.github.com" in line:
@@ -160,6 +162,9 @@ class OnlineInstallTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("请输入选项 [1]: ", completed.stderr)
         self.assertIn("监听地址 [127.0.0.1]: ", completed.stderr)
+        argv = (self.root / "curl-argv.log").read_text(encoding="utf-8").splitlines()
+        self.assertTrue(any("--progress-bar" in line and "release-assets" in line for line in argv))
+        self.assertFalse(any("--progress-bar" in line and "api.github.com" in line for line in argv))
         self.assertIn("control 127.0.0.1:19810", self.install_log.read_text(encoding="utf-8"))
 
     def test_bad_checksum_does_not_install(self):

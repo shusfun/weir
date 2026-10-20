@@ -244,7 +244,12 @@ fetch_url() {
       chmod 600 "$WORKDIR/curl-config"
       curl_config=(--config "$WORKDIR/curl-config")
     fi
-    code=$("$CURL_BIN" --silent --show-error --connect-timeout 20 --proto '=https' "${curl_config[@]}" -D "$header" -o "$dest" -w '%{http_code}' "$url") || { print_error "下载失败"; exit 1; }
+    # 有终端时显示附件下载进度；低于 1 KiB/s 持续 60 秒视为卡住，中止并重试
+    local progress=(--silent)
+    if [[ $signed == true ]] && is_interactive; then
+      progress=(--progress-bar)
+    fi
+    code=$("$CURL_BIN" "${progress[@]}" --show-error --connect-timeout 20 --speed-limit 1024 --speed-time 60 --retry 3 --retry-delay 3 --proto '=https' "${curl_config[@]}" -D "$header" -o "$dest" -w '%{http_code}' "$url") || { print_error "下载失败，请检查服务器到 GitHub 的网络"; exit 1; }
     code=${code//$'\n'/}
     case "$code" in
       200) return 0 ;;
