@@ -1,4 +1,14 @@
 {
+  "cleanup-control-staging.py": {
+    "scope": "none",
+    "impacts": ["lifecycle"],
+    "recovery": "User-authorized deletion of verified /var/tmp control staging only; preserve current/previous and latest two packages, data/backups/logs; persistent pre-delete plan and metadata archive. No installed release discovery or deletion."
+  },
+  "inspect-control-disk.py": {
+    "scope": "none",
+    "impacts": ["observe"],
+    "recovery": "Read-only filesystem sizes, project artifact metadata, Docker usage and deleted-open-file metadata; no cleanup."
+  },
   "verify-live-outbound-pools.py": {
     "scope": "outbound-pool",
     "impacts": [
@@ -7,6 +17,26 @@
       "final"
     ],
     "recovery": "Prefixed sources/pools/manual inventory, registered fixed catalog tags, dependent routes for acceptance grants and exact transient fixture; only empty-baseline full collection order. Runner disarms auto-sync and restores/verifies exact baseline."
+  },
+  "install-public-setup.py": {
+    "scope": "none",
+    "impacts": ["lifecycle"],
+    "recovery": "Old center config and migate schema are copied under /var/backups/migate before setup is reopened"
+  },
+  "repair-installed-lock.py": {
+    "scope": "none",
+    "impacts": ["lifecycle"],
+    "recovery": "If the database still has an administrator, restore the installed lock and remove the setup token. Does not print or change database data."
+  },
+  "inspect-control-start.py": {
+    "scope": "none",
+    "impacts": ["observe"],
+    "recovery": "Read-only service state and redacted recent control logs."
+  },
+  "inspect-control-http.py": {
+    "scope": "none",
+    "impacts": ["observe"],
+    "recovery": "read-only control listener and setup state"
   },
   "capture-deployment.py": {
     "scope": "none",

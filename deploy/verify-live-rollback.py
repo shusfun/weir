@@ -6,9 +6,10 @@ from remote import connect,run
 
 if os.environ.get('MIGATE_RELEASE_IMPACT') not in ['kernel','lifecycle','final']:
  raise RuntimeError('Full rollback rehearsal requires kernel/lifecycle/final impact; page batches retain backup/readiness checks')
-parser=argparse.ArgumentParser();parser.add_argument("--version",required=True);args=parser.parse_args()
+parser=argparse.ArgumentParser();parser.add_argument("--version",required=True);parser.add_argument("--role",choices=["control","gate"]);args=parser.parse_args()
 results=[]
-for role in ['control','gate']:
+roles=[args.role] if args.role else ['control','gate']
+for role in roles:
  with connect(role) as c:
   version=args.version
   bad=f'{version}-rollback-{int(time.time())}'

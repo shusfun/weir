@@ -74,11 +74,12 @@ func main() {
 		return
 	}
 	if *init {
-		token, err := control.Initialize(*path, cfg)
+		token, err := control.RotateSetupToken(*path, cfg)
 		if err != nil {
 			fatal(err)
 		}
 		fmt.Println("Initialization token (valid 30 minutes):", token)
+		fmt.Fprintf(os.Stderr, "凭证只保存在 %s，有效期 30 分钟。\n", filepath.Join(filepath.Dir(*path), "setup-token"))
 		return
 	}
 	if _, statErr := os.Stat(*path); os.IsNotExist(statErr) {
@@ -87,6 +88,7 @@ func main() {
 			fatal(err)
 		}
 		fmt.Println("Initialization token (valid 30 minutes):", token)
+		fmt.Fprintf(os.Stderr, "凭证只保存在 %s，有效期 30 分钟。\n", filepath.Join(filepath.Dir(*path), "setup-token"))
 		cfg, err = control.LoadConfig(*path)
 		if err != nil {
 			fatal(err)
@@ -100,9 +102,7 @@ func main() {
 	defer server.Close()
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	if cfg.Installed {
-		go server.Workers(ctx)
-	}
+	server.StartBackground(ctx)
 	httpServer := &http.Server{Addr: cfg.Listen, Handler: server.Router(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 65 * time.Second}
 	go func() {
 		<-ctx.Done()

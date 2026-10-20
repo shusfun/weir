@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	entsql "entgo.io/ent/dialect/sql"
@@ -119,18 +120,84 @@ func redisClient(c RedisConfig) *redis.Client {
 	}
 	return redis.NewClient(opts)
 }
+
+type setupCredential struct {
+	Installed bool
+	Hash      string
+	Expires   time.Time
+}
+
+// 安装凭证以磁盘为准。只读取校验所需字段，避免 LoadConfig 在密钥为空时生成新密钥。
+func readSetupCredential(path string) (setupCredential, error) {
+	var cred setupCredential
+	b, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return cred, nil
+	}
+	if err != nil {
+		return cred, err
+	}
+	var raw struct {
+		Installed    bool      `json:"installed"`
+		SetupHash    string    `json:"setup_hash"`
+		SetupExpires time.Time `json:"setup_expires"`
+	}
+	if err = json.Unmarshal(b, &raw); err != nil {
+		return cred, err
+	}
+	cred.Installed = raw.Installed
+	cred.Hash = raw.SetupHash
+	cred.Expires = raw.SetupExpires
+	return cred, nil
+}
+
+func readSetupToken(path string) string {
+	b, err := os.ReadFile(filepath.Join(filepath.Dir(path), "setup-token"))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+func replaceFile(src, dst string) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+	if err := os.Remove(dst); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return os.Rename(src, dst)
+}
+
 func Initialize(path string, c Config) (string, error) {
 	if c.Installed {
+		return "", errors.New("already installed")
+	}
+	disk, err := readSetupCredential(path)
+	if err != nil {
+		return "", err
+	}
+	if disk.Installed {
 		return "", errors.New("already installed")
 	}
 	token := randomToken(32)
 	c.SetupHash = digest(token)
 	c.SetupExpires = time.Now().Add(30 * time.Minute)
-	if err := saveConfig(path, c); err != nil {
+	dir := filepath.Dir(path)
+	pending := filepath.Join(dir, "setup-token.new")
+	if err = os.MkdirAll(dir, 0700); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(filepath.Join(filepath.Dir(path), "setup-token"), []byte(token), 0600); err != nil {
+	if err = os.WriteFile(pending, []byte(token), 0600); err != nil {
 		return "", err
 	}
+	if err = saveConfig(path, c); err != nil {
+		_ = os.Remove(pending)
+		return "", err
+	}
+	if err = replaceFile(pending, filepath.Join(dir, "setup-token")); err != nil {
+		return "", err
+	}
+	_ = os.Remove(filepath.Join(dir, "initialization.txt"))
 	return token, nil
 }

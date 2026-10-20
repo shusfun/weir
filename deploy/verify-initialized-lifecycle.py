@@ -42,7 +42,7 @@ def request(method,path,data=None,token=None,expected=200):
 def login():request('POST','/api/v1/auth/login',{'email':'admin@acceptance.test','password':'isolated-lifecycle-test-password'})
 '''
  python(api+'''
-token=Path('/etc/migate-control/initialization.txt').read_text().strip().split()[-1]
+token=Path('/etc/migate-control/setup-token').read_text().strip()
 db={'host':'postgres','port':5432,'user':'gate','password':'local-test-only','database':'gate','ssl_mode':'disable'}
 redis={'address':'redis:6379','username':'migate','password':'local-test-only'}
 request('POST','/api/v1/setup/test-db',db,token)

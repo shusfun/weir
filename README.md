@@ -27,17 +27,28 @@ bash install-online.sh list-versions
 
 安装包先直连 GitHub 下载；低于 100 KiB/s 持续 15 秒或失败时，依次改用 `gh-proxy.com`、`ghfast.top`、`ghproxy.net`、`gh.llkk.cc`，都不行再慢速直连。`checksums.txt` 始终直连 GitHub 获取，镜像返回的包校验不一致即丢弃；令牌不会发给镜像。`MIGATE_GITHUB_MIRRORS=off` 关闭镜像，也可写逗号分隔的主机名替换默认列表。中途按 Ctrl+C 会清理临时下载目录。
 
-安装完成后可以直接使用二进制：
+安装完成后，`systemctl` 只负责启动后台服务，不进入问答。未初始化时，浏览器打开的是安装向导。两条初始化路径选一条：
+
+```sh
+# Web：读取唯一的短时凭证，在浏览器完成向导
+sudo cat /etc/migate-control/setup-token
+# 凭证被拒绝或过期时轮换。运行中的服务会立即接受新凭证并拒绝旧凭证。
+migate-control --init
+
+# 终端：分步填写 PostgreSQL、Redis ACL、管理员和监听地址
+migate-control --setup
+```
+
+Web 向导在安装完成后会自动切换到登录，不需要再手工重启。终端安装如果发现服务已在运行，会等它就绪；监听地址有变化且本机服务可重启时，会重启服务。不要同时提交两边的安装。
 
 ```sh
 migate-control --version
-migate-control --setup
 systemctl status migate-control
 journalctl -u migate-control -f
 systemctl restart migate-control
 ```
 
-`--setup` 在终端里完成数据库、Redis 和管理员创建。不带参数启动时，如果还没安装，只打开安装向导。Gate 使用 `migate-gate version` 和 `migate-gate pair --center <HTTPS 地址> --name <名称>`。
+Gate 使用 `migate-gate version` 和 `migate-gate pair --center <HTTPS 地址> --name <名称>`。
 
 ## 卸载
 

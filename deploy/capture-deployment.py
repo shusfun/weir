@@ -1,11 +1,15 @@
 """Capture redacted actual runtime/inventory evidence without reading secrets."""
 import json,time
 from pathlib import Path
-from remote import connect,run
+from remote import connect, credentials, run
 from live_api import API
 
 report={'date':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'servers':{}}
+known=set(credentials())
 for role in ['control','gate']:
+ if role not in known:
+  report['servers'][role]={'skipped':'operator credentials do not include this role'}
+  continue
  with connect(role) as c:
   entry={}
   commands={

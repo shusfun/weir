@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -29,16 +30,19 @@ import (
 )
 
 type Server struct {
-	Config   Config
-	Path     string
-	DB       *sql.DB
-	Store    *ent.Client
-	Redis    *redis.Client
-	Crypto   *secrets.AESEncryptor
-	mu       sync.Mutex
-	sourceMu sync.Mutex
-	configMu sync.RWMutex
-	Assets   fs.FS
+	Config       Config
+	Path         string
+	DB           *sql.DB
+	Store        *ent.Client
+	Redis        *redis.Client
+	Crypto       *secrets.AESEncryptor
+	mu           sync.Mutex
+	sourceMu     sync.Mutex
+	configMu     sync.RWMutex
+	Assets       fs.FS
+	runtimeCtx   context.Context
+	workerOnce   sync.Once
+	workersReady atomic.Bool
 }
 
 func redisTLS() *tls.Config  { return &tls.Config{MinVersion: tls.VersionTLS12} }
@@ -282,14 +286,22 @@ func (s *Server) Router() *gin.Engine {
 	})
 	return r
 }
-func (s *Server) setupStatus(c *gin.Context) { c.JSON(200, gin.H{"installed": s.Config.Installed}) }
+func (s *Server) setupStatus(c *gin.Context) {
+	c.JSON(200, gin.H{"installed": s.Config.Installed, "ready": s.serviceReady()})
+}
 func (s *Server) setupGuard(c *gin.Context) {
-	if s.Config.Installed {
+	// 每次从磁盘读取。--init 更新文件后，当前进程立即接受新凭证并拒绝旧凭证。
+	cred, err := readSetupCredential(s.Path)
+	if err != nil {
+		failure(c, 503, "setup_state_unavailable")
+		return
+	}
+	if cred.Installed || s.Config.Installed {
 		failure(c, 409, "already_installed")
 		return
 	}
 	provided := digest(strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer "))
-	if time.Now().After(s.Config.SetupExpires) || subtle.ConstantTimeCompare([]byte(provided), []byte(s.Config.SetupHash)) != 1 {
+	if cred.Hash == "" || !cred.Expires.After(time.Now()) || subtle.ConstantTimeCompare([]byte(provided), []byte(cred.Hash)) != 1 {
 		failure(c, 401, "initialization_token_required")
 		return
 	}
@@ -360,8 +372,8 @@ func (s *Server) install(c *gin.Context) {
 		switch err.Error() {
 		case "schema_permission_required":
 			failure(c, 400, err.Error())
-		case "existing_installation_restore_config":
-			failure(c, 409, err.Error())
+		case "existing_installation_restore_config", "already installed":
+			failure(c, 409, "already_installed")
 		case "migration_failed":
 			failure(c, 500, err.Error())
 		default:
@@ -370,9 +382,21 @@ func (s *Server) install(c *gin.Context) {
 		return
 	}
 	s.audit(c, "system.install", "system", "ok")
-	c.JSON(201, gin.H{"installed": true})
+	c.JSON(201, gin.H{"installed": true, "ready": s.serviceReady()})
 }
 func (s *Server) finishInstall(ctx context.Context, email, password string) error {
+	unlock, err := lockInstall(filepath.Join(filepath.Dir(s.Path), "setup.lock"))
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	cred, err := readSetupCredential(s.Path)
+	if err != nil {
+		return err
+	}
+	if cred.Installed || s.Config.Installed {
+		return errors.New("already installed")
+	}
 	conn, err := s.DB.Conn(ctx)
 	if err != nil {
 		return err
@@ -407,7 +431,13 @@ func (s *Server) finishInstall(ctx context.Context, email, password string) erro
 		return errors.New("config_save_failed_restore_required")
 	}
 	s.Config = cfg
-	_ = os.Remove(filepath.Join(filepath.Dir(s.Path), "setup-token"))
+	dir := filepath.Dir(s.Path)
+	_ = os.Remove(filepath.Join(dir, "setup-token"))
+	_ = os.Remove(filepath.Join(dir, "setup-token.new"))
+	_ = os.Remove(filepath.Join(dir, "initialization.txt"))
+	if s.runtimeCtx != nil {
+		s.ensureWorkers()
+	}
 	return nil
 }
 func (s *Server) setting(ctx context.Context, key string, out any) bool {

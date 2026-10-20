@@ -123,9 +123,9 @@ if [ "$role" = control ]; then
   need_init=1
  fi
  if [ "$need_init" = 1 ]; then
-  "$base/current/migate-control" --config "$config/config.json" --listen "$listen" --init > "$config/initialization.txt"
-  chmod 0600 "$config/initialization.txt"
+  "$base/current/migate-control" --config "$config/config.json" --listen "$listen" --init >/dev/null
  fi
+ rm -f "$config/initialization.txt"
  cat > /etc/systemd/system/migate-control.service <<'UNIT'
 [Unit]
 Description=MiGate Control
@@ -341,6 +341,18 @@ else
   "$base/current/migate-gate" helper-health >/dev/null 2>&1 || { echo 'Gate helper unavailable' >&2; exit 1; }
  done
 fi
-if [ "$role" = control ]; then echo "Initialization credentials: $config/initialization.txt (root/service account only)"; fi
+if [ "$role" = control ]; then
+ if grep -Eq '"installed"[[:space:]]*:[[:space:]]*true' "$config/config.json"; then
+  echo 'Control is already initialized. Configuration and data were kept. Health check passed.'
+  echo 'Open the reverse-proxy site and log in. Do not run setup again.'
+ else
+  echo 'Control is not initialized yet. Choose one setup path:'
+  echo "  Web: read $config/setup-token (mode 0600, valid 30 minutes) and open the wizard."
+  echo '       Rotate a rejected or expired token with: migate-control --init'
+  echo '       A running service loads the new token and rejects the old one.'
+  echo '  Terminal: migate-control --setup'
+  echo 'Do not submit the Web wizard and the terminal wizard at the same time.'
+ fi
+fi
 committed=true
 echo 'Installed. Perform application health and real-client acceptance before marking passed.'

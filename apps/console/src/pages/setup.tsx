@@ -67,6 +67,33 @@ export function SetupPage({ done }: { done: () => void }) {
     [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [phase, setPhase] = useState<"form" | "switching" | "check_failed">(
+    "form",
+  );
+  async function waitUntilReady() {
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      try {
+        const state = await api("/setup/status");
+        const health = await fetch("/healthz");
+        const body = (await health.json().catch(() => ({}))) as {
+          status?: string;
+        };
+        if (
+          state.installed &&
+          state.ready &&
+          health.ok &&
+          body.status === "ok"
+        ) {
+          done();
+          return;
+        }
+      } catch {
+        // 继续轮询，直到超时后显示可重试的失败状态。
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    setPhase("check_failed");
+  }
   async function next(e: FormEvent) {
     e.preventDefault();
     if (busy) return;
@@ -81,16 +108,26 @@ export function SetupPage({ done }: { done: () => void }) {
         const length = new TextEncoder().encode(password).length;
         if (length < 12 || length > 72)
           throw Error("密码长度须为 12–72 字节。");
-        await api(
-          "/setup/install",
-          "POST",
-          { database, redis, email, password },
-          token,
-        );
+        setPhase("switching");
+        try {
+          await api(
+            "/setup/install",
+            "POST",
+            { database, redis, email, password },
+            token,
+          );
+        } catch (installError) {
+          const message =
+            installError instanceof Error ? installError.message : "";
+          if (!message.includes("初始化已经完成")) {
+            setPhase("form");
+            throw installError;
+          }
+        }
         setToken("");
         setPassword("");
         setConfirmation("");
-        done();
+        await waitUntilReady();
         return;
       }
       setStep((v) => v + 1);
@@ -108,6 +145,44 @@ export function SetupPage({ done }: { done: () => void }) {
   }
   function rd<K extends keyof RedisConfig>(key: K, value: RedisConfig[K]) {
     setRedis((v) => ({ ...v, [key]: value }));
+  }
+  if (phase !== "form") {
+    return (
+      <main className="auth-screen setup-screen" data-setup-phase={phase}>
+        <div className="setup-container">
+          <header className="setup-heading">
+            <h1>
+              {phase === "switching"
+                ? "正在切换到正常服务"
+                : "服务尚未就绪"}
+            </h1>
+            <p>
+              {phase === "switching"
+                ? "安装记录已保存。正在确认数据库、Redis 和后台任务。"
+                : "安装记录已保存，但正常服务还没有就绪。可以重新检查，不要再次提交安装。"}
+            </p>
+          </header>
+          {phase === "check_failed" ? (
+            <p className="auth-message error-message" role="alert">
+              服务尚未就绪。
+            </p>
+          ) : (
+            <p role="status">正在切换到正常服务</p>
+          )}
+          {phase === "check_failed" && (
+            <Button
+              type="button"
+              onClick={() => {
+                setPhase("switching");
+                void waitUntilReady();
+              }}
+            >
+              重试检查
+            </Button>
+          )}
+        </div>
+      </main>
+    );
   }
   return (
     <main className="auth-screen setup-screen">
@@ -182,8 +257,13 @@ export function SetupPage({ done }: { done: () => void }) {
                         onChange={setToken}
                       />
                       <p className="setup-info">
-                        在服务器运行 <code>migate-control --init</code>{" "}
-                        后取得凭证，有效期 30 分钟。过期时重新生成后重试。
+                        凭证只保存在服务器的{" "}
+                        <code>/etc/migate-control/setup-token</code>
+                        ，权限 0600，有效期 30
+                        分钟。过期或被拒绝时执行{" "}
+                        <code>migate-control --init</code>
+                        ，运行中的服务会立即改用新凭证并拒绝旧凭证。终端初始化使用{" "}
+                        <code>migate-control --setup</code>，不需要这份凭证。
                       </p>
                     </>
                   )}
