@@ -19,7 +19,7 @@ func TestIsolatedCenterPurgeAndPGRestore(t *testing.T) {
 		t.Skip("requires isolated PG18 tool container")
 	}
 	ctx := context.Background()
-	cfg := control.Config{Installed: true, EncryptionKey: "1111111111111111111111111111111111111111111111111111111111111111", Listen: "127.0.0.1:19810", PublicURL: "http://localhost:19810", Database: control.DatabaseConfig{Host: "postgres", Port: 5432, User: "gate", Password: "local-test-only", Database: "gate", SSLMode: "disable"}, Redis: control.RedisConfig{Address: "redis:6379", Username: "migate", Password: "local-test-only"}}
+	cfg := control.Config{Installed: true, EncryptionKey: "1111111111111111111111111111111111111111111111111111111111111111", Listen: "127.0.0.1:19810", Database: control.DatabaseConfig{Host: "postgres", Port: 5432, User: "gate", Password: "local-test-only", Database: "gate", SSLMode: "disable"}, Redis: control.RedisConfig{Address: "redis:6379", Username: "migate", Password: "local-test-only"}}
 	pc, e := pgx.ParseConfig(pgDSN(cfg.Database))
 	if e != nil {
 		t.Fatal(e)

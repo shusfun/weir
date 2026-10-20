@@ -196,7 +196,7 @@ func (s *Server) putProfilePublication(c *gin.Context) {
 	s.audit(c, "profile.publication."+req.Action, publicationKey(id), "ok")
 	view := publicationView(p)
 	if token != "" {
-		view["url"] = strings.TrimSuffix(s.Config.PublicURL, "/") + "/share/" + token
+		view["url"] = publicLink(c.Request, "/share/"+token)
 	}
 	c.JSON(200, view)
 }

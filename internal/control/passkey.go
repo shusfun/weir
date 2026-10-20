@@ -31,9 +31,15 @@ func (u passkeyUser) WebAuthnID() []byte {
 func (u passkeyUser) WebAuthnName() string                       { return u.account.Email }
 func (u passkeyUser) WebAuthnDisplayName() string                { return u.account.Email }
 func (u passkeyUser) WebAuthnCredentials() []webauthn.Credential { return u.credentials }
-func (s *Server) webAuthn() (*webauthn.WebAuthn, error) {
-	u, _ := url.Parse(s.Config.PublicURL)
-	return webauthn.New(&webauthn.Config{RPDisplayName: "MiGate", RPID: u.Hostname(), RPOrigins: []string{s.Config.PublicURL}, AuthenticatorSelection: protocol.AuthenticatorSelection{UserVerification: protocol.VerificationRequired}})
+
+// 依赖方取当前访问域名；通行密钥与域名绑定，换域名需重新注册。
+func (s *Server) webAuthn(r *http.Request) (*webauthn.WebAuthn, error) {
+	origin := requestOrigin(r)
+	u, err := url.Parse(origin)
+	if err != nil {
+		return nil, err
+	}
+	return webauthn.New(&webauthn.Config{RPDisplayName: "MiGate", RPID: u.Hostname(), RPOrigins: []string{origin}, AuthenticatorSelection: protocol.AuthenticatorSelection{UserVerification: protocol.VerificationRequired}})
 }
 func (s *Server) passUser(c *gin.Context, u *ent.User) passkeyUser {
 	p := passkeyUser{account: u}
@@ -134,7 +140,7 @@ func (s *Server) passLoginBegin(c *gin.Context) {
 		failure(c, 401, "passkey_unavailable")
 		return
 	}
-	wa, err := s.webAuthn()
+	wa, err := s.webAuthn(c.Request)
 	if err != nil {
 		failure(c, 500, "passkey_configuration_invalid")
 		return
@@ -167,7 +173,11 @@ func (s *Server) passLoginFinish(c *gin.Context) {
 		failure(c, 403, "email_verification_required")
 		return
 	}
-	wa, _ := s.webAuthn()
+	wa, err := s.webAuthn(c.Request)
+	if err != nil {
+		failure(c, 500, "passkey_configuration_invalid")
+		return
+	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
 	credential, err := wa.FinishLogin(s.passUser(c, u), ses.Data, c.Request)
 	if err != nil {
@@ -201,7 +211,7 @@ func (s *Server) passRegisterBegin(c *gin.Context) {
 		return
 	}
 	u := c.MustGet("account").(*ent.User)
-	wa, err := s.webAuthn()
+	wa, err := s.webAuthn(c.Request)
 	if err != nil {
 		failure(c, 500, "passkey_configuration_invalid")
 		return
@@ -226,7 +236,11 @@ func (s *Server) passRegisterFinish(c *gin.Context) {
 		return
 	}
 	u := c.MustGet("account").(*ent.User)
-	wa, _ := s.webAuthn()
+	wa, err := s.webAuthn(c.Request)
+	if err != nil {
+		failure(c, 500, "passkey_configuration_invalid")
+		return
+	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
 	credential, err := wa.FinishRegistration(s.passUser(c, u), ses.Data, c.Request)
 	if err != nil {

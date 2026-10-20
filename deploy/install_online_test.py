@@ -144,7 +144,10 @@ class OnlineInstallTests(unittest.TestCase):
     def test_checksum_match_runs_package_installer(self):
         completed = self.run_script("control", "127.0.0.1:19810", "https://example.test")
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertIn("control 127.0.0.1:19810 https://example.test", self.install_log.read_text(encoding="utf-8"))
+        recorded = self.install_log.read_text(encoding="utf-8")
+        # 旧版公共 URL 参数被忽略，只传监听地址
+        self.assertIn("control 127.0.0.1:19810", recorded)
+        self.assertNotIn("example.test", recorded)
         self.assertNotIn("sentinel-token-value", completed.stdout + completed.stderr)
         self.assertNotIn("sentinel-token-value", (self.root / "curl-argv.log").read_text(encoding="utf-8"))
 
@@ -255,6 +258,12 @@ class OnlineInstallTests(unittest.TestCase):
         self.assertIn("status=143", completed.stdout, completed.stderr)
         self.assertEqual(list(self.root.glob("migate-install-*")), [])
         self.assertFalse(self.install_log.exists())
+
+    def test_non_local_listen_warns_plain_http(self):
+        completed = self.run_script("control", "0.0.0.0:19810")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("明文 HTTP", completed.stdout)
+        self.assertIn("control 0.0.0.0:19810", self.install_log.read_text(encoding="utf-8"))
 
     def test_bad_checksum_does_not_install(self):
         (self.root / "checksums.txt").write_text("0" * 64 + "  " + self.name + "\n", encoding="utf-8")

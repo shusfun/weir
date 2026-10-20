@@ -32,7 +32,7 @@ func TestIntegration(t *testing.T) {
 		t.Skip("requires isolated local Docker services")
 	}
 	ctx := context.Background()
-	cfg := Config{Listen: "127.0.0.1:19810", PublicURL: "http://localhost:19810", EncryptionKey: randomToken(32)}
+	cfg := Config{Listen: "127.0.0.1:19810", EncryptionKey: randomToken(32)}
 	path := filepath.Join(t.TempDir(), "config.json")
 	token, err := Initialize(path, cfg)
 	if err != nil {

@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -138,7 +137,7 @@ func (s *Server) Router() *gin.Engine {
 		c.Header("X-Frame-Options", "DENY")
 		c.Header("Cache-Control", "no-store")
 		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'")
-		if c.Request.Method != "GET" && c.Request.Method != "HEAD" && c.GetHeader("Origin") != "" && strings.TrimSuffix(c.GetHeader("Origin"), "/") != strings.TrimSuffix(s.Config.PublicURL, "/") {
+		if !sameOriginRequest(c.Request) {
 			failure(c, 403, "origin_rejected")
 			return
 		}
@@ -490,12 +489,6 @@ func (s *Server) overview(c *gin.Context) {
 		status = "fresh"
 	}
 	c.JSON(200, gin.H{"users": users, "devices": len(devices), "tasks": tasks, "approved_devices": approved, "online_devices": online, "offline_devices": approved - online, "unknown_meters": unknown, "traffic_status": status, "observed_at": now.UTC(), "version": buildinfo.Version, "revision": buildinfo.Revision})
-}
-func safeURL(base, path string) string {
-	u, _ := url.Parse(base)
-	u.Path = path
-	u.RawQuery = ""
-	return u.String()
 }
 
 var _ = fmt.Sprint

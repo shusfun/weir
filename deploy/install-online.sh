@@ -25,7 +25,6 @@ TTY_DEVICE=${MIGATE_DEV_TTY:-/dev/tty}
 LANG_CHOICE=zh
 LISTEN_HOST=127.0.0.1
 LISTEN_PORT=19810
-PUBLIC_URL=http://127.0.0.1:19810
 ROLE=""
 TARGET_VERSION=""
 FORCE_YES=false
@@ -47,7 +46,8 @@ declare -A MSG=(
   [zh.role_title]="选择安装角色"
   [zh.role_control]="中心" [zh.role_gate]="Gate"
   [zh.host_prompt]="监听地址" [zh.port_prompt]="监听端口" [zh.invalid_port]="端口必须是 1-65535"
-  [zh.public_prompt]="公共 URL" [zh.public_https]="非本机监听必须填写 HTTPS 公共 URL"
+  [zh.plain_http]="非本机监听为明文 HTTP 直连；建议保持 127.0.0.1，由反代提供 HTTPS"
+  [zh.proxy_hint]="公共域名按访问请求自动识别；在 1Panel 等反代中指向此地址即可"
   [zh.summary]="监听地址"
   [zh.downloading]="正在下载" [zh.verifying]="正在校验安装包" [zh.installing]="正在安装"
   [zh.done]="安装完成" [zh.visit]="访问地址"
@@ -79,7 +79,8 @@ declare -A MSG=(
   [en.role_title]="Choose role"
   [en.role_control]="Control" [en.role_gate]="Gate"
   [en.host_prompt]="Listen address" [en.port_prompt]="Listen port" [en.invalid_port]="Port must be 1-65535"
-  [en.public_prompt]="Public URL" [en.public_https]="A non-local listener requires an HTTPS public URL"
+  [en.plain_http]="A non-local listener serves plain HTTP; prefer 127.0.0.1 behind an HTTPS reverse proxy"
+  [en.proxy_hint]="The public domain is detected from each request; point your reverse proxy (e.g. 1Panel) here"
   [en.summary]="Listen address"
   [en.downloading]="Downloading" [en.verifying]="Verifying archive" [en.installing]="Installing"
   [en.done]="Installation complete" [en.visit]="Open"
@@ -192,13 +193,17 @@ ask_role() {
 
 configure_control() {
   [[ $ROLE == gate ]] && return
-  if ! is_interactive; then
-    if [[ $LISTEN_HOST == 127.0.0.1 || $LISTEN_HOST == localhost ]]; then
-      [[ $PUBLIC_URL == http://127.0.0.1:19810 ]] && PUBLIC_URL=http://127.0.0.1:${LISTEN_PORT}
-    fi
-    print_info "$(msg summary): ${LISTEN_HOST}:${LISTEN_PORT}"
-    return
+  if is_interactive; then
+    ask_listen
   fi
+  print_info "$(msg summary): ${LISTEN_HOST}:${LISTEN_PORT}"
+  # 公共地址按请求推导；非本机监听只能是明文 HTTP 直连
+  if [[ $LISTEN_HOST != 127.0.0.1 && $LISTEN_HOST != localhost ]]; then
+    print_warning "$(msg plain_http)"
+  fi
+}
+
+ask_listen() {
   echo ""
   prompt_tty "$(msg host_prompt) [${LISTEN_HOST}]: "
   [[ -n $REPLY ]] && LISTEN_HOST=$REPLY
@@ -213,19 +218,6 @@ configure_control() {
       print_error "$(msg invalid_port)"
     fi
   done
-  if [[ $LISTEN_HOST != 127.0.0.1 && $LISTEN_HOST != localhost ]]; then
-    while true; do
-      prompt_tty "$(msg public_prompt): "
-      if [[ $REPLY == https://* ]]; then
-        PUBLIC_URL=$REPLY
-        break
-      fi
-      print_error "$(msg public_https)"
-    done
-  elif [[ $PUBLIC_URL == http://127.0.0.1:19810 || $PUBLIC_URL == http://127.0.0.1:${LISTEN_PORT} ]]; then
-    PUBLIC_URL=http://127.0.0.1:${LISTEN_PORT}
-  fi
-  print_info "$(msg summary): ${LISTEN_HOST}:${LISTEN_PORT}"
 }
 
 # 下载失败返回非零，地址不合规直接退出。参数：目标 地址 [最低速度 B/s] [持续秒数] [重试次数]
@@ -371,12 +363,12 @@ install_package() {
   download_package
   print_info "$(msg installing) v${TARGET_VERSION}"
   if [[ -n ${MIGATE_INSTALL_RECORD:-} ]]; then
-    printf '%s %s:%s %s\n' "$ROLE" "$LISTEN_HOST" "$LISTEN_PORT" "$PUBLIC_URL" >> "$MIGATE_INSTALL_RECORD"
+    printf '%s %s:%s\n' "$ROLE" "$LISTEN_HOST" "$LISTEN_PORT" >> "$MIGATE_INSTALL_RECORD"
     return
   fi
   local package=$WORKDIR
   if [[ $ROLE == control ]]; then
-    sh "$package/install.sh" control "${LISTEN_HOST}:${LISTEN_PORT}" "$PUBLIC_URL"
+    sh "$package/install.sh" control "${LISTEN_HOST}:${LISTEN_PORT}"
   else
     sh "$package/install.sh" gate
   fi
@@ -387,7 +379,10 @@ install_package() {
   print_success "$(msg done)"
   echo "=============================================="
   if [[ $ROLE == control ]]; then
-    echo "  $(msg visit): ${PUBLIC_URL}"
+    echo "  $(msg visit): http://${LISTEN_HOST}:${LISTEN_PORT}"
+    if [[ $LISTEN_HOST == 127.0.0.1 || $LISTEN_HOST == localhost ]]; then
+      echo "  $(msg proxy_hint)"
+    fi
     echo ""
     echo "  migate-control --version"
     echo "  migate-control --setup"
@@ -564,7 +559,8 @@ main() {
     case "$arg" in
       control|gate) ROLE=$arg ;;
       install|upgrade|update|rollback|list-versions|versions|uninstall|remove|--help|-h|help) action=$arg ;;
-      http://*|https://*) PUBLIC_URL=$arg ;;
+      # 旧版公共 URL 参数已不需要，兼容忽略
+      http://*|https://*) ;;
       *:*) LISTEN_HOST=${arg%%:*}; LISTEN_PORT=${arg##*:} ;;
       v[0-9]*|[0-9]*) TARGET_VERSION=$arg ;;
     esac

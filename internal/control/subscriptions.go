@@ -29,7 +29,7 @@ func (s *Server) mySubscription(c *gin.Context) {
 		failure(c, 500, "subscription_unavailable")
 		return
 	}
-	base := safeURL(s.Config.PublicURL, "/sub/"+u.SubscriptionToken)
+	base := publicLink(c.Request, "/sub/"+u.SubscriptionToken)
 	c.JSON(200, gin.H{"url": base, "formats": []string{"base64", "clash", "singbox", "surge", "loon", "quanx", "egern"}, "node_count": len(links), "quota": u.Quota, "used": u.Used, "expires": u.Expires})
 }
 func (s *Server) serveSubscription(c *gin.Context) {

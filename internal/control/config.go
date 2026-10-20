@@ -35,8 +35,8 @@ type RedisConfig struct {
 	TLS      bool   `json:"tls"`
 }
 type Config struct {
+	// 只配置监听地址；公共地址按请求推导，旧配置中的 public_url 被忽略
 	Listen        string         `json:"listen"`
-	PublicURL     string         `json:"public_url"`
 	Database      DatabaseConfig `json:"database"`
 	Redis         RedisConfig    `json:"redis"`
 	EncryptionKey string         `json:"encryption_key"`
@@ -66,18 +66,11 @@ func LoadConfig(path string) (Config, error) {
 	if c.Listen == "" {
 		c.Listen = "127.0.0.1:19810"
 	}
-	if c.PublicURL == "" {
-		c.PublicURL = "http://localhost:19810"
-	}
 	if c.EncryptionKey == "" {
 		c.EncryptionKey = randomToken(32)
 	}
 	if _, _, err = net.SplitHostPort(c.Listen); err != nil {
 		return c, fmt.Errorf("invalid listen address: %w", err)
-	}
-	u, err := url.Parse(c.PublicURL)
-	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1") {
-		return c, errors.New("public_url must be HTTPS, except localhost")
 	}
 	return c, nil
 }

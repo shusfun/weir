@@ -30,7 +30,7 @@ func TestApplySetupStopsBeforeInstallWhenDatabaseIsDown(t *testing.T) {
 
 func TestApplySetupRejectsInstalledConfiguration(t *testing.T) {
 	path := t.TempDir() + "/config.json"
-	cfg := Config{Installed: true, Listen: "127.0.0.1:19810", PublicURL: "http://127.0.0.1:19810", EncryptionKey: strings.Repeat("ab", 32)}
+	cfg := Config{Installed: true, Listen: "127.0.0.1:19810", EncryptionKey: strings.Repeat("ab", 32)}
 	if err := saveConfig(path, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestApplySetupRejectsInstalledConfiguration(t *testing.T) {
 
 func TestRunSetupCLIRejectsInstalledConfigurationBeforePrompts(t *testing.T) {
 	path := t.TempDir() + "/config.json"
-	if err := saveConfig(path, Config{Installed: true, Listen: "127.0.0.1:19810", PublicURL: "http://127.0.0.1:19810", EncryptionKey: strings.Repeat("ab", 32)}); err != nil {
+	if err := saveConfig(path, Config{Installed: true, Listen: "127.0.0.1:19810", EncryptionKey: strings.Repeat("ab", 32)}); err != nil {
 		t.Fatal(err)
 	}
 	err := RunSetupCLI(path, strings.NewReader(""), func(string) (string, error) {

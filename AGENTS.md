@@ -72,7 +72,7 @@
 
 - 初始化参考 Sub2API：短时凭证、PG / Redis 测试、管理员创建、串行安装与完成锁定。
 - 中心使用现有 1Panel 的 gate 数据库，独立 migate schema；Redis 使用 migate: 前缀与专用 ACL。不得清空共享实例。
-- 中心默认 127.0.0.1:19810；安装配置允许输入监听 IP、端口和公共 URL。仅信任明确配置的反代来源。
+- 中心默认 127.0.0.1:19810；安装只配置监听 IP 与端口，不配置公共 URL（用户 2026-10-20 明确调整）。公共地址按请求推导，仅信任本机回环反代的 X-Forwarded-Proto / X-Forwarded-Host；CSRF 以 Sec-Fetch-Site / Origin 与本站主机比对，不依赖配置来源。
 - 本机构建 React 并嵌入 Go；CGO_ENABLED=0 交叉编译 Linux 产物，校验后上传，systemd 运行。服务器不编译源码。
 - Gate 与现有 x-ui 共存，不占用 80、443、8443；本项目独立管理内核和配置。
 - clean 保留当前与回滚版本；uninstall 默认保留数据与托管内核；--with-cores 移除托管内核；--purge 先备份再移除本项目数据。

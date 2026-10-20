@@ -25,7 +25,6 @@ func main() {
 	f := flag.NewFlagSet("control", flag.ExitOnError)
 	path := f.String("config", "/etc/migate-control/config.json", "configuration file")
 	listen := f.String("listen", "", "listen address override")
-	public := f.String("public-url", "", "public HTTPS URL")
 	init := f.Bool("init", false, "create setup configuration and print short-lived initialization token")
 	health := f.Bool("health-check", false, "check configured local HTTP and dependencies")
 	version := f.Bool("version", false, "print release version")
@@ -47,9 +46,6 @@ func main() {
 	}
 	if *listen != "" {
 		cfg.Listen = *listen
-	}
-	if *public != "" {
-		cfg.PublicURL = *public
 	}
 	if *health {
 		host, port, e := net.SplitHostPort(cfg.Listen)

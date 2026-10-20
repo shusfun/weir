@@ -8,6 +8,8 @@
 
 和 Sub2API 一样，直接把脚本交给 Bash。有终端时会先选语言，再问中心的监听地址和端口；直接回车使用 `127.0.0.1:19810`。
 
+安装只配置监听地址，不需要填写公共 URL。推荐保持 `127.0.0.1`，由 1Panel 等反代提供 HTTPS；中心按每次请求识别访问域名，订阅 / 分享链接、Cookie 的 `Secure` 与通行密钥都随之生成，因此反代需转发 `Host` 和 `X-Forwarded-Proto`（只信任本机反代的转发头）。跨站提交按浏览器 `Sec-Fetch-Site` / `Origin` 拒绝。监听 `0.0.0.0` 时是明文 HTTP 直连，安装会给出警告。
+
 ```sh
 curl -sSL https://raw.githubusercontent.com/shusfun/MiSub/main/deploy/install-online.sh | bash
 ```

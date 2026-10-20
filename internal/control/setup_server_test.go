@@ -10,7 +10,6 @@ import (
 func TestUninstalledServerOnlyExposesSetup(t *testing.T) {
 	server, err := New(Config{
 		Listen:        "127.0.0.1:19810",
-		PublicURL:     "http://127.0.0.1:19810",
 		EncryptionKey: strings.Repeat("ab", 32),
 	}, t.TempDir()+"/config.json", nil)
 	if err != nil {

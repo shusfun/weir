@@ -63,7 +63,7 @@ func (s *Server) issueSession(c *gin.Context, u *ent.User, mfa bool) {
 		return
 	}
 	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie("migate_session", token, 86400, "/", "", strings.HasPrefix(s.Config.PublicURL, "https://"), true)
+	c.SetCookie("migate_session", token, 86400, "/", "", requestSecure(c.Request), true)
 	c.Set("user_id", u.ID)
 	s.audit(c, "auth.login", fmt.Sprint(u.ID), "ok")
 	c.JSON(200, gin.H{"user": userView(u), "mfa": mfa})
@@ -205,7 +205,7 @@ func (s *Server) me(c *gin.Context) { u := c.MustGet("account").(*ent.User); c.J
 func (s *Server) logout(c *gin.Context) {
 	s.Redis.Del(c.Request.Context(), c.GetString("session_key"))
 	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie("migate_session", "", -1, "/", "", strings.HasPrefix(s.Config.PublicURL, "https://"), true)
+	c.SetCookie("migate_session", "", -1, "/", "", requestSecure(c.Request), true)
 	c.JSON(200, gin.H{"ok": true})
 }
 func (s *Server) sessions(c *gin.Context) { s.listSessions(c, c.GetInt("user_id")) }

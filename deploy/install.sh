@@ -3,7 +3,7 @@
 set -eu
 umask 077
 role=${1:-}
-case "$role" in control|gate) ;; *) echo 'usage: sh install.sh control|gate [listen-address] [public-HTTPS-URL]' >&2; exit 2;; esac
+case "$role" in control|gate) ;; *) echo 'usage: sh install.sh control|gate [listen-address]' >&2; exit 2;; esac
 [ "$(id -u)" = 0 ] || { echo 'root required' >&2; exit 1; }
 package=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$package"
@@ -116,7 +116,6 @@ ln -sfn "$base/current/migate-$role" "/usr/local/bin/migate-$role"
 ln -sfn "$base/migate-manage" /usr/local/bin/migate-manage
 if [ "$role" = control ]; then
  listen=${2:-127.0.0.1:19810}
- public=${3:-http://localhost:19810}
  need_init=0
  if [ ! -f "$config/config.json" ]; then
   need_init=1
@@ -124,7 +123,7 @@ if [ "$role" = control ]; then
   need_init=1
  fi
  if [ "$need_init" = 1 ]; then
-  "$base/current/migate-control" --config "$config/config.json" --listen "$listen" --public-url "$public" --init > "$config/initialization.txt"
+  "$base/current/migate-control" --config "$config/config.json" --listen "$listen" --init > "$config/initialization.txt"
   chmod 0600 "$config/initialization.txt"
  fi
  cat > /etc/systemd/system/migate-control.service <<'UNIT'
