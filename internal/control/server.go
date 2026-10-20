@@ -352,56 +352,64 @@ func (s *Server) install(c *gin.Context) {
 	cfg := s.Config
 	cfg.Database = req.Database
 	cfg.Redis = req.Redis
+	s.Config = cfg
 	if err := s.connect(cfg); err != nil {
 		failure(c, 400, "dependency_connection_failed")
 		return
 	}
-	ctx := c.Request.Context()
+	if err := s.finishInstall(c.Request.Context(), req.Email, req.Password); err != nil {
+		switch err.Error() {
+		case "schema_permission_required":
+			failure(c, 400, err.Error())
+		case "existing_installation_restore_config":
+			failure(c, 409, err.Error())
+		case "migration_failed":
+			failure(c, 500, err.Error())
+		default:
+			failure(c, 500, "install_failed")
+		}
+		return
+	}
+	s.audit(c, "system.install", "system", "ok")
+	c.JSON(201, gin.H{"installed": true})
+}
+func (s *Server) finishInstall(ctx context.Context, email, password string) error {
 	conn, err := s.DB.Conn(ctx)
 	if err != nil {
-		failure(c, 500, "install_failed")
-		return
+		return err
 	}
 	defer conn.Close()
 	if _, err = conn.ExecContext(ctx, "SELECT pg_advisory_lock(69442899)"); err != nil {
-		failure(c, 500, "install_failed")
-		return
+		return err
 	}
 	defer conn.ExecContext(context.Background(), "SELECT pg_advisory_unlock(69442899)")
 	if _, err = s.DB.ExecContext(ctx, "CREATE SCHEMA IF NOT EXISTS migate"); err != nil {
-		failure(c, 400, "schema_permission_required")
-		return
+		return errors.New("schema_permission_required")
 	}
 	if err = s.Store.Schema.Create(ctx); err != nil {
-		failure(c, 500, "migration_failed")
-		return
+		return errors.New("migration_failed")
 	}
 	count, err := s.Store.User.Query().Where(user.RoleEQ("admin")).Count(ctx)
 	if err != nil {
-		failure(c, 500, "install_failed")
-		return
+		return err
 	}
 	if count > 0 {
-		failure(c, 409, "existing_installation_restore_config")
-		return
+		return errors.New("existing_installation_restore_config")
 	}
-	hash, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	_, err = s.Store.User.Create().SetEmail(strings.ToLower(req.Email)).SetPasswordHash(string(hash)).SetRole("admin").SetEmailVerified(true).SetSubscriptionToken(randomToken(32)).Save(ctx)
-	if err != nil {
-		failure(c, 500, "install_failed")
-		return
+	hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if _, err = s.Store.User.Create().SetEmail(strings.ToLower(email)).SetPasswordHash(string(hash)).SetRole("admin").SetEmailVerified(true).SetSubscriptionToken(randomToken(32)).Save(ctx); err != nil {
+		return err
 	}
+	cfg := s.Config
 	cfg.Installed = true
 	cfg.SetupHash = ""
 	if err = saveConfig(s.Path, cfg); err != nil {
 		s.Config = cfg
-		failure(c, 500, "config_save_failed_restore_required")
-		return
+		return errors.New("config_save_failed_restore_required")
 	}
 	s.Config = cfg
 	_ = os.Remove(filepath.Join(filepath.Dir(s.Path), "setup-token"))
-	s.audit(c, "system.install", "system", "ok")
-	c.JSON(201, gin.H{"installed": true})
+	return nil
 }
 func (s *Server) setting(ctx context.Context, key string, out any) bool {
 	r, err := s.Store.Resource.Query().Where(resource.KindEQ("settings"), resource.KeyEQ(key)).Only(ctx)

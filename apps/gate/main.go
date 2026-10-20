@@ -60,7 +60,7 @@ func main() {
 			}
 		}
 	case "version":
-		fmt.Println("migate-gate", buildinfo.Version, buildinfo.Revision)
+		fmt.Println(buildinfo.GateVersionLine())
 	default:
 		err = fmt.Errorf("unknown command")
 	}

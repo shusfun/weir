@@ -299,6 +299,18 @@ install_package() {
   echo "=============================================="
   if [[ $ROLE == control ]]; then
     echo "  $(msg visit): ${PUBLIC_URL}"
+    echo ""
+    echo "  migate-control --version"
+    echo "  migate-control --setup"
+    echo "  systemctl status migate-control"
+    echo "  journalctl -u migate-control -f"
+    echo "  systemctl restart migate-control"
+  else
+    echo "  migate-gate version"
+    echo "  migate-gate pair --center <HTTPS 地址> --name <名称>"
+    echo "  systemctl status migate-gate"
+    echo "  journalctl -u migate-gate -f"
+    echo "  systemctl restart migate-gate"
   fi
   echo ""
 }

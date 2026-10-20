@@ -23,6 +23,18 @@ bash install-online.sh list-versions
 
 没有终端时使用默认监听地址，不再提问。Gate 装好以后，后续版本由中心校验并推送。
 
+安装完成后可以直接使用二进制：
+
+```sh
+migate-control --version
+migate-control --setup
+systemctl status migate-control
+journalctl -u migate-control -f
+systemctl restart migate-control
+```
+
+`--setup` 在终端里完成数据库、Redis 和管理员创建。不带参数启动时，如果还没安装，只打开安装向导。Gate 使用 `migate-gate version` 和 `migate-gate pair --center <HTTPS 地址> --name <名称>`。
+
 ## 卸载
 
 交互卸载会先确认。确认后询问是否清除配置和数据，直接回车保留。

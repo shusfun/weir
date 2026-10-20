@@ -29,9 +29,16 @@ func main() {
 	init := f.Bool("init", false, "create setup configuration and print short-lived initialization token")
 	health := f.Bool("health-check", false, "check configured local HTTP and dependencies")
 	version := f.Bool("version", false, "print release version")
+	setupCLI := f.Bool("setup", false, "run the setup wizard in the terminal")
 	f.Parse(os.Args[1:])
 	if *version {
-		fmt.Println("migate-control", buildinfo.Version, buildinfo.Revision)
+		fmt.Println(buildinfo.ControlVersionLine())
+		return
+	}
+	if *setupCLI {
+		if err := control.RunSetupCLI(*path, os.Stdin, control.ReadSecret); err != nil {
+			fatal(err)
+		}
 		return
 	}
 	cfg, err := control.LoadConfig(*path)
@@ -78,6 +85,17 @@ func main() {
 		fmt.Println("Initialization token (valid 30 minutes):", token)
 		return
 	}
+	if _, statErr := os.Stat(*path); os.IsNotExist(statErr) {
+		token, err := control.Initialize(*path, cfg)
+		if err != nil {
+			fatal(err)
+		}
+		fmt.Println("Initialization token (valid 30 minutes):", token)
+		cfg, err = control.LoadConfig(*path)
+		if err != nil {
+			fatal(err)
+		}
+	}
 	assets, _ := fs.Sub(embedded, "static")
 	server, err := control.New(cfg, *path, assets)
 	if err != nil {
@@ -86,7 +104,9 @@ func main() {
 	defer server.Close()
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	go server.Workers(ctx)
+	if cfg.Installed {
+		go server.Workers(ctx)
+	}
 	httpServer := &http.Server{Addr: cfg.Listen, Handler: server.Router(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 65 * time.Second}
 	go func() {
 		<-ctx.Done()

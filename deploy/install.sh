@@ -112,6 +112,8 @@ if [ "$role" = gate ] && [ -f core-packages/catalog.json ]; then
 fi
 if [ -n "$previous" ]; then ln -sfn "releases/$previous" "$base/previous"; fi
 ln -sfn "releases/$version" "$base/current"
+ln -sfn "$base/current/migate-$role" "/usr/local/bin/migate-$role"
+ln -sfn "$base/migate-manage" /usr/local/bin/migate-manage
 if [ "$role" = control ]; then
  listen=${2:-127.0.0.1:19810}
  public=${3:-http://localhost:19810}
