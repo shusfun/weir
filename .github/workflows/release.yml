@@ -123,6 +123,7 @@ jobs:
       - name: Advance patch version
         if: needs.build.outputs.dry_run != 'true'
         env:
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.build.outputs.version }}
         shell: bash
         run: |
