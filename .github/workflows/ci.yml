@@ -60,7 +60,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: sh -n deploy/install.sh deploy/github-update.sh deploy/install-online.sh
-      - run: python deploy/version_test.py
+      - run: python version_test.py
         working-directory: deploy
       - run: python github_update_test.py
         working-directory: deploy
