@@ -1,4 +1,5 @@
 import { ReleaseUpdateCard } from "../components/release-update";
+import { ThemeControl } from "../theme";
 import {SubscriptionNamingEditor} from "../components/subscription-naming";
 import {SubscriptionDefaultsEditor} from "../components/subscription-defaults";
 import {AnnouncementEditor} from "../components/global-announcement";
@@ -153,6 +154,7 @@ export function SettingsPage({ loginRequired }: { loginRequired: () => void }) {
           <h2>系统设置</h2>
           <p>统一管理账户策略、邮件服务与安全观察。</p>
         </div>
+        <ThemeControl />
       </div>
       {query.error && (
         <State error={query.error} onRetry={() => query.refetch()} />

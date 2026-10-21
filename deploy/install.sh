@@ -173,6 +173,7 @@ UNIT
 Description=Watch MiGate release request
 [Path]
 PathExists=/var/lib/migate-control/release-request.json
+PathChanged=/var/lib/migate-control/release-request.json
 Unit=migate-control-update.service
 [Install]
 WantedBy=multi-user.target

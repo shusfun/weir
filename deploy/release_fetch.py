@@ -159,6 +159,7 @@ def status(path, state, message):
 
 def fetch(repo, tag, token_file, output, status_file):
     token = read_token(token_file)
+    status(status_file, "downloading", "正在下载")
     if not tag:
         api = "https://api.github.com/repos/" + repo + "/releases/latest"
         with _request(api, token) as response:
@@ -173,6 +174,7 @@ def fetch(repo, tag, token_file, output, status_file):
         checksum_text = response.read().decode("utf-8")
     with _request(archive_url, token) as response:
         archive = response.read()
+    status(status_file, "verifying", "正在校验")
     files = verify_archive(checksum_text, archive, version)
     write_manifest(output, version, files, archive)
     status(status_file, "verified", "release checksum verified")

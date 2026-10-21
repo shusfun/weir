@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 @source '../../../packages/ui/src';
 @theme {
   --color-primary: #315cdd;
@@ -369,3 +370,15 @@ button,input,textarea,select{font-family:inherit}button[data-slot=button]{gap:8p
 
 .pool-dialog[data-slot=dialog-content]{width:min(760px,calc(100vw - 32px));max-width:760px}.pool-node{display:flex;align-items:flex-start;gap:12px;padding:14px 0;border-bottom:1px solid var(--line,#e2e8f0)}.pool-node>[data-slot=checkbox]{margin:3px 0 0;flex:none}.pool-node>span{flex:1;min-width:0;overflow-wrap:anywhere}.pool-node strong,.pool-node small{display:block}.pool-node small{color:var(--muted,#64748b);margin-top:4px;font-size:12px}
 .pool-toggle-row{display:flex;align-items:center;justify-content:space-between;gap:18px}.pool-toggle-row>[data-slot=label]{min-width:0;font-size:12px}.pool-toggle-row>[data-slot=switch]{flex:0 0 32px;width:32px}
+.theme-control{display:inline-flex;gap:4px;align-items:center}
+.dark{--color-background:#14161f;--color-foreground:#e7e9f2;--color-card:#1c1f2b;--color-card-foreground:#e7e9f2;--color-popover:#1c1f2b;--color-popover-foreground:#e7e9f2;--color-muted:#262a38;--color-muted-foreground:#a7adbd;--color-border:#343848;--color-input:#343848;--color-secondary:#2a2744;--color-secondary-foreground:#d5cef8;--color-accent:#2a2744;--color-accent-foreground:#d5cef8;color-scheme:dark}
+.dark body{background:#14161f;color:#e7e9f2}
+.dark p,.dark small{color:#a7adbd}
+.dark .desktop-sidebar,.dark .global-bar,.dark .workspace-footer,.dark [data-slot=card],.dark [data-slot=dialog-content]{background:#1c1f2b;border-color:#343848;color:#e7e9f2}
+.dark .brand,.dark .nav-item,.dark .breadcrumb,.dark h1,.dark h2,.dark h3{color:#e7e9f2}
+.dark .nav-item.active{background:#2a2744;color:#d5cef8}
+.dark .nav-section-label,.dark .account-text small,.dark .console-label{color:#8b93a7}
+.dark .sidebar-bottom,.dark .table-toolbar,.dark [data-slot=table-row],.dark .list-row{border-color:#343848}
+.dark [data-slot=table-head],.dark .search-field input,.dark [data-slot=input],.dark [data-slot=select-trigger],.dark [data-slot=textarea]{background:#222636;color:#e7e9f2;border-color:#343848}
+.dark [data-slot=dialog-footer]{background:#181b26}
+.dark .environment,.dark .workspace-footer{color:#8b93a7}

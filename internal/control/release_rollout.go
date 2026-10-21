@@ -40,6 +40,7 @@ func (s *Server) releaseStatus(c *gin.Context) {
 	if err != nil {
 		checked = update.CheckResponse{CurrentVersion: buildinfo.Version, Status: "unknown", Message: "发布信息不可用"}
 	}
+	stage, detail, pending := s.releaseJob()
 	c.JSON(200, gin.H{
 		"current_version":  checked.CurrentVersion,
 		"latest_version":   checked.LatestVersion,
@@ -48,7 +49,74 @@ func (s *Server) releaseStatus(c *gin.Context) {
 		"status":           checked.Status,
 		"message":          checked.Message,
 		"gates":            s.gateRollout(c.Request.Context()),
+		"job": gin.H{
+			"stage":           stage,
+			"message":         detail,
+			"request_pending": pending,
+		},
 	})
+}
+
+func (s *Server) releaseJob() (string, string, bool) {
+	requestPath := filepath.Join(s.releaseStateDir(), "release-request.json")
+	_, requestErr := os.Stat(requestPath)
+	pending := requestErr == nil
+	body, err := os.ReadFile(filepath.Join(s.releaseStateDir(), "release-status.json"))
+	if err != nil {
+		if pending {
+			return "requested", releaseStageText("requested"), true
+		}
+		return "idle", "", false
+	}
+	var raw struct {
+		Status  string `json:"status"`
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(body, &raw) != nil {
+		return "unknown", "更新状态无法读取", pending
+	}
+	stage := raw.Status
+	switch stage {
+	case "requested", "downloading", "verifying", "verified", "installing", "restarting", "failed":
+	default:
+		stage = "unknown"
+	}
+	detail := releaseStageText(stage)
+	if stage == "failed" && safeReleaseDetail(raw.Message) {
+		detail = raw.Message
+	}
+	return stage, detail, pending
+}
+
+func releaseStageText(stage string) string {
+	switch stage {
+	case "requested":
+		return "已提交，等待安装单元"
+	case "downloading":
+		return "正在下载"
+	case "verifying", "verified":
+		return "正在校验"
+	case "installing":
+		return "正在安装"
+	case "restarting":
+		return "即将重启"
+	case "failed":
+		return "更新失败"
+	default:
+		return "更新状态无法读取"
+	}
+}
+
+func safeReleaseDetail(message string) bool {
+	if message == "" || len(message) > 80 {
+		return false
+	}
+	for _, r := range message {
+		if r < 32 || r == '/' || r == '\\' {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Server) requestRelease(c *gin.Context) {
@@ -60,18 +128,24 @@ func (s *Server) requestRelease(c *gin.Context) {
 		failure(c, 400, "release_confirmation_required")
 		return
 	}
-	if req.Tag != "" {
-		version, ok := buildinfo.ParseScheme(req.Tag)
-		if !ok || req.Tag != "v"+version.String() {
-			failure(c, 400, "release_tag_refused")
-			return
-		}
+	version, ok := buildinfo.ParseScheme(req.Tag)
+	if !ok || req.Tag != "v"+version.String() {
+		failure(c, 400, "release_tag_refused")
+		return
 	}
-	path := filepath.Join(s.releaseStateDir(), "release-request.json")
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	dir := s.releaseStateDir()
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		failure(c, 503, "release_request_failed")
 		return
 	}
+	statusBody, _ := json.Marshal(map[string]string{"status": "requested", "message": "已提交，等待安装单元"})
+	if err := os.WriteFile(filepath.Join(dir, "release-status.json"), statusBody, 0600); err != nil {
+		failure(c, 503, "release_request_failed")
+		return
+	}
+	path := filepath.Join(dir, "release-request.json")
+	// 先删除再创建，已存在的请求文件也能再次触发 PathExists。
+	_ = os.Remove(path)
 	body, _ := json.Marshal(map[string]string{"tag": req.Tag})
 	if err := os.WriteFile(path, body, 0600); err != nil {
 		failure(c, 503, "release_request_failed")

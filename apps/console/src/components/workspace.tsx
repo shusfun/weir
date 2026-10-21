@@ -17,6 +17,7 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
+import { ThemeControl } from "../theme";
 type Navigation = readonly (readonly [
   string,
   string,
@@ -136,6 +137,7 @@ export function Workspace({
             </span>
           </div>
           <div className="actions">
+            <ThemeControl />
             <span className="console-label">
               <span className="status-dot" />
               安全会话

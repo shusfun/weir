@@ -1,4 +1,5 @@
 import hashlib
+import json
 import sys
 import io
 import os
@@ -121,6 +122,9 @@ class UpdateScriptTests(unittest.TestCase):
         self.assertFalse(record.exists())
         self.assertTrue((release / "old").exists())
         self.assertNotIn("sentinel-token-value", completed.stdout + completed.stderr)
+        status = json.loads((root / "status.json").read_text(encoding="utf-8"))
+        self.assertEqual(status["status"], "failed")
+        self.assertNotIn("/", status["message"])
 
     def test_verified_fetch_records_control_install(self):
         root = pathlib.Path(tempfile.mkdtemp())
@@ -139,6 +143,35 @@ class UpdateScriptTests(unittest.TestCase):
         })
         subprocess.run([shell_program(), str(pathlib.Path(__file__).resolve().parent / "github-update.sh"), "v0.2.0"], check=True, env=env, text=True, capture_output=True)
         self.assertEqual(record.read_text(encoding="utf-8").strip(), "control")
+        status = json.loads((root / "status.json").read_text(encoding="utf-8"))
+        self.assertEqual(status["status"], "installing")
+
+    def test_apply_request_uses_saved_tag_and_removes_file(self):
+        root = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root)
+        fetcher = root / "fetch.py"
+        fetcher.write_text(
+            "import pathlib, sys\n"
+            "root = pathlib.Path(sys.argv[5])\n"
+            "root.mkdir(parents=True, exist_ok=True)\n"
+            "(root / 'seen-tag').write_text(sys.argv[3], encoding='utf-8')\n",
+            encoding="utf-8",
+        )
+        request = root / "request.json"
+        request.write_text('{"tag":"v0.2.0"}', encoding="utf-8")
+        env = os.environ.copy()
+        env.update({
+            "MIGATE_RELEASE_FETCH": fetcher.as_posix(),
+            "MIGATE_RELEASE_REQUEST": request.as_posix(),
+            "MIGATE_GATE_RELEASE_DIR": (root / "gate-release").as_posix(),
+            "MIGATE_RELEASE_STATUS": (root / "status.json").as_posix(),
+            "MIGATE_INSTALL_RECORD": (root / "install.log").as_posix(),
+            "MIGATE_GITHUB_TOKEN_FILE": (root / "missing-token").as_posix(),
+            "MIGATE_PYTHON": sys.executable,
+        })
+        subprocess.run([shell_program(), str(pathlib.Path(__file__).resolve().parent / "github-update.sh"), "--apply-request"], check=True, env=env, text=True, capture_output=True)
+        self.assertFalse(request.exists())
+        self.assertEqual((root / "gate-release" / "seen-tag").read_text(encoding="utf-8"), "v0.2.0")
 
 
 if __name__ == "__main__":
