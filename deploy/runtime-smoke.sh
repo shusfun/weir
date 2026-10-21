@@ -15,7 +15,7 @@ trap 'kill "${control_pid:-}" 2>/dev/null || true; rm -rf "$test_dir"' EXIT
 # Suppress the disposable initialization token in evidence output.
 ./migate-control --config "$test_dir/config.json" --init >/dev/null
 test -s "$test_dir/setup-token"
-./migate-control --config "$test_dir/config.json" >"$test_dir/control.log" 2>&1 &
+./migate-control --config "$test_dir/config.json" --serve >"$test_dir/control.log" 2>&1 &
 control_pid=$!
 ready=0
 for attempt in 1 2 3 4 5; do

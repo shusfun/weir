@@ -228,14 +228,7 @@ func (s *Server) revokeSession(c *gin.Context) {
 	c.JSON(200, gin.H{"ok": true})
 }
 func (s *Server) revokeAll(ctx context.Context, id int) {
-	iter := s.Redis.Scan(ctx, 0, "migate:session:*", 100).Iterator()
-	for iter.Next(ctx) {
-		var ses Session
-		b, err := s.Redis.Get(ctx, iter.Val()).Bytes()
-		if err == nil && json.Unmarshal(b, &ses) == nil && ses.UserID == id {
-			s.Redis.Del(ctx, iter.Val())
-		}
-	}
+	_ = revokeUserSessions(ctx, s.Redis, id)
 }
 func (s *Server) reauth(c *gin.Context, password, code string) bool {
 	u := c.MustGet("account").(*ent.User)

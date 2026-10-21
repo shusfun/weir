@@ -114,6 +114,7 @@ if [ -n "$previous" ]; then ln -sfn "releases/$previous" "$base/previous"; fi
 ln -sfn "releases/$version" "$base/current"
 ln -sfn "$base/current/migate-$role" "/usr/local/bin/migate-$role"
 ln -sfn "$base/migate-manage" /usr/local/bin/migate-manage
+if [ "$role" = control ]; then ln -sfn "$base/current/migate-control" /usr/local/bin/migate; fi
 if [ "$role" = control ]; then
  listen=${2:-127.0.0.1:19810}
  need_init=0
@@ -138,7 +139,7 @@ StateDirectory=migate-control
 ConfigurationDirectory=migate-control
 ConfigurationDirectoryMode=0700
 StateDirectoryMode=0700
-ExecStart=/opt/migate-control/current/migate-control --config /etc/migate-control/config.json
+ExecStart=/opt/migate-control/current/migate-control --config /etc/migate-control/config.json --serve
 Restart=on-failure
 UMask=0077
 NoNewPrivileges=yes
@@ -344,13 +345,15 @@ fi
 if [ "$role" = control ]; then
  if grep -Eq '"installed"[[:space:]]*:[[:space:]]*true' "$config/config.json"; then
   echo 'Control is already initialized. Configuration and data were kept. Health check passed.'
+  echo 'Run migate for service status, administrator recovery, and version.'
   echo 'Open the reverse-proxy site and log in. Do not run setup again.'
  else
-  echo 'Control is not initialized yet. Choose one setup path:'
+  echo 'Control is not initialized yet. Run: migate'
+  echo '  The Chinese menu covers service control, setup, the administrator, and the setup token.'
   echo "  Web: read $config/setup-token (mode 0600, valid 30 minutes) and open the wizard."
-  echo '       Rotate a rejected or expired token with: migate-control --init'
+  echo '       Rotate a rejected or expired token from the menu, or with: migate-control --init'
   echo '       A running service loads the new token and rejects the old one.'
-  echo '  Terminal: migate-control --setup'
+  echo '  Terminal: choose setup in the menu, or run migate-control --setup'
   echo 'Do not submit the Web wizard and the terminal wizard at the same time.'
  fi
 fi

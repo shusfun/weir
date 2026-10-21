@@ -27,7 +27,15 @@ bash install-online.sh list-versions
 
 安装包先直连 GitHub 下载；低于 100 KiB/s 持续 15 秒或失败时，依次改用 `gh-proxy.com`、`ghfast.top`、`ghproxy.net`、`gh.llkk.cc`，都不行再慢速直连。`checksums.txt` 始终直连 GitHub 获取，镜像返回的包校验不一致即丢弃；令牌不会发给镜像。`MIGATE_GITHUB_MIRRORS=off` 关闭镜像，也可写逗号分隔的主机名替换默认列表。中途按 Ctrl+C 会清理临时下载目录。
 
-安装完成后，`systemctl` 只负责启动后台服务，不进入问答。未初始化时，浏览器打开的是安装向导。两条初始化路径选一条：
+安装完成后，systemd 使用 `--serve` 在后台运行，不进入菜单。维护时执行 `migate`，用中文数字菜单管理服务、初始化、管理员账号和初始化凭证，不需要记参数。子菜单用 `0` 返回，主菜单用 `0` 退出。
+
+未初始化时，浏览器打开的是安装向导。菜单里的「初始化」和「初始化凭证」对应该向导；已经完成初始化后，菜单会拒绝再次安装和发放新凭证。强制修改管理员登录邮箱或密码不需要旧密码，原来的授权和订阅令牌保持不变。
+
+```sh
+migate
+```
+
+兼容的直接命令仍然可用：
 
 ```sh
 # Web：读取唯一的短时凭证，在浏览器完成向导
@@ -37,12 +45,14 @@ migate-control --init
 
 # 终端：分步填写 PostgreSQL、Redis ACL、管理员和监听地址
 migate-control --setup
+
+migate-control --version
+migate-control --serve
 ```
 
-Web 向导在安装完成后会自动切换到登录，不需要再手工重启。终端安装如果发现服务已在运行，会等它就绪；监听地址有变化且本机服务可重启时，会重启服务。不要同时提交两边的安装。
+Web 向导在安装完成后会自动切换到登录，不需要再手工重启。终端安装如果发现服务已在运行，会等它就绪；监听地址有变化且本机服务可重启时，会重启服务。不要同时提交两边的安装。root 重写配置时保留服务账号原来的文件所有者和权限，刷新后的凭证不需要重启就能被服务读到。
 
 ```sh
-migate-control --version
 systemctl status migate-control
 journalctl -u migate-control -f
 systemctl restart migate-control

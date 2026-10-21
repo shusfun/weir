@@ -29,7 +29,11 @@ func main() {
 	health := f.Bool("health-check", false, "check configured local HTTP and dependencies")
 	version := f.Bool("version", false, "print release version")
 	setupCLI := f.Bool("setup", false, "run the setup wizard in the terminal")
+	serve := f.Bool("serve", false, "run the HTTP service without opening the menu")
 	f.Parse(os.Args[1:])
+	if f.NArg() > 0 {
+		fatal(fmt.Errorf("不支持的参数。直接运行 migate 打开菜单"))
+	}
 	if *version {
 		fmt.Println(buildinfo.ControlVersionLine())
 		return
@@ -81,6 +85,18 @@ func main() {
 		fmt.Println("Initialization token (valid 30 minutes):", token)
 		fmt.Fprintf(os.Stderr, "凭证只保存在 %s，有效期 30 分钟。\n", filepath.Join(filepath.Dir(*path), "setup-token"))
 		return
+	}
+	if !*serve && *listen == "" {
+		switch control.SelectCLIMode() {
+		case "menu":
+			if err := control.RunOperatorMenu(*path, os.Stdin, os.Stdout); err != nil {
+				fatal(err)
+			}
+			return
+		case "no-terminal":
+			fmt.Fprintln(os.Stderr, "没有交互终端。请运行 migate 打开菜单，或使用 --serve 在后台启动。")
+			os.Exit(2)
+		}
 	}
 	if _, statErr := os.Stat(*path); os.IsNotExist(statErr) {
 		token, err := control.Initialize(*path, cfg)

@@ -76,18 +76,12 @@ func LoadConfig(path string) (Config, error) {
 	return c, nil
 }
 func saveConfig(path string, c Config) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return err
-	}
 	b, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return err
 	}
-	temp := path + ".tmp"
-	if err = os.WriteFile(temp, b, 0600); err != nil {
-		return err
-	}
-	return os.Rename(temp, path)
+	// root 重写时必须留下服务账号原来的所有者和权限，否则进程读不到配置。
+	return writeReplacing(path, b)
 }
 func openDatabase(c DatabaseConfig) (*sql.DB, *ent.Client, error) {
 	if c.Port == 0 {
@@ -160,6 +154,16 @@ func readSetupToken(path string) string {
 }
 
 func replaceFile(src, dst string) error {
+	if info, err := os.Lstat(dst); err == nil && !info.Mode().IsRegular() {
+		return errors.New("refusing to replace a non-regular file")
+	}
+	if info, err := os.Lstat(src); err == nil && !info.Mode().IsRegular() {
+		return errors.New("refusing to replace a non-regular file")
+	}
+	// 先把临时文件改成目标文件的身份，再改名。改名会换成新 inode，之后再 chown 就来不及挡住服务读取。
+	if err := applyIdentity(src, targetFileIdentity(dst)); err != nil {
+		return err
+	}
 	if err := os.Rename(src, dst); err == nil {
 		return nil
 	}
