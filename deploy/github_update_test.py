@@ -51,6 +51,14 @@ class ReleaseFetchTests(unittest.TestCase):
     def test_url_policy(self):
         good = "https://github.com/shusfun/MiSub/releases/download/v0.2.0/migate-0.2.0-linux-amd64.tar.gz"
         release_fetch.check_url(good)
+        release_fetch.check_url(
+            "https://release-assets.githubusercontent.com/github-production-release-asset/file",
+            allow_query=True,
+        )
+        release_fetch.check_url(
+            "https://objects.githubusercontent.com/github-production-release-asset/file?name=migate.tar.gz",
+            allow_query=True,
+        )
         for bad in (
             "http://github.com/shusfun/MiSub/releases/download/v0.2.0/migate-0.2.0-linux-amd64.tar.gz",
             "https://evil.test/migate-0.2.0-linux-amd64.tar.gz",

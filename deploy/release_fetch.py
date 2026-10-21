@@ -19,15 +19,19 @@ ALLOWED_HOSTS = {
     "objects.githubusercontent.com",
     "github-releases.githubusercontent.com",
 }
+ASSET_HOSTS = ALLOWED_HOSTS - {"api.github.com", "github.com"}
 TOKEN_HOSTS = ALLOWED_HOSTS
 ARCHIVE_SUFFIX = "-linux-amd64.tar.gz"
 
 
-def check_url(url):
+def check_url(url, allow_query=False):
     parts = urllib.parse.urlsplit(url)
-    if parts.scheme != "https" or parts.username or parts.password or parts.query or parts.fragment:
+    host = (parts.hostname or "").lower()
+    if parts.scheme != "https" or parts.username or parts.password or parts.fragment:
         raise ValueError("release url refused")
-    if (parts.hostname or "").lower() not in ALLOWED_HOSTS:
+    if parts.query and not (allow_query and host in ASSET_HOSTS):
+        raise ValueError("release url refused")
+    if host not in ALLOWED_HOSTS:
         raise ValueError("release host refused")
     return parts
 
@@ -52,7 +56,7 @@ def release_urls(repo, tag, version):
 
 class GuardRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        check_url(newurl)
+        check_url(newurl, allow_query=True)
         redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
         host = (urllib.parse.urlsplit(newurl).hostname or "").lower()
         if redirected is not None and host not in TOKEN_HOSTS:
@@ -71,7 +75,7 @@ def _request(url, token):
         response = opener.open(request, timeout=30)
     except urllib.error.HTTPError as exc:
         raise RuntimeError("release download failed") from exc
-    check_url(response.geturl())
+    check_url(response.geturl(), allow_query=True)
     return response
 
 
