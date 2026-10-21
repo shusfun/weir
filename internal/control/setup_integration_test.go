@@ -84,7 +84,7 @@ func TestSetupWebPromotion(t *testing.T) {
 	if call(http.MethodPost, "/api/v1/setup/test-redis", redis, token, "", nil).Code != http.StatusOK {
 		t.Fatal("redis acl user was rejected")
 	}
-	installed := call(http.MethodPost, "/api/v1/setup/install", map[string]any{"database": db, "redis": redis, "email": "admin-web@isolated.test", "password": "isolated-web-password"}, token, "", nil)
+	installed := call(http.MethodPost, "/api/v1/setup/install", map[string]any{"database": db, "redis": redis, "email": "admin-web@isolated.test", "password": "Isolated1-web-password"}, token, "", nil)
 	if installed.Code != http.StatusCreated {
 		t.Fatalf("install = %d %s", installed.Code, installed.Body.String())
 	}
@@ -103,11 +103,11 @@ func TestSetupWebPromotion(t *testing.T) {
 	if call(http.MethodPost, "/api/v1/setup/install", map[string]any{}, token, "", nil).Code != http.StatusConflict {
 		t.Fatal("completed install was accepted again")
 	}
-	secure := call(http.MethodPost, "/api/v1/auth/login", map[string]any{"email": "admin-web@isolated.test", "password": "isolated-web-password"}, "", "127.0.0.1:1234", map[string]string{"X-Forwarded-Proto": "https", "X-Forwarded-Host": "sub.example.test"})
+	secure := call(http.MethodPost, "/api/v1/auth/login", map[string]any{"email": "admin-web@isolated.test", "password": "Isolated1-web-password"}, "", "127.0.0.1:1234", map[string]string{"X-Forwarded-Proto": "https", "X-Forwarded-Host": "sub.example.test"})
 	if secure.Code != 200 || !strings.Contains(secure.Header().Get("Set-Cookie"), "Secure") {
 		t.Fatalf("proxy login = %d cookie=%q", secure.Code, secure.Header().Get("Set-Cookie"))
 	}
-	plain := call(http.MethodPost, "/api/v1/auth/login", map[string]any{"email": "admin-web@isolated.test", "password": "isolated-web-password"}, "", "192.0.2.1:1234", map[string]string{"X-Forwarded-Proto": "https"})
+	plain := call(http.MethodPost, "/api/v1/auth/login", map[string]any{"email": "admin-web@isolated.test", "password": "Isolated1-web-password"}, "", "192.0.2.1:1234", map[string]string{"X-Forwarded-Proto": "https"})
 	if plain.Code != 200 || strings.Contains(plain.Header().Get("Set-Cookie"), "Secure") {
 		t.Fatalf("untrusted proxy upgraded the request: %d %q", plain.Code, plain.Header().Get("Set-Cookie"))
 	}
@@ -160,11 +160,11 @@ func TestSetupCLIAndWebInstallOnce(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		cliErr = ApplySetup(path, SetupAnswers{Database: db, Redis: redis, Email: "admin-cli@isolated.test", Password: "isolated-cli-password", Listen: "127.0.0.1:9", Confirm: true})
+		cliErr = ApplySetup(path, SetupAnswers{Database: db, Redis: redis, Email: "admin-cli@isolated.test", Password: "Isolated1-cli-password", Listen: "127.0.0.1:9", Confirm: true})
 	}()
 	go func() {
 		defer wg.Done()
-		body, _ := json.Marshal(map[string]any{"database": db, "redis": redis, "email": "admin-web@isolated.test", "password": "isolated-web-password"})
+		body, _ := json.Marshal(map[string]any{"database": db, "redis": redis, "email": "admin-web@isolated.test", "password": "Isolated1-web-password"})
 		request := httptest.NewRequest(http.MethodPost, "/api/v1/setup/install", bytes.NewReader(body))
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Authorization", "Bearer "+token)
@@ -201,7 +201,7 @@ func TestSetupCLIInstallsIsolatedServices(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"listen":"127.0.0.1:9"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	secrets := []string{"local-test-only", "local-test-only", "isolated-cli-password", "isolated-cli-password"}
+	secrets := []string{"local-test-only", "local-test-only", "Isolated1-cli-password", "Isolated1-cli-password"}
 	lines := "\n25432\n\n\n\n" + "\n26379\n\nn\n" + "admin-cli@isolated.test\n" + "\n\n" + "y\n"
 	if err := RunSetupCLI(path, strings.NewReader(lines), func(string) (string, error) {
 		value := secrets[0]
@@ -219,7 +219,7 @@ func TestSetupCLIInstallsIsolatedServices(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer server.Close()
-	body, _ := json.Marshal(map[string]any{"email": "admin-cli@isolated.test", "password": "isolated-cli-password"})
+	body, _ := json.Marshal(map[string]any{"email": "admin-cli@isolated.test", "password": "Isolated1-cli-password"})
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()

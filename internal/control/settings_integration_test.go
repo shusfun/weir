@@ -25,7 +25,7 @@ func testSettingsTransactions(t *testing.T, s *Server, request func(string, stri
 			}
 		}
 	}()
-	base := systemSettingsUpdate{Security: before.Security, SMTP: mailer.SMTPConfig{Host: "smtp.example.test", Port: 465, Username: "operator", Password: "private-smtp-password", From: "sender@example.test", UseTLS: true}, Laya: ModelConfig{URL: "https://model.example.test/v1/systemone", Model: "observer", Key: "private-model-key"}, Revision: before.Revision, Password: "local-testing-password"}
+	base := systemSettingsUpdate{Security: before.Security, SMTP: mailer.SMTPConfig{Host: "smtp.example.test", Port: 465, Username: "operator", Password: "private-smtp-password", From: "sender@example.test", UseTLS: true}, Laya: ModelConfig{URL: "https://model.example.test/v1/systemone", Model: "observer", Key: "private-model-key"}, Revision: before.Revision, Password: "Local1-testing-password"}
 	call := func(body systemSettingsUpdate, want int) {
 		t.Helper()
 		w := request("PUT", "/api/v1/admin/settings", body, "", admin)
@@ -141,9 +141,9 @@ func testSettingsTransactions(t *testing.T, s *Server, request func(string, stri
 	}{
 		{"GET", "/api/v1/public", nil, ""},
 		{"GET", "/api/v1/admin/settings", nil, admin},
-		{"POST", "/api/v1/auth/login", map[string]any{"email": "admin@example.test", "password": "local-testing-password"}, ""},
+		{"POST", "/api/v1/auth/login", map[string]any{"email": "admin@example.test", "password": "Local1-testing-password"}, ""},
 		{"POST", "/api/v1/auth/passkey/begin", map[string]any{"email": "admin@example.test"}, ""},
-		{"POST", "/api/v1/auth/register", map[string]any{"email": "new@example.test", "password": "local-testing-password"}, ""},
+		{"POST", "/api/v1/auth/register", map[string]any{"email": "new@example.test", "password": "Local1-testing-password"}, ""},
 	} {
 		if response := request(probe.method, probe.path, probe.body, "", probe.cookie); response.Code != 503 {
 			t.Fatalf("unavailable policy %s returned %d", probe.path, response.Code)

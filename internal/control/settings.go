@@ -242,7 +242,7 @@ func (s *Server) register(c *gin.Context) {
 	if !bind(c, &req) {
 		return
 	}
-	if !validEmail(req.Email) || len(req.Password) < 12 || len(req.Password) > 72 {
+	if !validEmail(req.Email) || !validAccountPassword(req.Password) {
 		failure(c, 400, "invalid_account")
 		return
 	}
@@ -274,7 +274,7 @@ func (s *Server) resetPassword(c *gin.Context) {
 	if !bind(c, &req) {
 		return
 	}
-	if len(req.Password) < 12 || len(req.Password) > 72 {
+	if !validAccountPassword(req.Password) {
 		failure(c, 400, "invalid_password")
 		return
 	}

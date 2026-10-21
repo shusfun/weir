@@ -30,7 +30,7 @@ func testAnnouncementIntegration(t *testing.T, s *Server, request func(string, s
 	if d.Announcement.Enabled || d.Announcement.Public || d.Announcement.Authenticated {
 		t.Fatal("unsafe defaults")
 	}
-	body := map[string]any{"announcement": globalAnnouncement{Content: "PRIVATE DRAFT", Type: "warning", Dismissible: true}, "revision": d.Revision, "password": "local-testing-password"}
+	body := map[string]any{"announcement": globalAnnouncement{Content: "PRIVATE DRAFT", Type: "warning", Dismissible: true}, "revision": d.Revision, "password": "Local1-testing-password"}
 	if request("PUT", "/api/v1/admin/announcement", body, "", ordinary).Code != 403 {
 		t.Fatal("ordinary write")
 	}
@@ -38,7 +38,7 @@ func testAnnouncementIntegration(t *testing.T, s *Server, request func(string, s
 	if request("PUT", "/api/v1/admin/announcement", body, "", admin).Code != 401 {
 		t.Fatal("reauth bypass")
 	}
-	body["password"] = "local-testing-password"
+	body["password"] = "Local1-testing-password"
 	save := func(a globalAnnouncement) {
 		t.Helper()
 		body["announcement"] = a

@@ -37,14 +37,14 @@ func testClientCatalogIntegration(t *testing.T, s *Server, request func(string, 
 	if len(d.Clients) != len(defaultClientCatalog()) {
 		t.Fatal("compatible defaults missing")
 	}
-	body := map[string]any{"clients": d.Clients, "revision": d.Revision, "password": "local-testing-password"}
+	body := map[string]any{"clients": d.Clients, "revision": d.Revision, "password": "Local1-testing-password"}
 	if request("PUT", "/api/v1/admin/clients", body, "", ordinary).Code != 403 {
 		t.Fatal("ordinary catalog write")
 	}
 	for _, invalid := range []map[string]any{
-		{"revision": d.Revision, "password": "local-testing-password"},
-		{"clients": nil, "revision": d.Revision, "password": "local-testing-password"},
-		{"clients": d.Clients, "revision": d.Revision, "password": "local-testing-password", "unknown": true},
+		{"revision": d.Revision, "password": "Local1-testing-password"},
+		{"clients": nil, "revision": d.Revision, "password": "Local1-testing-password"},
+		{"clients": d.Clients, "revision": d.Revision, "password": "Local1-testing-password", "unknown": true},
 	} {
 		if request("PUT", "/api/v1/admin/clients", invalid, "", admin).Code != 400 {
 			t.Fatal("ambiguous or unknown catalog request accepted")
@@ -54,7 +54,7 @@ func testClientCatalogIntegration(t *testing.T, s *Server, request func(string, 
 	if request("PUT", "/api/v1/admin/clients", body, "", admin).Code != 401 {
 		t.Fatal("reauth bypass")
 	}
-	body["password"] = "local-testing-password"
+	body["password"] = "Local1-testing-password"
 	items := append([]catalogClient{}, d.Clients...)
 	items[0], items[1] = items[1], items[0]
 	items[0].Enabled = false

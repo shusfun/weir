@@ -3,6 +3,7 @@ import {
   Button,
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogTitle,
   DialogDescription,
 } from "@migate/ui";
@@ -168,9 +169,11 @@ export function Workspace({
           <DialogTitle>MiGate</DialogTitle>
           <DialogDescription>工作空间导航</DialogDescription>
           <nav aria-label="移动导航">{links}</nav>
-          <Button variant="outline" onClick={onLogout}>
-            退出登录
-          </Button>
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={onLogout}>
+              退出登录
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

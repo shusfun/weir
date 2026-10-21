@@ -5,6 +5,8 @@ import {
   ArrowRight,
   Check,
   Database,
+  Eye,
+  EyeOff,
   KeyRound,
   LockKeyhole,
   UserRound,
@@ -13,6 +15,10 @@ import {
   Button,
   Card,
   CardContent,
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
   Label,
   Select,
   SelectContent,
@@ -23,6 +29,7 @@ import {
 } from "@migate/ui";
 import { Field } from "../components/form-field";
 import { api } from "../api";
+import { accountPasswordError } from "../password";
 
 type DatabaseConfig = {
   host: string;
@@ -64,7 +71,9 @@ export function SetupPage({ done }: { done: () => void }) {
   });
   const [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
-    [confirmation, setConfirmation] = useState("");
+    [confirmation, setConfirmation] = useState(""),
+    [showPassword, setShowPassword] = useState(false),
+    [showConfirmation, setShowConfirmation] = useState(false);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const [phase, setPhase] = useState<"form" | "switching" | "check_failed">(
@@ -105,9 +114,8 @@ export function SetupPage({ done }: { done: () => void }) {
       if (step === 2) await api("/setup/test-redis", "POST", redis, token);
       if (step === 3) {
         if (password !== confirmation) throw Error("两次输入的密码不一致。");
-        const length = new TextEncoder().encode(password).length;
-        if (length < 12 || length > 72)
-          throw Error("密码长度须为 12–72 字节。");
+        const passwordError = accountPasswordError(password);
+        if (passwordError) throw Error(passwordError);
         setPhase("switching");
         try {
           await api(
@@ -387,20 +395,56 @@ export function SetupPage({ done }: { done: () => void }) {
                         value={email}
                         onChange={setEmail}
                       />
-                      <Field
-                        name={id + "password"}
-                        label="密码（12–72 字节）"
-                        type="password"
-                        value={password}
-                        onChange={setPassword}
-                      />
-                      <Field
-                        name={id + "confirm"}
-                        label="确认管理员密码"
-                        type="password"
-                        value={confirmation}
-                        onChange={setConfirmation}
-                      />
+                      <div className="field">
+                        <Label htmlFor={id + "password"}>
+                          密码（至少 6 位，含大小写字母和数字）
+                        </Label>
+                        <InputGroup>
+                          <InputGroupInput
+                            id={id + "password"}
+                            type={showPassword ? "text" : "password"}
+                            autoComplete="new-password"
+                            required
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                          />
+                          <InputGroupAddon align="inline-end">
+                            <InputGroupButton
+                              size="icon-sm"
+                              aria-pressed={showPassword}
+                              aria-label={showPassword ? "隐藏密码" : "显示密码"}
+                              onClick={() => setShowPassword((v) => !v)}
+                            >
+                              {showPassword ? <EyeOff /> : <Eye />}
+                            </InputGroupButton>
+                          </InputGroupAddon>
+                        </InputGroup>
+                      </div>
+                      <div className="field">
+                        <Label htmlFor={id + "confirm"}>确认管理员密码</Label>
+                        <InputGroup>
+                          <InputGroupInput
+                            id={id + "confirm"}
+                            type={showConfirmation ? "text" : "password"}
+                            autoComplete="new-password"
+                            required
+                            value={confirmation}
+                            onChange={(e) => setConfirmation(e.target.value)}
+                          />
+                          <InputGroupAddon align="inline-end">
+                            <InputGroupButton
+                              size="icon-sm"
+                              aria-pressed={showConfirmation}
+                              aria-label={
+                                showConfirmation ? "隐藏密码" : "显示密码"
+                              }
+                              onClick={() => setShowConfirmation((v) => !v)}
+                            >
+                              {showConfirmation ? <EyeOff /> : <Eye />}
+                            </InputGroupButton>
+                          </InputGroupAddon>
+                        </InputGroup>
+                      </div>
                       <p className="setup-info">
                         注册默认关闭。邮件服务、二次验证策略与 Laya
                         可在安装后配置。

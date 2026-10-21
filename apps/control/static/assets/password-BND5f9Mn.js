@@ -1,0 +1,1 @@
+function r(t){const e=Array.from(t).length,n=new TextEncoder().encode(t).length;return e<6||n>72||!/[A-Z]/.test(t)||!/[a-z]/.test(t)||!/[0-9]/.test(t)?"密码至少 6 位，且须同时包含大写字母、小写字母和数字。":""}export{r as a};

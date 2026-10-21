@@ -37,6 +37,7 @@ import {
 import { Metric } from "../components/metric";
 import { UserSessions } from "../components/user-sessions";
 import { api } from "../api";
+import { accountPasswordError } from "../password";
 import { client } from "../lib/client";
 import { bytes, date, type Account } from "../lib/models";
 import { State, Status } from "../components/feedback";
@@ -462,6 +463,13 @@ function UserEditor({
       E("请填写有效的额度和日期。");
       return;
     }
+    if (value === "new") {
+      const passwordError = accountPasswordError(password);
+      if (passwordError) {
+        E(passwordError);
+        return;
+      }
+    }
     S(true);
     try {
       if (value === "new")
@@ -527,14 +535,14 @@ function UserEditor({
               <Input
                 id="user-password"
                 type="password"
-                minLength={12}
+                minLength={6}
                 maxLength={72}
                 autoComplete="new-password"
                 required
                 value={password}
                 onChange={(e) => W(e.target.value)}
               />
-              <small>至少 12 个字符，用户可在账户安全中修改。</small>
+              <small>至少 6 位，须包含大写字母、小写字母和数字。</small>
             </div>
           )}
           <div className="field">

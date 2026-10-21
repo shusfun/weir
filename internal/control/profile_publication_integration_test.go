@@ -42,7 +42,7 @@ func testProfilePublication(t *testing.T, s *Server, request func(string, string
 	if request("GET", url, nil, "", ordinary).Code != 403 {
 		t.Fatal("ordinary metadata")
 	}
-	body := map[string]any{"action": "publish", "target": "clash", "days": 1, "revision": read()["revision"], "confirm": true, "password": "local-testing-password"}
+	body := map[string]any{"action": "publish", "target": "clash", "days": 1, "revision": read()["revision"], "confirm": true, "password": "Local1-testing-password"}
 	if request("PUT", url, body, "", ordinary).Code != 403 {
 		t.Fatal("ordinary publish")
 	}
@@ -50,7 +50,7 @@ func testProfilePublication(t *testing.T, s *Server, request func(string, string
 	if request("PUT", url, body, "", admin).Code != 401 {
 		t.Fatal("reauth bypass")
 	}
-	body["password"] = "local-testing-password"
+	body["password"] = "Local1-testing-password"
 	publish := func() string {
 		t.Helper()
 		body["revision"] = read()["revision"]

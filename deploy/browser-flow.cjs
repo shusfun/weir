@@ -7,15 +7,13 @@ let browser;
 (async()=>{
  const tokenFile=process.env.MIGATE_QA_TOKEN_FILE;if(!tokenFile)throw Error('MIGATE_QA_TOKEN_FILE required');
  const token=fs.readFileSync(tokenFile,'utf8').trim();
- const password='browser-local-test-only';const admin='admin@browser.example';const user='alice@browser.example';
+ const password='Browser1-local-test';const admin='admin@browser.example';const user='alice@browser.example';
  browser=await chromium.launch({channel:'chrome',headless:true});
  const page=await browser.newPage({viewport:{width:1280,height:900}});const errors=[];page.on('pageerror',e=>errors.push(String(e)));
  await page.goto('http://localhost:19810');await page.getByLabel('短时初始化凭证').fill(token);await page.getByRole('button',{name:'下一步',exact:true}).click();
  await page.getByLabel('端口',{exact:true}).fill('25432');await page.getByLabel('密码',{exact:true}).fill('local-test-only');await page.getByRole('button',{name:'下一步',exact:true}).click();
  await page.getByLabel('连接地址').fill('127.0.0.1:26379');await page.getByLabel('密码',{exact:true}).fill('local-test-only');await page.getByRole('button',{name:'下一步',exact:true}).click();
- await page.getByLabel('管理员邮箱').fill(admin);await page.getByLabel('密码（12–72 字节）').fill(password);await page.getByRole('button',{name:'安装并锁定'}).click();
- await page.getByRole('heading',{name:'欢迎回来'}).waitFor();
- await page.getByLabel('邮箱',{exact:true}).fill(admin);await page.getByLabel('密码',{exact:true}).fill(password);await page.getByRole('button',{name:/^(登录|验证并登录)$/,exact:true}).click();
+ await page.getByLabel('管理员邮箱').fill(admin);await page.getByLabel('密码（至少 6 位，含大小写字母和数字）').fill(password);await page.getByLabel('确认管理员密码').fill(password);await page.getByRole('button',{name:'安装并锁定'}).click();
  await page.getByRole('heading',{name:'概览',exact:true}).waitFor();await page.getByText('观测状态',{exact:true}).waitFor();
  await page.screenshot({path:'docs/evidence/admin-1280.png',fullPage:true});
  await page.getByRole('button',{name:'用户管理',exact:true}).click();const form=page.locator('form').filter({has:page.getByLabel('初始密码')});

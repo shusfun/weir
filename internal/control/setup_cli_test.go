@@ -6,7 +6,7 @@ import (
 )
 
 func TestValidateSetupAccountRejectsWeakInput(t *testing.T) {
-	if err := ValidateSetupAccount("not-an-email", "long-enough-password"); err == nil {
+	if err := ValidateSetupAccount("not-an-email", "Long1-enough-password"); err == nil {
 		t.Fatal("invalid email accepted")
 	}
 	if err := ValidateSetupAccount("admin@example.com", "short"); err == nil {
@@ -20,7 +20,7 @@ func TestApplySetupStopsBeforeInstallWhenDatabaseIsDown(t *testing.T) {
 		Database: DatabaseConfig{Host: "127.0.0.1", Port: 1, User: "migate", Database: "gate", SSLMode: "disable"},
 		Redis:    RedisConfig{Address: "127.0.0.1:1"},
 		Email:    "admin@example.com",
-		Password: "long-enough-password",
+		Password: "Long1-enough-password",
 		Confirm:  true,
 	})
 	if err == nil || err.Error() != "database connection failed" {
@@ -38,7 +38,7 @@ func TestApplySetupRejectsInstalledConfiguration(t *testing.T) {
 		Database: DatabaseConfig{Host: "127.0.0.1", Port: 5432, User: "migate", Database: "gate", SSLMode: "disable"},
 		Redis:    RedisConfig{Address: "127.0.0.1:6379"},
 		Email:    "admin@example.com",
-		Password: "long-enough-password",
+		Password: "Long1-enough-password",
 		Confirm:  true,
 	})
 	if err == nil || err.Error() != "already installed" {

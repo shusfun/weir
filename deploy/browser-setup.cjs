@@ -46,21 +46,28 @@ const compose = (...args) => command('docker', ['compose', '-f', 'deploy/test.co
   await page.getByLabel('密码', { exact: true }).fill('wrong-local-test'); await page.getByRole('button', { name: '下一步', exact: true }).click();
   await page.getByRole('alert').waitFor(); await page.getByLabel('密码', { exact: true }).fill('local-test-only'); await page.getByRole('button', { name: '下一步', exact: true }).click();
   await page.getByRole('heading', { name: '创建首位管理员', exact: true }).waitFor(); await shots('admin');
-  await page.getByLabel('管理员邮箱', { exact: true }).fill('admin@isolated.test'); await page.getByLabel('密码（12–72 字节）', { exact: true }).fill('isolated-browser-password'); await page.getByLabel('确认管理员密码', { exact: true }).fill('mismatched-isolated-password');
+  await page.getByLabel('管理员邮箱', { exact: true }).fill('admin@isolated.test'); await page.getByLabel('密码（至少 6 位，含大小写字母和数字）', { exact: true }).fill('ab1'); await page.getByLabel('确认管理员密码', { exact: true }).fill('ab1');
+  await page.getByRole('button', { name: '安装并锁定', exact: true }).click(); await page.getByRole('alert').filter({ hasText: '密码至少 6 位' }).waitFor();
+  await page.getByLabel('密码（至少 6 位，含大小写字母和数字）', { exact: true }).fill('Isolated1-browser-password'); await page.getByLabel('确认管理员密码', { exact: true }).fill('mismatched-isolated-password');
   await page.getByRole('button', { name: '安装并锁定', exact: true }).click(); await page.getByRole('alert').filter({ hasText: '两次输入的密码不一致' }).waitFor();
+  const passwordField = page.getByLabel('密码（至少 6 位，含大小写字母和数字）', { exact: true });
+  const confirmField = page.getByLabel('确认管理员密码', { exact: true });
+  await page.getByRole('button', { name: '显示密码', exact: true }).nth(1).click();
+  await page.getByRole('button', { name: '显示密码', exact: true }).click();
+  if (await passwordField.getAttribute('type') !== 'text' || await confirmField.getAttribute('type') !== 'text') throw Error('Both administrator passwords were not visible');
   await page.route('**/api/v1/setup/install', async route => { const response = await route.fetch(); await new Promise(resolve => setTimeout(resolve, 600)); await route.fulfill({ response }); });
-  await page.getByLabel('确认管理员密码', { exact: true }).fill('isolated-browser-password'); await page.getByRole('button', { name: '安装并锁定', exact: true }).click();
+  await confirmField.fill('Isolated1-browser-password'); await page.getByRole('button', { name: '安装并锁定', exact: true }).click();
   await page.getByRole('status').filter({ hasText: '正在切换到正常服务' }).waitFor();
   await page.screenshot({ path: path.join(shotRoot, `${shotPrefix}switching-390.png`), fullPage: true });
-  await page.getByRole('heading', { name: '欢迎回来', exact: true }).waitFor();
-  await page.getByLabel('邮箱', { exact: true }).fill('admin@isolated.test'); await page.getByLabel('密码', { exact: true }).fill('isolated-browser-password'); await page.getByRole('button', { name: '登录', exact: true }).click(); await page.getByRole('heading', { name: '概览', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '概览', exact: true }).waitFor();
+  if (await page.getByRole('heading', { name: '欢迎回来', exact: true }).count()) throw Error('Installed administrator was sent back to login');
   const result = await page.evaluate(async token => ({ me: await (await fetch('/api/v1/me')).json(), lock: (await fetch('/api/v1/setup/verify', { method: 'POST', headers: { Authorization: 'Bearer ' + token } })).status, policy: await (await fetch('/api/v1/public')).json() }), token);
   if (result.me.role !== 'admin' || result.lock !== 409 || result.policy.registration_enabled !== false) throw Error('Installed role, registration default or installation lock failed');
-  checks.push('actual credential verification refuses invalid token before database step', 'actual PostgreSQL bad-password rejection then corrected connection', 'actual Redis wrong ACL user and bad-password rejection then corrected connection', 'administrator password mismatch refusal; service promotion before login; registration closed and installation lock');
+  checks.push('actual credential verification refuses invalid token before database step', 'actual PostgreSQL bad-password rejection then corrected connection', 'actual Redis wrong ACL user and bad-password rejection then corrected connection', 'administrator password rules and both fields visible; direct entry after install; registration closed and installation lock');
   if (errors.length) throw Error('Setup browser runtime errors');
   const evidencePath = local ? 'docs/evidence/local/setup-ui.json' : 'docs/evidence/setup-new-ui.json';
   fs.writeFileSync(evidencePath, JSON.stringify({ date: new Date().toISOString(), target: 'disposable local control binary + dedicated PG18/Redis8 containers', checks, visual: 'screenshots captured; human review pending', production: 'Production initialization state not modified' }, null, 2));
-  console.log('Isolated actual setup UI, dependency retries, administrator login and installation lock passed');
+  console.log('Isolated actual setup UI, dependency retries, direct administrator entry and installation lock passed');
 })().catch(e => { console.error(e.message); process.exitCode = 1; }).finally(async () => {
   if (browser) await browser.close();
   if (server) { server.kill(); await new Promise(r => setTimeout(r, 500)); }

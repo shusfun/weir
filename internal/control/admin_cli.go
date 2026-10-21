@@ -84,8 +84,8 @@ func ForceAdminEmail(ctx context.Context, cfg Config, id int, email string) (Adm
 
 // ForceAdminPassword 只替换密码哈希。调用方不得把明文密码写入结果或审计。
 func ForceAdminPassword(ctx context.Context, cfg Config, id int, password string) (AdminChangeResult, error) {
-	if len(password) < 12 || len(password) > 72 {
-		return AdminChangeResult{}, errors.New("密码长度须为 12 到 72 位")
+	if !validAccountPassword(password) {
+		return AdminChangeResult{}, accountPasswordError()
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {

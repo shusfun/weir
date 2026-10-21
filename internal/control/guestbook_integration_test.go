@@ -48,7 +48,7 @@ func testGuestbook(t *testing.T, s *Server, request func(string, string, any, st
 	if request("PUT", base+"/config", body, "", admin).Code != 401 {
 		t.Fatal("reauth")
 	}
-	body["password"] = "local-testing-password"
+	body["password"] = "Local1-testing-password"
 	if request("PUT", base+"/config", body, "", admin).Code != 200 || request("PUT", base+"/config", body, "", admin).Code != 409 {
 		t.Fatal("save/CAS")
 	}

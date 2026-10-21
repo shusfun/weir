@@ -47,7 +47,7 @@ func testPublicSubscriptionDirectory(t *testing.T, s *Server, request func(strin
 	}
 	publication := fmt.Sprintf("/api/v1/admin/profiles/%d/publication", profile)
 	publish := func() {
-		w := request("PUT", publication, map[string]any{"action": "publish", "target": "links", "days": 1, "revision": read(publication)["revision"], "confirm": true, "password": "local-testing-password"}, "", admin)
+		w := request("PUT", publication, map[string]any{"action": "publish", "target": "links", "days": 1, "revision": read(publication)["revision"], "confirm": true, "password": "Local1-testing-password"}, "", admin)
 		if w.Code != 200 {
 			t.Fatal("publish", w.Code)
 		}
@@ -75,7 +75,7 @@ func testPublicSubscriptionDirectory(t *testing.T, s *Server, request func(strin
 	if request("PUT", endpoint, body, "", admin).Code != 401 {
 		t.Fatal("directory reauth")
 	}
-	body["password"] = "local-testing-password"
+	body["password"] = "Local1-testing-password"
 	save := func(entries []directoryPublication) {
 		t.Helper()
 		body["entries"] = entries
@@ -86,7 +86,7 @@ func testPublicSubscriptionDirectory(t *testing.T, s *Server, request func(strin
 		}
 	}
 	save([]directoryPublication{entry})
-	if request("PUT", endpoint, map[string]any{"entries": []directoryPublication{}, "revision": doc["revision"], "confirm": true, "password": "local-testing-password"}, "", admin).Code != 409 {
+	if request("PUT", endpoint, map[string]any{"entries": []directoryPublication{}, "revision": doc["revision"], "confirm": true, "password": "Local1-testing-password"}, "", admin).Code != 409 {
 		t.Fatal("stale directory")
 	}
 	w := request("GET", public, nil, "", "")

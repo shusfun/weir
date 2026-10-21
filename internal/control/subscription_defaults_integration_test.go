@@ -32,7 +32,7 @@ func testSubscriptionDefaults(t *testing.T, s *Server, request func(string, stri
 	if request("PUT", endpoint, body, "", admin).Code != 401 {
 		t.Fatal("default reauth")
 	}
-	body["password"] = "local-testing-password"
+	body["password"] = "Local1-testing-password"
 	if request("PUT", endpoint, body, "", ordinary).Code != 403 || request("PUT", endpoint, body, "", admin).Code != 200 {
 		t.Fatal("default save")
 	}

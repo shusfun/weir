@@ -18,6 +18,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  Label,
   Textarea,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@migate/ui";
@@ -494,7 +495,7 @@ const [guestbook,GB]=useState<Resource|null>(null);
       {profileOrder&&<ProfileOrdering close={()=>PS(false)} saved={async()=>{await changed();N("订阅组显示顺序已保存；组内引用与用户授权保持不变。")}}/>}
       {managingGroups&&<NodeGroupManager close={()=>MG(false)} saved={async()=>{await changed();await cache.invalidateQueries({queryKey:["selection","nodes"]});await cache.invalidateQueries({queryKey:["inventory","profiles"]});GF("all")}}/>}
       {dedup&&<NodeDedup close={()=>DD(false)} saved={async message=>{SEL([]);await changed();await cache.invalidateQueries({queryKey:["inventory","profiles"]});await cache.invalidateQueries({queryKey:["selection","profiles"]});N(message)}}/>}
-      <Dialog open={groupDialog} onOpenChange={v=>!busy&&GD(v)}><DialogContent><DialogTitle>移动所选节点到分组</DialogTitle><DialogDescription>只修改所选 {selected.length} 个节点的分组。留空移至未分组，订阅组授权保持不变。</DialogDescription><form className="stack" onSubmit={e=>{e.preventDefault();void saveGroup()}}><label htmlFor="node-group-destination">目标分组</label><Input id="node-group-destination" value={destination} maxLength={120} onChange={e=>DG(e.target.value)} placeholder="输入新分组，或选择已有分组"/><div className="actions">{groupNames.slice(0,20).map(g=><Button key={g} type="button" size="sm" variant="outline" onClick={()=>DG(g)}>{g}</Button>)}</div>{error&&<p role="alert">{error}</p>}<DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={()=>GD(false)}>取消</Button><Button type="submit" disabled={busy}>{busy?"保存中…":"确认移动分组"}</Button></DialogFooter></form></DialogContent></Dialog>
+      <Dialog open={groupDialog} onOpenChange={v=>!busy&&GD(v)}><DialogContent><DialogTitle>移动所选节点到分组</DialogTitle><DialogDescription>只修改所选 {selected.length} 个节点的分组。留空移至未分组，订阅组授权保持不变。</DialogDescription><form className="stack" onSubmit={e=>{e.preventDefault();void saveGroup()}}><Label htmlFor="node-group-destination">目标分组</Label><Input id="node-group-destination" value={destination} maxLength={120} onChange={e=>DG(e.target.value)} placeholder="输入新分组，或选择已有分组"/><div className="actions">{groupNames.slice(0,20).map(g=><Button key={g} type="button" size="sm" variant="outline" onClick={()=>DG(g)}>{g}</Button>)}</div>{error&&<p role="alert">{error}</p>}<DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={()=>GD(false)}>取消</Button><Button type="submit" disabled={busy}>{busy?"保存中…":"确认移动分组"}</Button></DialogFooter></form></DialogContent></Dialog>
       <Dialog open={importing} onOpenChange={IM}>
         <DialogContent className="business-dialog inventory-dialog">
           <DialogTitle>导入节点</DialogTitle>

@@ -7,6 +7,7 @@ import {
   DialogContent,
   DialogTitle,
   DialogDescription,
+  Checkbox,
   DialogFooter,
 } from "@migate/ui";
 import type { Device, Resource, Task } from "../lib/models";
@@ -234,17 +235,16 @@ export function OutboundTools({
                 ))
               : rows.map((r) => (
                   <label className="pool-node" key={r.id}>
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       aria-label={`探测 ${name(r)}`}
                       checked={ids.includes(Number(r.data.id))}
                       disabled={
                         busy ||
                         (!ids.includes(Number(r.data.id)) && ids.length >= 50)
                       }
-                      onChange={(e) =>
+                      onCheckedChange={(checked) =>
                         setIDs(
-                          e.target.checked
+                          checked === true
                             ? [...ids, Number(r.data.id)]
                             : ids.filter((id) => id !== Number(r.data.id)),
                         )

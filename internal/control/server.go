@@ -356,7 +356,7 @@ func (s *Server) install(c *gin.Context) {
 	if !bind(c, &req) {
 		return
 	}
-	if !validEmail(req.Email) || len(req.Password) < 12 || len(req.Password) > 72 {
+	if !validEmail(req.Email) || !validAccountPassword(req.Password) {
 		failure(c, 400, "strong_password_and_valid_email_required")
 		return
 	}
@@ -380,6 +380,12 @@ func (s *Server) install(c *gin.Context) {
 			failure(c, 500, "install_failed")
 		}
 		return
+	}
+	created, queryErr := s.Store.User.Query().Where(user.EmailEQ(strings.ToLower(req.Email)), user.RoleEQ("admin")).Only(c.Request.Context())
+	if queryErr == nil {
+		if err := s.storeSession(c, created, false); err == nil {
+			s.audit(c, "auth.login", fmt.Sprint(created.ID), "ok")
+		}
 	}
 	s.audit(c, "system.install", "system", "ok")
 	c.JSON(201, gin.H{"installed": true, "ready": s.serviceReady()})

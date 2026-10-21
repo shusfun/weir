@@ -120,7 +120,7 @@ func testDurableDNSCleanup(t *testing.T, s *Server, request func(string, string,
 	if view.Code != 200 || strings.Contains(view.Body.String(), "test-challenge-proof") || strings.Contains(view.Body.String(), sealed) || strings.Contains(view.Body.String(), "marker") {
 		t.Fatal("ledger API exposed private material")
 	}
-	if request("DELETE", "/api/v1/admin/dns-providers/"+strconv.Itoa(provider.ID), map[string]any{"password": "local-testing-password"}, "", admin).Code != 409 {
+	if request("DELETE", "/api/v1/admin/dns-providers/"+strconv.Itoa(provider.ID), map[string]any{"password": "Local1-testing-password"}, "", admin).Code != 409 {
 		t.Fatal("pending cleanup credentials deleted")
 	}
 	lock, e := s.DB.BeginTx(ctx, nil)
@@ -190,7 +190,7 @@ func testDurableDNSCleanup(t *testing.T, s *Server, request func(string, string,
 	if posts != 2 {
 		t.Fatal("cleanup reissued a challenge")
 	}
-	if request("DELETE", "/api/v1/admin/dns-providers/"+strconv.Itoa(provider.ID), map[string]any{"password": "local-testing-password"}, "", admin).Code != 200 {
+	if request("DELETE", "/api/v1/admin/dns-providers/"+strconv.Itoa(provider.ID), map[string]any{"password": "Local1-testing-password"}, "", admin).Code != 200 {
 		t.Fatal("cleaned ledger still prevented credential deletion")
 	}
 	t.Log("durable DNS intent before POST, encrypted ledger, provider failure/retry, advisory exclusion, restart recovery without ID, unowned TXT preservation, API redaction and credential deletion guard passed; controlled provider, not public CA")

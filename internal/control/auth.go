@@ -53,18 +53,24 @@ func (s *Server) rate(c *gin.Context, kind string, limit int) bool {
 	}
 	return true
 }
-func (s *Server) issueSession(c *gin.Context, u *ent.User, mfa bool) {
+func (s *Server) storeSession(c *gin.Context, u *ent.User, mfa bool) error {
 	token := randomToken(32)
 	sesh := Session{UserID: u.ID, MFA: mfa, CreatedAt: time.Now(), IP: c.ClientIP()}
 	b, _ := json.Marshal(sesh)
 	key := "migate:session:" + digest(token)
 	if err := s.Redis.Set(c.Request.Context(), key, b, 24*time.Hour).Err(); err != nil {
-		failure(c, 503, "session_unavailable")
-		return
+		return err
 	}
 	c.SetSameSite(http.SameSiteStrictMode)
 	c.SetCookie("migate_session", token, 86400, "/", "", requestSecure(c.Request), true)
 	c.Set("user_id", u.ID)
+	return nil
+}
+func (s *Server) issueSession(c *gin.Context, u *ent.User, mfa bool) {
+	if err := s.storeSession(c, u, mfa); err != nil {
+		failure(c, 503, "session_unavailable")
+		return
+	}
 	s.audit(c, "auth.login", fmt.Sprint(u.ID), "ok")
 	c.JSON(200, gin.H{"user": userView(u), "mfa": mfa})
 }
@@ -358,7 +364,7 @@ func (s *Server) changePassword(c *gin.Context) {
 	if !bind(c, &req) || !s.reauth(c, req.Password, req.Code) {
 		return
 	}
-	if len(req.NewPassword) < 12 || len(req.NewPassword) > 72 {
+	if !validAccountPassword(req.NewPassword) {
 		failure(c, 400, "password_length_12_to_72")
 		return
 	}
@@ -455,7 +461,7 @@ func (s *Server) createUser(c *gin.Context) {
 	if !bind(c, &req) {
 		return
 	}
-	if !validEmail(req.Email) || len(req.Password) < 12 || len(req.Password) > 72 || req.Quota < 0 {
+	if !validEmail(req.Email) || !validAccountPassword(req.Password) || req.Quota < 0 {
 		failure(c, 400, "invalid_user")
 		return
 	}

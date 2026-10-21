@@ -29,7 +29,7 @@ func testDNS01Contracts(t *testing.T, s *Server, request func(string, string, an
 	call("GET", "/dns-providers", nil, "", 401)
 	body := map[string]any{"name": "test-provider", "zone_id": strings.Repeat("a", 32), "token": "private-dns-token", "password": "wrong"}
 	call("POST", "/dns-providers", body, admin, 401)
-	body["password"] = "local-testing-password"
+	body["password"] = "Local1-testing-password"
 	saved := call("POST", "/dns-providers", body, admin, 200)
 	providerID := int(number(saved["id"]))
 	defer s.Store.Resource.DeleteOneID(providerID).Exec(ctx)
@@ -65,7 +65,7 @@ func testDNS01Contracts(t *testing.T, s *Server, request func(string, string, an
 	jobID := int(number(queued["task_id"]))
 	defer s.Store.Resource.DeleteOneID(jobID).Exec(ctx)
 	call("POST", path, order, admin, 409)
-	call("DELETE", fmt.Sprintf("/dns-providers/%d", providerID), map[string]any{"password": "local-testing-password"}, admin, 409)
+	call("DELETE", fmt.Sprintf("/dns-providers/%d", providerID), map[string]any{"password": "Local1-testing-password"}, admin, 409)
 	// Simulate lost configuration inside the isolated database. No CA/DNS request.
 	s.Store.Resource.DeleteOneID(providerID).Exec(ctx)
 	job, _ := s.Store.Resource.Get(ctx, jobID)

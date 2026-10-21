@@ -5,6 +5,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { KeyRound, ShieldCheck, Smartphone, LockKeyhole } from "lucide-react";
 import { Button, Card, CardContent, Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from "@migate/ui";
 import { api } from "../api";
+import { accountPasswordError } from "../password";
 import { passkey } from "../lib/passkey";
 import { date, type Account, type Items } from "../lib/models";
 import { Field } from "../components/form-field";
@@ -31,7 +32,7 @@ export function SecurityPage({loginRequired}:{loginRequired:()=>void}){
   }else if(action==="passkey"){
    await passkey("register",undefined,password,code);await cache.invalidateQueries({queryKey:["self-passkeys"]});A(null);P("");C("");N("Passkey 已绑定")
   }else if(action==="password"){
-   if(next!==repeat)throw Error("两次输入的新密码不一致。");const size=new TextEncoder().encode(next).length;if(size<12||size>72)throw Error("新密码需为 12–72 字节。");await api("/security/password","POST",{password,code,new_password:next});A(null);P("");NP("");RP("");C("");RL("密码已更新，所有旧会话已撤销。")
+   if(next!==repeat)throw Error("两次输入的新密码不一致。");const passwordError=accountPasswordError(next);if(passwordError)throw Error(passwordError);await api("/security/password","POST",{password,code,new_password:next});A(null);P("");NP("");RP("");C("");RL("密码已更新，所有旧会话已撤销。")
   }else if(action==="disable"){
    await api("/security/totp/disable","POST",{password,code});A(null);P("");C("");RL("身份验证器已停用，原恢复码和旧会话已失效。")
   }else if(action==="delete-key"){
@@ -49,7 +50,7 @@ export function SecurityPage({loginRequired}:{loginRequired:()=>void}){
  <UserSessions onCurrentRevoked={()=>RL("当前会话已撤销，请重新登录。")}/>
  <Dialog open={!!action} onOpenChange={v=>!v&&close()}><DialogContent className="security-dialog"><DialogTitle>{action?titles[action]:"账户安全"}</DialogTitle><DialogDescription>{enrollment.recovery?"请离线保存恢复码。关闭本页后无法再次查看。":"操作仅影响你的账户。敏感变更需验证当前密码与已绑定的二次验证。"}</DialogDescription>
  {enrollment.recovery?<div className="stack"><div className="recovery-codes sensitive-output">{enrollment.recovery.map(value=><code key={value}>{value}</code>)}</div><p>每个恢复码只能使用一次；不要发送给其他人。</p><Button onClick={()=>{T({});A(null);loginRequired()}}>已保存恢复码，重新登录</Button></div>:<form className="stack" onSubmit={submit}>
- {enrollment.url?<><div className="totp-setup sensitive-output"><QRCodeSVG value={enrollment.url} size={180}/><div><strong>扫描二维码</strong><p>在身份验证器中添加账户，或手动输入密钥。</p><code>{enrollment.secret}</code></div></div><Field name={id+"confirm-code"} label="身份验证器动态码" value={code} onChange={C} autoComplete="one-time-code"/></>:<><Field name="security-password" label="当前密码" type="password" value={password} onChange={P} autoComplete="current-password"/>{account.data?.totp_enrolled&&<Field name={id+"code"} label="二次验证码 / 恢复码" value={code} onChange={C} autoComplete="one-time-code"/>}{action==="password"&&<><Field name={id+"new"} label="新密码（12–72 字节）" type="password" value={next} onChange={NP}/><Field name={id+"repeat"} label="再次输入新密码" type="password" value={repeat} onChange={RP}/></>}</>}
+ {enrollment.url?<><div className="totp-setup sensitive-output"><QRCodeSVG value={enrollment.url} size={180}/><div><strong>扫描二维码</strong><p>在身份验证器中添加账户，或手动输入密钥。</p><code>{enrollment.secret}</code></div></div><Field name={id+"confirm-code"} label="身份验证器动态码" value={code} onChange={C} autoComplete="one-time-code"/></>:<><Field name="security-password" label="当前密码" type="password" value={password} onChange={P} autoComplete="current-password"/>{account.data?.totp_enrolled&&<Field name={id+"code"} label="二次验证码 / 恢复码" value={code} onChange={C} autoComplete="one-time-code"/>}{action==="password"&&<><Field name={id+"new"} label="新密码（至少 6 位，含大小写字母和数字）" type="password" value={next} onChange={NP}/><Field name={id+"repeat"} label="再次输入新密码" type="password" value={repeat} onChange={RP}/></>}</>}
  {error&&<p role="alert" className="error-message">{error}</p>}<DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={close}>取消</Button><Button type="submit" disabled={busy}>{busy?"正在处理…":enrollment.url?"确认 TOTP":action==="totp"?"生成绑定二维码":action==="passkey"?"继续绑定 Passkey":action==="password"?"确认修改密码":action==="disable"?"确认停用 TOTP":"确认删除 Passkey"}</Button></DialogFooter></form>}
  </DialogContent></Dialog>
 

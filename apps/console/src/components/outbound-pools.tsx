@@ -17,6 +17,7 @@ import {
   DialogDescription,
   DialogFooter,
   Switch,
+  Checkbox,
 } from "@migate/ui";
 import {
   Plus,
@@ -618,16 +619,15 @@ export function OutboundPools({ device }: { device: Device }) {
                     ) : (
                       visible.map((n) => (
                         <label className="pool-node" key={n.identity}>
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             aria-label={`选择 ${n.name || n.server}`}
                             disabled={
                               !n.supported || busy || active?.auto_refresh
                             }
                             checked={selected.includes(n.identity)}
-                            onChange={(e) =>
+                            onCheckedChange={(checked) =>
                               select(
-                                e.target.checked
+                                checked === true
                                   ? [...selected, n.identity]
                                   : selected.filter((x) => x !== n.identity),
                               )

@@ -471,8 +471,8 @@ func (m *operatorMenu) changeAdminPassword() (string, error) {
 	if first != second {
 		return "[失败] 两次密码不一致", nil
 	}
-	if len(first) < 12 || len(first) > 72 {
-		return "[失败] 密码长度须为 12 到 72 位", nil
+	if !validAccountPassword(first) {
+		return "[失败] " + accountPasswordHint, nil
 	}
 	ok, err = m.confirm(fmt.Sprintf("将修改管理员 id=%d（%s）的密码，授权和订阅令牌保持不变。继续？", chosen.ID, chosen.Email))
 	if err != nil || !ok {

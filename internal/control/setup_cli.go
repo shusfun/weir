@@ -54,8 +54,8 @@ var (
 )
 
 func ValidateSetupAccount(email, password string) error {
-	if !validEmail(email) || len(password) < 12 || len(password) > 72 {
-		return errors.New("strong password and valid email required")
+	if !validEmail(email) || !validAccountPassword(password) {
+		return errors.New("需要有效邮箱，且" + accountPasswordHint)
 	}
 	return nil
 }
@@ -236,7 +236,7 @@ func collectSetupAnswers(reader *bufio.Reader, password func(string) (string, er
 			continue
 		}
 		if err = ValidateSetupAccount(email, secret); err != nil {
-			fmt.Fprintln(os.Stderr, "需要有效邮箱，且密码为 12–72 字节")
+			fmt.Fprintln(os.Stderr, err.Error())
 			continue
 		}
 		answers.Email = email

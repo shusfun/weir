@@ -119,7 +119,7 @@ func TestSetupCLIInputClosedCancelAndRedaction(t *testing.T) {
 		applied = true
 		return nil
 	}
-	secret := "unique-secret-value"
+	secret := "Unique1-secret-value"
 	passwords := []string{secret, secret, secret, secret}
 	lines := strings.Repeat("\n", 5) + strings.Repeat("\n", 3) + "n\nadmin@example.com\n" + strings.Repeat("\n", 2) + "n\n"
 	output := captureStderr(t, func() {
@@ -160,7 +160,7 @@ func TestSetupCLIRetriesConnectionAndRejectsMismatch(t *testing.T) {
 		applied = answers
 		return nil
 	}
-	secrets := []string{"db-password-12", "db-password-12", "redis-password", "short", "short", "long-enough-password", "other-password-1", "long-enough-password", "long-enough-password"}
+	secrets := []string{"db-password-12", "db-password-12", "redis-password", "short", "short", "Long1-enough-password", "other-password-1", "Long1-enough-password", "Long1-enough-password"}
 	database := strings.Repeat("\n", 5)
 	redis := strings.Repeat("\n", 3) + "n\n"
 	listen := strings.Repeat("\n", 2)
@@ -179,7 +179,7 @@ func TestSetupCLIRetriesConnectionAndRejectsMismatch(t *testing.T) {
 	if calls != 2 || !applied.Confirm || applied.Database.User != "gate" || applied.Redis.Username != "migate" || applied.Listen != "127.0.0.1:19810" {
 		t.Fatalf("calls=%d answers=%+v redis=%+v", calls, applied, applied.Redis)
 	}
-	if applied.Password != "long-enough-password" || len(secrets) != 0 {
+	if applied.Password != "Long1-enough-password" || len(secrets) != 0 {
 		t.Fatalf("password confirmation leftover=%q password=%q", secrets, applied.Password)
 	}
 }

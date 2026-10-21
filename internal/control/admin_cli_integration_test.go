@@ -70,7 +70,7 @@ func TestForceAdminKeepsGrantAndSubscriptionToken(t *testing.T) {
 	if err != nil || !emailResult.AuditWritten || !emailResult.SessionsRevoked {
 		t.Fatalf("email result=%+v err=%v", emailResult, err)
 	}
-	passwordResult, err := ForceAdminPassword(ctx, cfg, admin.ID, "replacement-password")
+	passwordResult, err := ForceAdminPassword(ctx, cfg, admin.ID, "Replacement1-password")
 	if err != nil || !passwordResult.AuditWritten || !passwordResult.SessionsRevoked {
 		t.Fatalf("password result=%+v err=%v", passwordResult, err)
 	}
@@ -81,7 +81,7 @@ func TestForceAdminKeepsGrantAndSubscriptionToken(t *testing.T) {
 	if updated.Email != "renamed@example.test" || updated.SubscriptionToken != "keep-subscription-token" || updated.Quota != 42 || updated.Used != 7 || updated.Expires != 99 || updated.TotpSecret != "keep-totp" || updated.Role != "admin" || !updated.Enabled {
 		t.Fatalf("account mutated: %+v", updated)
 	}
-	if bcrypt.CompareHashAndPassword([]byte(updated.PasswordHash), []byte("replacement-password")) != nil {
+	if bcrypt.CompareHashAndPassword([]byte(updated.PasswordHash), []byte("Replacement1-password")) != nil {
 		t.Fatal("new password does not match")
 	}
 	still, err := store.Grant.Query().Where(grant.UserIDEQ(admin.ID)).Only(ctx)
@@ -102,7 +102,7 @@ func TestForceAdminKeepsGrantAndSubscriptionToken(t *testing.T) {
 		t.Fatalf("audits=%v err=%v", audits, err)
 	}
 	for _, item := range audits {
-		if strings.Contains(item.Action+item.Target+item.Result, "replacement-password") {
+		if strings.Contains(item.Action+item.Target+item.Result, "Replacement1-password") {
 			t.Fatal("audit contains the password")
 		}
 	}

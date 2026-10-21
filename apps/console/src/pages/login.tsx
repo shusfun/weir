@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { Button, Card, CardContent, Input, Label } from "@migate/ui";
 import { api } from "../api";
+import { accountPasswordError } from "../password";
 import { passkey } from "../lib/passkey";
 
 type Policy = {
@@ -99,9 +100,8 @@ export function LoginPage({ done }: { done: () => void }) {
     setNotice("");
     try {
       if (!challenge && (mode === "register" || mode === "reset")) {
-        const length = new TextEncoder().encode(password).length;
-        if (length < 12 || length > 72)
-          throw Error("密码长度须为 12–72 字节。");
+        const passwordError = accountPasswordError(password);
+        if (passwordError) throw Error(passwordError);
         if (password !== confirmation) throw Error("两次输入的密码不一致。");
       }
       if (challenge) {
@@ -260,7 +260,7 @@ export function LoginPage({ done }: { done: () => void }) {
                       onChange={(e) => setPassword(e.target.value)}
                     />
                     {mode !== "login" && (
-                      <small>12–72 字节，建议使用密码管理器生成。</small>
+                      <small>至少 6 位，须包含大写字母、小写字母和数字。</small>
                     )}
                   </div>
                 )}

@@ -75,7 +75,7 @@ func TestIntegration(t *testing.T) {
 	must(request("POST", "/api/v1/setup/test-db", db, "", ""), 401)
 	must(request("POST", "/api/v1/setup/test-db", db, token, ""), 200)
 	must(request("POST", "/api/v1/setup/test-redis", rc, token, ""), 200)
-	install := map[string]any{"database": db, "redis": rc, "email": "admin@example.test", "password": "local-testing-password"}
+	install := map[string]any{"database": db, "redis": rc, "email": "admin@example.test", "password": "Local1-testing-password"}
 	installResults := make(chan *httptest.ResponseRecorder, 2)
 	for i := 0; i < 2; i++ {
 		go func() { installResults <- request("POST", "/api/v1/setup/install", install, token, "") }()
@@ -100,7 +100,7 @@ func TestIntegration(t *testing.T) {
 	}
 	must(request("GET", "/api/v1/admin/users", nil, "", ""), 401)
 	login := func(email string) string {
-		w := request("POST", "/api/v1/auth/login", map[string]any{"email": email, "password": "local-testing-password"}, "", "")
+		w := request("POST", "/api/v1/auth/login", map[string]any{"email": email, "password": "Local1-testing-password"}, "", "")
 		must(w, 200)
 		cookies := w.Result().Cookies()
 		if len(cookies) == 0 {
@@ -163,13 +163,13 @@ func TestIntegration(t *testing.T) {
 	json.Unmarshal(wRecover.Body.Bytes(), &recovered)
 	approval := map[string]any{"code": recovered["pair_code"], "fingerprint": recovered["fingerprint"]}
 	must(request("POST", fmt.Sprintf("/api/v1/admin/devices/%d/approve", id), approval, "", admin), 401)
-	approval["password"] = "local-testing-password"
+	approval["password"] = "Local1-testing-password"
 	must(request("POST", fmt.Sprintf("/api/v1/admin/devices/%d/approve", id), approval, "", admin), 200)
 	must(request("POST", "/api/v1/agent/heartbeat", map[string]any{}, deviceToken["token"].(string), ""), 401)
 	must(request("POST", "/api/v1/devices/auth", authBody, "", ""), 401)
 	must(request("POST", fmt.Sprintf("/api/v1/admin/devices/%d/revoke", id), map[string]any{}, "", admin), 200)
-	must(request("POST", "/api/v1/admin/users", map[string]any{"email": "alice@example.test", "password": "local-testing-password", "quota": 2 * contracts.BudgetBlock, "expires": 0}, "", admin), 201)
-	must(request("POST", "/api/v1/admin/users", map[string]any{"email": "bob@example.test", "password": "local-testing-password", "quota": 2 * contracts.BudgetBlock, "expires": 0}, "", admin), 201)
+	must(request("POST", "/api/v1/admin/users", map[string]any{"email": "alice@example.test", "password": "Local1-testing-password", "quota": 2 * contracts.BudgetBlock, "expires": 0}, "", admin), 201)
+	must(request("POST", "/api/v1/admin/users", map[string]any{"email": "bob@example.test", "password": "Local1-testing-password", "quota": 2 * contracts.BudgetBlock, "expires": 0}, "", admin), 201)
 	alice := login("alice@example.test")
 	testUserDirectoryIntegration(t, request, admin, alice)
 	testClientCatalogIntegration(t, s, request, admin, alice)
@@ -381,10 +381,10 @@ func TestIntegration(t *testing.T) {
 	testHostHistory(t, s, request, admin, alice)
 	testSessionDirectory(t, s, request, admin, alice)
 	testAdminSessionsIntegration(t, request, admin, alice)
-	must(request("PUT", "/api/v1/admin/settings", map[string]any{"password": "local-testing-password", "security": SecuritySettings{TOTP: true, RequireAdminMFA: true}}, "", admin), 200)
+	must(request("PUT", "/api/v1/admin/settings", map[string]any{"password": "Local1-testing-password", "security": SecuritySettings{TOTP: true, RequireAdminMFA: true}}, "", admin), 200)
 	admin = login("admin@example.test")
 	must(request("GET", "/api/v1/admin/users", nil, "", admin), 403)
-	wSetup := request("POST", "/api/v1/security/totp/setup", map[string]any{"password": "local-testing-password"}, "", admin)
+	wSetup := request("POST", "/api/v1/security/totp/setup", map[string]any{"password": "Local1-testing-password"}, "", admin)
 	must(wSetup, 200)
 	var enrollment map[string]any
 	json.Unmarshal(wSetup.Body.Bytes(), &enrollment)
@@ -416,7 +416,7 @@ func TestIntegration(t *testing.T) {
 	json.Unmarshal(wConfirm.Body.Bytes(), &enrolled)
 	recovery := enrolled["recovery_codes"].([]any)[0].(string)
 	must(request("GET", "/api/v1/me", nil, "", admin), 401)
-	wLogin := request("POST", "/api/v1/auth/login", map[string]any{"email": "admin@example.test", "password": "local-testing-password"}, "", "")
+	wLogin := request("POST", "/api/v1/auth/login", map[string]any{"email": "admin@example.test", "password": "Local1-testing-password"}, "", "")
 	must(wLogin, 200)
 	var factor map[string]any
 	json.Unmarshal(wLogin.Body.Bytes(), &factor)

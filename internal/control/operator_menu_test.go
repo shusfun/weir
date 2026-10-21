@@ -189,7 +189,7 @@ func TestOperatorMenuPasswordMismatchDoesNotSave(t *testing.T) {
 
 func TestForceAdminPasswordRejectsShortPassword(t *testing.T) {
 	_, err := ForceAdminPassword(context.Background(), Config{}, 1, "short")
-	if err == nil || err.Error() != "密码长度须为 12 到 72 位" {
+	if err == nil || err.Error() != accountPasswordHint {
 		t.Fatal(err)
 	}
 }

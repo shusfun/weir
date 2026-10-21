@@ -66,7 +66,7 @@ func testSubscriptionNaming(t *testing.T, s *Server, request func(string, string
 	if request("PUT", ep, body, "", admin).Code != 401 {
 		t.Fatal("reauth")
 	}
-	body["password"] = "local-testing-password"
+	body["password"] = "Local1-testing-password"
 	if request("GET", ep, nil, "", ordinary).Code != 403 || request("PUT", ep, body, "", ordinary).Code != 403 || request("PUT", ep, body, "", admin).Code != 200 {
 		t.Fatal("permissions/save")
 	}

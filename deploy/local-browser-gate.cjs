@@ -28,12 +28,12 @@ async function request(method,url,data,cookie='') {const r=await fetch(origin+'/
   if(definition.install!=='browser'){
     await request('POST','/setup/verify',undefined).then(()=>{throw Error('Unauthenticated setup passed');},()=>{});
     const auth={'Authorization':'Bearer '+token,'Content-Type':'application/json','Origin':origin};
-    const install=await fetch(origin+'/api/v1/setup/install',{method:'POST',headers:auth,body:JSON.stringify({database:{host:'127.0.0.1',port:25432,user:'gate',password:'local-test-only',database:'gate',ssl_mode:'disable'},redis:{address:'127.0.0.1:26379',username:'migate',password:'local-test-only'},email:'admin@isolated.test',password:'isolated-browser-password'})});if(install.status!==201)throw Error('Local actual initialization failed');
-    const admin=(await request('POST','/auth/login',{email:'admin@isolated.test',password:'isolated-browser-password'})).cookie;
-    const account={email:'user@isolated.test',password:'isolated-user-password'};
+    const install=await fetch(origin+'/api/v1/setup/install',{method:'POST',headers:auth,body:JSON.stringify({database:{host:'127.0.0.1',port:25432,user:'gate',password:'local-test-only',database:'gate',ssl_mode:'disable'},redis:{address:'127.0.0.1:26379',username:'migate',password:'local-test-only'},email:'admin@isolated.test',password:'Isolated1-browser-password'})});if(install.status!==201)throw Error('Local actual initialization failed');
+    const admin=(await request('POST','/auth/login',{email:'admin@isolated.test',password:'Isolated1-browser-password'})).cookie;
+    const account={email:'user@isolated.test',password:'Isolated1-user-password'};
     await request('POST','/admin/users',account,admin);
     const user=(await request('POST','/auth/login',account)).cookie;
-    fixture={...fixture,s:{admin_cookie:admin,admin_email:'admin@isolated.test',admin_password:'isolated-browser-password',test_users:[account]},sessions:{[account.email]:user}};
+    fixture={...fixture,s:{admin_cookie:admin,admin_email:'admin@isolated.test',admin_password:'Isolated1-browser-password',test_users:[account]},sessions:{[account.email]:user}};
   }
   const file=path.join(scratch,'browser.json');fs.writeFileSync(file,JSON.stringify(fixture),{mode:0o600});
   const workflows=[...(definition.install==='browser'?[]:['browser-auth-layout.cjs']),...definition.workflows];

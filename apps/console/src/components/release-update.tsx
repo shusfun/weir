@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge, Button, Card, CardContent } from "@migate/ui";
+import { Badge, Button, Card, CardContent, Checkbox, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@migate/ui";
 import { api } from "../api";
 import { State } from "./feedback";
 
@@ -82,14 +82,20 @@ export function ReleaseUpdateCard() {
             </li>
           ))}
         </ul>
-        <label>卸载范围
-          <select value={mode} onChange={(event) => { setMode(event.target.value); setScopeConfirmed(false); }}>
-            <option value="retain">保留数据和内核</option>
-            <option value="cores">移除托管内核</option>
-            <option value="purge">备份后清除本项目数据</option>
-          </select>
-        </label>
-        {mode !== "retain" && <label><input type="checkbox" checked={scopeConfirmed} onChange={(event) => setScopeConfirmed(event.target.checked)} />再次确认这个清除范围</label>}
+        <div className="field">
+          <Label>卸载范围</Label>
+          <Select value={mode} onValueChange={(value) => { if (value == null) return; setMode(String(value)); setScopeConfirmed(false); }}>
+            <SelectTrigger className="w-full" aria-label="卸载范围">
+              <SelectValue>{mode === "cores" ? "移除托管内核" : mode === "purge" ? "备份后清除本项目数据" : "保留数据和内核"}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="retain">保留数据和内核</SelectItem>
+              <SelectItem value="cores">移除托管内核</SelectItem>
+              <SelectItem value="purge">备份后清除本项目数据</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {mode !== "retain" && <Label><Checkbox checked={scopeConfirmed} onCheckedChange={(checked) => setScopeConfirmed(checked === true)} />再次确认这个清除范围</Label>}
         {error && <p className="notice error-message" role="alert">{error}</p>}
         <Button type="button" disabled={busy || !data.update_available} onClick={confirm}>确认拉取并推送 Gate</Button>
       </CardContent>
