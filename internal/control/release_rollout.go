@@ -2,7 +2,6 @@ package control
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -191,16 +190,16 @@ func (s *Server) gateRollout(ctx context.Context) []gin.H {
 			"id":      device.ID,
 			"name":    device.Name,
 			"version": version,
-			"rollout": GateRolloutState(version, target, deviceCapable(device.Metadata, "release.replace.v1"), taskStatus),
+			"rollout": GateRolloutState(version, target, deviceCapable(device.Metadata, "release.replace.v2"), taskStatus),
 		})
 	}
 	return rows
 }
 
+// gateManifest 描述中心已校验、可推送给 Gate 的单个 migate 程序。
 type gateManifest struct {
-	Version      string `json:"version"`
-	GateSHA256   string `json:"gate_sha256"`
-	ManageSHA256 string `json:"manage_sha256"`
+	Version string `json:"version"`
+	SHA256  string `json:"sha256"`
 }
 
 func readGateManifest(dir string) (gateManifest, error) {
@@ -225,9 +224,7 @@ func (s *Server) enqueueGateRelease(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	gateBody, gateErr := os.ReadFile(filepath.Join(s.gateReleaseDir(), "migate-gate"))
-	manageBody, manageErr := os.ReadFile(filepath.Join(s.gateReleaseDir(), "migate-manage"))
-	if gateErr != nil || manageErr != nil {
+	if info, statErr := os.Stat(filepath.Join(s.gateReleaseDir(), "migate")); statErr != nil || !info.Mode().IsRegular() || len(manifest.SHA256) != 64 {
 		return
 	}
 	for _, device := range devices {
@@ -238,19 +235,14 @@ func (s *Server) enqueueGateRelease(ctx context.Context) {
 		if device.Status != "approved" || heartbeat == manifest.Version {
 			continue
 		}
-		if !deviceCapable(device.Metadata, "release.replace.v1") {
+		if !deviceCapable(device.Metadata, "release.replace.v2") {
 			continue
 		}
 		if s.releaseTaskExists(ctx, device.ID, manifest.Version) {
 			continue
 		}
-		payload := map[string]any{
-			"version":       manifest.Version,
-			"gate_sha256":   manifest.GateSHA256,
-			"manage_sha256": manifest.ManageSHA256,
-			"gate_body":     encodeRelease(gateBody),
-			"manage_body":   encodeRelease(manageBody),
-		}
+		// 任务只带版本与摘要；Gate 凭设备身份从 /agent/release/:version 下载程序本体。
+		payload := map[string]any{"version": manifest.Version, "sha256": manifest.SHA256}
 		_, _ = s.enqueue(ctx, device.ID, "release.replace", "release.replace:"+strconv.Itoa(device.ID)+":"+manifest.Version, time.Now().Unix(), payload)
 	}
 }
@@ -303,6 +295,19 @@ func deviceCapable(metadata map[string]any, want string) bool {
 	return false
 }
 
-func encodeRelease(body []byte) string {
-	return base64.StdEncoding.EncodeToString(body)
+// serveGateRelease 只向已认证的 Gate 提供当前清单记录的版本，不接受任意路径。
+func (s *Server) serveGateRelease(c *gin.Context) {
+	manifest, err := readGateManifest(s.gateReleaseDir())
+	if err != nil || manifest.Version == "" || c.Param("version") != manifest.Version {
+		failure(c, 404, "release_not_found")
+		return
+	}
+	path := filepath.Join(s.gateReleaseDir(), "migate")
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		failure(c, 404, "release_not_found")
+		return
+	}
+	c.Header("X-Release-SHA256", manifest.SHA256)
+	c.File(path)
 }

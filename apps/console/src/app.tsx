@@ -1,4 +1,4 @@
-// 应用入口：启动检测 → 初始化 / 登录 / 控制台。路由按功能分区，旧地址统一重定向到新位置。
+// 应用入口：启动检测 → 初始化 / 登录 / 控制台。路由按功能分区。
 import { lazy, Suspense, useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -21,7 +21,6 @@ const AuditPage = page(() => import("./pages/audit"), "AuditPage");
 const EventsPage = page(() => import("./pages/events"), "EventsPage");
 const SubscriptionPage = page(() => import("./pages/subscription"), "SubscriptionPage");
 const SecurityPage = page(() => import("./pages/security"), "SecurityPage");
-const RoutingRedirect = page(() => import("./pages/routing"), "RoutingRedirect");
 const SubscriptionsWorkspace = page(() => import("./pages/workspaces"), "SubscriptionsWorkspace");
 const DistributionWorkspace = page(() => import("./pages/workspaces"), "DistributionWorkspace");
 const SystemWorkspace = page(() => import("./pages/workspaces"), "SystemWorkspace");
@@ -33,30 +32,8 @@ const PublicPage = page(() => import("./pages/public-page"), "PublicPage");
 type Account = { email?: string; role?: string };
 const loading = (title: string) => <PageState kind="loading" title={title} />;
 
-// 旧地址 → 新地址，保留查询参数
-function Legacy({ to }: { to: string }) {
-  const { search } = useLocation();
-  return <Navigate to={to + search} replace />;
-}
-function LegacySubscriptions() {
-  const { search } = useLocation();
-  const params = new URLSearchParams(search);
-  const kind = params.get("kind");
-  params.delete("kind");
-  const rest = params.toString() ? "?" + params : "";
-  if (kind === "mail") return <Navigate to="/ops/mail" replace />;
-  if (kind === "public-page") return <Navigate to={"/distribution/pages" + rest} replace />;
-  return <Navigate to={"/subscriptions/" + (kind || "sources") + rest} replace />;
-}
-function LegacySettings() {
-  const tab = new URLSearchParams(useLocation().search).get("tab");
-  const map: Record<string, string> = { subscription: "/subscriptions/operators?view=defaults", announcement: "/distribution/announcements", clients: "/distribution/clients", mail: "/ops/mail" };
-  return <Navigate to={map[tab ?? ""] ?? "/system/" + (tab || "security")} replace />;
-}
 function DeviceRoute() {
   const { tab } = useParams();
-  const legacy = new URLSearchParams(useLocation().search).get("tab");
-  if (legacy && deviceTabKeys.includes(legacy)) return <Navigate to={legacy} replace />;
   if (tab && !deviceTabKeys.includes(tab)) return <Navigate to=".." relative="path" replace />;
   return <DevicesPage />;
 }
@@ -125,7 +102,6 @@ function Console() {
               <Route path="/devices/:deviceId/:tab?" element={guard(<DeviceRoute />)} />
               <Route path="/users/*" element={guard(<UsersPage />)} />
               <Route path="/grants" element={guard(<GrantsPage />)} />
-              <Route path="/subscriptions" element={guard(<LegacySubscriptions />)} />
               <Route path="/subscriptions/:kind" element={guard(<SubscriptionsWorkspace />)} />
               <Route path="/distribution/:section?" element={guard(<DistributionWorkspace />)} />
               <Route path="/ops/tasks" element={guard(<TasksPage />)} />
@@ -135,11 +111,6 @@ function Console() {
               <Route path="/system/:section?" element={guard(<SystemWorkspace loginRequired={loginRequired} />)} />
               <Route path="/subscription" element={<SubscriptionPage />} />
               <Route path="/security" element={<SecurityPage loginRequired={loginRequired} />} />
-              <Route path="/routing" element={guard(<RoutingRedirect />)} />
-              <Route path="/tasks" element={<Legacy to="/ops/tasks" />} />
-              <Route path="/audit" element={<Legacy to="/ops/audit" />} />
-              <Route path="/events" element={<Legacy to="/ops/events" />} />
-              <Route path="/settings" element={<LegacySettings />} />
               <Route path="*" element={<Navigate to={home} replace />} />
             </Routes>
           </Suspense>

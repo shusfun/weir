@@ -42,6 +42,7 @@ func (s *Server) deviceRoutes(ready, admin *gin.RouterGroup) {
 	a.POST("/results", s.taskResult)
 	a.POST("/heartbeat", s.heartbeat)
 	a.POST("/meter", s.meter)
+	a.GET("/release/:version", s.serveGateRelease)
 	a.POST("/revoke", func(c *gin.Context) {
 		if err := s.markDeviceRevoked(c.Request.Context(), c.GetInt("device_id")); err != nil {
 			failure(c, 500, "device_revoke_failed")
@@ -64,8 +65,9 @@ func (s *Server) pairDevice(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Name      string `json:"name"`
-		PublicKey string `json:"public_key"`
+		Name       string `json:"name"`
+		PublicKey  string `json:"public_key"`
+		LocalToken string `json:"local_token"`
 	}
 	if !bind(c, &req) {
 		return
@@ -73,6 +75,10 @@ func (s *Server) pairDevice(c *gin.Context) {
 	pub, err := base64.StdEncoding.DecodeString(req.PublicKey)
 	if err != nil || len(pub) != ed25519.PublicKeySize || len(req.Name) > 100 {
 		failure(c, 400, "invalid_device")
+		return
+	}
+	if req.LocalToken != "" {
+		s.pairLocalDevice(c, req.Name, req.PublicKey, req.LocalToken)
 		return
 	}
 	code := randomToken(6)

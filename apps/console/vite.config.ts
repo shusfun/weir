@@ -18,5 +18,5 @@ export default defineConfig({
       "/sub/": "http://127.0.0.1:19810",
     },
   },
-  build: { outDir: "../control/static", emptyOutDir: true },
+  build: { outDir: "../migate/static", emptyOutDir: true },
 });

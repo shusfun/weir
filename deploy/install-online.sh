@@ -29,7 +29,6 @@ ROLE=""
 TARGET_VERSION=""
 FORCE_YES=false
 PURGE=false
-WITH_CORES=false
 WORKDIR=""
 MIRRORS=()
 trap '[[ -n ${WORKDIR:-} && -d ${WORKDIR:-} ]] && rm -rf "$WORKDIR"' EXIT
@@ -44,7 +43,8 @@ declare -A MSG=(
   [zh.lang_zh]="中文" [zh.lang_en]="English" [zh.enter_choice]="请输入选项"
   [zh.title]="MiGate 安装"
   [zh.role_title]="选择安装角色"
-  [zh.role_control]="中心" [zh.role_gate]="Gate"
+  [zh.role_control]="中心" [zh.role_gate]="Gate" [zh.role_standalone]="单机（中心 + 本机 Gate）"
+  [zh.standalone_pair]="本机 Gate 会在中心初始化完成后自动配对，无需手动 pair"
   [zh.host_prompt]="监听地址" [zh.port_prompt]="监听端口" [zh.invalid_port]="端口必须是 1-65535"
   [zh.plain_http]="非本机监听为明文 HTTP 直连；建议保持 127.0.0.1，由反代提供 HTTPS"
   [zh.proxy_hint]="公共域名按访问请求自动识别；在 1Panel 等反代中指向此地址即可"
@@ -52,9 +52,9 @@ declare -A MSG=(
   [zh.downloading]="正在下载" [zh.verifying]="正在校验安装包" [zh.installing]="正在安装"
   [zh.done]="安装完成" [zh.visit]="本机监听"
   [zh.menu]="下一步执行 migate，打开中文菜单。服务、初始化、管理员账号和初始化凭证都在菜单里"
-  [zh.web_setup]="Web 初始化：用 root 读取 /etc/migate-control/setup-token（0600，30 分钟），在浏览器打开向导"
-  [zh.rotate_setup]="凭证被拒绝或过期时，在 migate 菜单里刷新，或执行 migate-control --init；运行中的服务会改用新凭证并拒绝旧凭证"
-  [zh.cli_setup]="终端初始化：在 migate 菜单里选择，或执行 migate-control --setup"
+  [zh.web_setup]="Web 初始化：用 root 读取 /etc/migate/center/setup-token（30 分钟有效），在浏览器打开向导"
+  [zh.rotate_setup]="凭证被拒绝或过期时，在 migate 菜单里刷新，或执行 migate center --init；运行中的服务会改用新凭证并拒绝旧凭证"
+  [zh.cli_setup]="终端初始化：在 migate 菜单里选择，或执行 migate center --setup"
   [zh.one_setup]="不要同时提交 Web 和终端初始化"
   [zh.not_installed]="尚未安装" [zh.upgrading]="正在升级" [zh.current]="当前版本"
   [zh.rollback]="正在回退" [zh.same]="已经是这个版本"
@@ -82,7 +82,8 @@ declare -A MSG=(
   [en.lang_zh]="中文" [en.lang_en]="English" [en.enter_choice]="Enter choice"
   [en.title]="MiGate installer"
   [en.role_title]="Choose role"
-  [en.role_control]="Control" [en.role_gate]="Gate"
+  [en.role_control]="Center" [en.role_gate]="Gate" [en.role_standalone]="Standalone (center + local Gate)"
+  [en.standalone_pair]="The local Gate pairs itself after the center is initialized; no manual pair needed"
   [en.host_prompt]="Listen address" [en.port_prompt]="Listen port" [en.invalid_port]="Port must be 1-65535"
   [en.plain_http]="A non-local listener serves plain HTTP; prefer 127.0.0.1 behind an HTTPS reverse proxy"
   [en.proxy_hint]="The public domain is detected from each request; point your reverse proxy (e.g. 1Panel) here"
@@ -90,9 +91,9 @@ declare -A MSG=(
   [en.downloading]="Downloading" [en.verifying]="Verifying archive" [en.installing]="Installing"
   [en.done]="Installation complete" [en.visit]="Local listener"
   [en.menu]="Next, run migate to open the Chinese menu for the service, setup, administrator, and setup token"
-  [en.web_setup]="Web setup: as root, read /etc/migate-control/setup-token (mode 0600, 30 minutes) and open the wizard"
-  [en.rotate_setup]="If the token is rejected or expired, refresh it in migate, or run migate-control --init; a running service loads the new token and rejects the old one"
-  [en.cli_setup]="Terminal setup: choose it in migate, or run migate-control --setup"
+  [en.web_setup]="Web setup: as root, read /etc/migate/center/setup-token (valid 30 minutes) and open the wizard"
+  [en.rotate_setup]="If the token is rejected or expired, refresh it in migate, or run migate center --init; a running service loads the new token and rejects the old one"
+  [en.cli_setup]="Terminal setup: choose it in migate, or run migate center --setup"
   [en.one_setup]="Do not submit the Web wizard and the terminal wizard at the same time"
   [en.not_installed]="Not installed" [en.upgrading]="Upgrading" [en.current]="Current version"
   [en.rollback]="Rolling back" [en.same]="Already at this version"
@@ -101,7 +102,7 @@ declare -A MSG=(
   [en.cancelled]="Uninstall cancelled"
   [en.purge_prompt]="Also remove configuration and data? Default is keep [y/N] "
   [en.kept]="Configuration and data kept"
-  [en.purged]="Project data backed up and removed"
+  [en.purged]="Program, configuration and data removed"
   [en.need_yes]="Non-interactive mode detected. Add -y to confirm uninstall."
   [en.usage]="Usage"
   [en.cmd_install]="Install the latest stable release"
@@ -186,18 +187,20 @@ check_root() {
 ask_role() {
   [[ -n $ROLE ]] && return
   if ! is_interactive; then
-    ROLE=control
+    ROLE=center
     return
   fi
   echo ""
   echo -e "${CYAN}  $(msg role_title)${NC}"
-  echo "  1) $(msg role_control) (默认/default)"
-  echo "  2) $(msg role_gate)"
+  echo "  1) $(msg role_standalone) (默认/default)"
+  echo "  2) $(msg role_control)"
+  echo "  3) $(msg role_gate)"
   echo ""
   prompt_tty "$(msg enter_choice) [1]: "
   case "$REPLY" in
-    2|gate|Gate) ROLE=gate ;;
-    *) ROLE=control ;;
+    2|center|Center) ROLE=center ;;
+    3|gate|Gate) ROLE=gate ;;
+    *) ROLE=standalone ;;
   esac
 }
 
@@ -377,10 +380,10 @@ install_package() {
     return
   fi
   local package=$WORKDIR
-  if [[ $ROLE == control ]]; then
-    sh "$package/install.sh" control "${LISTEN_HOST}:${LISTEN_PORT}"
-  else
+  if [[ $ROLE == gate ]]; then
     sh "$package/install.sh" gate
+  else
+    sh "$package/install.sh" "$ROLE" "${LISTEN_HOST}:${LISTEN_PORT}"
   fi
   rm -rf "$WORKDIR"
   WORKDIR=""
@@ -388,7 +391,8 @@ install_package() {
   echo "=============================================="
   print_success "$(msg done)"
   echo "=============================================="
-  if [[ $ROLE == control ]]; then
+  if [[ $ROLE != gate ]]; then
+    [[ $ROLE == standalone ]] && echo "  $(msg standalone_pair)"
     echo "  $(msg visit): http://${LISTEN_HOST}:${LISTEN_PORT}"
     if [[ $LISTEN_HOST == 127.0.0.1 || $LISTEN_HOST == localhost ]]; then
       echo "  $(msg proxy_hint)"
@@ -400,34 +404,33 @@ install_package() {
     echo "  $(msg one_setup)"
     echo ""
     echo "  migate"
-    echo "  migate-control --version"
-    echo "  migate-control --setup"
-    echo "  systemctl status migate-control"
-    echo "  journalctl -u migate-control -f"
-    echo "  systemctl restart migate-control"
+    echo "  migate center --setup"
+    echo "  systemctl status migate-center"
+    echo "  journalctl -u migate-center -f"
   else
-    echo "  migate-gate version"
-    echo "  migate-gate pair --center <HTTPS 地址> --name <名称>"
+    echo "  migate gate version"
     echo "  systemctl status migate-gate"
     echo "  journalctl -u migate-gate -f"
-    echo "  systemctl restart migate-gate"
   fi
   echo ""
 }
 
+# installed_role 读取本机已安装的角色（standalone / center / gate），未安装时为空。
+installed_role() {
+  local file=${MIGATE_ROLE_FILE:-/etc/migate/role}
+  [[ -f $file ]] && tr -d '[:space:]' < "$file"
+}
+
 role_installed() {
-  local manifest=${MIGATE_MANIFEST:-/etc/migate-$1/install-manifest.json}
-  local manager=${MIGATE_MANAGE:-/opt/migate-$1/migate-manage}
-  [[ -f $manifest && -x $manager ]]
+  local current
+  current=$(installed_role || true)
+  [[ -n $current && ( $current == "$1" || $current == standalone ) ]]
 }
 
 ensure_role() {
-  if [[ -n $ROLE ]]; then
-    return
-  fi
-  if role_installed control && ! role_installed gate; then ROLE=control; return; fi
-  if role_installed gate && ! role_installed control; then ROLE=gate; return; fi
-  ask_role
+  [[ -n $ROLE ]] && return
+  ROLE=$(installed_role || true)
+  [[ -n $ROLE ]] || ask_role
 }
 
 fresh_install() {
@@ -445,24 +448,10 @@ change_version() {
   install_package
 }
 
-clear_install_lock() {
-  local config=/etc/migate-$ROLE/config.json
-  [[ -f $config ]] || return 0
-  python3 - "$config" <<'PY'
-import json, sys
-path = sys.argv[1]
-with open(path, encoding="utf-8") as handle:
-    data = json.load(handle)
-data["installed"] = False
-data["setup_hash"] = ""
-with open(path, "w", encoding="utf-8") as handle:
-    json.dump(data, handle)
-PY
-}
-
 run_uninstall() {
   check_root
-  ensure_role
+  local installer=${MIGATE_LOCAL_INSTALLER:-/usr/local/lib/migate/install.sh}
+  [[ -f $installer && -n $(installed_role || true) ]] || { print_error "$(msg not_installed)"; exit 1; }
   print_warning "$(msg uninstall_confirm)"
   if ! is_interactive; then
     if [[ $FORCE_YES != true ]]; then
@@ -474,42 +463,19 @@ run_uninstall() {
     read_tty
     echo ""
     [[ $REPLY =~ ^[Yy]$ ]] || { print_info "$(msg cancelled)"; exit 0; }
-    if [[ $PURGE != true && $WITH_CORES != true ]]; then
+    if [[ $PURGE != true ]]; then
       echo -n "$(msg purge_prompt)"
       read_tty
       echo ""
       [[ $REPLY =~ ^[Yy]$ ]] && PURGE=true
     fi
   fi
-  local manifest=${MIGATE_MANIFEST:-/etc/migate-$ROLE/install-manifest.json}
-  local manager=${MIGATE_MANAGE:-/opt/migate-$ROLE/migate-manage}
-  [[ -f $manifest ]] || { print_error "$(msg not_installed)"; exit 1; }
-  [[ -x $manager ]] || { print_error "$(msg not_installed)"; exit 1; }
-  local confirm="$ROLE:uninstall"
-  local -a args=(uninstall --manifest "$manifest" --confirm "$confirm")
-  if [[ $WITH_CORES == true && $PURGE == true ]]; then
-    print_error "不能同时清除数据和只移除内核"
-    exit 1
-  fi
-  if [[ $WITH_CORES == true ]]; then
-    confirm="$ROLE:uninstall:with-cores"
-    args=(uninstall --manifest "$manifest" --confirm "$confirm" --with-cores)
-  fi
   if [[ $PURGE == true ]]; then
-    confirm="$ROLE:uninstall:purge"
-    if [[ $ROLE == control ]]; then
-      command -v pg_dump >/dev/null 2>&1 || { print_error "清除中心数据需要 pg_dump"; exit 1; }
-      args=(uninstall --manifest "$manifest" --confirm "$confirm" --purge --backup-dir /var/backups/migate --pg-dump pg_dump)
-    else
-      args=(uninstall --manifest "$manifest" --confirm "$confirm" --purge --backup-dir /var/backups/migate)
-    fi
+    sh "$installer" uninstall --purge
     print_success "$(msg purged)"
   else
-    print_warning "$(msg kept): /etc/migate-$ROLE /var/lib/migate-$ROLE"
-  fi
-  "$manager" "${args[@]}"
-  if [[ $PURGE != true ]]; then
-    clear_install_lock
+    sh "$installer" uninstall
+    print_warning "$(msg kept): /etc/migate /var/lib/migate"
   fi
 }
 
@@ -521,7 +487,7 @@ list_versions() {
 }
 
 show_help() {
-  echo "$(msg usage): $0 [command] [options]"
+  echo "$(msg usage): $0 [command] [role] [options]"
   echo ""
   echo "Commands:"
   echo "  install              $(msg cmd_install)"
@@ -530,21 +496,22 @@ show_help() {
   echo "  list-versions        $(msg cmd_versions)"
   echo "  uninstall            $(msg cmd_uninstall)"
   echo ""
+  echo "Roles: standalone | center | gate"
+  echo ""
   echo "Options:"
-  echo "  -v, --version <ver>  指定版本，例如 v0.1.1"
+  echo "  -v, --version <ver>  指定版本，例如 v0.1.10"
   echo "  -y, --yes            没有终端时确认卸载"
-  echo "  --purge              卸载时清除本项目数据"
-  echo "  --with-cores         卸载时移除托管内核"
+  echo "  --purge              卸载时同时删除配置与数据目录"
   echo ""
   echo "Environment:"
   echo "  MIGATE_GITHUB_MIRRORS  加速镜像主机名，逗号分隔；off 关闭"
   echo ""
   echo "Examples:"
   echo "  curl -sSL https://raw.githubusercontent.com/shusfun/MiSub/main/deploy/install-online.sh | bash"
-  echo "  $0 install -v v0.1.1"
+  echo "  $0 install standalone"
   echo "  $0 upgrade"
-  echo "  $0 rollback v0.1.1"
-  echo "  $0 uninstall"
+  echo "  $0 rollback v0.1.10"
+  echo "  $0 uninstall --purge"
 }
 
 main() {
@@ -553,7 +520,6 @@ main() {
     case "$1" in
       -y|--yes) FORCE_YES=true; shift ;;
       --purge) PURGE=true; shift ;;
-      --with-cores) WITH_CORES=true; shift ;;
       -v|--version)
         TARGET_VERSION=${2:-}
         [[ -n $TARGET_VERSION ]] || { print_error "版本号无效"; exit 1; }
@@ -573,30 +539,26 @@ main() {
   local arg
   for arg in "$@"; do
     case "$arg" in
-      control|gate) ROLE=$arg ;;
+      center|gate|standalone) ROLE=$arg ;;
       install|upgrade|update|rollback|list-versions|versions|uninstall|remove|--help|-h|help) action=$arg ;;
-      # 旧版公共 URL 参数已不需要，兼容忽略
-      http://*|https://*) ;;
       *:*) LISTEN_HOST=${arg%%:*}; LISTEN_PORT=${arg##*:} ;;
       v[0-9]*|[0-9]*) TARGET_VERSION=$arg ;;
     esac
   done
-  [[ $action == control || $action == gate ]] && action=install
+  [[ $action == center || $action == gate || $action == standalone ]] && action=install
   case "$action" in
     upgrade|update)
-      print_info "$(msg upgrading)"
       change_version
       ;;
-    install)
-      if [[ -n $TARGET_VERSION ]] && role_installed "${ROLE:-control}"; then
-        ROLE=${ROLE:-control}
+    install|"")
+      if [[ -n $TARGET_VERSION && -n $(installed_role || true) ]]; then
         change_version
       else
         fresh_install
       fi
       ;;
     rollback)
-      TARGET_VERSION=${TARGET_VERSION:-${3:-}}
+      TARGET_VERSION=${TARGET_VERSION:-${2:-}}
       [[ -n $TARGET_VERSION ]] || { print_error "版本号无效"; show_help; exit 1; }
       print_info "$(msg rollback)"
       change_version
@@ -609,13 +571,6 @@ main() {
       ;;
     --help|-h|help)
       show_help
-      ;;
-    "")
-      if [[ -n $TARGET_VERSION ]]; then
-        fresh_install
-      else
-        fresh_install
-      fi
       ;;
     *)
       print_error "无法识别的参数"

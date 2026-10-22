@@ -103,13 +103,14 @@ def verify_archive(checksum_text, archive, version):
         checksums = bundle.extractfile("SHA256SUMS")
         if checksums is None:
             raise ValueError("package sums missing")
+        # 发布包只含一个 migate 程序；Gate / 运维工具按调用名分发。
         wanted = {}
         for line in checksums.read().decode("utf-8").splitlines():
             parts = line.split()
-            if len(parts) == 2 and parts[1] in {"migate-gate", "migate-manage"}:
+            if len(parts) == 2 and parts[1] == "migate":
                 wanted[parts[1]] = parts[0].lower()
-        if set(wanted) != {"migate-gate", "migate-manage"}:
-            raise ValueError("gate binaries missing")
+        if set(wanted) != {"migate"}:
+            raise ValueError("gate binary missing")
         for filename, file_sum in wanted.items():
             member = bundle.extractfile(filename)
             if member is None:
@@ -117,7 +118,7 @@ def verify_archive(checksum_text, archive, version):
             data = member.read()
             if hashlib.sha256(data).hexdigest() != file_sum:
                 raise ValueError("gate binary checksum mismatch")
-            if len(data) > 32 * 1024 * 1024:
+            if len(data) > 128 * 1024 * 1024:
                 raise ValueError("gate binary too large")
             files[filename] = data
     return files
@@ -136,11 +137,7 @@ def write_manifest(directory, version, files, archive=b""):
     for name, data in files.items():
         (temporary / name).write_bytes(data)
         hashes[name] = hashlib.sha256(data).hexdigest()
-    manifest = {
-        "version": version,
-        "gate_sha256": hashes["migate-gate"],
-        "manage_sha256": hashes["migate-manage"],
-    }
+    manifest = {"version": version, "sha256": hashes["migate"]}
     (temporary / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     if archive:
         (temporary / "package.tar.gz").write_bytes(archive)

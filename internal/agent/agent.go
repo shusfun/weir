@@ -95,7 +95,7 @@ func Load(path string) (Config, error) {
 		return c, e
 	}
 	u, e := url.Parse(c.Center)
-	if e != nil || u.Scheme != "https" {
+	if e != nil || u.Scheme != "https" && !loopbackCenter(c.Center) {
 		return c, errors.New("HTTPS center required")
 	}
 	return c, nil
@@ -191,7 +191,7 @@ func (a *Agent) request(ctx context.Context, method, path string, body, out any,
 			a.tokenUntil = time.Time{}
 			a.mu.Unlock()
 		}
-		return fmt.Errorf("center HTTP %d", resp.StatusCode)
+		return statusError{resp.StatusCode}
 	}
 	if out != nil {
 		return json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(out)
@@ -895,7 +895,7 @@ func (a *Agent) sendHeartbeat(ctx context.Context) {
 	if err != nil {
 		observation = map[string]any{"source": "gate-helper", "observed_at": time.Now().UTC().Format(time.RFC3339), "validity": "unknown"}
 	}
-	a.request(ctx, "POST", "/agent/heartbeat", map[string]any{"version": buildinfo.Version, "hostname": a.Config.Name, "traffic_status": status, "inbounds": inbounds, "core_status": observation, "host_status": a.observeHost(), "capabilities": []string{"core.control.v1", "core.inspect.v1", "core.diagnostics.v1", "core.versions.v1", "certificate.delivery.v1", "certificate.bind.v1", "certificate.history.v1", "routing.order.v1", "outbound.transport.v1", "outbound.trust.v1", "outbound.pool.v1", "outbound.tools.v1", "resource.enabled.v1", "inbound.enabled.v1", "host.observation.v1", "host.cpu.v1", "release.replace.v1", "lifecycle.uninstall.v1"}}, nil, true)
+	a.request(ctx, "POST", "/agent/heartbeat", map[string]any{"version": buildinfo.Version, "hostname": a.Config.Name, "traffic_status": status, "inbounds": inbounds, "core_status": observation, "host_status": a.observeHost(), "capabilities": []string{"core.control.v1", "core.inspect.v1", "core.diagnostics.v1", "core.versions.v1", "certificate.delivery.v1", "certificate.bind.v1", "certificate.history.v1", "routing.order.v1", "outbound.transport.v1", "outbound.trust.v1", "outbound.pool.v1", "outbound.tools.v1", "resource.enabled.v1", "inbound.enabled.v1", "host.observation.v1", "host.cpu.v1", "release.replace.v2", "lifecycle.uninstall.v1"}}, nil, true)
 }
 func (a *Agent) report(ctx context.Context) {
 	a.mu.Lock()

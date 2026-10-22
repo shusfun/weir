@@ -1,0 +1,1 @@
+import{j as o}from"./index-BQI0USkw.js";import{R as s}from"./readout-QXmL-BVB.js";function i({title:r,value:t,caption:e}){return o.jsx(s,{className:"metric",label:r,value:t,caption:e})}export{i as M};

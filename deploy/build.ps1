@@ -13,10 +13,8 @@ try {
  $env:GOOS = 'linux'; $env:GOARCH = 'amd64'; $env:CGO_ENABLED = '0'
  $sourceRevision = (git rev-parse --short=12 HEAD).Trim() + '-working-tree'
  $linkFlags = "-s -w -X github.com/imzyb/MiGate/internal/buildinfo.Version=$Version -X github.com/imzyb/MiGate/internal/buildinfo.Revision=$sourceRevision"
- foreach ($app in @('control','gate','manage')) {
-  go build -trimpath -ldflags $linkFlags -o (Join-Path $releaseDir "migate-$app") "./apps/$app"
-  if ($LASTEXITCODE) { throw "$app compilation failed" }
- }
+ go build -trimpath -ldflags $linkFlags -o (Join-Path $releaseDir 'migate') './apps/migate'
+ if ($LASTEXITCODE) { throw 'migate compilation failed' }
  Copy-Item deploy/install.sh,deploy/sources.json,deploy/github-update.sh,deploy/release_fetch.py,deploy/version.py $releaseDir
  python deploy/package-cores.py $releaseDir
  if ($LASTEXITCODE) {throw 'Pinned core packaging failed'}

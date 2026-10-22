@@ -28,11 +28,11 @@ def shell_program():
     raise unittest.SkipTest("sh is not installed")
 
 
-def archive_for(version, gate=b"gate-binary", manage=b"manage-binary"):
+def archive_for(version, binary=b"migate-binary"):
     sums = []
     payload = io.BytesIO()
     with tarfile.open(fileobj=payload, mode="w:gz") as bundle:
-        for name, data in (("migate-gate", gate), ("migate-manage", manage), ("install.sh", b"#!/bin/sh\nexit 0\n")):
+        for name, data in (("migate", binary), ("install.sh", b"#!/bin/sh\nexit 0\n")):
             info = tarfile.TarInfo(name)
             info.size = len(data)
             bundle.addfile(info, io.BytesIO(data))
@@ -101,7 +101,9 @@ class ReleaseFetchTests(unittest.TestCase):
             check=True,
         )
         self.assertTrue((output / "manifest.json").exists())
-        self.assertTrue((output / "migate-gate").exists())
+        self.assertTrue((output / "migate").exists())
+        manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(set(manifest), {"version", "sha256"})
 
 
 class UpdateScriptTests(unittest.TestCase):

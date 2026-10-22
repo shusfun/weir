@@ -19,6 +19,7 @@ import { Steps, Step, Field, Notice,
   InputGroupButton,
   InputGroupInput,
   Label,
+  Segmented,
   Select,
   SelectContent,
   SelectItem,
@@ -30,7 +31,8 @@ import { TextField } from "../components/form-field";
 import { api } from "../api";
 import { accountPasswordError } from "../password";
 
-type DatabaseConfig = {
+type Driver = "sqlite" | "postgres";
+type PostgresConfig = {
   host: string;
   port: number;
   user: string;
@@ -46,15 +48,22 @@ type RedisConfig = {
 };
 const steps = [
   { name: "初始化凭证", hint: "验证安装权限", icon: KeyRound },
-  { name: "PostgreSQL", hint: "连接现有数据库", icon: Database },
-  { name: "Redis", hint: "检查专用 ACL", icon: LockKeyhole },
+  { name: "存储", hint: "SQLite 或 PostgreSQL + Redis", icon: Database },
   { name: "管理员", hint: "创建账户并锁定安装", icon: UserRound },
 ];
+const sslLabels: Record<string, string> = {
+  disable: "关闭（同机本地连接）",
+  require: "加密连接",
+  "verify-ca": "验证 CA",
+  "verify-full": "验证 CA 与服务器名称",
+};
 export function SetupPage({ done }: { done: () => void }) {
   const id = useId();
   const [step, setStep] = useState(0),
     [token, setToken] = useState("");
-  const [database, setDatabase] = useState<DatabaseConfig>({
+  const [driver, setDriver] = useState<Driver>("sqlite"),
+    [sqlitePath, setSqlitePath] = useState("");
+  const [postgres, setPostgres] = useState<PostgresConfig>({
     host: "127.0.0.1",
     port: 5432,
     user: "gate",
@@ -78,6 +87,11 @@ export function SetupPage({ done }: { done: () => void }) {
   const [phase, setPhase] = useState<"form" | "switching" | "check_failed">(
     "form",
   );
+  // 空路径表示使用服务端默认位置（/var/lib/migate/center/migate.db）。
+  const storeConfig = () =>
+    driver === "sqlite"
+      ? { driver, sqlite_path: sqlitePath.trim() }
+      : { driver, postgres, redis };
   async function waitUntilReady() {
     for (let attempt = 0; attempt < 40; attempt += 1) {
       try {
@@ -86,12 +100,7 @@ export function SetupPage({ done }: { done: () => void }) {
         const body = (await health.json().catch(() => ({}))) as {
           status?: string;
         };
-        if (
-          state.installed &&
-          state.ready &&
-          health.ok &&
-          body.status === "ok"
-        ) {
+        if (state.installed && state.ready && health.ok && body.status === "ok") {
           done();
           return;
         }
@@ -108,24 +117,21 @@ export function SetupPage({ done }: { done: () => void }) {
     setBusy(true);
     setError("");
     try {
-      if (step === 0) await api("/setup/verify", "POST", {}, token);
-      if (step === 1) await api("/setup/test-db", "POST", database, token);
-      if (step === 2) await api("/setup/test-redis", "POST", redis, token);
-      if (step === 3) {
+      if (step === 0) {
+        await api("/setup/verify", "POST", {}, token);
+        const state = await api("/setup/status");
+        if (!sqlitePath && state.default_sqlite_path) setSqlitePath(state.default_sqlite_path);
+      }
+      if (step === 1) await api("/setup/test-store", "POST", storeConfig(), token);
+      if (step === 2) {
         if (password !== confirmation) throw Error("两次输入的密码不一致。");
         const passwordError = accountPasswordError(password);
         if (passwordError) throw Error(passwordError);
         setPhase("switching");
         try {
-          await api(
-            "/setup/install",
-            "POST",
-            { database, redis, email, password },
-            token,
-          );
+          await api("/setup/install", "POST", { store: storeConfig(), email, password }, token);
         } catch (installError) {
-          const message =
-            installError instanceof Error ? installError.message : "";
+          const message = installError instanceof Error ? installError.message : "";
           if (!message.includes("初始化已经完成")) {
             setPhase("form");
             throw installError;
@@ -144,11 +150,8 @@ export function SetupPage({ done }: { done: () => void }) {
       setBusy(false);
     }
   }
-  function pg<K extends keyof DatabaseConfig>(
-    key: K,
-    value: DatabaseConfig[K],
-  ) {
-    setDatabase((v) => ({ ...v, [key]: value }));
+  function pg<K extends keyof PostgresConfig>(key: K, value: PostgresConfig[K]) {
+    setPostgres((v) => ({ ...v, [key]: value }));
   }
   function rd<K extends keyof RedisConfig>(key: K, value: RedisConfig[K]) {
     setRedis((v) => ({ ...v, [key]: value }));
@@ -158,21 +161,15 @@ export function SetupPage({ done }: { done: () => void }) {
       <main className="auth-screen setup-screen" data-setup-phase={phase}>
         <div className="setup-container">
           <header className="setup-heading">
-            <h1>
-              {phase === "switching"
-                ? "正在切换到正常服务"
-                : "服务尚未就绪"}
-            </h1>
+            <h1>{phase === "switching" ? "正在切换到正常服务" : "服务尚未就绪"}</h1>
             <p>
               {phase === "switching"
-                ? "安装记录已保存。正在确认数据库、Redis 和后台任务。"
-                : "安装记录已保存，但正常服务还没有就绪。可以重新检查，不要再次提交安装。"}
+                ? "安装记录已保存，正在确认存储可用。"
+                : "安装记录已保存，但服务还没有就绪。可以重新检查，不要再次提交安装。"}
             </p>
           </header>
           {phase === "check_failed" ? (
-            <Notice tone="bad">
-              服务尚未就绪。
-            </Notice>
+            <Notice tone="bad">服务尚未就绪。</Notice>
           ) : (
             <p role="status">正在切换到正常服务</p>
           )}
@@ -202,7 +199,7 @@ export function SetupPage({ done }: { done: () => void }) {
             <strong>MiGate</strong>
           </div>
           <h1>初始化你的控制中心</h1>
-          <p>连接现有数据服务，创建管理员后完成安装。</p>
+          <p>选择存储，创建管理员后完成安装。</p>
         </header>
         <div className="setup-workspace">
           <nav className="setup-progress" aria-label="安装进度">
@@ -218,30 +215,18 @@ export function SetupPage({ done }: { done: () => void }) {
                 />
               ))}
             </Steps>
-            <p>
-              仅设置本项目的数据空间。不会新建数据库服务或清理其他应用数据。
-            </p>
+            <p>使用 PostgreSQL 时只写入 migate schema，Redis 只使用 migate: 前缀，不清理其他应用数据。</p>
           </nav>
           <Card size="lg">
             <CardContent>
               <header className="setup-section-heading">
-                <small>步骤 {step + 1} / 4</small>
-                <h2>
-                  {
-                    [
-                      "验证初始化凭证",
-                      "连接 PostgreSQL",
-                      "连接 Redis",
-                      "创建首位管理员",
-                    ][step]
-                  }
-                </h2>
+                <small>步骤 {step + 1} / 3</small>
+                <h2>{["验证初始化凭证", "选择存储", "创建首位管理员"][step]}</h2>
                 <p>
                   {
                     [
                       "使用服务器生成的短时凭证，确认你有安装权限。",
-                      "使用现有数据库与账号，业务数据保存在 migate schema。",
-                      "使用专用 ACL 用户，业务键仅使用 migate: 前缀。",
+                      "单机推荐只用 SQLite，无需额外服务；已有数据库时可选 PostgreSQL + Redis。",
                       "保存账户后，安装入口将锁定；后续修改在后台完成。",
                     ][step]
                   }
@@ -259,126 +244,68 @@ export function SetupPage({ done }: { done: () => void }) {
                         onChange={setToken}
                       />
                       <p className="setup-info">
-                        凭证只保存在服务器的{" "}
-                        <code>/etc/migate-control/setup-token</code>
-                        ，权限 0600，有效期 30
-                        分钟。过期或被拒绝时执行{" "}
-                        <code>migate-control --init</code>
-                        ，运行中的服务会立即改用新凭证并拒绝旧凭证。终端初始化使用{" "}
-                        <code>migate-control --setup</code>，不需要这份凭证。
+                        凭证只保存在服务器的 <code>/etc/migate/center/setup-token</code>，仅 root 可读，有效期 30 分钟。过期或被拒绝时执行{" "}
+                        <code>migate center --init</code>，运行中的服务会立即改用新凭证。终端初始化使用{" "}
+                        <code>migate center --setup</code>，不需要这份凭证。
                       </p>
                     </>
                   )}
                   {step === 1 && (
                     <>
-                      <div className="settings-field-grid">
-                        <TextField
-                          name={id + "host"}
-                          label="主机"
-                          value={database.host}
-                          onChange={(v) => pg("host", v)}
-                        />
-                        <TextField
-                          name={id + "port"}
-                          label="端口"
-                          type="number"
-                          value={database.port}
-                          onChange={(v) => pg("port", Number(v))}
-                        />
-                        <TextField
-                          name={id + "database"}
-                          label="数据库"
-                          value={database.database}
-                          onChange={(v) => pg("database", v)}
-                        />
-                        <TextField
-                          name={id + "user"}
-                          label="账号"
-                          value={database.user}
-                          onChange={(v) => pg("user", v)}
-                        />
-                      </div>
-                      <TextField
-                        name={id + "pg-password"}
-                        label="密码"
-                        type="password"
-                        value={database.password}
-                        onChange={(v) => pg("password", v)}
+                      <Segmented
+                        aria-label="存储类型"
+                        value={driver}
+                        onValueChange={(v) => setDriver(v as Driver)}
+                        options={[
+                          ["sqlite", "只用 SQLite"],
+                          ["postgres", "PostgreSQL + Redis"],
+                        ]}
                       />
-                      <Field label="SSL 模式" htmlFor={id + "ssl"}>
-                        <Select
-                          value={database.ssl_mode}
-                          onValueChange={(v) => {
-                            if (v) pg("ssl_mode", v);
-                          }}
-                          disabled={busy}
-                        >
-                          <SelectTrigger id={id + "ssl"}>
-                            <SelectValue>
-                              {
-                                (
-                                  {
-                                    disable: "关闭（同机本地连接）",
-                                    require: "加密连接",
-                                    "verify-ca": "验证 CA",
-                                    "verify-full": "验证 CA 与服务器名称",
-                                  } as Record<string, string>
-                                )[database.ssl_mode]
-                              }
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {[
-                              ["disable", "关闭（同机本地连接）"],
-                              ["require", "加密连接"],
-                              ["verify-ca", "验证 CA"],
-                              ["verify-full", "验证 CA 与服务器名称"],
-                            ].map(([value, label]) => (
-                              <SelectItem key={value} value={value}>
-                                {label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </Field>
+                      {driver === "sqlite" ? (
+                        <TextField
+                          name={id + "sqlite"}
+                          label="数据库文件"
+                          value={sqlitePath}
+                          onChange={setSqlitePath}
+                        />
+                      ) : (
+                        <>
+                          <div className="settings-field-grid">
+                            <TextField name={id + "host"} label="PostgreSQL 主机" value={postgres.host} onChange={(v) => pg("host", v)} />
+                            <TextField name={id + "port"} label="端口" type="number" value={postgres.port} onChange={(v) => pg("port", Number(v))} />
+                            <TextField name={id + "database"} label="数据库" value={postgres.database} onChange={(v) => pg("database", v)} />
+                            <TextField name={id + "user"} label="账号" value={postgres.user} onChange={(v) => pg("user", v)} />
+                          </div>
+                          <TextField name={id + "pg-password"} label="数据库密码" type="password" value={postgres.password} onChange={(v) => pg("password", v)} />
+                          <Field label="SSL 模式" htmlFor={id + "ssl"}>
+                            <Select value={postgres.ssl_mode} onValueChange={(v) => { if (v) pg("ssl_mode", v); }} disabled={busy}>
+                              <SelectTrigger id={id + "ssl"}>
+                                <SelectValue>{sslLabels[postgres.ssl_mode]}</SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {Object.entries(sslLabels).map(([value, label]) => (
+                                  <SelectItem key={value} value={value}>{label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                          <div className="settings-field-grid">
+                            <TextField name={id + "address"} label="Redis 地址" value={redis.address} onChange={(v) => rd("address", v)} />
+                            <TextField name={id + "redis-user"} label="Redis ACL 用户" value={redis.username} onChange={(v) => rd("username", v)} />
+                          </div>
+                          <TextField name={id + "redis-password"} label="Redis 密码" type="password" value={redis.password} onChange={(v) => rd("password", v)} />
+                          <Label className="settings-policy">
+                            <span>
+                              <strong>Redis TLS 加密连接</strong>
+                              <small>根据现有 Redis 服务设置选择。</small>
+                            </span>
+                            <Switch disabled={busy} checked={redis.tls} onCheckedChange={(v) => rd("tls", v)} aria-label="Redis TLS 加密连接" />
+                          </Label>
+                        </>
+                      )}
                     </>
                   )}
                   {step === 2 && (
-                    <>
-                      <TextField
-                        name={id + "address"}
-                        label="连接地址"
-                        value={redis.address}
-                        onChange={(v) => rd("address", v)}
-                      />
-                      <TextField
-                        name={id + "redis-user"}
-                        label="ACL 用户"
-                        value={redis.username}
-                        onChange={(v) => rd("username", v)}
-                      />
-                      <TextField
-                        name={id + "redis-password"}
-                        label="密码"
-                        type="password"
-                        value={redis.password}
-                        onChange={(v) => rd("password", v)}
-                      />
-                      <Label className="settings-policy">
-                        <span>
-                          <strong>TLS 加密连接</strong>
-                          <small>根据现有 Redis 服务设置选择。</small>
-                        </span>
-                        <Switch
-                          disabled={busy}
-                          checked={redis.tls}
-                          onCheckedChange={(v) => rd("tls", v)}
-                          aria-label="TLS 加密连接"
-                        />
-                      </Label>
-                    </>
-                  )}
-                  {step === 3 && (
                     <>
                       <TextField
                         name={id + "email"}
@@ -424,9 +351,7 @@ export function SetupPage({ done }: { done: () => void }) {
                             <InputGroupButton
                               size="icon-sm"
                               aria-pressed={showConfirmation}
-                              aria-label={
-                                showConfirmation ? "隐藏密码" : "显示密码"
-                              }
+                              aria-label={showConfirmation ? "隐藏密码" : "显示密码"}
                               onClick={() => setShowConfirmation((v) => !v)}
                             >
                               {showConfirmation ? <EyeOff /> : <Eye />}
@@ -434,18 +359,11 @@ export function SetupPage({ done }: { done: () => void }) {
                           </InputGroupAddon>
                         </InputGroup>
                       </Field>
-                      <p className="setup-info">
-                        注册默认关闭。邮件服务、二次验证策略与 Laya
-                        可在安装后配置。
-                      </p>
+                      <p className="setup-info">二次验证与通行密钥可在安装后的账户安全中设置。</p>
                     </>
                   )}
                 </fieldset>
-                {error && (
-                  <Notice tone="bad">
-                    {error}
-                  </Notice>
-                )}
+                {error && <Notice tone="bad">{error}</Notice>}
                 <div className="setup-actions">
                   {step > 0 && (
                     <Button
@@ -463,12 +381,16 @@ export function SetupPage({ done }: { done: () => void }) {
                   )}
                   <Button type="submit" disabled={busy || !token}>
                     {busy
-                      ? step === 3
+                      ? step === 2
                         ? "正在安装…"
-                        : "正在验证…"
-                      : step === 3
+                        : step === 1
+                          ? "正在测试连接…"
+                          : "正在验证…"
+                      : step === 2
                         ? "安装并锁定"
-                        : "下一步"}
+                        : step === 1
+                          ? "测试连接并继续"
+                          : "下一步"}
                     <ArrowRight size={15} />
                   </Button>
                 </div>

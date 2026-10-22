@@ -1,209 +1,162 @@
 #!/bin/sh
-# Install a locally built and uploaded release; never builds on the target.
+# 安装本机已上传并解压的发布包（目标机器不编译源码）。
+#   sh install.sh standalone|center [监听地址]   单机 / 管理端（默认 127.0.0.1:19810）
+#   sh install.sh gate                           只装 Gate 执行端
+#   sh install.sh uninstall [--purge]            卸载；--purge 同时删除配置与数据目录
+# 新版直接覆盖旧版：发现旧版服务单元与程序目录时停止并删除；旧数据目录只列出，不自动删除。
 set -eu
 umask 077
-role=${1:-}
-case "$role" in control|gate) ;; *) echo 'usage: sh install.sh control|gate [listen-address]' >&2; exit 2;; esac
+
+usage() { echo 'usage: sh install.sh standalone|center [listen] | gate | uninstall [--purge]' >&2; exit 2; }
 [ "$(id -u)" = 0 ] || { echo 'root required' >&2; exit 1; }
+action=${1:-}
+case "$action" in standalone|center|gate|uninstall) ;; *) usage;; esac
+
+base=/opt/migate
+etc=/etc/migate
+lib=/var/lib/migate
+units_dir=/etc/systemd/system
+all_units="migate-center.service migate-gate.service migate-helper.service migate-xray.service migate-sing-box.service migate-local-pair.service"
+
+stop_units() {
+ for unit in $all_units; do
+  systemctl disable --now "$unit" >/dev/null 2>&1 || true
+ done
+}
+
+if [ "$action" = uninstall ]; then
+ purge=${2:-}
+ stop_units
+ for unit in $all_units; do rm -f "$units_dir/$unit"; done
+ systemctl daemon-reload
+ rm -f /usr/local/bin/migate
+ rm -rf "$base" /usr/local/lib/migate
+ if [ "$purge" = --purge ]; then
+  rm -rf "$etc" "$lib"
+  echo 'Removed program, configuration and data. A PostgreSQL migate schema or Redis migate:* keys, if used, are not touched.'
+ else
+  echo "Removed program and services. Kept configuration and data: $etc $lib"
+ fi
+ exit 0
+fi
+
+role=$action
 package=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$package"
-sha256sum -c SHA256SUMS
-chmod 0755 migate-control migate-gate migate-manage
+sha256sum -c SHA256SUMS >/dev/null
 version=$(cat VERSION)
 case "$version" in ''|.|..|*[!a-zA-Z0-9._-]*) echo 'invalid version' >&2; exit 1;; esac
-base=/opt/migate-$role
-config=/etc/migate-$role
-data=/var/lib/migate-$role
-exec 9>"/run/lock/migate-$role-install.lock"
+install -d -m 0755 /run/lock
+exec 9>/run/lock/migate-install.lock
 flock -n 9 || { echo 'Another installation is running' >&2; exit 1; }
-for p in "$base" "$base/releases" "$config" "$config/cores" "$data" /opt /etc /var /var/lib; do
- [ ! -L "$p" ] || { echo "symlink path refused: $p" >&2; exit 1; }
-done
-if [ -e "$base" ] && [ ! -f "$config/install-manifest.json" ]; then
- echo 'Existing unmanaged directory; manual review required' >&2; exit 1
-fi
-if [ -e "$base/releases/$version" ]; then echo 'Version already exists; use a new release version' >&2; exit 1; fi
-previous=''
-releases=''
-if [ -f "$config/install-manifest.json" ] && [ -x "$base/migate-manage" ]; then
- releases=$("$package/migate-manage" releases --manifest "$config/install-manifest.json")
-fi
-if [ -L "$base/current" ]; then previous=$(basename "$(readlink "$base/current")"); fi
-# Keep exact pre-update metadata and service files outside the install tree.
-rollback_dir=$(mktemp -d /var/tmp/migate-install-XXXXXX)
-active_units=''
-units="migate-$role.service"
-if [ "$role" = gate ]; then units="$units migate-gate-helper.service migate-gate-xray.service migate-gate-sing-box.service"; fi
-if [ "$role" = gate ] && [ -f /etc/systemd/system/migate-gate-tunnel.service ]; then units="$units migate-gate-tunnel.service"; fi
-for unit in $units; do
- if systemctl is-active --quiet "$unit"; then active_units="$active_units $unit"; fi
- if [ -f "/etc/systemd/system/$unit" ]; then cp -p "/etc/systemd/system/$unit" "$rollback_dir/$unit"; fi
-done
-for item in install-manifest.json; do
- if [ -f "$config/$item" ]; then cp -p "$config/$item" "$rollback_dir/$item"; fi
-done
-if [ -f "$base/migate-manage" ]; then cp -p "$base/migate-manage" "$rollback_dir/migate-manage"; fi
-old_previous=''
-if [ -L "$base/previous" ]; then old_previous=$(readlink "$base/previous"); fi
-committed=false
-rollback() {
- result=$?
- trap - EXIT HUP INT TERM
- if [ "$committed" != true ]; then
-  for unit in $units; do systemctl stop "$unit" >/dev/null 2>&1 || true; done
-  if [ -n "$previous" ]; then ln -sfn "releases/$previous" "$base/current"; fi
-  if [ -n "$old_previous" ]; then ln -sfn "$old_previous" "$base/previous"; elif [ -L "$base/previous" ]; then rm "$base/previous"; fi
-  for unit in $units; do
-   if [ -f "$rollback_dir/$unit" ]; then cp -p "$rollback_dir/$unit" "/etc/systemd/system/$unit"; fi
-  done
-  if [ -f "$rollback_dir/install-manifest.json" ]; then cp -p "$rollback_dir/install-manifest.json" "$config/install-manifest.json"; fi
-  if [ -f "$rollback_dir/migate-manage" ]; then cp -p "$rollback_dir/migate-manage" "$base/migate-manage"; fi
-  systemctl daemon-reload
-  recovery_ready=true
-  for unit in $active_units; do
-   systemctl reset-failed "$unit" >/dev/null 2>&1 || true
-   if ! systemctl start "$unit"; then recovery_ready=false; fi
-  done
-  # Type=simple only confirms exec, not that the previous application is ready.
-  if [ -n "$previous" ]; then
-   case " $active_units " in
-    *" migate-$role.service "*)
-     application_ready=false
-     for attempt in 1 2 3 4 5 6 7 8 9 10; do
-      if [ "$role" = control ]; then
-       if "$base/current/migate-control" --config "$config/config.json" --health-check >/dev/null 2>&1; then application_ready=true; break; fi
-      elif systemctl is-active --quiet migate-gate.service && "$base/current/migate-gate" helper-health >/dev/null 2>&1; then
-       application_ready=true; break
-      fi
-      sleep 1
-     done
-     [ "$application_ready" = true ] || recovery_ready=false
-     ;;
-   esac
-  fi
-  if [ "$recovery_ready" = true ]; then
-   echo "Installation failed; previous runtime and metadata restored; readiness verified. Diagnostic snapshot: $rollback_dir" >&2
-  else
-   echo "Installation failed; previous files restored but service recovery incomplete. Review diagnostics: $rollback_dir" >&2
-  fi
-  [ "$result" != 0 ] || result=1
- else
-  rm -r "$rollback_dir"
+
+# 角色只能扩展到单机，不能静默缩小：已装单机时再装 gate 视为升级同一单机。
+if [ -f "$etc/role" ]; then
+ installed=$(cat "$etc/role")
+ if [ "$installed" = standalone ]; then role=standalone; fi
+ if [ "$installed" != "$role" ] && [ "$role" != standalone ]; then
+  echo "This machine is installed as $installed; uninstall first or install standalone" >&2; exit 1
  fi
- exit "$result"
-}
-trap rollback EXIT
-trap 'exit 130' HUP INT TERM
-if [ -n "$previous" ]; then
- "$package/migate-manage" backup --manifest "$config/install-manifest.json" \
-  --backup-dir /var/backups/migate --pg-dump "${4:-pg_dump}" --confirm "$role:backup"
 fi
-for unit in $units; do systemctl stop "$unit" >/dev/null 2>&1 || true; done
+has_center=false; has_gate=false
+case "$role" in standalone) has_center=true; has_gate=true;; center) has_center=true;; gate) has_gate=true;; esac
+listen=${2:-127.0.0.1:19810}
+port=${listen##*:}
+case "$port" in ''|*[!0-9]*) echo 'invalid listen address' >&2; exit 2;; esac
+
+# —— 覆盖旧版：只删除旧服务单元与旧程序目录，旧配置 / 数据目录保留并提示 ——
+legacy=false
+for unit in migate-control.service migate-control-update.service migate-control-update.path migate-gate.service migate-gate-helper.service migate-gate-xray.service migate-gate-sing-box.service migate-gate-tunnel.service migate-gate-local-pair.service; do
+ if [ -f "$units_dir/$unit" ]; then
+  [ "$unit" = migate-gate.service ] && [ -f "$etc/role" ] && continue
+  systemctl disable --now "$unit" >/dev/null 2>&1 || true
+  rm -f "$units_dir/$unit"
+  legacy=true
+ fi
+done
+for dir in /opt/migate-control /opt/migate-gate; do
+ if [ -d "$dir" ]; then rm -rf "$dir"; legacy=true; fi
+done
+for link in /usr/local/bin/migate-control /usr/local/bin/migate-gate /usr/local/bin/migate-manage /usr/local/bin/migate-install; do rm -f "$link"; done
+if [ -L /usr/local/bin/migate ] && [ "$(readlink /usr/local/bin/migate)" != "$base/current/migate" ]; then rm -f /usr/local/bin/migate; fi
+
+# —— 程序：releases/<版本>，current 指向当前，保留上一版本用于回退 ——
+previous=''
+if [ -L "$base/current" ]; then previous=$(basename "$(readlink "$base/current")"); fi
+[ "$previous" != "$version" ] || previous=''
+install -d -m 0755 "$base" "$base/releases"
+if [ -e "$base/releases/$version" ]; then rm -rf "$base/releases/$version"; fi
 install -d -m 0755 "$base/releases/$version"
-install -d -m 0700 "$config" "$data"
-install -m 0755 "migate-$role" "$base/releases/$version/"
-install -m 0755 migate-manage "$base/migate-manage"
-cp SHA256SUMS sources.json "$base/releases/$version/"
-for item in source.tar.gz UIAble-LICENSE VERSION third_party; do
+install -m 0755 migate "$base/releases/$version/migate"
+cp SHA256SUMS VERSION "$base/releases/$version/"
+for item in sources.json source.tar.gz third_party; do
  if [ -e "$item" ]; then cp -R "$item" "$base/releases/$version/"; fi
 done
-if [ "$role" = gate ] && [ -f core-packages/catalog.json ]; then
- cp -R core-packages "$base/releases/$version/"
-fi
+stop_units
 if [ -n "$previous" ]; then ln -sfn "releases/$previous" "$base/previous"; fi
 ln -sfn "releases/$version" "$base/current"
-ln -sfn "$base/current/migate-$role" "/usr/local/bin/migate-$role"
-ln -sfn "$base/migate-manage" /usr/local/bin/migate-manage
-if [ "$role" = control ]; then ln -sfn "$base/current/migate-control" /usr/local/bin/migate; fi
-if [ "$role" = control ]; then
- listen=${2:-127.0.0.1:19810}
- need_init=0
- if [ ! -f "$config/config.json" ]; then
-  need_init=1
- elif ! grep -Eq '"installed"[[:space:]]*:[[:space:]]*true' "$config/config.json"; then
-  need_init=1
+ln -sfn "$base/current/migate" /usr/local/bin/migate
+for old in "$base"/releases/*; do
+ name=$(basename "$old")
+ [ "$name" = "$version" ] || [ "$name" = "$previous" ] || rm -rf "$old"
+done
+install -d -m 0755 /usr/local/lib/migate
+install -m 0755 "$package/install.sh" /usr/local/lib/migate/install.sh
+install -d -m 0755 "$etc"
+
+rollback() {
+ if [ -n "$previous" ]; then
+  ln -sfn "releases/$previous" "$base/current"
+  systemctl daemon-reload
+  for unit in $active; do systemctl restart "$unit" || true; done
+  echo "Startup failed; switched back to $previous" >&2
+ else
+  echo 'Startup failed; no previous version to restore' >&2
  fi
- if [ "$need_init" = 1 ]; then
-  "$base/current/migate-control" --config "$config/config.json" --listen "$listen" --init >/dev/null
+ exit 1
+}
+active=''
+
+# —— 中心 ——
+if [ "$has_center" = true ]; then
+ id migate-center >/dev/null 2>&1 || useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin migate-center
+ # /var/lib/migate 由 root 持有；中心与 Gate 各自只拥有自己的子目录，互不可写。
+ install -d -m 0755 "$lib"
+ install -d -m 0700 -o migate-center -g migate-center "$etc/center" "$lib/center"
+ if [ ! -f "$etc/center/config.json" ]; then
+  setpriv --reuid=migate-center --regid=migate-center --init-groups \
+   "$base/current/migate" center --config "$etc/center/config.json" --listen "$listen" --init >/dev/null
  fi
- rm -f "$config/initialization.txt"
- cat > /etc/systemd/system/migate-control.service <<'UNIT'
+ cat > "$units_dir/migate-center.service" <<'UNIT'
 [Unit]
-Description=MiGate Control
+Description=MiGate center
 After=network-online.target
 Wants=network-online.target
 [Service]
 Type=simple
-DynamicUser=yes
-StateDirectory=migate-control
-ConfigurationDirectory=migate-control
-ConfigurationDirectoryMode=0700
-StateDirectoryMode=0700
-ExecStart=/opt/migate-control/current/migate-control --config /etc/migate-control/config.json --serve
+User=migate-center
+Group=migate-center
+ExecStart=/opt/migate/current/migate center --config /etc/migate/center/config.json --serve
 Restart=on-failure
 UMask=0077
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=/etc/migate-control /var/lib/migate-control
+ReadWritePaths=/etc/migate/center /var/lib/migate/center
 [Install]
 WantedBy=multi-user.target
 UNIT
- # DynamicUser needs ownership of the existing credential directory. A static
- # service account keeps ownership deterministic across reinstall/recovery.
- id migate-control >/dev/null 2>&1 || useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin migate-control
- sed -i 's/DynamicUser=yes/User=migate-control\nGroup=migate-control/' /etc/systemd/system/migate-control.service
- chown -R migate-control:migate-control "$config" "$data"
- if [ -f "$package/github-update.sh" ]; then install -m 0755 "$package/github-update.sh" /usr/local/bin/migate-install; fi
- if [ -f "$package/release_fetch.py" ]; then
-  install -d -m 0755 /usr/local/lib/migate
-  install -m 0644 "$package/release_fetch.py" "$package/version.py" /usr/local/lib/migate/
- fi
- cat > /etc/systemd/system/migate-control-update.service <<'UNIT'
-[Unit]
-Description=MiGate verified GitHub release update
-[Service]
-Type=oneshot
-User=root
-ExecStart=/usr/local/bin/migate-install --apply-request
-UNIT
- cat > /etc/systemd/system/migate-control-update.path <<'UNIT'
-[Unit]
-Description=Watch MiGate release request
-[Path]
-PathExists=/var/lib/migate-control/release-request.json
-PathChanged=/var/lib/migate-control/release-request.json
-Unit=migate-control-update.service
-[Install]
-WantedBy=multi-user.target
-UNIT
- systemctl daemon-reload
- systemctl enable --now migate-control-update.path >/dev/null 2>&1 || true
-else
+ active="$active migate-center.service"
+fi
+
+# —— Gate ——
+if [ "$has_gate" = true ]; then
  id migate-gate >/dev/null 2>&1 || useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin migate-gate
- install -d -m 0750 "$config/cores" "$config/certs" "$base/cores"
- chown -R migate-gate:migate-gate "$data"
- cat > /etc/systemd/system/migate-gate.service <<'UNIT'
-[Unit]
-Description=MiGate outbound Agent
-After=network-online.target migate-gate-helper.service
-Requires=migate-gate-helper.service
-ConditionPathExists=/etc/migate-gate/agent.json
-[Service]
-User=migate-gate
-Group=migate-gate
-ExecStart=/opt/migate-gate/current/migate-gate run
-Restart=on-failure
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=yes
-PrivateTmp=yes
-ReadWritePaths=/var/lib/migate-gate /run/migate
-[Install]
-WantedBy=multi-user.target
-UNIT
- cat > /etc/systemd/system/migate-gate-helper.service <<'UNIT'
+ install -d -m 0750 -o root -g migate-gate "$etc/gate" "$etc/gate/cores" "$etc/gate/certs" "$base/cores"
+ install -d -m 0755 "$lib"
+ install -d -m 0700 -o migate-gate -g migate-gate "$lib/gate"
+ cat > "$units_dir/migate-helper.service" <<'UNIT'
 [Unit]
 Description=MiGate bounded core helper
 After=network-online.target
@@ -211,46 +164,48 @@ After=network-online.target
 Group=migate-gate
 RuntimeDirectory=migate
 RuntimeDirectoryMode=0750
-ExecStart=/opt/migate-gate/current/migate-gate helper
+ExecStart=/opt/migate/current/migate gate helper
 Restart=on-failure
+NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-NoNewPrivileges=yes
-ReadWritePaths=/run/migate /etc/migate-gate/cores /etc/migate-gate/certs /opt/migate-gate/cores /opt/migate-gate
+ReadWritePaths=/run/migate /etc/migate/gate /opt/migate/cores /opt/migate
 [Install]
 WantedBy=multi-user.target
 UNIT
- cat > /etc/systemd/system/migate-gate-xray.service <<'UNIT'
+ cat > "$units_dir/migate-gate.service" <<'UNIT'
 [Unit]
-Description=MiGate isolated Xray core
-StartLimitIntervalSec=10
-StartLimitBurst=30
-After=network-online.target
-ConditionPathExists=/etc/migate-gate/cores/xray.json
+Description=MiGate Gate agent
+After=network-online.target migate-helper.service
+Requires=migate-helper.service
+ConditionPathExists=/etc/migate/gate/agent.json
 [Service]
 User=migate-gate
 Group=migate-gate
-ExecStart=/opt/migate-gate/cores/xray run -config /etc/migate-gate/cores/xray.json
+ExecStart=/opt/migate/current/migate gate run --config /etc/migate/gate/agent.json
 Restart=on-failure
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
+ReadWritePaths=/var/lib/migate/gate /run/migate
 [Install]
 WantedBy=multi-user.target
 UNIT
- cat > /etc/systemd/system/migate-gate-sing-box.service <<'UNIT'
+ for core in xray sing-box; do
+  args='run -config'; [ "$core" = sing-box ] && args='run -c'
+  cat > "$units_dir/migate-$core.service" <<UNIT
 [Unit]
-Description=MiGate isolated sing-box core
+Description=MiGate managed $core
 StartLimitIntervalSec=10
 StartLimitBurst=30
 After=network-online.target
-ConditionPathExists=/etc/migate-gate/cores/sing-box.json
+ConditionPathExists=/etc/migate/gate/cores/$core.json
 [Service]
 User=migate-gate
 Group=migate-gate
-ExecStart=/opt/migate-gate/cores/sing-box run -c /etc/migate-gate/cores/sing-box.json
+ExecStart=/opt/migate/cores/$core $args /etc/migate/gate/cores/$core.json
 Restart=on-failure
 NoNewPrivileges=yes
 ProtectSystem=strict
@@ -259,104 +214,79 @@ PrivateTmp=yes
 [Install]
 WantedBy=multi-user.target
 UNIT
- chown root:migate-gate "$config" "$config/cores" "$config/certs" "$base/cores"
- chmod 0750 "$config"
-fi
-# Record only exact owned resources. The manifest survives non-purge uninstall.
-cat > "$config/install-manifest.json" <<EOF
-{"version":1,"role":"$role","current":"$version","previous":"$previous","releases":["$version"
-EOF
-for recorded in $releases; do
- case "$recorded" in ''|.|..|*[!a-zA-Z0-9._-]*) echo 'invalid recorded release' >&2; exit 1;; esac
- printf ',"%s"' "$recorded" >> "$config/install-manifest.json"
-done
-cat >> "$config/install-manifest.json" <<EOF
-],"resources":[
- {"path":"$base/releases","kind":"program"},
- {"path":"$base/current","kind":"program"},
- {"path":"$base/previous","kind":"program"},
- {"path":"$base/migate-manage","kind":"program"},
- {"path":"$config","kind":"config"},
- {"path":"$data","kind":"data"},
- {"path":"/etc/systemd/system/migate-$role.service","kind":"service"}
-EOF
-if [ "$role" = gate ]; then cat >> "$config/install-manifest.json" <<'EOF'
- ,{"path":"/etc/systemd/system/migate-gate-helper.service","kind":"service"}
- ,{"path":"/etc/systemd/system/migate-gate-xray.service","kind":"core-service"}
- ,{"path":"/etc/systemd/system/migate-gate-sing-box.service","kind":"core-service"}
- ,{"path":"/opt/migate-gate/cores","kind":"core"}
- ,{"path":"/etc/migate-gate/cores","kind":"core"}
-EOF
-fi
-if [ "$role" = gate ] && [ -f /etc/systemd/system/migate-gate-tunnel.service ]; then
- echo ',{"path":"/etc/systemd/system/migate-gate-tunnel.service","kind":"service"}' >> "$config/install-manifest.json"
-fi
-if [ "$role" = control ] && [ -f "$config/tunnel-owned" ]; then
- echo ',{"path":"/var/lib/migate-tunnel/.ssh/authorized_keys","kind":"transport-key"}' >> "$config/install-manifest.json"
-fi
-echo ']}' >> "$config/install-manifest.json"
-chmod 0600 "$config/install-manifest.json"
-systemctl daemon-reload
-systemctl enable "migate-$role.service"
-if [ "$role" = gate ]; then
- if [ -f /etc/systemd/system/migate-gate-tunnel.service ]; then systemctl start migate-gate-tunnel.service; fi
- systemctl enable --now migate-gate-helper.service
- helper_ready=false
- for attempt in 1 2 3 4 5; do
-  if "$base/current/migate-gate" helper-health >/dev/null 2>&1 && systemctl is-active --quiet migate-gate-helper.service; then helper_ready=true; break; fi
-  sleep 1
  done
- [ "$helper_ready" = true ] || { echo 'Gate helper health failed' >&2; exit 1; }
- if [ ! -f "$config/agent.json" ]; then
-  echo 'Installed. Verify a separate Xray release/checksum, then pair using migate-gate pair --center HTTPS_URL --name NAME.'
-  echo 'After pairing: chown root:migate-gate /etc/migate-gate/agent.json; chmod 0640 /etc/migate-gate/agent.json; systemctl start migate-gate'
-  committed=true
-  exit 0
- fi
+ active="$active migate-helper.service"
 fi
-if ! systemctl restart "migate-$role.service"; then
- if [ -n "$previous" ]; then ln -sfn "releases/$previous" "$base/current"; systemctl restart "migate-$role.service"; fi
- echo 'Startup failed; previous binary restored when available. Data migration rollback requires verified backup.' >&2
- exit 1
+
+# —— 单机：本机 Gate 用一次性凭证自动配对；中心只存摘要，配对成功后两边都删除 ——
+if [ "$role" = standalone ] && [ ! -f "$etc/gate/agent.json" ]; then
+ token=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
+ printf '%s' "$token" > "$etc/gate/local-pair.token"
+ chmod 0600 "$etc/gate/local-pair.token"
+ printf '%s' "$token" | sha256sum | cut -d' ' -f1 > "$etc/center/local-pair.sha256"
+ unset token
+ chown migate-center:migate-center "$etc/center/local-pair.sha256"
+ chmod 0600 "$etc/center/local-pair.sha256"
+ cat > "$units_dir/migate-local-pair.service" <<UNIT
+[Unit]
+Description=MiGate standalone local Gate pairing
+After=network-online.target migate-center.service migate-helper.service
+ConditionPathExists=/etc/migate/gate/local-pair.token
+ConditionPathExists=!/etc/migate/gate/agent.json
+[Service]
+Type=oneshot
+TimeoutStartSec=infinity
+ExecStart=/opt/migate/current/migate gate local-pair --config /etc/migate/gate/agent.json --token-file /etc/migate/gate/local-pair.token --center http://127.0.0.1:$port
+ExecStartPost=/usr/bin/env systemctl start migate-gate.service
+[Install]
+WantedBy=multi-user.target
+UNIT
 fi
-if [ "$role" = control ]; then
+
+printf '%s\n' "$role" > "$etc/role"
+chmod 0644 "$etc/role"
+systemctl daemon-reload
+for unit in $active; do
+ systemctl enable "$unit" >/dev/null
+ systemctl restart "$unit" || rollback
+done
+if [ "$has_center" = true ]; then
  healthy=false
  for attempt in 1 2 3 4 5 6 7 8 9 10; do
-  if "$base/current/migate-control" --config "$config/config.json" --health-check >/dev/null 2>&1; then healthy=true; break; fi
+  if "$base/current/migate" center --config "$etc/center/config.json" --health-check >/dev/null 2>&1; then healthy=true; break; fi
   sleep 1
  done
- if [ "$healthy" != true ]; then
-  if [ -n "$previous" ]; then ln -sfn "releases/$previous" "$base/current"; systemctl restart migate-control.service; fi
-  echo 'Application health failed. Previous binary restored when present; review external backup before any data restore.' >&2; exit 1
- fi
-else
- # Agent reconciles its persisted desired state, including intentionally
- # stopped cores. Starting cores here would bypass that state after upgrades.
- # Type=simple returning does not prove the process survived startup. Require
- # a stable Agent PID and an actual reply from the bounded helper.
- gate_pid=$(systemctl show -p MainPID --value migate-gate.service)
- [ "$gate_pid" -gt 0 ] || { echo 'Gate process absent' >&2; exit 1; }
- for attempt in 1 2 3; do
-  sleep 1
-  systemctl is-active --quiet migate-gate.service || { echo 'Gate startup failed' >&2; exit 1; }
-  [ "$(systemctl show -p MainPID --value migate-gate.service)" = "$gate_pid" ] || { echo 'Gate restarted during startup' >&2; exit 1; }
-  "$base/current/migate-gate" helper-health >/dev/null 2>&1 || { echo 'Gate helper unavailable' >&2; exit 1; }
- done
+ [ "$healthy" = true ] || rollback
 fi
-if [ "$role" = control ]; then
- if grep -Eq '"installed"[[:space:]]*:[[:space:]]*true' "$config/config.json"; then
-  echo 'Control is already initialized. Configuration and data were kept. Health check passed.'
-  echo 'Run migate for service status, administrator recovery, and version.'
-  echo 'Open the reverse-proxy site and log in. Do not run setup again.'
+if [ "$has_gate" = true ]; then
+ ready=false
+ for attempt in 1 2 3 4 5; do
+  if "$base/current/migate" gate helper-health >/dev/null 2>&1; then ready=true; break; fi
+  sleep 1
+ done
+ [ "$ready" = true ] || rollback
+ if [ -f "$etc/gate/agent.json" ]; then systemctl enable --now migate-gate.service >/dev/null; fi
+ if [ -f "$units_dir/migate-local-pair.service" ] && [ ! -f "$etc/gate/agent.json" ]; then
+  systemctl enable migate-local-pair.service >/dev/null
+  systemctl start --no-block migate-local-pair.service
+ fi
+fi
+
+echo "Installed MiGate $version ($role)."
+if [ "$has_center" = true ]; then
+ if grep -Eq '"installed"[[:space:]]*:[[:space:]]*true' "$etc/center/config.json"; then
+  echo 'Center is initialized; configuration and data were kept.'
  else
-  echo 'Control is not initialized yet. Run: migate'
-  echo '  The Chinese menu covers service control, setup, the administrator, and the setup token.'
-  echo "  Web: read $config/setup-token (mode 0600, valid 30 minutes) and open the wizard."
-  echo '       Rotate a rejected or expired token from the menu, or with: migate-control --init'
-  echo '       A running service loads the new token and rejects the old one.'
-  echo '  Terminal: choose setup in the menu, or run migate-control --setup'
-  echo 'Do not submit the Web wizard and the terminal wizard at the same time.'
+  echo 'Center is not initialized yet. Run: migate'
+  echo "  Web: read $etc/center/setup-token (root only, valid 30 minutes) and open the wizard."
+  echo '  Terminal: migate center --setup'
  fi
 fi
-committed=true
-echo 'Installed. Perform application health and real-client acceptance before marking passed.'
+if [ "$role" = standalone ]; then echo 'The local Gate pairs itself after the center is initialized.'; fi
+if [ "$role" = gate ] && [ ! -f "$etc/gate/agent.json" ]; then echo 'Pair this Gate from the center (Add Gate) to finish.'; fi
+if [ "$legacy" = true ]; then
+ echo 'Replaced a previous MiGate installation. Old data directories were kept and can be removed manually:'
+ for dir in /etc/migate-control /etc/migate-gate /var/lib/migate-control /var/lib/migate-gate; do
+  [ -e "$dir" ] && echo "  $dir"
+ done
+fi

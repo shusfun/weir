@@ -1,1 +1,0 @@
-import{j as s,C as n,b as c}from"./index-C3-EvPYs.js";function t({title:e,value:a,caption:r}){return s.jsx(n,{className:"metric",children:s.jsxs(c,{children:[s.jsx("span",{className:"metric-label",children:e}),s.jsx("strong",{className:"metric-number",children:a}),r&&s.jsx("small",{children:r})]})})}export{t as M};

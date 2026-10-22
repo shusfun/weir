@@ -10,7 +10,7 @@ import time
 
 def package(version):
     root = pathlib.Path(f"dist/migate-{version}-linux-amd64")
-    if not (root / "migate-control").is_file():
+    if not (root / "migate").is_file():
         raise SystemExit("release binaries are missing")
     (root / "BUILD.json").write_text(json.dumps({
         "version": version,

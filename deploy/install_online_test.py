@@ -30,9 +30,7 @@ def archive(version):
     payload = io.BytesIO()
     members = {
         "install.sh": "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$INSTALL_LOG\"\n",
-        "migate-control": "control",
-        "migate-gate": "gate",
-        "migate-manage": "manage",
+        "migate": "migate",
         "VERSION": version + "\n",
     }
     sums = []
@@ -142,12 +140,10 @@ class OnlineInstallTests(unittest.TestCase):
         return subprocess.run([shell_program(), str(pathlib.Path(__file__).resolve().parent / "install-online.sh"), *args], text=True, capture_output=True, env=env)
 
     def test_checksum_match_runs_package_installer(self):
-        completed = self.run_script("control", "127.0.0.1:19810", "https://example.test")
+        completed = self.run_script("center", "127.0.0.1:19810")
         self.assertEqual(completed.returncode, 0, completed.stderr)
         recorded = self.install_log.read_text(encoding="utf-8")
-        # 旧版公共 URL 参数被忽略，只传监听地址
-        self.assertIn("control 127.0.0.1:19810", recorded)
-        self.assertNotIn("example.test", recorded)
+        self.assertIn("center 127.0.0.1:19810", recorded)
         self.assertNotIn("sentinel-token-value", completed.stdout + completed.stderr)
         self.assertNotIn("sentinel-token-value", (self.root / "curl-argv.log").read_text(encoding="utf-8"))
 
@@ -189,7 +185,8 @@ class OnlineInstallTests(unittest.TestCase):
         argv = (self.root / "curl-argv.log").read_text(encoding="utf-8").splitlines()
         self.assertTrue(any("--progress-bar" in line and "release-assets" in line for line in argv))
         self.assertFalse(any("--progress-bar" in line and "api.github.com" in line for line in argv))
-        self.assertIn("control 127.0.0.1:19810", self.install_log.read_text(encoding="utf-8"))
+        # 交互安装默认单机角色
+        self.assertIn("standalone 127.0.0.1:19810", self.install_log.read_text(encoding="utf-8"))
 
     def test_slow_direct_switches_to_mirror(self):
         self.env["DIRECT_SLOW"] = (self.root / "direct-slow").as_posix()
@@ -260,10 +257,10 @@ class OnlineInstallTests(unittest.TestCase):
         self.assertFalse(self.install_log.exists())
 
     def test_non_local_listen_warns_plain_http(self):
-        completed = self.run_script("control", "0.0.0.0:19810")
+        completed = self.run_script("center", "0.0.0.0:19810")
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("明文 HTTP", completed.stdout)
-        self.assertIn("control 0.0.0.0:19810", self.install_log.read_text(encoding="utf-8"))
+        self.assertIn("center 0.0.0.0:19810", self.install_log.read_text(encoding="utf-8"))
 
     def test_bad_checksum_does_not_install(self):
         (self.root / "checksums.txt").write_text("0" * 64 + "  " + self.name + "\n", encoding="utf-8")
@@ -272,35 +269,50 @@ class OnlineInstallTests(unittest.TestCase):
         self.assertFalse(self.install_log.exists())
 
     def test_bad_version_does_not_download(self):
-        completed = self.run_script("--version", "0.2.0-rc1", "control")
+        completed = self.run_script("--version", "0.2.0-rc1", "center")
         self.assertNotEqual(completed.returncode, 0)
         self.assertFalse((self.root / "curl.log").exists())
 
+    def installed(self, role="gate"):
+        # 模拟已安装：角色文件 + 本机保存的 install.sh（记录被调用的参数）
+        role_file = self.root / "role"
+        role_file.write_text(role + "\n", encoding="utf-8")
+        installer = self.root / "local-install.sh"
+        installer.write_text("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$INSTALL_LOG\"\n", encoding="utf-8")
+        installer.chmod(installer.stat().st_mode | stat.S_IEXEC)
+        self.env["MIGATE_ROLE_FILE"] = role_file.as_posix()
+        self.env["MIGATE_LOCAL_INSTALLER"] = installer.as_posix()
+
+    def test_uninstall_not_installed(self):
+        completed = self.run_script("uninstall", "-y")
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("尚未安装", completed.stderr)
+
     def test_uninstall_without_confirmation_does_not_run(self):
-        completed = self.run_script("uninstall", "control")
+        self.installed()
+        completed = self.run_script("uninstall")
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("没有终端", completed.stderr)
+        self.assertFalse(self.install_log.exists())
 
     def test_interactive_cancel_does_not_uninstall(self):
-        completed = self.run_script("uninstall", "control", tty="1\nn\n")
+        self.installed()
+        completed = self.run_script("uninstall", tty="1\nn\n")
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("卸载已取消", completed.stdout + completed.stderr)
+        self.assertFalse(self.install_log.exists())
 
-    def test_interactive_retain_omits_destructive_flags(self):
-        manifest = self.root / "manifest.json"
-        manifest.write_text("{}", encoding="utf-8")
-        manager = self.root / "migate-manage"
-        manager.write_text("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$INSTALL_LOG\"\n", encoding="utf-8")
-        manager.chmod(manager.stat().st_mode | stat.S_IEXEC)
-        self.env["MIGATE_MANIFEST"] = manifest.as_posix()
-        self.env["MIGATE_MANAGE"] = manager.as_posix()
-        completed = self.run_script("uninstall", "gate", tty="1\ny\nn\n")
+    def test_interactive_retain_keeps_data(self):
+        self.installed("standalone")
+        completed = self.run_script("uninstall", tty="1\ny\nn\n")
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        recorded = self.install_log.read_text(encoding="utf-8")
-        self.assertIn("--confirm gate:uninstall", recorded)
-        self.assertNotIn("--purge", recorded)
-        self.assertNotIn("--with-cores", recorded)
+        self.assertEqual(self.install_log.read_text(encoding="utf-8").split(), ["uninstall"])
 
+    def test_noninteractive_purge(self):
+        self.installed()
+        completed = self.run_script("uninstall", "-y", "--purge")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(self.install_log.read_text(encoding="utf-8").split(), ["uninstall", "--purge"])
 
 if __name__ == "__main__":
     unittest.main()
