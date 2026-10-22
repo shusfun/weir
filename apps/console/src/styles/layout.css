@@ -1,0 +1,46 @@
+/* 通用布局与文字模式：所有页面共享。 */
+.stack { display: grid; gap: 18px; min-width: 0; }
+.stack > * { min-width: 0; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; min-width: 0; }
+.actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.row-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.scroll, .table-scroll { overflow: auto; scrollbar-width: thin; }
+.eyebrow { font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mg-ink-engraved); }
+
+
+
+
+
+
+
+
+.form-grid, .settings-field-grid, .template-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.quota-input { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 8px; }
+
+.help-note { display: flex; gap: 10px; align-items: flex-start; padding: 2px 4px; font-size: 12px; color: var(--mg-ink-3); }
+.help-note > svg { margin-top: 2px; color: var(--mg-ink-engraved); }
+.help-note p { margin: 0; font-size: 12px; }
+.tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 5px; font-size: 11px; border: 1px solid var(--mg-line); background: var(--mg-well); color: var(--mg-ink-2); }
+
+
+.detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px 24px; }
+.detail-grid > div { display: grid; gap: 4px; min-width: 0; }
+.detail-grid span { font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--mg-ink-engraved); }
+.detail-grid strong { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+.detail-grid .full { grid-column: 1 / -1; }
+
+.back-button { justify-self: start; }
+.entity-heading { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.entity-heading > div { flex: 1; min-width: 0; }
+.entity-heading h2 { font-size: 19px; overflow-wrap: anywhere; }
+.entity-heading p { font-size: 12px; margin-top: 2px; }
+
+@media (max-width: 900px) {
+  .two { grid-template-columns: 1fr; }
+  .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .form-grid, .settings-field-grid, .template-form-grid, .detail-grid { grid-template-columns: 1fr; }
+  .entity-heading > button { width: 100%; }
+
+}

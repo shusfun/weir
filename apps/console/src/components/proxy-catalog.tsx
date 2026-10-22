@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
+import { Notice, SearchInput,
   Button,
   Dialog,
   DialogContent,
@@ -12,7 +12,6 @@ import {
   SelectContent,
   SelectItem,
   SelectValue,
-  Input,
   Label,
 } from "@migate/ui";
 import { Globe } from "lucide-react";
@@ -139,7 +138,7 @@ export function ProxyCatalog({ device }: { device: Device }) {
           }
         }}
       >
-        <DialogContent className="business-dialog">
+        <DialogContent size="md">
           <DialogTitle>公共代理目录</DialogTitle>
           <DialogDescription>
             EDT-Pages
@@ -205,7 +204,7 @@ export function ProxyCatalog({ device }: { device: Device }) {
                 </SelectContent>
               </Select>
             </div>
-            <Input
+            <SearchInput
               aria-label="搜索公共代理"
               value={search}
               onChange={(e) => {
@@ -319,12 +318,12 @@ export function ProxyCatalog({ device }: { device: Device }) {
               </>
             )}
             {notice && (
-              <p className="notice" role="status">
+              <Notice role="status">
                 {notice}
-              </p>
+              </Notice>
             )}
             {confirm && (
-              <div className="notice">
+              <Notice>
                 <strong>
                   确认导入 {confirm.address}:{confirm.port}？
                 </strong>
@@ -345,12 +344,12 @@ export function ProxyCatalog({ device }: { device: Device }) {
                 >
                   返回目录
                 </Button>
-              </div>
+              </Notice>
             )}
             {error && (
-              <p role="alert" className="notice">
+              <Notice role="alert">
                 {error}
-              </p>
+              </Notice>
             )}
             <p className="muted">
               TCP 探测只检查 Gate

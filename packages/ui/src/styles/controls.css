@@ -1,0 +1,119 @@
+/* 拟物控件：开关、分段键、计数器窗口、模块卡片。全部只动 transform / opacity。 */
+@layer components {
+  .mg-switch {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    width: 44px;
+    height: 24px;
+    padding: 3px;
+    border-radius: 999px;
+    background: var(--mg-well);
+    box-shadow:
+      inset 2px 2px 4px var(--mg-neu-lo),
+      inset -2px -2px 4px var(--mg-neu-hi);
+    outline: none;
+    cursor: pointer;
+  }
+  .mg-switch::before {
+    content: "";
+    position: absolute;
+    inset: 3px;
+    border-radius: inherit;
+    background: var(--mg-indicator);
+    opacity: 0;
+    transition: opacity var(--mg-mid) ease;
+  }
+  .mg-switch[data-checked]::before { opacity: 0.88; }
+  .mg-switch[data-size="sm"] { width: 36px; height: 20px; }
+  .mg-switch:focus-visible { outline: 2px solid var(--mg-accent-text); outline-offset: 2px; }
+  .mg-switch[data-disabled] { opacity: 0.5; cursor: not-allowed; }
+  .mg-switch-thumb {
+    position: relative;
+    display: block;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #ffffff, #e6e6eb);
+    box-shadow:
+      1px 2px 3px rgb(0 0 0 / 0.22),
+      inset 0 1px 0 rgb(255 255 255 / 0.9);
+    transition: transform var(--mg-slow) var(--mg-spring);
+  }
+  .dark .mg-switch-thumb { background: linear-gradient(145deg, #e5e5ea, #a1a1a6); }
+  .mg-switch[data-size="sm"] .mg-switch-thumb { width: 14px; height: 14px; }
+  .mg-switch-thumb[data-checked] { transform: translateX(20px); }
+  .mg-switch[data-size="sm"] .mg-switch-thumb[data-checked] { transform: translateX(16px); }
+
+  /* 分段拨钮：内凹底座，各项平放不凸起，只有选中项点亮（.is-pressed），并排高度一致 */
+  .mg-segmented {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    max-width: 100%;
+    min-width: 0;
+    padding: 3px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-radius: var(--mg-radius);
+    background: var(--mg-well);
+    box-shadow:
+      inset 1px 1px 3px var(--mg-neu-lo),
+      inset -1px -1px 3px var(--mg-neu-hi);
+  }
+  .mg-segmented > .mg-key { background: transparent; }
+  .mg-segmented > .mg-key::before { opacity: 0; }
+  .mg-segmented[data-full-width="always"] { display: flex; width: 100%; }
+  .mg-segmented[data-full-width="always"] > .mg-key { flex: 1; }
+  @media (max-width: 700px) {
+    .mg-segmented[data-full-width="mobile"] { display: flex; width: 100%; }
+    .mg-segmented[data-full-width="mobile"] > .mg-key { flex: 1; }
+  }
+
+  /* 机械计数器：默认只有滚动数字，不加框；framed 时才嵌入内凹窗口（仅仪表盘关键读数） */
+  .mg-counter {
+    display: inline-flex;
+    align-items: baseline;
+    font-family: var(--mg-mono);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+  }
+  .mg-counter-digit {
+    display: inline-block;
+    height: 1.2em;
+    overflow: hidden;
+    vertical-align: bottom;
+  }
+  .mg-counter-strip {
+    display: block;
+    will-change: transform;
+  }
+  .mg-counter-strip > span { display: block; height: 1.2em; text-align: center; }
+  .mg-counter-static { display: inline-block; }
+  .mg-counter[data-framed="true"] {
+    padding: 2px 8px;
+    border-radius: 8px;
+    background: var(--mg-well);
+    box-shadow:
+      inset 2px 2px 4px var(--mg-neu-lo),
+      inset -2px -2px 4px var(--mg-neu-hi);
+  }
+
+  /* 模块卡片：右上角拟物开关，关闭后内容去色变暗 */
+  .mg-module-body {
+    transition:
+      filter var(--mg-slow) ease,
+      opacity var(--mg-slow) ease;
+  }
+  .mg-module-body[data-live="false"] {
+    filter: grayscale(1);
+    opacity: 0.55;
+  }
+  .mg-module-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--mg-ink-3); }
+  .mg-module-paused { margin: 0 0 12px; font-size: 12px; color: var(--mg-ink-3); }
+  /* 下拉选择器展开时保持按下 */
+  .mg-key[data-popup-open] { transform: translateY(1px); }
+  .mg-key[data-popup-open]::before { opacity: 0; }
+  .mg-key[data-popup-open]::after { opacity: 1; }
+}

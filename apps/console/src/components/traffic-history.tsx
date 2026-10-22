@@ -2,7 +2,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@migate/ui/ch
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
-import {
+import { SectionHeader,
   Button,
   Card,
   CardContent,
@@ -88,12 +88,7 @@ export function TrafficHistory({ deviceId }: { deviceId: number }) {
   return (
     <Card className="traffic-history-card">
       <CardContent className="stack">
-        <div className="section-heading">
-          <div>
-            <h2>流量历史</h2>
-            <p>Gate 授权计量上报 · 按实际采样间隔折算，不代表实时网卡速率。</p>
-          </div>
-          <div className="actions">
+        <SectionHeader align="start" title="流量历史" description="Gate 授权计量上报 · 按实际采样间隔折算，不代表实时网卡速率。" actions={<div className="actions">
             <Select value={window} onValueChange={(v) => setWindow(String(v))}>
               <SelectTrigger aria-label="流量时间范围">
                 <SelectValue>{windows[window]}</SelectValue>
@@ -114,8 +109,7 @@ export function TrafficHistory({ deviceId }: { deviceId: number }) {
             >
               <RefreshCw size={15} />
             </Button>
-          </div>
-        </div>
+          </div>} />
         {query.isPending ? (
           <State loading />
         ) : query.isError ? (
@@ -150,7 +144,7 @@ export function TrafficHistory({ deviceId }: { deviceId: number }) {
             {known.length ? (
               <ChartContainer
                 className="traffic-history-chart"
-                config={{ rate: { label: "平均用量速率", color: "#7354d2" } }}
+                config={{ rate: { label: "平均用量速率", color: "var(--mg-chart-1)" } }}
                 style={{ height: 240, width: "100%", minWidth: 0 }}
               >
                 <LineChart

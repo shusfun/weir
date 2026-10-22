@@ -5,14 +5,12 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowUpRight,
-  Check,
-  Copy,
   Globe2,
   LogIn,
   QrCode,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import {
+import { IconTile, CopyButton, Notice,
   Button,
   Card,
   CardContent,
@@ -65,15 +63,15 @@ export function PublicPage() {
     const timeout = setTimeout(() => setCopied(false), 2500);
     return () => clearTimeout(timeout);
   }, [copied]);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(pageURL);
+  // 复制反馈由 CopyButton 负责；页面另在下方显示一次“已复制”状态
+  const copyProps = {
+    value: pageURL,
+    onCopied: () => {
       setCopied(true);
       setError("");
-    } catch {
-      setError("无法访问剪贴板，请通过二维码或浏览器地址栏分享。");
-    }
-  }
+    },
+    onError: () => setError("无法访问剪贴板，请通过二维码或浏览器地址栏分享。"),
+  };
   return (
     <main className="published-page" data-theme={page?.theme || "violet"}>
       <header className="published-top">
@@ -99,7 +97,7 @@ export function PublicPage() {
           <CardContent>
             <div className="stack">
               <h1>页面不可用</h1>
-              <p role="alert">{query.error.message}</p>
+              <Notice tone="bad">{query.error.message}</Notice>
               <State error={query.error} onRetry={() => query.refetch()} />
             </div>
           </CardContent>
@@ -108,17 +106,13 @@ export function PublicPage() {
         page && (
           <>
             <section className="published-hero">
-              <span className="published-eyebrow">PUBLIC DIRECTORY</span>
-              <h1>{page.title}</h1>
+                            <h1>{page.title}</h1>
               {page.description && (
                 <p className="published-description">{page.description}</p>
               )}
               {page.show_share && (
                 <div className="published-actions">
-                  <Button onClick={copy}>
-                    {copied ? <Check size={16} /> : <Copy size={16} />}
-                    {copied ? "已复制" : "复制页面地址"}
-                  </Button>
+                  <CopyButton {...copyProps}>复制页面地址</CopyButton>
                   <Button variant="outline" onClick={() => setQR(true)}>
                     <QrCode size={16} />
                     页面二维码
@@ -126,7 +120,7 @@ export function PublicPage() {
                 </div>
               )}
               {copied && <p role="status">页面地址已复制。</p>}
-              {error && <p role="alert">{error}</p>}
+              {error && <Notice tone="bad">{error}</Notice>}
             </section>
             <GlobalAnnouncement audience="public"/>
             <PublishedAnnouncement notice={page} scope={slug}/>
@@ -146,11 +140,11 @@ export function PublicPage() {
                       key={card.slug}
                       href={"/p/" + encodeURIComponent(card.slug)}
                     >
-                      <Card>
-                        <CardContent>
-                          <span className="published-card-icon">
-                            <Globe2 size={22} />
-                          </span>
+                      <Card size="lg" className="published-card">
+                        <CardContent className="published-card-body">
+                          <IconTile size="lg" tone="soft">
+                            <Globe2 />
+                          </IconTile>
                           <h3>{card.title}</h3>
                           {card.description && <p>{card.description}</p>}
                           <span className="published-card-action">
@@ -176,7 +170,7 @@ export function PublicPage() {
           <DialogDescription>仅分享当前公开页面地址。</DialogDescription>
           <QRCodeSVG value={pageURL} size={192} title="公开页面二维码" />
           <p className="break-all">{pageURL}</p>
-          <Button onClick={copy}>{copied ? "已复制" : "复制页面地址"}</Button>
+          <CopyButton {...copyProps} icon={false}>复制页面地址</CopyButton>
         </DialogContent>
       </Dialog>
     </main>

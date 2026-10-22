@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import {
+import { CodeBlock, Notice, SectionHeader,
   Button,
   Dialog,
   DialogContent,
@@ -112,12 +112,7 @@ export function GateCores({
   }
   return (
     <div className="stack">
-      <div className="section-heading">
-        <div>
-          <h2>托管内核</h2>
-          <p>观测时间：{date(data?.observed_at)} · 来源：Gate 本地辅助程序</p>
-        </div>
-        <Button
+      <SectionHeader title="托管内核" description={<>观测时间：{date(data?.observed_at)} · 来源：Gate 本地辅助程序</>} actions={<Button
           variant="outline"
           onClick={() => {
             E("");
@@ -125,17 +120,16 @@ export function GateCores({
           }}
         >
           检查状态
-        </Button>
-      </div>
+        </Button>} />
       {notice && (
-        <p role="status" className="notice">
+        <Notice role="status">
           {notice}
-        </p>
+        </Notice>
       )}
       {!fresh && (
-        <p className="notice">
+        <Notice>
           当前内核状态未知；设备离线或观测过期时，不将旧状态显示为正常。
-        </p>
+        </Notice>
       )}
       {(data?.items ?? []).map((c) => (
         <div className="core-version-card" key={c.core}>
@@ -200,7 +194,7 @@ export function GateCores({
                       V({ ...versions, [c.core]: String(v) })
                     }
                   >
-                    <SelectTrigger aria-label={c.core + " 安装版本"}>
+                    <SelectTrigger className="max-w-full min-w-[180px]" aria-label={c.core + " 安装版本"}>
                       <SelectValue placeholder="尚无已校验版本包">
                         {selected}
                       </SelectValue>
@@ -257,18 +251,18 @@ export function GateCores({
                   </Button>
                 </div>
                 {compatibility && (
-                  <p className="notice" role="status">
+                  <Notice role="status">
                     兼容限制：{compatibility}
-                  </p>
+                  </Notice>
                 )}
                 <small>
                   仅使用随应用上传的已校验版本包。升级先验证现有配置；失败恢复原二进制与服务状态。停止中的内核不会被升级操作自动启动。
                 </small>
                 {selected && (
-                  <small className="fingerprint">
+                  <CodeBlock>
                     包 SHA-256：
                     {catalog.find((p) => p.version === selected)?.sha256}
-                  </small>
+                  </CodeBlock>
                 )}
                 {history && (
                   <details>
@@ -301,7 +295,7 @@ export function GateCores({
         <State empty="等待 Agent 上报托管内核版本与运行状态" />
       )}
       <Button
-        className="back-button"
+        className="back-button pl-1 text-[var(--mg-ink-3)]"
         variant="outline"
         disabled={!supported}
         onClick={() => {
@@ -312,10 +306,10 @@ export function GateCores({
         重新应用配置并重启托管内核
       </Button>
       {!supported && <p>此 Agent 未声明内核控制能力，请先升级 Agent。</p>}
-      <div className="notice">
+      <Notice>
         清理只删除登记的历史版本，保留当前与上一回滚版本。不会操作 x-ui
         内核或发现并删除未登记文件。
-      </div>
+      </Notice>
       <h3>内核操作记录</h3>
       {tasks
         .filter(
@@ -362,13 +356,13 @@ export function GateCores({
             management?.catalog?.find(
               (p) => p.core === pending.core && p.version === pending.version,
             )?.compatibility && (
-              <p className="notice">
+              <Notice>
                 REALITY 客户端兼容受限：sing-box 1.14.3 无法连接 Xray
                 26.10.17；混合客户端建议保留
                 26.3.27。配置检查通过不代表客户端兼容。
-              </p>
+              </Notice>
             )}
-          {error && <p role="alert">{error}</p>}
+          {error && <Notice tone="bad">{error}</Notice>}
           <DialogFooter>
             <Button variant="outline" disabled={busy} onClick={() => P(null)}>
               取消

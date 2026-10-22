@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Button, Input, Checkbox, Label } from "@migate/ui";
-import { ArrowUp, ArrowDown, X } from "lucide-react";
+import { OptionRow, ReorderButtons, SearchInput, Button, Checkbox} from "@migate/ui";
+import { X } from "lucide-react";
 import { client } from "../lib/client";
 import { State } from "./feedback";
 export function ResourceSelector({
@@ -45,7 +45,8 @@ export function ResourceSelector({
       <legend>
         {label} · 已选 {value.length}
       </legend>
-      <Input
+      <SearchInput
+        className="w-full"
         aria-label={"搜索" + label}
         value={search}
         onChange={(e) => S(e.target.value)}
@@ -60,7 +61,7 @@ export function ResourceSelector({
           {options
             .filter((o) => o.name.toLowerCase().includes(search.toLowerCase()))
             .map((o) => (
-              <Label className="selector-option" key={o.id}>
+              <OptionRow compact key={o.id}>
                 <Checkbox
                   checked={value.includes(o.id)}
                   onCheckedChange={(v) =>
@@ -70,7 +71,7 @@ export function ResourceSelector({
                   }
                 />
                 <span>{o.name}</span>
-              </Label>
+              </OptionRow>
             ))}
           {!options.length && <p>暂无可选资源</p>}
         </div>
@@ -82,26 +83,7 @@ export function ResourceSelector({
               <span>
                 {i + 1}. {title(id)}
               </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={"上移 " + title(id)}
-                disabled={i === 0}
-                onClick={() => move(i, -1)}
-              >
-                <ArrowUp size={14} />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={"下移 " + title(id)}
-                disabled={i === value.length - 1}
-                onClick={() => move(i, 1)}
-              >
-                <ArrowDown size={14} />
-              </Button>
+              <ReorderButtons label={title(id)} onUp={() => move(i, -1)} onDown={() => move(i, 1)} upDisabled={i === 0} downDisabled={i === value.length - 1} />
               <Button
                 type="button"
                 variant="ghost"

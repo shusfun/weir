@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import {
+import { OptionRow, Field, Notice, SectionHeader,
   Button,
   Card,
   CardContent,
-  Label,
   Input,
   Checkbox,
   Select,
@@ -99,15 +98,7 @@ export function CertificateBinding({
   return (
     <Card>
       <CardContent className="stack certificate-binding-panel">
-        <div className="section-heading">
-          <div>
-            <h3>入站证书绑定</h3>
-            <p>
-              批量更换所选 TLS
-              入站的证书。全部校验通过才应用；不会更改入站端口或用户凭据。
-            </p>
-          </div>
-          <Button
+        <SectionHeader level="h3" title="入站证书绑定" description="批量更换所选 TLS 入站的证书。全部校验通过才应用；不会更改入站端口或用户凭据。" actions={<Button
             variant="outline"
             disabled={!capable || pending || !eligible.length || !valid.length}
             onClick={() => {
@@ -120,13 +111,12 @@ export function CertificateBinding({
             }}
           >
             批量绑定证书
-          </Button>
-        </div>
+          </Button>} />
         {!capable && (
-          <p className="notice">请升级 Agent 以使用证书批量绑定。</p>
+          <Notice>请升级 Agent 以使用证书批量绑定。</Notice>
         )}
         {pending && (
-          <p className="notice">入站或证书任务执行中，请等待回执后操作。</p>
+          <Notice>入站或证书任务执行中，请等待回执后操作。</Notice>
         )}
         {!eligible.length && (
           <p className="muted">
@@ -134,9 +124,9 @@ export function CertificateBinding({
           </p>
         )}
         {!!eligible.length && !valid.length && (
-          <p className="notice">
+          <Notice>
             先导入仍有效的证书，或等待 DNS 签发配置完成。
-          </p>
+          </Notice>
         )}
         <div className="certificate-binding-summary">
           {certificates.map((c) => (
@@ -157,9 +147,9 @@ export function CertificateBinding({
           ))}
         </div>
         {notice && (
-          <p role="status" className="notice">
+          <Notice role="status">
             {notice}
-          </p>
+          </Notice>
         )}
         {tasks
           .filter(
@@ -181,15 +171,14 @@ export function CertificateBinding({
             if (!busy) O(v);
           }}
         >
-          <DialogContent className="business-dialog certificate-binding-dialog">
+          <DialogContent size="lg">
             <DialogTitle>批量绑定证书</DialogTitle>
             <DialogDescription>
               选择同一 Gate 已生效的 TLS
               入站；提交后等待任务回执，失败保留原配置。
             </DialogDescription>
             <div className="stack">
-              <div className="field">
-                <Label>目标证书</Label>
+              <Field label="目标证书">
                 <Select
                   value={cert}
                   onValueChange={(v) => {
@@ -212,19 +201,16 @@ export function CertificateBinding({
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </Field>
               {!confirm && (
-                <div className="field">
-                  <Label htmlFor="certificate-inbound-search">
-                    搜索 TLS 入站
-                  </Label>
+                <Field label="搜索 TLS 入站" htmlFor="certificate-inbound-search">
                   <Input
                     id="certificate-inbound-search"
                     value={query}
                     onChange={(e) => Q(e.target.value)}
                     placeholder="名称、协议或端口"
                   />
-                </div>
+                </Field>
               )}
               <div className="certificate-binding-list">
                 {(confirm
@@ -236,7 +222,7 @@ export function CertificateBinding({
                         .includes(query.toLowerCase()),
                     )
                 ).map((r) => (
-                  <label className="certificate-binding-target" key={r.id}>
+                  <OptionRow inset key={r.id}>
                     <Checkbox
                       aria-label={`选择入站 ${r.data.remark || r.data.id}`}
                       checked={selected.some((v) => v.id === r.id)}
@@ -260,7 +246,7 @@ export function CertificateBinding({
                         {confirm ? ` → ${certName(Number(cert))}` : ""}
                       </small>
                     </span>
-                  </label>
+                  </OptionRow>
                 ))}
               </div>
               <p className="muted">
@@ -268,9 +254,9 @@ export function CertificateBinding({
                 个；域名、有效期及当前绑定由中心和 Gate 双重检查。
               </p>
               {error && (
-                <p role="alert" className="error-message">
+                <Notice tone="bad">
                   {error}
-                </p>
+                </Notice>
               )}
             </div>
             <DialogFooter>

@@ -1,0 +1,244 @@
+/* 外壳：左侧控制条 + 顶栏 + 主区。控制条为一整块面板，当前项点亮 LED。 */
+.shell {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  min-height: 100dvh;
+}
+.shell[data-collapsed="true"] {
+  grid-template-columns: 72px minmax(0, 1fr);
+}
+.rail {
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 12px 14px;
+  /* 新拟物底座：与键帽同色、纯平 */
+  background: var(--mg-key);
+  border-right: 1px solid var(--mg-line-soft);
+  z-index: 20;
+}
+.rail-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px 18px;
+  text-decoration: none;
+  color: var(--mg-ink);
+}
+.rail-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  color: var(--mg-accent-ink);
+  background: linear-gradient(180deg, var(--mg-accent-hi), var(--mg-accent-lo));
+  border: 1px solid var(--mg-accent-lo);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.3),
+    0 1px 2px var(--mg-shade-strong);
+}
+.rail-brand strong {
+  display: block;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+}
+.rail-nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  /* 给键帽外阴影留出空间，避免被滚动容器裁切 */
+  padding: 4px 8px 4px 6px;
+}
+.rail-group {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.rail-group-label {
+  padding: 6px 10px 4px;
+}
+.rail-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: var(--mg-radius);
+  color: var(--mg-ink-2);
+  font-size: 13px;
+  text-decoration: none;
+}
+.rail-item > .rail-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rail-item svg {
+  width: 17px;
+  height: 17px;
+  color: var(--mg-ink-3);
+}
+.rail-item:hover {
+  color: var(--mg-ink);
+}
+/* 当前项：保持按下（.mg-key.active）+ 蓝色指示灯点亮 */
+.rail-item.active {
+  color: var(--mg-ink);
+  font-weight: 600;
+}
+.rail-item.active svg {
+  color: var(--mg-accent-text);
+}
+/* 导航指示灯使用 StatusLamp（size=sm，当前项 tone=active）；这里只处理未选中时的淡化 */
+.rail-item:not(.active) .rail-led {
+  opacity: 0.6;
+}
+.rail-foot {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--mg-line-soft);
+}
+/* 左下角个人中心：凸起铭牌，点开向上弹出菜单 */
+.rail-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: var(--mg-radius);
+  color: var(--mg-ink);
+  text-align: left;
+}
+.rail-account-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+.rail-account-text strong {
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rail-account-text small {
+  font-size: 11px;
+}
+.rail-account > svg {
+  width: 15px;
+  height: 15px;
+  color: var(--mg-ink-3);
+}
+.shell[data-collapsed="true"] .rail {
+  padding-inline: 10px;
+}
+.shell[data-collapsed="true"] .rail-brand > strong,
+.shell[data-collapsed="true"] .rail-group-label,
+.shell[data-collapsed="true"] .rail-item > .rail-label,
+.shell[data-collapsed="true"] .rail-led,
+.shell[data-collapsed="true"] .rail-account-text,
+.shell[data-collapsed="true"] .rail-account > svg {
+  display: none;
+}
+.shell[data-collapsed="true"] .rail-brand,
+.shell[data-collapsed="true"] .rail-item,
+.shell[data-collapsed="true"] .rail-account {
+  justify-content: center;
+  padding-inline: 0;
+}
+.shell-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 0 28px;
+  background: color-mix(in srgb, var(--mg-base) 94%, var(--mg-panel));
+  border-bottom: 1px solid var(--mg-line);
+  box-shadow: 0 1px 0 var(--mg-highlight);
+}
+.topbar-title {
+  min-width: 0;
+  flex: 1;
+}
+.topbar-title h1 {
+  font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.command-trigger .mg-kbd {
+  margin-left: auto;
+}
+.tray-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  font: 600 10.5px/18px var(--mg-mono);
+  text-align: center;
+  color: var(--mg-accent-ink);
+  background: var(--mg-accent);
+}
+.shell-main {
+  width: 100%;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 24px 28px 40px;
+  flex: 1;
+  min-width: 0;
+}
+
+
+@media (max-width: 1100px) {
+  .command-trigger > span:not(.mg-kbd) {
+    display: none;
+  }
+}
+@media (max-width: 900px) {
+  .shell,
+  .shell[data-collapsed="true"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rail {
+    display: none;
+  }
+  .topbar {
+    padding: 0 14px;
+    min-height: 56px;
+  }
+  .shell-main {
+    padding: 18px 16px 32px;
+  }
+
+  .command-trigger .mg-kbd {
+    display: none;
+  }
+}
+.shell[data-collapsed="true"] .rail-collapse > span {
+  display: none;
+}

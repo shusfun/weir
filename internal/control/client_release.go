@@ -28,15 +28,57 @@ func releaseRedirect(req *http.Request, via []*http.Request) error {
 }
 
 type clientRelease struct {
-	Status      string `json:"status"`
-	Source      string `json:"source"`
-	ObservedAt  string `json:"observed_at"`
-	Version     string `json:"version,omitempty"`
-	URL         string `json:"url,omitempty"`
-	PublishedAt string `json:"published_at,omitempty"`
+	Status      string         `json:"status"`
+	Source      string         `json:"source"`
+	ObservedAt  string         `json:"observed_at"`
+	Version     string         `json:"version,omitempty"`
+	URL         string         `json:"url,omitempty"`
+	PublishedAt string         `json:"published_at,omitempty"`
+	Assets      []releaseAsset `json:"assets,omitempty"`
 }
 
-func releaseCacheKey(repo string) string { return "migate:client-release:" + digest(repo) }
+// 安装包元数据：浏览器据此测速并在下载后校验 SHA-256；中心不代取安装包。
+type releaseAsset struct {
+	Name   string `json:"name"`
+	Size   int64  `json:"size"`
+	SHA256 string `json:"sha256,omitempty"`
+	URL    string `json:"url"`
+}
+
+var sha256Hex = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+// v2：加入安装包列表，避免沿用无 assets 的旧缓存。
+func releaseCacheKey(repo string) string { return "migate:client-release:v2:" + digest(repo) }
+
+// 只接受同一仓库正式发布的 github.com 下载地址；摘要仅在 GitHub 给出 sha256 时保留。
+type wireAsset struct {
+	Name   string `json:"name"`
+	Size   int64  `json:"size"`
+	URL    string `json:"browser_download_url"`
+	Digest string `json:"digest"`
+}
+
+func releaseAssets(raw []wireAsset, repo string) []releaseAsset {
+	var out []releaseAsset
+	for _, a := range raw {
+		if len(out) >= 80 {
+			break
+		}
+		u, e := url.Parse(a.URL)
+		if e != nil || u.Scheme != "https" || u.Host != "github.com" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || !strings.HasPrefix(u.EscapedPath(), "/"+repo+"/releases/download/") {
+			continue
+		}
+		if !catalogText(a.Name, 200, true) || a.Size <= 0 || a.Size > 2<<30 {
+			continue
+		}
+		sum := ""
+		if d := strings.ToLower(a.Digest); strings.HasPrefix(d, "sha256:") && sha256Hex.MatchString(d[7:]) {
+			sum = d[7:]
+		}
+		out = append(out, releaseAsset{Name: a.Name, Size: a.Size, SHA256: sum, URL: u.String()})
+	}
+	return out
+}
 func fetchClientRelease(ctx context.Context, client *http.Client, repo string, now time.Time) clientRelease {
 	result := clientRelease{Status: "unknown", Source: "github-releases", ObservedAt: now.UTC().Format(time.RFC3339)}
 	if !catalogRepo.MatchString(repo) {
@@ -72,8 +114,9 @@ func fetchClientRelease(ctx context.Context, client *http.Client, repo string, n
 		Tag        string `json:"tag_name"`
 		URL        string `json:"html_url"`
 		Published  string `json:"published_at"`
-		Draft      bool   `json:"draft"`
-		Prerelease bool   `json:"prerelease"`
+		Draft      bool        `json:"draft"`
+		Prerelease bool        `json:"prerelease"`
+		Assets     []wireAsset `json:"assets"`
 	}
 	if json.Unmarshal(raw, &wire) != nil || wire.Draft || wire.Prerelease || !catalogText(wire.Tag, 120, true) {
 		return result
@@ -107,6 +150,7 @@ func fetchClientRelease(ctx context.Context, client *http.Client, repo string, n
 	result.Version = wire.Tag
 	result.URL = u.String()
 	result.PublishedAt = published.UTC().Format(time.RFC3339)
+	result.Assets = releaseAssets(wire.Assets, canonicalRepo)
 	return result
 }
 func validCachedRelease(r clientRelease, now time.Time) bool {

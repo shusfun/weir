@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import {
+import { Field, Notice,
   Button,
   Textarea,
   Label,
@@ -95,10 +95,9 @@ export function InventoryImport({ saved }: { saved: () => void }) {
         </Button>
         <p>{fileName || "也可将一个文件拖到此处。UTF-8 文本，最大 2 MiB；文件只在浏览器读取。"}</p>
       </div>
-      <Label htmlFor="inventory-content">节点清单内容</Label>
-      <Textarea
+      <Field label="节点清单内容" htmlFor="inventory-content"><Textarea
         id="inventory-content"
-        className="sensitive-output"
+        mono
         value={content}
         disabled={reading || busy}
         onChange={(e) => {
@@ -107,7 +106,7 @@ export function InventoryImport({ saved }: { saved: () => void }) {
           P(null);
         }}
         rows={7}
-      />
+      /></Field>
       <Label className="selector-option">
         <Switch
           checked={dedup}
@@ -134,14 +133,14 @@ export function InventoryImport({ saved }: { saved: () => void }) {
         )}
       </div>
       {error && (
-        <p className="notice error" role="alert">
+        <Notice tone="bad">
           {error}
-        </p>
+        </Notice>
       )}
       {done && (
-        <p className="notice" role="status">
+        <Notice role="status">
           {done}
-        </p>
+        </Notice>
       )}
       {preview && (
         <>
@@ -151,7 +150,7 @@ export function InventoryImport({ saved }: { saved: () => void }) {
           </p>
           <div className="import-node-cards" aria-label="节点预览摘要">
             {preview.nodes.map((n) => (
-              <Card key={n.index}><CardContent>
+              <Card key={n.index} variant="plain"><CardContent>
                 <strong>{n.name || "未命名节点"}</strong>
                 <dl><div><dt>协议</dt><dd>{n.protocol}</dd></div><div><dt>服务器</dt><dd>{n.server}</dd></div><div><dt>端口</dt><dd>{n.port}</dd></div></dl>
               </CardContent></Card>

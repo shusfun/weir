@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import {
+import { Field, Notice, SearchInput, PageHeader,
   Button,
   Card,
   CardContent,
   Input,
-  Label,
   Select,
   SelectTrigger,
   SelectValue,
@@ -18,7 +17,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@migate/ui";
-import { Plus, Search, ShieldCheck } from "lucide-react";
+import { Plus, ShieldCheck } from "lucide-react";
 import { api } from "../api";
 import { client } from "../lib/client";
 import { bytes, type Grant } from "../lib/models";
@@ -115,12 +114,7 @@ export function GrantsPage() {
   );
   return (
     <div className="stack">
-      <div className="page-intro">
-        <div>
-          <h2>节点访问授权</h2>
-          <p>共用入站，独立客户端凭证。所有变更以设备回执为准。</p>
-        </div>
-        <Button
+      <PageHeader title="节点访问授权" description="共用入站，独立客户端凭证。所有变更以设备回执为准。" actions={<Button
           onClick={() => {
             E("");
             O(true);
@@ -128,24 +122,20 @@ export function GrantsPage() {
         >
           <Plus size={16} />
           分配节点
-        </Button>
-      </div>
+        </Button>} />
       {notice && (
-        <div className="notice" role="status">
+        <Notice role="status">
           {notice}
-        </div>
+        </Notice>
       )}
       <Card className="table-card">
         <div className="table-toolbar">
-          <div className="search-field">
-            <Search size={16} />
-            <Input
+          <SearchInput
               aria-label="搜索授权"
               placeholder="搜索用户、设备或入站…"
               value={search}
               onChange={(e) => S(e.target.value)}
             />
-          </div>
           <span className="result-count">{rows.length} 条授权</span>
         </div>
         <CardContent>
@@ -211,7 +201,7 @@ export function GrantsPage() {
           }
         }}
       >
-        <DialogContent className="business-dialog">
+        <DialogContent size="md">
           <DialogTitle>
             {revoke ? "撤销节点访问" : "分配独立客户端"}
           </DialogTitle>
@@ -229,15 +219,14 @@ export function GrantsPage() {
           >
             {!revoke && (
               <>
-                <div className="field">
-                  <Label htmlFor="grant-user-search">查找用户</Label>
+                <Field label="查找用户" htmlFor="grant-user-search">
                   <Input
                     id="grant-user-search"
                     placeholder="输入邮箱筛选…"
                     value={userSearch}
                     onChange={(e) => US(e.target.value)}
                   />
-                </div>
+                </Field>
                 <Choice
                   label="授权用户"
                   value={user}
@@ -271,17 +260,17 @@ export function GrantsPage() {
                   ])}
                 />
                 {device && !eligible.length && (
-                  <p className="notice">
+                  <Notice>
                     此 Gate 没有可授权入站，请先完成入站配置。
-                  </p>
+                  </Notice>
                 )}
-                {failure && <p role="alert">资源加载失败，请关闭后重试。</p>}
+                {failure && <Notice tone="bad">资源加载失败，请关闭后重试。</Notice>}
               </>
             )}
             {error && (
-              <p className="notice error" role="alert">
+              <Notice tone="bad">
                 {error}
-              </p>
+              </Notice>
             )}
             <DialogFooter>
               <Button
@@ -324,8 +313,7 @@ function Choice({
   options: string[][];
 }) {
   return (
-    <div className="field">
-      <Label>{label}</Label>
+    <Field label={label}>
       <Select value={value || null} onValueChange={(v) => onChange(v ?? "")}>
         <SelectTrigger aria-label={label}>
           <SelectValue>
@@ -340,6 +328,6 @@ function Choice({
           ))}
         </SelectContent>
       </Select>
-    </div>
+    </Field>
   );
 }

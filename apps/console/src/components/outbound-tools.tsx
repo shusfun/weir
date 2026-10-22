@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUp, ArrowDown, ListOrdered, Activity } from "lucide-react";
-import {
+import { ListOrdered, Activity } from "lucide-react";
+import { OptionRow, ReorderButtons, Notice,
   Button,
   Dialog,
   DialogContent,
@@ -138,19 +138,19 @@ export function OutboundTools({
         </p>
       )}
       {notice && (
-        <p role="status" className="notice">
+        <Notice role="status">
           {notice}
-        </p>
+        </Notice>
       )}
       {probeID && (
-        <div className="notice">
+        <Notice>
           <strong>TCP 探测 #{probeID}</strong>
           <p>
             从 Gate
             连接已生效出口的公网端口。结果不代表协议握手、吞吐或代理可用性。
           </p>
           {observations.error ? (
-            <p role="alert">
+            <Notice tone="bad">
               读取失败，当前结果未知。
               <Button
                 variant="outline"
@@ -158,7 +158,7 @@ export function OutboundTools({
               >
                 重新读取
               </Button>
-            </p>
+            </Notice>
           ) : !task ? (
             <p>正在读取任务…</p>
           ) : task.status !== "applied" ? (
@@ -186,7 +186,7 @@ export function OutboundTools({
               ))}
             </>
           )}
-        </div>
+        </Notice>
       )}
       <Dialog
         open={!!order || probing}
@@ -197,7 +197,7 @@ export function OutboundTools({
           }
         }}
       >
-        <DialogContent className="business-dialog">
+        <DialogContent size="md">
           <DialogTitle>
             {order ? "调整手动出站顺序" : "选择 TCP 探测出口"}
           </DialogTitle>
@@ -213,28 +213,11 @@ export function OutboundTools({
                     <span className="break-all">
                       {i + 1}. {name(r)}
                     </span>
-                    <Button
-                      variant="outline"
-                      size="icon-sm"
-                      aria-label={`上移 ${name(r)}`}
-                      disabled={busy || i === 0}
-                      onClick={() => move(i, -1)}
-                    >
-                      <ArrowUp size={14} />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon-sm"
-                      aria-label={`下移 ${name(r)}`}
-                      disabled={busy || i === order.length - 1}
-                      onClick={() => move(i, 1)}
-                    >
-                      <ArrowDown size={14} />
-                    </Button>
+                    <ReorderButtons label={name(r)} onUp={() => move(i, -1)} onDown={() => move(i, 1)} upDisabled={busy || i === 0} downDisabled={busy || i === order.length - 1} />
                   </div>
                 ))
               : rows.map((r) => (
-                  <label className="pool-node" key={r.id}>
+                  <OptionRow key={r.id}>
                     <Checkbox
                       aria-label={`探测 ${name(r)}`}
                       checked={ids.includes(Number(r.data.id))}
@@ -256,13 +239,13 @@ export function OutboundTools({
                         {String(r.data.address)}:{String(r.data.port)}
                       </small>
                     </span>
-                  </label>
+                  </OptionRow>
                 ))}
           </div>
           {error && (
-            <p role="alert" className="notice">
+            <Notice role="alert">
               {error}
-            </p>
+            </Notice>
           )}
           <DialogFooter>
             <Button

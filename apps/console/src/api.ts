@@ -56,6 +56,11 @@ subscription_naming_changed:"前缀与地区设置已被修改，请取消并重
  publication_stale_source: "订阅组包含回退旧缓存，请先成功刷新所有来源再分享。",
  profile_disabled: "请先启用订阅组，再明确发布分享。",
  share_not_found: "分享不存在、已撤下或已过期。",
+  mirror_limit: "加速镜像最多 8 个。",
+  invalid_mirror: "镜像前缀须为 HTTPS 地址并以 / 结尾，不能包含账号、查询参数或重复项。",
+  mirror_save_failed: "镜像列表未保存，原配置保持；请重试。",
+  mirrors_changed: "镜像列表已被其他管理员修改，请重新读取后再保存。",
+  client_mirrors_unavailable: "加速镜像暂时不可用，下载将只测速 GitHub 直连。",
   catalog_size_limit: "目录总大小不能超过 768 KiB；请缩小图标后重试。",
   invalid_catalog_icon: "图标须为 PNG / JPEG，最多 200 KiB、边长最多 512 像素；不接受 SVG、动画或远程图标。",
   client_catalog_unavailable: "客户端目录暂时不可用，请重试；已有订阅仍可使用。",
@@ -183,25 +188,71 @@ subscription_naming_changed:"前缀与地区设置已被修改，请取消并重
   uninstall_scope_confirmation_required: "移除内核或清除数据需要再次确认。",
   uninstall_request_failed: "卸载请求没有写入，请稍后重试。",
 };
+// 保留错误码与 HTTP 状态，调用方可按冲突码分支；toString 只返回中文文案，兼容 String(e) 的旧用法。
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly code: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+  get conflict() {
+    return this.status === 409 || this.code.endsWith("_changed");
+  }
+  override toString() {
+    return this.message;
+  }
+}
+
+export function isConflict(e: unknown) {
+  return e instanceof ApiError && e.conflict;
+}
+
 export async function api(
   path: string,
   method = "GET",
   body?: unknown,
   token?: string,
 ) {
-  const res = await fetch("/api/v1" + path, {
-    method,
-    credentials: "same-origin",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: "Bearer " + token } : {}),
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const data = await res.json();
-  if (!res.ok)
-    throw new Error(
-      messages[data.error?.code] || "操作失败，请检查输入与服务状态后重试。",
+  let res: Response;
+  try {
+    res = await fetch("/api/v1" + path, {
+      method,
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: "Bearer " + token } : {}),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError("无法连接控制中心，请检查网络后重试。", "network_unreachable", 0);
+  }
+  const text = await res.text();
+  let data: any = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      // 反代错误页等非 JSON 响应：不把 SyntaxError 暴露给用户
+      throw new ApiError(
+        res.ok
+          ? "服务返回了无法识别的内容，请刷新后重试。"
+          : `服务暂时不可用（HTTP ${res.status}），请稍后重试。`,
+        res.ok ? "invalid_response" : "upstream_unavailable",
+        res.status,
+      );
+    }
+  }
+  if (!res.ok) {
+    const code = String(data?.error?.code ?? "http_" + res.status);
+    throw new ApiError(
+      messages[code] ?? `操作失败（${code}），请检查输入与服务状态后重试。`,
+      code,
+      res.status,
     );
+  }
   return data;
 }

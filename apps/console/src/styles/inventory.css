@@ -1,0 +1,55 @@
+/* 订阅流水线：信号链导航、资源条目、处理链、模板、导入、出站池。 */
+
+.inventory-bulk { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 18px; font-size: 12.5px; background: var(--mg-well); border-bottom: 1px solid var(--mg-line-soft); }
+.inventory-items { display: grid; }
+.inventory-item { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 15px 0; border-bottom: 1px solid var(--mg-line-soft); }
+.inventory-item:last-child { border-bottom: 0; }
+.inventory-item-main { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.inventory-item-main > div { min-width: 0; }
+.inventory-item h3 { font-size: 14px; overflow-wrap: anywhere; }
+.inventory-item p { font-size: 12.5px; margin-top: 3px; font-family: var(--mg-mono); }
+.inventory-item small { display: block; margin-top: 3px; font-size: 11.5px; overflow-wrap: anywhere; }
+.profile-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.profile-cards .inventory-item { flex-direction: column; align-items: stretch; gap: 16px; padding: 16px; border-radius: var(--mg-radius); border: 1px solid var(--mg-line); background: linear-gradient(180deg, var(--mg-raised), var(--mg-panel)); box-shadow: inset 0 1px 0 var(--mg-highlight), 0 1px 1px var(--mg-shade); }
+.profile-cards .inventory-item > .actions { justify-content: flex-end; }
+
+.operator-step, .core-version-card, .acme-workspace { display: grid; gap: 14px; padding: 16px; border-radius: var(--mg-radius); border: 1px solid var(--mg-line); background: color-mix(in srgb, var(--mg-panel) 70%, var(--mg-well)); }
+.operator-step strong { font-size: 13px; }
+.operator-choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; max-height: 220px; overflow: auto; padding: 10px 0; }
+.pipeline-preview summary { font-size: 12.5px; }
+.import-preview { max-height: 380px; overflow: auto; }
+.import-file-panel { display: flex; align-items: center; gap: 14px; min-width: 0; padding: 14px; border-radius: var(--mg-radius); border: 1px dashed color-mix(in srgb, var(--mg-line) 60%, var(--mg-ink-3)); background: var(--mg-well); }
+.import-file-panel p { margin: 0; font-size: 12.5px; overflow-wrap: anywhere; min-width: 0; }
+.import-node-cards { display: none; }
+.dedup-plan { max-height: 45vh; overflow: auto; }
+
+.template-fields p { font-size: 12.5px; }
+.template-settings-row { display: flex; justify-content: space-between; align-items: end; gap: 14px; flex-wrap: wrap; }
+.template-member-options { display: flex; gap: 14px; flex-wrap: wrap; border: 0; padding: 4px 0; }
+.template-member-options legend { font-size: 12px; color: var(--mg-ink-2); margin-bottom: 6px; }
+.template-dns, .source-filter-fields { padding-top: 18px; border-top: 1px solid var(--mg-line); min-width: 0; }
+.source-filter-rule { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
+.source-usage-panel h3 { font-size: 14px; }
+.source-usage-panel p { font-size: 12.5px; overflow-wrap: anywhere; }
+.source-usage-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
+.source-usage-grid > div { padding: 2px 0; }
+.source-usage-grid span { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--mg-ink-engraved); }
+.source-usage-grid strong { display: block; margin-top: 4px; font: 600 18px/1.2 var(--mg-mono); overflow-wrap: anywhere; }
+.subscription-naming-editor, .subscription-defaults-editor, .naming-rule, .prefix-fields { min-width: 0; }
+
+.pool-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+
+@media (max-width: 1050px) { .profile-cards { grid-template-columns: 1fr; } }
+@media (max-width: 900px) {
+  .inventory-item { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .inventory-item > .actions { width: 100%; }
+}
+@media (max-width: 768px) { .source-usage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) {
+  .import-file-panel { flex-direction: column; align-items: stretch; }
+  .import-node-table { display: none; }
+  .import-node-cards { display: grid; gap: 10px; max-height: 42vh; overflow: auto; }
+  .import-node-cards dl { margin: 10px 0 0; display: grid; gap: 6px; font-size: 12px; }
+  .import-node-cards dl > div { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 8px; }
+  .import-node-cards dd { margin: 0; overflow-wrap: anywhere; }
+}

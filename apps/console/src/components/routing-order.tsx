@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUp, ArrowDown, ListOrdered } from "lucide-react";
-import {
+import { ListOrdered } from "lucide-react";
+import { ReorderButtons, Notice, SectionHeader,
   Button,
   Dialog,
   DialogContent,
@@ -80,12 +80,7 @@ export function RoutingOrder({
   }
   return (
     <div className="stack">
-      <div className="section-heading">
-        <div>
-          <h3>匹配优先级</h3>
-          <p>从上到下匹配，先命中的规则生效；一次任务更新全部规则顺序。</p>
-        </div>
-        <Button
+      <SectionHeader level="h3" title="匹配优先级" description="从上到下匹配，先命中的规则生效；一次任务更新全部规则顺序。" actions={<Button
           variant="outline"
           disabled={!capable || pending || rows.length < 2}
           onClick={() => {
@@ -96,8 +91,7 @@ export function RoutingOrder({
         >
           <ListOrdered size={15} />
           调整顺序
-        </Button>
-      </div>
+        </Button>} />
       {!capable && (
         <p className="muted">
           {devices.isError
@@ -107,9 +101,9 @@ export function RoutingOrder({
       )}
       {pending && <p role="status">路由任务仍在执行，完成后可继续调整顺序。</p>}
       {notice && (
-        <p role="status" className="notice">
+        <Notice role="status">
           {notice}
-        </p>
+        </Notice>
       )}
       <Dialog
         open={order !== null}
@@ -117,7 +111,7 @@ export function RoutingOrder({
           if (!open && !busy) setOrder(null);
         }}
       >
-        <DialogContent className="business-dialog">
+        <DialogContent size="md">
           <DialogTitle>调整路由匹配顺序</DialogTitle>
           <DialogDescription>
             上移提高优先级。仅更改顺序，不修改规则匹配条件与出站；列表变化时拒绝覆盖，需重新打开核对。
@@ -128,31 +122,14 @@ export function RoutingOrder({
                 <span className="break-all">
                   {i + 1}. {label(row)}
                 </span>
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  aria-label={"上移 " + label(row)}
-                  disabled={busy || i === 0}
-                  onClick={() => move(i, -1)}
-                >
-                  <ArrowUp size={14} />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  aria-label={"下移 " + label(row)}
-                  disabled={busy || i === order.length - 1}
-                  onClick={() => move(i, 1)}
-                >
-                  <ArrowDown size={14} />
-                </Button>
+                <ReorderButtons label={label(row)} onUp={() => move(i, -1)} onDown={() => move(i, 1)} upDisabled={busy || i === 0} downDisabled={busy || i === order.length - 1} />
               </div>
             ))}
           </div>
           {error && (
-            <p role="alert" className="notice error-message">
+            <Notice tone="bad">
               {error}
-            </p>
+            </Notice>
           )}
           <DialogFooter>
             <Button

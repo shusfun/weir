@@ -1,4 +1,4 @@
-import {
+import { Field,
   Label,Input,
   Select,
   SelectContent,
@@ -28,13 +28,12 @@ export function PublicPageFields({
     <div className="stack">
       <h3>公告展示</h3>
       <div className="actions"><Switch id="public-notice-enabled" checked={fields.notice_enabled!==false} onCheckedChange={notice_enabled=>change({...fields,notice_enabled})}/><Label htmlFor="public-notice-enabled">显示公开页公告</Label></div>
-      <Label htmlFor="public-notice-title">公告标题</Label><Input id="public-notice-title" value={fields.notice_title??""} maxLength={200} placeholder="公告" onChange={e=>change({...fields,notice_title:e.target.value})}/>
-      <Label htmlFor="public-notice-type">公告类型</Label><Select value={fields.notice_type||"info"} onValueChange={notice_type=>change({...fields,notice_type})}><SelectTrigger id="public-notice-type"><SelectValue>{({info:"通知",success:"成功",warning:"提醒",error:"重要"} as Record<string,string>)[fields.notice_type||"info"]}</SelectValue></SelectTrigger><SelectContent>{[["info","通知"],["success","成功"],["warning","提醒"],["error","重要"]].map(([v,n])=><SelectItem key={v} value={v}>{n}</SelectItem>)}</SelectContent></Select>
+      <Field label="公告标题" htmlFor="public-notice-title"><Input id="public-notice-title" value={fields.notice_title??""} maxLength={200} placeholder="公告" onChange={e=>change({...fields,notice_title:e.target.value})}/></Field>
+      <Field label="公告类型" htmlFor="public-notice-type"><Select value={fields.notice_type||"info"} onValueChange={notice_type=>change({...fields,notice_type})}><SelectTrigger id="public-notice-type"><SelectValue>{({info:"通知",success:"成功",warning:"提醒",error:"重要"} as Record<string,string>)[fields.notice_type||"info"]}</SelectValue></SelectTrigger><SelectContent>{[["info","通知"],["success","成功"],["warning","提醒"],["error","重要"]].map(([v,n])=><SelectItem key={v} value={v}>{n}</SelectItem>)}</SelectContent></Select></Field>
       <div className="actions"><Switch id="public-notice-dismiss" checked={fields.notice_dismissible===true} onCheckedChange={notice_dismissible=>change({...fields,notice_dismissible})}/><Label htmlFor="public-notice-dismiss">允许访客关闭当前公告</Label></div>
       <p className="muted">关闭偏好仅存在当前浏览器；公告内容、标题或类型更新后重新显示。正文按纯文本展示。</p>
       {fields.notice_enabled!==false&&fields.notice&&<div className="announcement-preview"><small>公告预览</small><PublishedAnnouncement preview scope="preview" notice={{notice:fields.notice,notice_title:fields.notice_title,notice_type:fields.notice_type,notice_dismissible:fields.notice_dismissible}}/></div>}
-      <Label htmlFor="public-theme">页面主题</Label>
-      <Select
+      <Field label="页面主题" htmlFor="public-theme"><Select
         value={fields.theme || "violet"}
         onValueChange={(theme) => change({ ...fields, theme })}
       >
@@ -48,7 +47,7 @@ export function PublicPageFields({
             </SelectItem>
           ))}
         </SelectContent>
-      </Select>
+      </Select></Field>
       <div className="actions">
         <Switch
           id="public-share"

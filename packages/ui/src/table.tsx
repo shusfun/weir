@@ -1,21 +1,11 @@
-"use client";
-
+// 来源 codedthemes/uiable table；本地改为面板内平面表格：表头刻字、行仅细线分隔，不给单元格加材质。
 import { ComponentProps } from "react";
-
-// third-party
 import { cn } from "cn";
 
 function Table({ className, ...props }: ComponentProps<"table">) {
   return (
-    <div
-      data-slot="table-container"
-      className="relative w-full overflow-x-auto"
-    >
-      <table
-        data-slot="table"
-        className={cn("w-full caption-bottom text-base", className)}
-        {...props}
-      />
+    <div data-slot="table-container" className="relative w-full overflow-x-auto">
+      <table data-slot="table" className={cn("w-full caption-bottom border-collapse text-[13px]", className)} {...props} />
     </div>
   );
 }
@@ -24,33 +14,21 @@ function TableHeader({ className, ...props }: ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn(
-        "[&_tr]:border-b-border-border bg-background align-middle text-[13px] font-bold uppercase ltr:text-left! rtl:text-right! [&_tr]:border-b",
-        className,
-      )}
+      className={cn("border-b border-[var(--mg-line-soft)] text-left", className)}
       {...props}
     />
   );
 }
 
 function TableBody({ className, ...props }: ComponentProps<"tbody">) {
-  return (
-    <tbody
-      data-slot="table-body"
-      className={cn("[&_tr:last-child]:border-0", className)}
-      {...props}
-    />
-  );
+  return <tbody data-slot="table-body" className={cn("[&_tr:last-child]:border-0", className)} {...props} />;
 }
 
 function TableFooter({ className, ...props }: ComponentProps<"tfoot">) {
   return (
     <tfoot
       data-slot="table-footer"
-      className={cn(
-        "border-t-border-border border-t bg-background font-semibold [&>tr]:last:border-b-0",
-        className,
-      )}
+      className={cn("border-t border-[var(--mg-line)] bg-[var(--mg-well)] font-medium", className)}
       {...props}
     />
   );
@@ -61,7 +39,7 @@ function TableRow({ className, ...props }: ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "border-b-border-border border-b transition-colors hover:bg-background data-[state=selected]:bg-background",
+        "border-b border-[var(--mg-line-soft)] transition-colors duration-[var(--mg-fast)] hover:bg-[color-mix(in_srgb,var(--mg-well)_55%,transparent)] data-[state=selected]:bg-[var(--mg-accent-soft)]",
         className,
       )}
       {...props}
@@ -74,7 +52,7 @@ function TableHead({ className, ...props }: ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "p-[.9rem_.75rem] whitespace-nowrap text-foreground ltr:first:pl-5 ltr:last:pr-5 ltr:first:sm:pl-[25px] ltr:last:sm:pr-[25px] rtl:first:pr-5 rtl:last:pl-5 rtl:first:sm:pr-[25px] rtl:last:sm:pl-[25px] [&:has([role=checkbox])]:pr-0",
+        "mg-engraved h-10 px-3 align-middle whitespace-nowrap first:pl-5 last:pr-5 [&:has([role=checkbox])]:pr-0",
         className,
       )}
       {...props}
@@ -86,32 +64,14 @@ function TableCell({ className, ...props }: ComponentProps<"td">) {
   return (
     <td
       data-slot="table-cell"
-      className={cn(
-        "p-[.7rem_.75rem] align-middle whitespace-nowrap ltr:first:pl-5 ltr:last:pr-5 ltr:first:sm:pl-[25px] ltr:last:sm:pr-[25px] rtl:first:pr-5 rtl:last:pl-5 rtl:first:sm:pr-[25px] rtl:last:sm:pl-[25px] [&:has([role=checkbox])]:pr-0",
-        className,
-      )}
+      className={cn("px-3 py-3 align-middle first:pl-5 last:pr-5 [&:has([role=checkbox])]:pr-0", className)}
       {...props}
     />
   );
 }
 
 function TableCaption({ className, ...props }: ComponentProps<"caption">) {
-  return (
-    <caption
-      data-slot="table-caption"
-      className={cn("mt-4 text-base text-muted-foreground", className)}
-      {...props}
-    />
-  );
+  return <caption data-slot="table-caption" className={cn("mt-4 text-xs text-[var(--mg-ink-3)]", className)} {...props} />;
 }
 
-export {
-  Table,
-  TableHeader,
-  TableBody,
-  TableFooter,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableCaption,
-};
+export { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell, TableCaption };

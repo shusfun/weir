@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
+import { OptionRow, ReorderButtons, Field, Notice, SectionHeader,
   Button,
   Card,
   CardContent,
@@ -24,8 +24,6 @@ import {
   RefreshCw,
   Layers,
   ArrowUpRight,
-  ArrowUp,
-  ArrowDown,
   ListOrdered,
 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -105,6 +103,14 @@ export function OutboundPools({ device }: { device: Device }) {
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
   const [poolOrder, setPoolOrder] = useState<Pool[] | null>(null);
+  // 调整展示顺序：与相邻项互换位置
+  const swap = (i: number, by: number) =>
+    setPoolOrder((order) => {
+      if (!order) return order;
+      const next = [...order];
+      [next[i], next[i + by]] = [next[i + by], next[i]];
+      return next;
+    });
   const sortedPools = [...(pools.data?.items ?? [])].sort(
     (a, b) => (a.priority ?? 0) - (b.priority ?? 0) || a.id - b.id,
   );
@@ -228,14 +234,7 @@ export function OutboundPools({ device }: { device: Device }) {
             调整池顺序
           </Button>
         </div>
-        <div className="section-heading">
-          <div>
-            <h2>
-              <Layers size={18} /> 订阅出站池
-            </h2>
-            <p>从订阅源选择出口节点，整批应用后可在路由中引用。</p>
-          </div>
-          <Button
+        <SectionHeader title={<><Layers size={18} /> 订阅出站池</>} description="从订阅源选择出口节点，整批应用后可在路由中引用。" actions={<Button
             disabled={!capable}
             onClick={() => {
               setError("");
@@ -251,17 +250,16 @@ export function OutboundPools({ device }: { device: Device }) {
           >
             <Plus size={16} />
             创建出站池
-          </Button>
-        </div>
+          </Button>} />
         {!capable && (
-          <p className="notice">
+          <Notice>
             设备需升级以支持出站池，现有手动出站可继续使用。
-          </p>
+          </Notice>
         )}
         {notice && (
-          <p className="notice" role="status">
+          <Notice role="status">
             {notice}
-          </p>
+          </Notice>
         )}
         {error && !active && !editor && <State error={error} />}
         {pools.isPending ? (
@@ -352,7 +350,7 @@ export function OutboundPools({ device }: { device: Device }) {
             if (!v && !busy) setPoolOrder(null);
           }}
         >
-          <DialogContent className="business-dialog">
+          <DialogContent size="md">
             <DialogTitle>调整订阅出站池顺序</DialogTitle>
             <DialogDescription>
               保存完整池版本快照。仅调整展示顺序，不改变路由匹配、凭据或节点授权。
@@ -363,31 +361,20 @@ export function OutboundPools({ device }: { device: Device }) {
                   <span className="break-all">
                     {i + 1}. {p.name}
                   </span>
-                  {[-1, 1].map((by) => (
-                    <Button
-                      key={by}
-                      variant="outline"
-                      size="icon-sm"
-                      aria-label={`${by < 0 ? "上移" : "下移"} ${p.name}`}
-                      disabled={
-                        busy || i + by < 0 || i + by >= poolOrder.length
-                      }
-                      onClick={() => {
-                        const next = [...poolOrder];
-                        [next[i], next[i + by]] = [next[i + by], next[i]];
-                        setPoolOrder(next);
-                      }}
-                    >
-                      {by < 0 ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
-                    </Button>
-                  ))}
+                  <ReorderButtons
+                    label={p.name}
+                    upDisabled={busy || i === 0}
+                    downDisabled={busy || i === poolOrder.length - 1}
+                    onUp={() => swap(i, -1)}
+                    onDown={() => swap(i, 1)}
+                  />
                 </div>
               ))}
             </div>
             {error && (
-              <p role="alert" className="notice">
+              <Notice role="alert">
                 {error}
-              </p>
+              </Notice>
             )}
             <DialogFooter>
               <Button
@@ -441,14 +428,13 @@ export function OutboundPools({ device }: { device: Device }) {
                 }}
               >
                 <div>
-                  <Label htmlFor="pool-name">名称</Label>
-                  <Input
+                  <Field label="名称" htmlFor="pool-name"><Input
                     id="pool-name"
                     required
                     maxLength={100}
                     value={editor.name}
                     onChange={(e) => edit({ ...editor, name: e.target.value })}
-                  />
+                  /></Field>
                 </div>
                 <div>
                   <Label>订阅源</Label>
@@ -490,7 +476,7 @@ export function OutboundPools({ device }: { device: Device }) {
                   沿用订阅源的刷新周期、请求头和安全校验。修改来源后需重新预览应用。
                 </p>
                 <div className="pool-toggle-row">
-                  <Label htmlFor="pool-prepend">在手动出站前展示</Label>
+                  <Label htmlFor="pool-prepend" className="min-w-0">在手动出站前展示</Label>
                   <Switch
                     id="pool-prepend"
                     checked={editor.prepend}
@@ -498,9 +484,7 @@ export function OutboundPools({ device }: { device: Device }) {
                   />
                 </div>
                 <div className="pool-toggle-row">
-                  <Label htmlFor="pool-auto-refresh">
-                    自动同步全部可托管节点
-                  </Label>
+                  <Label htmlFor="pool-auto-refresh" className="min-w-0">自动同步全部可托管节点</Label>
                   <Switch
                     id="pool-auto-refresh"
                     checked={editor.auto_refresh}
@@ -510,14 +494,14 @@ export function OutboundPools({ device }: { device: Device }) {
                   />
                 </div>
                 {editor.auto_refresh && (
-                  <p className="notice">
+                  <Notice>
                     首次预览并应用后，随来源缓存更新自动增减全部可托管节点，失败保留旧库存；暂不支持的协议不纳入。已有路由引用阻止移除，不会改成直连。
-                  </p>
+                  </Notice>
                 )}
                 {error && (
-                  <p className="notice" role="alert">
+                  <Notice role="alert">
                     {error}
-                  </p>
+                  </Notice>
                 )}
               </form>
             )}
@@ -545,7 +529,7 @@ export function OutboundPools({ device }: { device: Device }) {
             if (!v && !busy) open(null);
           }}
         >
-          <DialogContent className="pool-dialog">
+          <DialogContent size="lg">
             <DialogTitle>{active?.name} · 出口节点</DialogTitle>
             <DialogDescription>
               凭据保留在服务端。去重使用完整连接参数；不支持的组合会显示原因。
@@ -575,9 +559,9 @@ export function OutboundPools({ device }: { device: Device }) {
                     预览 10 分钟有效
                   </p>
                   {active?.auto_refresh && (
-                    <p className="notice">
+                    <Notice>
                       自动模式将同步全部可托管节点；需手动选择部分节点时，请先关闭自动同步。
-                    </p>
+                    </Notice>
                   )}
                   <Input
                     aria-label="筛选出口节点"
@@ -618,7 +602,7 @@ export function OutboundPools({ device }: { device: Device }) {
                       />
                     ) : (
                       visible.map((n) => (
-                        <label className="pool-node" key={n.identity}>
+                        <OptionRow key={n.identity}>
                           <Checkbox
                             aria-label={`选择 ${n.name || n.server}`}
                             disabled={
@@ -644,7 +628,7 @@ export function OutboundPools({ device }: { device: Device }) {
                               </small>
                             )}
                           </span>
-                        </label>
+                        </OptionRow>
                       ))
                     )}
                   </div>
@@ -656,15 +640,15 @@ export function OutboundPools({ device }: { device: Device }) {
                 />
               )}
               {error && (
-                <p className="notice" role="alert">
+                <Notice role="alert">
                   {error}
-                </p>
+                </Notice>
               )}
-              <p className="notice">
+              <Notice>
                 移除仍被路由引用的节点会被拒绝，请先调整路由。刷新或配置失败保留上次生效配置；停用不会更改用户授权。
-              </p>
+              </Notice>
               {action && (
-                <div className="notice" role="alert">
+                <Notice role="alert">
                   <strong>
                     {action === "apply"
                       ? `确认整批应用 ${selected.length} 个节点？`
@@ -683,7 +667,7 @@ export function OutboundPools({ device }: { device: Device }) {
                   >
                     返回选择
                   </Button>
-                </div>
+                </Notice>
               )}
             </div>
             <DialogFooter>

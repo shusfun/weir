@@ -1,0 +1,166 @@
+/* Tailwind 语义色映射到材质令牌；深色只需重定义 --mg-*。 */
+@theme inline {
+  --color-background: var(--mg-base);
+  --color-foreground: var(--mg-ink);
+  --color-card: var(--mg-panel);
+  --color-card-foreground: var(--mg-ink);
+  --color-popover: var(--mg-raised);
+  --color-popover-foreground: var(--mg-ink);
+  --color-primary: var(--mg-accent);
+  --color-primary-600: var(--mg-accent-lo);
+  --color-primary-foreground: var(--mg-accent-ink);
+  --color-secondary: var(--mg-accent-soft);
+  --color-secondary-foreground: var(--mg-accent-soft-ink);
+  --color-accent: var(--mg-accent-soft);
+  --color-accent-foreground: var(--mg-accent-soft-ink);
+  --color-muted: var(--mg-well);
+  --color-muted-foreground: var(--mg-ink-3);
+  --color-border: var(--mg-line);
+  --color-input: var(--mg-well);
+  --color-ring: var(--mg-ring);
+  --color-destructive: var(--mg-bad);
+  --font-sans: var(--mg-font);
+  --font-mono: var(--mg-mono);
+  --radius: var(--mg-radius);
+}
+
+@layer components {
+  /* 面板：平整，只有细边框（非交互元素不做拟物） */
+  .mg-panel {
+    background: var(--mg-panel);
+    border: 1px solid var(--mg-line-soft);
+    border-radius: var(--mg-radius-lg);
+  }
+  /* 凹槽：输入框、计数窗 */
+  .mg-well {
+    background: var(--mg-well);
+    border: 1px solid transparent;
+    border-radius: var(--mg-radius);
+    box-shadow:
+      inset 2px 2px 4px var(--mg-neu-lo),
+      inset -2px -2px 4px var(--mg-neu-hi);
+  }
+  .mg-raised {
+    background: var(--mg-key);
+    border: 1px solid transparent;
+  }
+
+  /*
+   * 新拟物键帽：外凸与内凹两层阴影各画在一个伪元素上，按下时交叉淡入淡出，
+   * 键帽本体只做 1–2px 位移（弹簧回弹），不逐帧重绘阴影。
+   */
+  .mg-key {
+    position: relative;
+    isolation: isolate;
+    background: var(--mg-key);
+    border: 1px solid transparent;
+    transition:
+      transform var(--mg-slow) var(--mg-spring),
+      color var(--mg-fast) ease;
+  }
+  .mg-key::before,
+  .mg-key::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    transition: opacity var(--mg-fast) ease;
+  }
+  .mg-key::before {
+    box-shadow:
+      -3px -3px 6px var(--mg-neu-hi),
+      3px 3px 7px var(--mg-neu-lo);
+  }
+  .mg-key::after {
+    opacity: 0;
+    box-shadow:
+      inset 2px 2px 5px var(--mg-neu-lo),
+      inset -2px -2px 5px var(--mg-neu-hi);
+  }
+  /*
+   * 选中态只认组件显式给出的 .is-pressed（Segmented 选项、导航当前项、secondary 变体）。
+   * 不再匹配 aria-pressed / aria-current / data-pressed：这些属性由 Base UI 在弹窗、菜单触发键
+   * 按下时自动加上，泛化匹配会把实心主按钮盖成浅色底。
+   * 常驻选中只下沉 1px；手指按下的瞬时反馈为 2px。
+   */
+  .mg-key.is-pressed {
+    transform: translateY(1px);
+    transition:
+      transform var(--mg-fast) ease-out,
+      color var(--mg-fast) ease;
+  }
+  .mg-key:active {
+    transform: translateY(2px);
+    transition:
+      transform var(--mg-fast) ease-out,
+      color var(--mg-fast) ease;
+  }
+  .mg-key:active::before,
+  .mg-key.is-pressed::before {
+    opacity: 0;
+  }
+  .mg-key:active::after,
+  .mg-key.is-pressed::after {
+    opacity: 1;
+  }
+  /*
+   * 常驻选中：无方向的柔和内发光（参考导航指示灯），零偏移阴影沿圆角均匀分布，
+   * 不再有左上暗 / 右下亮在拐角处的折痕。放在 :active 之后，按住选中键时底色不跳回灰色。
+   */
+  .mg-key.is-pressed::after {
+    background: var(--mg-key-selected);
+    box-shadow:
+      inset 0 0 0 1px var(--mg-key-selected-ring),
+      inset 0 0 8px 1px var(--mg-key-selected-glow);
+  }
+  /* 幽灵键：静止时平，悬停才浮起 */
+  .mg-key-ghost {
+    background: transparent;
+  }
+  .mg-key-ghost::before {
+    opacity: 0;
+  }
+  .mg-key-ghost:hover {
+    background: var(--mg-key);
+  }
+  .mg-key-ghost:hover::before {
+    opacity: 1;
+  }
+  .mg-key:focus-visible {
+    outline: 2px solid var(--mg-accent-text);
+    outline-offset: 2px;
+  }
+  .mg-key:disabled,
+  .mg-key[aria-disabled="true"] {
+    transform: none;
+  }
+  @media (forced-colors: active) {
+    .mg-key { border-color: ButtonText; }
+    .mg-key.is-pressed { border-width: 2px; }
+  }
+
+  .mg-engraved {
+    color: var(--mg-ink-engraved);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .mg-digits {
+    font-family: var(--mg-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

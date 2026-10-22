@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import {
+import { ReorderButtons, Field, Notice, SectionHeader,
   Button,
   Input,
   Label,
@@ -11,7 +11,7 @@ import {
   Switch,
   Textarea,
 } from "@migate/ui";
-import { ArrowUp, ArrowDown, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { OperatorChoices, PatternRules, SortFields } from "./operator-fields";
 export interface Operator {
@@ -57,14 +57,13 @@ export function OperatorEditor({
     change(a);
   }
   const field = (label: string, content: string, save: (v: string) => void) => (
-    <div className="field">
-      <Label>{label}</Label>
+    <Field label={label}>
       <Input
         aria-label={label}
         value={content}
         onChange={(e) => save(e.target.value)}
       />
-    </div>
+    </Field>
   );
   return (
     <div className="stack">
@@ -101,36 +100,13 @@ export function OperatorEditor({
       </div>
       {value.map((op, i) => (
         <section className="operator-step" key={i}>
-          <div className="section-heading">
-            <strong>
-              {i + 1}. {names[op.type] ?? op.type}
-            </strong>
-            <div className="actions">
+          <SectionHeader size="sm" flush title={<>{i + 1}. {names[op.type] ?? op.type}</>} actions={<div className="actions">
               <Switch
                 aria-label={"启用步骤 " + (i + 1)}
                 checked={op.enabled !== false}
                 onCheckedChange={(v) => set(i, { enabled: v })}
               />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={"上移步骤 " + (i + 1)}
-                disabled={i === 0}
-                onClick={() => move(i, -1)}
-              >
-                <ArrowUp size={14} />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={"下移步骤 " + (i + 1)}
-                disabled={i === value.length - 1}
-                onClick={() => move(i, 1)}
-              >
-                <ArrowDown size={14} />
-              </Button>
+              <ReorderButtons label={"步骤 " + (i + 1)} onUp={() => move(i, -1)} onDown={() => move(i, 1)} upDisabled={i === 0} downDisabled={i === value.length - 1} />
               <Button
                 type="button"
                 variant="ghost"
@@ -140,8 +116,7 @@ export function OperatorEditor({
               >
                 <Trash2 size={14} />
               </Button>
-            </div>
-          </div>
+            </div>} />
           {op.type === "filter" && (
             <div className="stack">
               {[
@@ -265,7 +240,7 @@ export function OperatorEditor({
                   })
                 }
               >
-                <SelectTrigger aria-label="重命名编号范围">
+                <SelectTrigger className="min-w-[100px] flex-1" aria-label="重命名编号范围">
                   <SelectValue>
                     {
                       (
@@ -356,14 +331,13 @@ export function OperatorEditor({
       <details className="pipeline-preview">
         <summary>处理前后对照</summary>
         <p>仅在后台转换，不运行 JavaScript。结果包含节点凭据，勿公开截图。</p>
-        <Label htmlFor="pipeline-input">测试节点链接（每行一条）</Label>
-        <Textarea
+        <Field label="测试节点链接（每行一条）" htmlFor="pipeline-input"><Textarea
           id="pipeline-input"
-          className="sensitive-output"
+          mono
           value={input}
           onChange={(e) => I(e.target.value)}
           rows={4}
-        />
+        /></Field>
         <Button
           type="button"
           variant="outline"
@@ -388,10 +362,10 @@ export function OperatorEditor({
         >
           {busy ? "正在处理…" : "预览处理结果"}
         </Button>
-        {error && <p role="alert">{error}</p>}
+        {error && <Notice tone="bad">{error}</Notice>}
         {output && (
           <Textarea
-            className="sensitive-output"
+            mono
             aria-label="处理后结果"
             readOnly
             value={output}
@@ -423,8 +397,7 @@ function JsonField({
     }
   }, [value]);
   return (
-    <div className="field">
-      <Label>{label}</Label>
+    <Field label={label}>
       <Textarea
         aria-label={label}
         value={text}
@@ -445,7 +418,7 @@ function JsonField({
         }}
         rows={5}
       />
-      {error && <p role="alert">{error}</p>}
-    </div>
+      {error && <Notice tone="bad">{error}</Notice>}
+    </Field>
   );
 }

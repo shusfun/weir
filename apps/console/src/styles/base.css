@@ -1,0 +1,121 @@
+/*
+ * 基础排版与全局元素。颜色全部来自 --mg-* 令牌，深色模式无需单独覆盖。
+ * 元素选择器必须放在 @layer base：未分层规则会压过 Tailwind utilities，
+ * 导致按钮、标题上的 text-* / bg-* 工具类失效（浅色主按钮曾因此变成深色字）。
+ */
+@layer base {
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+}
+body {
+  min-height: 100dvh;
+  background: var(--mg-base);
+  color: var(--mg-ink);
+  font: 14px/1.55 var(--mg-font);
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+}
+a {
+  color: inherit;
+}
+h1,
+h2,
+h3 {
+  margin: 0;
+  color: var(--mg-ink);
+  letter-spacing: -0.015em;
+}
+h1 {
+  font-size: 20px;
+  font-weight: 650;
+}
+h2 {
+  font-size: 15px;
+  font-weight: 650;
+}
+h3 {
+  font-size: 14px;
+  font-weight: 600;
+}
+p {
+  color: var(--mg-ink-3);
+  line-height: 1.65;
+  margin: 6px 0 0;
+}
+small {
+  font-size: 12px;
+  color: var(--mg-ink-3);
+}
+code,
+pre,
+kbd {
+  font-family: var(--mg-mono);
+}
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.6;
+  max-height: 500px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--mg-radius);
+  background: var(--mg-well);
+  border: 1px solid var(--mg-line);
+  box-shadow: inset 0 1px 2px var(--mg-inset);
+}
+input:not([type="checkbox"], [type="radio"]) {
+  width: 100%;
+}
+svg {
+  flex-shrink: 0;
+}
+:focus-visible {
+  outline: none;
+}
+a:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--mg-accent-text);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+details > summary {
+  cursor: pointer;
+  color: var(--mg-accent-text);
+  font-size: 12.5px;
+}
+fieldset {
+  min-width: 0;
+}
+::selection {
+  background: color-mix(in srgb, var(--mg-accent) 28%, transparent);
+}
+}
+
+/*
+ * 业务辅助类。sr-only / block / break-all / text-right / justify-end 与 Tailwind 工具类同名，
+ * 直接使用 Tailwind 版本：未分层的同名规则会压过组件里的响应式变体（如 max-md:hidden）。
+ */
+.muted {
+  color: var(--mg-ink-3);
+}
+.full-width {
+  width: 100%;
+}
+

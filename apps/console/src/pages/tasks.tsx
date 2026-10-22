@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import {
+import { Notice, SearchInput, PageHeader, Pager,
   Button,
   Card,
   CardContent,
-  Input,
   Select,
   SelectTrigger,
   SelectValue,
@@ -46,19 +45,11 @@ export function TasksPage({ deviceId }: { deviceId?: number }) {
   const current = tasks.data?.items.find((t) => t.id === detail?.id) ?? detail;
   return (
     <div className="stack">
-      <div className="page-intro">
-        <div>
-          <h2>执行记录与回执</h2>
-          <p>
-            设备暂离线时任务保持待执行；执行中超出租约会以同一任务 ID
-            自动重试。失败须修正配置后重新提交。
-          </p>
-        </div>
-      </div>
+      <PageHeader title="执行记录与回执" description="设备暂离线时任务保持待执行；执行中超出租约会以同一任务 ID 自动重试。失败须修正配置后重新提交。" />
       <Card>
         <CardContent>
           <div className="table-toolbar">
-            <Input
+            <SearchInput
               aria-label="搜索执行任务"
               placeholder="搜索操作名称或任务编号…"
               value={search}
@@ -75,7 +66,7 @@ export function TasksPage({ deviceId }: { deviceId?: number }) {
                   P(1);
                 }}
               >
-                <SelectTrigger aria-label="筛选任务设备">
+                <SelectTrigger className="min-w-[130px]" aria-label="筛选任务设备">
                   <SelectValue>
                     {device === "all" ? "全部设备" : name(Number(device))}
                   </SelectValue>
@@ -97,7 +88,7 @@ export function TasksPage({ deviceId }: { deviceId?: number }) {
                 P(1);
               }}
             >
-              <SelectTrigger aria-label="筛选任务状态">
+              <SelectTrigger className="min-w-[130px]" aria-label="筛选任务状态">
                 <SelectValue>
                   {status === "all" ? "全部状态" : labels[status]}
                 </SelectValue>
@@ -145,27 +136,7 @@ export function TasksPage({ deviceId }: { deviceId?: number }) {
               </div>
             ))
           )}
-          <div className="section-heading">
-            <small>
-              共 {tasks.data?.total ?? "…"} 条 · 第 {page} 页
-            </small>
-            <div className="actions">
-              <Button
-                variant="outline"
-                disabled={page === 1}
-                onClick={() => P(page - 1)}
-              >
-                上一页
-              </Button>
-              <Button
-                variant="outline"
-                disabled={!tasks.data || page * 20 >= (tasks.data.total ?? 0)}
-                onClick={() => P(page + 1)}
-              >
-                下一页
-              </Button>
-            </div>
-          </div>
+          <Pager variant="inline" page={page} pageSize={20} total={tasks.data?.total} busy={tasks.isPending} onPage={P} />
         </CardContent>
       </Card>
       <Dialog open={!!detail} onOpenChange={(open) => !open && T(null)}>
@@ -210,9 +181,9 @@ export function TasksPage({ deviceId }: { deviceId?: number }) {
                 )}
               </pre>
               {current.status === "failed" && (
-                <p role="alert">
+                <Notice tone="bad">
                   配置未生效。请按返回原因修正对应资源，再次核对并下发；不能把失败任务当作成功配置。
-                </p>
+                </Notice>
               )}
             </div>
           )}

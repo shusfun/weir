@@ -1,5 +1,4 @@
 import { ReleaseUpdateCard } from "../components/release-update";
-import { ThemeControl } from "../theme";
 import {SubscriptionNamingEditor} from "../components/subscription-naming";
 import {SubscriptionDefaultsEditor} from "../components/subscription-defaults";
 import {AnnouncementEditor} from "../components/global-announcement";
@@ -7,7 +6,7 @@ import { ClientCatalogEditor } from "../components/client-catalog";
 import { useId, useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import {
+import { Notice, Pager, SectionHeader,
   Button,
   Badge,
   Card,
@@ -25,6 +24,7 @@ import {
   TableBody,
   TableRow,
   TableCell,
+  StatusLamp,
 } from "@migate/ui";
 import {
   ShieldCheck,
@@ -33,10 +33,9 @@ import {
   Inbox,
   Save,
   RefreshCw,
-  ArrowRight,
 } from "lucide-react";
 import { api } from "../api";
-import { Field } from "../components/form-field";
+import { TextField } from "../components/form-field";
 import { State, Status } from "../components/feedback";
 import { date, type Resource } from "../lib/models";
 
@@ -137,45 +136,38 @@ function draftOf(v: Settings): Draft {
   };
 }
 
-export function SettingsPage({ loginRequired }: { loginRequired: () => void }) {
+// 系统设置：分区由路由决定（/system/:section），安全策略 / SMTP / Laya 共用一次保存与重新验证。
+export function SettingsPage({ section, loginRequired }: { section: string; loginRequired: () => void }) {
   const query = useQuery({
     queryKey: ["system-settings"],
     queryFn: () => api("/admin/settings") as Promise<Settings>,
     refetchOnWindowFocus: false,
+    enabled: section !== "release",
   });
+  if (section === "release") return <ReleaseUpdateCard />;
   if (query.isPending) return <State loading />;
   if (!query.data)
     return <State error={query.error} onRetry={() => query.refetch()} />;
   return (
     <>
-      <div className="page-intro">
-        <div>
-          <p className="eyebrow">SYSTEM SETTINGS</p>
-          <h2>系统设置</h2>
-          <p>统一管理账户策略、邮件服务与安全观察。</p>
-        </div>
-        <ThemeControl />
-      </div>
       {query.error && (
         <State error={query.error} onRetry={() => query.refetch()} />
       )}
-      <SettingsEditor initial={query.data} loginRequired={loginRequired} />
+      <SettingsEditor tab={section} initial={query.data} loginRequired={loginRequired} />
     </>
   );
 }
 function SettingsEditor({
+  tab,
   initial,
   loginRequired,
 }: {
+  tab: string;
   initial: Settings;
   loginRequired: () => void;
 }) {
   const cache = useQueryClient(),
-    id = useId(),
-    [params, SP] = useSearchParams();
-  const tab = sections.some((s) => s.key === params.get("tab"))
-    ? params.get("tab")!
-    : "security";
+    id = useId();
   const [d, D] = useState<Draft>(() => draftOf(initial)),
     [busy, B] = useState(false),
     [notice, N] = useState(""),
@@ -238,49 +230,21 @@ function SettingsEditor({
   }
   return (
     <div className="settings-workspace">
-      <nav className="settings-sections" aria-label="设置分组">
-        {sections.map((s) => (
-          <Button
-            key={s.key}
-            variant={tab === s.key ? "secondary" : "ghost"}
-            aria-current={tab === s.key ? "page" : undefined}
-            onClick={() => {
-              SP({ tab: s.key });
-              E("");
-              N("");
-            }}
-          >
-            <s.icon size={18} />
-            <span>
-              <strong>{s.label}</strong>
-              <small>{s.description}</small>
-            </span>
-            <ArrowRight size={14} />
-          </Button>
-        ))}
-      </nav>
       <div className="settings-body stack">
         {notice && (
-          <p className="notice" role="status">
+          <Notice role="status">
             {notice}
-          </p>
+          </Notice>
         )}
         {error && (
-          <p className="notice error-message" role="alert">
+          <Notice tone="bad">
             {error}
-          </p>
+          </Notice>
         )}
-        {tab === "release" && <ReleaseUpdateCard />}
         {tab === "security" && (
           <Card>
             <CardContent className="stack">
-              <div className="section-heading">
-                <div>
-                  <h3>账户与安全策略</h3>
-                  <p>策略变更后所有现有会话撤销，需要重新登录。</p>
-                </div>
-                <ShieldCheck size={22} />
-              </div>
+              <SectionHeader level="h3" title="账户与安全策略" description="策略变更后所有现有会话撤销，需要重新登录。" actions={<ShieldCheck size={22} />} />
               {policyFields.map(([key, label, description]) => (
                 <Label key={key} className="settings-policy">
                   <span>
@@ -306,26 +270,18 @@ function SettingsEditor({
           <>
             <Card>
               <CardContent className="stack">
-                <div className="section-heading">
-                  <div>
-                    <h3>SMTP 邮件服务</h3>
-                    <p>
-                      验证邮件和恢复邮件通过已保存配置发送。空服务器表示停用。
-                    </p>
-                  </div>
-                  <Badge variant="outline">
+                <SectionHeader level="h3" title="SMTP 邮件服务" description="验证邮件和恢复邮件通过已保存配置发送。空服务器表示停用。" actions={<Badge variant="outline">
                     {initial.smtp.Host ? "已配置" : "未配置"}
-                  </Badge>
-                </div>
+                  </Badge>} />
                 <div className="settings-field-grid">
-                  <Field
+                  <TextField
                     label="SMTP 服务器"
                     name={id + "host"}
                     value={d.smtp.Host}
                     onChange={(v) => smtp("Host", v)}
                     required={false}
                   />
-                  <Field
+                  <TextField
                     label="SMTP 端口"
                     name={id + "port"}
                     value={d.smtp.Port || ""}
@@ -333,7 +289,7 @@ function SettingsEditor({
                     type="number"
                     required={false}
                   />
-                  <Field
+                  <TextField
                     label="SMTP 账号"
                     name={id + "username"}
                     value={d.smtp.Username}
@@ -341,7 +297,7 @@ function SettingsEditor({
                     required={false}
                   />
                   {!d.clear_smtp_password && (
-                    <Field
+                    <TextField
                       label={
                         initial.smtp_password_set
                           ? "SMTP 密码（留空保留）"
@@ -354,7 +310,7 @@ function SettingsEditor({
                       required={false}
                     />
                   )}
-                  <Field
+                  <TextField
                     label="发件邮箱"
                     name={id + "from"}
                     value={d.smtp.From}
@@ -362,7 +318,7 @@ function SettingsEditor({
                     type="email"
                     required={false}
                   />
-                  <Field
+                  <TextField
                     label="发件名称"
                     name={id + "from-name"}
                     value={d.smtp.FromName}
@@ -422,7 +378,8 @@ function SettingsEditor({
                     void test("smtp");
                   }}
                 >
-                  <Field
+                  <TextField
+                    className="flex-1"
                     label="测试收件邮箱"
                     name={id + "recipient"}
                     value={recipient}
@@ -451,16 +408,10 @@ function SettingsEditor({
         {tab === "laya" && (
           <Card>
             <CardContent className="stack">
-              <div className="section-heading">
-                <div>
-                  <h3>Laya 远程观察</h3>
-                  <p>仅将脱敏事件发送到远程服务，用于分类与告警排序。</p>
-                </div>
-                <Badge variant="outline">
+              <SectionHeader level="h3" title="Laya 远程观察" description="仅将脱敏事件发送到远程服务，用于分类与告警排序。" actions={<Badge variant="outline">
                   {initial.laya.enabled ? "已启用" : "已关闭"}
-                </Badge>
-              </div>
-              <Field
+                </Badge>} />
+              <TextField
                 label="Laya 服务地址"
                 name={id + "model-url"}
                 value={d.laya.url}
@@ -472,7 +423,7 @@ function SettingsEditor({
                 HTTPS 基础地址或原生 /v1/systemone 接口。密钥只在中心使用。
               </small>
               <div className="settings-field-grid">
-                <Field
+                <TextField
                   label="模型名称"
                   name={id + "model-name"}
                   value={d.laya.model}
@@ -480,7 +431,7 @@ function SettingsEditor({
                   required={false}
                 />
                 {!d.clear_laya_key && (
-                  <Field
+                  <TextField
                     label={
                       initial.laya_key_set
                         ? "Laya API Key（留空保留）"
@@ -540,11 +491,12 @@ function SettingsEditor({
             </CardContent>
           </Card>
         )}
-        {tab === "subscription" ? <div className="stack"><SubscriptionDefaultsEditor/><SubscriptionNamingEditor/></div> : tab === "announcement" ? <AnnouncementEditor /> : tab === "clients" ? <ClientCatalogEditor /> : tab === "mail" ? (
-          <MailQueue />
-        ) : (
-          <div className="settings-save">
-            <span>{dirty ? "有未保存的更改" : "配置已与服务器同步"}</span>
+        {(
+          <div className="settings-save mg-panel">
+            <span>
+              <StatusLamp tone={dirty ? "warn" : "ok"} />
+              {dirty ? "有未保存的更改" : "配置已与服务器同步"}
+            </span>
             <div className="actions">
               <Button
                 variant="outline"
@@ -571,7 +523,7 @@ function SettingsEditor({
         )}
       </div>
       <Dialog open={confirm} onOpenChange={(v) => !busy && CF(v)}>
-        <DialogContent className="business-dialog">
+        <DialogContent size="md">
           <DialogTitle>确认保存系统设置</DialogTitle>
           <DialogDescription>
             {securityDirty
@@ -613,7 +565,7 @@ function SettingsEditor({
               }
             }}
           >
-            <Field
+            <TextField
               label="当前管理员密码"
               name={id + "password"}
               value={password}
@@ -621,7 +573,7 @@ function SettingsEditor({
               type="password"
             />
             {self.data?.totp_enrolled && (
-              <Field
+              <TextField
                 label="二次验证码 / 恢复码"
                 name={id + "code"}
                 value={code}
@@ -630,9 +582,9 @@ function SettingsEditor({
             )}
             <p>若其他管理员已经修改设置，本次会拒绝覆盖；请重新读取并核对。</p>
             {error && (
-              <p role="alert" className="error-message">
+              <Notice tone="bad">
                 {error}
-              </p>
+              </Notice>
             )}
             <DialogFooter>
               <Button
@@ -680,7 +632,7 @@ function SettingsEditor({
   );
 }
 
-function MailQueue() {
+export function MailQueue() {
   const [page, P] = useState(1),
     [busy, B] = useState(false),
     [error, E] = useState(""),
@@ -697,22 +649,14 @@ function MailQueue() {
   return (
     <Card>
       <CardContent className="stack">
-        <div className="section-heading">
-          <div>
-            <h3>邮件发送队列</h3>
-            <p>
-              入队、发送成功和失败分别记录。只展示发送状态，邮件正文与恢复凭据不回传。
-            </p>
-          </div>
-          <Button variant="outline" onClick={() => query.refetch()}>
+        <SectionHeader level="h3" title="邮件发送队列" description="入队、发送成功和失败分别记录。只展示发送状态，邮件正文与恢复凭据不回传。" actions={<Button variant="outline" onClick={() => query.refetch()}>
             <RefreshCw size={14} />
             刷新队列
-          </Button>
-        </div>
+          </Button>} />
         {error && (
-          <p role="alert" className="error-message">
+          <Notice tone="bad">
             {error}
-          </p>
+          </Notice>
         )}
         {query.isPending ? (
           <State loading />
@@ -793,27 +737,7 @@ function MailQueue() {
                 </TableBody>
               </Table>
             </div>
-            <div className="pagination">
-              <span>
-                共 {query.data.total} 项 · 第 {page} 页
-              </span>
-              <div className="actions">
-                <Button
-                  variant="outline"
-                  disabled={page === 1}
-                  onClick={() => P((v) => v - 1)}
-                >
-                  上一页邮件
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={page * 20 >= query.data.total}
-                  onClick={() => P((v) => v + 1)}
-                >
-                  下一页邮件
-                </Button>
-              </div>
-            </div>
+            <Pager variant="inline" name="邮件" label="项" page={page} pageSize={20} total={query.data.total} busy={query.isFetching} onPage={P} />
           </>
         )}
       </CardContent>

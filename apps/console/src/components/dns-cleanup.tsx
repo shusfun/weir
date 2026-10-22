@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
-import {
+import { Notice, Pager, SectionHeader,
   Badge,
   Button,
   Card,
@@ -71,32 +71,23 @@ export function DNSCleanupPanel({ deviceId }: { deviceId: number }) {
   return (
     <Card>
       <CardContent className="stack">
-        <div className="section-heading">
-          <div>
-            <h3>DNS 验证记录清理</h3>
-            <p>
-              仅清理本项目创建且归属一致的
-              TXT。签发中断后自动检查遗留记录；失败时保留状态，不标成成功。
-            </p>
-          </div>
-          <Button
+        <SectionHeader level="h3" title="DNS 验证记录清理" description="仅清理本项目创建且归属一致的 TXT。签发中断后自动检查遗留记录；失败时保留状态，不标成成功。" actions={<Button
             variant="outline"
             onClick={() => query.refetch()}
             disabled={query.isFetching}
           >
             <RefreshCw size={14} />
             刷新记录
-          </Button>
-        </div>
+          </Button>} />
         {notice && (
-          <p className="notice" role="status">
+          <Notice role="status">
             {notice}
-          </p>
+          </Notice>
         )}
         {error && (
-          <p className="notice error-message" role="alert">
+          <Notice tone="bad">
             {error}
-          </p>
+          </Notice>
         )}
         {query.isPending ? (
           <State loading />
@@ -159,27 +150,7 @@ export function DNSCleanupPanel({ deviceId }: { deviceId: number }) {
                 </TableBody>
               </Table>
             </div>
-            <div className="pagination">
-              <span>
-                共 {query.data.total} 条 · 第 {page} 页
-              </span>
-              <div className="actions">
-                <Button
-                  variant="outline"
-                  disabled={page === 1}
-                  onClick={() => setPage((v) => v - 1)}
-                >
-                  上一页
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={page * 20 >= query.data.total}
-                  onClick={() => setPage((v) => v + 1)}
-                >
-                  下一页
-                </Button>
-              </div>
-            </div>
+            <Pager variant="inline" name="清理记录" page={page} pageSize={20} total={query.data.total} busy={query.isFetching} onPage={setPage} />
           </>
         )}
       </CardContent>

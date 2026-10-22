@@ -1,6 +1,6 @@
 import {HostHistory} from "./host-history";
 import {useEffect,useState} from "react";
-import {Card,CardContent} from "@migate/ui";
+import { SectionHeader,Card,CardContent} from "@migate/ui";
 import {Server} from "lucide-react";
 import {bytes,type Device} from "../lib/models";
 import {Metric} from "./metric";
@@ -12,7 +12,7 @@ export function GateHost({device}:{device:Device}){
  const memory=h?.memory_total!=null&&h.memory_available!=null?`${bytes(h.memory_total-h.memory_available)} / ${bytes(h.memory_total)}`:"未知";
  const disk=h?.disk_total!=null&&h.disk_available!=null?`${bytes(h.disk_available)} / ${bytes(h.disk_total)}`:"未知";
  return <><Card aria-label="主机观测"><CardContent className="stack">
-  <div className="section-heading"><div><h2>主机观测</h2><p>只读系统采样 · {fresh?(h?.validity==="available"?"已更新":"部分未知"):"未知 / 观测已过期"}</p></div><Server size={22}/></div>
+  <SectionHeader title="主机观测" description={<>只读系统采样 · {fresh?(h?.validity==="available"?"已更新":"部分未知"):"未知 / 观测已过期"}</>} actions={<Server size={22}/>} />
   <div className="host-metrics"><Metric title="CPU 使用率" value={h?.cpu_percent==null?"未知":h.cpu_percent.toFixed(1)+"%"} caption={h?.cpu_interval_seconds==null?"等待两次有效采样；负载不等于使用率":`最近 ${h.cpu_interval_seconds.toFixed(0)} 秒平均；全部 CPU 合计归一到 100%`}/>
    <Metric title="系统负载" value={h?.load?.length===3?h.load.map(v=>v.toFixed(2)).join(" / "):"未知"} caption="1 / 5 / 15 分钟；不是 CPU 使用率"/>
    <Metric title="逻辑 CPU" value={h?.logical_cpus==null?"未知":String(h.logical_cpus)} caption="Agent 可见逻辑处理器"/>

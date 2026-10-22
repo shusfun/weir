@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import {
+import { ReorderButtons, Field, Notice, SectionHeader,
   Button,
   Card,
   CardContent,
@@ -16,9 +16,9 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@migate/ui";
-import { ArrowUp, ArrowDown, Trash2, Plus } from "lucide-react";
+import { Trash2, Plus } from "lucide-react";
 import { TemplateRuleSets } from "./template-rulesets";
-import { Field } from "./form-field";
+import { TextField } from "./form-field";
 type Row = Record<string, any>;
 const typeLabels: Record<string, string> = {
   clash: "Clash / Mihomo",
@@ -52,9 +52,9 @@ export function OutputTemplateFields({
     options: string[],
     set: (v: string) => void,
     key: string,
+    className?: string,
   ) => (
-    <div className="field">
-      <Label htmlFor={id + key}>{label}</Label>
+    <Field label={label} htmlFor={id + key} className={className}>
       <Select value={value} onValueChange={(v) => v && set(String(v))}>
         <SelectTrigger id={id + key}>
           <SelectValue>{typeLabels[value] ?? value}</SelectValue>
@@ -67,7 +67,7 @@ export function OutputTemplateFields({
           ))}
         </SelectContent>
       </Select>
-    </div>
+    </Field>
   );
   const update = (key: string, index: number, patch: Row) =>
     change({
@@ -119,6 +119,7 @@ export function OutputTemplateFields({
           ["clash", "singbox"],
           (target) => change({ ...fields, target }),
           "target",
+          "min-w-[200px] max-sm:w-full",
         )}
         <div className="actions">
           <Button type="button" variant="outline" onClick={() => PS("manual")}>
@@ -140,19 +141,14 @@ export function OutputTemplateFields({
         </div>
       </div>
       {fields.auto_groups && (
-        <p className="notice">
+        <Notice>
           已启用{fields.auto_groups === "region" ? "地区" : "协议"}
           自动分组，仅使用当前订阅节点。地区由节点名称 /
           服务器关键词识别，不代表实际地理位置；应用其他预设可取消。
-        </p>
+        </Notice>
       )}
       <section className="stack">
-        <div className="section-heading">
-          <div>
-            <h3>策略组</h3>
-            <p>组合当前已授权节点与其他策略组。模板不能增加节点权限。</p>
-          </div>
-          <Button
+        <SectionHeader level="h3" flush title="策略组" description="组合当前已授权节点与其他策略组。模板不能增加节点权限。" actions={<Button
             type="button"
             variant="outline"
             onClick={() =>
@@ -171,8 +167,7 @@ export function OutputTemplateFields({
           >
             <Plus size={14} />
             添加策略组
-          </Button>
-        </div>
+          </Button>} />
         {groups.map((g, i) => {
           const allowed = [
             "$nodes",
@@ -184,11 +179,9 @@ export function OutputTemplateFields({
           ];
           const options = [...new Set([...allowed, ...(g.members ?? [])])];
           return (
-            <Card key={i} className="template-group">
-              <CardContent>
-                <div className="section-heading">
-                  <strong>策略组 {i + 1}</strong>
-                  <Button
+            <Card key={i} variant="inset" size="sm" className="template-group">
+              <CardContent className="grid gap-3">
+                <SectionHeader size="sm" flush title={<>策略组 {i + 1}</>} actions={<Button
                     size="sm"
                     type="button"
                     variant="ghost"
@@ -197,10 +190,9 @@ export function OutputTemplateFields({
                   >
                     <Trash2 size={14} />
                     删除
-                  </Button>
-                </div>
+                  </Button>} />
                 <div className="template-form-grid">
-                  <Field
+                  <TextField
                     name={id + "group" + i}
                     label={`策略组 ${i + 1} 名称`}
                     value={g.name}
@@ -284,7 +276,7 @@ export function OutputTemplateFields({
                     </Label>
                   ))}
                 </fieldset>
-                <Field
+                <TextField
                   required={false}
                   name={id + "filter" + i}
                   label={`策略组 ${i + 1} 节点名称正则`}
@@ -298,12 +290,7 @@ export function OutputTemplateFields({
       </section>
       <TemplateRuleSets fields={fields} change={change} />
       <section className="stack">
-        <div className="section-heading">
-          <div>
-            <h3>匹配规则</h3>
-            <p>从上到下匹配；最终策略保持在末尾。</p>
-          </div>
-          <Button
+        <SectionHeader level="h3" flush title="匹配规则" description="从上到下匹配；最终策略保持在末尾。" actions={<Button
             type="button"
             variant="outline"
             onClick={() => {
@@ -319,38 +306,12 @@ export function OutputTemplateFields({
           >
             <Plus size={14} />
             添加规则
-          </Button>
-        </div>
+          </Button>} />
         {rules.map((r, i) => (
-          <Card key={i} className="template-rule">
-            <CardContent>
-              <div className="section-heading">
-                <strong>规则 {i + 1}</strong>
-                <div className="actions">
-                  <Button
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                    disabled={i === 0 || r.type === "FINAL"}
-                    aria-label={`上移规则 ${i + 1}`}
-                    onClick={() => move(i, -1)}
-                  >
-                    <ArrowUp size={14} />
-                  </Button>
-                  <Button
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                    disabled={
-                      i >= rules.length - 1 ||
-                      r.type === "FINAL" ||
-                      rules[i + 1]?.type === "FINAL"
-                    }
-                    aria-label={`下移规则 ${i + 1}`}
-                    onClick={() => move(i, 1)}
-                  >
-                    <ArrowDown size={14} />
-                  </Button>
+          <Card key={i} variant="inset" size="sm" className="template-rule">
+            <CardContent className="grid gap-3">
+              <SectionHeader size="sm" flush title={<>规则 {i + 1}</>} actions={<div className="actions">
+                  <ReorderButtons label={`规则 ${i + 1}`} onUp={() => move(i, -1)} onDown={() => move(i, 1)} upDisabled={i === 0 || r.type === "FINAL"} downDisabled={i >= rules.length - 1 || r.type === "FINAL" || rules[i + 1]?.type === "FINAL"} />
                   <Button
                     size="sm"
                     type="button"
@@ -361,14 +322,12 @@ export function OutputTemplateFields({
                   >
                     <Trash2 size={14} />
                   </Button>
-                </div>
-              </div>
+                </div>} />
               <div className="template-form-grid">
                 {r.type === "FINAL" ? (
-                  <div className="field">
-                    <Label>规则 {i + 1} 类型</Label>
+                  <Field label={<>规则 {i + 1} 类型</>}>
                     <strong>最终策略</strong>
-                  </div>
+                  </Field>
                 ) : (
                   select(
                     `规则 ${i + 1} 类型`,
@@ -410,7 +369,7 @@ export function OutputTemplateFields({
                       "ruleset" + i,
                     )
                   : r.type !== "FINAL" && (
-                      <Field
+                      <TextField
                         name={id + "value" + i}
                         label={`规则 ${i + 1} 匹配值`}
                         value={r.value ?? ""}
@@ -427,7 +386,7 @@ export function OutputTemplateFields({
           <h3>DNS 与加密解析</h3>
           <p>由客户端解析；中心不会请求这些地址，TLS 证书始终验证。</p>
         </div>
-        <Field
+        <TextField
           required={false}
           name={id + "dns"}
           label="DNS 服务器（逗号分隔；IP、https:// 或 tls://）"
@@ -442,7 +401,7 @@ export function OutputTemplateFields({
             })
           }
         />
-        <Field
+        <TextField
           required={false}
           name={id + "bootstrap"}
           label="引导 DNS IP（加密 DNS 使用域名时必填，逗号分隔）"

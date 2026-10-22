@@ -1,5 +1,5 @@
 import { useState } from "react";
-import {
+import { ReorderButtons, SearchInput,
   Button,
   Checkbox,
   Input,
@@ -12,7 +12,7 @@ import {
   Switch,
   Textarea,
 } from "@migate/ui";
-import { ArrowUp, ArrowDown, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { regionOptions } from "../lib/region-options";
 type Data = Record<string, any>;
 export const protocols = [
@@ -58,7 +58,8 @@ export function OperatorChoices({
         />
         启用{label}
       </Label>
-      <Input
+      <SearchInput
+        className="w-full"
         aria-label={"搜索" + label}
         placeholder="搜索选项…"
         value={search}
@@ -225,7 +226,7 @@ export function SortFields({
               value={key.key}
               onValueChange={(v) => change(i, { key: v })}
             >
-              <SelectTrigger aria-label={`排序字段 ${i + 1}`}>
+              <SelectTrigger className="min-w-[100px] flex-1" aria-label={`排序字段 ${i + 1}`}>
                 <SelectValue>
                   {sortFields.find(([k]) => k === key.key)?.[1] ?? key.key}
                 </SelectValue>
@@ -242,7 +243,7 @@ export function SortFields({
               value={key.order ?? "asc"}
               onValueChange={(v) => change(i, { order: v })}
             >
-              <SelectTrigger aria-label={`排序方向 ${i + 1}`}>
+              <SelectTrigger className="min-w-[100px] flex-1" aria-label={`排序方向 ${i + 1}`}>
                 <SelectValue>
                   {key.order === "desc" ? "降序" : "升序"}
                 </SelectValue>
@@ -252,26 +253,7 @@ export function SortFields({
                 <SelectItem value="desc">降序</SelectItem>
               </SelectContent>
             </Select>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`上移排序字段 ${i + 1}`}
-              disabled={i === 0}
-              onClick={() => move(i, -1)}
-            >
-              <ArrowUp size={14} />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`下移排序字段 ${i + 1}`}
-              disabled={i === keys.length - 1}
-              onClick={() => move(i, 1)}
-            >
-              <ArrowDown size={14} />
-            </Button>
+            <ReorderButtons label={`排序字段 ${i + 1}`} onUp={() => move(i, -1)} onDown={() => move(i, 1)} upDisabled={i === 0} downDisabled={i === keys.length - 1} />
             <Button
               type="button"
               variant="ghost"

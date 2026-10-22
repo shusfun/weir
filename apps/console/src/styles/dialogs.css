@@ -1,0 +1,22 @@
+/* 业务弹窗尺寸与内部布局。尺寸固定，不做尺寸过渡。 */
+.profile-output-dialog textarea { max-height: 40vh; white-space: pre; overflow: auto; }
+
+/* 排序列表：每行是一块小凸起铭牌 */
+.profile-order-list, .node-groups-list { max-height: 52vh; overflow: auto; display: grid; gap: 8px; }
+.profile-order-row, .node-group-row { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px 12px; border-radius: var(--mg-radius); border: 1px solid var(--mg-line); background: linear-gradient(180deg, var(--mg-raised), var(--mg-panel)); box-shadow: inset 0 1px 0 var(--mg-highlight), 0 1px 1px var(--mg-shade); }
+.profile-order-row strong, .node-group-identity { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.node-group-identity strong, .node-group-identity small { display: block; }
+.node-group-identity small { margin-top: 3px; }
+.profile-order-row > .actions, .node-group-row > .actions { flex-shrink: 0; }
+
+.resource-selector { min-width: 0; padding: 12px 14px; border-radius: var(--mg-radius); border: 1px solid var(--mg-line); background: var(--mg-well); box-shadow: inset 0 1px 2px var(--mg-inset); }
+.resource-selector legend { padding: 0 6px; font-size: 12px; color: var(--mg-ink-2); }
+.selector-options { max-height: 220px; overflow: auto; margin-top: 10px; display: grid; gap: 8px; }
+.selection-order { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--mg-line); }
+.selection-row { display: flex; gap: 6px; align-items: center; font-size: 12.5px; }
+.selection-row > span { flex: 1; overflow-wrap: anywhere; }
+
+@media (max-width: 600px) {
+  .profile-order-row, .node-group-row { flex-wrap: wrap; }
+  .profile-order-row > .actions, .node-group-row > .actions { margin-left: auto; }
+}

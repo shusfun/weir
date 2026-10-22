@@ -1,183 +1,149 @@
-import { useState, type ReactNode, type ComponentType } from "react";
-import {
-  Button,
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogTitle,
-  DialogDescription,
-} from "@migate/ui";
-import {
-  Menu,
-  ChevronLeft,
-  ChevronRight,
-  LogOut,
-  Activity,
-  ShieldCheck,
-  ArrowUpRight,
-} from "lucide-react";
-import { NavLink } from "react-router-dom";
+// 控制台外壳：左侧控制条（导航 + 左下角个人中心）、顶栏（标题 / 快速跳转 / 任务托盘 / 主题）、移动端侧边面板。
+import { useEffect, useState, type ReactNode } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { IconTile, Button, Kbd, Menu, MenuTrigger, MenuContent, MenuItem, MenuSeparator, Sheet, SheetContent, StatusLamp, Tooltip, TooltipProvider } from "@migate/ui";
+import { Menu as MenuIcon, PanelLeftClose, PanelLeftOpen, LogOut, ShieldCheck, Link2, Search, Activity, ChevronsUpDown } from "lucide-react";
 import { ThemeControl } from "../theme";
-type Navigation = readonly (readonly [
-  string,
-  string,
-  ComponentType<{ size?: number }>,
-])[];
-const sections = [
-  ["工作空间", ["overview", "users", "devices", "grants"]],
-  ["订阅与分发", ["subscriptions", "subscription"]],
-  [
-    "运维与安全",
-    ["routing", "tasks", "audit", "events", "settings", "security"],
-  ],
-] as const;
-export function Workspace({
-  navigation,
-  admin,
-  email,
-  children,
-  onLogout,
-}: {
-  navigation: Navigation;
-  admin: boolean;
-  email: string;
-  children: ReactNode;
-  onLogout: () => void;
-}) {
-  const [collapsed, C] = useState(false);
-  const [open, O] = useState(false);
-  const links = (
-    <>
-      {sections.map(([title, keys]) => {
-        const items = navigation.filter(
-          ([key]) =>
-            (keys as readonly string[]).includes(key) &&
-            (admin || ["subscription", "security"].includes(key)),
-        );
-        return items.length ? (
-          <div className="nav-section" key={title}>
-            <span className="nav-section-label">{title}</span>
-            {items.map(([key, label, Icon]) => (
-              <NavLink
-                key={key}
-                to={"/" + key}
-                className={({ isActive }) =>
-                  "nav-item" + (isActive ? " active" : "")
-                }
-                onClick={() => O(false)}
-                title={label}
-              >
-                <Icon size={18} />
-                <span>{label}</span>
-              </NavLink>
-            ))}
-          </div>
-        ) : null;
-      })}
-    </>
-  );
+import { navigation, navGroups, currentNav } from "../shell/navigation";
+import { CommandPalette } from "../shell/command-palette";
+import { TaskTray } from "../shell/task-tray";
+
+const collapseKey = "migate-rail-collapsed";
+function readCollapsed() {
+  try {
+    return localStorage.getItem(collapseKey) === "1";
+  } catch {
+    return false;
+  }
+}
+
+// 左下角个人中心：头像 + 账户，点开为我的订阅 / 账户安全 / 退出
+function AccountMenu({ admin, email, onLogout }: { admin: boolean; email: string; onLogout: () => void }) {
+  const navigate = useNavigate();
   return (
-    <div className={"workspace" + (collapsed ? " is-collapsed" : "")}>
-      <aside className="desktop-sidebar">
-        <NavLink to={admin ? "/overview" : "/subscription"} className="brand">
-          <span className="brand-mark">
-            <Activity size={22} />
-          </span>
-          <span>
-            MiGate<span className="brand-caption">CONTROL CONSOLE</span>
-          </span>
-        </NavLink>
-        <nav aria-label="主导航">{links}</nav>
-        <div className="sidebar-bottom">
-          <div className="environment">
-            <span className="status-dot" />
-            <span>统一控制中心</span>
-            <ShieldCheck size={14} />
-          </div>
-          <div className="account-identity">
-            <span className="avatar">{email.slice(0, 1).toUpperCase()}</span>
-            <span className="account-text">
-              <strong>{admin ? "管理员" : "个人账户"}</strong>
-              <small>{email}</small>
+    <Menu>
+      <MenuTrigger
+        render={
+          <button type="button" className="mg-key rail-account"aria-label={"个人中心：" + email}>
+            <IconTile size="sm" tone="neutral">{email.slice(0, 1).toUpperCase() || "?"}</IconTile>
+            <span className="rail-account-text">
+              <strong>{email}</strong>
+              <small>{admin ? "管理员" : "个人账户"}</small>
             </span>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="退出登录"
-              onClick={onLogout}
-            >
-              <LogOut size={16} />
-            </Button>
-          </div>
+            <ChevronsUpDown />
+          </button>
+        }
+      />
+      <MenuContent side="top" align="start">
+        <MenuItem onClick={() => navigate("/subscription")}><Link2 />我的订阅</MenuItem>
+        <MenuItem onClick={() => navigate("/security")}><ShieldCheck />账户安全</MenuItem>
+        <MenuSeparator />
+        <MenuItem onClick={onLogout}><LogOut />退出登录</MenuItem>
+      </MenuContent>
+    </Menu>
+  );
+}
+
+export function Workspace({ admin, email, children, onLogout }: { admin: boolean; email: string; children: ReactNode; onLogout: () => void }) {
+  const location = useLocation();
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [drawer, setDrawer] = useState(false);
+  const [palette, setPalette] = useState(false);
+  const current = currentNav(location.pathname);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(collapseKey, collapsed ? "1" : "0");
+    } catch {
+      // 仅本次生效
+    }
+  }, [collapsed]);
+  useEffect(() => setDrawer(false), [location.pathname]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPalette((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // 管理员的个人页面收进左下角个人中心；普通用户只有个人页面，保留在导航中
+  const nav = (compact: boolean) =>
+    navGroups.map((group) => {
+      const items = navigation.filter((item) => item.group === group && (admin ? item.admin : !item.admin));
+      if (!items.length) return null;
+      return (
+        <div className="rail-group" key={group}>
+          <span className="rail-group-label mg-engraved">{group}</span>
+          {items.map(({ key, path, label, icon: Icon }) => {
+            const link = (
+              <NavLink key={key} to={path} className={({ isActive }) => "mg-key rail-item" + (isActive ? " active is-pressed" : "")}>
+                {({ isActive }) => (
+                  <>
+                    <Icon />
+                    <span className="rail-label">{label}</span>
+                    <StatusLamp className="rail-led" size="sm" tone={isActive ? "active" : "off"} />
+                  </>
+                )}
+              </NavLink>
+            );
+            return compact ? <Tooltip key={key} content={label}>{link}</Tooltip> : link;
+          })}
         </div>
-        <Button
-          className="collapse-control"
-          variant="outline"
-          size="icon-sm"
-          aria-label={collapsed ? "展开导航" : "收起导航"}
-          onClick={() => C((v) => !v)}
-        >
-          {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-        </Button>
-      </aside>
-      <div className="workspace-body">
-        <div className="global-bar">
-          <div className="actions">
-            <Button
-              className="mobile-menu"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="打开导航"
-              onClick={() => O(true)}
-            >
-              <Menu size={20} />
+      );
+    });
+
+  return (
+    <TooltipProvider delay={300}>
+      <div className="shell" data-collapsed={collapsed}>
+        <aside className="rail">
+          <NavLink to={admin ? "/overview" : "/subscription"} className="rail-brand" aria-label="MiGate 首页">
+            <span className="rail-mark"><Activity size={19} /></span>
+            <strong>MiGate</strong>
+          </NavLink>
+          <nav className="rail-nav" aria-label="主导航">{nav(collapsed)}</nav>
+          <div className="rail-foot">
+            <Button className="rail-collapse justify-start in-data-[collapsed=true]:justify-center in-data-[collapsed=true]:px-0" variant="ghost" size="sm" aria-label={collapsed ? "展开导航" : "收起导航"} onClick={() => setCollapsed((v) => !v)}>
+              {collapsed ? <PanelLeftOpen /> : <><PanelLeftClose /><span>收起导航</span></>}
             </Button>
-            <span className="breadcrumb">
-              工作空间 <span>/</span> {admin ? "管理控制台" : "用户中心"}
-            </span>
+            <AccountMenu admin={admin} email={email} onLogout={onLogout} />
           </div>
-          <div className="actions">
-            <ThemeControl />
-            <span className="console-label">
-              <span className="status-dot" />
-              安全会话
-            </span>
-            <NavLink
-              to="/security"
-              className="header-account"
-              aria-label="账户安全"
-            >
-              {email.slice(0, 1).toUpperCase()}
-            </NavLink>
-          </div>
+        </aside>
+        <div className="shell-body">
+          <header className="topbar">
+            <Button className="hidden max-[900px]:inline-flex" variant="ghost" size="icon-sm" aria-label="打开导航" onClick={() => setDrawer(true)}>
+              <MenuIcon />
+            </Button>
+            <div className="topbar-title">
+              <h1>{current?.label ?? "MiGate"}</h1>
+            </div>
+            <div className="topbar-tools">
+              <Button className="command-trigger min-w-[220px] justify-start text-[var(--mg-ink-3)] max-[1100px]:min-w-0" variant="outline" size="sm" onClick={() => setPalette(true)} aria-label="快速跳转">
+                <Search />
+                <span>快速跳转…</span>
+                <Kbd>Ctrl K</Kbd>
+              </Button>
+              {admin && <TaskTray />}
+              <ThemeControl />
+            </div>
+          </header>
+          {children}
         </div>
-        {children}
-        <footer className="workspace-footer">
-          <span>MiGate · 独立节点，统一管理</span>
-          <a
-            href="https://github.com/imzyb/MiGate"
-            target="_blank"
-            rel="noreferrer"
-          >
-            项目 <ArrowUpRight size={12} />
-          </a>
-        </footer>
+        <Sheet open={drawer} onOpenChange={setDrawer}>
+          <SheetContent title="MiGate">
+            <div className="flex h-full flex-col">
+              <nav className="rail-nav" aria-label="移动导航">{nav(false)}</nav>
+              <div className="rail-foot">
+                <AccountMenu admin={admin} email={email} onLogout={onLogout} />
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+        <CommandPalette open={palette} onOpenChange={setPalette} admin={admin} />
       </div>
-      <Dialog open={open} onOpenChange={O}>
-        <DialogContent
-          className="navigation-drawer"
-          style={{ translate: "none" }}
-        >
-          <DialogTitle>MiGate</DialogTitle>
-          <DialogDescription>工作空间导航</DialogDescription>
-          <nav aria-label="移动导航">{links}</nav>
-          <DialogFooter>
-            <Button variant="outline" type="button" onClick={onLogout}>
-              退出登录
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+    </TooltipProvider>
   );
 }

@@ -1,9 +1,8 @@
 import { useId } from "react";
-import {
+import { Field, SectionHeader,
   Button,
   Card,
   CardContent,
-  Label,
   Select,
   SelectTrigger,
   SelectValue,
@@ -11,7 +10,7 @@ import {
   SelectItem,
 } from "@migate/ui";
 import { Plus, Trash2 } from "lucide-react";
-import { Field } from "./form-field";
+import { TextField } from "./form-field";
 type Row = Record<string, any>;
 const labels: Record<string, string> = {
   yaml: "YAML",
@@ -46,8 +45,7 @@ export function TemplateRuleSets({
     set: (value: string) => void,
     key: string,
   ) => (
-    <div className="field">
-      <Label htmlFor={id + key}>{label}</Label>
+    <Field label={label} htmlFor={id + key}>
       <Select value={value} onValueChange={(v) => v && set(String(v))}>
         <SelectTrigger id={id + key}>
           <SelectValue>{labels[value] ?? value}</SelectValue>
@@ -60,19 +58,11 @@ export function TemplateRuleSets({
           ))}
         </SelectContent>
       </Select>
-    </div>
+    </Field>
   );
   return (
     <section className="stack">
-      <div className="section-heading">
-        <div>
-          <h3>远程规则集</h3>
-          <p>
-            客户端通过 HTTPS
-            下载，中心不获取规则文件。仅填写公开、不带凭据的地址；保存后在匹配规则中选择引用。
-          </p>
-        </div>
-        <Button
+      <SectionHeader level="h3" title="远程规则集" description="客户端通过 HTTPS 下载，中心不获取规则文件。仅填写公开、不带凭据的地址；保存后在匹配规则中选择引用。" actions={<Button
           type="button"
           variant="outline"
           onClick={() =>
@@ -93,8 +83,7 @@ export function TemplateRuleSets({
         >
           <Plus size={14} />
           添加远程规则集
-        </Button>
-      </div>
+        </Button>} />
       {sets.map((set, i) => {
         const used = rules.some(
           (r) => r.type === "RULE-SET" && r.value === set.name,
@@ -102,9 +91,7 @@ export function TemplateRuleSets({
         return (
           <Card key={i}>
             <CardContent className="stack">
-              <div className="section-heading">
-                <strong>远程规则集 {i + 1}</strong>
-                <Button
+              <SectionHeader size="sm" title={<>远程规则集 {i + 1}</>} actions={<Button
                   type="button"
                   size="sm"
                   variant="ghost"
@@ -119,10 +106,9 @@ export function TemplateRuleSets({
                 >
                   <Trash2 size={14} />
                   删除
-                </Button>
-              </div>
+                </Button>} />
               <div className="template-form-grid">
-                <Field
+                <TextField
                   name={id + "name" + i}
                   label={`规则集 ${i + 1} 名称`}
                   value={set.name}
@@ -161,7 +147,7 @@ export function TemplateRuleSets({
                     (behavior) => update(i, { behavior }),
                     "behavior" + i,
                   )}
-                <Field
+                <TextField
                   name={id + "interval" + i}
                   label={`规则集 ${i + 1} 刷新间隔（小时）`}
                   type="number"
@@ -171,7 +157,7 @@ export function TemplateRuleSets({
                   }
                 />
               </div>
-              <Field
+              <TextField
                 name={id + "url" + i}
                 label={`规则集 ${i + 1} HTTPS 地址`}
                 type="url"

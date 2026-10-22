@@ -3,7 +3,6 @@ import {
   Activity,
   ArrowLeft,
   ArrowRight,
-  Check,
   Database,
   Eye,
   EyeOff,
@@ -11,7 +10,7 @@ import {
   LockKeyhole,
   UserRound,
 } from "lucide-react";
-import {
+import { Steps, Step, Field, Notice,
   Button,
   Card,
   CardContent,
@@ -27,7 +26,7 @@ import {
   SelectValue,
   Switch,
 } from "@migate/ui";
-import { Field } from "../components/form-field";
+import { TextField } from "../components/form-field";
 import { api } from "../api";
 import { accountPasswordError } from "../password";
 
@@ -171,9 +170,9 @@ export function SetupPage({ done }: { done: () => void }) {
             </p>
           </header>
           {phase === "check_failed" ? (
-            <p className="auth-message error-message" role="alert">
+            <Notice tone="bad">
               服务尚未就绪。
-            </p>
+            </Notice>
           ) : (
             <p role="status">正在切换到正常服务</p>
           )}
@@ -207,28 +206,23 @@ export function SetupPage({ done }: { done: () => void }) {
         </header>
         <div className="setup-workspace">
           <nav className="setup-progress" aria-label="安装进度">
-            <ol>
+            <Steps>
               {steps.map((item, i) => (
-                <li
+                <Step
                   key={item.name}
-                  aria-current={i === step ? "step" : undefined}
-                  className={i < step ? "complete" : ""}
-                >
-                  <span>
-                    {i < step ? <Check size={17} /> : <item.icon size={17} />}
-                  </span>
-                  <div>
-                    <strong>{item.name}</strong>
-                    <small>{item.hint}</small>
-                  </div>
-                </li>
+                  index={i}
+                  label={item.name}
+                  caption={item.hint}
+                  icon={<item.icon />}
+                  status={i < step ? "complete" : i === step ? "current" : "upcoming"}
+                />
               ))}
-            </ol>
+            </Steps>
             <p>
               仅设置本项目的数据空间。不会新建数据库服务或清理其他应用数据。
             </p>
           </nav>
-          <Card>
+          <Card size="lg">
             <CardContent>
               <header className="setup-section-heading">
                 <small>步骤 {step + 1} / 4</small>
@@ -257,7 +251,7 @@ export function SetupPage({ done }: { done: () => void }) {
                 <fieldset disabled={busy} className="setup-fields">
                   {step === 0 && (
                     <>
-                      <Field
+                      <TextField
                         name={id + "token"}
                         label="短时初始化凭证"
                         type="password"
@@ -278,41 +272,40 @@ export function SetupPage({ done }: { done: () => void }) {
                   {step === 1 && (
                     <>
                       <div className="settings-field-grid">
-                        <Field
+                        <TextField
                           name={id + "host"}
                           label="主机"
                           value={database.host}
                           onChange={(v) => pg("host", v)}
                         />
-                        <Field
+                        <TextField
                           name={id + "port"}
                           label="端口"
                           type="number"
                           value={database.port}
                           onChange={(v) => pg("port", Number(v))}
                         />
-                        <Field
+                        <TextField
                           name={id + "database"}
                           label="数据库"
                           value={database.database}
                           onChange={(v) => pg("database", v)}
                         />
-                        <Field
+                        <TextField
                           name={id + "user"}
                           label="账号"
                           value={database.user}
                           onChange={(v) => pg("user", v)}
                         />
                       </div>
-                      <Field
+                      <TextField
                         name={id + "pg-password"}
                         label="密码"
                         type="password"
                         value={database.password}
                         onChange={(v) => pg("password", v)}
                       />
-                      <div className="field">
-                        <Label htmlFor={id + "ssl"}>SSL 模式</Label>
+                      <Field label="SSL 模式" htmlFor={id + "ssl"}>
                         <Select
                           value={database.ssl_mode}
                           onValueChange={(v) => {
@@ -347,24 +340,24 @@ export function SetupPage({ done }: { done: () => void }) {
                             ))}
                           </SelectContent>
                         </Select>
-                      </div>
+                      </Field>
                     </>
                   )}
                   {step === 2 && (
                     <>
-                      <Field
+                      <TextField
                         name={id + "address"}
                         label="连接地址"
                         value={redis.address}
                         onChange={(v) => rd("address", v)}
                       />
-                      <Field
+                      <TextField
                         name={id + "redis-user"}
                         label="ACL 用户"
                         value={redis.username}
                         onChange={(v) => rd("username", v)}
                       />
-                      <Field
+                      <TextField
                         name={id + "redis-password"}
                         label="密码"
                         type="password"
@@ -387,7 +380,7 @@ export function SetupPage({ done }: { done: () => void }) {
                   )}
                   {step === 3 && (
                     <>
-                      <Field
+                      <TextField
                         name={id + "email"}
                         label="管理员邮箱"
                         type="email"
@@ -395,10 +388,7 @@ export function SetupPage({ done }: { done: () => void }) {
                         value={email}
                         onChange={setEmail}
                       />
-                      <div className="field">
-                        <Label htmlFor={id + "password"}>
-                          密码（至少 6 位，含大小写字母和数字）
-                        </Label>
+                      <Field label="密码（至少 6 位，含大小写字母和数字）" htmlFor={id + "password"}>
                         <InputGroup>
                           <InputGroupInput
                             id={id + "password"}
@@ -419,9 +409,8 @@ export function SetupPage({ done }: { done: () => void }) {
                             </InputGroupButton>
                           </InputGroupAddon>
                         </InputGroup>
-                      </div>
-                      <div className="field">
-                        <Label htmlFor={id + "confirm"}>确认管理员密码</Label>
+                      </Field>
+                      <Field label="确认管理员密码" htmlFor={id + "confirm"}>
                         <InputGroup>
                           <InputGroupInput
                             id={id + "confirm"}
@@ -444,7 +433,7 @@ export function SetupPage({ done }: { done: () => void }) {
                             </InputGroupButton>
                           </InputGroupAddon>
                         </InputGroup>
-                      </div>
+                      </Field>
                       <p className="setup-info">
                         注册默认关闭。邮件服务、二次验证策略与 Laya
                         可在安装后配置。
@@ -453,9 +442,9 @@ export function SetupPage({ done }: { done: () => void }) {
                   )}
                 </fieldset>
                 {error && (
-                  <p className="auth-message error-message" role="alert">
+                  <Notice tone="bad">
                     {error}
-                  </p>
+                  </Notice>
                 )}
                 <div className="setup-actions">
                   {step > 0 && (

@@ -1,4 +1,5 @@
-import { Card, CardContent } from "@migate/ui";
+import { Readout } from "@migate/ui";
+// 指标读数：沿用旧接口，值为“未知”时读数窗显示未知样式。
 export function Metric({
   title,
   value,
@@ -8,13 +9,5 @@ export function Metric({
   value: string;
   caption?: string;
 }) {
-  return (
-    <Card className="metric">
-      <CardContent>
-        <span className="metric-label">{title}</span>
-        <strong className="metric-number">{value}</strong>
-        {caption && <small>{caption}</small>}
-      </CardContent>
-    </Card>
-  );
+  return <Readout className="metric" label={title} value={value} caption={caption} />;
 }

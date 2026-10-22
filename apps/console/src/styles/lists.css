@@ -1,0 +1,43 @@
+/* 列表、表格工具栏、指标与状态：面板只给外框材质，行保持平面。 */
+.table-card { overflow: hidden; }
+.table-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 18px; border-bottom: 1px solid var(--mg-line-soft); box-shadow: 0 1px 0 var(--mg-highlight); }
+.table-toolbar > input { flex: 1; min-width: 160px; width: auto; }
+.result-count { margin-left: auto; font-size: 11.5px; color: var(--mg-ink-3); font-variant-numeric: tabular-nums; }
+
+.list-rows { display: grid; }
+.list-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px 0; border-bottom: 1px solid var(--mg-line-soft); min-width: 0; }
+.list-row:last-child { border-bottom: 0; }
+.list-row > div { min-width: 0; }
+.list-row strong { font-size: 13px; font-weight: 550; overflow-wrap: anywhere; }
+.list-row small { display: block; margin-top: 3px; font-size: 11.5px; overflow-wrap: anywhere; }
+.grant-row { flex-wrap: wrap; }
+
+.table-identity { display: flex; align-items: center; gap: 10px; min-width: 200px; }
+.table-identity > div { min-width: 0; }
+.table-identity small { display: block; margin-top: 2px; font-size: 11px; }
+.usage-cell { min-width: 150px; max-width: 220px; }
+.usage-cell strong { font-size: 12px; font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* 状态徽标：灯 + 文字，徽标本身保持中性 */
+/* 行内开关：开关 + 当前状态文字 */
+.inline-switch { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--mg-ink-3); white-space: nowrap; }
+.inline-switch[data-pending="true"] { opacity: 0.7; }
+
+.metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.metric-grid > .mg-readout { min-height: 92px; align-content: start; }
+
+.mobile-user-list { display: none; }
+@media (max-width: 900px) {
+  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metric-grid > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+@media (max-width: 700px) {
+  .desktop-user-table { display: none; }
+  .mobile-user-list { display: block; }
+  .mobile-user { padding: 16px 18px; border-bottom: 1px solid var(--mg-line-soft); }
+  .mobile-user strong { overflow-wrap: anywhere; font-size: 13px; }
+  .mobile-user p { font-size: 12px; margin-bottom: 8px; }
+  .table-toolbar { padding: 12px 14px; }
+  .result-count { display: none; }
+  .list-row { flex-wrap: wrap; }
+}

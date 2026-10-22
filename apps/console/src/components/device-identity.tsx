@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import {
+import { CodeBlock, Field, Notice,
   Button,
   Dialog,
   DialogContent,
@@ -8,7 +8,6 @@ import {
   DialogDescription,
   DialogFooter,
   Input,
-  Label,
   Select,
   SelectTrigger,
   SelectValue,
@@ -81,9 +80,9 @@ export function DeviceIdentity({
         {device ? "撤销设备身份" : "批准设备配对"}
       </Button>
       {notice && (
-        <p role="status" className="notice">
+        <Notice role="status">
           {notice}
-        </p>
+        </Notice>
       )}
       <Dialog
         open={open}
@@ -98,7 +97,7 @@ export function DeviceIdentity({
           }
         }}
       >
-        <DialogContent className="business-dialog">
+        <DialogContent size="md">
           <DialogTitle>
             {device ? "撤销设备身份" : "核对并批准配对"}
           </DialogTitle>
@@ -116,8 +115,7 @@ export function DeviceIdentity({
           >
             {!device && (
               <>
-                <div className="field">
-                  <Label>待配对设备</Label>
+                <Field label="待配对设备">
                   <Select
                     value={id || null}
                     onValueChange={(v) => {
@@ -140,20 +138,17 @@ export function DeviceIdentity({
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
+                </Field>
                 {!pending.length && (
-                  <p className="notice">
+                  <Notice>
                     暂无配对请求，请先在 VPS 启动 Agent 配对流程。
-                  </p>
+                  </Notice>
                 )}
                 {selected && (
                   <>
                     <p>中心收到的公钥指纹</p>
-                    <code className="fingerprint">{selected.fingerprint}</code>
-                    <div className="field">
-                      <Label htmlFor="pair-fingerprint">
-                        输入 VPS 显示的完整指纹
-                      </Label>
+                    <CodeBlock>{selected.fingerprint}</CodeBlock>
+                    <Field label="输入 VPS 显示的完整指纹" htmlFor="pair-fingerprint">
                       <Input
                         id="pair-fingerprint"
                         value={fingerprint}
@@ -161,9 +156,8 @@ export function DeviceIdentity({
                         required
                         autoComplete="off"
                       />
-                    </div>
-                    <div className="field">
-                      <Label htmlFor="pair-code">一次性配对码</Label>
+                    </Field>
+                    <Field label="一次性配对码" htmlFor="pair-code">
                       <Input
                         id="pair-code"
                         value={code}
@@ -171,11 +165,10 @@ export function DeviceIdentity({
                         required
                         autoComplete="off"
                       />
-                    </div>
+                    </Field>
                     {selected.status === "recovery" && (
                       <>
-                        <div className="field">
-                          <Label htmlFor="pair-password">管理员密码</Label>
+                        <Field label="管理员密码" htmlFor="pair-password">
                           <Input
                             id="pair-password"
                             type="password"
@@ -184,16 +177,15 @@ export function DeviceIdentity({
                             onChange={(e) => P(e.target.value)}
                             required
                           />
-                        </div>
-                        <div className="field">
-                          <Label htmlFor="pair-mfa">二次验证码</Label>
+                        </Field>
+                        <Field label="二次验证码" htmlFor="pair-mfa">
                           <Input
                             id="pair-mfa"
                             value={mfa}
                             onChange={(e) => M(e.target.value)}
                             autoComplete="one-time-code"
                           />
-                        </div>
+                        </Field>
                       </>
                     )}
                   </>
@@ -201,9 +193,9 @@ export function DeviceIdentity({
               </>
             )}
             {error && (
-              <p role="alert" className="notice error">
+              <Notice tone="bad">
                 {error}
-              </p>
+              </Notice>
             )}
             <DialogFooter>
               <Button

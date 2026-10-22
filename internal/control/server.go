@@ -201,6 +201,7 @@ func (s *Server) Router() *gin.Engine {
 	auth.GET("/announcements", s.publishedAnnouncement)
 	auth.GET("/clients", s.getClientCatalog)
 	auth.GET("/clients/:id/release", s.getClientRelease)
+	auth.GET("/client-mirrors", s.getClientMirrors)
 	admin := auth.Group("/admin")
 	admin.Use(func(c *gin.Context) {
 		if c.GetString("role") != "admin" {
@@ -236,6 +237,7 @@ func (s *Server) Router() *gin.Engine {
 	admin.PUT("/announcement", s.putAnnouncement)
 	admin.GET("/clients", s.getClientCatalog)
 	admin.PUT("/clients", s.putClientCatalog)
+	admin.PUT("/client-mirrors", s.putClientMirrors)
 	admin.PUT("/settings", s.putSettings)
 	admin.POST("/smtp/test", s.smtpTest)
 	admin.GET("/audit", s.listAudit)

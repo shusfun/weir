@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
+import { Field, Notice, SectionHeader,
   Button,
   Input,
   Label,
@@ -208,8 +208,7 @@ export function GateConfig({
     type = "text",
     required = false,
   ) => (
-    <div className="field">
-      <Label htmlFor={"gate-" + key}>{label}</Label>
+    <Field label={label} htmlFor={"gate-" + key}>
       <Input
         id={"gate-" + key}
         type={type}
@@ -227,11 +226,10 @@ export function GateConfig({
         }}
         autoComplete={type === "password" ? "new-password" : "off"}
       />
-    </div>
+    </Field>
   );
   const choice = (key: string, label: string, options: string[][]) => (
-    <div className="field">
-      <Label>{label}</Label>
+    <Field label={label}>
       <Select
         value={String(editor?.[key] ?? "")}
         onValueChange={(v) => {
@@ -280,7 +278,7 @@ export function GateConfig({
           ))}
         </SelectContent>
       </Select>
-    </div>
+    </Field>
   );
   const pending = tasks
     .filter(
@@ -296,16 +294,10 @@ export function GateConfig({
   ]);
   return (
     <div className="stack">
-      <div className="section-heading">
-        <div>
-          <h2>{title}配置</h2>
-          <p>以下配置已由设备回执确认。修改将以异步任务应用。</p>
-        </div>
-        <Button onClick={create}>
+      <SectionHeader title={<>{title}配置</>} description="以下配置已由设备回执确认。修改将以异步任务应用。" actions={<Button onClick={create}>
           <Plus size={15} />
           {tab === "certificates" ? "导入证书" : "新增" + title}
-        </Button>
-      </div>
+        </Button>} />
       {tab === "certificates" && (
         <div className="stack">
           <CertificateBinding
@@ -342,9 +334,9 @@ export function GateConfig({
         </>
       )}
       {notice && (
-        <p className="notice" role="status">
+        <Notice role="status">
           {notice}
-        </p>
+        </Notice>
       )}
       {rows.length ? (
         rows.map((r, index) => (
@@ -468,7 +460,7 @@ export function GateConfig({
           }
         }}
       >
-        <DialogContent className="business-dialog inventory-dialog">
+        <DialogContent size="xl">
           <DialogTitle>
             {removing ? "删除" : editor?.id ? "修改" : "新增"}
             {title}
@@ -594,10 +586,10 @@ export function GateConfig({
                         ["cubic", "Cubic"],
                         ["new_reno", "New Reno"],
                       ])}
-                    <p className="notice">
+                    <Notice>
                       端口不能为
                       80、443、8443，也不能占用其他服务。节点客户端凭据由授权流程独立分配。
-                    </p>
+                    </Notice>
                   </>
                 )}
                 {["inbounds", "outbounds", "routing"].includes(tab) &&
@@ -690,15 +682,15 @@ export function GateConfig({
                             />
                           )}
                         {!outboundTransportSupported && (
-                          <p className="notice">
+                          <Notice>
                             设备尚未支持新版传输表单；升级 Agent 后可编辑 TLS /
                             WebSocket / gRPC / Reality。
-                          </p>
+                          </Notice>
                         )}
                         {editor.transport_options_unavailable && (
-                          <p className="notice">
+                          <Notice>
                             历史高级设置含未适配字段，已保留原值；请先核对迁移差异再修改协议。
-                          </p>
+                          </Notice>
                         )}
                       </>
                     )}
@@ -713,15 +705,14 @@ export function GateConfig({
                         String(r.data.remark ?? r.data.id),
                       ]),
                     ])}
-                    <div className="field">
-                      <Label htmlFor="route-client-search">搜索授权用户</Label>
+                    <Field label="搜索授权用户" htmlFor="route-client-search">
                       <Input
                         id="route-client-search"
                         value={clientSearch}
                         onChange={(e) => CS(e.target.value)}
                         placeholder="邮箱或授权名称"
                       />
-                    </div>
+                    </Field>
                     {choice("client_id", "匹配客户端授权", [
                       ["0", "此入站的全部客户端"],
                       ...grants
@@ -768,10 +759,9 @@ export function GateConfig({
                 {tab === "certificates" && (
                   <>
                     {field("name", "证书名称", "text", true)}
-                    <Label htmlFor="certificate-pem">证书链 PEM</Label>
-                    <Textarea
+                    <Field label="证书链 PEM" htmlFor="certificate-pem"><Textarea
                       id="certificate-pem"
-                      className="sensitive-output"
+                      mono
                       value={editor.certificate_pem ?? ""}
                       onChange={(e) => {
                         ED({ ...editor, certificate_pem: e.target.value });
@@ -779,13 +769,10 @@ export function GateConfig({
                       }}
                       required
                       rows={6}
-                    />
-                    <Label htmlFor="certificate-key">
-                      私钥 PEM（仅提交，不回显）
-                    </Label>
-                    <Textarea
+                    /></Field>
+                    <Field label="私钥 PEM（仅提交，不回显）" htmlFor="certificate-key"><Textarea
                       id="certificate-key"
-                      className="sensitive-output"
+                      mono
                       value={editor.key_pem ?? ""}
                       onChange={(e) => {
                         ED({ ...editor, key_pem: e.target.value });
@@ -793,7 +780,7 @@ export function GateConfig({
                       }}
                       required
                       rows={6}
-                    />
+                    /></Field>
                     <p>
                       手工证书继续可用。自动签发将使用 DNS-01，真实签发需配置
                       DNS 凭据。
@@ -826,14 +813,14 @@ export function GateConfig({
               </>
             )}
             {confirm && (
-              <div role="status" className="notice">
+              <Notice role="status">
                 请核对配置后再次确认。应用期间可能重启本项目内核，影响现有连接。
-              </div>
+              </Notice>
             )}
             {error && (
-              <div role="alert" className="notice error">
+              <Notice tone="bad">
                 {error}
-              </div>
+              </Notice>
             )}
             <DialogFooter>
               <Button

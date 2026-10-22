@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
+import { Field, Notice, SectionHeader,
   Badge,
   Button,
   Card,
@@ -143,13 +143,7 @@ export function ReleaseUpdateCard() {
   return (
     <Card>
       <CardContent className="stack">
-        <div className="section-heading">
-          <div>
-            <h3>GitHub Release</h3>
-            <p>中心校验安装包后替换自己，再把同一份 Gate 程序推送替换。Gate 不访问 GitHub。</p>
-          </div>
-          <Badge>{data.status === "ok" && !data.update_available ? "已是最新" : data.status === "unknown" ? "不可用" : "可检查"}</Badge>
-        </div>
+        <SectionHeader level="h3" title="GitHub Release" description="中心校验安装包后替换自己，再把同一份 Gate 程序推送替换。Gate 不访问 GitHub。" actions={<Badge>{data.status === "ok" && !data.update_available ? "已是最新" : data.status === "unknown" ? "不可用" : "可检查"}</Badge>} />
         {data.status === "unknown" && <State error={data.message || "发布信息不可用"} detail={data.message || "发布信息不可用"} onRetry={() => query.refetch()} />}
         <p>当前版本 {data.current_version || "未知"}。最新正式版本 {data.latest_version || "未知"}。</p>
         {data.release_url && <p><a href={data.release_url}>查看 Release</a></p>}
@@ -161,8 +155,7 @@ export function ReleaseUpdateCard() {
             </li>
           ))}
         </ul>
-        <div className="field">
-          <Label>卸载范围</Label>
+        <Field label="卸载范围">
           <Select value={mode} onValueChange={(value) => { if (value == null) return; setMode(String(value)); setScopeConfirmed(false); }}>
             <SelectTrigger className="w-full" aria-label="卸载范围">
               <SelectValue>{mode === "cores" ? "移除托管内核" : mode === "purge" ? "备份后清除本项目数据" : "保留数据和内核"}</SelectValue>
@@ -173,12 +166,12 @@ export function ReleaseUpdateCard() {
               <SelectItem value="purge">备份后清除本项目数据</SelectItem>
             </SelectContent>
           </Select>
-        </div>
+        </Field>
         {mode !== "retain" && <Label><Checkbox checked={scopeConfirmed} onCheckedChange={(checked) => setScopeConfirmed(checked === true)} />再次确认这个清除范围</Label>}
-        {error && !open && <p className="notice error-message" role="alert">{error}</p>}
+        {error && !open && <Notice tone="bad">{error}</Notice>}
         <Button type="button" disabled={busy || !data.update_available} onClick={() => { setOpen(true); setError(""); setWaitingSince(0); }}>确认更新到 {tag}</Button>
         <Dialog open={open} onOpenChange={(next) => { if (!busy && !restarting) setOpen(next); }}>
-          <DialogContent className="business-dialog">
+          <DialogContent size="md">
             <DialogTitle>确认更新到 {tag}</DialogTitle>
             <DialogDescription>当前版本 {data.current_version || "未知"}。确认后校验安装包，替换中心并重启，再推送同一份 Gate。更新期间页面会短暂中断。</DialogDescription>
             {running && (
@@ -186,8 +179,8 @@ export function ReleaseUpdateCard() {
                 <ProgressLabel>{restarting && countdown > 0 ? `即将重启（${countdown}s）` : progressText}</ProgressLabel>
               </Progress>
             )}
-            {failed && <p className="notice error-message" role="alert">{stalled ? "安装单元没有开始。请确认更新单元已启用后重试。" : progressText}</p>}
-            {error && <p className="notice error-message" role="alert">{error}</p>}
+            {failed && <Notice tone="bad">{stalled ? "安装单元没有开始。请确认更新单元已启用后重试。" : progressText}</Notice>}
+            {error && <Notice tone="bad">{error}</Notice>}
             <DialogFooter>
               <Button type="button" variant="outline" disabled={busy || restarting} onClick={() => setOpen(false)}>取消</Button>
               <Button type="button" disabled={busy || restarting || (!failed && running)} onClick={() => void confirm()}>

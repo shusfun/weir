@@ -1,7 +1,6 @@
 import { useId } from "react";
-import {
+import { Field, Notice,
   Input,
-  Label,
   Select,
   SelectTrigger,
   SelectValue,
@@ -41,8 +40,7 @@ export function OutboundTransport({
     update?: (v: string) => void,
   ) {
     return (
-      <div className="field">
-        <Label htmlFor={id + key}>{label}</Label>
+      <Field label={label} htmlFor={id + key}>
         <Select
           value={String(
             value[key] ??
@@ -86,29 +84,28 @@ export function OutboundTransport({
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </Field>
     );
   }
   function field(key: string, label: string, placeholder?: string) {
     return (
-      <div className="field">
-        <Label htmlFor={id + key}>{label}</Label>
+      <Field label={label} htmlFor={id + key}>
         <Input
           id={id + key}
           value={value[key] ?? ""}
           placeholder={placeholder}
           onChange={(e) => set(key, e.target.value)}
         />
-      </div>
+      </Field>
     );
   }
   return (
     <section className="stack" aria-label="出站传输设置">
       <h3>传输与安全</h3>
       {["hysteria2", "tuic", "anytls", "shadowtls"].includes(protocol) && (
-        <p className="notice">
+        <Notice>
           此协议仅由 sing-box 执行；Xray 入站不能路由至此出口。
-        </p>
+        </Notice>
       )}
       {protocol === "hysteria2" && (
         <>
@@ -127,8 +124,7 @@ export function OutboundTransport({
               }),
           )}
           {value.obfs === "salamander" && (
-            <div className="field">
-              <Label htmlFor={id + "obfs_password"}>混淆密码</Label>
+            <Field label="混淆密码" htmlFor={id + "obfs_password"}>
               <Input
                 id={id + "obfs_password"}
                 type="password"
@@ -136,7 +132,7 @@ export function OutboundTransport({
                 placeholder="编辑时留空保留原密码"
                 onChange={(e) => set("obfs_password", e.target.value)}
               />
-            </div>
+            </Field>
           )}
         </>
       )}
@@ -248,8 +244,7 @@ export function OutboundTransport({
             field("fp", "出站 TLS 指纹（可选）", "chrome")}
           {security === "tls" && (
             <>
-              <div className="field">
-                <Label htmlFor={id + "alpn"}>出站 ALPN（逗号分隔）</Label>
+              <Field label="出站 ALPN（逗号分隔）" htmlFor={id + "alpn"}>
                 <Input
                   id={id + "alpn"}
                   value={(value.alpn ?? []).join(", ")}
@@ -263,12 +258,9 @@ export function OutboundTransport({
                     )
                   }
                 />
-              </div>
+              </Field>
               {trustSupported ? (
-                <div className="field">
-                  <Label htmlFor={id + "certificate"}>
-                    出站信任证书（可选 PEM）
-                  </Label>
+                <Field label="出站信任证书（可选 PEM）" htmlFor={id + "certificate"}>
                   <Textarea
                     id={id + "certificate"}
                     className="min-h-28 max-h-48 resize-y [field-sizing:fixed] font-mono text-xs"
@@ -281,11 +273,11 @@ export function OutboundTransport({
                     默认使用系统信任链。自签名目标可导入其公开证书；仍校验 SNI
                     与有效期，不支持跳过校验。请通过可信渠道核对证书。
                   </p>
-                </div>
+                </Field>
               ) : (
-                <p className="notice">
+                <Notice>
                   此 Agent 尚不支持自定义信任证书，请先升级设备。
-                </p>
+                </Notice>
               )}
             </>
           )}

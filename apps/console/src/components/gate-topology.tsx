@@ -13,7 +13,7 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import { ZoomIn, ZoomOut, Maximize, Network } from "lucide-react";
-import {
+import { Field, Notice, SectionHeader,
   Button,
   Badge,
   Card,
@@ -28,6 +28,7 @@ import {
   SelectItem,
 } from "@migate/ui";
 import type { Resource, Grant } from "../lib/models";
+import { tokenValue, useIsDark } from "../theme";
 import type { Inbound, Outbound, RoutingRule } from "../lib/topology-model";
 import {
   buildTopologyGraph,
@@ -48,19 +49,24 @@ function TopologyNode({ data }: NodeProps<Node<TopologyNodeData>>) {
     >
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
-      <CardContent>
-        <div className="section-heading">
-          <strong title={data.title}>{data.title}</strong>
-          <Badge variant="outline">
-            {data.missing
-              ? "缺失"
-              : data.kind === "client"
-                ? "授权记录"
-                : data.enabled
-                  ? "配置启用"
-                  : "配置停用"}
-          </Badge>
-        </div>
+      <CardContent className="p-3.5">
+        <SectionHeader
+          size="sm"
+          align="start"
+          className="flex-nowrap gap-2"
+          title={<span className="block truncate" title={data.title}>{data.title}</span>}
+          actions={
+            <Badge variant="outline">
+              {data.missing
+                ? "缺失"
+                : data.kind === "client"
+                  ? "授权记录"
+                  : data.enabled
+                    ? "配置启用"
+                    : "配置停用"}
+            </Badge>
+          }
+        />
         {data.subtitle && <small title={data.subtitle}>{data.subtitle}</small>}
         <dl>
           {data.meta.map((m) => (
@@ -98,6 +104,7 @@ export function GateTopology({
     [clientSearch, Q] = useState(""),
     [layout, L] = useState("columns"),
     [selected, S] = useState<string | null>(null);
+  const dark = useIsDark();
   const graph = useMemo(() => {
     const baseCount =
       (resources["device-inbound"] ?? []).length +
@@ -218,11 +225,12 @@ export function GateTopology({
         style: { ...e.style, strokeWidth: 2 },
         markerEnd: {
           type: MarkerType.ArrowClosed,
-          color: e.data?.enabled ? "#0f766e" : "#94a3b8",
+          // marker id 由颜色字符串生成，不能含 var()，按当前主题解析为实际色值
+          color: tokenValue(e.data?.enabled ? "--mg-edge-active" : "--mg-edge"),
         },
       }));
     return { nodes, edges };
-  }, [graph, kind, layout, tooLarge, expanded, clientSearch]);
+  }, [graph, kind, layout, tooLarge, expanded, clientSearch, dark]);
   const [renderNodes, setRenderNodes, onNodesChange] = useNodesState<
     Node<TopologyNodeData>
   >([]);
@@ -240,15 +248,7 @@ export function GateTopology({
   const detail = shown.nodes.find((n) => n.id === selected);
   return (
     <div className="stack">
-      <div className="section-heading">
-        <div>
-          <h2>链路画布</h2>
-          <p>
-            已回执的配置关系，不代表实时命中。默认直连仅表示未命中规则时的回退路径。
-          </p>
-        </div>
-        <Network size={22} />
-      </div>
+      <SectionHeader title="链路画布" description="已回执的配置关系，不代表实时命中。默认直连仅表示未命中规则时的回退路径。" actions={<Network size={22} />} />
       <div className="metric-grid graph-metrics">
         <Metric
           title="入站"
@@ -274,15 +274,14 @@ export function GateTopology({
       <Card>
         <CardContent className="stack">
           <div className="graph-toolbar">
-            <div className="field">
-              <Label htmlFor="graph-client-search">搜索客户端授权</Label>
+            <Field label="搜索客户端授权" htmlFor="graph-client-search" className="min-w-[150px] flex-1">
               <Input
                 id="graph-client-search"
                 placeholder="邮箱或授权名称"
                 value={clientSearch}
                 onChange={(e) => Q(e.target.value)}
               />
-            </div>
+            </Field>
             <div className="actions">
               <Switch
                 id="graph-expand"
@@ -297,8 +296,7 @@ export function GateTopology({
             条授权时折叠未被显式路由引用的记录；数量完整保留。搜索邮箱可定位具体授权，展开后可移动与缩放查看。
           </p>
           <div className="graph-toolbar">
-            <div className="field">
-              <Label>查看资源</Label>
+            <Field label="查看资源" className="min-w-[150px] flex-1">
               <Select value={kind} onValueChange={(v) => v && K(v)}>
                 <SelectTrigger aria-label="拓扑资源筛选">
                   <SelectValue>{kinds[kind]}</SelectValue>
@@ -311,9 +309,8 @@ export function GateTopology({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="field">
-              <Label>布局</Label>
+            </Field>
+            <Field label="布局" className="min-w-[150px] flex-1">
               <Select value={layout} onValueChange={(v) => v && L(v)}>
                 <SelectTrigger aria-label="拓扑布局">
                   <SelectValue>
@@ -325,7 +322,7 @@ export function GateTopology({
                   <SelectItem value="rows">从上向下</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
             <div className="actions">
               <Button
                 variant="outline"
@@ -388,15 +385,16 @@ export function GateTopology({
                 maxZoom={1.7}
                 fitView
                 onlyRenderVisibleElements
+                colorMode={dark ? "dark" : "light"}
               >
                 <Background gap={20} />
                 <MiniMap
                   style={{ width: 96, height: 64 }}
                   pannable
                   zoomable
-                  nodeColor="#9c92d4"
-                  nodeStrokeColor="#6e61ad"
-                  maskColor="rgba(226,232,240,0.55)"
+                  nodeColor="var(--mg-minimap-node)"
+                  nodeStrokeColor="var(--mg-accent-text)"
+                  maskColor="var(--mg-minimap-mask)"
                   ariaLabel="拓扑缩略图"
                 />
               </ReactFlow>
@@ -407,7 +405,7 @@ export function GateTopology({
             默认直连。停用关系保持可见；上下行缺少采样时显示未知。支持触摸移动和缩略图缩放。
           </p>
           {detail && (
-            <div className="notice" role="status">
+            <Notice role="status">
               <strong>{detail.data.title}</strong>
               <p>{detail.data.subtitle}</p>
               <Button
@@ -424,7 +422,7 @@ export function GateTopology({
               >
                 查看对应资源
               </Button>
-            </div>
+            </Notice>
           )}
         </CardContent>
       </Card>

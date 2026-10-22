@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useMatch } from "react-router-dom";
-import {
+import { Meter, IconTile, Field, Notice, SearchInput, PageHeader, Pager, SectionHeader,
   Button,
   Card,
   CardContent,
   Input,
-  Label,
   Select,
   SelectTrigger,
   SelectValue,
@@ -26,9 +25,7 @@ import {
 } from "@migate/ui";
 import {
   Plus,
-  Search,
   ArrowLeft,
-  ArrowRight,
   Users,
   Mail,
   ShieldCheck,
@@ -41,6 +38,7 @@ import { accountPasswordError } from "../password";
 import { client } from "../lib/client";
 import { bytes, date, type Account } from "../lib/models";
 import { State, Status } from "../components/feedback";
+import { InlineSwitch } from "../components/inline-switch";
 const units = { B: 1, MiB: 1024 ** 2, GiB: 1024 ** 3, TiB: 1024 ** 4 };
 function localDate(n: number) {
   if (!n) return "";
@@ -100,11 +98,17 @@ export function UsersPage() {
     await cache.invalidateQueries({ queryKey: ["grants"] });
     E(null);
   }
+  // 行内启用 / 停用：额度与有效期原样提交，只切换 enabled
+  async function setEnabled(u: Account, enabled: boolean) {
+    await api("/admin/users/" + u.id, "PATCH", { enabled, quota: u.quota, expires: u.expires });
+    await cache.invalidateQueries({ queryKey: ["users"] });
+    await cache.invalidateQueries({ queryKey: ["user"] });
+  }
   if (userId)
     return (
       <div className="stack">
         <Button
-          className="back-button"
+          className="back-button pl-1 text-[var(--mg-ink-3)]"
           variant="ghost"
           onClick={() => nav("/users")}
         >
@@ -119,9 +123,9 @@ export function UsersPage() {
           detail.data && (
             <>
               <div className="entity-heading">
-                <span className="entity-avatar">
-                  <Users size={28} />
-                </span>
+                <IconTile size="xl" tone="neutral">
+                  <Users />
+                </IconTile>
                 <div>
                   <h2>{detail.data.email}</h2>
                   <p>创建于 {date(detail.data.created_at)}</p>
@@ -141,12 +145,9 @@ export function UsersPage() {
               </div>
               <Card>
                 <CardContent>
-                  <div className="section-heading">
-                    <h2>账户信息</h2>
-                    <Status
+                  <SectionHeader title="账户信息" actions={<Status
                       value={detail.data.enabled ? "enabled" : "disabled"}
-                    />
-                  </div>
+                    />} />
                   <div className="detail-grid">
                     <div>
                       <span>角色</span>
@@ -173,15 +174,12 @@ export function UsersPage() {
               </Card>
               <Card>
                 <CardContent>
-                  <div className="section-heading">
-                    <h2>节点授权</h2>
-                    <Button
+                  <SectionHeader title="节点授权" actions={<Button
                       variant="outline"
                       onClick={() => nav("/grants?user=" + userId)}
                     >
                       管理授权
-                    </Button>
-                  </div>
+                    </Button>} />
                   {grants.isPending ? (
                     <State loading />
                   ) : grants.error ? (
@@ -220,27 +218,18 @@ export function UsersPage() {
     );
   return (
     <div className="stack">
-      <div className="page-intro">
-        <div>
-          <h2>账户与访问权限</h2>
-          <p>管理用户、流量额度和有效期。新用户默认没有节点授权。</p>
-        </div>
-        <Button onClick={() => E("new")}>
+      <PageHeader title="账户与访问权限" description="管理用户、流量额度和有效期。新用户默认没有节点授权。" actions={<Button onClick={() => E("new")}>
           <Plus size={16} />
           创建用户
-        </Button>
-      </div>
+        </Button>} />
       <Card className="table-card">
         <div className="table-toolbar">
-          <div className="search-field">
-            <Search size={17} />
-            <Input
+          <SearchInput
               aria-label="搜索用户"
               placeholder="搜索邮箱…"
               value={search}
               onChange={(e) => S(e.target.value)}
             />
-          </div>
           <Select
             value={filter}
             onValueChange={(v) => {
@@ -248,7 +237,7 @@ export function UsersPage() {
               P(1);
             }}
           >
-            <SelectTrigger aria-label="用户状态">
+            <SelectTrigger className="min-w-[130px]" aria-label="用户状态">
               <SelectValue>
                 {
                   (
@@ -292,13 +281,13 @@ export function UsersPage() {
                   <TableRow key={u.id}>
                     <TableCell>
                       <div className="table-identity">
-                        <span className="avatar">
+                        <IconTile size="sm" tone="neutral">
                           {u.email[0].toUpperCase()}
-                        </span>
+                        </IconTile>
                         <div>
                           <Button
                             variant="link"
-                            className="identity-link"
+                            className="h-auto min-h-0 justify-start p-0 text-left font-[550] whitespace-normal wrap-anywhere text-[var(--mg-ink)]"
                             onClick={() => nav("/users/" + u.id)}
                           >
                             {u.email}
@@ -311,24 +300,20 @@ export function UsersPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Status value={u.enabled ? "enabled" : "disabled"} />
+                      <InlineSwitch checked={u.enabled} label={"启用账户 " + u.email} onChange={(v) => setEnabled(u, v)} />
                     </TableCell>
                     <TableCell>
                       <div className="usage-cell">
                         <strong>
                           {bytes(u.used)} <span>/ {bytes(u.quota)}</span>
                         </strong>
-                        <div className="usage-track">
-                          <span
-                            style={{
-                              width:
-                                Math.min(
-                                  100,
-                                  u.quota ? (u.used / u.quota) * 100 : 0,
-                                ) + "%",
-                            }}
-                          />
-                        </div>
+                        {/* 额度为 0 时与原先一致显示空条，不当作未知 */}
+                        <Meter
+                          className="mt-[7px] h-1.5"
+                          label={"流量使用 " + u.email}
+                          value={u.quota ? u.used : 0}
+                          max={u.quota || 1}
+                        />
                       </div>
                     </TableCell>
                     <TableCell>
@@ -368,10 +353,7 @@ export function UsersPage() {
             !query.error &&
             rows.map((u) => (
               <article className="mobile-user" key={u.id}>
-                <div className="section-heading">
-                  <strong>{u.email}</strong>
-                  <Status value={u.enabled ? "enabled" : "disabled"} />
-                </div>
+                <SectionHeader size="sm" align="start" className="mb-2" title={<>{u.email}</>} actions={<InlineSwitch checked={u.enabled} label={"启用账户 " + u.email} onChange={(v) => setEnabled(u, v)} />} />
                 <p>
                   {u.role === "admin" ? "管理员" : "普通用户"} · {bytes(u.used)}{" "}
                   / {bytes(u.quota)}
@@ -392,29 +374,7 @@ export function UsersPage() {
               </article>
             ))}
         </div>
-        <div className="pagination">
-          <span>第 {page} 页 · 每页 20 条</span>
-          <div className="actions">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              aria-label="上一页"
-              disabled={page === 1}
-              onClick={() => P((p) => p - 1)}
-            >
-              <ArrowLeft size={15} />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              aria-label="下一页"
-              disabled={page * 20 >= total}
-              onClick={() => P((p) => p + 1)}
-            >
-              <ArrowRight size={15} />
-            </Button>
-          </div>
-        </div>
+        <Pager page={page} pageSize={20} total={total} onPage={P} />
       </Card>
       <UserEditor value={edit} close={() => E(null)} saved={saved} />
     </div>
@@ -500,7 +460,7 @@ function UserEditor({
         if (!o && !busy) close();
       }}
     >
-      <DialogContent className="business-dialog">
+      <DialogContent size="md">
         <DialogTitle>{value === "new" ? "创建用户" : "编辑用户"}</DialogTitle>
         <DialogDescription>
           {value === "new"
@@ -518,8 +478,7 @@ function UserEditor({
             void submit();
           }}
         >
-          <div className="field">
-            <Label htmlFor="user-email">邮箱</Label>
+          <Field label="邮箱" htmlFor="user-email">
             <Input
               id="user-email"
               type="email"
@@ -528,10 +487,9 @@ function UserEditor({
               disabled={value !== "new"}
               onChange={(e) => M(e.target.value)}
             />
-          </div>
+          </Field>
           {value === "new" && (
-            <div className="field">
-              <Label htmlFor="user-password">初始密码</Label>
+            <Field label="初始密码" htmlFor="user-password" hint="至少 6 位，须包含大写字母、小写字母和数字。">
               <Input
                 id="user-password"
                 type="password"
@@ -542,11 +500,9 @@ function UserEditor({
                 value={password}
                 onChange={(e) => W(e.target.value)}
               />
-              <small>至少 6 位，须包含大写字母、小写字母和数字。</small>
-            </div>
+              </Field>
           )}
-          <div className="field">
-            <Label htmlFor="user-quota">流量额度</Label>
+          <Field label="流量额度" htmlFor="user-quota" hint="额度为 0 时不允许使用代理流量。">
             <div className="quota-input">
               <Input
                 id="user-quota"
@@ -579,10 +535,8 @@ function UserEditor({
                 </SelectContent>
               </Select>
             </div>
-            <small>额度为 0 时不允许使用代理流量。</small>
-          </div>
-          <div className="field">
-            <Label htmlFor="user-expiry">到期时间</Label>
+            </Field>
+          <Field label="到期时间" htmlFor="user-expiry" hint="留空为长期有效，按当前时区显示。">
             <Input
               id="user-expiry"
               type="datetime-local"
@@ -592,11 +546,9 @@ function UserEditor({
                 C(false);
               }}
             />
-            <small>留空为长期有效，按当前时区显示。</small>
-          </div>
+            </Field>
           {value !== "new" && (
-            <div className="field">
-              <Label>账户状态</Label>
+            <Field label="账户状态">
               <Select
                 value={enabled}
                 onValueChange={(v) => {
@@ -614,17 +566,17 @@ function UserEditor({
                   <SelectItem value="disabled">停用</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
           )}
           {confirm && (
-            <div className="notice" role="status">
+            <Notice role="status">
               请确认保存。此变更会影响该用户的登录与节点访问。
-            </div>
+            </Notice>
           )}
           {error && (
-            <div className="notice error" role="alert">
+            <Notice tone="bad">
               {error}
-            </div>
+            </Notice>
           )}
           <DialogFooter>
             <Button

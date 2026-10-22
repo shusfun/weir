@@ -1,0 +1,81 @@
+/* 设备详情、运维、系统设置与账户安全。 */
+
+.host-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.host-sample-list { display: grid; gap: 4px; }
+.core-version-actions { flex-wrap: wrap; }
+.core-diagnostics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.core-diagnostic-card p, .core-diagnostic-card small { margin: 0; font-size: 12px; }
+.core-diagnostic-card code { display: block; margin-top: 6px; overflow-wrap: anywhere; }
+.certificate-binding-list { max-height: 320px; overflow: auto; border-radius: var(--mg-radius); border: 1px solid var(--mg-line); background: var(--mg-well); }
+.certificate-binding-panel .list-row, .acme-order { flex-wrap: wrap; }
+.task-receipt { max-height: 40vh; }
+
+.gate-graph { height: 620px; min-width: 0; overflow: hidden; border-radius: var(--mg-radius-lg); border: 1px solid var(--mg-line); background: var(--mg-well); box-shadow: inset 0 1px 3px var(--mg-inset); }
+/* React Flow 的 --xy-* 覆盖变量优先于其内置明暗默认值，统一映射到材质令牌 */
+.gate-graph {
+  --xy-background-color: transparent;
+  --xy-background-pattern-dots-color: var(--mg-line);
+  --xy-edge-label-background-color: var(--mg-panel);
+  --xy-edge-label-color: var(--mg-ink-2);
+  --xy-minimap-background-color: var(--mg-panel);
+  --xy-controls-button-background-color: var(--mg-panel);
+  --xy-controls-button-background-color-hover: var(--mg-raised);
+  --xy-controls-button-color: var(--mg-ink-2);
+  --xy-controls-button-border-color: var(--mg-line);
+  --xy-attribution-background-color: transparent;
+}
+.gate-graph .react-flow__background { opacity: 0.7; }
+.gate-graph .react-flow__minimap { border-radius: 8px; overflow: hidden; box-shadow: 0 0 0 1px var(--mg-line); background: var(--mg-panel); }
+.gate-graph .react-flow__controls { box-shadow: 0 1px 2px var(--mg-shade); border-radius: 8px; overflow: hidden; }
+.gate-graph .react-flow__controls-button { background: var(--mg-panel); border-color: var(--mg-line); color: var(--mg-ink-2); }
+.gate-graph-node { width: 270px; }
+.gate-graph-node small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
+.gate-graph-node dl { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin: 10px 0 0; }
+.gate-graph-node dt { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mg-ink-engraved); }
+.gate-graph-node dd { margin: 0; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gate-graph-node.graph-invalid { border-color: var(--mg-bad); background: var(--mg-bad-soft); }
+.graph-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.graph-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.audit-directory .table-toolbar, .event-directory .table-toolbar { padding: 0 0 14px; border: 0; box-shadow: none; }
+.audit-row, .event-row { padding: 12px 0; gap: 14px; flex-wrap: wrap; }
+.audit-row > div:first-child { flex: 1; }
+.audit-row small, .event-row small { overflow-wrap: anywhere; }
+.event-row > .actions { flex-wrap: wrap; justify-content: flex-end; }
+.event-query-time { font-size: 11.5px; margin: 12px 0; }
+
+.settings-body { display: grid; gap: 16px; min-width: 0; }
+.settings-body h3 { margin: 0 0 4px; font-size: 15px; }
+.settings-body p { font-size: 12.5px; }
+.settings-policy { display: flex; align-items: center; justify-content: space-between; gap: 22px; padding: 15px 0; border-bottom: 1px solid var(--mg-line-soft); }
+.settings-policy:last-child { border-bottom: 0; }
+.settings-policy > span { display: grid; gap: 3px; }
+.settings-policy strong { font-size: 13.5px; font-weight: 550; }
+.settings-policy small { font-size: 12px; line-height: 1.55; }
+.settings-test { display: flex; align-items: flex-end; gap: 14px; }
+.settings-save { position: sticky; bottom: 12px; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 16px; }
+.settings-save > span { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--mg-ink-2); }
+
+.security-method-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.security-session small { font-size: 11.5px; }
+.security-session > div { min-width: 0; overflow-wrap: anywhere; }
+.recovery-codes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.totp-setup { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+.totp-setup > div { flex: 1; min-width: 150px; }
+.session-filters { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 14px; margin: 16px 0; }
+.session-filters > .stack { min-width: 180px; flex: 1; }
+.session-list .security-session { gap: 14px; }
+
+@media (max-width: 1100px) { .host-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 1050px) { .core-diagnostics-grid { grid-template-columns: 1fr; } }
+@media (max-width: 1000px) {
+  .security-method-grid { grid-template-columns: 1fr; }
+  .graph-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .host-metrics { grid-template-columns: 1fr; }
+  .gate-graph { height: 540px; }
+  .settings-save, .settings-test { flex-direction: column; align-items: stretch; }
+  .session-list .security-session { flex-direction: column; align-items: flex-start; }
+  .event-row > .actions, .audit-row > .actions { width: 100%; }
+}

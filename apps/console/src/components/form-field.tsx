@@ -1,5 +1,6 @@
-import { Input, Label, Textarea } from "@migate/ui";
-export function Field({
+// 文本类表单项的便捷写法：标签 + 单行输入 / 多行文本。布局与说明由 @migate/ui 的 Field 负责。
+import { Field, Input, Textarea } from "@migate/ui";
+export function TextField({
   label,
   name,
   type = "text",
@@ -7,6 +8,8 @@ export function Field({
   onChange,
   required = true,
   autoComplete,
+  hint,
+  className,
 }: {
   label: string;
   name: string;
@@ -15,10 +18,11 @@ export function Field({
   onChange: (v: string) => void;
   required?: boolean;
   autoComplete?: string;
+  hint?: string;
+  className?: string;
 }) {
   return (
-    <div className="field">
-      <Label htmlFor={name}>{label}</Label>
+    <Field label={label} htmlFor={name} hint={hint} className={className}>
       {type === "textarea" ? (
         <Textarea
           id={name}
@@ -38,6 +42,6 @@ export function Field({
           autoComplete={autoComplete ?? (type === "password" ? "new-password" : undefined)}
         />
       )}
-    </div>
+    </Field>
   );
 }

@@ -1,20 +1,10 @@
 import { useState, lazy, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate, useMatch, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
+import { CodeBlock, SearchInput, SectionHeader, Button, Card, CardContent, Faceplate, FaceplateTitle, StatusLamp, toneOf, Segmented, PageHeader } from "@migate/ui";
+import { TabNav } from "../shell/tab-nav";
+import { deviceTabs } from "../shell/navigation";
 import {
-  Button,
-  Card,
-  CardContent,
-  Input,
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@migate/ui";
-import {
-  Search,
   Server,
   ArrowLeft,
   ArrowUpRight,
@@ -52,9 +42,9 @@ const tabs = [
 ] as const;
 export function DevicesPage() {
   const nav = useNavigate();
-  const deviceId = useMatch("/devices/:deviceId")?.params.deviceId;
-  const [params, SP] = useSearchParams();
-  const tab = params.get("tab") ?? "overview";
+  const { deviceId, tab: tabParam } = useParams();
+  const tab = tabParam ?? "overview";
+  const SP = ({ tab }: { tab: string }) => nav("/devices/" + deviceId + (tab === "overview" ? "" : "/" + tab));
   const [search, S] = useState("");
   const [state, F] = useState("all");
 
@@ -108,39 +98,34 @@ export function DevicesPage() {
     return (
       <div className="stack">
         <Button
-          className="back-button"
+          className="back-button pl-1 text-[var(--mg-ink-3)]"
           variant="ghost"
           onClick={() => nav("/devices")}
         >
           <ArrowLeft size={16} />
           全部 Gate
         </Button>
-        <div className="entity-heading">
-          <span className="entity-avatar">
-            <Server size={28} />
-          </span>
-          <div>
-            <h2>{d.name || "未命名 Gate"}</h2>
-            <p>
-              设备 #{d.id} · 最后联系 {date(d.last_seen)}
-            </p>
+        <Faceplate className="device-plate">
+          <StatusLamp tone={toneOf(d.status)} size="lg" />
+          <FaceplateTitle
+            eyebrow={"Gate · #" + d.id}
+            title={d.name || "未命名 Gate"}
+            meta={
+              <>
+                <span>Agent {String(d.metadata.version ?? "未知")}</span>
+                <span>最后联系 {date(d.last_seen)}</span>
+              </>
+            }
+          />
+          <div className="device-plate-actions">
+            <Status value={d.status} />
+            <DeviceIdentity device={d} devices={devices.data?.items ?? []} />
           </div>
-          <Status value={d.status} />
-          <DeviceIdentity device={d} devices={devices.data?.items ?? []} />
-        </div>
-        <div className="detail-tabs" role="tablist" aria-label="Gate 详情">
-          {tabs.map(([key, title]) => (
-            <Button
-              key={key}
-              variant="ghost"
-              role="tab"
-              aria-selected={tab === key}
-              onClick={() => SP({ tab: key })}
-            >
-              {title}
-            </Button>
-          ))}
-        </div>
+        </Faceplate>
+        <TabNav
+          label="Gate 详情"
+          items={deviceTabs.map((t) => ({ to: "/devices/" + d.id + (t.key ? "/" + t.key : ""), label: t.label, icon: t.icon, end: !t.key }))}
+        />
         {tab === "outbounds" && <OutboundPools device={d}/>}
         {resources.error && (
           <State error={resources.error} onRetry={() => resources.refetch()} />
@@ -173,10 +158,7 @@ export function DevicesPage() {
             </div>
             <Card>
               <CardContent>
-                <div className="section-heading">
-                  <h2>设备身份</h2>
-                  <KeyRound size={20} />
-                </div>
+                <SectionHeader title="设备身份" actions={<KeyRound size={20} />} />
                 <div className="detail-grid">
                   <div>
                     <span>认证状态</span>
@@ -199,19 +181,16 @@ export function DevicesPage() {
                   </div>
                   <div className="full">
                     <span>公钥指纹</span>
-                    <code className="fingerprint">{d.fingerprint}</code>
+                    <CodeBlock>{d.fingerprint}</CodeBlock>
                   </div>
                 </div>
               </CardContent>
             </Card>
             <Card>
               <CardContent>
-                <div className="section-heading">
-                  <h2>最近执行任务</h2>
-                  <Button variant="ghost" onClick={() => SP({ tab: "tasks" })}>
+                <SectionHeader title="最近执行任务" actions={<Button variant="ghost" onClick={() => SP({ tab: "tasks" })}>
                     查看全部 <ArrowUpRight size={15} />
-                  </Button>
-                </div>
+                  </Button>} />
                 {tasks.isPending ? (
                   <State loading />
                 ) : tasks.error ? (
@@ -265,15 +244,9 @@ export function DevicesPage() {
         {tab === "grants" && (
           <Card>
             <CardContent>
-              <div className="section-heading">
-                <h2>独立客户端授权</h2>
-                <Button
-                  variant="outline"
-                  onClick={() => nav("/grants?device=" + d.id)}
-                >
+              <SectionHeader title="独立客户端授权" actions={<Button variant="outline" render={<Link to={"/grants?device=" + d.id} />}>
                   管理授权
-                </Button>
-              </div>
+                </Button>} />
               {grants.isPending ? (
                 <State loading />
               ) : grants.error ? (
@@ -342,72 +315,40 @@ export function DevicesPage() {
   ).length;
   return (
     <div className="stack">
-      <div className="page-intro">
-        <div>
-          <h2>你的 Gate 网络</h2>
-          <p>独立设备身份，主动连接中心。点击设备查看配置与执行状态。</p>
-        </div>
-        <DeviceIdentity devices={devices.data?.items ?? []} />
-      </div>
+      <PageHeader
+        title="你的 Gate 网络"
+        description="每台 Gate 拥有独立设备身份并主动连接中心。打开设备查看入站、出站、路由与执行回执。"
+        actions={<DeviceIdentity devices={devices.data?.items ?? []} />}
+      />
       <div className="metric-grid">
-        <Metric
-          title="设备总数"
-          value={String(devices.data?.items.length ?? 0)}
-        />
-        <Metric
-          title="在线设备"
-          value={String(online)}
-          caption="最近 60 秒内联系"
-        />
+        <Metric title="设备总数" value={String(devices.data?.items.length ?? 0)} />
+        <Metric title="在线设备" value={String(online)} caption="最近 60 秒内联系" />
         <Metric
           title="离线设备"
-          value={String(
-            (devices.data?.items ?? []).filter((d) => d.status === "offline")
-              .length,
-          )}
+          value={String((devices.data?.items ?? []).filter((d) => d.status === "offline").length)}
         />
       </div>
       <Card className="table-card">
         <div className="table-toolbar">
-          <div className="search-field">
-            <Search size={17} />
-            <Input
-              aria-label="搜索 Gate"
-              placeholder="搜索设备名称…"
-              value={search}
-              onChange={(e) => S(e.target.value)}
-            />
-          </div>
-          <div className="filter-pills">
-            {[
-              ["all", "全部"],
-              ["approved", "在线"],
-              ["offline", "离线"],
-              ["pending", "待配对"],
-            ].map(([key, title]) => (
-              <Button
-                size="sm"
-                variant={state === key ? "secondary" : "ghost"}
-                key={key}
-                onClick={() => F(key)}
-              >
-                {title}
-              </Button>
-            ))}
-          </div>
+          <SearchInput aria-label="搜索 Gate" placeholder="搜索设备名称或编号…" value={search} onChange={(e) => S(e.target.value)} />
+          <Segmented
+            aria-label="按状态筛选设备"
+            size="sm"
+            fullWidth="mobile"
+            value={state}
+            onValueChange={F}
+            options={[["all", "全部"], ["approved", "在线"], ["offline", "离线"], ["pending", "待配对"]]}
+          />
+          <span className="result-count">{rows.length} 台</span>
         </div>
         {rows.length ? (
-          <div className="device-cards">
+          <div className="rack-list padded">
             {rows.map((d) => (
-              <DeviceCard
-                key={d.id}
-                device={d}
-                onOpen={() => nav("/devices/" + d.id)}
-              />
+              <DeviceCard key={d.id} device={d} onOpen={() => nav("/devices/" + d.id)} />
             ))}
           </div>
         ) : (
-          <State empty="没有匹配的设备" />
+          <State empty={search || state !== "all" ? "没有匹配的设备" : "还没有 Gate 设备"} detail="生成一次性配对码后，在 VPS 上运行 Agent 完成配对。" />
         )}
       </Card>
     </div>
@@ -420,34 +361,28 @@ function DeviceCard({
   device: Device;
   onOpen: () => void;
 }) {
+  // 1U 机架面板：状态灯 · 名称 · 关键事实 · 打开
   return (
-    <article className="device-card">
-      <div className="section-heading">
-        <span className="device-symbol">
-          <Server size={22} />
-        </span>
+    <Faceplate compact className="rack-row">
+      <StatusLamp tone={toneOf(d.status)} size="lg" label={"状态：" + d.status} />
+      <div className="rack-name">
+        <button type="button" onClick={onOpen}>{d.name || "未命名 Gate"}</button>
+        <small>#{d.id}</small>
+      </div>
+      <div className="rack-fact">
+        <span>Agent</span>
+        <span>{String(d.metadata.version ?? "未知")}</span>
+      </div>
+      <div className="rack-fact">
+        <span><Clock size={11} style={{ display: "inline", verticalAlign: "-1px" }} /> 最后联系</span>
+        <span>{date(d.last_seen)}</span>
+      </div>
+      <div className="row-actions">
         <Status value={d.status} />
+        <Button variant="outline" size="sm" onClick={onOpen} aria-label={"打开 " + (d.name || "Gate #" + d.id)}>
+          打开 <ArrowUpRight />
+        </Button>
       </div>
-      <Button className="device-name" variant="link" onClick={onOpen}>
-        {d.name || "未命名 Gate"}
-        <ArrowUpRight size={16} />
-      </Button>
-      <p>
-        设备 #{d.id} · Agent {String(d.metadata.version ?? "未知")}
-      </p>
-      <div className="device-facts">
-        <span>
-          <Clock size={14} />
-          {date(d.last_seen)}
-        </span>
-        <span>
-          <ShieldCheck size={14} />
-          {d.status === "revoked" ? "身份已撤销" : "独立设备身份"}
-        </span>
-      </div>
-      <Button className="device-open" variant="outline" onClick={onOpen}>
-        查看设备
-      </Button>
-    </article>
+    </Faceplate>
   );
 }

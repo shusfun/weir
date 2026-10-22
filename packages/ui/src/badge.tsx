@@ -1,54 +1,64 @@
-"use client";
-
-// third-party
+// 来源 codedthemes/uiable badge；本地改为压印铭牌样式。
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 
-// types
 const badgeVariants = cva(
-  "group/badge inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-lg border border-transparent px-[0.8em] py-[0.45em] text-[.75em] leading-[0.9] font-medium whitespace-nowrap transition-all focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3!",
+  "group/badge inline-flex w-fit shrink-0 items-center justify-center gap-1.5 overflow-hidden rounded-[var(--mg-radius-sm)] border px-2 py-0.5 text-[11px] leading-[1.45] font-medium whitespace-nowrap [&>svg]:pointer-events-none [&>svg]:size-3!",
   {
     variants: {
       variant: {
-        default: "bg-primary text-white [a]:hover:bg-primary/80",
+        default: "border-[var(--mg-accent-lo)] bg-[var(--mg-accent)] text-[var(--mg-accent-ink)]",
         secondary:
-          "bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80",
+          "border-[color-mix(in_srgb,var(--mg-accent)_25%,var(--mg-line))] bg-[var(--mg-accent-soft)] text-[var(--mg-accent-soft-ink)]",
         destructive:
-          "bg-destructive/10 text-destructive focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 [a]:hover:bg-destructive/20",
+          "border-[color-mix(in_srgb,var(--mg-bad)_35%,var(--mg-line))] bg-[var(--mg-bad-soft)] text-[var(--mg-bad-ink)]",
         outline:
-          "border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground",
-        ghost:
-          "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
-        link: "text-primary underline-offset-4 hover:underline",
+          "border-[var(--mg-line-soft)] bg-transparent text-[var(--mg-ink-2)]",
+        ghost: "border-transparent text-[var(--mg-ink-3)]",
+        link: "border-transparent text-[var(--mg-accent-text)] underline-offset-4 hover:underline",
+        // 状态色浅底标签：配合 tone 使用（事件级别、处理状态、已设置 / 未绑定等）
+        soft: "",
+        // 状态文字：透明底 + 状态色文字，通常前置 StatusLamp（任务 / 设备 / 授权状态）
+        status: "gap-1.5 border-transparent bg-transparent py-0.5 pr-2 pl-1 text-[11.5px]",
+      },
+      tone: {
+        neutral: "",
+        ok: "",
+        warn: "",
+        bad: "",
+        info: "",
       },
     },
-    defaultVariants: {
-      variant: "default",
-    },
+    compoundVariants: [
+      { variant: "soft", tone: "neutral", className: "border-[var(--mg-line)] bg-[var(--mg-well)] text-[var(--mg-ink-2)]" },
+      { variant: "soft", tone: "ok", className: "border-[color-mix(in_srgb,var(--mg-ok)_30%,var(--mg-line))] bg-[var(--mg-ok-soft)] text-[var(--mg-ok-ink)]" },
+      { variant: "soft", tone: "warn", className: "border-[color-mix(in_srgb,var(--mg-warn)_30%,var(--mg-line))] bg-[var(--mg-warn-soft)] text-[var(--mg-warn-ink)]" },
+      { variant: "soft", tone: "bad", className: "border-[color-mix(in_srgb,var(--mg-bad)_30%,var(--mg-line))] bg-[var(--mg-bad-soft)] text-[var(--mg-bad-ink)]" },
+      { variant: "soft", tone: "info", className: "border-[color-mix(in_srgb,var(--mg-info)_30%,var(--mg-line))] bg-[var(--mg-info-soft)] text-[var(--mg-info-ink)]" },
+      { variant: "status", tone: "neutral", className: "text-[var(--mg-ink-2)]" },
+      { variant: "status", tone: "ok", className: "text-[var(--mg-ok-ink)]" },
+      { variant: "status", tone: "warn", className: "text-[var(--mg-warn-ink)]" },
+      { variant: "status", tone: "bad", className: "text-[var(--mg-bad-ink)]" },
+      { variant: "status", tone: "info", className: "text-[var(--mg-info-ink)]" },
+    ],
+    defaultVariants: { variant: "default", tone: "neutral" },
   },
 );
 
 function Badge({
   className,
   variant = "default",
+  tone = "neutral",
   render,
   ...props
 }: useRender.ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
   return useRender({
     defaultTagName: "span",
-    props: mergeProps<"span">(
-      {
-        className: cn(badgeVariants({ variant }), className),
-      },
-      props,
-    ),
+    props: mergeProps<"span">({ className: cn(badgeVariants({ variant, tone }), className) }, props),
     render,
-    state: {
-      slot: "badge",
-      variant,
-    },
+    state: { slot: "badge", variant },
   });
 }
 

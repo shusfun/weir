@@ -1,0 +1,156 @@
+/*
+ * MiGate 令牌：中性色与状态色参考 Apple 系统色；选中 / 开启指示灯固定 #2f4bd0。
+ * 拟物只给可交互元素（键帽、开关、输入槽、计数窗）；面板、表格、正文保持平整。
+ * 弹簧曲线用 CSS linear() 近似，带约 8% 过冲；动画只作用于 transform / opacity。
+ */
+:root {
+  --mg-base: #f2f2f7;
+  --mg-base-deep: #e8e8ed;
+  --mg-panel: #ffffff;
+  --mg-panel-top: #ffffff;
+  --mg-raised: #ffffff;
+  --mg-well: #ececf1;
+  --mg-well-deep: #e3e3e9;
+  --mg-key: #f2f2f7;
+  /*
+   * 常驻选中键：底色复用语义色 --mg-accent-soft（与菜单高亮、徽标一致），
+   * 描边 / 内发光由 --mg-accent-text 派生。只在 :root 定义一次，深色随 .dark 中的语义色自动切换。
+   */
+  --mg-key-selected: var(--mg-accent-soft);
+  --mg-key-selected-ring: color-mix(in srgb, var(--mg-accent-text) 24%, transparent);
+  --mg-key-selected-glow: color-mix(in srgb, var(--mg-accent-text) 12%, transparent);
+
+  --mg-line: #d1d1d6;
+  --mg-line-soft: #e5e5ea;
+  --mg-highlight: rgb(255 255 255 / 0.9);
+  --mg-shade: rgb(0 0 0 / 0.06);
+  --mg-shade-strong: rgb(0 0 0 / 0.16);
+  --mg-inset: rgb(0 0 0 / 0.1);
+  /* 新拟物双向光影：左上亮、右下暗 */
+  --mg-neu-hi: rgb(255 255 255 / 0.95);
+  --mg-neu-lo: rgb(166 171 189 / 0.55);
+
+  --mg-ink: #1c1c1e;
+  --mg-ink-2: #3a3a3c;
+  --mg-ink-3: #636366;
+  /* 在 #f2f2f7 / #ececf1 上均 ≥ 4.5:1（原 #76767c 在底座上仅 4.04:1） */
+  --mg-ink-engraved: #6a6a6f;
+
+  --mg-indicator: #2f4bd0;
+  --mg-accent: #2f4bd0;
+  --mg-accent-hi: #4560dc;
+  --mg-accent-lo: #2539a8;
+  --mg-accent-ink: #ffffff;
+  /* 强调色用于文字 / 图标 / 选中边框 / 焦点轮廓；--mg-accent 只用于填充 */
+  --mg-accent-text: #2f4bd0;
+  --mg-accent-soft: #e8ecfb;
+  --mg-accent-soft-ink: #2539a8;
+  --mg-ring: rgb(47 75 208 / 0.45);
+
+  --mg-ok: #34c759;
+  --mg-ok-soft: #e8f8ec;
+  --mg-ok-ink: #1e7a3a;
+  --mg-warn: #ff9500;
+  --mg-warn-soft: #fff3e0;
+  --mg-warn-ink: #9a5800;
+  --mg-bad: #ff3b30;
+  --mg-bad-soft: #ffebea;
+  --mg-bad-ink: #c4281f;
+  --mg-info: #2f4bd0;
+  --mg-info-soft: #e8ecfb;
+  --mg-info-ink: #2539a8;
+  --mg-off: #aeaeb2;
+
+  --mg-lamp-bezel-top: #a3a3aa;
+  --mg-lamp-bezel-bottom: #ededf2;
+  --mg-lcd: #ececf1;
+  --mg-lcd-ink: #1c1c1e;
+  --mg-lcd-dim: #8e8e93;
+
+  /* 图表与拓扑连线：由组件以 var() 引用，随主题切换 */
+  --mg-chart-1: #2f4bd0;
+  --mg-edge: #94a3b8;
+  --mg-edge-strong: #64748b;
+  --mg-edge-active: #0f766e;
+  --mg-edge-bad: #dc2626;
+  --mg-minimap-node: #b4bdf0;
+  --mg-minimap-mask: rgb(226 232 240 / 0.55);
+
+  --mg-radius-sm: 7px;
+  --mg-radius: 10px;
+  --mg-radius-lg: 14px;
+  --mg-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --mg-spring: linear(0, 0.18 7%, 0.52 16%, 0.85 27%, 1.04 38%, 1.09 45%, 1.07 53%, 1.02 64%, 0.995 76%, 1);
+  --mg-fast: 140ms;
+  --mg-mid: 220ms;
+  --mg-slow: 300ms;
+  --mg-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  --mg-mono: "SF Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color-scheme: light;
+}
+
+.dark {
+  --mg-base: #1c1c1e;
+  --mg-base-deep: #161618;
+  --mg-panel: #232326;
+  --mg-panel-top: #232326;
+  --mg-raised: #2c2c2e;
+  --mg-well: #18181a;
+  --mg-well-deep: #121214;
+  --mg-key: #26262a;
+
+  --mg-line: #48484a;
+  --mg-line-soft: #343437;
+  --mg-highlight: rgb(255 255 255 / 0.05);
+  --mg-shade: rgb(0 0 0 / 0.35);
+  --mg-shade-strong: rgb(0 0 0 / 0.6);
+  --mg-inset: rgb(0 0 0 / 0.5);
+  --mg-neu-hi: rgb(255 255 255 / 0.06);
+  --mg-neu-lo: rgb(0 0 0 / 0.6);
+
+  --mg-ink: #f5f5f7;
+  --mg-ink-2: #d1d1d6;
+  --mg-ink-3: #aeaeb2;
+  --mg-ink-engraved: #8e8e93;
+
+  --mg-indicator: #2f4bd0;
+  --mg-accent: #2f4bd0;
+  --mg-accent-hi: #4560dc;
+  --mg-accent-lo: #2539a8;
+  --mg-accent-ink: #ffffff;
+  /* #2f4bd0 在深色面板上对比度约 2.3:1，文字与线条改用提亮色（约 6.5:1） */
+  --mg-accent-text: #8ea2ff;
+  --mg-accent-soft: #1e2647;
+  --mg-accent-soft-ink: #a9b8f5;
+  --mg-ring: rgb(125 149 245 / 0.55);
+
+  --mg-ok: #30d158;
+  --mg-ok-soft: #173323;
+  --mg-ok-ink: #7ee2a0;
+  --mg-warn: #ff9f0a;
+  --mg-warn-soft: #33260f;
+  --mg-warn-ink: #ffc266;
+  --mg-bad: #ff453a;
+  --mg-bad-soft: #3a1a18;
+  --mg-bad-ink: #ff8a82;
+  --mg-info: #7d95f5;
+  --mg-info-soft: #1e2647;
+  --mg-info-ink: #a9b8f5;
+  /* 熄灭灯需与 #232326 面板可区分 */
+  --mg-off: #636366;
+
+  --mg-lamp-bezel-top: #050506;
+  --mg-lamp-bezel-bottom: #3a3a3e;
+  --mg-lcd: #18181a;
+  --mg-lcd-ink: #f5f5f7;
+  --mg-lcd-dim: #8e8e93;
+
+  --mg-chart-1: #8ea2ff;
+  --mg-edge: #6b7280;
+  --mg-edge-strong: #9ca3af;
+  --mg-edge-active: #2dd4bf;
+  --mg-edge-bad: #ff6b61;
+  --mg-minimap-node: #4a5590;
+  --mg-minimap-mask: rgb(0 0 0 / 0.5);
+  color-scheme: dark;
+}

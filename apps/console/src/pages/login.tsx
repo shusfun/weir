@@ -8,7 +8,7 @@ import {
   Fingerprint,
   ShieldCheck,
 } from "lucide-react";
-import { Button, Card, CardContent, Input, Label } from "@migate/ui";
+import { IconTile, Field, Notice, Button, Card, CardContent, Input} from "@migate/ui";
 import { api } from "../api";
 import { accountPasswordError } from "../password";
 import { passkey } from "../lib/passkey";
@@ -177,16 +177,12 @@ export function LoginPage({ done }: { done: () => void }) {
           <strong>MiGate</strong>
         </a>
         <p className="auth-subtitle">独立节点，统一管理。</p>
-        <Card className="auth-card">
+        <Card className="auth-card" size="lg">
           <CardContent>
             <header className="auth-heading">
-              <span className="auth-heading-icon">
-                {challenge ? (
-                  <ShieldCheck size={22} />
-                ) : (
-                  <Fingerprint size={22} />
-                )}
-              </span>
+              <IconTile size="lg" className="mb-3.5">
+                {challenge ? <ShieldCheck /> : <Fingerprint />}
+              </IconTile>
               <h1>{challenge ? "验证你的身份" : titles[mode]}</h1>
               <p>
                 {challenge
@@ -200,7 +196,7 @@ export function LoginPage({ done }: { done: () => void }) {
               </p>
             )}
             {policy.isError && (
-              <div className="auth-message error-message" role="alert">
+              <Notice tone="bad">
                 登录方式暂时无法读取。
                 <Button
                   type="button"
@@ -209,17 +205,17 @@ export function LoginPage({ done }: { done: () => void }) {
                 >
                   重新读取
                 </Button>
-              </div>
+              </Notice>
             )}
             {unavailable && !policy.isPending ? (
               <div className="stack">
-                <p className="notice" role="status">
+                <Notice role="status">
                   {policy.isError
                     ? "当前账户策略未知，请重新读取后再继续。"
                     : mode === "register"
                       ? "注册暂未开放，请联系管理员创建账户。"
                       : "当前未启用邮箱验证。"}
-                </p>
+                </Notice>
               </div>
             ) : (
               <form
@@ -229,8 +225,7 @@ export function LoginPage({ done }: { done: () => void }) {
                 aria-busy={busy}
               >
                 {!challenge && (
-                  <div className="field">
-                    <Label htmlFor={id + "email"}>邮箱</Label>
+                  <Field label="邮箱" htmlFor={id + "email"}>
                     <Input
                       id={id + "email"}
                       type="email"
@@ -241,13 +236,10 @@ export function LoginPage({ done }: { done: () => void }) {
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@example.com"
                     />
-                  </div>
+                  </Field>
                 )}
                 {!challenge && mode !== "verify" && (
-                  <div className="field">
-                    <Label htmlFor={id + "password"}>
-                      {mode === "reset" ? "新密码" : "密码"}
-                    </Label>
+                  <Field label={mode === "reset" ? "新密码" : "密码"} htmlFor={id + "password"}>
                     <Input
                       id={id + "password"}
                       type="password"
@@ -262,11 +254,10 @@ export function LoginPage({ done }: { done: () => void }) {
                     {mode !== "login" && (
                       <small>至少 6 位，须包含大写字母、小写字母和数字。</small>
                     )}
-                  </div>
+                  </Field>
                 )}
                 {!challenge && (mode === "reset" || mode === "register") && (
-                  <div className="field">
-                    <Label htmlFor={id + "confirm"}>确认密码</Label>
+                  <Field label="确认密码" htmlFor={id + "confirm"}>
                     <Input
                       id={id + "confirm"}
                       type="password"
@@ -276,13 +267,10 @@ export function LoginPage({ done }: { done: () => void }) {
                       value={confirmation}
                       onChange={(e) => setConfirmation(e.target.value)}
                     />
-                  </div>
+                  </Field>
                 )}
                 {showCode && (
-                  <div className="field">
-                    <Label htmlFor={id + "code"}>
-                      {challenge ? "验证码 / 恢复码" : "邮箱验证码"}
-                    </Label>
+                  <Field label={challenge ? "验证码 / 恢复码" : "邮箱验证码"} htmlFor={id + "code"}>
                     <Input
                       id={id + "code"}
                       autoComplete="one-time-code"
@@ -302,17 +290,17 @@ export function LoginPage({ done }: { done: () => void }) {
                         {cooldown ? `${cooldown} 秒后重新发送` : "发送验证码"}
                       </Button>
                     )}
-                  </div>
+                  </Field>
                 )}
                 {error && (
-                  <p className="auth-message error-message" role="alert">
+                  <Notice tone="bad">
                     {error}
-                  </p>
+                  </Notice>
                 )}
                 {notice && (
-                  <p className="auth-message auth-success" role="status">
+                  <Notice tone="ok" role="status">
                     {notice}
-                  </p>
+                  </Notice>
                 )}
                 <Button
                   type="submit"

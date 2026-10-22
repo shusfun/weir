@@ -107,7 +107,7 @@ function DialogOverlay({
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 isolate z-50 bg-gray-900/20 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        "fixed inset-0 isolate z-50 bg-[rgb(20_18_14/0.38)] transition-opacity duration-[var(--mg-mid)] data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 dark:bg-[rgb(0_0_0/0.6)]",
         className,
       )}
       {...props}
@@ -115,13 +115,27 @@ function DialogOverlay({
   );
 }
 
+// 弹窗宽度档位：sm 确认 / 简单提示，md 常规表单，lg 列表编辑 / 多栏表单，xl 预览 / 大型编辑器。
+// 业务侧只选档位，不再用 !important 写死宽度。
+const dialogSizes = {
+  sm: "sm:max-w-sm",
+  md: "sm:max-w-[560px]",
+  lg: "sm:max-w-[720px]",
+  xl: "sm:max-w-[900px]",
+} as const;
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
+  size = "sm",
+  placement = "center",
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
+  size?: keyof typeof dialogSizes;
+  // top：靠上展示（命令面板），输入结果增减时位置不跳动
+  placement?: "center" | "top";
 }) {
   const generatedId = useId();
   const footerForm = findFooterForm(children);
@@ -145,8 +159,11 @@ function DialogContent({
       <DialogSlotContext.Provider value={slots}>
       <DialogPrimitive.Popup
         data-slot="dialog-content"
+        data-size={size}
         className={cn(
-          "transition-[opacity,transform,translate,scale] fixed top-1/2 left-1/2 z-50 flex w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-hidden rounded-lg bg-card p-6 text-base shadow-[0_0_15px_-3px_rgb(0,0,0,0.1)] ring-0 ring-foreground/10 duration-100 outline-none sm:max-w-sm max-h-[calc(100dvh-32px)] data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "group/dialog fixed left-1/2 z-50 flex max-h-[calc(100dvh-32px)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 flex-col gap-4 overflow-hidden rounded-[var(--mg-radius-lg)] border border-[var(--mg-line)] bg-[linear-gradient(180deg,var(--mg-panel-top),var(--mg-panel)_64px)] p-6 text-sm text-card-foreground shadow-[inset_0_1px_0_var(--mg-highlight),0_18px_40px_-12px_var(--mg-shade-strong)] outline-none transition-[opacity,scale] duration-[var(--mg-mid)] ease-[var(--mg-ease)] data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.98] data-[ending-style]:opacity-0 max-sm:p-5",
+          placement === "top" ? "top-[14vh] max-h-[calc(86dvh-16px)]" : "top-1/2 -translate-y-1/2",
+          dialogSizes[size],
           className,
         )}
         {...props}
@@ -156,7 +173,10 @@ function DialogContent({
             {header}
           </div>
         )}
-        <div data-slot="dialog-body" className="flex min-h-0 flex-auto flex-col overflow-x-hidden overflow-y-auto">
+        <div
+          data-slot="dialog-body"
+          className="flex min-h-0 min-w-0 flex-auto flex-col overflow-x-hidden overflow-y-auto [&>form]:flex [&>form]:min-h-full [&>form]:min-w-0 [&>form]:flex-[1_0_auto] [&>form]:flex-col"
+        >
           {body}
         </div>
         <div ref={setHost} data-slot="dialog-footer-host" className="shrink-0 empty:hidden" />
@@ -172,7 +192,7 @@ function DialogContent({
             }
           >
             <XIcon />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">关闭</span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>
@@ -215,7 +235,7 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "border-t-border-border -mx-6 -mb-6 flex shrink-0 flex-col-reverse gap-2 rounded-b-lg border-t bg-background p-5 sm:flex-row sm:justify-end",
+        "-mx-6 -mb-6 flex shrink-0 flex-col-reverse gap-2 rounded-b-[var(--mg-radius-lg)] border-t border-[var(--mg-line-soft)] bg-[var(--mg-panel)] px-6 py-4 max-sm:-mx-5 max-sm:-mb-5 max-sm:px-5 max-sm:py-3 sm:flex-row sm:justify-end",
         className,
       )}
       {...props}
@@ -237,7 +257,7 @@ function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("h5", className)}
+      className={cn("pr-8 text-[17px] font-semibold tracking-[-0.015em] text-[var(--mg-ink)]", className)}
       {...props}
     />
   );
@@ -251,7 +271,7 @@ function DialogDescription({
     <DialogPrimitive.Description
       data-slot="dialog-description"
       className={cn(
-        "text-base text-muted-foreground *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground",
+        "text-[13px] leading-relaxed text-[var(--mg-ink-3)] *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground",
         className,
       )}
       {...props}

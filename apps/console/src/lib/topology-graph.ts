@@ -675,7 +675,7 @@ function buildClientEdge(
       enabled: inbound.enabled !== false && client.enabled !== false,
     },
     style: {
-      stroke: "#94a3b8",
+      stroke: "var(--mg-edge)",
       strokeDasharray: "4 4",
       opacity:
         inbound.enabled !== false && client.enabled !== false ? 0.46 : 0.22,
@@ -701,7 +701,7 @@ function buildDefaultDirectEdge(
       enabled,
     },
     style: {
-      stroke: "#64748b",
+      stroke: "var(--mg-edge-strong)",
       strokeDasharray: "8 6",
       opacity: enabled ? 0.58 : 0.32,
     },
@@ -726,7 +726,7 @@ function buildClientDefaultDirectEdge(
       enabled,
     },
     style: {
-      stroke: "#64748b",
+      stroke: "var(--mg-edge-strong)",
       strokeDasharray: "8 6",
       opacity: enabled ? 0.42 : 0.24,
     },
@@ -774,10 +774,10 @@ function buildRoutingEdge(
     style: {
       stroke:
         missingTarget || invalidTarget
-          ? "#dc2626"
+          ? "var(--mg-edge-bad)"
           : enabled
-            ? "#0f766e"
-            : "#94a3b8",
+            ? "var(--mg-edge-active)"
+            : "var(--mg-edge)",
       strokeDasharray: enabled ? undefined : "6 5",
       opacity: enabled ? 0.82 : 0.36,
     },

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Button, Card, CardContent } from "@migate/ui";
+import { Notice, SectionHeader, Button, Card, CardContent } from "@migate/ui";
 import { client } from "../lib/client";
 import { date } from "../lib/models";
 
@@ -15,8 +15,8 @@ export function SourceUsagePanel() {
  const q=useQuery({queryKey:["source-usage"],queryFn:client.sourceUsage,refetchInterval:30000});
  const d=q.data;
  return <Card className="source-usage-panel" aria-label="上游用量合计"><CardContent>
-  <div className="section-heading"><div><h3>上游用量合计</h3><p className="muted">全部启用订阅源 · 上游自报，不是用户强制额度</p></div><Button variant="outline" size="sm" disabled={q.isFetching} onClick={()=>void q.refetch()}>刷新用量</Button></div>
-  {q.isPending ? <p role="status">正在读取上游观测…</p> : q.isError ? <p role="alert">上游用量读取失败，当前数值未知，请重试。</p> : d && <>
+  <SectionHeader level="h3" title="上游用量合计" description="全部启用订阅源 · 上游自报，不是用户强制额度" actions={<Button variant="outline" size="sm" disabled={q.isFetching} onClick={()=>void q.refetch()}>刷新用量</Button>} />
+  {q.isPending ? <p role="status">正在读取上游观测…</p> : q.isError ? <Notice tone="bad">上游用量读取失败，当前数值未知，请重试。</Notice> : d && <>
    <div className="source-usage-grid">
     {([["剩余流量",d.remaining],["总流量",d.total],["已上传",d.upload],["已下载",d.download]] as const).map(([label,value])=><div key={label}><span>{label}</span><strong title={value==null ? "缺失或过期数据" : value+" B"}>{capacity(value)}</strong></div>)}
    </div>

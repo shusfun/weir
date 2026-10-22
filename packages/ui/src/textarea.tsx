@@ -1,14 +1,17 @@
+// 来源 codedthemes/uiable textarea；本地改为凹槽材质。
+// mono：节点链接、PEM、订阅输出等原文内容，等宽且不自动折行。
 import { ComponentProps } from "react";
-
-// third-party
 import { cn } from "cn";
+import { fieldClass } from "./input";
 
-function Textarea({ className, ...props }: ComponentProps<"textarea">) {
+function Textarea({ className, mono = false, ...props }: ComponentProps<"textarea"> & { mono?: boolean }) {
   return (
     <textarea
       data-slot="textarea"
       className={cn(
-        "disabled:bg-secondary-200/10 dark:disabled:bg-secondary-200/10 flex field-sizing-content min-h-22 w-full rounded-lg border border-border bg-input px-3 py-[.8rem] text-base transition-colors outline-none placeholder:text-[#bec8d0] focus:border-primary focus:outline-none disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive dark:focus:border-primary dark:aria-invalid:border-destructive/50",
+        fieldClass,
+        "field-sizing-content min-h-22 py-2.5 leading-relaxed",
+        mono && "font-mono text-xs whitespace-pre",
         className,
       )}
       {...props}

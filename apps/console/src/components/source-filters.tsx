@@ -1,8 +1,7 @@
 import { useId, useState } from "react";
-import {
+import { Field, SectionHeader,
   Button,
   Input,
-  Label,
   Select,
   SelectTrigger,
   SelectValue,
@@ -54,22 +53,14 @@ export function SourceFilters({
   }
   return (
     <section className="stack source-filter-fields" aria-label="订阅源节点筛选">
-      <div className="section-heading">
-        <div>
-          <h3>节点筛选</h3>
-          <p>
-            先保留，再排除；仅作用于此源。空规则保留全部。更改后直接用于组预览。
-          </p>
-        </div>
-        <Button
+      <SectionHeader level="h3" align="start" title="节点筛选" description="先保留，再排除；仅作用于此源。空规则保留全部。更改后直接用于组预览。" actions={<Button
           type="button"
           variant="ghost"
           disabled={advanced && !canVisualize}
           onClick={() => A(!advanced)}
         >
           {advanced ? "可视化编辑" : "高级规则"}
-        </Button>
-      </div>
+        </Button>} />
       {advanced && !canVisualize && (
         <p className="muted">
           当前含混合 / 分隔规则，请在高级模式编辑，避免改变原有顺序。
@@ -77,18 +68,16 @@ export function SourceFilters({
       )}
       {advanced ? (
         <>
-          <Label htmlFor={id + "include"}>源保留规则</Label>
-          <Textarea
+          <Field label="源保留规则" htmlFor={id + "include"}><Textarea
             id={id + "include"}
             value={fields.filter_include ?? ""}
             onChange={(e) => change("filter_include", e.target.value)}
-          />
-          <Label htmlFor={id + "exclude"}>源排除规则</Label>
-          <Textarea
+          /></Field>
+          <Field label="源排除规则" htmlFor={id + "exclude"}><Textarea
             id={id + "exclude"}
             value={fields.filter_exclude ?? ""}
             onChange={(e) => change("filter_exclude", e.target.value)}
-          />
+          /></Field>
           <p className="muted">
             每行一个 RE2 名称表达式或 proto:ss,trojan。keep: 标记保留；---
             后为保留区。错误表达式会拒绝保存，不会忽略。
@@ -96,8 +85,7 @@ export function SourceFilters({
         </>
       ) : (
         <>
-          <Label htmlFor={id + "mode"}>筛选动作</Label>
-          <Select value={mode} onValueChange={(v) => v && M(v)}>
+          <Field label="筛选动作" htmlFor={id + "mode"}><Select value={mode} onValueChange={(v) => v && M(v)}>
             <SelectTrigger id={id + "mode"}>
               <SelectValue>
                 {mode === "include" ? "仅保留匹配节点" : "排除匹配节点"}
@@ -107,15 +95,14 @@ export function SourceFilters({
               <SelectItem value="include">仅保留匹配节点</SelectItem>
               <SelectItem value="exclude">排除匹配节点</SelectItem>
             </SelectContent>
-          </Select>
-          <Label htmlFor={id + "keyword"}>节点名称关键词</Label>
-          <Input
+          </Select></Field>
+          <Field label="节点名称关键词" htmlFor={id + "keyword"}><Input
             id={id + "keyword"}
             maxLength={100}
             value={keyword}
             onChange={(e) => K(e.target.value)}
             placeholder="例如 香港；按文字匹配，忽略大小写"
-          />
+          /></Field>
           <div className="actions">
             <Button
               type="button"
@@ -140,8 +127,7 @@ export function SourceFilters({
               </Button>
             ))}
           </div>
-          <Label htmlFor={id + "protocol"}>节点协议</Label>
-          <Select value={protocol} onValueChange={(v) => v && P(v)}>
+          <Field label="节点协议" htmlFor={id + "protocol"}><Select value={protocol} onValueChange={(v) => v && P(v)}>
             <SelectTrigger id={id + "protocol"}>
               <SelectValue>{protocol.toUpperCase()}</SelectValue>
             </SelectTrigger>
@@ -163,7 +149,7 @@ export function SourceFilters({
                 </SelectItem>
               ))}
             </SelectContent>
-          </Select>
+          </Select></Field>
           <Button
             type="button"
             variant="outline"

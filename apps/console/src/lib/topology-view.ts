@@ -62,7 +62,7 @@ export function topologyView(
       type: "smoothstep",
       animated: false,
       data: { kind: "client-inherits", label: "折叠授权记录", enabled: false },
-      style: { stroke: "#94a3b8", strokeDasharray: "4 4" },
+      style: { stroke: "var(--mg-edge)", strokeDasharray: "4 4" },
     });
   }
   return { nodes, edges };

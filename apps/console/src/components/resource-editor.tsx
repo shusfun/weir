@@ -1,9 +1,8 @@
 import {PrefixFields} from "./subscription-naming";
 import { useState, useId, type ReactNode } from "react";
 import { SourceFilters } from "./source-filters";
-import {
+import { Field,
   Button,
-  Input,
   Label,
   Card,
   CardHeader,
@@ -20,13 +19,14 @@ import {
 import { api } from "../api";
 import { ResourceSelector } from "./resource-selector";
 import { OperatorEditor } from "./operator-editor";
-import { Field } from "./form-field";
+import { TextField } from "./form-field";
 import { OutputTemplateFields } from "./template-fields";
 import { PublicPageFields } from "./public-page-fields";
 type Row = Record<string, any>;
+// 仅在编辑弹窗内使用：去掉外框，只保留分区标题与内容
 function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <Card>
+    <Card variant="plain">
       <CardHeader>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
@@ -116,7 +116,7 @@ export function ResourceEditor({
   const fieldId = useId();
   const setField = (key: string, value: any) => F({ ...fields, [key]: value });
   const textField = (key: string, label: string, type = "text") => (
-    <Field
+    <TextField
       key={key}
       name={fieldId + key}
       label={label}
@@ -139,7 +139,7 @@ export function ResourceEditor({
     </div>
   );
   const listField = (key: string, label: string) => (
-    <Field
+    <TextField
       key={key}
       name={fieldId + key}
       label={label + "（按顺序填写 ID，逗号分隔）"}
@@ -247,20 +247,16 @@ export function ResourceEditor({
               <>
                 {textField("slug", "公开路径（2–64 位小写字母、数字、连字符）")}
                 {textField("title", "公开页标题")}
-                <Label htmlFor={fieldId + "description"}>
-                  公开介绍（纯文本）
-                </Label>
-                <Textarea
+                <Field label="公开介绍（纯文本）" htmlFor={fieldId + "description"}><Textarea
                   id={fieldId + "description"}
                   value={fields.description ?? ""}
                   onChange={(e) => setField("description", e.target.value)}
-                />
-                <Label htmlFor={fieldId + "notice"}>公告（纯文本）</Label>
-                <Textarea
+                /></Field>
+                <Field label="公告（纯文本）" htmlFor={fieldId + "notice"}><Textarea
                   id={fieldId + "notice"}
                   value={fields.notice ?? ""}
                   onChange={(e) => setField("notice", e.target.value)}
-                />
+                /></Field>
                 {toggleField("show_login", "显示登录入口")}
                 <PublicPageFields
                   fields={fields}
@@ -355,13 +351,12 @@ export function ResourceEditor({
         )}
         {advanced && (
           <>
-            <Label htmlFor={fieldId + "json"}>{kind} JSON</Label>
-            <Textarea
+            <Field label={<>{kind} JSON</>} htmlFor={fieldId + "json"}><Textarea
               id={fieldId + "json"}
               value={text}
               onChange={(e) => T(e.target.value)}
               rows={7}
-            />
+            /></Field>
           </>
         )}
         <Button type="submit" disabled={busy}>

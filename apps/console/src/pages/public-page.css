@@ -1,19 +1,42 @@
+/*
+ * 公开页主题：--public-accent 用于文字 / 图标 / 边框，--public-fill 用于白字按钮底色，
+ * --public-soft 为浅底。中性色全部引用 --mg-* 令牌，深色模式只需覆盖三个主题色。
+ */
 .published-page {
   --public-accent: #7154d8;
+  --public-fill: #7154d8;
   --public-soft: #f0ebff;
+  /* 页面内的通用部件（图标方块、链接、焦点轮廓）随公开页主题色 */
+  --mg-accent-text: var(--public-accent);
+  --mg-accent-soft: var(--public-soft);
   max-width: 1120px;
   margin: 0 auto;
   padding: 0 36px 36px;
   min-height: 100dvh;
-  color: #222334;
+  color: var(--mg-ink);
 }
 .published-page[data-theme="ocean"] {
   --public-accent: #187598;
+  --public-fill: #187598;
   --public-soft: #e7f5fa;
 }
 .published-page[data-theme="forest"] {
   --public-accent: #277559;
+  --public-fill: #277559;
   --public-soft: #e8f4ee;
+}
+/* 深色：文字色提亮到 4.5:1 以上，按钮底色保持原色以维持白字对比 */
+.dark .published-page {
+  --public-accent: #ab9cff;
+  --public-soft: #27213f;
+}
+.dark .published-page[data-theme="ocean"] {
+  --public-accent: #5ec2e6;
+  --public-soft: #132e39;
+}
+.dark .published-page[data-theme="forest"] {
+  --public-accent: #63cf9e;
+  --public-soft: #142e25;
 }
 .published-top {
   display: flex;
@@ -21,7 +44,7 @@
   align-items: center;
   gap: 16px;
   padding: 26px 0;
-  border-bottom: 1px solid #e8e9ef;
+  border-bottom: 1px solid var(--mg-line-soft);
 }
 .published-brand {
   display: inline-flex;
@@ -37,12 +60,7 @@
   max-width: 850px;
   overflow-wrap: anywhere;
 }
-.published-eyebrow {
-  color: var(--public-accent);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 2px;
-}
+
 .published-hero h1 {
   font-size: clamp(30px, 5vw, 48px);
   font-weight: 750;
@@ -53,7 +71,7 @@
 .published-description {
   font-size: 16px;
   line-height: 1.85;
-  color: #686a7d;
+  color: var(--mg-ink-3);
   white-space: pre-wrap;
 }
 .published-actions {
@@ -63,15 +81,8 @@
   margin-top: 28px;
 }
 .published-actions button:first-child {
-  background: var(--public-accent);
-  color: white;
-}
-.published-announcement {
-  border-left: 3px solid var(--notice-accent,var(--public-accent)) !important;
-  background: var(--notice-soft,var(--public-soft)) !important;
-}
-.published-announcement [data-slot="card-content"] {
-  padding: 24px;
+  background: var(--public-fill);
+  color: var(--mg-accent-ink);
 }
 .published-section-title {
   display: flex;
@@ -90,7 +101,7 @@
   overflow-wrap: anywhere;
   line-height: 1.8;
   font-size: 14px;
-  color: #515568;
+  color: var(--mg-ink-2);
 }
 .published-directory {
   margin-top: 44px;
@@ -107,7 +118,7 @@
   font-weight: 700;
 }
 .published-directory-heading span {
-  color: #72768a;
+  color: var(--mg-ink-3);
   font-size: 13px;
 }
 .published-grid {
@@ -126,31 +137,23 @@
   outline: 3px solid var(--public-accent);
   outline-offset: 4px;
 }
-.published-card-link > [data-slot="card"] {
+.published-card {
   width: 100%;
   margin: 0;
   transition:
     border-color 0.15s,
     box-shadow 0.15s;
 }
-.published-card-link:hover > [data-slot="card"] {
+.published-card-link:hover .published-card {
   border-color: var(--public-accent);
-  box-shadow: 0 6px 22px #20204009;
+  box-shadow: 0 6px 22px var(--mg-shade);
 }
-.published-card-link [data-slot="card-content"] {
-  padding: 24px;
+.published-card-body {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   height: 100%;
   gap: 16px;
-}
-.published-card-icon {
-  display: inline-flex;
-  padding: 10px;
-  border-radius: 10px;
-  background: var(--public-soft);
-  color: var(--public-accent);
 }
 .published-card-link h3 {
   font-size: 17px;
@@ -160,7 +163,7 @@
 }
 .published-card-link p {
   font-size: 13px;
-  color: #686a7d;
+  color: var(--mg-ink-3);
   line-height: 1.8;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -178,14 +181,15 @@
 .published-footer {
   margin-top: 64px;
   padding-top: 24px;
-  border-top: 1px solid #e8e9ef;
+  border-top: 1px solid var(--mg-line-soft);
   font-size: 12px;
-  color: #9295a5;
+  color: var(--mg-ink-engraved);
   text-align: center;
 }
 .published-qr > svg {
   margin: 16px auto;
-  background: white;
+  /* 二维码必须保持白底以保证扫码识别 */
+  background: #fff;
   padding: 12px;
   box-sizing: content-box;
   max-width: calc(100% - 24px);
@@ -215,10 +219,6 @@
   .published-grid {
     grid-template-columns: minmax(0, 1fr);
     gap: 14px;
-  }
-  .published-announcement [data-slot="card-content"],
-  .published-card-link [data-slot="card-content"] {
-    padding: 20px;
   }
   .published-directory {
     margin-top: 32px;

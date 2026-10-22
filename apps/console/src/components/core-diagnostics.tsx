@@ -1,4 +1,5 @@
-import { Badge, Card, CardContent } from "@migate/ui";
+import { Notice, SectionHeader, Badge, Card, CardContent } from "@migate/ui";
+import { Status } from "./feedback";
 import type { Task } from "../lib/models";
 import { bytes, date } from "../lib/models";
 
@@ -59,7 +60,7 @@ export function CoreDiagnostics({
         200 条记录。分类数量不等于连接次数，原始配置与日志不回传。
       </p>
       {!latest.size && (
-        <p className="notice">尚无诊断回执。点击内核的“只读诊断”开始检查。</p>
+        <Notice>尚无诊断回执。点击内核的“只读诊断”开始检查。</Notice>
       )}
       <div className="core-diagnostics-grid">
         {[...latest].map(([core, task]) => {
@@ -69,37 +70,22 @@ export function CoreDiagnostics({
           const fresh =
             !!d.observed_at && Date.now() - Date.parse(d.observed_at) < 60000;
           return (
-            <Card className="core-diagnostic-card" key={core}>
-              <CardContent>
-                <div className="section-heading">
-                  <strong>
-                    {core} · 诊断 #{task.id}
-                  </strong>
-                  <Badge variant="outline">
+            <Card className="core-diagnostic-card" size="sm" key={core}>
+              <CardContent className="flex flex-col gap-2.5">
+                <SectionHeader size="sm" title={<>{core} · 诊断 #{task.id}</>} actions={<Badge variant="outline">
                     {fresh ? "最近观测" : "历史观测"}
-                  </Badge>
-                </div>
+                  </Badge>} />
                 <p>{date(d.observed_at)} · 来源：Gate 本地辅助程序</p>
                 {c?.validity === "fresh" ? (
                   <>
-                    <div className="section-heading">
-                      <strong>配置校验</strong>
-                      <Badge
-                        variant="outline"
-                        className={
-                          "status-badge status-" +
-                          (c.validation === "passed" ? "applied" : "failed")
-                        }
-                      >
-                        {c.validation === "passed"
-                          ? "校验通过"
-                          : "失败 / 不可用"}
-                      </Badge>
-                    </div>
+                    <SectionHeader size="sm" title="配置校验" actions={<Status
+                        value={c.validation === "passed" ? "applied" : "failed"}
+                        label={c.validation === "passed" ? "校验通过" : "失败 / 不可用"}
+                      />} />
                     {c.validation !== "passed" && (
-                      <p role="alert">
+                      <Notice tone="bad">
                         校验失败或校验器不可用；请结合任务记录与服务器受限日志排查。
-                      </p>
+                      </Notice>
                     )}
                     <p>
                       入站 {c.inbounds} · 出站 {c.outbounds} · 路由 {c.rules} ·{" "}
@@ -112,7 +98,7 @@ export function CoreDiagnostics({
                     </details>
                   </>
                 ) : (
-                  <p className="notice">配置不可读取或格式无效，状态未知。</p>
+                  <Notice>配置不可读取或格式无效，状态未知。</Notice>
                 )}
                 {j?.validity === "fresh" ? (
                   <>
@@ -130,13 +116,13 @@ export function CoreDiagnostics({
                       <small>最近记录：{date(j.latest_at)}</small>
                     )}
                     {j.possibly_limited && (
-                      <p className="notice">
+                      <Notice>
                         已达到采样上限；此窗口可能还有未展示的记录。
-                      </p>
+                      </Notice>
                     )}
                   </>
                 ) : (
-                  <p className="notice">日志不可用或输出截断，数量未知。</p>
+                  <Notice>日志不可用或输出截断，数量未知。</Notice>
                 )}
               </CardContent>
             </Card>

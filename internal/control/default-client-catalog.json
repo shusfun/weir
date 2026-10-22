@@ -1,5 +1,22 @@
 [
   {
+    "id": "flclash",
+    "name": "FlClash",
+    "description": "基于 Mihomo 的多平台客户端，界面简洁，支持一键导入订阅。推荐优先使用。",
+    "platforms": [
+      "windows",
+      "macos",
+      "linux",
+      "android"
+    ],
+    "url": "https://github.com/chen08209/FlClash/releases",
+    "repo": "chen08209/FlClash",
+    "icon": "monitor",
+    "format": "clash",
+    "import": "clash",
+    "enabled": true
+  },
+  {
     "id": "clash-verge-rev",
     "name": "Clash Verge Rev",
     "description": "现代化的 Clash 客户端，界面美观，功能强大，支持多平台。",

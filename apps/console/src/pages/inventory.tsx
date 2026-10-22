@@ -7,7 +7,7 @@ import { date } from "../lib/models";
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import {
+import { ReorderButtons, Field, Notice, SearchInput, Pager,
   Button,
   Input,
   Checkbox,
@@ -18,18 +18,13 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-  Label,
   Textarea,
-  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem, PageHeader, Segmented,
 } from "@migate/ui";
 import {
   Plus,
-  Search,
   Upload,
   RefreshCw,
-  ArrowLeft,
-  ArrowRight,
-  ArrowUp, ArrowDown,
   Layers,
   Link2,
   SlidersHorizontal,
@@ -45,6 +40,7 @@ import { ResourceEditor } from "../components/resource-editor";
 import { NodeDedup } from "../components/node-dedup";
 import { SourceUsagePanel } from "../components/source-usage";
 import { InventoryImport } from "../components/inventory-import";
+import { InlineSwitch } from "../components/inline-switch";
 const kinds = [
   ["sources", "订阅源", Link2],
   ["nodes", "手动节点", Layers],
@@ -52,16 +48,21 @@ const kinds = [
   ["operators", "处理链", SlidersHorizontal],
   ["templates", "输出模板", Code2],
   ["public-page", "公开页", Globe],
-  ["mail", "邮件队列", Mail],
 ] as const;
-export function InventoryPage() {
-  const [params, SP] = useSearchParams();
-  const kind = kinds.some((k) => k[0] === params.get("kind"))
-    ? params.get("kind")!
-    : "sources";
-  const title = kinds.find((k) => k[0] === kind)![1];
+const intros: Record<string, string> = {
+  sources: "上游订阅地址与自报用量。刷新失败时保留最近成功库存，用量显示未知。",
+  nodes: "手动维护的节点库存：导入、分组、去重与显示顺序。",
+  operators: "有序处理步骤：筛选、重命名、排序。订阅组可引用多条处理链。",
+  templates: "按客户端格式输出的策略组与规则模板。",
+  profiles: "组合来源、节点与处理链；预览输出、调整顺序，并按需发布独立分享。",
+  "public-page": "匿名可访问的公开页面；订阅目录与留言在各页面内单独管理。",
+};
+// 资源列表：订阅流水线各级与公开页面共用；kind 由路由决定。
+export function InventoryPage({ kind }: { kind: string }) {
+  const [params] = useSearchParams();
+  const title = kinds.find((k) => k[0] === kind)?.[1] ?? "资源";
   const cache = useQueryClient();
-  const [search, S] = useState("");
+  const [search, S] = useState(params.get("q") ?? "");
   const [page, P] = useState(1);
   const [selected, SEL] = useState<number[]>([]);
   const [editor, ED] = useState<Resource | "new" | null>(null);
@@ -99,7 +100,6 @@ const [guestbook,GB]=useState<Resource|null>(null);
   );
   const shown = rows.slice((page - 1) * 20, page * 20);
   useEffect(() => {
-    S("");
     P(1);
     SEL([]);
     ED(null);
@@ -115,7 +115,8 @@ const [guestbook,GB]=useState<Resource|null>(null);
     await cache.invalidateQueries({ queryKey: ["inventory", kind] });
     if(kind==="nodes")await cache.invalidateQueries({queryKey:["node-groups"]});
     await cache.invalidateQueries({ queryKey: ["selection", kind] });
-    await cache.invalidateQueries({ queryKey: ["legacy"] });
+    await cache.invalidateQueries({ queryKey: ["overview"] });
+    await cache.invalidateQueries({ queryKey: ["my-subscription"] });
     await cache.invalidateQueries({ queryKey: ["source-usage"] });
   }
   async function batch(action: string, ids: number[]) {
@@ -151,6 +152,11 @@ const [guestbook,GB]=useState<Resource|null>(null);
     RM(null);
     await changed();
     B(false);
+  }
+  // 行内开关：与批量启用 / 停用相同的写入方式，只改 enabled
+  async function toggle(r: Resource, enabled: boolean) {
+    await api("/admin/resources/" + kind, "POST", { id: r.id, data: { ...r.data, enabled } });
+    await changed();
   }
   async function move(id:number,other:number){B(true);E("");N("");try{await api("/admin/nodes/order","POST",{id,other_id:other});await changed();N("节点显示顺序已保存；订阅组保持自己的顺序。")}catch(e){E(e instanceof Error?e.message:"排序失败")}finally{B(false)}}
   async function saveGroup(){B(true);E("");N("");try{const result=await api("/admin/nodes/group","POST",{ids:selected,group:destination});const failed=result.items.filter((r:{ok:boolean})=>!r.ok).map((r:{id:number})=>r.id);SEL(failed);await changed();GD(false);N(`分组成功 ${result.items.length-failed.length} 项；失败 ${failed.length} 项${failed.length?"，已保留选择供重试":""}`)}catch(e){E(e instanceof Error?e.message:"移动失败")}finally{B(false)}}
@@ -188,86 +194,63 @@ const [guestbook,GB]=useState<Resource|null>(null);
   }
   return (
     <div className="stack">
-      <div className="page-intro">
-        <div>
-          <h2>订阅工作空间</h2>
-          <p>组织订阅源、节点与处理链。用户订阅仍只发布有效的 Gate 授权。</p>
-        </div>
-        <div className="actions">
-          {kind === "nodes" && (
-            <Button variant="outline" onClick={() => IM(true)}>
-              <Upload size={15} />
-              导入节点
-            </Button>
-          )}
-          {kind === "nodes" && <Button variant="outline" disabled={busy} onClick={()=>DD(true)}>清理重复</Button>}
-          {kind !== "mail" && (
+      <PageHeader
+        title={title}
+        description={intros[kind]}
+        actions={
+          <>
+            {kind === "nodes" && (
+              <Button variant="outline" onClick={() => IM(true)}>
+                <Upload />
+                导入节点
+              </Button>
+            )}
+            {kind === "nodes" && <Button variant="outline" disabled={busy} onClick={() => DD(true)}>清理重复</Button>}
             <Button onClick={() => ED("new")}>
-              <Plus size={15} />
+              <Plus />
               新增{title}
             </Button>
-          )}
-        </div>
-      </div>
-      <div className="inventory-tabs" role="tablist" aria-label="订阅工作空间">
-        {kinds.map(([key, label, Icon]) => (
-          <Button
-            key={key}
-            role="tab"
-            aria-selected={kind === key}
-            variant={kind === key ? "secondary" : "ghost"}
-            onClick={() => SP({ kind: key })}
-          >
-            <Icon size={15} />
-            {label}
-          </Button>
-        ))}
-      </div>
+          </>
+        }
+      />
       {kind === "sources" && <SourceUsagePanel />}
       {notice && (
-        <div role="status" className="notice">
+        <Notice role="status">
           {notice}
-        </div>
+        </Notice>
       )}
       {error && (
-        <div role="alert" className="notice error">
+        <Notice tone="bad">
           {error}
-        </div>
+        </Notice>
       )}
       <Card className="table-card">
         <div className="table-toolbar">
-          <div className="search-field">
-            <Search size={16} />
-            <Input
+          <SearchInput
               aria-label={"搜索" + title}
               placeholder={"搜索" + title + "…"}
               value={search}
               onChange={(e) => S(e.target.value)}
             />
-          </div>
           {["sources", "profiles", "public-page"].includes(kind) && (
-            <div className="filter-pills">
-              {[
+            <Segmented
+              aria-label={"按状态筛选" + title}
+              size="sm"
+              fullWidth="mobile"
+              value={status}
+              onValueChange={F}
+              options={[
                 ["all", "全部"],
                 ["enabled", kind === "public-page" ? "已发布" : "已启用"],
                 ["disabled", kind === "public-page" ? "未发布" : "已停用"],
-              ].map(([v, n]) => (
-                <Button
-                  key={v}
-                  size="sm"
-                  variant={status === v ? "secondary" : "ghost"}
-                  onClick={() => F(v)}
-                >
-                  {n}
-                </Button>
-              ))}
-            </div>
+              ]}
+            />
           )}
           <span className="result-count">{rows.length} 条记录</span>
           {kind === "profiles"&&<Button variant="outline" onClick={()=>PS(true)}>调整订阅组顺序</Button>}
           {kind === "nodes"&&<Button variant="outline" onClick={()=>MG(true)}>管理节点分组</Button>}
-          {kind === "nodes" && <Select value={group} onValueChange={v=>GF(String(v))}><SelectTrigger aria-label="筛选节点分组"><SelectValue>{group==="all"?"全部分组":group==="ungrouped"?"未分组":group.slice(2)}</SelectValue></SelectTrigger><SelectContent><SelectItem value="all">全部分组</SelectItem><SelectItem value="ungrouped">未分组</SelectItem>{groupNames.map(g=><SelectItem key={g} value={"g:"+g}>{g}</SelectItem>)}</SelectContent></Select>}
-          {kind === "nodes" && <Select value={protocol} onValueChange={v => PF(String(v))}><SelectTrigger aria-label="筛选节点协议"><SelectValue>{protocol === "all" ? "全部协议" : protocol === "invalid" ? "解析失败" : protocol}</SelectValue></SelectTrigger><SelectContent><SelectItem value="all">全部协议</SelectItem>{[...new Set((q.data?.items??[]).map(r => r.node?.valid ? r.node.protocol! : "invalid"))].sort().map(value => <SelectItem key={value} value={value}>{value === "invalid" ? "解析失败" : value}</SelectItem>)}</SelectContent></Select>}
+          {kind === "nodes" && <Select value={group} onValueChange={v=>GF(String(v))}><SelectTrigger className="min-w-[130px]" aria-label="筛选节点分组"><SelectValue>{group==="all"?"全部分组":group==="ungrouped"?"未分组":group.slice(2)}</SelectValue></SelectTrigger><SelectContent><SelectItem value="all">全部分组</SelectItem><SelectItem value="ungrouped">未分组</SelectItem>{groupNames.map(g=><SelectItem key={g} value={"g:"+g}>{g}</SelectItem>)}</SelectContent></Select>}
+          {kind === "nodes" && <Select value={protocol} onValueChange={v => PF(String(v))}><SelectTrigger className="min-w-[130px]" aria-label="筛选节点协议"><SelectValue>{protocol === "all" ? "全部协议" : protocol === "invalid" ? "解析失败" : protocol}</SelectValue></SelectTrigger><SelectContent><SelectItem value="all">全部协议</SelectItem>{[...new Set((q.data?.items??[]).map(r => r.node?.valid ? r.node.protocol! : "invalid"))].sort().map(value => <SelectItem key={value} value={value}>{value === "invalid" ? "解析失败" : value}</SelectItem>)}</SelectContent></Select>}
         </div>
         {kind !== "mail" && (
           <div className="inventory-bulk">
@@ -368,10 +351,19 @@ const [guestbook,GB]=useState<Resource|null>(null);
                     </div>
                   </div>
                   <div className="actions">
-                    {kind === "nodes" && <><Button variant="ghost" size="icon-sm" aria-label={"上移 "+String(r.data.name??r.key)} disabled={busy||rows.indexOf(r)===0} onClick={()=>move(r.id,rows[rows.indexOf(r)-1].id)}><ArrowUp size={14}/></Button><Button variant="ghost" size="icon-sm" aria-label={"下移 "+String(r.data.name??r.key)} disabled={busy||rows.indexOf(r)===rows.length-1} onClick={()=>move(r.id,rows[rows.indexOf(r)+1].id)}><ArrowDown size={14}/></Button></>}
-                    {typeof r.data.enabled === "boolean" && (
-                      <Status value={r.data.enabled ? "enabled" : "disabled"} />
-                    )}
+                    {kind === "nodes" && <><ReorderButtons label={String(r.data.name??r.key)} onUp={()=>move(r.id,rows[rows.indexOf(r)-1].id)} onDown={()=>move(r.id,rows[rows.indexOf(r)+1].id)} upDisabled={busy||rows.indexOf(r)===0} downDisabled={busy||rows.indexOf(r)===rows.length-1} /></>}
+                    {typeof r.data.enabled === "boolean" &&
+                      (["sources", "profiles", "public-page"].includes(kind) ? (
+                        <InlineSwitch
+                          checked={r.data.enabled}
+                          label={(kind === "public-page" ? "发布 " : "启用 ") + String(r.data.name ?? r.key)}
+                          on={kind === "public-page" ? "已发布" : "已启用"}
+                          off={kind === "public-page" ? "未发布" : "已停用"}
+                          onChange={(enabled) => toggle(r, enabled)}
+                        />
+                      ) : (
+                        <Status value={r.data.enabled ? "enabled" : "disabled"} />
+                      ))}
                     <small className="muted">#{r.id}</small>
                     {["nodes", "profiles", "sources"].includes(kind) && (
                       <Button
@@ -435,29 +427,7 @@ const [guestbook,GB]=useState<Resource|null>(null);
             </div>
           )}
         </CardContent>
-        <div className="pagination">
-          <span>第 {page} 页 · 每页 20 条</span>
-          <div className="actions">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              aria-label="上一页"
-              disabled={page === 1}
-              onClick={() => P((p) => p - 1)}
-            >
-              <ArrowLeft size={14} />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              aria-label="下一页"
-              disabled={page * 20 >= rows.length}
-              onClick={() => P((p) => p + 1)}
-            >
-              <ArrowRight size={14} />
-            </Button>
-          </div>
-        </div>
+        <Pager page={page} pageSize={20} total={rows.length} onPage={P} />
       </Card>
       <Dialog
         open={!!editor}
@@ -465,7 +435,7 @@ const [guestbook,GB]=useState<Resource|null>(null);
           if (!v) ED(null);
         }}
       >
-        <DialogContent className="business-dialog inventory-dialog">
+        <DialogContent size="xl">
           <DialogTitle>
             {editor === "new" ? "新增" : "编辑"}
             {title}
@@ -495,9 +465,9 @@ const [guestbook,GB]=useState<Resource|null>(null);
       {profileOrder&&<ProfileOrdering close={()=>PS(false)} saved={async()=>{await changed();N("订阅组显示顺序已保存；组内引用与用户授权保持不变。")}}/>}
       {managingGroups&&<NodeGroupManager close={()=>MG(false)} saved={async()=>{await changed();await cache.invalidateQueries({queryKey:["selection","nodes"]});await cache.invalidateQueries({queryKey:["inventory","profiles"]});GF("all")}}/>}
       {dedup&&<NodeDedup close={()=>DD(false)} saved={async message=>{SEL([]);await changed();await cache.invalidateQueries({queryKey:["inventory","profiles"]});await cache.invalidateQueries({queryKey:["selection","profiles"]});N(message)}}/>}
-      <Dialog open={groupDialog} onOpenChange={v=>!busy&&GD(v)}><DialogContent><DialogTitle>移动所选节点到分组</DialogTitle><DialogDescription>只修改所选 {selected.length} 个节点的分组。留空移至未分组，订阅组授权保持不变。</DialogDescription><form className="stack" onSubmit={e=>{e.preventDefault();void saveGroup()}}><Label htmlFor="node-group-destination">目标分组</Label><Input id="node-group-destination" value={destination} maxLength={120} onChange={e=>DG(e.target.value)} placeholder="输入新分组，或选择已有分组"/><div className="actions">{groupNames.slice(0,20).map(g=><Button key={g} type="button" size="sm" variant="outline" onClick={()=>DG(g)}>{g}</Button>)}</div>{error&&<p role="alert">{error}</p>}<DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={()=>GD(false)}>取消</Button><Button type="submit" disabled={busy}>{busy?"保存中…":"确认移动分组"}</Button></DialogFooter></form></DialogContent></Dialog>
+      <Dialog open={groupDialog} onOpenChange={v=>!busy&&GD(v)}><DialogContent><DialogTitle>移动所选节点到分组</DialogTitle><DialogDescription>只修改所选 {selected.length} 个节点的分组。留空移至未分组，订阅组授权保持不变。</DialogDescription><form className="stack" onSubmit={e=>{e.preventDefault();void saveGroup()}}><Field label="目标分组" htmlFor="node-group-destination"><Input id="node-group-destination" value={destination} maxLength={120} onChange={e=>DG(e.target.value)} placeholder="输入新分组，或选择已有分组"/></Field><div className="actions">{groupNames.slice(0,20).map(g=><Button key={g} type="button" size="sm" variant="outline" onClick={()=>DG(g)}>{g}</Button>)}</div>{error&&<Notice tone="bad">{error}</Notice>}<DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={()=>GD(false)}>取消</Button><Button type="submit" disabled={busy}>{busy?"保存中…":"确认移动分组"}</Button></DialogFooter></form></DialogContent></Dialog>
       <Dialog open={importing} onOpenChange={IM}>
-        <DialogContent className="business-dialog inventory-dialog">
+        <DialogContent size="xl">
           <DialogTitle>导入节点</DialogTitle>
           <DialogDescription>
             原始内容只用于解析与写入；预览不会创建资源。
@@ -544,14 +514,14 @@ const [guestbook,GB]=useState<Resource|null>(null);
           if (!v) PV(null);
         }}
       >
-        <DialogContent className="business-dialog inventory-dialog">
+        <DialogContent size="xl">
           <DialogTitle>节点与输出预览</DialogTitle>
           <DialogDescription>
             仅管理员可见。节点凭据不得公开。
           </DialogDescription>
           <Textarea
             aria-label="库存预览"
-            className="sensitive-output"
+            mono
             value={preview ?? ""}
             readOnly
             rows={12}
