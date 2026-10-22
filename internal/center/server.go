@@ -33,6 +33,10 @@ type Server struct {
 	// state 保护 Config / Store 的切换：普通请求持读锁，安装完成的切换持写锁。
 	state     sync.RWMutex
 	installMu sync.Mutex
+	// waiters 唤醒配置长轮询；actionWaiters 唤醒动作长轮询；actionDone 唤醒等待动作结果的管理请求。
+	waiters       gateWaiters
+	actionWaiters gateWaiters
+	actionDone    gateWaiters
 }
 
 func New(c Config, path string, assets fs.FS) (*Server, error) {
@@ -147,6 +151,7 @@ func (s *Server) Router() *gin.Engine {
 		c.Next()
 	})
 	r.GET("/healthz", s.health)
+	s.installRoutes(r)
 	api := r.Group("/api/v1")
 	api.GET("/setup/status", s.setupStatus)
 	api.POST("/setup/verify", s.setupGuard, func(c *gin.Context) { c.JSON(200, gin.H{"valid": true}) })
@@ -174,6 +179,9 @@ func (s *Server) Router() *gin.Engine {
 	auth.POST("/security/password", s.changePassword)
 	s.sessionRoutes(auth)
 	s.passkeyRoutes(ready, auth)
+	admin := auth.Group("/admin")
+	admin.Use(requireAdmin)
+	s.gateRoutes(ready, admin)
 
 	r.NoRoute(s.spa)
 	return r

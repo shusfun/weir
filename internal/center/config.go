@@ -24,6 +24,7 @@ const DefaultConfigPath = "/etc/migate/center/config.json"
 type Config struct {
 	Listen        string       `json:"listen"`
 	Store         store.Config `json:"store"`
+	DataDir       string       `json:"data_dir,omitempty"` // 内核缓存、版本档案覆盖等；默认 /var/lib/migate/center
 	EncryptionKey string       `json:"encryption_key"`
 	SetupHash     string       `json:"setup_hash,omitempty"`
 	SetupExpires  time.Time    `json:"setup_expires,omitempty"`

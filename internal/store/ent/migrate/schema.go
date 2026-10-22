@@ -36,6 +36,246 @@ var (
 			},
 		},
 	}
+	// BudgetsColumns holds the columns for the "budgets" table.
+	BudgetsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "user_id", Type: field.TypeInt},
+		{Name: "gate_id", Type: field.TypeInt},
+		{Name: "allocated", Type: field.TypeInt64, Default: 0},
+		{Name: "confirmed", Type: field.TypeInt64, Default: 0},
+		{Name: "used", Type: field.TypeInt64, Default: 0},
+		{Name: "revision", Type: field.TypeInt64, Default: 0},
+		{Name: "rate", Type: field.TypeFloat64, Default: 0},
+		{Name: "rated_at", Type: field.TypeTime, Nullable: true},
+	}
+	// BudgetsTable holds the schema information for the "budgets" table.
+	BudgetsTable = &schema.Table{
+		Name:       "budgets",
+		Columns:    BudgetsColumns,
+		PrimaryKey: []*schema.Column{BudgetsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "budget_user_id_gate_id",
+				Unique:  true,
+				Columns: []*schema.Column{BudgetsColumns[1], BudgetsColumns[2]},
+			},
+		},
+	}
+	// ChainsColumns holds the columns for the "chains" table.
+	ChainsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "user_id", Type: field.TypeInt},
+		{Name: "entry_node_id", Type: field.TypeInt},
+		{Name: "name", Type: field.TypeString, Size: 100},
+		{Name: "exit_kind", Type: field.TypeEnum, Enums: []string{"socks5", "node"}},
+		{Name: "exit_address", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "exit_port", Type: field.TypeInt, Default: 0},
+		{Name: "exit_username", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "exit_password", Type: field.TypeString, Default: ""},
+		{Name: "exit_node_id", Type: field.TypeInt, Nullable: true},
+		{Name: "enabled", Type: field.TypeBool, Default: true},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// ChainsTable holds the schema information for the "chains" table.
+	ChainsTable = &schema.Table{
+		Name:       "chains",
+		Columns:    ChainsColumns,
+		PrimaryKey: []*schema.Column{ChainsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "chain_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{ChainsColumns[1]},
+			},
+		},
+	}
+	// CredentialsColumns holds the columns for the "credentials" table.
+	CredentialsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "node_id", Type: field.TypeInt},
+		{Name: "link_id", Type: field.TypeInt, Nullable: true},
+		{Name: "chain_id", Type: field.TypeInt, Nullable: true},
+		{Name: "user_id", Type: field.TypeInt, Nullable: true},
+		{Name: "stats_key", Type: field.TypeString, Unique: true},
+		{Name: "uuid", Type: field.TypeString, Default: ""},
+		{Name: "password", Type: field.TypeString, Default: ""},
+		{Name: "internal", Type: field.TypeBool, Default: false},
+		{Name: "meter_epoch", Type: field.TypeString, Default: ""},
+		{Name: "meter_up", Type: field.TypeInt64, Default: 0},
+		{Name: "meter_down", Type: field.TypeInt64, Default: 0},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// CredentialsTable holds the schema information for the "credentials" table.
+	CredentialsTable = &schema.Table{
+		Name:       "credentials",
+		Columns:    CredentialsColumns,
+		PrimaryKey: []*schema.Column{CredentialsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "credential_node_id",
+				Unique:  false,
+				Columns: []*schema.Column{CredentialsColumns[1]},
+			},
+			{
+				Name:    "credential_link_id",
+				Unique:  false,
+				Columns: []*schema.Column{CredentialsColumns[2]},
+			},
+			{
+				Name:    "credential_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{CredentialsColumns[4]},
+			},
+		},
+	}
+	// GatesColumns holds the columns for the "gates" table.
+	GatesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "name", Type: field.TypeString, Size: 100},
+		{Name: "public_key", Type: field.TypeString, Unique: true},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "revoked"}, Default: "active"},
+		{Name: "public_host", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "version", Type: field.TypeString, Default: ""},
+		{Name: "hostname", Type: field.TypeString, Default: ""},
+		{Name: "arch", Type: field.TypeString, Default: "amd64"},
+		{Name: "last_seen_at", Type: field.TypeTime, Nullable: true},
+		{Name: "listening_ports", Type: field.TypeJSON, Nullable: true},
+		{Name: "kernels_running", Type: field.TypeJSON, Nullable: true},
+		{Name: "kernel_pins", Type: field.TypeJSON, Nullable: true},
+		{Name: "host", Type: field.TypeJSON, Nullable: true},
+		{Name: "config_revision", Type: field.TypeInt64, Default: 1},
+		{Name: "applied_revision", Type: field.TypeInt64, Default: 0},
+		{Name: "failed_revision", Type: field.TypeInt64, Default: 0},
+		{Name: "last_error", Type: field.TypeString, Default: ""},
+		{Name: "xray_stats_port", Type: field.TypeInt, Default: 0},
+		{Name: "singbox_stats_port", Type: field.TypeInt, Default: 0},
+		{Name: "meter_epoch", Type: field.TypeString, Default: ""},
+		{Name: "meter_seq", Type: field.TypeInt64, Default: 0},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// GatesTable holds the schema information for the "gates" table.
+	GatesTable = &schema.Table{
+		Name:       "gates",
+		Columns:    GatesColumns,
+		PrimaryKey: []*schema.Column{GatesColumns[0]},
+	}
+	// GateActionsColumns holds the columns for the "gate_actions" table.
+	GateActionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "gate_id", Type: field.TypeInt},
+		{Name: "kind", Type: field.TypeString, Size: 32},
+		{Name: "payload", Type: field.TypeJSON, Nullable: true},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "running", "done", "failed", "expired"}, Default: "pending"},
+		{Name: "result", Type: field.TypeJSON, Nullable: true},
+		{Name: "error", Type: field.TypeString, Default: ""},
+		{Name: "expires_at", Type: field.TypeTime},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "finished_at", Type: field.TypeTime, Nullable: true},
+	}
+	// GateActionsTable holds the schema information for the "gate_actions" table.
+	GateActionsTable = &schema.Table{
+		Name:       "gate_actions",
+		Columns:    GateActionsColumns,
+		PrimaryKey: []*schema.Column{GateActionsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "gateaction_gate_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{GateActionsColumns[1], GateActionsColumns[4]},
+			},
+		},
+	}
+	// LinksColumns holds the columns for the "links" table.
+	LinksColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "user_id", Type: field.TypeInt},
+		{Name: "name", Type: field.TypeString, Size: 100, Default: ""},
+		{Name: "token", Type: field.TypeString, Unique: true},
+		{Name: "all_nodes", Type: field.TypeBool, Default: true},
+		{Name: "node_ids", Type: field.TypeJSON, Nullable: true},
+		{Name: "chain_ids", Type: field.TypeJSON, Nullable: true},
+		{Name: "enabled", Type: field.TypeBool, Default: true},
+		{Name: "used", Type: field.TypeInt64, Default: 0},
+		{Name: "last_used_at", Type: field.TypeTime, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// LinksTable holds the schema information for the "links" table.
+	LinksTable = &schema.Table{
+		Name:       "links",
+		Columns:    LinksColumns,
+		PrimaryKey: []*schema.Column{LinksColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "link_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{LinksColumns[1]},
+			},
+		},
+	}
+	// NodesColumns holds the columns for the "nodes" table.
+	NodesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "gate_id", Type: field.TypeInt},
+		{Name: "name", Type: field.TypeString, Size: 100},
+		{Name: "preset", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "kernel", Type: field.TypeString, Size: 16},
+		{Name: "protocol", Type: field.TypeString, Size: 32},
+		{Name: "port", Type: field.TypeInt},
+		{Name: "network", Type: field.TypeString, Size: 16, Default: "tcp"},
+		{Name: "security", Type: field.TypeString, Size: 16, Default: "none"},
+		{Name: "settings", Type: field.TypeJSON, Nullable: true},
+		{Name: "cert_id", Type: field.TypeInt, Nullable: true},
+		{Name: "enabled", Type: field.TypeBool, Default: true},
+		{Name: "chain_kind", Type: field.TypeEnum, Enums: []string{"none", "socks5", "node"}, Default: "none"},
+		{Name: "chain_address", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "chain_port", Type: field.TypeInt, Default: 0},
+		{Name: "chain_username", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "chain_password", Type: field.TypeString, Default: ""},
+		{Name: "chain_node_id", Type: field.TypeInt, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// NodesTable holds the schema information for the "nodes" table.
+	NodesTable = &schema.Table{
+		Name:       "nodes",
+		Columns:    NodesColumns,
+		PrimaryKey: []*schema.Column{NodesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "node_gate_id_port",
+				Unique:  true,
+				Columns: []*schema.Column{NodesColumns[1], NodesColumns[6]},
+			},
+		},
+	}
+	// OutboundsColumns holds the columns for the "outbounds" table.
+	OutboundsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "gate_id", Type: field.TypeInt},
+		{Name: "tag", Type: field.TypeString, Size: 64},
+		{Name: "name", Type: field.TypeString, Size: 100, Default: ""},
+		{Name: "protocol", Type: field.TypeString, Size: 32},
+		{Name: "address", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "port", Type: field.TypeInt, Default: 0},
+		{Name: "username", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "password", Type: field.TypeString, Default: ""},
+		{Name: "settings", Type: field.TypeJSON, Nullable: true},
+		{Name: "enabled", Type: field.TypeBool, Default: true},
+		{Name: "position", Type: field.TypeInt, Default: 0},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// OutboundsTable holds the schema information for the "outbounds" table.
+	OutboundsTable = &schema.Table{
+		Name:       "outbounds",
+		Columns:    OutboundsColumns,
+		PrimaryKey: []*schema.Column{OutboundsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "outbound_gate_id_tag",
+				Unique:  true,
+				Columns: []*schema.Column{OutboundsColumns[1], OutboundsColumns[2]},
+			},
+		},
+	}
 	// PasskeysColumns holds the columns for the "passkeys" table.
 	PasskeysColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -77,6 +317,32 @@ var (
 				Name:    "recoverycode_user_id_digest",
 				Unique:  true,
 				Columns: []*schema.Column{RecoveryCodesColumns[1], RecoveryCodesColumns[2]},
+			},
+		},
+	}
+	// RoutesColumns holds the columns for the "routes" table.
+	RoutesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "gate_id", Type: field.TypeInt},
+		{Name: "node_id", Type: field.TypeInt, Nullable: true},
+		{Name: "user_id", Type: field.TypeInt, Nullable: true},
+		{Name: "outbound_tag", Type: field.TypeString, Size: 64},
+		{Name: "domain", Type: field.TypeString, Default: ""},
+		{Name: "ip", Type: field.TypeString, Default: ""},
+		{Name: "enabled", Type: field.TypeBool, Default: true},
+		{Name: "priority", Type: field.TypeInt, Default: 0},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// RoutesTable holds the schema information for the "routes" table.
+	RoutesTable = &schema.Table{
+		Name:       "routes",
+		Columns:    RoutesColumns,
+		PrimaryKey: []*schema.Column{RoutesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "route_gate_id",
+				Unique:  false,
+				Columns: []*schema.Column{RoutesColumns[1]},
 			},
 		},
 	}
@@ -129,8 +395,17 @@ var (
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		AuditsTable,
+		BudgetsTable,
+		ChainsTable,
+		CredentialsTable,
+		GatesTable,
+		GateActionsTable,
+		LinksTable,
+		NodesTable,
+		OutboundsTable,
 		PasskeysTable,
 		RecoveryCodesTable,
+		RoutesTable,
 		SettingsTable,
 		UsersTable,
 	}

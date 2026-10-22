@@ -16,7 +16,7 @@ base=/opt/migate
 etc=/etc/migate
 lib=/var/lib/migate
 units_dir=/etc/systemd/system
-all_units="migate-center.service migate-gate.service migate-helper.service migate-xray.service migate-sing-box.service migate-local-pair.service"
+all_units="migate-center.service migate-gate.service migate-helper.service migate-local-pair.service"
 
 stop_units() {
  for unit in $all_units; do
@@ -193,28 +193,8 @@ ReadWritePaths=/var/lib/migate/gate /run/migate
 [Install]
 WantedBy=multi-user.target
 UNIT
- for core in xray sing-box; do
-  args='run -config'; [ "$core" = sing-box ] && args='run -c'
-  cat > "$units_dir/migate-$core.service" <<UNIT
-[Unit]
-Description=MiGate managed $core
-StartLimitIntervalSec=10
-StartLimitBurst=30
-After=network-online.target
-ConditionPathExists=/etc/migate/gate/cores/$core.json
-[Service]
-User=migate-gate
-Group=migate-gate
-ExecStart=/opt/migate/cores/$core $args /etc/migate/gate/cores/$core.json
-Restart=on-failure
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=yes
-PrivateTmp=yes
-[Install]
-WantedBy=multi-user.target
-UNIT
- done
+ # 内核由辅助程序作为子进程托管（降权为 migate-gate、崩溃自动重启），不再单独建 systemd 单元。
+ rm -f "$units_dir/migate-xray.service" "$units_dir/migate-sing-box.service"
  active="$active migate-helper.service"
 fi
 

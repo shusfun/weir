@@ -13,8 +13,17 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/imzyb/MiGate/internal/store/ent/audit"
+	"github.com/imzyb/MiGate/internal/store/ent/budget"
+	"github.com/imzyb/MiGate/internal/store/ent/chain"
+	"github.com/imzyb/MiGate/internal/store/ent/credential"
+	"github.com/imzyb/MiGate/internal/store/ent/gate"
+	"github.com/imzyb/MiGate/internal/store/ent/gateaction"
+	"github.com/imzyb/MiGate/internal/store/ent/link"
+	"github.com/imzyb/MiGate/internal/store/ent/node"
+	"github.com/imzyb/MiGate/internal/store/ent/outbound"
 	"github.com/imzyb/MiGate/internal/store/ent/passkey"
 	"github.com/imzyb/MiGate/internal/store/ent/recoverycode"
+	"github.com/imzyb/MiGate/internal/store/ent/route"
 	"github.com/imzyb/MiGate/internal/store/ent/setting"
 	"github.com/imzyb/MiGate/internal/store/ent/user"
 )
@@ -78,8 +87,17 @@ func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			audit.Table:        audit.ValidColumn,
+			budget.Table:       budget.ValidColumn,
+			chain.Table:        chain.ValidColumn,
+			credential.Table:   credential.ValidColumn,
+			gate.Table:         gate.ValidColumn,
+			gateaction.Table:   gateaction.ValidColumn,
+			link.Table:         link.ValidColumn,
+			node.Table:         node.ValidColumn,
+			outbound.Table:     outbound.ValidColumn,
 			passkey.Table:      passkey.ValidColumn,
 			recoverycode.Table: recoverycode.ValidColumn,
+			route.Table:        route.ValidColumn,
 			setting.Table:      setting.ValidColumn,
 			user.Table:         user.ValidColumn,
 		})

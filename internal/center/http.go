@@ -76,7 +76,22 @@ func requestHost(r *http.Request) string {
 	return "localhost"
 }
 
-func requestSecure(r *http.Request) bool  { return requestScheme(r) == "https" }
+// directLoopback 只认直接来自本机回环、且不带任何转发头的请求（同机反代转发的请求不算）。
+func directLoopback(c *gin.Context) bool {
+	for _, header := range []string{"X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto", "X-Real-IP", "Forwarded"} {
+		if c.GetHeader(header) != "" {
+			return false
+		}
+	}
+	host, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+	if err != nil {
+		return false
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func requestSecure(r *http.Request) bool   { return requestScheme(r) == "https" }
 func requestOrigin(r *http.Request) string { return requestScheme(r) + "://" + requestHost(r) }
 
 func publicLink(r *http.Request, path string) string {

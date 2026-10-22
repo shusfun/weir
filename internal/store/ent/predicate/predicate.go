@@ -9,11 +9,38 @@ import (
 // Audit is the predicate function for audit builders.
 type Audit func(*sql.Selector)
 
+// Budget is the predicate function for budget builders.
+type Budget func(*sql.Selector)
+
+// Chain is the predicate function for chain builders.
+type Chain func(*sql.Selector)
+
+// Credential is the predicate function for credential builders.
+type Credential func(*sql.Selector)
+
+// Gate is the predicate function for gate builders.
+type Gate func(*sql.Selector)
+
+// GateAction is the predicate function for gateaction builders.
+type GateAction func(*sql.Selector)
+
+// Link is the predicate function for link builders.
+type Link func(*sql.Selector)
+
+// Node is the predicate function for node builders.
+type Node func(*sql.Selector)
+
+// Outbound is the predicate function for outbound builders.
+type Outbound func(*sql.Selector)
+
 // Passkey is the predicate function for passkey builders.
 type Passkey func(*sql.Selector)
 
 // RecoveryCode is the predicate function for recoverycode builders.
 type RecoveryCode func(*sql.Selector)
+
+// Route is the predicate function for route builders.
+type Route func(*sql.Selector)
 
 // Setting is the predicate function for setting builders.
 type Setting func(*sql.Selector)

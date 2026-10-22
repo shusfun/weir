@@ -49,7 +49,7 @@ type Session struct {
 
 var nonexistentAccountHash, _ = bcrypt.GenerateFromPassword([]byte("migate-nonexistent-account"), bcrypt.DefaultCost)
 
-func sessionPrefix(uid int) string           { return fmt.Sprintf("session:%d:", uid) }
+func sessionPrefix(uid int) string            { return fmt.Sprintf("session:%d:", uid) }
 func sessionKey(uid int, token string) string { return sessionPrefix(uid) + digest(token) }
 
 // 读取或解析失败时拒绝（503），不能把策略缺失当作「关闭 MFA」。

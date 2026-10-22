@@ -1,0 +1,7 @@
+kernel: xray
+min_version: 1.8.0
+max_version: 26.3.26
+protocols: [vless, vmess, trojan, shadowsocks, socks, http]
+networks: [tcp, raw, ws, grpc, xhttp, httpupgrade]
+securities: [tls, reality]
+notes: 旧版 Xray，仍支持 allowInsecure。

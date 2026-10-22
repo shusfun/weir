@@ -14,10 +14,28 @@ type Tx struct {
 	config
 	// Audit is the client for interacting with the Audit builders.
 	Audit *AuditClient
+	// Budget is the client for interacting with the Budget builders.
+	Budget *BudgetClient
+	// Chain is the client for interacting with the Chain builders.
+	Chain *ChainClient
+	// Credential is the client for interacting with the Credential builders.
+	Credential *CredentialClient
+	// Gate is the client for interacting with the Gate builders.
+	Gate *GateClient
+	// GateAction is the client for interacting with the GateAction builders.
+	GateAction *GateActionClient
+	// Link is the client for interacting with the Link builders.
+	Link *LinkClient
+	// Node is the client for interacting with the Node builders.
+	Node *NodeClient
+	// Outbound is the client for interacting with the Outbound builders.
+	Outbound *OutboundClient
 	// Passkey is the client for interacting with the Passkey builders.
 	Passkey *PasskeyClient
 	// RecoveryCode is the client for interacting with the RecoveryCode builders.
 	RecoveryCode *RecoveryCodeClient
+	// Route is the client for interacting with the Route builders.
+	Route *RouteClient
 	// Setting is the client for interacting with the Setting builders.
 	Setting *SettingClient
 	// User is the client for interacting with the User builders.
@@ -154,8 +172,17 @@ func (tx *Tx) Client() *Client {
 
 func (tx *Tx) init() {
 	tx.Audit = NewAuditClient(tx.config)
+	tx.Budget = NewBudgetClient(tx.config)
+	tx.Chain = NewChainClient(tx.config)
+	tx.Credential = NewCredentialClient(tx.config)
+	tx.Gate = NewGateClient(tx.config)
+	tx.GateAction = NewGateActionClient(tx.config)
+	tx.Link = NewLinkClient(tx.config)
+	tx.Node = NewNodeClient(tx.config)
+	tx.Outbound = NewOutboundClient(tx.config)
 	tx.Passkey = NewPasskeyClient(tx.config)
 	tx.RecoveryCode = NewRecoveryCodeClient(tx.config)
+	tx.Route = NewRouteClient(tx.config)
 	tx.Setting = NewSettingClient(tx.config)
 	tx.User = NewUserClient(tx.config)
 }

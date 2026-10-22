@@ -1,0 +1,8 @@
+kernel: xray
+min_version: 26.3.27
+protocols: [vless, vmess, trojan, shadowsocks, socks, http]
+networks: [tcp, raw, ws, grpc, xhttp, httpupgrade]
+securities: [tls, reality]
+strip:
+  - outbounds.*.streamSettings.tlsSettings.allowInsecure
+notes: 26.3.27 起移除 allowInsecure；26.10.17 的 REALITY 需要 MLKEM，与 sing-box 1.14.3 客户端不兼容，混合客户端时锁定 26.3.27。
