@@ -31,10 +31,14 @@ LOCK = '/run/lock/migate-acceptance.lock'
 def atomic(path, data):
     # Desktop may redirect LOCALAPPDATA to another drive. Resolve both names
     # before replace; mixing virtual and real paths yields ERROR_NOT_SAME_DEVICE.
-    path = path.resolve()
+    path = path.parent.resolve() / path.name
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix('.tmp')
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+    # Packaged Windows apps may redirect only the newly created file, while
+    # resolving its not-yet-existing destination still returns the virtual drive.
+    tmp = tmp.resolve()
+    path = tmp.parent / path.name
     os.chmod(tmp, 0o600)
     os.replace(tmp, path)
 

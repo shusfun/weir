@@ -72,7 +72,7 @@ def _request(url, token):
         request.add_header("Authorization", "Bearer " + token)
     opener = urllib.request.build_opener(GuardRedirect)
     try:
-        response = opener.open(request, timeout=30)
+        response = opener.open(request, timeout=180)
     except urllib.error.HTTPError as exc:
         raise RuntimeError("release download failed") from exc
     check_url(response.geturl(), allow_query=True)

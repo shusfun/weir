@@ -41,6 +41,51 @@ if info['config_exists']:
     info['initialization_file_exists'] = initial_path.is_file()
     info['initialization_file_authoritative'] = False
 print(json.dumps(info))
+import pwd, re
+metadata = []
+for name in ['config.json', 'setup-token', 'install.lock']:
+    item = pathlib.Path('/etc/migate-control') / name
+    if item.exists():
+        st = item.stat()
+        metadata.append({'file': name, 'owner': pwd.getpwuid(st.st_uid).pw_name, 'mode': oct(st.st_mode & 0o777)})
+print(json.dumps({'file_permissions': metadata}))
+readcheck = subprocess.run(['runuser', '-u', 'migate-control', '--', 'test', '-r', path], capture_output=True)
+print(json.dumps({'service_account_can_read_config': readcheck.returncode == 0}))
+if pid.isdecimal() and pid != '0':
+    print(json.dumps({'running_executable': os.readlink('/proc/' + pid + '/exe')}))
+# Only emit allowlisted command classifications, never raw shell history.
+events = []
+for history in ['/root/.bash_history', '/root/.zsh_history']:
+    file = pathlib.Path(history)
+    if not file.is_file():
+        continue
+    timestamp = None
+    for line in file.read_text(errors='replace').splitlines()[-1500:]:
+        if re.fullmatch(r'#[0-9]{10,}', line):
+            timestamp = datetime.datetime.fromtimestamp(int(line[1:]), datetime.timezone.utc).isoformat()
+            continue
+        category = None
+        if 'migate' in line.lower() or 'setup-token' in line:
+            if re.search(r'\bsystemctl\s+(restart|start|stop|status)\s+migate-control', line):
+                category = 'systemctl ' + re.search(r'\bsystemctl\s+(restart|start|stop|status)', line).group(1) + ' migate-control'
+            elif 'migate-control' in line and '--init' in line:
+                category = 'migate-control --init'
+            elif 'migate-control' in line and '--setup' in line:
+                category = 'migate-control --setup'
+            elif 'migate-control' in line and '--version' in line:
+                category = 'migate-control --version'
+            elif 'setup-token' in line and re.search(r'\bcat\b', line):
+                category = 'read setup-token'
+            elif 'install' in line and ('curl' in line or 'bash' in line):
+                category = 'MiGate installation script'
+            elif re.fullmatch(r'\s*(sudo\s+)?([./\w-]+/)?migate-control\s*', line):
+                category = 'migate-control without arguments'
+            else:
+                category = 'other MiGate-related command (arguments omitted)'
+        if category:
+            events.append({'source': file.name, 'time_if_recorded': timestamp, 'command_type': category})
+        timestamp = None
+print(json.dumps({'persisted_shell_history': events[-35:], 'note': 'Active shell commands may not yet be flushed to history'}))
 import urllib.request, urllib.error
 public_origin = 'https://sub.caowo.baby'
 # OPTIONS exercises the origin middleware without submitting setup credentials

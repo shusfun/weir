@@ -38,6 +38,21 @@
     "impacts": ["observe"],
     "recovery": "read-only control listener and setup state"
   },
+  "inspect-control-update.py": {
+    "scope": "none",
+    "impacts": ["observe"],
+    "recovery": "Report the update path unit. If it is inactive, write only that unit and enable it. Do not start an update or change installed releases."
+  },
+  "repair-release-fetch.py": {
+    "scope": "none",
+    "impacts": ["lifecycle"],
+    "recovery": "Replace only /usr/local/lib/migate/release_fetch.py and keep the previous file as release_fetch.py.bak. Do not start an update."
+  },
+  "apply-control-update.py": {
+    "scope": "none",
+    "impacts": ["lifecycle"],
+    "recovery": "Run migate-install for one published tag. install.sh keeps config and data and can roll back to the previous release."
+  },
   "capture-deployment.py": {
     "scope": "none",
     "impacts": [
