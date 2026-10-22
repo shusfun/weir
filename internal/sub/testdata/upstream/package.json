@@ -1,0 +1,6 @@
+{
+  "name": "misub-oracle",
+  "private": true,
+  "type": "module",
+  "description": "MiSub 4952c16 纯逻辑模块的原样副本，仅供 internal/sub 的 Node 对照测试使用"
+}
