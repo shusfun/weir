@@ -62,6 +62,8 @@
       inset 1px 1px 3px var(--mg-neu-lo),
       inset -1px -1px 3px var(--mg-neu-hi);
   }
+  /* 不撑满时只占内容宽度：放在网格 / 纵向 flex 里也不会被拉成整行 */
+  .mg-segmented:not([data-full-width]) { justify-self: start; align-self: flex-start; }
   .mg-segmented > .mg-key { background: transparent; }
   .mg-segmented > .mg-key::before { opacity: 0; }
   .mg-segmented[data-full-width="always"] { display: flex; width: 100%; }

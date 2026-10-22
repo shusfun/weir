@@ -98,7 +98,7 @@ export function CoreDiagnostics({
                     </details>
                   </>
                 ) : (
-                  <Notice>配置不可读取或格式无效，状态未知。</Notice>
+                  <Notice tone="warn">配置不可读取或格式无效，状态未知。</Notice>
                 )}
                 {j?.validity === "fresh" ? (
                   <>
@@ -122,7 +122,7 @@ export function CoreDiagnostics({
                     )}
                   </>
                 ) : (
-                  <Notice>日志不可用或输出截断，数量未知。</Notice>
+                  <Notice tone="warn">日志不可用或输出截断，数量未知。</Notice>
                 )}
               </CardContent>
             </Card>

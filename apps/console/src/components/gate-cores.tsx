@@ -127,7 +127,7 @@ export function GateCores({
         </Notice>
       )}
       {!fresh && (
-        <Notice>
+        <Notice tone="warn">
           当前内核状态未知；设备离线或观测过期时，不将旧状态显示为正常。
         </Notice>
       )}
@@ -356,7 +356,7 @@ export function GateCores({
             management?.catalog?.find(
               (p) => p.core === pending.core && p.version === pending.version,
             )?.compatibility && (
-              <Notice>
+              <Notice tone="warn">
                 REALITY 客户端兼容受限：sing-box 1.14.3 无法连接 Xray
                 26.10.17；混合客户端建议保留
                 26.3.27。配置检查通过不代表客户端兼容。

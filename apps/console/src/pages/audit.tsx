@@ -19,11 +19,10 @@ export function AuditPage() {
   const query = useQuery({ queryKey: ["audit-directory", params.toString()], queryFn: () => api("/admin/audit?" + params) as Promise<Items<Audit>> });
   return <div className="stack audit-directory">
     <PageHeader title="操作记录" description="追踪账户与设备变更。任务执行状态请以设备回执为准。" actions={<Button variant="outline" disabled={query.isFetching} onClick={() => query.refetch()}>刷新记录</Button>} />
-    <Card><CardContent>
-      <div className="table-toolbar">
+    <Card className="table-card"><div className="table-toolbar">
         <SearchInput aria-label="搜索审计记录" placeholder="搜索操作名称、目标或任务编号…" value={search} onChange={e => { S(e.target.value); P(1); }} />
         <Select value={result} onValueChange={v => { F(String(v)); P(1); }}><SelectTrigger className="min-w-[130px]" aria-label="筛选审计结果"><SelectValue>{resultLabels[result]}</SelectValue></SelectTrigger><SelectContent>{Object.entries(resultLabels).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}</SelectContent></Select>
-      </div>
+      </div><CardContent>
       {query.isPending ? <State loading /> : query.error ? <State error={query.error} onRetry={() => query.refetch()} /> : !query.data?.items.length ? <State empty="没有符合条件的操作记录" /> : query.data.items.map(item => <div className="list-row audit-row" key={item.id}>
         <div><strong>{item.action}</strong><small>{date(item.created_at)} · {item.actor ? `账户 #${item.actor}` : "系统 / 未登录"}</small><small>目标：{item.target || "未指定"}</small></div>
         <div className="actions"><Badge variant="soft" tone={resultTones[item.result] ?? "neutral"}>{resultLabels[item.result] ?? item.result}</Badge><Button size="sm" variant="outline" onClick={() => D(item)}>查看记录 #{item.id}</Button></div>

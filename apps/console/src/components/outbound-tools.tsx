@@ -243,7 +243,7 @@ export function OutboundTools({
                 ))}
           </div>
           {error && (
-            <Notice role="alert">
+            <Notice tone="bad">
               {error}
             </Notice>
           )}

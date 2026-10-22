@@ -35,7 +35,8 @@ export function State({
         }
       />
     );
-  return <PageState kind="empty" title={empty ?? "暂无记录"} detail={detail ?? "创建记录后会显示在这里。"} />;
+  // 空状态不带默认说明：“筛选无结果”“等待上报”“设备已移除”等场景含义各不相同，由调用处按需传入
+  return <PageState kind="empty" title={empty ?? "暂无记录"} detail={detail} />;
 }
 
 // 灯色 → 文字色：熄灭 / 未知 / 选中都按中性文字显示，避免把缺失状态染成正常色

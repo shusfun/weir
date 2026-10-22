@@ -209,7 +209,7 @@ export function LoginPage({ done }: { done: () => void }) {
             )}
             {unavailable && !policy.isPending ? (
               <div className="stack">
-                <Notice role="status">
+                <Notice tone="warn" role="status">
                   {policy.isError
                     ? "当前账户策略未知，请重新读取后再继续。"
                     : mode === "register"

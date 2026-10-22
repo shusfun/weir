@@ -103,7 +103,7 @@ export function OutboundTransport({
     <section className="stack" aria-label="出站传输设置">
       <h3>传输与安全</h3>
       {["hysteria2", "tuic", "anytls", "shadowtls"].includes(protocol) && (
-        <Notice>
+        <Notice tone="warn">
           此协议仅由 sing-box 执行；Xray 入站不能路由至此出口。
         </Notice>
       )}

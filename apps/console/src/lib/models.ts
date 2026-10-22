@@ -90,6 +90,7 @@ export const labels: Record<string, string> = {
   queued: "待执行",
   success: "已完成",
   completed: "已完成",
+  sent: "已发送",
 };
 
 export interface SourceUsage {

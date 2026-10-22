@@ -18,12 +18,6 @@ import { Notice, Pager, SectionHeader,
   DialogTitle,
   DialogDescription,
   DialogFooter,
-  Table,
-  TableHeader,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
   StatusLamp,
 } from "@migate/ui";
 import {
@@ -666,36 +660,19 @@ export function MailQueue() {
           <State empty="暂无发送记录" />
         ) : (
           <>
-            <div className="table-scroll">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>收件人</TableHead>
-                    <TableHead>状态</TableHead>
-                    <TableHead>尝试</TableHead>
-                    <TableHead>结果</TableHead>
-                    <TableHead>操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+            {/* 列表而非表格：窄屏下“结果”列不会被压成一字一行 */}
+            <div className="list-rows">
                   {query.data.items.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell>
+                    <div className="list-row" key={item.id}>
+                      <div>
                         <strong>{String(item.data.to)}</strong>
-                        <small className="block">
+                        <small>
                           {date(
                             (item as Resource & { created_at?: string })
                               .created_at,
                           )}
-                        </small>
-                      </TableCell>
-                      <TableCell>
-                        <Status value={String(item.data.status)} />
-                      </TableCell>
-                      <TableCell>
-                        {String(item.data.attempts ?? 0)} / 5
-                      </TableCell>
-                      <TableCell>
+                          {" · 尝试 "}
+                          {String(item.data.attempts ?? 0)} / 5{" · "}
                         {item.data.last_error
                           ? "发送失败，请检查邮件服务配置"
                           : item.data.status === "sent"
@@ -703,8 +680,10 @@ export function MailQueue() {
                             : item.data.status === "pending"
                               ? "等待发送"
                               : "未知"}
-                      </TableCell>
-                      <TableCell>
+                        </small>
+                      </div>
+                      <div className="row-actions">
+                        <Status value={String(item.data.status)} />
                         {item.data.status === "failed" && (
                           <Button
                             size="sm"
@@ -731,11 +710,9 @@ export function MailQueue() {
                             重新入队
                           </Button>
                         )}
-                      </TableCell>
-                    </TableRow>
+                      </div>
+                    </div>
                   ))}
-                </TableBody>
-              </Table>
             </div>
             <Pager variant="inline" name="邮件" label="项" page={page} pageSize={20} total={query.data.total} busy={query.isFetching} onPage={P} />
           </>

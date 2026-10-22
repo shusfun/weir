@@ -408,7 +408,7 @@ export function GateConfig({
                 {tab === "certificates" ? "更新证书" : "编辑"}
               </Button>
               <Button
-                variant="ghost"
+                variant="destructive"
                 size="sm"
                 disabled={
                   tab === "outbounds" && r.data.source === "subscription"
@@ -586,7 +586,7 @@ export function GateConfig({
                         ["cubic", "Cubic"],
                         ["new_reno", "New Reno"],
                       ])}
-                    <Notice>
+                    <Notice tone="warn">
                       端口不能为
                       80、443、8443，也不能占用其他服务。节点客户端凭据由授权流程独立分配。
                     </Notice>

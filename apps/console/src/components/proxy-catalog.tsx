@@ -347,7 +347,7 @@ export function ProxyCatalog({ device }: { device: Device }) {
               </Notice>
             )}
             {error && (
-              <Notice role="alert">
+              <Notice tone="bad">
                 {error}
               </Notice>
             )}

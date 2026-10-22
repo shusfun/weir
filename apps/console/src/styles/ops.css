@@ -37,12 +37,11 @@
 .graph-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
 .graph-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
-.audit-directory .table-toolbar, .event-directory .table-toolbar { padding: 0 0 14px; border: 0; box-shadow: none; }
 .audit-row, .event-row { padding: 12px 0; gap: 14px; flex-wrap: wrap; }
 .audit-row > div:first-child { flex: 1; }
 .audit-row small, .event-row small { overflow-wrap: anywhere; }
 .event-row > .actions { flex-wrap: wrap; justify-content: flex-end; }
-.event-query-time { font-size: 11.5px; margin: 12px 0; }
+.event-query-time { font-size: 11.5px; margin: 0 0 12px; }
 
 .settings-body { display: grid; gap: 16px; min-width: 0; }
 .settings-body h3 { margin: 0 0 4px; font-size: 15px; }

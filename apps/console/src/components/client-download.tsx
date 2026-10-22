@@ -80,7 +80,7 @@ function DownloadDialog({ client, close }: { client: CatalogClient; close: () =>
       <DialogContent size="md">
         <DialogTitle>下载 {client.name}</DialogTitle>
         <DialogDescription>在你的浏览器内测速，自动选择最快的可校验来源；下载后核对 GitHub 公布的 SHA-256。</DialogDescription>
-        {mirrors.isError && <Notice role="status">加速镜像暂时不可用，本次只测速 GitHub 直连。</Notice>}
+        {mirrors.isError && <Notice tone="warn" role="status">加速镜像暂时不可用，本次只测速 GitHub 直连。</Notice>}
         {release.isPending || mirrors.isPending ? <p role="status">正在读取发布信息…</p> : release.data?.status !== "current" ? (
           <Notice tone="bad">暂时无法读取正式发布信息，请改用发布页下载。</Notice>
         ) : (

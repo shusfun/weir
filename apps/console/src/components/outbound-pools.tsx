@@ -196,7 +196,7 @@ export function OutboundPools({ device }: { device: Device }) {
   return (
     <Card>
       <CardContent>
-        <div className="row-actions">
+        <SectionHeader title={<><Layers size={18} /> 订阅出站池</>} description="从订阅源选择出口节点，整批应用后可在路由中引用。" actions={<>
           <Button
             variant="outline"
             disabled={busy || !sortedPools.length}
@@ -233,8 +233,7 @@ export function OutboundPools({ device }: { device: Device }) {
             <ListOrdered size={15} />
             调整池顺序
           </Button>
-        </div>
-        <SectionHeader title={<><Layers size={18} /> 订阅出站池</>} description="从订阅源选择出口节点，整批应用后可在路由中引用。" actions={<Button
+          <Button
             disabled={!capable}
             onClick={() => {
               setError("");
@@ -250,9 +249,9 @@ export function OutboundPools({ device }: { device: Device }) {
           >
             <Plus size={16} />
             创建出站池
-          </Button>} />
+          </Button></>} />
         {!capable && (
-          <Notice>
+          <Notice tone="warn">
             设备需升级以支持出站池，现有手动出站可继续使用。
           </Notice>
         )}
@@ -339,11 +338,9 @@ export function OutboundPools({ device }: { device: Device }) {
             </div>
           ))
         )}
-        <p>
-          <Link to="/subscriptions?kind=sources">
-            管理订阅源 <ArrowUpRight size={13} />
-          </Link>
-        </p>
+        <Button variant="link" size="sm" render={<Link to="/subscriptions/sources" />}>
+          管理订阅源 <ArrowUpRight />
+        </Button>
         <Dialog
           open={!!poolOrder}
           onOpenChange={(v) => {
@@ -372,7 +369,7 @@ export function OutboundPools({ device }: { device: Device }) {
               ))}
             </div>
             {error && (
-              <Notice role="alert">
+              <Notice tone="bad">
                 {error}
               </Notice>
             )}
@@ -499,7 +496,7 @@ export function OutboundPools({ device }: { device: Device }) {
                   </Notice>
                 )}
                 {error && (
-                  <Notice role="alert">
+                  <Notice tone="bad">
                     {error}
                   </Notice>
                 )}
@@ -640,15 +637,15 @@ export function OutboundPools({ device }: { device: Device }) {
                 />
               )}
               {error && (
-                <Notice role="alert">
+                <Notice tone="bad">
                   {error}
                 </Notice>
               )}
-              <Notice>
+              <Notice tone="warn">
                 移除仍被路由引用的节点会被拒绝，请先调整路由。刷新或配置失败保留上次生效配置；停用不会更改用户授权。
               </Notice>
               {action && (
-                <Notice role="alert">
+                <Notice tone={action === "apply" ? "info" : "warn"} role="alert">
                   <strong>
                     {action === "apply"
                       ? `确认整批应用 ${selected.length} 个节点？`
@@ -657,7 +654,11 @@ export function OutboundPools({ device }: { device: Device }) {
                         : "确认停用出站池并移除本池出口？"}
                   </strong>
                   <p>Gate 成功回执前，已生效列表保持原状。</p>
-                  <Button disabled={busy} onClick={() => void apply()}>
+                  <Button
+                    variant={action === "apply" ? "default" : "destructive"}
+                    disabled={busy}
+                    onClick={() => void apply()}
+                  >
                     {busy ? "提交中…" : "确认提交"}
                   </Button>
                   <Button
@@ -672,7 +673,7 @@ export function OutboundPools({ device }: { device: Device }) {
             </div>
             <DialogFooter>
               <Button
-                variant="ghost"
+                variant="destructive"
                 disabled={busy}
                 onClick={() => setAction("delete")}
               >

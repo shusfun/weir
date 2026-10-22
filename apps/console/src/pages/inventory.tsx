@@ -272,7 +272,7 @@ const [guestbook,GB]=useState<Resource|null>(null);
               <>
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="destructive"
                   disabled={busy}
                   onClick={() => RM(selected)}
                 >
@@ -322,7 +322,7 @@ const [guestbook,GB]=useState<Resource|null>(null);
           ) : q.error ? (
             <State error={q.error} onRetry={() => q.refetch()} />
           ) : !shown.length ? (
-            <State empty={search ? "没有匹配的" + title : "暂无" + title} />
+            <State empty={search ? "没有匹配的" + title : "暂无" + title} detail={search ? "调整搜索或筛选条件后再试。" : "点击右上角「新增" + title + "」开始添加。"} />
           ) : (
             <div className={kind==="profiles"?"inventory-items profile-cards":"inventory-items"}>
               {shown.map((r) => (
@@ -387,24 +387,7 @@ const [guestbook,GB]=useState<Resource|null>(null);
                         刷新
                       </Button>
                     )}
-                    {kind !== "mail" && (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => ED(r)}
-                        >
-                          编辑
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => RM([r.id])}
-                        >
-                          删除
-                        </Button>
-                      </>
-                    )}
+                    {/* 公开页附属操作放在编辑 / 删除之前，危险操作始终在行尾 */}
                     {kind === "public-page" && <><Button variant="outline" size="sm" onClick={()=>PDIR(r)}>订阅目录</Button><Button variant="outline" size="sm" onClick={()=>GB(r)}>留言管理</Button></>}
                     {kind === "public-page" && r.data.enabled === true && (
                       <Button
@@ -420,6 +403,24 @@ const [guestbook,GB]=useState<Resource|null>(null);
                       >
                         查看公开页
                       </Button>
+                    )}
+                    {kind !== "mail" && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => ED(r)}
+                        >
+                          编辑
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => RM([r.id])}
+                        >
+                          删除
+                        </Button>
+                      </>
                     )}
                   </div>
                 </article>

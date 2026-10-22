@@ -46,9 +46,7 @@ export function TasksPage({ deviceId }: { deviceId?: number }) {
   return (
     <div className="stack">
       <PageHeader title="执行记录与回执" description="设备暂离线时任务保持待执行；执行中超出租约会以同一任务 ID 自动重试。失败须修正配置后重新提交。" />
-      <Card>
-        <CardContent>
-          <div className="table-toolbar">
+      <Card className="table-card"><div className="table-toolbar">
             <SearchInput
               aria-label="搜索执行任务"
               placeholder="搜索操作名称或任务编号…"
@@ -109,6 +107,7 @@ export function TasksPage({ deviceId }: { deviceId?: number }) {
               </SelectContent>
             </Select>
           </div>
+        <CardContent>
           {tasks.isPending ? (
             <State loading />
           ) : tasks.error ? (

@@ -167,17 +167,19 @@ export function GrantsPage() {
                 </div>
                 <div className="actions">
                   <Status value={g.status} />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!g.enabled}
-                    onClick={() => {
-                      E("");
-                      R(g);
-                    }}
-                  >
-                    {g.enabled ? "撤销授权" : "已撤销授权"}
-                  </Button>
+                  {/* 已撤销的授权只显示状态，不再留一个禁用按钮重复说明 */}
+                  {g.enabled && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => {
+                        E("");
+                        R(g);
+                      }}
+                    >
+                      撤销授权
+                    </Button>
+                  )}
                 </div>
               </div>
             ))

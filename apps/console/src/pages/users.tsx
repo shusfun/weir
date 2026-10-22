@@ -132,7 +132,6 @@ export function UsersPage() {
                 </div>
                 <Button onClick={() => E(detail.data!)}>编辑用户</Button>
               </div>
-              <UserSessions userId={Number(userId)} />
               <div className="metric-grid">
                 <Metric title="已用流量" value={bytes(detail.data.used)} />
                 <Metric title="总额度" value={bytes(detail.data.quota)} />
@@ -210,6 +209,8 @@ export function UsersPage() {
                   )}
                 </CardContent>
               </Card>
+              {/* 会话是排查用的明细，放在用量、账户与授权之后 */}
+              <UserSessions userId={Number(userId)} />
             </>
           )
         )}
@@ -263,7 +264,7 @@ export function UsersPage() {
         ) : query.error ? (
           <State error={query.error} onRetry={() => query.refetch()} />
         ) : !rows.length ? (
-          <State empty={search ? "没有匹配的用户" : "还没有用户"} />
+          <State empty={search ? "没有匹配的用户" : "还没有用户"} detail={search ? "调整搜索或筛选条件后再试。" : "点击右上角「创建用户」添加账户。"} />
         ) : (
           <div className="desktop-user-table scroll">
             <Table>

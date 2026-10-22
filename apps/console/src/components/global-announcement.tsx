@@ -11,7 +11,7 @@ const initial:Announcement={enabled:false,authenticated:false,public:false,title
 export function GlobalAnnouncement({audience}:{audience:"authenticated"|"public"}){
  const q=useQuery({queryKey:["global-announcement",audience],queryFn:()=>api(audience==="public"?"/announcements/public":"/announcements") as Promise<{announcement:PublishedNotice|null}>,retry:false,refetchInterval:30000});
  if(q.isPending)return <p className="muted" role="status">正在读取服务公告…</p>;
- if(q.isError)return <Notice role="alert">服务公告暂不可用。<Button variant="ghost" size="sm" onClick={()=>void q.refetch()}>重试公告</Button></Notice>;
+ if(q.isError)return <Notice tone="warn" role="alert">服务公告暂不可用。<Button variant="ghost" size="sm" onClick={()=>void q.refetch()}>重试公告</Button></Notice>;
  return q.data.announcement?<div className="global-announcement"><PublishedAnnouncement notice={q.data.announcement} scope={"global-"+audience}/></div>:null;
 }
 export function AnnouncementEditor(){
