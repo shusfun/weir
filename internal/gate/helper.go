@@ -46,6 +46,7 @@ type HelperStatus struct {
 	Active    map[string]string         `json:"active"`
 	Running   map[string]int            `json:"running"`
 	Listening []contracts.ListeningPort `json:"listening"`
+	Certs     map[string]string         `json:"certs"` // 证书 ID → 已安装文件摘要
 }
 
 // Helper 是以 root 运行的辅助程序。只提供白名单接口，不执行任意命令或任意路径。
@@ -148,7 +149,25 @@ func (h *Helper) status(w http.ResponseWriter, _ *http.Request) {
 			active[name] = v
 		}
 	}
-	writeJSON(w, 200, HelperStatus{Installed: h.installed(), Active: active, Running: h.Sup.Running(), Listening: ports})
+	writeJSON(w, 200, HelperStatus{Installed: h.installed(), Active: active, Running: h.Sup.Running(), Listening: ports, Certs: h.certs()})
+}
+
+// certs 返回已安装证书的摘要，Agent 据此决定是否需要重新下载。
+func (h *Helper) certs() map[string]string {
+	out := map[string]string{}
+	entries, _ := os.ReadDir(h.P.CertsDir)
+	for _, e := range entries {
+		id, ok := strings.CutSuffix(e.Name(), ".crt")
+		if !ok {
+			continue
+		}
+		cert, err1 := os.ReadFile(filepath.Join(h.P.CertsDir, e.Name()))
+		key, err2 := os.ReadFile(filepath.Join(h.P.CertsDir, id+".key"))
+		if err1 == nil && err2 == nil {
+			out[id] = contracts.CertSum(string(cert), string(key))
+		}
+	}
+	return out
 }
 
 // healthy 等待内核进程存活且统计端口可连接（最多 8 秒）。

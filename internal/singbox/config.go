@@ -56,6 +56,7 @@ type InboundConfig struct {
 	MTU               int              `json:"mtu,omitempty"`
 	Version           int              `json:"version,omitempty"`
 	Password          string           `json:"password,omitempty"`
+	Method            string           `json:"method,omitempty"`
 	Handshake         *HandshakeConfig `json:"handshake,omitempty"`
 }
 
@@ -304,11 +305,16 @@ func BuildConfigWithOptions(inbounds []db.Inbound, opts BuildOptions) Config {
 				addStatsUser(name)
 			}
 
-			// TLS (required for tuic)
+			// TLS (required for tuic)；QUIC 必须协商 ALPN，未配置时默认 h3。
+			alpn := splitCSV(inbound.TLSALPN)
+			if len(alpn) == 0 {
+				alpn = []string{"h3"}
+			}
 			ib.TLS = &TLSConfig{
 				Enabled:         true,
 				CertificatePath: CertFile,
 				KeyPath:         KeyFile,
+				ALPN:            alpn,
 			}
 			if inbound.TLSCertFile != "" && inbound.TLSKeyFile != "" {
 				ib.TLS.CertificatePath = inbound.TLSCertFile
@@ -324,6 +330,25 @@ func BuildConfigWithOptions(inbounds []db.Inbound, opts BuildOptions) Config {
 			// NOTE: WireGuard inbound requires sing-box >= 1.14
 			// Skipping for now — current deployed version is 1.13.x
 			continue
+
+		case "shadowsocks":
+			// Shadowsocks 2022 多用户：服务端密钥加每用户密钥，客户端以 "服务端密钥:用户密钥" 连接。
+			tag := InboundStatsTag(inbound)
+			ib := InboundConfig{
+				Type:       "shadowsocks",
+				Tag:        tag,
+				Listen:     "0.0.0.0",
+				ListenPort: port,
+				Method:     inbound.SSMethod,
+				Password:   inbound.SSPassword,
+			}
+			addStatsInbound(tag)
+			for _, client := range enabledClients(inbound.Clients) {
+				name := UserStatsKey(client)
+				ib.Users = append(ib.Users, UserConfig{Name: name, Password: client.PasswordValue()})
+				addStatsUser(name)
+			}
+			cfg.Inbounds = append(cfg.Inbounds, ib)
 
 		case "shadowtls":
 			tag := InboundStatsTag(inbound)
@@ -815,4 +840,14 @@ func firstNonZero(values ...int) int {
 		}
 	}
 	return 0
+}
+
+func splitCSV(v string) []string {
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		if p := strings.TrimSpace(part); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }

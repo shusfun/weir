@@ -33,6 +33,18 @@ func (f BudgetFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, erro
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.BudgetMutation", m)
 }
 
+// The CertificateFunc type is an adapter to allow the use of ordinary
+// function as Certificate mutator.
+type CertificateFunc func(context.Context, *ent.CertificateMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f CertificateFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.CertificateMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.CertificateMutation", m)
+}
+
 // The ChainFunc type is an adapter to allow the use of ordinary
 // function as Chain mutator.
 type ChainFunc func(context.Context, *ent.ChainMutation) (ent.Value, error)

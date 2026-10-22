@@ -1,6 +1,10 @@
 package contracts
 
-import "time"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"time"
+)
 
 // GateConfig 是中心下发给某台 Gate 的完整期望配置。Gate 只按版本号整份应用，
 // 用同一程序内的构建器生成内核配置；中心离线时仍可据此在本地剔除到期 / 超额凭据。
@@ -101,4 +105,13 @@ type GateState struct {
 	FailedRevision  int64  `json:"failed_revision,omitempty"`
 	Error           string `json:"error,omitempty"`
 	ConflictPort    int    `json:"conflict_port,omitempty"`
+}
+
+// CertSum 是证书与私钥一起计算的摘要；中心下发、Gate 核对已安装文件都用它。
+func CertSum(certPEM, keyPEM string) string {
+	h := sha256.New()
+	h.Write([]byte(certPEM))
+	h.Write([]byte{0})
+	h.Write([]byte(keyPEM))
+	return hex.EncodeToString(h.Sum(nil))
 }

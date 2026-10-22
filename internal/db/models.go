@@ -140,6 +140,7 @@ type Inbound struct {
 	RealityPrivateKey     string   `json:"reality_private_key"`
 	RealityPublicKey      string   `json:"reality_public_key"`
 	SSMethod              string   `json:"ss_method"`
+	SSPassword            string   `json:"ss_password"`
 	TLSCertFile           string   `json:"tls_cert_file"`
 	CertificateID         int64    `json:"certificate_id,omitempty"`
 	TLSKeyFile            string   `json:"tls_key_file"`

@@ -34,12 +34,19 @@ func (s *Server) compileGateConfig(ctx context.Context, g *ent.Gate) (contracts.
 	if err != nil {
 		return cfg, err
 	}
-	need, byID, ids := map[string]bool{}, map[int]*ent.Node{}, []int{}
+	need, byID, ids, certs := map[string]bool{}, map[int]*ent.Node{}, []int{}, map[int]bool{}
 	for _, n := range nodes {
 		in := contracts.Inbound{ID: int64(n.ID), Tag: nodeTag(n.ID), Kernel: n.Kernel, Protocol: n.Protocol, Port: n.Port, Network: n.Network, Security: n.Security, Settings: n.Settings}
 		if n.CertID != nil {
 			in.CertID = int64(*n.CertID)
-			cfg.Certs = append(cfg.Certs, contracts.CertRef{ID: int64(*n.CertID)})
+			if !certs[*n.CertID] {
+				certs[*n.CertID] = true
+				ct, err := s.Store.Ent.Certificate.Get(ctx, *n.CertID)
+				if err != nil {
+					return cfg, fmt.Errorf("node %d certificate: %w", n.ID, err)
+				}
+				cfg.Certs = append(cfg.Certs, contracts.CertRef{ID: int64(ct.ID), SHA256: ct.Sha256})
+			}
 		}
 		cfg.Inbounds = append(cfg.Inbounds, in)
 		need[n.Kernel], byID[n.ID] = true, n

@@ -7,6 +7,7 @@ import (
 
 	"github.com/imzyb/MiGate/internal/store/ent/audit"
 	"github.com/imzyb/MiGate/internal/store/ent/budget"
+	"github.com/imzyb/MiGate/internal/store/ent/certificate"
 	"github.com/imzyb/MiGate/internal/store/ent/chain"
 	"github.com/imzyb/MiGate/internal/store/ent/credential"
 	"github.com/imzyb/MiGate/internal/store/ent/gate"
@@ -80,6 +81,30 @@ func init() {
 	budgetDescRate := budgetFields[6].Descriptor()
 	// budget.DefaultRate holds the default value on creation for the rate field.
 	budget.DefaultRate = budgetDescRate.Default.(float64)
+	certificateFields := schema.Certificate{}.Fields()
+	_ = certificateFields
+	// certificateDescName is the schema descriptor for name field.
+	certificateDescName := certificateFields[0].Descriptor()
+	// certificate.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	certificate.NameValidator = certificateDescName.Validators[0].(func(string) error)
+	// certificateDescDomain is the schema descriptor for domain field.
+	certificateDescDomain := certificateFields[1].Descriptor()
+	// certificate.DomainValidator is a validator for the "domain" field. It is called by the builders before save.
+	certificate.DomainValidator = certificateDescDomain.Validators[0].(func(string) error)
+	// certificateDescSha256 is the schema descriptor for sha256 field.
+	certificateDescSha256 := certificateFields[5].Descriptor()
+	// certificate.DefaultSha256 holds the default value on creation for the sha256 field.
+	certificate.DefaultSha256 = certificateDescSha256.Default.(string)
+	// certificateDescCreatedAt is the schema descriptor for created_at field.
+	certificateDescCreatedAt := certificateFields[7].Descriptor()
+	// certificate.DefaultCreatedAt holds the default value on creation for the created_at field.
+	certificate.DefaultCreatedAt = certificateDescCreatedAt.Default.(func() time.Time)
+	// certificateDescUpdatedAt is the schema descriptor for updated_at field.
+	certificateDescUpdatedAt := certificateFields[8].Descriptor()
+	// certificate.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	certificate.DefaultUpdatedAt = certificateDescUpdatedAt.Default.(func() time.Time)
+	// certificate.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	certificate.UpdateDefaultUpdatedAt = certificateDescUpdatedAt.UpdateDefault.(func() time.Time)
 	chainFields := schema.Chain{}.Fields()
 	_ = chainFields
 	// chainDescName is the schema descriptor for name field.
@@ -442,28 +467,32 @@ func init() {
 	userDescMonthlyReset := userFields[8].Descriptor()
 	// user.DefaultMonthlyReset holds the default value on creation for the monthly_reset field.
 	user.DefaultMonthlyReset = userDescMonthlyReset.Default.(bool)
+	// userDescUsageResetAt is the schema descriptor for usage_reset_at field.
+	userDescUsageResetAt := userFields[9].Descriptor()
+	// user.DefaultUsageResetAt holds the default value on creation for the usage_reset_at field.
+	user.DefaultUsageResetAt = userDescUsageResetAt.Default.(func() time.Time)
 	// userDescAllNodes is the schema descriptor for all_nodes field.
-	userDescAllNodes := userFields[9].Descriptor()
+	userDescAllNodes := userFields[10].Descriptor()
 	// user.DefaultAllNodes holds the default value on creation for the all_nodes field.
 	user.DefaultAllNodes = userDescAllNodes.Default.(bool)
 	// userDescAllowChain is the schema descriptor for allow_chain field.
-	userDescAllowChain := userFields[10].Descriptor()
+	userDescAllowChain := userFields[12].Descriptor()
 	// user.DefaultAllowChain holds the default value on creation for the allow_chain field.
 	user.DefaultAllowChain = userDescAllowChain.Default.(bool)
 	// userDescTotpSecret is the schema descriptor for totp_secret field.
-	userDescTotpSecret := userFields[11].Descriptor()
+	userDescTotpSecret := userFields[13].Descriptor()
 	// user.DefaultTotpSecret holds the default value on creation for the totp_secret field.
 	user.DefaultTotpSecret = userDescTotpSecret.Default.(string)
 	// userDescTotpStep is the schema descriptor for totp_step field.
-	userDescTotpStep := userFields[12].Descriptor()
+	userDescTotpStep := userFields[14].Descriptor()
 	// user.DefaultTotpStep holds the default value on creation for the totp_step field.
 	user.DefaultTotpStep = userDescTotpStep.Default.(int64)
 	// userDescCreatedAt is the schema descriptor for created_at field.
-	userDescCreatedAt := userFields[13].Descriptor()
+	userDescCreatedAt := userFields[15].Descriptor()
 	// user.DefaultCreatedAt holds the default value on creation for the created_at field.
 	user.DefaultCreatedAt = userDescCreatedAt.Default.(func() time.Time)
 	// userDescUpdatedAt is the schema descriptor for updated_at field.
-	userDescUpdatedAt := userFields[14].Descriptor()
+	userDescUpdatedAt := userFields[16].Descriptor()
 	// user.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	user.DefaultUpdatedAt = userDescUpdatedAt.Default.(func() time.Time)
 	// user.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

@@ -81,6 +81,26 @@ func (s *Server) StartBackground(ctx context.Context) {
 	if !s.Config.Installed {
 		go s.watchInstallation(ctx)
 	}
+	go s.maintenance(ctx)
+}
+
+// maintenance 每分钟执行按月重置用量等周期任务；未初始化时跳过。
+func (s *Server) maintenance(ctx context.Context) {
+	tick := time.NewTicker(time.Minute)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			s.state.RLock()
+			ready := s.Config.Installed && s.Store != nil
+			if ready {
+				_ = s.Store.Lock.Do(ctx, "maintenance", func(ctx context.Context) error { return s.ResetDueUsage(ctx, time.Now()) })
+			}
+			s.state.RUnlock()
+		}
+	}
 }
 
 func (s *Server) watchInstallation(ctx context.Context) {
@@ -182,6 +202,8 @@ func (s *Server) Router() *gin.Engine {
 	admin := auth.Group("/admin")
 	admin.Use(requireAdmin)
 	s.gateRoutes(ready, admin)
+	s.userRoutes(auth, admin)
+	s.subRoutes(r, ready)
 
 	r.NoRoute(s.spa)
 	return r

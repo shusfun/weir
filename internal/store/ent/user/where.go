@@ -94,6 +94,11 @@ func MonthlyReset(v bool) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldMonthlyReset, v))
 }
 
+// UsageResetAt applies equality check predicate on the "usage_reset_at" field. It's identical to UsageResetAtEQ.
+func UsageResetAt(v time.Time) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldUsageResetAt, v))
+}
+
 // AllNodes applies equality check predicate on the "all_nodes" field. It's identical to AllNodesEQ.
 func AllNodes(v bool) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldAllNodes, v))
@@ -489,6 +494,46 @@ func MonthlyResetNEQ(v bool) predicate.User {
 	return predicate.User(sql.FieldNEQ(FieldMonthlyReset, v))
 }
 
+// UsageResetAtEQ applies the EQ predicate on the "usage_reset_at" field.
+func UsageResetAtEQ(v time.Time) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldUsageResetAt, v))
+}
+
+// UsageResetAtNEQ applies the NEQ predicate on the "usage_reset_at" field.
+func UsageResetAtNEQ(v time.Time) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldUsageResetAt, v))
+}
+
+// UsageResetAtIn applies the In predicate on the "usage_reset_at" field.
+func UsageResetAtIn(vs ...time.Time) predicate.User {
+	return predicate.User(sql.FieldIn(FieldUsageResetAt, vs...))
+}
+
+// UsageResetAtNotIn applies the NotIn predicate on the "usage_reset_at" field.
+func UsageResetAtNotIn(vs ...time.Time) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldUsageResetAt, vs...))
+}
+
+// UsageResetAtGT applies the GT predicate on the "usage_reset_at" field.
+func UsageResetAtGT(v time.Time) predicate.User {
+	return predicate.User(sql.FieldGT(FieldUsageResetAt, v))
+}
+
+// UsageResetAtGTE applies the GTE predicate on the "usage_reset_at" field.
+func UsageResetAtGTE(v time.Time) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldUsageResetAt, v))
+}
+
+// UsageResetAtLT applies the LT predicate on the "usage_reset_at" field.
+func UsageResetAtLT(v time.Time) predicate.User {
+	return predicate.User(sql.FieldLT(FieldUsageResetAt, v))
+}
+
+// UsageResetAtLTE applies the LTE predicate on the "usage_reset_at" field.
+func UsageResetAtLTE(v time.Time) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldUsageResetAt, v))
+}
+
 // AllNodesEQ applies the EQ predicate on the "all_nodes" field.
 func AllNodesEQ(v bool) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldAllNodes, v))
@@ -497,6 +542,16 @@ func AllNodesEQ(v bool) predicate.User {
 // AllNodesNEQ applies the NEQ predicate on the "all_nodes" field.
 func AllNodesNEQ(v bool) predicate.User {
 	return predicate.User(sql.FieldNEQ(FieldAllNodes, v))
+}
+
+// NodeIdsIsNil applies the IsNil predicate on the "node_ids" field.
+func NodeIdsIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldNodeIds))
+}
+
+// NodeIdsNotNil applies the NotNil predicate on the "node_ids" field.
+func NodeIdsNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldNodeIds))
 }
 
 // AllowChainEQ applies the EQ predicate on the "allow_chain" field.

@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 	"github.com/imzyb/MiGate/internal/store/ent/predicate"
 	"github.com/imzyb/MiGate/internal/store/ent/user"
@@ -174,6 +175,20 @@ func (_u *UserUpdate) SetNillableMonthlyReset(v *bool) *UserUpdate {
 	return _u
 }
 
+// SetUsageResetAt sets the "usage_reset_at" field.
+func (_u *UserUpdate) SetUsageResetAt(v time.Time) *UserUpdate {
+	_u.mutation.SetUsageResetAt(v)
+	return _u
+}
+
+// SetNillableUsageResetAt sets the "usage_reset_at" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableUsageResetAt(v *time.Time) *UserUpdate {
+	if v != nil {
+		_u.SetUsageResetAt(*v)
+	}
+	return _u
+}
+
 // SetAllNodes sets the "all_nodes" field.
 func (_u *UserUpdate) SetAllNodes(v bool) *UserUpdate {
 	_u.mutation.SetAllNodes(v)
@@ -185,6 +200,24 @@ func (_u *UserUpdate) SetNillableAllNodes(v *bool) *UserUpdate {
 	if v != nil {
 		_u.SetAllNodes(*v)
 	}
+	return _u
+}
+
+// SetNodeIds sets the "node_ids" field.
+func (_u *UserUpdate) SetNodeIds(v []int) *UserUpdate {
+	_u.mutation.SetNodeIds(v)
+	return _u
+}
+
+// AppendNodeIds appends value to the "node_ids" field.
+func (_u *UserUpdate) AppendNodeIds(v []int) *UserUpdate {
+	_u.mutation.AppendNodeIds(v)
+	return _u
+}
+
+// ClearNodeIds clears the value of the "node_ids" field.
+func (_u *UserUpdate) ClearNodeIds() *UserUpdate {
+	_u.mutation.ClearNodeIds()
 	return _u
 }
 
@@ -362,8 +395,22 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.MonthlyReset(); ok {
 		_spec.SetField(user.FieldMonthlyReset, field.TypeBool, value)
 	}
+	if value, ok := _u.mutation.UsageResetAt(); ok {
+		_spec.SetField(user.FieldUsageResetAt, field.TypeTime, value)
+	}
 	if value, ok := _u.mutation.AllNodes(); ok {
 		_spec.SetField(user.FieldAllNodes, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.NodeIds(); ok {
+		_spec.SetField(user.FieldNodeIds, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedNodeIds(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, user.FieldNodeIds, value)
+		})
+	}
+	if _u.mutation.NodeIdsCleared() {
+		_spec.ClearField(user.FieldNodeIds, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.AllowChain(); ok {
 		_spec.SetField(user.FieldAllowChain, field.TypeBool, value)
@@ -546,6 +593,20 @@ func (_u *UserUpdateOne) SetNillableMonthlyReset(v *bool) *UserUpdateOne {
 	return _u
 }
 
+// SetUsageResetAt sets the "usage_reset_at" field.
+func (_u *UserUpdateOne) SetUsageResetAt(v time.Time) *UserUpdateOne {
+	_u.mutation.SetUsageResetAt(v)
+	return _u
+}
+
+// SetNillableUsageResetAt sets the "usage_reset_at" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableUsageResetAt(v *time.Time) *UserUpdateOne {
+	if v != nil {
+		_u.SetUsageResetAt(*v)
+	}
+	return _u
+}
+
 // SetAllNodes sets the "all_nodes" field.
 func (_u *UserUpdateOne) SetAllNodes(v bool) *UserUpdateOne {
 	_u.mutation.SetAllNodes(v)
@@ -557,6 +618,24 @@ func (_u *UserUpdateOne) SetNillableAllNodes(v *bool) *UserUpdateOne {
 	if v != nil {
 		_u.SetAllNodes(*v)
 	}
+	return _u
+}
+
+// SetNodeIds sets the "node_ids" field.
+func (_u *UserUpdateOne) SetNodeIds(v []int) *UserUpdateOne {
+	_u.mutation.SetNodeIds(v)
+	return _u
+}
+
+// AppendNodeIds appends value to the "node_ids" field.
+func (_u *UserUpdateOne) AppendNodeIds(v []int) *UserUpdateOne {
+	_u.mutation.AppendNodeIds(v)
+	return _u
+}
+
+// ClearNodeIds clears the value of the "node_ids" field.
+func (_u *UserUpdateOne) ClearNodeIds() *UserUpdateOne {
+	_u.mutation.ClearNodeIds()
 	return _u
 }
 
@@ -764,8 +843,22 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	if value, ok := _u.mutation.MonthlyReset(); ok {
 		_spec.SetField(user.FieldMonthlyReset, field.TypeBool, value)
 	}
+	if value, ok := _u.mutation.UsageResetAt(); ok {
+		_spec.SetField(user.FieldUsageResetAt, field.TypeTime, value)
+	}
 	if value, ok := _u.mutation.AllNodes(); ok {
 		_spec.SetField(user.FieldAllNodes, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.NodeIds(); ok {
+		_spec.SetField(user.FieldNodeIds, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedNodeIds(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, user.FieldNodeIds, value)
+		})
+	}
+	if _u.mutation.NodeIdsCleared() {
+		_spec.ClearField(user.FieldNodeIds, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.AllowChain(); ok {
 		_spec.SetField(user.FieldAllowChain, field.TypeBool, value)

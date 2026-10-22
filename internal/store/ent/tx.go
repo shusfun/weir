@@ -16,6 +16,8 @@ type Tx struct {
 	Audit *AuditClient
 	// Budget is the client for interacting with the Budget builders.
 	Budget *BudgetClient
+	// Certificate is the client for interacting with the Certificate builders.
+	Certificate *CertificateClient
 	// Chain is the client for interacting with the Chain builders.
 	Chain *ChainClient
 	// Credential is the client for interacting with the Credential builders.
@@ -173,6 +175,7 @@ func (tx *Tx) Client() *Client {
 func (tx *Tx) init() {
 	tx.Audit = NewAuditClient(tx.config)
 	tx.Budget = NewBudgetClient(tx.config)
+	tx.Certificate = NewCertificateClient(tx.config)
 	tx.Chain = NewChainClient(tx.config)
 	tx.Credential = NewCredentialClient(tx.config)
 	tx.Gate = NewGateClient(tx.config)

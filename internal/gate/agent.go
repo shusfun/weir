@@ -168,10 +168,43 @@ func (a *Agent) ensureKernels(ctx context.Context, cfg contracts.GateConfig) err
 	return nil
 }
 
+// ensureCerts 下载配置引用、本机缺失或摘要不符的证书。
+func (a *Agent) ensureCerts(ctx context.Context, cfg contracts.GateConfig) error {
+	if len(cfg.Certs) == 0 {
+		return nil
+	}
+	st, err := a.helper.Status(ctx)
+	if err != nil {
+		return err
+	}
+	for _, ref := range cfg.Certs {
+		if st.Certs[strconv.FormatInt(ref.ID, 10)] == ref.SHA256 {
+			continue
+		}
+		var body struct {
+			Cert string `json:"cert_pem"`
+			Key  string `json:"key_pem"`
+		}
+		if _, err = a.center.call(ctx, "GET", fmt.Sprintf("/agent/certs/%d", ref.ID), nil, &body); err != nil {
+			return fmt.Errorf("download certificate %d: %w", ref.ID, err)
+		}
+		if contracts.CertSum(body.Cert, body.Key) != ref.SHA256 {
+			return fmt.Errorf("certificate %d checksum mismatch", ref.ID)
+		}
+		if err = a.helper.InstallCert(ctx, ref.ID, body.Cert, body.Key); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // applyLocked 生成内核配置并交给辅助程序应用；调用方持有 a.mu。
 // 返回 err 表示暂时性问题（稍后重试）；配置本身被拒绝时 err 为空、FailedRevision 非零。
 func (a *Agent) applyLocked(ctx context.Context, cfg contracts.GateConfig) (contracts.GateState, error) {
 	if err := a.ensureKernels(ctx, cfg); err != nil {
+		return contracts.GateState{}, err
+	}
+	if err := a.ensureCerts(ctx, cfg); err != nil {
 		return contracts.GateState{}, err
 	}
 	fresh := a.st.Config == nil || a.st.Config.Revision != cfg.Revision

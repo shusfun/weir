@@ -14,6 +14,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/imzyb/MiGate/internal/store/ent/audit"
 	"github.com/imzyb/MiGate/internal/store/ent/budget"
+	"github.com/imzyb/MiGate/internal/store/ent/certificate"
 	"github.com/imzyb/MiGate/internal/store/ent/chain"
 	"github.com/imzyb/MiGate/internal/store/ent/credential"
 	"github.com/imzyb/MiGate/internal/store/ent/gate"
@@ -88,6 +89,7 @@ func checkColumn(t, c string) error {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			audit.Table:        audit.ValidColumn,
 			budget.Table:       budget.ValidColumn,
+			certificate.Table:  certificate.ValidColumn,
 			chain.Table:        chain.ValidColumn,
 			credential.Table:   credential.ValidColumn,
 			gate.Table:         gate.ValidColumn,

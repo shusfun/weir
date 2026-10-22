@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -51,6 +52,12 @@ func (h *helperClient) do(ctx context.Context, method, path string, body io.Read
 func (h *helperClient) Status(ctx context.Context) (HelperStatus, error) {
 	var st HelperStatus
 	return st, h.do(ctx, "GET", "/status", nil, nil, &st)
+}
+
+func (h *helperClient) InstallCert(ctx context.Context, id int64, certPEM, keyPEM string) error {
+	body, _ := json.Marshal(map[string]string{"cert_pem": certPEM, "key_pem": keyPEM})
+	var res ApplyResult
+	return h.do(ctx, "POST", fmt.Sprintf("/cert?id=%d", id), bytes.NewReader(body), nil, &res)
 }
 
 func (h *helperClient) InstallKernel(ctx context.Context, name, version, sum string, data []byte) error {

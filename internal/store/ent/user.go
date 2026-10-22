@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -35,8 +36,12 @@ type User struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 	// MonthlyReset holds the value of the "monthly_reset" field.
 	MonthlyReset bool `json:"monthly_reset,omitempty"`
+	// UsageResetAt holds the value of the "usage_reset_at" field.
+	UsageResetAt time.Time `json:"usage_reset_at,omitempty"`
 	// AllNodes holds the value of the "all_nodes" field.
 	AllNodes bool `json:"all_nodes,omitempty"`
+	// NodeIds holds the value of the "node_ids" field.
+	NodeIds []int `json:"node_ids,omitempty"`
 	// AllowChain holds the value of the "allow_chain" field.
 	AllowChain bool `json:"allow_chain,omitempty"`
 	// TotpSecret holds the value of the "totp_secret" field.
@@ -55,13 +60,15 @@ func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case user.FieldNodeIds:
+			values[i] = new([]byte)
 		case user.FieldEnabled, user.FieldMonthlyReset, user.FieldAllNodes, user.FieldAllowChain:
 			values[i] = new(sql.NullBool)
 		case user.FieldID, user.FieldQuota, user.FieldUsed, user.FieldTotpStep:
 			values[i] = new(sql.NullInt64)
 		case user.FieldEmail, user.FieldName, user.FieldPasswordHash, user.FieldRole, user.FieldTotpSecret:
 			values[i] = new(sql.NullString)
-		case user.FieldExpiresAt, user.FieldCreatedAt, user.FieldUpdatedAt:
+		case user.FieldExpiresAt, user.FieldUsageResetAt, user.FieldCreatedAt, user.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -139,11 +146,25 @@ func (_m *User) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.MonthlyReset = value.Bool
 			}
+		case user.FieldUsageResetAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field usage_reset_at", values[i])
+			} else if value.Valid {
+				_m.UsageResetAt = value.Time
+			}
 		case user.FieldAllNodes:
 			if value, ok := values[i].(*sql.NullBool); !ok {
 				return fmt.Errorf("unexpected type %T for field all_nodes", values[i])
 			} else if value.Valid {
 				_m.AllNodes = value.Bool
+			}
+		case user.FieldNodeIds:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field node_ids", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.NodeIds); err != nil {
+					return fmt.Errorf("unmarshal field node_ids: %w", err)
+				}
 			}
 		case user.FieldAllowChain:
 			if value, ok := values[i].(*sql.NullBool); !ok {
@@ -239,8 +260,14 @@ func (_m *User) String() string {
 	builder.WriteString("monthly_reset=")
 	builder.WriteString(fmt.Sprintf("%v", _m.MonthlyReset))
 	builder.WriteString(", ")
+	builder.WriteString("usage_reset_at=")
+	builder.WriteString(_m.UsageResetAt.Format(time.ANSIC))
+	builder.WriteString(", ")
 	builder.WriteString("all_nodes=")
 	builder.WriteString(fmt.Sprintf("%v", _m.AllNodes))
+	builder.WriteString(", ")
+	builder.WriteString("node_ids=")
+	builder.WriteString(fmt.Sprintf("%v", _m.NodeIds))
 	builder.WriteString(", ")
 	builder.WriteString("allow_chain=")
 	builder.WriteString(fmt.Sprintf("%v", _m.AllowChain))

@@ -1,6 +1,6 @@
 kernel: sing-box
 min_version: 1.12.0
 protocols: [hysteria2, tuic, shadowsocks, vless, vmess, trojan, anytls, shadowtls, socks, http]
-networks: [tcp, ws, grpc, httpupgrade]
+networks: [tcp, udp, ws, grpc, httpupgrade]
 securities: [tls, reality]
 notes: 按用户统计流量需要 with_v2ray_api，由本项目 CI 跟随上游标签编译。

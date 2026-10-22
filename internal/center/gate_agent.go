@@ -35,7 +35,10 @@ func (s *Server) gateRoutes(ready, admin *gin.RouterGroup) {
 	a.POST("/actions/:id", s.agentActionResult)
 	a.GET("/kernels/:kernel/:version", s.agentKernel)
 	a.GET("/release/:version", s.agentRelease)
+	a.GET("/certs/:id", s.agentCert)
 	s.gateAdminRoutes(admin)
+	s.certRoutes(admin)
+	s.nodeRoutes(admin)
 	s.kernelAdminRoutes(admin)
 }
 

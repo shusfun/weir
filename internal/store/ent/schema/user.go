@@ -23,8 +23,11 @@ func (User) Fields() []ent.Field {
 		field.Int64("used").NonNegative().Default(0),
 		field.Time("expires_at").Optional().Nillable(),
 		field.Bool("monthly_reset").Default(false),
+		// usage_reset_at 是本周期开始时间；按月重置时以它为锚点。
+		field.Time("usage_reset_at").Default(time.Now),
 		// all_nodes 为真时自动包含以后新加的节点。
 		field.Bool("all_nodes").Default(false),
+		field.JSON("node_ids", []int{}).Optional(),
 		field.Bool("allow_chain").Default(true),
 		field.String("totp_secret").Sensitive().Default(""),
 		field.Int64("totp_step").Default(0),

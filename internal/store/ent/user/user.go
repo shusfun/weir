@@ -32,8 +32,12 @@ const (
 	FieldExpiresAt = "expires_at"
 	// FieldMonthlyReset holds the string denoting the monthly_reset field in the database.
 	FieldMonthlyReset = "monthly_reset"
+	// FieldUsageResetAt holds the string denoting the usage_reset_at field in the database.
+	FieldUsageResetAt = "usage_reset_at"
 	// FieldAllNodes holds the string denoting the all_nodes field in the database.
 	FieldAllNodes = "all_nodes"
+	// FieldNodeIds holds the string denoting the node_ids field in the database.
+	FieldNodeIds = "node_ids"
 	// FieldAllowChain holds the string denoting the allow_chain field in the database.
 	FieldAllowChain = "allow_chain"
 	// FieldTotpSecret holds the string denoting the totp_secret field in the database.
@@ -60,7 +64,9 @@ var Columns = []string{
 	FieldUsed,
 	FieldExpiresAt,
 	FieldMonthlyReset,
+	FieldUsageResetAt,
 	FieldAllNodes,
+	FieldNodeIds,
 	FieldAllowChain,
 	FieldTotpSecret,
 	FieldTotpStep,
@@ -97,6 +103,8 @@ var (
 	UsedValidator func(int64) error
 	// DefaultMonthlyReset holds the default value on creation for the "monthly_reset" field.
 	DefaultMonthlyReset bool
+	// DefaultUsageResetAt holds the default value on creation for the "usage_reset_at" field.
+	DefaultUsageResetAt func() time.Time
 	// DefaultAllNodes holds the default value on creation for the "all_nodes" field.
 	DefaultAllNodes bool
 	// DefaultAllowChain holds the default value on creation for the "allow_chain" field.
@@ -190,6 +198,11 @@ func ByExpiresAt(opts ...sql.OrderTermOption) OrderOption {
 // ByMonthlyReset orders the results by the monthly_reset field.
 func ByMonthlyReset(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldMonthlyReset, opts...).ToFunc()
+}
+
+// ByUsageResetAt orders the results by the usage_reset_at field.
+func ByUsageResetAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUsageResetAt, opts...).ToFunc()
 }
 
 // ByAllNodes orders the results by the all_nodes field.

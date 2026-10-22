@@ -132,6 +132,20 @@ func (_c *UserCreate) SetNillableMonthlyReset(v *bool) *UserCreate {
 	return _c
 }
 
+// SetUsageResetAt sets the "usage_reset_at" field.
+func (_c *UserCreate) SetUsageResetAt(v time.Time) *UserCreate {
+	_c.mutation.SetUsageResetAt(v)
+	return _c
+}
+
+// SetNillableUsageResetAt sets the "usage_reset_at" field if the given value is not nil.
+func (_c *UserCreate) SetNillableUsageResetAt(v *time.Time) *UserCreate {
+	if v != nil {
+		_c.SetUsageResetAt(*v)
+	}
+	return _c
+}
+
 // SetAllNodes sets the "all_nodes" field.
 func (_c *UserCreate) SetAllNodes(v bool) *UserCreate {
 	_c.mutation.SetAllNodes(v)
@@ -143,6 +157,12 @@ func (_c *UserCreate) SetNillableAllNodes(v *bool) *UserCreate {
 	if v != nil {
 		_c.SetAllNodes(*v)
 	}
+	return _c
+}
+
+// SetNodeIds sets the "node_ids" field.
+func (_c *UserCreate) SetNodeIds(v []int) *UserCreate {
+	_c.mutation.SetNodeIds(v)
 	return _c
 }
 
@@ -275,6 +295,10 @@ func (_c *UserCreate) defaults() {
 		v := user.DefaultMonthlyReset
 		_c.mutation.SetMonthlyReset(v)
 	}
+	if _, ok := _c.mutation.UsageResetAt(); !ok {
+		v := user.DefaultUsageResetAt()
+		_c.mutation.SetUsageResetAt(v)
+	}
 	if _, ok := _c.mutation.AllNodes(); !ok {
 		v := user.DefaultAllNodes
 		_c.mutation.SetAllNodes(v)
@@ -351,6 +375,9 @@ func (_c *UserCreate) check() error {
 	}
 	if _, ok := _c.mutation.MonthlyReset(); !ok {
 		return &ValidationError{Name: "monthly_reset", err: errors.New(`ent: missing required field "User.monthly_reset"`)}
+	}
+	if _, ok := _c.mutation.UsageResetAt(); !ok {
+		return &ValidationError{Name: "usage_reset_at", err: errors.New(`ent: missing required field "User.usage_reset_at"`)}
 	}
 	if _, ok := _c.mutation.AllNodes(); !ok {
 		return &ValidationError{Name: "all_nodes", err: errors.New(`ent: missing required field "User.all_nodes"`)}
@@ -433,9 +460,17 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		_spec.SetField(user.FieldMonthlyReset, field.TypeBool, value)
 		_node.MonthlyReset = value
 	}
+	if value, ok := _c.mutation.UsageResetAt(); ok {
+		_spec.SetField(user.FieldUsageResetAt, field.TypeTime, value)
+		_node.UsageResetAt = value
+	}
 	if value, ok := _c.mutation.AllNodes(); ok {
 		_spec.SetField(user.FieldAllNodes, field.TypeBool, value)
 		_node.AllNodes = value
+	}
+	if value, ok := _c.mutation.NodeIds(); ok {
+		_spec.SetField(user.FieldNodeIds, field.TypeJSON, value)
+		_node.NodeIds = value
 	}
 	if value, ok := _c.mutation.AllowChain(); ok {
 		_spec.SetField(user.FieldAllowChain, field.TypeBool, value)
@@ -635,6 +670,18 @@ func (u *UserUpsert) UpdateMonthlyReset() *UserUpsert {
 	return u
 }
 
+// SetUsageResetAt sets the "usage_reset_at" field.
+func (u *UserUpsert) SetUsageResetAt(v time.Time) *UserUpsert {
+	u.Set(user.FieldUsageResetAt, v)
+	return u
+}
+
+// UpdateUsageResetAt sets the "usage_reset_at" field to the value that was provided on create.
+func (u *UserUpsert) UpdateUsageResetAt() *UserUpsert {
+	u.SetExcluded(user.FieldUsageResetAt)
+	return u
+}
+
 // SetAllNodes sets the "all_nodes" field.
 func (u *UserUpsert) SetAllNodes(v bool) *UserUpsert {
 	u.Set(user.FieldAllNodes, v)
@@ -644,6 +691,24 @@ func (u *UserUpsert) SetAllNodes(v bool) *UserUpsert {
 // UpdateAllNodes sets the "all_nodes" field to the value that was provided on create.
 func (u *UserUpsert) UpdateAllNodes() *UserUpsert {
 	u.SetExcluded(user.FieldAllNodes)
+	return u
+}
+
+// SetNodeIds sets the "node_ids" field.
+func (u *UserUpsert) SetNodeIds(v []int) *UserUpsert {
+	u.Set(user.FieldNodeIds, v)
+	return u
+}
+
+// UpdateNodeIds sets the "node_ids" field to the value that was provided on create.
+func (u *UserUpsert) UpdateNodeIds() *UserUpsert {
+	u.SetExcluded(user.FieldNodeIds)
+	return u
+}
+
+// ClearNodeIds clears the value of the "node_ids" field.
+func (u *UserUpsert) ClearNodeIds() *UserUpsert {
+	u.SetNull(user.FieldNodeIds)
 	return u
 }
 
@@ -893,6 +958,20 @@ func (u *UserUpsertOne) UpdateMonthlyReset() *UserUpsertOne {
 	})
 }
 
+// SetUsageResetAt sets the "usage_reset_at" field.
+func (u *UserUpsertOne) SetUsageResetAt(v time.Time) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetUsageResetAt(v)
+	})
+}
+
+// UpdateUsageResetAt sets the "usage_reset_at" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateUsageResetAt() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateUsageResetAt()
+	})
+}
+
 // SetAllNodes sets the "all_nodes" field.
 func (u *UserUpsertOne) SetAllNodes(v bool) *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
@@ -904,6 +983,27 @@ func (u *UserUpsertOne) SetAllNodes(v bool) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateAllNodes() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateAllNodes()
+	})
+}
+
+// SetNodeIds sets the "node_ids" field.
+func (u *UserUpsertOne) SetNodeIds(v []int) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetNodeIds(v)
+	})
+}
+
+// UpdateNodeIds sets the "node_ids" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateNodeIds() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateNodeIds()
+	})
+}
+
+// ClearNodeIds clears the value of the "node_ids" field.
+func (u *UserUpsertOne) ClearNodeIds() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearNodeIds()
 	})
 }
 
@@ -1328,6 +1428,20 @@ func (u *UserUpsertBulk) UpdateMonthlyReset() *UserUpsertBulk {
 	})
 }
 
+// SetUsageResetAt sets the "usage_reset_at" field.
+func (u *UserUpsertBulk) SetUsageResetAt(v time.Time) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetUsageResetAt(v)
+	})
+}
+
+// UpdateUsageResetAt sets the "usage_reset_at" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateUsageResetAt() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateUsageResetAt()
+	})
+}
+
 // SetAllNodes sets the "all_nodes" field.
 func (u *UserUpsertBulk) SetAllNodes(v bool) *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
@@ -1339,6 +1453,27 @@ func (u *UserUpsertBulk) SetAllNodes(v bool) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateAllNodes() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateAllNodes()
+	})
+}
+
+// SetNodeIds sets the "node_ids" field.
+func (u *UserUpsertBulk) SetNodeIds(v []int) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetNodeIds(v)
+	})
+}
+
+// UpdateNodeIds sets the "node_ids" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateNodeIds() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateNodeIds()
+	})
+}
+
+// ClearNodeIds clears the value of the "node_ids" field.
+func (u *UserUpsertBulk) ClearNodeIds() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearNodeIds()
 	})
 }
 

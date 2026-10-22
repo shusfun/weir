@@ -12,6 +12,9 @@ type Audit func(*sql.Selector)
 // Budget is the predicate function for budget builders.
 type Budget func(*sql.Selector)
 
+// Certificate is the predicate function for certificate builders.
+type Certificate func(*sql.Selector)
+
 // Chain is the predicate function for chain builders.
 type Chain func(*sql.Selector)
 
