@@ -1,0 +1,77 @@
+# 跟随上游 sing-box 正式版，按官方参数加上 with_v2ray_api（按用户统计流量需要）编译，
+# 发布为 sing-box-v<版本>。不标记为 latest，避免影响 MiGate 程序自身的更新检查。
+name: sing-box
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "sing-box 版本（不带 v；留空为上游最新正式版）"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - id: v
+        name: Resolve upstream version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WANT: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          v="${WANT:-}"
+          if [ -z "$v" ]; then
+            v=$(gh api repos/SagerNet/sing-box/releases/latest --jq .tag_name)
+            v=${v#v}
+          fi
+          case "$v" in ''|*[!0-9.]*) echo "invalid version: $v" >&2; exit 1;; esac
+          if gh release view "sing-box-v$v" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - if: steps.v.outputs.exists == 'false'
+        uses: actions/checkout@v4
+        with:
+          repository: SagerNet/sing-box
+          ref: v${{ steps.v.outputs.version }}
+          path: sing-box
+      - if: steps.v.outputs.exists == 'false'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: sing-box/go.mod
+      - name: Build linux amd64 / arm64
+        if: steps.v.outputs.exists == 'false'
+        working-directory: sing-box
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          set -euo pipefail
+          tags="$(cat release/DEFAULT_BUILD_TAGS_OTHERS),with_v2ray_api"
+          ldflags="-X 'github.com/sagernet/sing-box/constant.Version=${VERSION}' $(cat release/LDFLAGS) -s -w -buildid="
+          mkdir -p ../out
+          for arch in amd64 arm64; do
+            dir="sing-box-${VERSION}-linux-${arch}"
+            mkdir -p "../out/$dir"
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -tags "$tags" -ldflags "$ldflags" -o "../out/$dir/sing-box" ./cmd/sing-box
+            cp LICENSE "../out/$dir/"
+            tar -C ../out -czf "../out/$dir.tar.gz" "$dir"
+          done
+          (cd ../out && sha256sum ./*.tar.gz > checksums.txt)
+      - name: Publish (not latest)
+        if: steps.v.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          gh release create "sing-box-v${VERSION}" out/*.tar.gz out/checksums.txt \
+            --repo "$GITHUB_REPOSITORY" --latest=false \
+            --title "sing-box ${VERSION} (with_v2ray_api)" \
+            --notes "Unmodified upstream SagerNet/sing-box v${VERSION}, built with the official tags plus with_v2ray_api for per-user traffic statistics."

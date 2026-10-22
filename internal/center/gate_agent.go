@@ -36,6 +36,7 @@ func (s *Server) gateRoutes(ready, admin *gin.RouterGroup) {
 	a.GET("/kernels/:kernel/:version", s.agentKernel)
 	a.GET("/release/:version", s.agentRelease)
 	s.gateAdminRoutes(admin)
+	s.kernelAdminRoutes(admin)
 }
 
 // agentConfig 长轮询：版本与 since 不同时立即返回完整配置，否则最多等 25 秒后返回 204。

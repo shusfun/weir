@@ -31,6 +31,8 @@ func dispatch(args []string) int {
 		return runCenter(args[1:])
 	case "gate":
 		return runGate(args[1:])
+	case "kernel":
+		return runKernel(args[1:])
 	case "version", "--version":
 		fmt.Println(buildinfo.ControlVersionLine())
 		return 0
@@ -47,7 +49,8 @@ func usage() {
 	fmt.Println(`用法：
   migate                     打开中心中文菜单
   migate center [参数]       中心：--serve / --setup / --init / --health-check / --version
-  migate gate <命令> [参数]  Gate：run / pair / local-pair / recover / helper / helper-health / version
+  migate gate <命令> [参数]  Gate：run / pair / local-pair / helper / helper-health / version
+  migate kernel import <内核> <版本> <架构> <文件>   离线导入内核到中心缓存
   migate version             显示版本`)
 }
 
