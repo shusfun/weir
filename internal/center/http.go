@@ -13,6 +13,21 @@ func failure(c *gin.Context, status int, code string) {
 	c.AbortWithStatusJSON(status, gin.H{"error": gin.H{"code": code, "message": code}})
 }
 
+// failDetail 返回固定错误码与附加说明（如 Gate 实测的原因）；extra 中的字段一并返回给页面。
+func failDetail(c *gin.Context, status int, code, detail string, extra gin.H) {
+	body := gin.H{"code": code, "message": code, "detail": detail}
+	for k, v := range extra {
+		body[k] = v
+	}
+	c.AbortWithStatusJSON(status, gin.H{"error": body})
+}
+
+// failErr 把 "错误码: 原因" 形式的错误拆成错误码与说明。
+func failErr(c *gin.Context, status int, err error) {
+	code, detail, _ := strings.Cut(err.Error(), ": ")
+	failDetail(c, status, code, detail, nil)
+}
+
 func bind(c *gin.Context, v any) bool {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
 	if err := c.ShouldBindJSON(v); err != nil {

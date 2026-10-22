@@ -6,7 +6,6 @@ import { Menu as MenuIcon, PanelLeftClose, PanelLeftOpen, LogOut, ShieldCheck, L
 import { ThemeControl } from "../theme";
 import { navigation, navGroups, currentNav } from "../shell/navigation";
 import { CommandPalette } from "../shell/command-palette";
-import { TaskTray } from "../shell/task-tray";
 
 const collapseKey = "migate-rail-collapsed";
 function readCollapsed() {
@@ -100,7 +99,7 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
     <TooltipProvider delay={300}>
       <div className="shell" data-collapsed={collapsed}>
         <aside className="rail">
-          <NavLink to={admin ? "/overview" : "/subscription"} className="rail-brand" aria-label="MiGate 首页">
+          <NavLink to={admin ? "/gates" : "/subscription"} className="rail-brand" aria-label="MiGate 首页">
             <span className="rail-mark"><Activity size={19} /></span>
             <strong>MiGate</strong>
           </NavLink>
@@ -126,7 +125,6 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
                 <span>快速跳转…</span>
                 <Kbd>Ctrl K</Kbd>
               </Button>
-              {admin && <TaskTray />}
               <ThemeControl />
             </div>
           </header>

@@ -35,17 +35,8 @@ export interface NavItem {
 export const navGroups = ["工作区", "订阅与分发", "运维", "系统", "个人"] as const;
 
 export const navigation: NavItem[] = [
-  { key: "overview", path: "/overview", label: "仪表盘", icon: LayoutDashboard, group: "工作区", admin: true },
-  { key: "devices", path: "/devices", label: "Gate 网络", icon: Server, group: "工作区", admin: true },
+  { key: "gates", path: "/gates", label: "VPS 与节点", icon: Server, group: "工作区", admin: true },
   { key: "users", path: "/users", label: "用户", icon: Users, group: "工作区", admin: true },
-  { key: "grants", path: "/grants", label: "授权总表", icon: KeyRound, group: "工作区", admin: true },
-  { key: "subscriptions", path: "/subscriptions", label: "订阅流水线", icon: Workflow, group: "订阅与分发", admin: true },
-  { key: "distribution", path: "/distribution", label: "分发与公开", icon: Megaphone, group: "订阅与分发", admin: true },
-  { key: "tasks", path: "/ops/tasks", label: "任务中心", icon: ListChecks, group: "运维", admin: true },
-  { key: "audit", path: "/ops/audit", label: "操作审计", icon: ScrollText, group: "运维", admin: true },
-  { key: "events", path: "/ops/events", label: "安全事件", icon: ShieldAlert, group: "运维", admin: true },
-  { key: "mail", path: "/ops/mail", label: "邮件队列", icon: Mail, group: "运维", admin: true },
-  { key: "system", path: "/system", label: "系统设置", icon: Settings2, group: "系统", admin: true },
   { key: "subscription", path: "/subscription", label: "我的订阅", icon: Link2, group: "个人", admin: false },
   { key: "security", path: "/security", label: "账户安全", icon: ShieldCheck, group: "个人", admin: false },
 ];

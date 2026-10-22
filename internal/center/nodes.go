@@ -85,7 +85,7 @@ func (s *Server) probeReality(c *gin.Context) {
 	}
 	res, err := s.gateProbe(c.Request.Context(), g, contracts.ActionRealityProbe, map[string]any{"targets": targets}, 90*time.Second)
 	if err != nil {
-		c.JSON(422, gin.H{"error": err.Error(), "result": res})
+		failDetail(c, 422, "reality_probe_failed", err.Error(), gin.H{"result": res})
 		return
 	}
 	c.JSON(200, res)
@@ -371,7 +371,7 @@ func (s *Server) createNode(c *gin.Context) {
 				res, err := s.gateProbe(ctx, g, contracts.ActionRealityProbe, map[string]any{"targets": targets}, 90*time.Second)
 				best, _ := res["best"].(string)
 				if err != nil || best == "" {
-					c.JSON(422, gin.H{"error": "reality_probe_failed", "detail": fmt.Sprint(err), "result": res})
+					failDetail(c, 422, "reality_probe_failed", fmt.Sprint(err), gin.H{"result": res})
 					return
 				}
 				target = best
@@ -393,11 +393,11 @@ func (s *Server) createNode(c *gin.Context) {
 		return
 	}
 	if err = s.checkSettings(ctx, g, p.Kernel, p.Protocol, p.Network, p.Security, req.Port, st); err != nil {
-		failure(c, 400, err.Error())
+		failDetail(c, 400, "invalid_node_settings", err.Error(), nil)
 		return
 	}
 	if err = s.validateChain(ctx, g, 0, req.Chain, false, !req.SkipProbe); err != nil {
-		failure(c, 422, err.Error())
+		failErr(c, 422, err)
 		return
 	}
 	name := strings.TrimSpace(req.Name)
@@ -528,13 +528,13 @@ func (s *Server) updateNode(c *gin.Context) {
 		}
 	}
 	if err = s.checkSettings(ctx, g, n.Kernel, n.Protocol, n.Network, n.Security, port, st); err != nil {
-		failure(c, 400, err.Error())
+		failDetail(c, 400, "invalid_node_settings", err.Error(), nil)
 		return
 	}
 	upd.SetSettings(st)
 	if req.Chain != nil {
 		if err = s.validateChain(ctx, g, n.ID, *req.Chain, false, !req.SkipProbe); err != nil {
-			failure(c, 422, err.Error())
+			failErr(c, 422, err)
 			return
 		}
 		if err = s.applyChain(upd.Mutation(), *req.Chain); err != nil {
@@ -562,12 +562,12 @@ func (s *Server) deleteNode(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	if deps, _ := s.Store.Ent.Node.Query().Where(node.ChainNodeIDEQ(n.ID)).Count(ctx); deps > 0 {
-		c.JSON(409, gin.H{"error": "node_in_use", "nodes": deps})
+		failDetail(c, 409, "node_in_use", "", gin.H{"nodes": deps})
 		return
 	}
 	exits, _ := s.Store.Ent.Chain.Query().Where(chain.ExitNodeIDEQ(n.ID)).Count(ctx)
 	if exits > 0 && c.Query("force") != "1" {
-		c.JSON(409, gin.H{"error": "node_in_use", "chains": exits})
+		failDetail(c, 409, "node_in_use", "", gin.H{"chains": exits})
 		return
 	}
 	affected := map[int]bool{}

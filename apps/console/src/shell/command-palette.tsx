@@ -3,8 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { PageState, Dialog, DialogContent, DialogTitle, Kbd } from "@migate/ui";
-import { Search, Server, User, Layers, CornerDownLeft, type LucideIcon } from "lucide-react";
-import { client } from "../lib/client";
+import { Search, Server, User, CornerDownLeft, type LucideIcon } from "lucide-react";
+import { api } from "../api";
 import { navigation } from "./navigation";
 
 interface Entry {
@@ -20,13 +20,8 @@ export function CommandPalette({ open, onOpenChange, admin }: { open: boolean; o
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  const devices = useQuery({ queryKey: ["devices"], queryFn: client.devices, enabled: open && admin });
-  const users = useQuery({
-    queryKey: ["palette-users", query],
-    queryFn: () => client.users("?page=1&page_size=8&q=" + encodeURIComponent(query)),
-    enabled: open && admin && query.trim().length > 0,
-  });
-  const profiles = useQuery({ queryKey: ["inventory", "profiles"], queryFn: () => client.resources("profiles"), enabled: open && admin });
+  const devices = useQuery({ queryKey: ["gates"], queryFn: async () => (await api("/admin/gates")) as { items: { id: number; name: string }[] }, enabled: open && admin });
+  const users = useQuery({ queryKey: ["users"], queryFn: async () => (await api("/admin/users")) as { items: { id: number; email: string; name: string }[] }, enabled: open && admin });
 
   useEffect(() => {
     if (open) {
@@ -43,14 +38,12 @@ export function CommandPalette({ open, onOpenChange, admin }: { open: boolean; o
       .map((item) => ({ id: "nav:" + item.key, group: "页面", label: item.label, hint: item.group, to: item.path, icon: item.icon }));
     for (const d of devices.data?.items ?? [])
       if (hit(d.name || "") || q === String(d.id))
-        list.push({ id: "device:" + d.id, group: "Gate 设备", label: d.name || "未命名 Gate", hint: "#" + d.id, to: "/devices/" + d.id, icon: Server });
+        list.push({ id: "gate:" + d.id, group: "VPS", label: d.name || "未命名 VPS", hint: "#" + d.id, to: "/gates", icon: Server });
     for (const u of users.data?.items ?? [])
-      list.push({ id: "user:" + u.id, group: "用户", label: u.email, hint: "#" + u.id, to: "/users/" + u.id, icon: User });
-    for (const p of profiles.data?.items ?? [])
-      if (hit(String(p.data.name ?? p.key)))
-        list.push({ id: "profile:" + p.id, group: "订阅组", label: String(p.data.name ?? p.key), hint: "#" + p.id, to: "/subscriptions/profiles?q=" + encodeURIComponent(String(p.data.name ?? p.key)), icon: Layers });
+      if (q && (hit(u.email) || hit(u.name || "")))
+        list.push({ id: "user:" + u.id, group: "用户", label: u.email, hint: u.name || "#" + u.id, to: "/users", icon: User });
     return list.slice(0, 40);
-  }, [query, admin, devices.data, users.data, profiles.data]);
+  }, [query, admin, devices.data, users.data]);
 
   useEffect(() => setActive(0), [query]);
 

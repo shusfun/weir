@@ -849,7 +849,7 @@ func (s *Server) createChain(c *gin.Context, admin bool) {
 	}
 	entry, err := s.checkUserChain(ctx, u, req, admin)
 	if err != nil {
-		failure(c, 422, err.Error())
+		failErr(c, 422, err)
 		return
 	}
 	create := s.Store.Ent.Chain.Create().SetUserID(u.ID).SetEntryNodeID(entry.ID).SetName(name)
@@ -964,7 +964,7 @@ func (s *Server) updateChain(c *gin.Context, admin bool) {
 		}
 		entry, err := s.checkUserChain(ctx, u, check, admin)
 		if err != nil {
-			failure(c, 422, err.Error())
+			failErr(c, 422, err)
 			return
 		}
 		upd.SetEntryNodeID(entry.ID)
