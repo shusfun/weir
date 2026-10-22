@@ -1,5 +1,7 @@
 # MiGate
 
+合并 [MiGate](https://github.com/imzyb/MiGate)（VPS 上的 Xray / sing-box 管理）与 [MiSub](https://github.com/imzyb/MiSub)（订阅管理）：中心管理用户、节点和订阅，Gate 在 VPS 上执行，代理流量直达 Gate。包含中心（`migate-control`）、Gate Agent（`migate-gate`）、运维工具（`migate-manage`）和嵌入中心的 React 控制台。产品基线与重构计划见 `docs/design.html`、`docs/implementation.html`。
+
 开源仓库：https://github.com/shusfun/MiSub
 
 中心和 Gate 使用同一份 GitHub Release。目标机器不编译源码。公开仓库安装不需要令牌。
