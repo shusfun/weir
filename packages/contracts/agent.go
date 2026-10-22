@@ -76,6 +76,8 @@ const (
 	ActionDiagnostics    = "core.diagnostics"
 	ActionCoreRestart    = "core.restart"
 	ActionUninstall      = "gate.uninstall"
+	// ActionNodeTest 在 Gate 本机回环上实测一份候选入站：起服务端内核与 sing-box 客户端，经代理真实下载。
+	ActionNodeTest = "node.test"
 )
 
 type ActionResult struct {

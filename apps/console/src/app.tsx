@@ -11,6 +11,7 @@ import "./style.css";
 const page = <M extends Record<K, ComponentType<any>>, K extends keyof M>(load: () => Promise<M>, name: K) =>
   lazy(() => load().then((m) => ({ default: m[name] })));
 const GatesPage = page(() => import("./pages/gates"), "GatesPage");
+const SystemPage = page(() => import("./pages/system"), "SystemPage");
 const SubPage = page(() => import("./pages/sub-page"), "SubPage");
 const UsersPage = page(() => import("./pages/users"), "UsersPage");
 const SubscriptionPage = page(() => import("./pages/subscription"), "SubscriptionPage");
@@ -82,6 +83,7 @@ function Console() {
               <Route path="/" element={<Navigate to={home} replace />} />
               <Route path="/gates" element={guard(<GatesPage />)} />
               <Route path="/users" element={guard(<UsersPage />)} />
+              <Route path="/system" element={guard(<SystemPage />)} />
               <Route path="/subscription" element={<SubscriptionPage />} />
               <Route path="/security" element={<SecurityPage loginRequired={loginRequired} />} />
               <Route path="*" element={<Navigate to={home} replace />} />

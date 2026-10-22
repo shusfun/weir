@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"regexp"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/imzyb/MiGate/packages/contracts"
@@ -54,6 +55,8 @@ func (a *Agent) runAction(ctx context.Context, act contracts.Action) contracts.A
 		}
 	case contracts.ActionUninstall:
 		err = a.helper.Uninstall(ctx)
+	case contracts.ActionNodeTest:
+		out, err = a.nodeTest(ctx, p)
 	default:
 		err = errUnknownAction
 	}
@@ -69,46 +72,65 @@ func realityProbe(ctx context.Context, p map[string]any) (map[string]any, error)
 	if len(list) == 0 || len(list) > 20 {
 		return nil, errors.New("targets must contain 1-20 hosts")
 	}
-	var results []map[string]any
-	best, bestLatency := "", time.Duration(0)
-	for _, item := range list {
+	// 并行探测，结果按候选顺序返回；总耗时约等于最慢的一个站点（单站最多约 13 秒）。
+	results := make([]map[string]any, len(list))
+	latencies := make([]time.Duration, len(list))
+	var wg sync.WaitGroup
+	for i, item := range list {
 		host, _ := item.(string)
 		if !probeHost.MatchString(host) {
 			continue
 		}
-		r := map[string]any{"host": host}
-		start := time.Now()
-		dialer := &net.Dialer{Timeout: 5 * time.Second}
-		conn, err := tls.DialWithDialer(dialer, "tcp", net.JoinHostPort(host, "443"), &tls.Config{ServerName: host, MinVersion: tls.VersionTLS13, NextProtos: []string{"h2", "http/1.1"}})
-		if err != nil {
-			r["error"] = err.Error()
-			results = append(results, r)
+		wg.Add(1)
+		go func(i int, host string) {
+			defer wg.Done()
+			results[i], latencies[i] = probeOne(host)
+		}(i, host)
+	}
+	wg.Wait()
+	best, bestLatency := "", time.Duration(0)
+	kept := results[:0]
+	for i, r := range results {
+		if r == nil {
 			continue
 		}
-		latency := time.Since(start)
-		state := conn.ConnectionState()
-		conn.Close()
-		r["latency_ms"], r["tls13"], r["h2"] = latency.Milliseconds(), state.Version == tls.VersionTLS13, state.NegotiatedProtocol == "h2"
-		client := &http.Client{Timeout: 8 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-		cross := false
-		if resp, err := client.Get("https://" + host + "/"); err == nil {
-			if loc, e := url.Parse(resp.Header.Get("Location")); e == nil && loc.Host != "" && loc.Hostname() != host {
-				cross = true
-			}
-			resp.Body.Close()
+		if r["suitable"] == true && (best == "" || latencies[i] < bestLatency) {
+			best, bestLatency = r["host"].(string), latencies[i]
 		}
-		r["cross_redirect"] = cross
-		ok := r["tls13"] == true && r["h2"] == true && !cross
-		r["suitable"] = ok
-		if ok && (best == "" || latency < bestLatency) {
-			best, bestLatency = host, latency
-		}
-		results = append(results, r)
+		kept = append(kept, r)
 	}
+	results = kept
 	if best == "" {
 		return map[string]any{"results": results}, errors.New("没有找到合适的伪装目标")
 	}
 	return map[string]any{"results": results, "best": best}, nil
+}
+
+// probeOne 检查单个站点：TLS 1.3、协商出 h2、首页不跳转到其他域名。
+func probeOne(host string) (map[string]any, time.Duration) {
+	r := map[string]any{"host": host}
+	start := time.Now()
+	dialer := &net.Dialer{Timeout: 5 * time.Second}
+	conn, err := tls.DialWithDialer(dialer, "tcp", net.JoinHostPort(host, "443"), &tls.Config{ServerName: host, MinVersion: tls.VersionTLS13, NextProtos: []string{"h2", "http/1.1"}})
+	if err != nil {
+		r["error"] = err.Error()
+		return r, 0
+	}
+	latency := time.Since(start)
+	state := conn.ConnectionState()
+	conn.Close()
+	r["latency_ms"], r["tls13"], r["h2"] = latency.Milliseconds(), state.Version == tls.VersionTLS13, state.NegotiatedProtocol == "h2"
+	client := &http.Client{Timeout: 8 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	cross := false
+	if resp, err := client.Get("https://" + host + "/"); err == nil {
+		if loc, e := url.Parse(resp.Header.Get("Location")); e == nil && loc.Host != "" && loc.Hostname() != host {
+			cross = true
+		}
+		resp.Body.Close()
+	}
+	r["cross_redirect"] = cross
+	r["suitable"] = r["tls13"] == true && r["h2"] == true && !cross
+	return r, latency
 }
 
 func publicIP(ip net.IP) bool {

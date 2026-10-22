@@ -2,7 +2,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Notice, PageHeader, StatusLamp, Switch, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useToast } from "@migate/ui";
-import { FileBadge, Plus, Server, Trash2 } from "lucide-react";
+import { FileBadge, Plus, Server, Sparkles, Trash2 } from "lucide-react";
+import { AIDraft } from "../components/ai-draft";
 import { api } from "../api";
 import { State } from "../components/feedback";
 import { InviteGate } from "../components/invite-gate";
@@ -27,6 +28,7 @@ export function GatesPage() {
   const [certs, setCerts] = useState(false);
   const [busy, setBusy] = useState(0);
   const [edit, setEdit] = useState<Gate | null>(null);
+  const [aiNode, setAINode] = useState<NodeItem | null>(null);
   const refresh = () => Promise.all([gates.refetch(), nodes.refetch()]);
   async function act(id: number, fn: () => Promise<unknown>, ok: string) {
     setBusy(id);
@@ -58,6 +60,7 @@ export function GatesPage() {
     <>
       <InviteGate open={invite} close={() => setInvite(false)} done={() => void gates.refetch()} />
       <CertManager open={certs} close={() => setCerts(false)} />
+      {aiNode && <AIDraft node={aiNode} close={() => setAINode(null)} applied={() => { setAINode(null); toast("草稿已生效", { tone: "ok" }); void refresh(); }} />}
       {edit && <GateEdit gate={edit} close={() => setEdit(null)} saved={() => { setEdit(null); toast("已保存", { tone: "ok" }); void refresh(); }} />}
       <NodeWizard open={wizard} close={() => setWizard(false)} done={() => { toast("节点已创建", { tone: "ok" }); void refresh(); }} gates={gates.data ?? []} nodes={nodes.data ?? []} />
     </>
@@ -123,10 +126,17 @@ export function GatesPage() {
                             <Switch aria-label={"启用 " + n.name} checked={n.enabled} disabled={busy === n.id} onCheckedChange={(v) => act(n.id, () => api("/admin/nodes/" + n.id, "PATCH", { enabled: v }), v ? "节点已启用" : "节点已停用")} />
                           </TableCell>
                           <TableCell>
+                            <span className="flex flex-nowrap gap-1.5">
+                            <Button size="sm" variant="outline" disabled={busy === n.id} onClick={() => act(n.id, async () => {
+                              const r = await api(`/admin/nodes/${n.id}/test`, "POST", {});
+                              toast(`实测通过：${r.latency_ms} ms`, { tone: "ok" });
+                            }, "实测完成")}>实测</Button>
+                            <Button size="sm" variant="outline" onClick={() => setAINode(n)}><Sparkles />AI 调整</Button>
                             <Button size="icon-sm" variant="destructive" aria-label={"删除 " + n.name} disabled={busy === n.id}
                               onClick={() => window.confirm(`删除节点「${n.name}」？使用它的订阅会立即失效。`) && act(n.id, () => api("/admin/nodes/" + n.id, "DELETE"), "节点已删除")}>
                               <Trash2 />
                             </Button>
+                            </span>
                           </TableCell>
                         </TableRow>
                       ))}

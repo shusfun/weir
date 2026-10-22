@@ -37,6 +37,7 @@ export const navGroups = ["工作区", "订阅与分发", "运维", "系统", "�
 export const navigation: NavItem[] = [
   { key: "gates", path: "/gates", label: "VPS 与节点", icon: Server, group: "工作区", admin: true },
   { key: "users", path: "/users", label: "用户", icon: Users, group: "工作区", admin: true },
+  { key: "system", path: "/system", label: "系统设置", icon: Settings2, group: "系统", admin: true },
   { key: "subscription", path: "/subscription", label: "我的订阅", icon: Link2, group: "个人", admin: false },
   { key: "security", path: "/security", label: "账户安全", icon: ShieldCheck, group: "个人", admin: false },
 ];

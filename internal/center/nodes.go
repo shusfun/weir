@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -83,7 +84,7 @@ func (s *Server) probeReality(c *gin.Context) {
 	for _, t := range realityTargets {
 		targets = append(targets, t)
 	}
-	res, err := s.gateProbe(c.Request.Context(), g, contracts.ActionRealityProbe, map[string]any{"targets": targets}, 90*time.Second)
+	res, err := s.gateProbe(c.Request.Context(), g, contracts.ActionRealityProbe, map[string]any{"targets": targets}, 50*time.Second)
 	if err != nil {
 		failDetail(c, 422, "reality_probe_failed", err.Error(), gin.H{"result": res})
 		return
@@ -358,30 +359,33 @@ func (s *Server) createNode(c *gin.Context) {
 		}
 		certID, st["tls_sni"] = &ct.ID, ct.Domain
 	}
+	// REALITY 目标：手动填写的只用它；否则按 VPS 实测的合适站点从快到慢，保存前的真实连接测试不通就换下一个。
+	var realityCandidates []string
 	if p.Security == "reality" && nodeSetting(st, "reality_dest") == "" {
 		target := strings.TrimSpace(req.RealityTarget)
-		if target == "" {
-			if req.SkipProbe {
-				target = realityTargets[0]
-			} else {
-				targets := make([]any, 0, len(realityTargets))
-				for _, t := range realityTargets {
-					targets = append(targets, t)
-				}
-				res, err := s.gateProbe(ctx, g, contracts.ActionRealityProbe, map[string]any{"targets": targets}, 90*time.Second)
-				best, _ := res["best"].(string)
-				if err != nil || best == "" {
-					failDetail(c, 422, "reality_probe_failed", fmt.Sprint(err), gin.H{"result": res})
-					return
-				}
-				target = best
+		switch {
+		case target != "":
+			realityCandidates = []string{target}
+		case req.SkipProbe:
+			realityCandidates = []string{realityTargets[0]}
+		default:
+			targets := make([]any, 0, len(realityTargets))
+			for _, t := range realityTargets {
+				targets = append(targets, t)
+			}
+			res, err := s.gateProbe(ctx, g, contracts.ActionRealityProbe, map[string]any{"targets": targets}, 50*time.Second)
+			if realityCandidates = suitableTargets(res); err != nil || len(realityCandidates) == 0 {
+				failDetail(c, 422, "reality_probe_failed", fmt.Sprint(err), gin.H{"result": res})
+				return
 			}
 		}
-		if !probeHostPattern(target) {
-			failure(c, 400, "invalid_reality_target")
-			return
+		for _, t := range realityCandidates {
+			if !probeHostPattern(t) {
+				failure(c, 400, "invalid_reality_target")
+				return
+			}
 		}
-		st["reality_dest"], st["reality_server_names"] = target+":443", target
+		st["reality_dest"], st["reality_server_names"] = realityCandidates[0]+":443", realityCandidates[0]
 	}
 	if req.Port == 0 {
 		if req.Port, err = s.AllocateNodePort(ctx, g); err != nil {
@@ -404,6 +408,34 @@ func (s *Server) createNode(c *gin.Context) {
 	if name == "" {
 		name = fmt.Sprintf("%s %s", g.Name, p.Name)
 	}
+	// 保存前由 VPS 用这份参数实测真实连接（内核自检 + 本机回环下载）；
+	// 例如 REALITY 目标在该网络下握手不通时直接拒绝，而不是建出一个连不上的节点。
+	tested := gin.H{"done": false}
+	if !req.SkipProbe {
+		candidate := &ent.Node{GateID: g.ID, Kernel: p.Kernel, Protocol: p.Protocol, Port: req.Port, Network: p.Network, Security: p.Security, Settings: st, CertID: certID}
+		tries := realityCandidates
+		if len(tries) == 0 {
+			tries = []string{""}
+		} else if len(tries) > 3 {
+			tries = tries[:3]
+		}
+		var res map[string]any
+		var failed []string
+		for _, t := range tries {
+			if t != "" {
+				st["reality_dest"], st["reality_server_names"] = t+":443", t
+			}
+			if res, err = s.testNode(ctx, candidate, st); err == nil {
+				break
+			}
+			failed = append(failed, strings.TrimSpace(t+" "+err.Error()))
+		}
+		if err != nil {
+			failDetail(c, 422, "node_test_failed", strings.Join(failed, "；"), gin.H{"result": res})
+			return
+		}
+		tested = gin.H{"done": true, "latency_ms": res["latency_ms"], "skipped_targets": failed}
+	}
 	create := s.Store.Ent.Node.Create().SetGateID(g.ID).SetName(name).SetPreset(p.ID).SetKernel(p.Kernel).
 		SetProtocol(p.Protocol).SetPort(req.Port).SetNetwork(p.Network).SetSecurity(p.Security).SetSettings(st).SetNillableCertID(certID)
 	if err = s.applyChain(create.Mutation(), req.Chain); err != nil {
@@ -420,7 +452,9 @@ func (s *Server) createNode(c *gin.Context) {
 		return
 	}
 	s.audit(c, "node.create", "node:"+itoa(n.ID), "ok")
-	c.JSON(200, s.nodeView(ctx, n))
+	view := s.nodeView(ctx, n)
+	view["tested"] = tested
+	c.JSON(200, view)
 }
 
 func probeHostPattern(host string) bool {
@@ -604,4 +638,28 @@ func (s *Server) deleteNode(c *gin.Context) {
 	}
 	s.audit(c, "node.delete", "node:"+itoa(n.ID), fmt.Sprintf("ok chains=%d", len(chains)))
 	c.Status(204)
+}
+
+// suitableTargets 取 REALITY 实测结果中合适的站点，按延迟从低到高。
+func suitableTargets(res map[string]any) []string {
+	list, _ := res["results"].([]any)
+	type item struct {
+		host string
+		ms   float64
+	}
+	var ok []item
+	for _, v := range list {
+		m, _ := v.(map[string]any)
+		if m["suitable"] == true {
+			h, _ := m["host"].(string)
+			ms, _ := m["latency_ms"].(float64)
+			ok = append(ok, item{h, ms})
+		}
+	}
+	sort.Slice(ok, func(i, j int) bool { return ok[i].ms < ok[j].ms })
+	out := make([]string, 0, len(ok))
+	for _, it := range ok {
+		out = append(out, it.host)
+	}
+	return out
 }

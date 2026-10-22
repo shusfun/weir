@@ -39,6 +39,7 @@ func (s *Server) gateRoutes(ready, admin *gin.RouterGroup) {
 	s.gateAdminRoutes(admin)
 	s.certRoutes(admin)
 	s.nodeRoutes(admin)
+	s.aiRoutes(admin)
 	s.kernelAdminRoutes(admin)
 }
 

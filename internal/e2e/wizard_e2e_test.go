@@ -223,4 +223,40 @@ func TestWizardSubscriptionRealClients(t *testing.T) {
 		return e.s.Store.Ent.User.GetX(ctx, uid).Used >= int64(len(blob))*int64(len(seen))
 	})
 	t.Logf("metered %d bytes for %d nodes", e.s.Store.Ent.User.GetX(ctx, uid).Used, len(seen))
+
+	// AI 草稿与节点修改使用的实测：Gate 在本机回环用候选参数起内核 + sing-box 客户端真实下载。
+	nodes, _ := e.get("/api/v1/admin/nodes", nil)
+	var list struct {
+		Items []map[string]any `json:"items"`
+	}
+	json.Unmarshal(nodes, &list)
+	for _, n := range list.Items {
+		if n["chain"].(map[string]any)["kind"] != "none" {
+			continue
+		}
+		res := e.post(fmt.Sprintf("/api/v1/admin/nodes/%d/test", int(n["id"].(float64))), map[string]any{}, nil)
+		if res["stage"] != "connect" || res["bytes"].(float64) != 256<<10 {
+			t.Fatalf("node test %s = %v", n["name"], res)
+		}
+		t.Logf("node test %s ok (%v ms)", n["name"], res["latency_ms"])
+	}
+	// 只有内核会拒绝的参数（REALITY short ID 非十六进制）必须被 Gate 上的内核自检拦下。
+	var hy map[string]any
+	for _, n := range list.Items {
+		if n["name"] == "R" {
+			hy = n
+		}
+	}
+	nid := int(hy["id"].(float64))
+	bad := e.s.Store.Ent.Node.GetX(ctx, nid)
+	st := map[string]any{}
+	for k, v := range bad.Settings {
+		st[k] = v
+	}
+	st["reality_short_id"] = "zz"
+	if res, err := e.s.TestNodeSettings(ctx, nid, st); err == nil || res["stage"] != "check" {
+		t.Fatalf("kernel-rejected settings: res=%v err=%v", res, err)
+	} else {
+		t.Logf("bad settings rejected: %v", err)
+	}
 }

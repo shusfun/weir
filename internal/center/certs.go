@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"math/big"
 	"net"
 	"strconv"
@@ -177,8 +178,10 @@ func (s *Server) agentCert(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	if n, _ := s.Store.Ent.Node.Query().Where(node.GateIDEQ(g.ID), node.CertIDEQ(id)).Count(ctx); n == 0 {
-		failure(c, 404, "cert_not_found")
-		return
+		if _, granted, _ := s.Store.KV.Get(ctx, fmt.Sprintf("cert-grant:%d:%d", g.ID, id)); !granted {
+			failure(c, 404, "cert_not_found")
+			return
+		}
 	}
 	cert, err := s.Store.Ent.Certificate.Get(ctx, id)
 	if err != nil {
