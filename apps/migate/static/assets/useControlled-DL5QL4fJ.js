@@ -1,0 +1,1 @@
+import{r as e}from"./index-CJZnzMYr.js";function f(t){return t==null||t.hasAttribute("disabled")||t.getAttribute("aria-disabled")==="true"}function b({controlled:t,default:s,name:o,state:d="value"}){const{current:a}=e.useRef(t!==void 0),[u,r]=e.useState(()=>s),i=a&&t!==void 0?t:u,l=e.useCallback(n=>{a||r(n)},[]);return[i,l]}export{f as i,b as u};
