@@ -87,7 +87,7 @@ func newInstalledServer(t *testing.T) (*Server, *testClient) {
 	if w := tc.do("POST", "/api/v1/auth/login", map[string]string{"email": "a@b.c", "password": "x"}, nil); w.Code != 503 {
 		t.Fatalf("login before install = %d", w.Code)
 	}
-	install := map[string]any{"store": map[string]any{"driver": "sqlite", "sqlite_path": filepath.Join(dir, "migate.db")}, "email": "Admin@Example.test", "password": "Passw0rd"}
+	install := map[string]any{"store": testStore(t, dir), "email": "Admin@Example.test", "password": "Passw0rd"}
 	if w := tc.do("POST", "/api/v1/setup/install", install, map[string]string{"Authorization": "Bearer wrong"}); w.Code != 401 {
 		t.Fatalf("install with wrong token = %d", w.Code)
 	}
