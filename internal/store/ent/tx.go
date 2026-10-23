@@ -36,6 +36,8 @@ type Tx struct {
 	Passkey *PasskeyClient
 	// RecoveryCode is the client for interacting with the RecoveryCode builders.
 	RecoveryCode *RecoveryCodeClient
+	// Resource is the client for interacting with the Resource builders.
+	Resource *ResourceClient
 	// Route is the client for interacting with the Route builders.
 	Route *RouteClient
 	// RuleTemplate is the client for interacting with the RuleTemplate builders.
@@ -195,6 +197,7 @@ func (tx *Tx) init() {
 	tx.Outbound = NewOutboundClient(tx.config)
 	tx.Passkey = NewPasskeyClient(tx.config)
 	tx.RecoveryCode = NewRecoveryCodeClient(tx.config)
+	tx.Resource = NewResourceClient(tx.config)
 	tx.Route = NewRouteClient(tx.config)
 	tx.RuleTemplate = NewRuleTemplateClient(tx.config)
 	tx.Setting = NewSettingClient(tx.config)

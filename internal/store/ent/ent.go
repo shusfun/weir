@@ -24,6 +24,7 @@ import (
 	"github.com/imzyb/MiGate/internal/store/ent/outbound"
 	"github.com/imzyb/MiGate/internal/store/ent/passkey"
 	"github.com/imzyb/MiGate/internal/store/ent/recoverycode"
+	"github.com/imzyb/MiGate/internal/store/ent/resource"
 	"github.com/imzyb/MiGate/internal/store/ent/route"
 	"github.com/imzyb/MiGate/internal/store/ent/ruletemplate"
 	"github.com/imzyb/MiGate/internal/store/ent/setting"
@@ -104,6 +105,7 @@ func checkColumn(t, c string) error {
 			outbound.Table:     outbound.ValidColumn,
 			passkey.Table:      passkey.ValidColumn,
 			recoverycode.Table: recoverycode.ValidColumn,
+			resource.Table:     resource.ValidColumn,
 			route.Table:        route.ValidColumn,
 			ruletemplate.Table: ruletemplate.ValidColumn,
 			setting.Table:      setting.ValidColumn,

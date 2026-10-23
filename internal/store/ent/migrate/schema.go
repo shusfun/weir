@@ -339,6 +339,28 @@ var (
 			},
 		},
 	}
+	// ResourcesColumns holds the columns for the "resources" table.
+	ResourcesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "kind", Type: field.TypeString, Size: 64},
+		{Name: "key", Type: field.TypeString, Size: 255},
+		{Name: "owner_id", Type: field.TypeInt, Default: 0},
+		{Name: "data", Type: field.TypeJSON},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// ResourcesTable holds the schema information for the "resources" table.
+	ResourcesTable = &schema.Table{
+		Name:       "resources",
+		Columns:    ResourcesColumns,
+		PrimaryKey: []*schema.Column{ResourcesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "resource_kind_key",
+				Unique:  true,
+				Columns: []*schema.Column{ResourcesColumns[1], ResourcesColumns[2]},
+			},
+		},
+	}
 	// RoutesColumns holds the columns for the "routes" table.
 	RoutesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -548,6 +570,7 @@ var (
 		OutboundsTable,
 		PasskeysTable,
 		RecoveryCodesTable,
+		ResourcesTable,
 		RoutesTable,
 		RuleTemplatesTable,
 		SettingsTable,

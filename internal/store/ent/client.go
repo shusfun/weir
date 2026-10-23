@@ -26,6 +26,7 @@ import (
 	"github.com/imzyb/MiGate/internal/store/ent/outbound"
 	"github.com/imzyb/MiGate/internal/store/ent/passkey"
 	"github.com/imzyb/MiGate/internal/store/ent/recoverycode"
+	"github.com/imzyb/MiGate/internal/store/ent/resource"
 	"github.com/imzyb/MiGate/internal/store/ent/route"
 	"github.com/imzyb/MiGate/internal/store/ent/ruletemplate"
 	"github.com/imzyb/MiGate/internal/store/ent/setting"
@@ -65,6 +66,8 @@ type Client struct {
 	Passkey *PasskeyClient
 	// RecoveryCode is the client for interacting with the RecoveryCode builders.
 	RecoveryCode *RecoveryCodeClient
+	// Resource is the client for interacting with the Resource builders.
+	Resource *ResourceClient
 	// Route is the client for interacting with the Route builders.
 	Route *RouteClient
 	// RuleTemplate is the client for interacting with the RuleTemplate builders.
@@ -104,6 +107,7 @@ func (c *Client) init() {
 	c.Outbound = NewOutboundClient(c.config)
 	c.Passkey = NewPasskeyClient(c.config)
 	c.RecoveryCode = NewRecoveryCodeClient(c.config)
+	c.Resource = NewResourceClient(c.config)
 	c.Route = NewRouteClient(c.config)
 	c.RuleTemplate = NewRuleTemplateClient(c.config)
 	c.Setting = NewSettingClient(c.config)
@@ -216,6 +220,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Outbound:     NewOutboundClient(cfg),
 		Passkey:      NewPasskeyClient(cfg),
 		RecoveryCode: NewRecoveryCodeClient(cfg),
+		Resource:     NewResourceClient(cfg),
 		Route:        NewRouteClient(cfg),
 		RuleTemplate: NewRuleTemplateClient(cfg),
 		Setting:      NewSettingClient(cfg),
@@ -255,6 +260,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		Outbound:     NewOutboundClient(cfg),
 		Passkey:      NewPasskeyClient(cfg),
 		RecoveryCode: NewRecoveryCodeClient(cfg),
+		Resource:     NewResourceClient(cfg),
 		Route:        NewRouteClient(cfg),
 		RuleTemplate: NewRuleTemplateClient(cfg),
 		Setting:      NewSettingClient(cfg),
@@ -293,8 +299,9 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.Audit, c.Budget, c.Certificate, c.Chain, c.Credential, c.Gate, c.GateAction,
-		c.Link, c.Node, c.Outbound, c.Passkey, c.RecoveryCode, c.Route, c.RuleTemplate,
-		c.Setting, c.SubGrant, c.SubNode, c.SubProfile, c.SubSource, c.User,
+		c.Link, c.Node, c.Outbound, c.Passkey, c.RecoveryCode, c.Resource, c.Route,
+		c.RuleTemplate, c.Setting, c.SubGrant, c.SubNode, c.SubProfile, c.SubSource,
+		c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -305,8 +312,9 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.Audit, c.Budget, c.Certificate, c.Chain, c.Credential, c.Gate, c.GateAction,
-		c.Link, c.Node, c.Outbound, c.Passkey, c.RecoveryCode, c.Route, c.RuleTemplate,
-		c.Setting, c.SubGrant, c.SubNode, c.SubProfile, c.SubSource, c.User,
+		c.Link, c.Node, c.Outbound, c.Passkey, c.RecoveryCode, c.Resource, c.Route,
+		c.RuleTemplate, c.Setting, c.SubGrant, c.SubNode, c.SubProfile, c.SubSource,
+		c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -339,6 +347,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Passkey.mutate(ctx, m)
 	case *RecoveryCodeMutation:
 		return c.RecoveryCode.mutate(ctx, m)
+	case *ResourceMutation:
+		return c.Resource.mutate(ctx, m)
 	case *RouteMutation:
 		return c.Route.mutate(ctx, m)
 	case *RuleTemplateMutation:
@@ -1956,6 +1966,139 @@ func (c *RecoveryCodeClient) mutate(ctx context.Context, m *RecoveryCodeMutation
 	}
 }
 
+// ResourceClient is a client for the Resource schema.
+type ResourceClient struct {
+	config
+}
+
+// NewResourceClient returns a client for the Resource from the given config.
+func NewResourceClient(c config) *ResourceClient {
+	return &ResourceClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `resource.Hooks(f(g(h())))`.
+func (c *ResourceClient) Use(hooks ...Hook) {
+	c.hooks.Resource = append(c.hooks.Resource, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `resource.Intercept(f(g(h())))`.
+func (c *ResourceClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Resource = append(c.inters.Resource, interceptors...)
+}
+
+// Create returns a builder for creating a Resource entity.
+func (c *ResourceClient) Create() *ResourceCreate {
+	mutation := newResourceMutation(c.config, OpCreate)
+	return &ResourceCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Resource entities.
+func (c *ResourceClient) CreateBulk(builders ...*ResourceCreate) *ResourceCreateBulk {
+	return &ResourceCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ResourceClient) MapCreateBulk(slice any, setFunc func(*ResourceCreate, int)) *ResourceCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ResourceCreateBulk{err: fmt.Errorf("calling to ResourceClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ResourceCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ResourceCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Resource.
+func (c *ResourceClient) Update() *ResourceUpdate {
+	mutation := newResourceMutation(c.config, OpUpdate)
+	return &ResourceUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ResourceClient) UpdateOne(_m *Resource) *ResourceUpdateOne {
+	mutation := newResourceMutation(c.config, OpUpdateOne, withResource(_m))
+	return &ResourceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ResourceClient) UpdateOneID(id int) *ResourceUpdateOne {
+	mutation := newResourceMutation(c.config, OpUpdateOne, withResourceID(id))
+	return &ResourceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Resource.
+func (c *ResourceClient) Delete() *ResourceDelete {
+	mutation := newResourceMutation(c.config, OpDelete)
+	return &ResourceDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ResourceClient) DeleteOne(_m *Resource) *ResourceDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ResourceClient) DeleteOneID(id int) *ResourceDeleteOne {
+	builder := c.Delete().Where(resource.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ResourceDeleteOne{builder}
+}
+
+// Query returns a query builder for Resource.
+func (c *ResourceClient) Query() *ResourceQuery {
+	return &ResourceQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeResource},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Resource entity by its id.
+func (c *ResourceClient) Get(ctx context.Context, id int) (*Resource, error) {
+	return c.Query().Where(resource.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ResourceClient) GetX(ctx context.Context, id int) *Resource {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ResourceClient) Hooks() []Hook {
+	return c.hooks.Resource
+}
+
+// Interceptors returns the client interceptors.
+func (c *ResourceClient) Interceptors() []Interceptor {
+	return c.inters.Resource
+}
+
+func (c *ResourceClient) mutate(ctx context.Context, m *ResourceMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ResourceCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ResourceUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ResourceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ResourceDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Resource mutation op: %q", m.Op())
+	}
+}
+
 // RouteClient is a client for the Route schema.
 type RouteClient struct {
 	config
@@ -3024,12 +3167,12 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 type (
 	hooks struct {
 		Audit, Budget, Certificate, Chain, Credential, Gate, GateAction, Link, Node,
-		Outbound, Passkey, RecoveryCode, Route, RuleTemplate, Setting, SubGrant,
-		SubNode, SubProfile, SubSource, User []ent.Hook
+		Outbound, Passkey, RecoveryCode, Resource, Route, RuleTemplate, Setting,
+		SubGrant, SubNode, SubProfile, SubSource, User []ent.Hook
 	}
 	inters struct {
 		Audit, Budget, Certificate, Chain, Credential, Gate, GateAction, Link, Node,
-		Outbound, Passkey, RecoveryCode, Route, RuleTemplate, Setting, SubGrant,
-		SubNode, SubProfile, SubSource, User []ent.Interceptor
+		Outbound, Passkey, RecoveryCode, Resource, Route, RuleTemplate, Setting,
+		SubGrant, SubNode, SubProfile, SubSource, User []ent.Interceptor
 	}
 )

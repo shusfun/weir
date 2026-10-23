@@ -42,6 +42,9 @@ type Passkey func(*sql.Selector)
 // RecoveryCode is the predicate function for recoverycode builders.
 type RecoveryCode func(*sql.Selector)
 
+// Resource is the predicate function for resource builders.
+type Resource func(*sql.Selector)
+
 // Route is the predicate function for route builders.
 type Route func(*sql.Selector)
 

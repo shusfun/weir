@@ -17,6 +17,7 @@ import (
 	"github.com/imzyb/MiGate/internal/store/ent/outbound"
 	"github.com/imzyb/MiGate/internal/store/ent/passkey"
 	"github.com/imzyb/MiGate/internal/store/ent/recoverycode"
+	"github.com/imzyb/MiGate/internal/store/ent/resource"
 	"github.com/imzyb/MiGate/internal/store/ent/route"
 	"github.com/imzyb/MiGate/internal/store/ent/ruletemplate"
 	"github.com/imzyb/MiGate/internal/store/ent/schema"
@@ -398,6 +399,24 @@ func init() {
 	recoverycodeDescCreatedAt := recoverycodeFields[3].Descriptor()
 	// recoverycode.DefaultCreatedAt holds the default value on creation for the created_at field.
 	recoverycode.DefaultCreatedAt = recoverycodeDescCreatedAt.Default.(func() time.Time)
+	resourceFields := schema.Resource{}.Fields()
+	_ = resourceFields
+	// resourceDescKind is the schema descriptor for kind field.
+	resourceDescKind := resourceFields[0].Descriptor()
+	// resource.KindValidator is a validator for the "kind" field. It is called by the builders before save.
+	resource.KindValidator = resourceDescKind.Validators[0].(func(string) error)
+	// resourceDescKey is the schema descriptor for key field.
+	resourceDescKey := resourceFields[1].Descriptor()
+	// resource.KeyValidator is a validator for the "key" field. It is called by the builders before save.
+	resource.KeyValidator = resourceDescKey.Validators[0].(func(string) error)
+	// resourceDescOwnerID is the schema descriptor for owner_id field.
+	resourceDescOwnerID := resourceFields[2].Descriptor()
+	// resource.DefaultOwnerID holds the default value on creation for the owner_id field.
+	resource.DefaultOwnerID = resourceDescOwnerID.Default.(int)
+	// resourceDescCreatedAt is the schema descriptor for created_at field.
+	resourceDescCreatedAt := resourceFields[4].Descriptor()
+	// resource.DefaultCreatedAt holds the default value on creation for the created_at field.
+	resource.DefaultCreatedAt = resourceDescCreatedAt.Default.(func() time.Time)
 	routeFields := schema.Route{}.Fields()
 	_ = routeFields
 	// routeDescOutboundTag is the schema descriptor for outbound_tag field.
