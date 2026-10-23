@@ -236,6 +236,25 @@ func (s *Server) completeMFA(c *gin.Context) {
 	s.issueSession(c, u, true)
 }
 
+// viewer 返回当前登录用户（未登录或会话无效时为 nil），不中断请求；供匿名也可访问的接口区分身份。
+func (s *Server) viewer(c *gin.Context) *ent.User {
+	raw, err := c.Cookie(sessionCookie)
+	uid, token, ok := parseSessionCookie(raw)
+	if err != nil || !ok {
+		return nil
+	}
+	b, found, err := s.Store.KV.Get(c.Request.Context(), sessionKey(uid, token))
+	var session Session
+	if err != nil || !found || json.Unmarshal([]byte(b), &session) != nil || session.UserID != uid {
+		return nil
+	}
+	u, err := s.Store.Ent.User.Get(c.Request.Context(), uid)
+	if err != nil || !u.Enabled {
+		return nil
+	}
+	return u
+}
+
 func (s *Server) authenticate(c *gin.Context) {
 	raw, err := c.Cookie(sessionCookie)
 	uid, token, ok := parseSessionCookie(raw)

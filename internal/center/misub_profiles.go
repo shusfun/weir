@@ -552,12 +552,21 @@ func (s *Server) serveGroup(c *gin.Context) {
 		failure(c, 404, "subscription_not_found")
 		return
 	}
+	s.writeGroup(c, p, "")
+}
+
+// writeGroup 输出订阅组内容；target 为空时按 UA 与查询参数判断格式。
+func (s *Server) writeGroup(c *gin.Context, p *ent.SubProfile, forced string) {
+	ctx := c.Request.Context()
 	if !p.Enabled {
 		failure(c, 404, "subscription_not_found")
 		return
 	}
 	ua := c.GetHeader("User-Agent")
-	target := misub.Target(ua, c.Request.URL.RawQuery)
+	target := forced
+	if target == "" {
+		target = misub.Target(ua, c.Request.URL.RawQuery)
+	}
 	var list string
 	var g MisubSettings
 	var tpl misub.Template

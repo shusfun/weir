@@ -208,6 +208,7 @@ func (s *Server) Router() *gin.Engine {
 	s.subRoutes(r, ready)
 	s.misubRoutes(r, auth, admin)
 	s.addonRoutes(ready, auth, admin)
+	s.pageRoutes(ready, admin)
 
 	r.NoRoute(s.spa)
 	return r

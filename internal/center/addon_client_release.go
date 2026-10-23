@@ -109,9 +109,9 @@ func fetchClientRelease(ctx context.Context, client *http.Client, repo string, n
 		return result
 	}
 	var wire struct {
-		Tag        string `json:"tag_name"`
-		URL        string `json:"html_url"`
-		Published  string `json:"published_at"`
+		Tag        string      `json:"tag_name"`
+		URL        string      `json:"html_url"`
+		Published  string      `json:"published_at"`
 		Draft      bool        `json:"draft"`
 		Prerelease bool        `json:"prerelease"`
 		Assets     []wireAsset `json:"assets"`
