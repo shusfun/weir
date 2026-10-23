@@ -39,6 +39,8 @@ type Server struct {
 	actionDone    gateWaiters
 	// AllowPrivateSources 允许订阅源指向内网地址（只用于测试）。
 	AllowPrivateSources bool
+	// Mail 发送邮件；为空时使用 SMTP。
+	Mail Mailer
 }
 
 func New(c Config, path string, assets fs.FS) (*Server, error) {
@@ -209,6 +211,9 @@ func (s *Server) Router() *gin.Engine {
 	s.misubRoutes(r, auth, admin)
 	s.addonRoutes(ready, auth, admin)
 	s.pageRoutes(ready, admin)
+	s.opsRoutes(admin)
+	s.backupRoutes(admin)
+	s.mailRoutes(ready, admin)
 
 	r.NoRoute(s.spa)
 	return r

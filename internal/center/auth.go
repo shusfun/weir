@@ -34,6 +34,9 @@ type SecuritySettings struct {
 	TOTP            bool `json:"totp_enabled"`
 	Passkey         bool `json:"passkey_enabled"`
 	RequireAdminMFA bool `json:"require_admin_mfa"`
+	// Registration 自助注册（默认关闭）；EmailVerification 注册时须验证邮箱（需要邮件服务）。
+	Registration      bool `json:"registration_enabled"`
+	EmailVerification bool `json:"email_verification"`
 }
 
 func defaultSecurity() SecuritySettings { return SecuritySettings{TOTP: true, Passkey: true} }
@@ -113,8 +116,8 @@ func (s *Server) publicSettings(c *gin.Context) {
 	if !ok {
 		return
 	}
-	// 自助注册与邮箱验证依赖邮件服务，后续阶段接入前固定关闭。
-	c.JSON(200, gin.H{"registration_enabled": false, "email_verification": false, "totp_enabled": p.TOTP, "passkey_enabled": p.Passkey})
+	_, smtp, _ := s.smtpSettings(c.Request.Context())
+	c.JSON(200, gin.H{"registration_enabled": p.Registration, "email_verification": p.EmailVerification && smtp, "password_reset": smtp, "totp_enabled": p.TOTP, "passkey_enabled": p.Passkey})
 }
 
 func (s *Server) storeSession(c *gin.Context, u *ent.User, mfa bool) error {
