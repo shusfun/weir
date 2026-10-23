@@ -365,6 +365,20 @@ var (
 			},
 		},
 	}
+	// RuleTemplatesColumns holds the columns for the "rule_templates" table.
+	RuleTemplatesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "name", Type: field.TypeString, Size: 100},
+		{Name: "format", Type: field.TypeEnum, Enums: []string{"ini", "yaml"}, Default: "ini"},
+		{Name: "content", Type: field.TypeString, Size: 2147483647},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// RuleTemplatesTable holds the schema information for the "rule_templates" table.
+	RuleTemplatesTable = &schema.Table{
+		Name:       "rule_templates",
+		Columns:    RuleTemplatesColumns,
+		PrimaryKey: []*schema.Column{RuleTemplatesColumns[0]},
+	}
 	// SettingsColumns holds the columns for the "settings" table.
 	SettingsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -378,6 +392,113 @@ var (
 		Name:       "settings",
 		Columns:    SettingsColumns,
 		PrimaryKey: []*schema.Column{SettingsColumns[0]},
+	}
+	// SubGrantsColumns holds the columns for the "sub_grants" table.
+	SubGrantsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "profile_id", Type: field.TypeInt},
+		{Name: "user_id", Type: field.TypeInt},
+		{Name: "token", Type: field.TypeString, Unique: true},
+		{Name: "last_used_at", Type: field.TypeTime, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// SubGrantsTable holds the schema information for the "sub_grants" table.
+	SubGrantsTable = &schema.Table{
+		Name:       "sub_grants",
+		Columns:    SubGrantsColumns,
+		PrimaryKey: []*schema.Column{SubGrantsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "subgrant_profile_id_user_id",
+				Unique:  true,
+				Columns: []*schema.Column{SubGrantsColumns[1], SubGrantsColumns[2]},
+			},
+			{
+				Name:    "subgrant_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{SubGrantsColumns[2]},
+			},
+		},
+	}
+	// SubNodesColumns holds the columns for the "sub_nodes" table.
+	SubNodesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "name", Type: field.TypeString, Size: 200, Default: ""},
+		{Name: "url", Type: field.TypeString, Size: 2147483647},
+		{Name: "group", Type: field.TypeString, Size: 100, Default: ""},
+		{Name: "enabled", Type: field.TypeBool, Default: true},
+		{Name: "filter_include", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "filter_exclude", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "operators", Type: field.TypeJSON, Nullable: true},
+		{Name: "plus_as_space", Type: field.TypeBool, Default: false},
+		{Name: "position", Type: field.TypeInt, Default: 0},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// SubNodesTable holds the schema information for the "sub_nodes" table.
+	SubNodesTable = &schema.Table{
+		Name:       "sub_nodes",
+		Columns:    SubNodesColumns,
+		PrimaryKey: []*schema.Column{SubNodesColumns[0]},
+	}
+	// SubProfilesColumns holds the columns for the "sub_profiles" table.
+	SubProfilesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "name", Type: field.TypeString, Size: 100},
+		{Name: "enabled", Type: field.TypeBool, Default: true},
+		{Name: "all_sources", Type: field.TypeBool, Default: false},
+		{Name: "source_ids", Type: field.TypeJSON, Nullable: true},
+		{Name: "node_ids", Type: field.TypeJSON, Nullable: true},
+		{Name: "operators", Type: field.TypeJSON, Nullable: true},
+		{Name: "settings", Type: field.TypeJSON, Nullable: true},
+		{Name: "expires_at", Type: field.TypeTime, Nullable: true},
+		{Name: "share_token", Type: field.TypeString, Default: ""},
+		{Name: "share_expires_at", Type: field.TypeTime, Nullable: true},
+		{Name: "downloads", Type: field.TypeInt, Default: 0},
+		{Name: "position", Type: field.TypeInt, Default: 0},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// SubProfilesTable holds the schema information for the "sub_profiles" table.
+	SubProfilesTable = &schema.Table{
+		Name:       "sub_profiles",
+		Columns:    SubProfilesColumns,
+		PrimaryKey: []*schema.Column{SubProfilesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "subprofile_share_token",
+				Unique:  false,
+				Columns: []*schema.Column{SubProfilesColumns[9]},
+			},
+		},
+	}
+	// SubSourcesColumns holds the columns for the "sub_sources" table.
+	SubSourcesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "name", Type: field.TypeString, Size: 100, Default: ""},
+		{Name: "url", Type: field.TypeString, Size: 2048},
+		{Name: "enabled", Type: field.TypeBool, Default: true},
+		{Name: "user_agent", Type: field.TypeString, Size: 256, Default: ""},
+		{Name: "filter_include", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "filter_exclude", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "operators", Type: field.TypeJSON, Nullable: true},
+		{Name: "plus_as_space", Type: field.TypeBool, Default: false},
+		{Name: "node_cache", Type: field.TypeBool, Default: true},
+		{Name: "exclude_traffic", Type: field.TypeBool, Default: false},
+		{Name: "website", Type: field.TypeString, Size: 2048, Default: ""},
+		{Name: "remark", Type: field.TypeString, Size: 500, Default: ""},
+		{Name: "position", Type: field.TypeInt, Default: 0},
+		{Name: "node_count", Type: field.TypeInt, Default: 0},
+		{Name: "known_nodes", Type: field.TypeInt, Default: 0},
+		{Name: "user_info", Type: field.TypeString, Default: ""},
+		{Name: "title", Type: field.TypeString, Default: ""},
+		{Name: "last_error", Type: field.TypeString, Default: ""},
+		{Name: "fetched_at", Type: field.TypeTime, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// SubSourcesTable holds the schema information for the "sub_sources" table.
+	SubSourcesTable = &schema.Table{
+		Name:       "sub_sources",
+		Columns:    SubSourcesColumns,
+		PrimaryKey: []*schema.Column{SubSourcesColumns[0]},
 	}
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
@@ -428,7 +549,12 @@ var (
 		PasskeysTable,
 		RecoveryCodesTable,
 		RoutesTable,
+		RuleTemplatesTable,
 		SettingsTable,
+		SubGrantsTable,
+		SubNodesTable,
+		SubProfilesTable,
+		SubSourcesTable,
 		UsersTable,
 	}
 )

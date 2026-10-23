@@ -45,8 +45,23 @@ type RecoveryCode func(*sql.Selector)
 // Route is the predicate function for route builders.
 type Route func(*sql.Selector)
 
+// RuleTemplate is the predicate function for ruletemplate builders.
+type RuleTemplate func(*sql.Selector)
+
 // Setting is the predicate function for setting builders.
 type Setting func(*sql.Selector)
+
+// SubGrant is the predicate function for subgrant builders.
+type SubGrant func(*sql.Selector)
+
+// SubNode is the predicate function for subnode builders.
+type SubNode func(*sql.Selector)
+
+// SubProfile is the predicate function for subprofile builders.
+type SubProfile func(*sql.Selector)
+
+// SubSource is the predicate function for subsource builders.
+type SubSource func(*sql.Selector)
 
 // User is the predicate function for user builders.
 type User func(*sql.Selector)

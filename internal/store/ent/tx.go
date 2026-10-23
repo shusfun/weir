@@ -38,8 +38,18 @@ type Tx struct {
 	RecoveryCode *RecoveryCodeClient
 	// Route is the client for interacting with the Route builders.
 	Route *RouteClient
+	// RuleTemplate is the client for interacting with the RuleTemplate builders.
+	RuleTemplate *RuleTemplateClient
 	// Setting is the client for interacting with the Setting builders.
 	Setting *SettingClient
+	// SubGrant is the client for interacting with the SubGrant builders.
+	SubGrant *SubGrantClient
+	// SubNode is the client for interacting with the SubNode builders.
+	SubNode *SubNodeClient
+	// SubProfile is the client for interacting with the SubProfile builders.
+	SubProfile *SubProfileClient
+	// SubSource is the client for interacting with the SubSource builders.
+	SubSource *SubSourceClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
 
@@ -186,7 +196,12 @@ func (tx *Tx) init() {
 	tx.Passkey = NewPasskeyClient(tx.config)
 	tx.RecoveryCode = NewRecoveryCodeClient(tx.config)
 	tx.Route = NewRouteClient(tx.config)
+	tx.RuleTemplate = NewRuleTemplateClient(tx.config)
 	tx.Setting = NewSettingClient(tx.config)
+	tx.SubGrant = NewSubGrantClient(tx.config)
+	tx.SubNode = NewSubNodeClient(tx.config)
+	tx.SubProfile = NewSubProfileClient(tx.config)
+	tx.SubSource = NewSubSourceClient(tx.config)
 	tx.User = NewUserClient(tx.config)
 }
 

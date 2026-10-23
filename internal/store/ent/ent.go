@@ -25,7 +25,12 @@ import (
 	"github.com/imzyb/MiGate/internal/store/ent/passkey"
 	"github.com/imzyb/MiGate/internal/store/ent/recoverycode"
 	"github.com/imzyb/MiGate/internal/store/ent/route"
+	"github.com/imzyb/MiGate/internal/store/ent/ruletemplate"
 	"github.com/imzyb/MiGate/internal/store/ent/setting"
+	"github.com/imzyb/MiGate/internal/store/ent/subgrant"
+	"github.com/imzyb/MiGate/internal/store/ent/subnode"
+	"github.com/imzyb/MiGate/internal/store/ent/subprofile"
+	"github.com/imzyb/MiGate/internal/store/ent/subsource"
 	"github.com/imzyb/MiGate/internal/store/ent/user"
 )
 
@@ -100,7 +105,12 @@ func checkColumn(t, c string) error {
 			passkey.Table:      passkey.ValidColumn,
 			recoverycode.Table: recoverycode.ValidColumn,
 			route.Table:        route.ValidColumn,
+			ruletemplate.Table: ruletemplate.ValidColumn,
 			setting.Table:      setting.ValidColumn,
+			subgrant.Table:     subgrant.ValidColumn,
+			subnode.Table:      subnode.ValidColumn,
+			subprofile.Table:   subprofile.ValidColumn,
+			subsource.Table:    subsource.ValidColumn,
 			user.Table:         user.ValidColumn,
 		})
 	})

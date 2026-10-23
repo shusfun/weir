@@ -36,6 +36,9 @@ func runOracle(t *testing.T, cases []oracleCase) {
 	if err != nil {
 		t.Skip("未找到 node，跳过与上游 MiSub JS 的对照测试")
 	}
+	if _, err := os.Stat(filepath.Join("testdata", "upstream", "node_modules", "js-yaml")); err != nil {
+		t.Skip("缺少对照依赖：在 internal/sub/testdata/upstream 执行 npm install --no-save js-yaml@4.1.1")
+	}
 	wire := make([]oracleWire, len(cases))
 	for i, c := range cases {
 		wire[i] = oracleWire{Mod: c.Mod, Fn: c.Fn, Prop: c.Prop, ReturnArgs: c.ReturnArgs,

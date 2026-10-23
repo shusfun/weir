@@ -37,6 +37,8 @@ type Server struct {
 	waiters       gateWaiters
 	actionWaiters gateWaiters
 	actionDone    gateWaiters
+	// AllowPrivateSources 允许订阅源指向内网地址（只用于测试）。
+	AllowPrivateSources bool
 }
 
 func New(c Config, path string, assets fs.FS) (*Server, error) {
@@ -204,6 +206,7 @@ func (s *Server) Router() *gin.Engine {
 	s.gateRoutes(ready, admin)
 	s.userRoutes(auth, admin)
 	s.subRoutes(r, ready)
+	s.misubRoutes(r, auth, admin)
 
 	r.NoRoute(s.spa)
 	return r

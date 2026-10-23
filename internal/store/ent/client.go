@@ -27,7 +27,12 @@ import (
 	"github.com/imzyb/MiGate/internal/store/ent/passkey"
 	"github.com/imzyb/MiGate/internal/store/ent/recoverycode"
 	"github.com/imzyb/MiGate/internal/store/ent/route"
+	"github.com/imzyb/MiGate/internal/store/ent/ruletemplate"
 	"github.com/imzyb/MiGate/internal/store/ent/setting"
+	"github.com/imzyb/MiGate/internal/store/ent/subgrant"
+	"github.com/imzyb/MiGate/internal/store/ent/subnode"
+	"github.com/imzyb/MiGate/internal/store/ent/subprofile"
+	"github.com/imzyb/MiGate/internal/store/ent/subsource"
 	"github.com/imzyb/MiGate/internal/store/ent/user"
 )
 
@@ -62,8 +67,18 @@ type Client struct {
 	RecoveryCode *RecoveryCodeClient
 	// Route is the client for interacting with the Route builders.
 	Route *RouteClient
+	// RuleTemplate is the client for interacting with the RuleTemplate builders.
+	RuleTemplate *RuleTemplateClient
 	// Setting is the client for interacting with the Setting builders.
 	Setting *SettingClient
+	// SubGrant is the client for interacting with the SubGrant builders.
+	SubGrant *SubGrantClient
+	// SubNode is the client for interacting with the SubNode builders.
+	SubNode *SubNodeClient
+	// SubProfile is the client for interacting with the SubProfile builders.
+	SubProfile *SubProfileClient
+	// SubSource is the client for interacting with the SubSource builders.
+	SubSource *SubSourceClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
 }
@@ -90,7 +105,12 @@ func (c *Client) init() {
 	c.Passkey = NewPasskeyClient(c.config)
 	c.RecoveryCode = NewRecoveryCodeClient(c.config)
 	c.Route = NewRouteClient(c.config)
+	c.RuleTemplate = NewRuleTemplateClient(c.config)
 	c.Setting = NewSettingClient(c.config)
+	c.SubGrant = NewSubGrantClient(c.config)
+	c.SubNode = NewSubNodeClient(c.config)
+	c.SubProfile = NewSubProfileClient(c.config)
+	c.SubSource = NewSubSourceClient(c.config)
 	c.User = NewUserClient(c.config)
 }
 
@@ -197,7 +217,12 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Passkey:      NewPasskeyClient(cfg),
 		RecoveryCode: NewRecoveryCodeClient(cfg),
 		Route:        NewRouteClient(cfg),
+		RuleTemplate: NewRuleTemplateClient(cfg),
 		Setting:      NewSettingClient(cfg),
+		SubGrant:     NewSubGrantClient(cfg),
+		SubNode:      NewSubNodeClient(cfg),
+		SubProfile:   NewSubProfileClient(cfg),
+		SubSource:    NewSubSourceClient(cfg),
 		User:         NewUserClient(cfg),
 	}, nil
 }
@@ -231,7 +256,12 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		Passkey:      NewPasskeyClient(cfg),
 		RecoveryCode: NewRecoveryCodeClient(cfg),
 		Route:        NewRouteClient(cfg),
+		RuleTemplate: NewRuleTemplateClient(cfg),
 		Setting:      NewSettingClient(cfg),
+		SubGrant:     NewSubGrantClient(cfg),
+		SubNode:      NewSubNodeClient(cfg),
+		SubProfile:   NewSubProfileClient(cfg),
+		SubSource:    NewSubSourceClient(cfg),
 		User:         NewUserClient(cfg),
 	}, nil
 }
@@ -263,8 +293,8 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.Audit, c.Budget, c.Certificate, c.Chain, c.Credential, c.Gate, c.GateAction,
-		c.Link, c.Node, c.Outbound, c.Passkey, c.RecoveryCode, c.Route, c.Setting,
-		c.User,
+		c.Link, c.Node, c.Outbound, c.Passkey, c.RecoveryCode, c.Route, c.RuleTemplate,
+		c.Setting, c.SubGrant, c.SubNode, c.SubProfile, c.SubSource, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -275,8 +305,8 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.Audit, c.Budget, c.Certificate, c.Chain, c.Credential, c.Gate, c.GateAction,
-		c.Link, c.Node, c.Outbound, c.Passkey, c.RecoveryCode, c.Route, c.Setting,
-		c.User,
+		c.Link, c.Node, c.Outbound, c.Passkey, c.RecoveryCode, c.Route, c.RuleTemplate,
+		c.Setting, c.SubGrant, c.SubNode, c.SubProfile, c.SubSource, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -311,8 +341,18 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.RecoveryCode.mutate(ctx, m)
 	case *RouteMutation:
 		return c.Route.mutate(ctx, m)
+	case *RuleTemplateMutation:
+		return c.RuleTemplate.mutate(ctx, m)
 	case *SettingMutation:
 		return c.Setting.mutate(ctx, m)
+	case *SubGrantMutation:
+		return c.SubGrant.mutate(ctx, m)
+	case *SubNodeMutation:
+		return c.SubNode.mutate(ctx, m)
+	case *SubProfileMutation:
+		return c.SubProfile.mutate(ctx, m)
+	case *SubSourceMutation:
+		return c.SubSource.mutate(ctx, m)
 	case *UserMutation:
 		return c.User.mutate(ctx, m)
 	default:
@@ -2049,6 +2089,139 @@ func (c *RouteClient) mutate(ctx context.Context, m *RouteMutation) (Value, erro
 	}
 }
 
+// RuleTemplateClient is a client for the RuleTemplate schema.
+type RuleTemplateClient struct {
+	config
+}
+
+// NewRuleTemplateClient returns a client for the RuleTemplate from the given config.
+func NewRuleTemplateClient(c config) *RuleTemplateClient {
+	return &RuleTemplateClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `ruletemplate.Hooks(f(g(h())))`.
+func (c *RuleTemplateClient) Use(hooks ...Hook) {
+	c.hooks.RuleTemplate = append(c.hooks.RuleTemplate, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `ruletemplate.Intercept(f(g(h())))`.
+func (c *RuleTemplateClient) Intercept(interceptors ...Interceptor) {
+	c.inters.RuleTemplate = append(c.inters.RuleTemplate, interceptors...)
+}
+
+// Create returns a builder for creating a RuleTemplate entity.
+func (c *RuleTemplateClient) Create() *RuleTemplateCreate {
+	mutation := newRuleTemplateMutation(c.config, OpCreate)
+	return &RuleTemplateCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of RuleTemplate entities.
+func (c *RuleTemplateClient) CreateBulk(builders ...*RuleTemplateCreate) *RuleTemplateCreateBulk {
+	return &RuleTemplateCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *RuleTemplateClient) MapCreateBulk(slice any, setFunc func(*RuleTemplateCreate, int)) *RuleTemplateCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &RuleTemplateCreateBulk{err: fmt.Errorf("calling to RuleTemplateClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*RuleTemplateCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &RuleTemplateCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for RuleTemplate.
+func (c *RuleTemplateClient) Update() *RuleTemplateUpdate {
+	mutation := newRuleTemplateMutation(c.config, OpUpdate)
+	return &RuleTemplateUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *RuleTemplateClient) UpdateOne(_m *RuleTemplate) *RuleTemplateUpdateOne {
+	mutation := newRuleTemplateMutation(c.config, OpUpdateOne, withRuleTemplate(_m))
+	return &RuleTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *RuleTemplateClient) UpdateOneID(id int) *RuleTemplateUpdateOne {
+	mutation := newRuleTemplateMutation(c.config, OpUpdateOne, withRuleTemplateID(id))
+	return &RuleTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for RuleTemplate.
+func (c *RuleTemplateClient) Delete() *RuleTemplateDelete {
+	mutation := newRuleTemplateMutation(c.config, OpDelete)
+	return &RuleTemplateDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *RuleTemplateClient) DeleteOne(_m *RuleTemplate) *RuleTemplateDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *RuleTemplateClient) DeleteOneID(id int) *RuleTemplateDeleteOne {
+	builder := c.Delete().Where(ruletemplate.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &RuleTemplateDeleteOne{builder}
+}
+
+// Query returns a query builder for RuleTemplate.
+func (c *RuleTemplateClient) Query() *RuleTemplateQuery {
+	return &RuleTemplateQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeRuleTemplate},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a RuleTemplate entity by its id.
+func (c *RuleTemplateClient) Get(ctx context.Context, id int) (*RuleTemplate, error) {
+	return c.Query().Where(ruletemplate.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *RuleTemplateClient) GetX(ctx context.Context, id int) *RuleTemplate {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *RuleTemplateClient) Hooks() []Hook {
+	return c.hooks.RuleTemplate
+}
+
+// Interceptors returns the client interceptors.
+func (c *RuleTemplateClient) Interceptors() []Interceptor {
+	return c.inters.RuleTemplate
+}
+
+func (c *RuleTemplateClient) mutate(ctx context.Context, m *RuleTemplateMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&RuleTemplateCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&RuleTemplateUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&RuleTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&RuleTemplateDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown RuleTemplate mutation op: %q", m.Op())
+	}
+}
+
 // SettingClient is a client for the Setting schema.
 type SettingClient struct {
 	config
@@ -2179,6 +2352,538 @@ func (c *SettingClient) mutate(ctx context.Context, m *SettingMutation) (Value, 
 		return (&SettingDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown Setting mutation op: %q", m.Op())
+	}
+}
+
+// SubGrantClient is a client for the SubGrant schema.
+type SubGrantClient struct {
+	config
+}
+
+// NewSubGrantClient returns a client for the SubGrant from the given config.
+func NewSubGrantClient(c config) *SubGrantClient {
+	return &SubGrantClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `subgrant.Hooks(f(g(h())))`.
+func (c *SubGrantClient) Use(hooks ...Hook) {
+	c.hooks.SubGrant = append(c.hooks.SubGrant, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `subgrant.Intercept(f(g(h())))`.
+func (c *SubGrantClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SubGrant = append(c.inters.SubGrant, interceptors...)
+}
+
+// Create returns a builder for creating a SubGrant entity.
+func (c *SubGrantClient) Create() *SubGrantCreate {
+	mutation := newSubGrantMutation(c.config, OpCreate)
+	return &SubGrantCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SubGrant entities.
+func (c *SubGrantClient) CreateBulk(builders ...*SubGrantCreate) *SubGrantCreateBulk {
+	return &SubGrantCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SubGrantClient) MapCreateBulk(slice any, setFunc func(*SubGrantCreate, int)) *SubGrantCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SubGrantCreateBulk{err: fmt.Errorf("calling to SubGrantClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SubGrantCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SubGrantCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SubGrant.
+func (c *SubGrantClient) Update() *SubGrantUpdate {
+	mutation := newSubGrantMutation(c.config, OpUpdate)
+	return &SubGrantUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SubGrantClient) UpdateOne(_m *SubGrant) *SubGrantUpdateOne {
+	mutation := newSubGrantMutation(c.config, OpUpdateOne, withSubGrant(_m))
+	return &SubGrantUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SubGrantClient) UpdateOneID(id int) *SubGrantUpdateOne {
+	mutation := newSubGrantMutation(c.config, OpUpdateOne, withSubGrantID(id))
+	return &SubGrantUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SubGrant.
+func (c *SubGrantClient) Delete() *SubGrantDelete {
+	mutation := newSubGrantMutation(c.config, OpDelete)
+	return &SubGrantDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SubGrantClient) DeleteOne(_m *SubGrant) *SubGrantDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SubGrantClient) DeleteOneID(id int) *SubGrantDeleteOne {
+	builder := c.Delete().Where(subgrant.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SubGrantDeleteOne{builder}
+}
+
+// Query returns a query builder for SubGrant.
+func (c *SubGrantClient) Query() *SubGrantQuery {
+	return &SubGrantQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSubGrant},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SubGrant entity by its id.
+func (c *SubGrantClient) Get(ctx context.Context, id int) (*SubGrant, error) {
+	return c.Query().Where(subgrant.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SubGrantClient) GetX(ctx context.Context, id int) *SubGrant {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SubGrantClient) Hooks() []Hook {
+	return c.hooks.SubGrant
+}
+
+// Interceptors returns the client interceptors.
+func (c *SubGrantClient) Interceptors() []Interceptor {
+	return c.inters.SubGrant
+}
+
+func (c *SubGrantClient) mutate(ctx context.Context, m *SubGrantMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SubGrantCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SubGrantUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SubGrantUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SubGrantDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SubGrant mutation op: %q", m.Op())
+	}
+}
+
+// SubNodeClient is a client for the SubNode schema.
+type SubNodeClient struct {
+	config
+}
+
+// NewSubNodeClient returns a client for the SubNode from the given config.
+func NewSubNodeClient(c config) *SubNodeClient {
+	return &SubNodeClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `subnode.Hooks(f(g(h())))`.
+func (c *SubNodeClient) Use(hooks ...Hook) {
+	c.hooks.SubNode = append(c.hooks.SubNode, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `subnode.Intercept(f(g(h())))`.
+func (c *SubNodeClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SubNode = append(c.inters.SubNode, interceptors...)
+}
+
+// Create returns a builder for creating a SubNode entity.
+func (c *SubNodeClient) Create() *SubNodeCreate {
+	mutation := newSubNodeMutation(c.config, OpCreate)
+	return &SubNodeCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SubNode entities.
+func (c *SubNodeClient) CreateBulk(builders ...*SubNodeCreate) *SubNodeCreateBulk {
+	return &SubNodeCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SubNodeClient) MapCreateBulk(slice any, setFunc func(*SubNodeCreate, int)) *SubNodeCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SubNodeCreateBulk{err: fmt.Errorf("calling to SubNodeClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SubNodeCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SubNodeCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SubNode.
+func (c *SubNodeClient) Update() *SubNodeUpdate {
+	mutation := newSubNodeMutation(c.config, OpUpdate)
+	return &SubNodeUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SubNodeClient) UpdateOne(_m *SubNode) *SubNodeUpdateOne {
+	mutation := newSubNodeMutation(c.config, OpUpdateOne, withSubNode(_m))
+	return &SubNodeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SubNodeClient) UpdateOneID(id int) *SubNodeUpdateOne {
+	mutation := newSubNodeMutation(c.config, OpUpdateOne, withSubNodeID(id))
+	return &SubNodeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SubNode.
+func (c *SubNodeClient) Delete() *SubNodeDelete {
+	mutation := newSubNodeMutation(c.config, OpDelete)
+	return &SubNodeDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SubNodeClient) DeleteOne(_m *SubNode) *SubNodeDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SubNodeClient) DeleteOneID(id int) *SubNodeDeleteOne {
+	builder := c.Delete().Where(subnode.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SubNodeDeleteOne{builder}
+}
+
+// Query returns a query builder for SubNode.
+func (c *SubNodeClient) Query() *SubNodeQuery {
+	return &SubNodeQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSubNode},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SubNode entity by its id.
+func (c *SubNodeClient) Get(ctx context.Context, id int) (*SubNode, error) {
+	return c.Query().Where(subnode.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SubNodeClient) GetX(ctx context.Context, id int) *SubNode {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SubNodeClient) Hooks() []Hook {
+	return c.hooks.SubNode
+}
+
+// Interceptors returns the client interceptors.
+func (c *SubNodeClient) Interceptors() []Interceptor {
+	return c.inters.SubNode
+}
+
+func (c *SubNodeClient) mutate(ctx context.Context, m *SubNodeMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SubNodeCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SubNodeUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SubNodeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SubNodeDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SubNode mutation op: %q", m.Op())
+	}
+}
+
+// SubProfileClient is a client for the SubProfile schema.
+type SubProfileClient struct {
+	config
+}
+
+// NewSubProfileClient returns a client for the SubProfile from the given config.
+func NewSubProfileClient(c config) *SubProfileClient {
+	return &SubProfileClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `subprofile.Hooks(f(g(h())))`.
+func (c *SubProfileClient) Use(hooks ...Hook) {
+	c.hooks.SubProfile = append(c.hooks.SubProfile, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `subprofile.Intercept(f(g(h())))`.
+func (c *SubProfileClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SubProfile = append(c.inters.SubProfile, interceptors...)
+}
+
+// Create returns a builder for creating a SubProfile entity.
+func (c *SubProfileClient) Create() *SubProfileCreate {
+	mutation := newSubProfileMutation(c.config, OpCreate)
+	return &SubProfileCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SubProfile entities.
+func (c *SubProfileClient) CreateBulk(builders ...*SubProfileCreate) *SubProfileCreateBulk {
+	return &SubProfileCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SubProfileClient) MapCreateBulk(slice any, setFunc func(*SubProfileCreate, int)) *SubProfileCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SubProfileCreateBulk{err: fmt.Errorf("calling to SubProfileClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SubProfileCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SubProfileCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SubProfile.
+func (c *SubProfileClient) Update() *SubProfileUpdate {
+	mutation := newSubProfileMutation(c.config, OpUpdate)
+	return &SubProfileUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SubProfileClient) UpdateOne(_m *SubProfile) *SubProfileUpdateOne {
+	mutation := newSubProfileMutation(c.config, OpUpdateOne, withSubProfile(_m))
+	return &SubProfileUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SubProfileClient) UpdateOneID(id int) *SubProfileUpdateOne {
+	mutation := newSubProfileMutation(c.config, OpUpdateOne, withSubProfileID(id))
+	return &SubProfileUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SubProfile.
+func (c *SubProfileClient) Delete() *SubProfileDelete {
+	mutation := newSubProfileMutation(c.config, OpDelete)
+	return &SubProfileDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SubProfileClient) DeleteOne(_m *SubProfile) *SubProfileDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SubProfileClient) DeleteOneID(id int) *SubProfileDeleteOne {
+	builder := c.Delete().Where(subprofile.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SubProfileDeleteOne{builder}
+}
+
+// Query returns a query builder for SubProfile.
+func (c *SubProfileClient) Query() *SubProfileQuery {
+	return &SubProfileQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSubProfile},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SubProfile entity by its id.
+func (c *SubProfileClient) Get(ctx context.Context, id int) (*SubProfile, error) {
+	return c.Query().Where(subprofile.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SubProfileClient) GetX(ctx context.Context, id int) *SubProfile {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SubProfileClient) Hooks() []Hook {
+	return c.hooks.SubProfile
+}
+
+// Interceptors returns the client interceptors.
+func (c *SubProfileClient) Interceptors() []Interceptor {
+	return c.inters.SubProfile
+}
+
+func (c *SubProfileClient) mutate(ctx context.Context, m *SubProfileMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SubProfileCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SubProfileUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SubProfileUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SubProfileDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SubProfile mutation op: %q", m.Op())
+	}
+}
+
+// SubSourceClient is a client for the SubSource schema.
+type SubSourceClient struct {
+	config
+}
+
+// NewSubSourceClient returns a client for the SubSource from the given config.
+func NewSubSourceClient(c config) *SubSourceClient {
+	return &SubSourceClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `subsource.Hooks(f(g(h())))`.
+func (c *SubSourceClient) Use(hooks ...Hook) {
+	c.hooks.SubSource = append(c.hooks.SubSource, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `subsource.Intercept(f(g(h())))`.
+func (c *SubSourceClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SubSource = append(c.inters.SubSource, interceptors...)
+}
+
+// Create returns a builder for creating a SubSource entity.
+func (c *SubSourceClient) Create() *SubSourceCreate {
+	mutation := newSubSourceMutation(c.config, OpCreate)
+	return &SubSourceCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SubSource entities.
+func (c *SubSourceClient) CreateBulk(builders ...*SubSourceCreate) *SubSourceCreateBulk {
+	return &SubSourceCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SubSourceClient) MapCreateBulk(slice any, setFunc func(*SubSourceCreate, int)) *SubSourceCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SubSourceCreateBulk{err: fmt.Errorf("calling to SubSourceClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SubSourceCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SubSourceCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SubSource.
+func (c *SubSourceClient) Update() *SubSourceUpdate {
+	mutation := newSubSourceMutation(c.config, OpUpdate)
+	return &SubSourceUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SubSourceClient) UpdateOne(_m *SubSource) *SubSourceUpdateOne {
+	mutation := newSubSourceMutation(c.config, OpUpdateOne, withSubSource(_m))
+	return &SubSourceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SubSourceClient) UpdateOneID(id int) *SubSourceUpdateOne {
+	mutation := newSubSourceMutation(c.config, OpUpdateOne, withSubSourceID(id))
+	return &SubSourceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SubSource.
+func (c *SubSourceClient) Delete() *SubSourceDelete {
+	mutation := newSubSourceMutation(c.config, OpDelete)
+	return &SubSourceDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SubSourceClient) DeleteOne(_m *SubSource) *SubSourceDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SubSourceClient) DeleteOneID(id int) *SubSourceDeleteOne {
+	builder := c.Delete().Where(subsource.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SubSourceDeleteOne{builder}
+}
+
+// Query returns a query builder for SubSource.
+func (c *SubSourceClient) Query() *SubSourceQuery {
+	return &SubSourceQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSubSource},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SubSource entity by its id.
+func (c *SubSourceClient) Get(ctx context.Context, id int) (*SubSource, error) {
+	return c.Query().Where(subsource.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SubSourceClient) GetX(ctx context.Context, id int) *SubSource {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SubSourceClient) Hooks() []Hook {
+	return c.hooks.SubSource
+}
+
+// Interceptors returns the client interceptors.
+func (c *SubSourceClient) Interceptors() []Interceptor {
+	return c.inters.SubSource
+}
+
+func (c *SubSourceClient) mutate(ctx context.Context, m *SubSourceMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SubSourceCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SubSourceUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SubSourceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SubSourceDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SubSource mutation op: %q", m.Op())
 	}
 }
 
@@ -2319,10 +3024,12 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 type (
 	hooks struct {
 		Audit, Budget, Certificate, Chain, Credential, Gate, GateAction, Link, Node,
-		Outbound, Passkey, RecoveryCode, Route, Setting, User []ent.Hook
+		Outbound, Passkey, RecoveryCode, Route, RuleTemplate, Setting, SubGrant,
+		SubNode, SubProfile, SubSource, User []ent.Hook
 	}
 	inters struct {
 		Audit, Budget, Certificate, Chain, Credential, Gate, GateAction, Link, Node,
-		Outbound, Passkey, RecoveryCode, Route, Setting, User []ent.Interceptor
+		Outbound, Passkey, RecoveryCode, Route, RuleTemplate, Setting, SubGrant,
+		SubNode, SubProfile, SubSource, User []ent.Interceptor
 	}
 )

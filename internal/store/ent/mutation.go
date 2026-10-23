@@ -25,7 +25,12 @@ import (
 	"github.com/imzyb/MiGate/internal/store/ent/predicate"
 	"github.com/imzyb/MiGate/internal/store/ent/recoverycode"
 	"github.com/imzyb/MiGate/internal/store/ent/route"
+	"github.com/imzyb/MiGate/internal/store/ent/ruletemplate"
 	"github.com/imzyb/MiGate/internal/store/ent/setting"
+	"github.com/imzyb/MiGate/internal/store/ent/subgrant"
+	"github.com/imzyb/MiGate/internal/store/ent/subnode"
+	"github.com/imzyb/MiGate/internal/store/ent/subprofile"
+	"github.com/imzyb/MiGate/internal/store/ent/subsource"
 	"github.com/imzyb/MiGate/internal/store/ent/user"
 )
 
@@ -51,7 +56,12 @@ const (
 	TypePasskey      = "Passkey"
 	TypeRecoveryCode = "RecoveryCode"
 	TypeRoute        = "Route"
+	TypeRuleTemplate = "RuleTemplate"
 	TypeSetting      = "Setting"
+	TypeSubGrant     = "SubGrant"
+	TypeSubNode      = "SubNode"
+	TypeSubProfile   = "SubProfile"
+	TypeSubSource    = "SubSource"
 	TypeUser         = "User"
 )
 
@@ -12840,6 +12850,494 @@ func (m *RouteMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown Route edge %s", name)
 }
 
+// RuleTemplateMutation represents an operation that mutates the RuleTemplate nodes in the graph.
+type RuleTemplateMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *int
+	name          *string
+	format        *ruletemplate.Format
+	content       *string
+	updated_at    *time.Time
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*RuleTemplate, error)
+	predicates    []predicate.RuleTemplate
+}
+
+var _ ent.Mutation = (*RuleTemplateMutation)(nil)
+
+// ruletemplateOption allows management of the mutation configuration using functional options.
+type ruletemplateOption func(*RuleTemplateMutation)
+
+// newRuleTemplateMutation creates new mutation for the RuleTemplate entity.
+func newRuleTemplateMutation(c config, op Op, opts ...ruletemplateOption) *RuleTemplateMutation {
+	m := &RuleTemplateMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeRuleTemplate,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withRuleTemplateID sets the ID field of the mutation.
+func withRuleTemplateID(id int) ruletemplateOption {
+	return func(m *RuleTemplateMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *RuleTemplate
+		)
+		m.oldValue = func(ctx context.Context) (*RuleTemplate, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().RuleTemplate.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withRuleTemplate sets the old RuleTemplate of the mutation.
+func withRuleTemplate(node *RuleTemplate) ruletemplateOption {
+	return func(m *RuleTemplateMutation) {
+		m.oldValue = func(context.Context) (*RuleTemplate, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m RuleTemplateMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m RuleTemplateMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *RuleTemplateMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *RuleTemplateMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().RuleTemplate.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetName sets the "name" field.
+func (m *RuleTemplateMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *RuleTemplateMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the RuleTemplate entity.
+// If the RuleTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RuleTemplateMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *RuleTemplateMutation) ResetName() {
+	m.name = nil
+}
+
+// SetFormat sets the "format" field.
+func (m *RuleTemplateMutation) SetFormat(r ruletemplate.Format) {
+	m.format = &r
+}
+
+// Format returns the value of the "format" field in the mutation.
+func (m *RuleTemplateMutation) Format() (r ruletemplate.Format, exists bool) {
+	v := m.format
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFormat returns the old "format" field's value of the RuleTemplate entity.
+// If the RuleTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RuleTemplateMutation) OldFormat(ctx context.Context) (v ruletemplate.Format, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFormat is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFormat requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFormat: %w", err)
+	}
+	return oldValue.Format, nil
+}
+
+// ResetFormat resets all changes to the "format" field.
+func (m *RuleTemplateMutation) ResetFormat() {
+	m.format = nil
+}
+
+// SetContent sets the "content" field.
+func (m *RuleTemplateMutation) SetContent(s string) {
+	m.content = &s
+}
+
+// Content returns the value of the "content" field in the mutation.
+func (m *RuleTemplateMutation) Content() (r string, exists bool) {
+	v := m.content
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldContent returns the old "content" field's value of the RuleTemplate entity.
+// If the RuleTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RuleTemplateMutation) OldContent(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldContent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldContent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldContent: %w", err)
+	}
+	return oldValue.Content, nil
+}
+
+// ResetContent resets all changes to the "content" field.
+func (m *RuleTemplateMutation) ResetContent() {
+	m.content = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *RuleTemplateMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *RuleTemplateMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the RuleTemplate entity.
+// If the RuleTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RuleTemplateMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *RuleTemplateMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the RuleTemplateMutation builder.
+func (m *RuleTemplateMutation) Where(ps ...predicate.RuleTemplate) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the RuleTemplateMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *RuleTemplateMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.RuleTemplate, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *RuleTemplateMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *RuleTemplateMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (RuleTemplate).
+func (m *RuleTemplateMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *RuleTemplateMutation) Fields() []string {
+	fields := make([]string, 0, 4)
+	if m.name != nil {
+		fields = append(fields, ruletemplate.FieldName)
+	}
+	if m.format != nil {
+		fields = append(fields, ruletemplate.FieldFormat)
+	}
+	if m.content != nil {
+		fields = append(fields, ruletemplate.FieldContent)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, ruletemplate.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *RuleTemplateMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case ruletemplate.FieldName:
+		return m.Name()
+	case ruletemplate.FieldFormat:
+		return m.Format()
+	case ruletemplate.FieldContent:
+		return m.Content()
+	case ruletemplate.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *RuleTemplateMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case ruletemplate.FieldName:
+		return m.OldName(ctx)
+	case ruletemplate.FieldFormat:
+		return m.OldFormat(ctx)
+	case ruletemplate.FieldContent:
+		return m.OldContent(ctx)
+	case ruletemplate.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown RuleTemplate field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RuleTemplateMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case ruletemplate.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	case ruletemplate.FieldFormat:
+		v, ok := value.(ruletemplate.Format)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFormat(v)
+		return nil
+	case ruletemplate.FieldContent:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetContent(v)
+		return nil
+	case ruletemplate.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RuleTemplate field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *RuleTemplateMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *RuleTemplateMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RuleTemplateMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown RuleTemplate numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *RuleTemplateMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *RuleTemplateMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *RuleTemplateMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown RuleTemplate nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *RuleTemplateMutation) ResetField(name string) error {
+	switch name {
+	case ruletemplate.FieldName:
+		m.ResetName()
+		return nil
+	case ruletemplate.FieldFormat:
+		m.ResetFormat()
+		return nil
+	case ruletemplate.FieldContent:
+		m.ResetContent()
+		return nil
+	case ruletemplate.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown RuleTemplate field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *RuleTemplateMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *RuleTemplateMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *RuleTemplateMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *RuleTemplateMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *RuleTemplateMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *RuleTemplateMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *RuleTemplateMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown RuleTemplate unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *RuleTemplateMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown RuleTemplate edge %s", name)
+}
+
 // SettingMutation represents an operation that mutates the Setting nodes in the graph.
 type SettingMutation struct {
 	config
@@ -13362,6 +13860,4249 @@ func (m *SettingMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *SettingMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown Setting edge %s", name)
+}
+
+// SubGrantMutation represents an operation that mutates the SubGrant nodes in the graph.
+type SubGrantMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *int
+	profile_id    *int
+	addprofile_id *int
+	user_id       *int
+	adduser_id    *int
+	token         *string
+	last_used_at  *time.Time
+	created_at    *time.Time
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*SubGrant, error)
+	predicates    []predicate.SubGrant
+}
+
+var _ ent.Mutation = (*SubGrantMutation)(nil)
+
+// subgrantOption allows management of the mutation configuration using functional options.
+type subgrantOption func(*SubGrantMutation)
+
+// newSubGrantMutation creates new mutation for the SubGrant entity.
+func newSubGrantMutation(c config, op Op, opts ...subgrantOption) *SubGrantMutation {
+	m := &SubGrantMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSubGrant,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSubGrantID sets the ID field of the mutation.
+func withSubGrantID(id int) subgrantOption {
+	return func(m *SubGrantMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SubGrant
+		)
+		m.oldValue = func(ctx context.Context) (*SubGrant, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SubGrant.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSubGrant sets the old SubGrant of the mutation.
+func withSubGrant(node *SubGrant) subgrantOption {
+	return func(m *SubGrantMutation) {
+		m.oldValue = func(context.Context) (*SubGrant, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SubGrantMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SubGrantMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SubGrantMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SubGrantMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SubGrant.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetProfileID sets the "profile_id" field.
+func (m *SubGrantMutation) SetProfileID(i int) {
+	m.profile_id = &i
+	m.addprofile_id = nil
+}
+
+// ProfileID returns the value of the "profile_id" field in the mutation.
+func (m *SubGrantMutation) ProfileID() (r int, exists bool) {
+	v := m.profile_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProfileID returns the old "profile_id" field's value of the SubGrant entity.
+// If the SubGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubGrantMutation) OldProfileID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProfileID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProfileID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProfileID: %w", err)
+	}
+	return oldValue.ProfileID, nil
+}
+
+// AddProfileID adds i to the "profile_id" field.
+func (m *SubGrantMutation) AddProfileID(i int) {
+	if m.addprofile_id != nil {
+		*m.addprofile_id += i
+	} else {
+		m.addprofile_id = &i
+	}
+}
+
+// AddedProfileID returns the value that was added to the "profile_id" field in this mutation.
+func (m *SubGrantMutation) AddedProfileID() (r int, exists bool) {
+	v := m.addprofile_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetProfileID resets all changes to the "profile_id" field.
+func (m *SubGrantMutation) ResetProfileID() {
+	m.profile_id = nil
+	m.addprofile_id = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *SubGrantMutation) SetUserID(i int) {
+	m.user_id = &i
+	m.adduser_id = nil
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *SubGrantMutation) UserID() (r int, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the SubGrant entity.
+// If the SubGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubGrantMutation) OldUserID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// AddUserID adds i to the "user_id" field.
+func (m *SubGrantMutation) AddUserID(i int) {
+	if m.adduser_id != nil {
+		*m.adduser_id += i
+	} else {
+		m.adduser_id = &i
+	}
+}
+
+// AddedUserID returns the value that was added to the "user_id" field in this mutation.
+func (m *SubGrantMutation) AddedUserID() (r int, exists bool) {
+	v := m.adduser_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *SubGrantMutation) ResetUserID() {
+	m.user_id = nil
+	m.adduser_id = nil
+}
+
+// SetToken sets the "token" field.
+func (m *SubGrantMutation) SetToken(s string) {
+	m.token = &s
+}
+
+// Token returns the value of the "token" field in the mutation.
+func (m *SubGrantMutation) Token() (r string, exists bool) {
+	v := m.token
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldToken returns the old "token" field's value of the SubGrant entity.
+// If the SubGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubGrantMutation) OldToken(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldToken is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldToken requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldToken: %w", err)
+	}
+	return oldValue.Token, nil
+}
+
+// ResetToken resets all changes to the "token" field.
+func (m *SubGrantMutation) ResetToken() {
+	m.token = nil
+}
+
+// SetLastUsedAt sets the "last_used_at" field.
+func (m *SubGrantMutation) SetLastUsedAt(t time.Time) {
+	m.last_used_at = &t
+}
+
+// LastUsedAt returns the value of the "last_used_at" field in the mutation.
+func (m *SubGrantMutation) LastUsedAt() (r time.Time, exists bool) {
+	v := m.last_used_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastUsedAt returns the old "last_used_at" field's value of the SubGrant entity.
+// If the SubGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubGrantMutation) OldLastUsedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastUsedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastUsedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastUsedAt: %w", err)
+	}
+	return oldValue.LastUsedAt, nil
+}
+
+// ClearLastUsedAt clears the value of the "last_used_at" field.
+func (m *SubGrantMutation) ClearLastUsedAt() {
+	m.last_used_at = nil
+	m.clearedFields[subgrant.FieldLastUsedAt] = struct{}{}
+}
+
+// LastUsedAtCleared returns if the "last_used_at" field was cleared in this mutation.
+func (m *SubGrantMutation) LastUsedAtCleared() bool {
+	_, ok := m.clearedFields[subgrant.FieldLastUsedAt]
+	return ok
+}
+
+// ResetLastUsedAt resets all changes to the "last_used_at" field.
+func (m *SubGrantMutation) ResetLastUsedAt() {
+	m.last_used_at = nil
+	delete(m.clearedFields, subgrant.FieldLastUsedAt)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *SubGrantMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *SubGrantMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the SubGrant entity.
+// If the SubGrant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubGrantMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *SubGrantMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// Where appends a list predicates to the SubGrantMutation builder.
+func (m *SubGrantMutation) Where(ps ...predicate.SubGrant) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SubGrantMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SubGrantMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SubGrant, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SubGrantMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SubGrantMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SubGrant).
+func (m *SubGrantMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SubGrantMutation) Fields() []string {
+	fields := make([]string, 0, 5)
+	if m.profile_id != nil {
+		fields = append(fields, subgrant.FieldProfileID)
+	}
+	if m.user_id != nil {
+		fields = append(fields, subgrant.FieldUserID)
+	}
+	if m.token != nil {
+		fields = append(fields, subgrant.FieldToken)
+	}
+	if m.last_used_at != nil {
+		fields = append(fields, subgrant.FieldLastUsedAt)
+	}
+	if m.created_at != nil {
+		fields = append(fields, subgrant.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SubGrantMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case subgrant.FieldProfileID:
+		return m.ProfileID()
+	case subgrant.FieldUserID:
+		return m.UserID()
+	case subgrant.FieldToken:
+		return m.Token()
+	case subgrant.FieldLastUsedAt:
+		return m.LastUsedAt()
+	case subgrant.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SubGrantMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case subgrant.FieldProfileID:
+		return m.OldProfileID(ctx)
+	case subgrant.FieldUserID:
+		return m.OldUserID(ctx)
+	case subgrant.FieldToken:
+		return m.OldToken(ctx)
+	case subgrant.FieldLastUsedAt:
+		return m.OldLastUsedAt(ctx)
+	case subgrant.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown SubGrant field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SubGrantMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case subgrant.FieldProfileID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProfileID(v)
+		return nil
+	case subgrant.FieldUserID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case subgrant.FieldToken:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetToken(v)
+		return nil
+	case subgrant.FieldLastUsedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastUsedAt(v)
+		return nil
+	case subgrant.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SubGrant field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SubGrantMutation) AddedFields() []string {
+	var fields []string
+	if m.addprofile_id != nil {
+		fields = append(fields, subgrant.FieldProfileID)
+	}
+	if m.adduser_id != nil {
+		fields = append(fields, subgrant.FieldUserID)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SubGrantMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case subgrant.FieldProfileID:
+		return m.AddedProfileID()
+	case subgrant.FieldUserID:
+		return m.AddedUserID()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SubGrantMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case subgrant.FieldProfileID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddProfileID(v)
+		return nil
+	case subgrant.FieldUserID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUserID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SubGrant numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SubGrantMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(subgrant.FieldLastUsedAt) {
+		fields = append(fields, subgrant.FieldLastUsedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SubGrantMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SubGrantMutation) ClearField(name string) error {
+	switch name {
+	case subgrant.FieldLastUsedAt:
+		m.ClearLastUsedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SubGrant nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SubGrantMutation) ResetField(name string) error {
+	switch name {
+	case subgrant.FieldProfileID:
+		m.ResetProfileID()
+		return nil
+	case subgrant.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case subgrant.FieldToken:
+		m.ResetToken()
+		return nil
+	case subgrant.FieldLastUsedAt:
+		m.ResetLastUsedAt()
+		return nil
+	case subgrant.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SubGrant field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SubGrantMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SubGrantMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SubGrantMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SubGrantMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SubGrantMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SubGrantMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SubGrantMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown SubGrant unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SubGrantMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown SubGrant edge %s", name)
+}
+
+// SubNodeMutation represents an operation that mutates the SubNode nodes in the graph.
+type SubNodeMutation struct {
+	config
+	op              Op
+	typ             string
+	id              *int
+	name            *string
+	url             *string
+	group           *string
+	enabled         *bool
+	filter_include  *string
+	filter_exclude  *string
+	operators       *[]interface{}
+	appendoperators []interface{}
+	plus_as_space   *bool
+	position        *int
+	addposition     *int
+	created_at      *time.Time
+	clearedFields   map[string]struct{}
+	done            bool
+	oldValue        func(context.Context) (*SubNode, error)
+	predicates      []predicate.SubNode
+}
+
+var _ ent.Mutation = (*SubNodeMutation)(nil)
+
+// subnodeOption allows management of the mutation configuration using functional options.
+type subnodeOption func(*SubNodeMutation)
+
+// newSubNodeMutation creates new mutation for the SubNode entity.
+func newSubNodeMutation(c config, op Op, opts ...subnodeOption) *SubNodeMutation {
+	m := &SubNodeMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSubNode,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSubNodeID sets the ID field of the mutation.
+func withSubNodeID(id int) subnodeOption {
+	return func(m *SubNodeMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SubNode
+		)
+		m.oldValue = func(ctx context.Context) (*SubNode, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SubNode.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSubNode sets the old SubNode of the mutation.
+func withSubNode(node *SubNode) subnodeOption {
+	return func(m *SubNodeMutation) {
+		m.oldValue = func(context.Context) (*SubNode, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SubNodeMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SubNodeMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SubNodeMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SubNodeMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SubNode.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetName sets the "name" field.
+func (m *SubNodeMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *SubNodeMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the SubNode entity.
+// If the SubNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubNodeMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *SubNodeMutation) ResetName() {
+	m.name = nil
+}
+
+// SetURL sets the "url" field.
+func (m *SubNodeMutation) SetURL(s string) {
+	m.url = &s
+}
+
+// URL returns the value of the "url" field in the mutation.
+func (m *SubNodeMutation) URL() (r string, exists bool) {
+	v := m.url
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldURL returns the old "url" field's value of the SubNode entity.
+// If the SubNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubNodeMutation) OldURL(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldURL is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldURL requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldURL: %w", err)
+	}
+	return oldValue.URL, nil
+}
+
+// ResetURL resets all changes to the "url" field.
+func (m *SubNodeMutation) ResetURL() {
+	m.url = nil
+}
+
+// SetGroup sets the "group" field.
+func (m *SubNodeMutation) SetGroup(s string) {
+	m.group = &s
+}
+
+// Group returns the value of the "group" field in the mutation.
+func (m *SubNodeMutation) Group() (r string, exists bool) {
+	v := m.group
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroup returns the old "group" field's value of the SubNode entity.
+// If the SubNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubNodeMutation) OldGroup(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroup is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroup requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroup: %w", err)
+	}
+	return oldValue.Group, nil
+}
+
+// ResetGroup resets all changes to the "group" field.
+func (m *SubNodeMutation) ResetGroup() {
+	m.group = nil
+}
+
+// SetEnabled sets the "enabled" field.
+func (m *SubNodeMutation) SetEnabled(b bool) {
+	m.enabled = &b
+}
+
+// Enabled returns the value of the "enabled" field in the mutation.
+func (m *SubNodeMutation) Enabled() (r bool, exists bool) {
+	v := m.enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEnabled returns the old "enabled" field's value of the SubNode entity.
+// If the SubNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubNodeMutation) OldEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEnabled: %w", err)
+	}
+	return oldValue.Enabled, nil
+}
+
+// ResetEnabled resets all changes to the "enabled" field.
+func (m *SubNodeMutation) ResetEnabled() {
+	m.enabled = nil
+}
+
+// SetFilterInclude sets the "filter_include" field.
+func (m *SubNodeMutation) SetFilterInclude(s string) {
+	m.filter_include = &s
+}
+
+// FilterInclude returns the value of the "filter_include" field in the mutation.
+func (m *SubNodeMutation) FilterInclude() (r string, exists bool) {
+	v := m.filter_include
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFilterInclude returns the old "filter_include" field's value of the SubNode entity.
+// If the SubNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubNodeMutation) OldFilterInclude(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFilterInclude is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFilterInclude requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFilterInclude: %w", err)
+	}
+	return oldValue.FilterInclude, nil
+}
+
+// ResetFilterInclude resets all changes to the "filter_include" field.
+func (m *SubNodeMutation) ResetFilterInclude() {
+	m.filter_include = nil
+}
+
+// SetFilterExclude sets the "filter_exclude" field.
+func (m *SubNodeMutation) SetFilterExclude(s string) {
+	m.filter_exclude = &s
+}
+
+// FilterExclude returns the value of the "filter_exclude" field in the mutation.
+func (m *SubNodeMutation) FilterExclude() (r string, exists bool) {
+	v := m.filter_exclude
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFilterExclude returns the old "filter_exclude" field's value of the SubNode entity.
+// If the SubNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubNodeMutation) OldFilterExclude(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFilterExclude is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFilterExclude requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFilterExclude: %w", err)
+	}
+	return oldValue.FilterExclude, nil
+}
+
+// ResetFilterExclude resets all changes to the "filter_exclude" field.
+func (m *SubNodeMutation) ResetFilterExclude() {
+	m.filter_exclude = nil
+}
+
+// SetOperators sets the "operators" field.
+func (m *SubNodeMutation) SetOperators(i []interface{}) {
+	m.operators = &i
+	m.appendoperators = nil
+}
+
+// Operators returns the value of the "operators" field in the mutation.
+func (m *SubNodeMutation) Operators() (r []interface{}, exists bool) {
+	v := m.operators
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOperators returns the old "operators" field's value of the SubNode entity.
+// If the SubNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubNodeMutation) OldOperators(ctx context.Context) (v []interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOperators is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOperators requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOperators: %w", err)
+	}
+	return oldValue.Operators, nil
+}
+
+// AppendOperators adds i to the "operators" field.
+func (m *SubNodeMutation) AppendOperators(i []interface{}) {
+	m.appendoperators = append(m.appendoperators, i...)
+}
+
+// AppendedOperators returns the list of values that were appended to the "operators" field in this mutation.
+func (m *SubNodeMutation) AppendedOperators() ([]interface{}, bool) {
+	if len(m.appendoperators) == 0 {
+		return nil, false
+	}
+	return m.appendoperators, true
+}
+
+// ClearOperators clears the value of the "operators" field.
+func (m *SubNodeMutation) ClearOperators() {
+	m.operators = nil
+	m.appendoperators = nil
+	m.clearedFields[subnode.FieldOperators] = struct{}{}
+}
+
+// OperatorsCleared returns if the "operators" field was cleared in this mutation.
+func (m *SubNodeMutation) OperatorsCleared() bool {
+	_, ok := m.clearedFields[subnode.FieldOperators]
+	return ok
+}
+
+// ResetOperators resets all changes to the "operators" field.
+func (m *SubNodeMutation) ResetOperators() {
+	m.operators = nil
+	m.appendoperators = nil
+	delete(m.clearedFields, subnode.FieldOperators)
+}
+
+// SetPlusAsSpace sets the "plus_as_space" field.
+func (m *SubNodeMutation) SetPlusAsSpace(b bool) {
+	m.plus_as_space = &b
+}
+
+// PlusAsSpace returns the value of the "plus_as_space" field in the mutation.
+func (m *SubNodeMutation) PlusAsSpace() (r bool, exists bool) {
+	v := m.plus_as_space
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPlusAsSpace returns the old "plus_as_space" field's value of the SubNode entity.
+// If the SubNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubNodeMutation) OldPlusAsSpace(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPlusAsSpace is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPlusAsSpace requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPlusAsSpace: %w", err)
+	}
+	return oldValue.PlusAsSpace, nil
+}
+
+// ResetPlusAsSpace resets all changes to the "plus_as_space" field.
+func (m *SubNodeMutation) ResetPlusAsSpace() {
+	m.plus_as_space = nil
+}
+
+// SetPosition sets the "position" field.
+func (m *SubNodeMutation) SetPosition(i int) {
+	m.position = &i
+	m.addposition = nil
+}
+
+// Position returns the value of the "position" field in the mutation.
+func (m *SubNodeMutation) Position() (r int, exists bool) {
+	v := m.position
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPosition returns the old "position" field's value of the SubNode entity.
+// If the SubNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubNodeMutation) OldPosition(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPosition is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPosition requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPosition: %w", err)
+	}
+	return oldValue.Position, nil
+}
+
+// AddPosition adds i to the "position" field.
+func (m *SubNodeMutation) AddPosition(i int) {
+	if m.addposition != nil {
+		*m.addposition += i
+	} else {
+		m.addposition = &i
+	}
+}
+
+// AddedPosition returns the value that was added to the "position" field in this mutation.
+func (m *SubNodeMutation) AddedPosition() (r int, exists bool) {
+	v := m.addposition
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPosition resets all changes to the "position" field.
+func (m *SubNodeMutation) ResetPosition() {
+	m.position = nil
+	m.addposition = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *SubNodeMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *SubNodeMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the SubNode entity.
+// If the SubNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubNodeMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *SubNodeMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// Where appends a list predicates to the SubNodeMutation builder.
+func (m *SubNodeMutation) Where(ps ...predicate.SubNode) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SubNodeMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SubNodeMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SubNode, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SubNodeMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SubNodeMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SubNode).
+func (m *SubNodeMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SubNodeMutation) Fields() []string {
+	fields := make([]string, 0, 10)
+	if m.name != nil {
+		fields = append(fields, subnode.FieldName)
+	}
+	if m.url != nil {
+		fields = append(fields, subnode.FieldURL)
+	}
+	if m.group != nil {
+		fields = append(fields, subnode.FieldGroup)
+	}
+	if m.enabled != nil {
+		fields = append(fields, subnode.FieldEnabled)
+	}
+	if m.filter_include != nil {
+		fields = append(fields, subnode.FieldFilterInclude)
+	}
+	if m.filter_exclude != nil {
+		fields = append(fields, subnode.FieldFilterExclude)
+	}
+	if m.operators != nil {
+		fields = append(fields, subnode.FieldOperators)
+	}
+	if m.plus_as_space != nil {
+		fields = append(fields, subnode.FieldPlusAsSpace)
+	}
+	if m.position != nil {
+		fields = append(fields, subnode.FieldPosition)
+	}
+	if m.created_at != nil {
+		fields = append(fields, subnode.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SubNodeMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case subnode.FieldName:
+		return m.Name()
+	case subnode.FieldURL:
+		return m.URL()
+	case subnode.FieldGroup:
+		return m.Group()
+	case subnode.FieldEnabled:
+		return m.Enabled()
+	case subnode.FieldFilterInclude:
+		return m.FilterInclude()
+	case subnode.FieldFilterExclude:
+		return m.FilterExclude()
+	case subnode.FieldOperators:
+		return m.Operators()
+	case subnode.FieldPlusAsSpace:
+		return m.PlusAsSpace()
+	case subnode.FieldPosition:
+		return m.Position()
+	case subnode.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SubNodeMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case subnode.FieldName:
+		return m.OldName(ctx)
+	case subnode.FieldURL:
+		return m.OldURL(ctx)
+	case subnode.FieldGroup:
+		return m.OldGroup(ctx)
+	case subnode.FieldEnabled:
+		return m.OldEnabled(ctx)
+	case subnode.FieldFilterInclude:
+		return m.OldFilterInclude(ctx)
+	case subnode.FieldFilterExclude:
+		return m.OldFilterExclude(ctx)
+	case subnode.FieldOperators:
+		return m.OldOperators(ctx)
+	case subnode.FieldPlusAsSpace:
+		return m.OldPlusAsSpace(ctx)
+	case subnode.FieldPosition:
+		return m.OldPosition(ctx)
+	case subnode.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown SubNode field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SubNodeMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case subnode.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	case subnode.FieldURL:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetURL(v)
+		return nil
+	case subnode.FieldGroup:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroup(v)
+		return nil
+	case subnode.FieldEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEnabled(v)
+		return nil
+	case subnode.FieldFilterInclude:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFilterInclude(v)
+		return nil
+	case subnode.FieldFilterExclude:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFilterExclude(v)
+		return nil
+	case subnode.FieldOperators:
+		v, ok := value.([]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOperators(v)
+		return nil
+	case subnode.FieldPlusAsSpace:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPlusAsSpace(v)
+		return nil
+	case subnode.FieldPosition:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPosition(v)
+		return nil
+	case subnode.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SubNode field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SubNodeMutation) AddedFields() []string {
+	var fields []string
+	if m.addposition != nil {
+		fields = append(fields, subnode.FieldPosition)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SubNodeMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case subnode.FieldPosition:
+		return m.AddedPosition()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SubNodeMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case subnode.FieldPosition:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPosition(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SubNode numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SubNodeMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(subnode.FieldOperators) {
+		fields = append(fields, subnode.FieldOperators)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SubNodeMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SubNodeMutation) ClearField(name string) error {
+	switch name {
+	case subnode.FieldOperators:
+		m.ClearOperators()
+		return nil
+	}
+	return fmt.Errorf("unknown SubNode nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SubNodeMutation) ResetField(name string) error {
+	switch name {
+	case subnode.FieldName:
+		m.ResetName()
+		return nil
+	case subnode.FieldURL:
+		m.ResetURL()
+		return nil
+	case subnode.FieldGroup:
+		m.ResetGroup()
+		return nil
+	case subnode.FieldEnabled:
+		m.ResetEnabled()
+		return nil
+	case subnode.FieldFilterInclude:
+		m.ResetFilterInclude()
+		return nil
+	case subnode.FieldFilterExclude:
+		m.ResetFilterExclude()
+		return nil
+	case subnode.FieldOperators:
+		m.ResetOperators()
+		return nil
+	case subnode.FieldPlusAsSpace:
+		m.ResetPlusAsSpace()
+		return nil
+	case subnode.FieldPosition:
+		m.ResetPosition()
+		return nil
+	case subnode.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SubNode field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SubNodeMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SubNodeMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SubNodeMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SubNodeMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SubNodeMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SubNodeMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SubNodeMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown SubNode unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SubNodeMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown SubNode edge %s", name)
+}
+
+// SubProfileMutation represents an operation that mutates the SubProfile nodes in the graph.
+type SubProfileMutation struct {
+	config
+	op               Op
+	typ              string
+	id               *int
+	name             *string
+	enabled          *bool
+	all_sources      *bool
+	source_ids       *[]int
+	appendsource_ids []int
+	node_ids         *[]int
+	appendnode_ids   []int
+	operators        *[]interface{}
+	appendoperators  []interface{}
+	settings         *map[string]interface{}
+	expires_at       *time.Time
+	share_token      *string
+	share_expires_at *time.Time
+	downloads        *int
+	adddownloads     *int
+	position         *int
+	addposition      *int
+	created_at       *time.Time
+	clearedFields    map[string]struct{}
+	done             bool
+	oldValue         func(context.Context) (*SubProfile, error)
+	predicates       []predicate.SubProfile
+}
+
+var _ ent.Mutation = (*SubProfileMutation)(nil)
+
+// subprofileOption allows management of the mutation configuration using functional options.
+type subprofileOption func(*SubProfileMutation)
+
+// newSubProfileMutation creates new mutation for the SubProfile entity.
+func newSubProfileMutation(c config, op Op, opts ...subprofileOption) *SubProfileMutation {
+	m := &SubProfileMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSubProfile,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSubProfileID sets the ID field of the mutation.
+func withSubProfileID(id int) subprofileOption {
+	return func(m *SubProfileMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SubProfile
+		)
+		m.oldValue = func(ctx context.Context) (*SubProfile, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SubProfile.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSubProfile sets the old SubProfile of the mutation.
+func withSubProfile(node *SubProfile) subprofileOption {
+	return func(m *SubProfileMutation) {
+		m.oldValue = func(context.Context) (*SubProfile, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SubProfileMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SubProfileMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SubProfileMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SubProfileMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SubProfile.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetName sets the "name" field.
+func (m *SubProfileMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *SubProfileMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the SubProfile entity.
+// If the SubProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubProfileMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *SubProfileMutation) ResetName() {
+	m.name = nil
+}
+
+// SetEnabled sets the "enabled" field.
+func (m *SubProfileMutation) SetEnabled(b bool) {
+	m.enabled = &b
+}
+
+// Enabled returns the value of the "enabled" field in the mutation.
+func (m *SubProfileMutation) Enabled() (r bool, exists bool) {
+	v := m.enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEnabled returns the old "enabled" field's value of the SubProfile entity.
+// If the SubProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubProfileMutation) OldEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEnabled: %w", err)
+	}
+	return oldValue.Enabled, nil
+}
+
+// ResetEnabled resets all changes to the "enabled" field.
+func (m *SubProfileMutation) ResetEnabled() {
+	m.enabled = nil
+}
+
+// SetAllSources sets the "all_sources" field.
+func (m *SubProfileMutation) SetAllSources(b bool) {
+	m.all_sources = &b
+}
+
+// AllSources returns the value of the "all_sources" field in the mutation.
+func (m *SubProfileMutation) AllSources() (r bool, exists bool) {
+	v := m.all_sources
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAllSources returns the old "all_sources" field's value of the SubProfile entity.
+// If the SubProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubProfileMutation) OldAllSources(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAllSources is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAllSources requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAllSources: %w", err)
+	}
+	return oldValue.AllSources, nil
+}
+
+// ResetAllSources resets all changes to the "all_sources" field.
+func (m *SubProfileMutation) ResetAllSources() {
+	m.all_sources = nil
+}
+
+// SetSourceIds sets the "source_ids" field.
+func (m *SubProfileMutation) SetSourceIds(i []int) {
+	m.source_ids = &i
+	m.appendsource_ids = nil
+}
+
+// SourceIds returns the value of the "source_ids" field in the mutation.
+func (m *SubProfileMutation) SourceIds() (r []int, exists bool) {
+	v := m.source_ids
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceIds returns the old "source_ids" field's value of the SubProfile entity.
+// If the SubProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubProfileMutation) OldSourceIds(ctx context.Context) (v []int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceIds is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceIds requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceIds: %w", err)
+	}
+	return oldValue.SourceIds, nil
+}
+
+// AppendSourceIds adds i to the "source_ids" field.
+func (m *SubProfileMutation) AppendSourceIds(i []int) {
+	m.appendsource_ids = append(m.appendsource_ids, i...)
+}
+
+// AppendedSourceIds returns the list of values that were appended to the "source_ids" field in this mutation.
+func (m *SubProfileMutation) AppendedSourceIds() ([]int, bool) {
+	if len(m.appendsource_ids) == 0 {
+		return nil, false
+	}
+	return m.appendsource_ids, true
+}
+
+// ClearSourceIds clears the value of the "source_ids" field.
+func (m *SubProfileMutation) ClearSourceIds() {
+	m.source_ids = nil
+	m.appendsource_ids = nil
+	m.clearedFields[subprofile.FieldSourceIds] = struct{}{}
+}
+
+// SourceIdsCleared returns if the "source_ids" field was cleared in this mutation.
+func (m *SubProfileMutation) SourceIdsCleared() bool {
+	_, ok := m.clearedFields[subprofile.FieldSourceIds]
+	return ok
+}
+
+// ResetSourceIds resets all changes to the "source_ids" field.
+func (m *SubProfileMutation) ResetSourceIds() {
+	m.source_ids = nil
+	m.appendsource_ids = nil
+	delete(m.clearedFields, subprofile.FieldSourceIds)
+}
+
+// SetNodeIds sets the "node_ids" field.
+func (m *SubProfileMutation) SetNodeIds(i []int) {
+	m.node_ids = &i
+	m.appendnode_ids = nil
+}
+
+// NodeIds returns the value of the "node_ids" field in the mutation.
+func (m *SubProfileMutation) NodeIds() (r []int, exists bool) {
+	v := m.node_ids
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNodeIds returns the old "node_ids" field's value of the SubProfile entity.
+// If the SubProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubProfileMutation) OldNodeIds(ctx context.Context) (v []int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNodeIds is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNodeIds requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNodeIds: %w", err)
+	}
+	return oldValue.NodeIds, nil
+}
+
+// AppendNodeIds adds i to the "node_ids" field.
+func (m *SubProfileMutation) AppendNodeIds(i []int) {
+	m.appendnode_ids = append(m.appendnode_ids, i...)
+}
+
+// AppendedNodeIds returns the list of values that were appended to the "node_ids" field in this mutation.
+func (m *SubProfileMutation) AppendedNodeIds() ([]int, bool) {
+	if len(m.appendnode_ids) == 0 {
+		return nil, false
+	}
+	return m.appendnode_ids, true
+}
+
+// ClearNodeIds clears the value of the "node_ids" field.
+func (m *SubProfileMutation) ClearNodeIds() {
+	m.node_ids = nil
+	m.appendnode_ids = nil
+	m.clearedFields[subprofile.FieldNodeIds] = struct{}{}
+}
+
+// NodeIdsCleared returns if the "node_ids" field was cleared in this mutation.
+func (m *SubProfileMutation) NodeIdsCleared() bool {
+	_, ok := m.clearedFields[subprofile.FieldNodeIds]
+	return ok
+}
+
+// ResetNodeIds resets all changes to the "node_ids" field.
+func (m *SubProfileMutation) ResetNodeIds() {
+	m.node_ids = nil
+	m.appendnode_ids = nil
+	delete(m.clearedFields, subprofile.FieldNodeIds)
+}
+
+// SetOperators sets the "operators" field.
+func (m *SubProfileMutation) SetOperators(i []interface{}) {
+	m.operators = &i
+	m.appendoperators = nil
+}
+
+// Operators returns the value of the "operators" field in the mutation.
+func (m *SubProfileMutation) Operators() (r []interface{}, exists bool) {
+	v := m.operators
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOperators returns the old "operators" field's value of the SubProfile entity.
+// If the SubProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubProfileMutation) OldOperators(ctx context.Context) (v []interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOperators is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOperators requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOperators: %w", err)
+	}
+	return oldValue.Operators, nil
+}
+
+// AppendOperators adds i to the "operators" field.
+func (m *SubProfileMutation) AppendOperators(i []interface{}) {
+	m.appendoperators = append(m.appendoperators, i...)
+}
+
+// AppendedOperators returns the list of values that were appended to the "operators" field in this mutation.
+func (m *SubProfileMutation) AppendedOperators() ([]interface{}, bool) {
+	if len(m.appendoperators) == 0 {
+		return nil, false
+	}
+	return m.appendoperators, true
+}
+
+// ClearOperators clears the value of the "operators" field.
+func (m *SubProfileMutation) ClearOperators() {
+	m.operators = nil
+	m.appendoperators = nil
+	m.clearedFields[subprofile.FieldOperators] = struct{}{}
+}
+
+// OperatorsCleared returns if the "operators" field was cleared in this mutation.
+func (m *SubProfileMutation) OperatorsCleared() bool {
+	_, ok := m.clearedFields[subprofile.FieldOperators]
+	return ok
+}
+
+// ResetOperators resets all changes to the "operators" field.
+func (m *SubProfileMutation) ResetOperators() {
+	m.operators = nil
+	m.appendoperators = nil
+	delete(m.clearedFields, subprofile.FieldOperators)
+}
+
+// SetSettings sets the "settings" field.
+func (m *SubProfileMutation) SetSettings(value map[string]interface{}) {
+	m.settings = &value
+}
+
+// Settings returns the value of the "settings" field in the mutation.
+func (m *SubProfileMutation) Settings() (r map[string]interface{}, exists bool) {
+	v := m.settings
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSettings returns the old "settings" field's value of the SubProfile entity.
+// If the SubProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubProfileMutation) OldSettings(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSettings is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSettings requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSettings: %w", err)
+	}
+	return oldValue.Settings, nil
+}
+
+// ClearSettings clears the value of the "settings" field.
+func (m *SubProfileMutation) ClearSettings() {
+	m.settings = nil
+	m.clearedFields[subprofile.FieldSettings] = struct{}{}
+}
+
+// SettingsCleared returns if the "settings" field was cleared in this mutation.
+func (m *SubProfileMutation) SettingsCleared() bool {
+	_, ok := m.clearedFields[subprofile.FieldSettings]
+	return ok
+}
+
+// ResetSettings resets all changes to the "settings" field.
+func (m *SubProfileMutation) ResetSettings() {
+	m.settings = nil
+	delete(m.clearedFields, subprofile.FieldSettings)
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (m *SubProfileMutation) SetExpiresAt(t time.Time) {
+	m.expires_at = &t
+}
+
+// ExpiresAt returns the value of the "expires_at" field in the mutation.
+func (m *SubProfileMutation) ExpiresAt() (r time.Time, exists bool) {
+	v := m.expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExpiresAt returns the old "expires_at" field's value of the SubProfile entity.
+// If the SubProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubProfileMutation) OldExpiresAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExpiresAt: %w", err)
+	}
+	return oldValue.ExpiresAt, nil
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (m *SubProfileMutation) ClearExpiresAt() {
+	m.expires_at = nil
+	m.clearedFields[subprofile.FieldExpiresAt] = struct{}{}
+}
+
+// ExpiresAtCleared returns if the "expires_at" field was cleared in this mutation.
+func (m *SubProfileMutation) ExpiresAtCleared() bool {
+	_, ok := m.clearedFields[subprofile.FieldExpiresAt]
+	return ok
+}
+
+// ResetExpiresAt resets all changes to the "expires_at" field.
+func (m *SubProfileMutation) ResetExpiresAt() {
+	m.expires_at = nil
+	delete(m.clearedFields, subprofile.FieldExpiresAt)
+}
+
+// SetShareToken sets the "share_token" field.
+func (m *SubProfileMutation) SetShareToken(s string) {
+	m.share_token = &s
+}
+
+// ShareToken returns the value of the "share_token" field in the mutation.
+func (m *SubProfileMutation) ShareToken() (r string, exists bool) {
+	v := m.share_token
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldShareToken returns the old "share_token" field's value of the SubProfile entity.
+// If the SubProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubProfileMutation) OldShareToken(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldShareToken is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldShareToken requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldShareToken: %w", err)
+	}
+	return oldValue.ShareToken, nil
+}
+
+// ResetShareToken resets all changes to the "share_token" field.
+func (m *SubProfileMutation) ResetShareToken() {
+	m.share_token = nil
+}
+
+// SetShareExpiresAt sets the "share_expires_at" field.
+func (m *SubProfileMutation) SetShareExpiresAt(t time.Time) {
+	m.share_expires_at = &t
+}
+
+// ShareExpiresAt returns the value of the "share_expires_at" field in the mutation.
+func (m *SubProfileMutation) ShareExpiresAt() (r time.Time, exists bool) {
+	v := m.share_expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldShareExpiresAt returns the old "share_expires_at" field's value of the SubProfile entity.
+// If the SubProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubProfileMutation) OldShareExpiresAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldShareExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldShareExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldShareExpiresAt: %w", err)
+	}
+	return oldValue.ShareExpiresAt, nil
+}
+
+// ClearShareExpiresAt clears the value of the "share_expires_at" field.
+func (m *SubProfileMutation) ClearShareExpiresAt() {
+	m.share_expires_at = nil
+	m.clearedFields[subprofile.FieldShareExpiresAt] = struct{}{}
+}
+
+// ShareExpiresAtCleared returns if the "share_expires_at" field was cleared in this mutation.
+func (m *SubProfileMutation) ShareExpiresAtCleared() bool {
+	_, ok := m.clearedFields[subprofile.FieldShareExpiresAt]
+	return ok
+}
+
+// ResetShareExpiresAt resets all changes to the "share_expires_at" field.
+func (m *SubProfileMutation) ResetShareExpiresAt() {
+	m.share_expires_at = nil
+	delete(m.clearedFields, subprofile.FieldShareExpiresAt)
+}
+
+// SetDownloads sets the "downloads" field.
+func (m *SubProfileMutation) SetDownloads(i int) {
+	m.downloads = &i
+	m.adddownloads = nil
+}
+
+// Downloads returns the value of the "downloads" field in the mutation.
+func (m *SubProfileMutation) Downloads() (r int, exists bool) {
+	v := m.downloads
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDownloads returns the old "downloads" field's value of the SubProfile entity.
+// If the SubProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubProfileMutation) OldDownloads(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDownloads is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDownloads requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDownloads: %w", err)
+	}
+	return oldValue.Downloads, nil
+}
+
+// AddDownloads adds i to the "downloads" field.
+func (m *SubProfileMutation) AddDownloads(i int) {
+	if m.adddownloads != nil {
+		*m.adddownloads += i
+	} else {
+		m.adddownloads = &i
+	}
+}
+
+// AddedDownloads returns the value that was added to the "downloads" field in this mutation.
+func (m *SubProfileMutation) AddedDownloads() (r int, exists bool) {
+	v := m.adddownloads
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetDownloads resets all changes to the "downloads" field.
+func (m *SubProfileMutation) ResetDownloads() {
+	m.downloads = nil
+	m.adddownloads = nil
+}
+
+// SetPosition sets the "position" field.
+func (m *SubProfileMutation) SetPosition(i int) {
+	m.position = &i
+	m.addposition = nil
+}
+
+// Position returns the value of the "position" field in the mutation.
+func (m *SubProfileMutation) Position() (r int, exists bool) {
+	v := m.position
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPosition returns the old "position" field's value of the SubProfile entity.
+// If the SubProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubProfileMutation) OldPosition(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPosition is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPosition requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPosition: %w", err)
+	}
+	return oldValue.Position, nil
+}
+
+// AddPosition adds i to the "position" field.
+func (m *SubProfileMutation) AddPosition(i int) {
+	if m.addposition != nil {
+		*m.addposition += i
+	} else {
+		m.addposition = &i
+	}
+}
+
+// AddedPosition returns the value that was added to the "position" field in this mutation.
+func (m *SubProfileMutation) AddedPosition() (r int, exists bool) {
+	v := m.addposition
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPosition resets all changes to the "position" field.
+func (m *SubProfileMutation) ResetPosition() {
+	m.position = nil
+	m.addposition = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *SubProfileMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *SubProfileMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the SubProfile entity.
+// If the SubProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubProfileMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *SubProfileMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// Where appends a list predicates to the SubProfileMutation builder.
+func (m *SubProfileMutation) Where(ps ...predicate.SubProfile) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SubProfileMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SubProfileMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SubProfile, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SubProfileMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SubProfileMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SubProfile).
+func (m *SubProfileMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SubProfileMutation) Fields() []string {
+	fields := make([]string, 0, 13)
+	if m.name != nil {
+		fields = append(fields, subprofile.FieldName)
+	}
+	if m.enabled != nil {
+		fields = append(fields, subprofile.FieldEnabled)
+	}
+	if m.all_sources != nil {
+		fields = append(fields, subprofile.FieldAllSources)
+	}
+	if m.source_ids != nil {
+		fields = append(fields, subprofile.FieldSourceIds)
+	}
+	if m.node_ids != nil {
+		fields = append(fields, subprofile.FieldNodeIds)
+	}
+	if m.operators != nil {
+		fields = append(fields, subprofile.FieldOperators)
+	}
+	if m.settings != nil {
+		fields = append(fields, subprofile.FieldSettings)
+	}
+	if m.expires_at != nil {
+		fields = append(fields, subprofile.FieldExpiresAt)
+	}
+	if m.share_token != nil {
+		fields = append(fields, subprofile.FieldShareToken)
+	}
+	if m.share_expires_at != nil {
+		fields = append(fields, subprofile.FieldShareExpiresAt)
+	}
+	if m.downloads != nil {
+		fields = append(fields, subprofile.FieldDownloads)
+	}
+	if m.position != nil {
+		fields = append(fields, subprofile.FieldPosition)
+	}
+	if m.created_at != nil {
+		fields = append(fields, subprofile.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SubProfileMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case subprofile.FieldName:
+		return m.Name()
+	case subprofile.FieldEnabled:
+		return m.Enabled()
+	case subprofile.FieldAllSources:
+		return m.AllSources()
+	case subprofile.FieldSourceIds:
+		return m.SourceIds()
+	case subprofile.FieldNodeIds:
+		return m.NodeIds()
+	case subprofile.FieldOperators:
+		return m.Operators()
+	case subprofile.FieldSettings:
+		return m.Settings()
+	case subprofile.FieldExpiresAt:
+		return m.ExpiresAt()
+	case subprofile.FieldShareToken:
+		return m.ShareToken()
+	case subprofile.FieldShareExpiresAt:
+		return m.ShareExpiresAt()
+	case subprofile.FieldDownloads:
+		return m.Downloads()
+	case subprofile.FieldPosition:
+		return m.Position()
+	case subprofile.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SubProfileMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case subprofile.FieldName:
+		return m.OldName(ctx)
+	case subprofile.FieldEnabled:
+		return m.OldEnabled(ctx)
+	case subprofile.FieldAllSources:
+		return m.OldAllSources(ctx)
+	case subprofile.FieldSourceIds:
+		return m.OldSourceIds(ctx)
+	case subprofile.FieldNodeIds:
+		return m.OldNodeIds(ctx)
+	case subprofile.FieldOperators:
+		return m.OldOperators(ctx)
+	case subprofile.FieldSettings:
+		return m.OldSettings(ctx)
+	case subprofile.FieldExpiresAt:
+		return m.OldExpiresAt(ctx)
+	case subprofile.FieldShareToken:
+		return m.OldShareToken(ctx)
+	case subprofile.FieldShareExpiresAt:
+		return m.OldShareExpiresAt(ctx)
+	case subprofile.FieldDownloads:
+		return m.OldDownloads(ctx)
+	case subprofile.FieldPosition:
+		return m.OldPosition(ctx)
+	case subprofile.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown SubProfile field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SubProfileMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case subprofile.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	case subprofile.FieldEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEnabled(v)
+		return nil
+	case subprofile.FieldAllSources:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAllSources(v)
+		return nil
+	case subprofile.FieldSourceIds:
+		v, ok := value.([]int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceIds(v)
+		return nil
+	case subprofile.FieldNodeIds:
+		v, ok := value.([]int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNodeIds(v)
+		return nil
+	case subprofile.FieldOperators:
+		v, ok := value.([]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOperators(v)
+		return nil
+	case subprofile.FieldSettings:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSettings(v)
+		return nil
+	case subprofile.FieldExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExpiresAt(v)
+		return nil
+	case subprofile.FieldShareToken:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetShareToken(v)
+		return nil
+	case subprofile.FieldShareExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetShareExpiresAt(v)
+		return nil
+	case subprofile.FieldDownloads:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDownloads(v)
+		return nil
+	case subprofile.FieldPosition:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPosition(v)
+		return nil
+	case subprofile.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SubProfile field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SubProfileMutation) AddedFields() []string {
+	var fields []string
+	if m.adddownloads != nil {
+		fields = append(fields, subprofile.FieldDownloads)
+	}
+	if m.addposition != nil {
+		fields = append(fields, subprofile.FieldPosition)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SubProfileMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case subprofile.FieldDownloads:
+		return m.AddedDownloads()
+	case subprofile.FieldPosition:
+		return m.AddedPosition()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SubProfileMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case subprofile.FieldDownloads:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDownloads(v)
+		return nil
+	case subprofile.FieldPosition:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPosition(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SubProfile numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SubProfileMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(subprofile.FieldSourceIds) {
+		fields = append(fields, subprofile.FieldSourceIds)
+	}
+	if m.FieldCleared(subprofile.FieldNodeIds) {
+		fields = append(fields, subprofile.FieldNodeIds)
+	}
+	if m.FieldCleared(subprofile.FieldOperators) {
+		fields = append(fields, subprofile.FieldOperators)
+	}
+	if m.FieldCleared(subprofile.FieldSettings) {
+		fields = append(fields, subprofile.FieldSettings)
+	}
+	if m.FieldCleared(subprofile.FieldExpiresAt) {
+		fields = append(fields, subprofile.FieldExpiresAt)
+	}
+	if m.FieldCleared(subprofile.FieldShareExpiresAt) {
+		fields = append(fields, subprofile.FieldShareExpiresAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SubProfileMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SubProfileMutation) ClearField(name string) error {
+	switch name {
+	case subprofile.FieldSourceIds:
+		m.ClearSourceIds()
+		return nil
+	case subprofile.FieldNodeIds:
+		m.ClearNodeIds()
+		return nil
+	case subprofile.FieldOperators:
+		m.ClearOperators()
+		return nil
+	case subprofile.FieldSettings:
+		m.ClearSettings()
+		return nil
+	case subprofile.FieldExpiresAt:
+		m.ClearExpiresAt()
+		return nil
+	case subprofile.FieldShareExpiresAt:
+		m.ClearShareExpiresAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SubProfile nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SubProfileMutation) ResetField(name string) error {
+	switch name {
+	case subprofile.FieldName:
+		m.ResetName()
+		return nil
+	case subprofile.FieldEnabled:
+		m.ResetEnabled()
+		return nil
+	case subprofile.FieldAllSources:
+		m.ResetAllSources()
+		return nil
+	case subprofile.FieldSourceIds:
+		m.ResetSourceIds()
+		return nil
+	case subprofile.FieldNodeIds:
+		m.ResetNodeIds()
+		return nil
+	case subprofile.FieldOperators:
+		m.ResetOperators()
+		return nil
+	case subprofile.FieldSettings:
+		m.ResetSettings()
+		return nil
+	case subprofile.FieldExpiresAt:
+		m.ResetExpiresAt()
+		return nil
+	case subprofile.FieldShareToken:
+		m.ResetShareToken()
+		return nil
+	case subprofile.FieldShareExpiresAt:
+		m.ResetShareExpiresAt()
+		return nil
+	case subprofile.FieldDownloads:
+		m.ResetDownloads()
+		return nil
+	case subprofile.FieldPosition:
+		m.ResetPosition()
+		return nil
+	case subprofile.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SubProfile field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SubProfileMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SubProfileMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SubProfileMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SubProfileMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SubProfileMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SubProfileMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SubProfileMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown SubProfile unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SubProfileMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown SubProfile edge %s", name)
+}
+
+// SubSourceMutation represents an operation that mutates the SubSource nodes in the graph.
+type SubSourceMutation struct {
+	config
+	op              Op
+	typ             string
+	id              *int
+	name            *string
+	url             *string
+	enabled         *bool
+	user_agent      *string
+	filter_include  *string
+	filter_exclude  *string
+	operators       *[]interface{}
+	appendoperators []interface{}
+	plus_as_space   *bool
+	node_cache      *bool
+	exclude_traffic *bool
+	website         *string
+	remark          *string
+	position        *int
+	addposition     *int
+	node_count      *int
+	addnode_count   *int
+	known_nodes     *int
+	addknown_nodes  *int
+	user_info       *string
+	title           *string
+	last_error      *string
+	fetched_at      *time.Time
+	created_at      *time.Time
+	clearedFields   map[string]struct{}
+	done            bool
+	oldValue        func(context.Context) (*SubSource, error)
+	predicates      []predicate.SubSource
+}
+
+var _ ent.Mutation = (*SubSourceMutation)(nil)
+
+// subsourceOption allows management of the mutation configuration using functional options.
+type subsourceOption func(*SubSourceMutation)
+
+// newSubSourceMutation creates new mutation for the SubSource entity.
+func newSubSourceMutation(c config, op Op, opts ...subsourceOption) *SubSourceMutation {
+	m := &SubSourceMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSubSource,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSubSourceID sets the ID field of the mutation.
+func withSubSourceID(id int) subsourceOption {
+	return func(m *SubSourceMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SubSource
+		)
+		m.oldValue = func(ctx context.Context) (*SubSource, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SubSource.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSubSource sets the old SubSource of the mutation.
+func withSubSource(node *SubSource) subsourceOption {
+	return func(m *SubSourceMutation) {
+		m.oldValue = func(context.Context) (*SubSource, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SubSourceMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SubSourceMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SubSourceMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SubSourceMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SubSource.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetName sets the "name" field.
+func (m *SubSourceMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *SubSourceMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the SubSource entity.
+// If the SubSource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubSourceMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *SubSourceMutation) ResetName() {
+	m.name = nil
+}
+
+// SetURL sets the "url" field.
+func (m *SubSourceMutation) SetURL(s string) {
+	m.url = &s
+}
+
+// URL returns the value of the "url" field in the mutation.
+func (m *SubSourceMutation) URL() (r string, exists bool) {
+	v := m.url
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldURL returns the old "url" field's value of the SubSource entity.
+// If the SubSource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubSourceMutation) OldURL(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldURL is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldURL requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldURL: %w", err)
+	}
+	return oldValue.URL, nil
+}
+
+// ResetURL resets all changes to the "url" field.
+func (m *SubSourceMutation) ResetURL() {
+	m.url = nil
+}
+
+// SetEnabled sets the "enabled" field.
+func (m *SubSourceMutation) SetEnabled(b bool) {
+	m.enabled = &b
+}
+
+// Enabled returns the value of the "enabled" field in the mutation.
+func (m *SubSourceMutation) Enabled() (r bool, exists bool) {
+	v := m.enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEnabled returns the old "enabled" field's value of the SubSource entity.
+// If the SubSource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubSourceMutation) OldEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEnabled: %w", err)
+	}
+	return oldValue.Enabled, nil
+}
+
+// ResetEnabled resets all changes to the "enabled" field.
+func (m *SubSourceMutation) ResetEnabled() {
+	m.enabled = nil
+}
+
+// SetUserAgent sets the "user_agent" field.
+func (m *SubSourceMutation) SetUserAgent(s string) {
+	m.user_agent = &s
+}
+
+// UserAgent returns the value of the "user_agent" field in the mutation.
+func (m *SubSourceMutation) UserAgent() (r string, exists bool) {
+	v := m.user_agent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserAgent returns the old "user_agent" field's value of the SubSource entity.
+// If the SubSource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubSourceMutation) OldUserAgent(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserAgent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserAgent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserAgent: %w", err)
+	}
+	return oldValue.UserAgent, nil
+}
+
+// ResetUserAgent resets all changes to the "user_agent" field.
+func (m *SubSourceMutation) ResetUserAgent() {
+	m.user_agent = nil
+}
+
+// SetFilterInclude sets the "filter_include" field.
+func (m *SubSourceMutation) SetFilterInclude(s string) {
+	m.filter_include = &s
+}
+
+// FilterInclude returns the value of the "filter_include" field in the mutation.
+func (m *SubSourceMutation) FilterInclude() (r string, exists bool) {
+	v := m.filter_include
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFilterInclude returns the old "filter_include" field's value of the SubSource entity.
+// If the SubSource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubSourceMutation) OldFilterInclude(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFilterInclude is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFilterInclude requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFilterInclude: %w", err)
+	}
+	return oldValue.FilterInclude, nil
+}
+
+// ResetFilterInclude resets all changes to the "filter_include" field.
+func (m *SubSourceMutation) ResetFilterInclude() {
+	m.filter_include = nil
+}
+
+// SetFilterExclude sets the "filter_exclude" field.
+func (m *SubSourceMutation) SetFilterExclude(s string) {
+	m.filter_exclude = &s
+}
+
+// FilterExclude returns the value of the "filter_exclude" field in the mutation.
+func (m *SubSourceMutation) FilterExclude() (r string, exists bool) {
+	v := m.filter_exclude
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFilterExclude returns the old "filter_exclude" field's value of the SubSource entity.
+// If the SubSource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubSourceMutation) OldFilterExclude(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFilterExclude is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFilterExclude requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFilterExclude: %w", err)
+	}
+	return oldValue.FilterExclude, nil
+}
+
+// ResetFilterExclude resets all changes to the "filter_exclude" field.
+func (m *SubSourceMutation) ResetFilterExclude() {
+	m.filter_exclude = nil
+}
+
+// SetOperators sets the "operators" field.
+func (m *SubSourceMutation) SetOperators(i []interface{}) {
+	m.operators = &i
+	m.appendoperators = nil
+}
+
+// Operators returns the value of the "operators" field in the mutation.
+func (m *SubSourceMutation) Operators() (r []interface{}, exists bool) {
+	v := m.operators
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOperators returns the old "operators" field's value of the SubSource entity.
+// If the SubSource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubSourceMutation) OldOperators(ctx context.Context) (v []interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOperators is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOperators requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOperators: %w", err)
+	}
+	return oldValue.Operators, nil
+}
+
+// AppendOperators adds i to the "operators" field.
+func (m *SubSourceMutation) AppendOperators(i []interface{}) {
+	m.appendoperators = append(m.appendoperators, i...)
+}
+
+// AppendedOperators returns the list of values that were appended to the "operators" field in this mutation.
+func (m *SubSourceMutation) AppendedOperators() ([]interface{}, bool) {
+	if len(m.appendoperators) == 0 {
+		return nil, false
+	}
+	return m.appendoperators, true
+}
+
+// ClearOperators clears the value of the "operators" field.
+func (m *SubSourceMutation) ClearOperators() {
+	m.operators = nil
+	m.appendoperators = nil
+	m.clearedFields[subsource.FieldOperators] = struct{}{}
+}
+
+// OperatorsCleared returns if the "operators" field was cleared in this mutation.
+func (m *SubSourceMutation) OperatorsCleared() bool {
+	_, ok := m.clearedFields[subsource.FieldOperators]
+	return ok
+}
+
+// ResetOperators resets all changes to the "operators" field.
+func (m *SubSourceMutation) ResetOperators() {
+	m.operators = nil
+	m.appendoperators = nil
+	delete(m.clearedFields, subsource.FieldOperators)
+}
+
+// SetPlusAsSpace sets the "plus_as_space" field.
+func (m *SubSourceMutation) SetPlusAsSpace(b bool) {
+	m.plus_as_space = &b
+}
+
+// PlusAsSpace returns the value of the "plus_as_space" field in the mutation.
+func (m *SubSourceMutation) PlusAsSpace() (r bool, exists bool) {
+	v := m.plus_as_space
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPlusAsSpace returns the old "plus_as_space" field's value of the SubSource entity.
+// If the SubSource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubSourceMutation) OldPlusAsSpace(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPlusAsSpace is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPlusAsSpace requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPlusAsSpace: %w", err)
+	}
+	return oldValue.PlusAsSpace, nil
+}
+
+// ResetPlusAsSpace resets all changes to the "plus_as_space" field.
+func (m *SubSourceMutation) ResetPlusAsSpace() {
+	m.plus_as_space = nil
+}
+
+// SetNodeCache sets the "node_cache" field.
+func (m *SubSourceMutation) SetNodeCache(b bool) {
+	m.node_cache = &b
+}
+
+// NodeCache returns the value of the "node_cache" field in the mutation.
+func (m *SubSourceMutation) NodeCache() (r bool, exists bool) {
+	v := m.node_cache
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNodeCache returns the old "node_cache" field's value of the SubSource entity.
+// If the SubSource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubSourceMutation) OldNodeCache(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNodeCache is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNodeCache requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNodeCache: %w", err)
+	}
+	return oldValue.NodeCache, nil
+}
+
+// ResetNodeCache resets all changes to the "node_cache" field.
+func (m *SubSourceMutation) ResetNodeCache() {
+	m.node_cache = nil
+}
+
+// SetExcludeTraffic sets the "exclude_traffic" field.
+func (m *SubSourceMutation) SetExcludeTraffic(b bool) {
+	m.exclude_traffic = &b
+}
+
+// ExcludeTraffic returns the value of the "exclude_traffic" field in the mutation.
+func (m *SubSourceMutation) ExcludeTraffic() (r bool, exists bool) {
+	v := m.exclude_traffic
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExcludeTraffic returns the old "exclude_traffic" field's value of the SubSource entity.
+// If the SubSource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubSourceMutation) OldExcludeTraffic(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExcludeTraffic is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExcludeTraffic requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExcludeTraffic: %w", err)
+	}
+	return oldValue.ExcludeTraffic, nil
+}
+
+// ResetExcludeTraffic resets all changes to the "exclude_traffic" field.
+func (m *SubSourceMutation) ResetExcludeTraffic() {
+	m.exclude_traffic = nil
+}
+
+// SetWebsite sets the "website" field.
+func (m *SubSourceMutation) SetWebsite(s string) {
+	m.website = &s
+}
+
+// Website returns the value of the "website" field in the mutation.
+func (m *SubSourceMutation) Website() (r string, exists bool) {
+	v := m.website
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWebsite returns the old "website" field's value of the SubSource entity.
+// If the SubSource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubSourceMutation) OldWebsite(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWebsite is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWebsite requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWebsite: %w", err)
+	}
+	return oldValue.Website, nil
+}
+
+// ResetWebsite resets all changes to the "website" field.
+func (m *SubSourceMutation) ResetWebsite() {
+	m.website = nil
+}
+
+// SetRemark sets the "remark" field.
+func (m *SubSourceMutation) SetRemark(s string) {
+	m.remark = &s
+}
+
+// Remark returns the value of the "remark" field in the mutation.
+func (m *SubSourceMutation) Remark() (r string, exists bool) {
+	v := m.remark
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRemark returns the old "remark" field's value of the SubSource entity.
+// If the SubSource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubSourceMutation) OldRemark(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRemark is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRemark requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRemark: %w", err)
+	}
+	return oldValue.Remark, nil
+}
+
+// ResetRemark resets all changes to the "remark" field.
+func (m *SubSourceMutation) ResetRemark() {
+	m.remark = nil
+}
+
+// SetPosition sets the "position" field.
+func (m *SubSourceMutation) SetPosition(i int) {
+	m.position = &i
+	m.addposition = nil
+}
+
+// Position returns the value of the "position" field in the mutation.
+func (m *SubSourceMutation) Position() (r int, exists bool) {
+	v := m.position
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPosition returns the old "position" field's value of the SubSource entity.
+// If the SubSource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubSourceMutation) OldPosition(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPosition is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPosition requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPosition: %w", err)
+	}
+	return oldValue.Position, nil
+}
+
+// AddPosition adds i to the "position" field.
+func (m *SubSourceMutation) AddPosition(i int) {
+	if m.addposition != nil {
+		*m.addposition += i
+	} else {
+		m.addposition = &i
+	}
+}
+
+// AddedPosition returns the value that was added to the "position" field in this mutation.
+func (m *SubSourceMutation) AddedPosition() (r int, exists bool) {
+	v := m.addposition
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPosition resets all changes to the "position" field.
+func (m *SubSourceMutation) ResetPosition() {
+	m.position = nil
+	m.addposition = nil
+}
+
+// SetNodeCount sets the "node_count" field.
+func (m *SubSourceMutation) SetNodeCount(i int) {
+	m.node_count = &i
+	m.addnode_count = nil
+}
+
+// NodeCount returns the value of the "node_count" field in the mutation.
+func (m *SubSourceMutation) NodeCount() (r int, exists bool) {
+	v := m.node_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNodeCount returns the old "node_count" field's value of the SubSource entity.
+// If the SubSource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubSourceMutation) OldNodeCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNodeCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNodeCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNodeCount: %w", err)
+	}
+	return oldValue.NodeCount, nil
+}
+
+// AddNodeCount adds i to the "node_count" field.
+func (m *SubSourceMutation) AddNodeCount(i int) {
+	if m.addnode_count != nil {
+		*m.addnode_count += i
+	} else {
+		m.addnode_count = &i
+	}
+}
+
+// AddedNodeCount returns the value that was added to the "node_count" field in this mutation.
+func (m *SubSourceMutation) AddedNodeCount() (r int, exists bool) {
+	v := m.addnode_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetNodeCount resets all changes to the "node_count" field.
+func (m *SubSourceMutation) ResetNodeCount() {
+	m.node_count = nil
+	m.addnode_count = nil
+}
+
+// SetKnownNodes sets the "known_nodes" field.
+func (m *SubSourceMutation) SetKnownNodes(i int) {
+	m.known_nodes = &i
+	m.addknown_nodes = nil
+}
+
+// KnownNodes returns the value of the "known_nodes" field in the mutation.
+func (m *SubSourceMutation) KnownNodes() (r int, exists bool) {
+	v := m.known_nodes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKnownNodes returns the old "known_nodes" field's value of the SubSource entity.
+// If the SubSource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubSourceMutation) OldKnownNodes(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKnownNodes is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKnownNodes requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKnownNodes: %w", err)
+	}
+	return oldValue.KnownNodes, nil
+}
+
+// AddKnownNodes adds i to the "known_nodes" field.
+func (m *SubSourceMutation) AddKnownNodes(i int) {
+	if m.addknown_nodes != nil {
+		*m.addknown_nodes += i
+	} else {
+		m.addknown_nodes = &i
+	}
+}
+
+// AddedKnownNodes returns the value that was added to the "known_nodes" field in this mutation.
+func (m *SubSourceMutation) AddedKnownNodes() (r int, exists bool) {
+	v := m.addknown_nodes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetKnownNodes resets all changes to the "known_nodes" field.
+func (m *SubSourceMutation) ResetKnownNodes() {
+	m.known_nodes = nil
+	m.addknown_nodes = nil
+}
+
+// SetUserInfo sets the "user_info" field.
+func (m *SubSourceMutation) SetUserInfo(s string) {
+	m.user_info = &s
+}
+
+// UserInfo returns the value of the "user_info" field in the mutation.
+func (m *SubSourceMutation) UserInfo() (r string, exists bool) {
+	v := m.user_info
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserInfo returns the old "user_info" field's value of the SubSource entity.
+// If the SubSource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubSourceMutation) OldUserInfo(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserInfo is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserInfo requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserInfo: %w", err)
+	}
+	return oldValue.UserInfo, nil
+}
+
+// ResetUserInfo resets all changes to the "user_info" field.
+func (m *SubSourceMutation) ResetUserInfo() {
+	m.user_info = nil
+}
+
+// SetTitle sets the "title" field.
+func (m *SubSourceMutation) SetTitle(s string) {
+	m.title = &s
+}
+
+// Title returns the value of the "title" field in the mutation.
+func (m *SubSourceMutation) Title() (r string, exists bool) {
+	v := m.title
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTitle returns the old "title" field's value of the SubSource entity.
+// If the SubSource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubSourceMutation) OldTitle(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTitle is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTitle requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTitle: %w", err)
+	}
+	return oldValue.Title, nil
+}
+
+// ResetTitle resets all changes to the "title" field.
+func (m *SubSourceMutation) ResetTitle() {
+	m.title = nil
+}
+
+// SetLastError sets the "last_error" field.
+func (m *SubSourceMutation) SetLastError(s string) {
+	m.last_error = &s
+}
+
+// LastError returns the value of the "last_error" field in the mutation.
+func (m *SubSourceMutation) LastError() (r string, exists bool) {
+	v := m.last_error
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastError returns the old "last_error" field's value of the SubSource entity.
+// If the SubSource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubSourceMutation) OldLastError(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastError is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastError requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastError: %w", err)
+	}
+	return oldValue.LastError, nil
+}
+
+// ResetLastError resets all changes to the "last_error" field.
+func (m *SubSourceMutation) ResetLastError() {
+	m.last_error = nil
+}
+
+// SetFetchedAt sets the "fetched_at" field.
+func (m *SubSourceMutation) SetFetchedAt(t time.Time) {
+	m.fetched_at = &t
+}
+
+// FetchedAt returns the value of the "fetched_at" field in the mutation.
+func (m *SubSourceMutation) FetchedAt() (r time.Time, exists bool) {
+	v := m.fetched_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFetchedAt returns the old "fetched_at" field's value of the SubSource entity.
+// If the SubSource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubSourceMutation) OldFetchedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFetchedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFetchedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFetchedAt: %w", err)
+	}
+	return oldValue.FetchedAt, nil
+}
+
+// ClearFetchedAt clears the value of the "fetched_at" field.
+func (m *SubSourceMutation) ClearFetchedAt() {
+	m.fetched_at = nil
+	m.clearedFields[subsource.FieldFetchedAt] = struct{}{}
+}
+
+// FetchedAtCleared returns if the "fetched_at" field was cleared in this mutation.
+func (m *SubSourceMutation) FetchedAtCleared() bool {
+	_, ok := m.clearedFields[subsource.FieldFetchedAt]
+	return ok
+}
+
+// ResetFetchedAt resets all changes to the "fetched_at" field.
+func (m *SubSourceMutation) ResetFetchedAt() {
+	m.fetched_at = nil
+	delete(m.clearedFields, subsource.FieldFetchedAt)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *SubSourceMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *SubSourceMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the SubSource entity.
+// If the SubSource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubSourceMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *SubSourceMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// Where appends a list predicates to the SubSourceMutation builder.
+func (m *SubSourceMutation) Where(ps ...predicate.SubSource) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SubSourceMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SubSourceMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SubSource, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SubSourceMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SubSourceMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SubSource).
+func (m *SubSourceMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SubSourceMutation) Fields() []string {
+	fields := make([]string, 0, 20)
+	if m.name != nil {
+		fields = append(fields, subsource.FieldName)
+	}
+	if m.url != nil {
+		fields = append(fields, subsource.FieldURL)
+	}
+	if m.enabled != nil {
+		fields = append(fields, subsource.FieldEnabled)
+	}
+	if m.user_agent != nil {
+		fields = append(fields, subsource.FieldUserAgent)
+	}
+	if m.filter_include != nil {
+		fields = append(fields, subsource.FieldFilterInclude)
+	}
+	if m.filter_exclude != nil {
+		fields = append(fields, subsource.FieldFilterExclude)
+	}
+	if m.operators != nil {
+		fields = append(fields, subsource.FieldOperators)
+	}
+	if m.plus_as_space != nil {
+		fields = append(fields, subsource.FieldPlusAsSpace)
+	}
+	if m.node_cache != nil {
+		fields = append(fields, subsource.FieldNodeCache)
+	}
+	if m.exclude_traffic != nil {
+		fields = append(fields, subsource.FieldExcludeTraffic)
+	}
+	if m.website != nil {
+		fields = append(fields, subsource.FieldWebsite)
+	}
+	if m.remark != nil {
+		fields = append(fields, subsource.FieldRemark)
+	}
+	if m.position != nil {
+		fields = append(fields, subsource.FieldPosition)
+	}
+	if m.node_count != nil {
+		fields = append(fields, subsource.FieldNodeCount)
+	}
+	if m.known_nodes != nil {
+		fields = append(fields, subsource.FieldKnownNodes)
+	}
+	if m.user_info != nil {
+		fields = append(fields, subsource.FieldUserInfo)
+	}
+	if m.title != nil {
+		fields = append(fields, subsource.FieldTitle)
+	}
+	if m.last_error != nil {
+		fields = append(fields, subsource.FieldLastError)
+	}
+	if m.fetched_at != nil {
+		fields = append(fields, subsource.FieldFetchedAt)
+	}
+	if m.created_at != nil {
+		fields = append(fields, subsource.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SubSourceMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case subsource.FieldName:
+		return m.Name()
+	case subsource.FieldURL:
+		return m.URL()
+	case subsource.FieldEnabled:
+		return m.Enabled()
+	case subsource.FieldUserAgent:
+		return m.UserAgent()
+	case subsource.FieldFilterInclude:
+		return m.FilterInclude()
+	case subsource.FieldFilterExclude:
+		return m.FilterExclude()
+	case subsource.FieldOperators:
+		return m.Operators()
+	case subsource.FieldPlusAsSpace:
+		return m.PlusAsSpace()
+	case subsource.FieldNodeCache:
+		return m.NodeCache()
+	case subsource.FieldExcludeTraffic:
+		return m.ExcludeTraffic()
+	case subsource.FieldWebsite:
+		return m.Website()
+	case subsource.FieldRemark:
+		return m.Remark()
+	case subsource.FieldPosition:
+		return m.Position()
+	case subsource.FieldNodeCount:
+		return m.NodeCount()
+	case subsource.FieldKnownNodes:
+		return m.KnownNodes()
+	case subsource.FieldUserInfo:
+		return m.UserInfo()
+	case subsource.FieldTitle:
+		return m.Title()
+	case subsource.FieldLastError:
+		return m.LastError()
+	case subsource.FieldFetchedAt:
+		return m.FetchedAt()
+	case subsource.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SubSourceMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case subsource.FieldName:
+		return m.OldName(ctx)
+	case subsource.FieldURL:
+		return m.OldURL(ctx)
+	case subsource.FieldEnabled:
+		return m.OldEnabled(ctx)
+	case subsource.FieldUserAgent:
+		return m.OldUserAgent(ctx)
+	case subsource.FieldFilterInclude:
+		return m.OldFilterInclude(ctx)
+	case subsource.FieldFilterExclude:
+		return m.OldFilterExclude(ctx)
+	case subsource.FieldOperators:
+		return m.OldOperators(ctx)
+	case subsource.FieldPlusAsSpace:
+		return m.OldPlusAsSpace(ctx)
+	case subsource.FieldNodeCache:
+		return m.OldNodeCache(ctx)
+	case subsource.FieldExcludeTraffic:
+		return m.OldExcludeTraffic(ctx)
+	case subsource.FieldWebsite:
+		return m.OldWebsite(ctx)
+	case subsource.FieldRemark:
+		return m.OldRemark(ctx)
+	case subsource.FieldPosition:
+		return m.OldPosition(ctx)
+	case subsource.FieldNodeCount:
+		return m.OldNodeCount(ctx)
+	case subsource.FieldKnownNodes:
+		return m.OldKnownNodes(ctx)
+	case subsource.FieldUserInfo:
+		return m.OldUserInfo(ctx)
+	case subsource.FieldTitle:
+		return m.OldTitle(ctx)
+	case subsource.FieldLastError:
+		return m.OldLastError(ctx)
+	case subsource.FieldFetchedAt:
+		return m.OldFetchedAt(ctx)
+	case subsource.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown SubSource field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SubSourceMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case subsource.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	case subsource.FieldURL:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetURL(v)
+		return nil
+	case subsource.FieldEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEnabled(v)
+		return nil
+	case subsource.FieldUserAgent:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserAgent(v)
+		return nil
+	case subsource.FieldFilterInclude:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFilterInclude(v)
+		return nil
+	case subsource.FieldFilterExclude:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFilterExclude(v)
+		return nil
+	case subsource.FieldOperators:
+		v, ok := value.([]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOperators(v)
+		return nil
+	case subsource.FieldPlusAsSpace:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPlusAsSpace(v)
+		return nil
+	case subsource.FieldNodeCache:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNodeCache(v)
+		return nil
+	case subsource.FieldExcludeTraffic:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExcludeTraffic(v)
+		return nil
+	case subsource.FieldWebsite:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWebsite(v)
+		return nil
+	case subsource.FieldRemark:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRemark(v)
+		return nil
+	case subsource.FieldPosition:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPosition(v)
+		return nil
+	case subsource.FieldNodeCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNodeCount(v)
+		return nil
+	case subsource.FieldKnownNodes:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKnownNodes(v)
+		return nil
+	case subsource.FieldUserInfo:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserInfo(v)
+		return nil
+	case subsource.FieldTitle:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTitle(v)
+		return nil
+	case subsource.FieldLastError:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastError(v)
+		return nil
+	case subsource.FieldFetchedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFetchedAt(v)
+		return nil
+	case subsource.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SubSource field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SubSourceMutation) AddedFields() []string {
+	var fields []string
+	if m.addposition != nil {
+		fields = append(fields, subsource.FieldPosition)
+	}
+	if m.addnode_count != nil {
+		fields = append(fields, subsource.FieldNodeCount)
+	}
+	if m.addknown_nodes != nil {
+		fields = append(fields, subsource.FieldKnownNodes)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SubSourceMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case subsource.FieldPosition:
+		return m.AddedPosition()
+	case subsource.FieldNodeCount:
+		return m.AddedNodeCount()
+	case subsource.FieldKnownNodes:
+		return m.AddedKnownNodes()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SubSourceMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case subsource.FieldPosition:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPosition(v)
+		return nil
+	case subsource.FieldNodeCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddNodeCount(v)
+		return nil
+	case subsource.FieldKnownNodes:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddKnownNodes(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SubSource numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SubSourceMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(subsource.FieldOperators) {
+		fields = append(fields, subsource.FieldOperators)
+	}
+	if m.FieldCleared(subsource.FieldFetchedAt) {
+		fields = append(fields, subsource.FieldFetchedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SubSourceMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SubSourceMutation) ClearField(name string) error {
+	switch name {
+	case subsource.FieldOperators:
+		m.ClearOperators()
+		return nil
+	case subsource.FieldFetchedAt:
+		m.ClearFetchedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SubSource nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SubSourceMutation) ResetField(name string) error {
+	switch name {
+	case subsource.FieldName:
+		m.ResetName()
+		return nil
+	case subsource.FieldURL:
+		m.ResetURL()
+		return nil
+	case subsource.FieldEnabled:
+		m.ResetEnabled()
+		return nil
+	case subsource.FieldUserAgent:
+		m.ResetUserAgent()
+		return nil
+	case subsource.FieldFilterInclude:
+		m.ResetFilterInclude()
+		return nil
+	case subsource.FieldFilterExclude:
+		m.ResetFilterExclude()
+		return nil
+	case subsource.FieldOperators:
+		m.ResetOperators()
+		return nil
+	case subsource.FieldPlusAsSpace:
+		m.ResetPlusAsSpace()
+		return nil
+	case subsource.FieldNodeCache:
+		m.ResetNodeCache()
+		return nil
+	case subsource.FieldExcludeTraffic:
+		m.ResetExcludeTraffic()
+		return nil
+	case subsource.FieldWebsite:
+		m.ResetWebsite()
+		return nil
+	case subsource.FieldRemark:
+		m.ResetRemark()
+		return nil
+	case subsource.FieldPosition:
+		m.ResetPosition()
+		return nil
+	case subsource.FieldNodeCount:
+		m.ResetNodeCount()
+		return nil
+	case subsource.FieldKnownNodes:
+		m.ResetKnownNodes()
+		return nil
+	case subsource.FieldUserInfo:
+		m.ResetUserInfo()
+		return nil
+	case subsource.FieldTitle:
+		m.ResetTitle()
+		return nil
+	case subsource.FieldLastError:
+		m.ResetLastError()
+		return nil
+	case subsource.FieldFetchedAt:
+		m.ResetFetchedAt()
+		return nil
+	case subsource.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SubSource field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SubSourceMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SubSourceMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SubSourceMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SubSourceMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SubSourceMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SubSourceMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SubSourceMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown SubSource unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SubSourceMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown SubSource edge %s", name)
 }
 
 // UserMutation represents an operation that mutates the User nodes in the graph.

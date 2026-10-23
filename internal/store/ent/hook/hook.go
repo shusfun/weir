@@ -165,6 +165,18 @@ func (f RouteFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RouteMutation", m)
 }
 
+// The RuleTemplateFunc type is an adapter to allow the use of ordinary
+// function as RuleTemplate mutator.
+type RuleTemplateFunc func(context.Context, *ent.RuleTemplateMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f RuleTemplateFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.RuleTemplateMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RuleTemplateMutation", m)
+}
+
 // The SettingFunc type is an adapter to allow the use of ordinary
 // function as Setting mutator.
 type SettingFunc func(context.Context, *ent.SettingMutation) (ent.Value, error)
@@ -175,6 +187,54 @@ func (f SettingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SettingMutation", m)
+}
+
+// The SubGrantFunc type is an adapter to allow the use of ordinary
+// function as SubGrant mutator.
+type SubGrantFunc func(context.Context, *ent.SubGrantMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SubGrantFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SubGrantMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SubGrantMutation", m)
+}
+
+// The SubNodeFunc type is an adapter to allow the use of ordinary
+// function as SubNode mutator.
+type SubNodeFunc func(context.Context, *ent.SubNodeMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SubNodeFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SubNodeMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SubNodeMutation", m)
+}
+
+// The SubProfileFunc type is an adapter to allow the use of ordinary
+// function as SubProfile mutator.
+type SubProfileFunc func(context.Context, *ent.SubProfileMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SubProfileFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SubProfileMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SubProfileMutation", m)
+}
+
+// The SubSourceFunc type is an adapter to allow the use of ordinary
+// function as SubSource mutator.
+type SubSourceFunc func(context.Context, *ent.SubSourceMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SubSourceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SubSourceMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SubSourceMutation", m)
 }
 
 // The UserFunc type is an adapter to allow the use of ordinary

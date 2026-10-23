@@ -18,8 +18,13 @@ import (
 	"github.com/imzyb/MiGate/internal/store/ent/passkey"
 	"github.com/imzyb/MiGate/internal/store/ent/recoverycode"
 	"github.com/imzyb/MiGate/internal/store/ent/route"
+	"github.com/imzyb/MiGate/internal/store/ent/ruletemplate"
 	"github.com/imzyb/MiGate/internal/store/ent/schema"
 	"github.com/imzyb/MiGate/internal/store/ent/setting"
+	"github.com/imzyb/MiGate/internal/store/ent/subgrant"
+	"github.com/imzyb/MiGate/internal/store/ent/subnode"
+	"github.com/imzyb/MiGate/internal/store/ent/subprofile"
+	"github.com/imzyb/MiGate/internal/store/ent/subsource"
 	"github.com/imzyb/MiGate/internal/store/ent/user"
 )
 
@@ -419,6 +424,18 @@ func init() {
 	routeDescCreatedAt := routeFields[8].Descriptor()
 	// route.DefaultCreatedAt holds the default value on creation for the created_at field.
 	route.DefaultCreatedAt = routeDescCreatedAt.Default.(func() time.Time)
+	ruletemplateFields := schema.RuleTemplate{}.Fields()
+	_ = ruletemplateFields
+	// ruletemplateDescName is the schema descriptor for name field.
+	ruletemplateDescName := ruletemplateFields[0].Descriptor()
+	// ruletemplate.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	ruletemplate.NameValidator = ruletemplateDescName.Validators[0].(func(string) error)
+	// ruletemplateDescUpdatedAt is the schema descriptor for updated_at field.
+	ruletemplateDescUpdatedAt := ruletemplateFields[3].Descriptor()
+	// ruletemplate.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	ruletemplate.DefaultUpdatedAt = ruletemplateDescUpdatedAt.Default.(func() time.Time)
+	// ruletemplate.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	ruletemplate.UpdateDefaultUpdatedAt = ruletemplateDescUpdatedAt.UpdateDefault.(func() time.Time)
 	settingFields := schema.Setting{}.Fields()
 	_ = settingFields
 	// settingDescKey is the schema descriptor for key field.
@@ -435,6 +452,162 @@ func init() {
 	setting.DefaultUpdatedAt = settingDescUpdatedAt.Default.(func() time.Time)
 	// setting.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	setting.UpdateDefaultUpdatedAt = settingDescUpdatedAt.UpdateDefault.(func() time.Time)
+	subgrantFields := schema.SubGrant{}.Fields()
+	_ = subgrantFields
+	// subgrantDescCreatedAt is the schema descriptor for created_at field.
+	subgrantDescCreatedAt := subgrantFields[4].Descriptor()
+	// subgrant.DefaultCreatedAt holds the default value on creation for the created_at field.
+	subgrant.DefaultCreatedAt = subgrantDescCreatedAt.Default.(func() time.Time)
+	subnodeFields := schema.SubNode{}.Fields()
+	_ = subnodeFields
+	// subnodeDescName is the schema descriptor for name field.
+	subnodeDescName := subnodeFields[0].Descriptor()
+	// subnode.DefaultName holds the default value on creation for the name field.
+	subnode.DefaultName = subnodeDescName.Default.(string)
+	// subnode.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	subnode.NameValidator = subnodeDescName.Validators[0].(func(string) error)
+	// subnodeDescGroup is the schema descriptor for group field.
+	subnodeDescGroup := subnodeFields[2].Descriptor()
+	// subnode.DefaultGroup holds the default value on creation for the group field.
+	subnode.DefaultGroup = subnodeDescGroup.Default.(string)
+	// subnode.GroupValidator is a validator for the "group" field. It is called by the builders before save.
+	subnode.GroupValidator = subnodeDescGroup.Validators[0].(func(string) error)
+	// subnodeDescEnabled is the schema descriptor for enabled field.
+	subnodeDescEnabled := subnodeFields[3].Descriptor()
+	// subnode.DefaultEnabled holds the default value on creation for the enabled field.
+	subnode.DefaultEnabled = subnodeDescEnabled.Default.(bool)
+	// subnodeDescFilterInclude is the schema descriptor for filter_include field.
+	subnodeDescFilterInclude := subnodeFields[4].Descriptor()
+	// subnode.DefaultFilterInclude holds the default value on creation for the filter_include field.
+	subnode.DefaultFilterInclude = subnodeDescFilterInclude.Default.(string)
+	// subnodeDescFilterExclude is the schema descriptor for filter_exclude field.
+	subnodeDescFilterExclude := subnodeFields[5].Descriptor()
+	// subnode.DefaultFilterExclude holds the default value on creation for the filter_exclude field.
+	subnode.DefaultFilterExclude = subnodeDescFilterExclude.Default.(string)
+	// subnodeDescPlusAsSpace is the schema descriptor for plus_as_space field.
+	subnodeDescPlusAsSpace := subnodeFields[7].Descriptor()
+	// subnode.DefaultPlusAsSpace holds the default value on creation for the plus_as_space field.
+	subnode.DefaultPlusAsSpace = subnodeDescPlusAsSpace.Default.(bool)
+	// subnodeDescPosition is the schema descriptor for position field.
+	subnodeDescPosition := subnodeFields[8].Descriptor()
+	// subnode.DefaultPosition holds the default value on creation for the position field.
+	subnode.DefaultPosition = subnodeDescPosition.Default.(int)
+	// subnodeDescCreatedAt is the schema descriptor for created_at field.
+	subnodeDescCreatedAt := subnodeFields[9].Descriptor()
+	// subnode.DefaultCreatedAt holds the default value on creation for the created_at field.
+	subnode.DefaultCreatedAt = subnodeDescCreatedAt.Default.(func() time.Time)
+	subprofileFields := schema.SubProfile{}.Fields()
+	_ = subprofileFields
+	// subprofileDescName is the schema descriptor for name field.
+	subprofileDescName := subprofileFields[0].Descriptor()
+	// subprofile.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	subprofile.NameValidator = subprofileDescName.Validators[0].(func(string) error)
+	// subprofileDescEnabled is the schema descriptor for enabled field.
+	subprofileDescEnabled := subprofileFields[1].Descriptor()
+	// subprofile.DefaultEnabled holds the default value on creation for the enabled field.
+	subprofile.DefaultEnabled = subprofileDescEnabled.Default.(bool)
+	// subprofileDescAllSources is the schema descriptor for all_sources field.
+	subprofileDescAllSources := subprofileFields[2].Descriptor()
+	// subprofile.DefaultAllSources holds the default value on creation for the all_sources field.
+	subprofile.DefaultAllSources = subprofileDescAllSources.Default.(bool)
+	// subprofileDescShareToken is the schema descriptor for share_token field.
+	subprofileDescShareToken := subprofileFields[8].Descriptor()
+	// subprofile.DefaultShareToken holds the default value on creation for the share_token field.
+	subprofile.DefaultShareToken = subprofileDescShareToken.Default.(string)
+	// subprofileDescDownloads is the schema descriptor for downloads field.
+	subprofileDescDownloads := subprofileFields[10].Descriptor()
+	// subprofile.DefaultDownloads holds the default value on creation for the downloads field.
+	subprofile.DefaultDownloads = subprofileDescDownloads.Default.(int)
+	// subprofileDescPosition is the schema descriptor for position field.
+	subprofileDescPosition := subprofileFields[11].Descriptor()
+	// subprofile.DefaultPosition holds the default value on creation for the position field.
+	subprofile.DefaultPosition = subprofileDescPosition.Default.(int)
+	// subprofileDescCreatedAt is the schema descriptor for created_at field.
+	subprofileDescCreatedAt := subprofileFields[12].Descriptor()
+	// subprofile.DefaultCreatedAt holds the default value on creation for the created_at field.
+	subprofile.DefaultCreatedAt = subprofileDescCreatedAt.Default.(func() time.Time)
+	subsourceFields := schema.SubSource{}.Fields()
+	_ = subsourceFields
+	// subsourceDescName is the schema descriptor for name field.
+	subsourceDescName := subsourceFields[0].Descriptor()
+	// subsource.DefaultName holds the default value on creation for the name field.
+	subsource.DefaultName = subsourceDescName.Default.(string)
+	// subsource.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	subsource.NameValidator = subsourceDescName.Validators[0].(func(string) error)
+	// subsourceDescURL is the schema descriptor for url field.
+	subsourceDescURL := subsourceFields[1].Descriptor()
+	// subsource.URLValidator is a validator for the "url" field. It is called by the builders before save.
+	subsource.URLValidator = subsourceDescURL.Validators[0].(func(string) error)
+	// subsourceDescEnabled is the schema descriptor for enabled field.
+	subsourceDescEnabled := subsourceFields[2].Descriptor()
+	// subsource.DefaultEnabled holds the default value on creation for the enabled field.
+	subsource.DefaultEnabled = subsourceDescEnabled.Default.(bool)
+	// subsourceDescUserAgent is the schema descriptor for user_agent field.
+	subsourceDescUserAgent := subsourceFields[3].Descriptor()
+	// subsource.DefaultUserAgent holds the default value on creation for the user_agent field.
+	subsource.DefaultUserAgent = subsourceDescUserAgent.Default.(string)
+	// subsource.UserAgentValidator is a validator for the "user_agent" field. It is called by the builders before save.
+	subsource.UserAgentValidator = subsourceDescUserAgent.Validators[0].(func(string) error)
+	// subsourceDescFilterInclude is the schema descriptor for filter_include field.
+	subsourceDescFilterInclude := subsourceFields[4].Descriptor()
+	// subsource.DefaultFilterInclude holds the default value on creation for the filter_include field.
+	subsource.DefaultFilterInclude = subsourceDescFilterInclude.Default.(string)
+	// subsourceDescFilterExclude is the schema descriptor for filter_exclude field.
+	subsourceDescFilterExclude := subsourceFields[5].Descriptor()
+	// subsource.DefaultFilterExclude holds the default value on creation for the filter_exclude field.
+	subsource.DefaultFilterExclude = subsourceDescFilterExclude.Default.(string)
+	// subsourceDescPlusAsSpace is the schema descriptor for plus_as_space field.
+	subsourceDescPlusAsSpace := subsourceFields[7].Descriptor()
+	// subsource.DefaultPlusAsSpace holds the default value on creation for the plus_as_space field.
+	subsource.DefaultPlusAsSpace = subsourceDescPlusAsSpace.Default.(bool)
+	// subsourceDescNodeCache is the schema descriptor for node_cache field.
+	subsourceDescNodeCache := subsourceFields[8].Descriptor()
+	// subsource.DefaultNodeCache holds the default value on creation for the node_cache field.
+	subsource.DefaultNodeCache = subsourceDescNodeCache.Default.(bool)
+	// subsourceDescExcludeTraffic is the schema descriptor for exclude_traffic field.
+	subsourceDescExcludeTraffic := subsourceFields[9].Descriptor()
+	// subsource.DefaultExcludeTraffic holds the default value on creation for the exclude_traffic field.
+	subsource.DefaultExcludeTraffic = subsourceDescExcludeTraffic.Default.(bool)
+	// subsourceDescWebsite is the schema descriptor for website field.
+	subsourceDescWebsite := subsourceFields[10].Descriptor()
+	// subsource.DefaultWebsite holds the default value on creation for the website field.
+	subsource.DefaultWebsite = subsourceDescWebsite.Default.(string)
+	// subsource.WebsiteValidator is a validator for the "website" field. It is called by the builders before save.
+	subsource.WebsiteValidator = subsourceDescWebsite.Validators[0].(func(string) error)
+	// subsourceDescRemark is the schema descriptor for remark field.
+	subsourceDescRemark := subsourceFields[11].Descriptor()
+	// subsource.DefaultRemark holds the default value on creation for the remark field.
+	subsource.DefaultRemark = subsourceDescRemark.Default.(string)
+	// subsource.RemarkValidator is a validator for the "remark" field. It is called by the builders before save.
+	subsource.RemarkValidator = subsourceDescRemark.Validators[0].(func(string) error)
+	// subsourceDescPosition is the schema descriptor for position field.
+	subsourceDescPosition := subsourceFields[12].Descriptor()
+	// subsource.DefaultPosition holds the default value on creation for the position field.
+	subsource.DefaultPosition = subsourceDescPosition.Default.(int)
+	// subsourceDescNodeCount is the schema descriptor for node_count field.
+	subsourceDescNodeCount := subsourceFields[13].Descriptor()
+	// subsource.DefaultNodeCount holds the default value on creation for the node_count field.
+	subsource.DefaultNodeCount = subsourceDescNodeCount.Default.(int)
+	// subsourceDescKnownNodes is the schema descriptor for known_nodes field.
+	subsourceDescKnownNodes := subsourceFields[14].Descriptor()
+	// subsource.DefaultKnownNodes holds the default value on creation for the known_nodes field.
+	subsource.DefaultKnownNodes = subsourceDescKnownNodes.Default.(int)
+	// subsourceDescUserInfo is the schema descriptor for user_info field.
+	subsourceDescUserInfo := subsourceFields[15].Descriptor()
+	// subsource.DefaultUserInfo holds the default value on creation for the user_info field.
+	subsource.DefaultUserInfo = subsourceDescUserInfo.Default.(string)
+	// subsourceDescTitle is the schema descriptor for title field.
+	subsourceDescTitle := subsourceFields[16].Descriptor()
+	// subsource.DefaultTitle holds the default value on creation for the title field.
+	subsource.DefaultTitle = subsourceDescTitle.Default.(string)
+	// subsourceDescLastError is the schema descriptor for last_error field.
+	subsourceDescLastError := subsourceFields[17].Descriptor()
+	// subsource.DefaultLastError holds the default value on creation for the last_error field.
+	subsource.DefaultLastError = subsourceDescLastError.Default.(string)
+	// subsourceDescCreatedAt is the schema descriptor for created_at field.
+	subsourceDescCreatedAt := subsourceFields[19].Descriptor()
+	// subsource.DefaultCreatedAt holds the default value on creation for the created_at field.
+	subsource.DefaultCreatedAt = subsourceDescCreatedAt.Default.(func() time.Time)
 	userFields := schema.User{}.Fields()
 	_ = userFields
 	// userDescEmail is the schema descriptor for email field.
