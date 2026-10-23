@@ -100,7 +100,15 @@ func (s *Server) maintenance(ctx context.Context) {
 			s.state.RLock()
 			ready := s.Config.Installed && s.Store != nil
 			if ready {
-				_ = s.Store.Lock.Do(ctx, "maintenance", func(ctx context.Context) error { return s.ResetDueUsage(ctx, time.Now()) })
+				_ = s.Store.Lock.Do(ctx, "maintenance", func(ctx context.Context) error {
+					now := time.Now()
+					// 各任务互不影响：一项失败不阻止其他项。
+					_ = s.ResetDueUsage(ctx, now)
+					_ = s.RefreshSources(ctx, now)
+					_ = s.AutoBackup(ctx, now)
+					_ = s.CheckAlerts(ctx, now)
+					return nil
+				})
 			}
 			s.state.RUnlock()
 		}
@@ -214,6 +222,8 @@ func (s *Server) Router() *gin.Engine {
 	s.opsRoutes(admin)
 	s.backupRoutes(admin)
 	s.mailRoutes(ready, admin)
+	s.notifyRoutes(admin)
+	s.extRoutes(r, admin)
 
 	r.NoRoute(s.spa)
 	return r
