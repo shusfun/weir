@@ -18,7 +18,7 @@ export function AuditPage() {
   if (result !== "all") params.set("result", result);
   const query = useQuery({ queryKey: ["audit-directory", params.toString()], queryFn: () => api("/admin/audit?" + params) as Promise<Items<Audit>> });
   return <div className="stack audit-directory">
-    <PageHeader title="操作记录" description="追踪账户与设备变更。任务执行状态请以设备回执为准。" actions={<Button variant="outline" disabled={query.isFetching} onClick={() => query.refetch()}>刷新记录</Button>} />
+    <PageHeader title="操作记录" description="追踪账户、节点、订阅与设置的变更；节点是否生效以 VPS 回报的配置版本为准。" actions={<Button variant="outline" disabled={query.isFetching} onClick={() => query.refetch()}>刷新记录</Button>} />
     <Card className="table-card"><div className="table-toolbar">
         <SearchInput aria-label="搜索审计记录" placeholder="搜索操作名称、目标或任务编号…" value={search} onChange={e => { S(e.target.value); P(1); }} />
         <Select value={result} onValueChange={v => { F(String(v)); P(1); }}><SelectTrigger className="min-w-[130px]" aria-label="筛选审计结果"><SelectValue>{resultLabels[result]}</SelectValue></SelectTrigger><SelectContent>{Object.entries(resultLabels).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}</SelectContent></Select>
@@ -31,8 +31,8 @@ export function AuditPage() {
     </CardContent></Card>
     <Dialog open={!!detail} onOpenChange={v => !v && D(null)}><DialogContent><DialogTitle>审计记录 #{detail?.id}</DialogTitle><DialogDescription>此记录描述操作请求的结果；异步任务是否生效须查看执行回执。</DialogDescription>{detail && <div className="stack"><div className="detail-grid">
       <div><span>操作</span><strong>{detail.action}</strong></div><div><span>结果</span><strong>{resultLabels[detail.result] ?? detail.result}</strong></div>
-      <div><span>操作者</span><strong>{detail.actor ? <Link to={"/users/" + detail.actor}>查看账户 #{detail.actor}</Link> : "系统 / 未登录"}</strong></div><div><span>来源 IP</span><strong>{detail.ip || "未知"}</strong></div>
+      <div><span>操作者</span><strong>{detail.actor ? <Link to="/users">账户 #{detail.actor}</Link> : "系统 / 未登录"}</strong></div><div><span>来源 IP</span><strong>{detail.ip || "未知"}</strong></div>
       <div><span>目标</span><strong className="break-all">{detail.target || "未指定"}</strong></div><div><span>时间</span><strong>{date(detail.created_at)}</strong></div>
-    </div>{detail.action.startsWith("task.") && <Link to={"/tasks?q=" + encodeURIComponent(detail.target)}>查看关联任务</Link>}</div>}</DialogContent></Dialog>
+    </div></div>}</DialogContent></Dialog>
   </div>;
 }

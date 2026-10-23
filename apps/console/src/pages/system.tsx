@@ -7,6 +7,7 @@ import { State } from "../components/feedback";
 import { AnnouncementEditor } from "../components/global-announcement";
 import { ClientCatalogEditor } from "../components/client-catalog";
 import { ClientMirrorsEditor } from "../components/client-mirrors";
+import { APITokensCard, BackupCard, NotifyCard, SecurityCard, SMTPCard } from "../components/system-settings";
 
 interface ProviderView {
   configured: boolean;
@@ -30,6 +31,11 @@ export function SystemPage() {
     <div className="stack">
       <PageHeader eyebrow="系统" title="系统设置" />
       {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : <AIProvider key={String(q.dataUpdatedAt)} value={q.data} saved={() => q.refetch()} />}
+      <SecurityCard />
+      <SMTPCard />
+      <NotifyCard />
+      <BackupCard />
+      <APITokensCard />
       <Card><CardContent><AnnouncementEditor /></CardContent></Card>
       <Card><CardContent><ClientCatalogEditor /></CardContent></Card>
       <Card><CardContent><ClientMirrorsEditor /></CardContent></Card>

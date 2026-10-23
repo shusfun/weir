@@ -39,6 +39,7 @@ export const navigation: NavItem[] = [
   { key: "users", path: "/users", label: "用户", icon: Users, group: "工作区", admin: true },
   { key: "subscriptions", path: "/subscriptions", label: "订阅管理", icon: Workflow, group: "订阅与分发", admin: true },
   { key: "pages", path: "/pages", label: "公开页面", icon: Megaphone, group: "订阅与分发", admin: true },
+  { key: "audit", path: "/ops/audit", label: "操作审计", icon: ScrollText, group: "运维", admin: true },
   { key: "system", path: "/system", label: "系统设置", icon: Settings2, group: "系统", admin: true },
   { key: "subscription", path: "/subscription", label: "我的订阅", icon: Link2, group: "个人", admin: false },
   { key: "security", path: "/security", label: "账户安全", icon: ShieldCheck, group: "个人", admin: false },

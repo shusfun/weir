@@ -14,6 +14,7 @@ const page = <M extends Record<K, ComponentType<any>>, K extends keyof M>(load: 
 const GatesPage = page(() => import("./pages/gates"), "GatesPage");
 const SubscriptionsPage = page(() => import("./pages/subscriptions"), "SubscriptionsPage");
 const PublicPagesPage = page(() => import("./pages/public-pages"), "PublicPagesPage");
+const AuditPage = page(() => import("./pages/audit"), "AuditPage");
 const SystemPage = page(() => import("./pages/system"), "SystemPage");
 const SubPage = page(() => import("./pages/sub-page"), "SubPage");
 const UsersPage = page(() => import("./pages/users"), "UsersPage");
@@ -90,6 +91,7 @@ function Console() {
               <Route path="/system" element={guard(<SystemPage />)} />
               <Route path="/subscriptions" element={guard(<SubscriptionsPage />)} />
               <Route path="/pages" element={guard(<PublicPagesPage />)} />
+              <Route path="/ops/audit" element={guard(<AuditPage />)} />
               <Route path="/subscription" element={<SubscriptionPage />} />
               <Route path="/security" element={<SecurityPage loginRequired={loginRequired} />} />
               <Route path="*" element={<Navigate to={home} replace />} />
