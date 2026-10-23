@@ -15,6 +15,7 @@ const GatesPage = page(() => import("./pages/gates"), "GatesPage");
 const SubscriptionsPage = page(() => import("./pages/subscriptions"), "SubscriptionsPage");
 const PublicPagesPage = page(() => import("./pages/public-pages"), "PublicPagesPage");
 const AuditPage = page(() => import("./pages/audit"), "AuditPage");
+const KernelsPage = page(() => import("./pages/kernels"), "KernelsPage");
 const SystemPage = page(() => import("./pages/system"), "SystemPage");
 const SubPage = page(() => import("./pages/sub-page"), "SubPage");
 const UsersPage = page(() => import("./pages/users"), "UsersPage");
@@ -88,6 +89,7 @@ function Console() {
               <Route path="/" element={<Navigate to={home} replace />} />
               <Route path="/gates" element={guard(<GatesPage />)} />
               <Route path="/users" element={guard(<UsersPage />)} />
+              <Route path="/kernels" element={guard(<KernelsPage />)} />
               <Route path="/system" element={guard(<SystemPage />)} />
               <Route path="/subscriptions" element={guard(<SubscriptionsPage />)} />
               <Route path="/pages" element={guard(<PublicPagesPage />)} />

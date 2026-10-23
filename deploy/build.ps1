@@ -1,4 +1,6 @@
-param([string]$Batch = 'B0')
+# 本机打包 linux/amd64 发布包，步骤与 .github/workflows/release.yml 一致：
+# 构建控制台 → CGO_ENABLED=0 交叉编译单个 migate → 复制安装 / 更新脚本 → package_release.py 生成校验和与归档。
+# 内核不随发布包分发：由中心从上游拉取（或用 migate kernel import 离线导入）后推送给 Gate。
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
 Push-Location $repoRoot
@@ -9,34 +11,17 @@ try {
  pnpm build
  if ($LASTEXITCODE) { throw 'Frontend build failed' }
  $releaseDir = Join-Path $repoRoot "dist/migate-$Version-linux-amd64"
+ if (Test-Path $releaseDir) { Remove-Item -Recurse -Force $releaseDir }
  New-Item -ItemType Directory -Force $releaseDir | Out-Null
  $env:GOOS = 'linux'; $env:GOARCH = 'amd64'; $env:CGO_ENABLED = '0'
- $sourceRevision = (git rev-parse --short=12 HEAD).Trim() + '-working-tree'
- $linkFlags = "-s -w -X github.com/imzyb/MiGate/internal/buildinfo.Version=$Version -X github.com/imzyb/MiGate/internal/buildinfo.Revision=$sourceRevision"
+ $revision = (git rev-parse HEAD).Trim()
+ $dirty = git status --porcelain
+ if ($dirty) { $revision += '-dirty' }
+ $linkFlags = "-s -w -X github.com/imzyb/MiGate/internal/buildinfo.Version=$Version -X github.com/imzyb/MiGate/internal/buildinfo.Revision=$revision"
  go build -trimpath -ldflags $linkFlags -o (Join-Path $releaseDir 'migate') './apps/migate'
  if ($LASTEXITCODE) { throw 'migate compilation failed' }
- Copy-Item deploy/install.sh,deploy/sources.json,deploy/github-update.sh,deploy/release_fetch.py,deploy/version.py $releaseDir
- python deploy/package-cores.py $releaseDir
- if ($LASTEXITCODE) {throw 'Pinned core packaging failed'}
- New-Item -ItemType Directory -Force (Join-Path $releaseDir 'third_party') | Out-Null
- Copy-Item third_party/* (Join-Path $releaseDir 'third_party') -Recurse -Force
- Copy-Item packages/ui/LICENSE (Join-Path $releaseDir 'UIAble-LICENSE')
- [IO.File]::WriteAllText((Join-Path $releaseDir 'VERSION'), $Version + "`n")
- $fingerprint = (python deploy/source_fingerprint.py).Trim()
- if ($LASTEXITCODE) { throw 'Source fingerprint failed' }
- @{version=$Version; batch=$Batch; source_fingerprint=$fingerprint; built_at=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content -Encoding utf8NoBOM (Join-Path $releaseDir 'BUILD.json')
- # Ship corresponding modified source and lockfiles alongside the LGPL modules.
- # Evidence screenshots and historical snapshots remain in the workspace/report.
- # They are not corresponding source and otherwise grow every binary release.
- tar -czf (Join-Path $releaseDir 'source.tar.gz') --exclude=node_modules --exclude=__pycache__ --exclude=docs/evidence -C $repoRoot apps internal ent packages services deploy docs third_party go.mod go.sum go.work go.work.sum package.json pnpm-lock.yaml pnpm-workspace.yaml AGENTS.md .gitignore .gitattributes
- if ($LASTEXITCODE) { throw 'Source packaging failed' }
- $entries = Get-ChildItem $releaseDir -File -Recurse | Where-Object Name -ne 'SHA256SUMS' | Sort-Object FullName | ForEach-Object {
-  $relative = $_.FullName.Substring($releaseDir.Length + 1).Replace('\','/')
-  "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $relative"
- }
- [IO.File]::WriteAllText((Join-Path $releaseDir 'SHA256SUMS'), ($entries -join "`n") + "`n")
- $archive = Join-Path $repoRoot "dist/migate-$Version-linux-amd64.tar.gz"
- tar -czf $archive -C $releaseDir .
+ Copy-Item deploy/install.sh,deploy/sources.json,deploy/github-update.sh,deploy/release_fetch.py,deploy/version.py,VERSION $releaseDir
+ python deploy/package_release.py $Version
  if ($LASTEXITCODE) { throw 'Packaging failed' }
- Get-FileHash $archive -Algorithm SHA256
+ Get-FileHash (Join-Path $repoRoot "dist/migate-$Version-linux-amd64.tar.gz") -Algorithm SHA256
 } finally { $env:GOOS=$oldGoos; $env:GOARCH=$oldGoarch; $env:CGO_ENABLED=$oldCgo; Pop-Location }

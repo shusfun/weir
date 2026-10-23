@@ -5,6 +5,7 @@ import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogDescript
 import { FileBadge, Plus, Server, Sparkles, Trash2 } from "lucide-react";
 import { AIDraft } from "../components/ai-draft";
 import { GateRouting } from "../components/gate-routing";
+import { GateDetail } from "../components/gate-detail";
 import { api } from "../api";
 import { State } from "../components/feedback";
 import { InviteGate } from "../components/invite-gate";
@@ -31,6 +32,7 @@ export function GatesPage() {
   const [edit, setEdit] = useState<Gate | null>(null);
   const [aiNode, setAINode] = useState<NodeItem | null>(null);
   const [routing, setRouting] = useState<Gate | null>(null);
+  const [detail, setDetail] = useState<Gate | null>(null);
   const refresh = () => Promise.all([gates.refetch(), nodes.refetch()]);
   async function act(id: number, fn: () => Promise<unknown>, ok: string) {
     setBusy(id);
@@ -62,6 +64,7 @@ export function GatesPage() {
     <>
       <InviteGate open={invite} close={() => setInvite(false)} done={() => void gates.refetch()} />
       <CertManager open={certs} close={() => setCerts(false)} />
+      {detail && <GateDetail gate={gates.data?.find((x) => x.id === detail.id) ?? detail} nodes={nodes.data ?? []} close={() => setDetail(null)} />}
       {routing && <GateRouting gate={routing} close={() => setRouting(null)} />}
       {aiNode && <AIDraft node={aiNode} close={() => setAINode(null)} applied={() => { setAINode(null); toast("草稿已生效", { tone: "ok" }); void refresh(); }} />}
       {edit && <GateEdit gate={edit} close={() => setEdit(null)} saved={() => { setEdit(null); toast("已保存", { tone: "ok" }); void refresh(); }} />}
@@ -100,6 +103,7 @@ export function GatesPage() {
                   {g.state === "failed" && g.last_error && <p className="text-[var(--mg-bad-ink)] text-sm">{g.last_error}</p>}
                 </div>
                 <span className="flex flex-nowrap gap-1.5">
+                  <Button size="sm" variant="outline" onClick={() => setDetail(g)}>详情</Button>
                   <Button size="sm" variant="outline" onClick={() => setRouting(g)}>出口与分流</Button>
                   <Button size="sm" variant="outline" onClick={() => setEdit(g)}>编辑</Button>
                 </span>
