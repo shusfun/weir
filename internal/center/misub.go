@@ -86,6 +86,7 @@ func (s *Server) misubRoutes(r *gin.Engine, auth, admin *gin.RouterGroup) {
 	admin.POST("/misub/profiles/:id/share", s.shareProfile)
 	admin.DELETE("/misub/profiles/:id/share", s.unshareProfile)
 	admin.PUT("/misub/profiles/:id/grants", s.setGrants)
+	admin.POST("/misub/operators/preview", s.previewOperators)
 	admin.GET("/misub/templates", s.listTemplates)
 	admin.POST("/misub/templates", s.saveTemplate)
 	admin.PATCH("/misub/templates/:id", s.saveTemplate)
@@ -793,4 +794,25 @@ func (s *Server) resolveTemplate(ctx context.Context, ref string) (misub.Templat
 		return misub.Template{Kind: "remote", Text: string(resp.Body), INI: misub.IsINIPath(value)}, nil
 	}
 	return misub.Template{}, fmt.Errorf("模板引用 %q 无效", ref)
+}
+
+// previewOperators 对粘贴的节点链接试运行处理链，不保存任何内容。
+func (s *Server) previewOperators(c *gin.Context) {
+	var req struct {
+		Links     []string `json:"links"`
+		Operators []any    `json:"operators"`
+	}
+	if !bind(c, &req) {
+		return
+	}
+	if len(req.Links) > 2000 {
+		failure(c, 400, "too_many_nodes")
+		return
+	}
+	if err := checkOperators(req.Operators); err != nil {
+		failDetail(c, 400, "invalid_operators", err.Error(), nil)
+		return
+	}
+	out := misub.RunOperators(req.Links, req.Operators, "clash-meta/2.5.0")
+	c.JSON(200, gin.H{"output": strings.Join(out, "\n"), "count": len(out)})
 }

@@ -381,3 +381,8 @@ func FormatBytes(n int64) string {
 	s = strings.TrimRight(strings.TrimRight(s, "0"), ".")
 	return s + " " + units[i]
 }
+
+// RunOperators 对一组节点链接执行算子链（管理员预览处理效果用）。
+func RunOperators(nodes []string, ops []any, userAgent string) []string {
+	return runOperators(nodes, ops, userAgent)
+}

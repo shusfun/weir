@@ -1,1 +1,0 @@
-import{j as s,q as r}from"./index-O-uNVMZb.js";import{h as n}from"./card-r93SWbic.js";function x({className:e,mono:t=!1,...a}){return s.jsx("textarea",{"data-slot":"textarea",className:r(n,"field-sizing-content min-h-22 py-2.5 leading-relaxed",t&&"font-mono text-xs whitespace-pre",e),...a})}export{x as T};

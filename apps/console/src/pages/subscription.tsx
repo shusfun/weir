@@ -1,6 +1,6 @@
 // 我的订阅：用量与到期一览；自己管理多条订阅链接与自建链式代理（只能使用管理员分配的节点）。
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, Meter, PageHeader, Readout } from "@migate/ui";
+import { Card, CardContent, CopyButton, Input, Meter, PageHeader, Readout, SectionHeader } from "@migate/ui";
 import { api } from "../api";
 import { State } from "../components/feedback";
 import { ChainPanel, LinkPanel, type NodeOption } from "../components/link-panel";
@@ -37,6 +37,7 @@ export function SubscriptionPage() {
           {s.quota > 0 && <Meter className="sm:col-span-3" label="流量使用" value={s.used} max={s.quota} />}
         </CardContent>
       </Card>
+      <GroupsCard />
       {nodes.data.length === 0 ? (
         <State empty="暂无可用节点" detail="请联系管理员分配节点。" />
       ) : (
@@ -46,5 +47,39 @@ export function SubscriptionPage() {
         </>
       )}
     </div>
+  );
+}
+
+interface Group {
+  id: number;
+  name: string;
+  url: string;
+  expires_at?: string | null;
+  last_used_at?: string | null;
+}
+
+// GroupsCard：管理员分配给本人的订阅组（外部机场节点，不占用本人额度）；没有分配时不显示。
+function GroupsCard() {
+  const q = useQuery({ queryKey: ["me-groups"], queryFn: async () => (await api("/me/groups")).items as Group[] });
+  if (q.isPending || (q.data && q.data.length === 0)) return null;
+  return (
+    <Card>
+      <CardContent className="stack">
+        <SectionHeader title="订阅组" description="管理员分配给你的订阅组，地址各自独立，可直接导入客户端。" />
+        {q.error ? (
+          <State error={q.error} onRetry={() => q.refetch()} />
+        ) : (
+          q.data!.map((g) => (
+            <div key={g.id} className="stack">
+              <strong>{g.name}{g.expires_at ? <small className="ml-2 text-[var(--mg-ink-3)]">到期 {date(g.expires_at)}</small> : null}</strong>
+              <div className="subscription-url">
+                <Input readOnly className="font-mono text-xs" aria-label={g.name + " 订阅地址"} value={g.url} />
+                <CopyButton value={g.url}>复制</CopyButton>
+              </div>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
   );
 }

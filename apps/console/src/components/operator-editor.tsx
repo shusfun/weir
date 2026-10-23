@@ -347,10 +347,9 @@ export function OperatorEditor({
             E("");
             O("");
             try {
-              const r = await api("/admin/subscriptions/preview", "POST", {
+              const r = await api("/admin/misub/operators/preview", "POST", {
                 links: input.split(/\r?\n/).filter(Boolean),
                 operators: value,
-                target: "links",
               });
               O(r.output || "处理后为空");
             } catch (e) {

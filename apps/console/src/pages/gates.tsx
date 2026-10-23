@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Notice, PageHeader, StatusLamp, Switch, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useToast } from "@migate/ui";
 import { FileBadge, Plus, Server, Sparkles, Trash2 } from "lucide-react";
 import { AIDraft } from "../components/ai-draft";
+import { GateRouting } from "../components/gate-routing";
 import { api } from "../api";
 import { State } from "../components/feedback";
 import { InviteGate } from "../components/invite-gate";
@@ -29,6 +30,7 @@ export function GatesPage() {
   const [busy, setBusy] = useState(0);
   const [edit, setEdit] = useState<Gate | null>(null);
   const [aiNode, setAINode] = useState<NodeItem | null>(null);
+  const [routing, setRouting] = useState<Gate | null>(null);
   const refresh = () => Promise.all([gates.refetch(), nodes.refetch()]);
   async function act(id: number, fn: () => Promise<unknown>, ok: string) {
     setBusy(id);
@@ -60,6 +62,7 @@ export function GatesPage() {
     <>
       <InviteGate open={invite} close={() => setInvite(false)} done={() => void gates.refetch()} />
       <CertManager open={certs} close={() => setCerts(false)} />
+      {routing && <GateRouting gate={routing} close={() => setRouting(null)} />}
       {aiNode && <AIDraft node={aiNode} close={() => setAINode(null)} applied={() => { setAINode(null); toast("草稿已生效", { tone: "ok" }); void refresh(); }} />}
       {edit && <GateEdit gate={edit} close={() => setEdit(null)} saved={() => { setEdit(null); toast("已保存", { tone: "ok" }); void refresh(); }} />}
       <NodeWizard open={wizard} close={() => setWizard(false)} done={() => { toast("节点已创建", { tone: "ok" }); void refresh(); }} gates={gates.data ?? []} nodes={nodes.data ?? []} />
@@ -96,7 +99,10 @@ export function GatesPage() {
                   </small>
                   {g.state === "failed" && g.last_error && <p className="text-[var(--mg-bad-ink)] text-sm">{g.last_error}</p>}
                 </div>
-                <Button size="sm" variant="outline" onClick={() => setEdit(g)}>编辑</Button>
+                <span className="flex flex-nowrap gap-1.5">
+                  <Button size="sm" variant="outline" onClick={() => setRouting(g)}>出口与分流</Button>
+                  <Button size="sm" variant="outline" onClick={() => setEdit(g)}>编辑</Button>
+                </span>
               </div>
               {list.length === 0 ? (
                 <State empty="这台 VPS 还没有节点" />
