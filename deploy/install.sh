@@ -60,14 +60,14 @@ if [ -f "$etc/role" ]; then
 fi
 has_center=false; has_gate=false
 case "$role" in standalone) has_center=true; has_gate=true;; center) has_center=true;; gate) has_gate=true;; esac
-# Gate 实测 REALITY 伪装目标与链式代理时要校验站点证书：最小化系统可能没有 CA 证书库，尽量补装。
-if $has_gate && [ ! -s /etc/ssl/certs/ca-certificates.crt ] && [ ! -s /etc/pki/tls/certs/ca-bundle.crt ] && [ ! -s /etc/ssl/cert.pem ]; then
+# 中心拉取内核 / 订阅源、Gate 实测 REALITY 目标都要校验 HTTPS 证书：最小化系统可能没有 CA 证书库，尽量补装。
+if [ ! -s /etc/ssl/certs/ca-certificates.crt ] && [ ! -s /etc/pki/tls/certs/ca-bundle.crt ] && [ ! -s /etc/ssl/cert.pem ]; then
  if command -v apt-get >/dev/null 2>&1; then apt-get install -y ca-certificates >/dev/null 2>&1 || true
  elif command -v dnf >/dev/null 2>&1; then dnf install -y ca-certificates >/dev/null 2>&1 || true
  elif command -v apk >/dev/null 2>&1; then apk add --no-cache ca-certificates >/dev/null 2>&1 || true
  fi
  [ -s /etc/ssl/certs/ca-certificates.crt ] || [ -s /etc/pki/tls/certs/ca-bundle.crt ] || [ -s /etc/ssl/cert.pem ] ||
-  echo 'warning: no system CA bundle; install ca-certificates or REALITY target probing will fail' >&2
+  echo 'warning: no system CA bundle; install ca-certificates (kernel downloads, subscription sources and REALITY probing need it)' >&2
 fi
 listen=${2:-127.0.0.1:19810}
 port=${listen##*:}

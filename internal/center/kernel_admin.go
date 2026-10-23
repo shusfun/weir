@@ -2,6 +2,7 @@ package center
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -50,6 +51,7 @@ func (s *Server) kernelAdminRoutes(admin *gin.RouterGroup) {
 	admin.GET("/kernels", s.listKernels)
 	admin.GET("/kernels/:kernel/releases", s.kernelReleases)
 	admin.POST("/kernels/:kernel/fetch", s.fetchKernel)
+	admin.GET("/kernels/:kernel/fetch", s.fetchStatus)
 	admin.PUT("/kernels/defaults", s.setKernelDefaults)
 	admin.GET("/kernels/profiles", s.listProfiles)
 }
@@ -107,13 +109,65 @@ func (s *Server) fetchKernel(c *gin.Context) {
 	if req.Arch == "" {
 		req.Arch = "amd64"
 	}
-	sum, err := s.fetcher().Fetch(c.Request.Context(), name, strings.TrimPrefix(req.Version, "v"), req.Arch)
-	if err != nil {
-		c.AbortWithStatusJSON(502, gin.H{"error": gin.H{"code": "fetch_failed", "message": err.Error()}})
+	version := strings.TrimPrefix(req.Version, "v")
+	if version == "" || len(version) > 64 || strings.ContainsAny(version, `/\ `) || req.Arch != "amd64" && req.Arch != "arm64" {
+		failure(c, 400, "invalid_version")
 		return
 	}
-	s.audit(c, "kernel.fetch", name+" "+req.Version+" "+req.Arch, "ok")
-	c.JSON(200, gin.H{"sha256": sum})
+	// 下载可能超过一分钟（经镜像回退、按官方摘要校验）：后台进行，页面轮询状态。
+	key := "kernel-fetch:" + name + ":" + version + ":" + req.Arch
+	ctx := c.Request.Context()
+	if ok, err := s.Store.KV.SetNX(ctx, key, `{"status":"running"}`, 30*time.Minute); err != nil || !ok {
+		if err != nil {
+			failure(c, 503, "kernel_fetch_unavailable")
+			return
+		}
+		raw, _, _ := s.Store.KV.Get(ctx, key)
+		var st map[string]any
+		_ = json.Unmarshal([]byte(raw), &st)
+		if st["status"] == "running" {
+			c.JSON(202, gin.H{"status": "running", "key": key})
+			return
+		}
+		_ = s.Store.KV.Del(ctx, key) // 上次已结束：允许重新下载
+		_ = s.Store.KV.Set(ctx, key, `{"status":"running"}`, 30*time.Minute)
+	}
+	actor, ip := c.GetInt("user_id"), c.ClientIP()
+	go func() {
+		bg, cancel := context.WithTimeout(context.Background(), 25*time.Minute)
+		defer cancel()
+		result := gin.H{"status": "done"}
+		sum, err := s.fetcher().Fetch(bg, name, version, req.Arch)
+		if err != nil {
+			result = gin.H{"status": "failed", "error": err.Error()}
+		} else {
+			result["sha256"] = sum
+		}
+		b, _ := json.Marshal(result)
+		_ = s.Store.KV.Set(bg, key, string(b), time.Hour)
+		res := "ok"
+		if err != nil {
+			res = "failed"
+		}
+		_, _ = s.Store.Ent.Audit.Create().SetActor(actor).SetAction("kernel.fetch").SetTarget(name + " " + version + " " + req.Arch).SetResult(res).SetIP(ip).Save(bg)
+	}()
+	c.JSON(202, gin.H{"status": "running", "key": key})
+}
+
+// fetchStatus 返回某次内核下载的状态：running / done（含 sha256）/ failed（含原因）/ none。
+func (s *Server) fetchStatus(c *gin.Context) {
+	name := c.Param("kernel")
+	key := "kernel-fetch:" + name + ":" + strings.TrimPrefix(c.Query("version"), "v") + ":" + c.DefaultQuery("arch", "amd64")
+	raw, ok, err := s.Store.KV.Get(c.Request.Context(), key)
+	if err != nil {
+		failure(c, 503, "kernel_fetch_unavailable")
+		return
+	}
+	if !ok {
+		c.JSON(200, gin.H{"status": "none"})
+		return
+	}
+	c.Data(200, "application/json", []byte(raw))
 }
 
 // setKernelDefaults 设置各内核的默认版本：没有单独锁定版本的 Gate 会按新版本重新下发配置。

@@ -46,7 +46,7 @@ export function KernelsPage() {
         Object.entries(q.data).map(([kernel, k]) => (
           <Card key={kernel}>
             <CardContent className="stack">
-              <SectionHeader title={names[kernel] ?? kernel} description={k.default ? `默认版本 ${k.default}` : "未设置默认版本：使用已下载的最新版本。"} actions={<Button size="sm" variant="outline" onClick={() => setReleases(kernel)}><Download />拉取版本</Button>} />
+              <SectionHeader title={names[kernel] ?? kernel} description={k.default ? `默认版本 ${k.default}` : "未设置默认版本：VPS 保持正在运行的版本，新部署的 VPS 使用已下载的最新版本。下载新版本不会自动替换。"} actions={<Button size="sm" variant="outline" onClick={() => setReleases(kernel)}><Download />拉取版本</Button>} />
               {(["amd64", "arm64"] as Arch[]).map((arch) => (
                 <div key={arch} className="stack">
                   <small className="text-[var(--mg-ink-3)]">{arch}</small>
@@ -96,9 +96,21 @@ function ReleasesDialog({ kernel, close, fetched }: { kernel: string; close: () 
     setBusy(version);
     setError("");
     try {
-      const r = await api(`/admin/kernels/${kernel}/fetch`, "POST", { version, arch });
-      toast(`已下载 ${kernel} ${version}（${arch}）`, { tone: "ok", description: "SHA-256 " + String(r.sha256).slice(0, 16) + "…" });
-      fetched();
+      // 后台下载：每 2 秒查询一次，最多等 25 分钟。
+      await api(`/admin/kernels/${kernel}/fetch`, "POST", { version, arch });
+      const query = `/admin/kernels/${kernel}/fetch?version=${encodeURIComponent(version)}&arch=${arch}`;
+      for (let i = 0; i < 750; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const st = await api(query);
+        if (st.status === "done") {
+          toast(`已下载 ${kernel} ${version}（${arch}）`, { tone: "ok", description: "SHA-256 " + String(st.sha256).slice(0, 16) + "…" });
+          fetched();
+          return;
+        }
+        if (st.status === "failed") throw new Error("下载失败：" + st.error);
+        if (st.status === "none") throw new Error("下载状态已丢失，请重试。");
+      }
+      throw new Error("下载超时，请稍后查看缓存版本。");
     } catch (e) {
       setError(String(e));
     } finally {

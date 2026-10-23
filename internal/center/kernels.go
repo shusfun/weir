@@ -51,6 +51,16 @@ func (s *Server) gateKernels(ctx context.Context, g *ent.Gate, need map[string]b
 		}
 		version := g.KernelPins[kernel]
 		if version == "" {
+			version = s.explicitDefault(ctx, kernel)
+		}
+		// 没有锁定也没有设置默认时，保持 Gate 正在运行的版本：下载新版本不会悄悄替换正在用的内核
+		// （例如 Xray 26.10 的 REALITY 与 sing-box 1.14 客户端不兼容），换版本必须由管理员明确设置。
+		if run := g.KernelsRunning[kernel]; version == "" && run != "" {
+			if _, _, err := s.kernelCache().Get(kernel, run, g.Arch); err == nil {
+				version = run
+			}
+		}
+		if version == "" {
 			version = s.defaultKernelVersion(ctx, kernel, g.Arch)
 		}
 		if version == "" {
@@ -79,4 +89,14 @@ func (s *Server) reveal(sealed string) (string, error) {
 		return "", errors.New("stored secret cannot be decrypted")
 	}
 	return plain, nil
+}
+
+// explicitDefault 只返回管理员明确设置的默认版本（未设置为空）。
+func (s *Server) explicitDefault(ctx context.Context, kernel string) string {
+	if row, err := s.Store.Ent.Setting.Query().Where(setting.KeyEQ("kernel-defaults")).Only(ctx); err == nil {
+		if v, ok := row.Value[kernel].(string); ok {
+			return v
+		}
+	}
+	return ""
 }

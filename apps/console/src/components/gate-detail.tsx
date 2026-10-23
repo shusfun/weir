@@ -19,7 +19,7 @@ const pct = (v: unknown) => (typeof v === "number" ? v.toFixed(1) + "%" : unknow
 const size = (v: unknown) => (typeof v === "number" ? bytes(v) : unknown);
 const uptime = (v: unknown) => (typeof v === "number" ? `${Math.floor(v / 86400)} 天 ${Math.floor((v % 86400) / 3600)} 小时` : unknown);
 
-export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host; listening_ports?: Port[]; kernel_pins?: Record<string, string> }; nodes: NodeItem[]; close: () => void }) {
+export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host; listening_ports?: Port[]; kernel_pins?: Record<string, string>; xray_stats_port?: number; singbox_stats_port?: number }; nodes: NodeItem[]; close: () => void }) {
   const toast = useToast();
   const kernels = useQuery({ queryKey: ["kernels"], queryFn: async () => (await api("/admin/kernels")).kernels as Record<string, { default: string; cached: Record<string, string[] | null> }> });
   const [pins, setPins] = useState<Record<string, string>>(gate.kernel_pins ?? {});
@@ -27,7 +27,8 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const h = gate.host ?? {};
-  const own = new Set(nodes.filter((n) => n.gate_id === gate.id).map((n) => n.port));
+  // 本项目自己的端口：节点端口与两个内核的统计端口（只监听回环）。
+  const own = new Set([...nodes.filter((n) => n.gate_id === gate.id).map((n) => n.port), gate.xray_stats_port ?? 0, gate.singbox_stats_port ?? 0]);
   const foreign = (gate.listening_ports ?? []).filter((p) => !own.has(p.port));
   async function run(key: string, fn: () => Promise<unknown>, ok: string) {
     setBusy(key);
@@ -68,7 +69,7 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
                 <strong>{k} <small className="font-normal text-[var(--mg-ink-3)]">运行中 {gate.kernels_running?.[k] ?? "无"}</small></strong>
                 <Field label="版本">
                   <Select value={pins[k] ?? ""} onValueChange={(v) => setPins({ ...pins, [k]: String(v) })}>
-                    <SelectTrigger aria-label={k + " 版本"}><SelectValue>{pins[k] || `跟随默认（${kernels.data[k]?.default || "最新已下载"}）`}</SelectValue></SelectTrigger>
+                    <SelectTrigger aria-label={k + " 版本"}><SelectValue>{pins[k] || `跟随默认（${kernels.data[k]?.default || "保持当前运行版本"}）`}</SelectValue></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="">跟随默认</SelectItem>
                       {cached.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}

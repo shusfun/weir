@@ -39,6 +39,7 @@ func gateView(g *ent.Gate) gin.H {
 		"config_revision": g.ConfigRevision, "applied_revision": g.AppliedRevision, "state": state,
 		"last_error": g.LastError, "kernels_running": g.KernelsRunning, "kernel_pins": g.KernelPins,
 		"listening_ports": g.ListeningPorts, "host": g.Host, "created_at": g.CreatedAt,
+		"xray_stats_port": g.XrayStatsPort, "singbox_stats_port": g.SingboxStatsPort,
 	}
 }
 
