@@ -257,6 +257,7 @@ func (s *Server) authenticate(c *gin.Context) {
 	}
 	c.Set("user_id", u.ID)
 	c.Set("account", u)
+	c.Set("role", string(u.Role)) // 未登录时为空：附加功能据此区分登录受众与匿名受众
 	c.Set("session_key", key)
 	c.Set("session", session)
 	policy, ok := s.securityPolicy(c)

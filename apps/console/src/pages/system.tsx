@@ -4,6 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Button, Card, CardContent, Field, Input, Notice, PageHeader, SectionHeader, Segmented, useToast } from "@migate/ui";
 import { api } from "../api";
 import { State } from "../components/feedback";
+import { AnnouncementEditor } from "../components/global-announcement";
+import { ClientCatalogEditor } from "../components/client-catalog";
+import { ClientMirrorsEditor } from "../components/client-mirrors";
 
 interface ProviderView {
   configured: boolean;
@@ -27,6 +30,9 @@ export function SystemPage() {
     <div className="stack">
       <PageHeader eyebrow="系统" title="系统设置" />
       {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : <AIProvider key={String(q.dataUpdatedAt)} value={q.data} saved={() => q.refetch()} />}
+      <Card><CardContent><AnnouncementEditor /></CardContent></Card>
+      <Card><CardContent><ClientCatalogEditor /></CardContent></Card>
+      <Card><CardContent><ClientMirrorsEditor /></CardContent></Card>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button, PageState, useToast } from "@migate/ui";
 import { Workspace } from "./components/workspace";
+import { GlobalAnnouncement } from "./components/global-announcement";
 import { api } from "./api";
 import "./style.css";
 
@@ -79,6 +80,7 @@ function Console() {
     <Workspace admin={admin} email={me.email ?? ""} onLogout={logout}>
       <main className="shell-main">
         <div className="stack">
+          <GlobalAnnouncement audience="authenticated" />
           <Suspense fallback={loading("正在加载页面…")}>
             <Routes>
               <Route path="/" element={<Navigate to={home} replace />} />

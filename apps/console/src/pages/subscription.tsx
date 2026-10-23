@@ -2,6 +2,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CopyButton, Input, Meter, PageHeader, Readout, SectionHeader } from "@migate/ui";
 import { api } from "../api";
+import { client } from "../lib/client";
+import { ClientDownload } from "../components/client-download";
+import { ClientIcon } from "../components/client-icon";
 import { State } from "../components/feedback";
 import { ChainPanel, LinkPanel, type NodeOption } from "../components/link-panel";
 import { bytes, date } from "../lib/models";
@@ -38,6 +41,7 @@ export function SubscriptionPage() {
         </CardContent>
       </Card>
       <GroupsCard />
+      <ClientsCard />
       {nodes.data.length === 0 ? (
         <State empty="暂无可用节点" detail="请联系管理员分配节点。" />
       ) : (
@@ -78,6 +82,37 @@ function GroupsCard() {
               </div>
             </div>
           ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ClientsCard：管理员维护的客户端目录（只显示启用项）；下载经加速镜像测速后选择。
+function ClientsCard() {
+  const q = useQuery({ queryKey: ["client-catalog"], queryFn: () => client.catalog() });
+  if (q.isPending) return null;
+  const items = (q.data?.clients ?? []).filter((c) => c.enabled);
+  return (
+    <Card>
+      <CardContent className="stack">
+        <SectionHeader title="客户端下载" description="下载入口由管理员维护；导入时在链接的「一键导入页」选择对应客户端。" />
+        {q.error ? (
+          <State error={q.error} onRetry={() => q.refetch()} />
+        ) : items.length === 0 ? (
+          <State empty="管理员尚未提供客户端下载" />
+        ) : (
+          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {items.map((c) => (
+              <li key={c.id} className="flex items-center justify-between gap-2 rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3">
+                <span className="flex min-w-0 items-center gap-2">
+                  <ClientIcon icon={c.icon} data={c.icon_data} />
+                  <span className="min-w-0"><strong>{c.name}</strong><small className="block truncate text-[var(--mg-ink-3)]">{c.description}</small></span>
+                </span>
+                <ClientDownload client={c} />
+              </li>
+            ))}
+          </ul>
         )}
       </CardContent>
     </Card>
