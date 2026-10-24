@@ -1,8 +1,8 @@
 // 托管的 dsh（DeepSeek Harness）：右侧抽屉内嵌 dsh 原生界面（独立子域名，只能从这里打开），
-// 以及 dsh 的启用 / 子域名设置与版本管理。DeepSeek 的 Key 在 dsh 自己的设置里填写，MiGate 不保存。
+// 以及 dsh 的启用 / 子域名设置与版本管理。DeepSeek 的 Key 在 dsh 自己的设置里填写，Weir 不保存。
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge, Button, CodeBlock, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Input, Label, Notice, Sheet, SheetContent, SkeletonList, StatusLamp, Switch, useToast } from "@migate/ui";
+import { Badge, Button, CodeBlock, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Input, Label, Notice, Sheet, SheetContent, SkeletonList, StatusLamp, Switch, useToast } from "@weir/ui";
 import { Bot, Download, RotateCcw, Star, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { date } from "../lib/models";
@@ -28,7 +28,7 @@ export interface DshView {
   installed: DshInstalled[];
   unsupported: string;
   ready: boolean;
-  // MiGate 插件：label 为期望加载的插件，loaded 为实际加载的插件，note / error 为没有加载的原因。
+  // Weir 插件：label 为期望加载的插件，loaded 为实际加载的插件，note / error 为没有加载的原因。
   plugin: { label: string; note: string; loaded: string; error: string; adapted: boolean };
 }
 
@@ -85,7 +85,7 @@ export function DshDrawer() {
         <Bot />
       </Button>
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="right" title="dsh" description="DeepSeek Harness · 草稿会由 MiGate 弹窗请你确认" className="w-[min(680px,100vw)] gap-3 p-3">
+        <SheetContent side="right" title="dsh" description="DeepSeek Harness · 草稿会由 Weir 弹窗请你确认" className="w-[min(680px,100vw)] gap-3 p-3">
           <div className="flex h-full min-h-[70vh] flex-col gap-2">
             {hint && <Notice role="status">{hint.notice}</Notice>}
             {error ? <Notice tone="bad">{error}</Notice> : src ? (
@@ -117,7 +117,7 @@ export function DshSettingsCard() {
   const st = q.data?.status;
   const [label, tone] = stateLabel[st?.state ?? "stopped"];
   return (
-    <Section title="dsh（DeepSeek Harness）" description="dsh 由中心托管，只监听本机回环。浏览器只能从控制台右下角的抽屉里打开它；直接访问 dsh 子域名一律拒绝。DeepSeek 的 Key 在 dsh 自己的设置里填写，MiGate 不保存。">
+    <Section title="dsh（DeepSeek Harness）" description="dsh 由中心托管，只监听本机回环。浏览器只能从控制台右下角的抽屉里打开它；直接访问 dsh 子域名一律拒绝。DeepSeek 的 Key 在 dsh 自己的设置里填写，Weir 不保存。">
       {q.isPending || q.error || !v || !q.data ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : (
         <form className="stack" onSubmit={(e) => { e.preventDefault(); void run(() => api("/admin/dsh/settings", "PUT", { ...v, ...re }), "已保存", () => { setDraft(null); setRe({ password: "", code: "" }); void client.invalidateQueries({ queryKey: ["dsh"] }); }); }}>
           {q.data.unsupported && <Notice tone="warn">{q.data.unsupported}。</Notice>}
@@ -211,24 +211,24 @@ export function DshVersions() {
   );
 }
 
-// PluginStatus：MiGate 插件的加载情况与创造模式适配入口。适配产物走草稿：MiGate 校验、试启动后弹窗请你确认。
+// PluginStatus：Weir 插件的加载情况与创造模式适配入口。适配产物走草稿：Weir 校验、试启动后弹窗请你确认。
 function PluginStatus({ view, busy, act }: { view: DshView; busy: string; act: (key: string, fn: () => Promise<unknown>, ok: string) => Promise<void> }) {
   const client = useQueryClient();
   const p = view.plugin;
   return (
     <div className="stack rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <strong>MiGate 插件</strong>
+        <strong>Weir 插件</strong>
         {p.loaded ? <Badge variant="soft" tone="ok">{p.loaded}</Badge> : <Badge variant="soft" tone="warn">{p.label ? "未加载" : "不兼容"}</Badge>}
         {p.adapted && <Badge variant="soft" tone="neutral">已适配</Badge>}
       </div>
-      <small className="text-[var(--mg-ink-3)]">提供「MiGate 助手」预设、控制台上下文与 MiGate 说明。插件不可用时只启用基础预设，MiGate 的工具照常可用。</small>
+      <small className="text-[var(--mg-ink-3)]">提供「Weir 助手」预设、控制台上下文与 Weir 说明。插件不可用时只启用基础预设，Weir 的工具照常可用。</small>
       {p.note && <Notice tone="warn">{p.note}</Notice>}
       {p.error && <Notice tone="bad">{p.error}</Notice>}
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="outline" disabled={!view.ready} onClick={() => openDsh({ notice: "在 dsh 里换到创造模式（Creator）预设，让它按工作区 migate-plugin/ADAPT.md 适配插件；改好后回到「内核 → dsh」点「提交适配草稿」。" })}><Bot />用创造模式适配</Button>
         <Button size="sm" variant="outline" disabled={!view.ready || !!busy} onClick={() => void act("adapt", async () => { await api("/admin/dsh/plugin/adapt", "POST"); await client.invalidateQueries({ queryKey: ["ai-drafts"] }); }, "适配草稿已试启动通过，请在弹窗里确认")}>{busy === "adapt" ? "正在校验并试启动…" : "提交适配草稿"}</Button>
-        {p.adapted && <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => window.confirm("改回 MiGate 内置插件？") && void act("restore", () => api("/admin/dsh/plugin", "DELETE"), "已改回内置插件，dsh 正在重启")}><RotateCcw />改回内置插件</Button>}
+        {p.adapted && <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => window.confirm("改回 Weir 内置插件？") && void act("restore", () => api("/admin/dsh/plugin", "DELETE"), "已改回内置插件，dsh 正在重启")}><RotateCcw />改回内置插件</Button>}
       </div>
     </div>
   );

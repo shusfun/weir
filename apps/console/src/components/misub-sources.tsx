@@ -1,7 +1,7 @@
 // 订阅源：机场订阅地址。中心拉取时只连公网地址；保护性缓存在上游失败或节点骤减时保留上次结果。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, CodeBlock, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Label, Meter, Notice, SectionHeader, SkeletonTable, Switch, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, useToast } from "@migate/ui";
+import { Badge, Button, CodeBlock, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Label, Meter, Notice, SectionHeader, SkeletonTable, Switch, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, useToast } from "@weir/ui";
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { bytes, date } from "../lib/models";

@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/imzyb/MiGate/internal/panelconfig"
-	"github.com/imzyb/MiGate/internal/paths"
+	"github.com/shusfun/weir/internal/panelconfig"
+	"github.com/shusfun/weir/internal/paths"
 )
 
 type Config struct {

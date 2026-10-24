@@ -18,13 +18,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/imzyb/MiGate/internal/misub"
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/ruletemplate"
-	"github.com/imzyb/MiGate/internal/store/ent/setting"
-	"github.com/imzyb/MiGate/internal/store/ent/subnode"
-	"github.com/imzyb/MiGate/internal/store/ent/subprofile"
-	"github.com/imzyb/MiGate/internal/store/ent/subsource"
+	"github.com/shusfun/weir/internal/misub"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/ruletemplate"
+	"github.com/shusfun/weir/internal/store/ent/setting"
+	"github.com/shusfun/weir/internal/store/ent/subnode"
+	"github.com/shusfun/weir/internal/store/ent/subprofile"
+	"github.com/shusfun/weir/internal/store/ent/subsource"
 )
 
 // 备份与导入：格式与 MiSub 的 misub-backup 一致（订阅、订阅组、规则模板），旧 MiSub 的备份可直接导入。

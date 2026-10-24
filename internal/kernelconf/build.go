@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/imzyb/MiGate/internal/db"
-	"github.com/imzyb/MiGate/internal/singbox"
-	"github.com/imzyb/MiGate/internal/xray"
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/internal/db"
+	"github.com/shusfun/weir/internal/singbox"
+	"github.com/shusfun/weir/internal/xray"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // Options 控制生成过程。Exhausted 是本 Gate 上额度已用尽的用户键集合。

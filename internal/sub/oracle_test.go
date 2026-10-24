@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	js "github.com/imzyb/MiGate/internal/sub/jscompat"
+	js "github.com/shusfun/weir/internal/sub/jscompat"
 )
 
 // oracleCase 描述一次“同一输入分别交给上游 JS 与 Go 移植执行”的对照。

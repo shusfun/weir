@@ -18,7 +18,7 @@ import { IconTile, CopyButton, Notice,
   DialogContent,
   DialogDescription,
   DialogTitle,
-} from "@migate/ui";
+} from "@weir/ui";
 import { api } from "../api";
 import { State } from "../components/feedback";
 import "./public-page.css";
@@ -53,7 +53,7 @@ export function PublicPage() {
   const pageURL = location.origin + "/p/" + encodeURIComponent(slug);
   useEffect(() => {
     const previous = document.title;
-    document.title = page?.title ?? "公开页面 · MiGate";
+    document.title = page?.title ?? "公开页面 · Weir";
     return () => {
       document.title = previous;
     };
@@ -160,7 +160,7 @@ export function PublicPage() {
             )}
             {!!page.subscriptions?.length&&<PublicSubscriptions items={page.subscriptions}/>}
             {page.guestbook?.enabled&&<PublicGuestbook slug={slug}/>}
-<footer className="published-footer">MiGate · 公开内容</footer>
+<footer className="published-footer">Weir · 公开内容</footer>
           </>
         )
       )}

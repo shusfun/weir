@@ -1,6 +1,6 @@
 // 一个窗口建 / 改用户：账号、额度、周期、按月重置、节点范围、是否允许自建链式代理。
 import { useState } from "react";
-import { Button, Checkbox, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Label, Notice, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from "@migate/ui";
+import { Button, Checkbox, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Label, Notice, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from "@weir/ui";
 import { api } from "../api";
 import { fromLocalInput, fromUnits, localInput, toUnits, units, type NodeItem, type Unit, type UserItem } from "../lib/core";
 

@@ -6,8 +6,8 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/node"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/node"
 )
 
 const (

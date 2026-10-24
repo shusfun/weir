@@ -70,7 +70,7 @@ type WebOptions struct {
 	Port        int
 	TrustedHost string // 浏览器看到的 dsh 子域名（含端口时一并写上）
 	PublicURL   string
-	Patches     []string // 叠加的补丁层：工作区、MiGate 基础预设、MiGate 插件（按顺序，后者覆盖前者）
+	Patches     []string // 叠加的补丁层：工作区、Weir 基础预设、Weir 插件（按顺序，后者覆盖前者）
 }
 
 // Status 是 dsh Web 进程的状态。

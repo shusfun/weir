@@ -2,7 +2,7 @@ package subout
 
 import (
 	"fmt"
-	"github.com/imzyb/MiGate/internal/subscription"
+	"github.com/shusfun/weir/internal/subscription"
 	"net"
 	"regexp"
 	"strconv"

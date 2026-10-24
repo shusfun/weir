@@ -1,4 +1,4 @@
-// MiGate 页内标签：刻线底边，选中项点亮下沿。只过渡颜色，不移动指示器。
+// Weir 页内标签：刻线底边，选中项点亮下沿。只过渡颜色，不移动指示器。
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
 import { cn } from "cn";
 

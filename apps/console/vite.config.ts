@@ -18,5 +18,5 @@ export default defineConfig({
       "/sub/": "http://127.0.0.1:19810",
     },
   },
-  build: { outDir: "../migate/static", emptyOutDir: true },
+  build: { outDir: "../weir/static", emptyOutDir: true },
 });

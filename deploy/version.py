@@ -7,7 +7,7 @@ PATTERN = re.compile(r"^[0-9]\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]{0,2})$")
 
 
 def parse(raw):
-    text = raw.strip().removeprefix("MiGate version:").strip().removeprefix("v")
+    text = raw.strip().removeprefix("Weir version:").strip().removeprefix("v")
     if not PATTERN.fullmatch(text):
         raise ValueError("invalid version")
     major, minor, patch = (int(part) for part in text.split("."))

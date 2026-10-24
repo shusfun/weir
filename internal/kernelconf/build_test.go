@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 func sampleConfig(t *testing.T) contracts.GateConfig {

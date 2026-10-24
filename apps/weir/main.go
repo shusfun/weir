@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/imzyb/MiGate/internal/buildinfo"
-	"github.com/imzyb/MiGate/internal/center"
+	"github.com/shusfun/weir/internal/buildinfo"
+	"github.com/shusfun/weir/internal/center"
 )
 
 func main() {

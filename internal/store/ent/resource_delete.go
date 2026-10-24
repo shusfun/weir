@@ -8,8 +8,8 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/imzyb/MiGate/internal/store/ent/predicate"
-	"github.com/imzyb/MiGate/internal/store/ent/resource"
+	"github.com/shusfun/weir/internal/store/ent/predicate"
+	"github.com/shusfun/weir/internal/store/ent/resource"
 )
 
 // ResourceDelete is the builder for deleting a Resource entity.

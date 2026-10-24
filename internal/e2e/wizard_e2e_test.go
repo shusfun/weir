@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imzyb/MiGate/internal/kernels"
+	"github.com/shusfun/weir/internal/kernels"
 )
 
 func (e *env) get(path string, header map[string]string) ([]byte, http.Header) {

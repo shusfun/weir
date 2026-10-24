@@ -10,7 +10,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/imzyb/MiGate/internal/store/ent/outbound"
+	"github.com/shusfun/weir/internal/store/ent/outbound"
 )
 
 // Outbound is the model entity for the Outbound schema.

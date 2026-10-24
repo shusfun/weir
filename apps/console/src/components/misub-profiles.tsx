@@ -1,7 +1,7 @@
 // 订阅组：选订阅源与手动节点（或全部），配处理链与规则模板；预览、分配给用户、匿名分享。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Checkbox, CodeBlock, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Label, Notice, SectionHeader, Segmented, SkeletonList, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Textarea, useToast } from "@migate/ui";
+import { Badge, Button, Checkbox, CodeBlock, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Label, Notice, SectionHeader, Segmented, SkeletonList, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Textarea, useToast } from "@weir/ui";
 import { Eye, Plus, Share2, Trash2, Users } from "lucide-react";
 import { api } from "../api";
 import { date } from "../lib/models";

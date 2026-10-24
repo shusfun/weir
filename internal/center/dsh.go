@@ -17,15 +17,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/publicsuffix"
 
-	"github.com/imzyb/MiGate/internal/dsh"
-	"github.com/imzyb/MiGate/internal/store/ent/setting"
+	"github.com/shusfun/weir/internal/dsh"
+	"github.com/shusfun/weir/internal/store/ent/setting"
 )
 
 // 托管的 dsh（DeepSeek Harness）：中心像内核一样下载、校验、切换版本，但不运行它。dsh 由独立的管理进程
 // （系统用户 migate-dsh，生产环境是 systemd 单元 migate-dsh）启动，只监听回环，读不到中心的配置、数据库与密钥；
 // 中心与它只通过 control/、status/ 两个目录交换文件（见 internal/dsh/agent.go）。
-// 浏览器只能经 MiGate 的 dsh 子域名网关、从控制台抽屉里打开它（见 dsh_gateway.go）。
-// DeepSeek 的 Key 只在 dsh 自己的设置里填写，MiGate 不保存也不读取。
+// 浏览器只能经 Weir 的 dsh 子域名网关、从控制台抽屉里打开它（见 dsh_gateway.go）。
+// DeepSeek 的 Key 只在 dsh 自己的设置里填写，Weir 不保存也不读取。
 
 const dshSettingKey = "dsh"
 
@@ -344,9 +344,9 @@ func (s *Server) dshJob(ctx context.Context, req dsh.JobRequest) (dsh.JobResult,
 	return dsh.JobResult{}, errors.New("dsh 任务超时")
 }
 
-// mcpPatch 是接入 MiGate 工具的 dsh 补丁层（Web 抽屉与后台分析共用这一行）。
+// mcpPatch 是接入 Weir 工具的 dsh 补丁层（Web 抽屉与后台分析共用这一行）。
 func mcpPatch(addr, token string) string {
-	return fmt.Sprintf(`# 由 MiGate 生成，每次启动覆盖。
+	return fmt.Sprintf(`# 由 Weir 生成，每次启动覆盖。
 - insert:
     - id: mcp-migate
       name: '@deepseek-ai/dsh-mcp-client'
@@ -360,10 +360,10 @@ func mcpPatch(addr, token string) string {
 `, addr, token)
 }
 
-// basePatch 是 MiGate 的基础预设：只有人设与 MiGate 工具，只用 dsh 最稳定的几个组合包，插件不可用时也在。
-// dsh 的 MCP 工具只作用于所在的预设，所以 MiGate 工具必须放在预设里；插件加载时它的「MiGate 助手」会取代这里的默认。
+// basePatch 是 Weir 的基础预设：只有人设与 Weir 工具，只用 dsh 最稳定的几个组合包，插件不可用时也在。
+// dsh 的 MCP 工具只作用于所在的预设，所以 Weir 工具必须放在预设里；插件加载时它的「Weir 助手」会取代这里的默认。
 func basePatch(url, token string) string {
-	return fmt.Sprintf(`# 由 MiGate 生成，每次启动覆盖。
+	return fmt.Sprintf(`# 由 Weir 生成，每次启动覆盖。
 - insert:
     - id: preset-migate-basic
       name: '@deepseek-ai/dsh-agent-preset'
@@ -374,7 +374,7 @@ func basePatch(url, token string) string {
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              prefix: 你是 MiGate 的运维助手。只能通过 MiGate 的工具读取脱敏后的状态、提交草稿；草稿要经过实测与管理员确认才会生效。请用中文回答。
+              prefix: 你是 Weir 的运维助手。只能通过 Weir 的工具读取脱敏后的状态、提交草稿；草稿要经过实测与管理员确认才会生效。请用中文回答。
           - id: mcp-migate
             name: '@deepseek-ai/dsh-mcp-client'
             config:
@@ -391,37 +391,37 @@ func basePatch(url, token string) string {
 }
 
 // dshInstructions 写入 $DSH_HOME/AGENTS.md（每次启动 dsh 时覆盖）。
-const dshInstructions = `# MiGate
+const dshInstructions = `# Weir
 
-本文件由 MiGate 生成，每次启动 dsh 时覆盖。这个 dsh 由 MiGate 托管，用来帮管理员调整代理节点、研判安全事件。
+本文件由 Weir 生成，每次启动 dsh 时覆盖。这个 dsh 由 Weir 托管，用来帮管理员调整代理节点、研判安全事件。
 
-## MiGate 工具
+## Weir 工具
 
 - mcp__migate__get_console_context：管理员正在看的节点或页面，对话开始先调用。
 - mcp__migate__list_nodes / get_node_state：节点列表与当前参数（密码、UUID、密钥显示为 <redacted>，不要猜测或修改）。
-- mcp__migate__submit_node_draft：提交节点参数草稿；MiGate 在节点所在 VPS 上用真实内核实测，通过后弹窗请管理员确认，未通过会返回原因，可以修改后重新提交。
+- mcp__migate__submit_node_draft：提交节点参数草稿；Weir 在节点所在 VPS 上用真实内核实测，通过后弹窗请管理员确认，未通过会返回原因，可以修改后重新提交。
 - mcp__migate__list_security_events / get_security_event / submit_defense_draft：安全事件与防御草稿，同样由管理员确认后才执行。
 
-你无法直接改动 MiGate 的任何配置，所有改动都是草稿。
+你无法直接改动 Weir 的任何配置，所有改动都是草稿。
 
-## MiGate 插件
+## Weir 插件
 
-工作区里的 {{MIGATE_PLUGIN_COPY}} 是 MiGate 维护的 dsh 插件副本。dsh 升级后插件不兼容时，可以在创造模式里按其中的 ADAPT.md 修改，
-改好后请管理员在 MiGate 控制台「内核 → dsh」点「提交适配草稿」；不要用插件管理直接安装。
+工作区里的 {{MIGATE_PLUGIN_COPY}} 是 Weir 维护的 dsh 插件副本。dsh 升级后插件不兼容时，可以在创造模式里按其中的 ADAPT.md 修改，
+改好后请管理员在 Weir 控制台「内核 → dsh」点「提交适配草稿」；不要用插件管理直接安装。
 `
 
 // analystPatch 是后台分析 profile：复用 Web 里保存的 Key，去掉一切能执行命令、写文件、联网的工具。
 func analystPatch(addr, token string) string {
 	disabled := []string{"tool-bash", "tool-pwsh", "tool-jobs", "tool-fs", "tool-fs-search", "tool-plugin-manager", "tool-working-directory", "tool-skill", "tool-subagent", "tool-subagent-fork", "tool-subagent-control", "tool-subagent-list-agents", "tool-workflow", "tool-web"}
 	var b strings.Builder
-	b.WriteString("# 由 MiGate 生成：后台分析只用 MiGate 的工具。\n")
+	b.WriteString("# 由 Weir 生成：后台分析只用 Weir 的工具。\n")
 	for _, id := range []string{"credentials", "authorization", "deepseek-account"} {
 		fmt.Fprintf(&b, "- id: %s\n  disabled: false\n", id)
 	}
 	for _, id := range disabled {
 		fmt.Fprintf(&b, "- id: %s\n  disabled: true\n", id)
 	}
-	b.WriteString(strings.Replace(mcpPatch(addr, token), "# 由 MiGate 生成，每次启动覆盖。\n", "", 1))
+	b.WriteString(strings.Replace(mcpPatch(addr, token), "# 由 Weir 生成，每次启动覆盖。\n", "", 1))
 	return b.String()
 }
 

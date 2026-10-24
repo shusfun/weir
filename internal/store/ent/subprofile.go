@@ -10,7 +10,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/imzyb/MiGate/internal/store/ent/subprofile"
+	"github.com/shusfun/weir/internal/store/ent/subprofile"
 )
 
 // SubProfile is the model entity for the SubProfile schema.

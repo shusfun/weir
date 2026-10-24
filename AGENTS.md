@@ -1,4 +1,4 @@
-# MiGate 开发约定
+# Weir 开发约定
 
 ## 先读什么
 
@@ -19,19 +19,19 @@
 
 ## 内核
 
-- Xray、sing-box、mihomo 一律以**独立二进制**调用，不引入它们的 Go 包，内核更新不需要 MiGate 发版。
+- Xray、sing-box、mihomo 一律以**独立二进制**调用，不引入它们的 Go 包，内核更新不需要 Weir 发版。
 - 中心从上游拉取二进制（镜像回退 + 官方摘要校验），再推送给 Gate；Gate 不访问 GitHub。sing-box 由 CI 跟随上游标签编译，加上 `with_v2ray_api`。
 - 配置按内核版本生成，依据是版本档案 YAML。校验交给二进制：Gate 上用 `xray run -test` / `sing-box check`，中心用 `mihomo -t` / `sing-box check` 检查生成的订阅。
 - 内核由本项目自己管理：使用独立目录和 systemd 单元，不碰 x-ui 等其他服务。端口不得与其他服务冲突：Gate 上报本机实际占用的端口，中心分配时避开；内核统计 / API 端口只监听回环地址。
 
 ## dsh（AI）
 
-- AI 由托管的 dsh 提供，只支持 DeepSeek；DeepSeek 的 Key 只在 dsh 自己的设置里填写，MiGate 不保存。不再接 Claude / GPT。
+- AI 由托管的 dsh 提供，只支持 DeepSeek；DeepSeek 的 Key 只在 dsh 自己的设置里填写，Weir 不保存。不再接 Claude / GPT。
 - 中心下载 Node.js（nodejs.org 官方摘要）与 `@deepseek-ai/dsh`（npm 官方源 sha512），`npm install --ignore-scripts`，不在服务器上编译；版本可切换、回退，切换前备份 dsh 的会话。
 - dsh 由独立的管理进程运行（系统用户 `migate-dsh`，systemd 单元 `migate-dsh`），读不到中心与 Gate 的配置、数据库和密钥；中心与它只通过 `/var/lib/migate/dsh/control`（中心写）和 `status`（dsh 写）交换文件。
 - 浏览器只能经设置里的 dsh 子域名、从控制台抽屉打开 dsh：一次性票据、只能在 iframe 里、跟随管理员会话；直接访问一律拒绝。启动令牌只在中心内部使用。
-- dsh 只能通过 MiGate 的 MCP 工具读取脱敏状态、提交草稿；确认弹窗由 MiGate 自己弹出，dsh 无法确认。MCP 只监听回环，令牌每次启动重新生成。
-- 分层：MCP 是底层（中心生成的 `migate-basic` 预设，插件不可用时也在）；MiGate 维护的 dsh 插件（`internal/center/dshplugin/`，只用声明式组合，不含脚本）提供「MiGate 助手」预设与控制台上下文；dsh 升级后插件不兼容时，用 dsh 的创造模式改工作区里的副本，MiGate 校验、试启动后作为草稿请管理员确认。
+- dsh 只能通过 Weir 的 MCP 工具读取脱敏状态、提交草稿；确认弹窗由 Weir 自己弹出，dsh 无法确认。MCP 只监听回环，令牌每次启动重新生成。
+- 分层：MCP 是底层（中心生成的 `migate-basic` 预设，插件不可用时也在）；Weir 维护的 dsh 插件（`internal/center/dshplugin/`，只用声明式组合，不含脚本）提供「Weir 助手」预设与控制台上下文；dsh 升级后插件不兼容时，用 dsh 的创造模式改工作区里的副本，Weir 校验、试启动后作为草稿请管理员确认。
 - 补丁不能按 id 改写 dsh 自带的预设：那会替换整行 `config`。只新增行、改默认预设。
 
 ## 权限与安全底线

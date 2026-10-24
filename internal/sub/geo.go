@@ -4,7 +4,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	js "github.com/imzyb/MiGate/internal/sub/jscompat"
+	js "github.com/shusfun/weir/internal/sub/jscompat"
 )
 
 // 移植自 functions/modules/utils/geo-utils.js

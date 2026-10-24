@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/imzyb/MiGate/internal/dsh"
+	"github.com/shusfun/weir/internal/dsh"
 )
 
 func TestBuiltinPluginIsValidAndRejectsDangerousEdits(t *testing.T) {
@@ -16,10 +16,10 @@ func TestBuiltinPluginIsValidAndRejectsDangerousEdits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ok, _ := dsh.InRange("0.2.1-rc.2", meta.MiGate.DSH); !ok {
-		t.Fatalf("builtin plugin must support the tested dsh: %s", meta.MiGate.DSH)
+	if ok, _ := dsh.InRange("0.2.1-rc.2", meta.Weir.DSH); !ok {
+		t.Fatalf("builtin plugin must support the tested dsh: %s", meta.Weir.DSH)
 	}
-	if ok, _ := dsh.InRange("0.3.0-rc.1", meta.MiGate.DSH); ok {
+	if ok, _ := dsh.InRange("0.3.0-rc.1", meta.Weir.DSH); ok {
 		t.Fatal("builtin plugin must not claim the next minor")
 	}
 	patch := files["cordis.patch.yml"]

@@ -11,8 +11,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/imzyb/MiGate/internal/kernels"
-	"github.com/imzyb/MiGate/internal/store/ent/setting"
+	"github.com/shusfun/weir/internal/kernels"
+	"github.com/shusfun/weir/internal/store/ent/setting"
 )
 
 // defaultMirrors 与 install-online.sh 一致；MIGATE_GITHUB_MIRRORS=off 关闭，或写逗号分隔的主机名替换。

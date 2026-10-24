@@ -4,7 +4,7 @@ import (
 	"math"
 	"strings"
 
-	js "github.com/imzyb/MiGate/internal/sub/jscompat"
+	js "github.com/shusfun/weir/internal/sub/jscompat"
 )
 
 // 移植自 functions/utils/node-transformer.js：正则过滤、正则重命名、模板重命名、去重与排序。

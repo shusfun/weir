@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/imzyb/MiGate/internal/paths"
+	"github.com/shusfun/weir/internal/paths"
 )
 
 // TryAcquire creates a non-blocking file-descriptor lock. The lock file may

@@ -8,7 +8,7 @@ import (
 )
 
 func TestFetchCustomUserAgentAndRedirect(t *testing.T) {
-	for _, custom := range []string{"", "MiGate-Acceptance/69 (Inventory)"} {
+	for _, custom := range []string{"", "Weir-Acceptance/69 (Inventory)"} {
 		seen := []string{}
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			seen = append(seen, r.UserAgent())

@@ -11,7 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/imzyb/MiGate/internal/store/ent/outbound"
+	"github.com/shusfun/weir/internal/store/ent/outbound"
 )
 
 // OutboundCreate is the builder for creating a Outbound entity.

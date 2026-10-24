@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Button } from "@migate/ui";
+import { Button } from "@weir/ui";
 import { Sun, Moon, Monitor } from "lucide-react";
 
 export const themeStorageKey = "migate-theme";

@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/chain"
-	"github.com/imzyb/MiGate/internal/store/ent/credential"
-	"github.com/imzyb/MiGate/internal/store/ent/outbound"
-	"github.com/imzyb/MiGate/internal/store/ent/route"
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/chain"
+	"github.com/shusfun/weir/internal/store/ent/credential"
+	"github.com/shusfun/weir/internal/store/ent/outbound"
+	"github.com/shusfun/weir/internal/store/ent/route"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // 生成出口的 ID 区间，避免与管理员出口（数据库 ID）冲突。

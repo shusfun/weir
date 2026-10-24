@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imzyb/MiGate/internal/store/ent/credential"
-	"github.com/imzyb/MiGate/internal/store/ent/link"
-	"github.com/imzyb/MiGate/internal/subscription"
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/internal/store/ent/credential"
+	"github.com/shusfun/weir/internal/store/ent/link"
+	"github.com/shusfun/weir/internal/subscription"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 func setupGate(t *testing.T) (*Server, *testClient, *fakeGate) {

@@ -3,7 +3,7 @@ package center
 import (
 	"testing"
 
-	"github.com/imzyb/MiGate/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent"
 )
 
 func budgetRow(gid int, alloc, confirmed, used int64, rate float64) *ent.Budget {

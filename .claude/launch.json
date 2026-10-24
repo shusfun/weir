@@ -4,7 +4,7 @@
     {
       "name": "console",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@migate/console", "dev"],
+      "runtimeArgs": ["--filter", "@weir/console", "dev"],
       "port": 5173
     }
   ]

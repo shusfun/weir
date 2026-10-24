@@ -2,7 +2,7 @@
   "version": 1,
   "sources": [
     {
-      "name": "MiGate",
+      "name": "Weir",
       "url": "https://github.com/imzyb/MiGate",
       "commit": "0998448e185b629bcb34334bee3a7188257c6240",
       "use": "internal runtime, core builders, database and subscription parsers; original tests retained",
@@ -38,7 +38,7 @@
       "version": "@xyflow/react 12.11.1",
       "license": "MIT",
       "use": "Gate read-only topology canvas, zoom, panning and minimap",
-      "changes": "UIAble has no graph canvas in fixed component catalog; original MiGate graph library retained. Controls and cards compose existing UIAble."
+      "changes": "UIAble has no graph canvas in fixed component catalog; original Weir graph library retained. Controls and cards compose existing UIAble."
     }
   ],
   "template_reference": "MiSub 4952c16: template-model.js, template-pipeline.js and render-singbox.js/render-egern.js copied unchanged to third_party/misub/reference. Go bounded templates cover groups, ordered local rules, encrypted DNS and explicit HTTPS remote rule-set declarations (Clash yaml/text; sing-box source/binary). Credential-bearing URLs and arbitrary paths reject. Full renderer and preset parity pending. Explicit region/protocol automatic groups use the pinned geo-utils metadata; only authorized links expand; name collisions preserve existing groups.",
@@ -48,7 +48,7 @@
   "ini_import_reference": "MiSub 4952c16 functions/modules/utils/node-parser.js parseSurgeOrQxLine adapted to internal/subscription/inventory_ini.go (MIT). Strict options/quotes/conflicts; only local proxy sections imported; rules/policies not applied; unknown protocols/options reject. 19 existing Go renderer roundtrips; full upstream parser parity and commercial clients pending.",
   "source_name_options_reference": "MiSub 4952c16 functions/modules/utils/node-cleaner.js copied unchanged (MIT), local vm oracle only. Go URI fragment plusAsSpace opt-in preserves credentials/query/%2B and structured/VMess names; deliberately no repeated percent decoding. 8 fixed-source name comparisons; full source-filter/metadata parity pending.",
   "source_filters_reference": "MiSub 4952c16 node-cleaner.js parseFilterRuleText/buildRuleSet/filterNodeUrls/applyFilterRules; unchanged fixed reference, local vm oracle. 24 filter combinations compared. Go strict RE2/limits/unknown protocol rejection; VMess decoded names instead of missing fragment URL. React UIAble visual keyword/protocol/preset chips and advanced text; no Vue runtime.",
-  "session_directory_reference": "Sub2API fixed user/account security interaction and existing MiGate session identity. React + UIAble shared paged directory for self/admin; stable sort, IP search, scoped self revocation. Go implementation original, reuses existing Redis sessions; no authentication policy reduction. Legacy no-page response preserved. Bounded full Redis scan remains a scale limitation.",
+  "session_directory_reference": "Sub2API fixed user/account security interaction and existing Weir session identity. React + UIAble shared paged directory for self/admin; stable sort, IP search, scoped self revocation. Go implementation original, reuses existing Redis sessions; no authentication policy reduction. Legacy no-page response preserved. Bounded full Redis scan remains a scale limitation.",
   "loon_wireguard_reference": "MiSub 4952c16 render-loon.js copied unchanged (MIT), local Node VM comparison only. Go bounded nested peer grammar preserves dual-stack, DNS, PSK, allowed IPs, MTU and reserved; old builtin subset compatible, keepalive and excess DNS explicitly refused. No commercial Loon device claim.",
-  "outbound_pool_tools_reference": "MiGate fixed OutboundsPage / ProxyPoolModal and outbound_subscriptions: manual full-snapshot order, pool display priority/prepend, explicit armed auto materialization, per-pool refresh results. Public SOCKS/HTTP/HTTPS directory uses only fixed official EDT-Pages GitHub paths (replacing the third-party mirror); bounded encrypted metadata cache. TCP-only Agent probe validates committed inventory/public numeric IP, pins DNS, never arbitrary commands or throughput claims."
+  "outbound_pool_tools_reference": "Weir fixed OutboundsPage / ProxyPoolModal and outbound_subscriptions: manual full-snapshot order, pool display priority/prepend, explicit armed auto materialization, per-pool refresh results. Public SOCKS/HTTP/HTTPS directory uses only fixed official EDT-Pages GitHub paths (replacing the third-party mirror); bounded encrypted metadata cache. TCP-only Agent probe validates committed inventory/public numeric IP, pins DNS, never arbitrary commands or throughput claims."
 }

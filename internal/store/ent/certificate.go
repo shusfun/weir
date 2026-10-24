@@ -9,7 +9,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/imzyb/MiGate/internal/store/ent/certificate"
+	"github.com/shusfun/weir/internal/store/ent/certificate"
 )
 
 // Certificate is the model entity for the Certificate schema.

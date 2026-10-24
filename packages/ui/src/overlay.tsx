@@ -1,4 +1,4 @@
-// MiGate 浮层：菜单、气泡、提示、侧边面板。浮层统一为凸起面板，仅淡入，不使用模糊。
+// Weir 浮层：菜单、气泡、提示、侧边面板。浮层统一为凸起面板，仅淡入，不使用模糊。
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";

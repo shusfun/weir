@@ -11,7 +11,7 @@ import { ReorderButtons, SearchInput,
   SelectItem,
   Switch,
   Textarea,
-} from "@migate/ui";
+} from "@weir/ui";
 import { Plus, Trash2 } from "lucide-react";
 import { regionOptions } from "../lib/region-options";
 type Data = Record<string, any>;

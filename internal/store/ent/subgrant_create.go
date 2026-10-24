@@ -11,7 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/imzyb/MiGate/internal/store/ent/subgrant"
+	"github.com/shusfun/weir/internal/store/ent/subgrant"
 )
 
 // SubGrantCreate is the builder for creating a SubGrant entity.

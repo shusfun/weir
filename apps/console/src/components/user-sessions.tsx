@@ -1,6 +1,6 @@
 import {useId,useState} from "react";
 import {useQuery,useQueryClient} from "@tanstack/react-query";
-import { PageState, Field, Notice, Pager, SectionHeader,Badge,Button,Card,CardContent,Input,Dialog,DialogContent,DialogTitle,DialogDescription,DialogFooter,Segmented} from "@migate/ui";
+import { PageState, Field, Notice, Pager, SectionHeader,Badge,Button,Card,CardContent,Input,Dialog,DialogContent,DialogTitle,DialogDescription,DialogFooter,Segmented} from "@weir/ui";
 import {api} from "../api";
 import {date} from "../lib/models";
 import {State} from "./feedback";

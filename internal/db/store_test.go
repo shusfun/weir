@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imzyb/MiGate/internal/db"
+	"github.com/shusfun/weir/internal/db"
 	_ "modernc.org/sqlite"
 )
 

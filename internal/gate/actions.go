@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 var probeHost = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]{0,62})(\.[A-Za-z0-9]([A-Za-z0-9-]{0,62}))+$`)

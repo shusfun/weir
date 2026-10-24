@@ -1,4 +1,4 @@
-// MiGate 页面骨架：页头、区块、五态页面状态、分页、骨架、键帽。
+// Weir 页面骨架：页头、区块、五态页面状态、分页、骨架、键帽。
 import { ComponentProps, ReactNode } from "react";
 import { cn } from "cn";
 import { AlertCircle, Inbox, LoaderCircle, Lock, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";

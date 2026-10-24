@@ -107,7 +107,7 @@ func TestDSHGatewayOnlyOpensFromConsoleDrawer(t *testing.T) {
 	}
 
 	b := &browser{t: t, s: s, r: s.Router(), cookies: map[string]string{}}
-	// 没有任何凭据：直接访问、伪造导航头、访问 MiGate 接口路径，都是拒绝访问，且不会碰到 dsh。
+	// 没有任何凭据：直接访问、伪造导航头、访问 Weir 接口路径，都是拒绝访问，且不会碰到 dsh。
 	for _, h := range []map[string]string{nil, iframeNav, {"Sec-Fetch-Site": "none", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "document"}} {
 		for _, p := range []string{"/", "/api/v1/me", "/api/remote.mux"} {
 			if w := b.get("http://dsh.example.com"+p, h); w.Code != 403 || !strings.Contains(w.Body.String(), "拒绝访问") {

@@ -16,16 +16,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/imzyb/MiGate/internal/ai"
-	"github.com/imzyb/MiGate/internal/db"
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/setting"
-	"github.com/imzyb/MiGate/internal/subout"
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/internal/ai"
+	"github.com/shusfun/weir/internal/db"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/setting"
+	"github.com/shusfun/weir/internal/subout"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
-// AI 草稿：托管的 dsh 通过 MiGate 的 MCP 工具提交草稿 → 系统按内核版本试生成并在 Gate 本机实测 →
-// 实测结果交回 dsh（未通过时它可以修改后再交）→ 控制台弹出 MiGate 自己的确认窗，管理员确认后才写入。
+// AI 草稿：托管的 dsh 通过 Weir 的 MCP 工具提交草稿 → 系统按内核版本试生成并在 Gate 本机实测 →
+// 实测结果交回 dsh（未通过时它可以修改后再交）→ 控制台弹出 Weir 自己的确认窗，管理员确认后才写入。
 // dsh 拿到的节点参数不含任何密码、UUID、密钥与订阅令牌；dsh 的令牌只能提交草稿，不能确认。
 
 const (

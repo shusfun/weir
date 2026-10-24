@@ -9,7 +9,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/imzyb/MiGate/internal/store/ent/ruletemplate"
+	"github.com/shusfun/weir/internal/store/ent/ruletemplate"
 )
 
 // RuleTemplate is the model entity for the RuleTemplate schema.

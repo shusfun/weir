@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/imzyb/MiGate/internal/buildinfo"
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/budget"
-	"github.com/imzyb/MiGate/internal/store/ent/credential"
-	"github.com/imzyb/MiGate/internal/store/ent/node"
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/internal/buildinfo"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/budget"
+	"github.com/shusfun/weir/internal/store/ent/credential"
+	"github.com/shusfun/weir/internal/store/ent/node"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 func userKey(uid int) string { return fmt.Sprintf("u%d", uid) }

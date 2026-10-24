@@ -1,6 +1,6 @@
 import {useState} from "react";
 import {QRCodeSVG} from "qrcode.react";
-import { CopyButton, Notice,Button,Card,CardContent,Dialog,DialogContent,DialogTitle,DialogDescription,DialogFooter} from "@migate/ui";
+import { CopyButton, Notice,Button,Card,CardContent,Dialog,DialogContent,DialogTitle,DialogDescription,DialogFooter} from "@weir/ui";
 export interface PublicSubscriptionCard {title:string;target:string;expires_at:number;path:string}
 const names:Record<string,string>={links:"节点链接",base64:"Base64",clash:"Clash / Mihomo",singbox:"sing-box",surge:"Surge",loon:"Loon",quanx:"Quantumult X",egern:"Egern"};
 export function PublicSubscriptions({items}:{items:PublicSubscriptionCard[]}){

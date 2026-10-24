@@ -11,7 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/imzyb/MiGate/internal/store/ent/resource"
+	"github.com/shusfun/weir/internal/store/ent/resource"
 )
 
 // ResourceCreate is the builder for creating a Resource entity.

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/imzyb/MiGate/internal/xray"
+	"github.com/shusfun/weir/internal/xray"
 )
 
 func TestGenerateRealityKeyGeneratesValidKeyPair(t *testing.T) {

@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/imzyb/MiGate/internal/ai"
-	"github.com/imzyb/MiGate/internal/store/ent"
-	entnode "github.com/imzyb/MiGate/internal/store/ent/node"
+	"github.com/shusfun/weir/internal/ai"
+	"github.com/shusfun/weir/internal/store/ent"
+	entnode "github.com/shusfun/weir/internal/store/ent/node"
 )
 
-// MiGate 给 dsh 的 MCP 工具（Streamable HTTP，JSON 响应）：只监听本机回环的随机端口，不经过反代；
+// Weir 给 dsh 的 MCP 工具（Streamable HTTP，JSON 响应）：只监听本机回环的随机端口，不经过反代；
 // 令牌每次中心启动重新生成，只能读取脱敏后的状态、提交草稿，不能确认或执行任何改动。
 // Web 抽屉与后台分析各用一个令牌，草稿据此标明来源。
 
@@ -50,7 +50,7 @@ type mcpTool struct {
 }
 
 // obj 生成工具参数的 JSON Schema。required 必须是数组：Go 的 nil 切片会编码成 null，
-// MCP SDK 会因此拒绝整个工具列表（dsh 里一个 MiGate 工具都看不到）。
+// MCP SDK 会因此拒绝整个工具列表（dsh 里一个 Weir 工具都看不到）。
 func obj(props map[string]any, required ...string) map[string]any {
 	if required == nil {
 		required = []string{}
@@ -59,10 +59,10 @@ func obj(props map[string]any, required ...string) map[string]any {
 }
 
 var mcpTools = []mcpTool{
-	{"get_console_context", "管理员在 MiGate 控制台里正在看哪个节点或页面（从那里打开了 dsh）。对话开始先调用。", obj(map[string]any{})},
-	{"list_nodes", "列出 MiGate 的全部节点（id、名称、所在 VPS、内核与协议）。", obj(map[string]any{})},
+	{"get_console_context", "管理员在 Weir 控制台里正在看哪个节点或页面（从那里打开了 dsh）。对话开始先调用。", obj(map[string]any{})},
+	{"list_nodes", "列出 Weir 的全部节点（id、名称、所在 VPS、内核与协议）。", obj(map[string]any{})},
 	{"get_node_state", "读取一个节点的当前参数（密码、UUID、密钥已替换为 <redacted>）、内核版本、VPS 最近的错误，以及草稿允许修改的字段。", obj(map[string]any{"node_id": map[string]any{"type": "integer"}}, "node_id")},
-	{"submit_node_draft", "提交节点参数草稿。MiGate 会在节点所在 VPS 上用真实内核实测；通过后弹窗请管理员确认，未通过会返回原因，可以修改后重新提交。草稿不会自动生效。", obj(map[string]any{
+	{"submit_node_draft", "提交节点参数草稿。Weir 会在节点所在 VPS 上用真实内核实测；通过后弹窗请管理员确认，未通过会返回原因，可以修改后重新提交。草稿不会自动生效。", obj(map[string]any{
 		"node_id": map[string]any{"type": "integer"},
 		"set":     map[string]any{"type": "object", "description": "要修改的字段与新值；值为 null 表示删除该字段。只能使用 get_node_state 返回的 editable_fields。"},
 		"explain": map[string]any{"type": "string", "description": "一句中文说明：为什么这样改。"},
@@ -80,7 +80,7 @@ var mcpTools = []mcpTool{
 // mcpVersions 是支持的经典 MCP 版本（新到旧）。
 var mcpVersions = []string{"2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"}
 
-const mcpInstructions = "这些工具连接 MiGate 中心。节点参数里的机密值已替换为 <redacted>，不要尝试修改它们。所有草稿都要经过系统实测与管理员确认，你无法直接改动任何配置。"
+const mcpInstructions = "这些工具连接 Weir 中心。节点参数里的机密值已替换为 <redacted>，不要尝试修改它们。所有草稿都要经过系统实测与管理员确认，你无法直接改动任何配置。"
 
 type rpcRequest struct {
 	ID     json.RawMessage `json:"id"`
@@ -168,7 +168,7 @@ func (s *Server) callTool(ctx context.Context, source, name string, raw json.Raw
 	ready := s.Store != nil
 	s.state.RUnlock()
 	if !ready {
-		return "MiGate 尚未初始化", true
+		return "Weir 尚未初始化", true
 	}
 	var args struct {
 		NodeID  int            `json:"node_id"`

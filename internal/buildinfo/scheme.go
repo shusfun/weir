@@ -15,6 +15,7 @@ type Scheme struct {
 
 func ParseScheme(raw string) (Scheme, bool) {
 	text := strings.TrimSpace(raw)
+	text = strings.TrimPrefix(text, "Weir version:")
 	text = strings.TrimPrefix(text, "MiGate version:")
 	text = strings.TrimSpace(text)
 	text = strings.TrimPrefix(text, "v")

@@ -1,7 +1,7 @@
 // 用户：一个窗口建用户与套餐；详情中查看 / 管理其订阅链接（含凭据原文）与自建链式代理。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Card, CardContent, Meter, PageHeader, Sheet, SheetContent, SkeletonTable, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, CopyButton, Notice, useToast } from "@migate/ui";
+import { Badge, Button, Card, CardContent, Meter, PageHeader, Sheet, SheetContent, SkeletonTable, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, CopyButton, Notice, useToast } from "@weir/ui";
 import { Plus, RotateCcw, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { State } from "../components/feedback";

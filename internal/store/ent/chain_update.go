@@ -10,8 +10,8 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/imzyb/MiGate/internal/store/ent/chain"
-	"github.com/imzyb/MiGate/internal/store/ent/predicate"
+	"github.com/shusfun/weir/internal/store/ent/chain"
+	"github.com/shusfun/weir/internal/store/ent/predicate"
 )
 
 // ChainUpdate is the builder for updating Chain entities.

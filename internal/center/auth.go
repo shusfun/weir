@@ -16,10 +16,10 @@ import (
 	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/recoverycode"
-	"github.com/imzyb/MiGate/internal/store/ent/setting"
-	"github.com/imzyb/MiGate/internal/store/ent/user"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/recoverycode"
+	"github.com/shusfun/weir/internal/store/ent/setting"
+	"github.com/shusfun/weir/internal/store/ent/user"
 )
 
 type entUser = ent.User
@@ -357,7 +357,7 @@ func (s *Server) setupTOTP(c *gin.Context) {
 		failure(c, 409, "already_enrolled")
 		return
 	}
-	key, err := totp.Generate(totp.GenerateOpts{Issuer: "MiGate", AccountName: u.Email})
+	key, err := totp.Generate(totp.GenerateOpts{Issuer: "Weir", AccountName: u.Email})
 	if err != nil {
 		failure(c, 500, "key_generation_failed")
 		return

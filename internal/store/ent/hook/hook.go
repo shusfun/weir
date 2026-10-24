@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/imzyb/MiGate/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent"
 )
 
 // The AuditFunc type is an adapter to allow the use of ordinary

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/imzyb/MiGate/internal/store"
-	"github.com/imzyb/MiGate/internal/store/ent/user"
+	"github.com/shusfun/weir/internal/store"
+	"github.com/shusfun/weir/internal/store/ent/user"
 )
 
 func scriptedSecrets(values ...string) func(string) (string, error) {

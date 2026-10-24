@@ -1,5 +1,5 @@
 // Package kernels 负责中心侧的内核：版本档案选择、从上游拉取与校验、本地缓存。
-// 内核只作为独立程序调用，不引入它们的 Go 包，内核更新不需要 MiGate 发版。
+// 内核只作为独立程序调用，不引入它们的 Go 包，内核更新不需要 Weir 发版。
 package kernels
 
 import (
@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/imzyb/MiGate/internal/kernelconf"
+	"github.com/shusfun/weir/internal/kernelconf"
 )
 
 //go:embed profiles/*.yaml

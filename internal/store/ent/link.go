@@ -10,7 +10,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/imzyb/MiGate/internal/store/ent/link"
+	"github.com/shusfun/weir/internal/store/ent/link"
 )
 
 // Link is the model entity for the Link schema.

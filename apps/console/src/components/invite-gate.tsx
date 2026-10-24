@@ -1,6 +1,6 @@
 // 添加 VPS：生成一次性配对命令（1 小时有效），在 VPS 上粘贴执行后自动连接中心。
 import { useState } from "react";
-import { Button, CodeBlock, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Notice } from "@migate/ui";
+import { Button, CodeBlock, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Notice } from "@weir/ui";
 import { api } from "../api";
 
 export function InviteGate({ open, close, done }: { open: boolean; close: () => void; done: () => void }) {

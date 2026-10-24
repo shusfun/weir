@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/imzyb/MiGate/internal/store/ent/gate"
+	"github.com/shusfun/weir/internal/store/ent/gate"
 )
 
 func itoa(v int) string { return strconv.Itoa(v) }

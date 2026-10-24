@@ -1,6 +1,6 @@
 import {useEffect,useState} from "react";
 import {useQuery,useQueryClient} from "@tanstack/react-query";
-import { Field, Notice,Button,Card,CardContent,Input,Textarea,Label,Switch,Select,SelectTrigger,SelectValue,SelectContent,SelectItem,Dialog,DialogContent,DialogTitle,DialogDescription,DialogFooter} from "@migate/ui";
+import { Field, Notice,Button,Card,CardContent,Input,Textarea,Label,Switch,Select,SelectTrigger,SelectValue,SelectContent,SelectItem,Dialog,DialogContent,DialogTitle,DialogDescription,DialogFooter} from "@weir/ui";
 import {api} from "../api";
 import {PublishedAnnouncement,type NoticeNode,type PublishedNotice} from "./published-announcement";
 

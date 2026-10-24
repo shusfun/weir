@@ -2,7 +2,7 @@
 // 用户浏览器把 GitHub 下载地址拼在前缀后测速，下载后仍按 SHA-256 校验。
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Field, Notice, SectionHeader, Button, Card, CardContent, Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter, Input, Textarea } from "@migate/ui";
+import { Field, Notice, SectionHeader, Button, Card, CardContent, Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter, Input, Textarea } from "@weir/ui";
 import { Save } from "lucide-react";
 import { api } from "../api";
 import { State, ConflictNotice } from "./feedback";

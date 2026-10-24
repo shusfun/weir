@@ -13,12 +13,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/imzyb/MiGate/internal/misub"
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/gate"
-	"github.com/imzyb/MiGate/internal/store/ent/setting"
-	"github.com/imzyb/MiGate/internal/store/ent/subsource"
-	"github.com/imzyb/MiGate/internal/store/ent/user"
+	"github.com/shusfun/weir/internal/misub"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/gate"
+	"github.com/shusfun/weir/internal/store/ent/setting"
+	"github.com/shusfun/weir/internal/store/ent/subsource"
+	"github.com/shusfun/weir/internal/store/ent/user"
 )
 
 // Telegram 通知与周期任务（订阅源定时刷新、WebDAV 自动备份）。通知只含名称与数值，不含任何凭据或订阅地址；
@@ -151,7 +151,7 @@ func (s *Server) Notify(ctx context.Context, text string) error {
 }
 
 func (s *Server) testNotify(c *gin.Context) {
-	if err := s.Notify(c.Request.Context(), "MiGate 测试通知：通知设置可用。"); err != nil {
+	if err := s.Notify(c.Request.Context(), "Weir 测试通知：通知设置可用。"); err != nil {
 		failDetail(c, 502, "notify_failed", err.Error(), nil)
 		return
 	}

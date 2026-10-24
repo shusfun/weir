@@ -9,10 +9,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/outbound"
-	"github.com/imzyb/MiGate/internal/store/ent/route"
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/outbound"
+	"github.com/shusfun/weir/internal/store/ent/route"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // 管理员出口与分流规则（按 Gate）：例如把流媒体域名经家宽 SOCKS5 出去。

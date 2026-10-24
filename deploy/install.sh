@@ -147,7 +147,7 @@ if [ "$has_center" = true ]; then
  fi
  cat > "$units_dir/migate-center.service" <<'UNIT'
 [Unit]
-Description=MiGate center
+Description=Weir center
 After=network-online.target
 Wants=network-online.target
 [Service]
@@ -171,7 +171,7 @@ UNIT
  # dsh 管理进程：只能写自己的状态与家目录，中心与 Gate 的配置、数据目录对它不可见。
  cat > "$units_dir/migate-dsh.service" <<'UNIT'
 [Unit]
-Description=MiGate dsh (DeepSeek Harness) agent
+Description=Weir dsh (DeepSeek Harness) agent
 After=network-online.target migate-center.service
 Wants=network-online.target
 [Service]
@@ -202,7 +202,7 @@ if [ "$has_gate" = true ]; then
  install -d -m 0700 -o migate-gate -g migate-gate "$lib/gate"
  cat > "$units_dir/migate-helper.service" <<'UNIT'
 [Unit]
-Description=MiGate bounded core helper
+Description=Weir bounded core helper
 After=network-online.target
 [Service]
 Group=migate-gate
@@ -220,7 +220,7 @@ WantedBy=multi-user.target
 UNIT
  cat > "$units_dir/migate-gate.service" <<'UNIT'
 [Unit]
-Description=MiGate Gate agent
+Description=Weir Gate agent
 After=network-online.target migate-helper.service
 Requires=migate-helper.service
 ConditionPathExists=/etc/migate/gate/agent.json
@@ -253,7 +253,7 @@ if [ "$role" = standalone ] && [ ! -f "$etc/gate/agent.json" ]; then
  chmod 0600 "$etc/center/local-pair.sha256"
  cat > "$units_dir/migate-local-pair.service" <<UNIT
 [Unit]
-Description=MiGate standalone local Gate pairing
+Description=Weir standalone local Gate pairing
 After=network-online.target migate-center.service migate-helper.service
 ConditionPathExists=/etc/migate/gate/local-pair.token
 ConditionPathExists=!/etc/migate/gate/agent.json
@@ -296,7 +296,7 @@ if [ "$has_gate" = true ]; then
  fi
 fi
 
-echo "Installed MiGate $version ($role)."
+echo "Installed Weir $version ($role)."
 if [ "$has_center" = true ]; then
  if grep -Eq '"installed"[[:space:]]*:[[:space:]]*true' "$etc/center/config.json"; then
   echo 'Center is initialized; configuration and data were kept.'
@@ -309,7 +309,7 @@ fi
 if [ "$role" = standalone ]; then echo 'The local Gate pairs itself after the center is initialized.'; fi
 if [ "$role" = gate ] && [ ! -f "$etc/gate/agent.json" ]; then echo 'Pair this Gate from the center (Add Gate) to finish.'; fi
 if [ "$legacy" = true ]; then
- echo 'Replaced a previous MiGate installation. Old data directories were kept and can be removed manually:'
+ echo 'Replaced a previous Weir installation. Old data directories were kept and can be removed manually:'
  for dir in /etc/migate-control /etc/migate-gate /var/lib/migate-control /var/lib/migate-gate; do
   [ -e "$dir" ] && echo "  $dir"
  done

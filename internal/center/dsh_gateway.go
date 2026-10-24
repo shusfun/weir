@@ -10,10 +10,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/imzyb/MiGate/internal/store/ent/user"
+	"github.com/shusfun/weir/internal/store/ent/user"
 )
 
-// dsh 子域名网关：请求的 Host 是设置里的 dsh 子域名时，由这里处理，永远不会进入 MiGate 的页面与接口。
+// dsh 子域名网关：请求的 Host 是设置里的 dsh 子域名时，由这里处理，永远不会进入 Weir 的页面与接口。
 // 只有同时满足以下条件才转给 dsh，否则一律 403「拒绝访问」，不返回任何 dsh 内容：
 //   - 由控制台签发的一次性票据进入（60 秒、只能用一次、绑定管理员会话），换得网关会话；
 //   - 浏览器标明请求来自同站（Sec-Fetch-Site），页面只能作为 iframe 加载（Sec-Fetch-Dest）；

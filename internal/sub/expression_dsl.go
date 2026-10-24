@@ -3,7 +3,7 @@ package sub
 import (
 	"strings"
 
-	js "github.com/imzyb/MiGate/internal/sub/jscompat"
+	js "github.com/shusfun/weir/internal/sub/jscompat"
 )
 
 // 移植自 functions/utils/expression-dsl.js：受限的声明式表达式，不执行任何脚本。

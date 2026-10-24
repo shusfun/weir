@@ -1,4 +1,4 @@
-// MiGate 分段拨钮：单选筛选、指标切换。内凹底座内各项平放，当前项点亮为选中色（.is-pressed）。
+// Weir 分段拨钮：单选筛选、指标切换。内凹底座内各项平放，当前项点亮为选中色（.is-pressed）。
 // 所有“几个按钮里选一个”的场景都用它，不要用 Button + aria-pressed 手拼。
 import { ToggleGroup } from "@base-ui/react/toggle-group";
 import { Toggle } from "@base-ui/react/toggle";

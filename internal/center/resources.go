@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/resource"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/resource"
 )
 
 // errResourceConflict 表示调用方的版本校验未通过（由 update 回调返回）。

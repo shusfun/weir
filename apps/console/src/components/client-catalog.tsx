@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from "react";
 import {useQuery,useQueryClient} from "@tanstack/react-query";
-import { ReorderButtons, Field, Notice, SearchInput, SectionHeader,Button,Card,CardContent,Input,Textarea,Label,Switch,Checkbox,Select,SelectTrigger,SelectValue,SelectContent,SelectItem,Dialog,DialogContent,DialogTitle,DialogDescription,DialogFooter} from "@migate/ui";
+import { ReorderButtons, Field, Notice, SearchInput, SectionHeader,Button,Card,CardContent,Input,Textarea,Label,Switch,Checkbox,Select,SelectTrigger,SelectValue,SelectContent,SelectItem,Dialog,DialogContent,DialogTitle,DialogDescription,DialogFooter} from "@weir/ui";
 import {Plus} from "lucide-react";
 import {ClientIcon} from "./client-icon";
 import {client} from "../lib/client";

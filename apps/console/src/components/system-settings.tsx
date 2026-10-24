@@ -1,7 +1,7 @@
 // 系统设置卡片：安全策略、邮件服务、通知、WebDAV 备份、MiSub 备份导入导出、API 令牌。修改都需要重新输入密码。
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Button, Card, CardContent, CopyButton, Field, Input, Label, Notice, SectionHeader, Switch, Textarea, useToast } from "@migate/ui";
+import { Button, Card, CardContent, CopyButton, Field, Input, Label, Notice, SectionHeader, Switch, Textarea, useToast } from "@weir/ui";
 import { Download, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { date } from "../lib/models";

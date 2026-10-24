@@ -20,10 +20,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/certificate"
-	"github.com/imzyb/MiGate/internal/store/ent/node"
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/certificate"
+	"github.com/shusfun/weir/internal/store/ent/node"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 func (s *Server) certRoutes(admin *gin.RouterGroup) {

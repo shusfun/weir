@@ -13,7 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/imzyb/MiGate/internal/buildinfo"
+	"github.com/shusfun/weir/internal/buildinfo"
 )
 
 // installerPath 是安装时保存在本机的 install.sh；Gate 安装包直接使用它，保证与中心同版本。
@@ -21,7 +21,7 @@ const installerPath = "/usr/local/lib/migate/install.sh"
 
 // gateScript 是「添加 Gate」生成的一行命令所执行的脚本。凭证只作为参数传入，不放进 URL。
 const gateScript = `#!/bin/sh
-# MiGate Gate 一键安装：下载与中心同版本的程序，安装 Gate 角色，并用一次性凭证配对。
+# Weir Gate 一键安装：下载与中心同版本的程序，安装 Gate 角色，并用一次性凭证配对。
 set -eu
 token=''
 while [ $# -gt 0 ]; do

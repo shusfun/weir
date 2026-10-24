@@ -16,8 +16,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/resource"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/resource"
 )
 
 type catalogClient struct {

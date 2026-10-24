@@ -4,7 +4,7 @@ import (
 	"math"
 	"strings"
 
-	js "github.com/imzyb/MiGate/internal/sub/jscompat"
+	js "github.com/shusfun/weir/internal/sub/jscompat"
 )
 
 // 移植自 functions/modules/subscription/user-agent-utils.js

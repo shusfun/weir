@@ -66,7 +66,7 @@ class GuardRedirect(urllib.request.HTTPRedirectHandler):
 
 def _request(url, token):
     check_url(url)
-    request = urllib.request.Request(url, headers={"User-Agent": "MiGate-release", "Accept": "application/vnd.github+json"})
+    request = urllib.request.Request(url, headers={"User-Agent": "Weir-release", "Accept": "application/vnd.github+json"})
     host = (urllib.parse.urlsplit(url).hostname or "").lower()
     if token and host in TOKEN_HOSTS:
         request.add_header("Authorization", "Bearer " + token)

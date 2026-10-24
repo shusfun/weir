@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/imzyb/MiGate/internal/trafficstats"
-	"github.com/imzyb/MiGate/internal/xray"
+	"github.com/shusfun/weir/internal/trafficstats"
+	"github.com/shusfun/weir/internal/xray"
 )
 
 type StatsClient interface {

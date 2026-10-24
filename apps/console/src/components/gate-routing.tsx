@@ -1,7 +1,7 @@
 // VPS 的出口与分流规则：例如把流媒体域名经家宽 SOCKS5 出去。被规则引用的出口不能停用、改名或删除。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Notice, SectionHeader, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Textarea, useToast } from "@migate/ui";
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Notice, SectionHeader, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Textarea, useToast } from "@weir/ui";
 import { Plus, Trash2 } from "lucide-react";
 import { api } from "../api";
 import type { Gate } from "../lib/core";

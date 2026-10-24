@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	js "github.com/imzyb/MiGate/internal/sub/jscompat"
+	js "github.com/shusfun/weir/internal/sub/jscompat"
 )
 
 // 校验 jscompat 语义层（WHATWG URL、js-yaml、JSON、编码、正则、数字格式化、排序）与 Node 一致。

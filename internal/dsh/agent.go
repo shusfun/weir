@@ -32,9 +32,9 @@ type Desired struct {
 	Generation   int64  `json:"generation"`
 	Version      string `json:"version"` // 为空表示停止
 	TrustedHost  string `json:"trusted_host"`
-	WebPatch     string `json:"web_patch"`     // MiGate 基础预设（只有人设与 MCP 工具，插件不可用时也在）
+	WebPatch     string `json:"web_patch"`     // Weir 基础预设（只有人设与 MCP 工具，插件不可用时也在）
 	AnalystPatch string `json:"analyst_patch"` // 后台分析 profile
-	Instructions string `json:"instructions"`  // 写入 $DSH_HOME/AGENTS.md 的 MiGate 说明
+	Instructions string `json:"instructions"`  // 写入 $DSH_HOME/AGENTS.md 的 Weir 说明
 	// 插件：PluginDir 是中心持有的插件目录（runtime/plugins/ 下，dsh 只读）；为空表示不加载插件。
 	// 插件补丁里的 MCP 地址与令牌是占位符，由管理进程用 MCPURL / MCPToken 填入后写到 state/ 下。
 	PluginDir   string `json:"plugin_dir,omitempty"`
@@ -231,8 +231,8 @@ func (a *agent) start(ctx context.Context, d Desired) {
 		if err = a.runner.Start(ctx, opts); err == nil {
 			a.plugin = d.PluginLabel
 		} else {
-			// 插件与这个 dsh 版本不兼容或写错：去掉插件、只用基础预设重启，MiGate 的工具照常可用。
-			a.pluginErr = "MiGate 插件导致 dsh 启动失败，已只用基础预设启动：" + err.Error()
+			// 插件与这个 dsh 版本不兼容或写错：去掉插件、只用基础预设重启，Weir 的工具照常可用。
+			a.pluginErr = "Weir 插件导致 dsh 启动失败，已只用基础预设启动：" + err.Error()
 			opts.Patches = base
 			if opts.Port, err = FreePort(); err == nil {
 				err = a.runner.Start(ctx, opts)
@@ -300,7 +300,7 @@ func (a *agent) jobs(ctx context.Context) {
 	}
 }
 
-// runJob 用后台分析 profile（只有 MiGate 的工具，没有 Shell、文件与联网）跑一个任务。
+// runJob 用后台分析 profile（只有 Weir 的工具，没有 Shell、文件与联网）跑一个任务。
 func (a *agent) runJob(ctx context.Context, d Desired, req JobRequest) Result {
 	if d.Version == "" || d.AnalystPatch == "" {
 		return Result{Error: "dsh 未启用"}

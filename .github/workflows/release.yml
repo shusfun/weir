@@ -72,8 +72,8 @@ jobs:
           release="dist/migate-${VERSION}-linux-amd64"
           mkdir -p "$release"
           revision="$(git rev-parse HEAD)"
-          flags="-s -w -X github.com/imzyb/MiGate/internal/buildinfo.Version=${VERSION} -X github.com/imzyb/MiGate/internal/buildinfo.Revision=${revision}"
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "$flags" -o "$release/migate" ./apps/migate
+          flags="-s -w -X github.com/shusfun/weir/internal/buildinfo.Version=${VERSION} -X github.com/shusfun/weir/internal/buildinfo.Revision=${revision}"
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "$flags" -o "$release/migate" ./apps/weir
           cp deploy/install.sh deploy/sources.json deploy/github-update.sh deploy/release_fetch.py deploy/version.py "$release/"
           cp VERSION "$release/VERSION"
           python3 deploy/package_release.py "$VERSION"

@@ -8,7 +8,7 @@ import {
   Fingerprint,
   ShieldCheck,
 } from "lucide-react";
-import { IconTile, Field, Notice, Button, Card, CardContent, Input} from "@migate/ui";
+import { IconTile, Field, Notice, Button, Card, CardContent, Input} from "@weir/ui";
 import { api } from "../api";
 import { accountPasswordError } from "../password";
 import { passkey } from "../lib/passkey";
@@ -170,11 +170,11 @@ export function LoginPage({ done }: { done: () => void }) {
   return (
     <main className="auth-screen">
       <div className="auth-container">
-        <a href="/" className="auth-brand" aria-label="MiGate 首页">
+        <a href="/" className="auth-brand" aria-label="Weir 首页">
           <span>
             <Activity size={26} />
           </span>
-          <strong>MiGate</strong>
+          <strong>Weir</strong>
         </a>
         <p className="auth-subtitle">独立节点，统一管理。</p>
         <Card className="auth-card" size="lg">

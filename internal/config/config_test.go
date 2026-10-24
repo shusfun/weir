@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/imzyb/MiGate/internal/paths"
+	"github.com/shusfun/weir/internal/paths"
 )
 
 func TestLoadNormalizesExistingValuesWithoutInjectingDefaults(t *testing.T) {

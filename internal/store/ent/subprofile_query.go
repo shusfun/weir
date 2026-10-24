@@ -12,8 +12,8 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/imzyb/MiGate/internal/store/ent/predicate"
-	"github.com/imzyb/MiGate/internal/store/ent/subprofile"
+	"github.com/shusfun/weir/internal/store/ent/predicate"
+	"github.com/shusfun/weir/internal/store/ent/subprofile"
 )
 
 // SubProfileQuery is the builder for querying SubProfile entities.

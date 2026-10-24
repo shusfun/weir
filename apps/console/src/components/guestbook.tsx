@@ -1,7 +1,7 @@
-import { Field, Notice, Pager } from "@migate/ui";
+import { Field, Notice, Pager } from "@weir/ui";
 import {useState} from 'react';
 import {useQuery,useQueryClient} from '@tanstack/react-query';
-import {Button,Card,CardContent,Input,Label,Textarea,Select,SelectTrigger,SelectValue,SelectContent,SelectItem,Switch,Dialog,DialogContent,DialogTitle,DialogDescription,DialogFooter} from '@migate/ui';
+import {Button,Card,CardContent,Input,Label,Textarea,Select,SelectTrigger,SelectValue,SelectContent,SelectItem,Switch,Dialog,DialogContent,DialogTitle,DialogDescription,DialogFooter} from '@weir/ui';
 import {api} from '../api';import {State} from './feedback';
 interface Config {enabled:boolean;allow_anonymous:boolean;require_audit:boolean}
 interface Message {id:number;nickname:string;content:string;type:string;status:string;created_at:string;reply:string;reply_at:string|null;visible?:boolean;revision?:string}

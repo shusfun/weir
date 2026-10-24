@@ -15,11 +15,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/imzyb/MiGate/internal/buildinfo"
-	"github.com/imzyb/MiGate/internal/lockfile"
-	"github.com/imzyb/MiGate/internal/secrets"
-	"github.com/imzyb/MiGate/internal/store"
-	"github.com/imzyb/MiGate/internal/store/ent/user"
+	"github.com/shusfun/weir/internal/buildinfo"
+	"github.com/shusfun/weir/internal/lockfile"
+	"github.com/shusfun/weir/internal/secrets"
+	"github.com/shusfun/weir/internal/store"
+	"github.com/shusfun/weir/internal/store/ent/user"
 )
 
 // Server 持有中心的配置与存储。初始化完成前 Store 为空，只开放初始化接口。

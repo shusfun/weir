@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	panelcfg "github.com/imzyb/MiGate/internal/config"
-	"github.com/imzyb/MiGate/internal/db"
+	panelcfg "github.com/shusfun/weir/internal/config"
+	"github.com/shusfun/weir/internal/db"
 )
 
 const SystemDirectOutboundTag = "migate-system-direct"
@@ -520,7 +520,7 @@ func clientRouteUser(protocol string, client db.Client) string {
 		// For socks/http inbound, Xray populates that field from the authenticated username.
 		return strings.TrimSpace(client.CredentialIDValue())
 	default:
-		// For VLESS/VMess/Trojan, MiGate stores the routing identity in Xray's per-user email field.
+		// For VLESS/VMess/Trojan, Weir stores the routing identity in Xray's per-user email field.
 		return clientStatsName(client)
 	}
 }

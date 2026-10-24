@@ -49,7 +49,7 @@ def archive_for(version, binary=b"migate-binary"):
 
 class ReleaseFetchTests(unittest.TestCase):
     def test_url_policy(self):
-        good = "https://github.com/shusfun/MiSub/releases/download/v0.2.0/migate-0.2.0-linux-amd64.tar.gz"
+        good = "https://github.com/shusfun/weir/releases/download/v0.2.0/migate-0.2.0-linux-amd64.tar.gz"
         release_fetch.check_url(good)
         release_fetch.check_url(
             "https://release-assets.githubusercontent.com/github-production-release-asset/file",
@@ -60,10 +60,10 @@ class ReleaseFetchTests(unittest.TestCase):
             allow_query=True,
         )
         for bad in (
-            "http://github.com/shusfun/MiSub/releases/download/v0.2.0/migate-0.2.0-linux-amd64.tar.gz",
+            "http://github.com/shusfun/weir/releases/download/v0.2.0/migate-0.2.0-linux-amd64.tar.gz",
             "https://evil.test/migate-0.2.0-linux-amd64.tar.gz",
             good + "?token=secret",
-            "https://user:secret@github.com/shusfun/MiSub/releases/download/v0.2.0/file",
+            "https://user:secret@github.com/shusfun/weir/releases/download/v0.2.0/file",
         ):
             with self.assertRaises(ValueError):
                 release_fetch.check_url(bad)

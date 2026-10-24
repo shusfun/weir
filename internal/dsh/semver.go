@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// 语义化版本比较（含预发布号）：判断 MiGate 插件声明的兼容范围是否包含当前 dsh 版本。
+// 语义化版本比较（含预发布号）：判断 Weir 插件声明的兼容范围是否包含当前 dsh 版本。
 
 type semver struct {
 	core [3]int

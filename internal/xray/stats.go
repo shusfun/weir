@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	runtimecmd "github.com/imzyb/MiGate/internal/runtime/command"
-	"github.com/imzyb/MiGate/internal/trafficstats"
+	runtimecmd "github.com/shusfun/weir/internal/runtime/command"
+	"github.com/shusfun/weir/internal/trafficstats"
 )
 
 // StatsClient provides access to Xray's traffic statistics.
@@ -26,7 +26,7 @@ import (
 // - StubStatsClient: returns empty data (default, no external dependencies)
 // - GRPCStatsClient: uses the v2ray-compatible local StatsService API
 //
-// The stub implementation ensures MiGate remains lightweight while providing
+// The stub implementation ensures Weir remains lightweight while providing
 // the API and WebUI structure. Real stats can be enabled by swapping the
 // implementation at runtime.
 type StatsClient interface {
@@ -59,7 +59,7 @@ type ClientStats struct {
 type StubStatsClient struct{}
 
 // CommandStatsClient queries real Xray traffic counters through the xray CLI
-// without pulling gRPC/protobuf into the default MiGate binary. It expects the
+// without pulling gRPC/protobuf into the default Weir binary. It expects the
 // generated Xray config to expose the local StatsService API.
 type CommandStatsClient struct {
 	BinaryPath string
@@ -276,7 +276,7 @@ func normalizedScopeType(scope string) string {
 }
 
 // GRPCStatsClient uses the v2ray-compatible StatsService over local h2c gRPC.
-// It implements only the small protobuf/gRPC surface MiGate needs so the
+// It implements only the small protobuf/gRPC surface Weir needs so the
 // release binary does not need generated protobuf dependencies.
 type GRPCStatsClient struct {
 	addr      string

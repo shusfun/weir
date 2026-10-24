@@ -9,7 +9,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/imzyb/MiGate/internal/store/ent/audit"
+	"github.com/shusfun/weir/internal/store/ent/audit"
 )
 
 // Audit is the model entity for the Audit schema.

@@ -7,8 +7,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/imzyb/MiGate/internal/sub"
-	js "github.com/imzyb/MiGate/internal/sub/jscompat"
+	"github.com/shusfun/weir/internal/sub"
+	js "github.com/shusfun/weir/internal/sub/jscompat"
 )
 
 // Template 是订阅组使用的规则模板：内置（6 个）、自定义（存在中心）或远程地址（中心拉取并缓存）。

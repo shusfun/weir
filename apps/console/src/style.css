@@ -1,4 +1,4 @@
-/* 控制台样式入口：令牌与材质来自 @migate/ui，业务样式按功能拆分。颜色只引用 --mg-* 令牌。 */
+/* 控制台样式入口：令牌与材质来自 @weir/ui，业务样式按功能拆分。颜色只引用 --mg-* 令牌。 */
 @import "tailwindcss";
 @import "../../../packages/ui/src/styles/tokens.css";
 @import "../../../packages/ui/src/styles/theme.css";

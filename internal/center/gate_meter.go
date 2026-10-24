@@ -6,11 +6,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/budget"
-	"github.com/imzyb/MiGate/internal/store/ent/credential"
-	"github.com/imzyb/MiGate/internal/store/ent/node"
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/budget"
+	"github.com/shusfun/weir/internal/store/ent/credential"
+	"github.com/shusfun/weir/internal/store/ent/node"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // meterDelta 按纪元与累计值算出本次新增用量：纪元变化（内核重启）时新纪元从零起算；

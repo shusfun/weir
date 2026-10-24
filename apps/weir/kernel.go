@@ -4,7 +4,7 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/imzyb/MiGate/internal/center"
+	"github.com/shusfun/weir/internal/center"
 )
 
 // runKernel：migate kernel import <内核> <版本> <架构> <文件>，把本机文件导入中心的内核缓存。

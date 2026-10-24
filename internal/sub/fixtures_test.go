@@ -3,7 +3,7 @@ package sub
 import (
 	"strings"
 
-	js "github.com/imzyb/MiGate/internal/sub/jscompat"
+	js "github.com/shusfun/weir/internal/sub/jscompat"
 )
 
 // 对照测试共用的代表性输入（覆盖全部协议与常见的非标准写法）。

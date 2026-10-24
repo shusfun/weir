@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	js "github.com/imzyb/MiGate/internal/sub/jscompat"
+	js "github.com/shusfun/weir/internal/sub/jscompat"
 )
 
 func nullIfFalse(s string, ok bool) any {

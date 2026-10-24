@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // fakeGate 处理 node.test 动作：前 n 次返回失败，之后成功；记录收到的测试配置。
@@ -43,7 +43,7 @@ func (g *fakeGate) serveNodeTests(t *testing.T, fail int, seen *[]map[string]any
 	}()
 }
 
-// mcpCall 以给定令牌调用 MiGate 给 dsh 的 MCP 接口，返回 result。
+// mcpCall 以给定令牌调用 Weir 给 dsh 的 MCP 接口，返回 result。
 func mcpCall(t *testing.T, h http.Handler, token, method string, params any) (int, map[string]any) {
 	t.Helper()
 	b, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": method, "params": params})

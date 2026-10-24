@@ -7,8 +7,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/imzyb/MiGate/internal/db"
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/internal/db"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // active 判断凭据此刻是否应下发到内核：到期或所属用户额度用尽的凭据被剔除；

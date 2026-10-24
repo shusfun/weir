@@ -2,7 +2,7 @@
 import { lazy, Suspense, useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button, PageState, useToast } from "@migate/ui";
+import { Button, PageState, useToast } from "@weir/ui";
 import { Workspace } from "./components/workspace";
 import { GlobalAnnouncement } from "./components/global-announcement";
 import { api } from "./api";

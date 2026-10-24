@@ -12,15 +12,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/budget"
-	"github.com/imzyb/MiGate/internal/store/ent/chain"
-	"github.com/imzyb/MiGate/internal/store/ent/credential"
-	"github.com/imzyb/MiGate/internal/store/ent/link"
-	"github.com/imzyb/MiGate/internal/store/ent/node"
-	"github.com/imzyb/MiGate/internal/store/ent/passkey"
-	"github.com/imzyb/MiGate/internal/store/ent/recoverycode"
-	"github.com/imzyb/MiGate/internal/store/ent/user"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/budget"
+	"github.com/shusfun/weir/internal/store/ent/chain"
+	"github.com/shusfun/weir/internal/store/ent/credential"
+	"github.com/shusfun/weir/internal/store/ent/link"
+	"github.com/shusfun/weir/internal/store/ent/node"
+	"github.com/shusfun/weir/internal/store/ent/passkey"
+	"github.com/shusfun/weir/internal/store/ent/recoverycode"
+	"github.com/shusfun/weir/internal/store/ent/user"
 )
 
 const (

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // Counter 是某凭据的累计字节数。

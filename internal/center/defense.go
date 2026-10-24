@@ -17,14 +17,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/audit"
-	"github.com/imzyb/MiGate/internal/store/ent/resource"
-	"github.com/imzyb/MiGate/internal/store/ent/setting"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/audit"
+	"github.com/shusfun/weir/internal/store/ent/resource"
+	"github.com/shusfun/weir/internal/store/ent/setting"
 )
 
 // 安全防御：规则（限流、失败登录计数）照常运行并产生安全事件 → Laya 判断「正常 / 可疑 / 未知」→
-// 可疑事件交给托管的 dsh 后台分析，dsh 只能提交防御草稿 → 控制台弹出 MiGate 的确认窗，管理员确认后才封禁。
+// 可疑事件交给托管的 dsh 后台分析，dsh 只能提交防御草稿 → 控制台弹出 Weir 的确认窗，管理员确认后才封禁。
 // 发给 Laya 与 dsh 的事件不含来源地址、账号、令牌；模型故障只让分析缺席，规则防线不受影响。
 
 const (
@@ -177,12 +177,12 @@ func (s *Server) analyzeEvent(ctx context.Context, id int) error {
 		s.markEvent(ctx, id, "new", "dsh 分析未完成："+msg)
 		return errors.New(msg)
 	}
-	// 分析由 dsh 管理进程以后台分析 profile 运行（只有 MiGate 的工具）；中心只提交任务、等结果。
+	// 分析由 dsh 管理进程以后台分析 profile 运行（只有 Weir 的工具）；中心只提交任务、等结果。
 	if _, _, ok := s.dshEndpoint(); !ok {
 		return fail("dsh 未运行")
 	}
 	s.markEvent(ctx, id, "analyzing", "")
-	task := fmt.Sprintf("你是 MiGate 的安全分析员。请先调用 mcp__migate__get_security_event 读取安全事件 %d，结合 Laya 的判断分析它是否是攻击。"+
+	task := fmt.Sprintf("你是 Weir 的安全分析员。请先调用 mcp__migate__get_security_event 读取安全事件 %d，结合 Laya 的判断分析它是否是攻击。"+
 		"需要处置时调用 mcp__migate__submit_defense_draft 提交防御草稿（管理员确认后才执行）；不需要处置就不要调用。最后用一两句中文说明结论。", id)
 	res, err := s.runDSHJob(ctx, task)
 	if err != nil {

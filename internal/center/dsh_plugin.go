@@ -17,27 +17,27 @@ import (
 	"github.com/gin-gonic/gin"
 	"gopkg.in/yaml.v3"
 
-	"github.com/imzyb/MiGate/internal/dsh"
-	"github.com/imzyb/MiGate/internal/store/ent/setting"
+	"github.com/shusfun/weir/internal/dsh"
+	"github.com/shusfun/weir/internal/store/ent/setting"
 )
 
 // dshPluginSettingKey 保存管理员确认过的适配插件；没有时使用内置插件。
 const dshPluginSettingKey = "dsh-plugin"
 
-// MiGate 维护的 dsh 插件：随程序发布（dshplugin/），由中心写到 runtime/plugins/（dsh 只读）。
+// Weir 维护的 dsh 插件：随程序发布（dshplugin/），由中心写到 runtime/plugins/（dsh 只读）。
 // 插件只用 dsh 的声明式组合（预设、人设、工具行），不含任何脚本；dsh 升级后不兼容时，
-// 管理员可以让 dsh 的创造模式改工作区里的副本，再由 MiGate 校验、试启动、确认后启用（适配草稿）。
+// 管理员可以让 dsh 的创造模式改工作区里的副本，再由 Weir 校验、试启动、确认后启用（适配草稿）。
 
 //go:embed dshplugin/*
 var dshPluginFS embed.FS
 
-const dshPluginName = "@migate/dsh-plugin"
+const dshPluginName = "@weir/dsh-plugin"
 
-// pluginMeta 是插件 package.json 中 MiGate 关心的字段。
+// pluginMeta 是插件 package.json 中 Weir 关心的字段。
 type pluginMeta struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
-	MiGate  struct {
+	Weir  struct {
 		DSH string `json:"dsh"` // 兼容的 dsh 版本范围
 	} `json:"migate"`
 }
@@ -83,7 +83,7 @@ func forbiddenRow(name string) bool {
 
 // validatePlugin 校验插件：只能是规定的几个文件；package.json 名称固定、版本与兼容范围合法；
 // cordis.patch.yml 不含 !!js 等标签，只新增行与改默认预设，只用 dsh 官方组合包且不含危险工具，
-// MiGate 工具行原样指向占位符。返回插件元数据。
+// Weir 工具行原样指向占位符。返回插件元数据。
 func validatePlugin(files map[string]string) (pluginMeta, error) {
 	var meta pluginMeta
 	allowed := map[string]bool{}
@@ -101,12 +101,12 @@ func validatePlugin(files map[string]string) (pluginMeta, error) {
 	if err := json.Unmarshal([]byte(files["package.json"]), &meta); err != nil {
 		return meta, errors.New("package.json 不是有效的 JSON")
 	}
-	if meta.Name != dshPluginName || !dsh.ValidVersion(meta.Version) || !dsh.ValidRange(meta.MiGate.DSH) {
+	if meta.Name != dshPluginName || !dsh.ValidVersion(meta.Version) || !dsh.ValidRange(meta.Weir.DSH) {
 		return meta, errors.New("package.json 的 name、version 或 migate.dsh 兼容范围无效")
 	}
 	patch := files["cordis.patch.yml"]
 	if strings.Count(patch, dsh.PlaceholderMCPURL) > 1 || strings.Count(patch, dsh.PlaceholderMCPToken) > 1 {
-		return meta, errors.New("MiGate 工具的地址与令牌占位符只能出现在 MiGate 工具行里")
+		return meta, errors.New("Weir 工具的地址与令牌占位符只能出现在 Weir 工具行里")
 	}
 	var doc yaml.Node
 	if err := yaml.Unmarshal([]byte(patch), &doc); err != nil {
@@ -180,7 +180,7 @@ func checkPatchRow(row *yaml.Node) error {
 }
 
 // checkPluginNode 遍历补丁内容：每个组合包（name 字段）只能是 dsh 官方包或 cordis:group，
-// 不能是危险工具；MiGate 工具行必须原样指向占位符，不能把令牌发给别的地址。
+// 不能是危险工具；Weir 工具行必须原样指向占位符，不能把令牌发给别的地址。
 func checkPluginNode(n *yaml.Node) error {
 	if n.Kind == yaml.MappingNode {
 		if name := mapGet(n, "name"); name != nil {
@@ -193,7 +193,7 @@ func checkPluginNode(n *yaml.Node) error {
 			case !strings.HasPrefix(v, "@deepseek-ai/dsh-"):
 				return fmt.Errorf("cordis.patch.yml 第 %d 行：只能使用 dsh 官方组合包，不能使用 %s", name.Line, v)
 			case forbiddenRow(v):
-				return fmt.Errorf("cordis.patch.yml 第 %d 行：MiGate 插件不能使用 %s（会执行命令、联网或安装插件）", name.Line, v)
+				return fmt.Errorf("cordis.patch.yml 第 %d 行：Weir 插件不能使用 %s（会执行命令、联网或安装插件）", name.Line, v)
 			case v == "@deepseek-ai/dsh-mcp-client":
 				if err := checkMCPRow(n); err != nil {
 					return err
@@ -209,7 +209,7 @@ func checkPluginNode(n *yaml.Node) error {
 	return nil
 }
 
-// checkMCPRow：只允许连接 MiGate 自己的工具，地址与令牌必须是占位符。
+// checkMCPRow：只允许连接 Weir 自己的工具，地址与令牌必须是占位符。
 func checkMCPRow(n *yaml.Node) error {
 	var row struct {
 		Config struct {
@@ -221,12 +221,12 @@ func checkMCPRow(n *yaml.Node) error {
 		} `yaml:"config"`
 	}
 	if err := n.Decode(&row); err != nil {
-		return fmt.Errorf("cordis.patch.yml 第 %d 行：MiGate 工具行无效", n.Line)
+		return fmt.Errorf("cordis.patch.yml 第 %d 行：Weir 工具行无效", n.Line)
 	}
 	c := row.Config
 	if c.ServerName != "migate" || c.Transport != "streamable-http" || c.URL != dsh.PlaceholderMCPURL || c.Command != "" ||
 		len(c.Headers) != 1 || c.Headers["Authorization"] != "Bearer "+dsh.PlaceholderMCPToken {
-		return fmt.Errorf("cordis.patch.yml 第 %d 行：MCP 只能连接 MiGate 自己的工具，地址与令牌必须保持占位符", n.Line)
+		return fmt.Errorf("cordis.patch.yml 第 %d 行：MCP 只能连接 Weir 自己的工具，地址与令牌必须保持占位符", n.Line)
 	}
 	return nil
 }
@@ -286,12 +286,12 @@ func (s *Server) activePlugin(ctx context.Context, dshVersion string) (dir, labe
 	}
 	files := builtinPluginFiles()
 	meta, err := validatePlugin(files)
-	if ok, _ := dsh.InRange(dshVersion, meta.MiGate.DSH); err == nil && ok {
+	if ok, _ := dsh.InRange(dshVersion, meta.Weir.DSH); err == nil && ok {
 		if dir, err = s.materializePlugin("builtin", files); err == nil {
 			return dir, "内置插件 " + meta.Version, strings.Join(notes, "；")
 		}
 	}
-	notes = append(notes, fmt.Sprintf("内置插件 %s 不支持 dsh %s（兼容范围 %s），只启用基础预设；可以用创造模式适配", meta.Version, dshVersion, meta.MiGate.DSH))
+	notes = append(notes, fmt.Sprintf("内置插件 %s 不支持 dsh %s（兼容范围 %s），只启用基础预设；可以用创造模式适配", meta.Version, dshVersion, meta.Weir.DSH))
 	return "", "", strings.Join(notes, "；")
 }
 
@@ -441,8 +441,8 @@ func (s *Server) adaptPlugin(c *gin.Context) {
 	}
 	meta, err := validatePlugin(got.Files)
 	if err == nil {
-		if ok, _ := dsh.InRange(set.Version, meta.MiGate.DSH); !ok {
-			err = fmt.Errorf("兼容范围 %s 不包含当前 dsh %s", meta.MiGate.DSH, set.Version)
+		if ok, _ := dsh.InRange(set.Version, meta.Weir.DSH); !ok {
+			err = fmt.Errorf("兼容范围 %s 不包含当前 dsh %s", meta.Weir.DSH, set.Version)
 		}
 	}
 	if err != nil {
@@ -490,8 +490,8 @@ func (s *Server) smokePluginDraft(c *gin.Context, ctx context.Context, version s
 		}
 	}
 	d := &Draft{ID: id, Kind: "plugin", Source: "dsh", Status: "passed", CreatedAt: time.Now().UTC(),
-		Explain: fmt.Sprintf("dsh 创造模式适配的 MiGate 插件 %s（兼容 dsh %s），已用 dsh %s 试启动通过。", meta.Version, meta.MiGate.DSH, version),
-		Plugin:  &pluginDraft{Version: meta.Version, Compat: meta.MiGate.DSH, Hash: pluginHash(files), Dir: dir, DSH: version, Warn: warn, Files: diffPlugin(before, files)}}
+		Explain: fmt.Sprintf("dsh 创造模式适配的 Weir 插件 %s（兼容 dsh %s），已用 dsh %s 试启动通过。", meta.Version, meta.Weir.DSH, version),
+		Plugin:  &pluginDraft{Version: meta.Version, Compat: meta.Weir.DSH, Hash: pluginHash(files), Dir: dir, DSH: version, Warn: warn, Files: diffPlugin(before, files)}}
 	if err = s.saveDraft(ctx, d); err != nil {
 		_ = os.RemoveAll(dir)
 		failure(c, 503, "draft_unavailable")
@@ -525,7 +525,7 @@ func (s *Server) applyPluginDraft(c *gin.Context, d *Draft) {
 		failure(c, 500, "save_failed")
 		return
 	}
-	value := map[string]any{"dir": dir, "version": meta.Version, "compat": meta.MiGate.DSH, "hash": p.Hash}
+	value := map[string]any{"dir": dir, "version": meta.Version, "compat": meta.Weir.DSH, "hash": p.Hash}
 	if err = s.Store.Ent.Setting.Create().SetKey(dshPluginSettingKey).SetValue(value).OnConflictColumns(setting.FieldKey).UpdateNewValues().Exec(ctx); err != nil {
 		failure(c, 500, "save_failed")
 		return

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/imzyb/MiGate/internal/store/ent/resource"
+	"github.com/shusfun/weir/internal/store/ent/resource"
 )
 
 func TestPublicPageCardsAndGuestbook(t *testing.T) {

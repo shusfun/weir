@@ -1,8 +1,10 @@
-# MiGate
+# Weir
 
 合并 [MiGate](https://github.com/imzyb/MiGate)（VPS 上的 Xray / sing-box 管理）与 [MiSub](https://github.com/imzyb/MiSub)（订阅管理）：中心管理用户、节点和订阅，Gate 在 VPS 上执行，代理流量直达 Gate。包含中心（`migate-control`）、Gate Agent（`migate-gate`）、运维工具（`migate-manage`）和嵌入中心的 React 控制台。产品基线与重构计划见 `docs/design.html`、`docs/implementation.html`。
 
-开源仓库：https://github.com/shusfun/MiSub
+开源仓库：https://github.com/shusfun/weir
+
+本机命令仍是 `migate`，配置在 `/etc/migate`，数据在 `/var/lib/migate`。已有安装不用迁移。
 
 中心和 Gate 使用同一份 GitHub Release。目标机器不编译源码。公开仓库安装不需要令牌。
 
@@ -13,7 +15,7 @@
 安装只配置监听地址，不需要填写公共 URL。推荐保持 `127.0.0.1`，由 1Panel 等反代提供 HTTPS；中心按每次请求识别访问域名，订阅 / 分享链接、Cookie 的 `Secure` 与通行密钥都随之生成，因此反代需转发 `Host` 和 `X-Forwarded-Proto`（只信任本机反代的转发头）。跨站提交按浏览器 `Sec-Fetch-Site` / `Origin` 拒绝。监听 `0.0.0.0` 时是明文 HTTP 直连，安装会给出警告。
 
 ```sh
-curl -sSL https://raw.githubusercontent.com/shusfun/MiSub/main/deploy/install-online.sh | bash
+curl -sSL https://raw.githubusercontent.com/shusfun/weir/main/deploy/install-online.sh | bash
 ```
 
 常用命令：
@@ -67,7 +69,7 @@ Gate 使用 `migate-gate version` 和 `migate-gate pair --center <HTTPS 地址> 
 交互卸载会先确认。确认后询问是否清除配置和数据，直接回车保留。
 
 ```sh
-curl -sSL https://raw.githubusercontent.com/shusfun/MiSub/main/deploy/install-online.sh | bash -s -- uninstall
+curl -sSL https://raw.githubusercontent.com/shusfun/weir/main/deploy/install-online.sh | bash -s -- uninstall
 ```
 
 没有终端时必须写出 `-y`。清除数据或托管内核必须显式写出：

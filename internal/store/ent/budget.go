@@ -9,7 +9,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/imzyb/MiGate/internal/store/ent/budget"
+	"github.com/shusfun/weir/internal/store/ent/budget"
 )
 
 // Budget is the model entity for the Budget schema.

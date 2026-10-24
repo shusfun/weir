@@ -1,6 +1,6 @@
 // 动效样例页：只在开发环境注册（app.tsx 路由与 navigation.ts 菜单都在 import.meta.env.DEV 分支里），生产构建不包含。
 // 在控制台外壳里打开（侧边栏「开发 → 动效样例」），主题切换用顶栏的。
-// 逐条展示 @migate/ui 的 13 种交互反馈，用于验收手感与亮暗主题、窄屏、键盘、减少动态效果下的表现。
+// 逐条展示 @weir/ui 的 13 种交互反馈，用于验收手感与亮暗主题、窄屏、键盘、减少动态效果下的表现。
 import { useState, type ReactNode } from "react";
 import {
   Button,
@@ -40,7 +40,7 @@ import {
   TableRow,
   useBurst,
   useToast,
-} from "@migate/ui";
+} from "@weir/ui";
 import { Sparkles } from "lucide-react";
 
 function Demo({ index, title, description, children }: { index: number; title: string; description: string; children: ReactNode }) {
@@ -91,7 +91,7 @@ export function DevUiPage() {
 
   return (
     <div className="stack">
-        <PageHeader eyebrow="开发" title="动效样例" description="@migate/ui 的交互反馈。窄屏、暗色、键盘操作和系统“减少动态效果”下都应可用。" />
+        <PageHeader eyebrow="开发" title="动效样例" description="@weir/ui 的交互反馈。窄屏、暗色、键盘操作和系统“减少动态效果”下都应可用。" />
         <div className="grid gap-4 lg:grid-cols-2">
           <Demo index={1} title="按压回弹" description="按下下沉并缩小，松手冲过原位再落回。">
             <div className="actions">

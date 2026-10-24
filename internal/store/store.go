@@ -20,7 +20,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	_ "modernc.org/sqlite"
 
-	"github.com/imzyb/MiGate/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent"
 )
 
 const (

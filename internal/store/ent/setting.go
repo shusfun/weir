@@ -10,7 +10,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/imzyb/MiGate/internal/store/ent/setting"
+	"github.com/shusfun/weir/internal/store/ent/setting"
 )
 
 // Setting is the model entity for the Setting schema.

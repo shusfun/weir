@@ -3,7 +3,7 @@ package center
 import (
 	"testing"
 
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // 下载新版本不能悄悄替换 Gate 正在运行的内核；只有管理员设置默认或锁定版本后才切换。

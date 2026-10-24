@@ -9,7 +9,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/imzyb/MiGate/internal/store/ent/route"
+	"github.com/shusfun/weir/internal/store/ent/route"
 )
 
 // Route is the model entity for the Route schema.

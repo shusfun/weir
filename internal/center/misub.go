@@ -11,12 +11,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/imzyb/MiGate/internal/misub"
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/ruletemplate"
-	"github.com/imzyb/MiGate/internal/store/ent/setting"
-	"github.com/imzyb/MiGate/internal/store/ent/subnode"
-	"github.com/imzyb/MiGate/internal/store/ent/subsource"
+	"github.com/shusfun/weir/internal/misub"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/ruletemplate"
+	"github.com/shusfun/weir/internal/store/ent/setting"
+	"github.com/shusfun/weir/internal/store/ent/subnode"
+	"github.com/shusfun/weir/internal/store/ent/subsource"
 )
 
 // MiSub 订阅管理：订阅源 + 手动节点 → 订阅组（处理链、规则模板）→ 分配给用户或分享。
@@ -786,7 +786,7 @@ func (s *Server) resolveTemplate(ctx context.Context, ref string) (misub.Templat
 		if raw, ok, _ := s.Store.KV.Get(ctx, key); ok {
 			return misub.Template{Kind: "remote", Text: raw, INI: misub.IsINIPath(value)}, nil
 		}
-		resp, err := s.subFetcher().Get(ctx, value, "MiGate")
+		resp, err := s.subFetcher().Get(ctx, value, "Weir")
 		if err != nil {
 			return misub.Template{}, fmt.Errorf("远程模板拉取失败：%v", err)
 		}

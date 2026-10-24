@@ -10,11 +10,11 @@ import (
 	"time"
 )
 
-// 工作区与 MiGate 插件：dsh 的默认工作区建在 state/workspace/ 下（Linux 服务器通常没有「文档」目录，
-// dsh 自己找不到默认位置，会一直要求手动选择）；$DSH_HOME/AGENTS.md 写入 MiGate 的说明；
-// 工作区里放一份 MiGate 插件的副本，供 dsh 的创造模式适配新版本，改好后由 MiGate 校验、试启动、确认。
+// 工作区与 Weir 插件：dsh 的默认工作区建在 state/workspace/ 下（Linux 服务器通常没有「文档」目录，
+// dsh 自己找不到默认位置，会一直要求手动选择）；$DSH_HOME/AGENTS.md 写入 Weir 的说明；
+// 工作区里放一份 Weir 插件的副本，供 dsh 的创造模式适配新版本，改好后由 Weir 校验、试启动、确认。
 
-// PluginFiles 是 MiGate 插件包含的全部文件（适配草稿也只能改这几个）。
+// PluginFiles 是 Weir 插件包含的全部文件（适配草稿也只能改这几个）。
 var PluginFiles = []string{"package.json", "cordis.patch.yml", "README.md", "ADAPT.md"}
 
 // 插件补丁里的占位符：MCP 地址与令牌每次中心启动都会变，由管理进程在启动 dsh 前填入。
@@ -39,11 +39,11 @@ func FillPlaceholders(b []byte, url, token string) []byte {
 // workspacePatch 把 dsh 的「文档」目录指向 dir，dsh 首次使用时在其下建默认工作区。
 // workspace-controller 行本身没有其他配置，整体替换它的 config 是安全的。
 func workspacePatch(dir string) string {
-	return fmt.Sprintf("# 由 MiGate 生成。\n- id: workspace-controller\n  config:\n    documentsDirectory: %q\n", dir)
+	return fmt.Sprintf("# 由 Weir 生成。\n- id: workspace-controller\n  config:\n    documentsDirectory: %q\n", dir)
 }
 
 // prepareWorkspace 写好 AGENTS.md、工作区补丁、基础预设与插件补丁；返回基础补丁层、插件补丁（可能为空）
-// 与插件问题（插件读取失败时只用基础预设启动，MiGate 的工具照常可用）。
+// 与插件问题（插件读取失败时只用基础预设启动，Weir 的工具照常可用）。
 func (a *agent) prepareWorkspace(d Desired) (base []string, plugin, pluginErr string, err error) {
 	l := a.l
 	home := filepath.Join(l.State(), "home")
@@ -69,7 +69,7 @@ func (a *agent) prepareWorkspace(d Desired) (base []string, plugin, pluginErr st
 	}
 	src, rerr := os.ReadFile(filepath.Join(d.PluginDir, "cordis.patch.yml"))
 	if rerr != nil {
-		return base, "", "读取 MiGate 插件失败：" + rerr.Error(), nil
+		return base, "", "读取 Weir 插件失败：" + rerr.Error(), nil
 	}
 	plugin = filepath.Join(l.State(), "migate-plugin.patch.yml")
 	if err = os.WriteFile(plugin, FillPlaceholders(src, d.MCPURL, d.MCPToken), 0o600); err != nil {
@@ -127,7 +127,7 @@ func (a *agent) collectPlugin() JobResult {
 		files[f] = string(b)
 	}
 	if len(files) == 0 {
-		return JobResult{Result: Result{Error: "工作区里没有 MiGate 插件副本：" + a.l.PluginCopy()}}
+		return JobResult{Result: Result{Error: "工作区里没有 Weir 插件副本：" + a.l.PluginCopy()}}
 	}
 	return JobResult{Result: Result{Completed: true}, Files: files}
 }

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { SearchInput, Badge, PageHeader, Pager, Button, SkeletonList, Card, CardContent, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Dialog, DialogContent, DialogTitle, DialogDescription } from "@migate/ui";
+import { SearchInput, Badge, PageHeader, Pager, Button, SkeletonList, Card, CardContent, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Dialog, DialogContent, DialogTitle, DialogDescription } from "@weir/ui";
 import { api } from "../api";
 import { date, type Items } from "../lib/models";
 import { State } from "../components/feedback";

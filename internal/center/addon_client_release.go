@@ -86,7 +86,7 @@ func fetchClientRelease(ctx context.Context, client *http.Client, repo string, n
 	if e != nil {
 		return result
 	}
-	req.Header.Set("User-Agent", "MiGate-client-metadata")
+	req.Header.Set("User-Agent", "Weir-client-metadata")
 	req.Header.Set("Accept", "application/vnd.github+json")
 	response, e := client.Do(req)
 	if e != nil {

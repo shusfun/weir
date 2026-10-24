@@ -1,6 +1,6 @@
 #!/bin/bash
-# MiGate 安装脚本，用法对齐 Sub2API：
-#   curl -sSL https://raw.githubusercontent.com/shusfun/MiSub/main/deploy/install-online.sh | bash
+# Weir 安装脚本，用法对齐 Sub2API：
+#   curl -sSL https://raw.githubusercontent.com/shusfun/weir/main/deploy/install-online.sh | bash
 set -euo pipefail
 
 if [[ -z ${BASH_VERSION:-} ]]; then
@@ -19,7 +19,7 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-GITHUB_REPO=${MIGATE_GITHUB_REPO:-shusfun/MiSub}
+GITHUB_REPO=${MIGATE_GITHUB_REPO:-shusfun/weir}
 CURL_BIN=${MIGATE_CURL:-curl}
 TTY_DEVICE=${MIGATE_DEV_TTY:-/dev/tty}
 LANG_CHOICE=zh
@@ -41,7 +41,7 @@ declare -A MSG=(
   [zh.info]="信息" [zh.success]="成功" [zh.warning]="警告" [zh.error]="错误"
   [zh.select_lang]="请选择语言 / Select language"
   [zh.lang_zh]="中文" [zh.lang_en]="English" [zh.enter_choice]="请输入选项"
-  [zh.title]="MiGate 安装"
+  [zh.title]="Weir 安装"
   [zh.role_title]="选择安装角色"
   [zh.role_control]="中心" [zh.role_gate]="Gate" [zh.role_standalone]="单机（中心 + 本机 Gate）"
   [zh.standalone_pair]="本机 Gate 会在中心初始化完成后自动配对，无需手动 pair"
@@ -58,7 +58,7 @@ declare -A MSG=(
   [zh.one_setup]="不要同时提交 Web 和终端初始化"
   [zh.not_installed]="尚未安装" [zh.upgrading]="正在升级" [zh.current]="当前版本"
   [zh.rollback]="正在回退" [zh.same]="已经是这个版本"
-  [zh.uninstall_confirm]="这将移除 MiGate 程序和服务。"
+  [zh.uninstall_confirm]="这将移除 Weir 程序和服务。"
   [zh.are_you_sure]="确认继续？[y/N] "
   [zh.cancelled]="卸载已取消"
   [zh.purge_prompt]="同时清除配置和数据？默认保留 [y/N] "
@@ -80,7 +80,7 @@ declare -A MSG=(
   [en.info]="info" [en.success]="success" [en.warning]="warning" [en.error]="error"
   [en.select_lang]="请选择语言 / Select language"
   [en.lang_zh]="中文" [en.lang_en]="English" [en.enter_choice]="Enter choice"
-  [en.title]="MiGate installer"
+  [en.title]="Weir installer"
   [en.role_title]="Choose role"
   [en.role_control]="Center" [en.role_gate]="Gate" [en.role_standalone]="Standalone (center + local Gate)"
   [en.standalone_pair]="The local Gate pairs itself after the center is initialized; no manual pair needed"
@@ -97,7 +97,7 @@ declare -A MSG=(
   [en.one_setup]="Do not submit the Web wizard and the terminal wizard at the same time"
   [en.not_installed]="Not installed" [en.upgrading]="Upgrading" [en.current]="Current version"
   [en.rollback]="Rolling back" [en.same]="Already at this version"
-  [en.uninstall_confirm]="This removes the MiGate program and service."
+  [en.uninstall_confirm]="This removes the Weir program and service."
   [en.are_you_sure]="Continue? [y/N] "
   [en.cancelled]="Uninstall cancelled"
   [en.purge_prompt]="Also remove configuration and data? Default is keep [y/N] "
@@ -507,7 +507,7 @@ show_help() {
   echo "  MIGATE_GITHUB_MIRRORS  加速镜像主机名，逗号分隔；off 关闭"
   echo ""
   echo "Examples:"
-  echo "  curl -sSL https://raw.githubusercontent.com/shusfun/MiSub/main/deploy/install-online.sh | bash"
+  echo "  curl -sSL https://raw.githubusercontent.com/shusfun/weir/main/deploy/install-online.sh | bash"
   echo "  $0 install standalone"
   echo "  $0 upgrade"
   echo "  $0 rollback v0.1.10"

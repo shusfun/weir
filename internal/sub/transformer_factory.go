@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	js "github.com/imzyb/MiGate/internal/sub/jscompat"
+	js "github.com/shusfun/weir/internal/sub/jscompat"
 )
 
 // 移植自 builtin-egern-generator.js 与 transformer-factory.js

@@ -1,4 +1,4 @@
-module github.com/imzyb/MiGate
+module github.com/shusfun/weir
 
 go 1.25.0
 

@@ -18,9 +18,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
 
-	"github.com/imzyb/MiGate/internal/buildinfo"
-	"github.com/imzyb/MiGate/internal/store"
-	"github.com/imzyb/MiGate/internal/store/ent/user"
+	"github.com/shusfun/weir/internal/buildinfo"
+	"github.com/shusfun/weir/internal/store"
+	"github.com/shusfun/weir/internal/store/ent/user"
 )
 
 // ServiceUnit 是中心的 systemd 单元名。
@@ -274,7 +274,7 @@ func RunOperatorMenu(path string, in io.Reader, out io.Writer) error {
 		if cfg.Installed {
 			state = "已初始化（" + cfg.Store.Driver + "）"
 		}
-		fmt.Fprintf(out, "\nMiGate 中心 %s · %s · 监听 %s\n", buildinfo.Version, state, cfg.Listen)
+		fmt.Fprintf(out, "\nWeir 中心 %s · %s · 监听 %s\n", buildinfo.Version, state, cfg.Listen)
 		fmt.Fprintln(out, "  1) 服务状态   2) 启动   3) 停止   4) 重启")
 		if cfg.Installed {
 			fmt.Fprintln(out, "  5) 重设管理员密码")

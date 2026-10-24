@@ -1,4 +1,4 @@
-// MiGate 轻提示：操作结果的短暂反馈。错误与需要核对的结果仍在页面内常驻显示。
+// Weir 轻提示：操作结果的短暂反馈。错误与需要核对的结果仍在页面内常驻显示。
 import { Toast } from "@base-ui/react/toast";
 import { XIcon } from "lucide-react";
 import type { ReactNode } from "react";

@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // Paths 是 Gate 在本机使用的固定位置；测试与容器里可整体替换。

@@ -23,11 +23,11 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/imzyb/MiGate/internal/center"
-	"github.com/imzyb/MiGate/internal/gate"
-	"github.com/imzyb/MiGate/internal/kernels"
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/xray"
+	"github.com/shusfun/weir/internal/center"
+	"github.com/shusfun/weir/internal/gate"
+	"github.com/shusfun/weir/internal/kernels"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/xray"
 )
 
 type env struct {

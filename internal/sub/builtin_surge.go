@@ -3,7 +3,7 @@ package sub
 import (
 	"strings"
 
-	js "github.com/imzyb/MiGate/internal/sub/jscompat"
+	js "github.com/shusfun/weir/internal/sub/jscompat"
 )
 
 // 移植自 functions/modules/subscription/builtin-surge-generator.js（Surge 不支持 VLESS，此类节点被跳过）。

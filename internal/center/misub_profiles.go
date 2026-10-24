@@ -10,14 +10,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/imzyb/MiGate/internal/misub"
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/predicate"
-	"github.com/imzyb/MiGate/internal/store/ent/subgrant"
-	"github.com/imzyb/MiGate/internal/store/ent/subnode"
-	"github.com/imzyb/MiGate/internal/store/ent/subprofile"
-	"github.com/imzyb/MiGate/internal/store/ent/subsource"
-	"github.com/imzyb/MiGate/internal/store/ent/user"
+	"github.com/shusfun/weir/internal/misub"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/predicate"
+	"github.com/shusfun/weir/internal/store/ent/subgrant"
+	"github.com/shusfun/weir/internal/store/ent/subnode"
+	"github.com/shusfun/weir/internal/store/ent/subprofile"
+	"github.com/shusfun/weir/internal/store/ent/subsource"
+	"github.com/shusfun/weir/internal/store/ent/user"
 )
 
 // profileSettings 是订阅组可覆盖的设置；缺省字段沿用全局默认。

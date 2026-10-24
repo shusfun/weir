@@ -3,7 +3,7 @@
 set -eu
 umask 077
 
-repo=${MIGATE_GITHUB_REPO:-shusfun/MiSub}
+repo=${MIGATE_GITHUB_REPO:-shusfun/weir}
 token_file=${MIGATE_GITHUB_TOKEN_FILE:-/etc/migate-control/github-update.token}
 release_root=${MIGATE_GATE_RELEASE_DIR:-/var/lib/migate-control/gate-release}
 status_file=${MIGATE_RELEASE_STATUS:-/var/lib/migate-control/release-status.json}

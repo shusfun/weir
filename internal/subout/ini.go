@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/imzyb/MiGate/internal/subscription"
+	"github.com/shusfun/weir/internal/subscription"
 )
 
 // Ported from pinned MiSub's Surge/Loon/QuanX generators (MIT). Unsupported

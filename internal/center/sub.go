@@ -16,10 +16,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/credential"
-	"github.com/imzyb/MiGate/internal/store/ent/link"
-	"github.com/imzyb/MiGate/internal/subout"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/credential"
+	"github.com/shusfun/weir/internal/store/ent/link"
+	"github.com/shusfun/weir/internal/subout"
 )
 
 func (s *Server) subRoutes(r *gin.Engine, ready *gin.RouterGroup) {
@@ -254,7 +254,7 @@ func (s *Server) serveSub(c *gin.Context) {
 	}
 	c.Header("Subscription-Userinfo", fmt.Sprintf("upload=0; download=%d; total=%d; expire=%d", u.Used, u.Quota, expire))
 	c.Header("Profile-Update-Interval", "12")
-	c.Header("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape("MiGate-"+firstNonEmpty(l.Name, "订阅")))
+	c.Header("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape("Weir-"+firstNonEmpty(l.Name, "订阅")))
 	_ = l.Update().SetLastUsedAt(time.Now()).Exec(ctx)
 	c.Data(200, contentType, body)
 }

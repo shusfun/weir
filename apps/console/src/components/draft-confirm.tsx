@@ -1,8 +1,8 @@
-// AI 草稿确认窗：dsh（抽屉对话或后台分析）提交、系统实测通过的草稿，在任何页面都由 MiGate 自己弹窗确认。
-// 弹窗内容从 MiGate 接口读取，不接收 dsh 页面发来的任何消息；dsh 的说明只按纯文本显示。
+// AI 草稿确认窗：dsh（抽屉对话或后台分析）提交、系统实测通过的草稿，在任何页面都由 Weir 自己弹窗确认。
+// 弹窗内容从 Weir 接口读取，不接收 dsh 页面发来的任何消息；dsh 的说明只按纯文本显示。
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Notice, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useToast } from "@migate/ui";
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Notice, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useToast } from "@weir/ui";
 import { api } from "../api";
 
 interface Change {
@@ -100,7 +100,7 @@ export function DraftConfirm() {
     <Dialog open onOpenChange={(o) => !o && !busy && setLater((l) => [...l, d.id])}>
       <DialogContent size="lg">
         <DialogTitle className="flex flex-wrap items-center gap-2">
-          {d.kind === "defense" ? "确认防御草稿" : d.kind === "plugin" ? `确认插件适配 · MiGate 插件 ${d.plugin?.version ?? ""}` : `确认 AI 草稿 · ${d.node_name ?? "节点"}`}
+          {d.kind === "defense" ? "确认防御草稿" : d.kind === "plugin" ? `确认插件适配 · Weir 插件 ${d.plugin?.version ?? ""}` : `确认 AI 草稿 · ${d.node_name ?? "节点"}`}
           <Badge variant="soft" tone="neutral">{d.source === "analysis" ? "dsh 后台分析" : "dsh 对话"}</Badge>
           {pending > 1 && <Badge variant="soft" tone="warn">还有 {pending - 1} 份待确认</Badge>}
         </DialogTitle>

@@ -9,7 +9,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/imzyb/MiGate/internal/store/ent/recoverycode"
+	"github.com/shusfun/weir/internal/store/ent/recoverycode"
 )
 
 // RecoveryCode is the model entity for the RecoveryCode schema.

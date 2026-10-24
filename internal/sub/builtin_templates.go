@@ -3,7 +3,7 @@ package sub
 import (
 	"embed"
 
-	js "github.com/imzyb/MiGate/internal/sub/jscompat"
+	js "github.com/shusfun/weir/internal/sub/jscompat"
 )
 
 // 移植自 functions/modules/subscription/builtin-template-registry.js：6 个内置 ini 分流模板。

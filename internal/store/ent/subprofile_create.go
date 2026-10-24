@@ -11,7 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/imzyb/MiGate/internal/store/ent/subprofile"
+	"github.com/shusfun/weir/internal/store/ent/subprofile"
 )
 
 // SubProfileCreate is the builder for creating a SubProfile entity.

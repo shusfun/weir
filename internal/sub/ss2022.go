@@ -3,7 +3,7 @@ package sub
 import (
 	"strings"
 
-	js "github.com/imzyb/MiGate/internal/sub/jscompat"
+	js "github.com/shusfun/weir/internal/sub/jscompat"
 )
 
 // 移植自 functions/modules/utils/ss2022-validator.js

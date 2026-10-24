@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/imzyb/MiGate/internal/corefile"
-	"github.com/imzyb/MiGate/internal/paths"
-	runtimecmd "github.com/imzyb/MiGate/internal/runtime/command"
+	"github.com/shusfun/weir/internal/corefile"
+	"github.com/shusfun/weir/internal/paths"
+	runtimecmd "github.com/shusfun/weir/internal/runtime/command"
 )
 
 var (

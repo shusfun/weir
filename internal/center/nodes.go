@@ -15,16 +15,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/imzyb/MiGate/internal/db"
-	"github.com/imzyb/MiGate/internal/kernelconf"
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/chain"
-	"github.com/imzyb/MiGate/internal/store/ent/credential"
-	"github.com/imzyb/MiGate/internal/store/ent/gate"
-	"github.com/imzyb/MiGate/internal/store/ent/gateaction"
-	"github.com/imzyb/MiGate/internal/store/ent/node"
-	"github.com/imzyb/MiGate/internal/store/ent/route"
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/internal/db"
+	"github.com/shusfun/weir/internal/kernelconf"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/chain"
+	"github.com/shusfun/weir/internal/store/ent/credential"
+	"github.com/shusfun/weir/internal/store/ent/gate"
+	"github.com/shusfun/weir/internal/store/ent/gateaction"
+	"github.com/shusfun/weir/internal/store/ent/node"
+	"github.com/shusfun/weir/internal/store/ent/route"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 func (s *Server) nodeRoutes(admin *gin.RouterGroup) {

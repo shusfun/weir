@@ -1,7 +1,7 @@
 // 证书：上传域名证书或生成自签证书（QUIC 节点用指纹固定）。私钥只进不出。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Notice, Segmented, Textarea } from "@migate/ui";
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Notice, Segmented, Textarea } from "@weir/ui";
 import { api } from "../api";
 import { date } from "../lib/models";
 import type { Cert } from "../lib/core";

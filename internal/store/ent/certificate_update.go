@@ -11,8 +11,8 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/imzyb/MiGate/internal/store/ent/certificate"
-	"github.com/imzyb/MiGate/internal/store/ent/predicate"
+	"github.com/shusfun/weir/internal/store/ent/certificate"
+	"github.com/shusfun/weir/internal/store/ent/predicate"
 )
 
 // CertificateUpdate is the builder for updating Certificate entities.

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/imzyb/MiGate/internal/db"
+	"github.com/shusfun/weir/internal/db"
 )
 
 func TestBuildConfig_Hysteria2Inbound(t *testing.T) {

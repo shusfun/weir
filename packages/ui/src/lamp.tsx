@@ -1,4 +1,4 @@
-// MiGate 状态灯：亮 / 警告 / 故障 / 信息 / 熄灭 / 未知。未知为空心虚线，避免把缺失数据显示成正常。
+// Weir 状态灯：亮 / 警告 / 故障 / 信息 / 熄灭 / 未知。未知为空心虚线，避免把缺失数据显示成正常。
 import { ComponentProps } from "react";
 import { cn } from "cn";
 

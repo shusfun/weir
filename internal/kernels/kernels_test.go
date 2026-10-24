@@ -117,7 +117,7 @@ func fakeGitHub(t *testing.T, tamper bool) (*httptest.Server, *Fetcher) {
 	t.Helper()
 	assets := map[string][]byte{
 		"/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip":                         zipWith("xray", []byte("xray-bin")),
-		"/shusfun/MiSub/releases/download/sing-box-v1.14.3/sing-box-1.14.3-linux-amd64.tar.gz": tarGzWith("sing-box-1.14.3-linux-amd64/sing-box", []byte("sb-bin")),
+		"/shusfun/weir/releases/download/sing-box-v1.14.3/sing-box-1.14.3-linux-amd64.tar.gz": tarGzWith("sing-box-1.14.3-linux-amd64/sing-box", []byte("sb-bin")),
 		"/MetaCubeX/mihomo/releases/download/v1.19.33/mihomo-linux-amd64-v1.19.33.gz":          gzWith([]byte("mihomo-bin")),
 	}
 	var srv *httptest.Server
@@ -125,7 +125,7 @@ func fakeGitHub(t *testing.T, tamper bool) (*httptest.Server, *Fetcher) {
 		base := srv.URL
 		releases := map[string][]map[string]any{
 			"/repos/XTLS/Xray-core/releases":   {{"tag_name": "v26.3.27", "assets": []map[string]any{{"name": "Xray-linux-64.zip", "browser_download_url": base + "/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip", "digest": digestOf(assets["/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip"])}}}, {"tag_name": "v27.0.0-pre", "prerelease": true}},
-			"/repos/shusfun/MiSub/releases":    {{"tag_name": "v0.1.10"}, {"tag_name": "sing-box-v1.14.3", "assets": []map[string]any{{"name": "sing-box-1.14.3-linux-amd64.tar.gz", "browser_download_url": base + "/shusfun/MiSub/releases/download/sing-box-v1.14.3/sing-box-1.14.3-linux-amd64.tar.gz", "digest": digestOf(assets["/shusfun/MiSub/releases/download/sing-box-v1.14.3/sing-box-1.14.3-linux-amd64.tar.gz"])}}}},
+			"/repos/shusfun/weir/releases":    {{"tag_name": "v0.1.10"}, {"tag_name": "sing-box-v1.14.3", "assets": []map[string]any{{"name": "sing-box-1.14.3-linux-amd64.tar.gz", "browser_download_url": base + "/shusfun/weir/releases/download/sing-box-v1.14.3/sing-box-1.14.3-linux-amd64.tar.gz", "digest": digestOf(assets["/shusfun/weir/releases/download/sing-box-v1.14.3/sing-box-1.14.3-linux-amd64.tar.gz"])}}}},
 			"/repos/MetaCubeX/mihomo/releases": {{"tag_name": "v1.19.33", "assets": []map[string]any{{"name": "mihomo-linux-amd64-v1.19.33.gz", "browser_download_url": base + "/MetaCubeX/mihomo/releases/download/v1.19.33/mihomo-linux-amd64-v1.19.33.gz", "digest": digestOf(assets["/MetaCubeX/mihomo/releases/download/v1.19.33/mihomo-linux-amd64-v1.19.33.gz"])}}}},
 		}
 		if list, ok := releases[r.URL.Path]; ok {

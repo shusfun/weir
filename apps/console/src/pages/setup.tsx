@@ -26,7 +26,7 @@ import { Steps, Step, Field, Notice, CheckMark, IconTile, prefersReducedMotion, 
   SelectTrigger,
   SelectValue,
   Switch,
-} from "@migate/ui";
+} from "@weir/ui";
 import { TextField } from "../components/form-field";
 import { api } from "../api";
 import { accountPasswordError } from "../password";
@@ -221,7 +221,7 @@ export function SetupPage({ done }: { done: () => void }) {
             <span>
               <Activity size={26} />
             </span>
-            <strong>MiGate</strong>
+            <strong>Weir</strong>
           </div>
           <h1>初始化你的控制中心</h1>
           <p>选择存储，创建管理员后完成安装。</p>

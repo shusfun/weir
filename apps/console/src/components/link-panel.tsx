@@ -1,7 +1,7 @@
 // 订阅链接与自建链式代理：管理员（按用户）与用户本人共用。base 为 "/admin/users/<id>" 或 "/me"。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Checkbox, CodeBlock, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Label, Notice, SectionHeader, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SkeletonList, Switch, useToast } from "@migate/ui";
+import { Badge, Button, Checkbox, CodeBlock, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Label, Notice, SectionHeader, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SkeletonList, Switch, useToast } from "@weir/ui";
 import { Plus, QrCode, RefreshCw, Trash2 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "../api";

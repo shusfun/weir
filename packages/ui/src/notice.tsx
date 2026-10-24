@@ -1,4 +1,4 @@
-// MiGate 提示条：页面 / 弹窗内常驻的说明、结果与错误。左侧状态色刻条，浅色底。
+// Weir 提示条：页面 / 弹窗内常驻的说明、结果与错误。左侧状态色刻条，浅色底。
 // tone=bad 默认 role="alert"（读屏立即播报）；其余语气不默认加 live region，需要时由调用方传 role="status"。
 import { ComponentProps } from "react";
 import { cn } from "cn";

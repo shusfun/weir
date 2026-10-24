@@ -1,7 +1,7 @@
 // VPS 详情：主机观测（缺失显示「未知」）、本机其他程序占用的端口、内核版本锁定、内核诊断 / 重启、节点出口关系。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Field, Notice, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Sheet, SheetContent, useToast } from "@migate/ui";
+import { Badge, Button, Field, Notice, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Sheet, SheetContent, useToast } from "@weir/ui";
 import { api } from "../api";
 import { bytes, date } from "../lib/models";
 import type { Gate, NodeItem } from "../lib/core";

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 func nodeSetting(m map[string]any, key string) string {

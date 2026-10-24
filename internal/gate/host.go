@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 var cpuPrev struct {

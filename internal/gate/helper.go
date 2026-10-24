@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 var helperKernels = []string{"xray", "sing-box"}

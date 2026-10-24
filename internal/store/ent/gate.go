@@ -10,7 +10,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/imzyb/MiGate/internal/store/ent/gate"
+	"github.com/shusfun/weir/internal/store/ent/gate"
 )
 
 // Gate is the model entity for the Gate schema.

@@ -1,5 +1,5 @@
-// 文本类表单项的便捷写法：标签 + 单行输入 / 多行文本。布局与说明由 @migate/ui 的 Field 负责。
-import { Field, Input, Textarea } from "@migate/ui";
+// 文本类表单项的便捷写法：标签 + 单行输入 / 多行文本。布局与说明由 @weir/ui 的 Field 负责。
+import { Field, Input, Textarea } from "@weir/ui";
 export function TextField({
   label,
   name,

@@ -12,8 +12,8 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
-	"github.com/imzyb/MiGate/internal/store/ent/gate"
-	"github.com/imzyb/MiGate/internal/store/ent/predicate"
+	"github.com/shusfun/weir/internal/store/ent/gate"
+	"github.com/shusfun/weir/internal/store/ent/predicate"
 )
 
 // GateUpdate is the builder for updating Gate entities.

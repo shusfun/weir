@@ -14,10 +14,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/imzyb/MiGate/internal/mailer"
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/setting"
-	"github.com/imzyb/MiGate/internal/store/ent/user"
+	"github.com/shusfun/weir/internal/mailer"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/setting"
+	"github.com/shusfun/weir/internal/store/ent/user"
 )
 
 // 邮件：SMTP 设置、找回密码与（可选的）自助注册。自助注册默认关闭，注册的用户不会自动获得任何节点。
@@ -144,7 +144,7 @@ func (s *Server) putSMTP(c *gin.Context) {
 // testSMTP 给当前管理员自己发一封测试邮件。
 func (s *Server) testSMTP(c *gin.Context) {
 	u := c.MustGet("account").(*ent.User)
-	if err := s.sendMail(c.Request.Context(), u.Email, "MiGate 测试邮件", "这是一封测试邮件，说明邮件服务设置可用。"); err != nil {
+	if err := s.sendMail(c.Request.Context(), u.Email, "Weir 测试邮件", "这是一封测试邮件，说明邮件服务设置可用。"); err != nil {
 		failDetail(c, 502, "smtp_failed", err.Error(), nil)
 		return
 	}
@@ -230,9 +230,9 @@ func (s *Server) sendEmailCode(c *gin.Context) {
 			failure(c, 503, "email_code_unavailable")
 			return
 		}
-		subject, body := "MiGate 找回密码", "你的验证码是 "+code+"，10 分钟内有效。如果不是你本人操作，请忽略这封邮件。"
+		subject, body := "Weir 找回密码", "你的验证码是 "+code+"，10 分钟内有效。如果不是你本人操作，请忽略这封邮件。"
 		if req.Purpose != "reset" {
-			subject, body = "MiGate 注册验证", "你的注册验证码是 "+code+"，10 分钟内有效。"
+			subject, body = "Weir 注册验证", "你的注册验证码是 "+code+"，10 分钟内有效。"
 		}
 		if err = s.sendMail(ctx, email, subject, body); err != nil {
 			s.audit(c, "auth.email", req.Purpose, "failed")

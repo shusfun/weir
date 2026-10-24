@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // socket 是 /proc/net 中一个处于监听（TCP LISTEN）或已绑定未连接（UDP）状态的套接字。

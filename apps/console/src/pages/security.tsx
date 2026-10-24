@@ -3,7 +3,7 @@ import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
 import { KeyRound, ShieldCheck, Smartphone, LockKeyhole } from "lucide-react";
-import { Badge, CodeBlock, IconTile, Notice, PageHeader, PageState, SectionHeader, Button, Card, CardContent, Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from "@migate/ui";
+import { Badge, CodeBlock, IconTile, Notice, PageHeader, PageState, SectionHeader, Button, Card, CardContent, Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from "@weir/ui";
 import { api } from "../api";
 import { accountPasswordError } from "../password";
 import { passkey } from "../lib/passkey";

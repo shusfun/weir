@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/imzyb/MiGate/internal/kernels"
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/setting"
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/internal/kernels"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/setting"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // dataDir 是中心的数据目录：内核缓存、版本档案覆盖等；未配置时放在配置文件同级的 data/ 下。

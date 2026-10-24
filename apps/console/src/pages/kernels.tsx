@@ -1,7 +1,7 @@
 // 内核：中心从上游拉取 Xray / sing-box / mihomo 并按官方摘要校验，再推送给 VPS；配置按内核版本档案生成。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Card, CardContent, CodeBlock, Dialog, DialogContent, DialogDescription, DialogTitle, Notice, PageHeader, SectionHeader, Segmented, SkeletonCards, SkeletonList, useToast } from "@migate/ui";
+import { Badge, Button, Card, CardContent, CodeBlock, Dialog, DialogContent, DialogDescription, DialogTitle, Notice, PageHeader, SectionHeader, Segmented, SkeletonCards, SkeletonList, useToast } from "@weir/ui";
 import { Download, Star } from "lucide-react";
 import { api } from "../api";
 import { State } from "../components/feedback";
@@ -40,7 +40,7 @@ export function KernelsPage() {
   }
   return (
     <div className="stack">
-      <PageHeader eyebrow="工作区" title="内核" description="内核只以独立程序运行，升级不需要更新 MiGate。中心拉取后按官方摘要校验，再推送给 VPS；VPS 不访问 GitHub。" />
+      <PageHeader eyebrow="工作区" title="内核" description="内核只以独立程序运行，升级不需要更新 Weir。中心拉取后按官方摘要校验，再推送给 VPS；VPS 不访问 GitHub。" />
       {q.isPending || q.error ? (
         <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} skeleton={<SkeletonCards count={3} lines={3} />} />
       ) : (

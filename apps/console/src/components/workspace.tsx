@@ -1,7 +1,7 @@
 // 控制台外壳：左侧控制条（导航 + 左下角个人中心）、顶栏（标题 / 快速跳转 / 任务托盘 / 主题）、移动端侧边面板。
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { IconTile, Button, Kbd, Menu, MenuTrigger, MenuContent, MenuItem, MenuSeparator, MenuToggle, Sheet, SheetClose, SheetContent, StatusLamp, Tooltip, TooltipProvider } from "@migate/ui";
+import { IconTile, Button, Kbd, Menu, MenuTrigger, MenuContent, MenuItem, MenuSeparator, MenuToggle, Sheet, SheetClose, SheetContent, StatusLamp, Tooltip, TooltipProvider } from "@weir/ui";
 import { PanelLeftClose, PanelLeftOpen, LogOut, ShieldCheck, Link2, Search, Activity, ChevronsUpDown } from "lucide-react";
 import { ThemeControl } from "../theme";
 import { navigation, navGroups, currentNav } from "../shell/navigation";
@@ -102,9 +102,9 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
     <TooltipProvider delay={300}>
       <div className="shell" data-collapsed={collapsed}>
         <aside className="rail">
-          <NavLink to={admin ? "/gates" : "/subscription"} className="rail-brand" aria-label="MiGate 首页">
+          <NavLink to={admin ? "/gates" : "/subscription"} className="rail-brand" aria-label="Weir 首页">
             <span className="rail-mark"><Activity size={19} /></span>
-            <strong>MiGate</strong>
+            <strong>Weir</strong>
           </NavLink>
           <nav className="rail-nav" aria-label="主导航">{nav(collapsed)}</nav>
           <div className="rail-foot">
@@ -120,7 +120,7 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
               <MenuToggle open={drawer} />
             </Button>
             <div className="topbar-title">
-              <h1>{current?.label ?? "MiGate"}</h1>
+              <h1>{current?.label ?? "Weir"}</h1>
             </div>
             <div className="topbar-tools">
               <Button className="command-trigger min-w-[220px] justify-start text-[var(--mg-ink-3)] max-[1100px]:min-w-0" variant="outline" size="sm" onClick={() => setPalette(true)} aria-label="快速跳转">
@@ -135,7 +135,7 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
         </div>
         <Sheet open={drawer} onOpenChange={setDrawer}>
           <SheetContent
-            title="MiGate"
+            title="Weir"
             className="[&_[data-slot=sheet-header]]:pl-[34px]"
             // 关闭后焦点回到顶栏的同一位置
             finalFocus={drawerTrigger}

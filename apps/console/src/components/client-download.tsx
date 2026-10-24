@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChoiceCard, CodeBlock, Field, Notice,
   Button, Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter, Progress, StatusLamp,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SectionHeader,
-} from "@migate/ui";
+} from "@weir/ui";
 import { Download, Gauge, RefreshCw } from "lucide-react";
 import { api } from "../api";
 import type { CatalogClient } from "../lib/models";

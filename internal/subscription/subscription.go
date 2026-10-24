@@ -18,12 +18,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/imzyb/MiGate/internal/db"
+	"github.com/shusfun/weir/internal/db"
 )
 
 const (
 	MaxBodyBytes = 2 << 20
-	UserAgent    = "MiGate outbound-subscription/1.0"
+	UserAgent    = "Weir outbound-subscription/1.0"
 )
 
 type ParsedLink struct {

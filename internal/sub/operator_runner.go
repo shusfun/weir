@@ -3,7 +3,7 @@ package sub
 import (
 	"strings"
 
-	js "github.com/imzyb/MiGate/internal/sub/jscompat"
+	js "github.com/shusfun/weir/internal/sub/jscompat"
 )
 
 // 移植自 functions/utils/operator-runner.js：Sub-Store 风格的算子链（过滤、重命名、受限 DSL、排序、去重）。

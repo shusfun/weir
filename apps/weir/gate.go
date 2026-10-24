@@ -8,8 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/imzyb/MiGate/internal/buildinfo"
-	"github.com/imzyb/MiGate/internal/gate"
+	"github.com/shusfun/weir/internal/buildinfo"
+	"github.com/shusfun/weir/internal/gate"
 )
 
 // runGate：Gate 执行端。run 为 Agent（migate-gate 身份），helper 为 root 辅助程序。

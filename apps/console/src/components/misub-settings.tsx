@@ -1,7 +1,7 @@
 // 规则模板（6 个内置 + 自定义 ini / Clash YAML）与订阅管理的默认设置。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Label, Notice, SectionHeader, Segmented, Switch, Textarea, useToast } from "@migate/ui";
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Label, Notice, SectionHeader, Segmented, Switch, Textarea, useToast } from "@weir/ui";
 import { Plus, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { ruleLevels, type CustomTemplate, type MisubSettings } from "../lib/misub";

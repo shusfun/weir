@@ -10,7 +10,7 @@ import { ReorderButtons, Field, Notice, SectionHeader,
   SelectItem,
   Switch,
   Textarea,
-} from "@migate/ui";
+} from "@weir/ui";
 import { Plus, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { OperatorChoices, PatternRules, SortFields } from "./operator-fields";

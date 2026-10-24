@@ -1,4 +1,4 @@
-// MiGate 读数窗与表头。value 为 null / undefined 时显示“未知”，Meter 显示斜纹，不落到 0。
+// Weir 读数窗与表头。value 为 null / undefined 时显示“未知”，Meter 显示斜纹，不落到 0。
 import { ComponentProps, ReactNode } from "react";
 import { cn } from "cn";
 import { Counter, isCountable } from "./counter";

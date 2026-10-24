@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/imzyb/MiGate/internal/subscription"
+	"github.com/shusfun/weir/internal/subscription"
 	"gopkg.in/yaml.v3"
 )
 

@@ -7,9 +7,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/resource"
-	"github.com/imzyb/MiGate/internal/store/ent/user"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/resource"
+	"github.com/shusfun/weir/internal/store/ent/user"
 )
 
 // 外部接口（对应 MiSub 的 external API）：管理员创建的 API 令牌以 Bearer 方式调用，

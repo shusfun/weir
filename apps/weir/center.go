@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/imzyb/MiGate/internal/buildinfo"
-	"github.com/imzyb/MiGate/internal/center"
+	"github.com/shusfun/weir/internal/buildinfo"
+	"github.com/shusfun/weir/internal/center"
 )
 
 //go:embed static/*
@@ -99,7 +99,7 @@ func runCenter(args []string) int {
 		defer done()
 		httpServer.Shutdown(shutdown)
 	}()
-	fmt.Println("MiGate center listening on", cfg.Listen)
+	fmt.Println("Weir center listening on", cfg.Listen)
 	if err = httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return fatal(err)
 	}

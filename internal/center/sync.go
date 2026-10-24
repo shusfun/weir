@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/chain"
-	"github.com/imzyb/MiGate/internal/store/ent/credential"
-	"github.com/imzyb/MiGate/internal/store/ent/link"
-	"github.com/imzyb/MiGate/internal/store/ent/node"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/chain"
+	"github.com/shusfun/weir/internal/store/ent/credential"
+	"github.com/shusfun/weir/internal/store/ent/link"
+	"github.com/shusfun/weir/internal/store/ent/node"
 )
 
 // 凭据由「期望状态」推导：每条链接 × 它覆盖的每个节点 / 自建链式代理各一份独立凭据。

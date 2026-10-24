@@ -11,8 +11,8 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/imzyb/MiGate/internal/store/ent/predicate"
-	"github.com/imzyb/MiGate/internal/store/ent/ruletemplate"
+	"github.com/shusfun/weir/internal/store/ent/predicate"
+	"github.com/shusfun/weir/internal/store/ent/ruletemplate"
 )
 
 // RuleTemplateUpdate is the builder for updating RuleTemplate entities.

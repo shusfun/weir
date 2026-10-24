@@ -12,10 +12,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/imzyb/MiGate/internal/buildinfo"
-	"github.com/imzyb/MiGate/internal/kernelconf"
-	"github.com/imzyb/MiGate/internal/xray"
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/internal/buildinfo"
+	"github.com/shusfun/weir/internal/kernelconf"
+	"github.com/shusfun/weir/internal/xray"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // Agent 以 migate-gate 身份运行：与中心通信、计量、本地执行额度与到期，经辅助程序应用配置。

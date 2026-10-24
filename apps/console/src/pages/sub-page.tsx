@@ -1,7 +1,7 @@
 // 浏览器打开订阅地址时的一键导入页：不需要登录，只显示本链接的用量、到期与节点名称（不含凭据）。
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
-import { Badge, Button, Card, CardContent, CopyButton, Input, Meter, PageHeader, Readout } from "@migate/ui";
+import { Badge, Button, Card, CardContent, CopyButton, Input, Meter, PageHeader, Readout } from "@weir/ui";
 import { ArrowUpRight } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "../api";
@@ -54,7 +54,7 @@ export function SubPage() {
       </main>
     );
   const d = info.data;
-  const title = "MiGate" + (d.name ? " · " + d.name : "");
+  const title = "Weir" + (d.name ? " · " + d.name : "");
   return (
     <main className="mx-auto grid w-full max-w-[960px] gap-4 p-4">
       <PageHeader eyebrow="订阅" title={title} description="在下方选择你使用的客户端一键导入；电脑上的客户端也可复制地址手动添加。" />

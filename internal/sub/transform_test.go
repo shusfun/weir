@@ -3,7 +3,7 @@ package sub
 import (
 	"testing"
 
-	js "github.com/imzyb/MiGate/internal/sub/jscompat"
+	js "github.com/shusfun/weir/internal/sub/jscompat"
 )
 
 func anys(list []any) *js.Array { return &js.Array{Items: list} }

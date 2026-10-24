@@ -9,7 +9,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/imzyb/MiGate/internal/store/ent/subgrant"
+	"github.com/shusfun/weir/internal/store/ent/subgrant"
 )
 
 // SubGrant is the model entity for the SubGrant schema.

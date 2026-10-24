@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imzyb/MiGate/internal/store/ent/user"
+	"github.com/shusfun/weir/internal/store/ent/user"
 )
 
 func openSQLiteForTest(t *testing.T) *Store {

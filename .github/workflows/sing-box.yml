@@ -1,5 +1,5 @@
 # 跟随上游 sing-box 正式版，按官方参数加上 with_v2ray_api（按用户统计流量需要）编译，
-# 发布为 sing-box-v<版本>。不标记为 latest，避免影响 MiGate 程序自身的更新检查。
+# 发布为 sing-box-v<版本>。不标记为 latest，避免影响 Weir 程序自身的更新检查。
 name: sing-box
 
 on:

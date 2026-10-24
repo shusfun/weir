@@ -61,9 +61,9 @@ func TestNormalizeVersionDropsTagsSuffix(t *testing.T) {
 	}
 }
 
-func TestServiceNameUsesMiGateSystemdUnit(t *testing.T) {
+func TestServiceNameUsesWeirSystemdUnit(t *testing.T) {
 	if got := ServiceName(); got != "migate-sing-box" {
-		t.Fatalf("expected MiGate sing-box service name, got %q", got)
+		t.Fatalf("expected Weir sing-box service name, got %q", got)
 	}
 }
 

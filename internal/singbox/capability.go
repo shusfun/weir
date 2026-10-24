@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/imzyb/MiGate/internal/db"
-	runtimecmd "github.com/imzyb/MiGate/internal/runtime/command"
+	"github.com/shusfun/weir/internal/db"
+	runtimecmd "github.com/shusfun/weir/internal/runtime/command"
 )
 
 const StatsUnsupportedMessage = "sing-box binary does not include with_v2ray_api"

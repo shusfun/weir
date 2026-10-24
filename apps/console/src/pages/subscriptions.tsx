@@ -1,5 +1,5 @@
 // 订阅管理（MiSub）：订阅源 → 手动节点 → 订阅组 → 规则模板 → 默认设置。
-import { Card, CardContent, PageHeader, Tabs, TabsList, TabsPanel, TabsTab } from "@migate/ui";
+import { Card, CardContent, PageHeader, Tabs, TabsList, TabsPanel, TabsTab } from "@weir/ui";
 import { useSearchParams } from "react-router-dom";
 import { SourcesPanel } from "../components/misub-sources";
 import { NodesPanel } from "../components/misub-nodes";

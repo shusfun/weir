@@ -10,7 +10,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/imzyb/MiGate/internal/store/ent/subnode"
+	"github.com/shusfun/weir/internal/store/ent/subnode"
 )
 
 // SubNode is the model entity for the SubNode schema.

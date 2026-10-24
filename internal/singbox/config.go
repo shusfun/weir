@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	panelcfg "github.com/imzyb/MiGate/internal/config"
-	"github.com/imzyb/MiGate/internal/db"
+	panelcfg "github.com/shusfun/weir/internal/config"
+	"github.com/shusfun/weir/internal/db"
 )
 
 const SystemDirectOutboundTag = "migate-system-direct"
@@ -259,7 +259,7 @@ func BuildConfigWithOptions(inbounds []db.Inbound, opts BuildOptions) Config {
 			}
 
 			// sing-box v1.13 requires TLS for Hysteria2 server inbounds.
-			// MiGate keeps the UI simple by using generated self-signed certs by default
+			// Weir keeps the UI simple by using generated self-signed certs by default
 			// and only honoring custom cert paths when the user explicitly enables TLS.
 			ib.TLS = &TLSConfig{
 				Enabled:         true,
@@ -547,7 +547,7 @@ func GenerateSelfSignedCert() error {
 	template := x509.Certificate{
 		SerialNumber: serial,
 		Subject: pkix.Name{
-			CommonName: "MiGate Auto-Generated Certificate",
+			CommonName: "Weir Auto-Generated Certificate",
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),

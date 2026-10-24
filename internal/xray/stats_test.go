@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/imzyb/MiGate/internal/trafficstats"
+	"github.com/shusfun/weir/internal/trafficstats"
 )
 
 type flakyStatsClient struct {

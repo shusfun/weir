@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	js "github.com/imzyb/MiGate/internal/sub/jscompat"
+	js "github.com/shusfun/weir/internal/sub/jscompat"
 )
 
 // 不依赖 Node 的冒烟测试：没有 node 时对照测试会跳过，这里保证基本链路可用。

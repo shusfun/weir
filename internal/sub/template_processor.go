@@ -3,7 +3,7 @@ package sub
 import (
 	"strings"
 
-	js "github.com/imzyb/MiGate/internal/sub/jscompat"
+	js "github.com/shusfun/weir/internal/sub/jscompat"
 )
 
 // 移植自 functions/modules/subscription/template-processor.js：模板模型的智能优化（正则成员展开、DNS / AI 分组注入、地区分组、清理）。

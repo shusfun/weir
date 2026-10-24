@@ -17,7 +17,7 @@ importers:
 
   apps/console:
     dependencies:
-      '@migate/ui':
+      '@weir/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       '@simplewebauthn/browser':

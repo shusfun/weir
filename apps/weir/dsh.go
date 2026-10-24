@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/imzyb/MiGate/internal/dsh"
+	"github.com/shusfun/weir/internal/dsh"
 )
 
 // runDSH：migate dsh agent --dir <托管目录>。dsh 的管理进程，以系统用户 migate-dsh 运行

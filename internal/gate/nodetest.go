@@ -18,8 +18,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/imzyb/MiGate/internal/kernelconf"
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/internal/kernelconf"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // freeLoopbackPort 返回一个 TCP 与 UDP 都空闲的回环端口（QUIC 协议监听 UDP）。

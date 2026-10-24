@@ -5,8 +5,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/imzyb/MiGate/internal/mailer"
-	"github.com/imzyb/MiGate/internal/store/ent/user"
+	"github.com/shusfun/weir/internal/mailer"
+	"github.com/shusfun/weir/internal/store/ent/user"
 )
 
 type fakeMail struct {

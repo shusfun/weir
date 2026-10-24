@@ -17,8 +17,8 @@ try {
  $revision = (git rev-parse HEAD).Trim()
  $dirty = git status --porcelain
  if ($dirty) { $revision += '-dirty' }
- $linkFlags = "-s -w -X github.com/imzyb/MiGate/internal/buildinfo.Version=$Version -X github.com/imzyb/MiGate/internal/buildinfo.Revision=$revision"
- go build -trimpath -ldflags $linkFlags -o (Join-Path $releaseDir 'migate') './apps/migate'
+ $linkFlags = "-s -w -X github.com/shusfun/weir/internal/buildinfo.Version=$Version -X github.com/shusfun/weir/internal/buildinfo.Revision=$revision"
+ go build -trimpath -ldflags $linkFlags -o (Join-Path $releaseDir 'migate') './apps/weir'
  if ($LASTEXITCODE) { throw 'migate compilation failed' }
  Copy-Item deploy/install.sh,deploy/sources.json,deploy/github-update.sh,deploy/release_fetch.py,deploy/version.py,VERSION $releaseDir
  python deploy/package_release.py $Version

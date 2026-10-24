@@ -13,9 +13,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/gate"
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/gate"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // 一次性预批准配对凭证：管理员「添加 Gate」生成（KV，1 小时），或单机安装时写入的本机摘要文件。

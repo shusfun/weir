@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/imzyb/MiGate/internal/store"
+	"github.com/shusfun/weir/internal/store"
 )
 
 // DefaultConfigPath 是中心配置文件的固定位置。

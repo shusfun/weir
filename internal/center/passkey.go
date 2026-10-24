@@ -14,9 +14,9 @@ import (
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/internal/store/ent/passkey"
-	"github.com/imzyb/MiGate/internal/store/ent/user"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/passkey"
+	"github.com/shusfun/weir/internal/store/ent/user"
 )
 
 type passkeyUser struct {
@@ -40,7 +40,7 @@ func (s *Server) webAuthn(r *http.Request) (*webauthn.WebAuthn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return webauthn.New(&webauthn.Config{RPDisplayName: "MiGate", RPID: u.Hostname(), RPOrigins: []string{origin}, AuthenticatorSelection: protocol.AuthenticatorSelection{UserVerification: protocol.VerificationRequired}})
+	return webauthn.New(&webauthn.Config{RPDisplayName: "Weir", RPID: u.Hostname(), RPOrigins: []string{origin}, AuthenticatorSelection: protocol.AuthenticatorSelection{UserVerification: protocol.VerificationRequired}})
 }
 
 func (s *Server) passUser(c *gin.Context, u *ent.User) (passkeyUser, error) {

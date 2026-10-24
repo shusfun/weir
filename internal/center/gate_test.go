@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imzyb/MiGate/internal/store/ent"
-	"github.com/imzyb/MiGate/packages/contracts"
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 type fakeGate struct {

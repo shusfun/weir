@@ -1,4 +1,4 @@
-// MiGate 机架面板：设备头部与设备列表行。compact 去掉机架耳，用于列表。
+// Weir 机架面板：设备头部与设备列表行。compact 去掉机架耳，用于列表。
 import { ComponentProps, ReactNode } from "react";
 import { cn } from "cn";
 

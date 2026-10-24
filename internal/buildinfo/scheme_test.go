@@ -3,7 +3,7 @@ package buildinfo
 import "testing"
 
 func TestParseSchemeBounds(t *testing.T) {
-	valid := []string{"0.2.0", "v0.2.0", "9.99.999", "MiGate version: v1.2.3"}
+	valid := []string{"0.2.0", "v0.2.0", "9.99.999", "Weir version: v1.2.3", "MiGate version: v1.2.3"}
 	for _, raw := range valid {
 		if _, ok := ParseScheme(raw); !ok {
 			t.Fatalf("expected %q to parse", raw)

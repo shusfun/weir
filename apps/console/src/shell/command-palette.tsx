@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { PageState, Dialog, DialogContent, DialogTitle, Kbd } from "@migate/ui";
+import { PageState, Dialog, DialogContent, DialogTitle, Kbd } from "@weir/ui";
 import { Search, Server, User, CornerDownLeft, type LucideIcon } from "lucide-react";
 import { api } from "../api";
 import { navigation } from "./navigation";

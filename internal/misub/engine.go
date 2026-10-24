@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/imzyb/MiGate/internal/sub"
-	js "github.com/imzyb/MiGate/internal/sub/jscompat"
+	"github.com/shusfun/weir/internal/sub"
+	js "github.com/shusfun/weir/internal/sub/jscompat"
 )
 
 // Source 是机场订阅源（对应上游 misub 中 url 以 http 开头的条目）。

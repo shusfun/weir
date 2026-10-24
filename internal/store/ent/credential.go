@@ -9,7 +9,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/imzyb/MiGate/internal/store/ent/credential"
+	"github.com/shusfun/weir/internal/store/ent/credential"
 )
 
 // Credential is the model entity for the Credential schema.

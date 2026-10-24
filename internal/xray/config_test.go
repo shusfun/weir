@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/imzyb/MiGate/internal/db"
-	"github.com/imzyb/MiGate/internal/xray"
+	"github.com/shusfun/weir/internal/db"
+	"github.com/shusfun/weir/internal/xray"
 )
 
 func join(parts ...string) string { return strings.Join(parts, "") }

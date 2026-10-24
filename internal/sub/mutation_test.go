@@ -6,7 +6,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	js "github.com/imzyb/MiGate/internal/sub/jscompat"
+	js "github.com/shusfun/weir/internal/sub/jscompat"
 )
 
 // 以固定种子对样例链接做随机变异（插入 / 删除 / 替换特殊字符），覆盖解析器在非常规输入上的行为。

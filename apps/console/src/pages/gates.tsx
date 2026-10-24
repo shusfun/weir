@@ -1,7 +1,7 @@
 // VPS 与节点：VPS 连接中心后只在这里操作；节点用四步向导创建，高级参数可在详情中修改。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Notice, PageHeader, SkeletonCards, StatusLamp, Switch, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useToast } from "@migate/ui";
+import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Notice, PageHeader, SkeletonCards, StatusLamp, Switch, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useToast } from "@weir/ui";
 import { FileBadge, Plus, Server, Sparkles, Trash2 } from "lucide-react";
 import { openDsh, useDsh } from "../components/dsh";
 import { GateRouting } from "../components/gate-routing";

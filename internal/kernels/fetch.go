@@ -39,7 +39,7 @@ func xrayAsset(_, arch string) string {
 var sources = map[string]source{
 	"xray":   {repo: "XTLS/Xray-core", tagPrefix: "v", asset: xrayAsset, extract: func(a []byte, _, _ string) ([]byte, error) { return fromZip(a, "xray") }},
 	"mihomo": {repo: "MetaCubeX/mihomo", tagPrefix: "v", asset: func(v, arch string) string { return "mihomo-linux-" + arch + "-v" + v + ".gz" }, extract: func(a []byte, _, _ string) ([]byte, error) { return fromGzip(a) }},
-	"sing-box": {repo: "shusfun/MiSub", tagPrefix: "sing-box-v", asset: func(v, arch string) string { return "sing-box-" + v + "-linux-" + arch + ".tar.gz" }, extract: func(a []byte, v, arch string) ([]byte, error) {
+	"sing-box": {repo: "shusfun/weir", tagPrefix: "sing-box-v", asset: func(v, arch string) string { return "sing-box-" + v + "-linux-" + arch + ".tar.gz" }, extract: func(a []byte, v, arch string) ([]byte, error) {
 		return fromTarGz(a, "sing-box-"+v+"-linux-"+arch+"/sing-box")
 	}},
 }
@@ -118,7 +118,7 @@ func (f Fetcher) releases(ctx context.Context, kernel string) ([]ghRelease, erro
 	}
 	var out []ghRelease
 	for _, r := range all {
-		// sing-box 与 MiGate 程序发布在同一仓库，只认 sing-box-v 前缀；其余仓库只认正式版。
+		// sing-box 与 Weir 程序发布在同一仓库，只认 sing-box-v 前缀；其余仓库只认正式版。
 		if r.Draft || !strings.HasPrefix(r.Tag, src.tagPrefix) || src.tagPrefix == "v" && r.Prerelease {
 			continue
 		}

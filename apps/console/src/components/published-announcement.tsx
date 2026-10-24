@@ -1,6 +1,6 @@
 import {createElement,useEffect,useState,type ReactNode} from "react";
 import {Bell,X} from "lucide-react";
-import { Notice,Button,Card,CardContent,SectionHeader} from "@migate/ui";
+import { Notice,Button,Card,CardContent,SectionHeader} from "@weir/ui";
 export interface NoticeNode {tag?:string;text?:string;href?:string;children?:NoticeNode[]}
 export interface PublishedNotice {notice:string;notice_title?:string;notice_type?:string;notice_dismissible?:boolean;notice_revision?:string;notice_nodes?:NoticeNode[]}
 const tags=new Set(["b","i","em","strong","a","p","br","ul","li","code","pre"]);

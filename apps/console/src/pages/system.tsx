@@ -1,5 +1,5 @@
 // 系统设置：按分区用标签页组织（AI 与 dsh / 安全防御 / 登录与令牌 / 通知 / 备份迁移 / 分发），分区记在地址栏 ?tab=。
-import { Card, CardContent, PageHeader, Tabs, TabsList, TabsPanel, TabsTab } from "@migate/ui";
+import { Card, CardContent, PageHeader, Tabs, TabsList, TabsPanel, TabsTab } from "@weir/ui";
 import { useSearchParams } from "react-router-dom";
 import { AnnouncementEditor } from "../components/global-announcement";
 import { ClientCatalogEditor } from "../components/client-catalog";

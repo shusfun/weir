@@ -1,4 +1,4 @@
-import { Notice, Button, Badge, PageState, StatusLamp, toneOf } from "@migate/ui";
+import { Notice, Button, Badge, PageState, StatusLamp, toneOf } from "@weir/ui";
 import { RefreshCw } from "lucide-react";
 import type { ReactNode } from "react";
 import { labels } from "../lib/models";

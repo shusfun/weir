@@ -1,7 +1,7 @@
 package sub
 
 import (
-	js "github.com/imzyb/MiGate/internal/sub/jscompat"
+	js "github.com/shusfun/weir/internal/sub/jscompat"
 )
 
 // 移植自 functions/modules/subscription/template-pipeline.js：ini 模板 → 统一模型 → 各客户端格式。

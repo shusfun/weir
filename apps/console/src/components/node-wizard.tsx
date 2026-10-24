@@ -1,7 +1,7 @@
 // 四步建节点：协议 → VPS → 链式代理 → 完成。伪装、传输参数由内置方案固定，REALITY 目标由 VPS 实测选择。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Button, ChoiceCard, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Notice, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Step, Steps } from "@migate/ui";
+import { Button, ChoiceCard, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Notice, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Step, Steps } from "@weir/ui";
 import { api } from "../api";
 import type { ChainSpec, Gate, NodeItem, Preset } from "../lib/core";
 import { useCerts } from "./cert-manager";

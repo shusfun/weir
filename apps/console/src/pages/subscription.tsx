@@ -1,6 +1,6 @@
 // 我的订阅：用量与到期一览；自己管理多条订阅链接与自建链式代理（只能使用管理员分配的节点）。
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CopyButton, Input, Meter, PageHeader, Readout, SectionHeader, SkeletonCards } from "@migate/ui";
+import { Card, CardContent, CopyButton, Input, Meter, PageHeader, Readout, SectionHeader, SkeletonCards } from "@weir/ui";
 import { api } from "../api";
 import { client } from "../lib/client";
 import { ClientDownload } from "../components/client-download";

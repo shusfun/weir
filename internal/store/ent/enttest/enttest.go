@@ -5,12 +5,12 @@ package enttest
 import (
 	"context"
 
-	"github.com/imzyb/MiGate/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent"
 	// required by schema hooks.
-	_ "github.com/imzyb/MiGate/internal/store/ent/runtime"
+	_ "github.com/shusfun/weir/internal/store/ent/runtime"
 
 	"entgo.io/ent/dialect/sql/schema"
-	"github.com/imzyb/MiGate/internal/store/ent/migrate"
+	"github.com/shusfun/weir/internal/store/ent/migrate"
 )
 
 type (
