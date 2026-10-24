@@ -5,6 +5,7 @@ import { useRender } from "@base-ui/react/use-render";
 import { mergeProps } from "@base-ui/react/merge-props";
 import { Check } from "lucide-react";
 import { cn } from "cn";
+import { Ripple } from "./ripple";
 
 // ---- 图标方块 / 头像 ----
 const tileSizes = {
@@ -53,20 +54,30 @@ function CodeBlock({ className, ...props }: ComponentProps<"code">) {
 }
 
 // ---- 可选卡片：几张卡片里选一张（客户端、下载来源） ----
+// ripple：可点的卡片（render 成按钮 / 链接，或带 onClick）默认从按压点散开水波
 function ChoiceCard({
   selected = false,
   featured = false,
+  ripple,
   render,
   className,
+  children,
   ...props
-}: useRender.ComponentProps<"div"> & { selected?: boolean; featured?: boolean }) {
+}: useRender.ComponentProps<"div"> & { selected?: boolean; featured?: boolean; ripple?: boolean }) {
+  const wave = ripple ?? (!!render || !!props.onClick);
   return useRender({
     defaultTagName: "div",
     render,
     props: mergeProps<"div">(
       {
+        children: (
+          <>
+            {children}
+            {wave && <Ripple />}
+          </>
+        ),
         className: cn(
-          "flex min-w-0 flex-col gap-2.5 rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3.5",
+          "relative flex min-w-0 flex-col gap-2.5 rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3.5",
           "bg-[linear-gradient(180deg,var(--mg-raised),var(--mg-panel))] shadow-[inset_0_1px_0_var(--mg-highlight),0_1px_2px_var(--mg-shade)]",
           featured &&
             "gap-3 rounded-[var(--mg-radius-lg)] border-[color-mix(in_srgb,var(--mg-accent-text)_45%,var(--mg-line))] bg-[linear-gradient(180deg,var(--mg-raised),var(--mg-accent-soft))] p-[18px]",
@@ -84,20 +95,26 @@ function ChoiceCard({
 function OptionRow({
   inset = false,
   compact = false,
+  ripple = true,
   className,
+  children,
   ...props
-}: ComponentProps<"label"> & { inset?: boolean; compact?: boolean }) {
+}: ComponentProps<"label"> & { inset?: boolean; compact?: boolean; ripple?: boolean }) {
   return (
     <label
       data-slot="option-row"
       className={cn(
-        "flex min-w-0 cursor-pointer items-start gap-3 wrap-anywhere [&>span]:grid [&>span]:min-w-0 [&>span]:flex-1 [&>span]:gap-[3px] [&>[data-slot=checkbox]]:mt-0.5 [&_small]:block",
+        // 文字列只匹配不带 data-slot 的 span：复选框（Base UI 渲染为 span）和水波层不能被撑开
+        "relative flex min-w-0 cursor-pointer items-start gap-3 wrap-anywhere [&>span:not([data-slot])]:grid [&>span:not([data-slot])]:min-w-0 [&>span:not([data-slot])]:flex-1 [&>span:not([data-slot])]:gap-[3px] [&>[data-slot=checkbox]]:mt-0.5 [&_small]:block",
         compact ? "items-center gap-2.5 text-[12.5px]" : "border-b border-[var(--mg-line-soft)] py-3",
         inset && "px-3.5",
         className,
       )}
       {...props}
-    />
+    >
+      {children}
+      {ripple && <Ripple />}
+    </label>
   );
 }
 

@@ -1,11 +1,13 @@
 // 控制台外壳：左侧控制条（导航 + 左下角个人中心）、顶栏（标题 / 快速跳转 / 任务托盘 / 主题）、移动端侧边面板。
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { IconTile, Button, Kbd, Menu, MenuTrigger, MenuContent, MenuItem, MenuSeparator, Sheet, SheetContent, StatusLamp, Tooltip, TooltipProvider } from "@migate/ui";
-import { Menu as MenuIcon, PanelLeftClose, PanelLeftOpen, LogOut, ShieldCheck, Link2, Search, Activity, ChevronsUpDown } from "lucide-react";
+import { IconTile, Button, Kbd, Menu, MenuTrigger, MenuContent, MenuItem, MenuSeparator, MenuToggle, Sheet, SheetClose, SheetContent, StatusLamp, Tooltip, TooltipProvider } from "@migate/ui";
+import { PanelLeftClose, PanelLeftOpen, LogOut, ShieldCheck, Link2, Search, Activity, ChevronsUpDown } from "lucide-react";
 import { ThemeControl } from "../theme";
 import { navigation, navGroups, currentNav } from "../shell/navigation";
 import { CommandPalette } from "../shell/command-palette";
+import { DshDrawer } from "./dsh";
+import { DraftConfirm } from "./draft-confirm";
 
 const collapseKey = "migate-rail-collapsed";
 function readCollapsed() {
@@ -47,6 +49,7 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [drawer, setDrawer] = useState(false);
+  const drawerTrigger = useRef<HTMLButtonElement>(null);
   const [palette, setPalette] = useState(false);
   const current = currentNav(location.pathname);
 
@@ -113,8 +116,8 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
         </aside>
         <div className="shell-body">
           <header className="topbar">
-            <Button className="hidden max-[900px]:inline-flex" variant="ghost" size="icon-sm" aria-label="打开导航" onClick={() => setDrawer(true)}>
-              <MenuIcon />
+            <Button ref={drawerTrigger} className="hidden max-[900px]:inline-flex" variant="ghost" size="icon-sm" aria-label="打开导航" aria-expanded={drawer} onClick={() => setDrawer(true)}>
+              <MenuToggle open={drawer} />
             </Button>
             <div className="topbar-title">
               <h1>{current?.label ?? "MiGate"}</h1>
@@ -131,7 +134,18 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
           {children}
         </div>
         <Sheet open={drawer} onOpenChange={setDrawer}>
-          <SheetContent title="MiGate">
+          <SheetContent
+            title="MiGate"
+            className="[&_[data-slot=sheet-header]]:pl-[34px]"
+            // 关闭后焦点回到顶栏的同一位置
+            finalFocus={drawerTrigger}
+            // 关闭键与顶栏的打开键在同一位置：抽屉滑到位后三条线在原地变成叉，关闭时倒序变回
+            close={
+              <SheetClose render={<Button variant="ghost" size="icon-sm" className="absolute top-[11.5px] left-3.5" aria-label="关闭导航" />}>
+                <MenuToggle follow />
+              </SheetClose>
+            }
+          >
             <div className="flex h-full flex-col">
               <nav className="rail-nav" aria-label="移动导航">{nav(false)}</nav>
               <div className="rail-foot">
@@ -141,6 +155,8 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
           </SheetContent>
         </Sheet>
         <CommandPalette open={palette} onOpenChange={setPalette} admin={admin} />
+        {admin && <DshDrawer />}
+        {admin && <DraftConfirm />}
       </div>
     </TooltipProvider>
   );

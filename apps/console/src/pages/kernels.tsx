@@ -1,10 +1,11 @@
 // 内核：中心从上游拉取 Xray / sing-box / mihomo 并按官方摘要校验，再推送给 VPS；配置按内核版本档案生成。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Card, CardContent, CodeBlock, Dialog, DialogContent, DialogDescription, DialogTitle, Notice, PageHeader, SectionHeader, Segmented, useToast } from "@migate/ui";
+import { Badge, Button, Card, CardContent, CodeBlock, Dialog, DialogContent, DialogDescription, DialogTitle, Notice, PageHeader, SectionHeader, Segmented, SkeletonCards, SkeletonList, useToast } from "@migate/ui";
 import { Download, Star } from "lucide-react";
 import { api } from "../api";
 import { State } from "../components/feedback";
+import { DshVersions } from "../components/dsh";
 import { date } from "../lib/models";
 
 type Arch = "amd64" | "arm64";
@@ -41,7 +42,7 @@ export function KernelsPage() {
     <div className="stack">
       <PageHeader eyebrow="工作区" title="内核" description="内核只以独立程序运行，升级不需要更新 MiGate。中心拉取后按官方摘要校验，再推送给 VPS；VPS 不访问 GitHub。" />
       {q.isPending || q.error ? (
-        <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} />
+        <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} skeleton={<SkeletonCards count={3} lines={3} />} />
       ) : (
         Object.entries(q.data).map(([kernel, k]) => (
           <Card key={kernel}>
@@ -66,6 +67,7 @@ export function KernelsPage() {
           </Card>
         ))
       )}
+      <DshVersions />
       <Card>
         <CardContent className="stack">
           <SectionHeader title="版本档案" description="每个档案声明某一内核版本范围支持的协议、传输与安全层，以及生成配置时要去掉的字段；超出档案的组合会被明确拒绝，不会静默降级。" />
@@ -123,8 +125,8 @@ function ReleasesDialog({ kernel, close, fetched }: { kernel: string; close: () 
         <DialogTitle>{names[kernel] ?? kernel} · 上游版本</DialogTitle>
         <DialogDescription>{kernel === "sing-box" ? "sing-box 来自本项目 CI 跟随上游标签编译（带 with_v2ray_api，按用户统计流量需要）。" : "来自上游 GitHub 正式发布。"}下载经镜像回退，摘要不一致即丢弃。</DialogDescription>
         <Segmented aria-label="架构" value={arch} onValueChange={setArch} options={[["amd64", "amd64"], ["arm64", "arm64"]] as const} />
-        {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : q.data.length === 0 ? <State empty="没有可用版本" /> : (
-          <ul className="stack max-h-[50vh] overflow-y-auto">
+        {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} skeleton={<SkeletonList rows={5} lines={1} className="stack" rowClassName="flex items-center justify-between gap-2" />} /> : q.data.length === 0 ? <State empty="没有可用版本" /> : (
+          <ul className="stack mg-focus-gutter max-h-[50vh] overflow-y-auto">
             {q.data.map((r) => (
               <li key={r.version} className="flex items-center justify-between gap-2">
                 <span><code>{r.version}</code><small className="ml-2 text-[var(--mg-ink-3)]">{date(r.published_at)}</small></span>

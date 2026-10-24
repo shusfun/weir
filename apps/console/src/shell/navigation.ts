@@ -20,6 +20,7 @@ import {
   Network,
   Cpu,
   FileBadge,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 
@@ -32,7 +33,7 @@ export interface NavItem {
   admin: boolean;
 }
 
-export const navGroups = ["工作区", "订阅与分发", "运维", "系统", "个人"] as const;
+export const navGroups = ["工作区", "订阅与分发", "运维", "系统", "个人", "开发"] as const;
 
 export const navigation: NavItem[] = [
   { key: "gates", path: "/gates", label: "VPS 与节点", icon: Server, group: "工作区", admin: true },
@@ -44,6 +45,10 @@ export const navigation: NavItem[] = [
   { key: "system", path: "/system", label: "系统设置", icon: Settings2, group: "系统", admin: true },
   { key: "subscription", path: "/subscription", label: "我的订阅", icon: Link2, group: "个人", admin: false },
   { key: "security", path: "/security", label: "账户安全", icon: ShieldCheck, group: "个人", admin: false },
+  // 开发环境专用：生产构建里 import.meta.env.DEV 为 false，菜单项和页面一起被剔除
+  ...(import.meta.env.DEV
+    ? [{ key: "dev-ui", path: "/dev/ui", label: "动效样例", icon: Sparkles, group: "开发" as const, admin: true }]
+    : []),
 ];
 
 export function currentNav(pathname: string) {
@@ -66,11 +71,14 @@ export const distributionSections = [
   { key: "announcements", label: "全局公告" },
 ] as const;
 
+// 系统设置分区（?tab=）
 export const systemSections = [
-  { key: "security", label: "安全策略" },
-  { key: "smtp", label: "邮件服务" },
-  { key: "laya", label: "Laya 观察" },
-  { key: "release", label: "版本发布" },
+  { key: "ai", label: "AI 与 dsh" },
+  { key: "defense", label: "安全防御" },
+  { key: "login", label: "登录与令牌" },
+  { key: "notify", label: "通知" },
+  { key: "backup", label: "备份迁移" },
+  { key: "distribution", label: "分发" },
 ] as const;
 
 export const deviceTabs = [

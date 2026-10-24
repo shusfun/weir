@@ -79,11 +79,21 @@
   --mg-radius-sm: 7px;
   --mg-radius: 10px;
   --mg-radius-lg: 14px;
+  /* 焦点环最大外扩：输入框 3px 阴影、键帽 2px 线 + 2px 间距 */
+  --mg-focus-gutter: 4px;
   --mg-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --mg-spring: linear(0, 0.18 7%, 0.52 16%, 0.85 27%, 1.04 38%, 1.09 45%, 1.07 53%, 1.02 64%, 0.995 76%, 1);
   --mg-fast: 140ms;
   --mg-mid: 220ms;
   --mg-slow: 300ms;
+  /*
+   * 动效：bounce 峰值约 1.6 倍位移再小幅回落，用于按压回弹、拨钮落位，
+   * 位移只有几像素时过冲才看得见；decel 先快后慢平滑停住，用于数字滚动、滑块、轮播吸附。
+   */
+  --mg-bounce: linear(0, 0.38 6%, 0.92 13%, 1.36 21%, 1.6 29%, 1.55 36%, 1.26 46%, 0.96 57%, 0.88 65%, 0.94 75%, 1.02 86%, 1);
+  --mg-bounce-dur: 460ms;
+  --mg-decel: cubic-bezier(0.16, 1, 0.3, 1);
+  --mg-settle: 600ms;
   --mg-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
   --mg-mono: "SF Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
   color-scheme: light;

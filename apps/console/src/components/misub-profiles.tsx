@@ -1,7 +1,7 @@
 // 订阅组：选订阅源与手动节点（或全部），配处理链与规则模板；预览、分配给用户、匿名分享。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Checkbox, CodeBlock, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Label, Notice, SectionHeader, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Textarea, useToast } from "@migate/ui";
+import { Badge, Button, Checkbox, CodeBlock, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Label, Notice, SectionHeader, Segmented, SkeletonList, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Textarea, useToast } from "@migate/ui";
 import { Eye, Plus, Share2, Trash2, Users } from "lucide-react";
 import { api } from "../api";
 import { date } from "../lib/models";
@@ -64,7 +64,12 @@ export function ProfilesPanel() {
     <section className="stack">
       <SectionHeader title="订阅组" description="把订阅源与手动节点组合成一份订阅；可分配给用户（各自独立地址）或匿名分享。外部节点的流量不计入用户额度。" actions={<Button size="sm" onClick={() => setEdit("new")}><Plus />新建订阅组</Button>} />
       {q.isPending || q.error ? (
-        <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} />
+        <State
+          loading={q.isPending}
+          error={q.error}
+          onRetry={() => q.refetch()}
+          skeleton={<SkeletonList rows={3} lines={2} className="stack" rowClassName="flex items-center justify-between gap-2 rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3" />}
+        />
       ) : q.data.length === 0 ? (
         <State empty="还没有订阅组" />
       ) : (
@@ -142,14 +147,14 @@ function ProfileForm({ value, close, saved }: { value: Profile | "new"; close: (
           <Label className="actions"><Switch aria-label="包含全部" checked={all} onCheckedChange={setAll} />包含全部已启用的订阅源与手动节点</Label>
           {!all && (
             <div className="grid gap-3 sm:grid-cols-2">
-              <fieldset className="stack max-h-56 overflow-y-auto">
+              <fieldset className="stack mg-focus-gutter max-h-56 overflow-y-auto">
                 <legend className="text-sm">订阅源</legend>
                 {(sources.data?.items ?? []).map((s) => (
                   <Label key={s.id} className="actions"><Checkbox checked={sourceIds.includes(s.id)} onCheckedChange={(v) => setSourceIds(toggle(sourceIds, s.id, !!v))} />{s.name || s.url}</Label>
                 ))}
                 {sources.data?.items.length === 0 && <small>还没有订阅源。</small>}
               </fieldset>
-              <fieldset className="stack max-h-56 overflow-y-auto">
+              <fieldset className="stack mg-focus-gutter max-h-56 overflow-y-auto">
                 <legend className="text-sm">手动节点</legend>
                 {(nodes.data?.items ?? []).map((n) => (
                   <Label key={n.id} className="actions"><Checkbox checked={nodeIds.includes(n.id)} onCheckedChange={(v) => setNodeIds(toggle(nodeIds, n.id, !!v))} />{n.name || decodeURIComponent(n.url.split("#")[1] ?? "") || n.id}{n.group && <small className="text-[var(--mg-ink-3)]">（{n.group}）</small>}</Label>
@@ -294,7 +299,7 @@ function GrantDialog({ profile, close, saved }: { profile: Profile; close: () =>
         {users.isPending || users.error ? (
           <State loading={users.isPending} error={users.error} onRetry={() => users.refetch()} />
         ) : (
-          <fieldset className="stack max-h-80 overflow-y-auto">
+          <fieldset className="stack mg-focus-gutter max-h-80 overflow-y-auto">
             <legend className="sr-only">用户</legend>
             {users.data.map((u) => (
               <Label key={u.id} className="actions"><Checkbox checked={picked.includes(u.id)} onCheckedChange={(v) => setPicked(v ? [...picked, u.id] : picked.filter((x) => x !== u.id))} />{u.name || u.email}<small className="text-[var(--mg-ink-3)]">{u.email}</small></Label>

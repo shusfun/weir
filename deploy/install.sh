@@ -16,7 +16,7 @@ base=/opt/migate
 etc=/etc/migate
 lib=/var/lib/migate
 units_dir=/etc/systemd/system
-all_units="migate-center.service migate-gate.service migate-helper.service migate-local-pair.service"
+all_units="migate-center.service migate-dsh.service migate-gate.service migate-helper.service migate-local-pair.service"
 
 stop_units() {
  for unit in $all_units; do
@@ -129,9 +129,18 @@ active=''
 # —— 中心 ——
 if [ "$has_center" = true ]; then
  id migate-center >/dev/null 2>&1 || useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin migate-center
+ # dsh（DeepSeek Harness）的管理进程用独立用户：它能执行命令，所以读不到中心的配置、数据库与密钥。
+ # 中心加入 migate-dsh 组，只为读取 dsh 写回的状态；dsh 只能读 control/，不能改中心下载的程序。
+ id migate-dsh >/dev/null 2>&1 || useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin migate-dsh
+ usermod -a -G migate-dsh migate-center
  # /var/lib/migate 由 root 持有；中心与 Gate 各自只拥有自己的子目录，互不可写。
  install -d -m 0755 "$lib"
  install -d -m 0700 -o migate-center -g migate-center "$etc/center" "$lib/center"
+ install -d -m 0755 "$lib/dsh"
+ install -d -m 0755 -o migate-center -g migate-center "$lib/dsh/runtime"
+ install -d -m 2750 -o migate-center -g migate-dsh "$lib/dsh/control" "$lib/dsh/control/jobs"
+ install -d -m 2750 -o migate-dsh -g migate-dsh "$lib/dsh/status" "$lib/dsh/status/jobs"
+ install -d -m 0700 -o migate-dsh -g migate-dsh "$lib/dsh/state"
  if [ ! -f "$etc/center/config.json" ]; then
   setpriv --reuid=migate-center --regid=migate-center --init-groups \
    "$base/current/migate" center --config "$etc/center/config.json" --listen "$listen" --init >/dev/null
@@ -145,6 +154,9 @@ Wants=network-online.target
 Type=simple
 User=migate-center
 Group=migate-center
+SupplementaryGroups=migate-dsh
+Environment=MIGATE_DSH_DIR=/var/lib/migate/dsh
+Environment=MIGATE_DSH_AGENT=systemd
 ExecStart=/opt/migate/current/migate center --config /etc/migate/center/config.json --serve
 Restart=on-failure
 UMask=0077
@@ -152,11 +164,34 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=/etc/migate/center /var/lib/migate/center
+ReadWritePaths=/etc/migate/center /var/lib/migate/center /var/lib/migate/dsh/runtime /var/lib/migate/dsh/control
 [Install]
 WantedBy=multi-user.target
 UNIT
- active="$active migate-center.service"
+ # dsh 管理进程：只能写自己的状态与家目录，中心与 Gate 的配置、数据目录对它不可见。
+ cat > "$units_dir/migate-dsh.service" <<'UNIT'
+[Unit]
+Description=MiGate dsh (DeepSeek Harness) agent
+After=network-online.target migate-center.service
+Wants=network-online.target
+[Service]
+Type=simple
+User=migate-dsh
+Group=migate-dsh
+ExecStart=/opt/migate/current/migate dsh agent --dir /var/lib/migate/dsh
+Restart=always
+RestartSec=5
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/migate/dsh/status /var/lib/migate/dsh/state
+InaccessiblePaths=-/etc/migate -/var/lib/migate/center -/var/lib/migate/gate
+[Install]
+WantedBy=multi-user.target
+UNIT
+ active="$active migate-center.service migate-dsh.service"
 fi
 
 # —— Gate ——

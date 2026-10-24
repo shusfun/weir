@@ -19,13 +19,14 @@ function PageHeader({
 }) {
   return (
     <header data-slot="page-header" className={cn("flex flex-wrap items-end justify-between gap-x-6 gap-y-3", className)}>
-      <div className="min-w-0 flex-1">
+      {/* 标题区至少留 16em（容器更窄时取满宽）：放不下操作区时操作区整体换到下一行，标题不会被挤成一字一行 */}
+      <div className="min-w-[min(100%,16em)] flex-1">
         {eyebrow && <div className="mg-engraved mb-1.5">{eyebrow}</div>}
         <h2 className="m-0 text-[19px] font-semibold tracking-[-0.02em] text-[var(--mg-ink)]">{title}</h2>
         {/* ch 按西文字符计宽，中文约两倍；用 em 控制约 46 个汉字一行 */}
         {description && <p className="mt-1.5 mb-0 max-w-[46em] text-[13px] leading-relaxed text-[var(--mg-ink-3)]">{description}</p>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="flex max-w-full flex-wrap items-center gap-2">{actions}</div>}
     </header>
   );
 }

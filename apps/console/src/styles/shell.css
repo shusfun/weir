@@ -242,3 +242,18 @@
 .shell[data-collapsed="true"] .rail-collapse > span {
   display: none;
 }
+/* dsh 抽屉入口：右下角浮动按钮，避开移动端底部安全区 */
+.dsh-fab {
+  position: fixed;
+  right: 24px;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  z-index: 40;
+  border-radius: 999px;
+  box-shadow: 0 6px 18px -6px var(--mg-shade-strong);
+}
+@media (max-width: 900px) {
+  .dsh-fab {
+    right: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+}

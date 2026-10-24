@@ -1,7 +1,7 @@
 // 订阅链接与自建链式代理：管理员（按用户）与用户本人共用。base 为 "/admin/users/<id>" 或 "/me"。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Checkbox, CodeBlock, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Label, Notice, SectionHeader, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, useToast } from "@migate/ui";
+import { Badge, Button, Checkbox, CodeBlock, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Label, Notice, SectionHeader, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SkeletonList, Switch, useToast } from "@migate/ui";
 import { Plus, QrCode, RefreshCw, Trash2 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "../api";
@@ -46,7 +46,12 @@ export function LinkPanel({ base, nodes, showCredentials }: { base: string; node
     <section className="stack">
       <SectionHeader title="订阅链接" description="每条链接凭据独立、共用同一份额度；最多 10 条。" actions={<Button size="sm" disabled={(links.data?.length ?? 0) >= 10} onClick={() => setEdit("new")}><Plus />新链接</Button>} />
       {links.isPending || links.error ? (
-        <State loading={links.isPending} error={links.error} onRetry={() => links.refetch()} />
+        <State
+          loading={links.isPending}
+          error={links.error}
+          onRetry={() => links.refetch()}
+          skeleton={<SkeletonList rows={2} lines={2} className="stack" rowClassName="rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3" />}
+        />
       ) : links.data.length === 0 ? (
         <State empty="还没有链接" />
       ) : (

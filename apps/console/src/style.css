@@ -4,6 +4,7 @@
 @import "../../../packages/ui/src/styles/theme.css";
 @import "../../../packages/ui/src/styles/instruments.css";
 @import "../../../packages/ui/src/styles/controls.css";
+@import "../../../packages/ui/src/styles/motion.css";
 @custom-variant dark (&:where(.dark, .dark *));
 @source '../../../packages/ui/src';
 

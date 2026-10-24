@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -22,106 +24,25 @@ import (
 	"github.com/imzyb/MiGate/packages/contracts"
 )
 
-// AI 配置助手：模型只出草稿 → 系统按内核版本试生成并在 Gate 本机实测真实连接 → 失败原因回给模型重写
-// （最多 3 轮）→ 管理员看差异确认后才写入节点。发给模型的内容不含任何密码、UUID、密钥与订阅令牌。
+// AI 草稿：托管的 dsh 通过 MiGate 的 MCP 工具提交草稿 → 系统按内核版本试生成并在 Gate 本机实测 →
+// 实测结果交回 dsh（未通过时它可以修改后再交）→ 控制台弹出 MiGate 自己的确认窗，管理员确认后才写入。
+// dsh 拿到的节点参数不含任何密码、UUID、密钥与订阅令牌；dsh 的令牌只能提交草稿，不能确认。
 
 const (
-	aiSettingKey = "ai-provider"
-	aiRounds     = 3
-	draftTTL     = time.Hour
+	draftTTL       = time.Hour
+	draftPrefix    = "ai-draft:"
+	maxDraftsLimit = 50
 )
 
 func (s *Server) aiRoutes(admin *gin.RouterGroup) {
-	admin.GET("/ai/provider", s.getAIProvider)
-	admin.PUT("/ai/provider", s.putAIProvider)
-	admin.DELETE("/ai/provider", s.deleteAIProvider)
-	admin.POST("/ai/drafts", s.createDraft)
+	admin.GET("/ai/drafts", s.listDrafts)
 	admin.GET("/ai/drafts/:id", s.getDraft)
 	admin.POST("/ai/drafts/:id/apply", s.applyDraft)
+	admin.DELETE("/ai/drafts/:id", s.discardDraft)
 	admin.POST("/nodes/:id/test", s.testNodeHandler)
 }
 
-type storedProvider struct {
-	Protocol string `json:"protocol"`
-	BaseURL  string `json:"base_url"`
-	Model    string `json:"model"`
-	Key      string `json:"key"` // 加密保存
-}
-
-func (s *Server) aiProvider(ctx context.Context) (ai.Provider, bool, error) {
-	row, err := s.Store.Ent.Setting.Query().Where(setting.KeyEQ(aiSettingKey)).Only(ctx)
-	if ent.IsNotFound(err) {
-		return ai.Provider{}, false, nil
-	}
-	if err != nil {
-		return ai.Provider{}, false, err
-	}
-	var sp storedProvider
-	b, _ := json.Marshal(row.Value)
-	if err = json.Unmarshal(b, &sp); err != nil {
-		return ai.Provider{}, false, err
-	}
-	key, err := s.reveal(sp.Key)
-	if err != nil {
-		return ai.Provider{}, false, err
-	}
-	return ai.Provider{Protocol: sp.Protocol, BaseURL: sp.BaseURL, Model: sp.Model, Key: key}, true, nil
-}
-
-func (s *Server) getAIProvider(c *gin.Context) {
-	p, ok, err := s.aiProvider(c.Request.Context())
-	if err != nil {
-		failure(c, 503, "ai_provider_unavailable")
-		return
-	}
-	c.JSON(200, gin.H{"configured": ok, "protocol": p.Protocol, "base_url": p.BaseURL, "model": p.Model, "key_set": p.Key != "", "protocols": ai.Protocols})
-}
-
-// putAIProvider 保存模型服务；改动需要重新输入密码（与二次验证码）。Key 留空时沿用原值，只写不读。
-func (s *Server) putAIProvider(c *gin.Context) {
-	var req struct {
-		Protocol string `json:"protocol"`
-		BaseURL  string `json:"base_url"`
-		Model    string `json:"model"`
-		Key      string `json:"key"`
-		Password string `json:"password"`
-		Code     string `json:"code"`
-	}
-	if !bind(c, &req) || !s.reauth(c, req.Password, req.Code) {
-		return
-	}
-	ctx := c.Request.Context()
-	p := ai.Provider{Protocol: req.Protocol, BaseURL: strings.TrimSpace(req.BaseURL), Model: strings.TrimSpace(req.Model), Key: strings.TrimSpace(req.Key)}
-	if p.Key == "" {
-		if old, ok, err := s.aiProvider(ctx); err == nil && ok {
-			p.Key = old.Key
-		}
-	}
-	if err := p.Validate(); err != nil {
-		failure(c, 400, "ai_"+err.Error())
-		return
-	}
-	sealed, err := s.Crypto.Encrypt(p.Key)
-	if err != nil {
-		failure(c, 500, "encrypt_failed")
-		return
-	}
-	value := map[string]any{"protocol": p.Protocol, "base_url": p.BaseURL, "model": p.Model, "key": sealed}
-	if err = s.Store.Ent.Setting.Create().SetKey(aiSettingKey).SetValue(value).OnConflictColumns(setting.FieldKey).UpdateNewValues().Exec(ctx); err != nil {
-		failure(c, 500, "save_failed")
-		return
-	}
-	s.audit(c, "ai.provider", p.Protocol, "ok")
-	c.JSON(200, gin.H{"configured": true, "protocol": p.Protocol, "base_url": p.BaseURL, "model": p.Model, "key_set": true, "protocols": ai.Protocols})
-}
-
-func (s *Server) deleteAIProvider(c *gin.Context) {
-	_, _ = s.Store.Ent.Setting.Delete().Where(setting.KeyEQ(aiSettingKey)).Exec(c.Request.Context())
-	s.audit(c, "ai.provider.delete", "", "ok")
-	c.Status(204)
-}
-
-// editableFields 是模型可以修改的入站字段：构建器认识的字段，去掉系统管理与机密字段。
+// editableFields 是草稿可以修改的入站字段：构建器认识的字段，去掉系统管理与机密字段。
 var editableFields = func() []string {
 	var out []string
 	t := reflect.TypeOf(db.Inbound{})
@@ -135,6 +56,11 @@ var editableFields = func() []string {
 	sort.Strings(out)
 	return out
 }()
+
+func editable(field string) bool {
+	i := sort.SearchStrings(editableFields, field)
+	return i < len(editableFields) && editableFields[i] == field
+}
 
 // testNode 让节点所在 Gate 用给定参数实测：内核自检 + 本机回环真实连接下载。
 func (s *Server) testNode(ctx context.Context, n *ent.Node, settings map[string]any) (map[string]any, error) {
@@ -204,28 +130,24 @@ func (s *Server) testNodeHandler(c *gin.Context) {
 	c.JSON(200, res)
 }
 
-// Draft 是一次 AI 调整：保存在 KV（1 小时）。Patch 只含模型改动的字段，确认时合并到节点当前参数。
+// Draft 是一份待确认的 AI 草稿（保存在 KV，1 小时后过期）。Kind 为 node（节点参数）或 defense（防御动作）。
+// 只有 status=passed 的草稿会弹出确认窗；failed 的草稿只用于把原因交回 dsh。
 type Draft struct {
-	ID          string         `json:"id"`
-	NodeID      int            `json:"node_id"`
-	Instruction string         `json:"instruction"`
-	Status      string         `json:"status"` // running / passed / failed / error
-	Error       string         `json:"error,omitempty"`
-	Explain     string         `json:"explain,omitempty"`
-	Changes     []ai.Change    `json:"changes,omitempty"`
-	Attempts    []Attempt      `json:"attempts"`
-	Patch       ai.Patch       `json:"-"`
-	PatchRaw    map[string]any `json:"patch,omitempty"`
-	BaseHash    string         `json:"base_hash"`
-	CreatedAt   time.Time      `json:"created_at"`
-}
-
-// Attempt 是一轮草稿与实测结果（不含任何机密值）。
-type Attempt struct {
-	Explain string         `json:"explain"`
-	Changes []ai.Change    `json:"changes"`
-	Error   string         `json:"error,omitempty"`
-	Result  map[string]any `json:"result,omitempty"`
+	ID        string         `json:"id"`
+	Kind      string         `json:"kind"`
+	Source    string         `json:"source"` // dsh（抽屉对话）/ analysis（后台分析）
+	Status    string         `json:"status"` // passed / failed
+	Error     string         `json:"error,omitempty"`
+	Explain   string         `json:"explain"`
+	CreatedAt time.Time      `json:"created_at"`
+	NodeID    int            `json:"node_id,omitempty"`
+	NodeName  string         `json:"node_name,omitempty"`
+	Changes   []ai.Change    `json:"changes,omitempty"`
+	Result    map[string]any `json:"result,omitempty"` // Gate 实测详情（不含机密）
+	PatchRaw  map[string]any `json:"patch,omitempty"`
+	BaseHash  string         `json:"base_hash,omitempty"`
+	Defense   *DefenseAction `json:"defense,omitempty"`
+	Plugin    *pluginDraft   `json:"plugin,omitempty"`
 }
 
 func settingsHash(m map[string]any) string {
@@ -234,19 +156,19 @@ func settingsHash(m map[string]any) string {
 	return hex.EncodeToString(h[:])
 }
 
-func draftKey(id string) string { return "ai-draft:" + id }
-
 func (s *Server) saveDraft(ctx context.Context, d *Draft) error {
-	d.PatchRaw = d.Patch.Set
 	b, err := json.Marshal(d)
 	if err != nil {
 		return err
 	}
-	return s.Store.KV.Set(ctx, draftKey(d.ID), string(b), draftTTL)
+	return s.Store.KV.Set(ctx, draftPrefix+d.ID, string(b), draftTTL)
 }
 
 func (s *Server) loadDraft(ctx context.Context, id string) (*Draft, error) {
-	raw, ok, err := s.Store.KV.Get(ctx, draftKey(id))
+	if id == "" || len(id) > 64 {
+		return nil, errors.New("draft_not_found")
+	}
+	raw, ok, err := s.Store.KV.Get(ctx, draftPrefix+id)
 	if err != nil || !ok {
 		return nil, errors.New("draft_not_found")
 	}
@@ -254,115 +176,38 @@ func (s *Server) loadDraft(ctx context.Context, id string) (*Draft, error) {
 	if err = json.Unmarshal([]byte(raw), &d); err != nil {
 		return nil, err
 	}
-	d.Patch.Set, d.Patch.Explain = d.PatchRaw, d.Explain
 	return &d, nil
 }
 
-// createDraft 后台生成草稿并实测；页面轮询 GET /ai/drafts/:id。
-func (s *Server) createDraft(c *gin.Context) {
-	var req struct {
-		NodeID      int    `json:"node_id"`
-		Instruction string `json:"instruction"`
-	}
-	if !bind(c, &req) {
-		return
-	}
-	req.Instruction = strings.TrimSpace(req.Instruction)
-	if req.Instruction == "" || len(req.Instruction) > 2000 {
-		failure(c, 400, "invalid_instruction")
-		return
-	}
-	ctx := c.Request.Context()
-	n, err := s.Store.Ent.Node.Get(ctx, req.NodeID)
+// pendingDrafts 返回等待确认的草稿（旧到新），控制台据此依次弹出确认窗。
+func (s *Server) pendingDrafts(ctx context.Context) ([]*Draft, error) {
+	keys, err := s.Store.KV.Keys(ctx, draftPrefix, 500)
 	if err != nil {
-		failure(c, 404, "node_not_found")
-		return
+		return nil, err
 	}
-	p, ok, err := s.aiProvider(ctx)
-	if err != nil || !ok {
-		failure(c, 409, "ai_not_configured")
-		return
+	var out []*Draft
+	for _, k := range keys {
+		if d, err := s.loadDraft(ctx, strings.TrimPrefix(k, draftPrefix)); err == nil && d.Status == "passed" {
+			out = append(out, d)
+		}
 	}
-	if ok, _ := s.Store.KV.SetNX(ctx, fmt.Sprintf("ai-running:%d", n.ID), "1", 5*time.Minute); !ok {
-		failure(c, 409, "draft_running")
-		return
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	if len(out) > maxDraftsLimit {
+		out = out[:maxDraftsLimit]
 	}
-	d := &Draft{ID: randomToken(12), NodeID: n.ID, Instruction: req.Instruction, Status: "running", Attempts: []Attempt{}, BaseHash: settingsHash(n.Settings), CreatedAt: time.Now()}
-	if err = s.saveDraft(ctx, d); err != nil {
-		_ = s.Store.KV.Del(ctx, fmt.Sprintf("ai-running:%d", n.ID))
+	return out, nil
+}
+
+func (s *Server) listDrafts(c *gin.Context) {
+	list, err := s.pendingDrafts(c.Request.Context())
+	if err != nil {
 		failure(c, 503, "draft_unavailable")
 		return
 	}
-	s.audit(c, "ai.draft", "node:"+itoa(n.ID), "started")
-	go func() {
-		bg, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-		defer s.Store.KV.Del(bg, fmt.Sprintf("ai-running:%d", n.ID))
-		s.runDraft(bg, p, n, d)
-	}()
-	c.JSON(202, d)
-}
-
-// runDraft 是草稿循环：模型故障只让本次草稿失败，节点与内核保持原样。
-func (s *Server) runDraft(ctx context.Context, p ai.Provider, n *ent.Node, d *Draft) {
-	g, _ := s.Store.Ent.Gate.Get(ctx, n.GateID)
-	versions := map[string]string{}
-	if g != nil {
-		if ks, _, err := s.gateKernels(ctx, g, map[string]bool{n.Kernel: true}); err == nil {
-			for k, v := range ks {
-				versions[k] = v.Version
-			}
-		}
+	if list == nil {
+		list = []*Draft{}
 	}
-	state, _ := json.MarshalIndent(map[string]any{
-		"kernel": n.Kernel, "kernel_version": versions[n.Kernel], "protocol": n.Protocol, "network": n.Network, "security": n.Security,
-		"settings": ai.Redact(n.Settings), "gate_last_error": func() string {
-			if g != nil {
-				return g.LastError
-			}
-			return ""
-		}(),
-	}, "", "  ")
-	msgs := []ai.Message{{Role: "user", Content: "当前节点：\n" + string(state) + "\n\n管理员要求：" + d.Instruction}}
-	system := ai.SystemPrompt(editableFields)
-	for round := 0; round < aiRounds; round++ {
-		answer, err := (ai.Client{}).Complete(ctx, p, system, msgs)
-		if err != nil {
-			d.Status, d.Error = "error", err.Error()
-			_ = s.saveDraft(ctx, d)
-			return
-		}
-		msgs = append(msgs, ai.Message{Role: "assistant", Content: answer})
-		att := Attempt{}
-		patch, err := ai.ParsePatch(answer)
-		if err == nil {
-			after := ai.Apply(n.Settings, patch)
-			att.Explain, att.Changes = patch.Explain, ai.Diff(n.Settings, after)
-			if g == nil {
-				err = errors.New("gate_not_found")
-			} else if err = s.checkSettings(ctx, g, n.Kernel, n.Protocol, n.Network, n.Security, n.Port, after); err == nil {
-				att.Result, err = s.testNode(ctx, n, after)
-			}
-			if err == nil {
-				d.Attempts = append(d.Attempts, att)
-				d.Status, d.Explain, d.Changes, d.Patch = "passed", patch.Explain, att.Changes, patch
-				_ = s.saveDraft(ctx, d)
-				return
-			}
-		}
-		att.Error = err.Error()
-		d.Attempts = append(d.Attempts, att)
-		_ = s.saveDraft(ctx, d)
-		feedback := "上一份草稿未通过：" + att.Error
-		if att.Result != nil {
-			if b, e := json.Marshal(att.Result); e == nil {
-				feedback += "\n实测详情：" + string(b)
-			}
-		}
-		msgs = append(msgs, ai.Message{Role: "user", Content: feedback + "\n请修正后重新输出完整 JSON 草稿。"})
-	}
-	d.Status, d.Error = "failed", "连续 3 次草稿未通过实测，节点保持原样"
-	_ = s.saveDraft(ctx, d)
+	c.JSON(200, gin.H{"drafts": list})
 }
 
 func (s *Server) getDraft(c *gin.Context) {
@@ -374,7 +219,65 @@ func (s *Server) getDraft(c *gin.Context) {
 	c.JSON(200, d)
 }
 
-// applyDraft 只接受已通过实测、且节点参数自起草后未被修改的草稿。
+func (s *Server) discardDraft(c *gin.Context) {
+	ctx := c.Request.Context()
+	d, err := s.loadDraft(ctx, c.Param("id"))
+	if err != nil {
+		failure(c, 404, "draft_not_found")
+		return
+	}
+	_ = s.Store.KV.Del(ctx, draftPrefix+d.ID)
+	if d.Kind == "defense" && d.Defense != nil {
+		s.markEvent(ctx, d.Defense.EventID, "dismissed", "")
+	}
+	if d.Kind == "plugin" && d.Plugin != nil && strings.HasPrefix(filepath.Clean(d.Plugin.Dir), filepath.Join(s.dshLayout().Runtime(), "plugin-drafts")+string(filepath.Separator)) {
+		_ = os.RemoveAll(d.Plugin.Dir)
+	}
+	s.audit(c, "ai.discard", d.Kind+":"+d.ID, "ok")
+	c.Status(204)
+}
+
+// submitNodeDraft 校验并实测 dsh 提交的节点草稿。返回的草稿 status 为 passed（等待管理员确认）或 failed（附原因）。
+func (s *Server) submitNodeDraft(ctx context.Context, source string, nodeID int, set map[string]any, explain string) (*Draft, error) {
+	n, err := s.Store.Ent.Node.Get(ctx, nodeID)
+	if err != nil {
+		return nil, errors.New("节点不存在")
+	}
+	explain = strings.TrimSpace(explain)
+	if explain == "" || len(explain) > 2000 {
+		return nil, errors.New("explain 必须是一句不超过 2000 字的说明")
+	}
+	patch := ai.Patch{Set: set, Explain: explain}
+	d := &Draft{ID: randomToken(12), Kind: "node", Source: source, Explain: explain, CreatedAt: time.Now().UTC(), NodeID: n.ID, NodeName: n.Name, PatchRaw: set, BaseHash: settingsHash(n.Settings)}
+	err = ai.CheckPatch(patch)
+	for k := range set {
+		if err == nil && !editable(k) {
+			err = fmt.Errorf("字段 %s 不允许修改", k)
+		}
+	}
+	if err == nil {
+		after := ai.Apply(n.Settings, patch)
+		d.Changes = ai.Diff(n.Settings, after)
+		if len(d.Changes) == 0 {
+			err = errors.New("草稿与当前参数相同")
+		} else if g, gerr := s.Store.Ent.Gate.Get(ctx, n.GateID); gerr != nil {
+			err = errors.New("节点所在 VPS 不存在")
+		} else if err = s.checkSettings(ctx, g, n.Kernel, n.Protocol, n.Network, n.Security, n.Port, after); err == nil {
+			d.Result, err = s.testNode(ctx, n, after)
+		}
+	}
+	d.Status = "passed"
+	if err != nil {
+		d.Status, d.Error = "failed", err.Error()
+	}
+	if err = s.saveDraft(ctx, d); err != nil {
+		return nil, err
+	}
+	_, _ = s.Store.Ent.Audit.Create().SetAction("ai.draft").SetTarget(source + " node:" + itoa(n.ID)).SetResult(d.Status).Save(ctx)
+	return d, nil
+}
+
+// applyDraft 只接受已通过实测的草稿；节点草稿还要求节点参数自起草后未被修改。
 func (s *Server) applyDraft(c *gin.Context) {
 	ctx := c.Request.Context()
 	d, err := s.loadDraft(ctx, c.Param("id"))
@@ -386,6 +289,14 @@ func (s *Server) applyDraft(c *gin.Context) {
 		failure(c, 409, "draft_not_passed")
 		return
 	}
+	if d.Kind == "defense" {
+		s.applyDefenseDraft(c, d)
+		return
+	}
+	if d.Kind == "plugin" {
+		s.applyPluginDraft(c, d)
+		return
+	}
 	n, err := s.Store.Ent.Node.Get(ctx, d.NodeID)
 	if err != nil {
 		failure(c, 404, "node_not_found")
@@ -395,7 +306,7 @@ func (s *Server) applyDraft(c *gin.Context) {
 		failure(c, 409, "draft_changed")
 		return
 	}
-	if n, err = n.Update().SetSettings(ai.Apply(n.Settings, d.Patch)).Save(ctx); err != nil {
+	if n, err = n.Update().SetSettings(ai.Apply(n.Settings, ai.Patch{Set: d.PatchRaw})).Save(ctx); err != nil {
 		failure(c, 500, "update_failed")
 		return
 	}
@@ -403,7 +314,7 @@ func (s *Server) applyDraft(c *gin.Context) {
 		failure(c, 500, "sync_failed")
 		return
 	}
-	_ = s.Store.KV.Del(ctx, draftKey(d.ID))
+	_ = s.Store.KV.Del(ctx, draftPrefix+d.ID)
 	s.audit(c, "ai.apply", "node:"+itoa(n.ID), "ok")
 	c.JSON(200, s.nodeView(ctx, n))
 }
@@ -415,4 +326,12 @@ func (s *Server) TestNodeSettings(ctx context.Context, nodeID int, settings map[
 		return nil, err
 	}
 	return s.testNode(ctx, n, settings)
+}
+
+// dropLegacyAIProvider 删除旧版的 Claude / GPT 模型服务配置：AI 改由托管的 dsh 提供，Key 只保存在 dsh 里。
+func (s *Server) dropLegacyAIProvider(ctx context.Context) {
+	n, err := s.Store.Ent.Setting.Delete().Where(setting.KeyEQ("ai-provider")).Exec(ctx)
+	if err == nil && n > 0 {
+		_, _ = s.Store.Ent.Audit.Create().SetAction("ai.provider.delete").SetTarget("migrated-to-dsh").SetResult("ok").Save(ctx)
+	}
 }

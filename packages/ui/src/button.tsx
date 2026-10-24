@@ -2,6 +2,7 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
+import { Ripple } from "./ripple";
 
 const buttonVariants = cva(
   "mg-key group/button inline-flex shrink-0 items-center justify-center gap-2 rounded-[var(--mg-radius)] font-medium whitespace-nowrap select-none outline-none disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
@@ -14,7 +15,7 @@ const buttonVariants = cva(
         secondary: "is-pressed text-[var(--mg-accent-soft-ink)]",
         ghost: "mg-key-ghost text-[var(--mg-ink-2)] hover:text-[var(--mg-ink)]",
         destructive: "text-[var(--mg-bad-ink)]",
-        link: "!bg-transparent px-0 text-[var(--mg-accent-text)] underline-offset-4 before:hidden after:hidden hover:underline active:!transform-none",
+        link: "!bg-transparent px-0 text-[var(--mg-accent-text)] underline-offset-4 before:hidden after:hidden hover:underline active:!translate-none active:!scale-none",
       },
       size: {
         default: "min-h-9 px-3.5 py-1.5 text-[13px]",
@@ -36,8 +37,10 @@ function Button({
   variant = "default",
   size = "default",
   nativeButton,
+  ripple = false,
+  children,
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants> & { ripple?: boolean }) {
   return (
     <ButtonPrimitive
       data-slot="button"
@@ -46,7 +49,11 @@ function Button({
       // 以链接等非 <button> 元素渲染时（render={<Link/>}）告知 Base UI，避免丢失按钮语义的警告
       nativeButton={nativeButton ?? !props.render}
       {...props}
-    />
+    >
+      {children}
+      {/* 水波默认关闭：小键帽上按压内凹已是反馈，大面积主操作键再开 */}
+      {ripple && <Ripple />}
+    </ButtonPrimitive>
   );
 }
 

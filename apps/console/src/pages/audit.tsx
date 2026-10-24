@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { SearchInput, Badge, PageHeader, Pager, Button, Card, CardContent, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Dialog, DialogContent, DialogTitle, DialogDescription } from "@migate/ui";
+import { SearchInput, Badge, PageHeader, Pager, Button, SkeletonList, Card, CardContent, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Dialog, DialogContent, DialogTitle, DialogDescription } from "@migate/ui";
 import { api } from "../api";
 import { date, type Items } from "../lib/models";
 import { State } from "../components/feedback";
@@ -23,7 +23,7 @@ export function AuditPage() {
         <SearchInput aria-label="搜索审计记录" placeholder="搜索操作名称、目标或任务编号…" value={search} onChange={e => { S(e.target.value); P(1); }} />
         <Select value={result} onValueChange={v => { F(String(v)); P(1); }}><SelectTrigger className="min-w-[130px]" aria-label="筛选审计结果"><SelectValue>{resultLabels[result]}</SelectValue></SelectTrigger><SelectContent>{Object.entries(resultLabels).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}</SelectContent></Select>
       </div><CardContent>
-      {query.isPending ? <State loading /> : query.error ? <State error={query.error} onRetry={() => query.refetch()} /> : !query.data?.items.length ? <State empty="没有符合条件的操作记录" /> : query.data.items.map(item => <div className="list-row audit-row" key={item.id}>
+      {query.isPending ? <State loading skeleton={<SkeletonList rows={6} lines={3} rowClassName="list-row audit-row" />} /> : query.error ? <State error={query.error} onRetry={() => query.refetch()} /> : !query.data?.items.length ? <State empty="没有符合条件的操作记录" /> : query.data.items.map(item => <div className="list-row audit-row" key={item.id}>
         <div><strong>{item.action}</strong><small>{date(item.created_at)} · {item.actor ? `账户 #${item.actor}` : "系统 / 未登录"}</small><small>目标：{item.target || "未指定"}</small></div>
         <div className="actions"><Badge variant="soft" tone={resultTones[item.result] ?? "neutral"}>{resultLabels[item.result] ?? item.result}</Badge><Button size="sm" variant="outline" onClick={() => D(item)}>查看记录 #{item.id}</Button></div>
       </div>)}

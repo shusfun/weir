@@ -41,6 +41,8 @@ type Server struct {
 	AllowPrivateSources bool
 	// Mail 发送邮件；为空时使用 SMTP。
 	Mail Mailer
+	// dsh 是托管的 DeepSeek Harness（进程、子域名网关、MCP 工具）。
+	dsh dshHost
 }
 
 func New(c Config, path string, assets fs.FS) (*Server, error) {
@@ -86,6 +88,7 @@ func (s *Server) StartBackground(ctx context.Context) {
 		go s.watchInstallation(ctx)
 	}
 	go s.maintenance(ctx)
+	go s.superviseDSH(ctx)
 }
 
 // maintenance 每分钟执行按月重置用量等周期任务；未初始化时跳过。
@@ -107,6 +110,8 @@ func (s *Server) maintenance(ctx context.Context) {
 					_ = s.RefreshSources(ctx, now)
 					_ = s.AutoBackup(ctx, now)
 					_ = s.CheckAlerts(ctx, now)
+					_ = s.ObserveSecurity(ctx, now)
+					s.dropLegacyAIProvider(ctx)
 					return nil
 				})
 			}
@@ -163,6 +168,8 @@ func (s *Server) Router() *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	_ = r.SetTrustedProxies([]string{"127.0.0.1", "::1"})
+	// dsh 子域名的请求在这里就分走，不会进入下面的页面与接口。
+	r.Use(s.dshGatewayMiddleware)
 	r.Use(func(c *gin.Context) {
 		if c.Request.URL.Path == "/api/v1/setup/install" {
 			s.state.Lock()
@@ -175,9 +182,17 @@ func (s *Server) Router() *gin.Engine {
 		c.Header("Referrer-Policy", "no-referrer")
 		c.Header("X-Frame-Options", "DENY")
 		c.Header("Cache-Control", "no-store")
-		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'")
+		csp := "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'"
+		if domain := s.dshDomain(); domain != "" {
+			csp += "; frame-src 'self' " + requestScheme(c.Request) + "://" + domain
+		}
+		c.Header("Content-Security-Policy", csp)
 		if !sameOriginRequest(c.Request) {
 			failure(c, 403, "origin_rejected")
+			return
+		}
+		if s.blocked(c.Request) {
+			failure(c, 403, "source_blocked")
 			return
 		}
 		c.Next()
@@ -220,6 +235,8 @@ func (s *Server) Router() *gin.Engine {
 	s.addonRoutes(ready, auth, admin)
 	s.pageRoutes(ready, admin)
 	s.opsRoutes(admin)
+	s.dshRoutes(admin)
+	s.defenseRoutes(admin)
 	s.backupRoutes(admin)
 	s.mailRoutes(ready, admin)
 	s.notifyRoutes(admin)

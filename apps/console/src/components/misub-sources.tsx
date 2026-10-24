@@ -1,7 +1,7 @@
 // 订阅源：机场订阅地址。中心拉取时只连公网地址；保护性缓存在上游失败或节点骤减时保留上次结果。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, CodeBlock, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Label, Meter, Notice, SectionHeader, Switch, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, useToast } from "@migate/ui";
+import { Badge, Button, CodeBlock, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Label, Meter, Notice, SectionHeader, SkeletonTable, Switch, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, useToast } from "@migate/ui";
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { bytes, date } from "../lib/models";
@@ -47,7 +47,12 @@ export function SourcesPanel() {
     <section className="stack">
       <SectionHeader title="订阅源" description="机场订阅地址；节点数与用量来自最近一次拉取，没有报告时显示「未知」。" actions={<Button size="sm" onClick={() => setEdit("new")}><Plus />添加订阅源</Button>} />
       {q.isPending || q.error ? (
-        <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} />
+        <State
+          loading={q.isPending}
+          error={q.error}
+          onRetry={() => q.refetch()}
+          skeleton={<SkeletonTable card={false} columns={["名称", "节点", "用量", "最近拉取", ""]} rows={4} lines={2} />}
+        />
       ) : q.data.items.length === 0 ? (
         <State empty="还没有订阅源" />
       ) : (

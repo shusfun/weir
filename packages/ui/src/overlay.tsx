@@ -97,18 +97,25 @@ function Tooltip({
 function Sheet(props: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root data-slot="sheet" {...props} />;
 }
+const SheetClose = DialogPrimitive.Close;
 
 function SheetContent({
   side = "left",
   title,
   description,
   className,
+  close,
+  finalFocus,
   children,
 }: {
   side?: "left" | "right";
   title: ReactNode;
   description?: ReactNode;
   className?: string;
+  // 自定义关闭键（如与触发键同位的 MenuToggle）；传入后不再渲染右上角的默认关闭键
+  close?: ReactNode;
+  // 关闭后焦点落点：触发键不是 Sheet 的 Trigger（如在顶栏里单独控制 open）时传入它的 ref
+  finalFocus?: DialogPrimitive.Popup.Props["finalFocus"];
   children: ReactNode;
 }) {
   return (
@@ -116,27 +123,30 @@ function SheetContent({
       <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-[rgb(20_18_14/0.38)] transition-opacity duration-[var(--mg-mid)] data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 dark:bg-[rgb(0_0_0/0.6)]" />
       <DialogPrimitive.Popup
         data-slot="sheet-content"
+        finalFocus={finalFocus}
         data-side={side}
         className={cn(
           "fixed inset-y-0 z-50 flex w-[min(320px,88vw)] flex-col gap-4 overflow-hidden border-[var(--mg-line)] bg-[var(--mg-panel)] p-5 shadow-[0_0_30px_-10px_var(--mg-shade-strong)] outline-none transition-transform duration-[var(--mg-mid)] ease-[var(--mg-ease)] data-[side=left]:left-0 data-[side=left]:border-r data-[side=right]:right-0 data-[side=right]:border-l data-[side=left]:data-[starting-style]:-translate-x-full data-[side=left]:data-[ending-style]:-translate-x-full data-[side=right]:data-[starting-style]:translate-x-full data-[side=right]:data-[ending-style]:translate-x-full",
           className,
         )}
       >
-        <div className="flex items-start justify-between gap-3">
+        <div data-slot="sheet-header" className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <DialogPrimitive.Title className="text-base font-semibold">{title}</DialogPrimitive.Title>
             {description && (
               <DialogPrimitive.Description className="mt-1 text-xs text-[var(--mg-ink-3)]">{description}</DialogPrimitive.Description>
             )}
           </div>
-          <DialogPrimitive.Close
-            aria-label="关闭"
-            className="inline-flex size-8 items-center justify-center rounded-[var(--mg-radius-sm)] text-[var(--mg-ink-3)] hover:bg-[var(--mg-well)] focus-visible:ring-3 focus-visible:ring-ring"
-          >
-            <XIcon className="size-4" />
-          </DialogPrimitive.Close>
+          {close ?? (
+            <DialogPrimitive.Close
+              aria-label="关闭"
+              className="inline-flex size-8 items-center justify-center rounded-[var(--mg-radius-sm)] text-[var(--mg-ink-3)] hover:bg-[var(--mg-well)] focus-visible:ring-3 focus-visible:ring-ring"
+            >
+              <XIcon className="size-4" />
+            </DialogPrimitive.Close>
+          )}
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+        <div className="mg-focus-gutter min-h-0 flex-1 overflow-y-auto">{children}</div>
       </DialogPrimitive.Popup>
     </DialogPrimitive.Portal>
   );
@@ -146,5 +156,5 @@ export {
   Menu, MenuTrigger, MenuContent, MenuItem, MenuLabel, MenuSeparator,
   Popover, PopoverTrigger, PopoverContent,
   TooltipProvider, Tooltip,
-  Sheet, SheetContent,
+  Sheet, SheetContent, SheetClose,
 };

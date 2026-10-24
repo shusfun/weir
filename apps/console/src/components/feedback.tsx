@@ -1,5 +1,6 @@
 import { Notice, Button, Badge, PageState, StatusLamp, toneOf } from "@migate/ui";
 import { RefreshCw } from "lucide-react";
+import type { ReactNode } from "react";
 import { labels } from "../lib/models";
 import { isConflict } from "../api";
 
@@ -10,13 +11,23 @@ export function State({
   empty,
   onRetry,
   detail,
+  skeleton,
 }: {
   loading?: boolean;
   error?: unknown;
   empty?: string;
   onRetry?: () => void;
   detail?: string;
+  // 与真实内容同结构的骨架（SkeletonTable / SkeletonList / SkeletonCards）；不传时显示转圈
+  skeleton?: ReactNode;
 }) {
+  if (loading && skeleton)
+    return (
+      <div role="status" aria-busy="true">
+        <span className="sr-only">正在加载数据</span>
+        {skeleton}
+      </div>
+    );
   if (loading)
     return <PageState kind="loading" title="正在加载数据" detail="请稍候，正在获取最新状态。" />;
   if (error)

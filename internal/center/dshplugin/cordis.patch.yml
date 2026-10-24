@@ -1,0 +1,39 @@
+# MiGate 维护的 dsh 插件：只新增「MiGate 助手」预设并设为默认，不改 dsh 自带的预设
+# （按 id 改写一行会替换它的整个 config）。MiGate 工具的地址与令牌是占位符，管理进程启动 dsh 时填入。
+- insert:
+    - id: preset-migate
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: migate
+        order: 0
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: |-
+                你是 MiGate 的运维助手（由 {{model}} 模型驱动），帮管理员调整代理节点、研判安全事件。
+                每段对话开始先调用 mcp__migate__get_console_context，了解管理员正在看哪个节点或页面。
+                只能通过 MiGate 的工具读取脱敏后的状态、提交草稿；草稿要经过 VPS 实测与管理员确认才会生效，你无法直接改动任何配置。
+                参数里的 <redacted> 是隐藏的机密值，不要猜测或修改。请用中文回答。
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
+          - id: tool-todo
+            name: '@deepseek-ai/dsh-tool-todo'
+            config:
+              allowParallelInProgress: true
+          - id: mcp-migate
+            name: '@deepseek-ai/dsh-mcp-client'
+            config:
+              serverName: migate
+              transport: streamable-http
+              url: '{{MIGATE_MCP_URL}}'
+              headers:
+                Authorization: 'Bearer {{MIGATE_MCP_TOKEN}}'
+              toolCallTimeoutMs: 180000
+- id: agent-preset-registry
+  config:
+    default: migate

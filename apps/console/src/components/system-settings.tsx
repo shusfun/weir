@@ -8,7 +8,7 @@ import { date } from "../lib/models";
 import { State } from "./feedback";
 
 // Reauth 是各卡片共用的「当前密码 + 二次验证码」输入。
-function Reauth({ value, onChange }: { value: { password: string; code: string }; onChange: (v: { password: string; code: string }) => void }) {
+export function Reauth({ value, onChange }: { value: { password: string; code: string }; onChange: (v: { password: string; code: string }) => void }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <Field label="当前密码" htmlFor={"re-pass-" + value.password.length}><Input type="password" autoComplete="current-password" aria-label="当前密码" required value={value.password} onChange={(e) => onChange({ ...value, password: e.target.value })} /></Field>
@@ -17,7 +17,7 @@ function Reauth({ value, onChange }: { value: { password: string; code: string }
   );
 }
 
-function useSave() {
+export function useSave() {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -37,7 +37,7 @@ function useSave() {
   return { busy, error, run };
 }
 
-function Section({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+export function Section({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return <Card><CardContent className="stack"><SectionHeader title={title} description={description} />{children}</CardContent></Card>;
 }
 

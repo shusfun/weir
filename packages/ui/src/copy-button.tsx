@@ -1,8 +1,9 @@
-// 复制到剪贴板：统一权限失败处理与“已复制”反馈（图标 + 文案 2 秒后恢复）。
+// 复制到剪贴板：统一权限失败处理与“已复制”反馈（描绘对勾 + 文案 2 秒后恢复）。
 // 调用方只关心复制什么、成功 / 失败后补充什么提示；不再各自调用 navigator.clipboard。
 import { useEffect, useState, type ComponentProps, type ReactNode } from "react";
-import { Check, Copy } from "lucide-react";
+import { Copy } from "lucide-react";
 import { Button } from "./button";
+import { CheckMark } from "./check-mark";
 
 function CopyButton({
   value,
@@ -41,7 +42,8 @@ function CopyButton({
         }
       }}
     >
-      {icon && (copied ? <Check /> : <Copy />)}
+      {/* 已复制：对勾一笔画出，状态有过程，不是啪地换图标 */}
+      {icon && (copied ? <CheckMark /> : <Copy />)}
       <span aria-live="polite">{copied ? copiedLabel : children}</span>
     </Button>
   );

@@ -1,5 +1,16 @@
 /* 拟物控件：开关、分段键、计数器窗口、模块卡片。全部只动 transform / opacity。 */
 @layer components {
+  /* 滚动容器会裁剪子元素外扩的焦点环：四周留出焦点环宽度再用负外边距抵消，内容位置不变 */
+  .mg-focus-gutter {
+    margin: calc(var(--mg-focus-gutter) * -1);
+    padding: var(--mg-focus-gutter);
+  }
+  /* fieldset 的 legend 贴在边框顶端、不吃内边距：下移回原位，正好落进让出的 4px */
+  .mg-focus-gutter > legend {
+    position: relative;
+    top: var(--mg-focus-gutter);
+  }
+
   .mg-switch {
     position: relative;
     display: inline-flex;
@@ -39,12 +50,20 @@
     box-shadow:
       1px 2px 3px rgb(0 0 0 / 0.22),
       inset 0 1px 0 rgb(255 255 255 / 0.9);
-    transition: transform var(--mg-slow) var(--mg-spring);
+    /* 位移与拉伸分开：translate 管位置，scale 管形变，互不覆盖 */
+    transform-origin: left center;
+    transition:
+      translate 260ms var(--mg-ease),
+      scale var(--mg-fast) ease-out;
   }
   .dark .mg-switch-thumb { background: linear-gradient(145deg, #e5e5ea, #a1a1a6); }
   .mg-switch[data-size="sm"] .mg-switch-thumb { width: 14px; height: 14px; }
-  .mg-switch-thumb[data-checked] { transform: translateX(20px); }
-  .mg-switch[data-size="sm"] .mg-switch-thumb[data-checked] { transform: translateX(16px); }
+  .mg-switch-thumb[data-checked] { translate: 20px 0; transform-origin: right center; }
+  .mg-switch[data-size="sm"] .mg-switch-thumb[data-checked] { translate: 16px 0; }
+  /* 弹性开关：按住时拨钮向行进方向拉长；松手切换时中段保持拉长，落位压回原宽并带一次回弹 */
+  .mg-switch:not([data-disabled]):active .mg-switch-thumb { scale: 1.33 1; }
+  .mg-switch[data-moved] .mg-switch-thumb[data-checked] { animation: mg-switch-land-on 460ms linear; }
+  .mg-switch[data-moved] .mg-switch-thumb[data-unchecked] { animation: mg-switch-land-off 460ms linear; }
 
   /* 分段拨钮：内凹底座，各项平放不凸起，只有选中项点亮（.is-pressed），并排高度一致 */
   .mg-segmented {
@@ -66,6 +85,8 @@
   .mg-segmented:not([data-full-width]) { justify-self: start; align-self: flex-start; }
   .mg-segmented > .mg-key { background: transparent; }
   .mg-segmented > .mg-key::before { opacity: 0; }
+  /* 底座内边距 3px 且横向可滚动：焦点框收到 2px 线 + 1px 间距，正好落在内边距里不被裁 */
+  .mg-segmented > .mg-key:focus-visible { outline-offset: 1px; }
   .mg-segmented[data-full-width="always"] { display: flex; width: 100%; }
   .mg-segmented[data-full-width="always"] > .mg-key { flex: 1; }
   @media (max-width: 700px) {
@@ -115,7 +136,23 @@
   .mg-module-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--mg-ink-3); }
   .mg-module-paused { margin: 0 0 12px; font-size: 12px; color: var(--mg-ink-3); }
   /* 下拉选择器展开时保持按下 */
-  .mg-key[data-popup-open] { transform: translateY(1px); }
+  .mg-key[data-popup-open] { translate: 0 1px; scale: none; }
   .mg-key[data-popup-open]::before { opacity: 0; }
   .mg-key[data-popup-open]::after { opacity: 1; }
+}
+
+/* 开 / 关各一组相同的关键帧：名字不同，每次切换都会重新播放。0–50% 行进中保持拉长，65% 压过头，之后回弹到原宽 */
+@keyframes mg-switch-land-on {
+  0% { scale: 1.33 1; }
+  50% { scale: 1.26 1; }
+  66% { scale: 0.86 1.06; }
+  82% { scale: 1.05 0.98; }
+  100% { scale: 1 1; }
+}
+@keyframes mg-switch-land-off {
+  0% { scale: 1.33 1; }
+  50% { scale: 1.26 1; }
+  66% { scale: 0.86 1.06; }
+  82% { scale: 1.05 0.98; }
+  100% { scale: 1 1; }
 }

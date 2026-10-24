@@ -1,5 +1,6 @@
 // 机械滚动计数器：每一位是一条 0-9 数字带（6 份循环），数值变化时各位独立滚动。
-// 所有位同一时长，低位走的距离更长所以更快；弹簧曲线带轻微过冲。首次显示不滚动。
+// 所有位同一时长、同时停住，低位走的距离更长所以更快；强减速曲线让数字慢慢停下来，
+// 不靠过冲收尾，也不会滚到一半突然刹住。首次显示不滚动。
 import { useLayoutEffect, useRef, useState } from "react";
 import { cn } from "cn";
 
@@ -24,7 +25,7 @@ function Column({ digit, turns, dir, tick }: { digit: number; turns: number; dir
         className="mg-counter-strip"
         style={{
           transform: `translateY(${-state.index * 1.2}em)`,
-          transition: state.animate ? "transform var(--mg-slow) var(--mg-spring)" : "none",
+          transition: state.animate ? "transform var(--mg-settle) var(--mg-decel)" : "none",
         }}
         // 停稳后无动画地归位到中间一份，下次可继续双向滚动
         onTransitionEnd={() => setState({ index: middle + digit, animate: false })}

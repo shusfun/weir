@@ -124,6 +124,12 @@ const dialogSizes = {
   xl: "sm:max-w-[900px]",
 } as const;
 
+// 640px 以下居中弹窗改为底部抽屉：升到位后停顿一拍，内容再落稳（关键帧见 styles/motion.css）；
+// 退场直接下沉。只改呈现，Dialog 的接口、焦点与关闭行为不变。命令面板（placement=top）不受影响。
+const bottomSheet =
+  "max-sm:inset-x-0 max-sm:top-auto max-sm:bottom-0 max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-b-none max-sm:border-b-0 max-sm:max-h-[calc(100dvh-24px)] max-sm:pb-[calc(20px+env(safe-area-inset-bottom,0px))] max-sm:transition-[translate] max-sm:duration-[260ms] max-sm:data-[open]:animate-[mg-sheet-rise_560ms_linear] max-sm:data-[starting-style]:scale-100 max-sm:data-[starting-style]:opacity-100 max-sm:data-[ending-style]:scale-100 max-sm:data-[ending-style]:opacity-100 max-sm:data-[ending-style]:translate-y-full";
+const bottomSheetContent = "max-sm:group-data-[open]/dialog:animate-[mg-sheet-content_560ms_linear]";
+
 function DialogContent({
   className,
   children,
@@ -162,20 +168,23 @@ function DialogContent({
         data-size={size}
         className={cn(
           "group/dialog fixed left-1/2 z-50 flex max-h-[calc(100dvh-32px)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 flex-col gap-4 overflow-hidden rounded-[var(--mg-radius-lg)] border border-[var(--mg-line)] bg-[linear-gradient(180deg,var(--mg-panel-top),var(--mg-panel)_64px)] p-6 text-sm text-card-foreground shadow-[inset_0_1px_0_var(--mg-highlight),0_18px_40px_-12px_var(--mg-shade-strong)] outline-none transition-[opacity,scale] duration-[var(--mg-mid)] ease-[var(--mg-ease)] data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.98] data-[ending-style]:opacity-0 max-sm:p-5",
-          placement === "top" ? "top-[14vh] max-h-[calc(86dvh-16px)]" : "top-1/2 -translate-y-1/2",
+          placement === "top" ? "top-[14vh] max-h-[calc(86dvh-16px)]" : cn("top-1/2 -translate-y-1/2", bottomSheet),
           dialogSizes[size],
           className,
         )}
         {...props}
       >
         {header.length > 0 && (
-          <div data-slot="dialog-pinned-header" className="flex shrink-0 flex-col gap-2">
+          <div data-slot="dialog-pinned-header" className={cn("flex shrink-0 flex-col gap-2", placement === "center" && bottomSheetContent)}>
             {header}
           </div>
         )}
         <div
           data-slot="dialog-body"
-          className="flex min-h-0 min-w-0 flex-auto flex-col overflow-x-hidden overflow-y-auto [&>form]:flex [&>form]:min-h-full [&>form]:min-w-0 [&>form]:flex-[1_0_auto] [&>form]:flex-col"
+          className={cn(
+            "mg-focus-gutter flex min-h-0 min-w-0 flex-auto flex-col overflow-x-hidden overflow-y-auto [&>form]:flex [&>form]:min-h-full [&>form]:min-w-0 [&>form]:flex-[1_0_auto] [&>form]:flex-col",
+            placement === "center" && bottomSheetContent,
+          )}
         >
           {body}
         </div>

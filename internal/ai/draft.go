@@ -1,3 +1,5 @@
+// Package ai 处理 AI（托管的 dsh）提交的配置草稿：发给模型前脱敏，草稿只能改非机密字段，
+// 合并后列出差异；草稿须经系统实测、管理员确认才生效。
 package ai
 
 import (
@@ -56,18 +58,23 @@ func ParsePatch(answer string) (Patch, error) {
 	if err := json.Unmarshal([]byte(text), &p); err != nil {
 		return p, errors.New("草稿不是有效的 JSON")
 	}
+	return p, CheckPatch(p)
+}
+
+// CheckPatch 拒绝空草稿、修改机密字段或写入占位符的草稿。
+func CheckPatch(p Patch) error {
 	if len(p.Set) == 0 {
-		return p, errors.New("草稿没有任何修改")
+		return errors.New("草稿没有任何修改")
 	}
 	for k, v := range p.Set {
 		if IsSecret(k) {
-			return p, fmt.Errorf("草稿试图修改机密字段 %s", k)
+			return fmt.Errorf("草稿试图修改机密字段 %s", k)
 		}
 		if s, ok := v.(string); ok && strings.Contains(s, placeholder) {
-			return p, fmt.Errorf("草稿字段 %s 含占位符", k)
+			return fmt.Errorf("草稿字段 %s 含占位符", k)
 		}
 	}
-	return p, nil
+	return nil
 }
 
 // Apply 把草稿合并进原参数（机密字段保持原值）。
@@ -117,12 +124,4 @@ func Diff(before, after map[string]any) []Change {
 		}
 	}
 	return out
-}
-
-// SystemPrompt 约束模型：只输出 JSON 草稿，只用给定字段。
-func SystemPrompt(fields []string) string {
-	return "你是代理服务器配置助手，为 Xray / sing-box 入站调整参数。只输出一个 JSON 对象，格式为 " +
-		`{"set": {"字段": 值}, "explain": "一句中文说明"}` +
-		"；值为 null 表示删除该字段。只能使用这些字段：" + strings.Join(fields, ", ") +
-		"。标为 <redacted> 的机密字段由系统管理，不要输出它们。不要输出其他文字。"
 }

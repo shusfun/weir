@@ -24,6 +24,8 @@ const SecurityPage = page(() => import("./pages/security"), "SecurityPage");
 const LoginPage = page(() => import("./pages/login"), "LoginPage");
 const SetupPage = page(() => import("./pages/setup"), "SetupPage");
 const PublicPage = page(() => import("./pages/public-page"), "PublicPage");
+// 动效样例页只在开发环境存在：生产构建里 import.meta.env.DEV 为 false，这个分支和页面一起被剔除
+const DevUiPage = import.meta.env.DEV ? page(() => import("./pages/dev-ui"), "DevUiPage") : null;
 
 type Account = { email?: string; role?: string };
 const loading = (title: string) => <PageState kind="loading" title={title} />;
@@ -96,6 +98,7 @@ function Console() {
               <Route path="/ops/audit" element={guard(<AuditPage />)} />
               <Route path="/subscription" element={<SubscriptionPage />} />
               <Route path="/security" element={<SecurityPage loginRequired={loginRequired} />} />
+              {DevUiPage && <Route path="/dev/ui" element={guard(<DevUiPage />)} />}
               <Route path="*" element={<Navigate to={home} replace />} />
             </Routes>
           </Suspense>

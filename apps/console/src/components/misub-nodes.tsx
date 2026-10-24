@@ -1,7 +1,7 @@
 // 手动节点：按分组展示；可批量导入（链接 / Base64 / Clash YAML / sing-box JSON），分组可重命名或解散（节点保留）。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Label, Notice, SectionHeader, Switch, Textarea, useToast } from "@migate/ui";
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Label, Notice, SectionHeader, SkeletonList, Switch, Textarea, useToast } from "@migate/ui";
 import { Plus, Trash2, Upload } from "lucide-react";
 import { api } from "../api";
 import type { ManualNode } from "../lib/misub";
@@ -44,7 +44,12 @@ export function NodesPanel() {
         <Button size="sm" onClick={() => setEdit("new")}><Plus />添加节点</Button>
       </>} />
       {q.isPending || q.error ? (
-        <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} />
+        <State
+          loading={q.isPending}
+          error={q.error}
+          onRetry={() => q.refetch()}
+          skeleton={<SkeletonList rows={3} lines={2} className="stack rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3" rowClassName="flex items-center justify-between gap-2" />}
+        />
       ) : q.data.items.length === 0 ? (
         <State empty="还没有手动节点" />
       ) : (

@@ -3,6 +3,7 @@
 //	migate                 打开中心中文菜单（本机装有中心时）
 //	migate center [参数]   中心服务、初始化与菜单
 //	migate gate <命令>     Gate Agent、辅助程序与配对
+//	migate dsh agent       dsh 管理进程（独立系统用户 migate-dsh）
 //	migate version         显示版本
 package main
 
@@ -33,6 +34,8 @@ func dispatch(args []string) int {
 		return runGate(args[1:])
 	case "kernel":
 		return runKernel(args[1:])
+	case "dsh":
+		return runDSH(args[1:])
 	case "version", "--version":
 		fmt.Println(buildinfo.ControlVersionLine())
 		return 0
@@ -51,6 +54,7 @@ func usage() {
   migate center [参数]       中心：--serve / --setup / --init / --health-check / --version
   migate gate <命令> [参数]  Gate：run / pair / local-pair / helper / helper-health / version
   migate kernel import <内核> <版本> <架构> <文件>   离线导入内核到中心缓存
+  migate dsh agent --dir <目录>   dsh 管理进程（由 systemd 单元 migate-dsh 启动）
   migate version             显示版本`)
 }
 

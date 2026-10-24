@@ -1,9 +1,9 @@
 // VPS 与节点：VPS 连接中心后只在这里操作；节点用四步向导创建，高级参数可在详情中修改。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Notice, PageHeader, StatusLamp, Switch, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useToast } from "@migate/ui";
+import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Notice, PageHeader, SkeletonCards, StatusLamp, Switch, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useToast } from "@migate/ui";
 import { FileBadge, Plus, Server, Sparkles, Trash2 } from "lucide-react";
-import { AIDraft } from "../components/ai-draft";
+import { openDsh, useDsh } from "../components/dsh";
 import { GateRouting } from "../components/gate-routing";
 import { GateDetail } from "../components/gate-detail";
 import { api } from "../api";
@@ -30,7 +30,7 @@ export function GatesPage() {
   const [certs, setCerts] = useState(false);
   const [busy, setBusy] = useState(0);
   const [edit, setEdit] = useState<Gate | null>(null);
-  const [aiNode, setAINode] = useState<NodeItem | null>(null);
+  const dsh = useDsh();
   const [routing, setRouting] = useState<Gate | null>(null);
   const [detail, setDetail] = useState<Gate | null>(null);
   const refresh = () => Promise.all([gates.refetch(), nodes.refetch()]);
@@ -66,7 +66,6 @@ export function GatesPage() {
       <CertManager open={certs} close={() => setCerts(false)} />
       {detail && <GateDetail gate={gates.data?.find((x) => x.id === detail.id) ?? detail} nodes={nodes.data ?? []} close={() => setDetail(null)} />}
       {routing && <GateRouting gate={routing} close={() => setRouting(null)} />}
-      {aiNode && <AIDraft node={aiNode} close={() => setAINode(null)} applied={() => { setAINode(null); toast("草稿已生效", { tone: "ok" }); void refresh(); }} />}
       {edit && <GateEdit gate={edit} close={() => setEdit(null)} saved={() => { setEdit(null); toast("已保存", { tone: "ok" }); void refresh(); }} />}
       <NodeWizard open={wizard} close={() => setWizard(false)} done={() => { toast("节点已创建", { tone: "ok" }); void refresh(); }} gates={gates.data ?? []} nodes={nodes.data ?? []} />
     </>
@@ -75,7 +74,7 @@ export function GatesPage() {
     return (
       <div className="stack">
         {header}
-        <State loading={gates.isPending || nodes.isPending} error={gates.error ?? nodes.error} onRetry={refresh} />
+        <State loading={gates.isPending || nodes.isPending} error={gates.error ?? nodes.error} onRetry={refresh} skeleton={<SkeletonCards count={2} lines={2} />} />
         {dialogs}
       </div>
     );
@@ -141,7 +140,7 @@ export function GatesPage() {
                               const r = await api(`/admin/nodes/${n.id}/test`, "POST", {});
                               toast(`实测通过：${r.latency_ms} ms`, { tone: "ok" });
                             }, "实测完成")}>实测</Button>
-                            <Button size="sm" variant="outline" onClick={() => setAINode(n)}><Sparkles />AI 调整</Button>
+                            <Button size="sm" variant="outline" title={dsh.data?.ready ? undefined : "请先在系统设置中启用 dsh"} disabled={!dsh.data?.ready} onClick={() => openDsh({ notice: `dsh 已知道你在看节点「${n.name}」，直接说要怎么调整即可。`, nodeId: n.id })}><Sparkles />AI 调整</Button>
                             <Button size="icon-sm" variant="destructive" aria-label={"删除 " + n.name} disabled={busy === n.id}
                               onClick={() => window.confirm(`删除节点「${n.name}」？使用它的订阅会立即失效。`) && act(n.id, () => api("/admin/nodes/" + n.id, "DELETE"), "节点已删除")}>
                               <Trash2 />

@@ -47,7 +47,9 @@
 
   /*
    * 新拟物键帽：外凸与内凹两层阴影各画在一个伪元素上，按下时交叉淡入淡出，
-   * 键帽本体只做 1–2px 位移（弹簧回弹），不逐帧重绘阴影。
+   * 键帽本体只做位移与缩放，不逐帧重绘阴影。
+   * 按压回弹：按下下沉 2px 并缩到 0.97；松手走 --mg-bounce，先冲过原位（上浮、略放大）再落回，
+   * 不是“缩一下就回来”。位移和缩放用独立的 translate / scale 属性，不覆盖业务类里的 transform。
    */
   .mg-key {
     position: relative;
@@ -55,7 +57,8 @@
     background: var(--mg-key);
     border: 1px solid transparent;
     transition:
-      transform var(--mg-slow) var(--mg-spring),
+      translate var(--mg-bounce-dur) var(--mg-bounce),
+      scale var(--mg-bounce-dur) var(--mg-bounce),
       color var(--mg-fast) ease;
   }
   .mg-key::before,
@@ -86,15 +89,18 @@
    * 常驻选中只下沉 1px；手指按下的瞬时反馈为 2px。
    */
   .mg-key.is-pressed {
-    transform: translateY(1px);
+    translate: 0 1px;
     transition:
-      transform var(--mg-fast) ease-out,
+      translate var(--mg-fast) ease-out,
+      scale var(--mg-fast) ease-out,
       color var(--mg-fast) ease;
   }
   .mg-key:active {
-    transform: translateY(2px);
+    translate: 0 2px;
+    scale: 0.97;
     transition:
-      transform var(--mg-fast) ease-out,
+      translate var(--mg-fast) ease-out,
+      scale var(--mg-fast) ease-out,
       color var(--mg-fast) ease;
   }
   .mg-key:active::before,
@@ -134,7 +140,8 @@
   }
   .mg-key:disabled,
   .mg-key[aria-disabled="true"] {
-    transform: none;
+    translate: none;
+    scale: none;
   }
   @media (forced-colors: active) {
     .mg-key { border-color: ButtonText; }

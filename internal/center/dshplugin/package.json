@@ -1,0 +1,9 @@
+{
+  "name": "@migate/dsh-plugin",
+  "version": "1.0.0",
+  "description": "MiGate 对接 DeepSeek Harness 的插件：MiGate 助手预设、控制台上下文与 MiGate 工具。",
+  "private": true,
+  "migate": {
+    "dsh": ">=0.2.0-0 <0.3.0-0"
+  }
+}

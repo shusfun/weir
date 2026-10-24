@@ -91,7 +91,7 @@ func (s *Server) rate(c *gin.Context, kind string, limit int64) bool {
 	return true
 }
 
-// securityEvent 先写入审计（action 以 security. 开头）；独立的安全事件与 AI 分类在后续阶段接入。
+// securityEvent 写入审计（action 以 security. 开头）；ObserveSecurity 据此生成安全事件交给 Laya 与 dsh 研判。
 func (s *Server) securityEvent(c *gin.Context, kind, scope, severity string) {
 	s.audit(c, "security."+kind, scope, severity)
 }

@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
   Activity,
   ArrowLeft,
@@ -10,7 +10,7 @@ import {
   LockKeyhole,
   UserRound,
 } from "lucide-react";
-import { Steps, Step, Field, Notice,
+import { Steps, Step, Field, Notice, CheckMark, IconTile, prefersReducedMotion, useBurst,
   Button,
   Card,
   CardContent,
@@ -84,9 +84,17 @@ export function SetupPage({ done }: { done: () => void }) {
     [showConfirmation, setShowConfirmation] = useState(false);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
-  const [phase, setPhase] = useState<"form" | "switching" | "check_failed">(
+  const [phase, setPhase] = useState<"form" | "switching" | "check_failed" | "ready">(
     "form",
   );
+  const readyMark = useRef<HTMLSpanElement>(null);
+  const burst = useBurst();
+  useEffect(() => {
+    if (phase !== "ready") return;
+    // 圈画完、对勾落笔的时刻爆散
+    const timer = setTimeout(() => readyMark.current && burst(readyMark.current, { distance: 72, count: 14 }), 620);
+    return () => clearTimeout(timer);
+  }, [phase, burst]);
   // 空路径表示使用服务端默认位置（/var/lib/migate/center/migate.db）。
   const storeConfig = () =>
     driver === "sqlite"
@@ -101,7 +109,9 @@ export function SetupPage({ done }: { done: () => void }) {
           status?: string;
         };
         if (state.installed && state.ready && health.ok && body.status === "ok") {
-          done();
+          // 安装完成是整个流程里最关键的一下：先画出对勾、爆散一次，再进入控制台
+          setPhase("ready");
+          setTimeout(done, prefersReducedMotion() ? 600 : 1500);
           return;
         }
       } catch {
@@ -155,6 +165,21 @@ export function SetupPage({ done }: { done: () => void }) {
   }
   function rd<K extends keyof RedisConfig>(key: K, value: RedisConfig[K]) {
     setRedis((v) => ({ ...v, [key]: value }));
+  }
+  if (phase === "ready") {
+    return (
+      <main className="auth-screen setup-screen" data-setup-phase={phase}>
+        <div className="setup-container flex flex-col items-center text-center">
+          <IconTile ref={readyMark} size="xl" tone="neutral" className="rounded-full text-[var(--mg-ok)]">
+            <CheckMark circle />
+          </IconTile>
+          <header className="setup-heading">
+            <h1>安装完成</h1>
+            <p role="status">正在进入控制台…</p>
+          </header>
+        </div>
+      </main>
+    );
   }
   if (phase !== "form") {
     return (
