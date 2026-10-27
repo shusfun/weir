@@ -1,9 +1,0 @@
-=== RUN   TestIntegration
-    integration_test.go:201: public directory theme/default compatibility, published-only cards, exact field allowlist, no-store, withdrawal, self/unknown rejection and ordinary-user isolation passed
-    integration_test.go:202: routing order admin/capability boundary, complete-set and stale guards, queued != applied, transactional receipt attributes passed
-    integration_test.go:203: real PG traffic snapshots: one/minute, exact accepted delta, first baseline, offline/gap unknown, recovery zero, reset rejection, API source/time and admin isolation passed; controlled counters, not network traffic
-    integration_test.go:204: operator save/inline profile/empty preview reject unsupported params; valid camelCase saves; rejected update preserves data; ordinary user 403
-    integration_test.go:340: durable DNS intent before POST, encrypted ledger, provider failure/retry, advisory exclusion, restart recovery without ID, unowned TXT preservation, API redaction and credential deletion guard passed; controlled provider, not public CA
---- PASS: TestIntegration (2.53s)
-PASS
-ok  	github.com/imzyb/MiGate/internal/control	5.552s

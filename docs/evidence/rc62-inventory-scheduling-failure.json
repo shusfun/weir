@@ -1,6 +1,0 @@
-{
-  "version": "0.2.0-rc62",
-  "failure": "Inventory browser timed out waiting for import action while failed-upgrade rollback acceptance temporarily stopped center",
-  "cause": "Acceptance scheduling conflict: dependent production availability probes ran concurrently",
-  "correction": "Wait for both rollback checks and service readiness, then rerun inventory sequentially. Failed browser run is not acceptance."
-}

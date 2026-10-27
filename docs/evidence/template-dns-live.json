@@ -1,8 +1,0 @@
-{
-  "version": "0.2.0-rc42",
-  "date": "2026-10-19T03:02:39.090Z",
-  "checks": [
-    "actual UI rejects hostname without bootstrap; adding bootstrap saves encrypted DNS fields",
-    "four viewport form screenshots; client TLS verification remains enabled"
-  ]
-}

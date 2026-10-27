@@ -1,5 +1,0 @@
-{
-  "date": "2026-10-20T02:24:26Z",
-  "result": "failed",
-  "detail": "Original cat holder outlived local runner after a failed read-only form harness. Verified exact flock command and only sh/cat descendants terminated; no service touched. Replaced holder with explicit EOF and bounded heartbeat expiry; retest pending."
-}

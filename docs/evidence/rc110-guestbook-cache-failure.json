@@ -1,7 +1,0 @@
-{
-  "version": "0.2.0-rc110",
-  "failure": "After approval in pending filter, switching all reused earlier 15-second query cache and displayed stale pending record",
-  "cause": "mutation refetched current filter only; global TanStack staleTime retained other filter cache",
-  "fix": "invalidate every per-page admin message list after each mutation, zero staleTime on management lists; repeat full workflow in rc111",
-  "additional_fix": "page deletion performs guestbook cleanup only after obtaining the same table lock as post/moderate, with rollback installed first"
-}

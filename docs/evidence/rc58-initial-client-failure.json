@@ -1,6 +1,0 @@
-{
-  "version": "0.2.0-rc58",
-  "date": "2026-10-19T05:32:27.360558+00:00",
-  "result": "failed",
-  "observation": "Xray real client TLS EOF while Gate installation was still finishing; timing correlation only, cause unconfirmed; retry required"
-}

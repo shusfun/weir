@@ -1,8 +1,0 @@
-{
-  "version": "0.2.0-rc48",
-  "date": "2026-10-19T03:42:56.179Z",
-  "checks": [
-    "full-inventory UI preview and metadata retention; four widths; actual stale-snapshot409 feedback and refresh; transactional deletion/profile reference update; distinct TLS SNI retained; no user grants"
-  ],
-  "scope": "Only disposable synthetic inventory and unassigned profile; baseline and both previews verified no unrelated duplicates"
-}

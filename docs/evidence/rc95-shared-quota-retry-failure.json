@@ -1,7 +1,0 @@
-{
-  "version": "0.2.0-rc95",
-  "stage": "fixture retry before pairing",
-  "failure": "installer correctly rejects duplicate release version retained by first interrupted setup",
-  "resolution": "fixture now checks installed binary matches exact release before reusing it; always starts labeled container; generate key only when absent",
-  "production": "no account, pairing or grant created"
-}

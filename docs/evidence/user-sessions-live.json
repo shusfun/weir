@@ -1,9 +1,0 @@
-{
-  "version": "0.2.0-rc39",
-  "date": "2026-10-19T02:32:00.376Z",
-  "checks": [
-    "administrator sees two real logins and revokes one through confirmation; revoked cookie immediately 401, other login remains 200",
-    "ordinary account session administration forbidden; four-width actual user detail",
-    "last revocation leaves actual empty state; no node grant changed"
-  ]
-}

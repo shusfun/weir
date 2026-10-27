@@ -1,7 +1,0 @@
-{
-  "version": "0.2.0-rc66",
-  "passed": false,
-  "check": "first actual named certificate update",
-  "finding": "task225 did not acknowledge within75seconds; eventual failed result local_helper_unavailable, attempts2; owned fixture deleted by task226",
-  "resolution": "subsequent full import/update/selector/cleanup rerun passed; no fabricated pass for first attempt"
-}

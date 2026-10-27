@@ -1,6 +1,0 @@
-{
-  "result": "failed",
-  "started_at": "2026-10-20T02:18:19Z",
-  "version": "0.2.0-rc112",
-  "detail": "Read-only harness used non-existing button label 新建 instead of 新增订阅组; no inventory submitted. Corrected harness and live-naming-labels.json retest passed; old lock holder failure separately retained."
-}

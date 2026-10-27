@@ -1,5 +1,0 @@
-{
-  "version": "0.2.0-rc62-predeployment",
-  "failure": "New integration assertion expected 201, existing resource API returns 200 for create",
-  "action": "Keep compatible API status; correct test to 200, reset disposable stack and rerun; no production deployment attempted"
-}

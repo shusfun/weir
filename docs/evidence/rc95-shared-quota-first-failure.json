@@ -1,7 +1,0 @@
-{
-  "version": "0.2.0-rc95",
-  "stage": "isolated fixture preparation",
-  "failure": "systemd test image missing ssh-keygen; pairing and account creation not reached",
-  "cleanup": "test container stopped; no temporary center key or account created; Gate fixture stop attempted",
-  "resolution": "install OpenSSH client only inside labeled disposable container; rerun current release"
-}

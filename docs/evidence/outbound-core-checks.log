@@ -1,4 +1,0 @@
-=== RUN   TestManagedOutboundCoreCompatibility
---- PASS: TestManagedOutboundCoreCompatibility (0.72s)
-PASS
-ok  	github.com/imzyb/MiGate/internal/control	3.914s

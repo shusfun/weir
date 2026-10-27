@@ -1,8 +1,0 @@
-{
-  "version": "0.2.0-rc54",
-  "date": "2026-10-19T04:35:18.825711+00:00",
-  "status": "failed",
-  "scope": "browser acceptance script selector",
-  "reason": "UIAble checkbox label resolves to visible role checkbox and hidden input; strict locator rejected",
-  "correction": "select visible checkbox by accessible role; complete workflow must be rerun"
-}

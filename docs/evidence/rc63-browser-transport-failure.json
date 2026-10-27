@@ -1,6 +1,0 @@
-{
-  "date": "2026-10-19T06:42:37.201852+00:00",
-  "failure": "Playwright route.fetch bypassed browser host mapping, causing TLS ECONNRESET and verbose request-header diagnostics",
-  "remediation": "Affected operator session revoked; old session verified 401; fresh MFA session saved only in restricted operator state. Injection now uses a browser-fetched snapshot, never route.fetch. No credentials in record.",
-  "follow_up": "Empty-state injection inherited unknown core validity during offline test. Set injected presentation freshness explicitly and rerun separately."
-}

@@ -1,9 +1,0 @@
-{
-  "version": "0.2.0-rc54",
-  "date": "2026-10-19T04:35:21.638Z",
-  "checks": [
-    "actual region preset confirmation, persisted template and profile output; current inventory only",
-    "actual protocol preset confirmation, persisted template and profile output; current inventory only"
-  ],
-  "limitations": "admin inventory fixture preview; real authorized-client egress tested separately; region is a keyword hint"
-}

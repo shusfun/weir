@@ -1,7 +1,0 @@
-{
-  "version": "0.2.0-rc99",
-  "result": "failed",
-  "cause": "Operator ran failed-start rollback while announcement revalidation was still mutating shared settings; expected stale-revision request and cleanup returned 502 during control restart",
-  "scope": "acceptance orchestration error, not accepted as product pass",
-  "action": "restore owned settings/page, persist recovery fixture, rerun all announcement mutations serially"
-}

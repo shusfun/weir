@@ -1,8 +1,0 @@
-{
-  "version": "0.2.0-rc84",
-  "check": "owned inlet initial real connection before state toggle",
-  "status": "failed",
-  "error": "TLS connection reset; cause not yet established",
-  "cleanup": "finally revoked owned grant, removed inlet and disabled fixture user",
-  "next": "Verify baseline connectivity and use established Reality destination; do not mark initial run passed"
-}

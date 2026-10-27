@@ -1,9 +1,0 @@
-{
-  "version": "0.2.0-rc53",
-  "date": "2026-10-19T04:27:22.113Z",
-  "checks": [
-    "actual UI creates HTTPS declaration; named selector, rename reference update and used-delete protection",
-    "four-width declaration and reference screenshots; actual profile output includes rule-provider and ordered RULE-SET"
-  ],
-  "limitations": "public example URI is emitted only, never fetched by center; real client download separately recorded"
-}

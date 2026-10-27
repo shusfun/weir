@@ -1,9 +1,0 @@
-{
-  "version": "0.2.0-rc71",
-  "date": "2026-10-19T07:58:03.312Z",
-  "checks": [
-    "oversize and non-UTF8 files rejected locally; previous content/preview cleared",
-    "native file picker reads UTF8/BOM INI; real drag/drop replaces preview with JSON; file reading/preview do not write; explicit commit creates only selected file node"
-  ],
-  "visual": "1440/1280/768/390 action screenshots manually reviewed: desktop table readable, mobile UIAble node card shows name/protocol/server/port, dialog and confirmation reachable"
-}

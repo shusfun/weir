@@ -1,9 +1,0 @@
-{
-  "version": "0.2.0-rc75",
-  "date": "2026-10-19T09:17:18.874Z",
-  "checks": [
-    "UI toggle on, cache cleared, UI refresh yields space; encoded plus/password/path preserved",
-    "UI toggle off clears transformed cache; literal name restored after refresh"
-  ],
-  "visual": "four widths captured; manual review pending"
-}

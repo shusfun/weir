@@ -1,4 +1,0 @@
-{
-  "reason": "Second integration invocation reused already initialized disposable test stack; setup returned 409/409 as expected for existing installation. Dedicated compose stack recreated, then complete integration passed. No production data touched.",
-  "status": "recovered and passed"
-}

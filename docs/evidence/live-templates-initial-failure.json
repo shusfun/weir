@@ -1,6 +1,0 @@
-{
-  "version": "0.2.0-rc23",
-  "result": "failed then retested",
-  "scope": "first real template client probe overlapped Gate update/restart",
-  "follow_up": "rerun after Gate install completed passed; see live-templates.json"
-}

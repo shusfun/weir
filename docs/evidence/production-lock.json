@@ -1,9 +1,0 @@
-{
-  "date": "2026-10-20T04:15:06Z",
-  "result": "passed",
-  "checks": [
-    "real second independent SSH flock refused while runner holds lock",
-    "local broker rejects missing/wrong/expired token in local regression",
-    "owned cleanup and undeclared/pre-existing mutation denial in local regression"
-  ]
-}

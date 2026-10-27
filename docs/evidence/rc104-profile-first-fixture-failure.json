@@ -1,4 +1,0 @@
-{
-  "stage": "stale conflict",
-  "detail": "locator.click: Timeout 30000ms exceeded. Call log: \u001b[2m  - waiting for getByRole('dialog').filter({ has: getByRole('heading', { name: '调整订阅组顺序', exact: true }) }).locator('.profile-order-row').filter({ has: getByText('profile-flow-1792426560528-香港与东京长名称订阅组', { exact: true }) }).getByRole('button', { name: '下移订阅组 profile-flow-1792426560528-香港与东京长名称订阅组', exact: true })\u001b[22m"
-}

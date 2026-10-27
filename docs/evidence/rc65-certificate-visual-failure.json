@@ -1,7 +1,0 @@
-{
-  "version": "0.2.0-rc65",
-  "passed": false,
-  "check": "390px binding dialog",
-  "finding": "selector shrinks but footer retains -23px margin with 18px dialog padding; clientWidth358 scrollWidth363",
-  "resolution": "rc66 aligns footer margin/padding; actual four-width rerun passed; footer screenshot review pending"
-}

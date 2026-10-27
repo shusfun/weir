@@ -1,9 +1,0 @@
-{
-  "version": "0.2.0-rc67",
-  "passed": false,
-  "checks": [
-    "leading-comment and URL-like credential browser fixture rejected before rc68 fix",
-    "HTTP fixture script had unescaped newline syntax error, failed readiness; source refresh first failed400"
-  ],
-  "resolution": "parser corrected in rc68; fixture string escaping fixed and readiness added; actual INI import and all five source formats rerun passed"
-}

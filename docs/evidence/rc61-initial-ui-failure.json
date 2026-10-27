@@ -1,5 +1,0 @@
-{
-  "version": "0.2.0-rc61",
-  "failure": "Immediate viewport resize check reported overflow at 1280 before Recharts ResizeObserver settled",
-  "follow_up": "Independent measurement after resize settled shows document width equals viewport at 1280, 768, 390; browser acceptance will await responsive layout then retain exact width assertion"
-}

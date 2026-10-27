@@ -1,4 +1,0 @@
-{
-  "stage": "publish UI",
-  "detail": "locator.waitFor: Error: strict mode violation: getByRole('dialog').filter({ has: getByRole('heading', { name: '公开订阅二维码', exact: true }) }).locator('svg') resolved to 2 elements:"
-}

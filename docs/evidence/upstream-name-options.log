@@ -1,6 +1,0 @@
-=== RUN   TestNamePlusUpstreamComparison
---- PASS: TestNamePlusUpstreamComparison (0.47s)
-=== RUN   TestSourceFiltersUpstreamComparison
---- PASS: TestSourceFiltersUpstreamComparison (1.68s)
-PASS
-ok  	github.com/imzyb/MiGate/internal/subscription	3.903s

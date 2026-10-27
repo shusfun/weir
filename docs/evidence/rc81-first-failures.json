@@ -1,8 +1,0 @@
-{
-  "version": "0.2.0-rc81",
-  "failure": "Xray 200 journal JSON records measured 74148 bytes, exceeding generic 64 KiB command cap; observed unknown accurately. Dedicated fixed diagnostic command gets a bounded 1 MiB buffer in rc82, record/time limits unchanged.",
-  "passed": [
-    "topology complete live workflow including minimap dimensions",
-    "diagnostic configs and sing-box journal"
-  ]
-}

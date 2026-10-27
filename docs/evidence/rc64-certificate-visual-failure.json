@@ -1,7 +1,0 @@
-{
-  "version": "0.2.0-rc64",
-  "functional": "Actual named import/update/history and TLS selector passed",
-  "visual": "Failed at 390: long certificate option expands min-content field and clips form padding",
-  "evidence": "certificate-name-binding-390.png",
-  "next": "rc65 min-width constraints and truncated select value; verify form/selector bounding boxes at four widths"
-}

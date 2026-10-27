@@ -1,9 +1,0 @@
-{
-  "recorded_at": "2026-10-18T20:38:41.605298+00:00",
-  "version": "0.2.0-rc29",
-  "role": "gate",
-  "initial_result": "SFTP upload interrupted with EOFError before checksum validation or installation",
-  "recovery": "Full archive reuploaded; SHA-256 verified before installer execution; Gate installed successfully",
-  "evidence": "deployment.json",
-  "application_failure": false
-}

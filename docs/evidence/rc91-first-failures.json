@@ -1,9 +1,0 @@
-{
-  "version": "0.2.0-rc91",
-  "operation": "browser provenance workflow",
-  "result": "fixture traversal failed",
-  "observed": "UI source-group save and actual source-aware preview completed; script then searched operator help in profile editor",
-  "cause": "profile editor references reusable operator resources; fixture used API inline operators and looked in wrong editor",
-  "cleanup": "finally removed all fixture records and HTTP service",
-  "followup": "use owned reusable chain referenced by profile and inspect actual chain editor; rerun complete workflow"
-}

@@ -1,9 +1,0 @@
-{
-  "version": "0.2.0-rc89",
-  "operation": "browser QR assertion",
-  "result": "test locator failed",
-  "cause": "QRCodeSVG renders SVG title child, not HTML title attribute; assertion searched attribute incorrectly",
-  "checks_before_failure": "admin actual UI publish/order and ordinary own-format/download passed",
-  "cleanup": "finally restored original catalog with administrator MFA",
-  "followup": "assert SVG title child and rerun full flow; visual raw values separately require correction"
-}

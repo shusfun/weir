@@ -1,6 +1,0 @@
-{
-  "version": "0.2.0-rc80",
-  "result": "visual failed",
-  "failure": "Minimap container resized with CSS while its SVG stayed 200x150; clipped preview at every width. rc81 passes explicit 96x64 dimensions to MiniMap itself.",
-  "functional": "topology flow passed; diagnostics pending"
-}

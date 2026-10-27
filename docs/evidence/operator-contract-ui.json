@@ -1,9 +1,0 @@
-{
-  "date": "2026-10-19T06:16:32.127Z",
-  "version": "0.2.0-rc62",
-  "checks": [
-    "actual API rejects unknown params/nested rule/DSL field for empty and populated input",
-    "actual UI 400 stays open with actionable error; corrected camelCase setting saves and persists; four dialog widths"
-  ],
-  "visual": "Human reviewed 1440/1280/768/390 screenshots; chart units single-line, mobile controls aligned; invalid/empty/loading UI checked"
-}

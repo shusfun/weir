@@ -1,8 +1,0 @@
-{
-  "version": "0.2.0-rc12",
-  "status": "failed",
-  "environment": "dedicated Docker; actual systemd, PG18, Redis8",
-  "passed_before_failure": ["HTTP initialization and account creation", "backup and resume"],
-  "failure": "Purge with intentionally failing pg_dump preserved data but left migate-control inactive; automatic resumption missing.",
-  "resolution": "Fixed preparation to pause services without disabling them, resume prior active/enabled state on backup failure, and defer Gate revocation until backup success. Retest required."
-}

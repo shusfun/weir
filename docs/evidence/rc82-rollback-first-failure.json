@@ -1,7 +1,0 @@
-{
-  "version": "0.2.0-rc82",
-  "control": "failed-start restoration passed",
-  "gate": "script checkpoint failed with no stdout; subsequent independent inspection confirms current symlink/install manifest rc82 and all owned core/Agent/tunnel/x-ui active",
-  "status": "retest with fixed non-secret checkpoints ongoing; not counted passed",
-  "retest": "Both hosts rerun passed with checkpoints; installer unchanged. Original no-output failure cause not established; preserved, not retroactively passed."
-}

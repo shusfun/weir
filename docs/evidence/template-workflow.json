@@ -1,9 +1,0 @@
-{
-  "version": "0.2.0-rc42",
-  "date": "2026-10-19T03:02:18.906Z",
-  "checks": [
-    "UI preset confirmation, group rename updates references, policy selector and rule order persist",
-    "final rule protected; actual profile output contains generated selector/automatic group and ordered domain rules",
-    "upgrade candidate and confirmation show REALITY sing-box incompatibility; cancel sends no install task"
-  ]
-}

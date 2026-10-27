@@ -1,4 +1,0 @@
-{
-  "stage": "pending refresh",
-  "detail": "locator.waitFor: Timeout 30000ms exceeded. | Call log: | \u001b[2m  - waiting for getByRole('dialog').filter({ has: getByRole('heading', { name: /留言管理 ·/ }) }).getByText('当前公开', { exact: true }) to be visible\u001b[22m | "
-}

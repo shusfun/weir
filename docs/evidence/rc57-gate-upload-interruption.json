@@ -1,7 +1,0 @@
-{
-  "version": "0.2.0-rc57",
-  "stage": "Gate SFTP upload before SHA-256 and install",
-  "error": "SSH connection dropped",
-  "effect": "Gate kept running rc56; no installation performed by failed invocation",
-  "followup": "Retry resumed a locally/remotely SHA-256-verified 46,170,112-byte prefix; mandatory full SHA-256 passed before install; Gate rc57 installed successfully."
-}

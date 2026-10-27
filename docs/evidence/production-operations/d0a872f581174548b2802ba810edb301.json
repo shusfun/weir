@@ -1,9 +1,0 @@
-{
-  "run_id": "d0a872f581174548b2802ba810edb301",
-  "label": "failed-acceptance-cleanup",
-  "started_at": "2026-10-20T02:02:00Z",
-  "finished_at": "2026-10-20T02:02:03Z",
-  "exit_code": 23,
-  "cleanup_verified": true,
-  "scope": "guestbook"
-}

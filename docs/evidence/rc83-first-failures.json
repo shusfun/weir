@@ -1,6 +1,0 @@
-{
-  "version": "0.2.0-rc83",
-  "failure": "Acceptance added actual config fingerprint check using Xray-style inbound tag; sing-box uses hy2-inbound-ID. Test selector corrected to pinned builder contract.",
-  "initial_functional": "UI/batch/receipt/client/guard/cleanup passed before added check; stronger actual certificate proof retest pending",
-  "cleanup": "fixture finally removed owned resources"
-}

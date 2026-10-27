@@ -1,7 +1,0 @@
-{
-  "version": "0.2.0-rc95",
-  "stage": "first heartbeat before account creation",
-  "failure": "test read JSON null metadata as object before Agent first heartbeat",
-  "resolution": "treat pre-heartbeat null as unknown and poll; retained revoked fixture recovers through device proof and administrator MFA",
-  "cleanup": "test identity revoked, temporary center key removed, fixture container stopped; no shared account created"
-}

@@ -1,7 +1,0 @@
-{
-  "version": "0.2.0-rc36",
-  "date": "2026-10-19T02:10:16.008335+00:00",
-  "result": "failed",
-  "finding": "Installer whitelist omitted core-packages. Helper reported version inventory unknown; UI correctly disabled installation. Actual Xray 26.3.27 and sing-box stats remained active; no core version switch happened.",
-  "fix": "Installer copies verified core package directory for Gate and retains corresponding notices/source. Rebuild and deploy rc37; rerun real UI upgrade, rollback and client checks."
-}

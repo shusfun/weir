@@ -1,7 +1,0 @@
-{
-  "version": "0.2.0-rc66",
-  "passed": true,
-  "review": "1440/1280/768/390 import and TLS selector screenshots reviewed; mobile footer scrolled into view and reviewed",
-  "scope": "long name truncation, padding, field width, wrapped help, reachable action buttons; actual name import/update/list/history/selector passed",
-  "limit": "binding draft canceled; no new TLS listener or CA issuance claimed"
-}

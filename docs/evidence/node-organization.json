@@ -1,9 +1,0 @@
-{
-  "version": "0.2.0-rc47",
-  "date": "2026-10-19T03:38:35.898Z",
-  "checks": [
-    "UI multi-select group movement/filter and persistent node ordering after reload",
-    "remove group via empty destination; actual import preview retains different TLS SNI and deduplicates renamed equivalent",
-    "real partial batch returns per-item success/failure; no blanket success"
-  ]
-}

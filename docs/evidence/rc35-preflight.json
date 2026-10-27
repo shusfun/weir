@@ -1,6 +1,0 @@
-{
-  "version": "0.2.0-rc35",
-  "date": "2026-10-19T02:01:59.798651+00:00",
-  "finding": "Review found atomic replacement mode 0750 would prevent unprivileged core service execution. Gate rc35 was not deployed; center rc35 only enables version tasks for capable Agent.",
-  "fix": "Use 0755 for active/restored executable; archives remain restricted. Added Linux permission assertion and ran real Linux Agent tests. Release rc36 required; no rc35 core acceptance claimed."
-}

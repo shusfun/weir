@@ -1,8 +1,0 @@
-{
-  "version": "0.2.0-rc88",
-  "operation": "actual UI catalog publication",
-  "result": "failed",
-  "cause": "UIAble Base UI Button defaults to type=button; publish control omitted type=submit, no request dispatched",
-  "safety": "no published catalog or user grants changed; owned browser draft discarded",
-  "followup": "rc89 explicit submit and error mappings; real workflow must rerun"
-}
