@@ -62,7 +62,7 @@
 .totp-setup { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
 .totp-setup > div { flex: 1; min-width: 150px; }
 .session-filters { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 14px; margin: 16px 0; }
-.session-filters > .stack { min-width: 180px; flex: 1; }
+.session-filters > [data-slot=field] { min-width: 180px; flex: 1; }
 .session-list .security-session { gap: 14px; }
 
 @media (max-width: 1100px) { .host-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

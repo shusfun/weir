@@ -3,10 +3,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChoiceCard, CodeBlock, Field, Notice,
   Button, Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter, Progress, StatusLamp,
-  Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SectionHeader,
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SectionHeader, Radio, RadioGroup, FormGrid,
 } from "@weir/ui";
 import { Download, Gauge, RefreshCw } from "lucide-react";
 import { api } from "../api";
+import { State } from "./feedback";
 import type { CatalogClient } from "../lib/models";
 import { assetsFor, candidates, detectPlatform, downloadVerified, probe, rank, speed, type ProbeResult, type ReleaseAsset } from "../lib/download";
 
@@ -81,32 +82,30 @@ function DownloadDialog({ client, close }: { client: CatalogClient; close: () =>
         <DialogTitle>下载 {client.name}</DialogTitle>
         <DialogDescription>在你的浏览器内测速，自动选择最快的可校验来源；下载后核对 GitHub 公布的 SHA-256。</DialogDescription>
         {mirrors.isError && <Notice tone="warn" role="status">加速镜像暂时不可用，本次只测速 GitHub 直连。</Notice>}
-        {release.isPending || mirrors.isPending ? <p role="status">正在读取发布信息…</p> : release.data?.status !== "current" ? (
+        {release.isPending || mirrors.isPending ? <State loading /> : release.data?.status !== "current" ? (
           <Notice tone="bad">暂时无法读取正式发布信息，请改用发布页下载。</Notice>
         ) : (
           <div className="stack">
-            <div className="form-grid">
-              <Field>
-                <span className="mg-engraved">平台</span>
+            <FormGrid>
+              <Field label="平台">
                 <Select value={platform} onValueChange={(v) => { setPlatform(String(v)); setAssetName(""); }}>
-                  <SelectTrigger aria-label="安装平台"><SelectValue>{platformNames[platform] ?? platform}</SelectValue></SelectTrigger>
+                  <SelectTrigger><SelectValue>{platformNames[platform] ?? platform}</SelectValue></SelectTrigger>
                   <SelectContent>{supported.map((p) => <SelectItem key={p} value={p}>{platformNames[p]}</SelectItem>)}</SelectContent>
                 </Select>
               </Field>
-              <Field>
-                <span className="mg-engraved">安装包 · {release.data.version}</span>
+              <Field label={"安装包 · " + release.data.version}>
                 <Select value={asset?.name ?? ""} onValueChange={(v) => setAssetName(String(v))}>
-                  <SelectTrigger aria-label="安装包"><SelectValue>{asset?.name ?? "此平台没有安装包"}</SelectValue></SelectTrigger>
+                  <SelectTrigger><SelectValue>{asset?.name ?? "此平台没有安装包"}</SelectValue></SelectTrigger>
                   <SelectContent>{assets.map((a) => <SelectItem key={a.name} value={a.name}>{a.name}</SelectItem>)}</SelectContent>
                 </Select>
               </Field>
-            </div>
+            </FormGrid>
             {asset && (
-              <div className="download-sources" role="radiogroup" aria-label="下载来源">
+              <RadioGroup className="download-sources" aria-label="下载来源" value={chosen} onValueChange={(v) => setChosen(String(v))} disabled={busy}>
                 <SectionHeader size="sm" flush title="来源测速" actions={<Button variant="ghost" size="sm" disabled={!results || busy} onClick={runProbe}><RefreshCw />重新测速</Button>} />
                 {!results ? <p role="status">正在测速…</p> : results.map((r, i) => (
                   <ChoiceCard key={r.url} className="download-source" selected={r.url === chosen} render={<label/>}>
-                    <input type="radio" name="download-source" checked={r.url === chosen} disabled={!!r.error || busy} onChange={() => setChosen(r.url)} />
+                    <Radio value={r.url} disabled={!!r.error} />
                     <StatusLamp tone={r.error ? "bad" : r.verifiable ? "ok" : "warn"} />
                     <span>
                       <strong>{r.mirror ? "镜像 · " + r.host : "GitHub 直连"}{i === 0 && !r.error && " · 最快"}</strong>
@@ -114,7 +113,7 @@ function DownloadDialog({ client, close }: { client: CatalogClient; close: () =>
                     </span>
                   </ChoiceCard>
                 ))}
-              </div>
+              </RadioGroup>
             )}
             {asset?.sha256 && <CodeBlock aria-label="SHA-256">SHA-256 {asset.sha256}</CodeBlock>}
             {busy && <Progress value={Math.round(progress * 100)} aria-label="下载进度" />}

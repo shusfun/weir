@@ -1,46 +1,50 @@
-// 文本类表单项的便捷写法：标签 + 单行输入 / 多行文本。布局与说明由 @weir/ui 的 Field 负责。
-import { Field, Input, Textarea } from "@weir/ui";
+// 文本类表单项的便捷写法：标签 + 单行输入 / 多行文本；type="password" 时带显示 / 隐藏按钮。布局、说明与校验由 @weir/ui 的 Field 负责。
+// 默认不必填；必填项显式传 required。
+import { Field, Input, PasswordInput, Textarea } from "@weir/ui";
 export function TextField({
   label,
   name,
+  field,
   type = "text",
   value,
   onChange,
-  required = true,
+  required = false,
   autoComplete,
   hint,
+  customError,
+  placeholder,
   className,
 }: {
   label: string;
+  // 控件 id
   name: string;
+  // 在 <Form errors> 中的字段名
+  field?: string;
   type?: string;
-  value: any;
+  value: string | number | null | undefined;
   onChange: (v: string) => void;
   required?: boolean;
   autoComplete?: string;
   hint?: string;
+  customError?: string;
+  placeholder?: string;
   className?: string;
 }) {
+  const common = {
+    id: name,
+    value: value ?? "",
+    required,
+    placeholder,
+    onChange: (e: { target: { value: string } }) => onChange(e.target.value),
+  };
   return (
-    <Field label={label} htmlFor={name} hint={hint} className={className}>
+    <Field label={label} htmlFor={name} name={field} hint={hint} customError={customError} className={className}>
       {type === "textarea" ? (
-        <Textarea
-          id={name}
-          value={value ?? ""}
-          rows={5}
-          required={required}
-          onChange={(e) => onChange(e.target.value)}
-          autoComplete="off"
-        />
+        <Textarea {...common} rows={5} autoComplete="off" />
+      ) : type === "password" ? (
+        <PasswordInput {...common} autoComplete={autoComplete ?? "new-password"} />
       ) : (
-        <Input
-          id={name}
-          type={type}
-          value={value ?? ""}
-          onChange={(e) => onChange(e.target.value)}
-          required={required}
-          autoComplete={autoComplete ?? (type === "password" ? "new-password" : undefined)}
-        />
+        <Input {...common} type={type} autoComplete={autoComplete} />
       )}
     </Field>
   );

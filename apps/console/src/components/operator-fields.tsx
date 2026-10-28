@@ -1,20 +1,16 @@
+// 处理链步骤的子表单：协议 / 地区勾选、正则规则列表、排序字段。参数结构与服务端 internal/sub 的处理链一致。
 import { useState } from "react";
-import { ReorderButtons, SearchInput,
-  Button,
-  Checkbox,
-  Input,
-  Label,
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-  Switch,
-  Textarea,
-} from "@weir/ui";
+import { ReorderButtons, SearchInput, Button, CheckboxField, Field, Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SwitchField, Textarea } from "@weir/ui";
 import { Plus, Trash2 } from "lucide-react";
 import { regionOptions } from "../lib/region-options";
-type Data = Record<string, any>;
+
+// 勾选类筛选：启用后只保留 values 中的协议 / 地区
+export type ChoiceParams = { enabled?: boolean; values?: string[] };
+// 正则规则：旧数据可能是纯字符串（只有 pattern）
+export type PatternRule = string | { pattern?: string; flags?: string; replacement?: string };
+export type SortKey = { key: string; order?: "asc" | "desc"; customOrder?: string[] };
+export type SortParams = { nameIgnoreEmoji?: boolean; keys?: SortKey[]; [extra: string]: unknown };
+
 export const protocols = [
   ["vless", "VLESS"],
   ["vmess", "VMess"],
@@ -27,7 +23,7 @@ export const protocols = [
   ["socks5", "SOCKS5"],
   ["http", "HTTP"],
 ];
-const regions = regionOptions;
+
 export function OperatorChoices({
   label,
   value,
@@ -35,62 +31,36 @@ export function OperatorChoices({
   type,
 }: {
   label: string;
-  value: Data;
-  save: (v: Data) => void;
+  value: ChoiceParams;
+  save: (v: ChoiceParams) => void;
   type: "protocol" | "region";
 }) {
-  const [search, S] = useState("");
-  const values: string[] = value.values ?? [];
-  const defaults = type === "protocol" ? protocols : regions;
-  const options = [
-    ...defaults,
-    ...values
-      .filter((v) => !defaults.some(([key]) => key === v))
-      .map((v) => [v, v]),
-  ];
+  const [search, setSearch] = useState("");
+  const values = value.values ?? [];
+  const defaults = type === "protocol" ? protocols : regionOptions;
+  const options = [...defaults, ...values.filter((v) => !defaults.some(([key]) => key === v)).map((v) => [v, v])];
   return (
-    <fieldset className="resource-selector">
+    <fieldset className="resource-selector grid gap-2">
       <legend>{label}</legend>
-      <Label className="selector-option">
-        <Switch
-          checked={value.enabled === true}
-          onCheckedChange={(enabled) => save({ ...value, enabled })}
-        />
-        启用{label}
-      </Label>
-      <SearchInput
-        className="w-full"
-        aria-label={"搜索" + label}
-        placeholder="搜索选项…"
-        value={search}
-        onChange={(e) => S(e.target.value)}
-      />
+      <SwitchField label={"启用" + label} checked={value.enabled === true} onCheckedChange={(enabled) => save({ ...value, enabled })} />
+      <SearchInput className="w-full" aria-label={"搜索" + label} placeholder="搜索选项…" value={search} onChange={(e) => setSearch(e.target.value)} />
       <div className="operator-choice-grid">
         {options
-          .filter(([key, name]) =>
-            (key + name).toLowerCase().includes(search.toLowerCase()),
-          )
+          .filter(([key, name]) => (key + name).toLowerCase().includes(search.toLowerCase()))
           .map(([key, name]) => (
-            <Label className="selector-option" key={key}>
-              <Checkbox
-                checked={values.includes(key)}
-                onCheckedChange={(checked) =>
-                  save({
-                    ...value,
-                    values: checked
-                      ? [...values, key]
-                      : values.filter((v) => v !== key),
-                  })
-                }
-              />
-              {name}
-            </Label>
+            <CheckboxField
+              key={key}
+              label={name}
+              checked={values.includes(key)}
+              onCheckedChange={(checked) => save({ ...value, values: checked ? [...values, key] : values.filter((v) => v !== key) })}
+            />
           ))}
       </div>
       <small>已选 {values.length} 项。启用但未勾选时不保留任何节点。</small>
     </fieldset>
   );
 }
+
 export function PatternRules({
   label,
   value,
@@ -99,23 +69,12 @@ export function PatternRules({
 }: {
   label: string;
   value: unknown;
-  save: (v: any[]) => void;
+  save: (v: PatternRule[]) => void;
   replacement?: boolean;
 }) {
-  const rules: any[] =
-    typeof value === "string"
-      ? value.split(/\r?\n/).filter(Boolean)
-      : Array.isArray(value)
-        ? value
-        : [];
-  const patch = (index: number, key: string, next: string) =>
-    save(
-      rules.map((r, i) =>
-        i === index
-          ? { ...(typeof r === "string" ? { pattern: r } : r), [key]: next }
-          : r,
-      ),
-    );
+  const rules: PatternRule[] = typeof value === "string" ? value.split(/\r?\n/).filter(Boolean) : Array.isArray(value) ? (value as PatternRule[]) : [];
+  const patch = (index: number, key: "pattern" | "flags" | "replacement", next: string) =>
+    save(rules.map((r, i) => (i === index ? { ...(typeof r === "string" ? { pattern: r } : r), [key]: next } : r)));
   return (
     <fieldset className="resource-selector">
       <legend>{label}</legend>
@@ -124,33 +83,12 @@ export function PatternRules({
           const row = typeof r === "string" ? { pattern: r } : r;
           return (
             <div className="operator-step" key={i}>
-              <Input
-                aria-label={`${label} ${i + 1} 匹配模式`}
-                placeholder="RE2 正则表达式"
-                value={row.pattern ?? ""}
-                onChange={(e) => patch(i, "pattern", e.target.value)}
-              />
-              <Input
-                aria-label={`${label} ${i + 1} 标志`}
-                placeholder={replacement ? "gi" : "i"}
-                value={row.flags ?? ""}
-                onChange={(e) => patch(i, "flags", e.target.value)}
-              />
+              <Input aria-label={`${label} ${i + 1} 匹配模式`} placeholder="RE2 正则表达式" value={row.pattern ?? ""} onChange={(e) => patch(i, "pattern", e.target.value)} />
+              <Input aria-label={`${label} ${i + 1} 标志`} placeholder={replacement ? "gi" : "i"} value={row.flags ?? ""} onChange={(e) => patch(i, "flags", e.target.value)} />
               {replacement && (
-                <Input
-                  aria-label={`${label} ${i + 1} 替换文本`}
-                  placeholder="$1 / $& / 模板字段"
-                  value={row.replacement ?? ""}
-                  onChange={(e) => patch(i, "replacement", e.target.value)}
-                />
+                <Input aria-label={`${label} ${i + 1} 替换文本`} placeholder="$1 / $& / 模板字段" value={row.replacement ?? ""} onChange={(e) => patch(i, "replacement", e.target.value)} />
               )}
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                aria-label={`删除${label} ${i + 1}`}
-                onClick={() => save(rules.filter((_, n) => n !== i))}
-              >
+              <Button type="button" size="sm" variant="ghost" aria-label={`删除${label} ${i + 1}`} onClick={() => save(rules.filter((_, n) => n !== i))}>
                 <Trash2 size={14} />
                 删除规则
               </Button>
@@ -160,28 +98,17 @@ export function PatternRules({
         <Button
           type="button"
           variant="outline"
-          onClick={() =>
-            save([
-              ...rules,
-              {
-                pattern: "",
-                flags: replacement ? "gi" : "i",
-                ...(replacement ? { replacement: "" } : {}),
-              },
-            ])
-          }
+          onClick={() => save([...rules, { pattern: "", flags: replacement ? "gi" : "i", ...(replacement ? { replacement: "" } : {}) }])}
         >
           <Plus size={14} />
           添加{label}
         </Button>
-        <small>
-          逗号属于正则内容，不用作分隔符。服务器使用受限
-          RE2；不支持的表达式会明确拒绝。
-        </small>
+        <small>逗号属于正则内容，不用作分隔符。服务器使用受限 RE2；不支持的表达式会明确拒绝。</small>
       </div>
     </fieldset>
   );
 }
+
 const sortFields = [
   ["name", "名称"],
   ["server", "服务器"],
@@ -189,19 +116,10 @@ const sortFields = [
   ["protocol", "协议"],
   ["region", "地区"],
 ];
-export function SortFields({
-  value,
-  save,
-}: {
-  value: Data;
-  save: (v: Data) => void;
-}) {
-  const keys: Data[] = value.keys ?? [];
-  const change = (index: number, patch: Data) =>
-    save({
-      ...value,
-      keys: keys.map((k, i) => (i === index ? { ...k, ...patch } : k)),
-    });
+
+export function SortFields({ value, save }: { value: SortParams; save: (v: SortParams) => void }) {
+  const keys = value.keys ?? [];
+  const change = (index: number, patch: Partial<SortKey>) => save({ ...value, keys: keys.map((k, i) => (i === index ? { ...k, ...patch } : k)) });
   const move = (i: number, offset: number) => {
     const next = [...keys];
     [next[i], next[i + offset]] = [next[i + offset], next[i]];
@@ -209,27 +127,14 @@ export function SortFields({
   };
   return (
     <div className="stack">
-      <Label className="selector-option">
-        <Switch
-          checked={value.nameIgnoreEmoji !== false}
-          onCheckedChange={(nameIgnoreEmoji) =>
-            save({ ...value, nameIgnoreEmoji })
-          }
-        />
-        名称排序忽略国旗
-      </Label>
+      <SwitchField label="名称排序忽略国旗" checked={value.nameIgnoreEmoji !== false} onCheckedChange={(nameIgnoreEmoji) => save({ ...value, nameIgnoreEmoji })} />
       {keys.map((key, i) => (
-        <fieldset className="resource-selector" key={i}>
+        <fieldset className="resource-selector grid gap-3" key={i}>
           <legend>排序优先级 {i + 1}</legend>
           <div className="actions">
-            <Select
-              value={key.key}
-              onValueChange={(v) => change(i, { key: v })}
-            >
+            <Select value={key.key} onValueChange={(v) => change(i, { key: String(v) })}>
               <SelectTrigger className="min-w-[100px] flex-1" aria-label={`排序字段 ${i + 1}`}>
-                <SelectValue>
-                  {sortFields.find(([k]) => k === key.key)?.[1] ?? key.key}
-                </SelectValue>
+                <SelectValue>{sortFields.find(([k]) => k === key.key)?.[1] ?? key.key}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {sortFields.map(([v, name]) => (
@@ -239,14 +144,9 @@ export function SortFields({
                 ))}
               </SelectContent>
             </Select>
-            <Select
-              value={key.order ?? "asc"}
-              onValueChange={(v) => change(i, { order: v })}
-            >
+            <Select value={key.order ?? "asc"} onValueChange={(v) => change(i, { order: v === "desc" ? "desc" : "asc" })}>
               <SelectTrigger className="min-w-[100px] flex-1" aria-label={`排序方向 ${i + 1}`}>
-                <SelectValue>
-                  {key.order === "desc" ? "降序" : "升序"}
-                </SelectValue>
+                <SelectValue>{key.order === "desc" ? "降序" : "升序"}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="asc">升序</SelectItem>
@@ -254,39 +154,16 @@ export function SortFields({
               </SelectContent>
             </Select>
             <ReorderButtons label={`排序字段 ${i + 1}`} onUp={() => move(i, -1)} onDown={() => move(i, 1)} upDisabled={i === 0} downDisabled={i === keys.length - 1} />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`删除排序字段 ${i + 1}`}
-              onClick={() =>
-                save({ ...value, keys: keys.filter((_, n) => n !== i) })
-              }
-            >
+            <Button type="button" variant="ghost" size="icon-sm" aria-label={`删除排序字段 ${i + 1}`} onClick={() => save({ ...value, keys: keys.filter((_, n) => n !== i) })}>
               <Trash2 size={14} />
             </Button>
           </div>
-          <Label>自定义优先顺序（每行一项，留空使用默认）</Label>
-          <Textarea
-            aria-label={`自定义排序 ${i + 1}`}
-            rows={3}
-            value={(key.customOrder ?? []).join("\n")}
-            onChange={(e) =>
-              change(i, {
-                customOrder: e.target.value.split(/\r?\n/).filter(Boolean),
-              })
-            }
-          />
+          <Field label="自定义优先顺序（每行一项，留空使用默认）">
+            <Textarea rows={3} value={(key.customOrder ?? []).join("\n")} onChange={(e) => change(i, { customOrder: e.target.value.split(/\r?\n/).filter(Boolean) })} />
+          </Field>
         </fieldset>
       ))}
-      <Button
-        type="button"
-        variant="outline"
-        disabled={keys.length >= 32}
-        onClick={() =>
-          save({ ...value, keys: [...keys, { key: "name", order: "asc" }] })
-        }
-      >
+      <Button type="button" variant="outline" disabled={keys.length >= 32} onClick={() => save({ ...value, keys: [...keys, { key: "name", order: "asc" }] })}>
         <Plus size={14} />
         添加排序字段
       </Button>

@@ -14,13 +14,15 @@ import (
 )
 
 // centerClient 封装与中心的通信：用设备私钥签名一次性挑战换取 15 分钟访问令牌，过期或 401 时自动重新认证。
+// 中心地址可在运行中切换（见 Agent.switchCenter），由 mu 保护。
 type centerClient struct {
-	cfg   Config
-	http  *http.Client
-	long  *http.Client // 长轮询与下载使用更长超时
-	mu    sync.Mutex
-	token string
-	until time.Time
+	cfg    Config
+	http   *http.Client
+	long   *http.Client // 长轮询与下载使用更长超时
+	mu     sync.Mutex
+	center string
+	token  string
+	until  time.Time
 }
 
 func newCenterClient(cfg Config) (*centerClient, error) {
@@ -32,7 +34,21 @@ func newCenterClient(cfg Config) (*centerClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &centerClient{cfg: cfg, http: short, long: long}, nil
+	return &centerClient{cfg: cfg, http: short, long: long, center: cfg.Center}, nil
+}
+
+// origin 返回当前连接的中心地址。
+func (c *centerClient) origin() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.center
+}
+
+// setOrigin 改用新的中心地址；旧令牌作废，下次请求在新地址重新认证。
+func (c *centerClient) setOrigin(center string) {
+	c.mu.Lock()
+	c.center, c.token, c.until = center, "", time.Time{}
+	c.mu.Unlock()
 }
 
 func (c *centerClient) raw(ctx context.Context, client *http.Client, method, path string, body any, auth bool) (*http.Response, error) {
@@ -44,7 +60,7 @@ func (c *centerClient) raw(ctx context.Context, client *http.Client, method, pat
 		}
 		rd = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.cfg.Center+"/api/v1"+path, rd)
+	req, err := http.NewRequestWithContext(ctx, method, c.origin()+"/api/v1"+path, rd)
 	if err != nil {
 		return nil, err
 	}

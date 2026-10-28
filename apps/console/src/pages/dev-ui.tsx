@@ -1,9 +1,27 @@
 // 动效样例页：只在开发环境注册（app.tsx 路由与 navigation.ts 菜单都在 import.meta.env.DEV 分支里），生产构建不包含。
 // 在控制台外壳里打开（侧边栏「开发 → 动效样例」），主题切换用顶栏的。
-// 逐条展示 @weir/ui 的 13 种交互反馈，用于验收手感与亮暗主题、窄屏、键盘、减少动态效果下的表现。
+// 逐条展示 @weir/ui 的 13 种交互反馈，以及表单（校验、确认框、单选、折叠）的写法，用于验收手感与亮暗主题、窄屏、键盘、减少动态效果下的表现。
 import { useState, type ReactNode } from "react";
 import {
   Button,
+  CheckboxField,
+  Collapsible,
+  Field,
+  Form,
+  FormGrid,
+  Input,
+  Notice,
+  PasswordInput,
+  Radio,
+  RadioGroup,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SwitchField,
+  useConfirm,
+  usePrompt,
   Card,
   CardContent,
   CardStack,
@@ -275,6 +293,71 @@ export function DevUiPage() {
             <Carousel slides={photos} label="示例照片" />
           </Demo>
         </div>
+        <FormDemo />
     </div>
+  );
+}
+
+// 表单样例：必填 / 格式 / 跨字段规则在字段下方提示；邮箱填 taken@example.com 模拟服务端返回的字段错误。
+function FormDemo() {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const prompt = usePrompt();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [repeat, setRepeat] = useState("");
+  const [region, setRegion] = useState("");
+  const [plan, setPlan] = useState("basic");
+  const [notify, setNotify] = useState(true);
+  const [agree, setAgree] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>();
+  return (
+    <Demo index={14} title="表单校验" description="参照 Element Plus：必填项带红色 *，失焦校验，出错后随输入实时更新；提交时聚焦第一个错误。错误行预留空间，不推动布局。">
+      <Form
+        errors={errors}
+        onSubmit={() => {
+          if (email === "taken@example.com") return setErrors({ email: "该邮箱已被使用。" });
+          setErrors(undefined);
+          toast("校验通过", { tone: "ok" });
+        }}
+      >
+        <FormGrid>
+          <Field label="邮箱" name="email" hint="填 taken@example.com 试试服务端错误。">
+            <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+          </Field>
+          <Field label="地区">
+            <Select required value={region} onValueChange={(v) => setRegion(String(v ?? ""))}>
+              <SelectTrigger><SelectValue>{region || "请选择"}</SelectValue></SelectTrigger>
+              <SelectContent>
+                {["东京", "香港", "新加坡"].map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="密码" hint="至少 6 位。">
+            <PasswordInput required minLength={6} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </Field>
+          <Field label="确认密码" customError={repeat && repeat !== password ? "两次输入的密码不一致" : ""}>
+            <PasswordInput required autoComplete="new-password" value={repeat} onChange={(e) => setRepeat(e.target.value)} />
+          </Field>
+        </FormGrid>
+        <RadioGroup aria-label="套餐" className="flex flex-wrap gap-4" value={plan} onValueChange={(v) => setPlan(String(v))}>
+          {[["basic", "基础"], ["pro", "专业"], ["team", "团队"]].map(([v, n]) => (
+            <label key={v} className="flex items-center gap-2 text-[13px]"><Radio value={v} />{n}</label>
+          ))}
+        </RadioGroup>
+        <SwitchField label="接收通知" description="开关与说明整行可点。" checked={notify} onCheckedChange={setNotify} />
+        <Field customError={agree ? "" : "请先阅读并同意"}>
+          <CheckboxField label="我已阅读使用说明" checked={agree} onCheckedChange={setAgree} />
+        </Field>
+        <Collapsible title="高级选项">
+          <Notice>折叠区内容。展开 / 收起有高度过渡。</Notice>
+        </Collapsible>
+        <div className="actions">
+          <Button type="submit">提交</Button>
+          <Button type="button" variant="outline" onClick={async () => toast((await confirm({ title: "删除这个节点？", description: "使用它的订阅会立即失效。", confirmText: "删除", tone: "danger" })) ? "已确认" : "已取消")}>确认框</Button>
+          <Button type="button" variant="outline" onClick={async () => { const v = await prompt({ title: "重命名分组", label: "新分组名", defaultValue: "香港", required: true }); toast(v === null ? "已取消" : "新名称：" + v); }}>输入框</Button>
+        </div>
+      </Form>
+    </Demo>
   );
 }

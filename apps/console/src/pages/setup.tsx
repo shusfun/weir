@@ -1,31 +1,24 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   Activity,
   ArrowLeft,
   ArrowRight,
   Database,
-  Eye,
-  EyeOff,
   KeyRound,
   LockKeyhole,
   UserRound,
 } from "lucide-react";
-import { Steps, Step, Field, Notice, CheckMark, IconTile, prefersReducedMotion, useBurst,
+import { Steps, Step, Field, Form, FormGrid, Notice, CheckMark, IconTile, prefersReducedMotion, useBurst, SwitchField,
   Button,
   Card,
   CardContent,
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-  Label,
+  PasswordInput,
   Segmented,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Switch,
 } from "@weir/ui";
 import { TextField } from "../components/form-field";
 import { api } from "../api";
@@ -79,9 +72,7 @@ export function SetupPage({ done }: { done: () => void }) {
   });
   const [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
-    [confirmation, setConfirmation] = useState(""),
-    [showPassword, setShowPassword] = useState(false),
-    [showConfirmation, setShowConfirmation] = useState(false);
+    [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const [phase, setPhase] = useState<"form" | "switching" | "check_failed" | "ready">(
@@ -121,9 +112,7 @@ export function SetupPage({ done }: { done: () => void }) {
     }
     setPhase("check_failed");
   }
-  async function next(e: FormEvent) {
-    e.preventDefault();
-    if (busy) return;
+  async function next() {
     setBusy(true);
     setError("");
     try {
@@ -257,14 +246,14 @@ export function SetupPage({ done }: { done: () => void }) {
                   }
                 </p>
               </header>
-              <form onSubmit={next} className="stack" aria-busy={busy}>
-                <fieldset disabled={busy} className="setup-fields">
+              <Form busy={busy} onSubmit={next} className="setup-fields">
                   {step === 0 && (
                     <>
                       <TextField
                         name={id + "token"}
                         label="短时初始化凭证"
                         type="password"
+                        required
                         value={token}
                         onChange={setToken}
                       />
@@ -290,21 +279,22 @@ export function SetupPage({ done }: { done: () => void }) {
                         <TextField
                           name={id + "sqlite"}
                           label="数据库文件"
+                          hint="留空使用服务器默认位置。"
                           value={sqlitePath}
                           onChange={setSqlitePath}
                         />
                       ) : (
                         <>
-                          <div className="settings-field-grid">
-                            <TextField name={id + "host"} label="PostgreSQL 主机" value={postgres.host} onChange={(v) => pg("host", v)} />
-                            <TextField name={id + "port"} label="端口" type="number" value={postgres.port} onChange={(v) => pg("port", Number(v))} />
-                            <TextField name={id + "database"} label="数据库" value={postgres.database} onChange={(v) => pg("database", v)} />
-                            <TextField name={id + "user"} label="账号" value={postgres.user} onChange={(v) => pg("user", v)} />
-                          </div>
+                          <FormGrid>
+                            <TextField name={id + "host"} label="PostgreSQL 主机" required value={postgres.host} onChange={(v) => pg("host", v)} />
+                            <TextField name={id + "port"} label="端口" type="number" required value={postgres.port} onChange={(v) => pg("port", Number(v))} />
+                            <TextField name={id + "database"} label="数据库" required value={postgres.database} onChange={(v) => pg("database", v)} />
+                            <TextField name={id + "user"} label="账号" required value={postgres.user} onChange={(v) => pg("user", v)} />
+                          </FormGrid>
                           <TextField name={id + "pg-password"} label="数据库密码" type="password" value={postgres.password} onChange={(v) => pg("password", v)} />
-                          <Field label="SSL 模式" htmlFor={id + "ssl"}>
-                            <Select value={postgres.ssl_mode} onValueChange={(v) => { if (v) pg("ssl_mode", v); }} disabled={busy}>
-                              <SelectTrigger id={id + "ssl"}>
+                          <Field label="SSL 模式">
+                            <Select value={postgres.ssl_mode} onValueChange={(v) => { if (v) pg("ssl_mode", v); }}>
+                              <SelectTrigger>
                                 <SelectValue>{sslLabels[postgres.ssl_mode]}</SelectValue>
                               </SelectTrigger>
                               <SelectContent>
@@ -314,18 +304,18 @@ export function SetupPage({ done }: { done: () => void }) {
                               </SelectContent>
                             </Select>
                           </Field>
-                          <div className="settings-field-grid">
-                            <TextField name={id + "address"} label="Redis 地址" value={redis.address} onChange={(v) => rd("address", v)} />
+                          <FormGrid>
+                            <TextField name={id + "address"} label="Redis 地址" required value={redis.address} onChange={(v) => rd("address", v)} />
                             <TextField name={id + "redis-user"} label="Redis ACL 用户" value={redis.username} onChange={(v) => rd("username", v)} />
-                          </div>
+                          </FormGrid>
                           <TextField name={id + "redis-password"} label="Redis 密码" type="password" value={redis.password} onChange={(v) => rd("password", v)} />
-                          <Label className="settings-policy">
-                            <span>
-                              <strong>Redis TLS 加密连接</strong>
-                              <small>根据现有 Redis 服务设置选择。</small>
-                            </span>
-                            <Switch disabled={busy} checked={redis.tls} onCheckedChange={(v) => rd("tls", v)} aria-label="Redis TLS 加密连接" />
-                          </Label>
+                          <SwitchField
+                            placement="end"
+                            label="Redis TLS 加密连接"
+                            description="根据现有 Redis 服务设置选择。"
+                            checked={redis.tls}
+                            onCheckedChange={(v) => rd("tls", v)}
+                          />
                         </>
                       )}
                     </>
@@ -336,65 +326,47 @@ export function SetupPage({ done }: { done: () => void }) {
                         name={id + "email"}
                         label="管理员邮箱"
                         type="email"
+                        required
                         autoComplete="username"
                         value={email}
                         onChange={setEmail}
                       />
-                      <Field label="密码（至少 6 位，含大小写字母和数字）" htmlFor={id + "password"}>
-                        <InputGroup>
-                          <InputGroupInput
-                            id={id + "password"}
-                            type={showPassword ? "text" : "password"}
-                            autoComplete="new-password"
-                            required
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                          />
-                          <InputGroupAddon align="inline-end">
-                            <InputGroupButton
-                              size="icon-sm"
-                              aria-pressed={showPassword}
-                              aria-label={showPassword ? "隐藏密码" : "显示密码"}
-                              onClick={() => setShowPassword((v) => !v)}
-                            >
-                              {showPassword ? <EyeOff /> : <Eye />}
-                            </InputGroupButton>
-                          </InputGroupAddon>
-                        </InputGroup>
+                      <Field
+                        label="密码"
+                        htmlFor={id + "password"}
+                        hint="至少 6 位，含大写字母、小写字母和数字。"
+                        customError={password ? accountPasswordError(password) : ""}
+                      >
+                        <PasswordInput
+                          id={id + "password"}
+                          autoComplete="new-password"
+                          required
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                        />
                       </Field>
-                      <Field label="确认管理员密码" htmlFor={id + "confirm"}>
-                        <InputGroup>
-                          <InputGroupInput
-                            id={id + "confirm"}
-                            type={showConfirmation ? "text" : "password"}
-                            autoComplete="new-password"
-                            required
-                            value={confirmation}
-                            onChange={(e) => setConfirmation(e.target.value)}
-                          />
-                          <InputGroupAddon align="inline-end">
-                            <InputGroupButton
-                              size="icon-sm"
-                              aria-pressed={showConfirmation}
-                              aria-label={showConfirmation ? "隐藏密码" : "显示密码"}
-                              onClick={() => setShowConfirmation((v) => !v)}
-                            >
-                              {showConfirmation ? <EyeOff /> : <Eye />}
-                            </InputGroupButton>
-                          </InputGroupAddon>
-                        </InputGroup>
+                      <Field
+                        label="确认管理员密码"
+                        htmlFor={id + "confirm"}
+                        customError={confirmation && confirmation !== password ? "两次输入的密码不一致" : ""}
+                      >
+                        <PasswordInput
+                          id={id + "confirm"}
+                          autoComplete="new-password"
+                          required
+                          value={confirmation}
+                          onChange={(e) => setConfirmation(e.target.value)}
+                        />
                       </Field>
                       <p className="setup-info">二次验证与通行密钥可在安装后的账户安全中设置。</p>
                     </>
                   )}
-                </fieldset>
                 {error && <Notice tone="bad">{error}</Notice>}
                 <div className="setup-actions">
                   {step > 0 && (
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={busy}
                       onClick={() => {
                         setError("");
                         setStep((v) => v - 1);
@@ -404,7 +376,7 @@ export function SetupPage({ done }: { done: () => void }) {
                       上一步
                     </Button>
                   )}
-                  <Button type="submit" disabled={busy || !token}>
+                  <Button type="submit" disabled={!token}>
                     {busy
                       ? step === 2
                         ? "正在安装…"
@@ -419,7 +391,7 @@ export function SetupPage({ done }: { done: () => void }) {
                     <ArrowRight size={15} />
                   </Button>
                 </div>
-              </form>
+              </Form>
             </CardContent>
           </Card>
         </div>

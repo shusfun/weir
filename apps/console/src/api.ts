@@ -1,8 +1,15 @@
+import { reportError } from "./lib/console-context";
+
 const messages: Record<string, string> = {
  gate_offline:"这台 VPS 当前离线，无法实测；请确认 Gate 服务在运行后重试。",
  gate_not_found:"VPS 不存在或已撤销。",
  unknown_preset:"请选择一个协议方案。",
- cert_required:"该方案需要域名证书，请先上传证书。",
+ cert_required:"这个节点需要证书。",
+ cert_unavailable:"这台 VPS 暂时拿不到证书",
+ draft_stale:"草稿依据的数据已被改动",
+ draft_failed:"草稿执行失败",
+ panel_failed:"1Panel 操作失败",
+ invalid_edge_domain:"节点证书域名无效",
  cert_not_found:"证书不存在。",
  cert_in_use:"证书仍被节点使用，请先更换这些节点的证书。",
  invalid_certificate:"证书与私钥不匹配或格式无效。",
@@ -334,6 +341,23 @@ export function isConflict(e: unknown) {
   return e instanceof ApiError && e.conflict;
 }
 
+// 表单错误：错误码能对应到字段的标在该字段下方（<Form errors> 按 name 分发），其余显示在表单底部。
+export type FormError<K extends string> = { field?: K; message: string };
+export function formError<K extends string>(e: unknown, fields: Partial<Record<string, K>>): FormError<K> {
+  return { field: e instanceof ApiError ? fields[e.code] : undefined, message: e instanceof Error ? e.message : String(e) };
+}
+// FormError → <Form errors>
+export function fieldErrors<K extends string>(e: FormError<K> | null | undefined): Partial<Record<K, string>> | undefined {
+  return e?.field ? ({ [e.field]: e.message } as Partial<Record<K, string>>) : undefined;
+}
+// 重新验证身份（当前密码 + 二次验证码）的错误码 → 字段
+export const reauthFields = {
+  password_required: "password",
+  second_factor_required: "code",
+  invalid_second_factor: "code",
+  invalid_code: "code",
+} as const;
+
 export async function api(
   path: string,
   method = "GET",
@@ -370,13 +394,16 @@ export async function api(
       );
     }
   }
+  // 没有中心错误码的 5xx（反代 / 开发代理连不上中心时的空响应）：是服务不可用，不是输入有误。
+  if (!res.ok && res.status >= 500 && !data?.error?.code) {
+    throw new ApiError(`服务暂时不可用（HTTP ${res.status}），请稍后重试。`, "upstream_unavailable", res.status);
+  }
   if (!res.ok) {
     const code = String(data?.error?.code ?? "http_" + res.status);
-    throw new ApiError(
-      (messages[code] ?? `操作失败（${code}），请检查输入与服务状态后重试。`) + (data?.error?.detail ? `（${data.error.detail}）` : ""),
-      code,
-      res.status,
-    );
+    const message = (messages[code] ?? `操作失败（${code}），请检查输入与服务状态后重试。`) + (data?.error?.detail ? `（${data.error.detail}）` : "");
+    // 页面感知：dsh 能看到最近一次失败提示（上报 / 轮询本身的失败不算）。
+    if (!path.startsWith("/admin/dsh/context") && !path.startsWith("/admin/dsh/navigation")) reportError(code, message);
+    throw new ApiError(message, code, res.status);
   }
   return data;
 }
