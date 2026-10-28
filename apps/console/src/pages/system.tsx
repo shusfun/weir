@@ -1,4 +1,4 @@
-// 系统设置：按分区用标签页组织（AI 与 dsh / 安全防御 / 登录与令牌 / 通知 / 备份迁移 / 分发），分区记在地址栏 ?tab=。
+// 系统设置：按分区用标签页组织（AI 与 dsh / 安全防御 / 登录与令牌 / 通知 / 节点证书 / 备份迁移 / 分发），分区记在地址栏 ?tab=。
 import { Card, CardContent, PageHeader, Tabs, TabsList, TabsPanel, TabsTab } from "@weir/ui";
 import { useSearchParams } from "react-router-dom";
 import { AnnouncementEditor } from "../components/global-announcement";
@@ -7,6 +7,7 @@ import { ClientMirrorsEditor } from "../components/client-mirrors";
 import { BlocksCard, EventsCard, LayaCard } from "../components/defense";
 import { DshSettingsCard, useDsh } from "../components/dsh";
 import { APITokensCard, BackupCard, NotifyCard, SecurityCard, SMTPCard } from "../components/system-settings";
+import { NodeCertCard } from "../components/node-certs";
 import { systemSections } from "../shell/navigation";
 
 export function SystemPage() {
@@ -34,6 +35,7 @@ export function SystemPage() {
           <SMTPCard />
           <NotifyCard />
         </TabsPanel>
+        <TabsPanel value="certs" className="stack"><NodeCertCard /></TabsPanel>
         <TabsPanel value="backup" className="stack"><BackupCard /></TabsPanel>
         <TabsPanel value="distribution" className="stack">
           <Card><CardContent><AnnouncementEditor /></CardContent></Card>

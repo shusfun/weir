@@ -45,7 +45,7 @@ function SelectTrigger({
       data-size={size}
       className={cn(
         // 在 Field 内默认撑满一行；工具栏等独立场景保持内容宽度
-        "mg-key flex h-9.5 w-fit min-w-0 items-center justify-between gap-2 rounded-[var(--mg-radius)] px-3 text-[13px] whitespace-nowrap text-[var(--mg-ink)] outline-none select-none in-data-[slot=field]:w-full disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive data-placeholder:text-[var(--mg-ink-engraved)] data-[size=sm]:h-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "mg-key flex h-9.5 w-fit min-w-0 items-center justify-between gap-2 rounded-[var(--mg-radius)] px-3 text-[13px] whitespace-nowrap text-[var(--mg-ink)] select-none in-data-[slot=field]:w-full disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive data-placeholder:text-[var(--mg-ink-engraved)] data-[size=sm]:h-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       {...props}

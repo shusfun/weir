@@ -1,17 +1,20 @@
 // VPS 与节点：VPS 连接中心后只在这里操作；节点用四步向导创建，高级参数可在详情中修改。
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Notice, PageHeader, SkeletonCards, StatusLamp, Switch, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useToast } from "@weir/ui";
+import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, Notice, PageHeader, SkeletonCards, StatusLamp, Switch, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useToast, useConfirm } from "@weir/ui";
 import { FileBadge, Plus, Server, Sparkles, Trash2 } from "lucide-react";
 import { openDsh, useDsh } from "../components/dsh";
 import { GateRouting } from "../components/gate-routing";
 import { GateDetail } from "../components/gate-detail";
 import { api } from "../api";
+import { useFormAction, useRowAction } from "../lib/action";
 import { State } from "../components/feedback";
 import { InviteGate } from "../components/invite-gate";
 import { CertManager } from "../components/cert-manager";
 import { NodeWizard } from "../components/node-wizard";
 import { date } from "../lib/models";
+import { useConsoleContext } from "../lib/console-context";
 import { protocolNames, type Gate, type NodeItem } from "../lib/core";
 
 const stateText: Record<Gate["state"], [string, "ok" | "warn" | "bad" | "off"]> = {
@@ -22,30 +25,39 @@ const stateText: Record<Gate["state"], [string, "ok" | "warn" | "bad" | "off"]> 
 };
 
 export function GatesPage() {
+  const confirm = useConfirm();
   const toast = useToast();
   const gates = useQuery({ queryKey: ["gates"], queryFn: async () => (await api("/admin/gates")).items as Gate[], refetchInterval: 10_000 });
   const nodes = useQuery({ queryKey: ["nodes"], queryFn: async () => (await api("/admin/nodes")).items as NodeItem[], refetchInterval: 10_000 });
   const [invite, setInvite] = useState(false);
   const [wizard, setWizard] = useState(false);
   const [certs, setCerts] = useState(false);
-  const [busy, setBusy] = useState(0);
   const [edit, setEdit] = useState<Gate | null>(null);
   const dsh = useDsh();
   const [routing, setRouting] = useState<Gate | null>(null);
   const [detail, setDetail] = useState<Gate | null>(null);
   const refresh = () => Promise.all([gates.refetch(), nodes.refetch()]);
-  async function act(id: number, fn: () => Promise<unknown>, ok: string) {
-    setBusy(id);
-    try {
-      await fn();
-      toast(ok, { tone: "ok" });
-      await refresh();
-    } catch (e) {
-      toast("操作未完成", { description: String(e), tone: "bad" });
-    } finally {
-      setBusy(0);
+  // dsh 的界面导航（?gate=编号）：打开这台 VPS 的详情。
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const id = Number(params.get("gate"));
+    const g = id ? gates.data?.find((x) => x.id === id) : undefined;
+    if (g) {
+      setDetail(g);
+      params.delete("gate");
+      setParams(params, { replace: true });
     }
-  }
+  }, [params, gates.data, setParams]);
+  const offline = (gates.data ?? []).filter((g) => g.status === "active" && !g.online).map((g) => `VPS「${g.name}」离线`);
+  const pending = (gates.data ?? []).filter((g) => g.state === "pending").map((g) => `VPS「${g.name}」配置待生效`);
+  const failed = (gates.data ?? []).filter((g) => g.state === "failed").map((g) => `VPS「${g.name}」配置应用失败：${g.last_error}`);
+  useConsoleContext({
+    page: "VPS 与节点",
+    list: { selected: gates.data?.length ?? 0, items: (gates.data ?? []).slice(0, 20).map((g) => ({ type: "gate", name: g.name, id: g.id })) },
+    notices: [...offline, ...pending, ...failed],
+  });
+  useConsoleContext(detail ? { object: { type: "gate", name: detail.name, id: detail.id }, dialog: { title: "VPS 详情" } } : null);
+  const { run: act, isBusy } = useRowAction<number>({ refetch: refresh });
   const header = (
     <PageHeader
       eyebrow="工作区"
@@ -132,17 +144,17 @@ export function GatesPage() {
                           <TableCell>{n.chain.kind === "none" ? "直连" : n.chain.kind === "socks5" ? `SOCKS5 ${n.chain.address}:${n.chain.port}` : `经 ${nodes.data.find((x) => x.id === n.chain.node_id)?.name ?? "节点"}`}</TableCell>
                           <TableCell>{n.credentials}</TableCell>
                           <TableCell>
-                            <Switch aria-label={"启用 " + n.name} checked={n.enabled} disabled={busy === n.id} onCheckedChange={(v) => act(n.id, () => api("/admin/nodes/" + n.id, "PATCH", { enabled: v }), v ? "节点已启用" : "节点已停用")} />
+                            <Switch aria-label={"启用 " + n.name} checked={n.enabled} disabled={isBusy(n.id)} onCheckedChange={(v) => act(n.id, () => api("/admin/nodes/" + n.id, "PATCH", { enabled: v }), v ? "节点已启用" : "节点已停用")} />
                           </TableCell>
                           <TableCell>
                             <span className="flex flex-nowrap gap-1.5">
-                            <Button size="sm" variant="outline" disabled={busy === n.id} onClick={() => act(n.id, async () => {
+                            <Button size="sm" variant="outline" disabled={isBusy(n.id)} onClick={() => act(n.id, async () => {
                               const r = await api(`/admin/nodes/${n.id}/test`, "POST", {});
                               toast(`实测通过：${r.latency_ms} ms`, { tone: "ok" });
                             }, "实测完成")}>实测</Button>
-                            <Button size="sm" variant="outline" title={dsh.data?.ready ? undefined : "请先在系统设置中启用 dsh"} disabled={!dsh.data?.ready} onClick={() => openDsh({ notice: `dsh 已知道你在看节点「${n.name}」，直接说要怎么调整即可。`, nodeId: n.id })}><Sparkles />AI 调整</Button>
-                            <Button size="icon-sm" variant="destructive" aria-label={"删除 " + n.name} disabled={busy === n.id}
-                              onClick={() => window.confirm(`删除节点「${n.name}」？使用它的订阅会立即失效。`) && act(n.id, () => api("/admin/nodes/" + n.id, "DELETE"), "节点已删除")}>
+                            <Button size="sm" variant="outline" title={dsh.data?.ready ? undefined : "请先在系统设置中启用 dsh"} disabled={!dsh.data?.ready} onClick={() => openDsh({ notice: `dsh 已知道你在看节点「${n.name}」，直接说要怎么调整即可。`, nodeId: n.id, nodeName: n.name })}><Sparkles />AI 调整</Button>
+                            <Button size="icon-sm" variant="destructive" aria-label={"删除 " + n.name} disabled={isBusy(n.id)}
+                              onClick={async () => (await confirm({ title: `删除节点「${n.name}」？`, description: "使用它的订阅会立即失效。", confirmText: "删除", tone: "danger" })) && act(n.id, () => api("/admin/nodes/" + n.id, "DELETE"), "节点已删除")}>
                               <Trash2 />
                             </Button>
                             </span>
@@ -166,34 +178,21 @@ export function GatesPage() {
 function GateEdit({ gate, close, saved }: { gate: Gate; close: () => void; saved: () => void }) {
   const [name, setName] = useState(gate.name);
   const [host, setHost] = useState(gate.public_host);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  async function submit() {
-    setBusy(true);
-    setError("");
-    try {
-      await api("/admin/gates/" + gate.id, "PATCH", { name: name.trim(), public_host: host.trim() });
-      saved();
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const save = useFormAction(() => api("/admin/gates/" + gate.id, "PATCH", { name: name.trim(), public_host: host.trim() }), { onSuccess: saved });
   return (
-    <Dialog open onOpenChange={(o) => !o && !busy && close()}>
+    <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
       <DialogContent size="md">
         <DialogTitle>编辑 VPS</DialogTitle>
         <DialogDescription>公网地址会写进订阅；改动后用户更新订阅即可生效。</DialogDescription>
-        <form className="stack" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
-          <Field label="名称" htmlFor="gate-edit-name"><Input id="gate-edit-name" required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} /></Field>
-          <Field label="公网地址" htmlFor="gate-edit-host" hint="IP 或解析到这台 VPS 的域名。"><Input id="gate-edit-host" value={host} onChange={(e) => setHost(e.target.value)} /></Field>
-          {error && <Notice tone="bad">{error}</Notice>}
+        <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
+          <Field label="名称"><Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} /></Field>
+          <Field label="公网地址" hint="IP 或解析到这台 VPS 的域名。"><Input value={host} onChange={(e) => setHost(e.target.value)} /></Field>
+          {save.error && <Notice tone="bad">{save.error}</Notice>}
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={busy} onClick={close}>取消</Button>
-            <Button type="submit" disabled={busy}>{busy ? "正在保存…" : "保存"}</Button>
+            <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
+            <Button type="submit" disabled={save.busy}>{save.busy ? "正在保存…" : "保存"}</Button>
           </DialogFooter>
-        </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );

@@ -12,8 +12,20 @@ export interface Gate {
   last_error: string;
   last_seen_at?: string;
   kernels_running?: Record<string, string>;
+  // Gate 上报的 1Panel 状态；缺失表示还没有上报（未知）。
+  panel?: { detected?: boolean; configured?: boolean; version?: string; error?: string } | null;
   config_revision: number;
   applied_revision: number;
+}
+
+// PresetField 是方案「高级」里可以改的一个字段（中文名、类型、单位、可选值）。
+export interface PresetField {
+  key: string;
+  label: string;
+  kind: "text" | "number" | "select" | "bool";
+  unit?: string;
+  hint?: string;
+  options?: [string, string][];
 }
 
 export interface Preset {
@@ -24,15 +36,36 @@ export interface Preset {
   protocol: string;
   cert: "none" | "required" | "self_signed_ok";
   chain_exit: boolean;
+  fields: PresetField[];
+  note?: string;
 }
 
 export interface ChainSpec {
-  kind: "none" | "socks5" | "node";
+  kind: "none" | "socks5" | "node" | "source";
   address?: string;
   port?: number;
   username?: string;
   password?: string;
   node_id?: number;
+  // source：管理员用 source_id（订阅源），用户自建用 profile_id（分给他的订阅组）；mode node / filter
+  source_id?: number;
+  profile_id?: number;
+  mode?: "node" | "filter";
+  match?: string;
+}
+
+// SourceResolved 是订阅源出口当前用的节点（一组时为全部成员）；resolved 为空表示还没解析成功。
+export interface SourceResolved {
+  resolved: string[] | null;
+  group?: boolean;
+  at?: string;
+}
+
+// Withheld 是因额度没有发给用户的节点（WireGuard 无法按用户计量）。
+export interface Withheld {
+  node_id: number;
+  name: string;
+  reason: string;
 }
 
 export interface NodeItem {
@@ -59,8 +92,13 @@ export interface Cert {
   name: string;
   domain: string;
   source: string;
+  gate_id?: number | null;
   not_after?: string;
   fingerprint: string;
+  // ready / renewing / pending / failed / expired / unknown
+  health?: string;
+  last_error?: string;
+  renewed_at?: string;
 }
 
 export interface Entry {
@@ -96,12 +134,14 @@ export interface ChainItem {
   name: string;
   entry_node_id: number;
   entry_name?: string;
-  exit_kind: "socks5" | "node";
+  exit_kind: "socks5" | "node" | "source";
   exit_address?: string;
   exit_port?: number;
   exit_username?: string;
   exit_password?: string;
   exit_node_id?: number | null;
+  exit_source?: { source_id?: number; profile_id?: number; mode?: "node" | "filter"; match?: string } | null;
+  source?: SourceResolved;
   enabled: boolean;
 }
 

@@ -204,6 +204,19 @@
   color: var(--mg-accent-ink);
   background: var(--mg-accent);
 }
+.origin-banner {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 16px 28px 0;
+}
+@media (max-width: 900px) {
+  .origin-banner {
+    padding: 12px 16px 0;
+  }
+}
 .shell-main {
   width: 100%;
   max-width: 1480px;
@@ -256,4 +269,9 @@
     right: 16px;
     bottom: calc(16px + env(safe-area-inset-bottom));
   }
+}
+
+/* 关系图的列标题：只是文字，不显示连接点 */
+.topology .topo-heading .react-flow__handle {
+  display: none;
 }
