@@ -27,6 +27,7 @@ import (
 	"github.com/shusfun/weir/internal/gate"
 	"github.com/shusfun/weir/internal/kernels"
 	"github.com/shusfun/weir/internal/store/ent"
+	entgate "github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/xray"
 )
 
@@ -44,6 +45,8 @@ type env struct {
 	// paths / stopAgent：最近一次 startGate 的 Gate 目录与 Agent 的停止函数（只停 Agent，辅助程序与内核照常运行）。
 	paths     gate.Paths
 	stopAgent context.CancelFunc
+	// gateCenter：Gate 连接中心用的地址（空为 url）；多 Gate 验收经可断开的中转连接中心。
+	gateCenter string
 }
 
 func (e *env) post(path string, body any, header map[string]string) map[string]any {
@@ -132,13 +135,17 @@ func (e *env) startGate(name string) {
 		CoresDir: filepath.Join(gd, "cores"), CertsDir: filepath.Join(gd, "certs"), KernelsDir: filepath.Join(gd, "kernels"), Root: filepath.Join(gd, "root"), RunAs: e.runAs}
 	go gate.ServeHelper(e.ctx, gate.NewHelper(p))
 	eventually(e.t, 5*time.Second, "helper socket", func() bool { _, err := os.Stat(p.Socket); return err == nil })
-	if err := gate.Pair(e.ctx, p, e.url, inv["token"].(string), name, ""); err != nil {
+	center := e.url
+	if e.gateCenter != "" {
+		center = e.gateCenter
+	}
+	if err := gate.Pair(e.ctx, p, center, inv["token"].(string), name, ""); err != nil {
 		e.t.Fatal(err)
 	}
 	e.paths = p
 	e.runAgent()
 	eventually(e.t, 10*time.Second, "gate heartbeat", func() bool {
-		g, err := e.s.Store.Ent.Gate.Query().Only(e.ctx)
+		g, err := e.s.Store.Ent.Gate.Query().Where(entgate.NameEQ(name)).Only(e.ctx)
 		if err == nil && g.LastSeenAt != nil {
 			e.gateID = g.ID
 			return true
