@@ -37,8 +37,9 @@ export function GatesPage() {
   const [routing, setRouting] = useState<Gate | null>(null);
   const [detail, setDetail] = useState<Gate | null>(null);
   const refresh = () => Promise.all([gates.refetch(), nodes.refetch()]);
-  // dsh 的界面导航（?gate=编号）：打开这台 VPS 的详情。
+  // 界面导航（dsh 与关系图）：?gate=编号 打开这台 VPS 的详情；?node=编号 关掉详情，滚到并高亮这个节点所在行。
   const [params, setParams] = useSearchParams();
+  const [focusNode, setFocusNode] = useState<number | null>(null);
   useEffect(() => {
     const id = Number(params.get("gate"));
     const g = id ? gates.data?.find((x) => x.id === id) : undefined;
@@ -47,7 +48,23 @@ export function GatesPage() {
       params.delete("gate");
       setParams(params, { replace: true });
     }
-  }, [params, gates.data, setParams]);
+    const nid = Number(params.get("node"));
+    if (nid && nodes.data?.some((n) => n.id === nid)) {
+      setDetail(null);
+      setRouting(null);
+      setFocusNode(nid);
+      params.delete("node");
+      setParams(params, { replace: true });
+    }
+  }, [params, gates.data, nodes.data, setParams]);
+  useEffect(() => {
+    if (!focusNode) return;
+    const row = document.querySelector<HTMLElement>(`[data-node-row="${focusNode}"]`);
+    row?.scrollIntoView({ block: "center" });
+    row?.focus({ preventScroll: true });
+    const t = setTimeout(() => setFocusNode(null), 2400);
+    return () => clearTimeout(t);
+  }, [focusNode]);
   const offline = (gates.data ?? []).filter((g) => g.status === "active" && !g.online).map((g) => `VPS「${g.name}」离线`);
   const pending = (gates.data ?? []).filter((g) => g.state === "pending").map((g) => `VPS「${g.name}」配置待生效`);
   const failed = (gates.data ?? []).filter((g) => g.state === "failed").map((g) => `VPS「${g.name}」配置应用失败：${g.last_error}`);
@@ -137,11 +154,11 @@ export function GatesPage() {
                     </TableHeader>
                     <TableBody>
                       {list.map((n) => (
-                        <TableRow key={n.id}>
+                        <TableRow key={n.id} data-node-row={n.id} tabIndex={focusNode === n.id ? -1 : undefined} className={focusNode === n.id ? "bg-[var(--mg-accent-soft)] transition-colors" : undefined}>
                           <TableCell>{n.name}</TableCell>
                           <TableCell>{protocolNames[n.protocol] ?? n.protocol}{n.security === "reality" ? " + REALITY" : n.network === "ws" ? " + WS" : ""}</TableCell>
                           <TableCell className="font-mono">{n.port}</TableCell>
-                          <TableCell>{n.chain.kind === "none" ? "直连" : n.chain.kind === "socks5" ? `SOCKS5 ${n.chain.address}:${n.chain.port}` : `经 ${nodes.data.find((x) => x.id === n.chain.node_id)?.name ?? "节点"}`}</TableCell>
+                          <TableCell>{n.chain.kind === "none" ? "直连" : n.chain.kind === "socks5" ? `SOCKS5 ${n.chain.address}:${n.chain.port}` : n.chain.kind === "source" ? "订阅源节点" : `经 ${nodes.data.find((x) => x.id === n.chain.node_id)?.name ?? "节点"}`}</TableCell>
                           <TableCell>{n.credentials}</TableCell>
                           <TableCell>
                             <Switch aria-label={"启用 " + n.name} checked={n.enabled} disabled={isBusy(n.id)} onCheckedChange={(v) => act(n.id, () => api("/admin/nodes/" + n.id, "PATCH", { enabled: v }), v ? "节点已启用" : "节点已停用")} />

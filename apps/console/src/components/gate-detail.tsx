@@ -37,7 +37,7 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
   const foreign = (gate.listening_ports ?? []).filter((p) => !own.has(p.port));
   const { run, isBusy } = useRowAction<string>();
   const mine = nodes.filter((n) => n.gate_id === gate.id);
-  const exitName = (n: NodeItem) => n.chain.kind === "none" ? "直连" : n.chain.kind === "socks5" ? `家宽 SOCKS5 ${n.chain.address}:${n.chain.port}` : `经 ${nodes.find((x) => x.id === n.chain.node_id)?.name ?? "节点"}（${nodes.find((x) => x.id === n.chain.node_id)?.gate_name ?? ""}）`;
+  const exitName = (n: NodeItem) => n.chain.kind === "none" ? "直连" : n.chain.kind === "socks5" ? `家宽 SOCKS5 ${n.chain.address}:${n.chain.port}` : n.chain.kind === "source" ? "订阅源节点" : `经 ${nodes.find((x) => x.id === n.chain.node_id)?.name ?? "节点"}（${nodes.find((x) => x.id === n.chain.node_id)?.gate_name ?? ""}）`;
   return (
     <Sheet open onOpenChange={(o) => !o && close()}>
       <SheetContent side="right" title={gate.name} description={`${gate.public_host || "等待上报地址"} · ${gate.arch} · 最近心跳 ${date(gate.last_seen_at)}`} className="w-full sm:max-w-[640px]">
@@ -83,7 +83,7 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
           <div className="actions"><Button disabled={isBusy()} onClick={() => void run("pins", () => api("/admin/gates/" + gate.id, "PATCH", { kernel_pins: Object.fromEntries(Object.entries(pins).filter(([, v]) => v)) }), "版本设置已保存")}>保存版本设置</Button></div>
           {!gate.online && <Notice tone="warn">VPS 离线：诊断与重启不可用。</Notice>}
           <GateCerts gate={gate} />
-          <SectionHeader title="关系图" description="用户 → 入口节点 → 路由 → 出口（只读）；点击跳到对应用户、VPS 或出口与分流。" />
+          <SectionHeader title="关系图" description="用户 → 入口节点 → 路由（用户自建链式代理、分流规则）→ 出口（只读）；点击跳到对应用户、节点、VPS、订阅源或出口与分流。" />
           <GateTopology gateId={gate.id} openRouting={() => setRouting(true)} />
           {routing && <GateRouting gate={gate} close={() => setRouting(false)} />}
           <SectionHeader title="节点与出口" description="入口节点 → 出口；分流规则在「出口与分流」中设置。" />
