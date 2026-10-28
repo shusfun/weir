@@ -39,6 +39,11 @@ type env struct {
 	dir    string
 	ctx    context.Context
 	gateID int
+	// runAs 是内核降权运行的账号（空为不降权）；验收 443 端口时用一个普通账号，确认只靠 CAP_NET_BIND_SERVICE 就能监听。
+	runAs string
+	// paths / stopAgent：最近一次 startGate 的 Gate 目录与 Agent 的停止函数（只停 Agent，辅助程序与内核照常运行）。
+	paths     gate.Paths
+	stopAgent context.CancelFunc
 }
 
 func (e *env) post(path string, body any, header map[string]string) map[string]any {
@@ -124,18 +129,14 @@ func (e *env) startGate(name string) {
 	inv := e.post("/api/v1/admin/gates/invite", map[string]string{"name": name}, nil)
 	gd := filepath.Join(e.dir, name)
 	p := gate.Paths{Config: filepath.Join(gd, "agent.json"), Data: filepath.Join(gd, "data"), Socket: filepath.Join("/tmp", "mg-"+name+".sock"),
-		CoresDir: filepath.Join(gd, "cores"), CertsDir: filepath.Join(gd, "certs"), KernelsDir: filepath.Join(gd, "kernels"), Root: filepath.Join(gd, "root")}
+		CoresDir: filepath.Join(gd, "cores"), CertsDir: filepath.Join(gd, "certs"), KernelsDir: filepath.Join(gd, "kernels"), Root: filepath.Join(gd, "root"), RunAs: e.runAs}
 	go gate.ServeHelper(e.ctx, gate.NewHelper(p))
 	eventually(e.t, 5*time.Second, "helper socket", func() bool { _, err := os.Stat(p.Socket); return err == nil })
 	if err := gate.Pair(e.ctx, p, e.url, inv["token"].(string), name, ""); err != nil {
 		e.t.Fatal(err)
 	}
-	a, err := gate.NewAgent(p)
-	if err != nil {
-		e.t.Fatal(err)
-	}
-	a.MeterEvery, a.HeartbeatEvery, a.ReportEvery = time.Second, time.Second, 1
-	go a.Run(e.ctx)
+	e.paths = p
+	e.runAgent()
 	eventually(e.t, 10*time.Second, "gate heartbeat", func() bool {
 		g, err := e.s.Store.Ent.Gate.Query().Only(e.ctx)
 		if err == nil && g.LastSeenAt != nil {
@@ -144,6 +145,18 @@ func (e *env) startGate(name string) {
 		}
 		return false
 	})
+}
+
+// runAgent 按 e.paths 启动 Agent（周期调短）；e.stopAgent 只停这个 Agent。
+func (e *env) runAgent() {
+	a, err := gate.NewAgent(e.paths)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	a.MeterEvery, a.HeartbeatEvery, a.ReportEvery = time.Second, time.Second, 1
+	ctx, cancel := context.WithCancel(e.ctx)
+	e.stopAgent = cancel
+	go a.Run(ctx)
 }
 
 // applied 等待 Gate 应用到中心最新的配置版本。
