@@ -44,7 +44,10 @@ func inQuerySet(c rune) bool {
 
 func inSpecialQuerySet(c rune) bool { return inQuerySet(c) || c == '\'' }
 
-func inPathSet(c rune) bool { return inQuerySet(c) || c == '?' || c == '`' || c == '{' || c == '}' }
+// inPathSet 是 WHATWG 现行标准的 path percent-encode set（含 U+005E ^，与 Node 24 起的实现一致）。
+func inPathSet(c rune) bool {
+	return inQuerySet(c) || c == '?' || c == '^' || c == '`' || c == '{' || c == '}'
+}
 
 func inUserinfoSet(c rune) bool {
 	return inPathSet(c) || c == '/' || c == ':' || c == ';' || c == '=' || c == '@' ||
