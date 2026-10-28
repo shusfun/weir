@@ -1,6 +1,5 @@
 // 按功能组织的导航表：侧边栏、顶栏标题、命令面板与旧地址重定向共用这一份配置。
 import {
-  LayoutDashboard,
   Server,
   Users,
   KeyRound,
@@ -8,8 +7,6 @@ import {
   Megaphone,
   ListChecks,
   ScrollText,
-  ShieldAlert,
-  Mail,
   Settings2,
   Link2,
   ShieldCheck,
@@ -77,6 +74,7 @@ export const systemSections = [
   { key: "defense", label: "安全防御" },
   { key: "login", label: "登录与令牌" },
   { key: "notify", label: "通知" },
+  { key: "certs", label: "节点证书" },
   { key: "backup", label: "备份迁移" },
   { key: "distribution", label: "分发" },
 ] as const;

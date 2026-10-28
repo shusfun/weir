@@ -8,6 +8,7 @@ import { navigation, navGroups, currentNav } from "../shell/navigation";
 import { CommandPalette } from "../shell/command-palette";
 import { DshDrawer } from "./dsh";
 import { DraftConfirm } from "./draft-confirm";
+import { CenterOriginBanner } from "./center-origin";
 
 const collapseKey = "migate-rail-collapsed";
 function readCollapsed() {
@@ -25,7 +26,7 @@ function AccountMenu({ admin, email, onLogout }: { admin: boolean; email: string
     <Menu>
       <MenuTrigger
         render={
-          <button type="button" className="mg-key rail-account"aria-label={"个人中心：" + email}>
+          <button type="button" className="mg-key rail-account" aria-label={"个人中心：" + email}>
             <IconTile size="sm" tone="neutral">{email.slice(0, 1).toUpperCase() || "?"}</IconTile>
             <span className="rail-account-text">
               <strong>{email}</strong>
@@ -131,6 +132,7 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
               <ThemeControl />
             </div>
           </header>
+          {admin && <CenterOriginBanner />}
           {children}
         </div>
         <Sheet open={drawer} onOpenChange={setDrawer}>

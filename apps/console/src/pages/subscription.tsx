@@ -1,6 +1,6 @@
 // 我的订阅：用量与到期一览；自己管理多条订阅链接与自建链式代理（只能使用管理员分配的节点）。
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CopyButton, Input, Meter, PageHeader, Readout, SectionHeader, SkeletonCards } from "@weir/ui";
+import { Card, CardContent, CopyButton, Input, Meter, Notice, PageHeader, Readout, SectionHeader, SkeletonCards } from "@weir/ui";
 import { api } from "../api";
 import { client } from "../lib/client";
 import { ClientDownload } from "../components/client-download";
@@ -8,6 +8,7 @@ import { ClientIcon } from "../components/client-icon";
 import { State } from "../components/feedback";
 import { ChainPanel, LinkPanel, type NodeOption } from "../components/link-panel";
 import { bytes, date } from "../lib/models";
+import type { Withheld } from "../lib/core";
 
 interface Summary {
   quota: number;
@@ -15,6 +16,7 @@ interface Summary {
   expires_at?: string | null;
   monthly_reset: boolean;
   next_reset?: string | null;
+  withheld?: Withheld[];
 }
 
 export function SubscriptionPage() {
@@ -45,6 +47,11 @@ export function SubscriptionPage() {
           {s.quota > 0 && <Meter className="sm:col-span-3" label="流量使用" value={s.used} max={s.quota} />}
         </CardContent>
       </Card>
+      {(s.withheld ?? []).length > 0 && (
+        <Notice tone="warn">
+          你的套餐有流量额度，以下 WireGuard 节点没有放进订阅：{s.withheld!.map((w) => w.name).join("、")}。WireGuard 没有按用户的流量统计，无法执行额度，只发给不限额度的用户。
+        </Notice>
+      )}
       <GroupsCard />
       <ClientsCard />
       {nodes.data.length === 0 ? (
@@ -107,9 +114,9 @@ function ClientsCard() {
         ) : items.length === 0 ? (
           <State empty="管理员尚未提供客户端下载" />
         ) : (
-          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((c) => (
-              <li key={c.id} className="flex items-center justify-between gap-2 rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3">
+              <li key={c.id} className="flex min-w-0 items-center justify-between gap-2 rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3">
                 <span className="flex min-w-0 items-center gap-2">
                   <ClientIcon icon={c.icon} data={c.icon_data} />
                   <span className="min-w-0"><strong>{c.name}</strong><small className="block truncate text-[var(--mg-ink-3)]">{c.description}</small></span>

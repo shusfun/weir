@@ -42,7 +42,7 @@ function Segmented<T extends string>({
           value={key}
           className={(state) =>
             cn(
-              "mg-key inline-flex shrink-0 items-center justify-center gap-1.5 rounded-[var(--mg-radius-sm)] px-3 whitespace-nowrap text-[var(--mg-ink-3)] outline-none hover:text-[var(--mg-ink)] [&_svg]:size-3.5",
+              "mg-key inline-flex shrink-0 items-center justify-center gap-1.5 rounded-[var(--mg-radius-sm)] px-3 whitespace-nowrap text-[var(--mg-ink-3)] hover:text-[var(--mg-ink)] [&_svg]:size-3.5",
               size === "sm" ? "h-7 text-xs" : "h-8 text-[12.5px]",
               state.pressed && "is-pressed font-semibold text-[var(--mg-ink)]",
             )

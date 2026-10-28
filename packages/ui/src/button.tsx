@@ -5,7 +5,7 @@ import { cn } from "cn";
 import { Ripple } from "./ripple";
 
 const buttonVariants = cva(
-  "mg-key group/button inline-flex shrink-0 items-center justify-center gap-2 rounded-[var(--mg-radius)] font-medium whitespace-nowrap select-none outline-none disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "mg-key group/button inline-flex shrink-0 items-center justify-center gap-2 rounded-[var(--mg-radius)] font-medium whitespace-nowrap select-none disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {

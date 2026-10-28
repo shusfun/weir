@@ -1,11 +1,15 @@
 // VPS 的出口与分流规则：例如把流媒体域名经家宽 SOCKS5 出去。被规则引用的出口不能停用、改名或删除。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Notice, SectionHeader, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Textarea, useToast } from "@weir/ui";
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, SectionHeader, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, SwitchField, Textarea, useToast, useConfirm, PasswordInput } from "@weir/ui";
 import { Plus, Trash2 } from "lucide-react";
 import { api } from "../api";
+import { useFormAction, useRowAction } from "../lib/action";
 import type { Gate } from "../lib/core";
 import { State } from "./feedback";
+import { useSources } from "./misub-sources";
+import { SourceSummary } from "./link-panel";
+import type { SourceResolved } from "../lib/core";
 
 interface Outbound {
   id: number;
@@ -17,6 +21,8 @@ interface Outbound {
   username: string;
   password?: string;
   enabled: boolean;
+  settings?: { source_id?: number; mode?: "node" | "filter"; match?: string } | null;
+  source?: SourceResolved;
 }
 interface Route {
   id: number;
@@ -29,28 +35,19 @@ interface Route {
   user_id?: number | null;
 }
 
-const protoNames: Record<string, string> = { socks: "SOCKS5", http: "HTTP 代理", freedom: "直连", blackhole: "拦截" };
+const protoNames: Record<string, string> = { socks: "SOCKS5", http: "HTTP 代理", freedom: "直连", blackhole: "拦截", source: "订阅源节点" };
+const latency = (r: unknown) => (r && typeof r === "object" && "latency_ms" in r ? `延迟 ${(r as { latency_ms: number }).latency_ms} ms` : undefined);
+const portError = (v: string) => (v && (Number(v) < 1 || Number(v) > 65535) ? "端口须在 1–65535 之间" : "");
 
 export function GateRouting({ gate, close }: { gate: Gate; close: () => void }) {
+  const confirm = useConfirm();
   const toast = useToast();
   const base = `/admin/gates/${gate.id}`;
   const outs = useQuery({ queryKey: ["outbounds", gate.id], queryFn: async () => (await api(base + "/outbounds")).items as Outbound[] });
   const routes = useQuery({ queryKey: ["routes", gate.id], queryFn: async () => (await api(base + "/routes")).items as Route[] });
   const [editOut, setEditOut] = useState<Outbound | "new" | null>(null);
   const [editRoute, setEditRoute] = useState<Route | "new" | null>(null);
-  const [busy, setBusy] = useState("");
-  async function run(key: string, fn: () => Promise<unknown>, ok: string) {
-    setBusy(key);
-    try {
-      const r = await fn();
-      toast(ok, { tone: "ok", description: r && typeof r === "object" && "latency_ms" in r ? `延迟 ${(r as { latency_ms: number }).latency_ms} ms` : undefined });
-      await Promise.all([outs.refetch(), routes.refetch()]);
-    } catch (e) {
-      toast("操作未完成", { description: String(e), tone: "bad" });
-    } finally {
-      setBusy("");
-    }
-  }
+  const { run, isBusy } = useRowAction<string>({ refetch: () => Promise.all([outs.refetch(), routes.refetch()]) });
   return (
     <Dialog open onOpenChange={(o) => !o && close()}>
       <DialogContent size="xl">
@@ -65,11 +62,11 @@ export function GateRouting({ gate, close }: { gate: Gate; close: () => void }) 
           <ul className="stack">
             {outs.data.map((o) => (
               <li key={o.id} className="flex flex-wrap items-center justify-between gap-2">
-                <span><code>{o.tag}</code> {o.name} <Badge variant="soft" tone="neutral">{protoNames[o.protocol] ?? o.protocol}</Badge>{o.address && <small className="ml-1">{o.address}:{o.port}</small>}{!o.enabled && <Badge variant="soft" tone="warn">停用</Badge>}</span>
+                <span><code>{o.tag}</code> {o.name} <Badge variant="soft" tone="neutral">{protoNames[o.protocol] ?? o.protocol}</Badge>{o.address && <small className="ml-1">{o.address}:{o.port}</small>}{o.protocol === "source" && <small className="ml-1"><SourceSummary choice={o.settings} resolved={o.source} /></small>}{!o.enabled && <Badge variant="soft" tone="warn">停用</Badge>}</span>
                 <span className="flex flex-nowrap gap-1.5">
-                  {o.address && <Button size="sm" variant="outline" disabled={busy === "p" + o.id} onClick={() => run("p" + o.id, () => api(`${base}/outbounds/${o.id}/probe`, "POST", {}), "实测可用")}>实测</Button>}
+                  {o.address && <Button size="sm" variant="outline" disabled={isBusy("p" + o.id)} onClick={() => run("p" + o.id, () => api(`${base}/outbounds/${o.id}/probe`, "POST", {}), "实测可用", { detail: latency })}>实测</Button>}
                   <Button size="sm" variant="outline" onClick={() => setEditOut(o)}>编辑</Button>
-                  <Button size="icon-sm" variant="destructive" aria-label={"删除出口 " + o.tag} disabled={busy === "o" + o.id} onClick={() => window.confirm(`删除出口 ${o.tag}？`) && run("o" + o.id, () => api(`${base}/outbounds/${o.id}`, "DELETE"), "已删除")}><Trash2 /></Button>
+                  <Button size="icon-sm" variant="destructive" aria-label={"删除出口 " + o.tag} disabled={isBusy("o" + o.id)} onClick={async () => (await confirm({ title: `删除出口 ${o.tag}？`, confirmText: "删除", tone: "danger" })) && run("o" + o.id, () => api(`${base}/outbounds/${o.id}`, "DELETE"), "已删除")}><Trash2 /></Button>
                 </span>
               </li>
             ))}
@@ -89,9 +86,9 @@ export function GateRouting({ gate, close }: { gate: Gate; close: () => void }) 
                   <small className="block max-w-xl truncate text-[var(--mg-ink-3)]">{[r.domain && "域名 " + r.domain, r.ip && "IP " + r.ip].filter(Boolean).join(" · ") || "全部流量"}</small>
                 </span>
                 <span className="flex flex-nowrap gap-1.5">
-                  <Switch aria-label="启用规则" checked={r.enabled} disabled={busy === "r" + r.id} onCheckedChange={(v) => run("r" + r.id, () => api(`${base}/routes/${r.id}`, "PATCH", { ...r, enabled: v }), v ? "已启用" : "已停用")} />
+                  <Switch aria-label="启用规则" checked={r.enabled} disabled={isBusy("r" + r.id)} onCheckedChange={(v) => run("r" + r.id, () => api(`${base}/routes/${r.id}`, "PATCH", { ...r, enabled: v }), v ? "已启用" : "已停用")} />
                   <Button size="sm" variant="outline" onClick={() => setEditRoute(r)}>编辑</Button>
-                  <Button size="icon-sm" variant="destructive" aria-label="删除规则" disabled={busy === "r" + r.id} onClick={() => window.confirm("删除这条规则？") && run("r" + r.id, () => api(`${base}/routes/${r.id}`, "DELETE"), "已删除")}><Trash2 /></Button>
+                  <Button size="icon-sm" variant="destructive" aria-label="删除规则" disabled={isBusy("r" + r.id)} onClick={async () => (await confirm({ title: "删除这条规则？", confirmText: "删除", tone: "danger" })) && run("r" + r.id, () => api(`${base}/routes/${r.id}`, "DELETE"), "已删除")}><Trash2 /></Button>
                 </span>
               </li>
             ))}
@@ -106,48 +103,59 @@ export function GateRouting({ gate, close }: { gate: Gate; close: () => void }) 
 
 function OutboundForm({ base, value, close, saved }: { base: string; value: Outbound | "new"; close: () => void; saved: () => void }) {
   const o = value === "new" ? undefined : value;
-  const [f, setF] = useState({ tag: o?.tag ?? "", name: o?.name ?? "", protocol: (o?.protocol ?? "socks") as "socks" | "http" | "freedom" | "blackhole", address: o?.address ?? "", port: o?.port ? String(o.port) : "", username: o?.username ?? "", password: o?.password ?? "", enabled: o?.enabled ?? true });
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const sources = useSources();
+  const [f, setF] = useState({ tag: o?.tag ?? "", name: o?.name ?? "", protocol: (o?.protocol ?? "socks") as "socks" | "http" | "freedom" | "blackhole" | "source", address: o?.address ?? "", port: o?.port ? String(o.port) : "", username: o?.username ?? "", password: o?.password ?? "", enabled: o?.enabled ?? true,
+    source_id: o?.settings?.source_id ?? 0, mode: (o?.settings?.mode ?? "filter") as "node" | "filter", match: o?.settings?.match ?? "" });
   const set = (p: Partial<typeof f>) => setF({ ...f, ...p });
   const remote = f.protocol === "socks" || f.protocol === "http";
-  async function submit() {
-    setBusy(true);
-    setError("");
-    try {
+  const save = useFormAction(
+    () => {
       const body = { ...f, port: Number(f.port) || 0 };
-      await (o ? api(`${base}/outbounds/${o.id}`, "PATCH", body) : api(base + "/outbounds", "POST", body));
-      saved();
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
+      return o ? api(`${base}/outbounds/${o.id}`, "PATCH", body) : api(base + "/outbounds", "POST", body);
+    },
+    { fields: { invalid_tag: "tag", tag_conflict: "tag", invalid_outbound_address: "address", invalid_outbound_credentials: "username", source_not_found: "source_id", invalid_source_exit: "match", group_unsupported: "match" }, onSuccess: saved },
+  );
   return (
-    <Dialog open onOpenChange={(v) => !v && !busy && close()}>
+    <Dialog open onOpenChange={(v) => !v && !save.busy && close()}>
       <DialogContent size="md">
         <DialogTitle>{o ? "编辑出口" : "添加出口"}</DialogTitle>
         <DialogDescription>标签只能用小写字母、数字、- 和 _；不能使用 direct、chain-、node- 等系统保留名称。</DialogDescription>
-        <form className="stack" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
-          <Segmented aria-label="出口类型" value={f.protocol} onValueChange={(protocol) => set({ protocol })} options={[["socks", "SOCKS5"], ["http", "HTTP 代理"], ["freedom", "直连"], ["blackhole", "拦截"]] as const} />
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="标签" htmlFor="ob-tag"><Input id="ob-tag" required value={f.tag} onChange={(e) => set({ tag: e.target.value.trim() })} /></Field>
-            <Field label="名称（可选）" htmlFor="ob-name"><Input id="ob-name" value={f.name} onChange={(e) => set({ name: e.target.value })} /></Field>
-            {remote && <>
-              <Field label="地址" htmlFor="ob-addr"><Input id="ob-addr" required value={f.address} onChange={(e) => set({ address: e.target.value.trim() })} /></Field>
-              <Field label="端口" htmlFor="ob-port"><Input id="ob-port" inputMode="numeric" required value={f.port} onChange={(e) => set({ port: e.target.value.replace(/\D/g, "") })} /></Field>
-              <Field label="用户名（可选）" htmlFor="ob-user"><Input id="ob-user" autoComplete="off" value={f.username} onChange={(e) => set({ username: e.target.value })} /></Field>
-              <Field label="密码（可选）" htmlFor="ob-pass"><Input id="ob-pass" type="password" autoComplete="new-password" value={f.password} onChange={(e) => set({ password: e.target.value })} /></Field>
+        <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
+          <Segmented aria-label="出口类型" value={f.protocol} onValueChange={(protocol) => set({ protocol })} options={[["socks", "SOCKS5"], ["http", "HTTP 代理"], ["source", "订阅源节点"], ["freedom", "直连"], ["blackhole", "拦截"]] as const} />
+          {f.protocol === "source" && <Notice role="status">用订阅源里的节点作出口：一组的全部成员都下发，由内核按延迟自动选、出故障自动切换（最多 50 个）；订阅源刷新后随之更新，刷新失败或暂时没有匹配时保留上一次可用的；从没解析成功时流量被丢弃，不会改成直连。</Notice>}
+          <FormGrid>
+            <Field label="标签" name="tag" customError={/^[a-z0-9_-]*$/.test(f.tag) ? "" : "标签只能使用小写字母、数字、- 和 _"}>
+              <Input required value={f.tag} onChange={(e) => set({ tag: e.target.value.trim() })} />
+            </Field>
+            <Field label="名称（可选）"><Input value={f.name} onChange={(e) => set({ name: e.target.value })} /></Field>
+            {f.protocol === "source" && <>
+              <Field label="订阅源" name="source_id">
+                <Select required value={f.source_id ? String(f.source_id) : ""} onValueChange={(v) => set({ source_id: Number(v) })}>
+                  <SelectTrigger><SelectValue>{(sources.data?.items ?? []).find((x) => x.id === f.source_id)?.name ?? "请选择"}</SelectValue></SelectTrigger>
+                  <SelectContent>{(sources.data?.items ?? []).map((x) => <SelectItem key={x.id} value={String(x.id)}>{x.name || x.url}</SelectItem>)}</SelectContent>
+                </Select>
+              </Field>
+              <Field label="选择方式">
+                <Segmented aria-label="选择方式" value={f.mode} onValueChange={(mode) => set({ mode })} options={[["filter", "按名称筛选一组"], ["node", "单个节点"]] as const} />
+              </Field>
+              <Field label={f.mode === "node" ? "节点名称（完全一致）" : "名称筛选（正则）"} name="match" hint={f.mode === "filter" ? "例如 ^HK 或 香港|HK；取匹配的第一个可用节点" : undefined}>
+                <Input required value={f.match} onChange={(e) => set({ match: e.target.value })} />
+              </Field>
             </>}
-          </div>
-          {o && <label className="actions"><Switch aria-label="启用" checked={f.enabled} onCheckedChange={(v) => set({ enabled: v })} />启用</label>}
-          {error && <Notice tone="bad">{error}</Notice>}
+            {remote && <>
+              <Field label="地址" name="address"><Input required value={f.address} onChange={(e) => set({ address: e.target.value.trim() })} /></Field>
+              <Field label="端口" customError={portError(f.port)}><Input inputMode="numeric" required value={f.port} onChange={(e) => set({ port: e.target.value.replace(/\D/g, "") })} /></Field>
+              <Field label="用户名（可选）" name="username"><Input autoComplete="off" value={f.username} onChange={(e) => set({ username: e.target.value })} /></Field>
+              <Field label="密码（可选）"><PasswordInput autoComplete="new-password" value={f.password} onChange={(e) => set({ password: e.target.value })} /></Field>
+            </>}
+          </FormGrid>
+          {o && <SwitchField label="启用" checked={f.enabled} onCheckedChange={(v) => set({ enabled: v })} />}
+          {save.error && <Notice tone="bad">{save.error}</Notice>}
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={busy} onClick={close}>取消</Button>
-            <Button type="submit" disabled={busy}>{busy ? "正在保存…" : "保存"}</Button>
+            <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
+            <Button type="submit" disabled={save.busy}>{save.busy ? "正在保存…" : "保存"}</Button>
           </DialogFooter>
-        </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );
@@ -159,45 +167,37 @@ function RouteForm({ base, value, outbounds, close, saved }: { base: string; val
   const [domain, setDomain] = useState((r?.domain ?? "").split(",").join("\n"));
   const [ip, setIp] = useState((r?.ip ?? "").split(",").join("\n"));
   const [priority, setPriority] = useState(String(r?.priority ?? 10));
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
   const choices = [{ tag: "direct", name: "直连" }, ...outbounds.filter((o) => o.enabled)];
-  async function submit() {
-    setBusy(true);
-    setError("");
-    try {
+  const save = useFormAction(
+    () => {
       const body = { outbound_tag: tag, domain, ip, priority: Number(priority) || 0, enabled: r?.enabled ?? true, node_id: r?.node_id ?? null, user_id: r?.user_id ?? null };
-      await (r ? api(`${base}/routes/${r.id}`, "PATCH", body) : api(base + "/routes", "POST", body));
-      saved();
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
+      return r ? api(`${base}/routes/${r.id}`, "PATCH", body) : api(base + "/routes", "POST", body);
+    },
+    { onSuccess: saved },
+  );
   return (
-    <Dialog open onOpenChange={(v) => !v && !busy && close()}>
+    <Dialog open onOpenChange={(v) => !v && !save.busy && close()}>
       <DialogContent size="md">
         <DialogTitle>{r ? "编辑规则" : "添加规则"}</DialogTitle>
         <DialogDescription>每行一条：domain:netflix.com、geosite:disney、full:api.example.com；IP 如 1.1.1.1/32、geoip:jp。</DialogDescription>
-        <form className="stack" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
-          <div className="grid gap-3 sm:grid-cols-2">
+        <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
+          <FormGrid>
             <Field label="出口">
-              <Select value={tag} onValueChange={(v) => setTag(String(v))}>
-                <SelectTrigger aria-label="出口"><SelectValue>{choices.find((c) => c.tag === tag)?.tag ?? tag}</SelectValue></SelectTrigger>
+              <Select required value={tag} onValueChange={(v) => setTag(String(v))}>
+                <SelectTrigger><SelectValue>{choices.find((c) => c.tag === tag)?.tag ?? tag}</SelectValue></SelectTrigger>
                 <SelectContent>{choices.map((c) => <SelectItem key={c.tag} value={c.tag}>{c.tag}{c.name ? `（${c.name}）` : ""}</SelectItem>)}</SelectContent>
               </Select>
             </Field>
-            <Field label="优先级" htmlFor="rt-pri" hint="数字越小越先匹配。"><Input id="rt-pri" inputMode="numeric" value={priority} onChange={(e) => setPriority(e.target.value.replace(/\D/g, ""))} /></Field>
-          </div>
-          <Field label="域名" htmlFor="rt-domain"><Textarea id="rt-domain" rows={4} className="font-mono text-xs" value={domain} onChange={(e) => setDomain(e.target.value)} /></Field>
-          <Field label="IP" htmlFor="rt-ip"><Textarea id="rt-ip" rows={2} className="font-mono text-xs" value={ip} onChange={(e) => setIp(e.target.value)} /></Field>
-          {error && <Notice tone="bad">{error}</Notice>}
+            <Field label="优先级" hint="数字越小越先匹配。"><Input inputMode="numeric" value={priority} onChange={(e) => setPriority(e.target.value.replace(/\D/g, ""))} /></Field>
+          </FormGrid>
+          <Field label="域名"><Textarea rows={4} className="font-mono text-xs" value={domain} onChange={(e) => setDomain(e.target.value)} /></Field>
+          <Field label="IP"><Textarea rows={2} className="font-mono text-xs" value={ip} onChange={(e) => setIp(e.target.value)} /></Field>
+          {save.error && <Notice tone="bad">{save.error}</Notice>}
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={busy} onClick={close}>取消</Button>
-            <Button type="submit" disabled={busy}>{busy ? "正在保存…" : "保存"}</Button>
+            <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
+            <Button type="submit" disabled={save.busy}>{save.busy ? "正在保存…" : "保存"}</Button>
           </DialogFooter>
-        </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );

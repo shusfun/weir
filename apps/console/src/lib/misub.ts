@@ -96,6 +96,7 @@ export interface MisubSettings {
   cache_minutes: number;
   skip_cert_verify: boolean;
   enable_udp: boolean;
+  disguise: boolean;
   filter_include: string;
   filter_exclude: string;
   update_interval: number;
