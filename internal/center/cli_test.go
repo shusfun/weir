@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/shusfun/weir/internal/store"
 	"github.com/shusfun/weir/internal/store/ent/user"
@@ -109,5 +110,55 @@ func TestOperatorMenuUninstallDelegatesToInstaller(t *testing.T) {
 	var out bytes.Buffer
 	if err := RunOperatorMenu(path, strings.NewReader("8\n0\n"), &out); err != nil || !strings.Contains(out.String(), "找不到安装脚本") {
 		t.Fatalf("missing installer: %v\n%s", err, out.String())
+	}
+}
+
+// 菜单 6 / --token：没过期的凭证照旧返回（不打断进行中的向导），过期或丢失时换新，旧的失效。
+func TestCurrentSetupTokenRotatesOnlyWhenExpired(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "center.json")
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 不能用默认端口：本机可能正跑着开发中心，轮换时会去确认它是否接受新凭证。
+	cfg.Listen = "127.0.0.1:1"
+	first, err := Initialize(path, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg, err = LoadConfig(path); err != nil {
+		t.Fatal(err)
+	}
+	got, left, rotated, err := CurrentSetupToken(path, cfg)
+	if err != nil || got != first || rotated || left <= 29*time.Minute {
+		t.Fatalf("fresh token: %q %v %v %v", got, left, rotated, err)
+	}
+
+	cfg.SetupExpires = time.Now().Add(-time.Minute)
+	if err = saveConfig(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	second, left, rotated, err := CurrentSetupToken(path, cfg)
+	if err != nil || second == first || !rotated || left != 30*time.Minute {
+		t.Fatalf("expired token: %q %v %v %v", second, left, rotated, err)
+	}
+	if cred, _ := readSetupCredential(path); cred.Hash != digest(second) || !cred.Expires.After(time.Now().Add(29*time.Minute)) {
+		t.Fatalf("rotated credential not saved: %+v", cred)
+	}
+
+	os.Remove(setupTokenPath(path))
+	third, _, rotated, err := CurrentSetupToken(path, cfg)
+	if err != nil || third == second || !rotated {
+		t.Fatalf("missing token file: %q %v %v", third, rotated, err)
+	}
+
+	var out bytes.Buffer
+	if err = RunOperatorMenu(path, strings.NewReader("6\n0\n"), &out); err != nil || !strings.Contains(out.String(), "还有 30 分钟有效") || !strings.Contains(out.String(), "\n"+third+"\n") {
+		t.Fatalf("menu 6: %v\n%s", err, out.String())
+	}
+
+	cfg.Installed = true
+	if _, _, _, err = CurrentSetupToken(path, cfg); err == nil {
+		t.Fatal("installed center must not issue a token")
 	}
 }

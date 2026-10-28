@@ -24,7 +24,7 @@ curl -sSL https://raw.githubusercontent.com/shusfun/weir/main/deploy/install-onl
 
 用 `https://域名` 打开控制台进入安装向导：验证初始化凭证 → 选择存储 → 创建管理员。
 
-- 初始化凭证 30 分钟有效。在服务器上执行 `migate`，菜单 `6` 显示、`7` 刷新。
+- 安装结束时打印初始化凭证，30 分钟有效。找不到或过期时执行 `migate` 选 `6`：没过期就照旧显示，过期了自动换新；`7` 强制换新。
 - 存储默认只用 SQLite。选 PostgreSQL + Redis 时，中心会探测本机实例；认出 1Panel 装的就填好地址、账号和推荐的空库，密码框留空即可，密码由中心直接读取，不经过浏览器。中心只使用 `migate` schema 和 `migate:` 前缀。
 - 已有 Weir 账户的库不能重新初始化：要继续用原来的数据请恢复原配置文件，否则换一个空库。
 - 也可以在终端完成：`migate` 菜单 `5`，或 `migate center --setup`。

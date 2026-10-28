@@ -323,9 +323,8 @@ export function SetupPage({ done }: { done: () => void }) {
                         onChange={setToken}
                       />
                       <p className="setup-info">
-                        凭证只保存在服务器的 <code>/etc/migate/center/setup-token</code>，仅 root 可读，有效期 30 分钟。过期或被拒绝时执行{" "}
-                        <code>migate center --init</code>，运行中的服务会立即改用新凭证。终端初始化使用{" "}
-                        <code>migate center --setup</code>，不需要这份凭证。
+                        安装结束时已打印凭证，有效期 30 分钟。找不到或过期时，在服务器上执行 <code>migate</code> 选{" "}
+                        <code>6</code>：没过期就照旧显示，过期了自动换新。终端初始化使用 <code>migate center --setup</code>，不需要这份凭证。
                       </p>
                     </>
                   )}

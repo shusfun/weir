@@ -322,9 +322,10 @@ if [ "$has_center" = true ]; then
  if grep -Eq '"installed"[[:space:]]*:[[:space:]]*true' "$etc/center/config.json"; then
   echo 'Center is initialized; configuration and data were kept.'
  else
-  echo 'Center is not initialized yet. Run: migate'
-  echo "  Web: read $etc/center/setup-token (root only, valid 30 minutes) and open the wizard."
-  echo '  Terminal: migate center --setup'
+  echo 'Center is not initialized yet. Open https://<your domain> and enter this token in the setup wizard:'
+  setpriv --reuid=migate-center --regid=migate-center --init-groups \
+   "$base/current/migate" center --config "$etc/center/config.json" --token || true
+  echo '  Expired? Run migate and choose 6; it shows a fresh token. Terminal setup: migate center --setup'
  fi
 fi
 if [ "$role" = standalone ]; then echo 'The local Gate pairs itself after the center is initialized.'; fi

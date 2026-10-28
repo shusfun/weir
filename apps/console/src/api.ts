@@ -285,7 +285,7 @@ subscription_naming_changed:"前缀与地区设置已被修改，请取消并重
   agent_capability_required:
     "此 Agent 尚不支持该操作，请先升级并等待新的心跳。",
   order_not_retryable: "任务不处于可重试的失败状态，或已达到三次尝试上限。",
-  initialization_token_required: "初始化凭证无效或已过期，请重新获取。",
+  initialization_token_required: "初始化凭证无效或已过期：在服务器上执行 migate 选 6，获取当前可用的凭证。",
   setup_state_unavailable: "初始化状态暂时无法读取，请稍后重试。",
   invalid_credentials: "邮箱或密码不正确。",
   invalid_second_factor: "二次验证码无效或已使用。",
