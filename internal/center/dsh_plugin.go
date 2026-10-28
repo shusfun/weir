@@ -37,7 +37,7 @@ const dshPluginName = "@weir/dsh-plugin"
 type pluginMeta struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
-	Weir  struct {
+	Weir    struct {
 		DSH string `json:"dsh"` // 兼容的 dsh 版本范围
 	} `json:"migate"`
 }
