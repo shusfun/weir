@@ -54,7 +54,6 @@
 /* 下载来源：ChoiceCard 横排，左侧单选框 + 状态灯 */
 .download-sources { display: grid; gap: 6px; }
 .download-source { flex-direction: row; align-items: center; padding: 9px 12px; cursor: pointer; }
-.download-source input { accent-color: var(--mg-accent); width: auto; }
 .download-source > span:last-child { min-width: 0; display: grid; }
 .download-source strong { font-size: 13px; font-weight: 550; overflow-wrap: anywhere; }
 .download-source small { font-size: 11.5px; font-family: var(--mg-mono); }

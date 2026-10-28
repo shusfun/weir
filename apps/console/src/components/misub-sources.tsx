@@ -1,9 +1,10 @@
 // 订阅源：机场订阅地址。中心拉取时只连公网地址；保护性缓存在上游失败或节点骤减时保留上次结果。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, CodeBlock, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Input, Label, Meter, Notice, SectionHeader, SkeletonTable, Switch, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, useToast } from "@weir/ui";
+import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Meter, Notice, SectionHeader, SkeletonTable, SwitchField, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, useToast, useConfirm } from "@weir/ui";
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { api } from "../api";
+import { useFormAction, useRowAction } from "../lib/action";
 import { bytes, date } from "../lib/models";
 import type { Source } from "../lib/misub";
 import { OperatorEditor, type Operator } from "./operator-editor";
@@ -14,34 +15,21 @@ export function useSources() {
 }
 
 export function SourcesPanel() {
+  const confirm = useConfirm();
   const toast = useToast();
   const q = useSources();
   const [edit, setEdit] = useState<Source | "new" | null>(null);
   const [nodes, setNodes] = useState<{ name: string; list: string[]; error: string } | null>(null);
-  const [busy, setBusy] = useState(0);
-  async function refresh(s: Source) {
-    setBusy(s.id);
-    try {
+  const { run, isBusy } = useRowAction<number>({ refetch: q.refetch });
+  // 刷新成功后直接弹出本次拉取的节点列表，不再额外提示
+  const refresh = (s: Source) =>
+    run(s.id, async () => {
       const r = await api(`/admin/misub/sources/${s.id}/refresh`, "POST", {});
       setNodes({ name: s.name || s.url, list: r.nodes, error: r.result?.error ?? "" });
-      await q.refetch();
-    } catch (e) {
-      toast("刷新失败", { description: String(e), tone: "bad" });
-    } finally {
-      setBusy(0);
-    }
-  }
+    });
   async function remove(s: Source) {
-    if (!window.confirm(`删除订阅源「${s.name || s.url}」？订阅组中的引用会一并移除。`)) return;
-    setBusy(s.id);
-    try {
-      await api("/admin/misub/sources/" + s.id, "DELETE");
-      await q.refetch();
-    } catch (e) {
-      toast("删除失败", { description: String(e), tone: "bad" });
-    } finally {
-      setBusy(0);
-    }
+    if (!(await confirm({ title: `删除订阅源「${s.name || s.url}」？`, description: "订阅组中的引用会一并移除。", confirmText: "删除", tone: "danger" }))) return;
+    await run(s.id, () => api("/admin/misub/sources/" + s.id, "DELETE"), "订阅源已删除");
   }
   return (
     <section className="stack">
@@ -89,9 +77,9 @@ export function SourcesPanel() {
                       <TableCell className="whitespace-nowrap">{date(s.fetched_at ?? undefined)}</TableCell>
                       <TableCell>
                         <span className="flex flex-nowrap gap-1.5">
-                          <Button size="sm" variant="outline" disabled={busy === s.id} onClick={() => void refresh(s)}><RefreshCw />刷新</Button>
+                          <Button size="sm" variant="outline" disabled={isBusy(s.id)} onClick={() => void refresh(s)}><RefreshCw />刷新</Button>
                           <Button size="sm" variant="outline" onClick={() => setEdit(s)}>编辑</Button>
-                          <Button size="icon-sm" variant="destructive" aria-label={"删除 " + (s.name || s.url)} disabled={busy === s.id} onClick={() => void remove(s)}><Trash2 /></Button>
+                          <Button size="icon-sm" variant="destructive" aria-label={"删除 " + (s.name || s.url)} disabled={isBusy(s.id)} onClick={() => void remove(s)}><Trash2 /></Button>
                         </span>
                       </TableCell>
                     </TableRow>
@@ -114,6 +102,13 @@ export function SourcesPanel() {
   );
 }
 
+const flags = [
+  ["enabled", "启用"],
+  ["node_cache", "保护性缓存"],
+  ["plus_as_space", "名称中的 + 视为空格"],
+  ["exclude_traffic", "不计入上游流量合计"],
+] as const;
+
 function SourceForm({ value, close, saved }: { value: Source | "new"; close: () => void; saved: () => void }) {
   const s = value === "new" ? undefined : value;
   const [form, setForm] = useState({
@@ -121,58 +116,51 @@ function SourceForm({ value, close, saved }: { value: Source | "new"; close: () 
     website: s?.website ?? "", remark: s?.remark ?? "", enabled: s?.enabled ?? true, node_cache: s?.node_cache ?? true, plus_as_space: s?.plus_as_space ?? false, exclude_traffic: s?.exclude_traffic ?? false,
   });
   const [ops, setOps] = useState<Operator[]>(s?.operators ?? []);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
   const set = (patch: Partial<typeof form>) => setForm({ ...form, ...patch });
-  async function submit() {
-    setBusy(true);
-    setError("");
-    try {
+  const save = useFormAction(
+    () => {
       const body = { ...form, operators: ops };
-      await (s ? api("/admin/misub/sources/" + s.id, "PATCH", body) : api("/admin/misub/sources", "POST", body));
-      saved();
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
+      return s ? api("/admin/misub/sources/" + s.id, "PATCH", body) : api("/admin/misub/sources", "POST", body);
+    },
+    {
+      fields: { invalid_source_url: "url", source_url_credentials: "url", source_url_private: "url", invalid_user_agent: "user_agent" },
+      onSuccess: saved,
+    },
+  );
   const text = (key: "name" | "url" | "user_agent" | "website" | "remark", label: string, hint?: string) => (
-    <Field label={label} htmlFor={"src-" + key} hint={hint}>
-      <Input id={"src-" + key} required={key === "url"} value={form[key]} onChange={(e) => set({ [key]: e.target.value })} />
+    <Field label={label} name={key} hint={hint}>
+      <Input type={key === "url" ? "url" : "text"} required={key === "url"} value={form[key]} onChange={(e) => set({ [key]: e.target.value })} />
     </Field>
   );
   return (
-    <Dialog open onOpenChange={(o) => !o && !busy && close()}>
+    <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
       <DialogContent size="lg">
         <DialogTitle>{s ? "编辑订阅源" : "添加订阅源"}</DialogTitle>
         <DialogDescription>更改地址、UA 或「+ 视为空格」后会清除旧缓存与用量记录；网站和备注只作记录，中心不会访问。</DialogDescription>
-        <form className="stack" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
-          <div className="grid gap-3 sm:grid-cols-2">
+        <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
+          <FormGrid>
             {text("name", "名称", "节点会加上这个前缀（可在设置中关闭）。")}
             {text("url", "订阅地址")}
             {text("user_agent", "自定义 User-Agent（可选）", "留空时按客户端类型自动选择。")}
             {text("website", "机场网站（可选）")}
-          </div>
-          <Field label="只保留（每行一条，支持正则）" htmlFor="src-include"><Textarea id="src-include" rows={2} value={form.filter_include} onChange={(e) => set({ filter_include: e.target.value })} /></Field>
-          <Field label="排除（每行一条，支持正则）" htmlFor="src-exclude"><Textarea id="src-exclude" rows={2} value={form.filter_exclude} onChange={(e) => set({ filter_exclude: e.target.value })} /></Field>
+          </FormGrid>
+          <Field label="只保留（每行一条，支持正则）"><Textarea rows={2} value={form.filter_include} onChange={(e) => set({ filter_include: e.target.value })} /></Field>
+          <Field label="排除（每行一条，支持正则）"><Textarea rows={2} value={form.filter_exclude} onChange={(e) => set({ filter_exclude: e.target.value })} /></Field>
           {text("remark", "备注（可选）")}
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Label className="actions"><Switch aria-label="启用" checked={form.enabled} onCheckedChange={(v) => set({ enabled: v })} />启用</Label>
-            <Label className="actions"><Switch aria-label="保护性缓存" checked={form.node_cache} onCheckedChange={(v) => set({ node_cache: v })} />保护性缓存</Label>
-            <Label className="actions"><Switch aria-label="名称中的 + 视为空格" checked={form.plus_as_space} onCheckedChange={(v) => set({ plus_as_space: v })} />名称中的 + 视为空格</Label>
-            <Label className="actions"><Switch aria-label="不计入上游流量合计" checked={form.exclude_traffic} onCheckedChange={(v) => set({ exclude_traffic: v })} />不计入上游流量合计</Label>
-          </div>
-          <details>
-            <summary className="cursor-pointer text-sm">本源的处理链（{ops.length} 步）</summary>
-            <div className="mt-2"><OperatorEditor value={ops} change={setOps} /></div>
-          </details>
-          {error && <Notice tone="bad">{error}</Notice>}
+          <FormGrid>
+            {flags.map(([k, label]) => (
+              <SwitchField key={k} label={label} checked={form[k]} onCheckedChange={(v) => set({ [k]: v })} />
+            ))}
+          </FormGrid>
+          <Collapsible title={`本源的处理链（${ops.length} 步）`}>
+            <OperatorEditor value={ops} change={setOps} />
+          </Collapsible>
+          {save.error && <Notice tone="bad">{save.error}</Notice>}
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={busy} onClick={close}>取消</Button>
-            <Button type="submit" disabled={busy}>{busy ? "正在保存…" : "保存"}</Button>
+            <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
+            <Button type="submit" disabled={save.busy}>{save.busy ? "正在保存…" : "保存"}</Button>
           </DialogFooter>
-        </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );

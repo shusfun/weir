@@ -128,15 +128,20 @@ export async function downloadVerified(url: string, asset: ReleaseAsset, onProgr
     const actual = await sha256Hex(await blob.arrayBuffer());
     if (actual !== asset.sha256) throw Error("SHA-256 校验不一致，安装包可能被篡改，已拒绝保存");
   }
+  saveBlob(blob, asset.name);
+  return { verified: !!asset.sha256 };
+}
+
+// 把内存中的文件交给浏览器保存。链接需挂到文档里（Firefox 要求），稍后再释放地址，避免下载还没开始就被撤销。
+export function saveBlob(blob: Blob, name: string) {
   const href = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = href;
-  a.download = asset.name;
+  a.download = name;
   document.body.append(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(href), 60000);
-  return { verified: !!asset.sha256 };
 }
 
 export function speed(bytesPerSecond?: number) {

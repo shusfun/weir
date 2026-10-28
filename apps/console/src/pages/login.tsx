@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -8,8 +8,8 @@ import {
   Fingerprint,
   ShieldCheck,
 } from "lucide-react";
-import { IconTile, Field, Notice, Button, Card, CardContent, Input} from "@weir/ui";
-import { api } from "../api";
+import { IconTile, Field, Form, Notice, Button, Card, CardContent, Input, PasswordInput } from "@weir/ui";
+import { api, fieldErrors, formError, type FormError } from "../api";
 import { accountPasswordError } from "../password";
 import { passkey } from "../lib/passkey";
 
@@ -31,12 +31,25 @@ const hints: Record<Mode, string> = {
   register: "创建账户后，由管理员分配节点与订阅权限。",
   verify: "输入发送到此邮箱的验证码，完成账户验证。",
 };
-const describe = (e: unknown) =>
-  e instanceof Error ? e.message : "操作失败，请重试。";
+// 服务端错误码 → 字段；其余显示在表单底部
+const loginFields = {
+  invalid_email: "email",
+  email_taken: "email",
+  email_verification_required: "email",
+  weak_password: "password",
+  invalid_password: "password",
+  invalid_credentials: "password",
+  invalid_verification_code: "code",
+  invalid_email_code: "code",
+  invalid_code: "code",
+  invalid_second_factor: "code",
+  second_factor_required: "code",
+} as const;
+type LoginField = (typeof loginFields)[keyof typeof loginFields];
 
 export function LoginPage({ done }: { done: () => void }) {
   const id = useId(),
-    form = useRef<HTMLFormElement>(null);
+    emailInput = useRef<HTMLInputElement>(null);
   const [params, setParams] = useSearchParams();
   const raw = params.get("auth");
   const mode: Mode =
@@ -52,8 +65,10 @@ export function LoginPage({ done }: { done: () => void }) {
   const [challenge, setChallenge] = useState(""),
     [code, setCode] = useState("");
   const [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
+    [error, setError] = useState<FormError<LoginField> | null>(null),
     [notice, setNotice] = useState("");
+  const errors = useMemo(() => fieldErrors(error), [error]);
+  const fail = (e: unknown) => setError(formError(e, loginFields));
   const [cooldown, setCooldown] = useState(0);
   useEffect(() => {
     if (!cooldown) return;
@@ -68,7 +83,7 @@ export function LoginPage({ done }: { done: () => void }) {
     setCode("");
     setPassword("");
     setConfirmation("");
-    setError("");
+    setError(null);
   }, [mode]);
   const unavailable =
     (mode === "register" && !policy.data?.registration_enabled) ||
@@ -82,7 +97,7 @@ export function LoginPage({ done }: { done: () => void }) {
     if (busy) return;
     setChallenge("");
     setCode("");
-    setError("");
+    setError(null);
     setNotice("");
     setParams(next === "login" ? {} : { auth: next }, { replace: true });
   }
@@ -92,18 +107,13 @@ export function LoginPage({ done }: { done: () => void }) {
     setParams({}, { replace: true });
     done();
   }
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    if (busy || unavailable) return;
+  // 密码强度与两次一致由 Field 的 customError 在提交前拦截
+  async function submit() {
+    if (unavailable) return;
     setBusy(true);
-    setError("");
+    setError(null);
     setNotice("");
     try {
-      if (!challenge && (mode === "register" || mode === "reset")) {
-        const passwordError = accountPasswordError(password);
-        if (passwordError) throw Error(passwordError);
-        if (password !== confirmation) throw Error("两次输入的密码不一致。");
-      }
       if (challenge) {
         await api("/auth/mfa", "POST", { challenge, code });
         complete();
@@ -139,18 +149,15 @@ export function LoginPage({ done }: { done: () => void }) {
             : "账户创建成功，请登录。节点权限由管理员分配。",
       );
     } catch (e) {
-      setError(describe(e));
+      fail(e);
     } finally {
       setBusy(false);
     }
   }
   async function requestCode() {
-    const input = form.current?.querySelector<HTMLInputElement>(
-      'input[type="email"]',
-    );
-    if (!input?.reportValidity() || busy || cooldown) return;
+    if (!emailInput.current?.reportValidity() || busy || cooldown) return;
     setBusy(true);
-    setError("");
+    setError(null);
     setNotice("");
     try {
       await api("/auth/email", "POST", {
@@ -162,7 +169,7 @@ export function LoginPage({ done }: { done: () => void }) {
         "若此邮箱符合条件，验证码将发送到邮箱；请检查收件箱与垃圾邮件。验证码 10 分钟有效。",
       );
     } catch (e) {
-      setError(describe(e));
+      fail(e);
     } finally {
       setBusy(false);
     }
@@ -218,65 +225,62 @@ export function LoginPage({ done }: { done: () => void }) {
                 </Notice>
               </div>
             ) : (
-              <form
-                ref={form}
-                onSubmit={submit}
-                className="auth-form"
-                aria-busy={busy}
-              >
+              <Form busy={busy} errors={errors} onSubmit={() => void submit()} className="auth-form">
                 {!challenge && (
-                  <Field label="邮箱" htmlFor={id + "email"}>
+                  <Field label="邮箱" htmlFor={id + "email"} name="email">
                     <Input
+                      ref={emailInput}
                       id={id + "email"}
                       type="email"
                       autoComplete="username"
                       required
                       value={email}
-                      disabled={busy}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@example.com"
                     />
                   </Field>
                 )}
                 {!challenge && mode !== "verify" && (
-                  <Field label={mode === "reset" ? "新密码" : "密码"} htmlFor={id + "password"}>
-                    <Input
+                  <Field
+                    label={mode === "reset" ? "新密码" : "密码"}
+                    htmlFor={id + "password"}
+                    name="password"
+                    hint={mode !== "login" ? "至少 6 位，须包含大写字母、小写字母和数字。" : undefined}
+                    customError={mode !== "login" && password ? accountPasswordError(password) : ""}
+                  >
+                    <PasswordInput
                       id={id + "password"}
-                      type="password"
                       autoComplete={
                         mode === "login" ? "current-password" : "new-password"
                       }
                       required
-                      disabled={busy}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                     />
-                    {mode !== "login" && (
-                      <small>至少 6 位，须包含大写字母、小写字母和数字。</small>
-                    )}
                   </Field>
                 )}
                 {!challenge && (mode === "reset" || mode === "register") && (
-                  <Field label="确认密码" htmlFor={id + "confirm"}>
-                    <Input
+                  <Field
+                    label="确认密码"
+                    htmlFor={id + "confirm"}
+                    customError={confirmation && confirmation !== password ? "两次输入的密码不一致" : ""}
+                  >
+                    <PasswordInput
                       id={id + "confirm"}
-                      type="password"
                       autoComplete="new-password"
                       required
-                      disabled={busy}
                       value={confirmation}
                       onChange={(e) => setConfirmation(e.target.value)}
                     />
                   </Field>
                 )}
                 {showCode && (
-                  <Field label={challenge ? "验证码 / 恢复码" : "邮箱验证码"} htmlFor={id + "code"}>
+                  <Field label={challenge ? "验证码 / 恢复码" : "邮箱验证码"} htmlFor={id + "code"} name="code">
                     <Input
                       id={id + "code"}
                       autoComplete="one-time-code"
                       autoFocus={!!challenge}
                       required
-                      disabled={busy}
                       value={code}
                       onChange={(e) => setCode(e.target.value.trim())}
                     />
@@ -284,7 +288,7 @@ export function LoginPage({ done }: { done: () => void }) {
                       <Button
                         type="button"
                         variant="outline"
-                        disabled={busy || cooldown > 0}
+                        disabled={cooldown > 0}
                         onClick={requestCode}
                       >
                         {cooldown ? `${cooldown} 秒后重新发送` : "发送验证码"}
@@ -292,11 +296,7 @@ export function LoginPage({ done }: { done: () => void }) {
                     )}
                   </Field>
                 )}
-                {error && (
-                  <Notice tone="bad">
-                    {error}
-                  </Notice>
-                )}
+                {error && !error.field && <Notice tone="bad">{error.message}</Notice>}
                 {notice && (
                   <Notice tone="ok" role="status">
                     {notice}
@@ -304,7 +304,7 @@ export function LoginPage({ done }: { done: () => void }) {
                 )}
                 <Button
                   type="submit"
-                  disabled={busy || policy.isPending || !!unavailable}
+                  disabled={policy.isPending || !!unavailable}
                 >
                   {busy
                     ? "正在验证…"
@@ -329,20 +329,15 @@ export function LoginPage({ done }: { done: () => void }) {
                       <Button
                         type="button"
                         variant="outline"
-                        disabled={busy}
                         onClick={async () => {
-                          const input =
-                            form.current?.querySelector<HTMLInputElement>(
-                              'input[type="email"]',
-                            );
-                          if (!input?.reportValidity()) return;
+                          if (!emailInput.current?.reportValidity()) return;
                           setBusy(true);
-                          setError("");
+                          setError(null);
                           try {
                             await passkey("login", email);
                             complete();
                           } catch (e) {
-                            setError(describe(e));
+                            fail(e);
                           } finally {
                             setBusy(false);
                           }
@@ -353,7 +348,7 @@ export function LoginPage({ done }: { done: () => void }) {
                       </Button>
                     </>
                   )}
-              </form>
+              </Form>
             )}
             <nav className="auth-links" aria-label="账户操作">
               {challenge ? (
@@ -364,7 +359,7 @@ export function LoginPage({ done }: { done: () => void }) {
                   onClick={() => {
                     setChallenge("");
                     setCode("");
-                    setError("");
+                    setError(null);
                   }}
                 >
                   <ArrowLeft size={14} />

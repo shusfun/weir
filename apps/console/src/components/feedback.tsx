@@ -68,7 +68,7 @@ export function ConflictNotice({ error, onReload }: { error: unknown; onReload: 
   if (!isConflict(error)) return null;
   return (
     <Notice tone="bad">
-      <div className="actions" style={{ justifyContent: "space-between" }}>
+      <div className="actions justify-between">
         <span>{(error as Error).message}</span>
         <Button size="sm" variant="outline" onClick={onReload}>
           <RefreshCw />

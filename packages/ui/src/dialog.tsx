@@ -17,6 +17,7 @@ import { createPortal } from "react-dom";
 
 // shadcn
 import { Button } from "./button";
+import { Form } from "./form";
 
 // third-party
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
@@ -45,7 +46,7 @@ function containsFooter(node: ReactNode): boolean {
 function findFooterForm(node: ReactNode): { id?: string } | null {
   for (const child of Children.toArray(node)) {
     if (!isValidElement(child) || isDialogBoundary(child)) continue;
-    if (child.type === "form" && containsFooter(child)) {
+    if ((child.type === "form" || child.type === Form) && containsFooter(child)) {
       return { id: (child.props as { id?: string }).id };
     }
     const found = findFooterForm(elementChildren(child));
@@ -56,7 +57,7 @@ function findFooterForm(node: ReactNode): { id?: string } | null {
 
 function assignFormId(node: ReactNode, formId: string): ReactNode {
   if (!isValidElement(node) || isDialogBoundary(node)) return node;
-  if (node.type === "form" && containsFooter(node)) {
+  if ((node.type === "form" || node.type === Form) && containsFooter(node)) {
     return cloneElement(node as ReactElement<{ id?: string }>, { id: formId });
   }
   const kids = elementChildren(node);
