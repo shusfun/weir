@@ -1,5 +1,5 @@
 // 应用入口：启动检测 → 初始化 / 登录 / 控制台。路由按功能分区。
-import { lazy, Suspense, useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { Component, lazy, Suspense, useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button, PageState, useToast } from "@weir/ui";
@@ -8,9 +8,43 @@ import { GlobalAnnouncement } from "./components/global-announcement";
 import { api } from "./api";
 import "./style.css";
 
+// 升级后旧标签页里的入口脚本还指向已删除的分块，按需加载会 404：整页重新加载一次换到新版本；
+// 30 秒内已重新加载过仍失败就交给 LoadBoundary 显示错误，避免反复刷新
+const reloadKey = "weir:chunk-reload";
+function reloadForNewBuild(error: unknown): Promise<never> {
+  let last = 0;
+  try {
+    last = Number(sessionStorage.getItem(reloadKey)) || 0;
+    if (Date.now() - last > 30_000) sessionStorage.setItem(reloadKey, String(Date.now()));
+  } catch {
+    last = Date.now();
+  }
+  if (Date.now() - last > 30_000) {
+    window.location.reload();
+    return new Promise<never>(() => {});
+  }
+  return Promise.reject(error);
+}
+
 // 按需加载页面并保留组件自身的 props 类型
 const page = <M extends Record<K, ComponentType<any>>, K extends keyof M>(load: () => Promise<M>, name: K) =>
-  lazy(() => load().then((m) => ({ default: m[name] })));
+  lazy(() => load().then((m) => ({ default: m[name] }), reloadForNewBuild));
+
+// 分块仍加载失败时显示可重试的错误，而不是整页空白
+class LoadBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div className="auth">
+        <PageState kind="error" title="页面加载失败" detail="控制台可能刚升级，或网络中断。" action={<Button onClick={() => window.location.reload()}>重新加载</Button>} />
+      </div>
+    );
+  }
+}
 const GatesPage = page(() => import("./pages/gates"), "GatesPage");
 const SubscriptionsPage = page(() => import("./pages/subscriptions"), "SubscriptionsPage");
 const PublicPagesPage = page(() => import("./pages/public-pages"), "PublicPagesPage");
@@ -109,6 +143,14 @@ function Console() {
 }
 
 export default function Application() {
+  return (
+    <LoadBoundary>
+      <Routed />
+    </LoadBoundary>
+  );
+}
+
+function Routed() {
   const { pathname } = useLocation();
   if (pathname.startsWith("/sub/"))
     return (
