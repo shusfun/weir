@@ -6,8 +6,7 @@
     "dev": "pnpm --filter @weir/console dev",
     "build": "pnpm --filter @weir/console build",
     "check": "pnpm --filter @weir/console check",
-    "test": "node deploy/test.cjs",
-    "test:local": "go test ./internal/control ./internal/agent ./internal/lifecycle ./internal/mailer ./internal/secrets ./services/subscriptions",
+    "test": "go test ./... && pnpm check",
     "release": "powershell -NoProfile -File deploy/build.ps1"
   },
   "devDependencies": {
