@@ -31,6 +31,10 @@ func (tc *testClient) do(method, path string, body any, header map[string]string
 	} else {
 		r = bytes.NewReader(nil)
 	}
+	// 中心只接受 HTTPS：测试请求按 HTTPS 发出（相对路径补上 https://example.com）。
+	if strings.HasPrefix(path, "/") {
+		path = "https://example.com" + path
+	}
 	req := httptest.NewRequest(method, path, r)
 	req.Header.Set("Content-Type", "application/json")
 	for k, v := range header {

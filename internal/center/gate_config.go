@@ -5,8 +5,10 @@ import (
 	"fmt"
 
 	"github.com/shusfun/weir/internal/buildinfo"
+	"github.com/shusfun/weir/internal/kernelconf"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/budget"
+	"github.com/shusfun/weir/internal/store/ent/certificate"
 	"github.com/shusfun/weir/internal/store/ent/credential"
 	"github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/packages/contracts"
@@ -45,7 +47,12 @@ func (s *Server) compileGateConfig(ctx context.Context, g *ent.Gate) (contracts.
 				if err != nil {
 					return cfg, fmt.Errorf("node %d certificate: %w", n.ID, err)
 				}
-				cfg.Certs = append(cfg.Certs, contracts.CertRef{ID: int64(ct.ID), SHA256: ct.Sha256})
+				ref := contracts.CertRef{ID: int64(ct.ID), SHA256: ct.Sha256}
+				if ct.Source == certificate.SourcePanel {
+					// 1Panel 证书：私钥只在 Gate 本机，1Panel 续签后摘要会变；摘要不进配置，免得每次续签都重新下发。
+					ref.SHA256, ref.Panel = "", ct.Domain
+				}
+				cfg.Certs = append(cfg.Certs, ref)
 			}
 		}
 		cfg.Inbounds = append(cfg.Inbounds, in)
@@ -64,7 +71,35 @@ func (s *Server) compileGateConfig(ctx context.Context, g *ent.Gate) (contracts.
 	if cfg.Kernels, cfg.Profiles, err = s.gateKernels(ctx, g, need); err != nil {
 		return cfg, err
 	}
+	guardGroups(&cfg, need)
 	return cfg, nil
+}
+
+// guardGroups：「一组」出口保存时已确认内核支持自动切换；之后内核换成不支持的版本时，只把这一组改成丢弃并提示，
+// 不让整份配置生成失败，也不悄悄退回单个节点。
+func guardGroups(cfg *contracts.GateConfig, kernels map[string]bool) {
+	var why string
+	for k := range kernels {
+		p, err := kernelconf.ParseProfile(cfg.Profiles[k])
+		if err != nil {
+			why = k + " 版本档案无效"
+			break
+		}
+		for _, f := range groupFeatures[k] {
+			if !p.Has(f) {
+				why = k + " " + p.MinVersion + " 不支持出口自动切换（版本档案没有 " + f + "）"
+			}
+		}
+	}
+	if why == "" {
+		return
+	}
+	for i, o := range cfg.Outbounds {
+		if o.Protocol == "group" {
+			cfg.Outbounds[i] = contracts.Outbound{ID: o.ID, Tag: o.Tag, Protocol: "blackhole"}
+			cfg.Meta[o.Tag] = why + "，暂时丢弃经这一组的流量"
+		}
+	}
 }
 
 // addCredentials 下发本 Gate 节点上的凭据与相关用户的额度；返回各自建链式代理的凭据，供生成路由。

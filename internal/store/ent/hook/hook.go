@@ -189,6 +189,18 @@ func (f RuleTemplateFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RuleTemplateMutation", m)
 }
 
+// The SampleFunc type is an adapter to allow the use of ordinary
+// function as Sample mutator.
+type SampleFunc func(context.Context, *ent.SampleMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SampleFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SampleMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SampleMutation", m)
+}
+
 // The SettingFunc type is an adapter to allow the use of ordinary
 // function as Setting mutator.
 type SettingFunc func(context.Context, *ent.SettingMutation) (ent.Value, error)

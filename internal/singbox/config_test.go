@@ -1,12 +1,14 @@
 package singbox
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/shusfun/weir/internal/db"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 func TestBuildConfig_Hysteria2Inbound(t *testing.T) {
@@ -845,5 +847,39 @@ func assertJSONStrings(t *testing.T, raw interface{}, want []string) {
 		if values[i] != want[i] {
 			t.Fatalf("unexpected array value at %d: got %#v want %#v", i, values[i], want[i])
 		}
+	}
+}
+
+func TestBuildConfig_WireGuardServerEndpoint(t *testing.T) {
+	serverPriv := base64.StdEncoding.EncodeToString(make([]byte, 32))
+	clientKey := make([]byte, 32)
+	clientKey[0] = 7
+	clientPriv := base64.StdEncoding.EncodeToString(clientKey)
+	cfg := BuildConfig([]db.Inbound{{ID: 9, Protocol: "wireguard", Port: 51820, Enabled: true, WgPrivateKey: serverPriv, WgMTU: 1380,
+		Clients: []db.Client{{ID: 42, Password: clientPriv, Enabled: true}, {ID: 43, Password: "not-a-key", Enabled: true}}}})
+	if len(cfg.Endpoints) != 1 || len(cfg.Inbounds) != 0 {
+		t.Fatalf("endpoints = %+v inbounds = %d", cfg.Endpoints, len(cfg.Inbounds))
+	}
+	ep := cfg.Endpoints[0]
+	if ep.Type != "wireguard" || ep.ListenPort != 51820 || ep.MTU != 1380 || ep.Address[0] != contracts.WGServerAddress || len(ep.Peers) != 1 {
+		t.Fatalf("endpoint = %+v", ep)
+	}
+	if ep.Peers[0].PublicKey != wgPublicKey(clientPriv) || ep.Peers[0].AllowedIPs[0] != contracts.WGClientAddress(42) {
+		t.Fatalf("peer = %+v", ep.Peers[0])
+	}
+}
+
+func TestBuildConfig_ShadowTLSDetoursToLoopbackShadowsocks(t *testing.T) {
+	cfg := BuildConfig([]db.Inbound{{ID: 5, Protocol: "shadowtls", Port: 8443, Enabled: true, TLSSNI: "www.microsoft.com", SSMethod: "2022-blake3-aes-128-gcm", SSPassword: "c2VydmVyLWtleS0xNmJ5dGU=",
+		Clients: []db.Client{{ID: 1, Password: "dXNlci1rZXktMTZieXRlcw==", StatsKey: "k1", Enabled: true}}}})
+	if len(cfg.Inbounds) != 2 {
+		t.Fatalf("inbounds = %+v", cfg.Inbounds)
+	}
+	st, ss := cfg.Inbounds[0], cfg.Inbounds[1]
+	if st.Type != "shadowtls" || st.Version != 3 || st.Detour != ss.Tag || st.Handshake == nil || st.Handshake.Server != "www.microsoft.com" || st.ListenPort != 8443 {
+		t.Fatalf("shadowtls = %+v", st)
+	}
+	if ss.Type != "shadowsocks" || ss.Listen != "127.0.0.1" || ss.ListenPort != 0 || ss.Password == "" || len(ss.Users) != 1 || ss.Users[0].Password != st.Users[0].Password {
+		t.Fatalf("shadowsocks = %+v", ss)
 	}
 }

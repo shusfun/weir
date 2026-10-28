@@ -694,6 +694,16 @@ func ChainKindNotIn(vs ...ChainKind) predicate.Node {
 	return predicate.Node(sql.FieldNotIn(FieldChainKind, vs...))
 }
 
+// ChainSourceIsNil applies the IsNil predicate on the "chain_source" field.
+func ChainSourceIsNil() predicate.Node {
+	return predicate.Node(sql.FieldIsNull(FieldChainSource))
+}
+
+// ChainSourceNotNil applies the NotNil predicate on the "chain_source" field.
+func ChainSourceNotNil() predicate.Node {
+	return predicate.Node(sql.FieldNotNull(FieldChainSource))
+}
+
 // ChainAddressEQ applies the EQ predicate on the "chain_address" field.
 func ChainAddressEQ(v string) predicate.Node {
 	return predicate.Node(sql.FieldEQ(FieldChainAddress, v))

@@ -51,6 +51,9 @@ type Route func(*sql.Selector)
 // RuleTemplate is the predicate function for ruletemplate builders.
 type RuleTemplate func(*sql.Selector)
 
+// Sample is the predicate function for sample builders.
+type Sample func(*sql.Selector)
+
 // Setting is the predicate function for setting builders.
 type Setting func(*sql.Selector)
 

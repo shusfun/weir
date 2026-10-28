@@ -23,6 +23,8 @@ const (
 	FieldResult = "result"
 	// FieldIP holds the string denoting the ip field in the database.
 	FieldIP = "ip"
+	// FieldDetail holds the string denoting the detail field in the database.
+	FieldDetail = "detail"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// Table holds the table name of the audit in the database.
@@ -37,6 +39,7 @@ var Columns = []string{
 	FieldTarget,
 	FieldResult,
 	FieldIP,
+	FieldDetail,
 	FieldCreatedAt,
 }
 

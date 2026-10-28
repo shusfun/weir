@@ -3,6 +3,7 @@ package contracts
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"time"
 )
 
@@ -58,7 +59,19 @@ type Outbound struct {
 	Username string         `json:"username,omitempty"`
 	Password string         `json:"password,omitempty"`
 	Settings map[string]any `json:"settings,omitempty"`
+	// Members 非空表示这是「一组」出口（Protocol 为 group）：全部成员都下发，由内核按延迟自动选、出故障自动切换
+	// （Xray balancer + observatory，sing-box urltest）。成员的 ID / Tag 由生成器分配。
+	Members []Outbound `json:"members,omitempty"`
 }
+
+// MaxGroupMembers 是「一组」出口的成员上限。
+const MaxGroupMembers = 50
+
+// 「一组」出口由内核探测成员延迟：探测地址与间隔（端到端测试中换成本机地址与更短的间隔）。
+var (
+	GroupProbeURL   = "https://www.gstatic.com/generate_204"
+	GroupProbeEvery = "3m"
+)
 
 // Route 把某入站（可限定某凭据）的流量送往指定出口；Priority 小者优先。
 type Route struct {
@@ -94,9 +107,12 @@ type GateBudget struct {
 }
 
 // CertRef 引用一张证书；Gate 按 ID 下载 PEM 并核对摘要。
+// Panel 非空表示这是 VPS 上 1Panel 管理的本机 IP 证书（值为该 IP）：私钥只在 Gate 本机，
+// Gate 缺文件时经 1Panel 取得，不从中心下载，也不核对摘要（1Panel 会自动续签）。
 type CertRef struct {
 	ID     int64  `json:"id"`
 	SHA256 string `json:"sha256"`
+	Panel  string `json:"panel,omitempty"`
 }
 
 // GateState 是 Gate 应用配置后的上报。
@@ -114,4 +130,12 @@ func CertSum(certPEM, keyPEM string) string {
 	h.Write([]byte{0})
 	h.Write([]byte(keyPEM))
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// WireGuard 地址：服务端固定 10.77.0.1/16，每个凭据按 ID 分到一个 /32（中心生成分享链接、Gate 生成配置都用它）。
+const WGServerAddress = "10.77.0.1/16"
+
+func WGClientAddress(credentialID int64) string {
+	n := credentialID%65532 + 2
+	return fmt.Sprintf("10.77.%d.%d/32", n/256, n%256)
 }

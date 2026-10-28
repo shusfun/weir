@@ -88,15 +88,20 @@ func (s *Server) syncUserLocked(ctx context.Context, uid int) ([]int, error) {
 		protocol                string
 	}
 	desired := map[string]want{}
+	// WireGuard 没有按用户的流量统计，Gate 无法执行额度：只给不限额度的用户发凭据。
+	wgBlocked := func(protocol string) bool { return protocol == "wireguard" && u.Quota > 0 }
 	for _, l := range links {
 		for id, n := range nodes {
+			if wgBlocked(n.Protocol) {
+				continue
+			}
 			if l.AllNodes || contains(l.NodeIds, id) {
 				desired[credKey(l.ID, id, 0)] = want{l.ID, id, 0, n.Protocol}
 			}
 		}
 		for _, ch := range chains {
 			entry, ok := nodes[ch.EntryNodeID]
-			if !ok || !(l.AllNodes || contains(l.ChainIds, ch.ID)) {
+			if !ok || wgBlocked(entry.Protocol) || !(l.AllNodes || contains(l.ChainIds, ch.ID)) {
 				continue
 			}
 			desired[credKey(l.ID, ch.EntryNodeID, ch.ID)] = want{l.ID, ch.EntryNodeID, ch.ID, entry.Protocol}

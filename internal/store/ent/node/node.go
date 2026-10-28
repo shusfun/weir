@@ -38,6 +38,8 @@ const (
 	FieldEnabled = "enabled"
 	// FieldChainKind holds the string denoting the chain_kind field in the database.
 	FieldChainKind = "chain_kind"
+	// FieldChainSource holds the string denoting the chain_source field in the database.
+	FieldChainSource = "chain_source"
 	// FieldChainAddress holds the string denoting the chain_address field in the database.
 	FieldChainAddress = "chain_address"
 	// FieldChainPort holds the string denoting the chain_port field in the database.
@@ -69,6 +71,7 @@ var Columns = []string{
 	FieldCertID,
 	FieldEnabled,
 	FieldChainKind,
+	FieldChainSource,
 	FieldChainAddress,
 	FieldChainPort,
 	FieldChainUsername,
@@ -135,6 +138,7 @@ const (
 	ChainKindNone   ChainKind = "none"
 	ChainKindSocks5 ChainKind = "socks5"
 	ChainKindNode   ChainKind = "node"
+	ChainKindSource ChainKind = "source"
 )
 
 func (ck ChainKind) String() string {
@@ -144,7 +148,7 @@ func (ck ChainKind) String() string {
 // ChainKindValidator is a validator for the "chain_kind" field enum values. It is called by the builders before save.
 func ChainKindValidator(ck ChainKind) error {
 	switch ck {
-	case ChainKindNone, ChainKindSocks5, ChainKindNode:
+	case ChainKindNone, ChainKindSocks5, ChainKindNode, ChainKindSource:
 		return nil
 	default:
 		return fmt.Errorf("node: invalid enum value for chain_kind field: %q", ck)

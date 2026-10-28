@@ -29,6 +29,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/resource"
 	"github.com/shusfun/weir/internal/store/ent/route"
 	"github.com/shusfun/weir/internal/store/ent/ruletemplate"
+	"github.com/shusfun/weir/internal/store/ent/sample"
 	"github.com/shusfun/weir/internal/store/ent/setting"
 	"github.com/shusfun/weir/internal/store/ent/subgrant"
 	"github.com/shusfun/weir/internal/store/ent/subnode"
@@ -72,6 +73,8 @@ type Client struct {
 	Route *RouteClient
 	// RuleTemplate is the client for interacting with the RuleTemplate builders.
 	RuleTemplate *RuleTemplateClient
+	// Sample is the client for interacting with the Sample builders.
+	Sample *SampleClient
 	// Setting is the client for interacting with the Setting builders.
 	Setting *SettingClient
 	// SubGrant is the client for interacting with the SubGrant builders.
@@ -110,6 +113,7 @@ func (c *Client) init() {
 	c.Resource = NewResourceClient(c.config)
 	c.Route = NewRouteClient(c.config)
 	c.RuleTemplate = NewRuleTemplateClient(c.config)
+	c.Sample = NewSampleClient(c.config)
 	c.Setting = NewSettingClient(c.config)
 	c.SubGrant = NewSubGrantClient(c.config)
 	c.SubNode = NewSubNodeClient(c.config)
@@ -223,6 +227,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Resource:     NewResourceClient(cfg),
 		Route:        NewRouteClient(cfg),
 		RuleTemplate: NewRuleTemplateClient(cfg),
+		Sample:       NewSampleClient(cfg),
 		Setting:      NewSettingClient(cfg),
 		SubGrant:     NewSubGrantClient(cfg),
 		SubNode:      NewSubNodeClient(cfg),
@@ -263,6 +268,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		Resource:     NewResourceClient(cfg),
 		Route:        NewRouteClient(cfg),
 		RuleTemplate: NewRuleTemplateClient(cfg),
+		Sample:       NewSampleClient(cfg),
 		Setting:      NewSettingClient(cfg),
 		SubGrant:     NewSubGrantClient(cfg),
 		SubNode:      NewSubNodeClient(cfg),
@@ -300,8 +306,8 @@ func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.Audit, c.Budget, c.Certificate, c.Chain, c.Credential, c.Gate, c.GateAction,
 		c.Link, c.Node, c.Outbound, c.Passkey, c.RecoveryCode, c.Resource, c.Route,
-		c.RuleTemplate, c.Setting, c.SubGrant, c.SubNode, c.SubProfile, c.SubSource,
-		c.User,
+		c.RuleTemplate, c.Sample, c.Setting, c.SubGrant, c.SubNode, c.SubProfile,
+		c.SubSource, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -313,8 +319,8 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.Audit, c.Budget, c.Certificate, c.Chain, c.Credential, c.Gate, c.GateAction,
 		c.Link, c.Node, c.Outbound, c.Passkey, c.RecoveryCode, c.Resource, c.Route,
-		c.RuleTemplate, c.Setting, c.SubGrant, c.SubNode, c.SubProfile, c.SubSource,
-		c.User,
+		c.RuleTemplate, c.Sample, c.Setting, c.SubGrant, c.SubNode, c.SubProfile,
+		c.SubSource, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -353,6 +359,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Route.mutate(ctx, m)
 	case *RuleTemplateMutation:
 		return c.RuleTemplate.mutate(ctx, m)
+	case *SampleMutation:
+		return c.Sample.mutate(ctx, m)
 	case *SettingMutation:
 		return c.Setting.mutate(ctx, m)
 	case *SubGrantMutation:
@@ -2365,6 +2373,139 @@ func (c *RuleTemplateClient) mutate(ctx context.Context, m *RuleTemplateMutation
 	}
 }
 
+// SampleClient is a client for the Sample schema.
+type SampleClient struct {
+	config
+}
+
+// NewSampleClient returns a client for the Sample from the given config.
+func NewSampleClient(c config) *SampleClient {
+	return &SampleClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `sample.Hooks(f(g(h())))`.
+func (c *SampleClient) Use(hooks ...Hook) {
+	c.hooks.Sample = append(c.hooks.Sample, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `sample.Intercept(f(g(h())))`.
+func (c *SampleClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Sample = append(c.inters.Sample, interceptors...)
+}
+
+// Create returns a builder for creating a Sample entity.
+func (c *SampleClient) Create() *SampleCreate {
+	mutation := newSampleMutation(c.config, OpCreate)
+	return &SampleCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Sample entities.
+func (c *SampleClient) CreateBulk(builders ...*SampleCreate) *SampleCreateBulk {
+	return &SampleCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SampleClient) MapCreateBulk(slice any, setFunc func(*SampleCreate, int)) *SampleCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SampleCreateBulk{err: fmt.Errorf("calling to SampleClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SampleCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SampleCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Sample.
+func (c *SampleClient) Update() *SampleUpdate {
+	mutation := newSampleMutation(c.config, OpUpdate)
+	return &SampleUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SampleClient) UpdateOne(_m *Sample) *SampleUpdateOne {
+	mutation := newSampleMutation(c.config, OpUpdateOne, withSample(_m))
+	return &SampleUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SampleClient) UpdateOneID(id int) *SampleUpdateOne {
+	mutation := newSampleMutation(c.config, OpUpdateOne, withSampleID(id))
+	return &SampleUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Sample.
+func (c *SampleClient) Delete() *SampleDelete {
+	mutation := newSampleMutation(c.config, OpDelete)
+	return &SampleDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SampleClient) DeleteOne(_m *Sample) *SampleDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SampleClient) DeleteOneID(id int) *SampleDeleteOne {
+	builder := c.Delete().Where(sample.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SampleDeleteOne{builder}
+}
+
+// Query returns a query builder for Sample.
+func (c *SampleClient) Query() *SampleQuery {
+	return &SampleQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSample},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Sample entity by its id.
+func (c *SampleClient) Get(ctx context.Context, id int) (*Sample, error) {
+	return c.Query().Where(sample.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SampleClient) GetX(ctx context.Context, id int) *Sample {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SampleClient) Hooks() []Hook {
+	return c.hooks.Sample
+}
+
+// Interceptors returns the client interceptors.
+func (c *SampleClient) Interceptors() []Interceptor {
+	return c.inters.Sample
+}
+
+func (c *SampleClient) mutate(ctx context.Context, m *SampleMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SampleCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SampleUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SampleUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SampleDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Sample mutation op: %q", m.Op())
+	}
+}
+
 // SettingClient is a client for the Setting schema.
 type SettingClient struct {
 	config
@@ -3167,12 +3308,12 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 type (
 	hooks struct {
 		Audit, Budget, Certificate, Chain, Credential, Gate, GateAction, Link, Node,
-		Outbound, Passkey, RecoveryCode, Resource, Route, RuleTemplate, Setting,
-		SubGrant, SubNode, SubProfile, SubSource, User []ent.Hook
+		Outbound, Passkey, RecoveryCode, Resource, Route, RuleTemplate, Sample,
+		Setting, SubGrant, SubNode, SubProfile, SubSource, User []ent.Hook
 	}
 	inters struct {
 		Audit, Budget, Certificate, Chain, Credential, Gate, GateAction, Link, Node,
-		Outbound, Passkey, RecoveryCode, Resource, Route, RuleTemplate, Setting,
-		SubGrant, SubNode, SubProfile, SubSource, User []ent.Interceptor
+		Outbound, Passkey, RecoveryCode, Resource, Route, RuleTemplate, Sample,
+		Setting, SubGrant, SubNode, SubProfile, SubSource, User []ent.Interceptor
 	}
 )

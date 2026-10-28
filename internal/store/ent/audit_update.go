@@ -104,6 +104,18 @@ func (_u *AuditUpdate) SetNillableIP(v *string) *AuditUpdate {
 	return _u
 }
 
+// SetDetail sets the "detail" field.
+func (_u *AuditUpdate) SetDetail(v map[string]interface{}) *AuditUpdate {
+	_u.mutation.SetDetail(v)
+	return _u
+}
+
+// ClearDetail clears the value of the "detail" field.
+func (_u *AuditUpdate) ClearDetail() *AuditUpdate {
+	_u.mutation.ClearDetail()
+	return _u
+}
+
 // Mutation returns the AuditMutation object of the builder.
 func (_u *AuditUpdate) Mutation() *AuditMutation {
 	return _u.mutation
@@ -190,6 +202,12 @@ func (_u *AuditUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.IP(); ok {
 		_spec.SetField(audit.FieldIP, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Detail(); ok {
+		_spec.SetField(audit.FieldDetail, field.TypeJSON, value)
+	}
+	if _u.mutation.DetailCleared() {
+		_spec.ClearField(audit.FieldDetail, field.TypeJSON)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -285,6 +303,18 @@ func (_u *AuditUpdateOne) SetNillableIP(v *string) *AuditUpdateOne {
 	if v != nil {
 		_u.SetIP(*v)
 	}
+	return _u
+}
+
+// SetDetail sets the "detail" field.
+func (_u *AuditUpdateOne) SetDetail(v map[string]interface{}) *AuditUpdateOne {
+	_u.mutation.SetDetail(v)
+	return _u
+}
+
+// ClearDetail clears the value of the "detail" field.
+func (_u *AuditUpdateOne) ClearDetail() *AuditUpdateOne {
+	_u.mutation.ClearDetail()
 	return _u
 }
 
@@ -404,6 +434,12 @@ func (_u *AuditUpdateOne) sqlSave(ctx context.Context) (_node *Audit, err error)
 	}
 	if value, ok := _u.mutation.IP(); ok {
 		_spec.SetField(audit.FieldIP, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Detail(); ok {
+		_spec.SetField(audit.FieldDetail, field.TypeJSON, value)
+	}
+	if _u.mutation.DetailCleared() {
+		_spec.ClearField(audit.FieldDetail, field.TypeJSON)
 	}
 	_node = &Audit{config: _u.config}
 	_spec.Assign = _node.assignValues

@@ -384,6 +384,16 @@ func IPContainsFold(v string) predicate.Audit {
 	return predicate.Audit(sql.FieldContainsFold(FieldIP, v))
 }
 
+// DetailIsNil applies the IsNil predicate on the "detail" field.
+func DetailIsNil() predicate.Audit {
+	return predicate.Audit(sql.FieldIsNull(FieldDetail))
+}
+
+// DetailNotNil applies the NotNil predicate on the "detail" field.
+func DetailNotNil() predicate.Audit {
+	return predicate.Audit(sql.FieldNotNull(FieldDetail))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.Audit {
 	return predicate.Audit(sql.FieldEQ(FieldCreatedAt, v))

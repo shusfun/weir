@@ -8,8 +8,8 @@ import (
 
 func TestInboundCapabilitiesCoverSupportedProtocols(t *testing.T) {
 	capabilities := db.InboundCapabilities()
-	if len(capabilities) != 9 {
-		t.Fatalf("expected 9 inbound capabilities, got %+v", capabilities)
+	if len(capabilities) != 10 {
+		t.Fatalf("expected 10 inbound capabilities, got %+v", capabilities)
 	}
 	seen := map[string]db.InboundCapability{}
 	for _, capability := range capabilities {
@@ -44,6 +44,7 @@ func TestInboundShareLinkCapabilityMatchesExpectedProtocols(t *testing.T) {
 		"http":        true,
 		"hysteria2":   true,
 		"tuic":        true,
+		"wireguard":   true,
 	}
 	for _, capability := range db.InboundCapabilities() {
 		want := supported[capability.Protocol]

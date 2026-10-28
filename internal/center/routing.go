@@ -1,6 +1,7 @@
 package center
 
 import (
+	"context"
 	"net"
 	"regexp"
 	"strconv"
@@ -30,7 +31,7 @@ func (s *Server) routingRoutes(admin *gin.RouterGroup) {
 	admin.DELETE("/gates/:id/routes/:rid", s.deleteRoute)
 }
 
-var outboundProtocols = map[string]bool{"socks": true, "http": true, "freedom": true, "blackhole": true}
+var outboundProtocols = map[string]bool{"socks": true, "http": true, "freedom": true, "blackhole": true, "source": true}
 
 var tagPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,47}$`)
 
@@ -44,6 +45,9 @@ func (s *Server) outboundView(o *ent.Outbound) gin.H {
 		"username": o.Username, "enabled": o.Enabled, "position": o.Position, "settings": o.Settings}
 	if pw, err := s.reveal(o.Password); err == nil {
 		v["password"] = pw
+	}
+	if o.Protocol == "source" && s.Store != nil {
+		v["source"] = s.exitView(context.Background(), "out:"+itoa(o.ID))
 	}
 	return v
 }
@@ -95,12 +99,37 @@ func (s *Server) saveOutbound(c *gin.Context) {
 		Username string `json:"username"`
 		Password string `json:"password"`
 		Enabled  *bool  `json:"enabled"`
+		// 订阅源里的节点：source_id + mode（node 单个节点 / filter 按名称正则筛选）+ match。
+		SourceID int    `json:"source_id"`
+		Mode     string `json:"mode"`
+		Match    string `json:"match"`
 	}
 	if !bind(c, &req) {
 		return
 	}
 	ctx := c.Request.Context()
 	req.Tag = strings.TrimSpace(req.Tag)
+	var settings map[string]any
+	if req.Protocol == "source" {
+		sp := sourceSpec{SourceID: req.SourceID, Mode: req.Mode, Match: strings.TrimSpace(req.Match)}
+		if _, err := s.Store.Ent.SubSource.Get(ctx, req.SourceID); err != nil {
+			failure(c, 400, "source_not_found")
+			return
+		}
+		if err := sp.check(); err != nil {
+			failDetail(c, 400, "invalid_source_exit", err.Error(), nil)
+			return
+		}
+		// 一组由内核自动选择与切换：这台 Gate 用到的内核版本不支持时保存报错，不悄悄退回单个节点。
+		if sp.Mode == "filter" {
+			if err := s.checkGroupSupport(ctx, g); err != nil {
+				failDetail(c, 409, "group_unsupported", err.Error(), nil)
+				return
+			}
+		}
+		req.Match = sp.Match
+		settings = map[string]any{"source_id": req.SourceID, "mode": req.Mode, "match": req.Match}
+	}
 	if !tagPattern.MatchString(req.Tag) || reservedTag(req.Tag) {
 		failure(c, 400, "invalid_tag")
 		return
@@ -139,7 +168,7 @@ func (s *Server) saveOutbound(c *gin.Context) {
 	if oid == 0 {
 		n, _ := s.Store.Ent.Outbound.Query().Where(outbound.GateIDEQ(g.ID)).Count(ctx)
 		saved, err = s.Store.Ent.Outbound.Create().SetGateID(g.ID).SetTag(req.Tag).SetName(strings.TrimSpace(req.Name)).SetProtocol(req.Protocol).
-			SetAddress(strings.TrimSpace(req.Address)).SetPort(req.Port).SetUsername(req.Username).SetPassword(sealed).SetPosition(n).Save(ctx)
+			SetAddress(strings.TrimSpace(req.Address)).SetPort(req.Port).SetUsername(req.Username).SetPassword(sealed).SetPosition(n).SetSettings(settings).Save(ctx)
 	} else {
 		old, gerr := s.Store.Ent.Outbound.Query().Where(outbound.IDEQ(oid), outbound.GateIDEQ(g.ID)).Only(ctx)
 		if gerr != nil {
@@ -155,7 +184,7 @@ func (s *Server) saveOutbound(c *gin.Context) {
 			}
 		}
 		upd := old.Update().SetTag(req.Tag).SetName(strings.TrimSpace(req.Name)).SetProtocol(req.Protocol).SetAddress(strings.TrimSpace(req.Address)).
-			SetPort(req.Port).SetUsername(req.Username).SetPassword(sealed)
+			SetPort(req.Port).SetUsername(req.Username).SetPassword(sealed).SetSettings(settings)
 		if req.Enabled != nil {
 			upd.SetEnabled(*req.Enabled)
 		}
@@ -164,6 +193,17 @@ func (s *Server) saveOutbound(c *gin.Context) {
 	if err != nil {
 		failure(c, 409, "tag_conflict")
 		return
+	}
+	if saved.Protocol == "source" {
+		// 保存时解析一次；还解析不出来（订阅源没拉过、没有匹配）时说明原因，出口暂时为丢弃。
+		if rerr := s.refreshSourceExit(ctx, "out:"+itoa(saved.ID), g.ID, specOf(saved.Settings), false); rerr != nil {
+			_, _ = s.bumpGate(ctx, g.ID)
+			s.audit(c, "outbound.save", "outbound:"+itoa(saved.ID), "ok")
+			view := s.outboundView(saved)
+			view["warning"] = rerr.Error()
+			c.JSON(200, view)
+			return
+		}
 	}
 	_, _ = s.bumpGate(ctx, g.ID)
 	s.audit(c, "outbound.save", "outbound:"+itoa(saved.ID), "ok")

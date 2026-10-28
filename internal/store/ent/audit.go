@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -27,6 +28,8 @@ type Audit struct {
 	Result string `json:"result,omitempty"`
 	// IP holds the value of the "ip" field.
 	IP string `json:"ip,omitempty"`
+	// Detail holds the value of the "detail" field.
+	Detail map[string]interface{} `json:"detail,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt    time.Time `json:"created_at,omitempty"`
 	selectValues sql.SelectValues
@@ -37,6 +40,8 @@ func (*Audit) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case audit.FieldDetail:
+			values[i] = new([]byte)
 		case audit.FieldID, audit.FieldActor:
 			values[i] = new(sql.NullInt64)
 		case audit.FieldAction, audit.FieldTarget, audit.FieldResult, audit.FieldIP:
@@ -94,6 +99,14 @@ func (_m *Audit) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.IP = value.String
 			}
+		case audit.FieldDetail:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field detail", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Detail); err != nil {
+					return fmt.Errorf("unmarshal field detail: %w", err)
+				}
+			}
 		case audit.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field created_at", values[i])
@@ -150,6 +163,9 @@ func (_m *Audit) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("ip=")
 	builder.WriteString(_m.IP)
+	builder.WriteString(", ")
+	builder.WriteString("detail=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Detail))
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

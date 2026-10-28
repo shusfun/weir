@@ -18,6 +18,8 @@ func (Audit) Fields() []ent.Field {
 		field.String("target").MaxLen(255).Default(""),
 		field.String("result").MaxLen(32).Default("ok"),
 		field.String("ip").MaxLen(64).Default(""),
+		// detail：dsh 草稿经管理员确认时，记下草稿各步（已脱敏）与管理员改过的字段。
+		field.JSON("detail", map[string]any{}).Optional(),
 		field.Time("created_at").Default(time.Now).Immutable(),
 	}
 }

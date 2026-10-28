@@ -1,12 +1,14 @@
 package singbox
 
 import (
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"math/big"
@@ -17,6 +19,7 @@ import (
 
 	panelcfg "github.com/shusfun/weir/internal/config"
 	"github.com/shusfun/weir/internal/db"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 const SystemDirectOutboundTag = "migate-system-direct"
@@ -25,6 +28,7 @@ const SystemDirectOutboundTag = "migate-system-direct"
 type Config struct {
 	Log          LogConfig           `json:"log"`
 	Inbounds     []InboundConfig     `json:"inbounds"`
+	Endpoints    []EndpointConfig    `json:"endpoints,omitempty"`
 	Outbounds    []OutboundConfig    `json:"outbounds"`
 	Route        *RouteConfig        `json:"route,omitempty"`
 	Experimental *ExperimentalConfig `json:"experimental,omitempty"`
@@ -58,6 +62,20 @@ type InboundConfig struct {
 	Password          string           `json:"password,omitempty"`
 	Method            string           `json:"method,omitempty"`
 	Handshake         *HandshakeConfig `json:"handshake,omitempty"`
+	Network           string           `json:"network,omitempty"`
+	Detour            string           `json:"detour,omitempty"`
+}
+
+// EndpointConfig 是 sing-box 的 WireGuard endpoint（作服务端：每个凭据一个 peer）。
+type EndpointConfig struct {
+	Type       string       `json:"type"`
+	Tag        string       `json:"tag"`
+	System     bool         `json:"system"`
+	Address    []string     `json:"address"`
+	PrivateKey string       `json:"private_key"`
+	ListenPort int          `json:"listen_port"`
+	MTU        int          `json:"mtu,omitempty"`
+	Peers      []PeerConfig `json:"peers"`
 }
 
 // HandshakeConfig represents the handshake server for ShadowTLS.
@@ -130,6 +148,10 @@ type OutboundConfig struct {
 	Security          string           `json:"security,omitempty"`
 	TLS               *TLSConfig       `json:"tls,omitempty"`
 	Transport         *TransportConfig `json:"transport,omitempty"`
+	// urltest：Outbounds 是成员，按 URL 测延迟自动选、出故障自动切换（「一组」出口用）。
+	Outbounds []string `json:"outbounds,omitempty"`
+	URL       string   `json:"url,omitempty"`
+	Interval  string   `json:"interval,omitempty"`
 }
 
 type TransportConfig struct {
@@ -327,8 +349,21 @@ func BuildConfigWithOptions(inbounds []db.Inbound, opts BuildOptions) Config {
 			cfg.Inbounds = append(cfg.Inbounds, ib)
 
 		case "wireguard":
-			// NOTE: WireGuard inbound requires sing-box >= 1.14
-			// Skipping for now — current deployed version is 1.13.x
+			// WireGuard 作服务端：sing-box 的 endpoint；每个凭据一个 peer（客户端私钥存在凭据密码里，
+			// 地址按凭据 ID 分配）。WireGuard 没有按用户的流量统计，中心只给不限额度的用户下发。
+			if inbound.WgPrivateKey == "" {
+				continue
+			}
+			ep := EndpointConfig{Type: "wireguard", Tag: InboundStatsTag(inbound), Address: []string{firstNonEmptyString(inbound.WgAddress, contracts.WGServerAddress)},
+				PrivateKey: inbound.WgPrivateKey, ListenPort: port, MTU: firstNonZero(inbound.WgMTU, 1408), Peers: []PeerConfig{}}
+			for _, client := range enabledClients(inbound.Clients) {
+				pub := wgPublicKey(client.PasswordValue())
+				if pub == "" {
+					continue
+				}
+				ep.Peers = append(ep.Peers, PeerConfig{PublicKey: pub, AllowedIPs: []string{contracts.WGClientAddress(client.ID)}})
+			}
+			cfg.Endpoints = append(cfg.Endpoints, ep)
 			continue
 
 		case "shadowsocks":
@@ -352,6 +387,25 @@ func BuildConfigWithOptions(inbounds []db.Inbound, opts BuildOptions) Config {
 
 		case "shadowtls":
 			tag := InboundStatsTag(inbound)
+			if inbound.SSPassword != "" {
+				// ShadowTLS v3 + Shadowsocks 2022（sing-box 官方示例的组合）：ShadowTLS 只做握手伪装，
+				// 认证后的连接交给只在回环上的 Shadowsocks 入站；按用户统计记在 Shadowsocks 入站上。
+				ssTag := tag + "-ss"
+				st := InboundConfig{Type: "shadowtls", Tag: tag, Listen: "0.0.0.0", ListenPort: port, Version: 3, Detour: ssTag}
+				if inbound.TLSSNI != "" {
+					st.Handshake = &HandshakeConfig{Server: inbound.TLSSNI, ServerPort: 443}
+				}
+				ss := InboundConfig{Type: "shadowsocks", Tag: ssTag, Listen: "127.0.0.1", Network: "tcp", Method: firstNonEmptyString(inbound.SSMethod, "2022-blake3-aes-128-gcm"), Password: inbound.SSPassword}
+				addStatsInbound(tag)
+				for _, client := range enabledClients(inbound.Clients) {
+					name := UserStatsKey(client)
+					st.Users = append(st.Users, UserConfig{Name: name, Password: client.PasswordValue()})
+					ss.Users = append(ss.Users, UserConfig{Name: name, Password: client.PasswordValue()})
+					addStatsUser(name)
+				}
+				cfg.Inbounds = append(cfg.Inbounds, st, ss)
+				continue
+			}
 			ib := InboundConfig{
 				Type:       "shadowtls",
 				Tag:        tag,
@@ -389,6 +443,28 @@ func BuildConfigWithOptions(inbounds []db.Inbound, opts BuildOptions) Config {
 	}
 
 	return cfg
+}
+
+func firstNonEmptyString(v ...string) string {
+	for _, s := range v {
+		if s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+// wgPublicKey 由 WireGuard 私钥（标准 base64）算出公钥；无效时返回空。
+func wgPublicKey(priv string) string {
+	raw, err := base64.StdEncoding.DecodeString(priv)
+	if err != nil {
+		return ""
+	}
+	key, err := ecdh.X25519().NewPrivateKey(raw)
+	if err != nil {
+		return ""
+	}
+	return base64.StdEncoding.EncodeToString(key.PublicKey().Bytes())
 }
 
 func BuildConfigWithOutbounds(inbounds []db.Inbound, outbounds []db.Outbound, routingRules []db.RoutingRule) (Config, error) {

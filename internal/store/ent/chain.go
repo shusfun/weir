@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -25,6 +26,8 @@ type Chain struct {
 	Name string `json:"name,omitempty"`
 	// ExitKind holds the value of the "exit_kind" field.
 	ExitKind chain.ExitKind `json:"exit_kind,omitempty"`
+	// ExitSource holds the value of the "exit_source" field.
+	ExitSource map[string]interface{} `json:"exit_source,omitempty"`
 	// ExitAddress holds the value of the "exit_address" field.
 	ExitAddress string `json:"exit_address,omitempty"`
 	// ExitPort holds the value of the "exit_port" field.
@@ -47,6 +50,8 @@ func (*Chain) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case chain.FieldExitSource:
+			values[i] = new([]byte)
 		case chain.FieldEnabled:
 			values[i] = new(sql.NullBool)
 		case chain.FieldID, chain.FieldUserID, chain.FieldEntryNodeID, chain.FieldExitPort, chain.FieldExitNodeID:
@@ -99,6 +104,14 @@ func (_m *Chain) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field exit_kind", values[i])
 			} else if value.Valid {
 				_m.ExitKind = chain.ExitKind(value.String)
+			}
+		case chain.FieldExitSource:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field exit_source", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.ExitSource); err != nil {
+					return fmt.Errorf("unmarshal field exit_source: %w", err)
+				}
 			}
 		case chain.FieldExitAddress:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -190,6 +203,9 @@ func (_m *Chain) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("exit_kind=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ExitKind))
+	builder.WriteString(", ")
+	builder.WriteString("exit_source=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ExitSource))
 	builder.WriteString(", ")
 	builder.WriteString("exit_address=")
 	builder.WriteString(_m.ExitAddress)

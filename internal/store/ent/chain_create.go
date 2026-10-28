@@ -46,6 +46,12 @@ func (_c *ChainCreate) SetExitKind(v chain.ExitKind) *ChainCreate {
 	return _c
 }
 
+// SetExitSource sets the "exit_source" field.
+func (_c *ChainCreate) SetExitSource(v map[string]interface{}) *ChainCreate {
+	_c.mutation.SetExitSource(v)
+	return _c
+}
+
 // SetExitAddress sets the "exit_address" field.
 func (_c *ChainCreate) SetExitAddress(v string) *ChainCreate {
 	_c.mutation.SetExitAddress(v)
@@ -300,6 +306,10 @@ func (_c *ChainCreate) createSpec() (*Chain, *sqlgraph.CreateSpec) {
 		_spec.SetField(chain.FieldExitKind, field.TypeEnum, value)
 		_node.ExitKind = value
 	}
+	if value, ok := _c.mutation.ExitSource(); ok {
+		_spec.SetField(chain.FieldExitSource, field.TypeJSON, value)
+		_node.ExitSource = value
+	}
 	if value, ok := _c.mutation.ExitAddress(); ok {
 		_spec.SetField(chain.FieldExitAddress, field.TypeString, value)
 		_node.ExitAddress = value
@@ -437,6 +447,24 @@ func (u *ChainUpsert) SetExitKind(v chain.ExitKind) *ChainUpsert {
 // UpdateExitKind sets the "exit_kind" field to the value that was provided on create.
 func (u *ChainUpsert) UpdateExitKind() *ChainUpsert {
 	u.SetExcluded(chain.FieldExitKind)
+	return u
+}
+
+// SetExitSource sets the "exit_source" field.
+func (u *ChainUpsert) SetExitSource(v map[string]interface{}) *ChainUpsert {
+	u.Set(chain.FieldExitSource, v)
+	return u
+}
+
+// UpdateExitSource sets the "exit_source" field to the value that was provided on create.
+func (u *ChainUpsert) UpdateExitSource() *ChainUpsert {
+	u.SetExcluded(chain.FieldExitSource)
+	return u
+}
+
+// ClearExitSource clears the value of the "exit_source" field.
+func (u *ChainUpsert) ClearExitSource() *ChainUpsert {
+	u.SetNull(chain.FieldExitSource)
 	return u
 }
 
@@ -642,6 +670,27 @@ func (u *ChainUpsertOne) SetExitKind(v chain.ExitKind) *ChainUpsertOne {
 func (u *ChainUpsertOne) UpdateExitKind() *ChainUpsertOne {
 	return u.Update(func(s *ChainUpsert) {
 		s.UpdateExitKind()
+	})
+}
+
+// SetExitSource sets the "exit_source" field.
+func (u *ChainUpsertOne) SetExitSource(v map[string]interface{}) *ChainUpsertOne {
+	return u.Update(func(s *ChainUpsert) {
+		s.SetExitSource(v)
+	})
+}
+
+// UpdateExitSource sets the "exit_source" field to the value that was provided on create.
+func (u *ChainUpsertOne) UpdateExitSource() *ChainUpsertOne {
+	return u.Update(func(s *ChainUpsert) {
+		s.UpdateExitSource()
+	})
+}
+
+// ClearExitSource clears the value of the "exit_source" field.
+func (u *ChainUpsertOne) ClearExitSource() *ChainUpsertOne {
+	return u.Update(func(s *ChainUpsert) {
+		s.ClearExitSource()
 	})
 }
 
@@ -1028,6 +1077,27 @@ func (u *ChainUpsertBulk) SetExitKind(v chain.ExitKind) *ChainUpsertBulk {
 func (u *ChainUpsertBulk) UpdateExitKind() *ChainUpsertBulk {
 	return u.Update(func(s *ChainUpsert) {
 		s.UpdateExitKind()
+	})
+}
+
+// SetExitSource sets the "exit_source" field.
+func (u *ChainUpsertBulk) SetExitSource(v map[string]interface{}) *ChainUpsertBulk {
+	return u.Update(func(s *ChainUpsert) {
+		s.SetExitSource(v)
+	})
+}
+
+// UpdateExitSource sets the "exit_source" field to the value that was provided on create.
+func (u *ChainUpsertBulk) UpdateExitSource() *ChainUpsertBulk {
+	return u.Update(func(s *ChainUpsert) {
+		s.UpdateExitSource()
+	})
+}
+
+// ClearExitSource clears the value of the "exit_source" field.
+func (u *ChainUpsertBulk) ClearExitSource() *ChainUpsertBulk {
+	return u.Update(func(s *ChainUpsert) {
+		s.ClearExitSource()
 	})
 }
 

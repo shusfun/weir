@@ -8,12 +8,15 @@ import (
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/budget"
 	"github.com/shusfun/weir/internal/store/ent/credential"
+	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/node"
 )
 
 const (
 	minChunk     int64 = 32 << 20 // 多 Gate 时每块至少 32 MiB
 	chunkHorizon       = 24 * time.Hour
+	// reclaimAfter：Gate 超过这么久没有心跳，不再等它确认下调，按它已上报的用量收回多出的额度。
+	reclaimAfter = 24 * time.Hour
 )
 
 // userGates 返回该用户当前有有效（非内部）凭据的 Gate。
@@ -54,7 +57,9 @@ func maxInt64(a, b int64) int64 {
 //   - 多台 Gate：每块按该 Gate 上的使用速度估算约 24 小时用量，最少 32 MiB；
 //     剩余不足四分之一块时补满一块，持有超过一块时收回到一块。
 //   - 已下调但 Gate 尚未确认的额度仍按旧值占用；各 Gate 占用合计不超过剩余额度。
-func planBudgets(remaining int64, rows []*ent.Budget) map[int]int64 {
+//   - stale 里的 Gate 已超过 reclaimAfter 没有心跳：不再按旧值占用、也不再加额度，只保留它已上报的用量与新值中较小者；
+//     它离线期间按旧额度多用的部分，回来上报后照实计入用户用量。
+func planBudgets(remaining int64, rows []*ent.Budget, stale map[int]bool) map[int]int64 {
 	out := map[int]int64{}
 	if len(rows) == 0 {
 		return out
@@ -80,8 +85,16 @@ func planBudgets(remaining int64, rows []*ent.Budget) map[int]int64 {
 		} else {
 			out[r.GateID] = r.Allocated
 		}
+		if stale[r.GateID] && out[r.GateID] > r.Allocated {
+			out[r.GateID] = maxInt64(r.Allocated, r.Used)
+		}
 	}
-	reserve := func(r *ent.Budget) int64 { return maxInt64(out[r.GateID], r.Confirmed) - r.Used }
+	reserve := func(r *ent.Budget) int64 {
+		if stale[r.GateID] {
+			return out[r.GateID] - r.Used
+		}
+		return maxInt64(out[r.GateID], r.Confirmed) - r.Used
+	}
 	total := int64(0)
 	for _, r := range rows {
 		total += maxInt64(reserve(r), 0)
@@ -94,7 +107,7 @@ func planBudgets(remaining int64, rows []*ent.Budget) map[int]int64 {
 				break
 			}
 			floor := maxInt64(r.Confirmed, r.Used)
-			if pass == 1 {
+			if pass == 1 || stale[r.GateID] {
 				floor = r.Used
 			}
 			if out[r.GateID] > floor {
@@ -124,6 +137,12 @@ func (s *Server) rebalanceUser(ctx context.Context, uid int) ([]int, error) {
 			return err
 		}
 		rows := make([]*ent.Budget, 0, len(gates))
+		stale := map[int]bool{}
+		if gs, err := s.Store.Ent.Gate.Query().Where(gate.IDIn(gates...)).All(ctx); err == nil {
+			for _, g := range gs {
+				stale[g.ID] = gateStale(g, time.Now())
+			}
+		}
 		for _, gid := range gates {
 			row, err := s.Store.Ent.Budget.Query().Where(budget.UserIDEQ(uid), budget.GateIDEQ(gid)).Only(ctx)
 			if ent.IsNotFound(err) {
@@ -137,7 +156,7 @@ func (s *Server) rebalanceUser(ctx context.Context, uid int) ([]int, error) {
 		if u.Quota == 0 {
 			return nil
 		}
-		for gid, alloc := range planBudgets(u.Quota-u.Used, rows) {
+		for gid, alloc := range planBudgets(u.Quota-u.Used, rows, stale) {
 			for _, r := range rows {
 				if r.GateID != gid || r.Allocated == alloc {
 					continue
@@ -155,6 +174,46 @@ func (s *Server) rebalanceUser(ctx context.Context, uid int) ([]int, error) {
 		return nil
 	})
 	return changed, err
+}
+
+// gateStale：配对后有过心跳、但已超过 reclaimAfter 没有心跳的 Gate。
+func gateStale(g *ent.Gate, now time.Time) bool {
+	return g.LastSeenAt != nil && now.Sub(*g.LastSeenAt) > reclaimAfter
+}
+
+// ReclaimStaleBudgets 每 10 分钟检查一次：长期离线的 Gate 上持有额度、且同时在其他 Gate 上有节点的用户，
+// 重新分配额度（收回离线 Gate 多出的部分给其他 Gate）。结果不变时不会重复下发配置。
+func (s *Server) ReclaimStaleBudgets(ctx context.Context, now time.Time) error {
+	if ok, err := s.Store.KV.SetNX(ctx, "budget-reclaim", "1", 10*time.Minute); err != nil || !ok {
+		return err
+	}
+	gs, err := s.Store.Ent.Gate.Query().Where(gate.LastSeenAtLT(now.Add(-reclaimAfter))).All(ctx)
+	if err != nil || len(gs) == 0 {
+		return err
+	}
+	ids := make([]int, 0, len(gs))
+	for _, g := range gs {
+		ids = append(ids, g.ID)
+	}
+	rows, err := s.Store.Ent.Budget.Query().Where(budget.GateIDIn(ids...), budget.ConfirmedGT(0)).All(ctx)
+	if err != nil {
+		return err
+	}
+	seen := map[int]bool{}
+	for _, r := range rows {
+		if seen[r.UserID] || r.Confirmed <= r.Used {
+			continue
+		}
+		seen[r.UserID] = true
+		changed, err := s.rebalanceUser(ctx, r.UserID)
+		if err == nil && len(changed) > 0 {
+			err = s.bumpGates(ctx, changed)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Rebalance 重新分配某用户的额度并唤醒受影响 Gate 的配置长轮询（套餐、节点、链接变化后调用）。

@@ -26,6 +26,8 @@ type Gate struct {
 	Status gate.Status `json:"status,omitempty"`
 	// PublicHost holds the value of the "public_host" field.
 	PublicHost string `json:"public_host,omitempty"`
+	// CenterURL holds the value of the "center_url" field.
+	CenterURL string `json:"center_url,omitempty"`
 	// Version holds the value of the "version" field.
 	Version string `json:"version,omitempty"`
 	// Hostname holds the value of the "hostname" field.
@@ -42,6 +44,8 @@ type Gate struct {
 	KernelPins map[string]string `json:"kernel_pins,omitempty"`
 	// Host holds the value of the "host" field.
 	Host map[string]interface{} `json:"host,omitempty"`
+	// Panel holds the value of the "panel" field.
+	Panel map[string]interface{} `json:"panel,omitempty"`
 	// ConfigRevision holds the value of the "config_revision" field.
 	ConfigRevision int64 `json:"config_revision,omitempty"`
 	// AppliedRevision holds the value of the "applied_revision" field.
@@ -68,11 +72,11 @@ func (*Gate) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case gate.FieldListeningPorts, gate.FieldKernelsRunning, gate.FieldKernelPins, gate.FieldHost:
+		case gate.FieldListeningPorts, gate.FieldKernelsRunning, gate.FieldKernelPins, gate.FieldHost, gate.FieldPanel:
 			values[i] = new([]byte)
 		case gate.FieldID, gate.FieldConfigRevision, gate.FieldAppliedRevision, gate.FieldFailedRevision, gate.FieldXrayStatsPort, gate.FieldSingboxStatsPort, gate.FieldMeterSeq:
 			values[i] = new(sql.NullInt64)
-		case gate.FieldName, gate.FieldPublicKey, gate.FieldStatus, gate.FieldPublicHost, gate.FieldVersion, gate.FieldHostname, gate.FieldArch, gate.FieldLastError, gate.FieldMeterEpoch:
+		case gate.FieldName, gate.FieldPublicKey, gate.FieldStatus, gate.FieldPublicHost, gate.FieldCenterURL, gate.FieldVersion, gate.FieldHostname, gate.FieldArch, gate.FieldLastError, gate.FieldMeterEpoch:
 			values[i] = new(sql.NullString)
 		case gate.FieldLastSeenAt, gate.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -120,6 +124,12 @@ func (_m *Gate) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field public_host", values[i])
 			} else if value.Valid {
 				_m.PublicHost = value.String
+			}
+		case gate.FieldCenterURL:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field center_url", values[i])
+			} else if value.Valid {
+				_m.CenterURL = value.String
 			}
 		case gate.FieldVersion:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -176,6 +186,14 @@ func (_m *Gate) assignValues(columns []string, values []any) error {
 			} else if value != nil && len(*value) > 0 {
 				if err := json.Unmarshal(*value, &_m.Host); err != nil {
 					return fmt.Errorf("unmarshal field host: %w", err)
+				}
+			}
+		case gate.FieldPanel:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field panel", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Panel); err != nil {
+					return fmt.Errorf("unmarshal field panel: %w", err)
 				}
 			}
 		case gate.FieldConfigRevision:
@@ -280,6 +298,9 @@ func (_m *Gate) String() string {
 	builder.WriteString("public_host=")
 	builder.WriteString(_m.PublicHost)
 	builder.WriteString(", ")
+	builder.WriteString("center_url=")
+	builder.WriteString(_m.CenterURL)
+	builder.WriteString(", ")
 	builder.WriteString("version=")
 	builder.WriteString(_m.Version)
 	builder.WriteString(", ")
@@ -305,6 +326,9 @@ func (_m *Gate) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("host=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Host))
+	builder.WriteString(", ")
+	builder.WriteString("panel=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Panel))
 	builder.WriteString(", ")
 	builder.WriteString("config_revision=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ConfigRevision))

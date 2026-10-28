@@ -89,11 +89,22 @@ func pickPort(taken ...map[int]bool) (int, error) {
 
 // AllocateNodePort 为新节点在指定 Gate 上分配端口。
 func (s *Server) AllocateNodePort(ctx context.Context, g *ent.Gate) (int, error) {
+	return s.allocateNodePort(ctx, g, false)
+}
+
+// allocateNodePort：REALITY 节点在 443 空闲时优先用 443（伪装更自然）。是否空闲只看 Gate 上报的实际占用
+// （1Panel 的 OpenResty、其他网站、x-ui 等占着时照常随机分配），这台 VPS 上已有本项目节点用 443 时也不用。
+// Gate 还没有上报过端口时不知道 443 是否空闲，也照常随机分配。其他协议不分配 443。
+func (s *Server) allocateNodePort(ctx context.Context, g *ent.Gate, reality bool) (int, error) {
 	own, err := s.gateOwnPorts(ctx, g)
 	if err != nil {
 		return 0, err
 	}
-	return pickPort(own, foreignPorts(g, own))
+	foreign := foreignPorts(g, own)
+	if reality && g.LastSeenAt != nil && g.ListeningPorts != nil && !own[443] && !foreign[443] {
+		return 443, nil
+	}
+	return pickPort(own, foreign)
 }
 
 // ensureStatsPorts 为 Gate 分配两个只监听回环的统计端口；已分配且未与其他程序冲突时保持不变。

@@ -69,6 +69,11 @@ func PublicHost(v string) predicate.Gate {
 	return predicate.Gate(sql.FieldEQ(FieldPublicHost, v))
 }
 
+// CenterURL applies equality check predicate on the "center_url" field. It's identical to CenterURLEQ.
+func CenterURL(v string) predicate.Gate {
+	return predicate.Gate(sql.FieldEQ(FieldCenterURL, v))
+}
+
 // Version applies equality check predicate on the "version" field. It's identical to VersionEQ.
 func Version(v string) predicate.Gate {
 	return predicate.Gate(sql.FieldEQ(FieldVersion, v))
@@ -347,6 +352,71 @@ func PublicHostEqualFold(v string) predicate.Gate {
 // PublicHostContainsFold applies the ContainsFold predicate on the "public_host" field.
 func PublicHostContainsFold(v string) predicate.Gate {
 	return predicate.Gate(sql.FieldContainsFold(FieldPublicHost, v))
+}
+
+// CenterURLEQ applies the EQ predicate on the "center_url" field.
+func CenterURLEQ(v string) predicate.Gate {
+	return predicate.Gate(sql.FieldEQ(FieldCenterURL, v))
+}
+
+// CenterURLNEQ applies the NEQ predicate on the "center_url" field.
+func CenterURLNEQ(v string) predicate.Gate {
+	return predicate.Gate(sql.FieldNEQ(FieldCenterURL, v))
+}
+
+// CenterURLIn applies the In predicate on the "center_url" field.
+func CenterURLIn(vs ...string) predicate.Gate {
+	return predicate.Gate(sql.FieldIn(FieldCenterURL, vs...))
+}
+
+// CenterURLNotIn applies the NotIn predicate on the "center_url" field.
+func CenterURLNotIn(vs ...string) predicate.Gate {
+	return predicate.Gate(sql.FieldNotIn(FieldCenterURL, vs...))
+}
+
+// CenterURLGT applies the GT predicate on the "center_url" field.
+func CenterURLGT(v string) predicate.Gate {
+	return predicate.Gate(sql.FieldGT(FieldCenterURL, v))
+}
+
+// CenterURLGTE applies the GTE predicate on the "center_url" field.
+func CenterURLGTE(v string) predicate.Gate {
+	return predicate.Gate(sql.FieldGTE(FieldCenterURL, v))
+}
+
+// CenterURLLT applies the LT predicate on the "center_url" field.
+func CenterURLLT(v string) predicate.Gate {
+	return predicate.Gate(sql.FieldLT(FieldCenterURL, v))
+}
+
+// CenterURLLTE applies the LTE predicate on the "center_url" field.
+func CenterURLLTE(v string) predicate.Gate {
+	return predicate.Gate(sql.FieldLTE(FieldCenterURL, v))
+}
+
+// CenterURLContains applies the Contains predicate on the "center_url" field.
+func CenterURLContains(v string) predicate.Gate {
+	return predicate.Gate(sql.FieldContains(FieldCenterURL, v))
+}
+
+// CenterURLHasPrefix applies the HasPrefix predicate on the "center_url" field.
+func CenterURLHasPrefix(v string) predicate.Gate {
+	return predicate.Gate(sql.FieldHasPrefix(FieldCenterURL, v))
+}
+
+// CenterURLHasSuffix applies the HasSuffix predicate on the "center_url" field.
+func CenterURLHasSuffix(v string) predicate.Gate {
+	return predicate.Gate(sql.FieldHasSuffix(FieldCenterURL, v))
+}
+
+// CenterURLEqualFold applies the EqualFold predicate on the "center_url" field.
+func CenterURLEqualFold(v string) predicate.Gate {
+	return predicate.Gate(sql.FieldEqualFold(FieldCenterURL, v))
+}
+
+// CenterURLContainsFold applies the ContainsFold predicate on the "center_url" field.
+func CenterURLContainsFold(v string) predicate.Gate {
+	return predicate.Gate(sql.FieldContainsFold(FieldCenterURL, v))
 }
 
 // VersionEQ applies the EQ predicate on the "version" field.
@@ -632,6 +702,16 @@ func HostIsNil() predicate.Gate {
 // HostNotNil applies the NotNil predicate on the "host" field.
 func HostNotNil() predicate.Gate {
 	return predicate.Gate(sql.FieldNotNull(FieldHost))
+}
+
+// PanelIsNil applies the IsNil predicate on the "panel" field.
+func PanelIsNil() predicate.Gate {
+	return predicate.Gate(sql.FieldIsNull(FieldPanel))
+}
+
+// PanelNotNil applies the NotNil predicate on the "panel" field.
+func PanelNotNil() predicate.Gate {
+	return predicate.Gate(sql.FieldNotNull(FieldPanel))
 }
 
 // ConfigRevisionEQ applies the EQ predicate on the "config_revision" field.

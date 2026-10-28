@@ -145,18 +145,28 @@ if [ "$has_center" = true ]; then
   setpriv --reuid=migate-center --regid=migate-center --init-groups \
    "$base/current/migate" center --config "$etc/center/config.json" --listen "$listen" --init >/dev/null
  fi
- cat > "$units_dir/migate-center.service" <<'UNIT'
+ # 单机角色：本机 Gate 的 Agent 在中心进程里运行（内核仍由 root 辅助程序托管），
+ # 中心加入 migate-gate 组以读取设备文件、访问辅助程序套接字，并拥有 Gate 的状态目录。
+ local_groups='migate-dsh'; local_env=''; local_paths=''; local_after=''
+ if [ "$role" = standalone ]; then
+  local_groups='migate-dsh migate-gate'
+  local_env='Environment=MIGATE_LOCAL_GATE=/etc/migate/gate/agent.json'
+  local_paths=' /var/lib/migate/gate /run/migate'
+  local_after=' migate-helper.service'
+ fi
+ cat > "$units_dir/migate-center.service" <<UNIT
 [Unit]
 Description=Weir center
-After=network-online.target
-Wants=network-online.target
+After=network-online.target$local_after
+Wants=network-online.target$local_after
 [Service]
 Type=simple
 User=migate-center
 Group=migate-center
-SupplementaryGroups=migate-dsh
+SupplementaryGroups=$local_groups
 Environment=MIGATE_DSH_DIR=/var/lib/migate/dsh
 Environment=MIGATE_DSH_AGENT=systemd
+$local_env
 ExecStart=/opt/migate/current/migate center --config /etc/migate/center/config.json --serve
 Restart=on-failure
 UMask=0077
@@ -164,7 +174,7 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=/etc/migate/center /var/lib/migate/center /var/lib/migate/dsh/runtime /var/lib/migate/dsh/control
+ReadWritePaths=/etc/migate/center /var/lib/migate/center /var/lib/migate/dsh/runtime /var/lib/migate/dsh/control$local_paths
 [Install]
 WantedBy=multi-user.target
 UNIT
@@ -199,7 +209,13 @@ if [ "$has_gate" = true ]; then
  id migate-gate >/dev/null 2>&1 || useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin migate-gate
  install -d -m 0750 -o root -g migate-gate "$etc/gate" "$etc/gate/cores" "$etc/gate/certs" "$base/cores"
  install -d -m 0755 "$lib"
- install -d -m 0700 -o migate-gate -g migate-gate "$lib/gate"
+ if [ "$role" = standalone ]; then
+  install -d -m 0700 -o migate-center -g migate-center "$lib/gate"
+  chown -R migate-center:migate-center "$lib/gate"
+  usermod -a -G migate-gate migate-center
+ else
+  install -d -m 0700 -o migate-gate -g migate-gate "$lib/gate"
+ fi
  cat > "$units_dir/migate-helper.service" <<'UNIT'
 [Unit]
 Description=Weir bounded core helper
@@ -218,6 +234,11 @@ ReadWritePaths=/run/migate /etc/migate/gate /opt/migate/cores /opt/migate
 [Install]
 WantedBy=multi-user.target
 UNIT
+ if [ "$role" = standalone ]; then
+  # 旧版单机的独立 Agent 服务：合并进中心进程后删除。
+  systemctl disable --now migate-gate.service >/dev/null 2>&1 || true
+  rm -f "$units_dir/migate-gate.service"
+ else
  cat > "$units_dir/migate-gate.service" <<'UNIT'
 [Unit]
 Description=Weir Gate agent
@@ -237,6 +258,7 @@ ReadWritePaths=/var/lib/migate/gate /run/migate
 [Install]
 WantedBy=multi-user.target
 UNIT
+ fi
  # 内核由辅助程序作为子进程托管（降权为 migate-gate、崩溃自动重启），不再单独建 systemd 单元。
  rm -f "$units_dir/migate-xray.service" "$units_dir/migate-sing-box.service"
  active="$active migate-helper.service"
@@ -261,7 +283,6 @@ ConditionPathExists=!/etc/migate/gate/agent.json
 Type=oneshot
 TimeoutStartSec=infinity
 ExecStart=/opt/migate/current/migate gate local-pair --config /etc/migate/gate/agent.json --token-file /etc/migate/gate/local-pair.token --center http://127.0.0.1:$port
-ExecStartPost=/usr/bin/env systemctl start migate-gate.service
 [Install]
 WantedBy=multi-user.target
 UNIT
@@ -289,7 +310,7 @@ if [ "$has_gate" = true ]; then
   sleep 1
  done
  [ "$ready" = true ] || rollback
- if [ -f "$etc/gate/agent.json" ]; then systemctl enable --now migate-gate.service >/dev/null; fi
+ if [ "$role" = gate ] && [ -f "$etc/gate/agent.json" ]; then systemctl enable --now migate-gate.service >/dev/null; fi
  if [ -f "$units_dir/migate-local-pair.service" ] && [ ! -f "$etc/gate/agent.json" ]; then
   systemctl enable migate-local-pair.service >/dev/null
   systemctl start --no-block migate-local-pair.service

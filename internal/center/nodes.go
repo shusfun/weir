@@ -22,6 +22,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/credential"
 	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/gateaction"
+	"github.com/shusfun/weir/internal/store/ent/link"
 	"github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/route"
 	"github.com/shusfun/weir/packages/contracts"
@@ -39,12 +40,29 @@ func (s *Server) nodeRoutes(admin *gin.RouterGroup) {
 
 // ChainSpec 描述链式代理出口：家宽 SOCKS5 或另一台 VPS 上的节点。
 type ChainSpec struct {
-	Kind     string `json:"kind"` // none / socks5 / node
+	Kind     string `json:"kind"` // none / socks5 / node / source（订阅源里的节点）
 	Address  string `json:"address"`
 	Port     int    `json:"port"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 	NodeID   int    `json:"node_id"`
+	// source：管理员用 source_id（任意订阅源），用户自建用 profile_id（分配给他的订阅组）；mode node / filter，match 名称或正则。
+	SourceID  int    `json:"source_id,omitempty"`
+	ProfileID int    `json:"profile_id,omitempty"`
+	Mode      string `json:"mode,omitempty"`
+	Match     string `json:"match,omitempty"`
+}
+
+func (c ChainSpec) source() sourceSpec {
+	return sourceSpec{SourceID: c.SourceID, ProfileID: c.ProfileID, Mode: c.Mode, Match: strings.TrimSpace(c.Match)}
+}
+
+// chainCtx 是校验链式代理出口时的上下文：入口节点用的内核（判断能否自动切换）、
+// 用户自建时是哪个用户（只能选分给他的订阅组），管理员代建可以选任意订阅源。
+type chainCtx struct {
+	kernel string
+	userID int
+	admin  bool
 }
 
 var errGateOffline = errors.New("gate_offline")
@@ -92,6 +110,16 @@ func (s *Server) probeReality(c *gin.Context) {
 	c.JSON(200, res)
 }
 
+// chainView 是节点的链式代理出口；订阅源出口附带当前用的是哪些节点。
+func (s *Server) chainView(ctx context.Context, n *ent.Node) gin.H {
+	v := gin.H{"kind": n.ChainKind, "address": n.ChainAddress, "port": n.ChainPort, "username": n.ChainUsername, "node_id": n.ChainNodeID}
+	if n.ChainKind == node.ChainKindSource {
+		sp := specOf(n.ChainSource)
+		v["source_id"], v["mode"], v["match"], v["source"] = sp.SourceID, sp.Mode, sp.Match, s.exitView(ctx, "node:"+itoa(n.ID))
+	}
+	return v
+}
+
 func (s *Server) nodeView(ctx context.Context, n *ent.Node) gin.H {
 	g, _ := s.Store.Ent.Gate.Get(ctx, n.GateID)
 	creds, _ := s.Store.Ent.Credential.Query().Where(credential.NodeIDEQ(n.ID), credential.InternalEQ(false)).Count(ctx)
@@ -99,7 +127,7 @@ func (s *Server) nodeView(ctx context.Context, n *ent.Node) gin.H {
 		"id": n.ID, "gate_id": n.GateID, "name": n.Name, "preset": n.Preset, "kernel": n.Kernel, "protocol": n.Protocol,
 		"port": n.Port, "network": n.Network, "security": n.Security, "settings": n.Settings, "cert_id": n.CertID,
 		"enabled": n.Enabled, "credentials": creds, "created_at": n.CreatedAt,
-		"chain": gin.H{"kind": n.ChainKind, "address": n.ChainAddress, "port": n.ChainPort, "username": n.ChainUsername, "node_id": n.ChainNodeID},
+		"chain": s.chainView(ctx, n),
 	}
 	if g != nil {
 		view["gate_name"], view["host"] = g.Name, g.PublicHost
@@ -174,9 +202,43 @@ func (s *Server) checkPort(ctx context.Context, g *ent.Gate, port, self int) err
 }
 
 // validateChain 校验链式代理出口并在入口 Gate 上实测（家宽 SOCKS5 必须能握手并经它连出去）。
-func (s *Server) validateChain(ctx context.Context, entry *ent.Gate, self int, spec ChainSpec, publicOnly, probe bool) error {
+func (s *Server) validateChain(ctx context.Context, entry *ent.Gate, self int, spec ChainSpec, publicOnly, probe bool, cc chainCtx) error {
 	switch spec.Kind {
 	case "", "none":
+		return nil
+	case "source":
+		sp := spec.source()
+		if err := sp.check(); err != nil {
+			return fmt.Errorf("invalid_chain: %v", err)
+		}
+		if sp.SourceID > 0 && !cc.admin {
+			return errors.New("exit_not_allowed: 只能选择分配给你的订阅组里的节点")
+		}
+		if sp.SourceID > 0 {
+			if _, err := s.Store.Ent.SubSource.Get(ctx, sp.SourceID); err != nil {
+				return errors.New("source_not_found")
+			}
+		} else if cc.userID > 0 {
+			granted, err := s.grantedProfiles(ctx, cc.userID)
+			if err != nil {
+				return err
+			}
+			if !granted[sp.ProfileID] {
+				return errors.New("exit_not_allowed: 这个订阅组没有分配给该用户")
+			}
+		}
+		ob, _, err := s.resolveSpec(ctx, sp, publicOnly)
+		if err != nil {
+			return fmt.Errorf("chain_exit_unavailable: %v", err)
+		}
+		if ob.Protocol == "group" {
+			if err = s.checkGroupSupport(ctx, entry, cc.kernel); err != nil {
+				return fmt.Errorf("group_unsupported: %v", err)
+			}
+		}
+		if probe {
+			return s.probeSpec(ctx, entry, ob, publicOnly)
+		}
 		return nil
 	case "socks5":
 		if strings.TrimSpace(spec.Address) == "" || spec.Port <= 0 || spec.Port > 65535 || len(spec.Username) > 255 || len(spec.Password) > 255 {
@@ -247,10 +309,23 @@ func (s *Server) applyChain(m *ent.NodeMutation, spec ChainSpec) error {
 	case "node":
 		m.SetChainKind(node.ChainKindNode)
 		m.SetChainNodeID(spec.NodeID)
+	case "source":
+		m.SetChainKind(node.ChainKindSource)
+		m.SetChainSource(spec.source().toMap())
 	default:
 		m.SetChainKind(node.ChainKindNone)
 	}
+	if spec.Kind != "source" {
+		m.ClearChainSource()
+	}
 	return nil
+}
+
+// afterChainSource 保存后解析一次订阅源出口（节点保存之后才有编号）。
+func (s *Server) afterChainSource(ctx context.Context, n *ent.Node) {
+	if n.ChainKind == node.ChainKindSource {
+		_ = s.refreshSourceExit(ctx, "node:"+itoa(n.ID), n.GateID, specOf(n.ChainSource), false)
+	}
 }
 
 // editableSettings 是高级编辑可改的入站字段；身份、证书文件路径与客户端列表由系统管理。
@@ -310,8 +385,10 @@ func (s *Server) createNode(c *gin.Context) {
 		CertID        int            `json:"cert_id"`
 		RealityTarget string         `json:"reality_target"`
 		Chain         ChainSpec      `json:"chain"`
-		Settings      map[string]any `json:"settings"` // 高级：覆盖预设参数
+		Settings      map[string]any `json:"settings"` // 高级：只能改预设列出的字段
 		SkipProbe     bool           `json:"skip_probe"`
+		// UserIDs 是第 ④ 步勾选的用户：把这个节点分给他们，保存后返回他们的分享链接。
+		UserIDs []int `json:"user_ids"`
 	}
 	if !bind(c, &req) {
 		return
@@ -333,31 +410,39 @@ func (s *Server) createNode(c *gin.Context) {
 		return
 	}
 	for k, v := range req.Settings {
+		if !p.advancedAllowed(k) {
+			failDetail(c, 400, "invalid_node_settings", "这个方案不能修改字段 "+k, nil)
+			return
+		}
 		st[k] = v
+	}
+	if p.ID == "hysteria2" && st["hy2_obfs"] == "" {
+		delete(st, "hy2_obfs")
+		delete(st, "hy2_obfs_password")
 	}
 	var certID *int
 	switch {
 	case req.CertID > 0:
+		// 高级：手动选择的证书（上传的或已有的）。
 		ct, err := s.Store.Ent.Certificate.Get(ctx, req.CertID)
 		if err != nil {
 			failure(c, 404, "cert_not_found")
 			return
 		}
 		certID, st["tls_sni"] = &ct.ID, ct.Domain
-	case p.Cert == "required":
-		failure(c, 400, "cert_required")
-		return
-	case p.Cert == "self_signed_ok":
-		domain := g.PublicHost
-		if domain == "" {
-			domain = "gate-" + itoa(g.ID) + ".invalid"
-		}
-		ct, err := s.saveCert(c, fmt.Sprintf("%s 自签", g.Name), domain, true, "", "")
+	case p.Cert == "required" || p.Cert == "self_signed_ok":
+		// 不选证书时由中心为这台 VPS 准备：自签共用一张；Trojan / WS + TLS 用这台 VPS 公网 IP 的证书。
+		ct, sni, err := s.certForNode(ctx, g, p.Cert)
 		if err != nil {
-			failure(c, 500, err.Error())
+			var why errCertUnavailable
+			if errors.As(err, &why) {
+				failDetail(c, 422, "cert_unavailable", err.Error(), nil)
+			} else {
+				failure(c, 500, "cert_failed")
+			}
 			return
 		}
-		certID, st["tls_sni"] = &ct.ID, ct.Domain
+		certID, st["tls_sni"] = &ct.ID, sni
 	}
 	// REALITY 目标：手动填写的只用它；否则按 VPS 实测的合适站点从快到慢，保存前的真实连接测试不通就换下一个。
 	var realityCandidates []string
@@ -388,7 +473,7 @@ func (s *Server) createNode(c *gin.Context) {
 		st["reality_dest"], st["reality_server_names"] = realityCandidates[0]+":443", realityCandidates[0]
 	}
 	if req.Port == 0 {
-		if req.Port, err = s.AllocateNodePort(ctx, g); err != nil {
+		if req.Port, err = s.allocateNodePort(ctx, g, p.Security == "reality"); err != nil {
 			failure(c, 409, "no_free_port")
 			return
 		}
@@ -400,7 +485,7 @@ func (s *Server) createNode(c *gin.Context) {
 		failDetail(c, 400, "invalid_node_settings", err.Error(), nil)
 		return
 	}
-	if err = s.validateChain(ctx, g, 0, req.Chain, false, !req.SkipProbe); err != nil {
+	if err = s.validateChain(ctx, g, 0, req.Chain, false, !req.SkipProbe, chainCtx{kernel: p.Kernel, admin: true}); err != nil {
 		failErr(c, 422, err)
 		return
 	}
@@ -447,14 +532,61 @@ func (s *Server) createNode(c *gin.Context) {
 		failure(c, 409, "node_conflict")
 		return
 	}
+	// 第 ④ 步勾选的用户：没有「全部节点」的用户把这个节点加进可用节点（「全部节点」的用户本来就有）。
+	for _, uid := range dedupe(req.UserIDs) {
+		u, err := s.Store.Ent.User.Get(ctx, uid)
+		if err != nil || u.AllNodes || contains(u.NodeIds, n.ID) {
+			continue
+		}
+		_ = u.Update().SetNodeIds(append(append([]int{}, u.NodeIds...), n.ID)).Exec(ctx)
+	}
 	if err = s.afterNodeChange(ctx, n); err != nil {
 		failure(c, 500, "sync_failed")
 		return
 	}
+	s.afterChainSource(ctx, n)
 	s.audit(c, "node.create", "node:"+itoa(n.ID), "ok")
 	view := s.nodeView(ctx, n)
 	view["tested"] = tested
+	view["shares"] = s.nodeShares(ctx, n, req.UserIDs)
 	c.JSON(200, view)
+}
+
+// nodeShares 是勾选用户在这个节点上的分享链接（每条包含该节点的链接一条）；拿不到时说明原因。
+func (s *Server) nodeShares(ctx context.Context, n *ent.Node, uids []int) []gin.H {
+	out := []gin.H{}
+	for _, uid := range dedupe(uids) {
+		u, err := s.Store.Ent.User.Get(ctx, uid)
+		if err != nil {
+			continue
+		}
+		item := gin.H{"user_id": u.ID, "email": u.Email, "name": u.Name, "links": []gin.H{}}
+		if n.Protocol == "wireguard" && u.Quota > 0 {
+			item["error"] = "WireGuard 只给不限额度的用户"
+			out = append(out, item)
+			continue
+		}
+		links, _ := s.Store.Ent.Link.Query().Where(link.UserIDEQ(u.ID), link.EnabledEQ(true)).All(ctx)
+		var got []gin.H
+		for _, l := range links {
+			entries, err := s.linkEntries(ctx, u, l)
+			if err != nil {
+				continue
+			}
+			for _, e := range entries {
+				if e.NodeID == n.ID && e.ChainID == 0 {
+					got = append(got, gin.H{"link": firstNonEmpty(l.Name, "订阅"), "uri": e.URI, "error": e.Error})
+				}
+			}
+		}
+		if len(got) == 0 {
+			item["error"] = "这个用户的链接都只选了部分节点，没有包含新节点；可以在用户详情里给链接加上"
+		} else {
+			item["links"] = got
+		}
+		out = append(out, item)
+	}
+	return out
 }
 
 func probeHostPattern(host string) bool {
@@ -567,7 +699,7 @@ func (s *Server) updateNode(c *gin.Context) {
 	}
 	upd.SetSettings(st)
 	if req.Chain != nil {
-		if err = s.validateChain(ctx, g, n.ID, *req.Chain, false, !req.SkipProbe); err != nil {
+		if err = s.validateChain(ctx, g, n.ID, *req.Chain, false, !req.SkipProbe, chainCtx{kernel: n.Kernel, admin: true}); err != nil {
 			failErr(c, 422, err)
 			return
 		}
@@ -584,6 +716,7 @@ func (s *Server) updateNode(c *gin.Context) {
 		failure(c, 500, "sync_failed")
 		return
 	}
+	s.afterChainSource(ctx, n)
 	s.audit(c, "node.update", "node:"+itoa(n.ID), "ok")
 	c.JSON(200, s.nodeView(ctx, n))
 }

@@ -22,6 +22,8 @@ const (
 	FieldName = "name"
 	// FieldExitKind holds the string denoting the exit_kind field in the database.
 	FieldExitKind = "exit_kind"
+	// FieldExitSource holds the string denoting the exit_source field in the database.
+	FieldExitSource = "exit_source"
 	// FieldExitAddress holds the string denoting the exit_address field in the database.
 	FieldExitAddress = "exit_address"
 	// FieldExitPort holds the string denoting the exit_port field in the database.
@@ -47,6 +49,7 @@ var Columns = []string{
 	FieldEntryNodeID,
 	FieldName,
 	FieldExitKind,
+	FieldExitSource,
 	FieldExitAddress,
 	FieldExitPort,
 	FieldExitUsername,
@@ -94,6 +97,7 @@ type ExitKind string
 const (
 	ExitKindSocks5 ExitKind = "socks5"
 	ExitKindNode   ExitKind = "node"
+	ExitKindSource ExitKind = "source"
 )
 
 func (ek ExitKind) String() string {
@@ -103,7 +107,7 @@ func (ek ExitKind) String() string {
 // ExitKindValidator is a validator for the "exit_kind" field enum values. It is called by the builders before save.
 func ExitKindValidator(ek ExitKind) error {
 	switch ek {
-	case ExitKindSocks5, ExitKindNode:
+	case ExitKindSocks5, ExitKindNode, ExitKindSource:
 		return nil
 	default:
 		return fmt.Errorf("chain: invalid enum value for exit_kind field: %q", ek)

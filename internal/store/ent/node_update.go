@@ -220,6 +220,18 @@ func (_u *NodeUpdate) SetNillableChainKind(v *node.ChainKind) *NodeUpdate {
 	return _u
 }
 
+// SetChainSource sets the "chain_source" field.
+func (_u *NodeUpdate) SetChainSource(v map[string]interface{}) *NodeUpdate {
+	_u.mutation.SetChainSource(v)
+	return _u
+}
+
+// ClearChainSource clears the value of the "chain_source" field.
+func (_u *NodeUpdate) ClearChainSource() *NodeUpdate {
+	_u.mutation.ClearChainSource()
+	return _u
+}
+
 // SetChainAddress sets the "chain_address" field.
 func (_u *NodeUpdate) SetChainAddress(v string) *NodeUpdate {
 	_u.mutation.SetChainAddress(v)
@@ -455,6 +467,12 @@ func (_u *NodeUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.ChainKind(); ok {
 		_spec.SetField(node.FieldChainKind, field.TypeEnum, value)
 	}
+	if value, ok := _u.mutation.ChainSource(); ok {
+		_spec.SetField(node.FieldChainSource, field.TypeJSON, value)
+	}
+	if _u.mutation.ChainSourceCleared() {
+		_spec.ClearField(node.FieldChainSource, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.ChainAddress(); ok {
 		_spec.SetField(node.FieldChainAddress, field.TypeString, value)
 	}
@@ -689,6 +707,18 @@ func (_u *NodeUpdateOne) SetNillableChainKind(v *node.ChainKind) *NodeUpdateOne 
 	if v != nil {
 		_u.SetChainKind(*v)
 	}
+	return _u
+}
+
+// SetChainSource sets the "chain_source" field.
+func (_u *NodeUpdateOne) SetChainSource(v map[string]interface{}) *NodeUpdateOne {
+	_u.mutation.SetChainSource(v)
+	return _u
+}
+
+// ClearChainSource clears the value of the "chain_source" field.
+func (_u *NodeUpdateOne) ClearChainSource() *NodeUpdateOne {
+	_u.mutation.ClearChainSource()
 	return _u
 }
 
@@ -956,6 +986,12 @@ func (_u *NodeUpdateOne) sqlSave(ctx context.Context) (_node *Node, err error) {
 	}
 	if value, ok := _u.mutation.ChainKind(); ok {
 		_spec.SetField(node.FieldChainKind, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.ChainSource(); ok {
+		_spec.SetField(node.FieldChainSource, field.TypeJSON, value)
+	}
+	if _u.mutation.ChainSourceCleared() {
+		_spec.ClearField(node.FieldChainSource, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.ChainAddress(); ok {
 		_spec.SetField(node.FieldChainAddress, field.TypeString, value)

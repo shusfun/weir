@@ -1516,7 +1516,7 @@ func TestStoreRejectsUnsupportedProtocol(t *testing.T) {
 	}
 	defer store.Close()
 
-	for _, protocol := range []string{"wireguard"} {
+	for _, protocol := range []string{"snell", "anytls-server"} {
 		_, err = store.CreateInbound(context.Background(), db.CreateInboundParams{
 			Protocol: protocol,
 			Port:     8080,

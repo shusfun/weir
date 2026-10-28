@@ -23,6 +23,14 @@ type Certificate struct {
 	Domain string `json:"domain,omitempty"`
 	// Source holds the value of the "source" field.
 	Source certificate.Source `json:"source,omitempty"`
+	// GateID holds the value of the "gate_id" field.
+	GateID *int `json:"gate_id,omitempty"`
+	// Status holds the value of the "status" field.
+	Status certificate.Status `json:"status,omitempty"`
+	// LastError holds the value of the "last_error" field.
+	LastError string `json:"last_error,omitempty"`
+	// RenewedAt holds the value of the "renewed_at" field.
+	RenewedAt *time.Time `json:"renewed_at,omitempty"`
 	// CertPem holds the value of the "cert_pem" field.
 	CertPem string `json:"cert_pem,omitempty"`
 	// KeyPem holds the value of the "key_pem" field.
@@ -43,11 +51,11 @@ func (*Certificate) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case certificate.FieldID:
+		case certificate.FieldID, certificate.FieldGateID:
 			values[i] = new(sql.NullInt64)
-		case certificate.FieldName, certificate.FieldDomain, certificate.FieldSource, certificate.FieldCertPem, certificate.FieldKeyPem, certificate.FieldSha256:
+		case certificate.FieldName, certificate.FieldDomain, certificate.FieldSource, certificate.FieldStatus, certificate.FieldLastError, certificate.FieldCertPem, certificate.FieldKeyPem, certificate.FieldSha256:
 			values[i] = new(sql.NullString)
-		case certificate.FieldNotAfter, certificate.FieldCreatedAt, certificate.FieldUpdatedAt:
+		case certificate.FieldRenewedAt, certificate.FieldNotAfter, certificate.FieldCreatedAt, certificate.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -87,6 +95,32 @@ func (_m *Certificate) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field source", values[i])
 			} else if value.Valid {
 				_m.Source = certificate.Source(value.String)
+			}
+		case certificate.FieldGateID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field gate_id", values[i])
+			} else if value.Valid {
+				_m.GateID = new(int)
+				*_m.GateID = int(value.Int64)
+			}
+		case certificate.FieldStatus:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field status", values[i])
+			} else if value.Valid {
+				_m.Status = certificate.Status(value.String)
+			}
+		case certificate.FieldLastError:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field last_error", values[i])
+			} else if value.Valid {
+				_m.LastError = value.String
+			}
+		case certificate.FieldRenewedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field renewed_at", values[i])
+			} else if value.Valid {
+				_m.RenewedAt = new(time.Time)
+				*_m.RenewedAt = value.Time
 			}
 		case certificate.FieldCertPem:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -169,6 +203,22 @@ func (_m *Certificate) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("source=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Source))
+	builder.WriteString(", ")
+	if v := _m.GateID; v != nil {
+		builder.WriteString("gate_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("status=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Status))
+	builder.WriteString(", ")
+	builder.WriteString("last_error=")
+	builder.WriteString(_m.LastError)
+	builder.WriteString(", ")
+	if v := _m.RenewedAt; v != nil {
+		builder.WriteString("renewed_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("cert_pem=")
 	builder.WriteString(_m.CertPem)

@@ -84,6 +84,12 @@ func (_c *AuditCreate) SetNillableIP(v *string) *AuditCreate {
 	return _c
 }
 
+// SetDetail sets the "detail" field.
+func (_c *AuditCreate) SetDetail(v map[string]interface{}) *AuditCreate {
+	_c.mutation.SetDetail(v)
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *AuditCreate) SetCreatedAt(v time.Time) *AuditCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -242,6 +248,10 @@ func (_c *AuditCreate) createSpec() (*Audit, *sqlgraph.CreateSpec) {
 		_spec.SetField(audit.FieldIP, field.TypeString, value)
 		_node.IP = value
 	}
+	if value, ok := _c.mutation.Detail(); ok {
+		_spec.SetField(audit.FieldDetail, field.TypeJSON, value)
+		_node.Detail = value
+	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(audit.FieldCreatedAt, field.TypeTime, value)
 		_node.CreatedAt = value
@@ -364,6 +374,24 @@ func (u *AuditUpsert) UpdateIP() *AuditUpsert {
 	return u
 }
 
+// SetDetail sets the "detail" field.
+func (u *AuditUpsert) SetDetail(v map[string]interface{}) *AuditUpsert {
+	u.Set(audit.FieldDetail, v)
+	return u
+}
+
+// UpdateDetail sets the "detail" field to the value that was provided on create.
+func (u *AuditUpsert) UpdateDetail() *AuditUpsert {
+	u.SetExcluded(audit.FieldDetail)
+	return u
+}
+
+// ClearDetail clears the value of the "detail" field.
+func (u *AuditUpsert) ClearDetail() *AuditUpsert {
+	u.SetNull(audit.FieldDetail)
+	return u
+}
+
 // UpdateNewValues updates the mutable fields using the new values that were set on create.
 // Using this option is equivalent to using:
 //
@@ -483,6 +511,27 @@ func (u *AuditUpsertOne) SetIP(v string) *AuditUpsertOne {
 func (u *AuditUpsertOne) UpdateIP() *AuditUpsertOne {
 	return u.Update(func(s *AuditUpsert) {
 		s.UpdateIP()
+	})
+}
+
+// SetDetail sets the "detail" field.
+func (u *AuditUpsertOne) SetDetail(v map[string]interface{}) *AuditUpsertOne {
+	return u.Update(func(s *AuditUpsert) {
+		s.SetDetail(v)
+	})
+}
+
+// UpdateDetail sets the "detail" field to the value that was provided on create.
+func (u *AuditUpsertOne) UpdateDetail() *AuditUpsertOne {
+	return u.Update(func(s *AuditUpsert) {
+		s.UpdateDetail()
+	})
+}
+
+// ClearDetail clears the value of the "detail" field.
+func (u *AuditUpsertOne) ClearDetail() *AuditUpsertOne {
+	return u.Update(func(s *AuditUpsert) {
+		s.ClearDetail()
 	})
 }
 
@@ -771,6 +820,27 @@ func (u *AuditUpsertBulk) SetIP(v string) *AuditUpsertBulk {
 func (u *AuditUpsertBulk) UpdateIP() *AuditUpsertBulk {
 	return u.Update(func(s *AuditUpsert) {
 		s.UpdateIP()
+	})
+}
+
+// SetDetail sets the "detail" field.
+func (u *AuditUpsertBulk) SetDetail(v map[string]interface{}) *AuditUpsertBulk {
+	return u.Update(func(s *AuditUpsert) {
+		s.SetDetail(v)
+	})
+}
+
+// UpdateDetail sets the "detail" field to the value that was provided on create.
+func (u *AuditUpsertBulk) UpdateDetail() *AuditUpsertBulk {
+	return u.Update(func(s *AuditUpsert) {
+		s.UpdateDetail()
+	})
+}
+
+// ClearDetail clears the value of the "detail" field.
+func (u *AuditUpsertBulk) ClearDetail() *AuditUpsertBulk {
+	return u.Update(func(s *AuditUpsert) {
+		s.ClearDetail()
 	})
 }
 

@@ -14,10 +14,12 @@ import (
 )
 
 // dsh 子域名网关：请求的 Host 是设置里的 dsh 子域名时，由这里处理，永远不会进入 Weir 的页面与接口。
-// 只有同时满足以下条件才转给 dsh，否则一律 403「拒绝访问」，不返回任何 dsh 内容：
+// 只有同时满足以下条件才转给 dsh，否则一律返回同一个空正文 404（不区分原因、不带 Weir 特有的响应头），
+// 看起来就像这个域名不存在：
 //   - 由控制台签发的一次性票据进入（60 秒、只能用一次、绑定管理员会话），换得网关会话；
 //   - 浏览器标明请求来自同站（Sec-Fetch-Site），页面只能作为 iframe 加载（Sec-Fetch-Dest）；
-//   - 网关会话对应的管理员会话仍然有效、账号仍是启用的管理员（退出登录或降级立即失效）。
+//   - 网关会话对应的管理员会话仍然有效、账号仍是启用的管理员（退出登录或降级立即失效）；
+//   - 经 HTTPS 访问（本地开发直连回环除外），dsh 正在运行。
 // dsh 自己只监听回环；启动令牌只在这里用来换取 dsh 的会话 Cookie，从不出现在浏览器里。
 
 const (
@@ -41,15 +43,29 @@ func (s *Server) dshGatewayMiddleware(c *gin.Context) {
 	}
 	c.Abort()
 	s.serveDSH(c.Writer, c.Request)
+	// 空正文的 404 也要立即写出，否则 gin 会在未匹配路由时补上自己的默认正文。
+	c.Writer.WriteHeaderNow()
 }
 
+// dshDeny 是唯一的拒绝响应：404、正文为空，只有 Go 默认的 Date / Content-Length。
 func dshDeny(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
-	w.WriteHeader(http.StatusForbidden)
-	_, _ = w.Write([]byte("拒绝访问\n"))
+	for k := range w.Header() {
+		delete(w.Header(), k)
+	}
+	w.WriteHeader(http.StatusNotFound)
+}
+
+// dshTransport 只接受 HTTPS；本地开发直接连回环、不带转发头的明文请求放行。
+func dshTransport(r *http.Request) bool {
+	if requestSecure(r) {
+		return true
+	}
+	for _, h := range []string{"X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto", "X-Real-IP", "Forwarded"} {
+		if r.Header.Get(h) != "" {
+			return false
+		}
+	}
+	return fromLocalProxy(r)
 }
 
 // browserContext 检查浏览器自带、页面脚本无法伪造的请求头：普通请求看 Fetch Metadata（必须来自同站，
@@ -87,7 +103,7 @@ func (s *Server) validGrant(r *http.Request, g dshGrant) bool {
 }
 
 func (s *Server) serveDSH(w http.ResponseWriter, r *http.Request) {
-	if !browserContext(r) {
+	if !dshTransport(r) || !browserContext(r) {
 		dshDeny(w)
 		return
 	}
@@ -113,7 +129,7 @@ func (s *Server) serveDSH(w http.ResponseWriter, r *http.Request) {
 	}
 	addr, _, running := s.dshEndpoint()
 	if !running {
-		http.Error(w, "dsh 未运行", http.StatusServiceUnavailable)
+		dshDeny(w)
 		return
 	}
 	s.proxyDSH(w, r, addr, g.Origin)
@@ -139,7 +155,7 @@ func (s *Server) openDSH(w http.ResponseWriter, r *http.Request) {
 	}
 	addr, token, running := s.dshEndpoint()
 	if !running {
-		http.Error(w, "dsh 未运行", http.StatusServiceUnavailable)
+		dshDeny(w)
 		return
 	}
 	req, _ := http.NewRequestWithContext(r.Context(), http.MethodGet, "http://"+addr+"/?token="+url.QueryEscape(token), nil)
@@ -147,12 +163,12 @@ func (s *Server) openDSH(w http.ResponseWriter, r *http.Request) {
 	client := &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := client.Do(req)
 	if err != nil {
-		http.Error(w, "dsh 不可用", http.StatusBadGateway)
+		dshDeny(w)
 		return
 	}
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusSeeOther {
-		http.Error(w, "dsh 拒绝了启动令牌", http.StatusBadGateway)
+		dshDeny(w)
 		return
 	}
 	secure := requestSecure(r)
@@ -165,7 +181,7 @@ func (s *Server) openDSH(w http.ResponseWriter, r *http.Request) {
 	err = s.Store.KV.Set(r.Context(), "dsh-gw:"+digest(session), string(b), dshGateTTL)
 	s.state.RUnlock()
 	if err != nil {
-		http.Error(w, "网关会话不可用", http.StatusServiceUnavailable)
+		dshDeny(w)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: dshGateCookie, Value: session, Path: "/", MaxAge: int(dshGateTTL.Seconds()), HttpOnly: true, Secure: secure, SameSite: http.SameSiteStrictMode})
@@ -221,9 +237,7 @@ func (s *Server) proxyDSH(w http.ResponseWriter, r *http.Request, addr, origin s
 			}
 			return nil
 		},
-		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
-			http.Error(w, "dsh 不可用", http.StatusBadGateway)
-		},
+		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) { dshDeny(w) },
 	}
 	proxy.ServeHTTP(w, r)
 }

@@ -21,6 +21,32 @@ type Heartbeat struct {
 	ListeningPorts []ListeningPort   `json:"listening_ports"`
 	Kernels        map[string]string `json:"kernels"` // 实际运行的内核版本；缺失表示未运行
 	Host           *HostSample       `json:"host,omitempty"`
+	Center         string            `json:"center,omitempty"` // Gate 正在连接的中心地址
+	Panel          *PanelStatus      `json:"panel,omitempty"`
+	// PanelCerts 是本机 1Panel 证书的当前状态（证书 ID → 摘要与到期），1Panel 续签后中心据此更新。
+	PanelCerts map[string]PanelCert `json:"panel_certs,omitempty"`
+}
+
+// PanelStatus 是 Gate 本机 1Panel 的状态。API 密钥只存在 Gate 本机（root 可读），从不上报。
+type PanelStatus struct {
+	Detected   bool   `json:"detected"`
+	Configured bool   `json:"configured"`
+	Version    string `json:"version,omitempty"`
+	Error      string `json:"error,omitempty"`
+}
+
+// PanelCert 是 1Panel 管理的一张证书：证书正文（公开）、证书与私钥一起的摘要、到期时间。
+type PanelCert struct {
+	CertPEM  string    `json:"cert_pem,omitempty"`
+	SHA256   string    `json:"sha256"`
+	NotAfter time.Time `json:"not_after"`
+}
+
+// HeartbeatReply 是中心对心跳的回复。Center 为中心记录的公共地址；与 Gate 当前连接的不同时，
+// Gate 先用新地址完成设备认证，成功后改用新地址（单机角色经回环连接，不切换）。
+type HeartbeatReply struct {
+	ConfigRevision int64  `json:"config_revision"`
+	Center         string `json:"center,omitempty"`
 }
 
 type ListeningPort struct {
@@ -78,6 +104,13 @@ const (
 	ActionUninstall      = "gate.uninstall"
 	// ActionNodeTest 在 Gate 本机回环上实测一份候选入站：起服务端内核与 sing-box 客户端，经代理真实下载。
 	ActionNodeTest = "node.test"
+	// ActionACMEHTTP01 让 Gate 临时在 80 端口应答一次 ACME HTTP-01 验证（只回应验证路径，用完即关）。
+	ActionACMEHTTP01 = "acme.http01"
+	// ActionPanelConfigure 把管理员填写的 1Panel API 密钥交给 Gate（经一次性编号取回，中心不落库）。
+	ActionPanelConfigure = "panel.configure"
+	ActionPanelRemove    = "panel.remove"
+	// ActionPanelCert 让 Gate 经本机 1Panel 申请（或找到已有的）本机 IP 证书。
+	ActionPanelCert = "panel.cert"
 )
 
 type ActionResult struct {

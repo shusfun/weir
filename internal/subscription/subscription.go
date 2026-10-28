@@ -79,6 +79,44 @@ type Settings struct {
 	ZeroRTT           bool               `json:"zero_rtt,omitempty"`
 	SPKI              string             `json:"spki,omitempty"`
 	CertificatePin    string             `json:"certificate_pin,omitempty"`
+	// ShadowTLS 是 Shadowsocks 前面的 ShadowTLS v3 握手伪装（SIP003 plugin=shadow-tls;host=…;password=…;version=3）。
+	ShadowTLS *ShadowTLSSettings `json:"shadowtls,omitempty"`
+}
+
+type ShadowTLSSettings struct {
+	Host     string `json:"host"`
+	Password string `json:"password"`
+	Version  int    `json:"version"`
+}
+
+// parseShadowTLSPlugin 解析 SIP003 插件参数；只接受 shadow-tls v3。
+func parseShadowTLSPlugin(v string) (*ShadowTLSSettings, error) {
+	parts := strings.Split(v, ";")
+	if len(parts) == 0 || parts[0] != "shadow-tls" {
+		return nil, errors.New("unsupported plugin")
+	}
+	st := &ShadowTLSSettings{Version: 3}
+	for _, kv := range parts[1:] {
+		k, val, _ := strings.Cut(kv, "=")
+		switch k {
+		case "host":
+			st.Host = val
+		case "password":
+			st.Password = val
+		case "version":
+			n, err := strconv.Atoi(val)
+			if err != nil || n != 3 {
+				return nil, errors.New("only shadow-tls v3 is supported")
+			}
+			st.Version = n
+		default:
+			return nil, errors.New("unsupported shadow-tls option")
+		}
+	}
+	if st.Host == "" || st.Password == "" || len(st.Host) > 253 || strings.ContainsAny(st.Host, "/:@ ") {
+		return nil, errors.New("invalid shadow-tls options")
+	}
+	return st, nil
 }
 
 type HTTPFetcher struct {
@@ -459,10 +497,18 @@ func parseSSLink(raw string) (ParsedLink, error) {
 	if err != nil {
 		return ParsedLink{}, errors.New("invalid query encoding")
 	}
+	var stls *ShadowTLSSettings
+	if p := query["plugin"]; len(p) == 1 && strings.HasPrefix(p[0], "shadow-tls") {
+		if stls, err = parseShadowTLSPlugin(p[0]); err != nil {
+			return ParsedLink{}, err
+		}
+		query.Del("plugin")
+	}
 	settings, err := settingsFromQuery(query, address)
 	if err != nil {
 		return ParsedLink{}, err
 	}
+	settings.ShadowTLS = stls
 	settings.Method = strings.TrimSpace(parts[0])
 	settingsJSON, _ := json.Marshal(settings)
 	item := ParsedLink{

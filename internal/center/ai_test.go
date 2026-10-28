@@ -108,17 +108,27 @@ func TestDSHNodeDraftNeverLeaksSecretsAndNeedsPassingTest(t *testing.T) {
 	}()
 	g.serveNodeTests(t, 1, &seen, stop)
 
+	nodeDraft := func(token string, set map[string]any, explain string) (string, bool) {
+		return toolText(t, h, token, "submit_draft", map[string]any{"explain": explain,
+			"steps": []any{map[string]any{"action": "node.update", "args": map[string]any{"node_id": nid, "set": set}}}})
+	}
 	// 改私钥被系统拒绝；第一次合法草稿 Gate 实测失败，原因交回 dsh；修改后通过，等待管理员确认。
-	if text, isErr := toolText(t, h, m.webToken, "submit_node_draft", map[string]any{"node_id": nid, "set": map[string]any{"reality_private_key": "stolen"}, "explain": "换密钥"}); !isErr || !strings.Contains(text, "机密") {
+	if text, isErr := nodeDraft(m.webToken, map[string]any{"reality_private_key": "stolen"}, "换密钥"); !isErr || !strings.Contains(text, "机密") {
 		t.Fatalf("secret change = %q", text)
 	}
-	if text, isErr := toolText(t, h, m.webToken, "submit_node_draft", map[string]any{"node_id": nid, "set": map[string]any{"reality_server_names": "www.apple.com", "reality_dest": "www.apple.com:443"}, "explain": "换伪装目标"}); !isErr || !strings.Contains(text, "未通过实测") {
+	// 模型不能自己声明「已实测」来跳过实测。
+	if text, isErr := toolText(t, h, m.webToken, "submit_draft", map[string]any{"explain": "x", "steps": []any{map[string]any{"action": "node.update", "tested": "anything",
+		"args": map[string]any{"node_id": nid, "set": map[string]any{"reality_server_names": "www.apple.com", "reality_dest": "www.apple.com:443"}}}}}); !isErr || !strings.Contains(text, "未通过实测") {
 		t.Fatalf("failed draft = %q", text)
 	}
 	if pending := mustJSON(t, admin, "GET", "/api/v1/admin/ai/drafts", nil, 200)["drafts"].([]any); len(pending) != 0 {
 		t.Fatalf("failed drafts must not ask for confirmation: %v", pending)
 	}
-	text, isErr := toolText(t, h, m.analystToken, "submit_node_draft", map[string]any{"node_id": nid, "set": map[string]any{"reality_server_names": "www.amazon.com", "reality_dest": "www.amazon.com:443"}, "explain": "改用 amazon"})
+	// 后台分析不能改节点。
+	if _, isErr := nodeDraft(m.analystToken, map[string]any{"reality_server_names": "www.amazon.com", "reality_dest": "www.amazon.com:443"}, "改用 amazon"); !isErr {
+		t.Fatal("analysis must not submit node drafts")
+	}
+	text, isErr := nodeDraft(m.webToken, map[string]any{"reality_server_names": "www.amazon.com", "reality_dest": "www.amazon.com:443"}, "改用 amazon")
 	if isErr || !strings.Contains(text, "管理员确认") || len(seen) != 2 {
 		t.Fatalf("passing draft = %q (gate tests %d)", text, len(seen))
 	}
@@ -131,23 +141,29 @@ func TestDSHNodeDraftNeverLeaksSecretsAndNeedsPassingTest(t *testing.T) {
 		t.Fatalf("pending = %v", pending)
 	}
 	d := pending[0].(map[string]any)
-	if b, _ := json.Marshal(d); strings.Contains(string(b), priv) || d["source"] != "analysis" || d["node_name"] == "" {
+	step := d["steps"].([]any)[0].(map[string]any)
+	if b, _ := json.Marshal(d); strings.Contains(string(b), priv) || d["source"] != "dsh" || !strings.Contains(step["title"].(string), node["name"].(string)) {
 		t.Fatalf("draft view = %s", b)
 	}
-	id := d["id"].(string)
-	applied := mustJSON(t, admin, "POST", "/api/v1/admin/ai/drafts/"+id+"/apply", nil, 200)
-	st := applied["settings"].(map[string]any)
-	if st["reality_server_names"] != "www.amazon.com" || st["reality_private_key"] != priv {
-		t.Fatalf("applied settings = %v", st)
+	// 确认窗里每个改动的字段都有中文名或字段名、改前 / 改后。
+	for _, f := range step["fields"].([]any) {
+		if fm := f.(map[string]any); fm["key"] == "set.reality_dest" && (fm["before"] != "www.microsoft.com:443" || fm["display"] != "www.amazon.com:443" || fm["changed"] != true) {
+			t.Fatalf("field = %v", fm)
+		}
 	}
+	id := d["id"].(string)
+	mustJSON(t, admin, "POST", "/api/v1/admin/ai/drafts/"+id+"/apply", nil, 200)
 	n, _ := s.Store.Ent.Node.Get(t.Context(), nid)
-	if n.Settings["reality_dest"] != "www.amazon.com:443" {
+	if n.Settings["reality_dest"] != "www.amazon.com:443" || n.Settings["reality_server_names"] != "www.amazon.com" || n.Settings["reality_private_key"] != priv {
 		t.Fatalf("node not updated: %v", n.Settings)
+	}
+	if len(seen) != 2 {
+		t.Fatalf("confirming an unchanged tested draft must not test again: %d", len(seen))
 	}
 	mustJSON(t, admin, "POST", "/api/v1/admin/ai/drafts/"+id+"/apply", nil, 404)
 
 	// 节点在起草后被改过：草稿作废；放弃的草稿直接删除。
-	toolText(t, h, m.webToken, "submit_node_draft", map[string]any{"node_id": nid, "set": map[string]any{"reality_server_names": "www.apple.com", "reality_dest": "www.apple.com:443"}, "explain": "换回 apple"})
+	nodeDraft(m.webToken, map[string]any{"reality_server_names": "www.apple.com", "reality_dest": "www.apple.com:443"}, "换回 apple")
 	stale := mustJSON(t, admin, "GET", "/api/v1/admin/ai/drafts", nil, 200)["drafts"].([]any)[0].(map[string]any)["id"].(string)
 	cur, _ := s.Store.Ent.Node.Get(t.Context(), nid)
 	changed := map[string]any{}
