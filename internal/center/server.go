@@ -221,6 +221,7 @@ func (s *Server) Router() *gin.Engine {
 	api := r.Group("/api/v1")
 	api.GET("/setup/status", s.setupStatus)
 	api.POST("/setup/verify", s.setupGuard, func(c *gin.Context) { c.JSON(200, gin.H{"valid": true}) })
+	api.POST("/setup/detect-store", s.setupGuard, s.detectStoreHandler)
 	api.POST("/setup/test-store", s.setupGuard, s.testStore)
 	api.POST("/setup/install", s.setupGuard, s.install)
 
@@ -315,7 +316,44 @@ func normalizeStore(cfg store.Config) store.Config {
 	if cfg.Driver == store.DriverSQLite && cfg.SQLitePath == "" {
 		cfg.SQLitePath = DefaultSQLitePath()
 	}
-	return cfg
+	return fillDetectedSecrets(cfg)
+}
+
+// checkInstallTarget 测试连通性，并拒绝已有 Weir 账户的存储（应恢复原配置，不能重新初始化）。
+func checkInstallTarget(ctx context.Context, cfg store.Config) error {
+	if err := store.Check(ctx, cfg); err != nil {
+		return err
+	}
+	has, err := store.HasData(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	if has {
+		return store.ErrExistingData
+	}
+	return nil
+}
+
+var (
+	errStoreOpen   = errors.New("store_connection_failed")
+	errStoreSchema = errors.New("create schema failed")
+)
+
+// storeFailure 把存储错误转成页面能说明原因的错误码；原始错误只写服务日志。
+func storeFailure(c *gin.Context, err error) {
+	fmt.Fprintln(os.Stderr, "setup store:", err)
+	switch {
+	case errors.Is(err, store.ErrExistingData):
+		failure(c, 409, "existing_installation_restore_config")
+	case errors.Is(err, store.ErrPostgresUnavailable):
+		failure(c, 400, "postgres_connection_failed")
+	case errors.Is(err, store.ErrRedisUnavailable):
+		failure(c, 400, "redis_connection_failed")
+	case errors.Is(err, errStoreSchema):
+		failure(c, 500, "store_schema_failed")
+	default:
+		failure(c, 400, "store_connection_failed")
+	}
 }
 
 func (s *Server) testStore(c *gin.Context) {
@@ -325,8 +363,8 @@ func (s *Server) testStore(c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
-	if err := store.Check(ctx, normalizeStore(cfg)); err != nil {
-		failure(c, 400, "store_connection_failed")
+	if err := checkInstallTarget(ctx, normalizeStore(cfg)); err != nil {
+		storeFailure(c, err)
 		return
 	}
 	c.JSON(200, gin.H{"ok": true})
@@ -349,12 +387,15 @@ func (s *Server) install(c *gin.Context) {
 	cfg.Store = normalizeStore(req.Store)
 	st, admin, err := s.finishInstall(c.Request.Context(), cfg, req.Email, req.Password)
 	if err != nil {
-		switch err.Error() {
-		case "already installed", "existing_installation_restore_config":
+		switch {
+		case err.Error() == "already installed":
 			failure(c, 409, "already_installed")
-		case "store_connection_failed":
-			failure(c, 400, err.Error())
+		case err.Error() == "existing_installation_restore_config":
+			failure(c, 409, err.Error())
+		case errors.Is(err, errStoreOpen):
+			storeFailure(c, err)
 		default:
+			fmt.Fprintln(os.Stderr, "setup install:", err)
 			failure(c, 500, "install_failed")
 		}
 		return
@@ -388,9 +429,13 @@ func completeInstall(ctx context.Context, path string, cfg Config, email, passwo
 	if cred, err := readSetupCredential(path); err != nil || cred.Installed {
 		return nil, nil, errors.New("already installed")
 	}
+	// 先确认目标里没有 Weir 账户，再建表：旧版本留下的表结构对不上时，迁移会失败，而且不该在上面重新初始化。
+	if err := checkInstallTarget(ctx, cfg.Store); err != nil {
+		return nil, nil, fmt.Errorf("%w: %w", errStoreOpen, err)
+	}
 	st, err := store.Open(ctx, cfg.Store)
 	if err != nil {
-		return nil, nil, errors.New("store_connection_failed")
+		return nil, nil, fmt.Errorf("%w: %w: %w", errStoreOpen, errStoreSchema, err)
 	}
 	admin, err := createFirstAdmin(ctx, st, email, password)
 	if err != nil {

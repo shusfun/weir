@@ -170,13 +170,38 @@ func RunSetupCLI(path string, in io.Reader, out io.Writer, readSecret func(strin
 		return err
 	}
 	if choice == "2" {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		found := detectStore(ctx)
+		cancel()
+		pgHost, pgPort, pgDB, pgUser, pgSecret := "127.0.0.1", "5432", "gate", "", "数据库密码"
+		if d := found.Postgres; d != nil {
+			pgHost, pgPort = d.Host, strconv.Itoa(d.Port)
+			if d.User != "" {
+				pgUser = d.User
+			}
+			if d.Recommended != "" {
+				pgDB = d.Recommended
+			}
+			if d.HasPassword {
+				pgSecret = "数据库密码（留空使用 1Panel 里的密码）"
+			}
+			fmt.Fprintln(out, describePostgres(d))
+		}
+		redisAddr, redisSecret := "127.0.0.1:6379", "Redis 密码（无则留空）"
+		if d := found.Redis; d != nil {
+			redisAddr = d.Address
+			if d.HasPassword {
+				redisSecret = "Redis 密码（留空使用 1Panel 里的密码）"
+			}
+			fmt.Fprintln(out, describeRedis(d))
+		}
 		pg := store.PostgresConfig{SSLMode: "disable"}
 		var port string
 		for _, f := range []struct {
 			label string
 			dst   *string
 			def   string
-		}{{"PostgreSQL 主机", &pg.Host, "127.0.0.1"}, {"PostgreSQL 端口", &port, "5432"}, {"数据库名", &pg.Database, "gate"}, {"数据库用户", &pg.User, ""}} {
+		}{{"PostgreSQL 主机", &pg.Host, pgHost}, {"PostgreSQL 端口", &port, pgPort}, {"数据库名", &pg.Database, pgDB}, {"数据库用户", &pg.User, pgUser}} {
 			if *f.dst, err = p.ask(f.label, f.def); err != nil {
 				return err
 			}
@@ -184,20 +209,20 @@ func RunSetupCLI(path string, in io.Reader, out io.Writer, readSecret func(strin
 		if pg.Port, err = strconv.Atoi(port); err != nil || pg.Port < 1 || pg.Port > 65535 {
 			return errors.New("PostgreSQL 端口无效")
 		}
-		if pg.Password, err = readSecret("数据库密码"); err != nil {
+		if pg.Password, err = readSecret(pgSecret); err != nil {
 			return err
 		}
 		rc := store.RedisConfig{}
-		if rc.Address, err = p.ask("Redis 地址", "127.0.0.1:6379"); err != nil {
+		if rc.Address, err = p.ask("Redis 地址", redisAddr); err != nil {
 			return err
 		}
-		if rc.Username, err = p.ask("Redis 用户（无则留空）", ""); err != nil {
+		if rc.Username, err = p.ask("Redis ACL 用户（只设了密码的 Redis 留空）", ""); err != nil {
 			return err
 		}
-		if rc.Password, err = readSecret("Redis 密码（无则留空）"); err != nil {
+		if rc.Password, err = readSecret(redisSecret); err != nil {
 			return err
 		}
-		cfg.Store = store.Config{Driver: store.DriverPostgres, Postgres: pg, Redis: rc}
+		cfg.Store = fillDetectedSecrets(store.Config{Driver: store.DriverPostgres, Postgres: pg, Redis: rc})
 	} else {
 		path, err := p.ask("SQLite 文件", DefaultSQLitePath())
 		if err != nil {
@@ -207,7 +232,9 @@ func RunSetupCLI(path string, in io.Reader, out io.Writer, readSecret func(strin
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if err = store.Check(ctx, cfg.Store); err != nil {
+	if err = checkInstallTarget(ctx, cfg.Store); errors.Is(err, store.ErrExistingData) {
+		return errors.New("这个存储里已有 Weir 账户：要继续用这些数据请恢复原配置文件，否则换一个空库")
+	} else if err != nil {
 		return fmt.Errorf("存储连接失败：%w", err)
 	}
 	email, err := p.ask("管理员邮箱", "")
@@ -281,7 +308,7 @@ func RunOperatorMenu(path string, in io.Reader, out io.Writer) error {
 		} else {
 			fmt.Fprintln(out, "  5) 终端初始化   6) 显示初始化凭证   7) 刷新初始化凭证")
 		}
-		fmt.Fprintln(out, "  0) 退出")
+		fmt.Fprintln(out, "  8) 卸载   0) 退出")
 		choice, err := p.ask("请选择", "")
 		if errors.Is(err, io.EOF) {
 			return nil
@@ -315,17 +342,94 @@ func RunOperatorMenu(path string, in io.Reader, out io.Writer) error {
 			report(out, RunSetupCLI(path, p.in, out, ReadSecret), "")
 		case choice == "6" && !cfg.Installed:
 			if token := readSetupToken(path); token != "" {
-				fmt.Fprintln(out, "初始化凭证（30 分钟有效）：", token)
+				printSetupToken(out, "初始化凭证（30 分钟有效）：", token)
 			} else {
 				fmt.Fprintln(out, "没有有效凭证，请选择 7 刷新。")
 			}
 		case choice == "7" && !cfg.Installed:
-			token, err := RotateSetupToken(path, cfg)
-			report(out, err, "新凭证（30 分钟有效）："+token)
+			if token, err := RotateSetupToken(path, cfg); err != nil {
+				report(out, err, "")
+			} else {
+				printSetupToken(out, "新凭证（30 分钟有效）：", token)
+			}
+		case choice == "8":
+			if done, err := p.uninstall(); err != nil {
+				report(out, err, "")
+			} else if done {
+				return nil
+			}
 		default:
 			fmt.Fprintln(out, "无效选项。")
 		}
 	}
+}
+
+func describePostgres(d *detectedPostgres) string {
+	from := "本机端口"
+	if d.Source == "1panel" {
+		from = "1Panel"
+	}
+	line := fmt.Sprintf("检测到 %s 的 PostgreSQL %s：%s:%d", from, d.Version, d.Host, d.Port)
+	if !d.Connected {
+		return line + "（未能登录，请手动填写账号和密码）"
+	}
+	var used []string
+	for _, db := range d.Databases {
+		if db.HasData {
+			used = append(used, db.Name)
+		}
+	}
+	if len(used) > 0 {
+		line += "；已有 Weir 账户的库：" + strings.Join(used, "、")
+	}
+	return line
+}
+
+func describeRedis(d *detectedRedis) string {
+	from := "本机端口"
+	if d.Source == "1panel" {
+		from = "1Panel"
+	}
+	line := fmt.Sprintf("检测到 %s 的 Redis %s：%s", from, d.Version, d.Address)
+	switch d.Status {
+	case store.RedisAuthRequired:
+		line += "（需要密码）"
+	case store.RedisWrongPassword:
+		line += "（1Panel 里的密码登录失败，请手动填写）"
+	}
+	return line
+}
+
+// printSetupToken 让凭证独占一行：网页终端对中文行的列宽计算与显示不一致，同行有中文时鼠标复制会错位丢字。
+func printSetupToken(out io.Writer, label, token string) {
+	fmt.Fprintln(out, label)
+	fmt.Fprintln(out, token)
+}
+
+// Installer 是每次安装都会复制到本机的安装脚本；卸载只交给它做，菜单不另写一套。
+var Installer = "/usr/local/lib/migate/install.sh"
+
+// uninstall 确认后调用安装脚本卸载；默认保留配置与数据。返回 done=true 表示已卸载，菜单随即退出。
+func (p prompter) uninstall() (bool, error) {
+	if _, err := os.Stat(Installer); err != nil {
+		return false, fmt.Errorf("找不到安装脚本 %s，请用在线脚本卸载", Installer)
+	}
+	fmt.Fprintln(p.out, "将停止并移除 Weir 的程序和服务。PostgreSQL 的 migate schema 与 Redis 的 migate: 键不会删除。")
+	if answer, err := p.ask("确认卸载？ [y/N]", "N"); err != nil || !strings.EqualFold(answer, "y") {
+		return false, err
+	}
+	args := []string{Installer, "uninstall"}
+	if answer, err := p.ask("同时删除配置和数据（/etc/migate、/var/lib/migate）？ [y/N]", "N"); err != nil {
+		return false, err
+	} else if strings.EqualFold(answer, "y") {
+		args = append(args, "--purge")
+	}
+	cmd := exec.Command("sh", args...)
+	cmd.Stdout, cmd.Stderr = p.out, p.out
+	if err := cmd.Run(); err != nil {
+		return false, fmt.Errorf("卸载失败：%w", err)
+	}
+	return true, nil
 }
 
 func systemctl(out io.Writer, args ...string) {

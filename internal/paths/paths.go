@@ -19,7 +19,6 @@ var (
 	MigateBinary    = "/usr/local/bin/migate"
 	MigateCLI       = "/usr/local/bin/mg"
 	Installer       = "/usr/local/bin/migate-install"
-	Uninstaller     = "/usr/local/bin/migate-uninstall"
 	DefaultHTTPPort = 9999
 )
 
