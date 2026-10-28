@@ -2,6 +2,7 @@ package center
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -101,18 +102,19 @@ func TestDSHGatewayOnlyOpensFromConsoleDrawer(t *testing.T) {
 	if s.dshDomain() != "dsh.example.com" {
 		t.Fatalf("domain = %q", s.dshDomain())
 	}
-	// 控制台的 CSP 只允许嵌入这个子域名。
-	if w := admin.do("GET", "/gates", nil, nil); !strings.Contains(w.Header().Get("Content-Security-Policy"), "frame-src 'self' http://dsh.example.com") {
-		t.Fatalf("console csp = %s", w.Header().Get("Content-Security-Policy"))
+	// 控制台的 CSP 用站点通配，不写具体的 dsh 子域名；登录前的页面也一样。
+	for _, c := range []*testClient{admin, {t: t, router: admin.router}} {
+		csp := c.do("GET", "/gates", nil, nil).Header().Get("Content-Security-Policy")
+		if !strings.Contains(csp, "frame-src 'self' https://*.example.com:*") || strings.Contains(csp, "dsh.example.com") {
+			t.Fatalf("console csp = %s", csp)
+		}
 	}
 
 	b := &browser{t: t, s: s, r: s.Router(), cookies: map[string]string{}}
-	// 没有任何凭据：直接访问、伪造导航头、访问 Weir 接口路径，都是拒绝访问，且不会碰到 dsh。
+	// 没有任何凭据：直接访问、伪造导航头、访问 Weir 接口路径、明文 HTTP，都是同一个空正文 404，且不会碰到 dsh。
 	for _, h := range []map[string]string{nil, iframeNav, {"Sec-Fetch-Site": "none", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "document"}} {
-		for _, p := range []string{"/", "/api/v1/me", "/api/remote.mux"} {
-			if w := b.get("http://dsh.example.com"+p, h); w.Code != 403 || !strings.Contains(w.Body.String(), "拒绝访问") {
-				t.Fatalf("GET %s %v = %d %s", p, h, w.Code, w.Body.String())
-			}
+		for _, p := range []string{"https://dsh.example.com/", "https://dsh.example.com/api/v1/me", "https://dsh.example.com/api/remote.mux", "https://dsh.example.com/healthz", "http://dsh.example.com/"} {
+			assertDSHDenied(t, b.get(p, h), p)
 		}
 	}
 	if len(f.seen) != 0 {
@@ -124,9 +126,9 @@ func TestDSHGatewayOnlyOpensFromConsoleDrawer(t *testing.T) {
 	if u.Host != "dsh.example.com" || u.Path != dshOpenPath {
 		t.Fatalf("ticket url = %s", ticket)
 	}
-	open := "http://dsh.example.com" + u.RequestURI()
+	open := "https://dsh.example.com" + u.RequestURI()
 	// 票据只能在 iframe 里使用。
-	if w := b.get(open, map[string]string{"Sec-Fetch-Site": "same-site", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "document"}); w.Code != 403 {
+	if w := b.get(open, map[string]string{"Sec-Fetch-Site": "same-site", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "document"}); w.Code != 404 {
 		t.Fatalf("top-level open = %d", w.Code)
 	}
 	w := b.get(open, iframeNav)
@@ -138,13 +140,13 @@ func TestDSHGatewayOnlyOpensFromConsoleDrawer(t *testing.T) {
 	}
 	// 票据只能用一次（换一个新浏览器也不行）。
 	other := &browser{t: t, s: s, r: b.r, cookies: map[string]string{}}
-	if w := other.get(open, iframeNav); w.Code != 403 {
+	if w := other.get(open, iframeNav); w.Code != 404 {
 		t.Fatalf("ticket reuse = %d", w.Code)
 	}
 
 	// 有了会话：iframe 里可以用，只转发 dsh 自己的 Cookie，允许控制台嵌入。
 	b.cookies[sessionCookie] = "console-session-must-not-leak"
-	w = b.get("http://dsh.example.com/", iframeNav)
+	w = b.get("https://dsh.example.com/", iframeNav)
 	if w.Code != 200 || w.Body.String() != "dsh-ok" {
 		t.Fatalf("iframe = %d %s", w.Code, w.Body.String())
 	}
@@ -152,32 +154,49 @@ func TestDSHGatewayOnlyOpensFromConsoleDrawer(t *testing.T) {
 	if c := fwd.Header.Get("Cookie"); c != "dsh-auth-x=v1" || fwd.Host != "dsh.example.com" {
 		t.Fatalf("forwarded cookie = %q host = %s", c, fwd.Host)
 	}
-	if w.Header().Get("X-Frame-Options") != "" || w.Header().Get("Content-Security-Policy") != "frame-ancestors http://example.com" {
+	if w.Header().Get("X-Frame-Options") != "" || w.Header().Get("Content-Security-Policy") != "frame-ancestors https://example.com" {
 		t.Fatalf("frame headers = %v", w.Header())
 	}
-	if w := b.get("http://dsh.example.com/api/session/list", map[string]string{"Sec-Fetch-Site": "same-origin", "Sec-Fetch-Mode": "cors", "Sec-Fetch-Dest": "empty"}); w.Code != 200 {
+	if w := b.get("https://dsh.example.com/api/session/list", map[string]string{"Sec-Fetch-Site": "same-origin", "Sec-Fetch-Mode": "cors", "Sec-Fetch-Dest": "empty"}); w.Code != 200 {
 		t.Fatalf("api = %d", w.Code)
 	}
 	// WebSocket 握手（Chromium 不带 Fetch Metadata）按 Origin 判断：只接受 dsh 子域名自己发起的。
-	ws := map[string]string{"Connection": "Upgrade", "Upgrade": "websocket", "Origin": "http://dsh.example.com"}
-	if w := b.get("http://dsh.example.com/api/remote.mux", ws); w.Code == 403 {
+	ws := map[string]string{"Connection": "Upgrade", "Upgrade": "websocket", "Origin": "https://dsh.example.com"}
+	if w := b.get("https://dsh.example.com/api/remote.mux", ws); w.Code == 404 {
 		t.Fatalf("same-origin websocket = %d", w.Code)
 	}
-	ws["Origin"] = "http://example.com"
-	if w := b.get("http://dsh.example.com/api/remote.mux", ws); w.Code != 403 {
+	ws["Origin"] = "https://example.com"
+	if w := b.get("https://dsh.example.com/api/remote.mux", ws); w.Code != 404 {
 		t.Fatalf("websocket from the console origin = %d", w.Code)
 	}
 	// 带着会话也不能在顶层窗口打开，也不能从别的网站发起。
-	if w := b.get("http://dsh.example.com/", map[string]string{"Sec-Fetch-Site": "none", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "document"}); w.Code != 403 {
+	if w := b.get("https://dsh.example.com/", map[string]string{"Sec-Fetch-Site": "none", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "document"}); w.Code != 404 {
 		t.Fatalf("top level = %d", w.Code)
 	}
-	if w := b.get("http://dsh.example.com/api/session/list", map[string]string{"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "cors"}); w.Code != 403 {
+	if w := b.get("https://dsh.example.com/api/session/list", map[string]string{"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "cors"}); w.Code != 404 {
 		t.Fatalf("cross site = %d", w.Code)
 	}
+	// 明文 HTTP 即使带着会话也拒绝。
+	assertDSHDenied(t, b.get("http://dsh.example.com/", iframeNav), "plain http")
+	// dsh 未运行：子域名同样只是空 404，原因只在控制台抽屉里由 Weir 显示。
+	s.dsh.endpoint = func() (string, string, bool) { return "", "", false }
+	assertDSHDenied(t, b.get("https://dsh.example.com/", iframeNav), "dsh stopped")
+	s.dsh.endpoint = func() (string, string, bool) { return strings.TrimPrefix(f.srv.URL, "http://"), fakeLaunchToken, true }
 	// 管理员退出登录后立即失效。
 	mustJSON(t, admin, "POST", "/api/v1/auth/logout", nil, 200)
-	if w := b.get("http://dsh.example.com/", iframeNav); w.Code != 403 {
-		t.Fatalf("after logout = %d", w.Code)
+	assertDSHDenied(t, b.get("https://dsh.example.com/", iframeNav), "after logout")
+}
+
+// assertDSHDenied：拒绝只有一种样子——404、空正文、没有 Weir 的响应头。
+func assertDSHDenied(t *testing.T, w *httptest.ResponseRecorder, what string) {
+	t.Helper()
+	if w.Code != 404 || w.Body.Len() != 0 {
+		t.Fatalf("%s = %d %q", what, w.Code, w.Body.String())
+	}
+	for k := range w.Header() {
+		if k != "Content-Length" && k != "Date" {
+			t.Fatalf("%s leaks header %s", what, k)
+		}
 	}
 }
 
@@ -206,7 +225,7 @@ func TestDefenseLayaThenDraftThenConfirmedBlock(t *testing.T) {
 	// 同一来源连续登录失败：规则产生安全事件。
 	attacker := &testClient{t: t, router: s.Router()}
 	for i := 0; i < 5; i++ {
-		req := httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(`{"email":"admin@example.test","password":"nope"}`))
+		req := httptest.NewRequest("POST", "https://example.com/api/v1/auth/login", strings.NewReader(`{"email":"admin@example.test","password":"nope"}`))
 		req.Header.Set("Content-Type", "application/json")
 		req.RemoteAddr = "203.0.113.9:5000"
 		w := httptest.NewRecorder()
@@ -238,14 +257,22 @@ func TestDefenseLayaThenDraftThenConfirmedBlock(t *testing.T) {
 	if strings.Contains(detail, "203.0.113.9") || !strings.Contains(detail, "来源 A") {
 		t.Fatalf("event for model = %s", detail)
 	}
-	if _, isErr := toolText(t, h, m.analystToken, "submit_defense_draft", map[string]any{"event_id": eid, "action": "block_source", "minutes": 1, "explain": "x"}); !isErr {
+	block := func(minutes int) (string, bool) {
+		return toolText(t, h, m.analystToken, "submit_draft", map[string]any{"explain": "短时间多次失败登录，建议封禁一小时",
+			"steps": []any{map[string]any{"action": "defense.block", "args": map[string]any{"event_id": eid, "minutes": minutes}}}})
+	}
+	if _, isErr := block(1); !isErr {
 		t.Fatal("too short block must be rejected")
 	}
-	if text, isErr := toolText(t, h, m.analystToken, "submit_defense_draft", map[string]any{"event_id": eid, "action": "block_source", "minutes": 60, "explain": "短时间多次失败登录，建议封禁一小时"}); isErr {
+	// 后台分析只能读安全事件、提交封禁草稿：不能读用户，也不能改节点。
+	if _, isErr := toolText(t, h, m.analystToken, "list_users", map[string]any{}); !isErr {
+		t.Fatal("analysis must not read users")
+	}
+	if text, isErr := block(60); isErr || strings.Contains(text, "203.0.113.9") {
 		t.Fatal(text)
 	}
 	probe := func() int {
-		req := httptest.NewRequest("GET", "/api/v1/public", nil)
+		req := httptest.NewRequest("GET", "https://example.com/api/v1/public", nil)
 		req.RemoteAddr = "203.0.113.9:5001"
 		w := httptest.NewRecorder()
 		attacker.router.ServeHTTP(w, req)
@@ -256,7 +283,8 @@ func TestDefenseLayaThenDraftThenConfirmedBlock(t *testing.T) {
 	}
 	pending := mustJSON(t, admin, "GET", "/api/v1/admin/ai/drafts", nil, 200)["drafts"].([]any)
 	d := pending[0].(map[string]any)
-	if d["kind"] != "defense" || d["defense"].(map[string]any)["source_ip"] != "203.0.113.9" {
+	step := d["steps"].([]any)[0].(map[string]any)
+	if d["kind"] != "actions" || step["action"] != "defense.block" || !strings.Contains(fmt.Sprint(step["preview"]), "203.0.113.9") {
 		t.Fatalf("defense draft = %v", d)
 	}
 	mustJSON(t, admin, "POST", "/api/v1/admin/ai/drafts/"+d["id"].(string)+"/apply", nil, 200)

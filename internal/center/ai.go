@@ -130,24 +130,19 @@ func (s *Server) testNodeHandler(c *gin.Context) {
 	c.JSON(200, res)
 }
 
-// Draft 是一份待确认的 AI 草稿（保存在 KV，1 小时后过期）。Kind 为 node（节点参数）或 defense（防御动作）。
-// 只有 status=passed 的草稿会弹出确认窗；failed 的草稿只用于把原因交回 dsh。
+// Draft 是一份待确认的草稿（保存在 KV，1 小时后过期）。Kind 为 actions（能力目录里的多步草稿，见 action_drafts.go）
+// 或 plugin（插件适配，附带逐文件差异）。两种都在同一个通用确认窗里显示：按 Steps 的参数说明逐步展示。
 type Draft struct {
-	ID        string         `json:"id"`
-	Kind      string         `json:"kind"`
-	Source    string         `json:"source"` // dsh（抽屉对话）/ analysis（后台分析）
-	Status    string         `json:"status"` // passed / failed
-	Error     string         `json:"error,omitempty"`
-	Explain   string         `json:"explain"`
-	CreatedAt time.Time      `json:"created_at"`
-	NodeID    int            `json:"node_id,omitempty"`
-	NodeName  string         `json:"node_name,omitempty"`
-	Changes   []ai.Change    `json:"changes,omitempty"`
-	Result    map[string]any `json:"result,omitempty"` // Gate 实测详情（不含机密）
-	PatchRaw  map[string]any `json:"patch,omitempty"`
-	BaseHash  string         `json:"base_hash,omitempty"`
-	Defense   *DefenseAction `json:"defense,omitempty"`
-	Plugin    *pluginDraft   `json:"plugin,omitempty"`
+	ID        string            `json:"id"`
+	Kind      string            `json:"kind"`
+	Source    string            `json:"source"` // dsh（抽屉对话）/ analysis（后台分析）
+	Status    string            `json:"status"` // passed
+	Explain   string            `json:"explain"`
+	CreatedAt time.Time         `json:"created_at"`
+	Steps     []DraftStep       `json:"steps"`
+	Versions  map[string]string `json:"versions,omitempty"` // 所依据的数据版本
+	Danger    bool              `json:"danger,omitempty"`   // 有危险步骤：确认要当前密码与二次验证码
+	Plugin    *pluginDraft      `json:"plugin,omitempty"`
 }
 
 func settingsHash(m map[string]any) string {
@@ -227,8 +222,10 @@ func (s *Server) discardDraft(c *gin.Context) {
 		return
 	}
 	_ = s.Store.KV.Del(ctx, draftPrefix+d.ID)
-	if d.Kind == "defense" && d.Defense != nil {
-		s.markEvent(ctx, d.Defense.EventID, "dismissed", "")
+	for _, st := range d.Steps {
+		if st.Action == "defense.block" {
+			s.markEvent(ctx, intArg(st.Args, "event_id"), "dismissed", "")
+		}
 	}
 	if d.Kind == "plugin" && d.Plugin != nil && strings.HasPrefix(filepath.Clean(d.Plugin.Dir), filepath.Join(s.dshLayout().Runtime(), "plugin-drafts")+string(filepath.Separator)) {
 		_ = os.RemoveAll(d.Plugin.Dir)
@@ -237,50 +234,9 @@ func (s *Server) discardDraft(c *gin.Context) {
 	c.Status(204)
 }
 
-// submitNodeDraft 校验并实测 dsh 提交的节点草稿。返回的草稿 status 为 passed（等待管理员确认）或 failed（附原因）。
-func (s *Server) submitNodeDraft(ctx context.Context, source string, nodeID int, set map[string]any, explain string) (*Draft, error) {
-	n, err := s.Store.Ent.Node.Get(ctx, nodeID)
-	if err != nil {
-		return nil, errors.New("节点不存在")
-	}
-	explain = strings.TrimSpace(explain)
-	if explain == "" || len(explain) > 2000 {
-		return nil, errors.New("explain 必须是一句不超过 2000 字的说明")
-	}
-	patch := ai.Patch{Set: set, Explain: explain}
-	d := &Draft{ID: randomToken(12), Kind: "node", Source: source, Explain: explain, CreatedAt: time.Now().UTC(), NodeID: n.ID, NodeName: n.Name, PatchRaw: set, BaseHash: settingsHash(n.Settings)}
-	err = ai.CheckPatch(patch)
-	for k := range set {
-		if err == nil && !editable(k) {
-			err = fmt.Errorf("字段 %s 不允许修改", k)
-		}
-	}
-	if err == nil {
-		after := ai.Apply(n.Settings, patch)
-		d.Changes = ai.Diff(n.Settings, after)
-		if len(d.Changes) == 0 {
-			err = errors.New("草稿与当前参数相同")
-		} else if g, gerr := s.Store.Ent.Gate.Get(ctx, n.GateID); gerr != nil {
-			err = errors.New("节点所在 VPS 不存在")
-		} else if err = s.checkSettings(ctx, g, n.Kernel, n.Protocol, n.Network, n.Security, n.Port, after); err == nil {
-			d.Result, err = s.testNode(ctx, n, after)
-		}
-	}
-	d.Status = "passed"
-	if err != nil {
-		d.Status, d.Error = "failed", err.Error()
-	}
-	if err = s.saveDraft(ctx, d); err != nil {
-		return nil, err
-	}
-	_, _ = s.Store.Ent.Audit.Create().SetAction("ai.draft").SetTarget(source + " node:" + itoa(n.ID)).SetResult(d.Status).Save(ctx)
-	return d, nil
-}
-
-// applyDraft 只接受已通过实测的草稿；节点草稿还要求节点参数自起草后未被修改。
+// applyDraft 只接受已通过试运行的草稿：插件适配走自己的启用流程，其余按步骤执行。
 func (s *Server) applyDraft(c *gin.Context) {
-	ctx := c.Request.Context()
-	d, err := s.loadDraft(ctx, c.Param("id"))
+	d, err := s.loadDraft(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		failure(c, 404, "draft_not_found")
 		return
@@ -289,34 +245,11 @@ func (s *Server) applyDraft(c *gin.Context) {
 		failure(c, 409, "draft_not_passed")
 		return
 	}
-	if d.Kind == "defense" {
-		s.applyDefenseDraft(c, d)
-		return
-	}
 	if d.Kind == "plugin" {
 		s.applyPluginDraft(c, d)
 		return
 	}
-	n, err := s.Store.Ent.Node.Get(ctx, d.NodeID)
-	if err != nil {
-		failure(c, 404, "node_not_found")
-		return
-	}
-	if settingsHash(n.Settings) != d.BaseHash {
-		failure(c, 409, "draft_changed")
-		return
-	}
-	if n, err = n.Update().SetSettings(ai.Apply(n.Settings, ai.Patch{Set: d.PatchRaw})).Save(ctx); err != nil {
-		failure(c, 500, "update_failed")
-		return
-	}
-	if err = s.afterNodeChange(ctx, n); err != nil {
-		failure(c, 500, "sync_failed")
-		return
-	}
-	_ = s.Store.KV.Del(ctx, draftPrefix+d.ID)
-	s.audit(c, "ai.apply", "node:"+itoa(n.ID), "ok")
-	c.JSON(200, s.nodeView(ctx, n))
+	s.applyActionDraft(c, d)
 }
 
 // TestNodeSettings 以给定参数实测某节点（不保存）；供端到端测试与内部调用。

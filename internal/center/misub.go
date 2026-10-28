@@ -42,6 +42,9 @@ type MisubSettings struct {
 	FilterInclude    string         `json:"filter_include"`
 	FilterExclude    string         `json:"filter_exclude"`
 	UpdateInterval   int            `json:"update_interval"`
+	// Disguise 是伪装页开关（默认关闭）：打开后浏览器访问订阅地址只看到伪装页，剩余流量与一键导入改为登录后
+	// 在「我的订阅」查看；客户端拉取订阅不受影响。
+	Disguise bool `json:"disguise"`
 }
 
 func defaultMisubSettings() MisubSettings {

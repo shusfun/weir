@@ -16,6 +16,7 @@ var (
 		{Name: "target", Type: field.TypeString, Size: 255, Default: ""},
 		{Name: "result", Type: field.TypeString, Size: 32, Default: "ok"},
 		{Name: "ip", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "detail", Type: field.TypeJSON, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 	}
 	// AuditsTable holds the schema information for the "audits" table.
@@ -27,7 +28,7 @@ var (
 			{
 				Name:    "audit_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{AuditsColumns[6]},
+				Columns: []*schema.Column{AuditsColumns[7]},
 			},
 			{
 				Name:    "audit_actor",
@@ -66,7 +67,11 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "name", Type: field.TypeString, Size: 100},
 		{Name: "domain", Type: field.TypeString, Size: 255},
-		{Name: "source", Type: field.TypeEnum, Enums: []string{"upload", "self_signed", "acme"}, Default: "upload"},
+		{Name: "source", Type: field.TypeEnum, Enums: []string{"upload", "self_signed", "acme", "panel", "edge"}, Default: "upload"},
+		{Name: "gate_id", Type: field.TypeInt, Nullable: true},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"ready", "pending", "failed"}, Default: "ready"},
+		{Name: "last_error", Type: field.TypeString, Default: ""},
+		{Name: "renewed_at", Type: field.TypeTime, Nullable: true},
 		{Name: "cert_pem", Type: field.TypeString, Size: 2147483647},
 		{Name: "key_pem", Type: field.TypeString, Size: 2147483647},
 		{Name: "sha256", Type: field.TypeString, Default: ""},
@@ -86,7 +91,8 @@ var (
 		{Name: "user_id", Type: field.TypeInt},
 		{Name: "entry_node_id", Type: field.TypeInt},
 		{Name: "name", Type: field.TypeString, Size: 100},
-		{Name: "exit_kind", Type: field.TypeEnum, Enums: []string{"socks5", "node"}},
+		{Name: "exit_kind", Type: field.TypeEnum, Enums: []string{"socks5", "node", "source"}},
+		{Name: "exit_source", Type: field.TypeJSON, Nullable: true},
 		{Name: "exit_address", Type: field.TypeString, Size: 255, Default: ""},
 		{Name: "exit_port", Type: field.TypeInt, Default: 0},
 		{Name: "exit_username", Type: field.TypeString, Size: 255, Default: ""},
@@ -154,6 +160,7 @@ var (
 		{Name: "public_key", Type: field.TypeString, Unique: true},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "revoked"}, Default: "active"},
 		{Name: "public_host", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "center_url", Type: field.TypeString, Size: 255, Default: ""},
 		{Name: "version", Type: field.TypeString, Default: ""},
 		{Name: "hostname", Type: field.TypeString, Default: ""},
 		{Name: "arch", Type: field.TypeString, Default: "amd64"},
@@ -162,6 +169,7 @@ var (
 		{Name: "kernels_running", Type: field.TypeJSON, Nullable: true},
 		{Name: "kernel_pins", Type: field.TypeJSON, Nullable: true},
 		{Name: "host", Type: field.TypeJSON, Nullable: true},
+		{Name: "panel", Type: field.TypeJSON, Nullable: true},
 		{Name: "config_revision", Type: field.TypeInt64, Default: 1},
 		{Name: "applied_revision", Type: field.TypeInt64, Default: 0},
 		{Name: "failed_revision", Type: field.TypeInt64, Default: 0},
@@ -245,7 +253,8 @@ var (
 		{Name: "settings", Type: field.TypeJSON, Nullable: true},
 		{Name: "cert_id", Type: field.TypeInt, Nullable: true},
 		{Name: "enabled", Type: field.TypeBool, Default: true},
-		{Name: "chain_kind", Type: field.TypeEnum, Enums: []string{"none", "socks5", "node"}, Default: "none"},
+		{Name: "chain_kind", Type: field.TypeEnum, Enums: []string{"none", "socks5", "node", "source"}, Default: "none"},
+		{Name: "chain_source", Type: field.TypeJSON, Nullable: true},
 		{Name: "chain_address", Type: field.TypeString, Size: 255, Default: ""},
 		{Name: "chain_port", Type: field.TypeInt, Default: 0},
 		{Name: "chain_username", Type: field.TypeString, Size: 255, Default: ""},
@@ -400,6 +409,38 @@ var (
 		Name:       "rule_templates",
 		Columns:    RuleTemplatesColumns,
 		PrimaryKey: []*schema.Column{RuleTemplatesColumns[0]},
+	}
+	// SamplesColumns holds the columns for the "samples" table.
+	SamplesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "scope", Type: field.TypeEnum, Enums: []string{"gate", "user"}},
+		{Name: "subject_id", Type: field.TypeInt},
+		{Name: "at", Type: field.TypeTime},
+		{Name: "traffic", Type: field.TypeInt64, Default: 0},
+		{Name: "cpu", Type: field.TypeFloat64, Nullable: true},
+		{Name: "mem_used", Type: field.TypeInt64, Nullable: true},
+		{Name: "mem_total", Type: field.TypeInt64, Nullable: true},
+		{Name: "disk_used", Type: field.TypeInt64, Nullable: true},
+		{Name: "disk_total", Type: field.TypeInt64, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// SamplesTable holds the schema information for the "samples" table.
+	SamplesTable = &schema.Table{
+		Name:       "samples",
+		Columns:    SamplesColumns,
+		PrimaryKey: []*schema.Column{SamplesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "sample_scope_subject_id_at",
+				Unique:  true,
+				Columns: []*schema.Column{SamplesColumns[1], SamplesColumns[2], SamplesColumns[3]},
+			},
+			{
+				Name:    "sample_at",
+				Unique:  false,
+				Columns: []*schema.Column{SamplesColumns[3]},
+			},
+		},
 	}
 	// SettingsColumns holds the columns for the "settings" table.
 	SettingsColumns = []*schema.Column{
@@ -573,6 +614,7 @@ var (
 		ResourcesTable,
 		RoutesTable,
 		RuleTemplatesTable,
+		SamplesTable,
 		SettingsTable,
 		SubGrantsTable,
 		SubNodesTable,

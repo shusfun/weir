@@ -10,10 +10,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/shusfun/weir/internal/ai"
-	"github.com/shusfun/weir/internal/store/ent"
-	entnode "github.com/shusfun/weir/internal/store/ent/node"
 )
 
 // Weir 给 dsh 的 MCP 工具（Streamable HTTP，JSON 响应）：只监听本机回环的随机端口，不经过反代；
@@ -58,23 +54,89 @@ func obj(props map[string]any, required ...string) map[string]any {
 	return map[string]any{"type": "object", "properties": props, "required": required, "additionalProperties": false}
 }
 
-var mcpTools = []mcpTool{
-	{"get_console_context", "管理员在 Weir 控制台里正在看哪个节点或页面（从那里打开了 dsh）。对话开始先调用。", obj(map[string]any{})},
-	{"list_nodes", "列出 Weir 的全部节点（id、名称、所在 VPS、内核与协议）。", obj(map[string]any{})},
-	{"get_node_state", "读取一个节点的当前参数（密码、UUID、密钥已替换为 <redacted>）、内核版本、VPS 最近的错误，以及草稿允许修改的字段。", obj(map[string]any{"node_id": map[string]any{"type": "integer"}}, "node_id")},
-	{"submit_node_draft", "提交节点参数草稿。Weir 会在节点所在 VPS 上用真实内核实测；通过后弹窗请管理员确认，未通过会返回原因，可以修改后重新提交。草稿不会自动生效。", obj(map[string]any{
-		"node_id": map[string]any{"type": "integer"},
-		"set":     map[string]any{"type": "object", "description": "要修改的字段与新值；值为 null 表示删除该字段。只能使用 get_node_state 返回的 editable_fields。"},
-		"explain": map[string]any{"type": "string", "description": "一句中文说明：为什么这样改。"},
-	}, "node_id", "set", "explain")},
-	{"list_security_events", "列出最近的安全事件（来源地址已替换为代号）与 Laya 的判断。", obj(map[string]any{})},
-	{"get_security_event", "读取一个安全事件的详情。", obj(map[string]any{"event_id": map[string]any{"type": "integer"}}, "event_id")},
-	{"submit_defense_draft", "针对一个安全事件提交防御草稿：暂时封禁该事件的来源。草稿会弹窗请管理员确认，不会自动执行。不需要处置时不要调用。", obj(map[string]any{
-		"event_id": map[string]any{"type": "integer"},
-		"action":   map[string]any{"type": "string", "enum": []string{"block_source"}},
-		"minutes":  map[string]any{"type": "integer", "minimum": 5, "maximum": maxBlockMinutes},
-		"explain":  map[string]any{"type": "string", "description": "一句中文说明：判断依据与建议。"},
-	}, "event_id", "action", "minutes", "explain")},
+// paramSchema 把参数说明转成 JSON Schema；说明里带中文名、单位、可选值的显示名与引用对象类型。
+func paramSchema(pa Param) map[string]any {
+	desc := pa.Label
+	if pa.Unit != "" {
+		desc += "（" + pa.Unit + "）"
+	}
+	if pa.Hint != "" {
+		desc += "。" + pa.Hint
+	}
+	m := map[string]any{}
+	switch pa.Kind {
+	case "bool":
+		m["type"] = "boolean"
+	case "int", "gb", "days":
+		m["type"] = "number"
+		if pa.Min != nil {
+			m["minimum"] = *pa.Min
+		}
+		if pa.Max != nil {
+			m["maximum"] = *pa.Max
+		}
+	case "enum":
+		m["type"] = "string"
+		vals := []string{}
+		for _, o := range pa.Options {
+			vals = append(vals, o[0])
+			desc += fmt.Sprintf("；%s=%s", o[0], o[1])
+		}
+		m["enum"] = vals
+	case "ref":
+		desc += "：" + objectNames[pa.Ref] + "编号，或前面步骤的 \"$名字\""
+	case "refs":
+		m["type"] = "array"
+		desc += "：" + objectNames[pa.Ref] + "编号列表（可含 \"$名字\"）"
+	case "object":
+		m["type"] = "object"
+	default:
+		m["type"] = "string"
+	}
+	m["description"] = desc
+	return m
+}
+
+func paramsSchema(params []Param) map[string]any {
+	props, req := map[string]any{}, []string{}
+	for _, pa := range params {
+		props[pa.Key] = paramSchema(pa)
+		if pa.Required {
+			req = append(req, pa.Key)
+		}
+	}
+	return obj(props, req...)
+}
+
+// mcpToolsFor 由能力目录生成工具列表：只读能力各一个工具；提交草稿统一用 submit_draft（list_actions 列出可提交的能力）。
+// 界面导航与控制台上下文只给抽屉对话。
+func mcpToolsFor(source string) []mcpTool {
+	tools := []mcpTool{}
+	if source == "dsh" {
+		tools = append(tools, consoleTools...)
+	}
+	var actions []string
+	for _, c := range catalog(source) {
+		if c.Kind == "read" {
+			tools = append(tools, mcpTool{c.Name, c.Purpose, paramsSchema(c.Params)})
+		} else {
+			actions = append(actions, c.Name+"（"+c.Title+"）")
+		}
+	}
+	tools = append(tools,
+		mcpTool{"list_actions", "列出可以提交草稿的能力：名称、用途、风险、参数说明（中文名、单位、可选值、引用类型）。拼草稿前先读。", obj(map[string]any{})},
+		mcpTool{"submit_draft", "提交草稿。Weir 用手动操作的同一套校验试运行：不通过会返回原因（可以修改后重新提交）；通过后弹出 Weir 的确认窗，管理员确认才生效，你无法确认。" +
+			"一份草稿可以有多步，新建对象的步骤用 as 起名，后面的步骤用 \"$名字\" 引用；任一步失败全部不生效。可提交的能力：" + strings.Join(actions, "、"),
+			obj(map[string]any{
+				"explain": map[string]any{"type": "string", "description": "一句中文说明：为什么这样做。"},
+				"steps": map[string]any{"type": "array", "description": "1 到 10 步", "items": obj(map[string]any{
+					"action": map[string]any{"type": "string", "description": "能力名称，见 list_actions"},
+					"as":     map[string]any{"type": "string", "description": "可选：新建对象的占位名（小写字母开头）"},
+					"args":   map[string]any{"type": "object", "description": "参数，见 list_actions"},
+				}, "action", "args")},
+			}, "explain", "steps")},
+	)
+	return tools
 }
 
 // mcpVersions 是支持的经典 MCP 版本（新到旧）。
@@ -137,7 +199,7 @@ func (s *Server) mcpHandler(m *mcpServer) http.Handler {
 		case "ping":
 			result = map[string]any{}
 		case "tools/list":
-			result = map[string]any{"tools": mcpTools}
+			result = map[string]any{"tools": mcpToolsFor(source)}
 		case "tools/call":
 			ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
 			text, isErr := s.callTool(ctx, source, req.Params.Name, req.Params.Arguments)
@@ -170,101 +232,67 @@ func (s *Server) callTool(ctx context.Context, source, name string, raw json.Raw
 	if !ready {
 		return "Weir 尚未初始化", true
 	}
-	var args struct {
-		NodeID  int            `json:"node_id"`
-		EventID int            `json:"event_id"`
-		Set     map[string]any `json:"set"`
-		Explain string         `json:"explain"`
-		Action  string         `json:"action"`
-		Minutes int            `json:"minutes"`
-	}
+	args := map[string]any{}
 	if len(raw) > 0 && json.Unmarshal(raw, &args) != nil {
 		return "参数不是有效的 JSON 对象", true
 	}
 	switch name {
-	case "get_console_context":
-		var hint struct {
-			NodeID int       `json:"node_id"`
-			Path   string    `json:"path"`
-			At     time.Time `json:"at"`
+	case "get_console_context", "navigate_console":
+		if source != "dsh" {
+			return "后台分析不能使用这个工具", true
 		}
-		raw, ok, err := s.Store.KV.Get(ctx, "dsh-context")
-		if err != nil || !ok || json.Unmarshal([]byte(raw), &hint) != nil {
-			return jsonText(map[string]any{"page": "未知", "note": "管理员是从控制台右下角直接打开的 dsh，没有附带页面信息。"}), false
+		if name == "get_console_context" {
+			return jsonText(s.consoleContextForModel(ctx)), false
 		}
-		out := map[string]any{"page": hint.Path, "opened_at": hint.At}
-		if hint.NodeID > 0 {
-			if n, err := s.Store.Ent.Node.Get(ctx, hint.NodeID); err == nil {
-				out["node"] = map[string]any{"id": n.ID, "name": n.Name, "kernel": n.Kernel, "protocol": n.Protocol}
-				out["note"] = fmt.Sprintf("管理员是在节点「%s」（id %d）上点「AI 调整」打开的 dsh。", n.Name, n.ID)
+		if err := s.queueNavigation(ctx, args); err != nil {
+			return "不能跳转：" + err.Error(), true
+		}
+		return "已让控制台打开该页面（只换页面，不改任何数据）。", false
+	case "list_actions":
+		out := []Capability{}
+		for _, c := range catalog(source) {
+			if c.Kind == "draft" {
+				out = append(out, c)
 			}
 		}
 		return jsonText(out), false
-	case "list_nodes":
-		nodes, err := s.Store.Ent.Node.Query().Order(ent.Asc(entnode.FieldID)).Limit(500).All(ctx)
+	case "submit_draft":
+		var req struct {
+			Explain string `json:"explain"`
+			Steps   []struct {
+				Action string         `json:"action"`
+				As     string         `json:"as"`
+				Args   map[string]any `json:"args"`
+			} `json:"steps"`
+		}
+		if json.Unmarshal(raw, &req) != nil {
+			return "参数格式不对：需要 explain 与 steps", true
+		}
+		// 只取模型能给的三个字段；标题、字段、预演、实测结果一律由 Weir 重新生成。
+		steps := make([]DraftStep, 0, len(req.Steps))
+		for _, st := range req.Steps {
+			steps = append(steps, DraftStep{Action: st.Action, As: st.As, Args: st.Args})
+		}
+		d, err := s.submitActionDraft(ctx, source, req.Explain, steps)
 		if err != nil {
-			return "读取节点失败", true
+			return "草稿没有通过，没有改动任何数据：" + err.Error() + "\n请根据原因修改后重新提交。", true
 		}
-		gates := map[int]string{}
-		if gs, err := s.Store.Ent.Gate.Query().All(ctx); err == nil {
-			for _, g := range gs {
-				gates[g.ID] = g.Name
-			}
+		titles := make([]string, 0, len(d.Steps))
+		for _, st := range d.Steps {
+			titles = append(titles, st.Title)
 		}
-		list := make([]map[string]any, 0, len(nodes))
-		for _, n := range nodes {
-			list = append(list, map[string]any{"id": n.ID, "name": n.Name, "vps": gates[n.GateID], "kernel": n.Kernel, "protocol": n.Protocol, "network": n.Network, "security": n.Security, "enabled": n.Enabled})
-		}
-		return jsonText(list), false
-	case "get_node_state":
-		n, err := s.Store.Ent.Node.Get(ctx, args.NodeID)
-		if err != nil {
-			return "节点不存在", true
-		}
-		state := map[string]any{"node_id": n.ID, "name": n.Name, "kernel": n.Kernel, "protocol": n.Protocol, "network": n.Network, "security": n.Security, "enabled": n.Enabled,
-			"settings": ai.Redact(n.Settings), "editable_fields": editableFields}
-		if g, err := s.Store.Ent.Gate.Get(ctx, n.GateID); err == nil {
-			state["vps"], state["vps_last_error"] = g.Name, g.LastError
-			if ks, _, err := s.gateKernels(ctx, g, map[string]bool{n.Kernel: true}); err == nil {
-				state["kernel_version"] = ks[n.Kernel].Version
-			}
-		}
-		return jsonText(state), false
-	case "submit_node_draft":
-		d, err := s.submitNodeDraft(ctx, source, args.NodeID, args.Set, args.Explain)
-		if err != nil {
-			return "草稿被拒绝：" + err.Error(), true
-		}
-		if d.Status != "passed" {
-			text := "草稿未通过实测，节点保持原样：" + d.Error
-			if d.Result != nil {
-				text += "\n实测详情：" + jsonText(d.Result)
-			}
-			return text + "\n请根据原因修改后重新提交。", true
-		}
-		return fmt.Sprintf("实测通过，已弹窗请管理员确认（草稿 %s）。在管理员确认前不会生效。", d.ID), false
-	case "list_security_events":
-		events, err := s.recentEvents(ctx, 20)
-		if err != nil {
-			return "读取安全事件失败", true
-		}
-		list := make([]map[string]any, 0, len(events))
-		for _, e := range events {
-			list = append(list, e.modelView())
-		}
-		return jsonText(list), false
-	case "get_security_event":
-		e, err := s.loadEvent(ctx, args.EventID)
-		if err != nil {
-			return "安全事件不存在", true
-		}
-		return jsonText(e.modelView()), false
-	case "submit_defense_draft":
-		d, err := s.submitDefenseDraft(ctx, source, args.EventID, args.Action, args.Minutes, args.Explain)
-		if err != nil {
-			return "草稿被拒绝：" + err.Error(), true
-		}
-		return fmt.Sprintf("已弹窗请管理员确认（草稿 %s）。在管理员确认前不会执行。", d.ID), false
+		return fmt.Sprintf("试运行通过，已弹窗请管理员确认（草稿 %s）：%s。在管理员确认前不会生效。", d.ID, strings.Join(titles, "；")), false
 	}
-	return "未知工具 " + name, true
+	c, ok := findCap(source, name)
+	if !ok || c.Kind != "read" {
+		return "未知工具 " + name, true
+	}
+	if err := s.checkArgs(ctx, newPlanCtx(source), c.Params, args); err != nil {
+		return err.Error(), true
+	}
+	v, err := c.read(ctx, s, args)
+	if err != nil {
+		return err.Error(), true
+	}
+	return jsonText(v), false
 }

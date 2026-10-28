@@ -36,8 +36,10 @@ func (s *Server) gateRoutes(ready, admin *gin.RouterGroup) {
 	a.GET("/kernels/:kernel/:version", s.agentKernel)
 	a.GET("/release/:version", s.agentRelease)
 	a.GET("/certs/:id", s.agentCert)
+	a.POST("/panel-secret", s.agentPanelSecret)
 	s.gateAdminRoutes(admin)
 	s.certRoutes(admin)
+	s.nodeCertRoutes(admin)
 	s.nodeRoutes(admin)
 	s.aiRoutes(admin)
 	s.routingRoutes(admin)
@@ -145,6 +147,9 @@ func (s *Server) agentHeartbeat(c *gin.Context) {
 			upd.SetHost(host)
 		}
 	}
+	if len(hb.Center) <= 255 {
+		upd.SetCenterURL(hb.Center)
+	}
 	if g.PublicHost == "" {
 		if ip := publicAddress(c.ClientIP()); ip != "" {
 			upd.SetPublicHost(ip)
@@ -155,6 +160,8 @@ func (s *Server) agentHeartbeat(c *gin.Context) {
 		failure(c, 500, "save_failed")
 		return
 	}
+	s.absorbPanelReport(ctx, g, hb)
+	s.recordHost(ctx, g.ID, hb.Host, time.Now())
 	before := g.ConfigRevision
 	if g, err = s.ensureStatsPorts(ctx, g); err != nil {
 		failure(c, 500, "port_allocation_failed")
@@ -163,7 +170,7 @@ func (s *Server) agentHeartbeat(c *gin.Context) {
 	if g.ConfigRevision != before {
 		s.waiters.notify(g.ID)
 	}
-	c.JSON(200, gin.H{"config_revision": g.ConfigRevision})
+	c.JSON(200, contracts.HeartbeatReply{ConfigRevision: g.ConfigRevision, Center: s.centerOrigin(ctx)})
 }
 
 // agentActions 长轮询待执行动作；过期的动作标记为已过期，不再下发。

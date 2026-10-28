@@ -73,6 +73,11 @@ func clashOutput(links []string) ([]byte, error) {
 			p["type"] = "ss"
 			p["cipher"] = settings.Method
 			p["password"] = n.Password
+			if st := settings.ShadowTLS; st != nil {
+				p["plugin"] = "shadow-tls"
+				p["client-fingerprint"] = "chrome"
+				p["plugin-opts"] = map[string]any{"host": st.Host, "password": st.Password, "version": st.Version}
+			}
 		default:
 			return nil, fmt.Errorf("unsupported protocol %s", n.Protocol)
 		}
@@ -179,6 +184,15 @@ func singboxOutput(links []string) ([]byte, error) {
 			p["type"] = "shadowsocks"
 			p["method"] = settings.Method
 			p["password"] = n.Password
+			if st := settings.ShadowTLS; st != nil {
+				// sing-box：Shadowsocks 经 detour 走一个 ShadowTLS 出站，由它连服务器并完成握手伪装。
+				stTag := name + " · shadowtls"
+				out = append(out, map[string]any{"type": "shadowtls", "tag": stTag, "server": n.Address, "server_port": n.Port, "version": st.Version, "password": st.Password,
+					"tls": map[string]any{"enabled": true, "server_name": st.Host, "utls": map[string]any{"enabled": true, "fingerprint": "chrome"}}})
+				delete(p, "server")
+				delete(p, "server_port")
+				p["detour"] = stTag
+			}
 		default:
 			return nil, fmt.Errorf("unsupported protocol")
 		}

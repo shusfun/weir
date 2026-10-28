@@ -15,6 +15,7 @@ var Formats = []string{"base64", "clash", "singbox", "surge", "loon", "quanx", "
 
 // Render 把链接渲染成目标格式，返回内容与 Content-Type。
 func Render(links []string, target string) ([]byte, string, error) {
+	links = forTarget(links, target)
 	switch target {
 	case "base64", "":
 		return []byte(base64.StdEncoding.EncodeToString([]byte(strings.Join(links, "\n")))), "text/plain; charset=utf-8", nil
@@ -32,6 +33,24 @@ func Render(links []string, target string) ([]byte, string, error) {
 		return b, "application/yaml; charset=utf-8", err
 	}
 	return nil, "", fmt.Errorf("unsupported target %q", target)
+}
+
+// forTarget 去掉目标格式表达不了的节点：ShadowTLS 只有 Clash（mihomo）与 sing-box 支持，
+// Surge / Loon / QuanX / Egern 订阅里不包含它，不让一个节点拖垮整份订阅。
+func forTarget(links []string, target string) []string {
+	switch target {
+	case "surge", "loon", "quanx", "egern":
+	default:
+		return links
+	}
+	out := links[:0:0]
+	for _, l := range links {
+		if strings.HasPrefix(l, "ss://") && strings.Contains(l, "plugin=shadow-tls") {
+			continue
+		}
+		out = append(out, l)
+	}
+	return out
 }
 
 // TargetForUA 按客户端 User-Agent 推断格式；无法识别时为 base64（通用分享链接列表）。

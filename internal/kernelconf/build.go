@@ -48,6 +48,10 @@ func Build(cfg contracts.GateConfig, opt Options) (Output, error) {
 		opt.Now = time.Now()
 	}
 	var out Output
+	cfg, groups, err := expandGroups(cfg)
+	if err != nil {
+		return out, err
+	}
 	inbounds, tagToID, keyToCred, err := toInbounds(cfg, opt)
 	if err != nil {
 		return out, err
@@ -96,6 +100,14 @@ func Build(cfg contracts.GateConfig, opt Options) (Output, error) {
 		if err != nil {
 			return out, err
 		}
+		if len(groups) > 0 {
+			if err = needFeatures(cfg, "xray", "balancer", "observatory"); err != nil {
+				return out, err
+			}
+			if err = xrayGroups(&conf, groups); err != nil {
+				return out, err
+			}
+		}
 		for i := range conf.Inbounds {
 			if conf.Inbounds[i].Tag == "api" {
 				conf.Inbounds[i].Port = cfg.Ports.XrayStats
@@ -112,6 +124,14 @@ func Build(cfg contracts.GateConfig, opt Options) (Output, error) {
 		conf, err := singbox.BuildConfigWithOutboundsOptions(singIn, outbounds, routes, singbox.BuildOptions{EnableV2RayAPIStats: true})
 		if err != nil {
 			return out, err
+		}
+		if len(groups) > 0 {
+			if err = needFeatures(cfg, "sing-box", "urltest"); err != nil {
+				return out, err
+			}
+			if err = singboxGroups(&conf, groups); err != nil {
+				return out, err
+			}
 		}
 		if conf.Experimental == nil || conf.Experimental.V2RayAPI == nil {
 			return out, errors.New("sing-box stats api missing")

@@ -16,6 +16,7 @@ func (s *Server) gateAdminRoutes(admin *gin.RouterGroup) {
 	admin.GET("/gates", s.listGates)
 	admin.POST("/gates/invite", s.inviteGate)
 	admin.GET("/gates/:id", s.getGate)
+	admin.GET("/gates/:id/topology", s.gateTopology)
 	admin.PATCH("/gates/:id", s.updateGate)
 	admin.POST("/gates/:id/revoke", s.revokeGate)
 	admin.GET("/gates/:id/config", s.previewGateConfig)
@@ -39,7 +40,7 @@ func gateView(g *ent.Gate) gin.H {
 		"config_revision": g.ConfigRevision, "applied_revision": g.AppliedRevision, "state": state,
 		"last_error": g.LastError, "kernels_running": g.KernelsRunning, "kernel_pins": g.KernelPins,
 		"listening_ports": g.ListeningPorts, "host": g.Host, "created_at": g.CreatedAt,
-		"xray_stats_port": g.XrayStatsPort, "singbox_stats_port": g.SingboxStatsPort,
+		"xray_stats_port": g.XrayStatsPort, "singbox_stats_port": g.SingboxStatsPort, "panel": g.Panel,
 	}
 }
 

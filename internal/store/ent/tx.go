@@ -42,6 +42,8 @@ type Tx struct {
 	Route *RouteClient
 	// RuleTemplate is the client for interacting with the RuleTemplate builders.
 	RuleTemplate *RuleTemplateClient
+	// Sample is the client for interacting with the Sample builders.
+	Sample *SampleClient
 	// Setting is the client for interacting with the Setting builders.
 	Setting *SettingClient
 	// SubGrant is the client for interacting with the SubGrant builders.
@@ -200,6 +202,7 @@ func (tx *Tx) init() {
 	tx.Resource = NewResourceClient(tx.config)
 	tx.Route = NewRouteClient(tx.config)
 	tx.RuleTemplate = NewRuleTemplateClient(tx.config)
+	tx.Sample = NewSampleClient(tx.config)
 	tx.Setting = NewSettingClient(tx.config)
 	tx.SubGrant = NewSubGrantClient(tx.config)
 	tx.SubNode = NewSubNodeClient(tx.config)

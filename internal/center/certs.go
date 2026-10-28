@@ -83,7 +83,8 @@ func selfSigned(domain string) (string, string, error) {
 }
 
 func certView(c *ent.Certificate) gin.H {
-	return gin.H{"id": c.ID, "name": c.Name, "domain": c.Domain, "source": c.Source, "not_after": c.NotAfter, "fingerprint": certFingerprint(c.CertPem), "created_at": c.CreatedAt}
+	return gin.H{"id": c.ID, "name": c.Name, "domain": c.Domain, "source": c.Source, "gate_id": c.GateID, "not_after": c.NotAfter, "fingerprint": certFingerprint(c.CertPem),
+		"health": certHealth(c, time.Now()), "last_error": c.LastError, "renewed_at": c.RenewedAt, "created_at": c.CreatedAt}
 }
 
 func (s *Server) listCerts(c *gin.Context) {
@@ -184,7 +185,8 @@ func (s *Server) agentCert(c *gin.Context) {
 		}
 	}
 	cert, err := s.Store.Ent.Certificate.Get(ctx, id)
-	if err != nil {
+	if err != nil || cert.Source == certificate.SourcePanel || cert.KeyPem == "" {
+		// 1Panel 证书的私钥只在 Gate 本机，中心没有。
 		failure(c, 404, "cert_not_found")
 		return
 	}

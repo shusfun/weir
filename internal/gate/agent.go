@@ -5,10 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,6 +34,8 @@ type Agent struct {
 	MeterEvery     time.Duration
 	HeartbeatEvery time.Duration
 	ReportEvery    int64
+	// switchTried 是上一次尝试切换中心地址的时间（由 mu 保护）。
+	switchTried time.Time
 }
 
 func NewAgent(p Paths) (*Agent, error) {
@@ -178,6 +183,15 @@ func (a *Agent) ensureCerts(ctx context.Context, cfg contracts.GateConfig) error
 		return err
 	}
 	for _, ref := range cfg.Certs {
+		if ref.Panel != "" {
+			// 1Panel 管理的本机证书：私钥只在本机，缺文件时经 1Panel 取得；1Panel 续签后摘要会变，不核对。
+			if _, ok := st.Certs[strconv.FormatInt(ref.ID, 10)]; !ok {
+				if _, err = a.helper.PanelCert(ctx, ref.ID, ref.Panel); err != nil {
+					return fmt.Errorf("certificate %d via 1Panel: %w", ref.ID, err)
+				}
+			}
+			continue
+		}
 		if st.Certs[strconv.FormatInt(ref.ID, 10)] == ref.SHA256 {
 			continue
 		}
@@ -318,14 +332,79 @@ func (a *Agent) meter(ctx context.Context) error {
 func (a *Agent) heartbeat(ctx context.Context) error {
 	hb := contracts.Heartbeat{Version: buildinfo.Version, Arch: runtime.GOARCH, Kernels: map[string]string{}, Host: sampleHost()}
 	hb.Hostname, _ = os.Hostname()
+	hb.Center = a.center.origin()
+	panelCerts := map[int64]string{}
+	a.mu.Lock()
+	if a.st.Config != nil {
+		for _, ref := range a.st.Config.Certs {
+			if ref.Panel != "" {
+				panelCerts[ref.ID] = ref.Panel
+			}
+		}
+	}
+	a.mu.Unlock()
+	if st, certs, err := a.helper.PanelReport(ctx, panelCerts); err == nil {
+		hb.Panel, hb.PanelCerts = &st, certs
+	}
 	if st, err := a.helper.Status(ctx); err == nil {
 		hb.ListeningPorts = st.Listening
 		for name := range st.Running {
 			hb.Kernels[name] = st.Active[name]
 		}
 	}
-	_, err := a.center.call(ctx, "POST", "/agent/heartbeat", hb, nil)
-	return err
+	var reply contracts.HeartbeatReply
+	if _, err := a.center.call(ctx, "POST", "/agent/heartbeat", hb, &reply); err != nil {
+		return err
+	}
+	if want := strings.TrimRight(reply.Center, "/"); want != "" && want != hb.Center && !loopbackCenter(hb.Center) {
+		return a.switchCenter(ctx, want)
+	}
+	return nil
+}
+
+// centerClientFor 创建用来验证新地址的客户端（测试中替换以信任测试证书）。
+var centerClientFor = newCenterClient
+
+// switchRetry 是新地址认证失败后的重试间隔。
+const switchRetry = 10 * time.Minute
+
+// switchCenter 先用新地址完成一次设备认证（签名挑战），成功后由辅助程序改写设备配置，再改用新地址。
+// 失败保持旧地址，10 分钟后再试；设备 ID 与私钥不变。
+func (a *Agent) switchCenter(ctx context.Context, center string) error {
+	a.mu.Lock()
+	if time.Since(a.switchTried) < switchRetry {
+		a.mu.Unlock()
+		return nil
+	}
+	a.switchTried = time.Now()
+	a.mu.Unlock()
+	if validCenter(center) != nil || !strings.HasPrefix(center, "https://") {
+		return fmt.Errorf("center switch to %q rejected: not https", center)
+	}
+	probe, err := centerClientFor(a.cfg)
+	if err != nil {
+		return err
+	}
+	probe.setOrigin(center)
+	if _, err = probe.bearer(ctx); err != nil {
+		return fmt.Errorf("center switch to %s: authentication failed: %w", center, err)
+	}
+	if err = a.helper.SetCenter(ctx, center); err != nil {
+		return fmt.Errorf("center switch to %s: %w", center, err)
+	}
+	a.center.setOrigin(center)
+	log.Printf("center switched to %s", center)
+	return nil
+}
+
+// loopbackCenter 判断是否经本机回环连接中心（单机角色），这种连接不跟随公共地址切换。
+func loopbackCenter(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	ip := net.ParseIP(u.Hostname())
+	return strings.EqualFold(u.Hostname(), "localhost") || ip != nil && ip.IsLoopback()
 }
 
 func (a *Agent) actionLoop(ctx context.Context) {

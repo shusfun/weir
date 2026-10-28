@@ -394,6 +394,9 @@ func (s *Server) previewProfile(c *gin.Context) {
 			out["output_error"] = err.Error()
 		} else {
 			out["output"], out["content_type"] = string(body), ct
+			if checkKernel(req.Target) != "" {
+				out["check"] = s.checkSubscription(ctx, req.Target, body)
+			}
 		}
 	}
 	c.JSON(200, out)
@@ -431,7 +434,7 @@ func (s *Server) shareProfile(c *gin.Context) {
 		return
 	}
 	s.audit(c, "misub.profile.share", "profile:"+itoa(id), "ok")
-	c.JSON(200, gin.H{"url": requestOrigin(c.Request) + "/sub/g/" + token, "expires_at": exp})
+	c.JSON(200, gin.H{"url": s.siteOrigin(c) + "/sub/g/" + token, "expires_at": exp})
 }
 
 func (s *Server) unshareProfile(c *gin.Context) {
@@ -512,7 +515,7 @@ func (s *Server) myGroups(c *gin.Context) {
 		if err != nil || !p.Enabled {
 			continue
 		}
-		out = append(out, gin.H{"id": p.ID, "name": p.Name, "url": requestOrigin(c.Request) + "/sub/g/" + g.Token, "expires_at": p.ExpiresAt, "last_used_at": g.LastUsedAt})
+		out = append(out, gin.H{"id": p.ID, "name": p.Name, "url": s.siteOrigin(c) + "/sub/g/" + g.Token, "expires_at": p.ExpiresAt, "last_used_at": g.LastUsedAt})
 	}
 	c.JSON(200, gin.H{"items": out})
 }
@@ -528,6 +531,10 @@ func (s *Server) serveGroup(c *gin.Context) {
 	token := c.Param("token")
 	if len(token) < 16 || len(token) > 128 {
 		failure(c, 404, "subscription_not_found")
+		return
+	}
+	if wantsBrowserPage(c) && s.disguised(ctx) {
+		disguisePage(c)
 		return
 	}
 	var p *ent.SubProfile
@@ -580,13 +587,14 @@ func (s *Server) writeGroup(c *gin.Context, p *ent.SubProfile, forced string) {
 			return
 		}
 	}
-	managed := requestOrigin(c.Request) + c.Request.URL.Path
+	managed := s.siteOrigin(c) + c.Request.URL.Path
 	body, ct, err := misub.Render(list, target, s.renderOptions(p, g, ua, c.Request.URL.RawQuery, managed), tpl)
 	if err != nil {
 		failure(c, 422, "format_conversion_failed")
 		return
 	}
 	_ = p.Update().AddDownloads(1).Exec(ctx)
+	s.recordSubCheck("profile-"+itoa(p.ID), "订阅组 · "+p.Name, target, body)
 	c.Header("Profile-Update-Interval", itoa(g.UpdateInterval))
 	c.Header("Content-Disposition", "attachment; filename*=UTF-8''"+urlPathEscape(p.Name))
 	c.Data(200, ct, body)

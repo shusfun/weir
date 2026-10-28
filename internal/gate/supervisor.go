@@ -171,6 +171,9 @@ func (s *Supervisor) Test(ctx context.Context, name, version, config string) err
 		if len(text) > 800 {
 			text = text[len(text)-800:]
 		}
+		if text == "" {
+			text = err.Error() // 内核没能启动（如降权失败）时没有输出，交回启动错误本身
+		}
 		return errors.New(name + " 配置自检失败：" + text)
 	}
 	return nil

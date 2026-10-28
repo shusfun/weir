@@ -85,6 +85,20 @@ func (_u *GateUpdate) SetNillablePublicHost(v *string) *GateUpdate {
 	return _u
 }
 
+// SetCenterURL sets the "center_url" field.
+func (_u *GateUpdate) SetCenterURL(v string) *GateUpdate {
+	_u.mutation.SetCenterURL(v)
+	return _u
+}
+
+// SetNillableCenterURL sets the "center_url" field if the given value is not nil.
+func (_u *GateUpdate) SetNillableCenterURL(v *string) *GateUpdate {
+	if v != nil {
+		_u.SetCenterURL(*v)
+	}
+	return _u
+}
+
 // SetVersion sets the "version" field.
 func (_u *GateUpdate) SetVersion(v string) *GateUpdate {
 	_u.mutation.SetVersion(v)
@@ -198,6 +212,18 @@ func (_u *GateUpdate) SetHost(v map[string]interface{}) *GateUpdate {
 // ClearHost clears the value of the "host" field.
 func (_u *GateUpdate) ClearHost() *GateUpdate {
 	_u.mutation.ClearHost()
+	return _u
+}
+
+// SetPanel sets the "panel" field.
+func (_u *GateUpdate) SetPanel(v map[string]interface{}) *GateUpdate {
+	_u.mutation.SetPanel(v)
+	return _u
+}
+
+// ClearPanel clears the value of the "panel" field.
+func (_u *GateUpdate) ClearPanel() *GateUpdate {
+	_u.mutation.ClearPanel()
 	return _u
 }
 
@@ -404,6 +430,11 @@ func (_u *GateUpdate) check() error {
 			return &ValidationError{Name: "public_host", err: fmt.Errorf(`ent: validator failed for field "Gate.public_host": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.CenterURL(); ok {
+		if err := gate.CenterURLValidator(v); err != nil {
+			return &ValidationError{Name: "center_url", err: fmt.Errorf(`ent: validator failed for field "Gate.center_url": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -430,6 +461,9 @@ func (_u *GateUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.PublicHost(); ok {
 		_spec.SetField(gate.FieldPublicHost, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CenterURL(); ok {
+		_spec.SetField(gate.FieldCenterURL, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Version(); ok {
 		_spec.SetField(gate.FieldVersion, field.TypeString, value)
@@ -474,6 +508,12 @@ func (_u *GateUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.HostCleared() {
 		_spec.ClearField(gate.FieldHost, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.Panel(); ok {
+		_spec.SetField(gate.FieldPanel, field.TypeJSON, value)
+	}
+	if _u.mutation.PanelCleared() {
+		_spec.ClearField(gate.FieldPanel, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.ConfigRevision(); ok {
 		_spec.SetField(gate.FieldConfigRevision, field.TypeInt64, value)
@@ -593,6 +633,20 @@ func (_u *GateUpdateOne) SetNillablePublicHost(v *string) *GateUpdateOne {
 	return _u
 }
 
+// SetCenterURL sets the "center_url" field.
+func (_u *GateUpdateOne) SetCenterURL(v string) *GateUpdateOne {
+	_u.mutation.SetCenterURL(v)
+	return _u
+}
+
+// SetNillableCenterURL sets the "center_url" field if the given value is not nil.
+func (_u *GateUpdateOne) SetNillableCenterURL(v *string) *GateUpdateOne {
+	if v != nil {
+		_u.SetCenterURL(*v)
+	}
+	return _u
+}
+
 // SetVersion sets the "version" field.
 func (_u *GateUpdateOne) SetVersion(v string) *GateUpdateOne {
 	_u.mutation.SetVersion(v)
@@ -706,6 +760,18 @@ func (_u *GateUpdateOne) SetHost(v map[string]interface{}) *GateUpdateOne {
 // ClearHost clears the value of the "host" field.
 func (_u *GateUpdateOne) ClearHost() *GateUpdateOne {
 	_u.mutation.ClearHost()
+	return _u
+}
+
+// SetPanel sets the "panel" field.
+func (_u *GateUpdateOne) SetPanel(v map[string]interface{}) *GateUpdateOne {
+	_u.mutation.SetPanel(v)
+	return _u
+}
+
+// ClearPanel clears the value of the "panel" field.
+func (_u *GateUpdateOne) ClearPanel() *GateUpdateOne {
+	_u.mutation.ClearPanel()
 	return _u
 }
 
@@ -925,6 +991,11 @@ func (_u *GateUpdateOne) check() error {
 			return &ValidationError{Name: "public_host", err: fmt.Errorf(`ent: validator failed for field "Gate.public_host": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.CenterURL(); ok {
+		if err := gate.CenterURLValidator(v); err != nil {
+			return &ValidationError{Name: "center_url", err: fmt.Errorf(`ent: validator failed for field "Gate.center_url": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -969,6 +1040,9 @@ func (_u *GateUpdateOne) sqlSave(ctx context.Context) (_node *Gate, err error) {
 	if value, ok := _u.mutation.PublicHost(); ok {
 		_spec.SetField(gate.FieldPublicHost, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.CenterURL(); ok {
+		_spec.SetField(gate.FieldCenterURL, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.Version(); ok {
 		_spec.SetField(gate.FieldVersion, field.TypeString, value)
 	}
@@ -1012,6 +1086,12 @@ func (_u *GateUpdateOne) sqlSave(ctx context.Context) (_node *Gate, err error) {
 	}
 	if _u.mutation.HostCleared() {
 		_spec.ClearField(gate.FieldHost, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.Panel(); ok {
+		_spec.SetField(gate.FieldPanel, field.TypeJSON, value)
+	}
+	if _u.mutation.PanelCleared() {
+		_spec.ClearField(gate.FieldPanel, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.ConfigRevision(); ok {
 		_spec.SetField(gate.FieldConfigRevision, field.TypeInt64, value)

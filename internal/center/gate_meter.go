@@ -10,6 +10,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/budget"
 	"github.com/shusfun/weir/internal/store/ent/credential"
 	"github.com/shusfun/weir/internal/store/ent/node"
+	entsample "github.com/shusfun/weir/internal/store/ent/sample"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -76,6 +77,18 @@ func (s *Server) applyMeter(ctx context.Context, g *ent.Gate, rep contracts.Mete
 		return affected, err
 	}
 	now := time.Now()
+	// 历史：计数可用（fresh）时才记，这一分钟即使没有流量也记为 0；不可用时不记，图表显示为未知。
+	fresh := rep.Status != "unavailable"
+	gateTotal, users := int64(0), map[int]int64{}
+	defer func() {
+		if !fresh {
+			return
+		}
+		s.recordTraffic(ctx, entsample.ScopeGate, g.ID, gateTotal, now)
+		for uid, d := range users {
+			s.recordTraffic(ctx, entsample.ScopeUser, uid, d, now)
+		}
+	}()
 	for _, sample := range rep.Usage {
 		cred, err := s.Store.Ent.Credential.Query().Where(credential.StatsKeyEQ(sample.StatsKey), credential.NodeIDIn(nodeIDs...)).Only(ctx)
 		if ent.IsNotFound(err) {
@@ -91,10 +104,15 @@ func (s *Server) applyMeter(ctx context.Context, g *ent.Gate, rep contracts.Mete
 		if err = cred.Update().SetMeterEpoch(rep.Epoch).SetMeterUp(sample.Up).SetMeterDown(sample.Down).Exec(ctx); err != nil {
 			return nil, err
 		}
-		if delta == 0 || cred.Internal || cred.UserID == nil {
+		if cred.Internal || cred.UserID == nil {
 			continue
 		}
 		uid := *cred.UserID
+		gateTotal += delta
+		users[uid] += delta
+		if delta == 0 {
+			continue
+		}
 		if err = s.Store.Ent.User.UpdateOneID(uid).AddUsed(delta).Exec(ctx); err != nil {
 			return nil, err
 		}

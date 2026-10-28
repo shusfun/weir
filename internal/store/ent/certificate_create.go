@@ -48,6 +48,62 @@ func (_c *CertificateCreate) SetNillableSource(v *certificate.Source) *Certifica
 	return _c
 }
 
+// SetGateID sets the "gate_id" field.
+func (_c *CertificateCreate) SetGateID(v int) *CertificateCreate {
+	_c.mutation.SetGateID(v)
+	return _c
+}
+
+// SetNillableGateID sets the "gate_id" field if the given value is not nil.
+func (_c *CertificateCreate) SetNillableGateID(v *int) *CertificateCreate {
+	if v != nil {
+		_c.SetGateID(*v)
+	}
+	return _c
+}
+
+// SetStatus sets the "status" field.
+func (_c *CertificateCreate) SetStatus(v certificate.Status) *CertificateCreate {
+	_c.mutation.SetStatus(v)
+	return _c
+}
+
+// SetNillableStatus sets the "status" field if the given value is not nil.
+func (_c *CertificateCreate) SetNillableStatus(v *certificate.Status) *CertificateCreate {
+	if v != nil {
+		_c.SetStatus(*v)
+	}
+	return _c
+}
+
+// SetLastError sets the "last_error" field.
+func (_c *CertificateCreate) SetLastError(v string) *CertificateCreate {
+	_c.mutation.SetLastError(v)
+	return _c
+}
+
+// SetNillableLastError sets the "last_error" field if the given value is not nil.
+func (_c *CertificateCreate) SetNillableLastError(v *string) *CertificateCreate {
+	if v != nil {
+		_c.SetLastError(*v)
+	}
+	return _c
+}
+
+// SetRenewedAt sets the "renewed_at" field.
+func (_c *CertificateCreate) SetRenewedAt(v time.Time) *CertificateCreate {
+	_c.mutation.SetRenewedAt(v)
+	return _c
+}
+
+// SetNillableRenewedAt sets the "renewed_at" field if the given value is not nil.
+func (_c *CertificateCreate) SetNillableRenewedAt(v *time.Time) *CertificateCreate {
+	if v != nil {
+		_c.SetRenewedAt(*v)
+	}
+	return _c
+}
+
 // SetCertPem sets the "cert_pem" field.
 func (_c *CertificateCreate) SetCertPem(v string) *CertificateCreate {
 	_c.mutation.SetCertPem(v)
@@ -155,6 +211,14 @@ func (_c *CertificateCreate) defaults() {
 		v := certificate.DefaultSource
 		_c.mutation.SetSource(v)
 	}
+	if _, ok := _c.mutation.Status(); !ok {
+		v := certificate.DefaultStatus
+		_c.mutation.SetStatus(v)
+	}
+	if _, ok := _c.mutation.LastError(); !ok {
+		v := certificate.DefaultLastError
+		_c.mutation.SetLastError(v)
+	}
 	if _, ok := _c.mutation.Sha256(); !ok {
 		v := certificate.DefaultSha256
 		_c.mutation.SetSha256(v)
@@ -194,6 +258,17 @@ func (_c *CertificateCreate) check() error {
 		if err := certificate.SourceValidator(v); err != nil {
 			return &ValidationError{Name: "source", err: fmt.Errorf(`ent: validator failed for field "Certificate.source": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.Status(); !ok {
+		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "Certificate.status"`)}
+	}
+	if v, ok := _c.mutation.Status(); ok {
+		if err := certificate.StatusValidator(v); err != nil {
+			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Certificate.status": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.LastError(); !ok {
+		return &ValidationError{Name: "last_error", err: errors.New(`ent: missing required field "Certificate.last_error"`)}
 	}
 	if _, ok := _c.mutation.CertPem(); !ok {
 		return &ValidationError{Name: "cert_pem", err: errors.New(`ent: missing required field "Certificate.cert_pem"`)}
@@ -248,6 +323,22 @@ func (_c *CertificateCreate) createSpec() (*Certificate, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Source(); ok {
 		_spec.SetField(certificate.FieldSource, field.TypeEnum, value)
 		_node.Source = value
+	}
+	if value, ok := _c.mutation.GateID(); ok {
+		_spec.SetField(certificate.FieldGateID, field.TypeInt, value)
+		_node.GateID = &value
+	}
+	if value, ok := _c.mutation.Status(); ok {
+		_spec.SetField(certificate.FieldStatus, field.TypeEnum, value)
+		_node.Status = value
+	}
+	if value, ok := _c.mutation.LastError(); ok {
+		_spec.SetField(certificate.FieldLastError, field.TypeString, value)
+		_node.LastError = value
+	}
+	if value, ok := _c.mutation.RenewedAt(); ok {
+		_spec.SetField(certificate.FieldRenewedAt, field.TypeTime, value)
+		_node.RenewedAt = &value
 	}
 	if value, ok := _c.mutation.CertPem(); ok {
 		_spec.SetField(certificate.FieldCertPem, field.TypeString, value)
@@ -358,6 +449,72 @@ func (u *CertificateUpsert) SetSource(v certificate.Source) *CertificateUpsert {
 // UpdateSource sets the "source" field to the value that was provided on create.
 func (u *CertificateUpsert) UpdateSource() *CertificateUpsert {
 	u.SetExcluded(certificate.FieldSource)
+	return u
+}
+
+// SetGateID sets the "gate_id" field.
+func (u *CertificateUpsert) SetGateID(v int) *CertificateUpsert {
+	u.Set(certificate.FieldGateID, v)
+	return u
+}
+
+// UpdateGateID sets the "gate_id" field to the value that was provided on create.
+func (u *CertificateUpsert) UpdateGateID() *CertificateUpsert {
+	u.SetExcluded(certificate.FieldGateID)
+	return u
+}
+
+// AddGateID adds v to the "gate_id" field.
+func (u *CertificateUpsert) AddGateID(v int) *CertificateUpsert {
+	u.Add(certificate.FieldGateID, v)
+	return u
+}
+
+// ClearGateID clears the value of the "gate_id" field.
+func (u *CertificateUpsert) ClearGateID() *CertificateUpsert {
+	u.SetNull(certificate.FieldGateID)
+	return u
+}
+
+// SetStatus sets the "status" field.
+func (u *CertificateUpsert) SetStatus(v certificate.Status) *CertificateUpsert {
+	u.Set(certificate.FieldStatus, v)
+	return u
+}
+
+// UpdateStatus sets the "status" field to the value that was provided on create.
+func (u *CertificateUpsert) UpdateStatus() *CertificateUpsert {
+	u.SetExcluded(certificate.FieldStatus)
+	return u
+}
+
+// SetLastError sets the "last_error" field.
+func (u *CertificateUpsert) SetLastError(v string) *CertificateUpsert {
+	u.Set(certificate.FieldLastError, v)
+	return u
+}
+
+// UpdateLastError sets the "last_error" field to the value that was provided on create.
+func (u *CertificateUpsert) UpdateLastError() *CertificateUpsert {
+	u.SetExcluded(certificate.FieldLastError)
+	return u
+}
+
+// SetRenewedAt sets the "renewed_at" field.
+func (u *CertificateUpsert) SetRenewedAt(v time.Time) *CertificateUpsert {
+	u.Set(certificate.FieldRenewedAt, v)
+	return u
+}
+
+// UpdateRenewedAt sets the "renewed_at" field to the value that was provided on create.
+func (u *CertificateUpsert) UpdateRenewedAt() *CertificateUpsert {
+	u.SetExcluded(certificate.FieldRenewedAt)
+	return u
+}
+
+// ClearRenewedAt clears the value of the "renewed_at" field.
+func (u *CertificateUpsert) ClearRenewedAt() *CertificateUpsert {
+	u.SetNull(certificate.FieldRenewedAt)
 	return u
 }
 
@@ -511,6 +668,83 @@ func (u *CertificateUpsertOne) SetSource(v certificate.Source) *CertificateUpser
 func (u *CertificateUpsertOne) UpdateSource() *CertificateUpsertOne {
 	return u.Update(func(s *CertificateUpsert) {
 		s.UpdateSource()
+	})
+}
+
+// SetGateID sets the "gate_id" field.
+func (u *CertificateUpsertOne) SetGateID(v int) *CertificateUpsertOne {
+	return u.Update(func(s *CertificateUpsert) {
+		s.SetGateID(v)
+	})
+}
+
+// AddGateID adds v to the "gate_id" field.
+func (u *CertificateUpsertOne) AddGateID(v int) *CertificateUpsertOne {
+	return u.Update(func(s *CertificateUpsert) {
+		s.AddGateID(v)
+	})
+}
+
+// UpdateGateID sets the "gate_id" field to the value that was provided on create.
+func (u *CertificateUpsertOne) UpdateGateID() *CertificateUpsertOne {
+	return u.Update(func(s *CertificateUpsert) {
+		s.UpdateGateID()
+	})
+}
+
+// ClearGateID clears the value of the "gate_id" field.
+func (u *CertificateUpsertOne) ClearGateID() *CertificateUpsertOne {
+	return u.Update(func(s *CertificateUpsert) {
+		s.ClearGateID()
+	})
+}
+
+// SetStatus sets the "status" field.
+func (u *CertificateUpsertOne) SetStatus(v certificate.Status) *CertificateUpsertOne {
+	return u.Update(func(s *CertificateUpsert) {
+		s.SetStatus(v)
+	})
+}
+
+// UpdateStatus sets the "status" field to the value that was provided on create.
+func (u *CertificateUpsertOne) UpdateStatus() *CertificateUpsertOne {
+	return u.Update(func(s *CertificateUpsert) {
+		s.UpdateStatus()
+	})
+}
+
+// SetLastError sets the "last_error" field.
+func (u *CertificateUpsertOne) SetLastError(v string) *CertificateUpsertOne {
+	return u.Update(func(s *CertificateUpsert) {
+		s.SetLastError(v)
+	})
+}
+
+// UpdateLastError sets the "last_error" field to the value that was provided on create.
+func (u *CertificateUpsertOne) UpdateLastError() *CertificateUpsertOne {
+	return u.Update(func(s *CertificateUpsert) {
+		s.UpdateLastError()
+	})
+}
+
+// SetRenewedAt sets the "renewed_at" field.
+func (u *CertificateUpsertOne) SetRenewedAt(v time.Time) *CertificateUpsertOne {
+	return u.Update(func(s *CertificateUpsert) {
+		s.SetRenewedAt(v)
+	})
+}
+
+// UpdateRenewedAt sets the "renewed_at" field to the value that was provided on create.
+func (u *CertificateUpsertOne) UpdateRenewedAt() *CertificateUpsertOne {
+	return u.Update(func(s *CertificateUpsert) {
+		s.UpdateRenewedAt()
+	})
+}
+
+// ClearRenewedAt clears the value of the "renewed_at" field.
+func (u *CertificateUpsertOne) ClearRenewedAt() *CertificateUpsertOne {
+	return u.Update(func(s *CertificateUpsert) {
+		s.ClearRenewedAt()
 	})
 }
 
@@ -841,6 +1075,83 @@ func (u *CertificateUpsertBulk) SetSource(v certificate.Source) *CertificateUpse
 func (u *CertificateUpsertBulk) UpdateSource() *CertificateUpsertBulk {
 	return u.Update(func(s *CertificateUpsert) {
 		s.UpdateSource()
+	})
+}
+
+// SetGateID sets the "gate_id" field.
+func (u *CertificateUpsertBulk) SetGateID(v int) *CertificateUpsertBulk {
+	return u.Update(func(s *CertificateUpsert) {
+		s.SetGateID(v)
+	})
+}
+
+// AddGateID adds v to the "gate_id" field.
+func (u *CertificateUpsertBulk) AddGateID(v int) *CertificateUpsertBulk {
+	return u.Update(func(s *CertificateUpsert) {
+		s.AddGateID(v)
+	})
+}
+
+// UpdateGateID sets the "gate_id" field to the value that was provided on create.
+func (u *CertificateUpsertBulk) UpdateGateID() *CertificateUpsertBulk {
+	return u.Update(func(s *CertificateUpsert) {
+		s.UpdateGateID()
+	})
+}
+
+// ClearGateID clears the value of the "gate_id" field.
+func (u *CertificateUpsertBulk) ClearGateID() *CertificateUpsertBulk {
+	return u.Update(func(s *CertificateUpsert) {
+		s.ClearGateID()
+	})
+}
+
+// SetStatus sets the "status" field.
+func (u *CertificateUpsertBulk) SetStatus(v certificate.Status) *CertificateUpsertBulk {
+	return u.Update(func(s *CertificateUpsert) {
+		s.SetStatus(v)
+	})
+}
+
+// UpdateStatus sets the "status" field to the value that was provided on create.
+func (u *CertificateUpsertBulk) UpdateStatus() *CertificateUpsertBulk {
+	return u.Update(func(s *CertificateUpsert) {
+		s.UpdateStatus()
+	})
+}
+
+// SetLastError sets the "last_error" field.
+func (u *CertificateUpsertBulk) SetLastError(v string) *CertificateUpsertBulk {
+	return u.Update(func(s *CertificateUpsert) {
+		s.SetLastError(v)
+	})
+}
+
+// UpdateLastError sets the "last_error" field to the value that was provided on create.
+func (u *CertificateUpsertBulk) UpdateLastError() *CertificateUpsertBulk {
+	return u.Update(func(s *CertificateUpsert) {
+		s.UpdateLastError()
+	})
+}
+
+// SetRenewedAt sets the "renewed_at" field.
+func (u *CertificateUpsertBulk) SetRenewedAt(v time.Time) *CertificateUpsertBulk {
+	return u.Update(func(s *CertificateUpsert) {
+		s.SetRenewedAt(v)
+	})
+}
+
+// UpdateRenewedAt sets the "renewed_at" field to the value that was provided on create.
+func (u *CertificateUpsertBulk) UpdateRenewedAt() *CertificateUpsertBulk {
+	return u.Update(func(s *CertificateUpsert) {
+		s.UpdateRenewedAt()
+	})
+}
+
+// ClearRenewedAt clears the value of the "renewed_at" field.
+func (u *CertificateUpsertBulk) ClearRenewedAt() *CertificateUpsertBulk {
+	return u.Update(func(s *CertificateUpsert) {
+		s.ClearRenewedAt()
 	})
 }
 

@@ -59,11 +59,12 @@ func TestNodeWizardUsersLinksChainsAndSubscription(t *testing.T) {
 	// 第一步只选协议与 VPS：REALITY 参数、端口由系统生成（skip_probe 时用第一个候选目标）。
 	reality := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": gid, "preset": "vless-reality", "skip_probe": true}, 200)
 	st := reality["settings"].(map[string]any)
-	if st["reality_public_key"] == "" || st["reality_dest"] != "www.microsoft.com:443" || reality["port"].(float64) < portMin {
+	// 443 空闲（Gate 已上报端口、没有其他程序占用）：REALITY 节点优先用 443。
+	if st["reality_public_key"] == "" || st["reality_dest"] != "www.microsoft.com:443" || reality["port"].(float64) != 443 {
 		t.Fatalf("reality node = %v", reality)
 	}
-	// 需要证书的预设没有证书时拒绝；Hysteria2 自动自签。
-	mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": gid, "preset": "trojan-tls", "skip_probe": true}, 400)
+	// 需要证书的预设拿不到证书时说明原因（测试中 ACME 不可达、没有 1Panel、没有节点证书域名）；Hysteria2 自动自签。
+	mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": gid, "preset": "trojan-tls", "skip_probe": true}, 422)
 	hy2 := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": gid, "preset": "hysteria2", "skip_probe": true}, 200)
 	if hy2["cert_id"] == nil {
 		t.Fatalf("hysteria2 must get a self-signed certificate: %v", hy2)

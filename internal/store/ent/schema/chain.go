@@ -17,7 +17,10 @@ func (Chain) Fields() []ent.Field {
 		field.Int("user_id"),
 		field.Int("entry_node_id"),
 		field.String("name").MaxLen(100),
-		field.Enum("exit_kind").Values("socks5", "node"),
+		field.Enum("exit_kind").Values("socks5", "node", "source"),
+		// exit_source：exit_kind 为 source 时的订阅源出口。用户自建只能用 profile_id（分配给他的订阅组），
+		// 管理员代建可以用 source_id；mode 为 node（单个节点）或 filter（一组），match 为名称或正则。
+		field.JSON("exit_source", map[string]any{}).Optional(),
 		field.String("exit_address").MaxLen(255).Default(""),
 		field.Int("exit_port").Default(0),
 		field.String("exit_username").MaxLen(255).Default(""),

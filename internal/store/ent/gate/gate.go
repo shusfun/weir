@@ -22,6 +22,8 @@ const (
 	FieldStatus = "status"
 	// FieldPublicHost holds the string denoting the public_host field in the database.
 	FieldPublicHost = "public_host"
+	// FieldCenterURL holds the string denoting the center_url field in the database.
+	FieldCenterURL = "center_url"
 	// FieldVersion holds the string denoting the version field in the database.
 	FieldVersion = "version"
 	// FieldHostname holds the string denoting the hostname field in the database.
@@ -38,6 +40,8 @@ const (
 	FieldKernelPins = "kernel_pins"
 	// FieldHost holds the string denoting the host field in the database.
 	FieldHost = "host"
+	// FieldPanel holds the string denoting the panel field in the database.
+	FieldPanel = "panel"
 	// FieldConfigRevision holds the string denoting the config_revision field in the database.
 	FieldConfigRevision = "config_revision"
 	// FieldAppliedRevision holds the string denoting the applied_revision field in the database.
@@ -67,6 +71,7 @@ var Columns = []string{
 	FieldPublicKey,
 	FieldStatus,
 	FieldPublicHost,
+	FieldCenterURL,
 	FieldVersion,
 	FieldHostname,
 	FieldArch,
@@ -75,6 +80,7 @@ var Columns = []string{
 	FieldKernelsRunning,
 	FieldKernelPins,
 	FieldHost,
+	FieldPanel,
 	FieldConfigRevision,
 	FieldAppliedRevision,
 	FieldFailedRevision,
@@ -103,6 +109,10 @@ var (
 	DefaultPublicHost string
 	// PublicHostValidator is a validator for the "public_host" field. It is called by the builders before save.
 	PublicHostValidator func(string) error
+	// DefaultCenterURL holds the default value on creation for the "center_url" field.
+	DefaultCenterURL string
+	// CenterURLValidator is a validator for the "center_url" field. It is called by the builders before save.
+	CenterURLValidator func(string) error
 	// DefaultVersion holds the default value on creation for the "version" field.
 	DefaultVersion string
 	// DefaultHostname holds the default value on creation for the "hostname" field.
@@ -181,6 +191,11 @@ func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 // ByPublicHost orders the results by the public_host field.
 func ByPublicHost(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPublicHost, opts...).ToFunc()
+}
+
+// ByCenterURL orders the results by the center_url field.
+func ByCenterURL(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCenterURL, opts...).ToFunc()
 }
 
 // ByVersion orders the results by the version field.

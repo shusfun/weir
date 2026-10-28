@@ -97,6 +97,18 @@ func (_u *ChainUpdate) SetNillableExitKind(v *chain.ExitKind) *ChainUpdate {
 	return _u
 }
 
+// SetExitSource sets the "exit_source" field.
+func (_u *ChainUpdate) SetExitSource(v map[string]interface{}) *ChainUpdate {
+	_u.mutation.SetExitSource(v)
+	return _u
+}
+
+// ClearExitSource clears the value of the "exit_source" field.
+func (_u *ChainUpdate) ClearExitSource() *ChainUpdate {
+	_u.mutation.ClearExitSource()
+	return _u
+}
+
 // SetExitAddress sets the "exit_address" field.
 func (_u *ChainUpdate) SetExitAddress(v string) *ChainUpdate {
 	_u.mutation.SetExitAddress(v)
@@ -288,6 +300,12 @@ func (_u *ChainUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.ExitKind(); ok {
 		_spec.SetField(chain.FieldExitKind, field.TypeEnum, value)
 	}
+	if value, ok := _u.mutation.ExitSource(); ok {
+		_spec.SetField(chain.FieldExitSource, field.TypeJSON, value)
+	}
+	if _u.mutation.ExitSourceCleared() {
+		_spec.ClearField(chain.FieldExitSource, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.ExitAddress(); ok {
 		_spec.SetField(chain.FieldExitAddress, field.TypeString, value)
 	}
@@ -402,6 +420,18 @@ func (_u *ChainUpdateOne) SetNillableExitKind(v *chain.ExitKind) *ChainUpdateOne
 	if v != nil {
 		_u.SetExitKind(*v)
 	}
+	return _u
+}
+
+// SetExitSource sets the "exit_source" field.
+func (_u *ChainUpdateOne) SetExitSource(v map[string]interface{}) *ChainUpdateOne {
+	_u.mutation.SetExitSource(v)
+	return _u
+}
+
+// ClearExitSource clears the value of the "exit_source" field.
+func (_u *ChainUpdateOne) ClearExitSource() *ChainUpdateOne {
+	_u.mutation.ClearExitSource()
 	return _u
 }
 
@@ -625,6 +655,12 @@ func (_u *ChainUpdateOne) sqlSave(ctx context.Context) (_node *Chain, err error)
 	}
 	if value, ok := _u.mutation.ExitKind(); ok {
 		_spec.SetField(chain.FieldExitKind, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.ExitSource(); ok {
+		_spec.SetField(chain.FieldExitSource, field.TypeJSON, value)
+	}
+	if _u.mutation.ExitSourceCleared() {
+		_spec.ClearField(chain.FieldExitSource, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.ExitAddress(); ok {
 		_spec.SetField(chain.FieldExitAddress, field.TypeString, value)

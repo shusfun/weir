@@ -20,6 +20,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/credential"
 	"github.com/shusfun/weir/internal/store/ent/link"
 	"github.com/shusfun/weir/internal/subout"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 func (s *Server) subRoutes(r *gin.Engine, ready *gin.RouterGroup) {
@@ -130,6 +131,29 @@ func shareLink(n *ent.Node, host string, cred *ent.Credential, name string, cert
 			q.Set("spki", spki)
 		}
 		return "hysteria2://" + url.PathEscape(cred.Password) + "@" + addr + "?" + q.Encode() + frag, nil
+	case "socks", "http":
+		// 本地代理：用户名密码认证、不加密。
+		scheme := "socks5"
+		if n.Protocol == "http" {
+			scheme = "http"
+		}
+		return (&url.URL{Scheme: scheme, User: url.UserPassword(cred.UUID, cred.Password), Host: addr, Fragment: name}).String(), nil
+	case "shadowtls":
+		// 没有通用分享链接：按 SIP003 写成带 shadow-tls 插件的 Shadowsocks 2022，Clash / sing-box 订阅据此生成。
+		q.Set("plugin", "shadow-tls;host="+firstNonEmpty(nodeSetting(st, "tls_sni"), "www.microsoft.com")+";password="+cred.Password+";version=3")
+		secret := nodeSetting(st, "ss_password") + ":" + cred.Password
+		return "ss://" + url.UserPassword(firstNonEmpty(nodeSetting(st, "ss_method"), ss2022Method), secret).String() + "@" + addr + "?" + q.Encode() + frag, nil
+	case "wireguard":
+		pub := wgPublicKey(nodeSetting(st, "wg_private_key"))
+		if pub == "" {
+			return "", fmt.Errorf("WireGuard 节点缺少服务端密钥")
+		}
+		q.Set("publickey", pub)
+		q.Set("address", contracts.WGClientAddress(int64(cred.ID)))
+		if m := numberOf(st["wg_mtu"]); m > 0 {
+			q.Set("mtu", strconv.Itoa(m))
+		}
+		return (&url.URL{Scheme: "wireguard", User: url.User(cred.Password), Host: addr, RawQuery: q.Encode(), Fragment: name}).String(), nil
 	case "tuic":
 		q.Set("sni", nodeSetting(st, "tls_sni"))
 		q.Set("alpn", firstNonEmpty(nodeSetting(st, "tls_alpn"), "h3"))
@@ -178,10 +202,20 @@ func (s *Server) linkEntries(ctx context.Context, u *ent.User, l *ent.Link) ([]E
 			e.ChainID, name = ch.ID, ch.Name
 		}
 		var cert *ent.Certificate
-		if n.CertID != nil {
-			cert, _ = s.Store.Ent.Certificate.Get(ctx, *n.CertID)
-		}
 		e.Name = name
+		if n.CertID != nil {
+			// 证书已过期或状态不明的节点不写进订阅（连接会失败，也不能显示为正常）。
+			if cert, err = s.Store.Ent.Certificate.Get(ctx, *n.CertID); err != nil {
+				e.Error = "证书状态未知"
+				out = append(out, e)
+				continue
+			}
+			if ok, why := certUsable(cert, time.Now()); !ok {
+				e.Error = why
+				out = append(out, e)
+				continue
+			}
+		}
 		if e.URI, err = shareLink(n, g.PublicHost, c, name, cert); err != nil {
 			e.Error = err.Error()
 		}
@@ -205,6 +239,21 @@ func (s *Server) linkByToken(ctx context.Context, token string) (*ent.Link, *ent
 	return l, u, true
 }
 
+// disguised：订阅地址打开了伪装页开关。
+func (s *Server) disguised(ctx context.Context) bool {
+	g, err := s.misubSettings(ctx)
+	return err == nil && g.Disguise
+}
+
+// disguisePage 是浏览器访问订阅地址时看到的伪装页：普通的空站点，不出现 Weir、订阅或任何用量信息。
+func disguisePage(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	c.Data(200, "text/html; charset=utf-8", []byte(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Welcome</title>`+
+		`<style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:15px/1.6 system-ui,sans-serif;color:#555;background:#fafafa}</style></head>`+
+		`<body><main><h1 style="font-weight:500;color:#333">It works.</h1><p>This site is under construction.</p></main></body></html>`))
+	c.Abort()
+}
+
 func wantsBrowserPage(c *gin.Context) bool {
 	ua := c.GetHeader("User-Agent")
 	return c.Query("target") == "" && strings.Contains(c.GetHeader("Accept"), "text/html") &&
@@ -225,6 +274,10 @@ func (s *Server) serveSub(c *gin.Context) {
 		return
 	}
 	if wantsBrowserPage(c) {
+		if s.disguised(ctx) {
+			disguisePage(c)
+			return
+		}
 		s.spa(c)
 		return
 	}
@@ -256,12 +309,18 @@ func (s *Server) serveSub(c *gin.Context) {
 	c.Header("Profile-Update-Interval", "12")
 	c.Header("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape("Weir-"+firstNonEmpty(l.Name, "订阅")))
 	_ = l.Update().SetLastUsedAt(time.Now()).Exec(ctx)
+	s.recordSubCheck("link-"+itoa(l.ID), firstNonEmpty(l.Name, "订阅")+" · "+u.Email, target, body)
 	c.Data(200, contentType, body)
 }
 
 // subInfo 供浏览器订阅页使用：只返回本链接的用量、到期与节点名称，不含凭据。
 func (s *Server) subInfo(c *gin.Context) {
 	ctx := c.Request.Context()
+	// 伪装页打开时，匿名的订阅信息接口与不存在的订阅一样返回 404；登录后在「我的订阅」查看。
+	if s.disguised(ctx) {
+		failure(c, 404, "subscription_not_found")
+		return
+	}
 	l, u, ok := s.linkByToken(ctx, c.Param("token"))
 	if !ok {
 		failure(c, 404, "subscription_not_found")
@@ -277,5 +336,5 @@ func (s *Server) subInfo(c *gin.Context) {
 		nodes = append(nodes, gin.H{"name": e.Name, "protocol": e.Protocol, "chain": e.ChainID != 0, "available": e.URI != ""})
 	}
 	c.JSON(200, gin.H{"name": l.Name, "quota": u.Quota, "used": u.Used, "expires_at": u.ExpiresAt, "next_reset": resetHint(u),
-		"formats": subout.Formats, "url": requestOrigin(c.Request) + "/sub/" + l.Token, "nodes": nodes})
+		"formats": subout.Formats, "url": s.siteOrigin(c) + "/sub/" + l.Token, "nodes": nodes})
 }

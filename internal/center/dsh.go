@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -397,10 +397,10 @@ const dshInstructions = `# Weir
 
 ## Weir 工具
 
-- mcp__migate__get_console_context：管理员正在看的节点或页面，对话开始先调用。
-- mcp__migate__list_nodes / get_node_state：节点列表与当前参数（密码、UUID、密钥显示为 <redacted>，不要猜测或修改）。
-- mcp__migate__submit_node_draft：提交节点参数草稿；Weir 在节点所在 VPS 上用真实内核实测，通过后弹窗请管理员确认，未通过会返回原因，可以修改后重新提交。
-- mcp__migate__list_security_events / get_security_event / submit_defense_draft：安全事件与防御草稿，同样由管理员确认后才执行。
+- mcp__migate__get_console_context：管理员此刻在控制台看什么（页面、对象、弹窗、未保存的表单）。每轮回答前先读一次。
+- mcp__migate__navigate_console：带管理员去某个页面或对象；只换页面，不改数据。
+- 只读工具（list_gates、list_nodes、get_node_state、list_users、get_user、list_security_events、get_security_event 等）：脱敏后的状态，密码、UUID、密钥显示为 <redacted>，不要猜测或修改。
+- mcp__migate__list_actions：可以提交草稿的能力与参数说明；mcp__migate__submit_draft：提交草稿（可多步），Weir 试运行，通过后弹窗请管理员确认，未通过会返回原因，可以修改后重新提交。
 
 你无法直接改动 Weir 的任何配置，所有改动都是草稿。
 
@@ -537,9 +537,33 @@ func checkDSHDomain(domain, console string) error {
 		return h
 	}
 	if site(a) != site(b) {
-		return fmt.Errorf("dsh 子域名必须与控制台 %s 属于同一站点（例如 dsh.%s）", b, site(b))
+		return fmt.Errorf("dsh 子域名必须与控制台 %s 属于同一站点（例如 k3f9x2.%s）", b, site(b))
 	}
 	return nil
+}
+
+// frameSite 是控制台 CSP frame-src 允许的来源：控制台所在站点的全部子域名（如 https://*.example.com:*）。
+// IP 与 localhost 没有子域名，改为同主机任意端口（本地开发）。
+func frameSite(r *http.Request) string {
+	scheme, host := requestScheme(r), requestHost(r)
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.Trim(host, "[]")
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.To4() == nil {
+			host = "[" + host + "]"
+		}
+		return scheme + "://" + host + ":*"
+	}
+	if !strings.Contains(host, ".") || host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return scheme + "://localhost:* " + scheme + "://*.localhost:*"
+	}
+	site, err := publicsuffix.EffectiveTLDPlusOne(host)
+	if err != nil {
+		site = host
+	}
+	return scheme + "://*." + site + ":*"
 }
 
 func (s *Server) dshReleases(c *gin.Context) {
@@ -677,18 +701,6 @@ func (s *Server) dshTicket(c *gin.Context) {
 	if err := s.Store.KV.Set(c.Request.Context(), "dsh-ticket:"+digest(t), string(b), time.Minute); err != nil {
 		failure(c, 503, "dsh_ticket_unavailable")
 		return
-	}
-	// 控制台上下文（可选）：管理员从哪个节点或页面打开了抽屉；dsh 用 get_console_context 读取。
-	var hint struct {
-		NodeID int    `json:"node_id"`
-		Path   string `json:"path"`
-	}
-	if raw, _ := io.ReadAll(io.LimitReader(c.Request.Body, 4096)); len(raw) > 0 && json.Unmarshal(raw, &hint) == nil {
-		if len(hint.Path) > 200 || !strings.HasPrefix(hint.Path, "/") {
-			hint.Path = ""
-		}
-		v, _ := json.Marshal(map[string]any{"user_id": c.GetInt("user_id"), "node_id": hint.NodeID, "path": hint.Path, "at": time.Now().UTC()})
-		_ = s.Store.KV.Set(c.Request.Context(), "dsh-context", string(v), 2*time.Hour)
 	}
 	s.audit(c, "dsh.open", "", "ok")
 	c.JSON(200, gin.H{"url": requestScheme(c.Request) + "://" + domain + dshOpenPath + "?t=" + t})

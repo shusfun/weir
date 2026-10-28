@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -53,6 +54,9 @@ func (s *Server) userRoutes(auth, admin *gin.RouterGroup) {
 		g.r.DELETE(g.base+"/chains/:cid", func(c *gin.Context) { s.deleteChain(c, admin) })
 	}
 	auth.GET("/me/nodes", s.myNodes)
+	auth.GET("/me/chain-sources", func(c *gin.Context) { s.chainSources(c, false) })
+	admin.GET("/users/:uid/chain-sources", func(c *gin.Context) { s.chainSources(c, true) })
+	admin.GET("/chain-sources", func(c *gin.Context) { s.chainSources(c, true) })
 	auth.GET("/me/subscription", s.mySubscription)
 }
 
@@ -254,7 +258,32 @@ func (s *Server) getUser(c *gin.Context) {
 		return
 	}
 	out["link_items"], out["chain_items"] = links, chains
+	out["withheld"] = s.withheldNodes(ctx, u)
 	c.JSON(200, out)
+}
+
+// withheldNodes 是因为额度没有发给这个用户的节点：WireGuard 没有按用户的流量统计，Gate 无法执行额度，
+// 只给不限额度的用户。写明原因，不悄悄少发。
+func (s *Server) withheldNodes(ctx context.Context, u *ent.User) []gin.H {
+	out := []gin.H{}
+	if u.Quota == 0 {
+		return out
+	}
+	nodes, err := s.userNodeIDs(ctx, u)
+	if err != nil {
+		return out
+	}
+	ids := make([]int, 0, len(nodes))
+	for id, n := range nodes {
+		if n.Protocol == "wireguard" {
+			ids = append(ids, id)
+		}
+	}
+	sort.Ints(ids)
+	for _, id := range ids {
+		out = append(out, gin.H{"node_id": id, "name": nodes[id].Name, "reason": "WireGuard 没有按用户的流量统计，无法执行额度，只发给不限额度的用户"})
+	}
+	return out
 }
 
 func (s *Server) updateUser(c *gin.Context) {
@@ -460,7 +489,8 @@ func (s *Server) mySubscription(c *gin.Context) {
 		failure(c, 503, "query_failed")
 		return
 	}
-	c.JSON(200, gin.H{"quota": u.Quota, "used": u.Used, "expires_at": u.ExpiresAt, "monthly_reset": u.MonthlyReset, "next_reset": resetHint(u), "links": links})
+	c.JSON(200, gin.H{"quota": u.Quota, "used": u.Used, "expires_at": u.ExpiresAt, "monthly_reset": u.MonthlyReset, "next_reset": resetHint(u), "links": links,
+		"withheld": s.withheldNodes(c.Request.Context(), u)})
 }
 
 func resetHint(u *ent.User) *time.Time {
@@ -496,7 +526,7 @@ func (s *Server) linkViews(c *gin.Context, u *ent.User, withCreds bool) ([]gin.H
 	out := make([]gin.H, 0, len(links))
 	for _, l := range links {
 		v := gin.H{
-			"id": l.ID, "name": l.Name, "token": l.Token, "url": requestOrigin(c.Request) + "/sub/" + l.Token,
+			"id": l.ID, "name": l.Name, "token": l.Token, "url": s.siteOrigin(c) + "/sub/" + l.Token,
 			"all_nodes": l.AllNodes, "node_ids": l.NodeIds, "chain_ids": l.ChainIds, "enabled": l.Enabled,
 			"used": l.Used, "last_used_at": l.LastUsedAt, "created_at": l.CreatedAt,
 		}
@@ -724,6 +754,9 @@ func (s *Server) chainViews(ctx context.Context, u *ent.User) ([]gin.H, error) {
 	for _, ch := range items {
 		v := gin.H{"id": ch.ID, "name": ch.Name, "entry_node_id": ch.EntryNodeID, "exit_kind": ch.ExitKind, "exit_address": ch.ExitAddress,
 			"exit_port": ch.ExitPort, "exit_username": ch.ExitUsername, "exit_node_id": ch.ExitNodeID, "enabled": ch.Enabled, "created_at": ch.CreatedAt}
+		if ch.ExitKind == chain.ExitKindSource {
+			v["exit_source"], v["source"] = ch.ExitSource, s.exitView(ctx, "chain:"+itoa(ch.ID))
+		}
 		if pw, err := s.reveal(ch.ExitPassword); err == nil {
 			v["exit_password"] = pw
 		}
@@ -786,6 +819,8 @@ func (s *Server) checkUserChain(ctx context.Context, u *ent.User, req chainReque
 		if nodes[req.Exit.NodeID] == nil {
 			return nil, errors.New("exit_not_allowed")
 		}
+	case "source":
+		// 订阅源里的节点：用户自建只能选分配给他的订阅组；管理员代建也可以选任意订阅源。
 	default:
 		return nil, errors.New("invalid_chain")
 	}
@@ -793,7 +828,7 @@ func (s *Server) checkUserChain(ctx context.Context, u *ent.User, req chainReque
 	if err != nil {
 		return nil, err
 	}
-	if err = s.validateChain(ctx, g, entry.ID, req.Exit, true, !(admin && req.SkipProbe)); err != nil {
+	if err = s.validateChain(ctx, g, entry.ID, req.Exit, true, !(admin && req.SkipProbe), chainCtx{kernel: entry.Kernel, userID: u.ID, admin: admin}); err != nil {
 		return nil, err
 	}
 	return entry, nil
@@ -805,6 +840,12 @@ func (s *Server) saveChainExit(m *ent.ChainMutation, spec ChainSpec) error {
 	m.SetExitUsername("")
 	m.SetExitPassword("")
 	m.ClearExitNodeID()
+	m.ClearExitSource()
+	if spec.Kind == "source" {
+		m.SetExitKind(chain.ExitKindSource)
+		m.SetExitSource(spec.source().toMap())
+		return nil
+	}
 	if spec.Kind == "socks5" {
 		m.SetExitKind(chain.ExitKindSocks5)
 		m.SetExitAddress(strings.TrimSpace(spec.Address))
@@ -849,6 +890,8 @@ func (s *Server) createChain(c *gin.Context, admin bool) {
 	}
 	entry, err := s.checkUserChain(ctx, u, req, admin)
 	if err != nil {
+		// 校验或 Gate 实测失败也写审计：操作者、目标用户与失败结果。
+		s.audit(c, "chain.create", "user:"+itoa(u.ID), "failed")
 		failErr(c, 422, err)
 		return
 	}
@@ -883,6 +926,14 @@ func (s *Server) afterChainChange(ctx context.Context, uid int) error {
 	}
 	if err == nil {
 		err = s.SyncUser(ctx, uid)
+	}
+	// 订阅源节点出口：保存后解析一次（之后随订阅源刷新）。
+	if chains, qerr := s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(uid), chain.ExitKindEQ(chain.ExitKindSource)).All(ctx); qerr == nil {
+		for _, ch := range chains {
+			if n, nerr := s.Store.Ent.Node.Get(ctx, ch.EntryNodeID); nerr == nil {
+				_ = s.refreshSourceExit(ctx, "chain:"+itoa(ch.ID), n.GateID, specOf(ch.ExitSource), true)
+			}
+		}
 	}
 	return err
 }
@@ -964,6 +1015,7 @@ func (s *Server) updateChain(c *gin.Context, admin bool) {
 		}
 		entry, err := s.checkUserChain(ctx, u, check, admin)
 		if err != nil {
+			s.audit(c, "chain.update", "chain:"+itoa(ch.ID), "failed")
 			failErr(c, 422, err)
 			return
 		}

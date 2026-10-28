@@ -49,6 +49,7 @@ func validKernel(name string) bool {
 
 func (s *Server) kernelAdminRoutes(admin *gin.RouterGroup) {
 	admin.GET("/kernels", s.listKernels)
+	admin.GET("/sub-checks", s.subChecks)
 	admin.GET("/kernels/:kernel/releases", s.kernelReleases)
 	admin.POST("/kernels/:kernel/fetch", s.fetchKernel)
 	admin.GET("/kernels/:kernel/fetch", s.fetchStatus)

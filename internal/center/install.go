@@ -46,7 +46,7 @@ func (s *Server) installRoutes(r *gin.Engine) {
 			failure(c, 503, "setup_required")
 			return
 		}
-		origin := requestOrigin(c.Request)
+		origin := s.siteOrigin(c)
 		c.Data(200, "text/x-shellscript; charset=utf-8", []byte(fmt.Sprintf(gateScript, origin)))
 	})
 	r.GET("/install/gate.tar.gz", s.gateBundle)

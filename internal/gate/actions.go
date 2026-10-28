@@ -57,6 +57,19 @@ func (a *Agent) runAction(ctx context.Context, act contracts.Action) contracts.A
 		err = a.helper.Uninstall(ctx)
 	case contracts.ActionNodeTest:
 		out, err = a.nodeTest(ctx, p)
+	case contracts.ActionACMEHTTP01:
+		err = a.helper.ACMEHTTP01(ctx, str(p, "token"), str(p, "key_auth"), num(p, "seconds"))
+	case contracts.ActionPanelConfigure:
+		out, err = a.configurePanel(ctx, p)
+	case contracts.ActionPanelRemove:
+		err = a.helper.RemovePanel(ctx)
+	case contracts.ActionPanelCert:
+		var pc contracts.PanelCert
+		if !validPanelIP(str(p, "ip")) {
+			err = errors.New("invalid ip")
+		} else if pc, err = a.helper.PanelCert(ctx, int64(num(p, "cert_id")), str(p, "ip")); err == nil {
+			out = map[string]any{"cert_pem": pc.CertPEM, "sha256": pc.SHA256, "not_after": pc.NotAfter}
+		}
 	default:
 		err = errUnknownAction
 	}
@@ -64,6 +77,21 @@ func (a *Agent) runAction(ctx context.Context, act contracts.Action) contracts.A
 		return contracts.ActionResult{Error: err.Error(), Result: out}
 	}
 	return contracts.ActionResult{OK: true, Result: out}
+}
+
+// configurePanel 凭动作里的一次性编号从中心取回 1Panel API 密钥（只取一次，中心不落库），交给辅助程序测试并保存。
+func (a *Agent) configurePanel(ctx context.Context, p map[string]any) (map[string]any, error) {
+	var secret struct {
+		APIKey string `json:"api_key"`
+	}
+	if _, err := a.center.call(ctx, "POST", "/agent/panel-secret", map[string]string{"nonce": str(p, "nonce")}, &secret); err != nil || secret.APIKey == "" {
+		return nil, errors.New("无法从中心取回 1Panel 密钥（可能已过期，请重新提交）")
+	}
+	v, err := a.helper.SetPanel(ctx, PanelConfig{Port: num(p, "port"), HTTPS: p["https"] == true, APIKey: secret.APIKey})
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"version": v}, nil
 }
 
 // realityProbe 从候选目标中选出适合作 REALITY 伪装的站点：TLS 1.3、协商出 h2、不跳转到其他域名，取延迟最低者。

@@ -43,6 +43,12 @@ type Server struct {
 	Mail Mailer
 	// dsh 是托管的 DeepSeek Harness（进程、子域名网关、MCP 工具）。
 	dsh dshHost
+	// origin 缓存记录的中心公共地址（见 origin.go）。
+	origin struct {
+		sync.Mutex
+		value  string
+		loaded bool
+	}
 }
 
 func New(c Config, path string, assets fs.FS) (*Server, error) {
@@ -108,9 +114,13 @@ func (s *Server) maintenance(ctx context.Context) {
 					// 各任务互不影响：一项失败不阻止其他项。
 					_ = s.ResetDueUsage(ctx, now)
 					_ = s.RefreshSources(ctx, now)
+					s.RefreshSourceExits(ctx)
 					_ = s.AutoBackup(ctx, now)
 					_ = s.CheckAlerts(ctx, now)
 					_ = s.ObserveSecurity(ctx, now)
+					_ = s.ReclaimStaleBudgets(ctx, now)
+					_ = s.RenewCerts(ctx, now)
+					_ = s.PruneSamples(ctx, now)
 					s.dropLegacyAIProvider(ctx)
 					return nil
 				})
@@ -168,8 +178,19 @@ func (s *Server) Router() *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	_ = r.SetTrustedProxies([]string{"127.0.0.1", "::1"})
-	// dsh 子域名的请求在这里就分走，不会进入下面的页面与接口。
+	// dsh 子域名的请求最先分走：不经过 HTTPS 拦截页、来源封禁与错误页，避免暴露这台机器上跑着 Weir。
 	r.Use(s.dshGatewayMiddleware)
+	// 节点证书域名的 HTTP-01 验证只能经明文 HTTP 到达，排在 HTTPS 拦截之前；只回应这一个路径。
+	r.Use(func(c *gin.Context) {
+		if strings.HasPrefix(c.Request.URL.Path, acmeChallengePath) {
+			s.state.RLock()
+			defer s.state.RUnlock()
+			s.serveACMEChallenge(c)
+			return
+		}
+		c.Next()
+	})
+	r.Use(requireHTTPS)
 	r.Use(func(c *gin.Context) {
 		if c.Request.URL.Path == "/api/v1/setup/install" {
 			s.state.Lock()
@@ -182,10 +203,8 @@ func (s *Server) Router() *gin.Engine {
 		c.Header("Referrer-Policy", "no-referrer")
 		c.Header("X-Frame-Options", "DENY")
 		c.Header("Cache-Control", "no-store")
-		csp := "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'"
-		if domain := s.dshDomain(); domain != "" {
-			csp += "; frame-src 'self' " + requestScheme(c.Request) + "://" + domain
-		}
+		// frame-src 用站点通配，不写具体的 dsh 子域名；是否启用 dsh 都一样，页面看不出 dsh 的存在。
+		csp := "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; frame-src 'self' " + frameSite(c.Request)
 		c.Header("Content-Security-Policy", csp)
 		if !sameOriginRequest(c.Request) {
 			failure(c, 403, "origin_rejected")
@@ -236,8 +255,11 @@ func (s *Server) Router() *gin.Engine {
 	s.pageRoutes(ready, admin)
 	s.opsRoutes(admin)
 	s.dshRoutes(admin)
+	s.contextRoutes(admin)
+	s.sampleRoutes(admin)
 	s.defenseRoutes(admin)
 	s.backupRoutes(admin)
+	s.originRoutes(admin)
 	s.mailRoutes(ready, admin)
 	s.notifyRoutes(admin)
 	s.extRoutes(r, admin)

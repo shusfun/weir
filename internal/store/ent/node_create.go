@@ -142,6 +142,12 @@ func (_c *NodeCreate) SetNillableChainKind(v *node.ChainKind) *NodeCreate {
 	return _c
 }
 
+// SetChainSource sets the "chain_source" field.
+func (_c *NodeCreate) SetChainSource(v map[string]interface{}) *NodeCreate {
+	_c.mutation.SetChainSource(v)
+	return _c
+}
+
 // SetChainAddress sets the "chain_address" field.
 func (_c *NodeCreate) SetChainAddress(v string) *NodeCreate {
 	_c.mutation.SetChainAddress(v)
@@ -470,6 +476,10 @@ func (_c *NodeCreate) createSpec() (*Node, *sqlgraph.CreateSpec) {
 		_spec.SetField(node.FieldChainKind, field.TypeEnum, value)
 		_node.ChainKind = value
 	}
+	if value, ok := _c.mutation.ChainSource(); ok {
+		_spec.SetField(node.FieldChainSource, field.TypeJSON, value)
+		_node.ChainSource = value
+	}
 	if value, ok := _c.mutation.ChainAddress(); ok {
 		_spec.SetField(node.FieldChainAddress, field.TypeString, value)
 		_node.ChainAddress = value
@@ -717,6 +727,24 @@ func (u *NodeUpsert) SetChainKind(v node.ChainKind) *NodeUpsert {
 // UpdateChainKind sets the "chain_kind" field to the value that was provided on create.
 func (u *NodeUpsert) UpdateChainKind() *NodeUpsert {
 	u.SetExcluded(node.FieldChainKind)
+	return u
+}
+
+// SetChainSource sets the "chain_source" field.
+func (u *NodeUpsert) SetChainSource(v map[string]interface{}) *NodeUpsert {
+	u.Set(node.FieldChainSource, v)
+	return u
+}
+
+// UpdateChainSource sets the "chain_source" field to the value that was provided on create.
+func (u *NodeUpsert) UpdateChainSource() *NodeUpsert {
+	u.SetExcluded(node.FieldChainSource)
+	return u
+}
+
+// ClearChainSource clears the value of the "chain_source" field.
+func (u *NodeUpsert) ClearChainSource() *NodeUpsert {
+	u.SetNull(node.FieldChainSource)
 	return u
 }
 
@@ -1043,6 +1071,27 @@ func (u *NodeUpsertOne) SetChainKind(v node.ChainKind) *NodeUpsertOne {
 func (u *NodeUpsertOne) UpdateChainKind() *NodeUpsertOne {
 	return u.Update(func(s *NodeUpsert) {
 		s.UpdateChainKind()
+	})
+}
+
+// SetChainSource sets the "chain_source" field.
+func (u *NodeUpsertOne) SetChainSource(v map[string]interface{}) *NodeUpsertOne {
+	return u.Update(func(s *NodeUpsert) {
+		s.SetChainSource(v)
+	})
+}
+
+// UpdateChainSource sets the "chain_source" field to the value that was provided on create.
+func (u *NodeUpsertOne) UpdateChainSource() *NodeUpsertOne {
+	return u.Update(func(s *NodeUpsert) {
+		s.UpdateChainSource()
+	})
+}
+
+// ClearChainSource clears the value of the "chain_source" field.
+func (u *NodeUpsertOne) ClearChainSource() *NodeUpsertOne {
+	return u.Update(func(s *NodeUpsert) {
+		s.ClearChainSource()
 	})
 }
 
@@ -1548,6 +1597,27 @@ func (u *NodeUpsertBulk) SetChainKind(v node.ChainKind) *NodeUpsertBulk {
 func (u *NodeUpsertBulk) UpdateChainKind() *NodeUpsertBulk {
 	return u.Update(func(s *NodeUpsert) {
 		s.UpdateChainKind()
+	})
+}
+
+// SetChainSource sets the "chain_source" field.
+func (u *NodeUpsertBulk) SetChainSource(v map[string]interface{}) *NodeUpsertBulk {
+	return u.Update(func(s *NodeUpsert) {
+		s.SetChainSource(v)
+	})
+}
+
+// UpdateChainSource sets the "chain_source" field to the value that was provided on create.
+func (u *NodeUpsertBulk) UpdateChainSource() *NodeUpsertBulk {
+	return u.Update(func(s *NodeUpsert) {
+		s.UpdateChainSource()
+	})
+}
+
+// ClearChainSource clears the value of the "chain_source" field.
+func (u *NodeUpsertBulk) ClearChainSource() *NodeUpsertBulk {
+	return u.Update(func(s *NodeUpsert) {
+		s.ClearChainSource()
 	})
 }
 

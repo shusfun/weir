@@ -269,6 +269,16 @@ func ExitKindNotIn(vs ...ExitKind) predicate.Chain {
 	return predicate.Chain(sql.FieldNotIn(FieldExitKind, vs...))
 }
 
+// ExitSourceIsNil applies the IsNil predicate on the "exit_source" field.
+func ExitSourceIsNil() predicate.Chain {
+	return predicate.Chain(sql.FieldIsNull(FieldExitSource))
+}
+
+// ExitSourceNotNil applies the NotNil predicate on the "exit_source" field.
+func ExitSourceNotNil() predicate.Chain {
+	return predicate.Chain(sql.FieldNotNull(FieldExitSource))
+}
+
 // ExitAddressEQ applies the EQ predicate on the "exit_address" field.
 func ExitAddressEQ(v string) predicate.Chain {
 	return predicate.Chain(sql.FieldEQ(FieldExitAddress, v))

@@ -22,6 +22,15 @@ type Config struct {
 	Stats     *StatsConfig     `json:"stats,omitempty"`
 	Policy    *PolicyConfig    `json:"policy,omitempty"`
 	API       *APIConfig       `json:"api,omitempty"`
+	// Observatory 为负载均衡器探测出口延迟（「一组」出口用）。
+	Observatory *ObservatoryConfig `json:"observatory,omitempty"`
+}
+
+type ObservatoryConfig struct {
+	SubjectSelector   []string `json:"subjectSelector"`
+	ProbeURL          string   `json:"probeUrl"`
+	ProbeInterval     string   `json:"probeInterval"`
+	EnableConcurrency bool     `json:"enableConcurrency"`
 }
 
 type StatsConfig struct{}
@@ -53,8 +62,13 @@ type RoutingConfig struct {
 }
 
 type Balancer struct {
-	Tag      string   `json:"tag"`
-	Selector []string `json:"selector"`
+	Tag      string            `json:"tag"`
+	Selector []string          `json:"selector"`
+	Strategy *BalancerStrategy `json:"strategy,omitempty"`
+}
+
+type BalancerStrategy struct {
+	Type string `json:"type"` // leastPing：按 observatory 测得的延迟选最快的可用出口
 }
 
 type RoutingRule struct {

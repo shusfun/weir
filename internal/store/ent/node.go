@@ -42,6 +42,8 @@ type Node struct {
 	Enabled bool `json:"enabled,omitempty"`
 	// ChainKind holds the value of the "chain_kind" field.
 	ChainKind node.ChainKind `json:"chain_kind,omitempty"`
+	// ChainSource holds the value of the "chain_source" field.
+	ChainSource map[string]interface{} `json:"chain_source,omitempty"`
 	// ChainAddress holds the value of the "chain_address" field.
 	ChainAddress string `json:"chain_address,omitempty"`
 	// ChainPort holds the value of the "chain_port" field.
@@ -62,7 +64,7 @@ func (*Node) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case node.FieldSettings:
+		case node.FieldSettings, node.FieldChainSource:
 			values[i] = new([]byte)
 		case node.FieldEnabled:
 			values[i] = new(sql.NullBool)
@@ -167,6 +169,14 @@ func (_m *Node) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field chain_kind", values[i])
 			} else if value.Valid {
 				_m.ChainKind = node.ChainKind(value.String)
+			}
+		case node.FieldChainSource:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field chain_source", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.ChainSource); err != nil {
+					return fmt.Errorf("unmarshal field chain_source: %w", err)
+				}
 			}
 		case node.FieldChainAddress:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -278,6 +288,9 @@ func (_m *Node) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("chain_kind=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ChainKind))
+	builder.WriteString(", ")
+	builder.WriteString("chain_source=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ChainSource))
 	builder.WriteString(", ")
 	builder.WriteString("chain_address=")
 	builder.WriteString(_m.ChainAddress)

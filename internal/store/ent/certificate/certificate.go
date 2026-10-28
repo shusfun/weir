@@ -20,6 +20,14 @@ const (
 	FieldDomain = "domain"
 	// FieldSource holds the string denoting the source field in the database.
 	FieldSource = "source"
+	// FieldGateID holds the string denoting the gate_id field in the database.
+	FieldGateID = "gate_id"
+	// FieldStatus holds the string denoting the status field in the database.
+	FieldStatus = "status"
+	// FieldLastError holds the string denoting the last_error field in the database.
+	FieldLastError = "last_error"
+	// FieldRenewedAt holds the string denoting the renewed_at field in the database.
+	FieldRenewedAt = "renewed_at"
 	// FieldCertPem holds the string denoting the cert_pem field in the database.
 	FieldCertPem = "cert_pem"
 	// FieldKeyPem holds the string denoting the key_pem field in the database.
@@ -42,6 +50,10 @@ var Columns = []string{
 	FieldName,
 	FieldDomain,
 	FieldSource,
+	FieldGateID,
+	FieldStatus,
+	FieldLastError,
+	FieldRenewedAt,
 	FieldCertPem,
 	FieldKeyPem,
 	FieldSha256,
@@ -65,6 +77,8 @@ var (
 	NameValidator func(string) error
 	// DomainValidator is a validator for the "domain" field. It is called by the builders before save.
 	DomainValidator func(string) error
+	// DefaultLastError holds the default value on creation for the "last_error" field.
+	DefaultLastError string
 	// DefaultSha256 holds the default value on creation for the "sha256" field.
 	DefaultSha256 string
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
@@ -86,6 +100,8 @@ const (
 	SourceUpload     Source = "upload"
 	SourceSelfSigned Source = "self_signed"
 	SourceAcme       Source = "acme"
+	SourcePanel      Source = "panel"
+	SourceEdge       Source = "edge"
 )
 
 func (s Source) String() string {
@@ -95,10 +111,37 @@ func (s Source) String() string {
 // SourceValidator is a validator for the "source" field enum values. It is called by the builders before save.
 func SourceValidator(s Source) error {
 	switch s {
-	case SourceUpload, SourceSelfSigned, SourceAcme:
+	case SourceUpload, SourceSelfSigned, SourceAcme, SourcePanel, SourceEdge:
 		return nil
 	default:
 		return fmt.Errorf("certificate: invalid enum value for source field: %q", s)
+	}
+}
+
+// Status defines the type for the "status" enum field.
+type Status string
+
+// StatusReady is the default value of the Status enum.
+const DefaultStatus = StatusReady
+
+// Status values.
+const (
+	StatusReady   Status = "ready"
+	StatusPending Status = "pending"
+	StatusFailed  Status = "failed"
+)
+
+func (s Status) String() string {
+	return string(s)
+}
+
+// StatusValidator is a validator for the "status" field enum values. It is called by the builders before save.
+func StatusValidator(s Status) error {
+	switch s {
+	case StatusReady, StatusPending, StatusFailed:
+		return nil
+	default:
+		return fmt.Errorf("certificate: invalid enum value for status field: %q", s)
 	}
 }
 
@@ -123,6 +166,26 @@ func ByDomain(opts ...sql.OrderTermOption) OrderOption {
 // BySource orders the results by the source field.
 func BySource(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldSource, opts...).ToFunc()
+}
+
+// ByGateID orders the results by the gate_id field.
+func ByGateID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldGateID, opts...).ToFunc()
+}
+
+// ByStatus orders the results by the status field.
+func ByStatus(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStatus, opts...).ToFunc()
+}
+
+// ByLastError orders the results by the last_error field.
+func ByLastError(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLastError, opts...).ToFunc()
+}
+
+// ByRenewedAt orders the results by the renewed_at field.
+func ByRenewedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRenewedAt, opts...).ToFunc()
 }
 
 // ByCertPem orders the results by the cert_pem field.

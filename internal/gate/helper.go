@@ -55,6 +55,12 @@ type Helper struct {
 	ProcRoot string
 	Sup      *Supervisor
 	mu       sync.Mutex
+	// 1Panel 连接测试与证书刷新的缓存（见 panel.go）。
+	panelMu        sync.Mutex
+	panelChecked   time.Time
+	panelRefreshed time.Time
+	panelVersion   string
+	panelError     string
 }
 
 func NewHelper(p Paths) *Helper { return &Helper{P: p, ProcRoot: "/proc", Sup: NewSupervisor(p)} }
@@ -88,9 +94,15 @@ func (h *Helper) Handler() http.Handler {
 	mux.HandleFunc("GET /status", h.status)
 	mux.HandleFunc("POST /restart", h.restart)
 	mux.HandleFunc("POST /cert", h.cert)
+	mux.HandleFunc("POST /center", h.setCenter)
 	mux.HandleFunc("GET /diagnostics", h.diagnostics)
 	mux.HandleFunc("POST /release", h.release)
 	mux.HandleFunc("POST /uninstall", h.uninstall)
+	mux.HandleFunc("POST /panel", h.setPanel)
+	mux.HandleFunc("DELETE /panel", h.removePanel)
+	mux.HandleFunc("POST /panel/cert", h.panelCert)
+	mux.HandleFunc("POST /panel/report", h.panelCertsReport)
+	mux.HandleFunc("POST /acme/http01", h.acmeHTTP01)
 	return mux
 }
 
@@ -103,6 +115,27 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 func known(name string) bool { return name == "xray" || name == "sing-box" }
 
 func sumOf(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToString(s[:]) }
+
+// setCenter 只改设备配置里的中心地址，设备 ID 与私钥不变；新地址必须是 HTTPS。
+func (h *Helper) setCenter(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Center string `json:"center"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil || !strings.HasPrefix(req.Center, "https://") || validCenter(req.Center) != nil {
+		writeJSON(w, 400, ApplyResult{Error: "invalid center"})
+		return
+	}
+	cfg, err := LoadConfig(h.P.Config)
+	if err == nil {
+		cfg.Center = strings.TrimRight(req.Center, "/")
+		err = saveConfig(h.P.Config, cfg, h.P.RunAs)
+	}
+	if err != nil {
+		writeJSON(w, 500, ApplyResult{Error: err.Error()})
+		return
+	}
+	writeJSON(w, 200, ApplyResult{OK: true})
+}
 
 func (h *Helper) installKernel(w http.ResponseWriter, r *http.Request) {
 	name, version, want := r.Header.Get("X-Kernel"), r.Header.Get("X-Version"), r.Header.Get("X-SHA256")
@@ -305,20 +338,9 @@ func (h *Helper) cert(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, ApplyResult{Error: "invalid certificate"})
 		return
 	}
-	if err = os.MkdirAll(h.P.CertsDir, 0750); err != nil {
+	if err = h.installCertFiles(id, body.Cert, body.Key); err != nil {
 		writeJSON(w, 500, ApplyResult{Error: err.Error()})
 		return
-	}
-	for ext, data := range map[string]string{"crt": body.Cert, "key": body.Key} {
-		path := filepath.Join(h.P.CertsDir, fmt.Sprintf("%d.%s", id, ext))
-		if err = os.WriteFile(path+".new", []byte(data), 0640); err == nil {
-			h.shareWithAgent(path + ".new")
-			err = os.Rename(path+".new", path)
-		}
-		if err != nil {
-			writeJSON(w, 500, ApplyResult{Error: err.Error()})
-			return
-		}
 	}
 	writeJSON(w, 200, ApplyResult{OK: true})
 }
@@ -393,8 +415,16 @@ func (h *Helper) release(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, ApplyResult{OK: true})
 	go func() {
 		time.Sleep(time.Second)
-		_ = exec.Command("systemctl", "restart", "--no-block", "migate-helper.service", "migate-gate.service").Run()
+		_ = exec.Command("systemctl", "restart", "--no-block", "migate-helper.service", agentUnit()).Run()
 	}()
+}
+
+// agentUnit 是运行 Agent 的服务：单机角色的本机 Gate 在中心进程里运行，其他是独立的 migate-gate。
+func agentUnit() string {
+	if role, _ := os.ReadFile("/etc/migate/role"); strings.TrimSpace(string(role)) == "standalone" {
+		return "migate-center.service"
+	}
+	return "migate-gate.service"
 }
 
 // uninstall 只在本机角色为 Gate 时执行，调用安装器的卸载（保留配置与数据）。

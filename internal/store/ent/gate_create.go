@@ -62,6 +62,20 @@ func (_c *GateCreate) SetNillablePublicHost(v *string) *GateCreate {
 	return _c
 }
 
+// SetCenterURL sets the "center_url" field.
+func (_c *GateCreate) SetCenterURL(v string) *GateCreate {
+	_c.mutation.SetCenterURL(v)
+	return _c
+}
+
+// SetNillableCenterURL sets the "center_url" field if the given value is not nil.
+func (_c *GateCreate) SetNillableCenterURL(v *string) *GateCreate {
+	if v != nil {
+		_c.SetCenterURL(*v)
+	}
+	return _c
+}
+
 // SetVersion sets the "version" field.
 func (_c *GateCreate) SetVersion(v string) *GateCreate {
 	_c.mutation.SetVersion(v)
@@ -139,6 +153,12 @@ func (_c *GateCreate) SetKernelPins(v map[string]string) *GateCreate {
 // SetHost sets the "host" field.
 func (_c *GateCreate) SetHost(v map[string]interface{}) *GateCreate {
 	_c.mutation.SetHost(v)
+	return _c
+}
+
+// SetPanel sets the "panel" field.
+func (_c *GateCreate) SetPanel(v map[string]interface{}) *GateCreate {
+	_c.mutation.SetPanel(v)
 	return _c
 }
 
@@ -311,6 +331,10 @@ func (_c *GateCreate) defaults() {
 		v := gate.DefaultPublicHost
 		_c.mutation.SetPublicHost(v)
 	}
+	if _, ok := _c.mutation.CenterURL(); !ok {
+		v := gate.DefaultCenterURL
+		_c.mutation.SetCenterURL(v)
+	}
 	if _, ok := _c.mutation.Version(); !ok {
 		v := gate.DefaultVersion
 		_c.mutation.SetVersion(v)
@@ -388,6 +412,14 @@ func (_c *GateCreate) check() error {
 	if v, ok := _c.mutation.PublicHost(); ok {
 		if err := gate.PublicHostValidator(v); err != nil {
 			return &ValidationError{Name: "public_host", err: fmt.Errorf(`ent: validator failed for field "Gate.public_host": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.CenterURL(); !ok {
+		return &ValidationError{Name: "center_url", err: errors.New(`ent: missing required field "Gate.center_url"`)}
+	}
+	if v, ok := _c.mutation.CenterURL(); ok {
+		if err := gate.CenterURLValidator(v); err != nil {
+			return &ValidationError{Name: "center_url", err: fmt.Errorf(`ent: validator failed for field "Gate.center_url": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Version(); !ok {
@@ -469,6 +501,10 @@ func (_c *GateCreate) createSpec() (*Gate, *sqlgraph.CreateSpec) {
 		_spec.SetField(gate.FieldPublicHost, field.TypeString, value)
 		_node.PublicHost = value
 	}
+	if value, ok := _c.mutation.CenterURL(); ok {
+		_spec.SetField(gate.FieldCenterURL, field.TypeString, value)
+		_node.CenterURL = value
+	}
 	if value, ok := _c.mutation.Version(); ok {
 		_spec.SetField(gate.FieldVersion, field.TypeString, value)
 		_node.Version = value
@@ -500,6 +536,10 @@ func (_c *GateCreate) createSpec() (*Gate, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Host(); ok {
 		_spec.SetField(gate.FieldHost, field.TypeJSON, value)
 		_node.Host = value
+	}
+	if value, ok := _c.mutation.Panel(); ok {
+		_spec.SetField(gate.FieldPanel, field.TypeJSON, value)
+		_node.Panel = value
 	}
 	if value, ok := _c.mutation.ConfigRevision(); ok {
 		_spec.SetField(gate.FieldConfigRevision, field.TypeInt64, value)
@@ -637,6 +677,18 @@ func (u *GateUpsert) UpdatePublicHost() *GateUpsert {
 	return u
 }
 
+// SetCenterURL sets the "center_url" field.
+func (u *GateUpsert) SetCenterURL(v string) *GateUpsert {
+	u.Set(gate.FieldCenterURL, v)
+	return u
+}
+
+// UpdateCenterURL sets the "center_url" field to the value that was provided on create.
+func (u *GateUpsert) UpdateCenterURL() *GateUpsert {
+	u.SetExcluded(gate.FieldCenterURL)
+	return u
+}
+
 // SetVersion sets the "version" field.
 func (u *GateUpsert) SetVersion(v string) *GateUpsert {
 	u.Set(gate.FieldVersion, v)
@@ -760,6 +812,24 @@ func (u *GateUpsert) UpdateHost() *GateUpsert {
 // ClearHost clears the value of the "host" field.
 func (u *GateUpsert) ClearHost() *GateUpsert {
 	u.SetNull(gate.FieldHost)
+	return u
+}
+
+// SetPanel sets the "panel" field.
+func (u *GateUpsert) SetPanel(v map[string]interface{}) *GateUpsert {
+	u.Set(gate.FieldPanel, v)
+	return u
+}
+
+// UpdatePanel sets the "panel" field to the value that was provided on create.
+func (u *GateUpsert) UpdatePanel() *GateUpsert {
+	u.SetExcluded(gate.FieldPanel)
+	return u
+}
+
+// ClearPanel clears the value of the "panel" field.
+func (u *GateUpsert) ClearPanel() *GateUpsert {
+	u.SetNull(gate.FieldPanel)
 	return u
 }
 
@@ -996,6 +1066,20 @@ func (u *GateUpsertOne) UpdatePublicHost() *GateUpsertOne {
 	})
 }
 
+// SetCenterURL sets the "center_url" field.
+func (u *GateUpsertOne) SetCenterURL(v string) *GateUpsertOne {
+	return u.Update(func(s *GateUpsert) {
+		s.SetCenterURL(v)
+	})
+}
+
+// UpdateCenterURL sets the "center_url" field to the value that was provided on create.
+func (u *GateUpsertOne) UpdateCenterURL() *GateUpsertOne {
+	return u.Update(func(s *GateUpsert) {
+		s.UpdateCenterURL()
+	})
+}
+
 // SetVersion sets the "version" field.
 func (u *GateUpsertOne) SetVersion(v string) *GateUpsertOne {
 	return u.Update(func(s *GateUpsert) {
@@ -1140,6 +1224,27 @@ func (u *GateUpsertOne) UpdateHost() *GateUpsertOne {
 func (u *GateUpsertOne) ClearHost() *GateUpsertOne {
 	return u.Update(func(s *GateUpsert) {
 		s.ClearHost()
+	})
+}
+
+// SetPanel sets the "panel" field.
+func (u *GateUpsertOne) SetPanel(v map[string]interface{}) *GateUpsertOne {
+	return u.Update(func(s *GateUpsert) {
+		s.SetPanel(v)
+	})
+}
+
+// UpdatePanel sets the "panel" field to the value that was provided on create.
+func (u *GateUpsertOne) UpdatePanel() *GateUpsertOne {
+	return u.Update(func(s *GateUpsert) {
+		s.UpdatePanel()
+	})
+}
+
+// ClearPanel clears the value of the "panel" field.
+func (u *GateUpsertOne) ClearPanel() *GateUpsertOne {
+	return u.Update(func(s *GateUpsert) {
+		s.ClearPanel()
 	})
 }
 
@@ -1564,6 +1669,20 @@ func (u *GateUpsertBulk) UpdatePublicHost() *GateUpsertBulk {
 	})
 }
 
+// SetCenterURL sets the "center_url" field.
+func (u *GateUpsertBulk) SetCenterURL(v string) *GateUpsertBulk {
+	return u.Update(func(s *GateUpsert) {
+		s.SetCenterURL(v)
+	})
+}
+
+// UpdateCenterURL sets the "center_url" field to the value that was provided on create.
+func (u *GateUpsertBulk) UpdateCenterURL() *GateUpsertBulk {
+	return u.Update(func(s *GateUpsert) {
+		s.UpdateCenterURL()
+	})
+}
+
 // SetVersion sets the "version" field.
 func (u *GateUpsertBulk) SetVersion(v string) *GateUpsertBulk {
 	return u.Update(func(s *GateUpsert) {
@@ -1708,6 +1827,27 @@ func (u *GateUpsertBulk) UpdateHost() *GateUpsertBulk {
 func (u *GateUpsertBulk) ClearHost() *GateUpsertBulk {
 	return u.Update(func(s *GateUpsert) {
 		s.ClearHost()
+	})
+}
+
+// SetPanel sets the "panel" field.
+func (u *GateUpsertBulk) SetPanel(v map[string]interface{}) *GateUpsertBulk {
+	return u.Update(func(s *GateUpsert) {
+		s.SetPanel(v)
+	})
+}
+
+// UpdatePanel sets the "panel" field to the value that was provided on create.
+func (u *GateUpsertBulk) UpdatePanel() *GateUpsertBulk {
+	return u.Update(func(s *GateUpsert) {
+		s.UpdatePanel()
+	})
+}
+
+// ClearPanel clears the value of the "panel" field.
+func (u *GateUpsertBulk) ClearPanel() *GateUpsertBulk {
+	return u.Update(func(s *GateUpsert) {
+		s.ClearPanel()
 	})
 }
 

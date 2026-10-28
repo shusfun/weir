@@ -51,6 +51,14 @@ func (s *Server) compileRoutes(ctx context.Context, g *ent.Gate, cfg *contracts.
 		return err
 	}
 	for _, o := range outs {
+		if o.Protocol == "source" {
+			ob, warn := s.exitFromStore(ctx, "out:"+itoa(o.ID), o.Tag, int64(o.ID))
+			if warn != "" {
+				cfg.Meta[o.Tag] = warn
+			}
+			cfg.Outbounds = append(cfg.Outbounds, ob)
+			continue
+		}
 		password, err := s.reveal(o.Password)
 		if err != nil {
 			return err
@@ -65,7 +73,12 @@ func (s *Server) compileRoutes(ctx context.Context, g *ent.Gate, cfg *contracts.
 		}
 		tag := fmt.Sprintf("chain-%d", ch.ID)
 		var ob contracts.Outbound
-		if ch.ExitKind == chain.ExitKindSocks5 {
+		if ch.ExitKind == chain.ExitKindSource {
+			var warn string
+			if ob, warn = s.exitFromStore(ctx, "chain:"+itoa(ch.ID), tag, 0); warn != "" {
+				cfg.Meta[tag] = warn
+			}
+		} else if ch.ExitKind == chain.ExitKindSocks5 {
 			password, rerr := s.reveal(ch.ExitPassword)
 			ob, err = socksExit(tag, ch.ExitAddress, ch.ExitPort, ch.ExitUsername, password), rerr
 		} else if ch.ExitNodeID != nil {
@@ -122,7 +135,12 @@ func (s *Server) compileRoutes(ctx context.Context, g *ent.Gate, cfg *contracts.
 		}
 		tag := fmt.Sprintf("nodechain-%d", n.ID)
 		var ob contracts.Outbound
-		if n.ChainKind == "socks5" {
+		if n.ChainKind == "source" {
+			var warn string
+			if ob, warn = s.exitFromStore(ctx, "node:"+itoa(n.ID), tag, 0); warn != "" {
+				cfg.Meta[tag] = warn
+			}
+		} else if n.ChainKind == "socks5" {
 			password, rerr := s.reveal(n.ChainPassword)
 			ob, err = socksExit(tag, n.ChainAddress, n.ChainPort, n.ChainUsername, password), rerr
 		} else if n.ChainNodeID != nil {

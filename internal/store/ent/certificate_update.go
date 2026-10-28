@@ -70,6 +70,81 @@ func (_u *CertificateUpdate) SetNillableSource(v *certificate.Source) *Certifica
 	return _u
 }
 
+// SetGateID sets the "gate_id" field.
+func (_u *CertificateUpdate) SetGateID(v int) *CertificateUpdate {
+	_u.mutation.ResetGateID()
+	_u.mutation.SetGateID(v)
+	return _u
+}
+
+// SetNillableGateID sets the "gate_id" field if the given value is not nil.
+func (_u *CertificateUpdate) SetNillableGateID(v *int) *CertificateUpdate {
+	if v != nil {
+		_u.SetGateID(*v)
+	}
+	return _u
+}
+
+// AddGateID adds value to the "gate_id" field.
+func (_u *CertificateUpdate) AddGateID(v int) *CertificateUpdate {
+	_u.mutation.AddGateID(v)
+	return _u
+}
+
+// ClearGateID clears the value of the "gate_id" field.
+func (_u *CertificateUpdate) ClearGateID() *CertificateUpdate {
+	_u.mutation.ClearGateID()
+	return _u
+}
+
+// SetStatus sets the "status" field.
+func (_u *CertificateUpdate) SetStatus(v certificate.Status) *CertificateUpdate {
+	_u.mutation.SetStatus(v)
+	return _u
+}
+
+// SetNillableStatus sets the "status" field if the given value is not nil.
+func (_u *CertificateUpdate) SetNillableStatus(v *certificate.Status) *CertificateUpdate {
+	if v != nil {
+		_u.SetStatus(*v)
+	}
+	return _u
+}
+
+// SetLastError sets the "last_error" field.
+func (_u *CertificateUpdate) SetLastError(v string) *CertificateUpdate {
+	_u.mutation.SetLastError(v)
+	return _u
+}
+
+// SetNillableLastError sets the "last_error" field if the given value is not nil.
+func (_u *CertificateUpdate) SetNillableLastError(v *string) *CertificateUpdate {
+	if v != nil {
+		_u.SetLastError(*v)
+	}
+	return _u
+}
+
+// SetRenewedAt sets the "renewed_at" field.
+func (_u *CertificateUpdate) SetRenewedAt(v time.Time) *CertificateUpdate {
+	_u.mutation.SetRenewedAt(v)
+	return _u
+}
+
+// SetNillableRenewedAt sets the "renewed_at" field if the given value is not nil.
+func (_u *CertificateUpdate) SetNillableRenewedAt(v *time.Time) *CertificateUpdate {
+	if v != nil {
+		_u.SetRenewedAt(*v)
+	}
+	return _u
+}
+
+// ClearRenewedAt clears the value of the "renewed_at" field.
+func (_u *CertificateUpdate) ClearRenewedAt() *CertificateUpdate {
+	_u.mutation.ClearRenewedAt()
+	return _u
+}
+
 // SetCertPem sets the "cert_pem" field.
 func (_u *CertificateUpdate) SetCertPem(v string) *CertificateUpdate {
 	_u.mutation.SetCertPem(v)
@@ -196,6 +271,11 @@ func (_u *CertificateUpdate) check() error {
 			return &ValidationError{Name: "source", err: fmt.Errorf(`ent: validator failed for field "Certificate.source": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Status(); ok {
+		if err := certificate.StatusValidator(v); err != nil {
+			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Certificate.status": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -219,6 +299,27 @@ func (_u *CertificateUpdate) sqlSave(ctx context.Context) (_node int, err error)
 	}
 	if value, ok := _u.mutation.Source(); ok {
 		_spec.SetField(certificate.FieldSource, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.GateID(); ok {
+		_spec.SetField(certificate.FieldGateID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedGateID(); ok {
+		_spec.AddField(certificate.FieldGateID, field.TypeInt, value)
+	}
+	if _u.mutation.GateIDCleared() {
+		_spec.ClearField(certificate.FieldGateID, field.TypeInt)
+	}
+	if value, ok := _u.mutation.Status(); ok {
+		_spec.SetField(certificate.FieldStatus, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.LastError(); ok {
+		_spec.SetField(certificate.FieldLastError, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.RenewedAt(); ok {
+		_spec.SetField(certificate.FieldRenewedAt, field.TypeTime, value)
+	}
+	if _u.mutation.RenewedAtCleared() {
+		_spec.ClearField(certificate.FieldRenewedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.CertPem(); ok {
 		_spec.SetField(certificate.FieldCertPem, field.TypeString, value)
@@ -297,6 +398,81 @@ func (_u *CertificateUpdateOne) SetNillableSource(v *certificate.Source) *Certif
 	if v != nil {
 		_u.SetSource(*v)
 	}
+	return _u
+}
+
+// SetGateID sets the "gate_id" field.
+func (_u *CertificateUpdateOne) SetGateID(v int) *CertificateUpdateOne {
+	_u.mutation.ResetGateID()
+	_u.mutation.SetGateID(v)
+	return _u
+}
+
+// SetNillableGateID sets the "gate_id" field if the given value is not nil.
+func (_u *CertificateUpdateOne) SetNillableGateID(v *int) *CertificateUpdateOne {
+	if v != nil {
+		_u.SetGateID(*v)
+	}
+	return _u
+}
+
+// AddGateID adds value to the "gate_id" field.
+func (_u *CertificateUpdateOne) AddGateID(v int) *CertificateUpdateOne {
+	_u.mutation.AddGateID(v)
+	return _u
+}
+
+// ClearGateID clears the value of the "gate_id" field.
+func (_u *CertificateUpdateOne) ClearGateID() *CertificateUpdateOne {
+	_u.mutation.ClearGateID()
+	return _u
+}
+
+// SetStatus sets the "status" field.
+func (_u *CertificateUpdateOne) SetStatus(v certificate.Status) *CertificateUpdateOne {
+	_u.mutation.SetStatus(v)
+	return _u
+}
+
+// SetNillableStatus sets the "status" field if the given value is not nil.
+func (_u *CertificateUpdateOne) SetNillableStatus(v *certificate.Status) *CertificateUpdateOne {
+	if v != nil {
+		_u.SetStatus(*v)
+	}
+	return _u
+}
+
+// SetLastError sets the "last_error" field.
+func (_u *CertificateUpdateOne) SetLastError(v string) *CertificateUpdateOne {
+	_u.mutation.SetLastError(v)
+	return _u
+}
+
+// SetNillableLastError sets the "last_error" field if the given value is not nil.
+func (_u *CertificateUpdateOne) SetNillableLastError(v *string) *CertificateUpdateOne {
+	if v != nil {
+		_u.SetLastError(*v)
+	}
+	return _u
+}
+
+// SetRenewedAt sets the "renewed_at" field.
+func (_u *CertificateUpdateOne) SetRenewedAt(v time.Time) *CertificateUpdateOne {
+	_u.mutation.SetRenewedAt(v)
+	return _u
+}
+
+// SetNillableRenewedAt sets the "renewed_at" field if the given value is not nil.
+func (_u *CertificateUpdateOne) SetNillableRenewedAt(v *time.Time) *CertificateUpdateOne {
+	if v != nil {
+		_u.SetRenewedAt(*v)
+	}
+	return _u
+}
+
+// ClearRenewedAt clears the value of the "renewed_at" field.
+func (_u *CertificateUpdateOne) ClearRenewedAt() *CertificateUpdateOne {
+	_u.mutation.ClearRenewedAt()
 	return _u
 }
 
@@ -439,6 +615,11 @@ func (_u *CertificateUpdateOne) check() error {
 			return &ValidationError{Name: "source", err: fmt.Errorf(`ent: validator failed for field "Certificate.source": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Status(); ok {
+		if err := certificate.StatusValidator(v); err != nil {
+			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Certificate.status": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -479,6 +660,27 @@ func (_u *CertificateUpdateOne) sqlSave(ctx context.Context) (_node *Certificate
 	}
 	if value, ok := _u.mutation.Source(); ok {
 		_spec.SetField(certificate.FieldSource, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.GateID(); ok {
+		_spec.SetField(certificate.FieldGateID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedGateID(); ok {
+		_spec.AddField(certificate.FieldGateID, field.TypeInt, value)
+	}
+	if _u.mutation.GateIDCleared() {
+		_spec.ClearField(certificate.FieldGateID, field.TypeInt)
+	}
+	if value, ok := _u.mutation.Status(); ok {
+		_spec.SetField(certificate.FieldStatus, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.LastError(); ok {
+		_spec.SetField(certificate.FieldLastError, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.RenewedAt(); ok {
+		_spec.SetField(certificate.FieldRenewedAt, field.TypeTime, value)
+	}
+	if _u.mutation.RenewedAtCleared() {
+		_spec.ClearField(certificate.FieldRenewedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.CertPem(); ok {
 		_spec.SetField(certificate.FieldCertPem, field.TypeString, value)

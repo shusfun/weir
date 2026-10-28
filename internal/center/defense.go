@@ -183,14 +183,14 @@ func (s *Server) analyzeEvent(ctx context.Context, id int) error {
 	}
 	s.markEvent(ctx, id, "analyzing", "")
 	task := fmt.Sprintf("你是 Weir 的安全分析员。请先调用 mcp__migate__get_security_event 读取安全事件 %d，结合 Laya 的判断分析它是否是攻击。"+
-		"需要处置时调用 mcp__migate__submit_defense_draft 提交防御草稿（管理员确认后才执行）；不需要处置就不要调用。最后用一两句中文说明结论。", id)
+		"需要处置时调用 mcp__migate__submit_draft 提交一步 defense.block 草稿（管理员确认后才执行）；不需要处置就不要调用。最后用一两句中文说明结论。", id)
 	res, err := s.runDSHJob(ctx, task)
 	if err != nil {
 		return fail(err.Error())
 	}
 	drafted := false
 	for _, t := range res.ToolCalls {
-		drafted = drafted || t == "mcp__migate__submit_defense_draft"
+		drafted = drafted || t == "mcp__migate__submit_draft"
 	}
 	conclusion := strings.TrimSpace(res.Final)
 	if len([]rune(conclusion)) > 500 {
@@ -254,43 +254,6 @@ func (s *Server) listEvents(c *gin.Context) {
 	c.JSON(200, gin.H{"events": list, "analyzing": analyzing})
 }
 
-// DefenseAction 是防御草稿的动作（来源地址在执行时从事件取，不经过模型）。
-type DefenseAction struct {
-	EventID int      `json:"event_id"`
-	Action  string   `json:"action"`
-	Minutes int      `json:"minutes"`
-	Source  string   `json:"source_ip"` // 只给管理员看
-	Laya    *Verdict `json:"laya,omitempty"`
-}
-
-func (s *Server) submitDefenseDraft(ctx context.Context, source string, eventID int, action string, minutes int, explain string) (*Draft, error) {
-	e, err := s.loadEvent(ctx, eventID)
-	if err != nil {
-		return nil, errors.New("安全事件不存在")
-	}
-	explain = strings.TrimSpace(explain)
-	switch {
-	case action != "block_source":
-		return nil, errors.New("只支持 block_source")
-	case minutes < 5 || minutes > maxBlockMinutes:
-		return nil, fmt.Errorf("封禁时长必须在 5 到 %d 分钟之间", maxBlockMinutes)
-	case explain == "" || len(explain) > 2000:
-		return nil, errors.New("explain 必须是一句不超过 2000 字的说明")
-	case e.Status == "blocked" || e.Status == "dismissed":
-		return nil, errors.New("该事件已处理")
-	case !blockable(e.SourceIP):
-		return nil, errors.New("该来源是本机或无效地址，不能封禁")
-	}
-	d := &Draft{ID: randomToken(12), Kind: "defense", Source: source, Status: "passed", Explain: explain, CreatedAt: time.Now().UTC(),
-		Defense: &DefenseAction{EventID: e.ID, Action: action, Minutes: minutes, Source: e.SourceIP, Laya: e.Laya}}
-	if err = s.saveDraft(ctx, d); err != nil {
-		return nil, err
-	}
-	s.markEvent(ctx, e.ID, "drafted", "")
-	_, _ = s.Store.Ent.Audit.Create().SetAction("ai.draft").SetTarget(source + " event:" + strconv.Itoa(e.ID)).SetResult("passed").Save(ctx)
-	return d, nil
-}
-
 func blockable(ip string) bool {
 	p := net.ParseIP(ip)
 	return p != nil && !p.IsLoopback() && !p.IsUnspecified()
@@ -304,28 +267,24 @@ type blockEntry struct {
 	By      int       `json:"by"`
 }
 
-// applyDefenseDraft 执行封禁；不能封禁确认者自己的来源。
-func (s *Server) applyDefenseDraft(c *gin.Context, d *Draft) {
+// blockSource 封禁一个安全事件的来源（防御草稿确认后执行）；不能封禁确认者自己的来源。返回封禁记录的键。
+func (s *Server) blockSource(c *gin.Context, e *SecurityEvent, minutes int, reason string) (string, error) {
 	ctx := c.Request.Context()
-	a := d.Defense
-	if a == nil || !blockable(a.Source) {
-		failure(c, 409, "draft_invalid")
-		return
+	if !blockable(e.SourceIP) || minutes < 5 || minutes > maxBlockMinutes {
+		return "", errors.New("不能封禁这个来源")
 	}
-	if a.Source == c.ClientIP() {
-		failDetail(c, 409, "block_self", "这是你当前的来源地址，不能封禁", nil)
-		return
+	if e.SourceIP == c.ClientIP() {
+		return "", errors.New("这是你当前的来源地址，不能封禁")
 	}
-	until := time.Now().UTC().Add(time.Duration(a.Minutes) * time.Minute)
-	b, _ := json.Marshal(blockEntry{IP: a.Source, Until: until, EventID: a.EventID, Reason: d.Explain, By: c.GetInt("user_id")})
-	if err := s.Store.KV.Set(ctx, blockPrefix+digest(a.Source), string(b), time.Duration(a.Minutes)*time.Minute); err != nil {
-		failure(c, 503, "block_unavailable")
-		return
+	until := time.Now().UTC().Add(time.Duration(minutes) * time.Minute)
+	b, _ := json.Marshal(blockEntry{IP: e.SourceIP, Until: until, EventID: e.ID, Reason: reason, By: c.GetInt("user_id")})
+	key := blockPrefix + digest(e.SourceIP)
+	if err := s.Store.KV.Set(ctx, key, string(b), time.Duration(minutes)*time.Minute); err != nil {
+		return "", errors.New("封禁暂时不可用")
 	}
-	_ = s.Store.KV.Del(ctx, draftPrefix+d.ID)
-	s.markEvent(ctx, a.EventID, "blocked", "")
-	s.audit(c, "defense.block", a.Source, "ok")
-	c.JSON(200, gin.H{"blocked": a.Source, "until": until})
+	s.markEvent(ctx, e.ID, "blocked", "")
+	s.audit(c, "defense.block", e.SourceIP, "ok")
+	return key, nil
 }
 
 // blocked 判断请求来源是否被封禁。Gate 的设备接口不受影响（设备身份独立校验）。

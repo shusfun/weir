@@ -27,6 +27,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/resource"
 	"github.com/shusfun/weir/internal/store/ent/route"
 	"github.com/shusfun/weir/internal/store/ent/ruletemplate"
+	"github.com/shusfun/weir/internal/store/ent/sample"
 	"github.com/shusfun/weir/internal/store/ent/setting"
 	"github.com/shusfun/weir/internal/store/ent/subgrant"
 	"github.com/shusfun/weir/internal/store/ent/subnode"
@@ -59,6 +60,7 @@ const (
 	TypeResource     = "Resource"
 	TypeRoute        = "Route"
 	TypeRuleTemplate = "RuleTemplate"
+	TypeSample       = "Sample"
 	TypeSetting      = "Setting"
 	TypeSubGrant     = "SubGrant"
 	TypeSubNode      = "SubNode"
@@ -79,6 +81,7 @@ type AuditMutation struct {
 	target        *string
 	result        *string
 	ip            *string
+	detail        *map[string]interface{}
 	created_at    *time.Time
 	clearedFields map[string]struct{}
 	done          bool
@@ -384,6 +387,55 @@ func (m *AuditMutation) ResetIP() {
 	m.ip = nil
 }
 
+// SetDetail sets the "detail" field.
+func (m *AuditMutation) SetDetail(value map[string]interface{}) {
+	m.detail = &value
+}
+
+// Detail returns the value of the "detail" field in the mutation.
+func (m *AuditMutation) Detail() (r map[string]interface{}, exists bool) {
+	v := m.detail
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDetail returns the old "detail" field's value of the Audit entity.
+// If the Audit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuditMutation) OldDetail(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDetail is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDetail requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDetail: %w", err)
+	}
+	return oldValue.Detail, nil
+}
+
+// ClearDetail clears the value of the "detail" field.
+func (m *AuditMutation) ClearDetail() {
+	m.detail = nil
+	m.clearedFields[audit.FieldDetail] = struct{}{}
+}
+
+// DetailCleared returns if the "detail" field was cleared in this mutation.
+func (m *AuditMutation) DetailCleared() bool {
+	_, ok := m.clearedFields[audit.FieldDetail]
+	return ok
+}
+
+// ResetDetail resets all changes to the "detail" field.
+func (m *AuditMutation) ResetDetail() {
+	m.detail = nil
+	delete(m.clearedFields, audit.FieldDetail)
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *AuditMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -454,7 +506,7 @@ func (m *AuditMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AuditMutation) Fields() []string {
-	fields := make([]string, 0, 6)
+	fields := make([]string, 0, 7)
 	if m.actor != nil {
 		fields = append(fields, audit.FieldActor)
 	}
@@ -469,6 +521,9 @@ func (m *AuditMutation) Fields() []string {
 	}
 	if m.ip != nil {
 		fields = append(fields, audit.FieldIP)
+	}
+	if m.detail != nil {
+		fields = append(fields, audit.FieldDetail)
 	}
 	if m.created_at != nil {
 		fields = append(fields, audit.FieldCreatedAt)
@@ -491,6 +546,8 @@ func (m *AuditMutation) Field(name string) (ent.Value, bool) {
 		return m.Result()
 	case audit.FieldIP:
 		return m.IP()
+	case audit.FieldDetail:
+		return m.Detail()
 	case audit.FieldCreatedAt:
 		return m.CreatedAt()
 	}
@@ -512,6 +569,8 @@ func (m *AuditMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldResult(ctx)
 	case audit.FieldIP:
 		return m.OldIP(ctx)
+	case audit.FieldDetail:
+		return m.OldDetail(ctx)
 	case audit.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	}
@@ -557,6 +616,13 @@ func (m *AuditMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetIP(v)
+		return nil
+	case audit.FieldDetail:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDetail(v)
 		return nil
 	case audit.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -609,7 +675,11 @@ func (m *AuditMutation) AddField(name string, value ent.Value) error {
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *AuditMutation) ClearedFields() []string {
-	return nil
+	var fields []string
+	if m.FieldCleared(audit.FieldDetail) {
+		fields = append(fields, audit.FieldDetail)
+	}
+	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -622,6 +692,11 @@ func (m *AuditMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *AuditMutation) ClearField(name string) error {
+	switch name {
+	case audit.FieldDetail:
+		m.ClearDetail()
+		return nil
+	}
 	return fmt.Errorf("unknown Audit nullable field %s", name)
 }
 
@@ -643,6 +718,9 @@ func (m *AuditMutation) ResetField(name string) error {
 		return nil
 	case audit.FieldIP:
 		m.ResetIP()
+		return nil
+	case audit.FieldDetail:
+		m.ResetDetail()
 		return nil
 	case audit.FieldCreatedAt:
 		m.ResetCreatedAt()
@@ -1668,6 +1746,11 @@ type CertificateMutation struct {
 	name          *string
 	domain        *string
 	source        *certificate.Source
+	gate_id       *int
+	addgate_id    *int
+	status        *certificate.Status
+	last_error    *string
+	renewed_at    *time.Time
 	cert_pem      *string
 	key_pem       *string
 	sha256        *string
@@ -1884,6 +1967,197 @@ func (m *CertificateMutation) OldSource(ctx context.Context) (v certificate.Sour
 // ResetSource resets all changes to the "source" field.
 func (m *CertificateMutation) ResetSource() {
 	m.source = nil
+}
+
+// SetGateID sets the "gate_id" field.
+func (m *CertificateMutation) SetGateID(i int) {
+	m.gate_id = &i
+	m.addgate_id = nil
+}
+
+// GateID returns the value of the "gate_id" field in the mutation.
+func (m *CertificateMutation) GateID() (r int, exists bool) {
+	v := m.gate_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGateID returns the old "gate_id" field's value of the Certificate entity.
+// If the Certificate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CertificateMutation) OldGateID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGateID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGateID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGateID: %w", err)
+	}
+	return oldValue.GateID, nil
+}
+
+// AddGateID adds i to the "gate_id" field.
+func (m *CertificateMutation) AddGateID(i int) {
+	if m.addgate_id != nil {
+		*m.addgate_id += i
+	} else {
+		m.addgate_id = &i
+	}
+}
+
+// AddedGateID returns the value that was added to the "gate_id" field in this mutation.
+func (m *CertificateMutation) AddedGateID() (r int, exists bool) {
+	v := m.addgate_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearGateID clears the value of the "gate_id" field.
+func (m *CertificateMutation) ClearGateID() {
+	m.gate_id = nil
+	m.addgate_id = nil
+	m.clearedFields[certificate.FieldGateID] = struct{}{}
+}
+
+// GateIDCleared returns if the "gate_id" field was cleared in this mutation.
+func (m *CertificateMutation) GateIDCleared() bool {
+	_, ok := m.clearedFields[certificate.FieldGateID]
+	return ok
+}
+
+// ResetGateID resets all changes to the "gate_id" field.
+func (m *CertificateMutation) ResetGateID() {
+	m.gate_id = nil
+	m.addgate_id = nil
+	delete(m.clearedFields, certificate.FieldGateID)
+}
+
+// SetStatus sets the "status" field.
+func (m *CertificateMutation) SetStatus(c certificate.Status) {
+	m.status = &c
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *CertificateMutation) Status() (r certificate.Status, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the Certificate entity.
+// If the Certificate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CertificateMutation) OldStatus(ctx context.Context) (v certificate.Status, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *CertificateMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetLastError sets the "last_error" field.
+func (m *CertificateMutation) SetLastError(s string) {
+	m.last_error = &s
+}
+
+// LastError returns the value of the "last_error" field in the mutation.
+func (m *CertificateMutation) LastError() (r string, exists bool) {
+	v := m.last_error
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastError returns the old "last_error" field's value of the Certificate entity.
+// If the Certificate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CertificateMutation) OldLastError(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastError is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastError requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastError: %w", err)
+	}
+	return oldValue.LastError, nil
+}
+
+// ResetLastError resets all changes to the "last_error" field.
+func (m *CertificateMutation) ResetLastError() {
+	m.last_error = nil
+}
+
+// SetRenewedAt sets the "renewed_at" field.
+func (m *CertificateMutation) SetRenewedAt(t time.Time) {
+	m.renewed_at = &t
+}
+
+// RenewedAt returns the value of the "renewed_at" field in the mutation.
+func (m *CertificateMutation) RenewedAt() (r time.Time, exists bool) {
+	v := m.renewed_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRenewedAt returns the old "renewed_at" field's value of the Certificate entity.
+// If the Certificate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CertificateMutation) OldRenewedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRenewedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRenewedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRenewedAt: %w", err)
+	}
+	return oldValue.RenewedAt, nil
+}
+
+// ClearRenewedAt clears the value of the "renewed_at" field.
+func (m *CertificateMutation) ClearRenewedAt() {
+	m.renewed_at = nil
+	m.clearedFields[certificate.FieldRenewedAt] = struct{}{}
+}
+
+// RenewedAtCleared returns if the "renewed_at" field was cleared in this mutation.
+func (m *CertificateMutation) RenewedAtCleared() bool {
+	_, ok := m.clearedFields[certificate.FieldRenewedAt]
+	return ok
+}
+
+// ResetRenewedAt resets all changes to the "renewed_at" field.
+func (m *CertificateMutation) ResetRenewedAt() {
+	m.renewed_at = nil
+	delete(m.clearedFields, certificate.FieldRenewedAt)
 }
 
 // SetCertPem sets the "cert_pem" field.
@@ -2149,7 +2423,7 @@ func (m *CertificateMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *CertificateMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 13)
 	if m.name != nil {
 		fields = append(fields, certificate.FieldName)
 	}
@@ -2158,6 +2432,18 @@ func (m *CertificateMutation) Fields() []string {
 	}
 	if m.source != nil {
 		fields = append(fields, certificate.FieldSource)
+	}
+	if m.gate_id != nil {
+		fields = append(fields, certificate.FieldGateID)
+	}
+	if m.status != nil {
+		fields = append(fields, certificate.FieldStatus)
+	}
+	if m.last_error != nil {
+		fields = append(fields, certificate.FieldLastError)
+	}
+	if m.renewed_at != nil {
+		fields = append(fields, certificate.FieldRenewedAt)
 	}
 	if m.cert_pem != nil {
 		fields = append(fields, certificate.FieldCertPem)
@@ -2191,6 +2477,14 @@ func (m *CertificateMutation) Field(name string) (ent.Value, bool) {
 		return m.Domain()
 	case certificate.FieldSource:
 		return m.Source()
+	case certificate.FieldGateID:
+		return m.GateID()
+	case certificate.FieldStatus:
+		return m.Status()
+	case certificate.FieldLastError:
+		return m.LastError()
+	case certificate.FieldRenewedAt:
+		return m.RenewedAt()
 	case certificate.FieldCertPem:
 		return m.CertPem()
 	case certificate.FieldKeyPem:
@@ -2218,6 +2512,14 @@ func (m *CertificateMutation) OldField(ctx context.Context, name string) (ent.Va
 		return m.OldDomain(ctx)
 	case certificate.FieldSource:
 		return m.OldSource(ctx)
+	case certificate.FieldGateID:
+		return m.OldGateID(ctx)
+	case certificate.FieldStatus:
+		return m.OldStatus(ctx)
+	case certificate.FieldLastError:
+		return m.OldLastError(ctx)
+	case certificate.FieldRenewedAt:
+		return m.OldRenewedAt(ctx)
 	case certificate.FieldCertPem:
 		return m.OldCertPem(ctx)
 	case certificate.FieldKeyPem:
@@ -2259,6 +2561,34 @@ func (m *CertificateMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetSource(v)
+		return nil
+	case certificate.FieldGateID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGateID(v)
+		return nil
+	case certificate.FieldStatus:
+		v, ok := value.(certificate.Status)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case certificate.FieldLastError:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastError(v)
+		return nil
+	case certificate.FieldRenewedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRenewedAt(v)
 		return nil
 	case certificate.FieldCertPem:
 		v, ok := value.(string)
@@ -2309,13 +2639,21 @@ func (m *CertificateMutation) SetField(name string, value ent.Value) error {
 // AddedFields returns all numeric fields that were incremented/decremented during
 // this mutation.
 func (m *CertificateMutation) AddedFields() []string {
-	return nil
+	var fields []string
+	if m.addgate_id != nil {
+		fields = append(fields, certificate.FieldGateID)
+	}
+	return fields
 }
 
 // AddedField returns the numeric value that was incremented/decremented on a field
 // with the given name. The second boolean return value indicates that this field
 // was not set, or was not defined in the schema.
 func (m *CertificateMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case certificate.FieldGateID:
+		return m.AddedGateID()
+	}
 	return nil, false
 }
 
@@ -2324,6 +2662,13 @@ func (m *CertificateMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *CertificateMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case certificate.FieldGateID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGateID(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Certificate numeric field %s", name)
 }
@@ -2332,6 +2677,12 @@ func (m *CertificateMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *CertificateMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(certificate.FieldGateID) {
+		fields = append(fields, certificate.FieldGateID)
+	}
+	if m.FieldCleared(certificate.FieldRenewedAt) {
+		fields = append(fields, certificate.FieldRenewedAt)
+	}
 	if m.FieldCleared(certificate.FieldNotAfter) {
 		fields = append(fields, certificate.FieldNotAfter)
 	}
@@ -2349,6 +2700,12 @@ func (m *CertificateMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *CertificateMutation) ClearField(name string) error {
 	switch name {
+	case certificate.FieldGateID:
+		m.ClearGateID()
+		return nil
+	case certificate.FieldRenewedAt:
+		m.ClearRenewedAt()
+		return nil
 	case certificate.FieldNotAfter:
 		m.ClearNotAfter()
 		return nil
@@ -2368,6 +2725,18 @@ func (m *CertificateMutation) ResetField(name string) error {
 		return nil
 	case certificate.FieldSource:
 		m.ResetSource()
+		return nil
+	case certificate.FieldGateID:
+		m.ResetGateID()
+		return nil
+	case certificate.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case certificate.FieldLastError:
+		m.ResetLastError()
+		return nil
+	case certificate.FieldRenewedAt:
+		m.ResetRenewedAt()
 		return nil
 	case certificate.FieldCertPem:
 		m.ResetCertPem()
@@ -2451,6 +2820,7 @@ type ChainMutation struct {
 	addentry_node_id *int
 	name             *string
 	exit_kind        *chain.ExitKind
+	exit_source      *map[string]interface{}
 	exit_address     *string
 	exit_port        *int
 	addexit_port     *int
@@ -2746,6 +3116,55 @@ func (m *ChainMutation) OldExitKind(ctx context.Context) (v chain.ExitKind, err 
 // ResetExitKind resets all changes to the "exit_kind" field.
 func (m *ChainMutation) ResetExitKind() {
 	m.exit_kind = nil
+}
+
+// SetExitSource sets the "exit_source" field.
+func (m *ChainMutation) SetExitSource(value map[string]interface{}) {
+	m.exit_source = &value
+}
+
+// ExitSource returns the value of the "exit_source" field in the mutation.
+func (m *ChainMutation) ExitSource() (r map[string]interface{}, exists bool) {
+	v := m.exit_source
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExitSource returns the old "exit_source" field's value of the Chain entity.
+// If the Chain object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChainMutation) OldExitSource(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExitSource is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExitSource requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExitSource: %w", err)
+	}
+	return oldValue.ExitSource, nil
+}
+
+// ClearExitSource clears the value of the "exit_source" field.
+func (m *ChainMutation) ClearExitSource() {
+	m.exit_source = nil
+	m.clearedFields[chain.FieldExitSource] = struct{}{}
+}
+
+// ExitSourceCleared returns if the "exit_source" field was cleared in this mutation.
+func (m *ChainMutation) ExitSourceCleared() bool {
+	_, ok := m.clearedFields[chain.FieldExitSource]
+	return ok
+}
+
+// ResetExitSource resets all changes to the "exit_source" field.
+func (m *ChainMutation) ResetExitSource() {
+	m.exit_source = nil
+	delete(m.clearedFields, chain.FieldExitSource)
 }
 
 // SetExitAddress sets the "exit_address" field.
@@ -3088,7 +3507,7 @@ func (m *ChainMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ChainMutation) Fields() []string {
-	fields := make([]string, 0, 11)
+	fields := make([]string, 0, 12)
 	if m.user_id != nil {
 		fields = append(fields, chain.FieldUserID)
 	}
@@ -3100,6 +3519,9 @@ func (m *ChainMutation) Fields() []string {
 	}
 	if m.exit_kind != nil {
 		fields = append(fields, chain.FieldExitKind)
+	}
+	if m.exit_source != nil {
+		fields = append(fields, chain.FieldExitSource)
 	}
 	if m.exit_address != nil {
 		fields = append(fields, chain.FieldExitAddress)
@@ -3138,6 +3560,8 @@ func (m *ChainMutation) Field(name string) (ent.Value, bool) {
 		return m.Name()
 	case chain.FieldExitKind:
 		return m.ExitKind()
+	case chain.FieldExitSource:
+		return m.ExitSource()
 	case chain.FieldExitAddress:
 		return m.ExitAddress()
 	case chain.FieldExitPort:
@@ -3169,6 +3593,8 @@ func (m *ChainMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldName(ctx)
 	case chain.FieldExitKind:
 		return m.OldExitKind(ctx)
+	case chain.FieldExitSource:
+		return m.OldExitSource(ctx)
 	case chain.FieldExitAddress:
 		return m.OldExitAddress(ctx)
 	case chain.FieldExitPort:
@@ -3219,6 +3645,13 @@ func (m *ChainMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetExitKind(v)
+		return nil
+	case chain.FieldExitSource:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExitSource(v)
 		return nil
 	case chain.FieldExitAddress:
 		v, ok := value.(string)
@@ -3350,6 +3783,9 @@ func (m *ChainMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *ChainMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(chain.FieldExitSource) {
+		fields = append(fields, chain.FieldExitSource)
+	}
 	if m.FieldCleared(chain.FieldExitNodeID) {
 		fields = append(fields, chain.FieldExitNodeID)
 	}
@@ -3367,6 +3803,9 @@ func (m *ChainMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *ChainMutation) ClearField(name string) error {
 	switch name {
+	case chain.FieldExitSource:
+		m.ClearExitSource()
+		return nil
 	case chain.FieldExitNodeID:
 		m.ClearExitNodeID()
 		return nil
@@ -3389,6 +3828,9 @@ func (m *ChainMutation) ResetField(name string) error {
 		return nil
 	case chain.FieldExitKind:
 		m.ResetExitKind()
+		return nil
+	case chain.FieldExitSource:
+		m.ResetExitSource()
 		return nil
 	case chain.FieldExitAddress:
 		m.ResetExitAddress()
@@ -4657,6 +5099,7 @@ type GateMutation struct {
 	public_key            *string
 	status                *gate.Status
 	public_host           *string
+	center_url            *string
 	version               *string
 	hostname              *string
 	arch                  *string
@@ -4666,6 +5109,7 @@ type GateMutation struct {
 	kernels_running       *map[string]string
 	kernel_pins           *map[string]string
 	host                  *map[string]interface{}
+	panel                 *map[string]interface{}
 	config_revision       *int64
 	addconfig_revision    *int64
 	applied_revision      *int64
@@ -4927,6 +5371,42 @@ func (m *GateMutation) OldPublicHost(ctx context.Context) (v string, err error) 
 // ResetPublicHost resets all changes to the "public_host" field.
 func (m *GateMutation) ResetPublicHost() {
 	m.public_host = nil
+}
+
+// SetCenterURL sets the "center_url" field.
+func (m *GateMutation) SetCenterURL(s string) {
+	m.center_url = &s
+}
+
+// CenterURL returns the value of the "center_url" field in the mutation.
+func (m *GateMutation) CenterURL() (r string, exists bool) {
+	v := m.center_url
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCenterURL returns the old "center_url" field's value of the Gate entity.
+// If the Gate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GateMutation) OldCenterURL(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCenterURL is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCenterURL requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCenterURL: %w", err)
+	}
+	return oldValue.CenterURL, nil
+}
+
+// ResetCenterURL resets all changes to the "center_url" field.
+func (m *GateMutation) ResetCenterURL() {
+	m.center_url = nil
 }
 
 // SetVersion sets the "version" field.
@@ -5296,6 +5776,55 @@ func (m *GateMutation) HostCleared() bool {
 func (m *GateMutation) ResetHost() {
 	m.host = nil
 	delete(m.clearedFields, gate.FieldHost)
+}
+
+// SetPanel sets the "panel" field.
+func (m *GateMutation) SetPanel(value map[string]interface{}) {
+	m.panel = &value
+}
+
+// Panel returns the value of the "panel" field in the mutation.
+func (m *GateMutation) Panel() (r map[string]interface{}, exists bool) {
+	v := m.panel
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPanel returns the old "panel" field's value of the Gate entity.
+// If the Gate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GateMutation) OldPanel(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPanel is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPanel requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPanel: %w", err)
+	}
+	return oldValue.Panel, nil
+}
+
+// ClearPanel clears the value of the "panel" field.
+func (m *GateMutation) ClearPanel() {
+	m.panel = nil
+	m.clearedFields[gate.FieldPanel] = struct{}{}
+}
+
+// PanelCleared returns if the "panel" field was cleared in this mutation.
+func (m *GateMutation) PanelCleared() bool {
+	_, ok := m.clearedFields[gate.FieldPanel]
+	return ok
+}
+
+// ResetPanel resets all changes to the "panel" field.
+func (m *GateMutation) ResetPanel() {
+	m.panel = nil
+	delete(m.clearedFields, gate.FieldPanel)
 }
 
 // SetConfigRevision sets the "config_revision" field.
@@ -5776,7 +6305,7 @@ func (m *GateMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GateMutation) Fields() []string {
-	fields := make([]string, 0, 21)
+	fields := make([]string, 0, 23)
 	if m.name != nil {
 		fields = append(fields, gate.FieldName)
 	}
@@ -5788,6 +6317,9 @@ func (m *GateMutation) Fields() []string {
 	}
 	if m.public_host != nil {
 		fields = append(fields, gate.FieldPublicHost)
+	}
+	if m.center_url != nil {
+		fields = append(fields, gate.FieldCenterURL)
 	}
 	if m.version != nil {
 		fields = append(fields, gate.FieldVersion)
@@ -5812,6 +6344,9 @@ func (m *GateMutation) Fields() []string {
 	}
 	if m.host != nil {
 		fields = append(fields, gate.FieldHost)
+	}
+	if m.panel != nil {
+		fields = append(fields, gate.FieldPanel)
 	}
 	if m.config_revision != nil {
 		fields = append(fields, gate.FieldConfigRevision)
@@ -5856,6 +6391,8 @@ func (m *GateMutation) Field(name string) (ent.Value, bool) {
 		return m.Status()
 	case gate.FieldPublicHost:
 		return m.PublicHost()
+	case gate.FieldCenterURL:
+		return m.CenterURL()
 	case gate.FieldVersion:
 		return m.Version()
 	case gate.FieldHostname:
@@ -5872,6 +6409,8 @@ func (m *GateMutation) Field(name string) (ent.Value, bool) {
 		return m.KernelPins()
 	case gate.FieldHost:
 		return m.Host()
+	case gate.FieldPanel:
+		return m.Panel()
 	case gate.FieldConfigRevision:
 		return m.ConfigRevision()
 	case gate.FieldAppliedRevision:
@@ -5907,6 +6446,8 @@ func (m *GateMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldStatus(ctx)
 	case gate.FieldPublicHost:
 		return m.OldPublicHost(ctx)
+	case gate.FieldCenterURL:
+		return m.OldCenterURL(ctx)
 	case gate.FieldVersion:
 		return m.OldVersion(ctx)
 	case gate.FieldHostname:
@@ -5923,6 +6464,8 @@ func (m *GateMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldKernelPins(ctx)
 	case gate.FieldHost:
 		return m.OldHost(ctx)
+	case gate.FieldPanel:
+		return m.OldPanel(ctx)
 	case gate.FieldConfigRevision:
 		return m.OldConfigRevision(ctx)
 	case gate.FieldAppliedRevision:
@@ -5977,6 +6520,13 @@ func (m *GateMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPublicHost(v)
+		return nil
+	case gate.FieldCenterURL:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCenterURL(v)
 		return nil
 	case gate.FieldVersion:
 		v, ok := value.(string)
@@ -6033,6 +6583,13 @@ func (m *GateMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetHost(v)
+		return nil
+	case gate.FieldPanel:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPanel(v)
 		return nil
 	case gate.FieldConfigRevision:
 		v, ok := value.(int64)
@@ -6217,6 +6774,9 @@ func (m *GateMutation) ClearedFields() []string {
 	if m.FieldCleared(gate.FieldHost) {
 		fields = append(fields, gate.FieldHost)
 	}
+	if m.FieldCleared(gate.FieldPanel) {
+		fields = append(fields, gate.FieldPanel)
+	}
 	return fields
 }
 
@@ -6246,6 +6806,9 @@ func (m *GateMutation) ClearField(name string) error {
 	case gate.FieldHost:
 		m.ClearHost()
 		return nil
+	case gate.FieldPanel:
+		m.ClearPanel()
+		return nil
 	}
 	return fmt.Errorf("unknown Gate nullable field %s", name)
 }
@@ -6265,6 +6828,9 @@ func (m *GateMutation) ResetField(name string) error {
 		return nil
 	case gate.FieldPublicHost:
 		m.ResetPublicHost()
+		return nil
+	case gate.FieldCenterURL:
+		m.ResetCenterURL()
 		return nil
 	case gate.FieldVersion:
 		m.ResetVersion()
@@ -6289,6 +6855,9 @@ func (m *GateMutation) ResetField(name string) error {
 		return nil
 	case gate.FieldHost:
 		m.ResetHost()
+		return nil
+	case gate.FieldPanel:
+		m.ResetPanel()
 		return nil
 	case gate.FieldConfigRevision:
 		m.ResetConfigRevision()
@@ -8219,6 +8788,7 @@ type NodeMutation struct {
 	addcert_id       *int
 	enabled          *bool
 	chain_kind       *node.ChainKind
+	chain_source     *map[string]interface{}
 	chain_address    *string
 	chain_port       *int
 	addchain_port    *int
@@ -8850,6 +9420,55 @@ func (m *NodeMutation) ResetChainKind() {
 	m.chain_kind = nil
 }
 
+// SetChainSource sets the "chain_source" field.
+func (m *NodeMutation) SetChainSource(value map[string]interface{}) {
+	m.chain_source = &value
+}
+
+// ChainSource returns the value of the "chain_source" field in the mutation.
+func (m *NodeMutation) ChainSource() (r map[string]interface{}, exists bool) {
+	v := m.chain_source
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldChainSource returns the old "chain_source" field's value of the Node entity.
+// If the Node object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *NodeMutation) OldChainSource(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldChainSource is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldChainSource requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldChainSource: %w", err)
+	}
+	return oldValue.ChainSource, nil
+}
+
+// ClearChainSource clears the value of the "chain_source" field.
+func (m *NodeMutation) ClearChainSource() {
+	m.chain_source = nil
+	m.clearedFields[node.FieldChainSource] = struct{}{}
+}
+
+// ChainSourceCleared returns if the "chain_source" field was cleared in this mutation.
+func (m *NodeMutation) ChainSourceCleared() bool {
+	_, ok := m.clearedFields[node.FieldChainSource]
+	return ok
+}
+
+// ResetChainSource resets all changes to the "chain_source" field.
+func (m *NodeMutation) ResetChainSource() {
+	m.chain_source = nil
+	delete(m.clearedFields, node.FieldChainSource)
+}
+
 // SetChainAddress sets the "chain_address" field.
 func (m *NodeMutation) SetChainAddress(s string) {
 	m.chain_address = &s
@@ -9154,7 +9773,7 @@ func (m *NodeMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *NodeMutation) Fields() []string {
-	fields := make([]string, 0, 18)
+	fields := make([]string, 0, 19)
 	if m.gate_id != nil {
 		fields = append(fields, node.FieldGateID)
 	}
@@ -9190,6 +9809,9 @@ func (m *NodeMutation) Fields() []string {
 	}
 	if m.chain_kind != nil {
 		fields = append(fields, node.FieldChainKind)
+	}
+	if m.chain_source != nil {
+		fields = append(fields, node.FieldChainSource)
 	}
 	if m.chain_address != nil {
 		fields = append(fields, node.FieldChainAddress)
@@ -9241,6 +9863,8 @@ func (m *NodeMutation) Field(name string) (ent.Value, bool) {
 		return m.Enabled()
 	case node.FieldChainKind:
 		return m.ChainKind()
+	case node.FieldChainSource:
+		return m.ChainSource()
 	case node.FieldChainAddress:
 		return m.ChainAddress()
 	case node.FieldChainPort:
@@ -9286,6 +9910,8 @@ func (m *NodeMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldEnabled(ctx)
 	case node.FieldChainKind:
 		return m.OldChainKind(ctx)
+	case node.FieldChainSource:
+		return m.OldChainSource(ctx)
 	case node.FieldChainAddress:
 		return m.OldChainAddress(ctx)
 	case node.FieldChainPort:
@@ -9390,6 +10016,13 @@ func (m *NodeMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetChainKind(v)
+		return nil
+	case node.FieldChainSource:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetChainSource(v)
 		return nil
 	case node.FieldChainAddress:
 		v, ok := value.(string)
@@ -9532,6 +10165,9 @@ func (m *NodeMutation) ClearedFields() []string {
 	if m.FieldCleared(node.FieldCertID) {
 		fields = append(fields, node.FieldCertID)
 	}
+	if m.FieldCleared(node.FieldChainSource) {
+		fields = append(fields, node.FieldChainSource)
+	}
 	if m.FieldCleared(node.FieldChainNodeID) {
 		fields = append(fields, node.FieldChainNodeID)
 	}
@@ -9554,6 +10190,9 @@ func (m *NodeMutation) ClearField(name string) error {
 		return nil
 	case node.FieldCertID:
 		m.ClearCertID()
+		return nil
+	case node.FieldChainSource:
+		m.ClearChainSource()
 		return nil
 	case node.FieldChainNodeID:
 		m.ClearChainNodeID()
@@ -9601,6 +10240,9 @@ func (m *NodeMutation) ResetField(name string) error {
 		return nil
 	case node.FieldChainKind:
 		m.ResetChainKind()
+		return nil
+	case node.FieldChainSource:
+		m.ResetChainSource()
 		return nil
 	case node.FieldChainAddress:
 		m.ResetChainAddress()
@@ -13916,6 +14558,1155 @@ func (m *RuleTemplateMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *RuleTemplateMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown RuleTemplate edge %s", name)
+}
+
+// SampleMutation represents an operation that mutates the Sample nodes in the graph.
+type SampleMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *int
+	scope         *sample.Scope
+	subject_id    *int
+	addsubject_id *int
+	at            *time.Time
+	traffic       *int64
+	addtraffic    *int64
+	cpu           *float64
+	addcpu        *float64
+	mem_used      *int64
+	addmem_used   *int64
+	mem_total     *int64
+	addmem_total  *int64
+	disk_used     *int64
+	adddisk_used  *int64
+	disk_total    *int64
+	adddisk_total *int64
+	created_at    *time.Time
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*Sample, error)
+	predicates    []predicate.Sample
+}
+
+var _ ent.Mutation = (*SampleMutation)(nil)
+
+// sampleOption allows management of the mutation configuration using functional options.
+type sampleOption func(*SampleMutation)
+
+// newSampleMutation creates new mutation for the Sample entity.
+func newSampleMutation(c config, op Op, opts ...sampleOption) *SampleMutation {
+	m := &SampleMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSample,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSampleID sets the ID field of the mutation.
+func withSampleID(id int) sampleOption {
+	return func(m *SampleMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *Sample
+		)
+		m.oldValue = func(ctx context.Context) (*Sample, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().Sample.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSample sets the old Sample of the mutation.
+func withSample(node *Sample) sampleOption {
+	return func(m *SampleMutation) {
+		m.oldValue = func(context.Context) (*Sample, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SampleMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SampleMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SampleMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SampleMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().Sample.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetScope sets the "scope" field.
+func (m *SampleMutation) SetScope(s sample.Scope) {
+	m.scope = &s
+}
+
+// Scope returns the value of the "scope" field in the mutation.
+func (m *SampleMutation) Scope() (r sample.Scope, exists bool) {
+	v := m.scope
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldScope returns the old "scope" field's value of the Sample entity.
+// If the Sample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SampleMutation) OldScope(ctx context.Context) (v sample.Scope, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldScope is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldScope requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldScope: %w", err)
+	}
+	return oldValue.Scope, nil
+}
+
+// ResetScope resets all changes to the "scope" field.
+func (m *SampleMutation) ResetScope() {
+	m.scope = nil
+}
+
+// SetSubjectID sets the "subject_id" field.
+func (m *SampleMutation) SetSubjectID(i int) {
+	m.subject_id = &i
+	m.addsubject_id = nil
+}
+
+// SubjectID returns the value of the "subject_id" field in the mutation.
+func (m *SampleMutation) SubjectID() (r int, exists bool) {
+	v := m.subject_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSubjectID returns the old "subject_id" field's value of the Sample entity.
+// If the Sample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SampleMutation) OldSubjectID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSubjectID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSubjectID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSubjectID: %w", err)
+	}
+	return oldValue.SubjectID, nil
+}
+
+// AddSubjectID adds i to the "subject_id" field.
+func (m *SampleMutation) AddSubjectID(i int) {
+	if m.addsubject_id != nil {
+		*m.addsubject_id += i
+	} else {
+		m.addsubject_id = &i
+	}
+}
+
+// AddedSubjectID returns the value that was added to the "subject_id" field in this mutation.
+func (m *SampleMutation) AddedSubjectID() (r int, exists bool) {
+	v := m.addsubject_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSubjectID resets all changes to the "subject_id" field.
+func (m *SampleMutation) ResetSubjectID() {
+	m.subject_id = nil
+	m.addsubject_id = nil
+}
+
+// SetAt sets the "at" field.
+func (m *SampleMutation) SetAt(t time.Time) {
+	m.at = &t
+}
+
+// At returns the value of the "at" field in the mutation.
+func (m *SampleMutation) At() (r time.Time, exists bool) {
+	v := m.at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAt returns the old "at" field's value of the Sample entity.
+// If the Sample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SampleMutation) OldAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAt: %w", err)
+	}
+	return oldValue.At, nil
+}
+
+// ResetAt resets all changes to the "at" field.
+func (m *SampleMutation) ResetAt() {
+	m.at = nil
+}
+
+// SetTraffic sets the "traffic" field.
+func (m *SampleMutation) SetTraffic(i int64) {
+	m.traffic = &i
+	m.addtraffic = nil
+}
+
+// Traffic returns the value of the "traffic" field in the mutation.
+func (m *SampleMutation) Traffic() (r int64, exists bool) {
+	v := m.traffic
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTraffic returns the old "traffic" field's value of the Sample entity.
+// If the Sample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SampleMutation) OldTraffic(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTraffic is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTraffic requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTraffic: %w", err)
+	}
+	return oldValue.Traffic, nil
+}
+
+// AddTraffic adds i to the "traffic" field.
+func (m *SampleMutation) AddTraffic(i int64) {
+	if m.addtraffic != nil {
+		*m.addtraffic += i
+	} else {
+		m.addtraffic = &i
+	}
+}
+
+// AddedTraffic returns the value that was added to the "traffic" field in this mutation.
+func (m *SampleMutation) AddedTraffic() (r int64, exists bool) {
+	v := m.addtraffic
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetTraffic resets all changes to the "traffic" field.
+func (m *SampleMutation) ResetTraffic() {
+	m.traffic = nil
+	m.addtraffic = nil
+}
+
+// SetCPU sets the "cpu" field.
+func (m *SampleMutation) SetCPU(f float64) {
+	m.cpu = &f
+	m.addcpu = nil
+}
+
+// CPU returns the value of the "cpu" field in the mutation.
+func (m *SampleMutation) CPU() (r float64, exists bool) {
+	v := m.cpu
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCPU returns the old "cpu" field's value of the Sample entity.
+// If the Sample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SampleMutation) OldCPU(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCPU is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCPU requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCPU: %w", err)
+	}
+	return oldValue.CPU, nil
+}
+
+// AddCPU adds f to the "cpu" field.
+func (m *SampleMutation) AddCPU(f float64) {
+	if m.addcpu != nil {
+		*m.addcpu += f
+	} else {
+		m.addcpu = &f
+	}
+}
+
+// AddedCPU returns the value that was added to the "cpu" field in this mutation.
+func (m *SampleMutation) AddedCPU() (r float64, exists bool) {
+	v := m.addcpu
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearCPU clears the value of the "cpu" field.
+func (m *SampleMutation) ClearCPU() {
+	m.cpu = nil
+	m.addcpu = nil
+	m.clearedFields[sample.FieldCPU] = struct{}{}
+}
+
+// CPUCleared returns if the "cpu" field was cleared in this mutation.
+func (m *SampleMutation) CPUCleared() bool {
+	_, ok := m.clearedFields[sample.FieldCPU]
+	return ok
+}
+
+// ResetCPU resets all changes to the "cpu" field.
+func (m *SampleMutation) ResetCPU() {
+	m.cpu = nil
+	m.addcpu = nil
+	delete(m.clearedFields, sample.FieldCPU)
+}
+
+// SetMemUsed sets the "mem_used" field.
+func (m *SampleMutation) SetMemUsed(i int64) {
+	m.mem_used = &i
+	m.addmem_used = nil
+}
+
+// MemUsed returns the value of the "mem_used" field in the mutation.
+func (m *SampleMutation) MemUsed() (r int64, exists bool) {
+	v := m.mem_used
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMemUsed returns the old "mem_used" field's value of the Sample entity.
+// If the Sample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SampleMutation) OldMemUsed(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMemUsed is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMemUsed requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMemUsed: %w", err)
+	}
+	return oldValue.MemUsed, nil
+}
+
+// AddMemUsed adds i to the "mem_used" field.
+func (m *SampleMutation) AddMemUsed(i int64) {
+	if m.addmem_used != nil {
+		*m.addmem_used += i
+	} else {
+		m.addmem_used = &i
+	}
+}
+
+// AddedMemUsed returns the value that was added to the "mem_used" field in this mutation.
+func (m *SampleMutation) AddedMemUsed() (r int64, exists bool) {
+	v := m.addmem_used
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearMemUsed clears the value of the "mem_used" field.
+func (m *SampleMutation) ClearMemUsed() {
+	m.mem_used = nil
+	m.addmem_used = nil
+	m.clearedFields[sample.FieldMemUsed] = struct{}{}
+}
+
+// MemUsedCleared returns if the "mem_used" field was cleared in this mutation.
+func (m *SampleMutation) MemUsedCleared() bool {
+	_, ok := m.clearedFields[sample.FieldMemUsed]
+	return ok
+}
+
+// ResetMemUsed resets all changes to the "mem_used" field.
+func (m *SampleMutation) ResetMemUsed() {
+	m.mem_used = nil
+	m.addmem_used = nil
+	delete(m.clearedFields, sample.FieldMemUsed)
+}
+
+// SetMemTotal sets the "mem_total" field.
+func (m *SampleMutation) SetMemTotal(i int64) {
+	m.mem_total = &i
+	m.addmem_total = nil
+}
+
+// MemTotal returns the value of the "mem_total" field in the mutation.
+func (m *SampleMutation) MemTotal() (r int64, exists bool) {
+	v := m.mem_total
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMemTotal returns the old "mem_total" field's value of the Sample entity.
+// If the Sample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SampleMutation) OldMemTotal(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMemTotal is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMemTotal requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMemTotal: %w", err)
+	}
+	return oldValue.MemTotal, nil
+}
+
+// AddMemTotal adds i to the "mem_total" field.
+func (m *SampleMutation) AddMemTotal(i int64) {
+	if m.addmem_total != nil {
+		*m.addmem_total += i
+	} else {
+		m.addmem_total = &i
+	}
+}
+
+// AddedMemTotal returns the value that was added to the "mem_total" field in this mutation.
+func (m *SampleMutation) AddedMemTotal() (r int64, exists bool) {
+	v := m.addmem_total
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearMemTotal clears the value of the "mem_total" field.
+func (m *SampleMutation) ClearMemTotal() {
+	m.mem_total = nil
+	m.addmem_total = nil
+	m.clearedFields[sample.FieldMemTotal] = struct{}{}
+}
+
+// MemTotalCleared returns if the "mem_total" field was cleared in this mutation.
+func (m *SampleMutation) MemTotalCleared() bool {
+	_, ok := m.clearedFields[sample.FieldMemTotal]
+	return ok
+}
+
+// ResetMemTotal resets all changes to the "mem_total" field.
+func (m *SampleMutation) ResetMemTotal() {
+	m.mem_total = nil
+	m.addmem_total = nil
+	delete(m.clearedFields, sample.FieldMemTotal)
+}
+
+// SetDiskUsed sets the "disk_used" field.
+func (m *SampleMutation) SetDiskUsed(i int64) {
+	m.disk_used = &i
+	m.adddisk_used = nil
+}
+
+// DiskUsed returns the value of the "disk_used" field in the mutation.
+func (m *SampleMutation) DiskUsed() (r int64, exists bool) {
+	v := m.disk_used
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDiskUsed returns the old "disk_used" field's value of the Sample entity.
+// If the Sample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SampleMutation) OldDiskUsed(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDiskUsed is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDiskUsed requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDiskUsed: %w", err)
+	}
+	return oldValue.DiskUsed, nil
+}
+
+// AddDiskUsed adds i to the "disk_used" field.
+func (m *SampleMutation) AddDiskUsed(i int64) {
+	if m.adddisk_used != nil {
+		*m.adddisk_used += i
+	} else {
+		m.adddisk_used = &i
+	}
+}
+
+// AddedDiskUsed returns the value that was added to the "disk_used" field in this mutation.
+func (m *SampleMutation) AddedDiskUsed() (r int64, exists bool) {
+	v := m.adddisk_used
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearDiskUsed clears the value of the "disk_used" field.
+func (m *SampleMutation) ClearDiskUsed() {
+	m.disk_used = nil
+	m.adddisk_used = nil
+	m.clearedFields[sample.FieldDiskUsed] = struct{}{}
+}
+
+// DiskUsedCleared returns if the "disk_used" field was cleared in this mutation.
+func (m *SampleMutation) DiskUsedCleared() bool {
+	_, ok := m.clearedFields[sample.FieldDiskUsed]
+	return ok
+}
+
+// ResetDiskUsed resets all changes to the "disk_used" field.
+func (m *SampleMutation) ResetDiskUsed() {
+	m.disk_used = nil
+	m.adddisk_used = nil
+	delete(m.clearedFields, sample.FieldDiskUsed)
+}
+
+// SetDiskTotal sets the "disk_total" field.
+func (m *SampleMutation) SetDiskTotal(i int64) {
+	m.disk_total = &i
+	m.adddisk_total = nil
+}
+
+// DiskTotal returns the value of the "disk_total" field in the mutation.
+func (m *SampleMutation) DiskTotal() (r int64, exists bool) {
+	v := m.disk_total
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDiskTotal returns the old "disk_total" field's value of the Sample entity.
+// If the Sample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SampleMutation) OldDiskTotal(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDiskTotal is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDiskTotal requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDiskTotal: %w", err)
+	}
+	return oldValue.DiskTotal, nil
+}
+
+// AddDiskTotal adds i to the "disk_total" field.
+func (m *SampleMutation) AddDiskTotal(i int64) {
+	if m.adddisk_total != nil {
+		*m.adddisk_total += i
+	} else {
+		m.adddisk_total = &i
+	}
+}
+
+// AddedDiskTotal returns the value that was added to the "disk_total" field in this mutation.
+func (m *SampleMutation) AddedDiskTotal() (r int64, exists bool) {
+	v := m.adddisk_total
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearDiskTotal clears the value of the "disk_total" field.
+func (m *SampleMutation) ClearDiskTotal() {
+	m.disk_total = nil
+	m.adddisk_total = nil
+	m.clearedFields[sample.FieldDiskTotal] = struct{}{}
+}
+
+// DiskTotalCleared returns if the "disk_total" field was cleared in this mutation.
+func (m *SampleMutation) DiskTotalCleared() bool {
+	_, ok := m.clearedFields[sample.FieldDiskTotal]
+	return ok
+}
+
+// ResetDiskTotal resets all changes to the "disk_total" field.
+func (m *SampleMutation) ResetDiskTotal() {
+	m.disk_total = nil
+	m.adddisk_total = nil
+	delete(m.clearedFields, sample.FieldDiskTotal)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *SampleMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *SampleMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the Sample entity.
+// If the Sample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SampleMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *SampleMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// Where appends a list predicates to the SampleMutation builder.
+func (m *SampleMutation) Where(ps ...predicate.Sample) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SampleMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SampleMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Sample, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SampleMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SampleMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (Sample).
+func (m *SampleMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SampleMutation) Fields() []string {
+	fields := make([]string, 0, 10)
+	if m.scope != nil {
+		fields = append(fields, sample.FieldScope)
+	}
+	if m.subject_id != nil {
+		fields = append(fields, sample.FieldSubjectID)
+	}
+	if m.at != nil {
+		fields = append(fields, sample.FieldAt)
+	}
+	if m.traffic != nil {
+		fields = append(fields, sample.FieldTraffic)
+	}
+	if m.cpu != nil {
+		fields = append(fields, sample.FieldCPU)
+	}
+	if m.mem_used != nil {
+		fields = append(fields, sample.FieldMemUsed)
+	}
+	if m.mem_total != nil {
+		fields = append(fields, sample.FieldMemTotal)
+	}
+	if m.disk_used != nil {
+		fields = append(fields, sample.FieldDiskUsed)
+	}
+	if m.disk_total != nil {
+		fields = append(fields, sample.FieldDiskTotal)
+	}
+	if m.created_at != nil {
+		fields = append(fields, sample.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SampleMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case sample.FieldScope:
+		return m.Scope()
+	case sample.FieldSubjectID:
+		return m.SubjectID()
+	case sample.FieldAt:
+		return m.At()
+	case sample.FieldTraffic:
+		return m.Traffic()
+	case sample.FieldCPU:
+		return m.CPU()
+	case sample.FieldMemUsed:
+		return m.MemUsed()
+	case sample.FieldMemTotal:
+		return m.MemTotal()
+	case sample.FieldDiskUsed:
+		return m.DiskUsed()
+	case sample.FieldDiskTotal:
+		return m.DiskTotal()
+	case sample.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SampleMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case sample.FieldScope:
+		return m.OldScope(ctx)
+	case sample.FieldSubjectID:
+		return m.OldSubjectID(ctx)
+	case sample.FieldAt:
+		return m.OldAt(ctx)
+	case sample.FieldTraffic:
+		return m.OldTraffic(ctx)
+	case sample.FieldCPU:
+		return m.OldCPU(ctx)
+	case sample.FieldMemUsed:
+		return m.OldMemUsed(ctx)
+	case sample.FieldMemTotal:
+		return m.OldMemTotal(ctx)
+	case sample.FieldDiskUsed:
+		return m.OldDiskUsed(ctx)
+	case sample.FieldDiskTotal:
+		return m.OldDiskTotal(ctx)
+	case sample.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown Sample field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SampleMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case sample.FieldScope:
+		v, ok := value.(sample.Scope)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetScope(v)
+		return nil
+	case sample.FieldSubjectID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSubjectID(v)
+		return nil
+	case sample.FieldAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAt(v)
+		return nil
+	case sample.FieldTraffic:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTraffic(v)
+		return nil
+	case sample.FieldCPU:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCPU(v)
+		return nil
+	case sample.FieldMemUsed:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMemUsed(v)
+		return nil
+	case sample.FieldMemTotal:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMemTotal(v)
+		return nil
+	case sample.FieldDiskUsed:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDiskUsed(v)
+		return nil
+	case sample.FieldDiskTotal:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDiskTotal(v)
+		return nil
+	case sample.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown Sample field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SampleMutation) AddedFields() []string {
+	var fields []string
+	if m.addsubject_id != nil {
+		fields = append(fields, sample.FieldSubjectID)
+	}
+	if m.addtraffic != nil {
+		fields = append(fields, sample.FieldTraffic)
+	}
+	if m.addcpu != nil {
+		fields = append(fields, sample.FieldCPU)
+	}
+	if m.addmem_used != nil {
+		fields = append(fields, sample.FieldMemUsed)
+	}
+	if m.addmem_total != nil {
+		fields = append(fields, sample.FieldMemTotal)
+	}
+	if m.adddisk_used != nil {
+		fields = append(fields, sample.FieldDiskUsed)
+	}
+	if m.adddisk_total != nil {
+		fields = append(fields, sample.FieldDiskTotal)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SampleMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case sample.FieldSubjectID:
+		return m.AddedSubjectID()
+	case sample.FieldTraffic:
+		return m.AddedTraffic()
+	case sample.FieldCPU:
+		return m.AddedCPU()
+	case sample.FieldMemUsed:
+		return m.AddedMemUsed()
+	case sample.FieldMemTotal:
+		return m.AddedMemTotal()
+	case sample.FieldDiskUsed:
+		return m.AddedDiskUsed()
+	case sample.FieldDiskTotal:
+		return m.AddedDiskTotal()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SampleMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case sample.FieldSubjectID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSubjectID(v)
+		return nil
+	case sample.FieldTraffic:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTraffic(v)
+		return nil
+	case sample.FieldCPU:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCPU(v)
+		return nil
+	case sample.FieldMemUsed:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddMemUsed(v)
+		return nil
+	case sample.FieldMemTotal:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddMemTotal(v)
+		return nil
+	case sample.FieldDiskUsed:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDiskUsed(v)
+		return nil
+	case sample.FieldDiskTotal:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDiskTotal(v)
+		return nil
+	}
+	return fmt.Errorf("unknown Sample numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SampleMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(sample.FieldCPU) {
+		fields = append(fields, sample.FieldCPU)
+	}
+	if m.FieldCleared(sample.FieldMemUsed) {
+		fields = append(fields, sample.FieldMemUsed)
+	}
+	if m.FieldCleared(sample.FieldMemTotal) {
+		fields = append(fields, sample.FieldMemTotal)
+	}
+	if m.FieldCleared(sample.FieldDiskUsed) {
+		fields = append(fields, sample.FieldDiskUsed)
+	}
+	if m.FieldCleared(sample.FieldDiskTotal) {
+		fields = append(fields, sample.FieldDiskTotal)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SampleMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SampleMutation) ClearField(name string) error {
+	switch name {
+	case sample.FieldCPU:
+		m.ClearCPU()
+		return nil
+	case sample.FieldMemUsed:
+		m.ClearMemUsed()
+		return nil
+	case sample.FieldMemTotal:
+		m.ClearMemTotal()
+		return nil
+	case sample.FieldDiskUsed:
+		m.ClearDiskUsed()
+		return nil
+	case sample.FieldDiskTotal:
+		m.ClearDiskTotal()
+		return nil
+	}
+	return fmt.Errorf("unknown Sample nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SampleMutation) ResetField(name string) error {
+	switch name {
+	case sample.FieldScope:
+		m.ResetScope()
+		return nil
+	case sample.FieldSubjectID:
+		m.ResetSubjectID()
+		return nil
+	case sample.FieldAt:
+		m.ResetAt()
+		return nil
+	case sample.FieldTraffic:
+		m.ResetTraffic()
+		return nil
+	case sample.FieldCPU:
+		m.ResetCPU()
+		return nil
+	case sample.FieldMemUsed:
+		m.ResetMemUsed()
+		return nil
+	case sample.FieldMemTotal:
+		m.ResetMemTotal()
+		return nil
+	case sample.FieldDiskUsed:
+		m.ResetDiskUsed()
+		return nil
+	case sample.FieldDiskTotal:
+		m.ResetDiskTotal()
+		return nil
+	case sample.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown Sample field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SampleMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SampleMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SampleMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SampleMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SampleMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SampleMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SampleMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown Sample unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SampleMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown Sample edge %s", name)
 }
 
 // SettingMutation represents an operation that mutates the Setting nodes in the graph.

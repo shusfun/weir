@@ -27,6 +27,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/resource"
 	"github.com/shusfun/weir/internal/store/ent/route"
 	"github.com/shusfun/weir/internal/store/ent/ruletemplate"
+	"github.com/shusfun/weir/internal/store/ent/sample"
 	"github.com/shusfun/weir/internal/store/ent/setting"
 	"github.com/shusfun/weir/internal/store/ent/subgrant"
 	"github.com/shusfun/weir/internal/store/ent/subnode"
@@ -108,6 +109,7 @@ func checkColumn(t, c string) error {
 			resource.Table:     resource.ValidColumn,
 			route.Table:        route.ValidColumn,
 			ruletemplate.Table: ruletemplate.ValidColumn,
+			sample.Table:       sample.ValidColumn,
 			setting.Table:      setting.ValidColumn,
 			subgrant.Table:     subgrant.ValidColumn,
 			subnode.Table:      subnode.ValidColumn,

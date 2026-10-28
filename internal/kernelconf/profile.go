@@ -17,7 +17,20 @@ type Profile struct {
 	Networks   []string `yaml:"networks"`
 	Securities []string `yaml:"securities"`
 	Strip      []string `yaml:"strip,omitempty"` // 点分路径，* 匹配数组任意元素或对象任意键
-	Notes      string   `yaml:"notes,omitempty"`
+	// Features 是生成配置要用到的内核特性（如 Xray 的 balancer、observatory，sing-box 的 urltest）。
+	// 没写或为空表示一项都不支持——和协议列表「为空即不限制」的含义相反。
+	Features []string `yaml:"features,omitempty"`
+	Notes    string   `yaml:"notes,omitempty"`
+}
+
+// Has 判断档案是否声明了某项特性；没有声明就是不支持。
+func (p Profile) Has(feature string) bool {
+	for _, f := range p.Features {
+		if strings.EqualFold(f, feature) {
+			return true
+		}
+	}
+	return false
 }
 
 func ParseProfile(text string) (Profile, error) {

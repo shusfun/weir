@@ -117,11 +117,4 @@ func TestPluginAdaptDraftConfirmAndRestore(t *testing.T) {
 	if _, label, _ := s.activePlugin(ctx, "0.2.1-rc.2"); label != "内置插件 1.0.0" {
 		t.Fatalf("restore = %s", label)
 	}
-
-	// 控制台上下文：打开抽屉时记下页面，dsh 用 get_console_context 读取。
-	mustJSON(t, admin, "POST", "/api/v1/admin/dsh/ticket", map[string]any{"path": "/gates"}, 200)
-	m, _ := s.ensureMCP()
-	if text, _ := toolText(t, s.mcpHandler(m), m.webToken, "get_console_context", map[string]any{}); !strings.Contains(text, "/gates") {
-		t.Fatalf("console context = %s", text)
-	}
 }
