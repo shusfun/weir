@@ -15,6 +15,7 @@ SINGBOX = ROOT / "dist" / "cores" / "sing-box-1.14.3-stats" / "sing-box"  # 带 
 # 订阅检查用的 mihomo（可选）：由 Weir 的内核下载（官方摘要校验）放到这里，缺少时相关测试跳过。
 MIHOMO = ROOT / "dist" / "cores" / "fetched" / "mihomo" / "1.19.33" / "amd64" / "mihomo"
 IMAGE = os.environ.get("MIGATE_E2E_IMAGE", "debian:bookworm-slim")
+CA_BUNDLE = pathlib.Path(os.environ.get("MIGATE_E2E_CA_BUNDLE", "/etc/ssl/cert.pem"))
 
 
 def main(argv):
@@ -32,6 +33,9 @@ def main(argv):
            "-e", "MIGATE_E2E_XRAY=/cores/xray", "-e", "MIGATE_E2E_SINGBOX=/cores/sing-box", "-e", "MIGATE_E2E_BINARY=/t/migate"]
     if MIHOMO.is_file():
         cmd += ["-v", f"{MIHOMO}:/cores/mihomo:ro", "-e", "MIGATE_E2E_MIHOMO=/cores/mihomo"]
+    # 精简镜像没有 CA 证书库（安装器会补装）；Gate 实测 REALITY 目标等访问外网的测试借用本机的证书库，只读。
+    if CA_BUNDLE.is_file():
+        cmd += ["-v", f"{CA_BUNDLE}:/etc/ssl/certs/ca-certificates.crt:ro"]
     cmd += [IMAGE, "/t/e2e.test", *args]
     return subprocess.run(cmd).returncode
 
