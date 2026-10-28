@@ -39,6 +39,28 @@ type RedisConfig = {
   password: string;
   tls: boolean;
 };
+// 中心在本机探测到的数据服务；密码只报告「读到了」，本身不返回，安装时由中心补上。
+type Detection = {
+  postgres: null | {
+    source: "1panel" | "port";
+    host: string;
+    port: number;
+    user?: string;
+    has_password: boolean;
+    connected: boolean;
+    version?: string;
+    databases?: { name: string; has_data: boolean; unknown?: boolean }[];
+    recommended?: string;
+  };
+  redis: null | {
+    source: "1panel" | "port";
+    address: string;
+    has_password: boolean;
+    status: "ok" | "auth_required" | "wrong_password";
+    version?: string;
+  };
+};
+const sourceLabel = { "1panel": "1Panel", port: "本机端口" } as const;
 const steps = [
   { name: "初始化凭证", hint: "验证安装权限", icon: KeyRound },
   { name: "存储", hint: "SQLite 或 PostgreSQL + Redis", icon: Database },
@@ -66,10 +88,14 @@ export function SetupPage({ done }: { done: () => void }) {
   });
   const [redis, setRedis] = useState<RedisConfig>({
     address: "127.0.0.1:6379",
-    username: "migate",
+    // 1Panel 等只设了 requirepass 的 Redis 没有单独的 ACL 用户
+    username: "",
     password: "",
     tls: false,
   });
+  const [detection, setDetection] = useState<Detection | null>(null),
+    [detecting, setDetecting] = useState(false),
+    [detectError, setDetectError] = useState("");
   const [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
     [confirmation, setConfirmation] = useState("");
@@ -149,6 +175,45 @@ export function SetupPage({ done }: { done: () => void }) {
       setBusy(false);
     }
   }
+  // 探测本机的 PostgreSQL / Redis 并填入表单；密码框留空即使用中心读到的密码。
+  async function detect() {
+    setDetecting(true);
+    setDetectError("");
+    try {
+      const found: Detection = await api("/setup/detect-store", "POST", {}, token);
+      setDetection(found);
+      const p = found.postgres;
+      if (p) {
+        setPostgres((v) => ({
+          ...v,
+          host: p.host,
+          port: p.port,
+          user: p.user || v.user,
+          database: p.recommended || v.database,
+          password: p.has_password ? "" : v.password,
+        }));
+      }
+      const r = found.redis;
+      if (r) setRedis((v) => ({ ...v, address: r.address, username: "", password: r.has_password ? "" : v.password }));
+    } catch (e) {
+      setDetectError(e instanceof Error ? e.message : "探测失败，请手动填写。");
+    } finally {
+      setDetecting(false);
+    }
+  }
+  useEffect(() => {
+    if (step === 1 && driver === "postgres" && !detection && !detecting && !detectError) void detect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, driver]);
+  const pgDetected = detection?.postgres;
+  const redisDetected = detection?.redis;
+  // 用的是探测到的实例时，密码框留空表示使用中心读到的密码
+  const pgUsesDetected =
+    !!pgDetected?.has_password && pgDetected.host === postgres.host && pgDetected.port === postgres.port && pgDetected.user === postgres.user;
+  const redisUsesDetected = !!redisDetected?.has_password && redisDetected.address === redis.address && !redis.username;
+  const pickedDatabase = pgDetected?.databases?.find((d) => d.name === postgres.database.trim());
+  const usedDatabases = pgDetected?.databases?.filter((d) => d.has_data).map((d) => d.name) ?? [];
+  const freeDatabases = pgDetected?.databases?.filter((d) => !d.has_data && !d.unknown).map((d) => d.name) ?? [];
   function pg<K extends keyof PostgresConfig>(key: K, value: PostgresConfig[K]) {
     setPostgres((v) => ({ ...v, [key]: value }));
   }
@@ -285,13 +350,66 @@ export function SetupPage({ done }: { done: () => void }) {
                         />
                       ) : (
                         <>
+                          <div className="flex flex-col gap-2" aria-live="polite">
+                            {detecting ? (
+                              <Notice role="status">正在探测服务器上的 PostgreSQL 与 Redis…</Notice>
+                            ) : detectError ? (
+                              <Notice tone="warn">{detectError}</Notice>
+                            ) : detection ? (
+                              <>
+                                {pgDetected ? (
+                                  <Notice tone={pgDetected.connected ? "ok" : "warn"}>
+                                    检测到 {sourceLabel[pgDetected.source]} 的 PostgreSQL {pgDetected.version} · {pgDetected.host}:{pgDetected.port}
+                                    {pgDetected.connected
+                                      ? `，已用 ${pgDetected.user} 登录。` + (freeDatabases.length ? `可用的库：${freeDatabases.join("、")}。` : "")
+                                      : "，未能登录，请填写账号和密码。"}
+                                    {usedDatabases.length > 0 && ` 已有 Weir 账户、不能重新初始化的库：${usedDatabases.join("、")}。`}
+                                  </Notice>
+                                ) : (
+                                  <Notice tone="warn">本机没有发现 PostgreSQL，请填写地址。</Notice>
+                                )}
+                                {redisDetected ? (
+                                  <Notice tone={redisDetected.status === "ok" ? "ok" : "warn"}>
+                                    检测到 {sourceLabel[redisDetected.source]} 的 Redis {redisDetected.version} · {redisDetected.address}
+                                    {
+                                      {
+                                        ok: redisDetected.has_password ? "，已用其中的密码连通。" : "，无需密码。",
+                                        auth_required: "，需要密码，请填写。",
+                                        wrong_password: "，1Panel 里的密码登录失败，请填写密码。",
+                                      }[redisDetected.status]
+                                    }
+                                  </Notice>
+                                ) : (
+                                  <Notice tone="warn">本机没有发现 Redis，请填写地址。</Notice>
+                                )}
+                              </>
+                            ) : null}
+                            <Button type="button" variant="outline" size="sm" className="self-start" disabled={detecting} onClick={() => void detect()}>
+                              {detecting ? "正在探测…" : "重新探测"}
+                            </Button>
+                          </div>
                           <FormGrid>
                             <TextField name={id + "host"} label="PostgreSQL 主机" required value={postgres.host} onChange={(v) => pg("host", v)} />
                             <TextField name={id + "port"} label="端口" type="number" required value={postgres.port} onChange={(v) => pg("port", Number(v))} />
-                            <TextField name={id + "database"} label="数据库" required value={postgres.database} onChange={(v) => pg("database", v)} />
+                            <TextField
+                              name={id + "database"}
+                              label="数据库"
+                              required
+                              value={postgres.database}
+                              onChange={(v) => pg("database", v)}
+                              customError={pickedDatabase?.has_data ? "这个库里已有 Weir 账户，请换一个空库" : ""}
+                            />
                             <TextField name={id + "user"} label="账号" required value={postgres.user} onChange={(v) => pg("user", v)} />
                           </FormGrid>
-                          <TextField name={id + "pg-password"} label="数据库密码" type="password" value={postgres.password} onChange={(v) => pg("password", v)} />
+                          <TextField
+                            name={id + "pg-password"}
+                            label="数据库密码"
+                            type="password"
+                            value={postgres.password}
+                            onChange={(v) => pg("password", v)}
+                            placeholder={pgUsesDetected ? "留空使用 1Panel 里的密码" : undefined}
+                            hint={pgUsesDetected ? "密码由中心直接读取，不经过浏览器。" : undefined}
+                          />
                           <Field label="SSL 模式">
                             <Select value={postgres.ssl_mode} onValueChange={(v) => { if (v) pg("ssl_mode", v); }}>
                               <SelectTrigger>
@@ -306,9 +424,23 @@ export function SetupPage({ done }: { done: () => void }) {
                           </Field>
                           <FormGrid>
                             <TextField name={id + "address"} label="Redis 地址" required value={redis.address} onChange={(v) => rd("address", v)} />
-                            <TextField name={id + "redis-user"} label="Redis ACL 用户" value={redis.username} onChange={(v) => rd("username", v)} />
+                            <TextField
+                              name={id + "redis-user"}
+                              label="Redis ACL 用户"
+                              hint="只设了密码的 Redis（如 1Panel）留空。"
+                              value={redis.username}
+                              onChange={(v) => rd("username", v)}
+                            />
                           </FormGrid>
-                          <TextField name={id + "redis-password"} label="Redis 密码" type="password" value={redis.password} onChange={(v) => rd("password", v)} />
+                          <TextField
+                            name={id + "redis-password"}
+                            label="Redis 密码"
+                            type="password"
+                            value={redis.password}
+                            onChange={(v) => rd("password", v)}
+                            placeholder={redisUsesDetected ? "留空使用 1Panel 里的密码" : undefined}
+                            hint={redisUsesDetected ? "密码由中心直接读取，不经过浏览器。" : undefined}
+                          />
                           <SwitchField
                             placement="end"
                             label="Redis TLS 加密连接"

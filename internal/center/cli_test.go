@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -74,5 +75,39 @@ func TestSetupCLICancelWritesNothing(t *testing.T) {
 	}
 	if cfg, _ := LoadConfig(path); cfg.Installed {
 		t.Fatal("cancelled setup must not install")
+	}
+}
+
+// 菜单的卸载只调用本机安装脚本：取消不调用，确认后按选择传 uninstall / uninstall --purge，卸载后菜单退出。
+func TestOperatorMenuUninstallDelegatesToInstaller(t *testing.T) {
+	dir := t.TempDir()
+	record := filepath.Join(dir, "args")
+	script := filepath.Join(dir, "install.sh")
+	if err := os.WriteFile(script, []byte("echo \"$@\" > '"+record+"'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := Installer
+	Installer = script
+	t.Cleanup(func() { Installer = old })
+	path := filepath.Join(dir, "center.json")
+	for _, tc := range []struct{ input, want string }{
+		{"8\nn\n0\n", ""},
+		{"8\ny\n\n", "uninstall"},
+		{"8\ny\ny\n", "uninstall --purge"},
+	} {
+		os.Remove(record)
+		var out bytes.Buffer
+		if err := RunOperatorMenu(path, strings.NewReader(tc.input), &out); err != nil {
+			t.Fatalf("%q: %v", tc.input, err)
+		}
+		got, _ := os.ReadFile(record)
+		if strings.TrimSpace(string(got)) != tc.want {
+			t.Fatalf("%q: installer args = %q, want %q\n%s", tc.input, got, tc.want, out.String())
+		}
+	}
+	Installer = filepath.Join(dir, "missing.sh")
+	var out bytes.Buffer
+	if err := RunOperatorMenu(path, strings.NewReader("8\n0\n"), &out); err != nil || !strings.Contains(out.String(), "找不到安装脚本") {
+		t.Fatalf("missing installer: %v\n%s", err, out.String())
 	}
 }

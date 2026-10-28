@@ -295,7 +295,9 @@ subscription_naming_changed:"前缀与地区设置已被修改，请取消并重
   forbidden: "你没有执行此操作的权限。",
   session_expired: "登录已过期，请重新登录。",
   existing_installation_restore_config:
-    "检测到已有安装，请恢复原配置，不能重新初始化。",
+    "这个存储里已有 Weir 账户，不能重新初始化：要继续用这些数据请恢复原配置文件，否则换一个空库。",
+  store_connection_failed: "存储连接失败，请检查地址、账号和权限。",
+  store_schema_failed: "连接成功，但建表失败，请查看中心日志（journalctl -u migate-center）。",
   already_installed: "初始化已经完成。",
   postgres_connection_failed: "PostgreSQL 连接失败。",
   redis_connection_failed: "Redis 连接失败。",

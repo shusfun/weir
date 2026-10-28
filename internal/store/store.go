@@ -128,7 +128,74 @@ func Check(ctx context.Context, c Config) error {
 		probe.Close()
 		return os.Remove(probe.Name())
 	}
-	p := c.Postgres
+	db, err := sql.Open("pgx", postgresDSN(c.Postgres))
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	if err = db.PingContext(ctx); err != nil {
+		return fmt.Errorf("%w: %w", ErrPostgresUnavailable, err)
+	}
+	rdb := newRedisClient(c.Redis)
+	defer rdb.Close()
+	if err = rdb.Ping(ctx).Err(); err != nil {
+		return fmt.Errorf("%w: %w", ErrRedisUnavailable, err)
+	}
+	return nil
+}
+
+var (
+	ErrPostgresUnavailable = errors.New("postgres unavailable")
+	ErrRedisUnavailable    = errors.New("redis unavailable")
+	// ErrExistingData 表示目标存储里已有 Weir 账户，不能在上面重新初始化。
+	ErrExistingData = errors.New("store already holds Weir accounts")
+)
+
+// HasData 报告目标存储里是否已有 Weir 账户；只读，不建表。
+// 只有表结构、没有账户（上次安装中途失败）不算已有数据，可以继续安装。
+func HasData(ctx context.Context, c Config) (bool, error) {
+	if err := c.Validate(); err != nil {
+		return false, err
+	}
+	if c.Driver == DriverSQLite {
+		if _, err := os.Stat(c.SQLitePath); errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(c.SQLitePath)+"?mode=ro")
+		if err != nil {
+			return false, err
+		}
+		defer db.Close()
+		var tables int
+		if err = db.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'users'").Scan(&tables); err != nil || tables == 0 {
+			return false, err
+		}
+		var exists bool
+		err = db.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM users)").Scan(&exists)
+		return exists, err
+	}
+	db, err := sql.Open("pgx", postgresDSN(c.Postgres))
+	if err != nil {
+		return false, err
+	}
+	defer db.Close()
+	return postgresHasAccounts(ctx, db)
+}
+
+func postgresHasAccounts(ctx context.Context, db *sql.DB) (bool, error) {
+	var table bool
+	if err := db.QueryRowContext(ctx, "SELECT to_regclass('migate.users') IS NOT NULL").Scan(&table); err != nil {
+		return false, fmt.Errorf("%w: %w", ErrPostgresUnavailable, err)
+	}
+	if !table {
+		return false, nil
+	}
+	var exists bool
+	err := db.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM migate.users)").Scan(&exists)
+	return exists, err
+}
+
+func postgresDSN(p PostgresConfig) string {
 	if p.Port == 0 {
 		p.Port = 5432
 	}
@@ -140,17 +207,7 @@ func Check(ctx context.Context, c Config) error {
 	q.Set("sslmode", p.SSLMode)
 	q.Set("connect_timeout", "5")
 	u.RawQuery = q.Encode()
-	db, err := sql.Open("pgx", u.String())
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-	if err = db.PingContext(ctx); err != nil {
-		return err
-	}
-	rdb := newRedisClient(c.Redis)
-	defer rdb.Close()
-	return rdb.Ping(ctx).Err()
+	return u.String()
 }
 
 func openSQLite(ctx context.Context, path string) (*Store, error) {
@@ -180,19 +237,7 @@ func openSQLite(ctx context.Context, path string) (*Store, error) {
 }
 
 func openPostgres(ctx context.Context, c Config) (*Store, error) {
-	p := c.Postgres
-	if p.Port == 0 {
-		p.Port = 5432
-	}
-	if p.SSLMode == "" {
-		p.SSLMode = "disable"
-	}
-	u := &url.URL{Scheme: "postgres", Host: net.JoinHostPort(p.Host, fmt.Sprint(p.Port)), Path: "/" + p.Database, User: url.UserPassword(p.User, p.Password)}
-	q := u.Query()
-	q.Set("sslmode", p.SSLMode)
-	q.Set("connect_timeout", "5")
-	u.RawQuery = q.Encode()
-	pc, err := pgx.ParseConfig(u.String())
+	pc, err := pgx.ParseConfig(postgresDSN(c.Postgres))
 	if err != nil {
 		return nil, errors.New("invalid PostgreSQL configuration")
 	}
@@ -207,7 +252,7 @@ func openPostgres(ctx context.Context, c Config) (*Store, error) {
 	defer cancel()
 	if err = db.PingContext(ping); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("postgres unavailable: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrPostgresUnavailable, err)
 	}
 	if _, err = db.ExecContext(ctx, "CREATE SCHEMA IF NOT EXISTS migate"); err != nil {
 		db.Close()
@@ -222,7 +267,7 @@ func openPostgres(ctx context.Context, c Config) (*Store, error) {
 	}
 	if err = s.KV.Ping(ping); err != nil {
 		s.Close()
-		return nil, fmt.Errorf("redis unavailable: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrRedisUnavailable, err)
 	}
 	return s, nil
 }
