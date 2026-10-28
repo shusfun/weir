@@ -105,6 +105,35 @@ func RotateSetupToken(path string, cfg Config) (string, error) {
 	return token, nil
 }
 
+// CurrentSetupToken 返回可用的初始化凭证及剩余有效期：现有凭证没过期就照旧返回（不打断进行中的向导），
+// 过期、缺失或与配置里的摘要对不上时轮换一份新的。rotated 表示这次换了新凭证。
+func CurrentSetupToken(path string, cfg Config) (token string, left time.Duration, rotated bool, err error) {
+	cred, err := readSetupCredential(path)
+	if err != nil {
+		return "", 0, false, err
+	}
+	if cred.Installed || cfg.Installed {
+		return "", 0, false, errors.New("already installed")
+	}
+	token = readSetupToken(path)
+	if left = time.Until(cred.Expires); token != "" && cred.Hash != "" && digest(token) == cred.Hash && left > 0 {
+		return token, left, false, nil
+	}
+	if token, err = RotateSetupToken(path, cfg); err != nil {
+		return "", 0, false, err
+	}
+	return token, 30 * time.Minute, true, nil
+}
+
+// DescribeSetupToken 是凭证上方那行说明：剩余分钟数，换新时注明原凭证已过期。
+func DescribeSetupToken(left time.Duration, rotated bool) string {
+	minutes := int((left + time.Minute - 1) / time.Minute)
+	if rotated {
+		return fmt.Sprintf("原凭证已过期，已换新（%d 分钟有效）：", minutes)
+	}
+	return fmt.Sprintf("初始化凭证（还有 %d 分钟有效）：", minutes)
+}
+
 type prompter struct {
 	in         *bufio.Reader
 	out        io.Writer
@@ -341,16 +370,16 @@ func RunOperatorMenu(path string, in io.Reader, out io.Writer) error {
 		case choice == "5":
 			report(out, RunSetupCLI(path, p.in, out, ReadSecret), "")
 		case choice == "6" && !cfg.Installed:
-			if token := readSetupToken(path); token != "" {
-				printSetupToken(out, "初始化凭证（30 分钟有效）：", token)
+			if token, left, rotated, err := CurrentSetupToken(path, cfg); err != nil {
+				report(out, err, "")
 			} else {
-				fmt.Fprintln(out, "没有有效凭证，请选择 7 刷新。")
+				PrintSetupToken(out, DescribeSetupToken(left, rotated), token)
 			}
 		case choice == "7" && !cfg.Installed:
 			if token, err := RotateSetupToken(path, cfg); err != nil {
 				report(out, err, "")
 			} else {
-				printSetupToken(out, "新凭证（30 分钟有效）：", token)
+				PrintSetupToken(out, "新凭证（30 分钟有效）：", token)
 			}
 		case choice == "8":
 			if done, err := p.uninstall(); err != nil {
@@ -400,8 +429,8 @@ func describeRedis(d *detectedRedis) string {
 	return line
 }
 
-// printSetupToken 让凭证独占一行：网页终端对中文行的列宽计算与显示不一致，同行有中文时鼠标复制会错位丢字。
-func printSetupToken(out io.Writer, label, token string) {
+// PrintSetupToken 让凭证独占一行：网页终端对中文行的列宽计算与显示不一致，同行有中文时鼠标复制会错位丢字。
+func PrintSetupToken(out io.Writer, label, token string) {
 	fmt.Fprintln(out, label)
 	fmt.Fprintln(out, token)
 }

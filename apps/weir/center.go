@@ -29,6 +29,7 @@ func runCenter(args []string) int {
 	path := f.String("config", center.DefaultConfigPath, "configuration file")
 	listen := f.String("listen", "", "listen address override")
 	initToken := f.Bool("init", false, "create a short-lived initialization token")
+	showToken := f.Bool("token", false, "print a usable initialization token, rotating it if expired")
 	health := f.Bool("health-check", false, "check the local HTTP service and its store")
 	version := f.Bool("version", false, "print release version")
 	setupCLI := f.Bool("setup", false, "run the setup wizard in the terminal")
@@ -64,6 +65,14 @@ func runCenter(args []string) int {
 			return fatal(err)
 		}
 		fmt.Println("Initialization token (valid 30 minutes):", token)
+		return 0
+	}
+	if *showToken {
+		token, left, rotated, err := center.CurrentSetupToken(*path, cfg)
+		if err != nil {
+			return fatal(err)
+		}
+		center.PrintSetupToken(os.Stdout, center.DescribeSetupToken(left, rotated), token)
 		return 0
 	}
 	if !*serve && *listen == "" {
