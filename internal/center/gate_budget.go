@@ -2,6 +2,7 @@ package center
 
 import (
 	"context"
+	"math"
 	"sort"
 	"time"
 
@@ -17,6 +18,8 @@ const (
 	chunkHorizon       = 24 * time.Hour
 	// reclaimAfter：Gate 超过这么久没有心跳，不再等它确认下调，按它已上报的用量收回多出的额度。
 	reclaimAfter = 24 * time.Hour
+	// unconfirmable 是写入新额度、还没拿到 Gate 配置版本时的临时版本号：任何回报都不会确认它。
+	unconfirmable = math.MaxInt64
 )
 
 // userGates 返回该用户当前有有效（非内部）凭据的 Gate。
@@ -56,7 +59,7 @@ func maxInt64(a, b int64) int64 {
 //   - 只有一台 Gate：剩余额度整份给它（中心断线多久都不影响，也不会超额）。
 //   - 多台 Gate：每块按该 Gate 上的使用速度估算约 24 小时用量，最少 32 MiB；
 //     剩余不足四分之一块时补满一块，持有超过一块时收回到一块。
-//   - 已下调但 Gate 尚未确认的额度仍按旧值占用；各 Gate 占用合计不超过剩余额度。
+//   - Gate 尚未确认的变化按较大的一边占用（下调前的旧值，或已下发的上调）；各 Gate 占用合计不超过剩余额度。
 //   - stale 里的 Gate 已超过 reclaimAfter 没有心跳：不再按旧值占用、也不再加额度，只保留它已上报的用量与新值中较小者；
 //     它离线期间按旧额度多用的部分，回来上报后照实计入用户用量。
 func planBudgets(remaining int64, rows []*ent.Budget, stale map[int]bool) map[int]int64 {
@@ -89,24 +92,26 @@ func planBudgets(remaining int64, rows []*ent.Budget, stale map[int]bool) map[in
 			out[r.GateID] = maxInt64(r.Allocated, r.Used)
 		}
 	}
+	// held 是 Gate 此刻可能按它放行的额度：已确认的值，或已下发、还没确认的新值（上调也可能已经生效）。
+	held := func(r *ent.Budget) int64 { return maxInt64(r.Allocated, r.Confirmed) }
 	reserve := func(r *ent.Budget) int64 {
 		if stale[r.GateID] {
 			return out[r.GateID] - r.Used
 		}
-		return maxInt64(out[r.GateID], r.Confirmed) - r.Used
+		return maxInt64(out[r.GateID], held(r)) - r.Used
 	}
 	total := int64(0)
 	for _, r := range rows {
 		total += maxInt64(reserve(r), 0)
 	}
 	over := total - remaining
-	// 先削减「增加」的部分（新值高于 Gate 已确认的值）；仍超出时按 Gate 顺序削减其余新值。
+	// 先削减「增加」的部分（新值高于 Gate 可能已在执行的值）；仍超出时按 Gate 顺序削减其余新值。
 	for pass := 0; pass < 2 && over > 0; pass++ {
 		for _, r := range rows {
 			if over <= 0 {
 				break
 			}
-			floor := maxInt64(r.Confirmed, r.Used)
+			floor := maxInt64(held(r), r.Used)
 			if pass == 1 || stale[r.GateID] {
 				floor = r.Used
 			}
@@ -161,11 +166,16 @@ func (s *Server) rebalanceUser(ctx context.Context, uid int) ([]int, error) {
 				if r.GateID != gid || r.Allocated == alloc {
 					continue
 				}
+				// 先写新值（版本标为不可确认）再加 Gate 的配置版本：Gate 按新版本编译配置时一定读到新值，
+				// 不会出现「回报的版本已含新值、实际执行的还是旧值」而被误记为已确认。
+				if r, err = r.Update().SetAllocated(alloc).SetRevision(unconfirmable).Save(ctx); err != nil {
+					return err
+				}
 				rev, err := s.bumpGate(ctx, gid)
 				if err != nil {
 					return err
 				}
-				if _, err = r.Update().SetAllocated(alloc).SetRevision(rev).Save(ctx); err != nil {
+				if _, err = r.Update().SetRevision(rev).Save(ctx); err != nil {
 					return err
 				}
 				changed = append(changed, gid)

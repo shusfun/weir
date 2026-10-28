@@ -10,14 +10,11 @@ func budgetRow(gid int, alloc, confirmed, used int64, rate float64) *ent.Budget 
 	return &ent.Budget{GateID: gid, Allocated: alloc, Confirmed: confirmed, Used: used, Rate: rate}
 }
 
-// reserved 是各 Gate 实际可能被用掉的额度合计（已确认与新值取大者）。不变量：不超过剩余额度。
+// reserved 是各 Gate 实际可能被用掉的额度合计（新值、已确认的值、已下发未确认的值取最大）。不变量：不超过剩余额度。
 func reserved(plan map[int]int64, rows []*ent.Budget) int64 {
 	total := int64(0)
 	for _, r := range rows {
-		v := plan[r.GateID]
-		if r.Confirmed > v {
-			v = r.Confirmed
-		}
+		v := max(plan[r.GateID], r.Confirmed, r.Allocated)
 		if v-r.Used > 0 {
 			total += v - r.Used
 		}
@@ -72,6 +69,19 @@ func TestPlanShrinkWaitsForConfirmation(t *testing.T) {
 	}
 	if got := reserved(plan, rows); got > 9*gib {
 		t.Fatalf("reserved %d > remaining", got)
+	}
+}
+
+// 一台 Gate 的上调已经下发、还没确认时又要下调：它可能已按上调后的值放行，另一台不能按「已下调」来拿额度。
+// （容器验收 QUOTA-01 实测到两台合计 336 MiB > 200 MiB 额度。）
+func TestPlanUnconfirmedRaiseStillCounts(t *testing.T) {
+	const mib = int64(1 << 20)
+	busy := float64(3*mib) // 3 MiB/s：24 小时一块远大于剩余额度
+	rows := []*ent.Budget{budgetRow(1, 168*mib, 32*mib, 4*mib, busy), budgetRow(2, 32*mib, 32*mib, 5*mib, busy)}
+	remaining := 200*mib - 9*mib
+	plan := planBudgets(remaining, rows, nil)
+	if got := reserved(plan, rows); got > remaining {
+		t.Fatalf("reserved %d MiB > remaining %d MiB: %v", got>>20, remaining>>20, plan)
 	}
 }
 
