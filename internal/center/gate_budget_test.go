@@ -76,7 +76,7 @@ func TestPlanShrinkWaitsForConfirmation(t *testing.T) {
 // （容器验收 QUOTA-01 实测到两台合计 336 MiB > 200 MiB 额度。）
 func TestPlanUnconfirmedRaiseStillCounts(t *testing.T) {
 	const mib = int64(1 << 20)
-	busy := float64(3*mib) // 3 MiB/s：24 小时一块远大于剩余额度
+	busy := float64(3 * mib) // 3 MiB/s：24 小时一块远大于剩余额度
 	rows := []*ent.Budget{budgetRow(1, 168*mib, 32*mib, 4*mib, busy), budgetRow(2, 32*mib, 32*mib, 5*mib, busy)}
 	remaining := 200*mib - 9*mib
 	plan := planBudgets(remaining, rows, nil)
