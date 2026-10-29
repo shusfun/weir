@@ -1,6 +1,7 @@
 package center
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 
@@ -9,6 +10,10 @@ import (
 
 func TestDriverAdminSaveHistoryRollbackRestore(t *testing.T) {
 	s, admin, _ := setupGate(t)
+	// Linux 上检查会真的运行缓存里的内核：换成一个总是通过的假程序（其他平台只做生成检查）。
+	if _, err := s.kernelCache().Put("xray", "26.3.27", runtime.GOARCH, []byte("#!/bin/sh\nexit 0\n")); err != nil {
+		t.Fatal(err)
+	}
 	list := mustJSON(t, admin, "GET", "/api/v1/admin/drivers", nil, 200)["drivers"].([]any)
 	if len(list) < 4 {
 		t.Fatalf("drivers = %v", list)
@@ -61,6 +66,18 @@ func TestDriverAdminSaveHistoryRollbackRestore(t *testing.T) {
 	}
 	if w = admin.do("POST", "/api/v1/admin/drivers/xray-27/restore", nil, nil); w.Code != 404 {
 		t.Fatalf("restore custom = %d", w.Code)
+	}
+	// 内核检查不通过（Linux 上才会运行内核）：拒绝保存，日志交回。
+	if runtime.GOOS == "linux" {
+		if _, err := s.kernelCache().Put("xray", "26.3.27", runtime.GOARCH, []byte("#!/bin/sh\necho bad field >&2\nexit 1\n")); err != nil {
+			t.Fatal(err)
+		}
+		w := admin.do("PUT", "/api/v1/admin/drivers/xray-26.3", map[string]any{"text": edited + "# again\n"}, nil)
+		body := decode(t, w)
+		samples, _ := body["check"].(map[string]any)["samples"].([]any)
+		if w.Code != 422 || len(samples) == 0 || !strings.Contains(samples[0].(map[string]any)["log"].(string), "bad field") {
+			t.Fatalf("failing kernel check = %d %v", w.Code, body)
+		}
 	}
 	// 方案来自驱动：节点向导看到的就是驱动里的方案。
 	items := mustJSON(t, admin, "GET", "/api/v1/admin/presets", nil, 200)["items"].([]any)
