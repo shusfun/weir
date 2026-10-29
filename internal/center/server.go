@@ -49,6 +49,9 @@ type Server struct {
 	GitHub *ghrelease.Client
 	// jobs 是内核、dsh 下载等后台任务。
 	jobs jobManager
+	// ghCalls 是正在后台进行的 GitHub 查询（通知列表用，见 notices.go）。
+	ghMu    sync.Mutex
+	ghCalls map[string]chan error
 	// driverCache 缓存合并后的内核驱动（每次编译 Gate 配置都会用到）。
 	driverCache struct {
 		sync.Mutex

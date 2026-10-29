@@ -10,6 +10,7 @@ import { DshDrawer } from "./dsh";
 import { DraftConfirm } from "./draft-confirm";
 import { CenterOriginBanner } from "./center-origin";
 import { NoticesButton } from "./notices";
+import { JobWatcher } from "./job";
 
 const collapseKey = "weir-rail-collapsed";
 function readCollapsed() {
@@ -161,6 +162,7 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
         <CommandPalette open={palette} onOpenChange={setPalette} admin={admin} />
         {admin && <DshDrawer />}
         {admin && <DraftConfirm />}
+        {admin && <JobWatcher />}
       </div>
     </TooltipProvider>
   );
