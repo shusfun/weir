@@ -52,7 +52,8 @@ const stateLabel: Record<string, [string, "ok" | "warn" | "bad" | "off" | "info"
 };
 
 export function useDsh(enabled = true) {
-  return useQuery({ queryKey: ["dsh"], queryFn: () => api("/admin/dsh") as Promise<DshView>, enabled, refetchInterval: (q) => (q.state.data?.status.state === "starting" ? 3000 : 30000) });
+  // 已启用但还没在运行（刚保存、正在启动、刚重启）时 3 秒刷新一次，步骤清单与入口及时变成「运行中」
+  return useQuery({ queryKey: ["dsh"], queryFn: () => api("/admin/dsh") as Promise<DshView>, enabled, refetchInterval: (q) => (q.state.data?.settings.enabled && q.state.data.status.state !== "running" ? 3000 : 30000) });
 }
 
 // 其他页面通过事件打开抽屉（例如节点上的「AI 调整」），附带上下文。
