@@ -23,6 +23,8 @@ type KV interface {
 	Del(ctx context.Context, keys ...string) error
 	// Incr 原子加一；键首次出现时设置 ttl。用于限速计数。
 	Incr(ctx context.Context, key string, ttl time.Duration) (int64, error)
+	// IncrBy 原子加 delta；键首次出现时设置 ttl。用于按天累计的流量。
+	IncrBy(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error)
 	// Keys 列出指定前缀的键（不含 weir: 前缀），最多 limit 个；超出返回 ErrTooMany。
 	Keys(ctx context.Context, prefix string, limit int) ([]string, error)
 	Ping(ctx context.Context) error
@@ -80,6 +82,18 @@ func (r redisKV) Incr(ctx context.Context, key string, ttl time.Duration) (int64
 		seconds = int64((ttl + time.Second - 1) / time.Second)
 	}
 	return incrWithTTL.Run(ctx, r.c, []string{redisPrefix + key}, seconds).Int64()
+}
+
+// incrByWithTTL 只用 get / set / pttl / expire（受限的 ACL 用户也有这些命令），在脚本里原子地完成：
+// 键已存在时保留剩余时间，首次出现时设置 ttl。
+var incrByWithTTL = redis.NewScript(`local k=KEYS[1];local n=tonumber(redis.call('GET',k) or '0')+tonumber(ARGV[1]);local t=redis.call('PTTL',k);if t>0 then redis.call('SET',k,n,'PX',t) else redis.call('SET',k,n);if t==-2 and tonumber(ARGV[2])>0 then redis.call('EXPIRE',k,ARGV[2]) end end;return n`)
+
+func (r redisKV) IncrBy(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
+	seconds := int64(0)
+	if ttl > 0 {
+		seconds = int64((ttl + time.Second - 1) / time.Second)
+	}
+	return incrByWithTTL.Run(ctx, r.c, []string{redisPrefix + key}, delta, seconds).Int64()
 }
 
 func (r redisKV) Keys(ctx context.Context, prefix string, limit int) ([]string, error) {
@@ -174,6 +188,17 @@ ON CONFLICT(key) DO UPDATE SET
   value = CASE WHEN kv.expires_at > 0 AND kv.expires_at <= ? THEN '1' ELSE CAST(CAST(kv.value AS INTEGER) + 1 AS TEXT) END,
   expires_at = CASE WHEN kv.expires_at > 0 AND kv.expires_at <= ? THEN excluded.expires_at ELSE kv.expires_at END
 RETURNING CAST(value AS INTEGER)`, key, expiry(ttl), time.Now().UnixMilli(), time.Now().UnixMilli()).Scan(&n)
+	return n, err
+}
+
+func (s *sqliteKV) IncrBy(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
+	var n int64
+	now := time.Now().UnixMilli()
+	err := s.db.QueryRowContext(ctx, `INSERT INTO kv(key, value, expires_at) VALUES(?, CAST(? AS TEXT), ?)
+ON CONFLICT(key) DO UPDATE SET
+  value = CASE WHEN kv.expires_at > 0 AND kv.expires_at <= ? THEN excluded.value ELSE CAST(CAST(kv.value AS INTEGER) + ? AS TEXT) END,
+  expires_at = CASE WHEN kv.expires_at > 0 AND kv.expires_at <= ? THEN excluded.expires_at ELSE kv.expires_at END
+RETURNING CAST(value AS INTEGER)`, key, delta, expiry(ttl), now, delta, now).Scan(&n)
 	return n, err
 }
 

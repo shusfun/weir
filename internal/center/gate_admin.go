@@ -41,6 +41,7 @@ func gateView(g *ent.Gate) gin.H {
 		"last_error": g.LastError, "kernels_running": g.KernelsRunning, "kernel_pins": g.KernelPins,
 		"listening_ports": g.ListeningPorts, "host": g.Host, "created_at": g.CreatedAt,
 		"xray_stats_port": g.XrayStatsPort, "singbox_stats_port": g.SingboxStatsPort, "panel": g.Panel,
+		"firewall": g.Firewall, "public_host_hint": publicHostHint(g), "colocated": colocated(g),
 	}
 }
 
@@ -61,7 +62,7 @@ func (s *Server) gateParam(c *gin.Context) (*ent.Gate, bool) {
 func (s *Server) listGates(c *gin.Context) {
 	items, err := s.Store.Ent.Gate.Query().Order(ent.Asc(gate.FieldID)).All(c.Request.Context())
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	out := make([]gin.H, 0, len(items))
@@ -93,7 +94,7 @@ func (s *Server) inviteGate(c *gin.Context) {
 	token := randomToken(32)
 	b, _ := json.Marshal(pairInvite{Name: name})
 	if err := s.Store.KV.Set(c.Request.Context(), "pair:"+digest(token), string(b), time.Hour); err != nil {
-		failure(c, 503, "invite_unavailable")
+		failInternal(c, 503, "invite_unavailable", err)
 		return
 	}
 	s.audit(c, "gate.invite", name, "ok")
@@ -139,7 +140,7 @@ func (s *Server) updateGate(c *gin.Context) {
 	}
 	g, err := upd.Save(c.Request.Context())
 	if err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	s.waiters.notify(g.ID)
@@ -155,7 +156,7 @@ func (s *Server) revokeGate(c *gin.Context) {
 	}
 	g, err := g.Update().SetStatus(gate.StatusRevoked).Save(c.Request.Context())
 	if err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	s.waiters.notify(g.ID)

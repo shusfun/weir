@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -114,23 +115,32 @@ func (s *Supervisor) keep(pr *proc, bin string, started chan<- error) {
 		out, _ := cmd.StdoutPipe()
 		cmd.Stderr = cmd.Stdout
 		err = cmd.Start()
+		// 先记下进程再通知已启动：紧接着的下一次应用要据此认出端口是自己的内核占着，不当成别的程序。
+		if err == nil {
+			s.mu.Lock()
+			pr.cmd = cmd
+			s.mu.Unlock()
+		}
 		if first {
 			started <- err
 			first = false
 		}
 		if err == nil {
-			s.mu.Lock()
-			pr.cmd = cmd
-			s.mu.Unlock()
 			s.collect(pr, out)
-			_ = cmd.Wait()
+			err = cmd.Wait()
 		}
 		s.mu.Lock()
 		stopped := pr.stopped
+		last := ""
+		if n := len(pr.logs); n > 0 {
+			last = pr.logs[n-1]
+		}
 		s.mu.Unlock()
 		if stopped {
 			return
 		}
+		// 内核输出只留在内存（重启辅助程序就没了），退出原因要写进服务日志；IP 与诊断接口一样遮盖。
+		log.Printf("%s exited (%v), restarting in %s; last output: %s", pr.name, err, backoff, maskIPs(last))
 		time.Sleep(backoff)
 		if backoff < 30*time.Second {
 			backoff *= 2

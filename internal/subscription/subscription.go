@@ -569,16 +569,16 @@ func settingsFromQuery(values url.Values, address string) (Settings, error) {
 	security := strings.ToLower(firstQuery(values, "security", "tls"))
 	network := strings.ToLower(firstQuery(values, "type", "network"))
 	settings := Settings{
-		Security:      security,
-		Network:       network,
-		SNI:           firstQuery(values, "sni", "servername", "serverName", "peer"),
-		Host:          firstQuery(values, "host"),
-		Path:          firstQuery(values, "path"),
-		Flow:          firstQuery(values, "flow"),
-		Fingerprint:   firstQuery(values, "fp", "fingerprint"),
-		PublicKey:     firstQuery(values, "pbk", "publicKey"),
-		ShortID:       firstQuery(values, "sid", "shortId"),
-		ServiceName:   firstQuery(values, "serviceName", "service_name"),
+		Security:    security,
+		Network:     network,
+		SNI:         firstQuery(values, "sni", "servername", "serverName", "peer"),
+		Host:        firstQuery(values, "host"),
+		Path:        firstQuery(values, "path"),
+		Flow:        firstQuery(values, "flow"),
+		Fingerprint: firstQuery(values, "fp", "fingerprint"),
+		PublicKey:   firstQuery(values, "pbk", "publicKey"),
+		ShortID:     firstQuery(values, "sid", "shortId"),
+		ServiceName: firstQuery(values, "serviceName", "service_name"),
 
 		AllowInsecure: truthy(firstQuery(values, "allowInsecure", "allow_insecure", "skip-cert-verify", "insecure")),
 		Obfs:          firstQuery(values, "obfs"), ObfsPassword: firstQuery(values, "obfs-password", "obfs_password"), CongestionControl: firstQuery(values, "congestion_control"), ZeroRTT: truthy(firstQuery(values, "zero_rtt_handshake")), SPKI: firstQuery(values, "spki"), CertificatePin: firstQuery(values, "pinSHA256"),

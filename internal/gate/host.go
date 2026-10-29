@@ -20,6 +20,29 @@ var cpuPrev struct {
 func u64(v uint64) *uint64   { return &v }
 func f64(v float64) *float64 { return &v }
 
+// netCounters 是除回环外全部网卡的收发累计；读不到时为空。
+func netCounters() (*uint64, *uint64) {
+	f, err := os.Open("/proc/net/dev")
+	if err != nil {
+		return nil, nil
+	}
+	defer f.Close()
+	var rx, tx uint64
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		name, rest, ok := strings.Cut(sc.Text(), ":")
+		if !ok || strings.TrimSpace(name) == "lo" {
+			continue
+		}
+		if v := strings.Fields(rest); len(v) >= 9 {
+			r, _ := strconv.ParseUint(v[0], 10, 64)
+			t, _ := strconv.ParseUint(v[8], 10, 64)
+			rx, tx = rx+r, tx+t
+		}
+	}
+	return u64(rx), u64(tx)
+}
+
 // sampleHost 只读取固定的 /proc 文件与数据盘用量；读不到的字段留空，中心显示为「未知」。
 // CPU 使用率取相邻两次有效采样的差值；首次、计数回退或间隔超过 60 秒时为未知。
 func sampleHost() *contracts.HostSample {
@@ -50,23 +73,7 @@ func sampleHost() *contracts.HostSample {
 			}
 		}
 	}
-	if f, err := os.Open("/proc/net/dev"); err == nil {
-		var rx, tx uint64
-		sc := bufio.NewScanner(f)
-		for sc.Scan() {
-			name, rest, ok := strings.Cut(sc.Text(), ":")
-			if !ok || strings.TrimSpace(name) == "lo" {
-				continue
-			}
-			if v := strings.Fields(rest); len(v) >= 9 {
-				r, _ := strconv.ParseUint(v[0], 10, 64)
-				t, _ := strconv.ParseUint(v[8], 10, 64)
-				rx, tx = rx+r, tx+t
-			}
-		}
-		f.Close()
-		s.NetRxBytes, s.NetTxBytes = u64(rx), u64(tx)
-	}
+	s.NetRxBytes, s.NetTxBytes = netCounters()
 	if b, err := os.ReadFile("/proc/stat"); err == nil {
 		line, _, _ := strings.Cut(string(b), "\n")
 		if f := strings.Fields(line); len(f) >= 8 && f[0] == "cpu" {

@@ -57,7 +57,7 @@ func (s *Server) agentMeter(c *gin.Context) {
 		return cur.Update().SetMeterEpoch(rep.Epoch).SetMeterSeq(rep.Seq).Exec(ctx)
 	})
 	if err != nil {
-		failure(c, 500, "meter_failed")
+		failInternal(c, 500, "meter_failed", err)
 		return
 	}
 	for uid := range affected {
@@ -104,6 +104,10 @@ func (s *Server) applyMeter(ctx context.Context, g *ent.Gate, rep contracts.Mete
 		if err = cred.Update().SetMeterEpoch(rep.Epoch).SetMeterUp(sample.Up).SetMeterDown(sample.Down).Exec(ctx); err != nil {
 			return nil, err
 		}
+		if delta > 0 {
+			// 按天累计（中心本地日期），链路页显示每条路径今天的流量；内部凭据也记，用于出口一侧的连线。
+			_, _ = s.Store.KV.IncrBy(ctx, dayTrafficKey(now, cred.ID), delta, 50*time.Hour)
+		}
 		if cred.Internal || cred.UserID == nil {
 			continue
 		}
@@ -145,4 +149,8 @@ func (s *Server) addBudgetUsage(ctx context.Context, uid, gid int, delta int64, 
 		}
 	}
 	return b.Update().AddUsed(delta).SetRate(rate).SetRatedAt(now).Exec(ctx)
+}
+
+func dayTrafficKey(t time.Time, credID int) string {
+	return "traffic-day:" + t.Format("20060102") + ":" + itoa(credID)
 }

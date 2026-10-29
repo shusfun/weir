@@ -2,22 +2,15 @@
 import {
   Server,
   Users,
-  KeyRound,
   Workflow,
   Megaphone,
-  ListChecks,
   ScrollText,
   Settings2,
   Link2,
   ShieldCheck,
-  Gauge,
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  Route,
-  Network,
   Cpu,
-  FileBadge,
   Sparkles,
+  Globe2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -36,11 +29,13 @@ export const navigation: NavItem[] = [
   { key: "gates", path: "/gates", label: "VPS 与节点", icon: Server, group: "工作区", admin: true },
   { key: "kernels", path: "/kernels", label: "内核", icon: Cpu, group: "工作区", admin: true },
   { key: "users", path: "/users", label: "用户", icon: Users, group: "工作区", admin: true },
+  { key: "linkmap", path: "/linkmap", label: "链路", icon: Globe2, group: "工作区", admin: true },
   { key: "subscriptions", path: "/subscriptions", label: "订阅管理", icon: Workflow, group: "订阅与分发", admin: true },
   { key: "pages", path: "/pages", label: "公开页面", icon: Megaphone, group: "订阅与分发", admin: true },
   { key: "audit", path: "/ops/audit", label: "操作审计", icon: ScrollText, group: "运维", admin: true },
   { key: "system", path: "/system", label: "系统设置", icon: Settings2, group: "系统", admin: true },
   { key: "subscription", path: "/subscription", label: "我的订阅", icon: Link2, group: "个人", admin: false },
+  { key: "my-linkmap", path: "/my/linkmap", label: "我的链路", icon: Globe2, group: "个人", admin: false },
   { key: "security", path: "/security", label: "账户安全", icon: ShieldCheck, group: "个人", admin: false },
   // 开发环境专用：生产构建里 import.meta.env.DEV 为 false，菜单项和页面一起被剔除
   ...(import.meta.env.DEV
@@ -79,16 +74,3 @@ export const systemSections = [
   { key: "backup", label: "备份迁移" },
   { key: "distribution", label: "分发" },
 ] as const;
-
-export const deviceTabs = [
-  { key: "", label: "概览", icon: Gauge },
-  { key: "inbounds", label: "入站", icon: ArrowDownToLine },
-  { key: "grants", label: "客户端授权", icon: KeyRound },
-  { key: "outbounds", label: "出站", icon: ArrowUpFromLine },
-  { key: "routing", label: "路由", icon: Route },
-  { key: "topology", label: "拓扑", icon: Network },
-  { key: "cores", label: "内核", icon: Cpu },
-  { key: "certificates", label: "证书", icon: FileBadge },
-  { key: "tasks", label: "任务", icon: ListChecks },
-] as const;
-export const deviceTabKeys: readonly string[] = deviceTabs.map((t) => t.key).filter(Boolean);

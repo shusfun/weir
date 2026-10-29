@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http/httptest"
 	"os"
 	"strings"
@@ -23,6 +24,8 @@ import (
 // 中心测试一律不访问真实的 Let's Encrypt：默认指向一个连不上的地址，需要签发的测试换成假 CA。
 func TestMain(m *testing.M) {
 	acmeDirectory = func(NodeCertSettings) string { return "http://127.0.0.1:1/directory" }
+	// 建节点后会在后台从中心连一次节点端口：测试里不连外部地址，直接当作连不上。
+	reachDial = func(context.Context, string) (net.Conn, error) { return nil, errors.New("test: no dialing") }
 	os.Exit(m.Run())
 }
 

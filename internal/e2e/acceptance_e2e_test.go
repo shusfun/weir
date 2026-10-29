@@ -315,6 +315,7 @@ func TestSourceGroupFailoverInKernels(t *testing.T) {
 			t.Fatalf("%s traffic did not leave through a group member", tag)
 		}
 	}
+	liveRatesFromKernels(t, e, clients["X-POOL"], target.URL, len(blob))
 	// 断开一个成员：内核探测到后自动切到另一个，流量照常。
 	used, other := a, b
 	if b.hits.Load() > a.hits.Load() {
@@ -881,4 +882,49 @@ func TestCenterChecksSubscriptionsWithRealKernels(t *testing.T) {
 		}
 		t.Logf("%s %v: %v", k, results[k]["version"], results[k]["status"])
 	}
+}
+
+// liveRatesFromKernels：经一组出口下载时，链路页的实时数据来自真实内核的计数——
+// 路径（凭据）与出口（一组）都有速率，且标出这一刻流量最大的成员（驱动打开了按出口计量，Gate 把内核标签换回了配置标签）。
+func liveRatesFromKernels(t *testing.T, e *env, port int, url string, size int) {
+	t.Helper()
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				_ = fetchVia(port, url, size)
+			}
+		}
+	}()
+	var ev struct {
+		Paths  map[string]struct{ Up, Down float64 } `json:"paths"`
+		Exits  map[string]struct{ Up, Down float64 } `json:"exits"`
+		Active map[string]int                        `json:"active"`
+	}
+	eventually(t, 40*time.Second, "live rates from kernel counters", func() bool {
+		raw, err := e.s.LiveSnapshot(e.ctx, e.gateID, 10*time.Second)
+		if err != nil || json.Unmarshal(raw, &ev) != nil {
+			return false
+		}
+		moving := 0.0
+		for _, r := range ev.Paths {
+			moving += r.Down + r.Up
+		}
+		exit := 0.0
+		for id, r := range ev.Exits {
+			if strings.HasPrefix(id, "nodechain:") {
+				exit += r.Down + r.Up
+			}
+		}
+		active := false
+		for _, i := range ev.Active {
+			active = active || i >= 0
+		}
+		t.Logf("live frame: paths %.0f B/s, group exits %.0f B/s, active %v", moving, exit, ev.Active)
+		return moving > 0 && exit > 0 && active
+	})
 }

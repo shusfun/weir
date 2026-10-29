@@ -1,11 +1,14 @@
-// VPS 的出口与分流规则：例如把流媒体域名经家宽 SOCKS5 出去。被规则引用的出口不能停用、改名或删除。
+// VPS 的出口与分流规则：例如把流媒体域名经家宽代理出去。出口可以是 SOCKS5 / HTTP / HTTPS 代理、一条分享链接、
+// 订阅源节点、直连或拦截；被规则引用的出口不能停用、改名或删除。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, SectionHeader, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, SwitchField, Textarea, useToast, useConfirm, PasswordInput } from "@weir/ui";
 import { Plus, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
-import type { Gate } from "../lib/core";
+import type { ExitProbe, Gate } from "../lib/core";
+import { parseExitText } from "../lib/exit-parse";
+import { probeText } from "./chain-exit";
 import { State } from "./feedback";
 import { useSources } from "./misub-sources";
 import { SourceSummary } from "./link-panel";
@@ -24,6 +27,8 @@ interface Outbound {
   enabled: boolean;
   settings?: { source_id?: number; mode?: "node" | "filter"; match?: string } | null;
   source?: SourceResolved;
+  link?: string;
+  probe?: ExitProbe;
 }
 interface Route {
   id: number;
@@ -36,8 +41,8 @@ interface Route {
   user_id?: number | null;
 }
 
-const protoNames: Record<string, string> = { socks: "SOCKS5", http: "HTTP 代理", freedom: "直连", blackhole: "拦截", source: "订阅源节点" };
-const latency = (r: unknown) => (r && typeof r === "object" && "latency_ms" in r ? `延迟 ${(r as { latency_ms: number }).latency_ms} ms` : undefined);
+const protoNames: Record<string, string> = { socks: "SOCKS5", http: "HTTP 代理", https: "HTTPS 代理", link: "分享链接", freedom: "直连", blackhole: "拦截", source: "订阅源节点" };
+const probed = (r: unknown) => probeText(r as ExitProbe);
 const portError = (v: string) => (v && (Number(v) < 1 || Number(v) > 65535) ? "端口须在 1–65535 之间" : "");
 
 export function GateRouting({ gate, close }: { gate: Gate; close: () => void }) {
@@ -64,9 +69,12 @@ export function GateRouting({ gate, close }: { gate: Gate; close: () => void }) 
           <ul className="stack">
             {outs.data.map((o) => (
               <li key={o.id} className="flex flex-wrap items-center justify-between gap-2">
-                <span><code>{o.tag}</code> {o.name} <Badge variant="soft" tone="neutral">{protoNames[o.protocol] ?? o.protocol}</Badge>{o.address && <small className="ml-1">{o.address}:{o.port}</small>}{o.protocol === "source" && <small className="ml-1"><SourceSummary choice={o.settings} resolved={o.source} /></small>}{!o.enabled && <Badge variant="soft" tone="warn">停用</Badge>}</span>
+                <span className="min-w-0">
+                  <code>{o.tag}</code> {o.name} <Badge variant="soft" tone="neutral">{protoNames[o.protocol] ?? o.protocol}</Badge>{o.address && <small className="ml-1">{o.address}:{o.port}</small>}{o.protocol === "source" && <small className="ml-1"><SourceSummary choice={o.settings} resolved={o.source} /></small>}{!o.enabled && <Badge variant="soft" tone="warn">停用</Badge>}
+                  {o.address && <small className="block text-[var(--mg-ink-3)]">{probeText(o.probe)}</small>}
+                </span>
                 <span className="flex flex-nowrap gap-1.5">
-                  {o.address && <Button size="sm" variant="outline" disabled={isBusy("p" + o.id)} onClick={() => run("p" + o.id, () => api(`${base}/outbounds/${o.id}/probe`, "POST", {}), "实测可用", { detail: latency })}>实测</Button>}
+                  {o.address && <Button size="sm" variant="outline" disabled={isBusy("p" + o.id)} onClick={() => run("p" + o.id, () => api(`${base}/outbounds/${o.id}/probe`, "POST", {}), "实测可用", { detail: probed })}>实测</Button>}
                   <Button size="sm" variant="outline" onClick={() => setEditOut(o)}>编辑</Button>
                   <Button size="icon-sm" variant="destructive" aria-label={"删除出口 " + o.tag} disabled={isBusy("o" + o.id)} onClick={async () => (await confirm({ title: `删除出口 ${o.tag}？`, confirmText: "删除", tone: "danger" })) && run("o" + o.id, () => api(`${base}/outbounds/${o.id}`, "DELETE"), "已删除")}><Trash2 /></Button>
                 </span>
@@ -106,25 +114,47 @@ export function GateRouting({ gate, close }: { gate: Gate; close: () => void }) 
 function OutboundForm({ base, value, close, saved }: { base: string; value: Outbound | "new"; close: () => void; saved: () => void }) {
   const o = value === "new" ? undefined : value;
   const sources = useSources();
-  const [f, setF] = useState({ tag: o?.tag ?? "", name: o?.name ?? "", protocol: (o?.protocol ?? "socks") as "socks" | "http" | "freedom" | "blackhole" | "source", address: o?.address ?? "", port: o?.port ? String(o.port) : "", username: o?.username ?? "", password: o?.password ?? "", enabled: o?.enabled ?? true,
-    source_id: o?.settings?.source_id ?? 0, mode: (o?.settings?.mode ?? "filter") as "node" | "filter", match: o?.settings?.match ?? "" });
+  const [f, setF] = useState({ tag: o?.tag ?? "", name: o?.name ?? "", protocol: (o?.protocol ?? "socks") as "socks" | "http" | "https" | "link" | "freedom" | "blackhole" | "source", address: o?.address ?? "", port: o?.port ? String(o.port) : "", username: o?.username ?? "", password: o?.password ?? "", enabled: o?.enabled ?? true,
+    source_id: o?.settings?.source_id ?? 0, mode: (o?.settings?.mode ?? "filter") as "node" | "filter", match: o?.settings?.match ?? "", link: o?.link ?? "" });
   const set = (p: Partial<typeof f>) => setF({ ...f, ...p });
-  const remote = f.protocol === "socks" || f.protocol === "http";
+  const remote = f.protocol === "socks" || f.protocol === "http" || f.protocol === "https";
+  const [paste, setPaste] = useState("");
+  const parsed = paste.trim() ? parseExitText(paste) : null;
+  const pasteError = parsed?.type === "subscription" ? "这是订阅地址，不能作出口" : parsed?.type === "link" ? "这是分享链接，请改选「分享链接」" : parsed?.type === "error" ? parsed.message : "";
+  const applyPaste = (text: string) => {
+    setPaste(text);
+    const r = text.trim() ? parseExitText(text) : null;
+    if (r?.type === "proxy") {
+      const protocol = r.proxy.kind === "socks5" ? "socks" : r.proxy.kind ?? f.protocol;
+      set({ protocol: protocol as typeof f.protocol, address: r.proxy.address, port: String(r.proxy.port), username: r.proxy.username ?? "", password: r.proxy.password ?? "" });
+    }
+  };
   const save = useFormAction(
     () => {
       const body = { ...f, port: Number(f.port) || 0 };
       return o ? api(`${base}/outbounds/${o.id}`, "PATCH", body) : api(base + "/outbounds", "POST", body);
     },
-    { fields: { invalid_tag: "tag", tag_conflict: "tag", invalid_outbound_address: "address", invalid_outbound_credentials: "username", source_not_found: "source_id", invalid_source_exit: "match", group_unsupported: "match" }, onSuccess: saved },
+    { fields: { invalid_tag: "tag", tag_conflict: "tag", invalid_outbound_address: "address", invalid_outbound_credentials: "username", source_not_found: "source_id", invalid_source_exit: "match", group_unsupported: "match",
+      invalid_link: "link", exit_unsupported: remote ? "address" : "link" }, onSuccess: saved },
   );
-  useConsoleContext({ dialog: { title: o ? "编辑出口" : "添加出口" }, form: Object.entries(f).map(([k, v]) => field(k, k, typeof v === "object" ? JSON.stringify(v) : v, /pass|secret|key/i.test(k))) });
+  useConsoleContext({ dialog: { title: o ? "编辑出口" : "添加出口" }, form: Object.entries(f).map(([k, v]) => field(k, k, typeof v === "object" ? JSON.stringify(v) : v, /pass|secret|key|link/i.test(k))) });
   return (
     <Dialog open onOpenChange={(v) => !v && !save.busy && close()}>
       <DialogContent size="md">
         <DialogTitle>{o ? "编辑出口" : "添加出口"}</DialogTitle>
         <DialogDescription>标签只能用小写字母、数字、- 和 _；不能使用 direct、chain-、node- 等系统保留名称。</DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
-          <Segmented aria-label="出口类型" value={f.protocol} onValueChange={(protocol) => set({ protocol })} options={[["socks", "SOCKS5"], ["http", "HTTP 代理"], ["source", "订阅源节点"], ["freedom", "直连"], ["blackhole", "拦截"]] as const} />
+          <Segmented aria-label="出口类型" value={f.protocol} onValueChange={(protocol) => set({ protocol })} options={[["socks", "SOCKS5"], ["http", "HTTP"], ["https", "HTTPS"], ["link", "分享链接"], ["source", "订阅源节点"], ["freedom", "直连"], ["blackhole", "拦截"]] as const} />
+          {remote && (
+            <Field label="粘贴识别（可选）" customError={pasteError} hint="支持 host:port、host:port:用户名:密码、用户名:密码@host:port、socks5:// 与 http(s):// 地址。">
+              <Input autoComplete="off" spellCheck={false} value={paste} placeholder="1.2.3.4:1080:user:pass" onChange={(e) => applyPaste(e.target.value)} />
+            </Field>
+          )}
+          {f.protocol === "link" && (
+            <Field label="分享链接" name="link" required hint="一个节点的链接（vless / vmess / trojan / ss / hysteria2 / tuic / anytls）；订阅地址不能作出口。这台 VPS 上的每个内核都要能连接它。">
+              <Textarea required rows={3} spellCheck={false} className="font-mono text-xs" value={f.link} onChange={(e) => set({ link: e.target.value.trim() })} />
+            </Field>
+          )}
           {f.protocol === "source" && <Notice role="status">用订阅源里的节点作出口：一组的全部成员都下发，由内核按延迟自动选、出故障自动切换（最多 50 个）；订阅源刷新后随之更新，刷新失败或暂时没有匹配时保留上一次可用的；从没解析成功时流量被丢弃，不会改成直连。</Notice>}
           <FormGrid>
             <Field label="标签" name="tag" customError={/^[a-z0-9_-]*$/.test(f.tag) ? "" : "标签只能使用小写字母、数字、- 和 _"}>

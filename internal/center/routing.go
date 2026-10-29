@@ -2,18 +2,17 @@ package center
 
 import (
 	"context"
-	"net"
+	"errors"
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/shusfun/weir/internal/store/ent"
+	entnode "github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/outbound"
 	"github.com/shusfun/weir/internal/store/ent/route"
-	"github.com/shusfun/weir/packages/contracts"
 )
 
 // 管理员出口与分流规则（按 Gate）：例如把流媒体域名经家宽 SOCKS5 出去。
@@ -31,7 +30,10 @@ func (s *Server) routingRoutes(admin *gin.RouterGroup) {
 	admin.DELETE("/gates/:id/routes/:rid", s.deleteRoute)
 }
 
-var outboundProtocols = map[string]bool{"socks": true, "http": true, "freedom": true, "blackhole": true, "source": true}
+var outboundProtocols = map[string]bool{"socks": true, "http": true, "https": true, "link": true, "freedom": true, "blackhole": true, "source": true}
+
+// outboundKind 是出口协议对应的链式代理出口类型（实测、检查内核用）。
+var outboundKind = map[string]string{"socks": "socks5", "http": "http", "https": "https", "link": "link"}
 
 var tagPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,47}$`)
 
@@ -44,10 +46,19 @@ func (s *Server) outboundView(o *ent.Outbound) gin.H {
 	v := gin.H{"id": o.ID, "gate_id": o.GateID, "tag": o.Tag, "name": o.Name, "protocol": o.Protocol, "address": o.Address, "port": o.Port,
 		"username": o.Username, "enabled": o.Enabled, "position": o.Position, "settings": o.Settings}
 	if pw, err := s.reveal(o.Password); err == nil {
-		v["password"] = pw
+		if o.Protocol == "link" {
+			v["link"] = pw
+		} else {
+			v["password"] = pw
+		}
 	}
 	if o.Protocol == "source" && s.Store != nil {
 		v["source"] = s.exitView(context.Background(), "out:"+itoa(o.ID))
+	}
+	if s.Store != nil {
+		if p, ok := s.loadExitProbe(context.Background(), "out:"+itoa(o.ID)); ok {
+			v["probe"] = p
+		}
 	}
 	return v
 }
@@ -59,7 +70,7 @@ func (s *Server) listOutbounds(c *gin.Context) {
 	}
 	items, err := s.Store.Ent.Outbound.Query().Where(outbound.GateIDEQ(g.ID)).Order(ent.Asc(outbound.FieldPosition), ent.Asc(outbound.FieldID)).All(c.Request.Context())
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	out := make([]gin.H, 0, len(items))
@@ -103,6 +114,8 @@ func (s *Server) saveOutbound(c *gin.Context) {
 		SourceID int    `json:"source_id"`
 		Mode     string `json:"mode"`
 		Match    string `json:"match"`
+		// link：一条分享链接（不接受订阅地址），加密保存。
+		Link string `json:"link"`
 	}
 	if !bind(c, &req) {
 		return
@@ -138,18 +151,29 @@ func (s *Server) saveOutbound(c *gin.Context) {
 		failure(c, 400, "unsupported_outbound_protocol")
 		return
 	}
-	if req.Protocol == "socks" || req.Protocol == "http" {
-		host := strings.TrimSpace(req.Address)
-		if host == "" || len(host) > 255 || strings.ContainsAny(host, "/ @") || req.Port < 1 || req.Port > 65535 {
+	switch req.Protocol {
+	case "socks", "http", "https":
+		if !validHostPort(req.Address, req.Port) {
 			failure(c, 400, "invalid_outbound_address")
 			return
 		}
-		if net.ParseIP(host) == nil && !strings.Contains(host, ".") {
-			failure(c, 400, "invalid_outbound_address")
+		req.Address = strings.Trim(strings.TrimSpace(req.Address), "[]")
+	case "link":
+		o, _, err := parseExitLink(req.Link)
+		if err != nil {
+			failDetail(c, 400, "invalid_link", err.Error(), nil)
 			return
 		}
-	} else {
+		req.Address, req.Port, req.Username, req.Password = o.Address, o.Port, "", strings.TrimSpace(req.Link)
+	default:
 		req.Address, req.Port, req.Username, req.Password = "", 0, "", ""
+	}
+	// 这台 VPS 上用到的内核都要能连接这个出口：分流规则可能作用于任一内核的节点，连不上时整份配置会被拒绝。
+	if kind := outboundKind[req.Protocol]; kind != "" {
+		if err := s.checkGateKernels(ctx, g, ChainSpec{Kind: kind, Address: req.Address, Port: req.Port, Username: req.Username, Password: req.Password, Link: req.Link}); err != nil {
+			failDetail(c, 409, "exit_unsupported", err.Error(), nil)
+			return
+		}
 	}
 	if len(req.Username) > 255 || len(req.Password) > 255 {
 		failure(c, 400, "invalid_outbound_credentials")
@@ -159,7 +183,7 @@ func (s *Server) saveOutbound(c *gin.Context) {
 	if req.Password != "" {
 		var err error
 		if sealed, err = s.Crypto.Encrypt(req.Password); err != nil {
-			failure(c, 500, "encrypt_failed")
+			failInternal(c, 500, "encrypt_failed", err)
 			return
 		}
 	}
@@ -231,7 +255,7 @@ func (s *Server) deleteOutbound(c *gin.Context) {
 		return
 	}
 	if err = s.Store.Ent.Outbound.DeleteOne(o).Exec(ctx); err != nil {
-		failure(c, 500, "delete_failed")
+		failInternal(c, 500, "delete_failed", err)
 		return
 	}
 	_, _ = s.bumpGate(ctx, g.ID)
@@ -239,7 +263,31 @@ func (s *Server) deleteOutbound(c *gin.Context) {
 	c.Status(204)
 }
 
-// probeOutbound 由该 Gate 实测出口（SOCKS5 握手并经它连接一个站点；HTTP 只测 TCP 可达）。
+// checkGateKernels 确认这台 VPS 上节点用到的每个内核都能连接这个出口（还没有节点时不检查）。
+func (s *Server) checkGateKernels(ctx context.Context, g *ent.Gate, spec ChainSpec) error {
+	ex, err := s.resolveChain(ctx, 0, spec, false, chainCtx{admin: true, gate: g})
+	if err != nil {
+		_, detail, _ := strings.Cut(err.Error(), ": ")
+		return errors.New(firstNonEmpty(detail, err.Error()))
+	}
+	nodes, err := s.Store.Ent.Node.Query().Where(entnode.GateIDEQ(g.ID), entnode.EnabledEQ(true)).All(ctx)
+	if err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	for _, n := range nodes {
+		if seen[n.Kernel] {
+			continue
+		}
+		seen[n.Kernel] = true
+		if err = s.checkOutboundKernel(ctx, g, n.Kernel, ex.members()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// probeOutbound 由该 Gate 实测出口：代理与分享链接按协议真连一次，经它访问中心拿到实际出口 IP。
 func (s *Server) probeOutbound(c *gin.Context) {
 	g, ok := s.gateParam(c)
 	if !ok {
@@ -256,15 +304,26 @@ func (s *Server) probeOutbound(c *gin.Context) {
 		return
 	}
 	pw, _ := s.reveal(o.Password)
-	kind := "node"
-	if o.Protocol == "socks" {
-		kind = "socks5"
+	kind := outboundKind[o.Protocol]
+	if kind == "" {
+		failure(c, 400, "probe_unsupported")
+		return
 	}
-	res, err := s.gateProbe(ctx, g, contracts.ActionOutboundProbe, map[string]any{"kind": kind, "address": o.Address, "port": o.Port, "username": o.Username, "password": pw}, 30*time.Second)
+	spec := ChainSpec{Kind: kind, Address: o.Address, Port: o.Port, Username: o.Username, Password: pw}
+	if kind == "link" {
+		spec.Password, spec.Link = "", pw
+	}
+	ex, err := s.resolveChain(ctx, 0, spec, false, chainCtx{admin: true, gate: g})
 	if err != nil {
 		failErr(c, 422, err)
 		return
 	}
+	res, err := s.probeExit(ctx, g, ex, false)
+	if err != nil {
+		failErr(c, 422, err)
+		return
+	}
+	s.saveExitProbe(ctx, "out:"+itoa(o.ID), res)
 	c.JSON(200, res)
 }
 
@@ -279,7 +338,7 @@ func (s *Server) listRoutes(c *gin.Context) {
 	}
 	items, err := s.Store.Ent.Route.Query().Where(route.GateIDEQ(g.ID)).Order(ent.Asc(route.FieldPriority), ent.Asc(route.FieldID)).All(c.Request.Context())
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	out := make([]gin.H, 0, len(items))
@@ -374,7 +433,7 @@ func (s *Server) saveRoute(c *gin.Context) {
 		saved, err = upd.Save(ctx)
 	}
 	if err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	_, _ = s.bumpGate(ctx, g.ID)

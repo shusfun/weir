@@ -6,6 +6,8 @@ import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogDescript
 import { FileBadge, Plus, Server, Sparkles, Trash2 } from "lucide-react";
 import { openDsh } from "../components/dsh";
 import { ObjectLink, dataObject, useDialogParam } from "../components/object-link";
+import { exitKindName, probeText } from "../components/chain-exit";
+import { NodeAccess } from "../components/node-access";
 import { GateRouting } from "../components/gate-routing";
 import { GateDetail } from "../components/gate-detail";
 import { api } from "../api";
@@ -123,6 +125,11 @@ export function GatesPage() {
                     {Object.entries(g.kernels_running ?? {}).map(([k, v]) => <span key={k}> · <ObjectLink to={{ type: "kernel", key: `${k}@${v}`, name: `${k} ${v}` }} /></span>)}
                   </small>
                   {g.state === "failed" && g.last_error && <p className="text-[var(--mg-bad-ink)] text-sm">{g.last_error}</p>}
+                  {!g.public_host && (
+                    <p className="text-sm text-[var(--mg-warn-ink)]">
+                      还没有公网地址，这台 VPS 上的节点生成不了分享链接。{g.colocated ? "中心与它在同一台机器上，记录不到来源地址；" : ""}请点「编辑」填写{g.public_host_hint ? `（本机网卡上的公网 IP 是 ${g.public_host_hint}）` : ""}。
+                    </p>
+                  )}
                 </div>
                 <span className="flex flex-nowrap gap-1.5">
                   <Button size="sm" variant="outline" onClick={() => detailParam.open(g)}>详情</Button>
@@ -151,8 +158,14 @@ export function GatesPage() {
                         <TableRow key={n.id} data-node-row={n.id} {...dataObject({ type: "node", id: n.id })} tabIndex={focusNode === n.id ? -1 : undefined} className={focusNode === n.id ? "bg-[var(--mg-accent-soft)] transition-colors" : undefined}>
                           <TableCell>{n.name}</TableCell>
                           <TableCell>{protocolNames[n.protocol] ?? n.protocol}{n.security === "reality" ? " + REALITY" : n.network === "ws" ? " + WS" : ""}</TableCell>
-                          <TableCell className="font-mono">{n.port}</TableCell>
-                          <TableCell>{n.chain.kind === "none" ? "直连" : n.chain.kind === "socks5" ? `SOCKS5 ${n.chain.address}:${n.chain.port}` : n.chain.kind === "source" ? "订阅源节点" : <>经 <ObjectLink to={{ type: "node", id: n.chain.node_id ?? undefined, name: nodes.data.find((x) => x.id === n.chain.node_id)?.name ?? "节点" }} /></>}</TableCell>
+                          <TableCell className="font-mono">
+                            {n.port}
+                            <NodeAccess ports={n.ports} reach={n.reach} compact />
+                          </TableCell>
+                          <TableCell>
+                            {n.chain.kind === "none" ? "直连" : n.chain.kind === "node" ? <>经 <ObjectLink to={{ type: "node", id: n.chain.node_id ?? undefined, name: nodes.data.find((x) => x.id === n.chain.node_id)?.name ?? "节点" }} /></> : n.chain.kind === "source" ? "订阅源节点" : `${exitKindName[n.chain.kind]} ${n.chain.address ?? ""}${n.chain.port ? ":" + n.chain.port : ""}`}
+                            {n.chain.kind !== "none" && <small className="block text-[var(--mg-ink-3)]">{probeText(n.chain.probe)}</small>}
+                          </TableCell>
                           <TableCell>{n.credentials}</TableCell>
                           <TableCell>
                             <Switch aria-label={"启用 " + n.name} checked={n.enabled} disabled={isBusy(n.id)} onCheckedChange={(v) => act(n.id, () => api("/admin/nodes/" + n.id, "PATCH", { enabled: v }), v ? "节点已启用" : "节点已停用")} />
@@ -197,7 +210,10 @@ function GateEdit({ gate, close, saved }: { gate: Gate; close: () => void; saved
         <DialogDescription>公网地址会写进订阅；改动后用户更新订阅即可生效。</DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
           <Field label="名称"><Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} /></Field>
-          <Field label="公网地址" hint="IP 或解析到这台 VPS 的域名。"><Input value={host} onChange={(e) => setHost(e.target.value)} /></Field>
+          <Field label="公网地址" hint={gate.public_host_hint && !host ? `IP 或解析到这台 VPS 的域名；本机网卡上的公网 IP 是 ${gate.public_host_hint}。域名开了 CDN 代理时节点连不上，请填 IP。` : "IP 或解析到这台 VPS 的域名；域名开了 CDN 代理时节点连不上，请填 IP。"}>
+            <Input value={host} placeholder={gate.public_host_hint} onChange={(e) => setHost(e.target.value)} />
+          </Field>
+          {gate.public_host_hint && !host && <Button type="button" size="sm" variant="outline" onClick={() => setHost(gate.public_host_hint ?? "")}>填入 {gate.public_host_hint}</Button>}
           <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
             <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>

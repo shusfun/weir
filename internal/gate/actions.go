@@ -44,7 +44,17 @@ func (a *Agent) runAction(ctx context.Context, act contracts.Action) contracts.A
 	case contracts.ActionRealityProbe:
 		out, err = realityProbe(ctx, p)
 	case contracts.ActionChainProbe, contracts.ActionOutboundProbe:
-		out, err = chainProbe(ctx, p)
+		if _, ok := p["client"].(map[string]any); ok {
+			out, err = a.clientProbe(ctx, p)
+		} else {
+			out, err = chainProbe(ctx, p)
+		}
+	case contracts.ActionLiveStart:
+		if a.runCtx == nil {
+			err = errors.New("agent not running")
+		} else {
+			a.startLive(num(p, "seconds"))
+		}
 	case contracts.ActionDiagnostics:
 		out, err = a.helper.Diagnostics(ctx, str(p, "kernel"))
 	case contracts.ActionCoreRestart:
@@ -161,8 +171,11 @@ func probeOne(host string) (map[string]any, time.Duration) {
 	return r, latency
 }
 
+// cgnat / benchmark 是 Go 的 IsPrivate 不包含、但同样不是公网的段（云厂商元数据 100.100.100.200 在 cgnat 里）。
+var cgnat, benchmark = &net.IPNet{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMask(10, 32)}, &net.IPNet{IP: net.IPv4(198, 18, 0, 0), Mask: net.CIDRMask(15, 32)}
+
 func publicIP(ip net.IP) bool {
-	return !(ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() || ip.Equal(net.IPv4(100, 100, 100, 200)) || len(ip) == net.IPv6len && ip[0]&0xfe == 0xfc)
+	return !(ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() || cgnat.Contains(ip) || benchmark.Contains(ip) || len(ip) == net.IPv6len && ip[0]&0xfe == 0xfc)
 }
 
 // chainProbe 实测链式代理出口：socks5 完成握手（含认证）并经它 CONNECT 一个目标；node 只测 TCP 可达。
@@ -190,7 +203,9 @@ func chainProbe(ctx context.Context, p map[string]any) (map[string]any, error) {
 	}
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
+	mode := "tcp"
 	if str(p, "kind") == "socks5" {
+		mode = "proxy"
 		target := str(p, "target")
 		if target == "" {
 			target = "www.gstatic.com:443"
@@ -199,7 +214,7 @@ func chainProbe(ctx context.Context, p map[string]any) (map[string]any, error) {
 			return nil, err
 		}
 	}
-	return map[string]any{"latency_ms": time.Since(start).Milliseconds(), "ip": ips[0].String()}, nil
+	return map[string]any{"latency_ms": time.Since(start).Milliseconds(), "ip": ips[0].String(), "mode": mode}, nil
 }
 
 // socks5Connect 按 RFC 1928 / 1929 完成握手与认证，并请求连接 target。

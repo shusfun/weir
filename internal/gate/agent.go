@@ -36,6 +36,11 @@ type Agent struct {
 	ReportEvery    int64
 	// switchTried 是上一次尝试切换中心地址的时间（由 mu 保护）。
 	switchTried time.Time
+	// 实时上报（live.go）：期限与是否在跑，由 liveMu 保护；runCtx 是 Run 的上下文。
+	liveMu      sync.Mutex
+	liveUntil   time.Time
+	liveRunning bool
+	runCtx      context.Context
 }
 
 func NewAgent(p Paths) (*Agent, error) {
@@ -55,6 +60,7 @@ func (a *Agent) statePath() string { return filepath.Join(a.P.Data, "state.json"
 
 // Run 启动时先按本地已生效配置重建（中心不可达也能继续服务），然后并行运行各循环。
 func (a *Agent) Run(ctx context.Context) error {
+	a.runCtx = ctx
 	a.mu.Lock()
 	if a.st.Config != nil {
 		if _, err := a.applyLocked(ctx, *a.st.Config); err != nil {
@@ -115,10 +121,17 @@ func (a *Agent) configLoop(ctx context.Context) {
 			sleep(ctx, 10*time.Second)
 			continue
 		}
+		// 中心的配置版本号，两边的日志按它对上。
+		if state.FailedRevision == cfg.Revision {
+			log.Printf("revision %d rejected, keeping %d: %s", cfg.Revision, state.AppliedRevision, state.Error)
+		} else {
+			log.Printf("revision %d applied", state.AppliedRevision)
+		}
 		if _, err = a.center.call(ctx, "POST", "/agent/state", state, nil); err != nil {
 			log.Printf("report state: %v", err)
 		}
-		if state.FailedRevision != 0 {
+		// 配置被拒绝时等一会再取，避免反复应用同一份坏配置；端口冲突时中心会马上换端口发新版本，直接去取（长轮询，不会空转）。
+		if state.FailedRevision != 0 && state.ConflictPort == 0 {
 			sleep(ctx, 30*time.Second)
 		}
 	}
@@ -351,7 +364,7 @@ func (a *Agent) heartbeat(ctx context.Context) error {
 		hb.Panel, hb.PanelCerts = &st, certs
 	}
 	if st, err := a.helper.Status(ctx); err == nil {
-		hb.ListeningPorts = st.Listening
+		hb.ListeningPorts, hb.Firewall = st.Listening, st.Firewall
 		for name := range st.Running {
 			hb.Kernels[name] = st.Active[name]
 		}

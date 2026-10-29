@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"strconv"
@@ -30,6 +31,7 @@ func (s *Server) gateRoutes(ready, admin *gin.RouterGroup) {
 	a.POST("/state", s.agentState)
 	a.POST("/heartbeat", s.agentHeartbeat)
 	a.POST("/meter", s.agentMeter)
+	a.POST("/live", s.agentLive)
 	a.GET("/actions", s.agentActions)
 	a.POST("/actions/:id", s.agentActionResult)
 	a.GET("/kernels/:kernel/:version", s.agentKernel)
@@ -57,7 +59,7 @@ func (s *Server) agentConfig(c *gin.Context) {
 		wait := s.waiters.wait(g.ID) // 先订阅再读取，避免错过两者之间的版本变化
 		cur, err := s.Store.Ent.Gate.Get(ctx, g.ID)
 		if err != nil {
-			failure(c, 503, "config_unavailable")
+			failInternal(c, 503, "config_unavailable", err)
 			return
 		}
 		if cur.ConfigRevision != since {
@@ -96,9 +98,13 @@ func (s *Server) agentState(c *gin.Context) {
 	if st.FailedRevision > 0 {
 		upd.SetFailedRevision(st.FailedRevision)
 	}
+	// 远端 VPS 的服务日志不在中心这台机器上：被拒绝的版本在中心也记一次（同一版本只记一次）。
+	if st.FailedRevision > g.FailedRevision {
+		slog.Error("gate rejected revision", "gate", g.ID, "revision", st.FailedRevision, "applied", st.AppliedRevision, "err", redact(st.Error))
+	}
 	g, err := upd.Save(ctx)
 	if err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	if st.ConflictPort > 0 {
@@ -149,6 +155,12 @@ func (s *Server) agentHeartbeat(c *gin.Context) {
 	if len(hb.Center) <= 255 {
 		upd.SetCenterURL(hb.Center)
 	}
+	// 防火墙：这次没读到时清空（显示「未知」），不沿用旧的结果。
+	if fw := hb.Firewall; fw != nil && len(fw.Rules) <= 500 {
+		upd.SetFirewall(map[string]any{"tool": fw.Tool, "active": fw.Active, "rules": fw.Rules, "error": fw.Error, "at": time.Now().UTC()})
+	} else {
+		upd.ClearFirewall()
+	}
 	if g.PublicHost == "" {
 		if ip := publicAddress(c.ClientIP()); ip != "" {
 			upd.SetPublicHost(ip)
@@ -156,14 +168,14 @@ func (s *Server) agentHeartbeat(c *gin.Context) {
 	}
 	g, err := upd.Save(ctx)
 	if err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	s.absorbPanelReport(ctx, g, hb)
 	s.recordHost(ctx, g.ID, hb.Host, time.Now())
 	before := g.ConfigRevision
 	if g, err = s.ensureStatsPorts(ctx, g); err != nil {
-		failure(c, 500, "port_allocation_failed")
+		failInternal(c, 500, "port_allocation_failed", err)
 		return
 	}
 	if g.ConfigRevision != before {
@@ -182,14 +194,14 @@ func (s *Server) agentActions(c *gin.Context) {
 		_, _ = s.Store.Ent.GateAction.Update().Where(gateaction.GateIDEQ(g.ID), gateaction.StatusEQ(gateaction.StatusPending), gateaction.ExpiresAtLT(time.Now())).SetStatus(gateaction.StatusExpired).Save(ctx)
 		items, err := s.Store.Ent.GateAction.Query().Where(gateaction.GateIDEQ(g.ID), gateaction.StatusEQ(gateaction.StatusPending)).Order(ent.Asc(gateaction.FieldID)).Limit(10).All(ctx)
 		if err != nil {
-			failure(c, 503, "actions_unavailable")
+			failInternal(c, 503, "actions_unavailable", err)
 			return
 		}
 		if len(items) > 0 {
 			out := make([]contracts.Action, 0, len(items))
 			for _, a := range items {
 				if _, err = a.Update().SetStatus(gateaction.StatusRunning).Save(ctx); err != nil {
-					failure(c, 500, "save_failed")
+					failInternal(c, 500, "save_failed", err)
 					return
 				}
 				out = append(out, contracts.Action{ID: int64(a.ID), Kind: a.Kind, Payload: a.Payload, ExpiresAt: a.ExpiresAt})
@@ -229,7 +241,7 @@ func (s *Server) agentActionResult(c *gin.Context) {
 		status = gateaction.StatusFailed
 	}
 	if _, err = a.Update().SetStatus(status).SetResult(res.Result).SetError(res.Error).SetFinishedAt(time.Now()).Save(ctx); err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	s.actionDone.notify(a.ID)

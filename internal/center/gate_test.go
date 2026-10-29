@@ -161,6 +161,12 @@ func TestGatePairConfigMeterAndRevoke(t *testing.T) {
 	if after := s.Store.Ent.Gate.GetX(ctx, gate.ID).ConfigRevision; after <= before {
 		t.Fatal("revision not bumped after port reassignment")
 	}
+	// 内核绑定统计端口失败（被出站连接占着）：换统计端口，下发的配置里也是新端口。
+	stats := g.config(0).Ports.XrayStats
+	g.call("POST", "/api/v1/agent/state", contracts.GateState{FailedRevision: s.Store.Ent.Gate.GetX(ctx, gate.ID).ConfigRevision, Error: "xray 启动后健康检查未通过", ConflictPort: stats})
+	if got := g.config(0).Ports.XrayStats; got == stats || got == 0 {
+		t.Fatalf("stats port not reassigned: %d → %d", stats, got)
+	}
 	// 普通用户不能调用管理接口。
 	if w := admin.do("POST", "/api/v1/admin/gates/"+itoa(int(g.id))+"/revoke", nil, nil); w.Code != 200 {
 		t.Fatalf("revoke = %d", w.Code)

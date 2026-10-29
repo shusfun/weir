@@ -175,7 +175,7 @@ func (s *Server) checkOutboundKernel(ctx context.Context, entry *ent.Gate, kerne
 	for _, m := range members {
 		network, _ := m.Settings["network"].(string)
 		if err := d.OutboundAllows(db.NormalizeOutboundProtocol(m.Protocol), network); err != nil {
-			return fmt.Errorf("入口节点用 %w", err)
+			return err
 		}
 	}
 	return nil

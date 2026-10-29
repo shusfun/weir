@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/shusfun/weir/internal/db"
 	"github.com/shusfun/weir/internal/kernelconf"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/chain"
@@ -28,8 +29,7 @@ import (
 //     内核版本不支持时保存报错，不悄悄退回单个节点。
 // 订阅源刷新后成员随之更新；刷新失败或一时没有匹配时保留上一次可用的；从没解析成功过时丢弃流量，不改成直连。
 // 管理员可以选任意订阅源（source_id）；用户自建只能选分配给他的订阅组（profile_id）里出现的节点。
-
-var sourceExitProtocols = map[string]string{"vless": "vless", "vmess": "vmess", "trojan": "trojan", "socks5": "socks", "http": "http"}
+// 能作出口的协议与参数由 linkOutbound 决定；匹配到但不能作出口的节点跳过并写明原因。
 
 type sourceSpec struct {
 	SourceID  int    `json:"source_id,omitempty"`
@@ -88,46 +88,121 @@ func (s *Server) specLinks(ctx context.Context, sp sourceSpec) ([]string, error)
 }
 
 // resolveSpec 找出匹配的节点并转成出口：单个节点得到普通出口，一组得到 group 出口（全部成员）。
-// publicOnly 为真（用户自建）时只接受公网地址的节点。返回出口与成员名称。
-func (s *Server) resolveSpec(ctx context.Context, sp sourceSpec, publicOnly bool) (contracts.Outbound, []string, error) {
+// publicOnly 为真（用户自建）时只接受公网地址的节点；kernels 是会用到这个出口的内核（入口节点的，或这台 VPS 上的全部），
+// 有一个内核连不上的成员跳过并写明原因（否则整份 Gate 配置会被拒绝）。
+func (s *Server) resolveSpec(ctx context.Context, g *ent.Gate, kernels []string, sp sourceSpec, publicOnly bool) (resolvedExit, error) {
 	links, err := s.specLinks(ctx, sp)
 	if err != nil {
-		return contracts.Outbound{}, nil, err
+		return resolvedExit{}, err
 	}
+	allowed := s.outboundFilter(ctx, g, kernels)
 	var re *regexp.Regexp
 	if sp.Mode == "filter" {
 		if re, err = regexp.Compile(sp.Match); err != nil {
-			return contracts.Outbound{}, nil, errors.New("筛选条件不是有效的正则")
+			return resolvedExit{}, errors.New("筛选条件不是有效的正则")
 		}
 	}
 	parsed, _ := subscription.ParseLinks(links)
+	var ex resolvedExit
 	var members []contracts.Outbound
-	var names []string
 	for _, n := range parsed.Nodes {
 		if sp.Mode == "filter" && !re.MatchString(n.Remark) || sp.Mode != "filter" && n.Remark != sp.Match {
 			continue
 		}
-		proto, ok := sourceExitProtocols[n.Protocol]
-		if !ok || publicOnly && (literalPrivate(n.Address) || strings.EqualFold(n.Address, "localhost")) {
+		if publicOnly && (literalPrivate(n.Address) || strings.EqualFold(n.Address, "localhost")) {
+			ex.Skipped = append(ex.Skipped, n.Remark+"：不是公网地址")
 			continue
 		}
-		set := map[string]any{}
-		_ = json.Unmarshal([]byte(n.SettingsJSON), &set)
-		members = append(members, contracts.Outbound{Protocol: proto, Address: n.Address, Port: n.Port, Username: n.Username, Password: n.Password, Settings: set})
-		names = append(names, n.Remark)
+		o, err := linkOutbound(n)
+		if err == nil {
+			err = allowed(o)
+		}
+		if err != nil {
+			ex.Skipped = append(ex.Skipped, n.Remark+"："+err.Error())
+			continue
+		}
+		members = append(members, o)
+		ex.Names, ex.Links = append(ex.Names, n.Remark), append(ex.Links, n.RawLink)
 		if sp.Mode != "filter" {
 			break
 		}
 	}
 	switch {
+	case len(members) == 0 && len(ex.Skipped) > 0:
+		return resolvedExit{}, fmt.Errorf("匹配「%s」的节点都不能作出口（%s）", sp.Match, strings.Join(firstN(ex.Skipped, 3), "；"))
 	case len(members) == 0:
-		return contracts.Outbound{}, nil, fmt.Errorf("没有匹配「%s」的可用节点（支持 VLESS / VMess / Trojan / SOCKS5 / HTTP）", sp.Match)
+		return resolvedExit{}, fmt.Errorf("没有匹配「%s」的节点", sp.Match)
 	case len(members) > contracts.MaxGroupMembers:
-		return contracts.Outbound{}, nil, fmt.Errorf("匹配到 %d 个节点，一组最多 %d 个，请收紧筛选条件", len(members), contracts.MaxGroupMembers)
+		return resolvedExit{}, fmt.Errorf("匹配到 %d 个节点，一组最多 %d 个，请收紧筛选条件", len(members), contracts.MaxGroupMembers)
 	case sp.Mode == "filter":
-		return contracts.Outbound{Protocol: "group", Members: members}, names, nil
+		ex.Outbound = contracts.Outbound{Protocol: "group", Members: members}
+	default:
+		ex.Outbound = members[0]
 	}
-	return members[0], names, nil
+	return ex, nil
+}
+
+// outboundFilter 返回一个检查：这些内核能否作客户端连接某个出口。读不到驱动时不过滤（编译 Gate 配置时会如实报错）。
+func (s *Server) outboundFilter(ctx context.Context, g *ent.Gate, kernels []string) func(contracts.Outbound) error {
+	var drivers []kernelconf.Driver
+	if g != nil && len(kernels) > 0 {
+		need := map[string]bool{}
+		for _, k := range kernels {
+			need[k] = true
+		}
+		if _, profiles, err := s.gateKernels(ctx, g, need); err == nil {
+			for k := range need {
+				if d, err := kernelconf.ParseDriver(profiles[k]); err == nil {
+					drivers = append(drivers, d)
+				}
+			}
+		}
+	}
+	return func(o contracts.Outbound) error {
+		network, _ := o.Settings["network"].(string)
+		for _, d := range drivers {
+			if err := d.OutboundAllows(db.NormalizeOutboundProtocol(o.Protocol), network); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
+// ownerKernels 是会用到某个订阅源出口的内核：节点链式代理与用户自建链用入口节点的内核，分流出口用这台 VPS 上全部节点的。
+func (s *Server) ownerKernels(ctx context.Context, owner string, gid int) []string {
+	kind, id, _ := strings.Cut(owner, ":")
+	switch kind {
+	case "node":
+		if n, err := s.Store.Ent.Node.Get(ctx, atoiOr(id)); err == nil {
+			return []string{n.Kernel}
+		}
+	case "chain":
+		if ch, err := s.Store.Ent.Chain.Get(ctx, atoiOr(id)); err == nil {
+			if n, err := s.Store.Ent.Node.Get(ctx, ch.EntryNodeID); err == nil {
+				return []string{n.Kernel}
+			}
+		}
+	case "out":
+		nodes, _ := s.Store.Ent.Node.Query().Where(entnode.GateIDEQ(gid), entnode.EnabledEQ(true)).All(ctx)
+		seen := map[string]bool{}
+		var out []string
+		for _, n := range nodes {
+			if !seen[n.Kernel] {
+				seen[n.Kernel] = true
+				out = append(out, n.Kernel)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
+func firstN(list []string, n int) []string {
+	if len(list) > n {
+		return list[:n]
+	}
+	return list
 }
 
 // 解析结果按所属对象单独保存：分流出口 out:<id>、节点链式代理 node:<id>、用户自建 chain:<id>。
@@ -136,22 +211,27 @@ func sourceExitKey(owner string) string { return "source-exit:" + owner }
 type storedExit struct {
 	Outbound contracts.Outbound `json:"outbound"`
 	Names    []string           `json:"names"`
+	Skipped  []string           `json:"skipped,omitempty"` // 匹配到但不能作出口的节点及原因
 	At       time.Time          `json:"at"`
 }
 
 // refreshSourceExit 解析并保存；结果有变化时让 Gate 重新下发。解析失败保留上一次可用的。
 func (s *Server) refreshSourceExit(ctx context.Context, owner string, gid int, sp sourceSpec, publicOnly bool) error {
-	ob, names, err := s.resolveSpec(ctx, sp, publicOnly)
+	g, err := s.Store.Ent.Gate.Get(ctx, gid)
+	if err != nil {
+		return err
+	}
+	ex, err := s.resolveSpec(ctx, g, s.ownerKernels(ctx, owner, gid), sp, publicOnly)
 	if err != nil {
 		return err
 	}
 	prev, _ := s.loadExit(ctx, owner)
-	a, _ := json.Marshal(ob)
+	a, _ := json.Marshal(ex.Outbound)
 	b, _ := json.Marshal(prev.Outbound)
-	if string(a) == string(b) {
+	if string(a) == string(b) && len(ex.Skipped) == len(prev.Skipped) {
 		return nil
 	}
-	raw, _ := json.Marshal(storedExit{Outbound: ob, Names: names, At: time.Now().UTC()})
+	raw, _ := json.Marshal(storedExit{Outbound: ex.Outbound, Names: ex.Names, Skipped: ex.Skipped, At: time.Now().UTC()})
 	if err = s.Store.KV.Set(ctx, sourceExitKey(owner), string(raw), 0); err != nil {
 		return err
 	}
@@ -184,7 +264,7 @@ func (s *Server) exitView(ctx context.Context, owner string) map[string]any {
 	if !ok {
 		return map[string]any{"resolved": nil}
 	}
-	return map[string]any{"resolved": v.Names, "group": v.Outbound.Protocol == "group", "at": v.At}
+	return map[string]any{"resolved": v.Names, "group": v.Outbound.Protocol == "group", "skipped": v.Skipped, "at": v.At}
 }
 
 // groupFeatures 是「一组」在各内核上需要的特性。
@@ -225,26 +305,6 @@ func (s *Server) checkGroupSupport(ctx context.Context, g *ent.Gate, kernels ...
 		}
 	}
 	return nil
-}
-
-// probeSpec 由入口 Gate 实测：单个节点必须连得上；一组至少有一个成员连得上（最多试 5 个）。
-func (s *Server) probeSpec(ctx context.Context, entry *ent.Gate, ob contracts.Outbound, publicOnly bool) error {
-	members := []contracts.Outbound{ob}
-	if ob.Protocol == "group" {
-		members = ob.Members
-	}
-	var last error
-	for i, m := range members {
-		if i >= 5 {
-			break
-		}
-		_, err := s.gateProbe(ctx, entry, contracts.ActionChainProbe, map[string]any{"kind": "node", "address": m.Address, "port": m.Port, "public_only": publicOnly}, 30*time.Second)
-		if err == nil {
-			return nil
-		}
-		last = err
-	}
-	return fmt.Errorf("chain_probe_failed: %w", last)
 }
 
 // grantedProfiles 是分配给用户的订阅组（用户自建链式代理只能选这些组里出现的节点）。
@@ -296,7 +356,7 @@ func (s *Server) chainSources(c *gin.Context, admin bool) {
 		out := []string{}
 		parsed, _ := subscription.ParseLinks(links)
 		for _, n := range parsed.Nodes {
-			if _, ok := sourceExitProtocols[n.Protocol]; ok {
+			if _, err := linkOutbound(n); err == nil {
 				out = append(out, n.Remark)
 			}
 		}
@@ -316,7 +376,7 @@ func (s *Server) chainSources(c *gin.Context, admin bool) {
 	if uid == 0 {
 		srcs, err := s.Store.Ent.SubSource.Query().Order(ent.Asc("position"), ent.Asc("id")).All(ctx)
 		if err != nil {
-			failure(c, 503, "query_failed")
+			failInternal(c, 503, "query_failed", err)
 			return
 		}
 		for _, src := range srcs {
@@ -328,7 +388,7 @@ func (s *Server) chainSources(c *gin.Context, admin bool) {
 	}
 	granted, err := s.grantedProfiles(ctx, uid)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	for id := range granted {

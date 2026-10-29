@@ -16,6 +16,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/shusfun/weir/internal/buildinfo"
+	"github.com/shusfun/weir/internal/geoip"
 	"github.com/shusfun/weir/internal/ghrelease"
 	"github.com/shusfun/weir/internal/kernels"
 	"github.com/shusfun/weir/internal/lockfile"
@@ -64,6 +65,12 @@ type Server struct {
 		value  string
 		loaded bool
 	}
+	// geo 是 IP 定位数据库（见 geo.go）；GeoDB 非空时代替（只用于测试）。
+	geoOnce sync.Once
+	geo     *geoip.DB
+	GeoDB   geoLocator
+	// live 是链路页的实时数据（只在内存，见 live.go）。
+	live liveHub
 }
 
 func New(c Config, path string, assets fs.FS) (*Server, error) {
@@ -137,6 +144,8 @@ func (s *Server) maintenance(ctx context.Context) {
 					report.note("reclaim-budgets", s.ReclaimStaleBudgets(ctx, now))
 					report.note("renew-certs", s.RenewCerts(ctx, now))
 					report.note("prune-samples", s.PruneSamples(ctx, now))
+					s.CheckReachabilityAll(ctx, now)
+					s.RefreshGeoIP(ctx, now)
 					s.dropLegacyAIProvider(ctx)
 					return nil
 				})
@@ -255,6 +264,8 @@ func (s *Server) Router() *gin.Engine {
 		c.Next()
 	})
 	ready.GET("/public", s.publicSettings)
+	// 回显来源 IP：链式代理实测时经出口访问它，得到实际出口 IP（只信任本机回环反代的转发头）。
+	ready.GET("/ip", func(c *gin.Context) { c.Header("Cache-Control", "no-store"); c.JSON(200, gin.H{"ip": c.ClientIP()}) })
 	ready.POST("/auth/login", s.login)
 	ready.POST("/auth/mfa", s.completeMFA)
 	auth := ready.Group("")
@@ -271,6 +282,7 @@ func (s *Server) Router() *gin.Engine {
 	admin.Use(requireAdmin)
 	s.gateRoutes(ready, admin)
 	s.userRoutes(auth, admin)
+	s.linkMapRoutes(auth, admin)
 	s.subRoutes(r, ready)
 	s.misubRoutes(r, auth, admin)
 	s.addonRoutes(ready, auth, admin)
