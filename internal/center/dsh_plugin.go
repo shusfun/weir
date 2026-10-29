@@ -197,6 +197,9 @@ func checkPluginNode(n *yaml.Node) error {
 				if err := checkSkillRow(n); err != nil {
 					return err
 				}
+			case v == "@deepseek-ai/dsh-skill":
+				// dsh-base 已全局加载 skill 注册表，预设里再写一次会重复注册「skills」服务，所有新会话都建不起来
+				return fmt.Errorf("cordis.patch.yml 第 %d 行：dsh-skill 由 dsh 全局加载，预设里不能再写", name.Line)
 			}
 		}
 	}
