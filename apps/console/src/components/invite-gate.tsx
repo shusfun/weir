@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Button, CodeBlock, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, Notice } from "@weir/ui";
 import { api } from "../api";
 import { useFormAction } from "../lib/action";
+import { field, useConsoleContext } from "../lib/console-context";
 
 export function InviteGate({ open, close, done }: { open: boolean; close: () => void; done: () => void }) {
   const [name, setName] = useState("");
@@ -21,6 +22,7 @@ export function InviteGate({ open, close, done }: { open: boolean; close: () => 
     invite.reset();
     close();
   };
+  useConsoleContext(open ? { dialog: { title: "添加 VPS", step: command ? "已生成安装命令" : "填写名称" }, form: [field("name", "名称", name)] } : null);
   return (
     <Dialog open={open} onOpenChange={(o) => !o && !invite.busy && reset()}>
       <DialogContent size="md">
@@ -30,8 +32,7 @@ export function InviteGate({ open, close, done }: { open: boolean; close: () => 
           <div className="stack">
             <CodeBlock className="block whitespace-pre-wrap break-all">{command}</CodeBlock>
             <Notice role="status">命令 1 小时内有效且只能使用一次；连接成功后此 VPS 会出现在列表中。</Notice>
-            {copyError && <Notice tone="bad">{copyError}</Notice>}
-            <DialogFooter>
+            <DialogFooter error={copyError}>
               <CopyButton value={command} onError={() => setCopyError("复制失败，请手动选择命令复制。")}>复制命令</CopyButton>
               <Button variant="outline" onClick={reset}>完成</Button>
             </DialogFooter>
@@ -41,10 +42,9 @@ export function InviteGate({ open, close, done }: { open: boolean; close: () => 
             <Field label="名称" hint="例如：香港-1。可随时修改。" customError={name && !name.trim() ? "请输入名称" : ""}>
               <Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
             </Field>
-            {invite.error && <Notice tone="bad">{invite.error}</Notice>}
-            <DialogFooter>
+            <DialogFooter error={invite.error}>
               <Button type="button" variant="outline" disabled={invite.busy} onClick={reset}>取消</Button>
-              <Button type="submit" disabled={invite.busy}>{invite.busy ? "正在生成…" : "生成安装命令"}</Button>
+              <Button type="submit" disabled={invite.busy} busy={invite.busy} busyText="正在生成…">生成安装命令</Button>
             </DialogFooter>
           </Form>
         )}

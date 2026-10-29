@@ -59,18 +59,42 @@ func TestConsoleContextPerDrawerRedactedAndNavigation(t *testing.T) {
 	if text, isErr := toolText(t, h, m.webToken, "navigate_console", map[string]any{"page": "secret-admin"}); !isErr {
 		t.Fatalf("unknown page = %s", text)
 	}
-	if text, isErr := toolText(t, h, m.webToken, "navigate_console", map[string]any{"page": "gates", "object_id": 3}); isErr {
+	// 对象必须存在：不存在的 VPS 如实报错，不跳到空页面。
+	if text, isErr := toolText(t, h, m.webToken, "navigate_console", map[string]any{"page": "gates", "object_id": 3}); !isErr || !strings.Contains(text, "找不到") {
+		t.Fatalf("missing gate = %s", text)
+	}
+	g := s.Store.Ent.Gate.Create().SetName("HK-2").SetPublicKey("test-key-hk2").SaveX(t.Context())
+	if text, isErr := toolText(t, h, m.webToken, "navigate_console", map[string]any{"page": "gates", "object_id": g.ID}); isErr {
 		t.Fatal(text)
 	}
 	if w := admin.do("GET", "/api/v1/admin/dsh/navigation?drawer="+tabA, nil, nil); w.Code != 204 {
 		t.Fatalf("other tab got navigation: %d", w.Code)
 	}
 	nav := mustJSON(t, admin, "GET", "/api/v1/admin/dsh/navigation?drawer="+tabB, nil, 200)
-	if nav["path"] != "/gates" || nav["object"] != "gate" || nav["id"].(float64) != 3 {
+	obj, _ := nav["object"].(map[string]any)
+	if nav["path"] != "/gates" || obj["type"] != "gate" || obj["id"].(float64) != float64(g.ID) || obj["name"] != "HK-2" {
 		t.Fatalf("navigation = %v", nav)
 	}
 	if w := admin.do("GET", "/api/v1/admin/dsh/navigation?drawer="+tabB, nil, nil); w.Code != 204 {
 		t.Fatal("navigation must be taken once")
+	}
+	// 只给对象、不给页面：按名称的对象（内置驱动）也能打开；没有的类型被拒。
+	if text, isErr := toolText(t, h, m.webToken, "navigate_console", map[string]any{"object_type": "driver", "object_key": "xray-26.3"}); isErr {
+		t.Fatal(text)
+	}
+	nav = mustJSON(t, admin, "GET", "/api/v1/admin/dsh/navigation?drawer="+tabB, nil, 200)
+	if obj, _ := nav["object"].(map[string]any); obj["type"] != "driver" || obj["key"] != "xray-26.3" {
+		t.Fatalf("driver navigation = %v", nav)
+	}
+	if _, isErr := toolText(t, h, m.webToken, "navigate_console", map[string]any{"object_type": "secret", "object_key": "x"}); !isErr {
+		t.Fatal("unknown object type must be rejected")
+	}
+	// 控制台查对象归属：链接属于哪个用户（审计里的 link:12 据此打开用户详情）。
+	if w := admin.do("GET", "/api/v1/admin/objects/gate/"+itoa(g.ID), nil, nil); w.Code != 200 || !strings.Contains(w.Body.String(), "HK-2") {
+		t.Fatalf("object lookup = %d %s", w.Code, w.Body.String())
+	}
+	if w := admin.do("GET", "/api/v1/admin/objects/link/999", nil, nil); w.Code != 404 {
+		t.Fatalf("missing link = %d", w.Code)
 	}
 
 	// 后台分析看不到控制台上下文。

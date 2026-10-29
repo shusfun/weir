@@ -1,7 +1,7 @@
 // Weir 轻提示：操作结果的短暂反馈。错误与需要核对的结果仍在页面内常驻显示。
 import { Toast } from "@base-ui/react/toast";
 import { XIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { useCallback, type ReactNode } from "react";
 import { StatusLamp, type LampTone } from "./lamp";
 import { CheckMark } from "./check-mark";
 
@@ -45,10 +45,14 @@ function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// useToast 返回的函数在组件整个生命周期里不变（只依赖 Base UI 稳定的 add）：放进 effect 依赖时，
+// 新提示出现引起的重新渲染不会让 effect 再跑一遍、再弹一次。
 function useToast() {
-  const manager = Toast.useToastManager();
-  return (title: string, options: { description?: string; tone?: LampTone } = {}) =>
-    manager.add({ title, description: options.description, type: options.tone ?? "ok" });
+  const { add } = Toast.useToastManager();
+  return useCallback(
+    (title: string, options: { description?: string; tone?: LampTone } = {}) => add({ title, description: options.description, type: options.tone ?? "ok" }),
+    [add],
+  );
 }
 
 export { ToastProvider, useToast };

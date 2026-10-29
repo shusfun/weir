@@ -1,7 +1,7 @@
 // 操作记录：账户、节点、订阅与设置的变更，可按结果筛选并查看单条详情。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import {
   SearchInput,
   Badge,
@@ -24,6 +24,9 @@ import {
 import { api } from "../api";
 import { date, type Items } from "../lib/models";
 import { State } from "../components/feedback";
+import { ObjectLink, dataObject } from "../components/object-link";
+import { parseTarget } from "../lib/objects";
+import { field, useConsoleContext } from "../lib/console-context";
 
 type Audit = {
   id: number;
@@ -42,17 +45,32 @@ const resultLabels: Record<string, string> = {
   queued: "已排队",
 };
 const resultTones: Record<string, "ok" | "bad" | "warn"> = { ok: "ok", denied: "bad", failed: "bad", queued: "warn" };
+// 地址栏：?q= 是筛选（如从对象跳过来看它的记录：?q=node:12），?audit=编号 打开这条记录的详情。
 export function AuditPage() {
-  const [search, setSearch] = useState("");
+  const [url, setUrl] = useSearchParams();
+  const [search, setSearch] = useState(url.get("q") ?? "");
   const [result, setResult] = useState("all");
   const [page, setPage] = useState(1);
-  const [detail, setDetail] = useState<Audit | null>(null);
   const params = new URLSearchParams({ page: String(page), page_size: "20", q: search });
   if (result !== "all") params.set("result", result);
   const query = useQuery({
     queryKey: ["audit-directory", params.toString()],
     queryFn: () => api("/admin/audit?" + params) as Promise<Items<Audit>>,
   });
+  const detailId = Number(url.get("audit")) || 0;
+  const one = useQuery({
+    queryKey: ["audit-one", detailId],
+    enabled: detailId > 0 && !query.data?.items.some((x) => x.id === detailId),
+    queryFn: async () => ((await api("/admin/audit?id=" + detailId)) as Items<Audit>).items[0] ?? null,
+  });
+  const detail = detailId ? query.data?.items.find((x) => x.id === detailId) ?? one.data ?? null : null;
+  const openDetail = (a: Audit) => setUrl((p) => { p.set("audit", String(a.id)); return p; });
+  const closeDetail = () => setUrl((p) => { p.delete("audit"); return p; }, { replace: true });
+  useConsoleContext({
+    page: "操作审计",
+    list: { filters: { 搜索: search, 结果: resultLabels[result] ?? result }, selected: query.data?.total ?? 0, items: (query.data?.items ?? []).slice(0, 20).map((a) => ({ type: "audit", name: a.action, id: a.id })) },
+  });
+  useConsoleContext(detail ? { object: { type: "audit", name: detail.action, id: detail.id }, dialog: { title: "审计记录 #" + detail.id }, form: [field("target", "目标", detail.target), field("result", "结果", detail.result)] } : null);
   return (
     <div className="stack audit-directory">
       <PageHeader
@@ -103,19 +121,19 @@ export function AuditPage() {
             <State empty="没有符合条件的操作记录" />
           ) : (
             query.data.items.map((item) => (
-              <div className="list-row audit-row" key={item.id}>
+              <div className="list-row audit-row" key={item.id} {...dataObject({ type: "audit", id: item.id })}>
                 <div>
                   <strong>{item.action}</strong>
                   <small>
-                    {date(item.created_at)} · {item.actor ? `账户 #${item.actor}` : "系统 / 未登录"}
+                    {date(item.created_at)} · {item.actor ? <ObjectLink to={{ type: "user", id: item.actor, name: `账户 #${item.actor}` }} /> : "系统 / 未登录"}
                   </small>
-                  <small>目标：{item.target || "未指定"}</small>
+                  <small>目标：<AuditTarget target={item.target} /></small>
                 </div>
                 <div className="actions">
                   <Badge variant="soft" tone={resultTones[item.result] ?? "neutral"}>
                     {resultLabels[item.result] ?? item.result}
                   </Badge>
-                  <Button size="sm" variant="outline" onClick={() => setDetail(item)}>
+                  <Button size="sm" variant="outline" onClick={() => openDetail(item)}>
                     查看记录 #{item.id}
                   </Button>
                 </div>
@@ -132,10 +150,11 @@ export function AuditPage() {
           />
         </CardContent>
       </Card>
-      <Dialog open={!!detail} onOpenChange={(v) => !v && setDetail(null)}>
+      <Dialog open={!!detailId && (!!detail || one.isFetched)} onOpenChange={(v) => !v && closeDetail()}>
         <DialogContent>
-          <DialogTitle>审计记录 #{detail?.id}</DialogTitle>
+          <DialogTitle>审计记录 #{detail?.id ?? detailId}</DialogTitle>
           <DialogDescription>此记录描述操作请求的结果；异步任务是否生效须查看执行回执。</DialogDescription>
+          {!detail && <State empty="没有这条记录" detail="编号不存在，或已超出保留期。" />}
           {detail && (
             <div className="stack">
               <div className="detail-grid">
@@ -149,7 +168,7 @@ export function AuditPage() {
                 </div>
                 <div>
                   <span>操作者</span>
-                  <strong>{detail.actor ? <Link to="/users">账户 #{detail.actor}</Link> : "系统 / 未登录"}</strong>
+                  <strong>{detail.actor ? <ObjectLink to={{ type: "user", id: detail.actor, name: `账户 #${detail.actor}` }} /> : "系统 / 未登录"}</strong>
                 </div>
                 <div>
                   <span>来源 IP</span>
@@ -157,7 +176,7 @@ export function AuditPage() {
                 </div>
                 <div>
                   <span>目标</span>
-                  <strong className="break-all">{detail.target || "未指定"}</strong>
+                  <strong className="break-all"><AuditTarget target={detail.target} /></strong>
                 </div>
                 <div>
                   <span>时间</span>
@@ -170,4 +189,11 @@ export function AuditPage() {
       </Dialog>
     </div>
   );
+}
+
+// AuditTarget：目标是「类型:编号」时可以点过去；对象已删除时打开后会如实提示。
+function AuditTarget({ target }: { target: string }) {
+  if (!target) return <>未指定</>;
+  const ref = parseTarget(target);
+  return ref ? <ObjectLink to={ref}>{target}</ObjectLink> : <>{target}</>;
 }

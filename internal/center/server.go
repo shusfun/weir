@@ -275,6 +275,7 @@ func (s *Server) Router() *gin.Engine {
 	s.selfUpdateRoutes(admin)
 	s.driverRoutes(admin)
 	s.noticeRoutes(admin)
+	s.objectRoutes(admin)
 	s.contextRoutes(admin)
 	s.sampleRoutes(admin)
 	s.defenseRoutes(admin)

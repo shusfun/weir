@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Form, Notice, useToast } from "@weir/ui";
 import { api } from "../api";
 import { emptyReauth, Reauth, useReauthAction } from "./system-settings";
+import { field, useConsoleContext } from "../lib/console-context";
 
 interface PendingGate {
   id: number;
@@ -106,6 +107,7 @@ function ChangeOrigin({ value, close }: { value: CenterOrigin; close: () => void
     },
   });
   const gates = value.pending_gates;
+  useConsoleContext({ dialog: { title: "改为当前地址" }, form: [field("from", "记录的中心地址", value.origin), field("to", "当前访问地址", value.current), field("password", "当前密码", re.password, true)] });
   return (
     <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
       <DialogContent size="lg">
@@ -129,10 +131,9 @@ function ChangeOrigin({ value, close }: { value: CenterOrigin; close: () => void
             <Notice tone="ok">目前没有仍连接其他地址的 Gate。</Notice>
           )}
           <Reauth value={re} onChange={setRe} />
-          {save.error && <Notice tone="bad">{save.error}</Notice>}
-          <DialogFooter>
+          <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
-            <Button type="submit" disabled={save.busy}>{save.busy ? "正在更改…" : "确认更改"}</Button>
+            <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在更改…">确认更改</Button>
           </DialogFooter>
         </Form>
       </DialogContent>

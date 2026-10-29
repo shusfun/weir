@@ -11,6 +11,8 @@ import type { ChainSpec, Gate, NodeItem, Preset, PresetField, UserItem } from ".
 import { useCerts } from "./cert-manager";
 import { State } from "./feedback";
 import { SourcePicker } from "./source-picker";
+import { Link } from "react-router-dom";
+import { objectHref } from "../lib/objects";
 
 const stepNames = ["协议", "VPS", "链式代理", "完成"] as const;
 
@@ -94,7 +96,7 @@ export function NodeWizard({ open, close, done, gates, nodes }: { open: boolean;
         <DialogContent size="lg">
           <DialogTitle>节点已创建</DialogTitle>
           <DialogDescription>下面是勾选用户在这个节点上的分享链接；用户的订阅也已包含它。VPS 应用配置约需数秒。</DialogDescription>
-          <ShareList shares={shares} />
+          <ShareList shares={shares} leave={reset} />
           <DialogFooter><Button onClick={reset}>完成</Button></DialogFooter>
         </DialogContent>
       </Dialog>
@@ -199,10 +201,9 @@ export function NodeWizard({ open, close, done, gates, nodes }: { open: boolean;
             </Field>
           </>
         )}
-        {save.error && <Notice tone="bad">{save.error}</Notice>}
-        <DialogFooter>
+        <DialogFooter error={save.error}>
           <Button type="button" variant="outline" disabled={save.busy} onClick={() => (step === 0 ? reset() : setStep(step - 1))}>{step === 0 ? "取消" : "上一步"}</Button>
-          <Button type="submit" disabled={blocked || save.busy}>{step < 3 ? "下一步" : save.busy ? "正在实测并保存…" : "创建节点"}</Button>
+          <Button type="submit" disabled={blocked} busy={save.busy} busyText="正在实测并保存…">{step < 3 ? "下一步" : "创建节点"}</Button>
         </DialogFooter>
         </Form>
       </DialogContent>
@@ -257,14 +258,20 @@ function AdvancedFields({ fields, value, onChange }: { fields: PresetField[]; va
 }
 
 // ShareList：每个勾选用户在新节点上的链接；点「二维码」展开。拿不到链接时说明原因。
-function ShareList({ shares }: { shares: Share[] }) {
+// ShareList：每个用户可点到用户详情；链接没包含新节点时直接给「去加上」，点了关掉这个窗口再跳过去。
+function ShareList({ shares, leave }: { shares: Share[]; leave: () => void }) {
   const [qr, setQr] = useState("");
   return (
     <ul className="stack max-h-[60vh] overflow-y-auto">
       {shares.map((s) => (
         <li key={s.user_id} className="rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3">
-          <strong className="text-sm">{s.name ? `${s.name}（${s.email}）` : s.email}</strong>
-          {s.error ? <small className="mt-1 block text-[var(--mg-warn-ink)]">{s.error}</small> : s.links.map((l) => (
+          <Link to={objectHref({ type: "user", id: s.user_id })} onClick={leave} className="text-sm font-semibold text-[var(--mg-accent-text)] underline-offset-4 hover:underline">{s.name ? `${s.name}（${s.email}）` : s.email}</Link>
+          {s.error ? (
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <small className="text-[var(--mg-warn-ink)]">{s.error}</small>
+              <Button size="xs" variant="outline" render={<Link to={objectHref({ type: "user", id: s.user_id })} onClick={leave} />}>去用户详情加上</Button>
+            </div>
+          ) : s.links.map((l) => (
             <div key={l.link + l.uri} className="mt-2 stack">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="soft" tone="neutral">{l.link}</Badge>

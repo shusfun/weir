@@ -38,8 +38,9 @@ func (s *Server) driverRoutes(admin *gin.RouterGroup) {
 
 // driverUse 是用到某驱动的内核版本与 VPS。
 type driverUse struct {
-	Versions []string `json:"versions"`
-	Gates    []string `json:"gates"`
+	Versions []string  `json:"versions"`
+	Gates    []string  `json:"gates"`
+	GateRefs []gateRef `json:"gate_refs"`
 }
 
 func (s *Server) driverUsage(ctx context.Context, d kernels.Drivers) map[string]driverUse {
@@ -72,6 +73,7 @@ func (s *Server) driverUsage(ctx context.Context, d kernels.Drivers) map[string]
 			if n := pick(kernel, v); n != "" {
 				u := out[n]
 				u.Gates = append(u.Gates, g.Name)
+				u.GateRefs = append(u.GateRefs, gateRef{g.ID, g.Name})
 				out[n] = u
 			}
 		}
@@ -88,9 +90,16 @@ func (s *Server) listDrivers(c *gin.Context) {
 	for _, e := range list {
 		u := usage[e.Name]
 		items = append(items, gin.H{"name": e.Name, "kernel": e.Kernel, "min_version": e.MinVersion, "max_version": e.MaxVersion, "extends": e.Extends,
-			"source": e.Source, "disabled": e.Disabled, "error": e.Error, "versions": nonNil(u.Versions), "gates": nonNil(u.Gates)})
+			"source": e.Source, "disabled": e.Disabled, "error": e.Error, "versions": nonNil(u.Versions), "gates": nonNil(u.Gates), "gate_refs": nonNilRefs(u.GateRefs)})
 	}
 	c.JSON(200, gin.H{"drivers": items})
+}
+
+func nonNilRefs(s []gateRef) []gateRef {
+	if s == nil {
+		return []gateRef{}
+	}
+	return s
 }
 
 func nonNil(s []string) []string {

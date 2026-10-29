@@ -27,6 +27,7 @@ import { api, isConflict } from "../api";
 import { useFormAction } from "../lib/action";
 import { ConflictNotice, State } from "./feedback";
 import { emptyReauth, Reauth, useReauthAction } from "./system-settings";
+import { field, useConsoleContext } from "../lib/console-context";
 
 interface Config {
   enabled: boolean;
@@ -142,11 +143,11 @@ export function PublicGuestbook({ slug }: { slug: string }) {
             <Field label="留言正文" name="content" hint={`${[...content].length} / 500 字`} customError={content && !content.trim() ? "请输入留言正文" : ""}>
               <Textarea rows={4} maxLength={500} required value={content} onChange={(e) => setContent(e.target.value)} />
             </Field>
+            <div className="actions">
+              <Button type="submit" disabled={post.busy} busy={post.busy} busyText="正在提交…">提交留言</Button>
+            </div>
             {post.error && <Notice tone="bad">{post.error}</Notice>}
             {notice && <Notice role="status">{notice}</Notice>}
-            <div className="actions">
-              <Button type="submit" disabled={post.busy}>{post.busy ? "正在提交…" : "提交留言"}</Button>
-            </div>
           </Form>
           {q.data.items.length === 0 ? <p>暂无公开留言。</p> : q.data.items.map((item) => <Entry key={item.id} item={item} />)}
           <Pager variant="inline" name="留言" page={page} pageSize={20} total={q.data.total} busy={q.isFetching} onPage={setPage} />
@@ -231,6 +232,7 @@ export function GuestbookManager({ page: resource, close }: { page: { id: number
     { fields: { invalid_guestbook: "reply" }, invalidate: [["guestbook-manage", resource.id]], onSuccess: done },
   );
   const save = mode === "config" ? saveConfig : saveMessage;
+  useConsoleContext({ dialog: { title: "留言管理" }, list: { filters: { 状态: status || "全部", 搜索: search } } });
   return (
     <Dialog open onOpenChange={(v) => !v && !save.busy && close()}>
       <DialogContent size="xl" className="guestbook-manager">

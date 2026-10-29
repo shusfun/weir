@@ -32,15 +32,27 @@ const buttonVariants = cva(
   },
 );
 
+// busy：请求进行中，按钮禁用并把文字换成 busyText（默认「正在处理…」）。两段文字叠在同一格里、
+// 宽度取较长的那段，切换时按钮和旁边的按钮都不移动。
 function Button({
   className,
   variant = "default",
   size = "default",
   nativeButton,
   ripple = false,
+  busy,
+  busyText = "正在处理…",
+  disabled,
   children,
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants> & { ripple?: boolean }) {
+}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants> & { ripple?: boolean; busy?: boolean; busyText?: string }) {
+  const label =
+    busy === undefined ? children : (
+      <span className="grid items-center justify-items-center [&>*]:col-start-1 [&>*]:row-start-1">
+        <span className={cn("inline-flex items-center gap-[inherit]", busy && "invisible")} aria-hidden={busy || undefined}>{children}</span>
+        <span className={cn(!busy && "invisible")} aria-hidden={!busy || undefined}>{busyText}</span>
+      </span>
+    );
   return (
     <ButtonPrimitive
       data-slot="button"
@@ -48,9 +60,11 @@ function Button({
       className={cn(buttonVariants({ variant, size, className }))}
       // 以链接等非 <button> 元素渲染时（render={<Link/>}）告知 Base UI，避免丢失按钮语义的警告
       nativeButton={nativeButton ?? !props.render}
+      disabled={disabled || busy}
+      aria-busy={busy || undefined}
       {...props}
     >
-      {children}
+      {label}
       {/* 水波默认关闭：小键帽上按压内凹已是反馈，大面积主操作键再开 */}
       {ripple && <Ripple />}
     </ButtonPrimitive>

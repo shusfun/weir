@@ -138,8 +138,8 @@ export function UserSessions({ userId, onCurrentRevoked }: { userId?: number; on
                       <small>登录于 {date(session.created_at)} · {session.mfa ? "已完成二次验证" : "普通登录"}</small>
                       <small>约 {Math.ceil(session.expires_in / 60)} 分钟后过期</small>
                     </div>
-                    <Button variant="destructive" size="sm" disabled={isBusy()} onClick={() => void revoke(session)}>
-                      {isBusy(session.id) ? "正在撤销…" : `撤销${session.current ? "当前" : "此"}会话`}
+                    <Button variant="destructive" size="sm" disabled={isBusy()} busy={isBusy(session.id)} busyText="正在撤销…" onClick={() => void revoke(session)}>
+                      {`撤销${session.current ? "当前" : "此"}会话`}
                     </Button>
                   </div>
                 ))}

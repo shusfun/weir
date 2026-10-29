@@ -10,6 +10,7 @@ import { State } from "./feedback";
 import { useSources } from "./misub-sources";
 import { SourceSummary } from "./link-panel";
 import type { SourceResolved } from "../lib/core";
+import { field, useConsoleContext } from "../lib/console-context";
 
 interface Outbound {
   id: number;
@@ -48,6 +49,7 @@ export function GateRouting({ gate, close }: { gate: Gate; close: () => void }) 
   const [editOut, setEditOut] = useState<Outbound | "new" | null>(null);
   const [editRoute, setEditRoute] = useState<Route | "new" | null>(null);
   const { run, isBusy } = useRowAction<string>({ refetch: () => Promise.all([outs.refetch(), routes.refetch()]) });
+  useConsoleContext({ object: { type: "gate", name: gate.name, id: gate.id }, dialog: { title: "出口与分流" }, notices: [`${outs.data?.length ?? "未知"} 个出口，${routes.data?.length ?? "未知"} 条分流规则`] });
   return (
     <Dialog open onOpenChange={(o) => !o && close()}>
       <DialogContent size="xl">
@@ -115,6 +117,7 @@ function OutboundForm({ base, value, close, saved }: { base: string; value: Outb
     },
     { fields: { invalid_tag: "tag", tag_conflict: "tag", invalid_outbound_address: "address", invalid_outbound_credentials: "username", source_not_found: "source_id", invalid_source_exit: "match", group_unsupported: "match" }, onSuccess: saved },
   );
+  useConsoleContext({ dialog: { title: o ? "编辑出口" : "添加出口" }, form: Object.entries(f).map(([k, v]) => field(k, k, typeof v === "object" ? JSON.stringify(v) : v, /pass|secret|key/i.test(k))) });
   return (
     <Dialog open onOpenChange={(v) => !v && !save.busy && close()}>
       <DialogContent size="md">
@@ -150,10 +153,9 @@ function OutboundForm({ base, value, close, saved }: { base: string; value: Outb
             </>}
           </FormGrid>
           {o && <SwitchField label="启用" checked={f.enabled} onCheckedChange={(v) => set({ enabled: v })} />}
-          {save.error && <Notice tone="bad">{save.error}</Notice>}
-          <DialogFooter>
+          <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
-            <Button type="submit" disabled={save.busy}>{save.busy ? "正在保存…" : "保存"}</Button>
+            <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           </DialogFooter>
         </Form>
       </DialogContent>
@@ -175,6 +177,7 @@ function RouteForm({ base, value, outbounds, close, saved }: { base: string; val
     },
     { onSuccess: saved },
   );
+  useConsoleContext({ dialog: { title: r ? "编辑规则" : "添加规则" }, form: [field("outbound_tag", "出口", tag), field("domain", "域名", domain.split("\n").filter(Boolean).join("、")), field("ip", "IP", ip.split("\n").filter(Boolean).join("、")), field("priority", "优先级", priority)] });
   return (
     <Dialog open onOpenChange={(v) => !v && !save.busy && close()}>
       <DialogContent size="md">
@@ -192,10 +195,9 @@ function RouteForm({ base, value, outbounds, close, saved }: { base: string; val
           </FormGrid>
           <Field label="域名"><Textarea rows={4} className="font-mono text-xs" value={domain} onChange={(e) => setDomain(e.target.value)} /></Field>
           <Field label="IP"><Textarea rows={2} className="font-mono text-xs" value={ip} onChange={(e) => setIp(e.target.value)} /></Field>
-          {save.error && <Notice tone="bad">{save.error}</Notice>}
-          <DialogFooter>
+          <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
-            <Button type="submit" disabled={save.busy}>{save.busy ? "正在保存…" : "保存"}</Button>
+            <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           </DialogFooter>
         </Form>
       </DialogContent>

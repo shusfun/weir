@@ -44,3 +44,8 @@
   .entity-heading > button { width: 100%; }
 
 }
+
+/* 对象链接跳过来时高亮目标行约 2 秒（FocusFromURL） */
+@keyframes mg-flash { 0%, 60% { background-color: var(--mg-accent-soft); } 100% { background-color: transparent; } }
+.mg-flash { animation: mg-flash 2.2s var(--mg-ease); border-radius: var(--mg-radius); }
+@media (prefers-reduced-motion: reduce) { .mg-flash { animation: none; outline: 2px solid var(--mg-accent); } }

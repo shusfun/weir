@@ -278,6 +278,16 @@ func (s *Server) materializePlugin(source string, files map[string]string) (stri
 	return dir, nil
 }
 
+// pluginVerified 判断某个 dsh 版本是否在内置插件已验证的范围内（只比较版本，不写文件）。
+func pluginVerified(dshVersion string) bool {
+	meta, err := validatePlugin(builtinPluginFiles())
+	if err != nil {
+		return false
+	}
+	ok, _ := dsh.InRange(dshVersion, meta.Weir.DSH)
+	return ok
+}
+
 // activePlugin 为当前 dsh 版本选插件：在已验证范围内用内置插件；超出范围时不加载，返回原因。
 // verified 为 false 时后台安全分析暂停（它按工具 id 禁用工具，新版本改了 id 时禁用会悄悄失效）。
 func (s *Server) activePlugin(dshVersion string) (dir, label, note string, verified bool) {

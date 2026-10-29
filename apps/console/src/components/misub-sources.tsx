@@ -9,6 +9,8 @@ import { bytes, date } from "../lib/models";
 import type { Source } from "../lib/misub";
 import { OperatorEditor, type Operator } from "./operator-editor";
 import { State } from "./feedback";
+import { dataObject } from "./object-link";
+import { field, useConsoleContext } from "../lib/console-context";
 
 export function useSources() {
   return useQuery({ queryKey: ["misub-sources"], queryFn: () => api("/admin/misub/sources") as Promise<{ items: Source[]; traffic: { used: number; total: number; sources: number } }> });
@@ -31,6 +33,7 @@ export function SourcesPanel() {
     if (!(await confirm({ title: `删除订阅源「${s.name || s.url}」？`, description: "订阅组中的引用会一并移除。", confirmText: "删除", tone: "danger" }))) return;
     await run(s.id, () => api("/admin/misub/sources/" + s.id, "DELETE"), "订阅源已删除");
   }
+  useConsoleContext({ tab: "订阅源", list: { selected: q.data?.items.length ?? 0, items: (q.data?.items ?? []).slice(0, 20).map((s) => ({ type: "source", name: s.name, id: s.id })) } });
   return (
     <section className="stack">
       <SectionHeader title="订阅源" description="机场订阅地址；节点数与用量来自最近一次拉取，没有报告时显示「未知」。" actions={<Button size="sm" onClick={() => setEdit("new")}><Plus />添加订阅源</Button>} />
@@ -66,7 +69,7 @@ export function SourcesPanel() {
                 {q.data.items.map((s) => {
                   const ui = s.user_info;
                   return (
-                    <TableRow key={s.id}>
+                    <TableRow key={s.id} {...dataObject({ type: "source", id: s.id })}>
                       <TableCell>
                         <strong>{s.name || s.title || "未命名"}</strong> {!s.enabled && <Badge variant="soft" tone="warn">停用</Badge>}
                         <small className="block max-w-72 truncate text-[var(--mg-ink-3)]" title={s.url}>{s.url}</small>
@@ -132,6 +135,7 @@ function SourceForm({ value, close, saved }: { value: Source | "new"; close: () 
       <Input type={key === "url" ? "url" : "text"} required={key === "url"} value={form[key]} onChange={(e) => set({ [key]: e.target.value })} />
     </Field>
   );
+  useConsoleContext({ dialog: { title: s ? "编辑订阅源" : "添加订阅源" }, object: s ? { type: "source", name: s.name, id: s.id } : undefined, form: Object.entries(form).map(([k, v]) => field(k, k, typeof v === "object" ? JSON.stringify(v) : v, k === "url")) });
   return (
     <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
       <DialogContent size="lg">
@@ -155,10 +159,9 @@ function SourceForm({ value, close, saved }: { value: Source | "new"; close: () 
           <Collapsible title={`本源的处理链（${ops.length} 步）`}>
             <OperatorEditor value={ops} change={setOps} />
           </Collapsible>
-          {save.error && <Notice tone="bad">{save.error}</Notice>}
-          <DialogFooter>
+          <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
-            <Button type="submit" disabled={save.busy}>{save.busy ? "正在保存…" : "保存"}</Button>
+            <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           </DialogFooter>
         </Form>
       </DialogContent>

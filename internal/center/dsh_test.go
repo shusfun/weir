@@ -98,6 +98,12 @@ func TestDSHGatewayOnlyOpensFromConsoleDrawer(t *testing.T) {
 	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": true, "domain": "dsh.other.net", "password": "Passw0rd"}, 400)
 	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": true, "domain": "example.com", "password": "Passw0rd"}, 400)
 	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": true, "domain": "DSH.example.com", "password": "Passw0rd"}, 200)
+	// 只改后台分析开关不用密码；改地址、重新启用要密码；停用不用密码。
+	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": true, "domain": "dsh.example.com", "auto_analyze": true}, 200)
+	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": true, "domain": "k3f9x2.example.com"}, 401)
+	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": false, "domain": "dsh.example.com"}, 200)
+	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": true, "domain": "dsh.example.com"}, 401)
+	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": true, "domain": "dsh.example.com", "password": "Passw0rd"}, 200)
 	s.reconcileDSH(t.Context())
 	if s.dshDomain() != "dsh.example.com" {
 		t.Fatalf("domain = %q", s.dshDomain())

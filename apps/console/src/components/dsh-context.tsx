@@ -7,6 +7,7 @@ import { useToast } from "@weir/ui";
 import { api } from "../api";
 import { drawerId, snapshot, subscribeContext } from "../lib/console-context";
 import { currentNav, systemSections } from "../shell/navigation";
+import { objectHref, type ObjectRef } from "../lib/objects";
 
 const closedTTL = 30 * 60 * 1000;
 
@@ -63,12 +64,11 @@ export function DshContextReporter({ open }: { open: boolean }) {
     const poll = window.setInterval(async () => {
       const id = drawerId();
       if (!id || document.visibilityState !== "visible") return;
-      const nav = (await api("/admin/dsh/navigation?drawer=" + id).catch(() => null)) as { path: string; tab?: string; object?: "gate" | "user"; id?: number } | null;
-      if (!nav?.path) return;
-      const q = new URLSearchParams();
-      if (nav.tab) q.set("tab", nav.tab);
-      if (nav.object && nav.id) q.set(nav.object, String(nav.id));
-      navigate(nav.path + (q.size ? "?" + q.toString() : ""));
+      // 给了对象就按对象类型的固定地址打开（lib/objects.ts）；只给页面时打开页面与标签
+      const nav = (await api("/admin/dsh/navigation?drawer=" + id).catch(() => null)) as { path?: string; tab?: string; object?: ObjectRef } | null;
+      if (!nav || (!nav.path && !nav.object)) return;
+      if (nav.object) navigate(objectHref(nav.object));
+      else navigate(nav.path + (nav.tab ? "?tab=" + encodeURIComponent(nav.tab) : ""));
       toast("由 dsh 打开", { tone: "info" });
     }, 3000);
     return () => window.clearInterval(poll);

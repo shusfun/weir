@@ -1,5 +1,6 @@
 // 订阅源里的节点作出口：单个节点（名称完全一致），或按名称正则筛选一组（全部成员下发，由内核自动选择与切换，最多 50 个）。
 // 管理员可选任意订阅源；用户自建只能选分配给他的订阅组里出现的节点（由接口决定给哪些选项）。
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Badge, Field, Input, Notice, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@weir/ui";
 import { api } from "../api";
@@ -36,7 +37,12 @@ export function SourcePicker({ path, value, onChange }: { path: string; value: S
   if (q.isPending || q.error) return <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} />;
   const options = q.data ?? [];
   if (options.length === 0) {
-    return <State empty={path.startsWith("/admin/chain-sources") ? "还没有订阅源" : "没有分配给这个用户的订阅组"} detail={path.startsWith("/admin/chain-sources") ? "先在「订阅管理」里添加订阅源并拉取一次。" : "管理员把订阅组分配给用户后，就能选组里的节点作出口。"} />;
+    return path.startsWith("/admin/chain-sources") ? (
+      <div className="stack">
+        <State empty="还没有订阅源" detail="先添加订阅源并拉取一次，再回来选组里的节点作出口。" />
+        <Link className="self-start text-[13px] text-[var(--mg-accent-text)] underline-offset-4 hover:underline" to="/subscriptions?tab=sources" target="_blank">在新标签页打开「订阅管理 → 订阅源」</Link>
+      </div>
+    ) : <State empty="没有分配给这个用户的订阅组" detail="管理员把订阅组分配给用户后，就能选组里的节点作出口。" />;
   }
   const chosen = options.find((o) => (o.kind === "source" ? o.id === value.source_id : o.id === value.profile_id));
   const mode = value.mode ?? "filter";

@@ -39,6 +39,10 @@ func (s *Server) listAudit(c *gin.Context) {
 	if v := c.Query("result"); v != "" {
 		q = q.Where(audit.ResultEQ(v))
 	}
+	// id：只取这一条（对象链接打开某条审计时用）
+	if v, err := strconv.Atoi(c.Query("id")); err == nil && v > 0 {
+		q = q.Where(audit.IDEQ(v))
+	}
 	ctx := c.Request.Context()
 	total, err := q.Clone().Count(ctx)
 	if err != nil {

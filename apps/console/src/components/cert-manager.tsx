@@ -8,6 +8,8 @@ import { date } from "../lib/models";
 import type { Cert } from "../lib/core";
 import { State } from "./feedback";
 import { CertHealth, certSource } from "./node-certs";
+import { dataObject } from "./object-link";
+import { field, useConsoleContext } from "../lib/console-context";
 
 export function useCerts() {
   return useQuery({ queryKey: ["certs"], queryFn: async () => (await api("/admin/certs")).items as Cert[] });
@@ -31,6 +33,7 @@ export function CertManager({ open, close }: { open: boolean; close: () => void 
       setKeyPem("");
     },
   });
+  useConsoleContext(open ? { dialog: { title: "证书" }, list: { selected: certs.data?.length ?? 0, items: (certs.data ?? []).slice(0, 20).map((c) => ({ type: "cert", name: c.domain, id: c.id })) }, form: [field("mode", "添加方式", mode === "upload" ? "上传" : "自签"), field("domain", "域名", domain), field("cert_pem", "证书", certPem, true), field("key_pem", "私钥", keyPem, true)] } : null);
   return (
     <Dialog open={open} onOpenChange={(o) => !o && !add.busy && close()}>
       <DialogContent size="lg">
@@ -43,7 +46,7 @@ export function CertManager({ open, close }: { open: boolean; close: () => void 
         ) : (
           <ul className="stack" aria-label="证书列表">
             {certs.data.map((c) => (
-              <li key={c.id} className="flex flex-wrap items-center justify-between gap-2">
+              <li key={c.id} {...dataObject({ type: "cert", id: c.id })} className="flex flex-wrap items-center justify-between gap-2">
                 <span className="min-w-0">
                   <strong>{c.domain}</strong> <Badge variant="soft" tone="neutral">{certSource[c.source] ?? c.source}</Badge> <CertHealth cert={c} />
                   <small className="block text-[var(--mg-ink-3)]">{c.not_after ? `有效期至 ${date(c.not_after)}` : "有效期未知"}</small>
@@ -77,10 +80,9 @@ export function CertManager({ open, close }: { open: boolean; close: () => void 
               </Field>
             </>
           )}
-          {add.error && <Notice tone="bad">{add.error}</Notice>}
-          <DialogFooter>
+          <DialogFooter error={add.error}>
             <Button type="button" variant="outline" disabled={add.busy} onClick={close}>关闭</Button>
-            <Button type="submit" disabled={add.busy}>{add.busy ? "正在保存…" : "添加证书"}</Button>
+            <Button type="submit" disabled={add.busy} busy={add.busy} busyText="正在保存…">添加证书</Button>
           </DialogFooter>
         </Form>
       </DialogContent>

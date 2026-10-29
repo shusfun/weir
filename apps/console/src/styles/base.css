@@ -17,6 +17,8 @@ body {
   color: var(--mg-ink);
   font: 14px/1.55 var(--mg-font);
   font-synthesis: none;
+  /* 数字等宽：进度、速度、计数、时间刷新时不左右抖动 */
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }

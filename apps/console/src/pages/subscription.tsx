@@ -9,6 +9,7 @@ import { State } from "../components/feedback";
 import { ChainPanel, LinkPanel, type NodeOption } from "../components/link-panel";
 import { bytes, date } from "../lib/models";
 import type { Withheld } from "../lib/core";
+import { field, useConsoleContext } from "../lib/console-context";
 
 interface Summary {
   quota: number;
@@ -23,6 +24,7 @@ export function SubscriptionPage() {
   const summary = useQuery({ queryKey: ["me-subscription"], queryFn: () => api("/me/subscription") as Promise<Summary>, refetchInterval: 30_000 });
   const nodes = useQuery({ queryKey: ["me-nodes"], queryFn: async () => (await api("/me/nodes")).items as NodeOption[] });
   const header = <PageHeader eyebrow="个人" title="我的订阅" description="每条链接凭据独立、共享同一份额度；可以给不同设备分别生成。" />;
+  useConsoleContext({ page: "我的订阅" });
   if (summary.isPending || nodes.isPending || summary.error || nodes.error)
     return (
       <div className="stack">

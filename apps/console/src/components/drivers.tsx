@@ -11,6 +11,8 @@ import { date } from "../lib/models";
 import { State } from "./feedback";
 import { DiffView, type DiffLine } from "./diff";
 import { openDsh } from "./dsh";
+import { ObjectLink, dataObject, useStringDialogParam } from "./object-link";
+import { field, useConsoleContext } from "../lib/console-context";
 
 interface DriverItem {
   name: string;
@@ -23,6 +25,7 @@ interface DriverItem {
   error?: string;
   versions: string[];
   gates: string[];
+  gate_refs?: { id: number; name: string }[];
 }
 interface DriverCheck {
   name: string;
@@ -48,8 +51,11 @@ const sourceLabel = { builtin: ["内置", "neutral"], custom: ["自定义", "ok"
 
 export function DriversPanel() {
   const q = useQuery({ queryKey: ["drivers"], queryFn: async () => (await api("/admin/drivers")).drivers as DriverItem[] });
-  const [open, setOpen] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+  // ?driver=名称 打开这个驱动；?driver=new 打开「新增驱动」（对象链接、dsh 的界面导航都走这里）
+  const param = useStringDialogParam("driver");
+  const open = param.value && param.value !== "new" ? param.value : null;
+  const creating = param.value === "new";
+  useConsoleContext({ list: { selected: q.data?.length ?? 0, items: (q.data ?? []).slice(0, 20).map((d) => ({ type: "driver", name: d.name, key: d.name })) } });
   return (
     <Card>
       <CardContent className="stack">
@@ -58,16 +64,16 @@ export function DriversPanel() {
           description="每个内核版本怎么运行、支持哪些协议、建节点的方案、怎么生成配置，都写在驱动里；新版本用 extends 继承上一版本、只写变化。引擎强制检查统计端口只监听回环、证书只用托管目录，驱动写错也绕不过。"
           actions={
             <span className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => openDsh({ notice: "让 dsh 用 weir-driver skill：读内核更新说明，为新版本起草驱动；草稿检查通过后会弹窗给你看差异。" })}><Bot />让 dsh 起草</Button>
-              <Button size="sm" variant="outline" onClick={() => setCreating(true)}><Plus />新增驱动</Button>
+              <Button size="sm" variant="outline" onClick={() => openDsh({ notice: "dsh 会用 weir-driver skill：读内核更新说明，为新版本起草驱动；草稿检查通过后会弹窗给你看差异。直接说要为哪个内核的哪个版本写驱动即可。" })}><Bot />让 dsh 起草</Button>
+              <Button size="sm" variant="outline" onClick={() => param.open("new")}><Plus />新增驱动</Button>
             </span>
           }
         />
         {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} skeleton={<SkeletonList rows={4} lines={1} />} /> : (
           <ul className="m-0 list-none space-y-2 p-0">
             {q.data.map((d) => (
-              <li key={d.name}>
-                <button type="button" className="flex w-full flex-wrap items-center gap-2 rounded-[var(--mg-radius)] border border-[var(--mg-line)] px-3 py-2 text-left hover:bg-[var(--mg-well)]" onClick={() => setOpen(d.name)}>
+              <li key={d.name} {...dataObject({ type: "driver", key: d.name })}>
+                <button type="button" className="flex w-full flex-wrap items-center gap-2 rounded-[var(--mg-radius)] border border-[var(--mg-line)] px-3 py-2 text-left hover:bg-[var(--mg-well)]" onClick={() => param.open(d.name)}>
                   <code className="text-xs">{d.name}</code>
                   <Badge variant="soft" tone={sourceLabel[d.source][1]}>{sourceLabel[d.source][0]}</Badge>
                   {d.disabled && <Badge variant="soft" tone="bad">已停用</Badge>}
@@ -80,8 +86,8 @@ export function DriversPanel() {
           </ul>
         )}
       </CardContent>
-      {open && <DriverDialog name={open} close={() => setOpen(null)} changed={() => void q.refetch()} />}
-      {creating && <NewDriverDialog close={() => setCreating(false)} created={(n) => { setCreating(false); setOpen(n); void q.refetch(); }} />}
+      {open && <DriverDialog name={open} close={param.close} changed={() => void q.refetch()} />}
+      {creating && <NewDriverDialog close={param.close} created={(n) => { param.open(n); void q.refetch(); }} />}
     </Card>
   );
 }
@@ -106,7 +112,7 @@ function CheckView({ c }: { c: DriverCheck }) {
 }
 
 function DriverDialog({ name, close, changed }: { name: string; close: () => void; changed: () => void }) {
-  const q = useQuery({ queryKey: ["driver", name], queryFn: () => api("/admin/drivers/" + encodeURIComponent(name)) as Promise<{ driver: DriverItem & { text: string }; resolved: string; resolve_error?: string; history: History[]; builtin?: string; usage: { versions?: string[]; gates?: string[] } }> });
+  const q = useQuery({ queryKey: ["driver", name], queryFn: () => api("/admin/drivers/" + encodeURIComponent(name)) as Promise<{ driver: DriverItem & { text: string }; resolved: string; resolve_error?: string; history: History[]; builtin?: string; usage: { versions?: string[]; gates?: string[]; gate_refs?: { id: number; name: string }[] } }> });
   const [text, setText] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [check, setCheck] = useState<DriverCheck | null>(null);
@@ -114,6 +120,12 @@ function DriverDialog({ name, close, changed }: { name: string; close: () => voi
   const { run, isBusy } = useRowAction<string>({ refetch: () => { void q.refetch(); changed(); } });
   const value = text ?? q.data?.driver.text ?? "";
   const dirty = text !== null && text !== q.data?.driver.text;
+  // 页面感知：正在看哪个驱动、有没有改动、最近一次检查结果（驱动原文不上报，dsh 用 get_driver 读）
+  useConsoleContext({
+    object: { type: "driver", name, key: name },
+    dialog: { title: "驱动 " + name },
+    form: [field("dirty", "原文有未保存的改动", dirty ? "是" : "否"), field("note", "说明", note), ...(check ? [field("check_result", "最近一次检查", check.state === "passed" ? "通过" : check.state === "failed" ? "未通过：" + (check.error ?? "") : "未知")] : [])],
+  });
   const save = () =>
     run("save", async () => {
       try {
@@ -135,7 +147,7 @@ function DriverDialog({ name, close, changed }: { name: string; close: () => voi
       <DialogContent size="xl">
         <DialogTitle>驱动 {name}</DialogTitle>
         <DialogDescription>
-          {q.data ? `${q.data.driver.kernel} ${q.data.driver.min_version} – ${q.data.driver.max_version || "最新"}；${(q.data.usage.versions ?? []).length > 0 ? "已下载版本 " + q.data.usage.versions!.join("、") : "没有已下载的版本"}${(q.data.usage.gates ?? []).length > 0 ? "；在用：" + q.data.usage.gates!.join("、") : ""}。` : "正在读取…"}
+          {q.data ? <>{q.data.driver.kernel} {q.data.driver.min_version} – {q.data.driver.max_version || "最新"}；{(q.data.usage.versions ?? []).length > 0 ? <>已下载版本 {q.data.usage.versions!.map((v, i) => <span key={v}>{i > 0 && "、"}<ObjectLink to={{ type: "kernel", key: `${q.data!.driver.kernel}@${v}`, name: v }} /></span>)}</> : "没有已下载的版本"}{(q.data.usage.gate_refs ?? []).length > 0 && <>；在用：{q.data.usage.gate_refs!.map((g, i) => <span key={g.id}>{i > 0 && "、"}<ObjectLink to={{ type: "gate", id: g.id, name: g.name }} /></span>)}</>}。</> : "正在读取…"}
         </DialogDescription>
         {q.isPending || q.error || !q.data ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : (
           <div className="stack max-h-[70vh] overflow-y-auto">
@@ -145,10 +157,9 @@ function DriverDialog({ name, close, changed }: { name: string; close: () => voi
                 <Textarea className="min-h-[18rem] font-mono text-xs" spellCheck={false} value={value} onChange={(e) => { setText(e.target.value); setCheck(null); }} />
               </Field>
               <Field label="说明" hint="这次改了什么、依据哪段更新说明（记在历史里）。"><Input value={note} onChange={(e) => setNote(e.target.value)} /></Field>
-              {check && <CheckView c={check} />}
               <div className="actions">
-                <Button type="button" variant="outline" disabled={isBusy()} onClick={() => void run("check", async () => { const c = (await api("/admin/drivers/check", "POST", { name, text: value, live: true })).check as DriverCheck; setCheck(c); return c; }, (c) => (c as DriverCheck).state === "passed" ? "检查通过" : "")}>{isBusy("check") ? "正在检查…" : "只检查"}</Button>
-                <Button type="submit" disabled={!dirty || isBusy()}>{isBusy("save") ? "正在检查并保存…" : "检查并保存"}</Button>
+                <Button type="button" variant="outline" disabled={isBusy()} onClick={() => void run("check", async () => { const c = (await api("/admin/drivers/check", "POST", { name, text: value, live: true })).check as DriverCheck; setCheck(c); return c; }, (c) => (c as DriverCheck).state === "passed" ? "检查通过" : "")} busy={isBusy("check")} busyText="正在检查…">只检查</Button>
+                <Button type="submit" disabled={!dirty || isBusy()} busy={isBusy("save")} busyText="正在检查并保存…">检查并保存</Button>
                 {q.data.driver.disabled ? (
                   <Button type="button" variant="ghost" disabled={isBusy()} onClick={() => void run("toggle", () => api(`/admin/drivers/${encodeURIComponent(name)}/enable`, "POST"), "已启用")}>启用</Button>
                 ) : (
@@ -156,6 +167,7 @@ function DriverDialog({ name, close, changed }: { name: string; close: () => voi
                 )}
                 {q.data.driver.source === "modified" && <Button type="button" variant="ghost" disabled={isBusy()} onClick={async () => (await confirm({ title: `把 ${name} 恢复为内置版本？`, description: "改动会保留在历史里，可以再退回。", confirmText: "恢复内置" })) && void run("restore", () => api(`/admin/drivers/${encodeURIComponent(name)}/restore`, "POST"), "已恢复内置")}><RotateCcw />恢复内置</Button>}
               </div>
+              {check && <CheckView c={check} />}
             </Form>
             <Collapsible title="展开 extends 后的全文">
               <pre className="max-h-80 overflow-auto rounded-[var(--mg-radius)] bg-[var(--mg-well)] p-2 text-xs">{q.data.resolved || "（无法展开）"}</pre>
@@ -208,10 +220,13 @@ function NewDriverDialog({ close, created }: { close: () => void; created: (name
           <Field label="继承" hint="默认继承同内核起始版本最高的驱动。">
             <div className="flex flex-wrap gap-2">{parents.map((p) => <Button key={p.name} type="button" size="sm" variant={parent === p.name ? "default" : "outline"} onClick={() => setF({ ...f, parent: p.name })}>{p.name}</Button>)}</div>
           </Field>
-          {check && <CheckView c={check} />}
+          {/* 检查结果区固定高度、内部滚动：结果出现时下面的按钮不被顶走 */}
+          <div className="h-32 overflow-y-auto rounded-[var(--mg-radius)] border border-dashed border-[var(--mg-line)] p-2">
+            {check ? <CheckView c={check} /> : <small className="text-[var(--mg-ink-3)]">点「检查并新增」后，每个方案的样例配置检查结果显示在这里。</small>}
+          </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={close}>取消</Button>
-            <Button type="submit" disabled={!f.name || !f.min || !parent || isBusy()}>{isBusy() ? "正在检查…" : "检查并新增"}</Button>
+            <Button type="submit" disabled={!f.name || !f.min || !parent || isBusy()} busy={isBusy()} busyText="正在检查…">检查并新增</Button>
           </DialogFooter>
         </Form>
       </DialogContent>
