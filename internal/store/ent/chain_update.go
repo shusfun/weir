@@ -199,6 +199,20 @@ func (_u *ChainUpdate) ClearExitNodeID() *ChainUpdate {
 	return _u
 }
 
+// SetExitLink sets the "exit_link" field.
+func (_u *ChainUpdate) SetExitLink(v string) *ChainUpdate {
+	_u.mutation.SetExitLink(v)
+	return _u
+}
+
+// SetNillableExitLink sets the "exit_link" field if the given value is not nil.
+func (_u *ChainUpdate) SetNillableExitLink(v *string) *ChainUpdate {
+	if v != nil {
+		_u.SetExitLink(*v)
+	}
+	return _u
+}
+
 // SetEnabled sets the "enabled" field.
 func (_u *ChainUpdate) SetEnabled(v bool) *ChainUpdate {
 	_u.mutation.SetEnabled(v)
@@ -329,6 +343,9 @@ func (_u *ChainUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.ExitNodeIDCleared() {
 		_spec.ClearField(chain.FieldExitNodeID, field.TypeInt)
+	}
+	if value, ok := _u.mutation.ExitLink(); ok {
+		_spec.SetField(chain.FieldExitLink, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Enabled(); ok {
 		_spec.SetField(chain.FieldEnabled, field.TypeBool, value)
@@ -525,6 +542,20 @@ func (_u *ChainUpdateOne) ClearExitNodeID() *ChainUpdateOne {
 	return _u
 }
 
+// SetExitLink sets the "exit_link" field.
+func (_u *ChainUpdateOne) SetExitLink(v string) *ChainUpdateOne {
+	_u.mutation.SetExitLink(v)
+	return _u
+}
+
+// SetNillableExitLink sets the "exit_link" field if the given value is not nil.
+func (_u *ChainUpdateOne) SetNillableExitLink(v *string) *ChainUpdateOne {
+	if v != nil {
+		_u.SetExitLink(*v)
+	}
+	return _u
+}
+
 // SetEnabled sets the "enabled" field.
 func (_u *ChainUpdateOne) SetEnabled(v bool) *ChainUpdateOne {
 	_u.mutation.SetEnabled(v)
@@ -685,6 +716,9 @@ func (_u *ChainUpdateOne) sqlSave(ctx context.Context) (_node *Chain, err error)
 	}
 	if _u.mutation.ExitNodeIDCleared() {
 		_spec.ClearField(chain.FieldExitNodeID, field.TypeInt)
+	}
+	if value, ok := _u.mutation.ExitLink(); ok {
+		_spec.SetField(chain.FieldExitLink, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Enabled(); ok {
 		_spec.SetField(chain.FieldEnabled, field.TypeBool, value)

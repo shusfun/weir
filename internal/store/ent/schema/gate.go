@@ -29,6 +29,8 @@ func (Gate) Fields() []ent.Field {
 		field.JSON("host", map[string]any{}).Optional(),
 		// panel 是 Gate 上报的 1Panel 状态（是否检测到、是否已填 API 密钥、版本、错误）；密钥只在 Gate 本机。
 		field.JSON("panel", map[string]any{}).Optional(),
+		// firewall 是 Gate 上报的本机防火墙（ufw / firewalld / iptables 是否启用、放行了哪些端口）；读不到时为空，显示「未知」。
+		field.JSON("firewall", map[string]any{}).Optional(),
 		field.Int64("config_revision").Default(1),
 		field.Int64("applied_revision").Default(0),
 		field.Int64("failed_revision").Default(0),

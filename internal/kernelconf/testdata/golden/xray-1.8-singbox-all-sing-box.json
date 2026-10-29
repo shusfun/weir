@@ -34,6 +34,23 @@
           "shadowtls-inbound-25",
           "shadowtls-inbound-26"
         ],
+        "outbounds": [
+          "singbox-out-2147483647",
+          "singbox-out-40",
+          "singbox-out-41",
+          "singbox-out-42",
+          "singbox-out-43",
+          "singbox-out-44",
+          "singbox-out-45",
+          "singbox-out-46",
+          "singbox-out-47",
+          "singbox-out-48",
+          "singbox-out-49",
+          "singbox-out-60",
+          "singbox-out-61",
+          "singbox-out-62",
+          "singbox-out-63"
+        ],
         "users": [
           "c201",
           "c211",

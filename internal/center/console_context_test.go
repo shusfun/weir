@@ -13,7 +13,7 @@ func TestConsoleContextPerDrawerRedactedAndNavigation(t *testing.T) {
 		text, _ := toolText(t, h, m.webToken, "get_console_context", map[string]any{})
 		return text
 	}
-	// 还没有打开过抽屉：未知并说明原因。
+	// 还没有打开过 dsh 窗口：未知并说明原因。
 	if text := read(); !strings.Contains(text, "未知") || !strings.Contains(text, "reason") {
 		t.Fatalf("no context = %s", text)
 	}
@@ -39,7 +39,7 @@ func TestConsoleContextPerDrawerRedactedAndNavigation(t *testing.T) {
 	if strings.Contains(text, "hunter2") || strings.Contains(text, "SECRET-KEY") || !strings.Contains(text, `"filled": true`) {
 		t.Fatalf("form must be redacted: %s", text)
 	}
-	// 另一个标签：各自独立。B 在后台时不覆盖 A；B 到前台打开抽屉后成为当前会话。
+	// 另一个标签：各自独立。B 在后台时不覆盖 A；B 到前台打开 dsh 窗口后成为当前会话。
 	report(tabB, map[string]any{"page": "用户", "visible": false, "drawer_open": true})
 	if text := read(); !strings.Contains(text, "HK-1") {
 		t.Fatalf("background tab overwrote the active one: %s", text)
@@ -55,7 +55,7 @@ func TestConsoleContextPerDrawerRedactedAndNavigation(t *testing.T) {
 	}
 	report(tabB, map[string]any{"page": "用户", "visible": true, "drawer_open": true})
 
-	// 导航：只作用于当前抽屉会话（B），A 收不到；只能去白名单里的页面；取一次即删。
+	// 导航：只作用于当前 dsh 会话（B），A 收不到；只能去白名单里的页面；取一次即删。
 	if text, isErr := toolText(t, h, m.webToken, "navigate_console", map[string]any{"page": "secret-admin"}); !isErr {
 		t.Fatalf("unknown page = %s", text)
 	}

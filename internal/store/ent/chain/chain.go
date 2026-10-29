@@ -34,6 +34,8 @@ const (
 	FieldExitPassword = "exit_password"
 	// FieldExitNodeID holds the string denoting the exit_node_id field in the database.
 	FieldExitNodeID = "exit_node_id"
+	// FieldExitLink holds the string denoting the exit_link field in the database.
+	FieldExitLink = "exit_link"
 	// FieldEnabled holds the string denoting the enabled field in the database.
 	FieldEnabled = "enabled"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -55,6 +57,7 @@ var Columns = []string{
 	FieldExitUsername,
 	FieldExitPassword,
 	FieldExitNodeID,
+	FieldExitLink,
 	FieldEnabled,
 	FieldCreatedAt,
 }
@@ -84,6 +87,8 @@ var (
 	ExitUsernameValidator func(string) error
 	// DefaultExitPassword holds the default value on creation for the "exit_password" field.
 	DefaultExitPassword string
+	// DefaultExitLink holds the default value on creation for the "exit_link" field.
+	DefaultExitLink string
 	// DefaultEnabled holds the default value on creation for the "enabled" field.
 	DefaultEnabled bool
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
@@ -96,6 +101,9 @@ type ExitKind string
 // ExitKind values.
 const (
 	ExitKindSocks5 ExitKind = "socks5"
+	ExitKindHTTP   ExitKind = "http"
+	ExitKindHTTPS  ExitKind = "https"
+	ExitKindLink   ExitKind = "link"
 	ExitKindNode   ExitKind = "node"
 	ExitKindSource ExitKind = "source"
 )
@@ -107,7 +115,7 @@ func (ek ExitKind) String() string {
 // ExitKindValidator is a validator for the "exit_kind" field enum values. It is called by the builders before save.
 func ExitKindValidator(ek ExitKind) error {
 	switch ek {
-	case ExitKindSocks5, ExitKindNode, ExitKindSource:
+	case ExitKindSocks5, ExitKindHTTP, ExitKindHTTPS, ExitKindLink, ExitKindNode, ExitKindSource:
 		return nil
 	default:
 		return fmt.Errorf("chain: invalid enum value for exit_kind field: %q", ek)
@@ -165,6 +173,11 @@ func ByExitPassword(opts ...sql.OrderTermOption) OrderOption {
 // ByExitNodeID orders the results by the exit_node_id field.
 func ByExitNodeID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldExitNodeID, opts...).ToFunc()
+}
+
+// ByExitLink orders the results by the exit_link field.
+func ByExitLink(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldExitLink, opts...).ToFunc()
 }
 
 // ByEnabled orders the results by the enabled field.

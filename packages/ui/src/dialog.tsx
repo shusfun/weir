@@ -174,6 +174,8 @@ type ContentProps = DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
   size?: keyof typeof dialogSizes;
   placement?: "top" | "palette";
+  // layer="top"：确认框一类必须在最上面的弹窗（盖过 dsh 等常驻的浮动窗口）
+  layer?: "page" | "top";
 };
 
 function DialogContent({ children, ...rest }: ContentProps) {
@@ -209,6 +211,7 @@ function DialogLayer({
   showCloseButton = true,
   size = "sm",
   placement = "top",
+  layer = "page",
   ...props
 }: Omit<ContentProps, "children"> & { id: string; formId: string | null; header: ReactNode[]; body: ReactNode[] }) {
   const depth = useDialogDepth(id);
@@ -217,7 +220,7 @@ function DialogLayer({
   const sheet = placement === "top";
   return (
     <>
-      <DialogOverlay depth={depth} />
+      <DialogOverlay depth={depth} className={layer === "top" ? "z-[57]" : undefined} />
       <DialogSlotContext.Provider value={slots}>
       <DialogPrimitive.Popup
         data-slot="dialog-content"
@@ -225,7 +228,8 @@ function DialogLayer({
         data-depth={depth}
         style={{ "--mg-dialog-depth": depth, ...(style as CSSProperties) } as CSSProperties}
         className={cn(
-          "group/dialog fixed left-1/2 z-50 flex w-full max-w-[calc(100%-2rem)] -translate-x-1/2 flex-col gap-4 overflow-hidden rounded-[var(--mg-radius-lg)] border border-[var(--mg-line)] bg-[linear-gradient(180deg,var(--mg-panel-top),var(--mg-panel)_64px)] p-6 text-sm text-card-foreground shadow-[inset_0_1px_0_var(--mg-highlight),0_18px_40px_-12px_var(--mg-shade-strong)] outline-none transition-[opacity,scale] duration-[var(--mg-mid)] ease-[var(--mg-ease)] data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.98] data-[ending-style]:opacity-0 max-sm:p-5",
+          layer === "top" ? "z-[57]" : "z-50",
+          "group/dialog fixed left-1/2 flex w-full max-w-[calc(100%-2rem)] -translate-x-1/2 flex-col gap-4 overflow-hidden rounded-[var(--mg-radius-lg)] border border-[var(--mg-line)] bg-[linear-gradient(180deg,var(--mg-panel-top),var(--mg-panel)_64px)] p-6 text-sm text-card-foreground shadow-[inset_0_1px_0_var(--mg-highlight),0_18px_40px_-12px_var(--mg-shade-strong)] outline-none transition-[opacity,scale] duration-[var(--mg-mid)] ease-[var(--mg-ease)] data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.98] data-[ending-style]:opacity-0 max-sm:p-5",
           placement === "palette" ? "top-[14vh] max-h-[calc(86dvh-16px)]" : cn(anchored, sheetBase, size === "sm" ? sheetFit : sheetFull),
           dialogSizes[size],
           className,

@@ -54,6 +54,8 @@ type Node struct {
 	ChainPassword string `json:"-"`
 	// ChainNodeID holds the value of the "chain_node_id" field.
 	ChainNodeID *int `json:"chain_node_id,omitempty"`
+	// ChainLink holds the value of the "chain_link" field.
+	ChainLink string `json:"-"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt    time.Time `json:"created_at,omitempty"`
 	selectValues sql.SelectValues
@@ -70,7 +72,7 @@ func (*Node) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case node.FieldID, node.FieldGateID, node.FieldPort, node.FieldCertID, node.FieldChainPort, node.FieldChainNodeID:
 			values[i] = new(sql.NullInt64)
-		case node.FieldName, node.FieldPreset, node.FieldKernel, node.FieldProtocol, node.FieldNetwork, node.FieldSecurity, node.FieldChainKind, node.FieldChainAddress, node.FieldChainUsername, node.FieldChainPassword:
+		case node.FieldName, node.FieldPreset, node.FieldKernel, node.FieldProtocol, node.FieldNetwork, node.FieldSecurity, node.FieldChainKind, node.FieldChainAddress, node.FieldChainUsername, node.FieldChainPassword, node.FieldChainLink:
 			values[i] = new(sql.NullString)
 		case node.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -209,6 +211,12 @@ func (_m *Node) assignValues(columns []string, values []any) error {
 				_m.ChainNodeID = new(int)
 				*_m.ChainNodeID = int(value.Int64)
 			}
+		case node.FieldChainLink:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field chain_link", values[i])
+			} else if value.Valid {
+				_m.ChainLink = value.String
+			}
 		case node.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field created_at", values[i])
@@ -307,6 +315,8 @@ func (_m *Node) String() string {
 		builder.WriteString("chain_node_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("chain_link=<sensitive>")
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

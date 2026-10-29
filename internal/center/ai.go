@@ -141,7 +141,7 @@ func (s *Server) testNodeHandler(c *gin.Context) {
 type Draft struct {
 	ID        string            `json:"id"`
 	Kind      string            `json:"kind"`
-	Source    string            `json:"source"` // dsh（抽屉对话）/ analysis（后台分析）
+	Source    string            `json:"source"` // dsh（窗口里的对话）/ analysis（后台分析）
 	Status    string            `json:"status"` // passed
 	Explain   string            `json:"explain"`
 	CreatedAt time.Time         `json:"created_at"`

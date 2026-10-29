@@ -12,8 +12,8 @@ import (
 )
 
 // 页面感知：dsh 随时知道管理员此刻在控制台看什么。上下文由各页面主动声明、控制台报给中心，dsh 经 get_console_context 读取；
-// 控制台与 dsh 的 iframe 之间不直接传消息。上下文属于「抽屉会话」：绑定打开抽屉的管理员会话和那一个浏览器标签，
-// 多个标签各自独立、互不覆盖。只存在短期存储里（关闭抽屉超过 30 分钟或退出登录即失效），不写审计、不进备份。
+// 控制台与 dsh 的 iframe 之间不直接传消息。上下文属于「dsh 会话」：绑定打开 dsh 窗口的管理员会话和那一个浏览器标签，
+// 多个标签各自独立、互不覆盖。只存在短期存储里（关闭 dsh 窗口超过 30 分钟或退出登录即失效），不写审计、不进备份。
 
 const (
 	ctxTTL       = 30 * time.Minute
@@ -25,7 +25,7 @@ const (
 
 var drawerIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,64}$`)
 
-// ConsoleContext 是一个抽屉会话的最新上下文。
+// ConsoleContext 是一个 dsh 会话的最新上下文。
 type ConsoleContext struct {
 	Drawer     string         `json:"-"`
 	UserID     int            `json:"-"`
@@ -122,7 +122,7 @@ func (s *Server) contextRoutes(admin *gin.RouterGroup) {
 
 func ctxKey(uid int, drawer string) string { return ctxKeyPrefix + itoa(uid) + ":" + drawer }
 
-// reportContext 保存一个抽屉会话的上下文；在前台且抽屉开着的标签成为 dsh 当前读取的会话。
+// reportContext 保存一个 dsh 会话的上下文；在前台且 dsh 窗口开着（含缩小）的标签成为 dsh 当前读取的会话。
 func (s *Server) reportContext(c *gin.Context) {
 	var req struct {
 		Drawer string `json:"drawer"`
@@ -154,15 +154,15 @@ func (s *Server) reportContext(c *gin.Context) {
 	c.Status(204)
 }
 
-// activeContext 是 dsh 当前读取的抽屉会话：最近一个在前台、抽屉开着的标签。
+// activeContext 是 dsh 当前读取的 dsh 会话：最近一个在前台、dsh 窗口开着的标签。
 func (s *Server) activeContext(ctx context.Context) (*ConsoleContext, string, string) {
 	key, ok, err := s.Store.KV.Get(ctx, ctxActiveKey)
 	if err != nil || !ok {
-		return nil, "", "还没有打开过 dsh 抽屉的控制台标签（或已关闭超过 30 分钟）"
+		return nil, "", "还没有打开过 dsh 窗口的控制台标签（或已关闭超过 30 分钟）"
 	}
 	raw, ok, err := s.Store.KV.Get(ctx, key)
 	if err != nil || !ok {
-		return nil, "", "抽屉会话已结束"
+		return nil, "", "dsh 会话已结束"
 	}
 	var v struct {
 		ConsoleContext
@@ -244,7 +244,7 @@ func (s *Server) queueNavigation(ctx context.Context, args map[string]any) error
 	return s.Store.KV.Set(ctx, "dsh-nav:"+strings.TrimPrefix(key, ctxKeyPrefix), string(b), navTTL)
 }
 
-// pollNavigation 由打开抽屉的那个标签轮询：只作用于它自己（按抽屉会话），取一次即删。
+// pollNavigation 由打开 dsh 窗口的那个标签轮询：只作用于它自己（按 dsh 会话），取一次即删。
 func (s *Server) pollNavigation(c *gin.Context) {
 	drawer := c.Query("drawer")
 	if !drawerIDPattern.MatchString(drawer) {

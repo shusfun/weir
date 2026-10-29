@@ -50,6 +50,8 @@ const (
 	FieldChainPassword = "chain_password"
 	// FieldChainNodeID holds the string denoting the chain_node_id field in the database.
 	FieldChainNodeID = "chain_node_id"
+	// FieldChainLink holds the string denoting the chain_link field in the database.
+	FieldChainLink = "chain_link"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// Table holds the table name of the node in the database.
@@ -77,6 +79,7 @@ var Columns = []string{
 	FieldChainUsername,
 	FieldChainPassword,
 	FieldChainNodeID,
+	FieldChainLink,
 	FieldCreatedAt,
 }
 
@@ -123,6 +126,8 @@ var (
 	ChainUsernameValidator func(string) error
 	// DefaultChainPassword holds the default value on creation for the "chain_password" field.
 	DefaultChainPassword string
+	// DefaultChainLink holds the default value on creation for the "chain_link" field.
+	DefaultChainLink string
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 )
@@ -137,6 +142,9 @@ const DefaultChainKind = ChainKindNone
 const (
 	ChainKindNone   ChainKind = "none"
 	ChainKindSocks5 ChainKind = "socks5"
+	ChainKindHTTP   ChainKind = "http"
+	ChainKindHTTPS  ChainKind = "https"
+	ChainKindLink   ChainKind = "link"
 	ChainKindNode   ChainKind = "node"
 	ChainKindSource ChainKind = "source"
 )
@@ -148,7 +156,7 @@ func (ck ChainKind) String() string {
 // ChainKindValidator is a validator for the "chain_kind" field enum values. It is called by the builders before save.
 func ChainKindValidator(ck ChainKind) error {
 	switch ck {
-	case ChainKindNone, ChainKindSocks5, ChainKindNode, ChainKindSource:
+	case ChainKindNone, ChainKindSocks5, ChainKindHTTP, ChainKindHTTPS, ChainKindLink, ChainKindNode, ChainKindSource:
 		return nil
 	default:
 		return fmt.Errorf("node: invalid enum value for chain_kind field: %q", ck)
@@ -241,6 +249,11 @@ func ByChainPassword(opts ...sql.OrderTermOption) OrderOption {
 // ByChainNodeID orders the results by the chain_node_id field.
 func ByChainNodeID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldChainNodeID, opts...).ToFunc()
+}
+
+// ByChainLink orders the results by the chain_link field.
+func ByChainLink(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldChainLink, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

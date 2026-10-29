@@ -322,6 +322,20 @@ func (_u *NodeUpdate) ClearChainNodeID() *NodeUpdate {
 	return _u
 }
 
+// SetChainLink sets the "chain_link" field.
+func (_u *NodeUpdate) SetChainLink(v string) *NodeUpdate {
+	_u.mutation.SetChainLink(v)
+	return _u
+}
+
+// SetNillableChainLink sets the "chain_link" field if the given value is not nil.
+func (_u *NodeUpdate) SetNillableChainLink(v *string) *NodeUpdate {
+	if v != nil {
+		_u.SetChainLink(*v)
+	}
+	return _u
+}
+
 // Mutation returns the NodeMutation object of the builder.
 func (_u *NodeUpdate) Mutation() *NodeMutation {
 	return _u.mutation
@@ -496,6 +510,9 @@ func (_u *NodeUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.ChainNodeIDCleared() {
 		_spec.ClearField(node.FieldChainNodeID, field.TypeInt)
+	}
+	if value, ok := _u.mutation.ChainLink(); ok {
+		_spec.SetField(node.FieldChainLink, field.TypeString, value)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -812,6 +829,20 @@ func (_u *NodeUpdateOne) ClearChainNodeID() *NodeUpdateOne {
 	return _u
 }
 
+// SetChainLink sets the "chain_link" field.
+func (_u *NodeUpdateOne) SetChainLink(v string) *NodeUpdateOne {
+	_u.mutation.SetChainLink(v)
+	return _u
+}
+
+// SetNillableChainLink sets the "chain_link" field if the given value is not nil.
+func (_u *NodeUpdateOne) SetNillableChainLink(v *string) *NodeUpdateOne {
+	if v != nil {
+		_u.SetChainLink(*v)
+	}
+	return _u
+}
+
 // Mutation returns the NodeMutation object of the builder.
 func (_u *NodeUpdateOne) Mutation() *NodeMutation {
 	return _u.mutation
@@ -1016,6 +1047,9 @@ func (_u *NodeUpdateOne) sqlSave(ctx context.Context) (_node *Node, err error) {
 	}
 	if _u.mutation.ChainNodeIDCleared() {
 		_spec.ClearField(node.FieldChainNodeID, field.TypeInt)
+	}
+	if value, ok := _u.mutation.ChainLink(); ok {
+		_spec.SetField(node.FieldChainLink, field.TypeString, value)
 	}
 	_node = &Node{config: _u.config}
 	_spec.Assign = _node.assignValues

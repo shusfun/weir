@@ -162,6 +162,12 @@ func (_c *GateCreate) SetPanel(v map[string]interface{}) *GateCreate {
 	return _c
 }
 
+// SetFirewall sets the "firewall" field.
+func (_c *GateCreate) SetFirewall(v map[string]interface{}) *GateCreate {
+	_c.mutation.SetFirewall(v)
+	return _c
+}
+
 // SetConfigRevision sets the "config_revision" field.
 func (_c *GateCreate) SetConfigRevision(v int64) *GateCreate {
 	_c.mutation.SetConfigRevision(v)
@@ -541,6 +547,10 @@ func (_c *GateCreate) createSpec() (*Gate, *sqlgraph.CreateSpec) {
 		_spec.SetField(gate.FieldPanel, field.TypeJSON, value)
 		_node.Panel = value
 	}
+	if value, ok := _c.mutation.Firewall(); ok {
+		_spec.SetField(gate.FieldFirewall, field.TypeJSON, value)
+		_node.Firewall = value
+	}
 	if value, ok := _c.mutation.ConfigRevision(); ok {
 		_spec.SetField(gate.FieldConfigRevision, field.TypeInt64, value)
 		_node.ConfigRevision = value
@@ -830,6 +840,24 @@ func (u *GateUpsert) UpdatePanel() *GateUpsert {
 // ClearPanel clears the value of the "panel" field.
 func (u *GateUpsert) ClearPanel() *GateUpsert {
 	u.SetNull(gate.FieldPanel)
+	return u
+}
+
+// SetFirewall sets the "firewall" field.
+func (u *GateUpsert) SetFirewall(v map[string]interface{}) *GateUpsert {
+	u.Set(gate.FieldFirewall, v)
+	return u
+}
+
+// UpdateFirewall sets the "firewall" field to the value that was provided on create.
+func (u *GateUpsert) UpdateFirewall() *GateUpsert {
+	u.SetExcluded(gate.FieldFirewall)
+	return u
+}
+
+// ClearFirewall clears the value of the "firewall" field.
+func (u *GateUpsert) ClearFirewall() *GateUpsert {
+	u.SetNull(gate.FieldFirewall)
 	return u
 }
 
@@ -1245,6 +1273,27 @@ func (u *GateUpsertOne) UpdatePanel() *GateUpsertOne {
 func (u *GateUpsertOne) ClearPanel() *GateUpsertOne {
 	return u.Update(func(s *GateUpsert) {
 		s.ClearPanel()
+	})
+}
+
+// SetFirewall sets the "firewall" field.
+func (u *GateUpsertOne) SetFirewall(v map[string]interface{}) *GateUpsertOne {
+	return u.Update(func(s *GateUpsert) {
+		s.SetFirewall(v)
+	})
+}
+
+// UpdateFirewall sets the "firewall" field to the value that was provided on create.
+func (u *GateUpsertOne) UpdateFirewall() *GateUpsertOne {
+	return u.Update(func(s *GateUpsert) {
+		s.UpdateFirewall()
+	})
+}
+
+// ClearFirewall clears the value of the "firewall" field.
+func (u *GateUpsertOne) ClearFirewall() *GateUpsertOne {
+	return u.Update(func(s *GateUpsert) {
+		s.ClearFirewall()
 	})
 }
 
@@ -1848,6 +1897,27 @@ func (u *GateUpsertBulk) UpdatePanel() *GateUpsertBulk {
 func (u *GateUpsertBulk) ClearPanel() *GateUpsertBulk {
 	return u.Update(func(s *GateUpsert) {
 		s.ClearPanel()
+	})
+}
+
+// SetFirewall sets the "firewall" field.
+func (u *GateUpsertBulk) SetFirewall(v map[string]interface{}) *GateUpsertBulk {
+	return u.Update(func(s *GateUpsert) {
+		s.SetFirewall(v)
+	})
+}
+
+// UpdateFirewall sets the "firewall" field to the value that was provided on create.
+func (u *GateUpsertBulk) UpdateFirewall() *GateUpsertBulk {
+	return u.Update(func(s *GateUpsert) {
+		s.UpdateFirewall()
+	})
+}
+
+// ClearFirewall clears the value of the "firewall" field.
+func (u *GateUpsertBulk) ClearFirewall() *GateUpsertBulk {
+	return u.Update(func(s *GateUpsert) {
+		s.ClearFirewall()
 	})
 }
 

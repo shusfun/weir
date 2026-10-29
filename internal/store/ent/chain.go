@@ -38,6 +38,8 @@ type Chain struct {
 	ExitPassword string `json:"-"`
 	// ExitNodeID holds the value of the "exit_node_id" field.
 	ExitNodeID *int `json:"exit_node_id,omitempty"`
+	// ExitLink holds the value of the "exit_link" field.
+	ExitLink string `json:"-"`
 	// Enabled holds the value of the "enabled" field.
 	Enabled bool `json:"enabled,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
@@ -56,7 +58,7 @@ func (*Chain) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case chain.FieldID, chain.FieldUserID, chain.FieldEntryNodeID, chain.FieldExitPort, chain.FieldExitNodeID:
 			values[i] = new(sql.NullInt64)
-		case chain.FieldName, chain.FieldExitKind, chain.FieldExitAddress, chain.FieldExitUsername, chain.FieldExitPassword:
+		case chain.FieldName, chain.FieldExitKind, chain.FieldExitAddress, chain.FieldExitUsername, chain.FieldExitPassword, chain.FieldExitLink:
 			values[i] = new(sql.NullString)
 		case chain.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -144,6 +146,12 @@ func (_m *Chain) assignValues(columns []string, values []any) error {
 				_m.ExitNodeID = new(int)
 				*_m.ExitNodeID = int(value.Int64)
 			}
+		case chain.FieldExitLink:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field exit_link", values[i])
+			} else if value.Valid {
+				_m.ExitLink = value.String
+			}
 		case chain.FieldEnabled:
 			if value, ok := values[i].(*sql.NullBool); !ok {
 				return fmt.Errorf("unexpected type %T for field enabled", values[i])
@@ -222,6 +230,8 @@ func (_m *Chain) String() string {
 		builder.WriteString("exit_node_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("exit_link=<sensitive>")
 	builder.WriteString(", ")
 	builder.WriteString("enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Enabled))

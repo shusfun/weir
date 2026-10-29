@@ -1,5 +1,5 @@
 // 页面感知：每个页面、弹窗、向导主动声明自己的上下文（页面名、对象、步骤、表单字段），不由系统从界面猜测。
-// 抽屉打开过的那个浏览器标签把合并后的上下文报给中心，dsh 经 get_console_context 读取；不传截图、DOM 或页面原文。
+// 打开过 dsh 窗口的那个浏览器标签把合并后的上下文报给中心，dsh 经 get_console_context 读取；不传截图、DOM 或页面原文。
 import { useEffect, useRef } from "react";
 
 // 正在看的对象：类型取 lib/objects.ts 的 ObjectType；数字编号的填 id，驱动、内核版本这类按名称的填 key。
@@ -88,7 +88,7 @@ export function field(key: string, label: string, value: unknown, secret = false
   return secret ? { key, label, secret: true, filled: text !== "" } : { key, label, value: text, filled: text !== "" };
 }
 
-// drawerId 是这个浏览器标签的抽屉会话编号（只存在本标签的 sessionStorage）；抽屉没打开过时为空。
+// drawerId 是这个浏览器标签的 dsh 会话编号（只存在本标签的 sessionStorage）；dsh 窗口没打开过时为空。
 const drawerKey = "weir-dsh-drawer";
 export function drawerId(create = false): string {
   try {

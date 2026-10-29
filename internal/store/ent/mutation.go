@@ -2830,6 +2830,7 @@ type ChainMutation struct {
 	exit_password    *string
 	exit_node_id     *int
 	addexit_node_id  *int
+	exit_link        *string
 	enabled          *bool
 	created_at       *time.Time
 	clearedFields    map[string]struct{}
@@ -3403,6 +3404,42 @@ func (m *ChainMutation) ResetExitNodeID() {
 	delete(m.clearedFields, chain.FieldExitNodeID)
 }
 
+// SetExitLink sets the "exit_link" field.
+func (m *ChainMutation) SetExitLink(s string) {
+	m.exit_link = &s
+}
+
+// ExitLink returns the value of the "exit_link" field in the mutation.
+func (m *ChainMutation) ExitLink() (r string, exists bool) {
+	v := m.exit_link
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExitLink returns the old "exit_link" field's value of the Chain entity.
+// If the Chain object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChainMutation) OldExitLink(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExitLink is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExitLink requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExitLink: %w", err)
+	}
+	return oldValue.ExitLink, nil
+}
+
+// ResetExitLink resets all changes to the "exit_link" field.
+func (m *ChainMutation) ResetExitLink() {
+	m.exit_link = nil
+}
+
 // SetEnabled sets the "enabled" field.
 func (m *ChainMutation) SetEnabled(b bool) {
 	m.enabled = &b
@@ -3509,7 +3546,7 @@ func (m *ChainMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ChainMutation) Fields() []string {
-	fields := make([]string, 0, 12)
+	fields := make([]string, 0, 13)
 	if m.user_id != nil {
 		fields = append(fields, chain.FieldUserID)
 	}
@@ -3539,6 +3576,9 @@ func (m *ChainMutation) Fields() []string {
 	}
 	if m.exit_node_id != nil {
 		fields = append(fields, chain.FieldExitNodeID)
+	}
+	if m.exit_link != nil {
+		fields = append(fields, chain.FieldExitLink)
 	}
 	if m.enabled != nil {
 		fields = append(fields, chain.FieldEnabled)
@@ -3574,6 +3614,8 @@ func (m *ChainMutation) Field(name string) (ent.Value, bool) {
 		return m.ExitPassword()
 	case chain.FieldExitNodeID:
 		return m.ExitNodeID()
+	case chain.FieldExitLink:
+		return m.ExitLink()
 	case chain.FieldEnabled:
 		return m.Enabled()
 	case chain.FieldCreatedAt:
@@ -3607,6 +3649,8 @@ func (m *ChainMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldExitPassword(ctx)
 	case chain.FieldExitNodeID:
 		return m.OldExitNodeID(ctx)
+	case chain.FieldExitLink:
+		return m.OldExitLink(ctx)
 	case chain.FieldEnabled:
 		return m.OldEnabled(ctx)
 	case chain.FieldCreatedAt:
@@ -3689,6 +3733,13 @@ func (m *ChainMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetExitNodeID(v)
+		return nil
+	case chain.FieldExitLink:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExitLink(v)
 		return nil
 	case chain.FieldEnabled:
 		v, ok := value.(bool)
@@ -3848,6 +3899,9 @@ func (m *ChainMutation) ResetField(name string) error {
 		return nil
 	case chain.FieldExitNodeID:
 		m.ResetExitNodeID()
+		return nil
+	case chain.FieldExitLink:
+		m.ResetExitLink()
 		return nil
 	case chain.FieldEnabled:
 		m.ResetEnabled()
@@ -5112,6 +5166,7 @@ type GateMutation struct {
 	kernel_pins           *map[string]string
 	host                  *map[string]interface{}
 	panel                 *map[string]interface{}
+	firewall              *map[string]interface{}
 	config_revision       *int64
 	addconfig_revision    *int64
 	applied_revision      *int64
@@ -5829,6 +5884,55 @@ func (m *GateMutation) ResetPanel() {
 	delete(m.clearedFields, gate.FieldPanel)
 }
 
+// SetFirewall sets the "firewall" field.
+func (m *GateMutation) SetFirewall(value map[string]interface{}) {
+	m.firewall = &value
+}
+
+// Firewall returns the value of the "firewall" field in the mutation.
+func (m *GateMutation) Firewall() (r map[string]interface{}, exists bool) {
+	v := m.firewall
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFirewall returns the old "firewall" field's value of the Gate entity.
+// If the Gate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GateMutation) OldFirewall(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFirewall is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFirewall requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFirewall: %w", err)
+	}
+	return oldValue.Firewall, nil
+}
+
+// ClearFirewall clears the value of the "firewall" field.
+func (m *GateMutation) ClearFirewall() {
+	m.firewall = nil
+	m.clearedFields[gate.FieldFirewall] = struct{}{}
+}
+
+// FirewallCleared returns if the "firewall" field was cleared in this mutation.
+func (m *GateMutation) FirewallCleared() bool {
+	_, ok := m.clearedFields[gate.FieldFirewall]
+	return ok
+}
+
+// ResetFirewall resets all changes to the "firewall" field.
+func (m *GateMutation) ResetFirewall() {
+	m.firewall = nil
+	delete(m.clearedFields, gate.FieldFirewall)
+}
+
 // SetConfigRevision sets the "config_revision" field.
 func (m *GateMutation) SetConfigRevision(i int64) {
 	m.config_revision = &i
@@ -6307,7 +6411,7 @@ func (m *GateMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GateMutation) Fields() []string {
-	fields := make([]string, 0, 23)
+	fields := make([]string, 0, 24)
 	if m.name != nil {
 		fields = append(fields, gate.FieldName)
 	}
@@ -6349,6 +6453,9 @@ func (m *GateMutation) Fields() []string {
 	}
 	if m.panel != nil {
 		fields = append(fields, gate.FieldPanel)
+	}
+	if m.firewall != nil {
+		fields = append(fields, gate.FieldFirewall)
 	}
 	if m.config_revision != nil {
 		fields = append(fields, gate.FieldConfigRevision)
@@ -6413,6 +6520,8 @@ func (m *GateMutation) Field(name string) (ent.Value, bool) {
 		return m.Host()
 	case gate.FieldPanel:
 		return m.Panel()
+	case gate.FieldFirewall:
+		return m.Firewall()
 	case gate.FieldConfigRevision:
 		return m.ConfigRevision()
 	case gate.FieldAppliedRevision:
@@ -6468,6 +6577,8 @@ func (m *GateMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldHost(ctx)
 	case gate.FieldPanel:
 		return m.OldPanel(ctx)
+	case gate.FieldFirewall:
+		return m.OldFirewall(ctx)
 	case gate.FieldConfigRevision:
 		return m.OldConfigRevision(ctx)
 	case gate.FieldAppliedRevision:
@@ -6592,6 +6703,13 @@ func (m *GateMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPanel(v)
+		return nil
+	case gate.FieldFirewall:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFirewall(v)
 		return nil
 	case gate.FieldConfigRevision:
 		v, ok := value.(int64)
@@ -6779,6 +6897,9 @@ func (m *GateMutation) ClearedFields() []string {
 	if m.FieldCleared(gate.FieldPanel) {
 		fields = append(fields, gate.FieldPanel)
 	}
+	if m.FieldCleared(gate.FieldFirewall) {
+		fields = append(fields, gate.FieldFirewall)
+	}
 	return fields
 }
 
@@ -6810,6 +6931,9 @@ func (m *GateMutation) ClearField(name string) error {
 		return nil
 	case gate.FieldPanel:
 		m.ClearPanel()
+		return nil
+	case gate.FieldFirewall:
+		m.ClearFirewall()
 		return nil
 	}
 	return fmt.Errorf("unknown Gate nullable field %s", name)
@@ -6860,6 +6984,9 @@ func (m *GateMutation) ResetField(name string) error {
 		return nil
 	case gate.FieldPanel:
 		m.ResetPanel()
+		return nil
+	case gate.FieldFirewall:
+		m.ResetFirewall()
 		return nil
 	case gate.FieldConfigRevision:
 		m.ResetConfigRevision()
@@ -9625,6 +9752,7 @@ type NodeMutation struct {
 	chain_password   *string
 	chain_node_id    *int
 	addchain_node_id *int
+	chain_link       *string
 	created_at       *time.Time
 	clearedFields    map[string]struct{}
 	done             bool
@@ -10532,6 +10660,42 @@ func (m *NodeMutation) ResetChainNodeID() {
 	delete(m.clearedFields, node.FieldChainNodeID)
 }
 
+// SetChainLink sets the "chain_link" field.
+func (m *NodeMutation) SetChainLink(s string) {
+	m.chain_link = &s
+}
+
+// ChainLink returns the value of the "chain_link" field in the mutation.
+func (m *NodeMutation) ChainLink() (r string, exists bool) {
+	v := m.chain_link
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldChainLink returns the old "chain_link" field's value of the Node entity.
+// If the Node object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *NodeMutation) OldChainLink(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldChainLink is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldChainLink requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldChainLink: %w", err)
+	}
+	return oldValue.ChainLink, nil
+}
+
+// ResetChainLink resets all changes to the "chain_link" field.
+func (m *NodeMutation) ResetChainLink() {
+	m.chain_link = nil
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *NodeMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -10602,7 +10766,7 @@ func (m *NodeMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *NodeMutation) Fields() []string {
-	fields := make([]string, 0, 19)
+	fields := make([]string, 0, 20)
 	if m.gate_id != nil {
 		fields = append(fields, node.FieldGateID)
 	}
@@ -10657,6 +10821,9 @@ func (m *NodeMutation) Fields() []string {
 	if m.chain_node_id != nil {
 		fields = append(fields, node.FieldChainNodeID)
 	}
+	if m.chain_link != nil {
+		fields = append(fields, node.FieldChainLink)
+	}
 	if m.created_at != nil {
 		fields = append(fields, node.FieldCreatedAt)
 	}
@@ -10704,6 +10871,8 @@ func (m *NodeMutation) Field(name string) (ent.Value, bool) {
 		return m.ChainPassword()
 	case node.FieldChainNodeID:
 		return m.ChainNodeID()
+	case node.FieldChainLink:
+		return m.ChainLink()
 	case node.FieldCreatedAt:
 		return m.CreatedAt()
 	}
@@ -10751,6 +10920,8 @@ func (m *NodeMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldChainPassword(ctx)
 	case node.FieldChainNodeID:
 		return m.OldChainNodeID(ctx)
+	case node.FieldChainLink:
+		return m.OldChainLink(ctx)
 	case node.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	}
@@ -10887,6 +11058,13 @@ func (m *NodeMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetChainNodeID(v)
+		return nil
+	case node.FieldChainLink:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetChainLink(v)
 		return nil
 	case node.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -11087,6 +11265,9 @@ func (m *NodeMutation) ResetField(name string) error {
 		return nil
 	case node.FieldChainNodeID:
 		m.ResetChainNodeID()
+		return nil
+	case node.FieldChainLink:
+		m.ResetChainLink()
 		return nil
 	case node.FieldCreatedAt:
 		m.ResetCreatedAt()

@@ -31,7 +31,7 @@ const (
 type dshGrant struct {
 	UserID     int    `json:"user_id"`
 	SessionKey string `json:"session_key"`
-	Origin     string `json:"origin"` // 打开抽屉的控制台来源，只允许它嵌入
+	Origin     string `json:"origin"` // 打开 dsh 窗口的控制台来源，只允许它嵌入
 }
 
 // dshGatewayMiddleware 在所有其他处理之前按 Host 分流。

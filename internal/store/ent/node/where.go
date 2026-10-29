@@ -129,6 +129,11 @@ func ChainNodeID(v int) predicate.Node {
 	return predicate.Node(sql.FieldEQ(FieldChainNodeID, v))
 }
 
+// ChainLink applies equality check predicate on the "chain_link" field. It's identical to ChainLinkEQ.
+func ChainLink(v string) predicate.Node {
+	return predicate.Node(sql.FieldEQ(FieldChainLink, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.Node {
 	return predicate.Node(sql.FieldEQ(FieldCreatedAt, v))
@@ -987,6 +992,71 @@ func ChainNodeIDIsNil() predicate.Node {
 // ChainNodeIDNotNil applies the NotNil predicate on the "chain_node_id" field.
 func ChainNodeIDNotNil() predicate.Node {
 	return predicate.Node(sql.FieldNotNull(FieldChainNodeID))
+}
+
+// ChainLinkEQ applies the EQ predicate on the "chain_link" field.
+func ChainLinkEQ(v string) predicate.Node {
+	return predicate.Node(sql.FieldEQ(FieldChainLink, v))
+}
+
+// ChainLinkNEQ applies the NEQ predicate on the "chain_link" field.
+func ChainLinkNEQ(v string) predicate.Node {
+	return predicate.Node(sql.FieldNEQ(FieldChainLink, v))
+}
+
+// ChainLinkIn applies the In predicate on the "chain_link" field.
+func ChainLinkIn(vs ...string) predicate.Node {
+	return predicate.Node(sql.FieldIn(FieldChainLink, vs...))
+}
+
+// ChainLinkNotIn applies the NotIn predicate on the "chain_link" field.
+func ChainLinkNotIn(vs ...string) predicate.Node {
+	return predicate.Node(sql.FieldNotIn(FieldChainLink, vs...))
+}
+
+// ChainLinkGT applies the GT predicate on the "chain_link" field.
+func ChainLinkGT(v string) predicate.Node {
+	return predicate.Node(sql.FieldGT(FieldChainLink, v))
+}
+
+// ChainLinkGTE applies the GTE predicate on the "chain_link" field.
+func ChainLinkGTE(v string) predicate.Node {
+	return predicate.Node(sql.FieldGTE(FieldChainLink, v))
+}
+
+// ChainLinkLT applies the LT predicate on the "chain_link" field.
+func ChainLinkLT(v string) predicate.Node {
+	return predicate.Node(sql.FieldLT(FieldChainLink, v))
+}
+
+// ChainLinkLTE applies the LTE predicate on the "chain_link" field.
+func ChainLinkLTE(v string) predicate.Node {
+	return predicate.Node(sql.FieldLTE(FieldChainLink, v))
+}
+
+// ChainLinkContains applies the Contains predicate on the "chain_link" field.
+func ChainLinkContains(v string) predicate.Node {
+	return predicate.Node(sql.FieldContains(FieldChainLink, v))
+}
+
+// ChainLinkHasPrefix applies the HasPrefix predicate on the "chain_link" field.
+func ChainLinkHasPrefix(v string) predicate.Node {
+	return predicate.Node(sql.FieldHasPrefix(FieldChainLink, v))
+}
+
+// ChainLinkHasSuffix applies the HasSuffix predicate on the "chain_link" field.
+func ChainLinkHasSuffix(v string) predicate.Node {
+	return predicate.Node(sql.FieldHasSuffix(FieldChainLink, v))
+}
+
+// ChainLinkEqualFold applies the EqualFold predicate on the "chain_link" field.
+func ChainLinkEqualFold(v string) predicate.Node {
+	return predicate.Node(sql.FieldEqualFold(FieldChainLink, v))
+}
+
+// ChainLinkContainsFold applies the ContainsFold predicate on the "chain_link" field.
+func ChainLinkContainsFold(v string) predicate.Node {
+	return predicate.Node(sql.FieldContainsFold(FieldChainLink, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

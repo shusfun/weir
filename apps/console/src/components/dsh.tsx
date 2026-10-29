@@ -1,10 +1,10 @@
-// 托管的 dsh（DeepSeek Harness）：右侧抽屉内嵌 dsh 原生界面（独立子域名，只能从这里打开），
+// 托管的 dsh（DeepSeek Harness）：浮动窗口内嵌 dsh 原生界面（独立地址，只能从这里打开），
 // 以及 dsh 的启用 / 子域名设置与版本管理。DeepSeek 的 Key 在 dsh 自己的设置里填写，Weir 不保存。
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Form, FormGrid, Input, Notice, Sheet, SheetContent, SkeletonList, StatusLamp, SwitchField, useConfirm } from "@weir/ui";
-import { Bot, Download, RotateCcw, Star, Trash2 } from "lucide-react";
+import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Form, FormGrid, Input, Notice, SkeletonList, StatusLamp, SwitchField, useConfirm } from "@weir/ui";
+import { Bot, Download, Minus, RotateCcw, Star, Trash2, X } from "lucide-react";
 import { api, ApiError } from "../api";
 import { useRowAction } from "../lib/action";
 import { date } from "../lib/models";
@@ -37,7 +37,7 @@ export interface DshView {
   plugin: { label: string; note: string; loaded: string; error: string; verified: boolean };
 }
 
-// 打开抽屉时附带的提示：notice 显示在抽屉顶部。dsh 看到的页面与对象由各页面声明（见 lib/console-context.ts）。
+// 打开窗口时附带的提示：notice 显示在窗口顶部。dsh 看到的页面与对象由各页面声明（见 lib/console-context.ts）。
 export interface DshHint {
   notice: string;
   nodeId?: number;
@@ -56,12 +56,12 @@ export function useDsh(enabled = true) {
   return useQuery({ queryKey: ["dsh"], queryFn: () => api("/admin/dsh") as Promise<DshView>, enabled, refetchInterval: (q) => (q.state.data?.settings.enabled && q.state.data.status.state !== "running" ? 3000 : 30000) });
 }
 
-// 其他页面通过事件打开抽屉（例如节点上的「AI 调整」），附带上下文。
+// 其他页面通过事件打开 dsh 窗口（例如节点上的「AI 调整」），附带上下文。
 export function openDsh(hint?: DshHint) {
   window.dispatchEvent(new CustomEvent("weir:dsh-open", { detail: hint }));
 }
 
-// notReady 是 dsh 不能打开时的一句话原因（工具提示、日志用）；抽屉里显示的是 DshSetup 的步骤清单。
+// notReady 是 dsh 不能打开时的一句话原因（工具提示用）；窗口里显示的是 DshSetup 的步骤清单。
 function notReady(v: DshView | undefined): string {
   if (!v) return "暂时无法读取 dsh 状态，请重试。";
   if (v.unsupported) return v.unsupported + "。";
@@ -77,11 +77,50 @@ function notReady(v: DshView | undefined): string {
   }
 }
 
-// DshDrawer：管理员在任何页面都有右下角入口。dsh 已就绪时内嵌 dsh；没就绪时抽屉里列出还差的步骤，
-// 每一步就地完成（下载、填地址并启用、等它启动），完成后自动打开 dsh。「让 dsh 起草」「AI 调整」也打开这里。
-export function DshDrawer() {
+// DshWindow：管理员在任何页面都有右下角入口，打开的是一个浮动窗口，不挡页面：页面照常能点、能填，
+// 窗口可以拖动标题栏移动、拖右下角改大小（位置与大小记在本浏览器）。
+// - 缩小：窗口收起成右下角的「dsh」条，dsh 继续在后台运行、对话不断，页面感知照常上报；点一下恢复原样。
+// - 关闭：卸下 dsh 页面并结束这次连接；再打开时重新连接（dsh 自己保存的会话还在）。
+// dsh 没就绪时窗口里列出还差的步骤并就地完成。「让 dsh 起草」「AI 调整」也打开这里；窄屏时是底部面板。
+type WindowMode = "closed" | "open" | "min";
+type Geometry = { x: number; y: number; w: number; h: number };
+const geometryKey = "weir:dsh-window";
+
+function loadGeometry(): Geometry {
+  const w = Math.min(560, window.innerWidth - 32), h = Math.min(720, window.innerHeight - 96);
+  const fallback = { x: window.innerWidth - w - 24, y: window.innerHeight - h - 24, w, h };
+  try {
+    const g = JSON.parse(localStorage.getItem(geometryKey) ?? "") as Geometry;
+    if ([g.x, g.y, g.w, g.h].every((n) => typeof n === "number" && Number.isFinite(n))) return clampGeometry(g);
+  } catch {
+    // 本地存储不可用或没有记录：用默认位置
+  }
+  return fallback;
+}
+
+// clampGeometry：窗口至少留出标题栏在视口里，不会被拖到找不回来的地方。
+function clampGeometry(g: Geometry): Geometry {
+  const w = Math.max(360, Math.min(g.w, window.innerWidth - 16));
+  const h = Math.max(320, Math.min(g.h, window.innerHeight - 16));
+  return { w, h, x: Math.max(8, Math.min(g.x, window.innerWidth - w - 8)), y: Math.max(8, Math.min(g.y, window.innerHeight - 48)) };
+}
+
+function saveGeometry(g: Geometry) {
+  try {
+    localStorage.setItem(geometryKey, JSON.stringify(g));
+  } catch {
+    // 记不住位置只是不方便，不影响使用
+  }
+}
+
+export function DshWindow() {
   const dsh = useDsh();
-  const [open, setOpen] = useState(false);
+  const [mode, setModeState] = useState<WindowMode>("closed");
+  const modeRef = useRef<WindowMode>("closed");
+  const setMode = (m: WindowMode) => {
+    modeRef.current = m;
+    setModeState(m);
+  };
   const [src, setSrc] = useState("");
   const [error, setError] = useState("");
   const [hint, setHint] = useState<DshHint | null>(null);
@@ -90,70 +129,188 @@ export function DshDrawer() {
     setError("");
     setSrc("");
     try {
-      // 每次打开都领取一次性票据；网关用它换会话，令牌不经过页面。同时告诉 dsh 管理员正在看哪里。
+      // 每次连接都领取一次性票据；网关用它换会话，令牌不经过页面。同时告诉 dsh 管理员正在看哪里。
       const { url } = await api("/admin/dsh/ticket", "POST", { drawer: drawerId() });
       setSrc(url);
     } catch (e) {
       setError(e instanceof ApiError && e.code === "dsh_not_running" ? notReady(dsh.data) : e instanceof Error ? e.message : "暂时无法打开 dsh，请重试。");
     }
   }
+  // show：从关闭打开时重新连接；从缩小恢复时保留原来的 dsh 页面与对话。
   async function show(next?: DshHint | null) {
-    drawerId(true); // 这个标签的抽屉会话：页面感知与界面导航都按它隔离
-    setOpen(true);
-    setHint(next ?? null);
-    const view = (await dsh.refetch()).data;
-    if (view?.ready) await ticket();
+    drawerId(true); // 这个标签的 dsh 会话：页面感知与界面导航都按它隔离
+    if (next) setHint(next);
+    const wasClosed = modeRef.current === "closed";
+    setMode("open");
+    if (wasClosed && (await dsh.refetch()).data?.ready) await ticket();
+  }
+  function close() {
+    setMode("closed");
+    setSrc("");
+    setError("");
+    setHint(null);
   }
   useEffect(() => {
     const onOpen = (e: Event) => void show((e as CustomEvent).detail);
     window.addEventListener("weir:dsh-open", onOpen);
     return () => window.removeEventListener("weir:dsh-open", onOpen);
   }, []);
-  // 在抽屉里配置好、dsh 刚就绪时，接着打开它
+  // 在窗口里配置好、dsh 刚就绪时，接着连上它
   useEffect(() => {
-    if (open && ready && !src && !error) void ticket();
-  }, [open, ready]);
-  return <DrawerView open={open} setOpen={setOpen} hint={hint} ready={ready} view={dsh.data} error={error} src={src} retry={() => void ticket()} openNew={() => void show()} />;
-}
-
-// DrawerView：抽屉本身；从某个节点打开时把那个节点声明为正在看的对象。
-function DrawerView({ open, setOpen, hint, ready, view, error, src, retry, openNew }: { open: boolean; setOpen: (v: boolean) => void; hint: DshHint | null; ready: boolean; view?: DshView; error: string; src: string; retry: () => void; openNew: () => void }) {
-  useConsoleContext(open && hint?.nodeId ? { object: { type: "node", name: hint.nodeName ?? "节点", id: hint.nodeId } } : null);
+    if (mode !== "closed" && ready && !src && !error) void ticket();
+  }, [mode, ready]);
   return (
     <>
-      <Button className="dsh-fab" size="icon-lg" aria-label={ready ? "打开 dsh" : "dsh：还没配置好，点开查看还差哪几步"} title={ready ? "打开 dsh（DeepSeek）" : "dsh 还没配置好：" + notReady(view)} onClick={openNew}>
-        <Bot />
-        {!ready && view && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-[var(--mg-warn)]" aria-hidden />}
-      </Button>
-      {drawerId() && <DshContextReporter open={open} />}
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="right" title="dsh" description="DeepSeek Harness · 草稿会由 Weir 弹窗请你确认" className="w-[min(680px,100vw)] gap-3 p-3">
-          <div className="flex h-full min-h-[70vh] flex-col gap-2">
-            {hint && <Notice role="status">{hint.notice}</Notice>}
-            {!ready ? (
-              <div className="min-h-0 flex-1 overflow-y-auto"><DshSetup view={view} /></div>
-            ) : error ? (
-              <>
-                <Notice tone="warn" role="status">{error}</Notice>
-                <div className="actions">
-                  <Button variant="outline" size="sm" onClick={retry}><RotateCcw />重试</Button>
-                </div>
-              </>
-            ) : src ? (
-              <iframe
-                key={src}
-                title="dsh"
-                src={src}
-                className="min-h-0 w-full flex-1 rounded-[var(--mg-radius)] border border-[var(--mg-line)] bg-[var(--mg-well)]"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-modals"
-                allow="clipboard-write"
-                referrerPolicy="no-referrer"
-              />
-            ) : <State loading />}
-          </div>
-        </SheetContent>
-      </Sheet>
+      {mode !== "open" && (
+        <Button className="dsh-fab" size={mode === "min" ? "default" : "icon-lg"} aria-label={mode === "min" ? "恢复 dsh 窗口" : ready ? "打开 dsh" : "dsh：还没配置好，点开查看还差哪几步"} title={ready ? undefined : "dsh 还没配置好：" + notReady(dsh.data)} onClick={() => void show()}>
+          <Bot />
+          {mode === "min" && <span>dsh · 已缩小</span>}
+          {!ready && dsh.data && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-[var(--mg-warn)]" aria-hidden />}
+        </Button>
+      )}
+      {drawerId() && <DshContextReporter open={mode !== "closed"} />}
+      {mode !== "closed" && (
+        <WindowFrame hidden={mode === "min"} minimize={() => setMode("min")} close={close} hint={hint} clearHint={() => setHint(null)} hintObject={hint?.nodeId ? { type: "node", name: hint.nodeName ?? "节点", id: hint.nodeId } : undefined}>
+          {!ready ? (
+            <div className="min-h-0 flex-1 overflow-y-auto p-3"><DshSetup view={dsh.data} /></div>
+          ) : error ? (
+            <div className="stack p-3">
+              <Notice tone="warn" role="status">{error}</Notice>
+              <div className="actions"><Button variant="outline" size="sm" onClick={() => void ticket()}><RotateCcw />重试</Button></div>
+            </div>
+          ) : src ? (
+            <>
+            <KeyTip />
+            <iframe
+              key={src}
+              title="dsh"
+              src={src}
+              className="min-h-0 w-full flex-1 border-0 bg-[var(--mg-well)]"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-modals"
+              allow="clipboard-write"
+              referrerPolicy="no-referrer"
+            />
+            </>
+          ) : <div className="p-3"><State loading /></div>}
+        </WindowFrame>
+      )}
     </>
+  );
+}
+
+// WindowFrame：窗口外框。宽屏可拖动标题栏移动、拖右下角改大小；窄屏固定为底部面板。
+// 缩小时只是隐藏（display: none），里面的 dsh 页面不卸下。从节点打开时把那个节点声明为正在看的对象。
+function WindowFrame({ hidden, minimize, close, hint, clearHint, hintObject, children }: { hidden: boolean; minimize: () => void; close: () => void; hint: DshHint | null; clearHint: () => void; hintObject?: { type: string; name: string; id: number }; children: ReactNode }) {
+  useConsoleContext(!hidden && hintObject ? { object: hintObject } : null);
+  const [g, setG] = useState<Geometry>(loadGeometry);
+  const [dragging, setDragging] = useState(false);
+  const frame = useRef<HTMLDivElement>(null);
+  const narrow = useNarrow();
+  useEffect(() => {
+    const onResize = () => setG((v) => clampGeometry(v));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  // 拖右下角改大小（原生 resize）后记下新的宽高
+  useEffect(() => {
+    const el = frame.current;
+    if (!el || narrow) return;
+    const ro = new ResizeObserver(() => {
+      const r = el.getBoundingClientRect();
+      setG((v) => (Math.abs(v.w - r.width) < 1 && Math.abs(v.h - r.height) < 1 ? v : { ...v, w: r.width, h: r.height }));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [narrow]);
+  useEffect(() => {
+    if (!dragging) saveGeometry(g);
+  }, [g, dragging]);
+  function startDrag(e: React.PointerEvent) {
+    if (narrow || (e.target as HTMLElement).closest("button")) return;
+    e.preventDefault();
+    const start = { px: e.clientX, py: e.clientY, x: g.x, y: g.y };
+    setDragging(true);
+    const move = (ev: PointerEvent) => setG((v) => clampGeometry({ ...v, x: start.x + ev.clientX - start.px, y: start.y + ev.clientY - start.py }));
+    const up = () => {
+      setDragging(false);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+  return (
+    <div
+      ref={frame}
+      role="dialog"
+      aria-modal="false"
+      aria-label="dsh"
+      data-dsh-window=""
+      hidden={hidden}
+      className={"dsh-window " + (hidden ? "hidden" : "flex")}
+      style={narrow ? undefined : { left: g.x, top: g.y, width: g.w, height: g.h }}
+    >
+      <div className={"dsh-window-bar " + (narrow ? "" : "cursor-move")} onPointerDown={startDrag}>
+        <Bot className="size-4 shrink-0 text-[var(--mg-ink-3)]" />
+        <strong className="text-[13px]">dsh</strong>
+        <small className="min-w-0 flex-1 truncate text-[var(--mg-ink-3)]">草稿会由 Weir 弹窗请你确认</small>
+        <Button size="icon-sm" variant="ghost" aria-label="缩小 dsh 窗口（dsh 继续在后台运行）" title="缩小：dsh 继续在后台运行，点右下角恢复" onClick={minimize}><Minus /></Button>
+        <Button size="icon-sm" variant="ghost" aria-label="关闭 dsh 窗口" title="关闭：结束这次连接，再打开时重新连接" onClick={close}><X /></Button>
+      </div>
+      {hint && (
+        <div className="flex items-start gap-2 border-b border-[var(--mg-line-soft)] px-3 py-2 text-[12.5px] text-[var(--mg-ink-2)]" role="status">
+          <span className="min-w-0 flex-1">{hint.notice}</span>
+          <Button size="icon-xs" variant="ghost" aria-label="收起这条提示" onClick={clearHint}><X /></Button>
+        </div>
+      )}
+      {/* 拖动时盖住 dsh 页面，鼠标移到它上面也不丢事件 */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {children}
+        {dragging && <div className="absolute inset-0" />}
+      </div>
+    </div>
+  );
+}
+
+function useNarrow() {
+  const query = "(max-width: 640px)";
+  const [narrow, setNarrow] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const m = window.matchMedia(query);
+    const on = () => setNarrow(m.matches);
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, []);
+  return narrow;
+}
+
+// dsh 的「DeepSeek 账号登录」只接受本机回环地址（http://127.0.0.1:端口）作为登录回调，经 Weir 的 dsh 地址打开时
+// dsh 会拒绝这次登录；所以在 Weir 里用 API Key。这是 dsh 的限制，不是 Weir 能绕过的。
+const keyHelp = "在 dsh 的设置里选「API Key」，填 DeepSeek 开放平台（platform.deepseek.com）创建的 API Key。不要用「DeepSeek 账号登录」：dsh 只允许在它所在的机器上用账号登录，经 Weir 打开时会失败。Key 只保存在 dsh 里，Weir 不保存、也不会发给别处。";
+const keyTipKey = "weir:dsh-key-tip";
+
+// KeyTip：dsh 打开后第一次给一条提示，说明用 API Key、不用账号登录；收起后在本浏览器不再显示。
+function KeyTip() {
+  const [show, setShow] = useState(() => {
+    try {
+      return localStorage.getItem(keyTipKey) !== "1";
+    } catch {
+      return true;
+    }
+  });
+  if (!show) return null;
+  return (
+    <div className="flex items-start gap-2 border-b border-[var(--mg-line-soft)] bg-[var(--mg-well)] px-3 py-2 text-[12.5px] text-[var(--mg-ink-2)]" role="note">
+      <span className="min-w-0 flex-1">{keyHelp}</span>
+      <Button size="xs" variant="ghost" onClick={() => {
+        try {
+          localStorage.setItem(keyTipKey, "1");
+        } catch {
+          // 记不住只是下次还会显示
+        }
+        setShow(false);
+      }}>知道了</Button>
+    </div>
   );
 }
 
@@ -167,7 +324,7 @@ export function DshSetup({ view }: { view?: DshView }) {
     ["下载 dsh", set.version ? "done" : "current"],
     ["填写 dsh 地址并启用", !set.version ? "todo" : set.enabled && set.domain ? "done" : "current"],
     ["等待 dsh 启动", !(set.version && set.enabled && set.domain) ? "todo" : view.status.state === "running" ? "done" : "current"],
-    ["在 dsh 里填 DeepSeek Key", view.ready ? "current" : "todo"],
+    ["在 dsh 里填 DeepSeek API Key", view.ready ? "current" : "todo"],
   ];
   return (
     <ol className="m-0 list-none space-y-3 p-0" aria-label="dsh 配置步骤">
@@ -183,7 +340,7 @@ export function DshSetup({ view }: { view?: DshView }) {
         <DshStartStep view={view} />
       </SetupStep>
       <SetupStep n={4} title={steps[3][0]} state={steps[3][1]} done="">
-        <small className="text-[var(--mg-ink-3)]">dsh 打开后在它自己的设置里填写 DeepSeek 的 API Key；Key 只保存在 dsh 里，Weir 不保存、也不会发给别处。</small>
+        <small className="text-[var(--mg-ink-3)]">{keyHelp}</small>
       </SetupStep>
     </ol>
   );
@@ -291,7 +448,7 @@ function DshAddressForm({ view, turnOn }: { view: DshView; turnOn?: boolean }) {
 export function DshSettingsCard() {
   const q = useDsh();
   return (
-    <Section title="dsh（DeepSeek Harness）" description="dsh 由中心托管，只监听本机回环。浏览器只能从控制台右下角的抽屉里打开它；其他途径访问 dsh 地址只会得到一个空的 404，看起来就像这个地址不存在。DeepSeek 的 Key 在 dsh 自己的设置里填写，Weir 不保存。">
+    <Section title="dsh（DeepSeek Harness）" description="dsh 由中心托管，只监听本机回环。浏览器只能从控制台右下角的 dsh 窗口里打开它；其他途径访问 dsh 地址只会得到一个空的 404，看起来就像这个地址不存在。DeepSeek 的 Key 在 dsh 自己的设置里填写，Weir 不保存。">
       {q.isPending || q.error || !q.data ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : !q.data.settings.version || !q.data.settings.enabled || !q.data.settings.domain ? <DshSetup view={q.data} /> : (
         <div className="stack">
           <DshStartStep view={q.data} />

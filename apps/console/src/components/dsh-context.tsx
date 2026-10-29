@@ -1,6 +1,6 @@
-// dsh 抽屉的页面感知：打开过抽屉的那个浏览器标签把合并后的上下文报给中心（页面切换、弹窗开关、向导换步、
+// dsh 窗口的页面感知：打开过 dsh 窗口的那个浏览器标签把合并后的上下文报给中心（页面切换、弹窗开关、向导换步、
 // 选中对象变化立即报，表单停止输入 1 秒后报；连续变化合并为一次），标签切到后台时标记「不在前台」。
-// 抽屉开着时轮询 dsh 的界面导航：只作用于这个标签，跳转后底部提示「由 dsh 打开」。
+// 窗口开着（含缩小）时轮询 dsh 的界面导航：只作用于这个标签，跳转后底部提示「由 dsh 打开」。
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@weir/ui";

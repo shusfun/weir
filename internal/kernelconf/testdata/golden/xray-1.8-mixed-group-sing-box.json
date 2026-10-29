@@ -8,6 +8,15 @@
           "hy2-inbound-20",
           "inbound-24-shadowsocks"
         ],
+        "outbounds": [
+          "singbox-out-2147483647",
+          "singbox-out-40",
+          "singbox-out-41",
+          "singbox-out-42",
+          "singbox-out-70",
+          "singbox-out-1073741824",
+          "singbox-out-1073741825"
+        ],
         "users": [
           "c201",
           "c241"
