@@ -155,7 +155,7 @@ func (s *Server) readClientCatalog(ctx context.Context) (catalogDocument, error)
 func (s *Server) getClientCatalog(c *gin.Context) {
 	d, e := s.readClientCatalog(c.Request.Context())
 	if e != nil {
-		failure(c, 503, "client_catalog_unavailable")
+		failInternal(c, 503, "client_catalog_unavailable", e)
 		return
 	}
 	if c.GetString("role") != "admin" {
@@ -227,7 +227,7 @@ func (s *Server) putClientCatalog(c *gin.Context) {
 		return
 	}
 	if e != nil {
-		failure(c, 503, "catalog_save_failed")
+		failInternal(c, 503, "catalog_save_failed", e)
 		return
 	}
 	s.audit(c, "settings.client-catalog", fmt.Sprintf("%d clients", len(req.Clients)), "ok")

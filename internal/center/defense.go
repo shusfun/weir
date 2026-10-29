@@ -247,7 +247,7 @@ func (s *Server) dismissEvent(c *gin.Context) {
 func (s *Server) listEvents(c *gin.Context) {
 	list, err := s.recentEvents(c.Request.Context(), 50)
 	if err != nil {
-		failure(c, 503, "events_unavailable")
+		failInternal(c, 503, "events_unavailable", err)
 		return
 	}
 	analyzing, _, _ := s.Store.KV.Get(c.Request.Context(), "defense-analyzing")
@@ -318,7 +318,7 @@ func (s *Server) listBlocks(c *gin.Context) {
 	ctx := c.Request.Context()
 	keys, err := s.Store.KV.Keys(ctx, blockPrefix, 500)
 	if err != nil {
-		failure(c, 503, "block_unavailable")
+		failInternal(c, 503, "block_unavailable", err)
 		return
 	}
 	out := []gin.H{}
@@ -401,7 +401,7 @@ func (s *Server) putLaya(c *gin.Context) {
 		}
 		sealed, err := s.Crypto.Encrypt(k)
 		if err != nil {
-			failure(c, 500, "encrypt_failed")
+			failInternal(c, 500, "encrypt_failed", err)
 			return
 		}
 		l.Key = sealed
@@ -418,7 +418,7 @@ func (s *Server) putLaya(c *gin.Context) {
 	b, _ := json.Marshal(l)
 	_ = json.Unmarshal(b, &value)
 	if err := s.Store.Ent.Setting.Create().SetKey("laya").SetValue(value).OnConflictColumns(setting.FieldKey).UpdateNewValues().Exec(ctx); err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	s.audit(c, "defense.laya", "", "ok")

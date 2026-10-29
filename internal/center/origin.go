@@ -105,7 +105,7 @@ func (s *Server) getCenterOrigin(c *gin.Context) {
 	origin, current := s.centerOrigin(ctx), requestOrigin(c.Request)
 	pending, err := s.pendingGates(ctx, origin)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	c.JSON(200, gin.H{"origin": origin, "current": current, "recordable": domainOrigin(current), "pending_gates": pending})
@@ -139,7 +139,7 @@ func (s *Server) putCenterOrigin(c *gin.Context) {
 	err := s.Store.Ent.Setting.Create().SetKey(originSettingKey).SetValue(map[string]any{"origin": current}).
 		OnConflictColumns(setting.FieldKey).UpdateNewValues().Exec(ctx)
 	if err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	s.origin.Lock()

@@ -90,7 +90,7 @@ func certView(c *ent.Certificate) gin.H {
 func (s *Server) listCerts(c *gin.Context) {
 	items, err := s.Store.Ent.Certificate.Query().Order(ent.Asc(certificate.FieldID)).All(c.Request.Context())
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	out := make([]gin.H, 0, len(items))
@@ -192,7 +192,7 @@ func (s *Server) agentCert(c *gin.Context) {
 	}
 	key, err := s.reveal(cert.KeyPem)
 	if err != nil {
-		failure(c, 500, "cert_unreadable")
+		failInternal(c, 500, "cert_unreadable", err)
 		return
 	}
 	c.JSON(200, gin.H{"cert_pem": cert.CertPem, "key_pem": key, "sha256": cert.Sha256})

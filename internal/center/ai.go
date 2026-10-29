@@ -201,7 +201,7 @@ func (s *Server) pendingDrafts(ctx context.Context) ([]*Draft, error) {
 func (s *Server) listDrafts(c *gin.Context) {
 	list, err := s.pendingDrafts(c.Request.Context())
 	if err != nil {
-		failure(c, 503, "draft_unavailable")
+		failInternal(c, 503, "draft_unavailable", err)
 		return
 	}
 	if list == nil {

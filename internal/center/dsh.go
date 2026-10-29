@@ -527,7 +527,7 @@ func (s *Server) putDSHSettings(c *gin.Context) {
 	set := s.dshSettings(ctx)
 	set.Enabled, set.Domain, set.AutoAnalyze = req.Enabled, domain, req.AutoAnalyze
 	if err := s.saveDSHSettings(ctx, set); err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	s.audit(c, "dsh.settings", domain, "ok")
@@ -591,6 +591,7 @@ func frameSite(r *http.Request) string {
 func (s *Server) dshReleases(c *gin.Context) {
 	list, err := s.dshInstaller().Releases(c.Request.Context())
 	if err != nil {
+		_ = c.Error(err)
 		c.AbortWithStatusJSON(502, gin.H{"error": gin.H{"code": "upstream_unavailable", "message": "无法获取 dsh 版本：" + err.Error()}})
 		return
 	}
@@ -664,7 +665,7 @@ func (s *Server) setDSHVersion(c *gin.Context) {
 		}
 		set.Version = req.Version
 		if err := s.saveDSHSettings(ctx, set); err != nil {
-			failure(c, 500, "save_failed")
+			failInternal(c, 500, "save_failed", err)
 			return
 		}
 	}
@@ -710,7 +711,7 @@ func (s *Server) dshTicket(c *gin.Context) {
 	t := randomToken(32)
 	b, _ := json.Marshal(dshGrant{UserID: c.GetInt("user_id"), SessionKey: c.GetString("session_key"), Origin: requestOrigin(c.Request)})
 	if err := s.Store.KV.Set(c.Request.Context(), "dsh-ticket:"+digest(t), string(b), time.Minute); err != nil {
-		failure(c, 503, "dsh_ticket_unavailable")
+		failInternal(c, 503, "dsh_ticket_unavailable", err)
 		return
 	}
 	s.audit(c, "dsh.open", "", "ok")

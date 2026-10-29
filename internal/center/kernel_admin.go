@@ -165,6 +165,7 @@ func (s *Server) kernelReleases(c *gin.Context) {
 	}
 	list, err := s.fetcher().Releases(c.Request.Context(), name)
 	if err != nil {
+		_ = c.Error(err)
 		c.AbortWithStatusJSON(502, gin.H{"error": gin.H{"code": "upstream_unavailable", "message": "无法获取上游版本：" + err.Error()}})
 		return
 	}
@@ -336,7 +337,7 @@ func (s *Server) setKernelDefaults(c *gin.Context) {
 	}
 	err := s.Store.Ent.Setting.Create().SetKey("kernel-defaults").SetValue(value).OnConflictColumns(setting.FieldKey).UpdateNewValues().Exec(ctx)
 	if err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	ids, err := s.Store.Ent.Gate.Query().IDs(ctx)
@@ -344,7 +345,7 @@ func (s *Server) setKernelDefaults(c *gin.Context) {
 		err = s.bumpGates(ctx, ids)
 	}
 	if err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	s.audit(c, "kernel.defaults", "", "ok")

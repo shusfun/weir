@@ -116,6 +116,7 @@ func (s *Server) StartBackground(ctx context.Context) {
 func (s *Server) maintenance(ctx context.Context) {
 	tick := time.NewTicker(time.Minute)
 	defer tick.Stop()
+	report := taskLog{}
 	for {
 		select {
 		case <-ctx.Done():
@@ -124,21 +125,24 @@ func (s *Server) maintenance(ctx context.Context) {
 			s.state.RLock()
 			ready := s.Config.Installed && s.Store != nil
 			if ready {
-				_ = s.Store.Lock.Do(ctx, "maintenance", func(ctx context.Context) error {
+				err := s.Store.Lock.Do(ctx, "maintenance", func(ctx context.Context) error {
 					now := time.Now()
 					// 各任务互不影响：一项失败不阻止其他项。
-					_ = s.ResetDueUsage(ctx, now)
-					_ = s.RefreshSources(ctx, now)
+					report.note("reset-usage", s.ResetDueUsage(ctx, now))
+					report.note("refresh-sources", s.RefreshSources(ctx, now))
 					s.RefreshSourceExits(ctx)
-					_ = s.AutoBackup(ctx, now)
-					_ = s.CheckAlerts(ctx, now)
-					_ = s.ObserveSecurity(ctx, now)
-					_ = s.ReclaimStaleBudgets(ctx, now)
-					_ = s.RenewCerts(ctx, now)
-					_ = s.PruneSamples(ctx, now)
+					report.note("auto-backup", s.AutoBackup(ctx, now))
+					report.note("check-alerts", s.CheckAlerts(ctx, now))
+					report.note("observe-security", s.ObserveSecurity(ctx, now))
+					report.note("reclaim-budgets", s.ReclaimStaleBudgets(ctx, now))
+					report.note("renew-certs", s.RenewCerts(ctx, now))
+					report.note("prune-samples", s.PruneSamples(ctx, now))
 					s.dropLegacyAIProvider(ctx)
 					return nil
 				})
+				if ctx.Err() == nil {
+					report.note("maintenance-lock", err)
+				}
 			}
 			s.state.RUnlock()
 		}
@@ -205,6 +209,8 @@ func (s *Server) Router() *gin.Engine {
 		}
 		c.Next()
 	})
+	// 排在 dsh 子域名之后：那边的响应不带 Weir 的头，也不记日志。
+	r.Use(requestLog)
 	r.Use(requireHTTPS)
 	r.Use(func(c *gin.Context) {
 		if c.Request.URL.Path == "/api/v1/setup/install" {
@@ -296,8 +302,8 @@ func (s *Server) health(c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 	defer cancel()
-	if s.Store.Ping(ctx) != nil {
-		failure(c, 503, "dependency_unavailable")
+	if err := s.Store.Ping(ctx); err != nil {
+		failInternal(c, 503, "dependency_unavailable", err)
 		return
 	}
 	c.JSON(200, gin.H{"status": "ok", "version": buildinfo.Version})
@@ -317,7 +323,7 @@ func (s *Server) setupStatus(c *gin.Context) {
 func (s *Server) setupGuard(c *gin.Context) {
 	cred, err := readSetupCredential(s.Path)
 	if err != nil {
-		failure(c, 503, "setup_state_unavailable")
+		failInternal(c, 503, "setup_state_unavailable", err)
 		return
 	}
 	if cred.Installed || s.Config.Installed {
@@ -516,7 +522,7 @@ func (s *Server) spa(c *gin.Context) {
 		b, err = fs.ReadFile(s.Assets, path)
 	}
 	if err != nil {
-		failure(c, 503, "frontend_not_built")
+		failInternal(c, 503, "frontend_not_built", err)
 		return
 	}
 	mime := "text/html; charset=utf-8"

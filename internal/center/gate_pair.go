@@ -104,8 +104,8 @@ func (s *Server) agentChallenge(c *gin.Context) {
 		return
 	}
 	challenge := randomToken(32)
-	if s.Store.KV.Set(c.Request.Context(), "gate-challenge:"+strconv.Itoa(g.ID)+":"+challenge, "1", time.Minute) != nil {
-		failure(c, 503, "auth_unavailable")
+	if err := s.Store.KV.Set(c.Request.Context(), "gate-challenge:"+strconv.Itoa(g.ID)+":"+challenge, "1", time.Minute); err != nil {
+		failInternal(c, 503, "auth_unavailable", err)
 		return
 	}
 	c.JSON(200, gin.H{"challenge": challenge})
@@ -133,8 +133,8 @@ func (s *Server) agentAuthenticate(c *gin.Context) {
 		return
 	}
 	token := randomToken(32)
-	if s.Store.KV.Set(ctx, "gate-token:"+digest(token), strconv.Itoa(g.ID), 15*time.Minute) != nil {
-		failure(c, 503, "auth_unavailable")
+	if err := s.Store.KV.Set(ctx, "gate-token:"+digest(token), strconv.Itoa(g.ID), 15*time.Minute); err != nil {
+		failInternal(c, 503, "auth_unavailable", err)
 		return
 	}
 	c.JSON(200, gin.H{"token": token, "expires_in": 900})

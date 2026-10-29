@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -65,7 +66,7 @@ func (s *Server) gateBundle(c *gin.Context) {
 	binary, err := os.ReadFile(exe)
 	installer, ierr := os.ReadFile(installerPath)
 	if err != nil || ierr != nil {
-		failure(c, 503, "bundle_unavailable")
+		failInternal(c, 503, "bundle_unavailable", errors.Join(err, ierr))
 		return
 	}
 	files := map[string][]byte{"weir": binary, "install.sh": installer, "VERSION": []byte(buildinfo.Version + "\n")}
@@ -87,7 +88,7 @@ func (s *Server) gateBundle(c *gin.Context) {
 			_, err = tw.Write(files[name])
 		}
 		if err != nil {
-			failure(c, 500, "bundle_failed")
+			failInternal(c, 500, "bundle_failed", err)
 			return
 		}
 	}

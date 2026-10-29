@@ -181,7 +181,7 @@ func (s *Server) subChecks(c *gin.Context) {
 	ctx := c.Request.Context()
 	keys, err := s.Store.KV.Keys(ctx, "subcheck-last:", 500)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	items := []SubCheck{}

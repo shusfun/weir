@@ -55,6 +55,7 @@ CGO_ENABLED=0 GOOS=linux go build -o dist/weir ./apps/weir
 ```
 
 
+
 ## 规则
 
 - **先读代码再改**，沿用现有架构、命名和风格。服务端只用 Go；Node.js 只用于构建、上游对照测试和托管的 dsh。

@@ -188,7 +188,7 @@ func (s *Server) putNodeCertSettings(c *gin.Context) {
 	}
 	v.EdgeDomain, v.Email, v.Staging = req.EdgeDomain, req.Email, req.Staging
 	if err := s.saveNodeCertSettings(ctx, v); err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	s.audit(c, "certs.settings", req.EdgeDomain, "ok")

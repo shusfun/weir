@@ -101,7 +101,7 @@ func (s *Server) misubRoutes(r *gin.Engine, auth, admin *gin.RouterGroup) {
 func (s *Server) getMisubSettings(c *gin.Context) {
 	st, err := s.misubSettings(c.Request.Context())
 	if err != nil {
-		failure(c, 503, "settings_unavailable")
+		failInternal(c, 503, "settings_unavailable", err)
 		return
 	}
 	c.JSON(200, st)
@@ -128,7 +128,7 @@ func (s *Server) putMisubSettings(c *gin.Context) {
 	b, _ := json.Marshal(st)
 	_ = json.Unmarshal(b, &value)
 	if err := s.Store.Ent.Setting.Create().SetKey(misubSettingKey).SetValue(value).OnConflictColumns(setting.FieldKey).UpdateNewValues().Exec(c.Request.Context()); err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	s.audit(c, "misub.settings", "", "ok")
@@ -208,7 +208,7 @@ func parseUserInfo(raw string) map[string]int64 {
 func (s *Server) listSources(c *gin.Context) {
 	items, err := s.Store.Ent.SubSource.Query().Order(ent.Asc(subsource.FieldPosition), ent.Asc(subsource.FieldID)).All(c.Request.Context())
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	out := make([]gin.H, 0, len(items))
@@ -385,7 +385,7 @@ func (s *Server) orderSources(c *gin.Context) {
 	}
 	for i, id := range req.IDs {
 		if err = s.Store.Ent.SubSource.UpdateOneID(id).SetPosition(i).Exec(ctx); err != nil {
-			failure(c, 500, "save_failed")
+			failInternal(c, 500, "save_failed", err)
 			return
 		}
 	}
@@ -476,7 +476,7 @@ func manualView(v *ent.SubNode) gin.H {
 func (s *Server) listManualNodes(c *gin.Context) {
 	items, err := s.Store.Ent.SubNode.Query().Order(ent.Asc(subnode.FieldPosition), ent.Asc(subnode.FieldID)).All(c.Request.Context())
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	out := make([]gin.H, 0, len(items))
@@ -607,7 +607,7 @@ func (s *Server) importManualNodes(c *gin.Context) {
 		bulk = append(bulk, s.Store.Ent.SubNode.Create().SetURL(l).SetGroup(strings.TrimSpace(req.Group)).SetPosition(n+i))
 	}
 	if _, err := s.Store.Ent.SubNode.CreateBulk(bulk...).Save(ctx); err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	s.invalidateGroups(ctx)
@@ -648,7 +648,7 @@ func (s *Server) renameNodeGroup(c *gin.Context) {
 		}
 	}
 	if _, err := s.Store.Ent.SubNode.Update().Where(subnode.GroupEQ(req.From)).SetGroup(to).Save(ctx); err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	s.invalidateGroups(ctx)
@@ -685,7 +685,7 @@ func (s *Server) dropFromProfiles(ctx context.Context, field string, id int) {
 func (s *Server) listTemplates(c *gin.Context) {
 	items, err := s.Store.Ent.RuleTemplate.Query().Order(ent.Asc(ruletemplate.FieldID)).All(c.Request.Context())
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	custom := make([]gin.H, 0, len(items))

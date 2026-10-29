@@ -70,7 +70,7 @@ func (s *Server) readMirrors(c *gin.Context) (mirrorDocument, error) {
 func (s *Server) getClientMirrors(c *gin.Context) {
 	d, e := s.readMirrors(c)
 	if e != nil {
-		failure(c, 503, "client_mirrors_unavailable")
+		failInternal(c, 503, "client_mirrors_unavailable", e)
 		return
 	}
 	if c.GetString("role") != "admin" {
@@ -124,7 +124,7 @@ func (s *Server) putClientMirrors(c *gin.Context) {
 		return
 	}
 	if e != nil {
-		failure(c, 503, "mirror_save_failed")
+		failInternal(c, 503, "mirror_save_failed", e)
 		return
 	}
 	s.audit(c, "settings.client-mirrors", fmt.Sprintf("%d mirrors", len(req.Mirrors)), "ok")

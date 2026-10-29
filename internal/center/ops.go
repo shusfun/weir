@@ -46,12 +46,12 @@ func (s *Server) listAudit(c *gin.Context) {
 	ctx := c.Request.Context()
 	total, err := q.Clone().Count(ctx)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	items, err := q.Order(ent.Desc(audit.FieldID)).Offset((page - 1) * size).Limit(size).All(ctx)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	out := make([]gin.H, 0, len(items))

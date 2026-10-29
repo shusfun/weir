@@ -37,7 +37,7 @@ func (s *Server) gateTopology(c *gin.Context) {
 	ctx := c.Request.Context()
 	nodes, err := s.Store.Ent.Node.Query().Where(entnode.GateIDEQ(g.ID)).Order(ent.Asc(entnode.FieldID)).All(ctx)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	var out []topoNode
