@@ -33,7 +33,7 @@ export function CertManager({ open, close }: { open: boolean; close: () => void 
       setKeyPem("");
     },
   });
-  useConsoleContext(open ? { dialog: { title: "证书" }, list: { selected: certs.data?.length ?? 0, items: (certs.data ?? []).slice(0, 20).map((c) => ({ type: "cert", name: c.domain, id: c.id })) }, form: [field("mode", "添加方式", mode === "upload" ? "上传" : "自签"), field("domain", "域名", domain), field("cert_pem", "证书", certPem, true), field("key_pem", "私钥", keyPem, true)] } : null);
+  useConsoleContext(open ? { dialog: { title: "证书" }, list: { total: certs.data?.length ?? 0, items: (certs.data ?? []).slice(0, 20).map((c) => ({ type: "cert", name: c.domain, id: c.id })) }, form: [field("mode", "添加方式", mode === "upload" ? "上传" : "自签"), field("domain", "域名", domain), field("cert_pem", "证书", certPem, true), field("key_pem", "私钥", keyPem, true)] } : null);
   return (
     <Dialog open={open} onOpenChange={(o) => !o && !add.busy && close()}>
       <DialogContent size="lg">

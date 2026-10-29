@@ -57,7 +57,7 @@ export function ProfilesPanel() {
     await run(p.id, () => api("/admin/misub/profiles/" + p.id, "DELETE"), "订阅组已删除");
   }
   const done = (msg: string) => { toast(msg, { tone: "ok" }); void q.refetch(); };
-  useConsoleContext({ tab: "订阅组", list: { selected: q.data?.length ?? 0, items: (q.data ?? []).slice(0, 20).map((p) => ({ type: "profile", name: p.name, id: p.id })) } });
+  useConsoleContext({ tab: "订阅组", list: { total: q.data?.length ?? 0, items: (q.data ?? []).slice(0, 20).map((p) => ({ type: "profile", name: p.name, id: p.id })) } });
   return (
     <section className="stack">
       <SectionHeader title="订阅组" description="把订阅源与手动节点组合成一份订阅；可分配给用户（各自独立地址）或匿名分享。外部节点的流量不计入用户额度。" actions={<Button size="sm" onClick={() => setEdit("new")}><Plus />新建订阅组</Button>} />

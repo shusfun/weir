@@ -20,8 +20,9 @@ export function CommandPalette({ open, onOpenChange, admin }: { open: boolean; o
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  const devices = useQuery({ queryKey: ["gates"], queryFn: async () => (await api("/admin/gates")) as { items: { id: number; name: string }[] }, enabled: open && admin });
-  const users = useQuery({ queryKey: ["users"], queryFn: async () => (await api("/admin/users")) as { items: { id: number; email: string; name: string }[] }, enabled: open && admin });
+  // 快速跳转只要名称：查询键与列表页分开（列表页缓存的是数组，这里是 { items }，同一个键会互相覆盖、让列表页崩掉）
+  const devices = useQuery({ queryKey: ["palette", "gates"], queryFn: async () => (await api("/admin/gates")) as { items: { id: number; name: string }[] }, enabled: open && admin });
+  const users = useQuery({ queryKey: ["palette", "users"], queryFn: async () => (await api("/admin/users")) as { items: { id: number; email: string; name: string }[] }, enabled: open && admin });
 
   useEffect(() => {
     if (open) {

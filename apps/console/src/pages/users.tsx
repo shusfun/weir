@@ -42,7 +42,7 @@ export function UsersPage() {
         });
     }
   }, [params, navigate, toast]);
-  useConsoleContext({ page: "用户", list: { selected: users.data?.length ?? 0, items: (users.data ?? []).slice(0, 20).map((u) => ({ type: "user", name: u.name || u.email, id: u.id })) } });
+  useConsoleContext({ page: "用户", list: { total: users.data?.length ?? 0, items: (users.data ?? []).slice(0, 20).map((u) => ({ type: "user", name: u.name || u.email, id: u.id })) } });
   useConsoleContext(detail ? { object: { type: "user", name: detail.name || detail.email, id: detail.id }, dialog: { title: "用户详情" } } : null);
   const header = <PageHeader eyebrow="工作区" title="用户" description="建用户时一次设好额度、周期与节点；用户可自行生成多条链接与链式代理。" actions={<Button onClick={() => setForm("new")}><Plus />创建用户</Button>} />;
   const optionsFor = (u: UserItem): NodeOption[] =>
