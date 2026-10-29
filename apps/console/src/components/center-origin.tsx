@@ -18,7 +18,7 @@ interface CenterOrigin {
   pending_gates: PendingGate[];
 }
 
-const dismissKey = (a: string, b: string) => "migate-origin-dismiss:" + a + "→" + b;
+const dismissKey = (a: string, b: string) => "weir-origin-dismiss:" + a + "→" + b;
 function dismissed(a: string, b: string) {
   try {
     return localStorage.getItem(dismissKey(a, b)) === "1";

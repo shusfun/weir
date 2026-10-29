@@ -1,0 +1,9 @@
+# Xray 26.3.27 起：移除了出口 TLS 的 allowInsecure，其余与 xray-1.8 相同。
+kernel: xray
+name: xray-26.3
+extends: xray-1.8
+min_version: 26.3.27
+max_version: 26.10.16
+notes: 26.3.27 起移除 allowInsecure。
+strip:
+  - outbounds.*.streamSettings.tlsSettings.allowInsecure

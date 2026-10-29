@@ -2,9 +2,11 @@ package center
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -22,7 +24,7 @@ import (
 )
 
 // 托管的 dsh（DeepSeek Harness）：中心像内核一样下载、校验、切换版本，但不运行它。dsh 由独立的管理进程
-// （系统用户 migate-dsh，生产环境是 systemd 单元 migate-dsh）启动，只监听回环，读不到中心的配置、数据库与密钥；
+// （系统用户 weir-dsh，生产环境是 systemd 单元 weir-dsh）启动，只监听回环，读不到中心的配置、数据库与密钥；
 // 中心与它只通过 control/、status/ 两个目录交换文件（见 internal/dsh/agent.go）。
 // 浏览器只能经 Weir 的 dsh 子域名网关、从控制台抽屉里打开它（见 dsh_gateway.go）。
 // DeepSeek 的 Key 只在 dsh 自己的设置里填写，Weir 不保存也不读取。
@@ -50,16 +52,17 @@ type dshHost struct {
 	wake    chan struct{}
 	cache   dsh.AgentStatus
 	cacheAt time.Time
-	// pluginNote 是插件没有加载的原因（版本不兼容等）。
+	// pluginNote 是插件没有加载的原因（版本未验证等）；verified 为真表示当前 dsh 版本在插件的已验证范围内。
 	pluginNote string
+	verified   bool
 	// endpoint / jobRunner 只在测试中替换：假 dsh 的地址与启动令牌、假的任务执行。
 	endpoint  func() (string, string, bool)
 	jobRunner func(context.Context, dsh.JobRequest) (dsh.JobResult, error)
 }
 
-// dshDir 是中心与 dsh 管理进程共用的托管目录；生产环境由安装脚本设置 MIGATE_DSH_DIR（/var/lib/migate/dsh）。
+// dshDir 是中心与 dsh 管理进程共用的托管目录；生产环境由安装脚本设置 WEIR_DSH_DIR（/var/lib/weir/dsh）。
 func (s *Server) dshDir() string {
-	if v := os.Getenv("MIGATE_DSH_DIR"); v != "" {
+	if v := os.Getenv("WEIR_DSH_DIR"); v != "" {
 		return v
 	}
 	return filepath.Join(s.dataDir(), "dsh")
@@ -69,8 +72,8 @@ func (s *Server) dshLayout() dsh.Layout { return dsh.Layout{Root: s.dshDir()} }
 
 func (s *Server) dshInstaller() dsh.Installer { return dsh.DefaultInstaller(s.dshLayout().Runtime()) }
 
-// dshExternal 表示管理进程由 systemd 单元 migate-dsh 托管，中心不自己启动它。
-func dshExternal() bool { return os.Getenv("MIGATE_DSH_AGENT") == "systemd" }
+// dshExternal 表示管理进程由 systemd 单元 weir-dsh 托管，中心不自己启动它。
+func dshExternal() bool { return os.Getenv("WEIR_DSH_AGENT") == "systemd" }
 
 func (s *Server) dshSettings(ctx context.Context) DSHSettings {
 	var out DSHSettings
@@ -191,7 +194,14 @@ func (s *Server) reconcileDSH(ctx context.Context) {
 		url := "http://" + m.addr + "/mcp"
 		want = dsh.Desired{Version: set.Version, TrustedHost: domain, WebPatch: basePatch(url, m.webToken), AnalystPatch: analystPatch(m.addr, m.analystToken),
 			Instructions: dshInstructions, MCPURL: url, MCPToken: m.webToken}
-		want.PluginDir, want.PluginLabel, note = s.activePlugin(ctx, set.Version)
+		var verified bool
+		want.PluginDir, want.PluginLabel, note, verified = s.activePlugin(set.Version)
+		if verified {
+			want.SkillsDir, _ = s.writeDSHSkills()
+		}
+		s.dsh.mu.Lock()
+		s.dsh.verified = verified
+		s.dsh.mu.Unlock()
 	}
 	if err := s.prepareDSHDirs(); err != nil {
 		return
@@ -219,7 +229,7 @@ func (s *Server) reconcileDSH(ctx context.Context) {
 }
 
 // prepareDSHDirs 建好托管目录：runtime/、control/ 归中心（control/ 对 dsh 组只读），status/、state/ 归管理进程。
-// 生产环境由安装脚本建好并设置属主；开发容器里中心以 root 运行，这里把 status/、state/ 交给 migate-dsh。
+// 生产环境由安装脚本建好并设置属主；开发容器里中心以 root 运行，这里把 status/、state/ 交给 weir-dsh。
 func (s *Server) prepareDSHDirs() error {
 	l := s.dshLayout()
 	for _, d := range []string{l.Root, l.Runtime()} {
@@ -251,7 +261,7 @@ func (s *Server) prepareDSHDirs() error {
 	return nil
 }
 
-// ensureAgent 在没有 systemd 单元时由中心启动管理进程（以 root 运行且有 migate-dsh 用户时切换到该用户）。
+// ensureAgent 在没有 systemd 单元时由中心启动管理进程（以 root 运行且有 weir-dsh 用户时切换到该用户）。
 // 管理进程退出后 10 秒内不重复拉起；它自己负责 dsh 的失败退避。
 func (s *Server) ensureAgent() {
 	if dshExternal() {
@@ -269,8 +279,8 @@ func (s *Server) ensureAgent() {
 	cmd := exec.Command(exe, "dsh", "agent", "--dir", s.dshDir())
 	cmd.Dir = s.dshDir()
 	cmd.Env = []string{"PATH=/usr/local/bin:/usr/bin:/bin", "LANG=C.UTF-8"}
-	if v := os.Getenv("MIGATE_DSH_DEEPSEEK_BASE_URL"); v != "" {
-		cmd.Env = append(cmd.Env, "MIGATE_DSH_DEEPSEEK_BASE_URL="+v)
+	if v := os.Getenv("WEIR_DSH_DEEPSEEK_BASE_URL"); v != "" {
+		cmd.Env = append(cmd.Env, "WEIR_DSH_DEEPSEEK_BASE_URL="+v)
 	}
 	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 	cmd.SysProcAttr = dsh.AgentProcAttr()
@@ -310,8 +320,17 @@ func (s *Server) stopAgent() {
 	dsh.Kill(cmd)
 }
 
+// errUnverifiedDSH：后台分析只在已验证的 dsh 版本上运行（它按工具 id 禁用工具，新版本改了 id 时禁用会悄悄失效）。
+var errUnverifiedDSH = errors.New("这个 dsh 版本还没验证，后台安全分析暂停；等 Weir 发版适配")
+
 // runDSHJob 把一次后台分析交给管理进程。
 func (s *Server) runDSHJob(ctx context.Context, task string) (dsh.Result, error) {
+	s.dsh.mu.Lock()
+	verified := s.dsh.verified || s.dsh.jobRunner != nil
+	s.dsh.mu.Unlock()
+	if !verified {
+		return dsh.Result{}, errUnverifiedDSH
+	}
 	res, err := s.dshJob(ctx, dsh.JobRequest{Kind: "analysis", Task: task})
 	return res.Result, err
 }
@@ -348,10 +367,10 @@ func (s *Server) dshJob(ctx context.Context, req dsh.JobRequest) (dsh.JobResult,
 func mcpPatch(addr, token string) string {
 	return fmt.Sprintf(`# 由 Weir 生成，每次启动覆盖。
 - insert:
-    - id: mcp-migate
+    - id: mcp-weir
       name: '@deepseek-ai/dsh-mcp-client'
       config:
-        serverName: migate
+        serverName: weir
         transport: streamable-http
         url: http://%s/mcp
         headers:
@@ -365,20 +384,20 @@ func mcpPatch(addr, token string) string {
 func basePatch(url, token string) string {
 	return fmt.Sprintf(`# 由 Weir 生成，每次启动覆盖。
 - insert:
-    - id: preset-migate-basic
+    - id: preset-weir-basic
       name: '@deepseek-ai/dsh-agent-preset'
       config:
-        id: migate-basic
+        id: weir-basic
         order: 0
         plugins:
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
               prefix: 你是 Weir 的运维助手。只能通过 Weir 的工具读取脱敏后的状态、提交草稿；草稿要经过实测与管理员确认才会生效。请用中文回答。
-          - id: mcp-migate
+          - id: mcp-weir
             name: '@deepseek-ai/dsh-mcp-client'
             config:
-              serverName: migate
+              serverName: weir
               transport: streamable-http
               url: %q
               headers:
@@ -386,28 +405,27 @@ func basePatch(url, token string) string {
               toolCallTimeoutMs: 180000
 - id: agent-preset-registry
   config:
-    default: migate-basic
+    default: weir-basic
 `, url, "Bearer "+token)
 }
 
-// dshInstructions 写入 $DSH_HOME/AGENTS.md（每次启动 dsh 时覆盖）。
+// dshInstructions 写入 $DSH_HOME/AGENTS.md（每次启动 dsh 时覆盖）：只写每次会话都要遵守的规则。
+// 工具说明在 MCP 工具描述里，做事流程在 Weir 生成的 skill 里（skill 目录见 writeDSHSkills），这里不重复。
 const dshInstructions = `# Weir
 
-本文件由 Weir 生成，每次启动 dsh 时覆盖。这个 dsh 由 Weir 托管，用来帮管理员调整代理节点、研判安全事件。
+这个 dsh 由 Weir 托管，帮管理员管理代理：VPS（即 Gate，Weir 的执行端）、节点（VPS 上的一个入站）、用户与订阅、内核（Xray、sing-box）与内核驱动，并研判安全事件。
 
-## Weir 工具
+## 每次都要做
 
-- mcp__migate__get_console_context：管理员此刻在控制台看什么（页面、对象、弹窗、未保存的表单）。每轮回答前先读一次。
-- mcp__migate__navigate_console：带管理员去某个页面或对象；只换页面，不改数据。
-- 只读工具（list_gates、list_nodes、get_node_state、list_users、get_user、list_security_events、get_security_event 等）：脱敏后的状态，密码、UUID、密钥显示为 <redacted>，不要猜测或修改。
-- mcp__migate__list_actions：可以提交草稿的能力与参数说明；mcp__migate__submit_draft：提交草稿（可多步），Weir 试运行，通过后弹窗请管理员确认，未通过会返回原因，可以修改后重新提交。
+- 回答前先调用 get_console_context，知道管理员正在看哪个页面或对象，不要让管理员复述。
+- 查状态只用只读工具；改动一律提交草稿（submit_draft）。草稿由 Weir 试运行，通过后由 Weir 弹窗、管理员确认才生效，你无法确认。草稿被拒时按返回的原因修改后重新提交。
+- 做具体任务前看有没有对应的 skill：调节点用 weir-node，写内核驱动用 weir-driver，研判安全事件用 weir-security。
 
-你无法直接改动 Weir 的任何配置，所有改动都是草稿。
+## 不要做
 
-## Weir 插件
-
-工作区里的 {{MIGATE_PLUGIN_COPY}} 是 Weir 维护的 dsh 插件副本。dsh 升级后插件不兼容时，可以在创造模式里按其中的 ADAPT.md 修改，
-改好后请管理员在 Weir 控制台「内核 → dsh」点「提交适配草稿」；不要用插件管理直接安装。
+- 不要猜测或修改 <redacted>：那是隐藏的密码、UUID、密钥。
+- 不要编造状态、版本号或更新说明；工具拿不到的就说「未知」，并说明缺什么。
+- 不要建议管理员登录服务器执行命令来绕过草稿。
 `
 
 // analystPatch 是后台分析 profile：复用 Web 里保存的 Key，去掉一切能执行命令、写文件、联网的工具。
@@ -430,13 +448,10 @@ func (s *Server) dshRoutes(admin *gin.RouterGroup) {
 	admin.PUT("/dsh/settings", s.putDSHSettings)
 	admin.GET("/dsh/releases", s.dshReleases)
 	admin.POST("/dsh/fetch", s.fetchDSH)
-	admin.GET("/dsh/fetch", s.dshFetchStatus)
 	admin.PUT("/dsh/version", s.setDSHVersion)
 	admin.DELETE("/dsh/versions/:version", s.removeDSHVersion)
 	admin.POST("/dsh/restart", s.restartDSH)
 	admin.POST("/dsh/ticket", s.dshTicket)
-	admin.POST("/dsh/plugin/adapt", s.adaptPlugin)
-	admin.DELETE("/dsh/plugin", s.restorePlugin)
 }
 
 // dshStatus 返回设置、管理进程报告的状态（不含启动令牌）与已下载的版本。
@@ -457,7 +472,7 @@ func (s *Server) dshStatus(c *gin.Context) {
 	case s.dsh.endpoint == nil && set.Enabled && set.Version != "" && time.Since(agent.Heartbeat) > 3*time.Minute:
 		st.State, st.Error = "failed", "dsh 管理进程没有在运行"
 		if dshExternal() {
-			st.Error += "，请检查 systemd 单元 migate-dsh"
+			st.Error += "，请检查 systemd 单元 weir-dsh"
 		}
 	case st.State == "running":
 		st.State = "starting" // 进程在跑，但还是上一份期望状态
@@ -473,8 +488,10 @@ func (s *Server) dshStatus(c *gin.Context) {
 	s.dsh.mu.Lock()
 	want, note := s.dsh.desired, s.dsh.pluginNote
 	s.dsh.mu.Unlock()
-	_, adaptErr := s.Store.Ent.Setting.Query().Where(setting.KeyEQ(dshPluginSettingKey)).Only(c.Request.Context())
-	plugin := gin.H{"label": want.PluginLabel, "note": note, "loaded": agent.Plugin, "error": agent.PluginError, "adapted": adaptErr == nil}
+	s.dsh.mu.Lock()
+	verified := s.dsh.verified
+	s.dsh.mu.Unlock()
+	plugin := gin.H{"label": want.PluginLabel, "note": note, "loaded": agent.Plugin, "error": agent.PluginError, "verified": verified}
 	c.JSON(200, gin.H{"settings": set, "status": st, "installed": installed, "unsupported": supported, "ready": running && s.dshDomain() != "", "plugin": plugin})
 }
 
@@ -575,7 +592,7 @@ func (s *Server) dshReleases(c *gin.Context) {
 	c.JSON(200, gin.H{"releases": list})
 }
 
-// fetchDSH 后台下载并校验一个版本（与内核下载相同：页面轮询状态）。
+// fetchDSH 在后台下载并校验一个版本（任务：进度、日志、可取消，见 jobs.go）。
 func (s *Server) fetchDSH(c *gin.Context) {
 	var req struct {
 		Version string `json:"version"`
@@ -591,46 +608,22 @@ func (s *Server) fetchDSH(c *gin.Context) {
 		failDetail(c, 409, "dsh_unsupported", err.Error(), nil)
 		return
 	}
-	ctx := c.Request.Context()
-	key := "dsh-fetch:" + req.Version
-	if ok, err := s.Store.KV.SetNX(ctx, key, `{"status":"running"}`, 40*time.Minute); err != nil {
-		failure(c, 503, "dsh_fetch_unavailable")
-		return
-	} else if !ok {
-		raw, _, _ := s.Store.KV.Get(ctx, key)
-		if strings.Contains(raw, `"running"`) {
-			c.JSON(202, gin.H{"status": "running"})
-			return
-		}
-		_ = s.Store.KV.Set(ctx, key, `{"status":"running"}`, 40*time.Minute)
-	}
 	actor, ip := c.GetInt("user_id"), c.ClientIP()
-	go func() {
-		bg, cancel := context.WithTimeout(context.Background(), 35*time.Minute)
-		defer cancel()
-		meta, err := s.dshInstaller().Install(bg, req.Version)
-		result, res := map[string]any{"status": "done", "integrity": meta.Integrity, "registry": meta.Registry}, "ok"
+	job := s.jobs.Start("dsh:"+req.Version, "dsh", "dsh "+req.Version, func(bg context.Context, run JobRun) (map[string]any, error) {
+		in := s.dshInstaller()
+		in.Progress, in.Log = run.Progress, run.Log
+		meta, err := in.Install(bg, req.Version)
+		res := "ok"
 		if err != nil {
-			result, res = map[string]any{"status": "failed", "error": err.Error()}, "failed"
+			res = "failed"
 		}
-		b, _ := json.Marshal(result)
-		_ = s.Store.KV.Set(bg, key, string(b), time.Hour)
-		_, _ = s.Store.Ent.Audit.Create().SetActor(actor).SetAction("dsh.fetch").SetTarget(req.Version).SetResult(res).SetIP(ip).Save(bg)
-	}()
-	c.JSON(202, gin.H{"status": "running"})
-}
-
-func (s *Server) dshFetchStatus(c *gin.Context) {
-	raw, ok, err := s.Store.KV.Get(c.Request.Context(), "dsh-fetch:"+c.Query("version"))
-	if err != nil {
-		failure(c, 503, "dsh_fetch_unavailable")
-		return
-	}
-	if !ok {
-		c.JSON(200, gin.H{"status": "none"})
-		return
-	}
-	c.Data(200, "application/json", []byte(raw))
+		_, _ = s.Store.Ent.Audit.Create().SetActor(actor).SetAction("dsh.fetch").SetTarget(req.Version).SetResult(res).SetIP(ip).Save(context.Background())
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"integrity": meta.Integrity, "registry": meta.Registry}, nil
+	})
+	c.JSON(202, gin.H{"job": job})
 }
 
 // setDSHVersion 切换版本：记下上一版本以便回退；管理进程据新的期望状态停掉旧版本、备份 dsh 的会话与设置，再按新版本启动。
@@ -704,4 +697,30 @@ func (s *Server) dshTicket(c *gin.Context) {
 	}
 	s.audit(c, "dsh.open", "", "ok")
 	c.JSON(200, gin.H{"url": requestScheme(c.Request) + "://" + domain + dshOpenPath + "?t=" + t})
+}
+
+//go:embed dshskills
+var dshSkillsFS embed.FS
+
+// writeDSHSkills 把随程序发布的 skill 写到 control/skills/（dsh 只读），返回目录。
+func (s *Server) writeDSHSkills() (string, error) {
+	dir := filepath.Join(s.dshLayout().Control(), "skills")
+	if err := dsh.SharedDir(dir); err != nil {
+		return "", err
+	}
+	err := fs.WalkDir(dshSkillsFS, "dshskills", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || p == "dshskills" {
+			return err
+		}
+		dest := filepath.Join(dir, strings.TrimPrefix(p, "dshskills/"))
+		if d.IsDir() {
+			return dsh.SharedDir(dest)
+		}
+		b, err := dshSkillsFS.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		return dsh.WriteSharedBytes(dest, b)
+	})
+	return dir, err
 }

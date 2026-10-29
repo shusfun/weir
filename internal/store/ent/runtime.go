@@ -12,6 +12,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/credential"
 	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/gateaction"
+	"github.com/shusfun/weir/internal/store/ent/kerneldriver"
 	"github.com/shusfun/weir/internal/store/ent/link"
 	"github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/outbound"
@@ -260,6 +261,44 @@ func init() {
 	gateactionDescCreatedAt := gateactionFields[7].Descriptor()
 	// gateaction.DefaultCreatedAt holds the default value on creation for the created_at field.
 	gateaction.DefaultCreatedAt = gateactionDescCreatedAt.Default.(func() time.Time)
+	kerneldriverFields := schema.KernelDriver{}.Fields()
+	_ = kerneldriverFields
+	// kerneldriverDescName is the schema descriptor for name field.
+	kerneldriverDescName := kerneldriverFields[0].Descriptor()
+	// kerneldriver.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	kerneldriver.NameValidator = kerneldriverDescName.Validators[0].(func(string) error)
+	// kerneldriverDescKernel is the schema descriptor for kernel field.
+	kerneldriverDescKernel := kerneldriverFields[1].Descriptor()
+	// kerneldriver.KernelValidator is a validator for the "kernel" field. It is called by the builders before save.
+	kerneldriver.KernelValidator = kerneldriverDescKernel.Validators[0].(func(string) error)
+	// kerneldriverDescText is the schema descriptor for text field.
+	kerneldriverDescText := kerneldriverFields[3].Descriptor()
+	// kerneldriver.DefaultText holds the default value on creation for the text field.
+	kerneldriver.DefaultText = kerneldriverDescText.Default.(string)
+	// kerneldriverDescDisabled is the schema descriptor for disabled field.
+	kerneldriverDescDisabled := kerneldriverFields[4].Descriptor()
+	// kerneldriver.DefaultDisabled holds the default value on creation for the disabled field.
+	kerneldriver.DefaultDisabled = kerneldriverDescDisabled.Default.(bool)
+	// kerneldriverDescNote is the schema descriptor for note field.
+	kerneldriverDescNote := kerneldriverFields[5].Descriptor()
+	// kerneldriver.DefaultNote holds the default value on creation for the note field.
+	kerneldriver.DefaultNote = kerneldriverDescNote.Default.(string)
+	// kerneldriver.NoteValidator is a validator for the "note" field. It is called by the builders before save.
+	kerneldriver.NoteValidator = kerneldriverDescNote.Validators[0].(func(string) error)
+	// kerneldriverDescSource is the schema descriptor for source field.
+	kerneldriverDescSource := kerneldriverFields[6].Descriptor()
+	// kerneldriver.DefaultSource holds the default value on creation for the source field.
+	kerneldriver.DefaultSource = kerneldriverDescSource.Default.(string)
+	// kerneldriver.SourceValidator is a validator for the "source" field. It is called by the builders before save.
+	kerneldriver.SourceValidator = kerneldriverDescSource.Validators[0].(func(string) error)
+	// kerneldriverDescActor is the schema descriptor for actor field.
+	kerneldriverDescActor := kerneldriverFields[7].Descriptor()
+	// kerneldriver.DefaultActor holds the default value on creation for the actor field.
+	kerneldriver.DefaultActor = kerneldriverDescActor.Default.(int)
+	// kerneldriverDescCreatedAt is the schema descriptor for created_at field.
+	kerneldriverDescCreatedAt := kerneldriverFields[8].Descriptor()
+	// kerneldriver.DefaultCreatedAt holds the default value on creation for the created_at field.
+	kerneldriver.DefaultCreatedAt = kerneldriverDescCreatedAt.Default.(func() time.Time)
 	linkFields := schema.Link{}.Fields()
 	_ = linkFields
 	// linkDescName is the schema descriptor for name field.

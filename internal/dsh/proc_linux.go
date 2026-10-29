@@ -12,10 +12,10 @@ import (
 
 // RunUser 是运行 dsh 管理进程的系统用户（安装脚本创建）。dsh 以它的身份运行，
 // 只能写自己的家目录与状态目录，读不到中心的配置、数据库与密钥。
-const RunUser = "migate-dsh"
+const RunUser = "weir-dsh"
 
 // AgentUser 返回中心直接启动管理进程时要切换到的用户：中心以 root 运行且该用户存在时为它，否则为空。
-// 生产环境由 systemd 单元 migate-dsh 以该用户启动管理进程，中心不需要也没有 root 权限。
+// 生产环境由 systemd 单元 weir-dsh 以该用户启动管理进程，中心不需要也没有 root 权限。
 func AgentUser() (uid, gid int, ok bool) {
 	if os.Geteuid() != 0 {
 		return 0, 0, false

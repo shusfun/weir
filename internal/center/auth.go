@@ -25,7 +25,7 @@ import (
 type entUser = ent.User
 
 const (
-	sessionCookie = "migate_session"
+	sessionCookie = "weir_session"
 	sessionTTL    = 24 * time.Hour
 )
 
@@ -50,7 +50,7 @@ type Session struct {
 	IP        string    `json:"ip"`
 }
 
-var nonexistentAccountHash, _ = bcrypt.GenerateFromPassword([]byte("migate-nonexistent-account"), bcrypt.DefaultCost)
+var nonexistentAccountHash, _ = bcrypt.GenerateFromPassword([]byte("weir-nonexistent-account"), bcrypt.DefaultCost)
 
 func sessionPrefix(uid int) string            { return fmt.Sprintf("session:%d:", uid) }
 func sessionKey(uid int, token string) string { return sessionPrefix(uid) + digest(token) }

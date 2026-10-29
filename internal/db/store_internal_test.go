@@ -79,7 +79,7 @@ func TestStoreConfiguresSQLiteRuntimeForWriteContention(t *testing.T) {
 
 func TestStoreConfiguresSQLitePragmasForEveryFileConnection(t *testing.T) {
 	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "migate.db")
+	path := filepath.Join(t.TempDir(), "weir.db")
 	store, err := Open(ctx, path)
 	if err != nil {
 		t.Fatalf("open store: %v", err)

@@ -7,8 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -64,6 +62,11 @@ func editable(field string) bool {
 
 // testNode 让节点所在 Gate 用给定参数实测：内核自检 + 本机回环真实连接下载。
 func (s *Server) testNode(ctx context.Context, n *ent.Node, settings map[string]any) (map[string]any, error) {
+	return s.testNodeWith(ctx, n, settings, nil)
+}
+
+// testNodeWith 同 testNode，drivers 非空时用其中的驱动（展开后的全文）代替当前驱动——保存驱动前实测用。
+func (s *Server) testNodeWith(ctx context.Context, n *ent.Node, settings map[string]any, drivers map[string]string) (map[string]any, error) {
 	g, err := s.Store.Ent.Gate.Get(ctx, n.GateID)
 	if err != nil {
 		return nil, err
@@ -72,9 +75,12 @@ func (s *Server) testNode(ctx context.Context, n *ent.Node, settings map[string]
 	if err != nil {
 		return nil, err
 	}
+	for k, text := range drivers {
+		profiles[k] = text
+	}
 	id, password := newSecret(n.Protocol)
 	in := contracts.Inbound{ID: 1, Tag: "test", Kernel: n.Kernel, Protocol: n.Protocol, Network: n.Network, Security: n.Security, Settings: settings}
-	cfg := contracts.GateConfig{Kernels: kernels, Profiles: profiles, Inbounds: []contracts.Inbound{in},
+	cfg := contracts.GateConfig{Kernels: kernels, Drivers: profiles, Inbounds: []contracts.Inbound{in},
 		Credentials: []contracts.Credential{{ID: 1, InboundID: 1, StatsKey: "test", UserKey: "test", UUID: id, Password: password}}, Budgets: map[string]contracts.GateBudget{"test": {Unlimited: true}}}
 	var cert *ent.Certificate
 	if n.CertID != nil {
@@ -130,8 +136,8 @@ func (s *Server) testNodeHandler(c *gin.Context) {
 	c.JSON(200, res)
 }
 
-// Draft 是一份待确认的草稿（保存在 KV，1 小时后过期）。Kind 为 actions（能力目录里的多步草稿，见 action_drafts.go）
-// 或 plugin（插件适配，附带逐文件差异）。两种都在同一个通用确认窗里显示：按 Steps 的参数说明逐步展示。
+// Draft 是一份待确认的草稿（保存在 KV，1 小时后过期）：能力目录里的多步草稿（见 action_drafts.go），
+// 在通用确认窗里按 Steps 的参数说明逐步展示；驱动草稿另附逐行差异。
 type Draft struct {
 	ID        string            `json:"id"`
 	Kind      string            `json:"kind"`
@@ -142,7 +148,6 @@ type Draft struct {
 	Steps     []DraftStep       `json:"steps"`
 	Versions  map[string]string `json:"versions,omitempty"` // 所依据的数据版本
 	Danger    bool              `json:"danger,omitempty"`   // 有危险步骤：确认要当前密码与二次验证码
-	Plugin    *pluginDraft      `json:"plugin,omitempty"`
 }
 
 func settingsHash(m map[string]any) string {
@@ -227,14 +232,11 @@ func (s *Server) discardDraft(c *gin.Context) {
 			s.markEvent(ctx, intArg(st.Args, "event_id"), "dismissed", "")
 		}
 	}
-	if d.Kind == "plugin" && d.Plugin != nil && strings.HasPrefix(filepath.Clean(d.Plugin.Dir), filepath.Join(s.dshLayout().Runtime(), "plugin-drafts")+string(filepath.Separator)) {
-		_ = os.RemoveAll(d.Plugin.Dir)
-	}
 	s.audit(c, "ai.discard", d.Kind+":"+d.ID, "ok")
 	c.Status(204)
 }
 
-// applyDraft 只接受已通过试运行的草稿：插件适配走自己的启用流程，其余按步骤执行。
+// applyDraft 只接受已通过试运行的草稿，按步骤执行。
 func (s *Server) applyDraft(c *gin.Context) {
 	d, err := s.loadDraft(c.Request.Context(), c.Param("id"))
 	if err != nil {
@@ -243,10 +245,6 @@ func (s *Server) applyDraft(c *gin.Context) {
 	}
 	if d.Status != "passed" {
 		failure(c, 409, "draft_not_passed")
-		return
-	}
-	if d.Kind == "plugin" {
-		s.applyPluginDraft(c, d)
 		return
 	}
 	s.applyActionDraft(c, d)

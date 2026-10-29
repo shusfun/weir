@@ -1,11 +1,11 @@
-name: migate-local-test
+name: weir-local-test
 # Explicit benchmark-only subnet avoids exhausting Docker Desktop's default
 # pools when unrelated workspaces keep their own networks. Override if needed.
 networks:
   default:
     ipam:
       config:
-        - subnet: ${MIGATE_TEST_SUBNET:-198.18.191.0/28}
+        - subnet: ${WEIR_TEST_SUBNET:-198.18.191.0/28}
 services:
   postgres:
     image: postgres:18-alpine

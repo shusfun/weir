@@ -11,8 +11,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,6 +26,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/shusfun/weir/internal/fetch"
 )
 
 // Package 是 dsh 的官方 npm 包名；只认这个名字，同名的第三方包不会被当成本体。
@@ -74,19 +74,28 @@ type Installer struct {
 	NodeMirrors  []string
 	// Registries 的第一个是官方源（摘要以它为准），其余是安装时的回退源。
 	Registries []string
+	// Progress / Log 接收下载进度与日志（可为空）。
+	Progress func(fetch.Progress)
+	Log      func(string)
 }
 
-// DefaultInstaller 使用官方源与国内镜像；MIGATE_NPM_REGISTRIES / MIGATE_NODE_MIRRORS 可用逗号分隔替换回退源。
+func (in Installer) log(s string) {
+	if in.Log != nil {
+		in.Log(s)
+	}
+}
+
+// DefaultInstaller 使用官方源与国内镜像；WEIR_NPM_REGISTRIES / WEIR_NODE_MIRRORS 可用逗号分隔替换回退源。
 func DefaultInstaller(dir string) Installer {
 	regs := []string{"https://registry.npmjs.org", "https://registry.npmmirror.com"}
-	if v := os.Getenv("MIGATE_NPM_REGISTRIES"); v != "" {
+	if v := os.Getenv("WEIR_NPM_REGISTRIES"); v != "" {
 		regs = append(regs[:1], splitList(v)...)
 	}
 	mirrors := []string{"https://npmmirror.com/mirrors/node"}
-	if v := os.Getenv("MIGATE_NODE_MIRRORS"); v != "" {
+	if v := os.Getenv("WEIR_NODE_MIRRORS"); v != "" {
 		mirrors = splitList(v)
 	}
-	return Installer{Dir: dir, HTTP: &http.Client{Timeout: 10 * time.Minute}, NodeOfficial: "https://nodejs.org/dist", NodeMirrors: mirrors, Registries: regs}
+	return Installer{Dir: dir, HTTP: &http.Client{Timeout: 2 * time.Minute}, NodeOfficial: "https://nodejs.org/dist", NodeMirrors: mirrors, Registries: regs}
 }
 
 func splitList(v string) []string {
@@ -264,25 +273,19 @@ func (in Installer) EnsureNode(ctx context.Context) (string, error) {
 	if want == "" {
 		return "", fmt.Errorf("官方摘要中没有 %s", name)
 	}
-	// 镜像优先（国内更快），官方地址兜底；任何来源的内容都要与官方摘要一致。
-	var archive []byte
-	last := errors.New("没有可用的下载地址")
+	// 镜像优先（国内更快），官方地址兜底；任何来源的内容都要与官方摘要一致。可续传、可取消。
+	var urls []string
 	for _, base := range append(append([]string{}, in.NodeMirrors...), in.NodeOfficial) {
-		data, err := in.get(ctx, fmt.Sprintf("%s/v%s/%s", base, version, name), 200<<20)
-		if err != nil {
-			last = err
-			continue
-		}
-		sum := sha256.Sum256(data)
-		if hex.EncodeToString(sum[:]) != want {
-			last = fmt.Errorf("%s 提供的 Node.js 与官方摘要不一致", hostOf(base))
-			continue
-		}
-		archive = data
-		break
+		urls = append(urls, fmt.Sprintf("%s/v%s/%s", base, version, name))
 	}
-	if archive == nil {
-		return "", last
+	in.log("下载 Node.js " + version)
+	part := filepath.Join(in.Dir, ".downloads", name)
+	if err = fetch.Download(ctx, fetch.Request{URLs: urls, Dest: part, SHA256: want, MaxSize: 200 << 20, HTTP: downloadClient(), OnProgress: in.Progress, Log: in.Log}); err != nil {
+		return "", err
+	}
+	archive, err := os.ReadFile(part)
+	if err != nil {
+		return "", err
 	}
 	dest := filepath.Join(in.Dir, "node", "v"+version)
 	tmp := dest + ".new"
@@ -295,6 +298,7 @@ func (in Installer) EnsureNode(ctx context.Context) (string, error) {
 	if err = os.Rename(tmp, dest); err != nil {
 		return "", err
 	}
+	_ = os.Remove(part)
 	publish(in.Dir)
 	return filepath.Join(dest, "bin", "node"), nil
 }
@@ -398,7 +402,7 @@ func (in Installer) List() []Installed {
 	var out []Installed
 	for _, e := range entries {
 		var meta Installed
-		b, err := os.ReadFile(filepath.Join(in.Dir, "versions", e.Name(), ".migate.json"))
+		b, err := os.ReadFile(filepath.Join(in.Dir, "versions", e.Name(), ".weir.json"))
 		if err != nil || json.Unmarshal(b, &meta) != nil || meta.Version != e.Name() {
 			continue
 		}
@@ -462,22 +466,29 @@ func (in Installer) Install(ctx context.Context, v string) (Installed, error) {
 		if err = os.MkdirAll(tmp, 0o755); err != nil {
 			return Installed{}, err
 		}
-		_ = os.WriteFile(filepath.Join(tmp, "package.json"), []byte(`{"name":"migate-dsh","private":true}`), 0o644)
+		_ = os.WriteFile(filepath.Join(tmp, "package.json"), []byte(`{"name":"weir-dsh","private":true}`), 0o644)
 		cmd := exec.CommandContext(ctx, node, npm, "install", "--prefix", tmp, "--ignore-scripts", "--omit=dev", "--no-audit", "--no-fund", "--no-update-notifier", "--registry", reg+"/", Package+"@"+v)
 		cmd.Env = []string{"PATH=" + filepath.Dir(node) + ":/usr/local/bin:/usr/bin:/bin", "HOME=" + filepath.Join(in.Dir, "user"), "npm_config_cache=" + filepath.Join(in.Dir, "npm-cache"), "LANG=C.UTF-8"}
-		out, runErr := cmd.CombinedOutput()
+		in.log("用 npm 从 " + hostOf(reg) + " 安装 " + Package + "@" + v)
+		out, runErr := in.runLogged(cmd)
 		if runErr != nil {
-			last = fmt.Errorf("从 %s 安装失败：%s", hostOf(reg), tail(string(out), 400))
+			if ctx.Err() != nil {
+				_ = os.RemoveAll(tmp)
+				return Installed{}, ctx.Err()
+			}
+			last = fmt.Errorf("从 %s 安装失败：%s", hostOf(reg), tail(out, 400))
+			in.log(last.Error())
 			continue
 		}
 		got, lockErr := lockIntegrity(filepath.Join(tmp, "package-lock.json"))
 		if lockErr != nil || got != want {
 			last = fmt.Errorf("%s 提供的 dsh 与官方摘要不一致", hostOf(reg))
+			in.log(last.Error())
 			continue
 		}
 		meta := Installed{Version: v, Integrity: want, Registry: hostOf(reg), InstalledAt: time.Now().UTC()}
 		b, _ := json.Marshal(meta)
-		if err = os.WriteFile(filepath.Join(tmp, ".migate.json"), b, 0o644); err != nil {
+		if err = os.WriteFile(filepath.Join(tmp, ".weir.json"), b, 0o644); err != nil {
 			return Installed{}, err
 		}
 		_ = os.RemoveAll(dest)
@@ -489,6 +500,37 @@ func (in Installer) Install(ctx context.Context, v string) (Installed, error) {
 	}
 	_ = os.RemoveAll(tmp)
 	return Installed{}, last
+}
+
+// runLogged 运行命令，逐行把输出写进日志，并返回全部输出。
+func (in Installer) runLogged(cmd *exec.Cmd) (string, error) {
+	pr, pw := io.Pipe()
+	cmd.Stdout, cmd.Stderr = pw, pw
+	var all strings.Builder
+	done := make(chan struct{})
+	go func() {
+		sc := bufio.NewScanner(pr)
+		sc.Buffer(make([]byte, 64<<10), 1<<20)
+		for sc.Scan() {
+			line := strings.TrimSpace(sc.Text())
+			all.WriteString(line + "\n")
+			if line != "" {
+				in.log("npm: " + line)
+			}
+		}
+		close(done)
+	}()
+	err := cmd.Run()
+	_ = pw.Close()
+	<-done
+	return all.String(), err
+}
+
+// downloadClient 不设整体时限：大文件由 fetch 的无数据超时控制。
+func downloadClient() *http.Client {
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.ResponseHeaderTimeout = 30 * time.Second
+	return &http.Client{Transport: tr}
 }
 
 func lockIntegrity(path string) (string, error) {

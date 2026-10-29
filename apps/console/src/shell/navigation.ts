@@ -70,6 +70,7 @@ export const distributionSections = [
 
 // 系统设置分区（?tab=）
 export const systemSections = [
+  { key: "update", label: "版本与更新" },
   { key: "ai", label: "AI 与 dsh" },
   { key: "defense", label: "安全防御" },
   { key: "login", label: "登录与令牌" },

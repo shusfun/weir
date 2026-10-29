@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { Button } from "@weir/ui";
 import { Sun, Moon, Monitor } from "lucide-react";
 
-export const themeStorageKey = "migate-theme";
+export const themeStorageKey = "weir-theme";
 export type ThemeMode = "light" | "dark" | "system";
 
 // 单个图标按钮循环切换：浅色 → 深色 → 跟随系统

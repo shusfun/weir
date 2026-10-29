@@ -42,9 +42,9 @@ import (
 // seedSingbox 把 sing-box 放进中心的内核缓存（版本号与内置档案对应）。
 func (e *env) seedSingbox() string {
 	e.t.Helper()
-	sb := os.Getenv("MIGATE_E2E_SINGBOX")
+	sb := os.Getenv("WEIR_E2E_SINGBOX")
 	if sb == "" {
-		e.t.Skip("MIGATE_E2E_SINGBOX not set")
+		e.t.Skip("WEIR_E2E_SINGBOX not set")
 	}
 	data, err := os.ReadFile(sb)
 	if err != nil {
@@ -114,14 +114,14 @@ func TestRealityPrefers443WithDroppedPrivileges(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip("needs root (helper drops privileges for the kernels)")
 	}
-	if _, err := user.Lookup("migate-e2e"); err != nil {
-		if out, err := exec.Command("useradd", "-r", "-M", "-s", "/usr/sbin/nologin", "migate-e2e").CombinedOutput(); err != nil {
+	if _, err := user.Lookup("weir-e2e"); err != nil {
+		if out, err := exec.Command("useradd", "-r", "-M", "-s", "/usr/sbin/nologin", "weir-e2e").CombinedOutput(); err != nil {
 			t.Skipf("cannot create an unprivileged account: %v %s", err, out)
 		}
 	}
 	e := setup(t)
 	sb := e.seedSingbox()
-	e.runAs = "migate-e2e"
+	e.runAs = "weir-e2e"
 	// 内核账号要能进入测试目录（安装器建的目录本来就是这样：内核目录 0755、配置目录属组为内核账号）。
 	gd := filepath.Join(e.dir, "p443")
 	for _, d := range []string{gd, filepath.Join(gd, "kernels"), filepath.Join(gd, "cores"), filepath.Join(gd, "certs")} {
@@ -155,7 +155,7 @@ func TestRealityPrefers443WithDroppedPrivileges(t *testing.T) {
 	u := e.post("/api/v1/admin/users", map[string]any{"email": "p443@e2e.test", "password": "E2eUser1"}, nil)
 	e.applied("REALITY on 443")
 	pid := helperRunning(t, filepath.Join("/tmp", "mg-p443.sock"))["xray"]
-	acct, _ := user.Lookup("migate-e2e")
+	acct, _ := user.Lookup("weir-e2e")
 	if pid == 0 || procUID(pid) != acct.Uid {
 		t.Fatalf("xray pid %d runs as uid %q, want %s", pid, procUID(pid), acct.Uid)
 	}
@@ -623,16 +623,16 @@ func TestNewPresetsConnectWithRealClients(t *testing.T) {
 	}
 }
 
-// ARCH-01：单机角色合并为一个进程——真实的 migate 程序以 `center --serve --local-gate` 运行，本机 Gate 的 Agent
+// ARCH-01：单机角色合并为一个进程——真实的 weir 程序以 `center --serve --local-gate` 运行，本机 Gate 的 Agent
 // 在中心进程里；内核仍由 root 辅助程序 `gate helper` 托管。没有单独的 `gate run` 进程。
 func TestStandaloneLocalGateInCenterProcess(t *testing.T) {
-	bin := os.Getenv("MIGATE_E2E_BINARY")
+	bin := os.Getenv("WEIR_E2E_BINARY")
 	if bin == "" || os.Geteuid() != 0 {
-		t.Skip("MIGATE_E2E_BINARY not set or not root")
+		t.Skip("WEIR_E2E_BINARY not set or not root")
 	}
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "center", "config.json")
-	agent := "/etc/migate/gate/agent.json"
+	agent := "/etc/weir/gate/agent.json"
 	os.Remove(agent)
 	out, err := exec.Command(bin, "center", "--config", cfg, "--listen", "127.0.0.1:19899", "--init").CombinedOutput()
 	if err != nil {
@@ -834,9 +834,9 @@ func TestGateExposureFailedConfigAndOffline(t *testing.T) {
 
 // KERNEL-02：中心用真实 mihomo -t 检查生成的 Clash 订阅、用 sing-box check 检查 sing-box 订阅（REALITY / SS2022 / Hysteria2）。
 func TestCenterChecksSubscriptionsWithRealKernels(t *testing.T) {
-	mh := os.Getenv("MIGATE_E2E_MIHOMO")
+	mh := os.Getenv("WEIR_E2E_MIHOMO")
 	if mh == "" {
-		t.Skip("MIGATE_E2E_MIHOMO not set")
+		t.Skip("WEIR_E2E_MIHOMO not set")
 	}
 	e := setup(t)
 	e.seedSingbox()

@@ -46,7 +46,7 @@ type releaseAsset struct {
 var sha256Hex = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // v2：加入安装包列表，避免沿用无 assets 的旧缓存。
-func releaseCacheKey(repo string) string { return "migate:client-release:v2:" + digest(repo) }
+func releaseCacheKey(repo string) string { return "weir:client-release:v2:" + digest(repo) }
 
 // 只接受同一仓库正式发布的 github.com 下载地址；摘要仅在 GitHub 给出 sha256 时保留。
 type wireAsset struct {

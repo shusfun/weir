@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/shusfun/weir/packages/contracts"
+
+	"github.com/shusfun/weir/internal/kernelconf"
 )
 
 var helperKernels = []string{"xray", "sing-box"}
@@ -33,6 +35,8 @@ type ApplyRequest struct {
 	Configs    map[string][]byte `json:"configs"`
 	StatsPorts map[string]int    `json:"stats_ports"`
 	Ports      []int             `json:"ports"` // 本次配置需要监听的全部端口，用于冲突检查
+	// Args 是各内核的运行与自检参数（来自驱动；辅助程序再校验一遍）。
+	Args map[string]kernelconf.KernelArgs `json:"args,omitempty"`
 }
 
 type ApplyResult struct {
@@ -272,7 +276,8 @@ func (h *Helper) Apply(ctx context.Context, req ApplyRequest) ApplyResult {
 			return ApplyResult{Error: err.Error()}
 		}
 		h.shareWithAgent(cand)
-		if err := h.Sup.Test(ctx, name, want, cand); err != nil {
+		oldArgs := h.Sup.args(name)
+		if err := h.Sup.Test(ctx, name, want, cand, req.Args[name]); err != nil {
 			_ = os.Remove(cand)
 			return ApplyResult{Error: err.Error()}
 		}
@@ -284,8 +289,16 @@ func (h *Helper) Apply(ctx context.Context, req ApplyRequest) ApplyResult {
 			return ApplyResult{Error: err.Error()}
 		}
 		_ = h.setPointer(name, want)
+		if a := req.Args[name]; len(a.Run) > 0 {
+			if err := h.Sup.SetArgs(name, a); err != nil {
+				return ApplyResult{Error: err.Error()}
+			}
+		}
 		if err := h.Sup.Start(name); err != nil || !h.healthy(name, req.StatsPorts[name]) {
 			h.Sup.Stop(name)
+			if len(oldArgs.Run) > 0 {
+				_ = h.Sup.SetArgs(name, oldArgs)
+			}
 			if hadPrev == nil {
 				_ = os.Rename(cur+".prev", cur)
 				_ = h.setPointer(name, old)
@@ -393,8 +406,8 @@ func (h *Helper) release(w http.ResponseWriter, r *http.Request) {
 	}
 	dir := filepath.Join(h.P.Root, "releases", version)
 	if err = os.MkdirAll(dir, 0755); err == nil {
-		if err = os.WriteFile(filepath.Join(dir, "migate.new"), data, 0755); err == nil {
-			err = os.Rename(filepath.Join(dir, "migate.new"), filepath.Join(dir, "migate"))
+		if err = os.WriteFile(filepath.Join(dir, "weir.new"), data, 0755); err == nil {
+			err = os.Rename(filepath.Join(dir, "weir.new"), filepath.Join(dir, "weir"))
 		}
 	}
 	if err == nil {
@@ -415,21 +428,21 @@ func (h *Helper) release(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, ApplyResult{OK: true})
 	go func() {
 		time.Sleep(time.Second)
-		_ = exec.Command("systemctl", "restart", "--no-block", "migate-helper.service", agentUnit()).Run()
+		_ = exec.Command("systemctl", "restart", "--no-block", "weir-helper.service", agentUnit()).Run()
 	}()
 }
 
-// agentUnit 是运行 Agent 的服务：单机角色的本机 Gate 在中心进程里运行，其他是独立的 migate-gate。
+// agentUnit 是运行 Agent 的服务：单机角色的本机 Gate 在中心进程里运行，其他是独立的 weir-gate。
 func agentUnit() string {
-	if role, _ := os.ReadFile("/etc/migate/role"); strings.TrimSpace(string(role)) == "standalone" {
-		return "migate-center.service"
+	if role, _ := os.ReadFile("/etc/weir/role"); strings.TrimSpace(string(role)) == "standalone" {
+		return "weir-center.service"
 	}
-	return "migate-gate.service"
+	return "weir-gate.service"
 }
 
 // uninstall 只在本机角色为 Gate 时执行，调用安装器的卸载（保留配置与数据）。
 func (h *Helper) uninstall(w http.ResponseWriter, _ *http.Request) {
-	role, _ := os.ReadFile("/etc/migate/role")
+	role, _ := os.ReadFile("/etc/weir/role")
 	if strings.TrimSpace(string(role)) != "gate" {
 		writeJSON(w, 409, ApplyResult{Error: "only a gate-only machine can be uninstalled remotely"})
 		return
@@ -437,11 +450,11 @@ func (h *Helper) uninstall(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, 200, ApplyResult{OK: true})
 	go func() {
 		time.Sleep(time.Second)
-		_ = exec.Command("sh", "/usr/local/lib/migate/install.sh", "uninstall").Run()
+		_ = exec.Command("sh", "/usr/local/lib/weir/install.sh", "uninstall").Run()
 	}()
 }
 
-// ServeHelper 在本机套接字上提供辅助接口：属组 migate-gate、权限 0660，只有 Agent 能访问。
+// ServeHelper 在本机套接字上提供辅助接口：属组 weir-gate、权限 0660，只有 Agent 能访问。
 func ServeHelper(ctx context.Context, h *Helper) error {
 	if err := os.MkdirAll(filepath.Dir(h.P.Socket), 0750); err != nil {
 		return err

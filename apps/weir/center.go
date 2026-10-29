@@ -34,10 +34,10 @@ func runCenter(args []string) int {
 	version := f.Bool("version", false, "print release version")
 	setupCLI := f.Bool("setup", false, "run the setup wizard in the terminal")
 	serve := f.Bool("serve", false, "run the HTTP service without opening the menu")
-	localGate := f.String("local-gate", os.Getenv("MIGATE_LOCAL_GATE"), "standalone: run the local Gate agent in this process once this device file exists")
+	localGate := f.String("local-gate", os.Getenv("WEIR_LOCAL_GATE"), "standalone: run the local Gate agent in this process once this device file exists")
 	f.Parse(args)
 	if f.NArg() > 0 {
-		return fatal(fmt.Errorf("不支持的参数。运行 migate help 查看用法"))
+		return fatal(fmt.Errorf("不支持的参数。运行 weir help 查看用法"))
 	}
 	if *version {
 		fmt.Println(buildinfo.ControlVersionLine())
@@ -83,7 +83,7 @@ func runCenter(args []string) int {
 			}
 			return 0
 		case "no-terminal":
-			fmt.Fprintln(os.Stderr, "没有交互终端。运行 migate 打开菜单，或使用 migate center --serve 在后台启动。")
+			fmt.Fprintln(os.Stderr, "没有交互终端。运行 weir 打开菜单，或使用 weir center --serve 在后台启动。")
 			return 2
 		}
 	}

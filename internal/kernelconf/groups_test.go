@@ -9,7 +9,7 @@ import (
 	"github.com/shusfun/weir/packages/contracts"
 )
 
-func groupConfig(t *testing.T, xrayFeatures, singFeatures string) contracts.GateConfig {
+func groupConfig(t *testing.T, xrayFeatures, singFeatures []any) contracts.GateConfig {
 	cfg := sampleConfig(t)
 	cfg.Inbounds = append(cfg.Inbounds, contracts.Inbound{ID: 2, Tag: "hy2", Kernel: "sing-box", Protocol: "hysteria2", Port: 24444, Security: "tls", CertID: 5, Settings: map[string]any{"tls_sni": "hy.example.test"}})
 	cfg.Credentials = append(cfg.Credentials, contracts.Credential{ID: 21, InboundID: 2, StatsKey: "c21", UserKey: "u1", Password: "pw21"})
@@ -18,10 +18,11 @@ func groupConfig(t *testing.T, xrayFeatures, singFeatures string) contracts.Gate
 		{Protocol: "trojan", Address: "198.51.100.11", Port: 443, Password: "b", Settings: map[string]any{"security": "tls", "tls": true, "sni": "b.example.com"}},
 	}})
 	cfg.Routes = append(cfg.Routes, contracts.Route{ID: 4, Domain: "example.org", OutboundTag: "hk-pool", Priority: 3})
-	cfg.Profiles = map[string]string{
-		"xray":     "kernel: xray\nmin_version: 26.3.27\nprotocols: [vless, trojan, socks]\n" + xrayFeatures,
-		"sing-box": "kernel: sing-box\nmin_version: 1.12.0\nprotocols: [hysteria2, trojan, socks]\n" + singFeatures,
+	feature := func(text string, list []any) string {
+		return withDriver(t, text, func(m map[string]any) { m["features"] = list })
 	}
+	cfg.Drivers["xray"] = feature(cfg.Drivers["xray"], xrayFeatures)
+	cfg.Drivers["sing-box"] = feature(cfg.Drivers["sing-box"], singFeatures)
 	return cfg
 }
 
@@ -37,7 +38,7 @@ func certDir(t *testing.T) string {
 }
 
 func TestGroupBecomesBalancerAndURLTest(t *testing.T) {
-	out, err := Build(groupConfig(t, "features: [balancer, observatory]\n", "features: [urltest]\n"), Options{CertDir: certDir(t)})
+	out, err := Build(groupConfig(t, []any{"balancer", "observatory"}, []any{"urltest"}), Options{CertDir: certDir(t)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,14 +80,14 @@ func TestGroupBecomesBalancerAndURLTest(t *testing.T) {
 }
 
 func TestGroupNeedsKernelFeatures(t *testing.T) {
-	// 档案没写 features：不支持，报错，不悄悄退回单个节点。
-	if _, err := Build(groupConfig(t, "", "features: [urltest]\n"), Options{CertDir: certDir(t)}); err == nil || !strings.Contains(err.Error(), "不支持出口自动切换") {
+	// 驱动没写 features：不支持，报错，不悄悄退回单个节点。
+	if _, err := Build(groupConfig(t, nil, []any{"urltest"}), Options{CertDir: certDir(t)}); err == nil || !strings.Contains(err.Error(), "不支持出口自动切换") {
 		t.Fatalf("xray without features = %v", err)
 	}
-	if _, err := Build(groupConfig(t, "features: [balancer, observatory]\n", "features: []\n"), Options{CertDir: certDir(t)}); err == nil || !strings.Contains(err.Error(), "urltest") {
+	if _, err := Build(groupConfig(t, []any{"balancer", "observatory"}, []any{}), Options{CertDir: certDir(t)}); err == nil || !strings.Contains(err.Error(), "urltest") {
 		t.Fatalf("sing-box without urltest = %v", err)
 	}
-	cfg := groupConfig(t, "features: [balancer, observatory]\n", "features: [urltest]\n")
+	cfg := groupConfig(t, []any{"balancer", "observatory"}, []any{"urltest"})
 	cfg.Outbounds[len(cfg.Outbounds)-1].Members = make([]contracts.Outbound, contracts.MaxGroupMembers+1)
 	if _, err := Build(cfg, Options{CertDir: certDir(t)}); err == nil {
 		t.Fatal("more than 50 members must be rejected")

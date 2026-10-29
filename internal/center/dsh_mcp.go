@@ -192,7 +192,7 @@ func (s *Server) mcpHandler(m *mcpServer) http.Handler {
 				}
 			}
 			result = map[string]any{"protocolVersion": v, "capabilities": map[string]any{"tools": map[string]any{}},
-				"serverInfo": map[string]any{"name": "migate", "version": "1"}, "instructions": mcpInstructions}
+				"serverInfo": map[string]any{"name": "weir", "version": "1"}, "instructions": mcpInstructions}
 		case "server/discover":
 			// MCP 2026-07-28 起服务端必须实现；只声明经典版本，客户端据此走 initialize 握手。
 			result = map[string]any{"supportedVersions": mcpVersions, "capabilities": map[string]any{"tools": map[string]any{}}, "instructions": mcpInstructions}

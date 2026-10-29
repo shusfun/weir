@@ -1,0 +1,341 @@
+# Xray 1.8 起的驱动。格式见 .agents/skills/weir-kernel-driver/SKILL.md；变量见 internal/kernelconf/view.go。
+kernel: xray
+name: xray-1.8
+min_version: 1.8.0
+max_version: 26.3.26
+notes: 旧版 Xray，客户端出口仍支持 allowInsecure。
+protocols: [vless, vmess, trojan, shadowsocks, socks, http]
+networks: [tcp, raw, ws, grpc, xhttp, httpupgrade]
+securities: [tls, reality]
+features: [balancer, observatory]
+run: [run, -config, "{config}"]
+check: [run, -test, -config, "{config}"]
+
+presets:
+  - id: vless-reality
+    order: 10
+    name: VLESS + REALITY
+    summary: 无需域名和证书，借用大站 TLS 握手，抗探测最好（推荐）
+    protocol: vless
+    network: tcp
+    security: reality
+    cert: none
+    chain_exit: true
+    reality: true
+    settings:
+      reality_private_key: "$gen:reality.private"
+      reality_public_key: "$gen:reality.public"
+      reality_short_id: "$gen:hex8"
+      tls_fingerprint: chrome
+    fields:
+      - {key: tls_fingerprint, label: TLS 指纹, kind: select, options: [[chrome, Chrome], [firefox, Firefox], [safari, Safari], [ios, iOS], [edge, Edge], [random, 随机]]}
+      - {key: reality_short_id, label: Short ID, kind: text, hint: 0–16 位十六进制}
+      - {key: reality_dest, label: REALITY 目标, kind: text, hint: "地址:端口；一般留空，由 VPS 实测选择（第 ④ 步也可以只填域名）"}
+      - {key: reality_server_names, label: REALITY SNI, kind: text, hint: 填了 REALITY 目标时一起填，多个用逗号分隔}
+  - id: vless-ws-tls
+    order: 20
+    name: VLESS + WebSocket + TLS
+    summary: 用 VPS 公网 IP 的证书，不需要加解析；可套 CDN（需自备域名证书）
+    protocol: vless
+    network: ws
+    security: tls
+    cert: required
+    chain_exit: true
+    settings: {ws_path: "/$gen:hex12", tls_alpn: http/1.1}
+    fields: &wsFields
+      - {key: ws_path, label: WebSocket 路径, kind: text, hint: 以 / 开头}
+      - {key: ws_host, label: WebSocket Host, kind: text, hint: 留空时用连接地址}
+      - {key: tls_alpn, label: ALPN, kind: text, hint: "多个用逗号分隔，例如 h2,http/1.1"}
+      - {key: tls_fingerprint, label: TLS 指纹, kind: select, options: [[chrome, Chrome], [firefox, Firefox], [safari, Safari], [ios, iOS], [edge, Edge], [random, 随机]]}
+  - id: vmess-ws-tls
+    order: 30
+    name: VMess + WebSocket + TLS
+    summary: 老客户端兼容最好；用 VPS 公网 IP 的证书
+    protocol: vmess
+    network: ws
+    security: tls
+    cert: required
+    chain_exit: true
+    settings: {ws_path: "/$gen:hex12", tls_alpn: http/1.1}
+    fields: *wsFields
+  - id: trojan-tls
+    order: 40
+    name: Trojan + TLS
+    summary: 用 VPS 公网 IP 的证书，不需要加解析
+    protocol: trojan
+    network: tcp
+    security: tls
+    cert: required
+    chain_exit: true
+    settings: {tls_alpn: "h2,http/1.1"}
+    fields:
+      - {key: tls_alpn, label: ALPN, kind: text, hint: "多个用逗号分隔，例如 h2,http/1.1"}
+      - {key: tls_fingerprint, label: TLS 指纹, kind: select, options: [[chrome, Chrome], [firefox, Firefox], [safari, Safari], [ios, iOS], [edge, Edge], [random, 随机]]}
+  - id: socks-local
+    order: 100
+    name: 本地 SOCKS5
+    summary: 带用户名密码的 SOCKS5（不加密），给只支持 SOCKS 的程序用
+    protocol: socks
+    network: tcp
+    security: none
+    cert: none
+    note: SOCKS5 不加密，流量在公网上是明文，只适合可信网络或再套一层加密。
+  - id: http-local
+    order: 110
+    name: 本地 HTTP 代理
+    summary: 带用户名密码的 HTTP 代理（不加密），给只支持 HTTP 代理的程序用
+    protocol: http
+    network: tcp
+    security: none
+    cert: none
+    note: HTTP 代理不加密，用户名密码与流量在公网上都是明文，只适合可信网络。
+
+templates:
+  root:
+    log: {loglevel: warning}
+    inbounds:
+      - $each: "${inbounds}"
+        $as: ib
+        $do: {$use: "inbound.${ib.protocol}"}
+      - {tag: api, listen: 127.0.0.1, port: "${stats}", protocol: dokodemo-door, settings: {address: 127.0.0.1}}
+    outbounds:
+      - $each: "${outbounds}"
+        $as: ob
+        $do:
+          $if: "not ob.group"
+          $then: {$use: "outbound.${ob.protocol}"}
+    routing:
+      domainStrategy: AsIs
+      rules:
+        - {inboundTag: [api], outboundTag: api}
+        - $each: "${routes}"
+          $as: r
+          $do: {$use: rule}
+      balancers?:
+        $each: "${groups}"
+        $as: g
+        $do: {tag: "${g.tag}", selector: "${g.members}", strategy: {type: leastPing}}
+    observatory?:
+      $if: "groups"
+      $then:
+        subjectSelector: "${groups | map('members') | flat}"
+        probeUrl: "${probe.url}"
+        probeInterval: "${probe.interval}"
+        enableConcurrency: true
+    stats: {}
+    policy:
+      levels: {"0": {statsUserUplink: true, statsUserDownlink: true}}
+      system: {statsInboundUplink: true, statsInboundDownlink: true}
+    api: {tag: api, services: [StatsService]}
+
+  rule:
+    $merge:
+      - $if: "r.balancer"
+        $then: {balancerTag: "${r.outbound}"}
+        $else: {outboundTag: "${r.outbound}"}
+      - user?: "${r.user | list}"
+        inboundTag?: "${r.inbound | list}"
+        domain?: "${r.domain | rules}"
+        ip?: "${r.ip | rules}"
+        protocol?: "${r.protocol | rules}"
+
+  # —— 入站 ——
+  inbound.vless:
+    tag: "${ib.tag}"
+    listen: 0.0.0.0
+    port: "${ib.port}"
+    protocol: vless
+    settings:
+      decryption: none
+      clients:
+        - $each: "${ib.clients}"
+          $as: c
+          $do:
+            id: "${c.credential}"
+            email: "${c.stats_name}"
+            flow?:
+              $if: "ib.security == 'reality' and ib.network != 'xhttp'"
+              $then: xtls-rprx-vision
+    streamSettings: {$use: stream}
+  inbound.vmess:
+    tag: "${ib.tag}"
+    listen: 0.0.0.0
+    port: "${ib.port}"
+    protocol: vmess
+    settings:
+      clients:
+        - $each: "${ib.clients}"
+          $as: c
+          $do: {id: "${c.credential}", email: "${c.stats_name}", alterId: 0}
+    streamSettings: {$use: stream}
+  inbound.trojan:
+    tag: "${ib.tag}"
+    listen: 0.0.0.0
+    port: "${ib.port}"
+    protocol: trojan
+    settings:
+      clients:
+        - $each: "${ib.clients}"
+          $as: c
+          $do: {password: "${c.password}", email: "${c.stats_name}"}
+    streamSettings: {$use: stream}
+  inbound.shadowsocks:
+    tag: "${ib.tag}"
+    listen: 0.0.0.0
+    port: "${ib.port}"
+    protocol: shadowsocks
+    settings: {method: "${ib.ss_method}", password: "${ib.ss_password}"}
+    streamSettings: {$use: stream}
+  inbound.socks:
+    tag: "${ib.tag}"
+    listen: 0.0.0.0
+    port: "${ib.port}"
+    protocol: socks
+    settings:
+      auth: password
+      udp: true
+      accounts:
+        - $each: "${ib.clients}"
+          $as: c
+          $do: {user: "${c.route_user}", pass: "${c.password}"}
+  inbound.http:
+    tag: "${ib.tag}"
+    listen: 0.0.0.0
+    port: "${ib.port}"
+    protocol: http
+    settings:
+      accounts:
+        - $each: "${ib.clients}"
+          $as: c
+          $do: {user: "${c.route_user}", pass: "${c.password}"}
+
+  stream:
+    network: "${ib.network | default('tcp')}"
+    security: "${ib.security | default('none')}"
+    wsSettings?:
+      $if: "ib.network == 'ws'"
+      $then: {path: "${ib.ws_path | default('/')}", "host?": "${ib.ws_host}"}
+    httpSettings?:
+      $if: "ib.network == 'h2'"
+      $then: {path: "${ib.ws_path | default('/')}", "host?": "${ib.ws_host | split}"}
+    grpcSettings?:
+      $if: "ib.network == 'grpc'"
+      $then: {serviceName: "${ib.grpc_service_name | default('weir')}"}
+    xhttpSettings?:
+      $if: "ib.network == 'xhttp'"
+      $then: {path: "${ib.xhttp_path | default('/')}", mode: "${ib.xhttp_mode | default('stream-one')}"}
+    realitySettings?:
+      $if: "ib.security == 'reality'"
+      $then:
+        show: false
+        dest: "${ib.reality_dest | default('www.cloudflare.com:443')}"
+        serverNames:
+          $if: "ib.reality_server_names"
+          $then: "${ib.reality_server_names | split}"
+          $else: [www.cloudflare.com]
+        shortIds: ["${ib.reality_short_id}"]
+        privateKey?: "${ib.reality_private_key}"
+        fingerprint?: "${ib.tls_fingerprint}"
+    tlsSettings?:
+      $if: "ib.security == 'tls'"
+      $then:
+        certificates?:
+          $if: "ib.tls_cert_file and ib.tls_key_file"
+          $then: [{certificateFile: "${ib.tls_cert_file}", keyFile: "${ib.tls_key_file}"}]
+        serverName?: "${ib.tls_sni}"
+        fingerprint?: "${ib.tls_fingerprint}"
+        alpn?: "${ib.tls_alpn | split}"
+
+  # —— 出口 ——
+  outbound.freedom: {tag: "${ob.tag}", protocol: freedom, settings: {}}
+  outbound.blackhole: {tag: "${ob.tag}", protocol: blackhole, settings: {}}
+  outbound.dns: {tag: "${ob.tag}", protocol: dns, settings: {}}
+  outbound.socks:
+    tag: "${ob.tag}"
+    protocol: socks
+    settings:
+      servers:
+        - address: "${ob.address}"
+          port: "${ob.port}"
+          users?:
+            $if: "ob.username | trim"
+            $then: [{user: "${ob.username | trim}", "pass?": "${ob.password}"}]
+    streamSettings?: {$use: ostream}
+  outbound.http: &httpOut
+    tag: "${ob.tag}"
+    protocol: http
+    settings:
+      servers:
+        - address: "${ob.address}"
+          port: "${ob.port}"
+          users?:
+            $if: "ob.username | trim"
+            $then: [{user: "${ob.username | trim}", "pass?": "${ob.password}"}]
+    streamSettings?: {$use: ostream}
+  outbound.https: *httpOut
+  outbound.vmess:
+    tag: "${ob.tag}"
+    protocol: vmess
+    settings:
+      vnext:
+        - address: "${ob.address}"
+          port: "${ob.port}"
+          users: [{id: "${ob.username | trim}", alterId: 0, security: "${ob.s.method | trim | default('auto')}"}]
+    streamSettings?: {$use: ostream}
+  outbound.vless:
+    tag: "${ob.tag}"
+    protocol: vless
+    settings:
+      vnext:
+        - address: "${ob.address}"
+          port: "${ob.port}"
+          users: [{id: "${ob.username | trim}", encryption: none, "flow?": "${ob.s.flow}"}]
+    streamSettings?: {$use: ostream}
+  outbound.trojan:
+    tag: "${ob.tag}"
+    protocol: trojan
+    settings:
+      servers: [{address: "${ob.address}", port: "${ob.port}", password: "${ob.password | trim | first(ob.username | trim)}"}]
+    streamSettings?: {$use: ostream}
+  outbound.shadowsocks:
+    tag: "${ob.tag}"
+    protocol: shadowsocks
+    settings:
+      servers: [{address: "${ob.address}", port: "${ob.port}", method: "${ob.username | trim | first(ob.s.method | trim, 'aes-128-gcm')}", password: "${ob.password}"}]
+    streamSettings?: {$use: ostream}
+
+  # 出口的传输与 TLS：没写传输也没写安全层时不生成。
+  ostream:
+    $if: "ob.s.network or ob.s.security"
+    $then:
+      network: "${ob.s.network | default('tcp')}"
+      security?:
+        $if: "ob.s.security != 'none'"
+        $then: "${ob.s.security}"
+      wsSettings?:
+        $if: "ob.s.network in ['ws', 'websocket']"
+        $then:
+          path?: "${ob.s.path}"
+          headers?:
+            $if: "ob.s.host"
+            $then: {Host: "${ob.s.host}"}
+      grpcSettings?:
+        $if: "ob.s.network == 'grpc'"
+        $then: {"serviceName?": "${ob.s.service_name}"}
+      tlsSettings?:
+        $if: "ob.s.security == 'tls'"
+        $then:
+          serverName?: "${ob.s.sni}"
+          fingerprint?: "${ob.s.fingerprint}"
+          alpn?: "${ob.s.alpn}"
+          allowInsecure?: "${ob.s.allow_insecure}"
+          certificates?:
+            $if: "ob.s.trusted_certificate"
+            $then: [{certificate: "${ob.s.trusted_certificate | lines}", usage: verify}]
+      realitySettings?:
+        $if: "ob.s.security == 'reality'"
+        $then:
+          serverName?: "${ob.s.sni}"
+          fingerprint?: "${ob.s.fingerprint}"
+          publicKey?: "${ob.s.public_key}"
+          shortId?: "${ob.s.short_id}"

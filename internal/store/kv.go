@@ -12,7 +12,7 @@ import (
 )
 
 // KV 是会话、限速、一次性凭证等短期数据的存储。ttl 为 0 表示不过期。
-// 键由调用方给出（不含前缀）；Redis 实现统一加 migate: 前缀，只触及本项目的键。
+// 键由调用方给出（不含前缀）；Redis 实现统一加 weir: 前缀，只触及本项目的键。
 type KV interface {
 	Get(ctx context.Context, key string) (string, bool, error)
 	Set(ctx context.Context, key, value string, ttl time.Duration) error
@@ -23,14 +23,14 @@ type KV interface {
 	Del(ctx context.Context, keys ...string) error
 	// Incr 原子加一；键首次出现时设置 ttl。用于限速计数。
 	Incr(ctx context.Context, key string, ttl time.Duration) (int64, error)
-	// Keys 列出指定前缀的键（不含 migate: 前缀），最多 limit 个；超出返回 ErrTooMany。
+	// Keys 列出指定前缀的键（不含 weir: 前缀），最多 limit 个；超出返回 ErrTooMany。
 	Keys(ctx context.Context, prefix string, limit int) ([]string, error)
 	Ping(ctx context.Context) error
 }
 
 var ErrTooMany = errors.New("kv: too many keys")
 
-const redisPrefix = "migate:"
+const redisPrefix = "weir:"
 
 func redisTLS() *tls.Config { return &tls.Config{MinVersion: tls.VersionTLS12} }
 

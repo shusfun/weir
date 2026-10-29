@@ -11,9 +11,9 @@ import (
 // 用同一程序内的构建器生成内核配置；中心离线时仍可据此在本地剔除到期 / 超额凭据。
 type GateConfig struct {
 	Revision    int64                 `json:"revision"`
-	Version     string                `json:"version"`  // 中心程序版本；与 Gate 不一致时 Gate 先自更新
-	Kernels     map[string]Kernel     `json:"kernels"`  // "xray" / "sing-box"
-	Profiles    map[string]string     `json:"profiles"` // 内核 → 版本档案 YAML（已按锁定版本选好）
+	Version     string                `json:"version"` // 中心程序版本；与 Gate 不一致时 Gate 先自更新
+	Kernels     map[string]Kernel     `json:"kernels"` // "xray" / "sing-box"
+	Drivers     map[string]string     `json:"drivers"` // 内核 → 驱动 YAML（已按锁定版本选好、展开 extends）
 	Ports       PortPlan              `json:"ports"`
 	Inbounds    []Inbound             `json:"inbounds"`
 	Outbounds   []Outbound            `json:"outbounds"`

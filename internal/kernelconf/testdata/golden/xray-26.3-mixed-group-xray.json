@@ -1,0 +1,251 @@
+{
+  "api": {
+    "services": [
+      "StatsService"
+    ],
+    "tag": "api"
+  },
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "port": 24001,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "email": "c11",
+            "flow": "xtls-rprx-vision",
+            "id": "11111111-1111-4111-8111-111111111111"
+          },
+          {
+            "email": "c12",
+            "flow": "xtls-rprx-vision",
+            "id": "u1"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "realitySettings": {
+          "dest": "www.microsoft.com:443",
+          "fingerprint": "chrome",
+          "privateKey": "kKB1Vv7m0wN3hOq1oQv0b9nN5mF3V6Q2l1c8pZ0yGXE",
+          "serverNames": [
+            "www.microsoft.com",
+            "microsoft.com"
+          ],
+          "shortIds": [
+            "a1b2c3d4"
+          ],
+          "show": false
+        },
+        "security": "reality"
+      },
+      "tag": "inbound-1-vless"
+    },
+    {
+      "listen": "0.0.0.0",
+      "port": 24005,
+      "protocol": "trojan",
+      "settings": {
+        "clients": [
+          {
+            "email": "c51",
+            "password": "pw-5"
+          },
+          {
+            "email": "c52",
+            "password": "pw2-5"
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "tls",
+        "tlsSettings": {
+          "alpn": [
+            "h2",
+            "http/1.1"
+          ],
+          "certificates": [
+            {
+              "certificateFile": "/weir-test-certs/7.crt",
+              "keyFile": "/weir-test-certs/7.key"
+            }
+          ]
+        }
+      },
+      "tag": "inbound-5-trojan"
+    },
+    {
+      "listen": "127.0.0.1",
+      "port": 21001,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "127.0.0.1"
+      },
+      "tag": "api"
+    }
+  ],
+  "log": {
+    "loglevel": "warning"
+  },
+  "observatory": {
+    "enableConcurrency": true,
+    "probeInterval": "3m",
+    "probeUrl": "https://www.gstatic.com/generate_204",
+    "subjectSelector": [
+      "xray-out-1073741824",
+      "xray-out-1073741825"
+    ]
+  },
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "settings": {},
+      "tag": "xray-out-2147483647"
+    },
+    {
+      "protocol": "socks",
+      "settings": {
+        "servers": [
+          {
+            "address": "203.0.113.1",
+            "port": 1080,
+            "users": [
+              {
+                "pass": "pw",
+                "user": "user"
+              }
+            ]
+          }
+        ]
+      },
+      "tag": "xray-out-40"
+    },
+    {
+      "protocol": "socks",
+      "settings": {
+        "servers": [
+          {
+            "address": "203.0.113.2",
+            "port": 1081
+          }
+        ]
+      },
+      "tag": "xray-out-41"
+    },
+    {
+      "protocol": "http",
+      "settings": {
+        "servers": [
+          {
+            "address": "203.0.113.3",
+            "port": 8080,
+            "users": [
+              {
+                "user": "u"
+              }
+            ]
+          }
+        ]
+      },
+      "tag": "xray-out-42"
+    },
+    {
+      "protocol": "trojan",
+      "settings": {
+        "servers": [
+          {
+            "address": "198.51.100.10",
+            "password": "a",
+            "port": 443
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "a.example.com"
+        }
+      },
+      "tag": "xray-out-1073741824"
+    },
+    {
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "198.51.100.11",
+            "port": 443,
+            "users": [
+              {
+                "encryption": "none",
+                "id": "66666666-6666-4666-8666-666666666666"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "realitySettings": {
+          "publicKey": "K",
+          "shortId": "1"
+        },
+        "security": "reality"
+      },
+      "tag": "xray-out-1073741825"
+    }
+  ],
+  "policy": {
+    "levels": {
+      "0": {
+        "statsUserDownlink": true,
+        "statsUserUplink": true
+      }
+    },
+    "system": {
+      "statsInboundDownlink": true,
+      "statsInboundUplink": true
+    }
+  },
+  "routing": {
+    "balancers": [
+      {
+        "selector": [
+          "xray-out-1073741824",
+          "xray-out-1073741825"
+        ],
+        "strategy": {
+          "type": "leastPing"
+        },
+        "tag": "xray-out-70"
+      }
+    ],
+    "domainStrategy": "AsIs",
+    "rules": [
+      {
+        "inboundTag": [
+          "api"
+        ],
+        "outboundTag": "api"
+      },
+      {
+        "balancerTag": "xray-out-70",
+        "domain": [
+          "g.com"
+        ]
+      },
+      {
+        "inboundTag": [
+          "inbound-1-vless"
+        ],
+        "outboundTag": "xray-out-40"
+      }
+    ]
+  },
+  "stats": {}
+}

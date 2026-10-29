@@ -13,7 +13,7 @@ func WriteFile(path string, data []byte) error {
 		return err
 	}
 	if os.Geteuid() == 0 {
-		if group, err := user.LookupGroup("migate"); err == nil {
+		if group, err := user.LookupGroup("weir"); err == nil {
 			if gid, err := strconv.Atoi(group.Gid); err == nil {
 				_ = os.Chown(path, 0, gid)
 			}

@@ -112,7 +112,7 @@ export function SetupPage({ done }: { done: () => void }) {
     const timer = setTimeout(() => readyMark.current && burst(readyMark.current, { distance: 72, count: 14 }), 620);
     return () => clearTimeout(timer);
   }, [phase, burst]);
-  // 空路径表示使用服务端默认位置（/var/lib/migate/center/migate.db）。
+  // 空路径表示使用服务端默认位置（/var/lib/weir/center/weir.db）。
   const storeConfig = () =>
     driver === "sqlite"
       ? { driver, sqlite_path: sqlitePath.trim() }
@@ -294,7 +294,7 @@ export function SetupPage({ done }: { done: () => void }) {
                 />
               ))}
             </Steps>
-            <p>使用 PostgreSQL 时只写入 migate schema，Redis 只使用 migate: 前缀，不清理其他应用数据。</p>
+            <p>使用 PostgreSQL 时只写入 weir schema，Redis 只使用 weir: 前缀，不清理其他应用数据。</p>
           </nav>
           <Card size="lg">
             <CardContent>
@@ -323,8 +323,8 @@ export function SetupPage({ done }: { done: () => void }) {
                         onChange={setToken}
                       />
                       <p className="setup-info">
-                        安装结束时已打印凭证，有效期 30 分钟。找不到或过期时，在服务器上执行 <code>migate</code> 选{" "}
-                        <code>6</code>：没过期就照旧显示，过期了自动换新。终端初始化使用 <code>migate center --setup</code>，不需要这份凭证。
+                        安装结束时已打印凭证，有效期 30 分钟。找不到或过期时，在服务器上执行 <code>weir</code> 选{" "}
+                        <code>6</code>：没过期就照旧显示，过期了自动换新。终端初始化使用 <code>weir center --setup</code>，不需要这份凭证。
                       </p>
                     </>
                   )}

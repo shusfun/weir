@@ -45,7 +45,7 @@ export function PublishedAnnouncement({
   scope: string;
   preview?: boolean;
 }) {
-  const key = "migate:notice:" + scope + ":" + (notice.notice_revision ?? "draft");
+  const key = "weir:notice:" + scope + ":" + (notice.notice_revision ?? "draft");
   const [hidden, setHidden] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {

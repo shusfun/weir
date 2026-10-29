@@ -13,7 +13,7 @@ description: 改完 Weir 的代码或文档后，选出该跑的检查、启动�
 |---|---|
 | 控制台页面或组件 | `pnpm check`、`pnpm build`；再按下方「浏览器验收」实际看改过的页面 |
 | 某个 Go 包 | `go build ./... && go vet ./...`，再跑这个包的 `go test ./internal/<包>/` |
-| 中心存储、迁移、锁或键值 | 再用 PG + Redis 跑一次：`docker compose -f deploy/test.compose.yml up -d` 后 `MIGATE_CENTER_STORE=postgres go test ./internal/center/` |
+| 中心存储、迁移、锁或键值 | 再用 PG + Redis 跑一次：`docker compose -f deploy/test.compose.yml up -d` 后 `WEIR_CENTER_STORE=postgres go test ./internal/center/` |
 | 内核配置生成、版本档案、Gate 应用流程 | 包测试，再跑 `python deploy/e2e.py -run <相关用例>` |
 | 安装、升级、发版脚本 | 见 [deploy/AGENTS.md](../../../deploy/AGENTS.md) 的「验证」 |
 | MiSub 迁移的订阅逻辑 | 包测试；与上游原代码的对照测试用 Node v24 跑（会话默认的 Node 可能是 v22，要显式切换 PATH） |
@@ -24,7 +24,7 @@ description: 改完 Weir 的代码或文档后，选出该跑的检查、启动�
 只跑一套。启动前先查端口有没有进程，有就复用：
 
 - 控制台：`pnpm dev`，地址 `http://127.0.0.1:5173`，`/api` 和 `/sub/` 代理到中心。
-- 中心：`http://127.0.0.1:19810`，启动命令 `migate center --serve --config <目录>/config.json`。中心嵌入的是编译时的 `apps/weir/static`，改了前端要在 19810 上看，就得重新编译中心再重启。
+- 中心：`http://127.0.0.1:19810`，启动命令 `weir center --serve --config <目录>/config.json`。中心嵌入的是编译时的 `apps/weir/static`，改了前端要在 19810 上看，就得重新编译中心再重启。
 - 数据服务：`deploy/test.compose.yml`，PostgreSQL 在 `127.0.0.1:25432`，Redis 在 `127.0.0.1:26379`。
 - 开发管理员：`admin@dev.test` / `WeirDev2026`，只用于本机演示数据，不得用于生产。脚本要走登录表单；直接请求 `/api/v1/auth/login` 会因为缺少 `Sec-Fetch-Site` 被拒，返回 `origin_rejected`。
 - 自己起的进程和容器，用完即停。

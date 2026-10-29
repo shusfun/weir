@@ -214,13 +214,13 @@ func (s *Server) checkGroupSupport(ctx context.Context, g *ent.Gate, kernels ...
 		return fmt.Errorf("无法确认内核是否支持出口自动切换：%v", err)
 	}
 	for k := range need {
-		p, err := kernelconf.ParseProfile(profiles[k])
+		p, err := kernelconf.ParseDriver(profiles[k])
 		if err != nil {
 			return err
 		}
 		for _, f := range groupFeatures[k] {
 			if !p.Has(f) {
-				return fmt.Errorf("%s %s 不支持出口自动切换（版本档案没有 %s），请改选单个节点或升级内核", k, p.MinVersion, f)
+				return fmt.Errorf("%s %s 不支持出口自动切换（驱动没有 %s），请改选单个节点或升级内核", k, p.MinVersion, f)
 			}
 		}
 	}

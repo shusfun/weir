@@ -212,6 +212,32 @@ var (
 			},
 		},
 	}
+	// KernelDriversColumns holds the columns for the "kernel_drivers" table.
+	KernelDriversColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "name", Type: field.TypeString, Size: 48},
+		{Name: "kernel", Type: field.TypeString, Size: 16},
+		{Name: "revision", Type: field.TypeInt},
+		{Name: "text", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "disabled", Type: field.TypeBool, Default: false},
+		{Name: "note", Type: field.TypeString, Size: 500, Default: ""},
+		{Name: "source", Type: field.TypeString, Size: 16, Default: "admin"},
+		{Name: "actor", Type: field.TypeInt, Default: 0},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// KernelDriversTable holds the schema information for the "kernel_drivers" table.
+	KernelDriversTable = &schema.Table{
+		Name:       "kernel_drivers",
+		Columns:    KernelDriversColumns,
+		PrimaryKey: []*schema.Column{KernelDriversColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "kerneldriver_name_revision",
+				Unique:  true,
+				Columns: []*schema.Column{KernelDriversColumns[1], KernelDriversColumns[3]},
+			},
+		},
+	}
 	// LinksColumns holds the columns for the "links" table.
 	LinksColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -606,6 +632,7 @@ var (
 		CredentialsTable,
 		GatesTable,
 		GateActionsTable,
+		KernelDriversTable,
 		LinksTable,
 		NodesTable,
 		OutboundsTable,

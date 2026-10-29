@@ -2,7 +2,7 @@
 (function () {
   var theme = "system";
   try {
-    var stored = localStorage.getItem("migate-theme");
+    var stored = localStorage.getItem("weir-theme");
     if (stored === "light" || stored === "dark" || stored === "system") theme = stored;
   } catch (e) {
     // 浏览器禁止存储时按跟随系统处理

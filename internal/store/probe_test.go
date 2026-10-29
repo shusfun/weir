@@ -12,7 +12,7 @@ import (
 
 func TestHasDataSQLite(t *testing.T) {
 	ctx := context.Background()
-	cfg := Config{Driver: DriverSQLite, SQLitePath: filepath.Join(t.TempDir(), "migate.db")}
+	cfg := Config{Driver: DriverSQLite, SQLitePath: filepath.Join(t.TempDir(), "weir.db")}
 	if has, err := HasData(ctx, cfg); err != nil || has {
 		t.Fatalf("missing file: has=%v err=%v", has, err)
 	}
@@ -33,10 +33,10 @@ func TestHasDataSQLite(t *testing.T) {
 	}
 }
 
-// 复现生产环境：旧版本在共享库里留下列不全、已有账户的 migate.users，探测要标出来，HasData 要拒绝。
+// 复现生产环境：旧版本在共享库里留下列不全、已有账户的 weir.users，探测要标出来，HasData 要拒绝。
 func TestProbePostgresMarksLegacyData(t *testing.T) {
-	if os.Getenv("MIGATE_INTEGRATION") != "1" {
-		t.Skip("set MIGATE_INTEGRATION=1 with deploy/test.compose.yml running")
+	if os.Getenv("WEIR_INTEGRATION") != "1" {
+		t.Skip("set WEIR_INTEGRATION=1 with deploy/test.compose.yml running")
 	}
 	ctx := context.Background()
 	admin, err := sql.Open("pgx", "postgres://gate:local-test-only@127.0.0.1:25432/gate?sslmode=disable")
@@ -45,7 +45,7 @@ func TestProbePostgresMarksLegacyData(t *testing.T) {
 	}
 	defer admin.Close()
 	suffix := time.Now().UnixNano()
-	legacy, empty := fmt.Sprintf("migate_probe_legacy_%d", suffix), fmt.Sprintf("migate_probe_empty_%d", suffix)
+	legacy, empty := fmt.Sprintf("weir_probe_legacy_%d", suffix), fmt.Sprintf("weir_probe_empty_%d", suffix)
 	for _, name := range []string{legacy, empty} {
 		if _, err = admin.Exec("CREATE DATABASE " + name); err != nil {
 			t.Fatal(err)
@@ -58,9 +58,9 @@ func TestProbePostgresMarksLegacyData(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, q := range []string{
-		"CREATE SCHEMA migate",
-		"CREATE TABLE migate.users (id bigserial PRIMARY KEY, email text, role text, created_at timestamptz)",
-		"INSERT INTO migate.users (email, role, created_at) VALUES ('admin', 'admin', now())",
+		"CREATE SCHEMA weir",
+		"CREATE TABLE weir.users (id bigserial PRIMARY KEY, email text, role text, created_at timestamptz)",
+		"INSERT INTO weir.users (email, role, created_at) VALUES ('admin', 'admin', now())",
 	} {
 		if _, err = db.Exec(q); err != nil {
 			t.Fatal(err)
@@ -68,7 +68,7 @@ func TestProbePostgresMarksLegacyData(t *testing.T) {
 	}
 	db.Close()
 
-	cfg := Config{Driver: DriverPostgres, Postgres: p, Redis: RedisConfig{Address: "127.0.0.1:26379", Username: "migate", Password: "local-test-only"}}
+	cfg := Config{Driver: DriverPostgres, Postgres: p, Redis: RedisConfig{Address: "127.0.0.1:26379", Username: "weir", Password: "local-test-only"}}
 	if has, err := HasData(ctx, cfg); err != nil || !has {
 		t.Fatalf("legacy: has=%v err=%v", has, err)
 	}
@@ -94,7 +94,7 @@ func TestProbePostgresMarksLegacyData(t *testing.T) {
 		t.Fatalf("redis = %s", status)
 	}
 	// 测试实例的 default 用户不要密码，无法在这里覆盖 NOAUTH；只设 requirepass 的实例（1Panel）在部署时实测。
-	if status, _ := ProbeRedis(ctx, RedisConfig{Address: cfg.Redis.Address, Username: "migate", Password: "wrong"}); status != RedisWrongPassword {
+	if status, _ := ProbeRedis(ctx, RedisConfig{Address: cfg.Redis.Address, Username: "weir", Password: "wrong"}); status != RedisWrongPassword {
 		t.Fatalf("redis wrong password = %s", status)
 	}
 	if status, _ := ProbeRedis(ctx, RedisConfig{Address: "127.0.0.1:1"}); status != RedisUnreachable {

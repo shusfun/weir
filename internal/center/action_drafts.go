@@ -113,6 +113,11 @@ func (s *Server) applyActionDraft(c *gin.Context, d *Draft) {
 			}
 		}
 	}
+	for k := range before {
+		if name, ok := strings.CutPrefix(k, "driver:"); ok {
+			quick.versions[k] = driverVersion(ctx, s, name)
+		}
+	}
 	for k, v := range before {
 		if quick.versions[k] != v {
 			failDetail(c, 409, "draft_stale", "草稿依据的数据已被改动，请让 dsh 重新生成", nil)

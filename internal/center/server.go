@@ -16,6 +16,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/shusfun/weir/internal/buildinfo"
+	"github.com/shusfun/weir/internal/ghrelease"
+	"github.com/shusfun/weir/internal/kernels"
 	"github.com/shusfun/weir/internal/lockfile"
 	"github.com/shusfun/weir/internal/secrets"
 	"github.com/shusfun/weir/internal/store"
@@ -43,6 +45,16 @@ type Server struct {
 	Mail Mailer
 	// dsh 是托管的 DeepSeek Harness（进程、子域名网关、MCP 工具）。
 	dsh dshHost
+	// GitHub 非空时代替真实的 GitHub（只用于测试）：API 地址、下载主机与 HTTP 客户端。
+	GitHub *ghrelease.Client
+	// jobs 是内核、dsh 下载等后台任务。
+	jobs jobManager
+	// driverCache 缓存合并后的内核驱动（每次编译 Gate 配置都会用到）。
+	driverCache struct {
+		sync.Mutex
+		value *kernels.Drivers
+		at    time.Time
+	}
 	// origin 缓存记录的中心公共地址（见 origin.go）。
 	origin struct {
 		sync.Mutex
@@ -256,6 +268,10 @@ func (s *Server) Router() *gin.Engine {
 	s.pageRoutes(ready, admin)
 	s.opsRoutes(admin)
 	s.dshRoutes(admin)
+	s.jobRoutes(admin)
+	s.selfUpdateRoutes(admin)
+	s.driverRoutes(admin)
+	s.noticeRoutes(admin)
 	s.contextRoutes(admin)
 	s.sampleRoutes(admin)
 	s.defenseRoutes(admin)

@@ -1,40 +1,40 @@
 package paths
 
 var (
-	ConfigDir       = "/etc/migate"
-	CoreConfigDir   = "/etc/migate/cores"
-	CertDir         = "/etc/migate/certs"
-	PanelConfig     = "/etc/migate/panel.json"
-	XrayConfig      = "/etc/migate/cores/xray.json"
-	SingboxConfig   = "/etc/migate/cores/sing-box.json"
-	DataDir         = "/var/lib/migate"
-	Database        = "/var/lib/migate/migate.db"
-	BackupDir       = "/var/lib/migate/backups"
-	VersionsFile    = "/var/lib/migate/versions.json"
-	LogDir          = "/var/log/migate"
-	RunDir          = "/run/migate"
+	ConfigDir       = "/etc/weir"
+	CoreConfigDir   = "/etc/weir/cores"
+	CertDir         = "/etc/weir/certs"
+	PanelConfig     = "/etc/weir/panel.json"
+	XrayConfig      = "/etc/weir/cores/xray.json"
+	SingboxConfig   = "/etc/weir/cores/sing-box.json"
+	DataDir         = "/var/lib/weir"
+	Database        = "/var/lib/weir/weir.db"
+	BackupDir       = "/var/lib/weir/backups"
+	VersionsFile    = "/var/lib/weir/versions.json"
+	LogDir          = "/var/log/weir"
+	RunDir          = "/run/weir"
 	BinDir          = "/usr/local/bin"
 	XrayBinary      = "/usr/local/bin/xray"
 	SingboxBinary   = "/usr/local/bin/sing-box"
-	MigateBinary    = "/usr/local/bin/migate"
-	MigateCLI       = "/usr/local/bin/mg"
-	Installer       = "/usr/local/bin/migate-install"
+	WeirBinary      = "/usr/local/bin/weir"
+	WeirCLI         = "/usr/local/bin/mg"
+	Installer       = "/usr/local/bin/weir-install"
 	DefaultHTTPPort = 9999
 )
 
 const (
-	PanelService   = "migate"
-	XrayService    = "migate-xray"
-	SingboxService = "migate-sing-box"
+	PanelService   = "weir"
+	XrayService    = "weir-xray"
+	SingboxService = "weir-sing-box"
 
-	PanelServiceUnit   = "migate.service"
-	XrayServiceUnit    = "migate-xray.service"
-	SingboxServiceUnit = "migate-sing-box.service"
+	PanelServiceUnit   = "weir.service"
+	XrayServiceUnit    = "weir-xray.service"
+	SingboxServiceUnit = "weir-sing-box.service"
 )
 
 var (
-	InstallLock = "/run/migate/install.lock"
-	ApplyLock   = "/run/migate/apply.lock"
-	SyncLock    = "/run/migate/sync.lock"
-	UpgradeLock = "/run/migate/upgrade.lock"
+	InstallLock = "/run/weir/install.lock"
+	ApplyLock   = "/run/weir/apply.lock"
+	SyncLock    = "/run/weir/sync.lock"
+	UpgradeLock = "/run/weir/upgrade.lock"
 )

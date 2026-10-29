@@ -1,0 +1,168 @@
+{
+  "api": {
+    "services": [
+      "StatsService"
+    ],
+    "tag": "api"
+  },
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "port": 24001,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "email": "c11",
+            "flow": "xtls-rprx-vision",
+            "id": "11111111-1111-4111-8111-111111111111"
+          },
+          {
+            "email": "c12",
+            "flow": "xtls-rprx-vision",
+            "id": "u1"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "realitySettings": {
+          "dest": "www.microsoft.com:443",
+          "fingerprint": "chrome",
+          "privateKey": "kKB1Vv7m0wN3hOq1oQv0b9nN5mF3V6Q2l1c8pZ0yGXE",
+          "serverNames": [
+            "www.microsoft.com",
+            "microsoft.com"
+          ],
+          "shortIds": [
+            "a1b2c3d4"
+          ],
+          "show": false
+        },
+        "security": "reality"
+      },
+      "tag": "inbound-1-vless"
+    },
+    {
+      "listen": "0.0.0.0",
+      "port": 24002,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "email": "c21",
+            "id": "11111111-1111-4111-8111-111111111112"
+          },
+          {
+            "email": "c22",
+            "id": "u2"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "realitySettings": {
+          "dest": "www.cloudflare.com:443",
+          "serverNames": [
+            "www.cloudflare.com"
+          ],
+          "shortIds": [
+            ""
+          ],
+          "show": false
+        },
+        "security": "reality",
+        "xhttpSettings": {
+          "mode": "packet-up",
+          "path": "/x"
+        }
+      },
+      "tag": "inbound-2-vless"
+    },
+    {
+      "listen": "0.0.0.0",
+      "port": 24003,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "email": "c31",
+            "id": "11111111-1111-4111-8111-111111111113"
+          },
+          {
+            "email": "c32",
+            "id": "u3"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "ws",
+        "security": "tls",
+        "tlsSettings": {
+          "alpn": [
+            "http/1.1"
+          ],
+          "certificates": [
+            {
+              "certificateFile": "/weir-test-certs/5.crt",
+              "keyFile": "/weir-test-certs/5.key"
+            }
+          ],
+          "fingerprint": "firefox",
+          "serverName": "s.example.com"
+        },
+        "wsSettings": {
+          "host": "h.example.com",
+          "path": "/abc"
+        }
+      },
+      "tag": "inbound-3-vless"
+    },
+    {
+      "listen": "127.0.0.1",
+      "port": 21001,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "127.0.0.1"
+      },
+      "tag": "api"
+    }
+  ],
+  "log": {
+    "loglevel": "warning"
+  },
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "settings": {},
+      "tag": "xray-out-2147483647"
+    }
+  ],
+  "policy": {
+    "levels": {
+      "0": {
+        "statsUserDownlink": true,
+        "statsUserUplink": true
+      }
+    },
+    "system": {
+      "statsInboundDownlink": true,
+      "statsInboundUplink": true
+    }
+  },
+  "routing": {
+    "domainStrategy": "AsIs",
+    "rules": [
+      {
+        "inboundTag": [
+          "api"
+        ],
+        "outboundTag": "api"
+      }
+    ]
+  },
+  "stats": {}
+}

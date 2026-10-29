@@ -1,4 +1,4 @@
-"""Assemble a verified linux/amd64 release directory into checksums and an archive."""
+"""Assemble verified linux release directories (amd64 / arm64) into archives and one checksums.txt."""
 import hashlib
 import json
 import os
@@ -8,12 +8,16 @@ import tarfile
 import time
 
 
-def package(version):
-    root = pathlib.Path(f"dist/migate-{version}-linux-amd64")
-    if not (root / "migate").is_file():
+ARCHES = ("amd64", "arm64")
+
+
+def package(version, arch):
+    root = pathlib.Path(f"dist/weir-{version}-linux-{arch}")
+    if not (root / "weir").is_file():
         raise SystemExit("release binaries are missing")
     (root / "BUILD.json").write_text(json.dumps({
         "version": version,
+        "arch": arch,
         "built_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }), encoding="utf-8")
     source = root / "source.tar.gz"
@@ -35,13 +39,21 @@ def package(version):
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         lines.append(f"{digest}  {path.relative_to(root).as_posix()}")
     (root / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    archive = pathlib.Path(f"dist/migate-{version}-linux-amd64.tar.gz")
+    archive = pathlib.Path(f"dist/weir-{version}-linux-{arch}.tar.gz")
     with tarfile.open(archive, "w:gz") as bundle:
         for path in sorted(item for item in root.rglob("*") if item.is_file()):
             bundle.add(path, arcname=path.relative_to(root).as_posix())
-    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-    pathlib.Path("dist/checksums.txt").write_text(f"{digest}  {archive.name}\n", encoding="utf-8")
+    return archive
+
+
+def checksums(archives):
+    lines = [f"{hashlib.sha256(a.read_bytes()).hexdigest()}  {a.name}" for a in archives]
+    pathlib.Path("dist/checksums.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":
-    package(os.environ.get("VERSION") or sys.argv[1])
+    version = os.environ.get("VERSION") or sys.argv[1]
+    arches = sys.argv[2:] or [a for a in ARCHES if pathlib.Path(f"dist/weir-{version}-linux-{a}/weir").is_file()]
+    if not arches:
+        raise SystemExit("release binaries are missing")
+    checksums([package(version, a) for a in arches])

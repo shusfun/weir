@@ -9,20 +9,22 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/shusfun/weir/internal/fetch"
 )
 
 func TestCompareVersions(t *testing.T) {
 	cases := []struct {
 		a, b string
 		sign int
-	}{{"26.3.27", "26.10.17", -1}, {"v1.14.3", "1.14.3", 0}, {"1.14.3-migate.1", "1.14.3", 0}, {"1.12.0", "1.9.9", 1}}
+	}{{"26.3.27", "26.10.17", -1}, {"v1.14.3", "1.14.3", 0}, {"1.14.3-weir.1", "1.14.3", 0}, {"1.12.0", "1.9.9", 1}}
 	for _, c := range cases {
 		got := CompareVersions(c.a, c.b)
 		if got < 0 && c.sign >= 0 || got > 0 && c.sign <= 0 || got == 0 && c.sign != 0 {
@@ -31,31 +33,59 @@ func TestCompareVersions(t *testing.T) {
 	}
 }
 
-func TestProfileSelectionAndOverride(t *testing.T) {
-	p := Profiles{}
-	text, err := p.Select("xray", "26.10.17")
-	if err != nil || !strings.Contains(text, "min_version: 26.3.27") {
-		t.Fatalf("select new xray: %v\n%s", err, text)
+func TestDriverSelectionOverrideAndDisable(t *testing.T) {
+	d := Drivers{}
+	pick := func(kernel, version string) string {
+		drv, _, err := d.Select(kernel, version)
+		if err != nil {
+			return "error: " + err.Error()
+		}
+		return drv.Name
 	}
-	if text, err = p.Select("xray", "25.1.30"); err != nil || !strings.Contains(text, "max_version: 26.3.26") {
-		t.Fatalf("select old xray: %v\n%s", err, text)
+	for version, want := range map[string]string{"25.1.30": "xray-1.8", "26.3.27": "xray-26.3", "26.10.17": "xray-26.10", "27.0.0": "xray-26.10"} {
+		if got := pick("xray", version); got != want {
+			t.Fatalf("xray %s → %s, want %s", version, got, want)
+		}
 	}
-	if _, err = p.Select("sing-box", "1.10.0"); err == nil {
-		t.Fatal("version below every profile accepted")
+	if got := pick("sing-box", "1.10.0"); !strings.HasPrefix(got, "error") {
+		t.Fatalf("version below every driver accepted: %s", got)
 	}
-	dir := t.TempDir()
-	override := "kernel: xray\nmin_version: 26.3.27\nprotocols: [vless]\nnotes: overridden\n"
-	if err = os.WriteFile(filepath.Join(dir, "xray-26.3.yaml"), []byte(override), 0644); err != nil {
-		t.Fatal(err)
+	// 继承：xray-26.10 只写了版本区间与 compat，模板与方案都来自 xray-1.8。
+	drv, full, err := d.Resolve("xray-26.10")
+	if err != nil || len(drv.Presets) == 0 || drv.Templates["root"] == nil || len(drv.Strip) != 1 || !strings.Contains(full, "MLKEM") {
+		t.Fatalf("resolve xray-26.10: %v presets=%d strip=%v", err, len(drv.Presets), drv.Strip)
 	}
-	if text, _ = (Profiles{OverrideDir: dir}).Select("xray", "26.10.17"); !strings.Contains(text, "overridden") {
-		t.Fatalf("override not applied:\n%s", text)
+	if why := drv.Incompatible("sing-box", "1.14.3", "vless", "reality"); why == "" {
+		t.Fatal("compat must flag sing-box 1.14.3 with REALITY")
 	}
-	if err = os.WriteFile(filepath.Join(dir, "bad.yaml"), []byte("kernel: nope\n"), 0644); err != nil {
-		t.Fatal(err)
+	// 停用：这个版本区间没有驱动了（如实报错，不换成区间不覆盖它的驱动）；被继承的驱动停用后照样能被继承。
+	d.Saved = map[string]Saved{"xray-26.10": {Name: "xray-26.10", Disabled: true}}
+	if got := pick("xray", "26.10.17"); !strings.HasPrefix(got, "error") {
+		t.Fatalf("disabled driver still selected: %s", got)
 	}
-	if _, err = (Profiles{OverrideDir: dir}).Select("xray", "26.10.17"); err == nil {
-		t.Fatal("invalid override profile accepted")
+	d.Saved = map[string]Saved{"xray-26.3": {Name: "xray-26.3", Disabled: true}}
+	if got := pick("xray", "26.10.17"); got != "xray-26.10" {
+		t.Fatalf("child of a disabled driver must still resolve: %s", got)
+	}
+	// 自定义驱动覆盖内置：改了父驱动的模板，子驱动跟着变。
+	base := Builtin()["xray-1.8"]
+	d.Saved = map[string]Saved{"xray-1.8": {Name: "xray-1.8", Text: strings.Replace(base, "loglevel: warning", "loglevel: error", 1)}}
+	if _, full, _ := d.Resolve("xray-26.3"); !strings.Contains(full, "loglevel: error") {
+		t.Fatal("child must inherit the modified parent")
+	}
+	// 坏掉的同内核驱动：报错，不悄悄换成别的。
+	d.Saved = map[string]Saved{"xray-26.3": {Name: "xray-26.3", Text: "kernel: xray\nname: xray-26.3\nmin_version: 26.3.27\nunknown: 1\n"}}
+	if got := pick("xray", "26.3.27"); !strings.HasPrefix(got, "error") {
+		t.Fatalf("broken driver must surface: %s", got)
+	}
+	list := (Drivers{}).List()
+	if len(list) < 4 {
+		t.Fatalf("list = %d", len(list))
+	}
+	for _, e := range list {
+		if e.Error != "" || e.Source != "builtin" {
+			t.Fatalf("builtin %s: %+v", e.Name, e)
+		}
 	}
 }
 
@@ -172,7 +202,7 @@ func TestFetchAllKernelsAndListReleases(t *testing.T) {
 
 func TestFetchRejectsDigestMismatch(t *testing.T) {
 	_, f := fakeGitHub(t, true)
-	if _, err := f.Fetch(context.Background(), "xray", "26.3.27", "amd64"); err == nil || !strings.Contains(err.Error(), "digest") {
+	if _, err := f.Fetch(context.Background(), "xray", "26.3.27", "amd64"); !errors.Is(err, fetch.ErrDigest) {
 		t.Fatalf("err = %v", err)
 	}
 	if _, _, err := f.Cache.Get("xray", "26.3.27", "amd64"); err == nil {

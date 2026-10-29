@@ -100,7 +100,7 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 	if err != nil {
 		return map[string]any{"stage": "build"}, fmt.Errorf("生成配置失败：%w", err)
 	}
-	dir, err := os.MkdirTemp("", "migate-test-")
+	dir, err := os.MkdirTemp("", "weir-test-")
 	if err != nil {
 		return nil, err
 	}
@@ -119,14 +119,16 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 		return nil, err
 	}
 	// 内核自检：Xray run -test / sing-box check。
-	_, test := kernelArgs(kernel, serverPath)
+	run, test, err := kernelArgs(kernel, out.Args[kernel], serverPath)
+	if err != nil {
+		return nil, err
+	}
 	if b, err := exec.CommandContext(ctx, bin(kernel), test...).CombinedOutput(); err != nil {
 		return map[string]any{"stage": "check", "log": lastLines(string(b), 20)}, errors.New("内核自检未通过")
 	}
 	runCtx, cancel := context.WithTimeout(ctx, 40*time.Second)
 	defer cancel()
 	serverLog, clientLog := &tailBuffer{}, &tailBuffer{}
-	run, _ := kernelArgs(kernel, serverPath)
 	sp := exec.CommandContext(runCtx, bin(kernel), run...)
 	sp.Stdout, sp.Stderr = serverLog, serverLog
 	if err = sp.Start(); err != nil {
@@ -149,7 +151,10 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 	if err = os.WriteFile(clientPath, cc, 0600); err != nil {
 		return nil, err
 	}
-	run, _ = kernelArgs("sing-box", clientPath)
+	// 客户端：sing-box 的驱动参数（这次配置没有 sing-box 入站时用默认参数）。
+	if run, _, err = kernelArgs("sing-box", out.Args["sing-box"], clientPath); err != nil {
+		return nil, err
+	}
 	cp := exec.CommandContext(runCtx, bin("sing-box"), run...)
 	cp.Stdout, cp.Stderr = clientLog, clientLog
 	if err = cp.Start(); err != nil {

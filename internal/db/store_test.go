@@ -2236,9 +2236,9 @@ func TestStoreCreateInboundWithTransportFields(t *testing.T) {
 		Port:               20000,
 		Network:            "ws",
 		Security:           "tls",
-		WsPath:             "/migate",
+		WsPath:             "/weir",
 		WsHost:             "test.example.com",
-		GrpcServiceName:    "migate",
+		GrpcServiceName:    "weir",
 		RealityDest:        "www.google.com:443",
 		RealityServerNames: "www.google.com",
 		RealityShortID:     "6ba85179e30d4fc2",
@@ -2267,8 +2267,8 @@ func TestStoreCreateInboundWithTransportFields(t *testing.T) {
 		}
 	}
 
-	if inbound.WsPath != "/migate" {
-		t.Fatalf("ws_path: got %q, want /migate", inbound.WsPath)
+	if inbound.WsPath != "/weir" {
+		t.Fatalf("ws_path: got %q, want /weir", inbound.WsPath)
 	}
 	if inbound.WsHost != "test.example.com" {
 		t.Fatalf("ws_host: got %q, want test.example.com", inbound.WsHost)
@@ -2283,8 +2283,8 @@ func TestStoreCreateInboundWithTransportFields(t *testing.T) {
 	for _, ib := range inbounds {
 		if ib.ID == inbound.ID {
 			found = true
-			if ib.WsPath != "/migate" {
-				t.Fatalf("list ws_path: got %q, want /migate", ib.WsPath)
+			if ib.WsPath != "/weir" {
+				t.Fatalf("list ws_path: got %q, want /weir", ib.WsPath)
 			}
 			if ib.RealityDest != "www.google.com:443" {
 				t.Fatalf("list reality_dest: got %q, want www.google.com:443", ib.RealityDest)
@@ -2416,14 +2416,14 @@ func TestStoreCreateInboundWithXHTTPFields(t *testing.T) {
 		Security:           "reality",
 		RealityDest:        "www.cloudflare.com:443",
 		RealityServerNames: "www.cloudflare.com",
-		XHTTPPath:          "/migate-xhttp",
+		XHTTPPath:          "/weir-xhttp",
 		XHTTPMode:          "stream-one",
 	})
 	if err != nil {
 		t.Fatalf("create inbound: %v", err)
 	}
-	if inbound.XHTTPPath != "/migate-xhttp" {
-		t.Fatalf("xhttp_path: got %q, want /migate-xhttp", inbound.XHTTPPath)
+	if inbound.XHTTPPath != "/weir-xhttp" {
+		t.Fatalf("xhttp_path: got %q, want /weir-xhttp", inbound.XHTTPPath)
 	}
 	if inbound.XHTTPMode != "stream-one" {
 		t.Fatalf("xhttp_mode: got %q, want stream-one", inbound.XHTTPMode)
@@ -2433,7 +2433,7 @@ func TestStoreCreateInboundWithXHTTPFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list inbounds: %v", err)
 	}
-	if len(loaded) != 1 || loaded[0].XHTTPPath != "/migate-xhttp" || loaded[0].XHTTPMode != "stream-one" {
+	if len(loaded) != 1 || loaded[0].XHTTPPath != "/weir-xhttp" || loaded[0].XHTTPMode != "stream-one" {
 		t.Fatalf("xhttp fields not persisted via list: %+v", loaded)
 	}
 
@@ -4474,8 +4474,8 @@ func TestCertificateAssetsAndInboundUsage(t *testing.T) {
 		Source:           db.CertSourceACME,
 		Status:           db.CertStatusIssued,
 		Domains:          []string{"example.com", "www.example.com"},
-		CertPath:         "/etc/migate/certs/example/fullchain.pem",
-		KeyPath:          "/etc/migate/certs/example/privkey.pem",
+		CertPath:         "/etc/weir/certs/example/fullchain.pem",
+		KeyPath:          "/etc/weir/certs/example/privkey.pem",
 		NotBefore:        "2026-06-20T00:00:00Z",
 		NotAfter:         "2026-09-20T00:00:00Z",
 		Fingerprint:      "ABC",

@@ -17,7 +17,7 @@ import (
 
 func openSQLiteForTest(t *testing.T) *Store {
 	t.Helper()
-	s, err := Open(context.Background(), Config{Driver: DriverSQLite, SQLitePath: filepath.Join(t.TempDir(), "migate.db")})
+	s, err := Open(context.Background(), Config{Driver: DriverSQLite, SQLitePath: filepath.Join(t.TempDir(), "weir.db")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,19 +25,19 @@ func openSQLiteForTest(t *testing.T) *Store {
 	return s
 }
 
-// openPostgresForTest 只在 MIGATE_INTEGRATION=1 时连接 deploy/test.compose.yml 的一次性容器。
+// openPostgresForTest 只在 WEIR_INTEGRATION=1 时连接 deploy/test.compose.yml 的一次性容器。
 // 每次新建独立数据库并在结束时删除，不触碰容器里本地开发环境使用的 gate 库。
 func openPostgresForTest(t *testing.T) *Store {
 	t.Helper()
-	if os.Getenv("MIGATE_INTEGRATION") != "1" {
-		t.Skip("set MIGATE_INTEGRATION=1 with deploy/test.compose.yml running")
+	if os.Getenv("WEIR_INTEGRATION") != "1" {
+		t.Skip("set WEIR_INTEGRATION=1 with deploy/test.compose.yml running")
 	}
 	admin, err := sql.Open("pgx", "postgres://gate:local-test-only@127.0.0.1:25432/gate?sslmode=disable")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { admin.Close() })
-	name := fmt.Sprintf("migate_store_test_%d", time.Now().UnixNano())
+	name := fmt.Sprintf("weir_store_test_%d", time.Now().UnixNano())
 	if _, err = admin.Exec("CREATE DATABASE " + name); err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func openPostgresForTest(t *testing.T) *Store {
 	s, err := Open(context.Background(), Config{
 		Driver:   DriverPostgres,
 		Postgres: PostgresConfig{Host: "127.0.0.1", Port: 25432, User: "gate", Password: "local-test-only", Database: name},
-		Redis:    RedisConfig{Address: "127.0.0.1:26379", Username: "migate", Password: "local-test-only"},
+		Redis:    RedisConfig{Address: "127.0.0.1:26379", Username: "weir", Password: "local-test-only"},
 	})
 	if err != nil {
 		t.Fatal(err)

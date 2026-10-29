@@ -182,15 +182,15 @@ func (s *Server) analyzeEvent(ctx context.Context, id int) error {
 		return fail("dsh 未运行")
 	}
 	s.markEvent(ctx, id, "analyzing", "")
-	task := fmt.Sprintf("你是 Weir 的安全分析员。请先调用 mcp__migate__get_security_event 读取安全事件 %d，结合 Laya 的判断分析它是否是攻击。"+
-		"需要处置时调用 mcp__migate__submit_draft 提交一步 defense.block 草稿（管理员确认后才执行）；不需要处置就不要调用。最后用一两句中文说明结论。", id)
+	task := fmt.Sprintf("你是 Weir 的安全分析员。请先调用 mcp__weir__get_security_event 读取安全事件 %d，结合 Laya 的判断分析它是否是攻击。"+
+		"需要处置时调用 mcp__weir__submit_draft 提交一步 defense.block 草稿（管理员确认后才执行）；不需要处置就不要调用。最后用一两句中文说明结论。", id)
 	res, err := s.runDSHJob(ctx, task)
 	if err != nil {
 		return fail(err.Error())
 	}
 	drafted := false
 	for _, t := range res.ToolCalls {
-		drafted = drafted || t == "mcp__migate__submit_draft"
+		drafted = drafted || t == "mcp__weir__submit_draft"
 	}
 	conclusion := strings.TrimSpace(res.Final)
 	if len([]rune(conclusion)) > 500 {

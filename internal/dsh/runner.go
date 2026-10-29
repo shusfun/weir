@@ -29,7 +29,7 @@ func (p Paths) Home() string { return filepath.Join(p.Dir, "home") }
 func (p Paths) Work() string { return filepath.Join(p.Dir, "work") }
 
 // env 是 dsh 进程的完整环境：只给运行需要的变量，不继承中心的任何环境变量（数据库、加密密钥等）。
-// MIGATE_DSH_DEEPSEEK_BASE_URL 只用于本地验收时把 dsh 指向假模型。
+// WEIR_DSH_DEEPSEEK_BASE_URL 只用于本地验收时把 dsh 指向假模型。
 func (p Paths) env() []string {
 	env := []string{
 		"PATH=" + filepath.Dir(p.Node) + ":/usr/local/bin:/usr/bin:/bin",
@@ -37,13 +37,13 @@ func (p Paths) env() []string {
 		"DSH_HOME=" + p.Home(),
 		"LANG=C.UTF-8",
 	}
-	if v := os.Getenv("MIGATE_DSH_DEEPSEEK_BASE_URL"); v != "" {
+	if v := os.Getenv("WEIR_DSH_DEEPSEEK_BASE_URL"); v != "" {
 		env = append(env, "DEEPSEEK_BASE_URL="+v)
 	}
 	return env
 }
 
-// prepare 建好 dsh 的家目录与工作目录（管理进程本身已是 migate-dsh 用户，这里不再降权）。
+// prepare 建好 dsh 的家目录与工作目录（管理进程本身已是 weir-dsh 用户，这里不再降权）。
 func (p Paths) prepare() error {
 	for _, d := range []string{p.Home(), p.Work(), filepath.Join(p.Dir, "user")} {
 		if err := os.MkdirAll(d, 0o700); err != nil {

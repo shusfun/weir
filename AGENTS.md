@@ -10,9 +10,9 @@ Weir 是个人使用的代理管理面板：合并 [MiGate](https://github.com/i
 
 | 说法 | 含义 |
 |---|---|
-| Weir | 产品名；程序与系统用户沿用 `migate` |
-| 中心 | `migate center`：用户、节点、订阅、审计与内嵌控制台 |
-| Gate | `migate gate`：VPS 上的执行端，主动连中心、托管内核；**控制台里叫「VPS」** |
+| Weir | 产品名；程序、系统用户、服务、目录、PG schema 与 Redis 前缀都叫 `weir`（上游项目 MiGate 保留原名） |
+| 中心 | `weir center`：用户、节点、订阅、审计与内嵌控制台 |
+| Gate | `weir gate`：VPS 上的执行端，主动连中心、托管内核；**控制台里叫「VPS」** |
 | 单机 | 同一台机器装中心与本机 Gate |
 | 节点 | Gate 上的一个入站；授权单位是「用户 → 节点」 |
 | 内核 | Xray、sing-box（Gate 上运行）、mihomo（中心检查订阅） |
@@ -21,17 +21,18 @@ Weir 是个人使用的代理管理面板：合并 [MiGate](https://github.com/i
 ## 目录
 
 ```
-apps/weir/            migate 程序入口；static/ 是 pnpm build 的产物，嵌入程序
+apps/weir/            weir 程序入口；static/ 是 pnpm build 的产物，嵌入程序
 apps/console/         控制台（React + TypeScript + Vite，TanStack Query）
 packages/ui/          UIAble 组件源码
 packages/contracts/   中心与 Gate 的协议
 internal/center/      中心：HTTP 接口、能力目录、Gate 同步、dsh 网关、MiSub 附加功能
 internal/gate/        Gate Agent：领取配置、应用与回滚、白名单动作
-internal/kernels/     内核拉取、校验、缓存与版本档案（profiles/）
-internal/kernelconf/  把 GateConfig 生成为内核配置
-internal/xray/        Xray 配置生成与统计
-internal/singbox/     sing-box 配置生成与统计
-internal/dsh/         dsh 管理进程（以 migate-dsh 运行）
+internal/kernels/     内核拉取、校验、缓存与内置驱动（drivers/）
+internal/kernelconf/  驱动格式、模板引擎：按驱动把 GateConfig 生成为内核配置，生成后强制检查
+internal/xray/        REALITY 密钥与统计接口客户端（Xray / sing-box 共用）
+internal/fetch/       可续传、可取消的下载；internal/ghrelease/ 读 GitHub Release
+internal/selfupdate/  自更新的 root 一侧（weir self-update）
+internal/dsh/         dsh 管理进程（以 weir-dsh 运行）
 internal/misub/       订阅源编排（MiSub 迁移）
 internal/sub/         订阅格式生成器（Clash、Loon 等，MiSub 迁移）
 internal/subout/      订阅输出格式
@@ -51,9 +52,9 @@ pnpm build                       # 构建控制台到 apps/weir/static
 go build ./... && go vet ./...
 go test ./internal/<包>/          # 中心测试默认用 SQLite
 docker compose -f deploy/test.compose.yml up -d
-MIGATE_CENTER_STORE=postgres go test ./internal/center/   # PG + Redis 跑中心测试
+WEIR_CENTER_STORE=postgres go test ./internal/center/   # PG + Redis 跑中心测试
 python deploy/e2e.py [-run 正则]  # 容器里跑真实内核，需要 Docker 与 dist/cores
-CGO_ENABLED=0 GOOS=linux go build -o dist/migate ./apps/weir
+CGO_ENABLED=0 GOOS=linux go build -o dist/weir ./apps/weir
 ```
 
 ## 改完怎么验证
@@ -63,9 +64,9 @@ CGO_ENABLED=0 GOOS=linux go build -o dist/migate ./apps/weir
 ## 规则
 
 - **先读代码再改**，沿用现有架构、命名和风格。服务端只用 Go；Node.js 只用于构建、上游对照测试和托管的 dsh。
-- **改这些目录前先读它们的 `AGENTS.md`**：`apps/console/`、`internal/kernels/`（也管 `kernelconf`、`xray`、`singbox`）、`internal/dsh/`、`deploy/`。
+- **改这些目录前先读它们的 `AGENTS.md`**：`apps/console/`、`internal/kernels/`（也管 `kernelconf`、`fetch`、`ghrelease`）、`internal/dsh/`、`deploy/`。
 - **上游页面按原有交互移植**，只优化繁琐的步骤，不改写成通用增删改查表单而丢掉原有流程。
-- **存储**可选 PostgreSQL + Redis 或只用 SQLite。PG / Redis 只用 `migate` schema 和 `migate:` 前缀，不得清空共享实例。
+- **存储**可选 PostgreSQL + Redis 或只用 SQLite。PG / Redis 只用 `weir` schema 和 `weir:` 前缀，不得清空共享实例。
 - **观测数据缺失显示「未知」**，不能显示为正常或 0。失败要暴露真实原因，不静默降级，不用占位结果冒充成功。
 - **注释写代码表达不了的约定与原因**，不复述代码，不写修改过程。
 

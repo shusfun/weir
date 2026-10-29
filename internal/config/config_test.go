@@ -113,7 +113,7 @@ func TestManagementDirectTargetsAutoDetectIncludesAutomaticAndManualHosts(t *tes
 
 func TestEnsureManagementDirectDefaultsPreservesExplicitDisabled(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "panel.json")
-	if err := os.WriteFile(path, []byte(`{"panel_port":9999,"database_path":"/var/lib/migate/migate.db","management_direct_enabled":false,"management_direct_hosts":["old.example"],"management_direct_ports":[2200]}`), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"panel_port":9999,"database_path":"/var/lib/weir/weir.db","management_direct_enabled":false,"management_direct_hosts":["old.example"],"management_direct_ports":[2200]}`), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	cfg, err := EnsureManagementDirectDefaults(path, []string{"old.example", "103.193.149.217"}, []int{22, 2200})
@@ -140,7 +140,7 @@ func TestEnsureManagementDirectDefaultsPreservesExplicitDisabled(t *testing.T) {
 
 func TestEnsureManagementDirectDefaultsRespectsAutoDetectDisabled(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "panel.json")
-	if err := os.WriteFile(path, []byte(`{"panel_port":9999,"database_path":"/var/lib/migate/migate.db","management_direct_auto_detect":false,"management_direct_hosts":["manual.example"],"management_direct_ports":[2200]}`), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"panel_port":9999,"database_path":"/var/lib/weir/weir.db","management_direct_auto_detect":false,"management_direct_hosts":["manual.example"],"management_direct_ports":[2200]}`), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	cfg, err := EnsureManagementDirectDefaults(path, []string{"103.193.149.217"}, []int{22})
@@ -182,7 +182,7 @@ func TestLoadRejectsInvalidExplicitValues(t *testing.T) {
 
 func TestLoadIgnoresUnknownFieldsForUpgradeCompatibility(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "panel.json")
-	if err := os.WriteFile(path, []byte(`{"panel_port":9999,"unknown_config_path":"/var/lib/migate"}`), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"panel_port":9999,"unknown_config_path":"/var/lib/weir"}`), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	cfg, err := Load(path)
@@ -196,7 +196,7 @@ func TestLoadIgnoresUnknownFieldsForUpgradeCompatibility(t *testing.T) {
 
 func TestUpdateDropsUnknownFieldsWhenSaving(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "panel.json")
-	if err := os.WriteFile(path, []byte(`{"panel_port":9999,"database_path":"/var/lib/migate/migate.db","unknown":true}`), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"panel_port":9999,"database_path":"/var/lib/weir/weir.db","unknown":true}`), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	if _, err := Update(path, func(cfg Config) (Config, error) {
@@ -219,7 +219,7 @@ func TestUpdateDropsUnknownFieldsWhenSaving(t *testing.T) {
 
 func TestUpdateNormalizesWebBasePath(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "panel.json")
-	if err := Save(path, Config{PanelUsername: "admin", DatabasePath: "/var/lib/migate/migate.db"}); err != nil {
+	if err := Save(path, Config{PanelUsername: "admin", DatabasePath: "/var/lib/weir/weir.db"}); err != nil {
 		t.Fatalf("save config: %v", err)
 	}
 	updated, err := Update(path, func(cfg Config) (Config, error) {
@@ -250,7 +250,7 @@ func TestSaveRejectsRelativeDatabasePath(t *testing.T) {
 
 func TestSaveRejectsPanelPortOutOfRange(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "panel.json")
-	if err := Save(path, Config{PanelPort: 70000, DatabasePath: "/var/lib/migate/migate.db"}); err == nil || !strings.Contains(err.Error(), "panel_port") {
+	if err := Save(path, Config{PanelPort: 70000, DatabasePath: "/var/lib/weir/weir.db"}); err == nil || !strings.Contains(err.Error(), "panel_port") {
 		t.Fatalf("expected panel_port range error, got %v", err)
 	}
 }

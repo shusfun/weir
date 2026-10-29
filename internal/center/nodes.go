@@ -29,7 +29,7 @@ import (
 )
 
 func (s *Server) nodeRoutes(admin *gin.RouterGroup) {
-	admin.GET("/presets", func(c *gin.Context) { c.JSON(200, gin.H{"items": presets}) })
+	admin.GET("/presets", func(c *gin.Context) { c.JSON(200, gin.H{"items": s.presets(c.Request.Context())}) })
 	admin.GET("/nodes", s.listNodes)
 	admin.POST("/nodes", s.createNode)
 	admin.GET("/nodes/:id", s.getNode)
@@ -260,7 +260,7 @@ func (s *Server) validateChain(ctx context.Context, entry *ent.Gate, self int, s
 		if err != nil || !exit.Enabled {
 			return errors.New("chain_exit_unavailable")
 		}
-		if p, ok := presetByID(exit.Preset); ok && !p.ChainExit {
+		if p, ok := s.presetByID(ctx, exit.Preset); ok && !p.ChainExit {
 			return errors.New("chain_exit_unsupported")
 		}
 		// 出口节点自身也走链时可能成环：最多追 8 跳。
@@ -353,12 +353,12 @@ func (s *Server) checkSettings(ctx context.Context, g *ent.Gate, kernel, protoco
 		Credentials: []contracts.Credential{{ID: 1, InboundID: 1, StatsKey: "check", UserKey: "u0", UUID: id, Password: password}},
 	}
 	if _, profiles, err := s.gateKernels(ctx, g, map[string]bool{kernel: true}); err == nil {
-		cfg.Profiles = profiles
+		cfg.Drivers = profiles
 	}
 	if security == "tls" {
 		cfg.Inbounds[0].CertID = 1
 	}
-	dir, err := os.MkdirTemp("", "migate-check-")
+	dir, err := os.MkdirTemp("", "weir-check-")
 	if err != nil {
 		return err
 	}
@@ -399,7 +399,7 @@ func (s *Server) createNode(c *gin.Context) {
 		failure(c, 404, "gate_not_found")
 		return
 	}
-	p, ok := presetByID(req.Preset)
+	p, ok := s.presetByID(ctx, req.Preset)
 	if !ok {
 		failure(c, 400, "unknown_preset")
 		return

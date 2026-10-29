@@ -6,17 +6,17 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
+	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/shusfun/weir/internal/fetch"
+	"github.com/shusfun/weir/internal/ghrelease"
 )
 
 const maxDownload = 200 << 20
@@ -44,79 +44,47 @@ var sources = map[string]source{
 	}},
 }
 
-// Release 是上游的一个正式版本。
+// Release 是上游的一个正式版本。Downloads 是各架构下载包的下载量；sing-box 的下载量与发布时间取上游
+// SagerNet/sing-box 同一标签（本项目 CI 重新编译的时间与下载量没有参考价值）。
 type Release struct {
-	Version     string    `json:"version"`
-	PublishedAt time.Time `json:"published_at"`
-	Notes       string    `json:"notes"`
+	Version     string           `json:"version"`
+	PublishedAt time.Time        `json:"published_at"`
+	Notes       string           `json:"notes"`
+	Downloads   map[string]int64 `json:"downloads,omitempty"`
 }
 
-// Fetcher 访问 GitHub API 列版本、下载并校验内核。Mirrors 为下载加速前缀（如 https://gh-proxy.com/），
-// 摘要始终取自 GitHub API，镜像返回的内容与摘要不一致即丢弃。
+// statsRepo 是取下载量的仓库：sing-box 由本项目 CI 编译，自己仓库的下载量没有参考价值。
+var statsRepo = map[string]struct{ repo, asset string }{
+	"sing-box": {"SagerNet/sing-box", "sing-box-%s-linux-%s.tar.gz"},
+}
+
+// Fetcher 访问 GitHub API 列版本、下载并校验内核。Mirrors 为下载加速前缀（如 https://gh-proxy.com）；
+// 摘要始终取自 GitHub API，镜像返回的内容与摘要不一致即丢弃。下载经 internal/fetch：可续传、可取消。
 type Fetcher struct {
 	HTTP         *http.Client
 	API          string // 默认 https://api.github.com
 	DownloadHost string // 默认 github.com；只接受该主机的 https 下载地址
 	Mirrors      []string
 	Cache        Cache
+	// Progress / Log 接收下载进度与日志（可为空）。
+	Progress func(fetch.Progress)
+	Log      func(string)
 }
 
-type ghAsset struct {
-	Name   string `json:"name"`
-	URL    string `json:"browser_download_url"`
-	Digest string `json:"digest"`
+func (f Fetcher) gh() ghrelease.Client {
+	return ghrelease.Client{HTTP: f.HTTP, API: f.API, Host: f.DownloadHost, Mirrors: f.Mirrors}
 }
 
-type ghRelease struct {
-	Tag        string    `json:"tag_name"`
-	Draft      bool      `json:"draft"`
-	Prerelease bool      `json:"prerelease"`
-	Published  time.Time `json:"published_at"`
-	Body       string    `json:"body"`
-	Assets     []ghAsset `json:"assets"`
-}
-
-func (f Fetcher) client() *http.Client {
-	if f.HTTP != nil {
-		return f.HTTP
-	}
-	return &http.Client{Timeout: 10 * time.Minute}
-}
-
-func (f Fetcher) api() string {
-	if f.API != "" {
-		return strings.TrimRight(f.API, "/")
-	}
-	return "https://api.github.com"
-}
-
-func (f Fetcher) getJSON(ctx context.Context, u string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	resp, err := f.client().Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("github api HTTP %d", resp.StatusCode)
-	}
-	return json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(out)
-}
-
-func (f Fetcher) releases(ctx context.Context, kernel string) ([]ghRelease, error) {
+func (f Fetcher) releases(ctx context.Context, kernel string) ([]ghrelease.Release, error) {
 	src, ok := sources[kernel]
 	if !ok {
 		return nil, fmt.Errorf("unknown kernel %q", kernel)
 	}
-	var all []ghRelease
-	if err := f.getJSON(ctx, f.api()+"/repos/"+src.repo+"/releases?per_page=50", &all); err != nil {
+	all, err := f.gh().List(ctx, src.repo, 50)
+	if err != nil {
 		return nil, err
 	}
-	var out []ghRelease
+	var out []ghrelease.Release
 	for _, r := range all {
 		// sing-box 与 Weir 程序发布在同一仓库，只认 sing-box-v 前缀；其余仓库只认正式版。
 		if r.Draft || !strings.HasPrefix(r.Tag, src.tagPrefix) || src.tagPrefix == "v" && r.Prerelease {
@@ -127,50 +95,87 @@ func (f Fetcher) releases(ctx context.Context, kernel string) ([]ghRelease, erro
 	return out, nil
 }
 
-// Releases 列出上游正式版本（新到旧）。
+// Releases 列出上游正式版本（新到旧），附各架构下载量。
 func (f Fetcher) Releases(ctx context.Context, kernel string) ([]Release, error) {
 	rs, err := f.releases(ctx, kernel)
 	if err != nil {
 		return nil, err
 	}
 	src := sources[kernel]
+	var stats map[string]ghrelease.Release
+	if sr, ok := statsRepo[kernel]; ok {
+		stats = map[string]ghrelease.Release{}
+		if list, err := f.gh().List(ctx, sr.repo, 50); err == nil {
+			for _, r := range list {
+				stats[strings.TrimPrefix(r.Tag, "v")] = r
+			}
+		}
+	}
 	out := make([]Release, 0, len(rs))
 	for _, r := range rs {
-		out = append(out, Release{Version: strings.TrimPrefix(r.Tag, src.tagPrefix), PublishedAt: r.Published, Notes: r.Body})
+		v := strings.TrimPrefix(r.Tag, src.tagPrefix)
+		rel := Release{Version: v, PublishedAt: r.Published, Notes: r.Body, Downloads: map[string]int64{}}
+		if s, ok := stats[v]; ok && !s.Published.IsZero() {
+			rel.PublishedAt = s.Published
+		}
+		for _, arch := range []string{"amd64", "arm64"} {
+			if stats != nil {
+				if s, ok := stats[v]; ok {
+					if a, ok := s.Asset(fmt.Sprintf(statsRepo[kernel].asset, v, arch)); ok {
+						rel.Downloads[arch] = a.Downloads
+					}
+				}
+				continue
+			}
+			if a, ok := r.Asset(src.asset(v, arch)); ok {
+				rel.Downloads[arch] = a.Downloads
+			}
+		}
+		out = append(out, rel)
 	}
 	return out, nil
 }
 
 // Fetch 下载指定版本、按 GitHub 摘要校验、解出程序并存入缓存，返回程序摘要。
+// 下载到一半的文件放在缓存目录的 .downloads 下，再次调用时续传。
 func (f Fetcher) Fetch(ctx context.Context, kernel, version, arch string) (string, error) {
 	src, ok := sources[kernel]
 	if !ok {
 		return "", fmt.Errorf("unknown kernel %q", kernel)
+	}
+	if !safeVersion.MatchString(version) || !safeArch.MatchString(arch) {
+		return "", fmt.Errorf("invalid kernel reference %s %s %s", kernel, version, arch)
 	}
 	rs, err := f.releases(ctx, kernel)
 	if err != nil {
 		return "", err
 	}
 	name := src.asset(version, arch)
-	var asset *ghAsset
+	var asset *ghrelease.Asset
 	for _, r := range rs {
-		if r.Tag != src.tagPrefix+version {
-			continue
-		}
-		for i := range r.Assets {
-			if r.Assets[i].Name == name {
-				asset = &r.Assets[i]
+		if r.Tag == src.tagPrefix+version {
+			if a, ok := r.Asset(name); ok {
+				asset = &a
 			}
 		}
 	}
 	if asset == nil {
 		return "", fmt.Errorf("%s %s 没有 %s", kernel, version, name)
 	}
-	want := strings.TrimPrefix(asset.Digest, "sha256:")
-	if len(want) != 64 {
+	want := asset.SHA256()
+	if want == "" {
 		return "", fmt.Errorf("%s %s 的发布没有提供摘要，拒绝下载", kernel, version)
 	}
-	archive, err := f.download(ctx, asset.URL, want)
+	urls, err := f.gh().URLs(asset.URL)
+	if err != nil {
+		return "", err
+	}
+	dest := filepath.Join(f.Cache.Dir, ".downloads", name)
+	err = fetch.Download(ctx, fetch.Request{URLs: urls, Dest: dest, SHA256: want, MaxSize: maxDownload, HTTP: f.HTTP, OnProgress: f.Progress, Log: f.Log})
+	if err != nil {
+		return "", err
+	}
+	archive, err := os.ReadFile(dest)
 	if err != nil {
 		return "", err
 	}
@@ -178,57 +183,11 @@ func (f Fetcher) Fetch(ctx context.Context, kernel, version, arch string) (strin
 	if err != nil {
 		return "", err
 	}
-	return f.Cache.Put(kernel, version, arch, binary)
-}
-
-func (f Fetcher) download(ctx context.Context, raw, want string) ([]byte, error) {
-	host := f.DownloadHost
-	if host == "" {
-		host = "github.com"
+	sum, err := f.Cache.Put(kernel, version, arch, binary)
+	if err == nil {
+		_ = os.Remove(dest)
 	}
-	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || u.Host != host {
-		return nil, errors.New("download URL refused")
-	}
-	candidates := append([]string{raw}, nil...)
-	for _, m := range f.Mirrors {
-		candidates = append(candidates, strings.TrimRight(m, "/")+"/"+raw)
-	}
-	var last error
-	for _, c := range candidates {
-		data, err := f.get(ctx, c)
-		if err != nil {
-			last = err
-			continue
-		}
-		sum := sha256.Sum256(data)
-		if hex.EncodeToString(sum[:]) != want {
-			last = errors.New("archive digest mismatch")
-			continue
-		}
-		return data, nil
-	}
-	return nil, last
-}
-
-func (f Fetcher) get(ctx context.Context, u string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := f.client().Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("download HTTP %d", resp.StatusCode)
-	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxDownload+1))
-	if err != nil || len(data) > maxDownload {
-		return nil, errors.New("download too large or interrupted")
-	}
-	return data, nil
+	return sum, err
 }
 
 func fromZip(archive []byte, name string) ([]byte, error) {

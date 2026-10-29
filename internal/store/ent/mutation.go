@@ -18,6 +18,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/credential"
 	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/gateaction"
+	"github.com/shusfun/weir/internal/store/ent/kerneldriver"
 	"github.com/shusfun/weir/internal/store/ent/link"
 	"github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/outbound"
@@ -52,6 +53,7 @@ const (
 	TypeCredential   = "Credential"
 	TypeGate         = "Gate"
 	TypeGateAction   = "GateAction"
+	TypeKernelDriver = "KernelDriver"
 	TypeLink         = "Link"
 	TypeNode         = "Node"
 	TypeOutbound     = "Outbound"
@@ -7790,6 +7792,833 @@ func (m *GateActionMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *GateActionMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown GateAction edge %s", name)
+}
+
+// KernelDriverMutation represents an operation that mutates the KernelDriver nodes in the graph.
+type KernelDriverMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *int
+	name          *string
+	kernel        *string
+	revision      *int
+	addrevision   *int
+	text          *string
+	disabled      *bool
+	note          *string
+	source        *string
+	actor         *int
+	addactor      *int
+	created_at    *time.Time
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*KernelDriver, error)
+	predicates    []predicate.KernelDriver
+}
+
+var _ ent.Mutation = (*KernelDriverMutation)(nil)
+
+// kerneldriverOption allows management of the mutation configuration using functional options.
+type kerneldriverOption func(*KernelDriverMutation)
+
+// newKernelDriverMutation creates new mutation for the KernelDriver entity.
+func newKernelDriverMutation(c config, op Op, opts ...kerneldriverOption) *KernelDriverMutation {
+	m := &KernelDriverMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeKernelDriver,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withKernelDriverID sets the ID field of the mutation.
+func withKernelDriverID(id int) kerneldriverOption {
+	return func(m *KernelDriverMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *KernelDriver
+		)
+		m.oldValue = func(ctx context.Context) (*KernelDriver, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().KernelDriver.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withKernelDriver sets the old KernelDriver of the mutation.
+func withKernelDriver(node *KernelDriver) kerneldriverOption {
+	return func(m *KernelDriverMutation) {
+		m.oldValue = func(context.Context) (*KernelDriver, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m KernelDriverMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m KernelDriverMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *KernelDriverMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *KernelDriverMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().KernelDriver.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetName sets the "name" field.
+func (m *KernelDriverMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *KernelDriverMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the KernelDriver entity.
+// If the KernelDriver object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *KernelDriverMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *KernelDriverMutation) ResetName() {
+	m.name = nil
+}
+
+// SetKernel sets the "kernel" field.
+func (m *KernelDriverMutation) SetKernel(s string) {
+	m.kernel = &s
+}
+
+// Kernel returns the value of the "kernel" field in the mutation.
+func (m *KernelDriverMutation) Kernel() (r string, exists bool) {
+	v := m.kernel
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKernel returns the old "kernel" field's value of the KernelDriver entity.
+// If the KernelDriver object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *KernelDriverMutation) OldKernel(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKernel is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKernel requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKernel: %w", err)
+	}
+	return oldValue.Kernel, nil
+}
+
+// ResetKernel resets all changes to the "kernel" field.
+func (m *KernelDriverMutation) ResetKernel() {
+	m.kernel = nil
+}
+
+// SetRevision sets the "revision" field.
+func (m *KernelDriverMutation) SetRevision(i int) {
+	m.revision = &i
+	m.addrevision = nil
+}
+
+// Revision returns the value of the "revision" field in the mutation.
+func (m *KernelDriverMutation) Revision() (r int, exists bool) {
+	v := m.revision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRevision returns the old "revision" field's value of the KernelDriver entity.
+// If the KernelDriver object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *KernelDriverMutation) OldRevision(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRevision is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRevision requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRevision: %w", err)
+	}
+	return oldValue.Revision, nil
+}
+
+// AddRevision adds i to the "revision" field.
+func (m *KernelDriverMutation) AddRevision(i int) {
+	if m.addrevision != nil {
+		*m.addrevision += i
+	} else {
+		m.addrevision = &i
+	}
+}
+
+// AddedRevision returns the value that was added to the "revision" field in this mutation.
+func (m *KernelDriverMutation) AddedRevision() (r int, exists bool) {
+	v := m.addrevision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRevision resets all changes to the "revision" field.
+func (m *KernelDriverMutation) ResetRevision() {
+	m.revision = nil
+	m.addrevision = nil
+}
+
+// SetText sets the "text" field.
+func (m *KernelDriverMutation) SetText(s string) {
+	m.text = &s
+}
+
+// Text returns the value of the "text" field in the mutation.
+func (m *KernelDriverMutation) Text() (r string, exists bool) {
+	v := m.text
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldText returns the old "text" field's value of the KernelDriver entity.
+// If the KernelDriver object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *KernelDriverMutation) OldText(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldText is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldText requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldText: %w", err)
+	}
+	return oldValue.Text, nil
+}
+
+// ResetText resets all changes to the "text" field.
+func (m *KernelDriverMutation) ResetText() {
+	m.text = nil
+}
+
+// SetDisabled sets the "disabled" field.
+func (m *KernelDriverMutation) SetDisabled(b bool) {
+	m.disabled = &b
+}
+
+// Disabled returns the value of the "disabled" field in the mutation.
+func (m *KernelDriverMutation) Disabled() (r bool, exists bool) {
+	v := m.disabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDisabled returns the old "disabled" field's value of the KernelDriver entity.
+// If the KernelDriver object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *KernelDriverMutation) OldDisabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDisabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDisabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDisabled: %w", err)
+	}
+	return oldValue.Disabled, nil
+}
+
+// ResetDisabled resets all changes to the "disabled" field.
+func (m *KernelDriverMutation) ResetDisabled() {
+	m.disabled = nil
+}
+
+// SetNote sets the "note" field.
+func (m *KernelDriverMutation) SetNote(s string) {
+	m.note = &s
+}
+
+// Note returns the value of the "note" field in the mutation.
+func (m *KernelDriverMutation) Note() (r string, exists bool) {
+	v := m.note
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNote returns the old "note" field's value of the KernelDriver entity.
+// If the KernelDriver object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *KernelDriverMutation) OldNote(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNote is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNote requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNote: %w", err)
+	}
+	return oldValue.Note, nil
+}
+
+// ResetNote resets all changes to the "note" field.
+func (m *KernelDriverMutation) ResetNote() {
+	m.note = nil
+}
+
+// SetSource sets the "source" field.
+func (m *KernelDriverMutation) SetSource(s string) {
+	m.source = &s
+}
+
+// Source returns the value of the "source" field in the mutation.
+func (m *KernelDriverMutation) Source() (r string, exists bool) {
+	v := m.source
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSource returns the old "source" field's value of the KernelDriver entity.
+// If the KernelDriver object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *KernelDriverMutation) OldSource(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSource is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSource requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSource: %w", err)
+	}
+	return oldValue.Source, nil
+}
+
+// ResetSource resets all changes to the "source" field.
+func (m *KernelDriverMutation) ResetSource() {
+	m.source = nil
+}
+
+// SetActor sets the "actor" field.
+func (m *KernelDriverMutation) SetActor(i int) {
+	m.actor = &i
+	m.addactor = nil
+}
+
+// Actor returns the value of the "actor" field in the mutation.
+func (m *KernelDriverMutation) Actor() (r int, exists bool) {
+	v := m.actor
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldActor returns the old "actor" field's value of the KernelDriver entity.
+// If the KernelDriver object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *KernelDriverMutation) OldActor(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldActor is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldActor requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldActor: %w", err)
+	}
+	return oldValue.Actor, nil
+}
+
+// AddActor adds i to the "actor" field.
+func (m *KernelDriverMutation) AddActor(i int) {
+	if m.addactor != nil {
+		*m.addactor += i
+	} else {
+		m.addactor = &i
+	}
+}
+
+// AddedActor returns the value that was added to the "actor" field in this mutation.
+func (m *KernelDriverMutation) AddedActor() (r int, exists bool) {
+	v := m.addactor
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetActor resets all changes to the "actor" field.
+func (m *KernelDriverMutation) ResetActor() {
+	m.actor = nil
+	m.addactor = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *KernelDriverMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *KernelDriverMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the KernelDriver entity.
+// If the KernelDriver object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *KernelDriverMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *KernelDriverMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// Where appends a list predicates to the KernelDriverMutation builder.
+func (m *KernelDriverMutation) Where(ps ...predicate.KernelDriver) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the KernelDriverMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *KernelDriverMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.KernelDriver, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *KernelDriverMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *KernelDriverMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (KernelDriver).
+func (m *KernelDriverMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *KernelDriverMutation) Fields() []string {
+	fields := make([]string, 0, 9)
+	if m.name != nil {
+		fields = append(fields, kerneldriver.FieldName)
+	}
+	if m.kernel != nil {
+		fields = append(fields, kerneldriver.FieldKernel)
+	}
+	if m.revision != nil {
+		fields = append(fields, kerneldriver.FieldRevision)
+	}
+	if m.text != nil {
+		fields = append(fields, kerneldriver.FieldText)
+	}
+	if m.disabled != nil {
+		fields = append(fields, kerneldriver.FieldDisabled)
+	}
+	if m.note != nil {
+		fields = append(fields, kerneldriver.FieldNote)
+	}
+	if m.source != nil {
+		fields = append(fields, kerneldriver.FieldSource)
+	}
+	if m.actor != nil {
+		fields = append(fields, kerneldriver.FieldActor)
+	}
+	if m.created_at != nil {
+		fields = append(fields, kerneldriver.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *KernelDriverMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case kerneldriver.FieldName:
+		return m.Name()
+	case kerneldriver.FieldKernel:
+		return m.Kernel()
+	case kerneldriver.FieldRevision:
+		return m.Revision()
+	case kerneldriver.FieldText:
+		return m.Text()
+	case kerneldriver.FieldDisabled:
+		return m.Disabled()
+	case kerneldriver.FieldNote:
+		return m.Note()
+	case kerneldriver.FieldSource:
+		return m.Source()
+	case kerneldriver.FieldActor:
+		return m.Actor()
+	case kerneldriver.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *KernelDriverMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case kerneldriver.FieldName:
+		return m.OldName(ctx)
+	case kerneldriver.FieldKernel:
+		return m.OldKernel(ctx)
+	case kerneldriver.FieldRevision:
+		return m.OldRevision(ctx)
+	case kerneldriver.FieldText:
+		return m.OldText(ctx)
+	case kerneldriver.FieldDisabled:
+		return m.OldDisabled(ctx)
+	case kerneldriver.FieldNote:
+		return m.OldNote(ctx)
+	case kerneldriver.FieldSource:
+		return m.OldSource(ctx)
+	case kerneldriver.FieldActor:
+		return m.OldActor(ctx)
+	case kerneldriver.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown KernelDriver field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *KernelDriverMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case kerneldriver.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	case kerneldriver.FieldKernel:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKernel(v)
+		return nil
+	case kerneldriver.FieldRevision:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRevision(v)
+		return nil
+	case kerneldriver.FieldText:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetText(v)
+		return nil
+	case kerneldriver.FieldDisabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDisabled(v)
+		return nil
+	case kerneldriver.FieldNote:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNote(v)
+		return nil
+	case kerneldriver.FieldSource:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSource(v)
+		return nil
+	case kerneldriver.FieldActor:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetActor(v)
+		return nil
+	case kerneldriver.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown KernelDriver field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *KernelDriverMutation) AddedFields() []string {
+	var fields []string
+	if m.addrevision != nil {
+		fields = append(fields, kerneldriver.FieldRevision)
+	}
+	if m.addactor != nil {
+		fields = append(fields, kerneldriver.FieldActor)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *KernelDriverMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case kerneldriver.FieldRevision:
+		return m.AddedRevision()
+	case kerneldriver.FieldActor:
+		return m.AddedActor()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *KernelDriverMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case kerneldriver.FieldRevision:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRevision(v)
+		return nil
+	case kerneldriver.FieldActor:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddActor(v)
+		return nil
+	}
+	return fmt.Errorf("unknown KernelDriver numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *KernelDriverMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *KernelDriverMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *KernelDriverMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown KernelDriver nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *KernelDriverMutation) ResetField(name string) error {
+	switch name {
+	case kerneldriver.FieldName:
+		m.ResetName()
+		return nil
+	case kerneldriver.FieldKernel:
+		m.ResetKernel()
+		return nil
+	case kerneldriver.FieldRevision:
+		m.ResetRevision()
+		return nil
+	case kerneldriver.FieldText:
+		m.ResetText()
+		return nil
+	case kerneldriver.FieldDisabled:
+		m.ResetDisabled()
+		return nil
+	case kerneldriver.FieldNote:
+		m.ResetNote()
+		return nil
+	case kerneldriver.FieldSource:
+		m.ResetSource()
+		return nil
+	case kerneldriver.FieldActor:
+		m.ResetActor()
+		return nil
+	case kerneldriver.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown KernelDriver field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *KernelDriverMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *KernelDriverMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *KernelDriverMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *KernelDriverMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *KernelDriverMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *KernelDriverMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *KernelDriverMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown KernelDriver unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *KernelDriverMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown KernelDriver edge %s", name)
 }
 
 // LinkMutation represents an operation that mutates the Link nodes in the graph.

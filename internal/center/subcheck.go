@@ -113,7 +113,7 @@ func (s *Server) checkSubscription(ctx context.Context, target string, body []by
 func runSubCheck(ctx context.Context, dataDir, kernel, bin string, body []byte) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	tmp, err := os.MkdirTemp("", "migate-subcheck-")
+	tmp, err := os.MkdirTemp("", "weir-subcheck-")
 	if err != nil {
 		return nil, err
 	}

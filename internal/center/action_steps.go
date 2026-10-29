@@ -270,8 +270,8 @@ func execLinkCreate(ctx context.Context, s *Server, x *execCtx, st *DraftStep) (
 // —— 节点：只能改 editable_fields；在节点所在 VPS 上用真实内核实测，通过才可确认 ——
 
 // fieldLabel 是节点字段的中文名（来自内置方案的高级字段），没有登记的用字段名。
-func fieldLabel(key string) (string, string) {
-	for _, p := range presets {
+func (s *Server) fieldLabel(ctx context.Context, key string) (string, string) {
+	for _, p := range s.presets(ctx) {
 		for _, f := range p.Fields {
 			if f.Key == key {
 				return f.Label, f.Unit
@@ -325,7 +325,7 @@ func planNodeUpdate(ctx context.Context, s *Server, p *planCtx, st *DraftStep) e
 		}
 	}
 	for _, c := range ai.Diff(n.Settings, after) {
-		label, unit := fieldLabel(c.Key)
+		label, unit := s.fieldLabel(ctx, c.Key)
 		pa := Param{Key: "set." + c.Key, Label: label, Kind: valueKind(c.After), Unit: unit}
 		fields = append(fields, StepField{Param: pa, Value: c.After, Display: s.display(ctx, p, pa, c.After), Before: s.display(ctx, p, pa, c.Before), Changed: true})
 	}
