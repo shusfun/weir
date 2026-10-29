@@ -11,6 +11,7 @@ import "./style.css";
 // 升级后旧标签页里的入口脚本还指向已删除的分块，按需加载会 404：整页重新加载一次换到新版本；
 // 30 秒内已重新加载过仍失败就交给 LoadBoundary 显示错误，避免反复刷新
 const reloadKey = "weir:chunk-reload";
+class ChunkLoadError extends Error {}
 function reloadForNewBuild(error: unknown): Promise<never> {
   let last = 0;
   try {
@@ -23,24 +24,26 @@ function reloadForNewBuild(error: unknown): Promise<never> {
     window.location.reload();
     return new Promise<never>(() => {});
   }
-  return Promise.reject(error);
+  return Promise.reject(new ChunkLoadError(error instanceof Error ? error.message : String(error)));
 }
 
 // 按需加载页面并保留组件自身的 props 类型
 const page = <M extends Record<K, ComponentType<any>>, K extends keyof M>(load: () => Promise<M>, name: K) =>
   lazy(() => load().then((m) => ({ default: m[name] }), reloadForNewBuild));
 
-// 分块仍加载失败时显示可重试的错误，而不是整页空白
-class LoadBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
-  state = { failed: false };
-  static getDerivedStateFromError() {
-    return { failed: true };
+// 分块加载失败或页面渲染出错时显示可重试的错误与真实原因，而不是整页空白
+class LoadBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null };
+  static getDerivedStateFromError(error: unknown) {
+    return { error: error instanceof Error ? error : new Error(String(error)) };
   }
   render() {
-    if (!this.state.failed) return this.props.children;
+    const { error } = this.state;
+    if (!error) return this.props.children;
+    const chunk = error instanceof ChunkLoadError;
     return (
       <div className="auth">
-        <PageState kind="error" title="页面加载失败" detail="控制台可能刚升级，或网络中断。" action={<Button onClick={() => window.location.reload()}>重新加载</Button>} />
+        <PageState kind="error" title={chunk ? "页面加载失败" : "页面出错"} detail={chunk ? `控制台可能刚升级，或网络中断：${error.message}` : error.message} action={<Button onClick={() => window.location.reload()}>重新加载</Button>} />
       </div>
     );
   }

@@ -190,3 +190,38 @@ func TestSelfUpdateEndpointsInDevelopmentBuild(t *testing.T) {
 		t.Fatalf("development build = %d %s", w.Code, w.Body.String())
 	}
 }
+
+// GitHub 很慢时：通知先写「正在查询」，不当成连不上，也不缓存成失败；查询在后台完成后下一次直接命中。
+func TestSlowGitHubIsNotReportedAsUnreachable(t *testing.T) {
+	s, admin, _ := setupGate(t)
+	var srv *httptest.Server
+	slow := make(chan struct{})
+	srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-slow
+		_ = json.NewEncoder(w).Encode([]any{})
+	}))
+	t.Cleanup(srv.Close)
+	u, _ := url.Parse(srv.URL)
+	s.GitHub = &ghrelease.Client{HTTP: srv.Client(), API: srv.URL, Host: u.Host}
+	start := time.Now()
+	notices := mustJSON(t, admin, "GET", "/api/v1/admin/notices", nil, 200)["notices"].([]any)
+	if time.Since(start) > 15*time.Second {
+		t.Fatal("notices must not wait for slow GitHub")
+	}
+	for _, n := range notices {
+		m := n.(map[string]any)
+		if strings.HasPrefix(m["id"].(string), "github-unreachable") {
+			t.Fatalf("slow GitHub reported as unreachable: %v", m)
+		}
+		if extra, ok := m["extra"].(map[string]any); ok && strings.Contains(fmt.Sprint(extra["reason"]), "无法读取") {
+			t.Fatalf("slow GitHub reported as failure: %v", m)
+		}
+	}
+	close(slow)
+	time.Sleep(300 * time.Millisecond)
+	for _, n := range mustJSON(t, admin, "GET", "/api/v1/admin/notices", nil, 200)["notices"].([]any) {
+		if extra, ok := n.(map[string]any)["extra"].(map[string]any); ok && strings.Contains(fmt.Sprint(extra["reason"]), "正在查询") {
+			t.Fatalf("finished lookup must be served from cache: %v", n)
+		}
+	}
+}

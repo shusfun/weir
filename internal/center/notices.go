@@ -95,11 +95,45 @@ func (s *Server) listNotices(c *gin.Context) {
 	c.JSON(200, gin.H{"notices": out, "dismissed": len(all) - len(out)})
 }
 
+// errChecking 表示访问 GitHub 的查询还在后台进行（没超过它自己的时限），稍后再看。
+var errChecking = errors.New("正在向 GitHub 查询，稍后刷新")
+
+// githubOnce 在后台（不受请求时限影响，最多 45 秒）运行一次访问 GitHub 的查询，同名查询同时只有一个；
+// 调用方最多等到自己的时限，还没结束就得到 errChecking。查询的结果由各自的缓存保存，下次直接命中。
+func (s *Server) githubOnce(ctx context.Context, key string, run func(context.Context) error) error {
+	s.ghMu.Lock()
+	if s.ghCalls == nil {
+		s.ghCalls = map[string]chan error{}
+	}
+	ch, ok := s.ghCalls[key]
+	if !ok {
+		ch = make(chan error, 1)
+		s.ghCalls[key] = ch
+		go func() {
+			bg, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+			defer cancel()
+			err := run(bg)
+			s.ghMu.Lock()
+			delete(s.ghCalls, key)
+			s.ghMu.Unlock()
+			ch <- err
+			close(ch)
+		}()
+	}
+	s.ghMu.Unlock()
+	select {
+	case err := <-ch:
+		return err
+	case <-ctx.Done():
+		return errChecking
+	}
+}
+
 // notices 计算当前要处理的问题。
 func (s *Server) notices(ctx context.Context) []Notice {
 	var out []Notice
 	d := s.drivers(ctx)
-	// 通知列表要快：访问 GitHub 的部分最多等 10 秒（结果缓存，失败也缓存 10 分钟）。
+	// 通知列表要快：访问 GitHub 的查询在后台进行，这里最多等 10 秒；没等到就写「正在查询」，不当成失败。
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	for _, kernel := range kernels.Names {
@@ -114,12 +148,20 @@ func (s *Server) notices(ctx context.Context) []Notice {
 			default:
 				n.Detail = "建节点和节点实测都要用它；这个架构的 VPS 在下载完成前无法生效。"
 			}
-			if rec, err := s.recommended(ctx, kernel); err == nil && rec.Version != "" {
+			var rec Recommendation
+			err := s.githubOnce(ctx, "recommend:"+kernel, func(bg context.Context) error {
+				var e error
+				rec, e = s.recommended(bg, kernel)
+				return e
+			})
+			if err == nil && rec.Version != "" {
 				n.Action = &NoticeAction{Kind: "fetch_kernel", Label: "下载推荐版本 " + rec.Version, Kernel: kernel, Version: rec.Version}
 				n.Extra = map[string]any{"reason": rec.Reason}
 			} else {
 				n.Action = &NoticeAction{Kind: "open", Label: "去内核页", To: "/kernels"}
-				if err != nil {
+				if err == errChecking {
+					n.Extra = map[string]any{"reason": "正在查询推荐版本，稍后刷新"}
+				} else if err != nil {
 					n.Extra = map[string]any{"reason": "无法读取推荐版本：" + err.Error()}
 				} else if rec.Reason != "" {
 					n.Extra = map[string]any{"reason": rec.Reason}
@@ -147,9 +189,15 @@ func (s *Server) notices(ctx context.Context) []Notice {
 	if st, ok := selfupdate.ReadStatus(); ok && st.State == "failed" && st.Finished != nil && time.Since(*st.Finished) < 7*24*time.Hour {
 		out = append(out, Notice{ID: "update-failed:" + st.ID, Level: "warn", Title: "上次更新没有成功", Detail: st.Error, Action: &NoticeAction{Kind: "update", Label: "查看"}})
 	}
-	if list, err := s.weirReleases(ctx, false); err == nil && len(list) > 0 && buildinfo.Release() && selfupdate.Compare(list[0].Version, buildinfo.Version) > 0 {
+	var list []weirRelease
+	err := s.githubOnce(ctx, "weir-releases", func(bg context.Context) error {
+		var e error
+		list, e = s.weirReleases(bg, false)
+		return e
+	})
+	if err == nil && len(list) > 0 && buildinfo.Release() && selfupdate.Compare(list[0].Version, buildinfo.Version) > 0 {
 		out = append(out, Notice{ID: "weir-update:" + list[0].Version, Level: "info", Title: "Weir 有新版本 " + list[0].Version, Detail: "当前 " + buildinfo.Version + "。", Action: &NoticeAction{Kind: "update", Label: "查看并更新"}})
-	} else if err != nil {
+	} else if err != nil && err != errChecking {
 		out = append(out, Notice{ID: "github-unreachable:" + time.Now().UTC().Format("2006-01-02"), Level: "warn", Title: "连不上 GitHub", Detail: "无法检查新版本，内核下载会依次尝试镜像。" + err.Error()})
 	}
 	if free, ok := diskFree(s.dataDir()); ok && free < 1<<30 {

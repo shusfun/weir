@@ -77,6 +77,17 @@ export function NodeWizard({ open, close, done, gates, nodes }: { open: boolean;
     save.reset();
     close();
   };
+  // 页面感知：向导进行到第几步、未保存的填写内容（SOCKS5 密码只标已填 / 未填）。须在下面显示链接的提前返回之前调用。
+  useConsoleContext(open && !shares ? {
+    dialog: { title: "新建节点", step: `第 ${step + 1} 步 ${stepNames[step]}` },
+    object: gate ? { type: "gate", name: gate.name, id: gate.id } : undefined,
+    form: [
+      field("preset", "协议方案", chosen?.name), field("gate", "VPS", gate?.name), field("chain", "出口", chain.kind),
+      ...(chain.kind === "socks5" ? [field("chain_address", "SOCKS5 地址", chain.address), field("chain_password", "SOCKS5 密码", chain.password, true)] : []),
+      field("name", "节点名称", name), field("port", "端口", port), field("target", "伪装目标", target),
+      ...Object.entries(advanced).map(([k, v]) => field("set." + k, chosen?.fields.find((f) => f.key === k)?.label ?? k, v)),
+    ],
+  } : null);
   if (shares) {
     return (
       <Dialog open={open} onOpenChange={(o) => !o && reset()}>
@@ -89,17 +100,6 @@ export function NodeWizard({ open, close, done, gates, nodes }: { open: boolean;
       </Dialog>
     );
   }
-  // 页面感知：向导进行到第几步、未保存的填写内容（SOCKS5 密码只标已填 / 未填）。
-  useConsoleContext(open && !shares ? {
-    dialog: { title: "新建节点", step: `第 ${step + 1} 步 ${stepNames[step]}` },
-    object: gate ? { type: "gate", name: gate.name, id: gate.id } : undefined,
-    form: [
-      field("preset", "协议方案", chosen?.name), field("gate", "VPS", gate?.name), field("chain", "出口", chain.kind),
-      ...(chain.kind === "socks5" ? [field("chain_address", "SOCKS5 地址", chain.address), field("chain_password", "SOCKS5 密码", chain.password, true)] : []),
-      field("name", "节点名称", name), field("port", "端口", port), field("target", "伪装目标", target),
-      ...Object.entries(advanced).map(([k, v]) => field("set." + k, chosen?.fields.find((f) => f.key === k)?.label ?? k, v)),
-    ],
-  } : null);
   // 每一步都是一张表单：“下一步”先按本步的必填项校验，未通过时错误标在字段下方
   const blocked = (step === 0 && !chosen) || (step === 1 && active.length === 0) || (step === 2 && chain.kind === "node" && exits.length === 0) || (step === 2 && chain.kind === "source" && (!chain.source_id || !chain.match));
   return (

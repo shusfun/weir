@@ -1,5 +1,5 @@
 // 后台任务（内核 / dsh 下载等）：进度、速度、当前线路、逐条日志与取消。关掉弹窗任务照常进行，回来能接着看。
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge, Button, CodeBlock, Collapsible, Notice, Progress } from "@weir/ui";
 import { X } from "lucide-react";
@@ -35,6 +35,41 @@ export function useJobs(kind: string) {
     refetchInterval: (query) => ((query.state.data ?? []).some((j: Job) => j.status === "running") ? 1000 : 15000),
   });
   return q;
+}
+
+// 任务结束后要刷新的数据（按任务类型）。
+const refreshAfter: Record<string, string[][]> = {
+  kernel: [["kernels"], ["notices"], ["drivers"], ["kernel-releases"]],
+  "gate-release": [["gates"]],
+  dsh: [["dsh"], ["notices"]],
+};
+
+// JobWatcher 在控制台里常驻：任何任务结束（或同一 id 的任务再次结束）时刷新相关数据，
+// 不依赖下载窗口是否还开着、是不是它看到了状态变化。
+export function JobWatcher() {
+  const client = useQueryClient();
+  const seen = useRef<Map<string, string> | null>(null);
+  const q = useQuery({
+    queryKey: ["jobs", "all"],
+    queryFn: async () => (await api("/admin/jobs")).jobs as Job[],
+    refetchInterval: (query) => ((query.state.data ?? []).some((j: Job) => j.status === "running") ? 1500 : 10000),
+  });
+  useEffect(() => {
+    if (!q.data) return;
+    const first = seen.current === null;
+    const prev = seen.current ?? new Map<string, string>();
+    const next = new Map<string, string>();
+    for (const j of q.data) {
+      const sig = j.status + "@" + (j.finished_at ?? "");
+      next.set(j.id, sig);
+      if (!first && j.status !== "running" && prev.get(j.id) !== sig) {
+        for (const key of refreshAfter[j.kind] ?? []) void client.invalidateQueries({ queryKey: key });
+        void client.invalidateQueries({ queryKey: ["job", j.id] });
+      }
+    }
+    seen.current = next;
+  }, [q.data, client]);
+  return null;
 }
 
 // useStartedJob 返回「任务已开始」的通知函数：同一版本再次下载会复用任务 id，要让已显示的任务重新开始轮询。
