@@ -66,6 +66,11 @@ export function bytes(n: number | undefined) {
     ["B", "KiB", "MiB", "GiB", "TiB"][i]
   );
 }
+// 日志行的时刻：服务端记 UTC，按浏览器本地时间显示时:分:秒
+export function clock(value: string) {
+  const d = new Date(value);
+  return Number.isNaN(+d) ? value : d.toLocaleTimeString("zh-CN", { hour12: false });
+}
 export function date(value: string | number | undefined) {
   if (!value || String(value).startsWith("0001")) return "尚无记录";
   const d = new Date(typeof value === "number" ? value * 1000 : value);

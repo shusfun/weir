@@ -147,7 +147,7 @@ function DriverDialog({ name, close, changed }: { name: string; close: () => voi
               <Field label="说明" hint="这次改了什么、依据哪段更新说明（记在历史里）。"><Input value={note} onChange={(e) => setNote(e.target.value)} /></Field>
               {check && <CheckView c={check} />}
               <div className="actions">
-                <Button type="button" variant="outline" disabled={isBusy()} onClick={() => void run("check", async () => setCheck((await api("/admin/drivers/check", "POST", { name, text: value, live: true })).check), "检查完成")}>{isBusy("check") ? "正在检查…" : "只检查"}</Button>
+                <Button type="button" variant="outline" disabled={isBusy()} onClick={() => void run("check", async () => { const c = (await api("/admin/drivers/check", "POST", { name, text: value, live: true })).check as DriverCheck; setCheck(c); return c; }, (c) => (c as DriverCheck).state === "passed" ? "检查通过" : "")}>{isBusy("check") ? "正在检查…" : "只检查"}</Button>
                 <Button type="submit" disabled={!dirty || isBusy()}>{isBusy("save") ? "正在检查并保存…" : "检查并保存"}</Button>
                 {q.data.driver.disabled ? (
                   <Button type="button" variant="ghost" disabled={isBusy()} onClick={() => void run("toggle", () => api(`/admin/drivers/${encodeURIComponent(name)}/enable`, "POST"), "已启用")}>启用</Button>
