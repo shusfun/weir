@@ -26,6 +26,8 @@ type Tx struct {
 	Gate *GateClient
 	// GateAction is the client for interacting with the GateAction builders.
 	GateAction *GateActionClient
+	// KernelDriver is the client for interacting with the KernelDriver builders.
+	KernelDriver *KernelDriverClient
 	// Link is the client for interacting with the Link builders.
 	Link *LinkClient
 	// Node is the client for interacting with the Node builders.
@@ -194,6 +196,7 @@ func (tx *Tx) init() {
 	tx.Credential = NewCredentialClient(tx.config)
 	tx.Gate = NewGateClient(tx.config)
 	tx.GateAction = NewGateActionClient(tx.config)
+	tx.KernelDriver = NewKernelDriverClient(tx.config)
 	tx.Link = NewLinkClient(tx.config)
 	tx.Node = NewNodeClient(tx.config)
 	tx.Outbound = NewOutboundClient(tx.config)

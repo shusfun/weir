@@ -54,7 +54,7 @@ func TestSourceFiltersOrderAndFidelity(t *testing.T) {
 }
 
 func TestSourceFiltersUpstreamComparison(t *testing.T) {
-	if os.Getenv("MIGATE_UPSTREAM_TESTS") != "1" {
+	if os.Getenv("WEIR_UPSTREAM_TESTS") != "1" {
 		t.Skip("requires Node for fixed-source oracle")
 	}
 	for _, rule := range []string{"", "香港", "keep:香港", "proto:ss,trojan", "keep:proto:trojan", "Expire\n---\n香港\nproto:trojan", "^hk|US", "keep:missing", "KeEp:Proto:SS\n剩余", "---\nproto:http\n---\nUS", "keep:香港\nkeep:US", "Expire\n剩余"} {

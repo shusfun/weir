@@ -10,6 +10,7 @@ import { date } from "../lib/models";
 import { drawerId, useConsoleContext } from "../lib/console-context";
 import { DshContextReporter } from "./dsh-context";
 import { State } from "./feedback";
+import { JobByID, useStartedJob } from "./job";
 import { emptyReauth, Reauth, Section, useReauthAction } from "./system-settings";
 
 export interface DshSettings {
@@ -32,7 +33,7 @@ export interface DshView {
   unsupported: string;
   ready: boolean;
   // Weir 插件：label 为期望加载的插件，loaded 为实际加载的插件，note / error 为没有加载的原因。
-  plugin: { label: string; note: string; loaded: string; error: string; adapted: boolean };
+  plugin: { label: string; note: string; loaded: string; error: string; verified: boolean };
 }
 
 // 打开抽屉时附带的提示：notice 显示在抽屉顶部。dsh 看到的页面与对象由各页面声明（见 lib/console-context.ts）。
@@ -55,7 +56,7 @@ export function useDsh(enabled = true) {
 
 // 其他页面通过事件打开抽屉（例如节点上的「AI 调整」），附带上下文。
 export function openDsh(hint?: DshHint) {
-  window.dispatchEvent(new CustomEvent("migate:dsh-open", { detail: hint }));
+  window.dispatchEvent(new CustomEvent("weir:dsh-open", { detail: hint }));
 }
 
 // notReady 是 dsh 不能打开时由 Weir 自己显示的原因；dsh 子域名本身只会返回空 404，看不出原因。
@@ -101,8 +102,8 @@ export function DshDrawer() {
   }
   useEffect(() => {
     const onOpen = (e: Event) => void show((e as CustomEvent).detail);
-    window.addEventListener("migate:dsh-open", onOpen);
-    return () => window.removeEventListener("migate:dsh-open", onOpen);
+    window.addEventListener("weir:dsh-open", onOpen);
+    return () => window.removeEventListener("weir:dsh-open", onOpen);
   }, []);
   // 入口按「已启用」显示：dsh 暂时没在运行时也能点开，看到原因。
   if (!dsh.data?.settings.enabled || !dsh.data.settings.domain) return null;
@@ -282,7 +283,7 @@ export function DshVersions() {
               ))}
             </div>
           )}
-          <PluginStatus view={q.data} isBusy={isBusy} act={act} />
+          <PluginStatus view={q.data} />
         </div>
       )}
       {releases && <DshReleases close={() => setReleases(false)} fetched={() => void q.refetch()} />}
@@ -290,59 +291,40 @@ export function DshVersions() {
   );
 }
 
-// PluginStatus：Weir 插件的加载情况与创造模式适配入口。适配产物走草稿：Weir 校验、试启动后弹窗请你确认。
-function PluginStatus({ view, isBusy, act }: { view: DshView; isBusy: (key?: string) => boolean; act: (key: string, fn: () => Promise<unknown>, ok: string) => Promise<boolean> }) {
-  const confirm = useConfirm();
-  const client = useQueryClient();
+// PluginStatus：Weir 插件的加载情况。插件随 Weir 发版适配；dsh 版本超出已验证范围时只启用基础预设、后台安全分析暂停。
+function PluginStatus({ view }: { view: DshView }) {
   const p = view.plugin;
   return (
     <div className="stack rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3">
       <div className="flex flex-wrap items-center gap-2">
         <strong>Weir 插件</strong>
-        {p.loaded ? <Badge variant="soft" tone="ok">{p.loaded}</Badge> : <Badge variant="soft" tone="warn">{p.label ? "未加载" : "不兼容"}</Badge>}
-        {p.adapted && <Badge variant="soft" tone="neutral">已适配</Badge>}
+        {p.loaded ? <Badge variant="soft" tone="ok">{p.loaded}</Badge> : <Badge variant="soft" tone="warn">{p.verified ? "未加载" : "版本未验证"}</Badge>}
       </div>
-      <small className="text-[var(--mg-ink-3)]">提供「Weir 助手」预设、控制台上下文与 Weir 说明。插件不可用时只启用基础预设，Weir 的工具照常可用。</small>
+      <small className="text-[var(--mg-ink-3)]">提供「Weir 助手」预设、控制台上下文、Weir 说明与 skill（调节点、写驱动、研判安全事件）。插件不可用时只启用基础预设，Weir 的工具照常可用。</small>
       {p.note && <Notice tone="warn">{p.note}</Notice>}
       {p.error && <Notice tone="bad">{p.error}</Notice>}
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="outline" disabled={!view.ready} onClick={() => openDsh({ notice: "在 dsh 里换到创造模式（Creator）预设，让它按工作区 migate-plugin/ADAPT.md 适配插件；改好后回到「内核 → dsh」点「提交适配草稿」。" })}><Bot />用创造模式适配</Button>
-        <Button size="sm" variant="outline" disabled={!view.ready || isBusy()} onClick={() => void act("adapt", async () => { await api("/admin/dsh/plugin/adapt", "POST"); await client.invalidateQueries({ queryKey: ["ai-drafts"] }); }, "适配草稿已试启动通过，请在弹窗里确认")}>{isBusy("adapt") ? "正在校验并试启动…" : "提交适配草稿"}</Button>
-        {p.adapted && <Button size="sm" variant="ghost" disabled={isBusy()} onClick={async () => (await confirm({ title: "改回 Weir 内置插件？", confirmText: "改回" })) && void act("restore", () => api("/admin/dsh/plugin", "DELETE"), "已改回内置插件，dsh 正在重启")}><RotateCcw />改回内置插件</Button>}
-      </div>
     </div>
   );
 }
 
-// 后台安装（首次还要下载 Node.js）：每 3 秒查询一次，最多等 35 分钟。返回下载所用的源。
-async function fetchVersion(version: string): Promise<string> {
-  await api("/admin/dsh/fetch", "POST", { version });
-  for (let i = 0; i < 700; i++) {
-    await new Promise((r) => setTimeout(r, 3000));
-    const st = await api("/admin/dsh/fetch?version=" + encodeURIComponent(version));
-    if (st.status === "done") return st.registry;
-    if (st.status === "failed") throw new Error("下载失败：" + st.error);
-    if (st.status === "none") throw new Error("下载状态已丢失，请重试。");
-  }
-  throw new Error("下载超时，请稍后查看已下载的版本。");
-}
-
 function DshReleases({ close, fetched }: { close: () => void; fetched: () => void }) {
   const q = useQuery({ queryKey: ["dsh-releases"], queryFn: async () => (await api("/admin/dsh/releases")).releases as DshRelease[] });
-  const { run, isBusy } = useRowAction<string>({ refetch: fetched });
-  const download = (version: string) =>
-    run(version, () => fetchVersion(version), `已下载 dsh ${version}`, { detail: (registry) => `摘要与官方源一致，来自 ${registry}`, fail: "dsh 下载未完成" });
+  const [job, setJob] = useState<string | null>(null);
+  const started = useStartedJob();
+  const { run, isBusy } = useRowAction<string>();
+  const download = (version: string) => run(version, async () => setJob(started((await api("/admin/dsh/fetch", "POST", { version })).job.id)), `开始下载 dsh ${version}`, { fail: "下载没有开始" });
   return (
-    <Dialog open onOpenChange={(o) => !o && !isBusy() && close()}>
+    <Dialog open onOpenChange={(o) => !o && close()}>
       <DialogContent size="lg">
         <DialogTitle>dsh · 上游版本</DialogTitle>
-        <DialogDescription>来自 npm 官方源的 @deepseek-ai/dsh。dsh 仍是开发者预览版，版本之间可能不兼容；出问题时可以回退到上一版本。首次下载还会安装 Node.js 运行环境，需要几分钟。</DialogDescription>
+        <DialogDescription>来自 npm 官方源的 @deepseek-ai/dsh，任何版本都能装；超出 Weir 插件已验证范围的版本只启用基础预设、后台安全分析暂停。首次下载还会安装 Node.js 运行环境（可续传），需要几分钟；关掉窗口下载照常进行。</DialogDescription>
+        {job && <JobByID id={job} onFinish={fetched} />}
         {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} skeleton={<SkeletonList rows={5} lines={1} className="stack" rowClassName="flex items-center justify-between gap-2" />} /> : q.data.length === 0 ? <State empty="没有可用版本" /> : (
           <ul className="stack mg-focus-gutter max-h-[50vh] overflow-y-auto">
             {q.data.map((r) => (
               <li key={r.version} className="flex items-center justify-between gap-2">
                 <span className="flex flex-wrap items-center gap-2"><code>{r.version}</code>{(r.tags ?? []).map((t) => <Badge key={t} variant="soft" tone={t === "latest" ? "ok" : "neutral"}>{t}</Badge>)}<small className="text-[var(--mg-ink-3)]">{date(r.published_at)}</small></span>
-                <Button size="sm" variant="outline" disabled={isBusy()} onClick={() => void download(r.version)}>{isBusy(r.version) ? "正在下载…" : "下载"}</Button>
+                <Button size="sm" variant="outline" disabled={isBusy()} onClick={() => void download(r.version)}>下载</Button>
               </li>
             ))}
           </ul>

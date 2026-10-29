@@ -1,0 +1,140 @@
+{
+  "experimental": {
+    "v2ray_api": {
+      "listen": "127.0.0.1:21002",
+      "stats": {
+        "enabled": true,
+        "inbounds": [
+          "hy2-inbound-20",
+          "inbound-24-shadowsocks"
+        ],
+        "users": [
+          "c201",
+          "c241"
+        ]
+      }
+    }
+  },
+  "inbounds": [
+    {
+      "down_mbps": 200,
+      "listen": "0.0.0.0",
+      "listen_port": 25001,
+      "obfs": {
+        "password": "obfs",
+        "type": "salamander"
+      },
+      "tag": "hy2-inbound-20",
+      "tls": {
+        "certificate_path": "/weir-test-certs/5.crt",
+        "enabled": true,
+        "key_path": "/weir-test-certs/5.key",
+        "server_name": "hy.example.com"
+      },
+      "type": "hysteria2",
+      "up_mbps": 100,
+      "users": [
+        {
+          "name": "c201",
+          "password": "pw-20"
+        }
+      ]
+    },
+    {
+      "listen": "0.0.0.0",
+      "listen_port": 25005,
+      "method": "2022-blake3-aes-128-gcm",
+      "password": "c2VydmVyLWtleS0xNi1iMDE=",
+      "tag": "inbound-24-shadowsocks",
+      "type": "shadowsocks",
+      "users": [
+        {
+          "name": "c241",
+          "password": "pw-24"
+        }
+      ]
+    }
+  ],
+  "log": {
+    "level": "warn"
+  },
+  "outbounds": [
+    {
+      "tag": "singbox-out-2147483647",
+      "type": "direct"
+    },
+    {
+      "password": "pw",
+      "server": "203.0.113.1",
+      "server_port": 1080,
+      "tag": "singbox-out-40",
+      "type": "socks",
+      "username": "user"
+    },
+    {
+      "server": "203.0.113.2",
+      "server_port": 1081,
+      "tag": "singbox-out-41",
+      "type": "socks"
+    },
+    {
+      "server": "203.0.113.3",
+      "server_port": 8080,
+      "tag": "singbox-out-42",
+      "type": "http",
+      "username": "u"
+    },
+    {
+      "interval": "3m",
+      "outbounds": [
+        "singbox-out-1073741824",
+        "singbox-out-1073741825"
+      ],
+      "tag": "singbox-out-70",
+      "type": "urltest",
+      "url": "https://www.gstatic.com/generate_204"
+    },
+    {
+      "password": "a",
+      "server": "198.51.100.10",
+      "server_port": 443,
+      "tag": "singbox-out-1073741824",
+      "tls": {
+        "enabled": true,
+        "server_name": "a.example.com"
+      },
+      "type": "trojan"
+    },
+    {
+      "server": "198.51.100.11",
+      "server_port": 443,
+      "tag": "singbox-out-1073741825",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "K",
+          "short_id": "1"
+        }
+      },
+      "type": "vless",
+      "uuid": "66666666-6666-4666-8666-666666666666"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "domain": [
+          "g.com"
+        ],
+        "outbound": "singbox-out-70"
+      },
+      {
+        "auth_user": [
+          "grant-201"
+        ],
+        "outbound": "singbox-out-70"
+      }
+    ]
+  }
+}

@@ -1,7 +1,7 @@
 //go:build e2e
 
 // 端到端测试：在 Linux 容器内用真实 Xray 跑通「中心 → 配对 → 下发 → 真实客户端连接 → 计量 → 额度 / 到期执行」。
-// 由 deploy/e2e.py 交叉编译并在 debian 容器中运行；MIGATE_E2E_XRAY 指向 Linux 版 Xray。
+// 由 deploy/e2e.py 交叉编译并在 debian 容器中运行；WEIR_E2E_XRAY 指向 Linux 版 Xray。
 package e2e
 
 import (
@@ -93,9 +93,9 @@ func freePort(t *testing.T) int {
 
 // setup 启动中心（SQLite）并通过 Web 接口完成初始化，种入 Xray 内核缓存。
 func setup(t *testing.T) *env {
-	bin := os.Getenv("MIGATE_E2E_XRAY")
+	bin := os.Getenv("WEIR_E2E_XRAY")
 	if bin == "" {
-		t.Skip("MIGATE_E2E_XRAY not set")
+		t.Skip("WEIR_E2E_XRAY not set")
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "center", "config.json")

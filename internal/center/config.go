@@ -18,13 +18,13 @@ import (
 )
 
 // DefaultConfigPath 是中心配置文件的固定位置。
-const DefaultConfigPath = "/etc/migate/center/config.json"
+const DefaultConfigPath = "/etc/weir/center/config.json"
 
 // Config 只配置监听地址与存储；公共地址按每次请求推导。
 type Config struct {
 	Listen        string       `json:"listen"`
 	Store         store.Config `json:"store"`
-	DataDir       string       `json:"data_dir,omitempty"` // 内核缓存、版本档案覆盖等；默认 /var/lib/migate/center
+	DataDir       string       `json:"data_dir,omitempty"` // 内核缓存、版本档案覆盖等；默认 /var/lib/weir/center
 	EncryptionKey string       `json:"encryption_key"`
 	SetupHash     string       `json:"setup_hash,omitempty"`
 	SetupExpires  time.Time    `json:"setup_expires,omitempty"`
@@ -80,8 +80,8 @@ func saveConfig(path string, c Config) error {
 	return writeReplacing(path, b)
 }
 
-// DefaultSQLitePath 是单机模式的数据库位置（与配置同属 /var/lib/migate 数据目录）。
-func DefaultSQLitePath() string { return "/var/lib/migate/center/migate.db" }
+// DefaultSQLitePath 是单机模式的数据库位置（与配置同属 /var/lib/weir 数据目录）。
+func DefaultSQLitePath() string { return "/var/lib/weir/center/weir.db" }
 
 type setupCredential struct {
 	Installed bool

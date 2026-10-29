@@ -159,7 +159,7 @@ export function DevUiPage() {
 
           <Demo index={5} title="成功勾选" description="对勾沿路径一笔画出；首屏已勾选的直接显示。">
             <div className="actions">
-              <CopyButton variant="outline" value="migate">复制示例文本</CopyButton>
+              <CopyButton variant="outline" value="weir">复制示例文本</CopyButton>
               <Checkbox id="dev-check" checked={checked} onCheckedChange={setChecked} />
               <Label htmlFor="dev-check">复选框</Label>
               <Button variant="outline" onClick={() => toast("已保存", { description: "配置已下发到 3 台 VPS。" })}>成功提示</Button>

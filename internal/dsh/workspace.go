@@ -6,33 +6,31 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
-	"time"
 )
 
 // 工作区与 Weir 插件：dsh 的默认工作区建在 state/workspace/ 下（Linux 服务器通常没有「文档」目录，
 // dsh 自己找不到默认位置，会一直要求手动选择）；$DSH_HOME/AGENTS.md 写入 Weir 的说明；
-// 工作区里放一份 Weir 插件的副本，供 dsh 的创造模式适配新版本，改好后由 Weir 校验、试启动、确认。
+// Weir 插件随 Weir 发版维护，补丁里的 MCP 地址、令牌与 skill 目录在启动 dsh 前填入。
 
-// PluginFiles 是 Weir 插件包含的全部文件（适配草稿也只能改这几个）。
-var PluginFiles = []string{"package.json", "cordis.patch.yml", "README.md", "ADAPT.md"}
+// PluginFiles 是 Weir 插件包含的全部文件。
+var PluginFiles = []string{"package.json", "cordis.patch.yml", "README.md"}
 
 // 插件补丁里的占位符：MCP 地址与令牌每次中心启动都会变，由管理进程在启动 dsh 前填入。
 const (
-	PlaceholderMCPURL   = "{{MIGATE_MCP_URL}}"
-	PlaceholderMCPToken = "{{MIGATE_MCP_TOKEN}}"
-	placeholderCopy     = "{{MIGATE_PLUGIN_COPY}}"
+	PlaceholderMCPURL   = "{{WEIR_MCP_URL}}"
+	PlaceholderMCPToken = "{{WEIR_MCP_TOKEN}}"
+	PlaceholderSkills   = "{{WEIR_SKILLS_DIR}}"
 )
 
 func (l Layout) Workspace() string { return filepath.Join(l.State(), "workspace") }
 func (l Layout) DefaultWorkspace() string {
 	return filepath.Join(l.Workspace(), "deepseek-harness", "default-workspace")
 }
-func (l Layout) PluginCopy() string { return filepath.Join(l.DefaultWorkspace(), "migate-plugin") }
 
-// FillPlaceholders 填入 MCP 地址与令牌。
-func FillPlaceholders(b []byte, url, token string) []byte {
+// FillPlaceholders 填入 MCP 地址、令牌与 skill 目录。
+func FillPlaceholders(b []byte, url, token, skills string) []byte {
 	b = bytes.ReplaceAll(b, []byte(PlaceholderMCPURL), []byte(url))
+	b = bytes.ReplaceAll(b, []byte(PlaceholderSkills), []byte(skills))
 	return bytes.ReplaceAll(b, []byte(PlaceholderMCPToken), []byte(token))
 }
 
@@ -52,11 +50,10 @@ func (a *agent) prepareWorkspace(d Desired) (base []string, plugin, pluginErr st
 			return nil, "", "", err
 		}
 	}
-	notes := strings.ReplaceAll(d.Instructions, placeholderCopy, l.PluginCopy())
-	if err = os.WriteFile(filepath.Join(home, "AGENTS.md"), []byte(notes), 0o600); err != nil {
+	if err = os.WriteFile(filepath.Join(home, "AGENTS.md"), []byte(d.Instructions), 0o600); err != nil {
 		return nil, "", "", err
 	}
-	ws, web := filepath.Join(l.State(), "migate-workspace.patch.yml"), filepath.Join(l.State(), "migate-web.patch.yml")
+	ws, web := filepath.Join(l.State(), "weir-workspace.patch.yml"), filepath.Join(l.State(), "weir-web.patch.yml")
 	if err = os.WriteFile(ws, []byte(workspacePatch(l.Workspace())), 0o600); err != nil {
 		return nil, "", "", err
 	}
@@ -71,29 +68,14 @@ func (a *agent) prepareWorkspace(d Desired) (base []string, plugin, pluginErr st
 	if rerr != nil {
 		return base, "", "读取 Weir 插件失败：" + rerr.Error(), nil
 	}
-	plugin = filepath.Join(l.State(), "migate-plugin.patch.yml")
-	if err = os.WriteFile(plugin, FillPlaceholders(src, d.MCPURL, d.MCPToken), 0o600); err != nil {
+	if d.SkillsDir == "" {
+		return base, "", "Weir skill 目录缺失", nil
+	}
+	plugin = filepath.Join(l.State(), "weir-plugin.patch.yml")
+	if err = os.WriteFile(plugin, FillPlaceholders(src, d.MCPURL, d.MCPToken, d.SkillsDir), 0o600); err != nil {
 		return nil, "", "", err
 	}
-	copyPlugin(d.PluginDir, l.PluginCopy())
 	return base, plugin, "", nil
-}
-
-// copyPlugin 把当前插件复制到工作区供创造模式修改；插件来源没变时保留工作区里正在改的副本。
-func copyPlugin(src, dst string) {
-	marker := filepath.Join(dst, ".migate-source")
-	if b, err := os.ReadFile(marker); err == nil && strings.TrimSpace(string(b)) == src {
-		return
-	}
-	if os.MkdirAll(dst, 0o700) != nil {
-		return
-	}
-	for _, f := range PluginFiles {
-		if b, err := os.ReadFile(filepath.Join(src, f)); err == nil {
-			_ = os.WriteFile(filepath.Join(dst, f), b, 0o600)
-		}
-	}
-	_ = os.WriteFile(marker, []byte(src), 0o600)
 }
 
 // dispatch 按任务类型执行。
@@ -102,71 +84,9 @@ func (a *agent) dispatch(ctx context.Context, d Desired, req JobRequest) JobResu
 	switch req.Kind {
 	case "", "analysis":
 		res = JobResult{Result: a.runJob(ctx, d, req)}
-	case "plugin-collect":
-		res = a.collectPlugin()
-	case "plugin-smoke":
-		res = a.smokePlugin(ctx, d, req.PluginDir)
 	default:
 		res = JobResult{Result: Result{Error: "未知任务"}}
 	}
 	res.ID = req.ID
 	return res
-}
-
-// collectPlugin 读取工作区里创造模式改好的插件副本。
-func (a *agent) collectPlugin() JobResult {
-	files := map[string]string{}
-	for _, f := range PluginFiles {
-		b, err := os.ReadFile(filepath.Join(a.l.PluginCopy(), f))
-		if err != nil {
-			continue
-		}
-		if len(b) > 64<<10 {
-			return JobResult{Result: Result{Error: f + " 超过 64 KB"}}
-		}
-		files[f] = string(b)
-	}
-	if len(files) == 0 {
-		return JobResult{Result: Result{Error: "工作区里没有 Weir 插件副本：" + a.l.PluginCopy()}}
-	}
-	return JobResult{Result: Result{Completed: true}, Files: files}
-}
-
-// smokePlugin 用全新的临时家目录带着插件试启动一次 dsh：插件写错或与当前 dsh 不兼容时启动会失败。
-func (a *agent) smokePlugin(ctx context.Context, d Desired, dir string) JobResult {
-	drafts := filepath.Clean(filepath.Join(a.l.Runtime(), "plugin-drafts"))
-	if !strings.HasPrefix(filepath.Clean(dir), drafts+string(filepath.Separator)) {
-		return JobResult{Result: Result{Error: "插件目录无效"}}
-	}
-	p := a.paths(d.Version)
-	if d.Version == "" || p.Node == "" {
-		return JobResult{Result: Result{Error: "dsh 未启用或运行环境缺失"}}
-	}
-	src, err := os.ReadFile(filepath.Join(dir, "cordis.patch.yml"))
-	if err != nil {
-		return JobResult{Result: Result{Error: "读取插件草稿失败"}}
-	}
-	tmp, err := os.MkdirTemp(a.l.State(), "smoke-")
-	if err != nil {
-		return JobResult{Result: Result{Error: err.Error()}}
-	}
-	defer os.RemoveAll(tmp)
-	ws, web, plugin := filepath.Join(tmp, "ws.yml"), filepath.Join(tmp, "web.yml"), filepath.Join(tmp, "plugin.yml")
-	_ = os.WriteFile(ws, []byte(workspacePatch(filepath.Join(tmp, "workspace"))), 0o600)
-	_ = os.WriteFile(web, []byte(d.WebPatch), 0o600)
-	_ = os.WriteFile(plugin, FillPlaceholders(src, d.MCPURL, d.MCPToken), 0o600)
-	port, err := FreePort()
-	if err != nil {
-		return JobResult{Result: Result{Error: err.Error()}}
-	}
-	var r Runner
-	run, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
-	err = r.Start(run, WebOptions{Paths: Paths{Node: p.Node, Bin: p.Bin, Dir: tmp}, Version: d.Version, Port: port, TrustedHost: "127.0.0.1", Patches: []string{ws, web, plugin}})
-	logs := r.Status().Logs
-	r.Stop()
-	if err != nil {
-		return JobResult{Result: Result{Error: "带着插件启动 dsh 失败：" + err.Error()}, Log: logs}
-	}
-	return JobResult{Result: Result{Completed: true}, Log: logs}
 }

@@ -29,7 +29,7 @@ import (
 type Param struct {
 	Key      string      `json:"key"`
 	Label    string      `json:"label"`
-	Kind     string      `json:"kind"` // string / int / bool / enum / gb / days / ref / refs / object
+	Kind     string      `json:"kind"` // string / text（长文本，如驱动原文）/ int / bool / enum / gb / days / ref / refs / object
 	Unit     string      `json:"unit,omitempty"`
 	Ref      string      `json:"ref,omitempty"` // 引用对象类型：user / node / gate / link / event
 	Options  [][2]string `json:"options,omitempty"`
@@ -78,6 +78,8 @@ type DraftStep struct {
 	Edited  []string       `json:"edited,omitempty"` // 管理员在确认窗里改过的字段
 	// Tested 是已实测通过的参数摘要：确认时参数没变就不再实测。
 	Tested string `json:"tested,omitempty"`
+	// Diff 是长文本参数（如驱动原文）与当前版本的逐行差异，确认窗按差异显示。
+	Diff []diffLine `json:"diff,omitempty"`
 }
 
 // StepField 是确认窗里的一行：参数说明 + 现值 / 草稿值的显示文本；Value 是可编辑的原值。
@@ -149,6 +151,11 @@ func (s *Server) checkValue(ctx context.Context, p *planCtx, pa Param, v any) er
 		str, ok := v.(string)
 		if !ok || len(str) > 2000 {
 			return errors.New("必须是不超过 2000 字的文本")
+		}
+	case "text":
+		str, ok := v.(string)
+		if !ok || len(str) > 256<<10 {
+			return errors.New("必须是不超过 256 KB 的文本")
 		}
 	case "bool":
 		if _, ok := v.(bool); !ok {
@@ -263,6 +270,9 @@ func (s *Server) display(ctx context.Context, p *planCtx, pa Param, v any) strin
 		return "未填"
 	}
 	switch pa.Kind {
+	case "text":
+		str, _ := v.(string)
+		return fmt.Sprintf("%d 行（内容见下方差异）", strings.Count(strings.TrimRight(str, "\n"), "\n")+1)
 	case "bool":
 		if v == true {
 			return "是"
@@ -447,7 +457,7 @@ var draftCaps = []Capability{
 // catalog 返回某个来源可用的能力（后台分析只能读安全事件、提交封禁草稿）。
 func catalog(source string) []Capability {
 	var out []Capability
-	for _, list := range [][]Capability{readCaps, draftCaps} {
+	for _, list := range [][]Capability{readCaps, driverReadCaps, draftCaps, driverDraftCaps} {
 		for _, c := range list {
 			if c.Role == "" {
 				c.Role = "admin"

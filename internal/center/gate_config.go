@@ -68,7 +68,7 @@ func (s *Server) compileGateConfig(ctx context.Context, g *ent.Gate) (contracts.
 	if err = s.compileRoutes(ctx, g, &cfg, nodes, chainKeys); err != nil {
 		return cfg, err
 	}
-	if cfg.Kernels, cfg.Profiles, err = s.gateKernels(ctx, g, need); err != nil {
+	if cfg.Kernels, cfg.Drivers, err = s.gateKernels(ctx, g, need); err != nil {
 		return cfg, err
 	}
 	guardGroups(&cfg, need)
@@ -80,14 +80,14 @@ func (s *Server) compileGateConfig(ctx context.Context, g *ent.Gate) (contracts.
 func guardGroups(cfg *contracts.GateConfig, kernels map[string]bool) {
 	var why string
 	for k := range kernels {
-		p, err := kernelconf.ParseProfile(cfg.Profiles[k])
+		p, err := kernelconf.ParseDriver(cfg.Drivers[k])
 		if err != nil {
-			why = k + " 版本档案无效"
+			why = k + " 驱动无效"
 			break
 		}
 		for _, f := range groupFeatures[k] {
 			if !p.Has(f) {
-				why = k + " " + p.MinVersion + " 不支持出口自动切换（版本档案没有 " + f + "）"
+				why = k + " " + p.MinVersion + " 不支持出口自动切换（驱动没有 " + f + "）"
 			}
 		}
 	}

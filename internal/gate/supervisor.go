@@ -3,6 +3,7 @@ package gate
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -11,14 +12,45 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/shusfun/weir/internal/kernelconf"
 )
 
-// kernelArgs 返回内核的运行参数与配置自检参数。
-func kernelArgs(name, config string) (run, test []string) {
+// defaultArgs 是驱动没有给出参数时（旧状态文件）的运行与自检参数。
+func defaultArgs(name string) kernelconf.KernelArgs {
 	if name == "sing-box" {
-		return []string{"run", "-c", config}, []string{"check", "-c", config}
+		return kernelconf.KernelArgs{Run: []string{"run", "-c", "{config}"}, Check: []string{"check", "-c", "{config}"}}
 	}
-	return []string{"run", "-config", config}, []string{"run", "-test", "-config", config}
+	return kernelconf.KernelArgs{Run: []string{"run", "-config", "{config}"}, Check: []string{"run", "-test", "-config", "{config}"}}
+}
+
+// kernelArgs 返回内核的运行参数与配置自检参数（{config} 已换成路径）。参数来自驱动，必须通过校验。
+func kernelArgs(name string, a kernelconf.KernelArgs, config string) (run, test []string, err error) {
+	if len(a.Run) == 0 && len(a.Check) == 0 {
+		a = defaultArgs(name)
+	}
+	if err = kernelconf.CheckArgs(a); err != nil {
+		return nil, nil, err
+	}
+	return kernelconf.Args(a.Run, config), kernelconf.Args(a.Check, config), nil
+}
+
+// args 读取某内核已应用的参数（与配置文件放在一起）；没有时用默认参数。
+func (s *Supervisor) args(name string) kernelconf.KernelArgs {
+	var a kernelconf.KernelArgs
+	if b, err := os.ReadFile(filepath.Join(s.p.CoresDir, name+".args.json")); err == nil {
+		_ = json.Unmarshal(b, &a)
+	}
+	return a
+}
+
+// SetArgs 保存某内核的运行参数（切换配置时写入，Start 时读取）。
+func (s *Supervisor) SetArgs(name string, a kernelconf.KernelArgs) error {
+	if err := kernelconf.CheckArgs(a); err != nil {
+		return err
+	}
+	b, _ := json.Marshal(a)
+	return os.WriteFile(filepath.Join(s.p.CoresDir, name+".args.json"), b, 0640)
 }
 
 // proc 是一个被托管的内核进程。
@@ -70,12 +102,18 @@ func (s *Supervisor) keep(pr *proc, bin string, started chan<- error) {
 	backoff := time.Second
 	first := true
 	for {
-		run, _ := kernelArgs(pr.name, s.config(pr.name))
+		run, _, err := kernelArgs(pr.name, s.args(pr.name), s.config(pr.name))
+		if err != nil {
+			if first {
+				started <- err
+			}
+			return
+		}
 		cmd := exec.Command(bin, run...)
 		dropPrivileges(cmd, s.p.RunAs)
 		out, _ := cmd.StdoutPipe()
 		cmd.Stderr = cmd.Stdout
-		err := cmd.Start()
+		err = cmd.Start()
 		if first {
 			started <- err
 			first = false
@@ -155,12 +193,15 @@ func (s *Supervisor) Logs(name string) []string {
 }
 
 // Test 用指定版本内核自身的自检命令检查配置文件（版本切换前先检查，未通过不切换）。
-func (s *Supervisor) Test(ctx context.Context, name, version, config string) error {
+func (s *Supervisor) Test(ctx context.Context, name, version, config string, a kernelconf.KernelArgs) error {
 	bin := filepath.Join(s.p.KernelsDir, name+"-"+version)
 	if _, err := os.Stat(bin); err != nil {
 		return errors.New(name + " " + version + " is not installed")
 	}
-	_, test := kernelArgs(name, config)
+	_, test, err := kernelArgs(name, a, config)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, test...)

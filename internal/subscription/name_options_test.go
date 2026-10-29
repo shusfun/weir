@@ -12,7 +12,7 @@ import (
 )
 
 func TestNamePlusUpstreamComparison(t *testing.T) {
-	if os.Getenv("MIGATE_UPSTREAM_TESTS") != "1" {
+	if os.Getenv("WEIR_UPSTREAM_TESTS") != "1" {
 		t.Skip("requires local Node fixed-source oracle")
 	}
 	for _, link := range []string{

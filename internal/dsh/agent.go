@@ -1,6 +1,6 @@
 package dsh
 
-// Agent 是 dsh 的管理进程，以独立系统用户 migate-dsh 运行（生产环境由 systemd 单元 migate-dsh 启动，
+// Agent 是 dsh 的管理进程，以独立系统用户 weir-dsh 运行（生产环境由 systemd 单元 weir-dsh 启动，
 // 开发容器里由中心降权启动）。中心与它只通过两个目录交换文件，dsh 读不到中心的配置、数据库与密钥：
 //   control/（中心写，dsh 只读）：desired.json 期望状态；jobs/<id>.json 后台分析任务。
 //   status/（dsh 写，中心只读）：status.json 运行状态与回环端点；jobs/<id>.json 分析结果。
@@ -41,6 +41,8 @@ type Desired struct {
 	PluginLabel string `json:"plugin_label,omitempty"`
 	MCPURL      string `json:"mcp_url"`
 	MCPToken    string `json:"mcp_token"`
+	// SkillsDir 是中心写好的 Weir skill 目录（control/skills，dsh 只读），填进插件补丁的占位符。
+	SkillsDir string `json:"skills_dir,omitempty"`
 }
 
 // AgentStatus 是管理进程写回的状态。Token 是 dsh 的启动令牌，只给中心网关用，不返回给页面。
@@ -55,20 +57,16 @@ type AgentStatus struct {
 	PluginError string    `json:"plugin_error,omitempty"` // 插件导致 dsh 启动失败时的原因（已去掉插件重启）
 }
 
-// JobRequest / JobResult 是交给管理进程的一次任务：analysis 后台分析；plugin-collect 读取工作区里
-// 创造模式改好的插件副本；plugin-smoke 用全新的临时家目录带着插件试启动一次 dsh。
+// JobRequest / JobResult 是交给管理进程的一次任务（目前只有 analysis：后台安全分析）。
 type JobRequest struct {
-	ID        string `json:"id"`
-	Kind      string `json:"kind,omitempty"` // 为空即 analysis
-	Task      string `json:"task,omitempty"`
-	PluginDir string `json:"plugin_dir,omitempty"`
+	ID   string `json:"id"`
+	Kind string `json:"kind,omitempty"` // 为空即 analysis
+	Task string `json:"task,omitempty"`
 }
 
 type JobResult struct {
 	ID string `json:"id"`
 	Result
-	Files map[string]string `json:"files,omitempty"` // plugin-collect
-	Log   []string          `json:"log,omitempty"`   // plugin-smoke（令牌已隐藏）
 }
 
 var jobID = regexp.MustCompile(`^[0-9a-f]{16,64}$`)
@@ -87,6 +85,16 @@ func WriteShared(path string, v any) error {
 		return err
 	}
 	_ = os.Chmod(tmp, 0o640) // 进程 umask 可能更严
+	return os.Rename(tmp, path)
+}
+
+// WriteSharedBytes 原子写入一个对方可读的文件（内容原样）。
+func WriteSharedBytes(path string, b []byte) error {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o640); err != nil {
+		return err
+	}
+	_ = os.Chmod(tmp, 0o640)
 	return os.Rename(tmp, path)
 }
 
@@ -314,10 +322,10 @@ func (a *agent) runJob(ctx context.Context, d Desired, req JobRequest) Result {
 	}
 	run, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	if err := EnsureProfile(run, p, "migate-analyst", "headless", []byte(d.AnalystPatch)); err != nil {
+	if err := EnsureProfile(run, p, "weir-analyst", "headless", []byte(d.AnalystPatch)); err != nil {
 		return Result{Error: err.Error()}
 	}
-	res, err := RunHeadless(run, p, "migate-analyst", req.Task)
+	res, err := RunHeadless(run, p, "weir-analyst", req.Task)
 	if err != nil {
 		return Result{Error: err.Error()}
 	}

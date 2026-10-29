@@ -14,8 +14,8 @@ XRAY = ROOT / "dist" / "cores" / "v26.3.27" / "xray"
 SINGBOX = ROOT / "dist" / "cores" / "sing-box-1.14.3-stats" / "sing-box"  # 带 with_v2ray_api 的构建
 # 订阅检查用的 mihomo（可选）：由 Weir 的内核下载（官方摘要校验）放到这里，缺少时相关测试跳过。
 MIHOMO = ROOT / "dist" / "cores" / "fetched" / "mihomo" / "1.19.33" / "amd64" / "mihomo"
-IMAGE = os.environ.get("MIGATE_E2E_IMAGE", "debian:bookworm-slim")
-CA_BUNDLE = pathlib.Path(os.environ.get("MIGATE_E2E_CA_BUNDLE", "/etc/ssl/cert.pem"))
+IMAGE = os.environ.get("WEIR_E2E_IMAGE", "debian:bookworm-slim")
+CA_BUNDLE = pathlib.Path(os.environ.get("WEIR_E2E_CA_BUNDLE", "/etc/ssl/cert.pem"))
 
 
 def main(argv):
@@ -25,14 +25,14 @@ def main(argv):
     OUT.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, GOOS="linux", GOARCH="amd64", CGO_ENABLED="0")
     subprocess.run(["go", "test", "-c", "-tags", "e2e", "-o", str(OUT / "e2e.test"), "./internal/e2e"], cwd=ROOT, env=env, check=True)
-    # 单机合并为一个进程的验收要用真实的 migate 程序（中心 + 本机 Gate + 辅助程序）。
-    subprocess.run(["go", "build", "-o", str(OUT / "migate"), "./apps/weir"], cwd=ROOT, env=env, check=True)
+    # 单机合并为一个进程的验收要用真实的 weir 程序（中心 + 本机 Gate + 辅助程序）。
+    subprocess.run(["go", "build", "-o", str(OUT / "weir"), "./apps/weir"], cwd=ROOT, env=env, check=True)
     args = ["-test.v", "-test.timeout", "15m", *argv]
     cmd = ["docker", "run", "--rm",
            "-v", f"{OUT}:/t", "-v", f"{XRAY}:/cores/xray:ro", "-v", f"{SINGBOX}:/cores/sing-box:ro",
-           "-e", "MIGATE_E2E_XRAY=/cores/xray", "-e", "MIGATE_E2E_SINGBOX=/cores/sing-box", "-e", "MIGATE_E2E_BINARY=/t/migate"]
+           "-e", "WEIR_E2E_XRAY=/cores/xray", "-e", "WEIR_E2E_SINGBOX=/cores/sing-box", "-e", "WEIR_E2E_BINARY=/t/weir"]
     if MIHOMO.is_file():
-        cmd += ["-v", f"{MIHOMO}:/cores/mihomo:ro", "-e", "MIGATE_E2E_MIHOMO=/cores/mihomo"]
+        cmd += ["-v", f"{MIHOMO}:/cores/mihomo:ro", "-e", "WEIR_E2E_MIHOMO=/cores/mihomo"]
     # 精简镜像没有 CA 证书库（安装器会补装）；Gate 实测 REALITY 目标等访问外网的测试借用本机的证书库，只读。
     if CA_BUNDLE.is_file():
         cmd += ["-v", f"{CA_BUNDLE}:/etc/ssl/certs/ca-certificates.crt:ro"]

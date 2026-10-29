@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Weir 对接 DeepSeek Harness 的插件：Weir 助手预设、控制台上下文与 Weir 工具。",
   "private": true,
-  "migate": {
+  "weir": {
     "dsh": ">=0.2.0-0 <0.3.0-0"
   }
 }

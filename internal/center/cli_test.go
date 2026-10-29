@@ -28,7 +28,7 @@ func scriptedSecrets(values ...string) func(string) (string, error) {
 func TestSetupCLISQLiteThenResetPassword(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
-	db := filepath.Join(dir, "migate.db")
+	db := filepath.Join(dir, "weir.db")
 	// 监听（默认）→ 存储 1 → SQLite 路径 → 邮箱 → 确认
 	input := strings.Join([]string{"", "1", db, "Ops@Example.test", "y"}, "\n") + "\n"
 	var out bytes.Buffer
@@ -69,7 +69,7 @@ func TestSetupCLISQLiteThenResetPassword(t *testing.T) {
 func TestSetupCLICancelWritesNothing(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
-	input := strings.Join([]string{"", "1", filepath.Join(dir, "migate.db"), "ops@example.test", "n"}, "\n") + "\n"
+	input := strings.Join([]string{"", "1", filepath.Join(dir, "weir.db"), "ops@example.test", "n"}, "\n") + "\n"
 	var out bytes.Buffer
 	if err := RunSetupCLI(path, strings.NewReader(input), &out, scriptedSecrets("Passw0rd", "Passw0rd")); err == nil {
 		t.Fatal("cancel must return an error")

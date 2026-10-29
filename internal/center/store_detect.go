@@ -141,7 +141,7 @@ func detectPostgres(ctx context.Context) *detectedPostgres {
 
 // recommendDatabase 选一个还没有 Weir 账户的库：先认专门建的，再认 1Panel 账号同名库，最后是 postgres。
 func recommendDatabase(dbs []store.PostgresDatabase, user string) string {
-	for _, name := range []string{"migate", "weir", "gate", user, "postgres"} {
+	for _, name := range []string{"weir", "weir", "gate", user, "postgres"} {
 		if i := slices.IndexFunc(dbs, func(d store.PostgresDatabase) bool { return d.Name == name }); i >= 0 && !dbs[i].HasData && !dbs[i].Unknown {
 			return name
 		}

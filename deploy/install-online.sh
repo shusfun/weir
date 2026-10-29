@@ -19,9 +19,9 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-GITHUB_REPO=${MIGATE_GITHUB_REPO:-shusfun/weir}
-CURL_BIN=${MIGATE_CURL:-curl}
-TTY_DEVICE=${MIGATE_DEV_TTY:-/dev/tty}
+GITHUB_REPO=${WEIR_GITHUB_REPO:-shusfun/weir}
+CURL_BIN=${WEIR_CURL:-curl}
+TTY_DEVICE=${WEIR_DEV_TTY:-/dev/tty}
 LANG_CHOICE=zh
 LISTEN_HOST=127.0.0.1
 LISTEN_PORT=19810
@@ -51,10 +51,10 @@ declare -A MSG=(
   [zh.summary]="监听地址"
   [zh.downloading]="正在下载" [zh.verifying]="正在校验安装包" [zh.installing]="正在安装"
   [zh.done]="安装完成" [zh.visit]="本机监听"
-  [zh.menu]="下一步执行 migate，打开中文菜单。服务、初始化、管理员账号和初始化凭证都在菜单里"
+  [zh.menu]="下一步执行 weir，打开中文菜单。服务、初始化、管理员账号和初始化凭证都在菜单里"
   [zh.web_setup]="Web 初始化：用 https://域名 打开向导，填上面打印的初始化凭证（30 分钟有效）"
-  [zh.rotate_setup]="凭证过期或找不到时，执行 migate 选 6：没过期就照旧显示，过期了自动换新"
-  [zh.cli_setup]="终端初始化：在 migate 菜单里选择，或执行 migate center --setup"
+  [zh.rotate_setup]="凭证过期或找不到时，执行 weir 选 6：没过期就照旧显示，过期了自动换新"
+  [zh.cli_setup]="终端初始化：在 weir 菜单里选择，或执行 weir center --setup"
   [zh.one_setup]="不要同时提交 Web 和终端初始化"
   [zh.not_installed]="尚未安装" [zh.upgrading]="正在升级" [zh.current]="当前版本"
   [zh.rollback]="正在回退" [zh.same]="已经是这个版本"
@@ -75,8 +75,8 @@ declare -A MSG=(
   [zh.mirror_failed]="镜像不可用"
   [zh.mirror_bad_sum]="镜像返回的安装包校验不一致，已丢弃"
   [zh.final_direct]="继续直连 GitHub 下载，速度可能较慢"
-  [zh.checksum_failed]="压缩包校验失败"
-  [zh.bad_mirrors]="MIGATE_GITHUB_MIRRORS 只能是 off 或逗号分隔的主机名"
+  [zh.checksum_failed]="压缩包校验失败" [zh.arch_unsupported]="不支持的处理器架构（只支持 amd64 与 arm64）"
+  [zh.bad_mirrors]="WEIR_GITHUB_MIRRORS 只能是 off 或逗号分隔的主机名"
   [en.info]="info" [en.success]="success" [en.warning]="warning" [en.error]="error"
   [en.select_lang]="请选择语言 / Select language"
   [en.lang_zh]="中文" [en.lang_en]="English" [en.enter_choice]="Enter choice"
@@ -90,10 +90,10 @@ declare -A MSG=(
   [en.summary]="Listen address"
   [en.downloading]="Downloading" [en.verifying]="Verifying archive" [en.installing]="Installing"
   [en.done]="Installation complete" [en.visit]="Local listener"
-  [en.menu]="Next, run migate to open the Chinese menu for the service, setup, administrator, and setup token"
+  [en.menu]="Next, run weir to open the Chinese menu for the service, setup, administrator, and setup token"
   [en.web_setup]="Web setup: open https://<domain> and enter the initialization token printed above (valid 30 minutes)"
-  [en.rotate_setup]="If the token expired or is lost, run migate and choose 6: it shows the current token, or a fresh one once it has expired"
-  [en.cli_setup]="Terminal setup: choose it in migate, or run migate center --setup"
+  [en.rotate_setup]="If the token expired or is lost, run weir and choose 6: it shows the current token, or a fresh one once it has expired"
+  [en.cli_setup]="Terminal setup: choose it in weir, or run weir center --setup"
   [en.one_setup]="Do not submit the Web wizard and the terminal wizard at the same time"
   [en.not_installed]="Not installed" [en.upgrading]="Upgrading" [en.current]="Current version"
   [en.rollback]="Rolling back" [en.same]="Already at this version"
@@ -114,8 +114,8 @@ declare -A MSG=(
   [en.mirror_failed]="Mirror unavailable"
   [en.mirror_bad_sum]="Mirror archive checksum mismatch; discarded"
   [en.final_direct]="Continuing direct GitHub download; this may be slow"
-  [en.checksum_failed]="Archive checksum verification failed"
-  [en.bad_mirrors]="MIGATE_GITHUB_MIRRORS must be off or comma-separated hostnames"
+  [en.checksum_failed]="Archive checksum verification failed" [en.arch_unsupported]="Unsupported CPU architecture (only amd64 and arm64)"
+  [en.bad_mirrors]="WEIR_GITHUB_MIRRORS must be off or comma-separated hostnames"
 )
 
 msg() { printf '%s' "${MSG[$LANG_CHOICE.$1]}"; }
@@ -124,17 +124,29 @@ print_success() { echo -e "${GREEN}[$(msg success)]${NC} $1"; }
 print_warning() { echo -e "${YELLOW}[$(msg warning)]${NC} $1"; }
 print_error() { echo -e "${RED}[$(msg error)]${NC} $1" >&2; }
 
-if [[ -n ${MIGATE_DEV_TTY:-} && -r $TTY_DEVICE ]]; then
+if [[ -n ${WEIR_DEV_TTY:-} && -r $TTY_DEVICE ]]; then
   exec 3<"$TTY_DEVICE"
 fi
 
+# 能真正打开终端才算可交互：SSH 不带终端执行时 /dev/tty 存在、权限也对，但打不开（No such device）。
 is_interactive() {
-  [[ ${MIGATE_NONINTERACTIVE:-} == 1 ]] && return 1
-  [[ -e $TTY_DEVICE && -r $TTY_DEVICE && -w $TTY_DEVICE ]]
+  [[ ${WEIR_NONINTERACTIVE:-} == 1 ]] && return 1
+  [[ -e $TTY_DEVICE && -r $TTY_DEVICE && -w $TTY_DEVICE ]] || return 1
+  [[ -n ${WEIR_DEV_TTY:-} ]] && return 0
+  { : <>"$TTY_DEVICE"; } 2>/dev/null
+}
+
+# 本机架构：amd64 或 arm64，其他直接退出。WEIR_ARCH 只用于测试。
+host_arch() {
+  case "${WEIR_ARCH:-$(uname -m)}" in
+    x86_64|amd64) echo amd64 ;;
+    aarch64|arm64) echo arm64 ;;
+    *) print_error "$(msg arch_unsupported): $(uname -m)"; exit 1 ;;
+  esac
 }
 
 read_tty() {
-  if [[ -n ${MIGATE_DEV_TTY:-} ]]; then
+  if [[ -n ${WEIR_DEV_TTY:-} ]]; then
     IFS= read -r REPLY <&3 || REPLY=""
   else
     IFS= read -r REPLY < /dev/tty || REPLY=""
@@ -143,7 +155,7 @@ read_tty() {
 }
 
 prompt_tty() {
-  if [[ -n ${MIGATE_DEV_TTY:-} ]]; then
+  if [[ -n ${WEIR_DEV_TTY:-} ]]; then
     printf '%s' "$1" >&2
   else
     printf '%s' "$1" >/dev/tty
@@ -178,7 +190,7 @@ valid_version() {
 valid_port() { [[ $1 =~ ^[0-9]+$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 )); }
 
 check_root() {
-  if [[ $(id -u) -ne 0 && -z ${MIGATE_ALLOW_NON_ROOT:-} ]]; then
+  if [[ $(id -u) -ne 0 && -z ${WEIR_ALLOW_NON_ROOT:-} ]]; then
     print_error "root required"
     exit 1
   fi
@@ -262,8 +274,8 @@ try_fetch_url() {
     header=$WORKDIR/headers
     local curl_config=()
     # 令牌只发送给 GitHub 自身，不转发到签名存储主机
-    if [[ -n ${MIGATE_GITHUB_TOKEN:-} && $signed != true ]]; then
-      printf 'header = "Authorization: Bearer %s"\n' "$MIGATE_GITHUB_TOKEN" > "$WORKDIR/curl-config"
+    if [[ -n ${WEIR_GITHUB_TOKEN:-} && $signed != true ]]; then
+      printf 'header = "Authorization: Bearer %s"\n' "$WEIR_GITHUB_TOKEN" > "$WORKDIR/curl-config"
       chmod 600 "$WORKDIR/curl-config"
       curl_config=(--config "$WORKDIR/curl-config")
     fi
@@ -305,9 +317,9 @@ resolve_version() {
   valid_version "$TARGET_VERSION" || { print_error "发布版本无效"; exit 1; }
 }
 
-# 加速镜像列表：MIGATE_GITHUB_MIRRORS=off 关闭，或写逗号分隔的主机名替换默认列表
+# 加速镜像列表：WEIR_GITHUB_MIRRORS=off 关闭，或写逗号分隔的主机名替换默认列表
 load_mirrors() {
-  local raw=${MIGATE_GITHUB_MIRRORS:-gh-proxy.com,ghfast.top,ghproxy.net,gh.llkk.cc} item
+  local raw=${WEIR_GITHUB_MIRRORS:-gh-proxy.com,ghfast.top,ghproxy.net,gh.llkk.cc} item
   local pattern='^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$'
   local -a items
   MIRRORS=()
@@ -336,10 +348,10 @@ verify_archive() {
 }
 
 download_package() {
-  WORKDIR=$(mktemp -d "${TMPDIR:-/tmp}/migate-install-XXXXXX")
+  WORKDIR=$(mktemp -d "${TMPDIR:-/tmp}/weir-install-XXXXXX")
   load_mirrors
   resolve_version
-  local name=migate-${TARGET_VERSION}-linux-amd64.tar.gz
+  local name=weir-${TARGET_VERSION}-linux-$(host_arch).tar.gz
   local base=https://github.com/${GITHUB_REPO}/releases/download/v${TARGET_VERSION}
   # 校验和始终直连 GitHub 获取，镜像只提供压缩包
   fetch_url "$WORKDIR/checksums.txt" "$base/checksums.txt"
@@ -375,8 +387,8 @@ download_package() {
 install_package() {
   download_package
   print_info "$(msg installing) v${TARGET_VERSION}"
-  if [[ -n ${MIGATE_INSTALL_RECORD:-} ]]; then
-    printf '%s %s:%s\n' "$ROLE" "$LISTEN_HOST" "$LISTEN_PORT" >> "$MIGATE_INSTALL_RECORD"
+  if [[ -n ${WEIR_INSTALL_RECORD:-} ]]; then
+    printf '%s %s:%s\n' "$ROLE" "$LISTEN_HOST" "$LISTEN_PORT" >> "$WEIR_INSTALL_RECORD"
     return
   fi
   local package=$WORKDIR
@@ -403,21 +415,21 @@ install_package() {
     echo "  $(msg cli_setup)"
     echo "  $(msg one_setup)"
     echo ""
-    echo "  migate"
-    echo "  migate center --setup"
-    echo "  systemctl status migate-center"
-    echo "  journalctl -u migate-center -f"
+    echo "  weir"
+    echo "  weir center --setup"
+    echo "  systemctl status weir-center"
+    echo "  journalctl -u weir-center -f"
   else
-    echo "  migate gate version"
-    echo "  systemctl status migate-gate"
-    echo "  journalctl -u migate-gate -f"
+    echo "  weir gate version"
+    echo "  systemctl status weir-gate"
+    echo "  journalctl -u weir-gate -f"
   fi
   echo ""
 }
 
 # installed_role 读取本机已安装的角色（standalone / center / gate），未安装时为空。
 installed_role() {
-  local file=${MIGATE_ROLE_FILE:-/etc/migate/role}
+  local file=${WEIR_ROLE_FILE:-/etc/weir/role}
   [[ -f $file ]] && tr -d '[:space:]' < "$file"
 }
 
@@ -450,7 +462,7 @@ change_version() {
 
 run_uninstall() {
   check_root
-  local installer=${MIGATE_LOCAL_INSTALLER:-/usr/local/lib/migate/install.sh}
+  local installer=${WEIR_LOCAL_INSTALLER:-/usr/local/lib/weir/install.sh}
   [[ -f $installer && -n $(installed_role || true) ]] || { print_error "$(msg not_installed)"; exit 1; }
   print_warning "$(msg uninstall_confirm)"
   if ! is_interactive; then
@@ -475,12 +487,12 @@ run_uninstall() {
     print_success "$(msg purged)"
   else
     sh "$installer" uninstall
-    print_warning "$(msg kept): /etc/migate /var/lib/migate"
+    print_warning "$(msg kept): /etc/weir /var/lib/weir"
   fi
 }
 
 list_versions() {
-  WORKDIR=$(mktemp -d "${TMPDIR:-/tmp}/migate-install-XXXXXX")
+  WORKDIR=$(mktemp -d "${TMPDIR:-/tmp}/weir-install-XXXXXX")
   fetch_url "$WORKDIR/releases.json" "https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=20"
   grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' "$WORKDIR/releases.json" | sed -n 's/.*"\([^"]*\)"$/\1/p'
   rm -rf "$WORKDIR"
@@ -504,7 +516,7 @@ show_help() {
   echo "  --purge              卸载时同时删除配置与数据目录"
   echo ""
   echo "Environment:"
-  echo "  MIGATE_GITHUB_MIRRORS  加速镜像主机名，逗号分隔；off 关闭"
+  echo "  WEIR_GITHUB_MIRRORS  加速镜像主机名，逗号分隔；off 关闭"
   echo ""
   echo "Examples:"
   echo "  curl -sSL https://raw.githubusercontent.com/shusfun/weir/main/deploy/install-online.sh | bash"

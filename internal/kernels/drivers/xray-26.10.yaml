@@ -1,0 +1,12 @@
+# Xray 26.10.17 起：REALITY 需要 MLKEM，旧的 sing-box 客户端连不上。配置写法与 xray-26.3 相同。
+kernel: xray
+name: xray-26.10
+extends: xray-26.3
+min_version: 26.10.17
+notes: REALITY 需要 MLKEM；混用 sing-box 客户端时用 26.3.27。
+compat:
+  - kernel: sing-box
+    range: "<=1.14.3"
+    protocol: vless
+    security: reality
+    reason: Xray 26.10.17 起 REALITY 需要 MLKEM，sing-box 1.14.3 及更早的客户端连不上

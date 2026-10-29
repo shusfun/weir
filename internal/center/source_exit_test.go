@@ -1,12 +1,12 @@
 package center
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/shusfun/weir/internal/kernels"
 	"github.com/shusfun/weir/packages/contracts"
+	"gopkg.in/yaml.v3"
 )
 
 func TestSourceNodeAsExitFollowsRefreshAndKeepsLastGood(t *testing.T) {
@@ -77,8 +77,8 @@ func TestSourceGroupNeedsKernelSupport(t *testing.T) {
 	ctx := t.Context()
 	mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "vless-reality", "skip_probe": true}, 200)
 	src, _ := s.Store.Ent.SubSource.Create().SetName("机场").SetURL("https://example.com/sub").Save(ctx)
-	// 覆盖版本档案：去掉 features，表示这个 Xray 版本不支持自动切换。
-	writeProfile(t, s, "xray-26.3.yaml", "kernel: xray\nmin_version: 26.3.27\nprotocols: [vless, vmess, trojan, shadowsocks, socks, http]\nnetworks: [tcp, raw, ws, grpc, xhttp, httpupgrade]\nsecurities: [tls, reality]\n")
+	// 保存一个驱动：去掉 features，表示这个 Xray 版本不支持自动切换。
+	saveDriver(t, s, "xray-26.3", func(m map[string]any) { m["features"] = []any{} })
 	w := admin.do("POST", "/api/v1/admin/gates/"+itoa(int(g.id))+"/outbounds", map[string]any{"tag": "pool", "protocol": "source", "source_id": src.ID, "mode": "filter", "match": "."}, nil)
 	if body := decode(t, w); w.Code != 409 || body["error"].(map[string]any)["code"] != "group_unsupported" {
 		t.Fatalf("unsupported kernel = %d %v", w.Code, body)
@@ -145,15 +145,19 @@ func TestChainStepThreeSourceAndUserRestriction(t *testing.T) {
 }
 
 // writeProfile 在中心数据目录写一份覆盖用的版本档案（与内置档案同名时替换它）。
-func writeProfile(t *testing.T, s *Server, name, text string) {
+// saveDriver 保存一个驱动版本（覆盖同名内置驱动），edit 改动展开前的原文。
+func saveDriver(t *testing.T, s *Server, name string, edit func(m map[string]any)) {
 	t.Helper()
-	dir := filepath.Join(s.dataDir(), "profiles")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	var m map[string]any
+	if err := yaml.Unmarshal([]byte(kernels.Builtin()[name]), &m); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644); err != nil {
+	edit(m)
+	b, _ := yaml.Marshal(m)
+	if _, err := s.Store.Ent.KernelDriver.Create().SetName(name).SetKernel(m["kernel"].(string)).SetRevision(1).SetText(string(b)).Save(t.Context()); err != nil {
 		t.Fatal(err)
 	}
+	s.dropDriverCache()
 }
 
 func nowUTC() time.Time { return time.Now().UTC() }

@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -16,6 +18,7 @@ func sampleConfig(t *testing.T) contracts.GateConfig {
 	past := time.Now().Add(-time.Hour)
 	return contracts.GateConfig{
 		Revision: 7,
+		Drivers:  map[string]string{"xray": driverText(t, "xray-26.3"), "sing-box": driverText(t, "sing-box-1.12")},
 		Ports:    contracts.PortPlan{XrayStats: 21001, SingboxStats: 21002},
 		Inbounds: []contracts.Inbound{{
 			ID: 1, Tag: "hk-reality", Kernel: "xray", Protocol: "vless", Port: 24443, Network: "tcp", Security: "reality",
@@ -97,9 +100,25 @@ func TestBuildRejectsMissingReferences(t *testing.T) {
 	}
 }
 
-func TestProfileValidatesAndStrips(t *testing.T) {
+// withDriver 改动驱动的某些字段后重新编码（测试驱动校验与 strip）。
+func withDriver(t *testing.T, text string, edit func(m map[string]any)) string {
+	t.Helper()
+	var m map[string]any
+	if err := yaml.Unmarshal([]byte(text), &m); err != nil {
+		t.Fatal(err)
+	}
+	edit(m)
+	b, err := yaml.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func TestDriverValidatesAndStrips(t *testing.T) {
 	cfg := sampleConfig(t)
-	cfg.Profiles = map[string]string{"xray": "kernel: xray\nmin_version: 26.3.27\nprotocols: [vless, vmess, trojan, shadowsocks]\nnetworks: [tcp, ws, grpc, xhttp]\nsecurities: [tls, reality]\nstrip: [policy.levels.*.statsUserDownlink]\n"}
+	base := cfg.Drivers["xray"]
+	cfg.Drivers["xray"] = withDriver(t, base, func(m map[string]any) { m["strip"] = []any{"policy.levels.*.statsUserDownlink"} })
 	out, err := Build(cfg, Options{})
 	if err != nil {
 		t.Fatal(err)
@@ -110,13 +129,50 @@ func TestProfileValidatesAndStrips(t *testing.T) {
 	if !strings.Contains(string(out.Xray), "statsUserUplink") {
 		t.Fatal("strip removed too much")
 	}
-	cfg.Profiles["xray"] = "kernel: xray\nmin_version: 26.3.27\nprotocols: [trojan]\n"
+	cfg.Drivers["xray"] = withDriver(t, base, func(m map[string]any) { m["protocols"] = []any{"trojan"}; delete(m, "presets") })
 	if _, err = Build(cfg, Options{}); err == nil || !strings.Contains(err.Error(), "不支持协议 vless") {
 		t.Fatalf("err = %v", err)
 	}
-	cfg.Profiles["xray"] = "kernel: xray\nmin_version: 1\nprotocols: [vless]\nunknown_field: 1\n"
+	cfg.Drivers["xray"] = withDriver(t, base, func(m map[string]any) { m["unknown_field"] = 1 })
 	if _, err = Build(cfg, Options{}); err == nil {
-		t.Fatal("unknown profile field accepted")
+		t.Fatal("unknown driver field accepted")
+	}
+	delete(cfg.Drivers, "xray")
+	if _, err = Build(cfg, Options{}); err == nil || !strings.Contains(err.Error(), "没有驱动") {
+		t.Fatalf("missing driver: %v", err)
+	}
+}
+
+// 驱动写错也绕不过生成后的检查：统计端口不能对外监听、不能监听没分配的端口、证书只能在托管目录、不能写日志文件。
+func TestEnforceRejectsUnsafeDrivers(t *testing.T) {
+	cfg := sampleConfig(t)
+	base := cfg.Drivers["xray"]
+	edits := map[string]func(m map[string]any){
+		"统计端口": func(m map[string]any) {
+			root := m["templates"].(map[string]any)["root"].(map[string]any)
+			root["inbounds"].([]any)[1].(map[string]any)["listen"] = "0.0.0.0"
+		},
+		"没有分配": func(m map[string]any) {
+			root := m["templates"].(map[string]any)["root"].(map[string]any)
+			root["inbounds"] = append(root["inbounds"].([]any), map[string]any{"tag": "x", "listen": "0.0.0.0", "port": 2222, "protocol": "socks", "settings": map[string]any{}})
+		},
+		"托管目录": func(m map[string]any) {
+			root := m["templates"].(map[string]any)["root"].(map[string]any)
+			root["inbounds"] = append(root["inbounds"].([]any), map[string]any{"tag": "x", "listen": "0.0.0.0", "port": 24443, "protocol": "vless", "streamSettings": map[string]any{"tlsSettings": map[string]any{"certificates": []any{map[string]any{"certificateFile": "/etc/shadow", "keyFile": "/etc/shadow"}}}}})
+		},
+		"日志": func(m map[string]any) {
+			m["templates"].(map[string]any)["root"].(map[string]any)["log"] = map[string]any{"loglevel": "warning", "access": "/tmp/x.log"}
+		},
+	}
+	for want, edit := range edits {
+		cfg.Drivers["xray"] = withDriver(t, base, edit)
+		if _, err := Build(cfg, Options{CertDir: t.TempDir()}); err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("%s: err = %v", want, err)
+		}
+	}
+	// 运行参数不能带路径或其他值。
+	if _, err := ParseDriver(withDriver(t, base, func(m map[string]any) { m["run"] = []any{"run", "-config", "{config}", "/etc/passwd"} })); err == nil {
+		t.Fatal("path in run args accepted")
 	}
 }
 
@@ -128,6 +184,7 @@ func TestBuildSingboxHysteria2WithManagedCert(t *testing.T) {
 		}
 	}
 	cfg := contracts.GateConfig{
+		Drivers:     map[string]string{"sing-box": driverText(t, "sing-box-1.12")},
 		Ports:       contracts.PortPlan{XrayStats: 21001, SingboxStats: 21002},
 		Inbounds:    []contracts.Inbound{{ID: 2, Tag: "hy2", Kernel: "sing-box", Protocol: "hysteria2", Port: 24444, Security: "tls", CertID: 5, Settings: map[string]any{"tls_sni": "hy.example.test"}}},
 		Credentials: []contracts.Credential{{ID: 21, InboundID: 2, StatsKey: "c21", UserKey: "u1", Password: "secret-21"}},

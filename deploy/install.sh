@@ -12,11 +12,12 @@ usage() { echo 'usage: sh install.sh standalone|center [listen] | gate | uninsta
 action=${1:-}
 case "$action" in standalone|center|gate|uninstall) ;; *) usage;; esac
 
-base=/opt/migate
-etc=/etc/migate
-lib=/var/lib/migate
+base=/opt/weir
+etc=/etc/weir
+lib=/var/lib/weir
 units_dir=/etc/systemd/system
-all_units="migate-center.service migate-dsh.service migate-gate.service migate-helper.service migate-local-pair.service"
+# weir-update.service 不在这里：自更新时 install.sh 由它运行，停掉它会连带结束安装本身。
+all_units="weir-center.service weir-dsh.service weir-gate.service weir-helper.service weir-local-pair.service weir-update.path"
 
 stop_units() {
  for unit in $all_units; do
@@ -27,13 +28,14 @@ stop_units() {
 if [ "$action" = uninstall ]; then
  purge=${2:-}
  stop_units
- for unit in $all_units; do rm -f "$units_dir/$unit"; done
+ systemctl stop weir-update.service >/dev/null 2>&1 || true
+ for unit in $all_units weir-update.service; do rm -f "$units_dir/$unit"; done
  systemctl daemon-reload
- rm -f /usr/local/bin/migate
- rm -rf "$base" /usr/local/lib/migate
+ rm -f /usr/local/bin/weir
+ rm -rf "$base" /usr/local/lib/weir
  if [ "$purge" = --purge ]; then
   rm -rf "$etc" "$lib"
-  echo 'Removed program, configuration and data. A PostgreSQL migate schema or Redis migate:* keys, if used, are not touched.'
+  echo 'Removed program, configuration and data. A PostgreSQL weir schema or Redis weir:* keys, if used, are not touched.'
  else
   echo "Removed program and services. Kept configuration and data: $etc $lib"
  fi
@@ -47,7 +49,7 @@ sha256sum -c SHA256SUMS >/dev/null
 version=$(cat VERSION)
 case "$version" in ''|.|..|*[!a-zA-Z0-9._-]*) echo 'invalid version' >&2; exit 1;; esac
 install -d -m 0755 /run/lock
-exec 9>/run/lock/migate-install.lock
+exec 9>/run/lock/weir-install.lock
 flock -n 9 || { echo 'Another installation is running' >&2; exit 1; }
 
 # 角色只能扩展到单机，不能静默缩小：已装单机时再装 gate 视为升级同一单机。
@@ -73,22 +75,6 @@ listen=${2:-127.0.0.1:19810}
 port=${listen##*:}
 case "$port" in ''|*[!0-9]*) echo 'invalid listen address' >&2; exit 2;; esac
 
-# —— 覆盖旧版：只删除旧服务单元与旧程序目录，旧配置 / 数据目录保留并提示 ——
-legacy=false
-for unit in migate-control.service migate-control-update.service migate-control-update.path migate-gate.service migate-gate-helper.service migate-gate-xray.service migate-gate-sing-box.service migate-gate-tunnel.service migate-gate-local-pair.service; do
- if [ -f "$units_dir/$unit" ]; then
-  [ "$unit" = migate-gate.service ] && [ -f "$etc/role" ] && continue
-  systemctl disable --now "$unit" >/dev/null 2>&1 || true
-  rm -f "$units_dir/$unit"
-  legacy=true
- fi
-done
-for dir in /opt/migate-control /opt/migate-gate; do
- if [ -d "$dir" ]; then rm -rf "$dir"; legacy=true; fi
-done
-for link in /usr/local/bin/migate-control /usr/local/bin/migate-gate /usr/local/bin/migate-manage /usr/local/bin/migate-install; do rm -f "$link"; done
-if [ -L /usr/local/bin/migate ] && [ "$(readlink /usr/local/bin/migate)" != "$base/current/migate" ]; then rm -f /usr/local/bin/migate; fi
-
 # —— 程序：releases/<版本>，current 指向当前，保留上一版本用于回退 ——
 previous=''
 if [ -L "$base/current" ]; then previous=$(basename "$(readlink "$base/current")"); fi
@@ -96,21 +82,19 @@ if [ -L "$base/current" ]; then previous=$(basename "$(readlink "$base/current")
 install -d -m 0755 "$base" "$base/releases"
 if [ -e "$base/releases/$version" ]; then rm -rf "$base/releases/$version"; fi
 install -d -m 0755 "$base/releases/$version"
-install -m 0755 migate "$base/releases/$version/migate"
-cp SHA256SUMS VERSION "$base/releases/$version/"
-for item in sources.json source.tar.gz third_party; do
- if [ -e "$item" ]; then cp -R "$item" "$base/releases/$version/"; fi
-done
+# 保留整个发布包（含 install.sh），面板里「切回上一版本」直接用它重新安装。
+for item in *; do cp -R "$item" "$base/releases/$version/"; done
+chmod 0755 "$base/releases/$version/weir" "$base/releases/$version/install.sh"
 stop_units
 if [ -n "$previous" ]; then ln -sfn "releases/$previous" "$base/previous"; fi
 ln -sfn "releases/$version" "$base/current"
-ln -sfn "$base/current/migate" /usr/local/bin/migate
+ln -sfn "$base/current/weir" /usr/local/bin/weir
 for old in "$base"/releases/*; do
  name=$(basename "$old")
  [ "$name" = "$version" ] || [ "$name" = "$previous" ] || rm -rf "$old"
 done
-install -d -m 0755 /usr/local/lib/migate
-install -m 0755 "$package/install.sh" /usr/local/lib/migate/install.sh
+install -d -m 0755 /usr/local/lib/weir
+install -m 0755 "$package/install.sh" /usr/local/lib/weir/install.sh
 install -d -m 0755 "$etc"
 
 rollback() {
@@ -128,67 +112,70 @@ active=''
 
 # —— 中心 ——
 if [ "$has_center" = true ]; then
- id migate-center >/dev/null 2>&1 || useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin migate-center
+ id weir-center >/dev/null 2>&1 || useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin weir-center
  # dsh（DeepSeek Harness）的管理进程用独立用户：它能执行命令，所以读不到中心的配置、数据库与密钥。
- # 中心加入 migate-dsh 组，只为读取 dsh 写回的状态；dsh 只能读 control/，不能改中心下载的程序。
- id migate-dsh >/dev/null 2>&1 || useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin migate-dsh
- usermod -a -G migate-dsh migate-center
- # /var/lib/migate 由 root 持有；中心与 Gate 各自只拥有自己的子目录，互不可写。
+ # 中心加入 weir-dsh 组，只为读取 dsh 写回的状态；dsh 只能读 control/，不能改中心下载的程序。
+ id weir-dsh >/dev/null 2>&1 || useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin weir-dsh
+ usermod -a -G weir-dsh weir-center
+ # /var/lib/weir 由 root 持有；中心与 Gate 各自只拥有自己的子目录，互不可写。
  install -d -m 0755 "$lib"
- install -d -m 0700 -o migate-center -g migate-center "$etc/center" "$lib/center"
+ install -d -m 0700 -o weir-center -g weir-center "$etc/center" "$lib/center"
  install -d -m 0755 "$lib/dsh"
- install -d -m 0755 -o migate-center -g migate-center "$lib/dsh/runtime"
- install -d -m 2750 -o migate-center -g migate-dsh "$lib/dsh/control" "$lib/dsh/control/jobs"
- install -d -m 2750 -o migate-dsh -g migate-dsh "$lib/dsh/status" "$lib/dsh/status/jobs"
- install -d -m 0700 -o migate-dsh -g migate-dsh "$lib/dsh/state"
+ # 自更新：中心写请求、读进度（组 weir-center 可写）；root 的 weir-update 执行，解包目录只有 root 能进。
+ install -d -m 2770 -o root -g weir-center "$lib/update"
+ install -d -m 0700 "$lib/update-work"
+ install -d -m 0755 -o weir-center -g weir-center "$lib/dsh/runtime"
+ install -d -m 2750 -o weir-center -g weir-dsh "$lib/dsh/control" "$lib/dsh/control/jobs"
+ install -d -m 2750 -o weir-dsh -g weir-dsh "$lib/dsh/status" "$lib/dsh/status/jobs"
+ install -d -m 0700 -o weir-dsh -g weir-dsh "$lib/dsh/state"
  if [ ! -f "$etc/center/config.json" ]; then
-  setpriv --reuid=migate-center --regid=migate-center --init-groups \
-   "$base/current/migate" center --config "$etc/center/config.json" --listen "$listen" --init >/dev/null
+  setpriv --reuid=weir-center --regid=weir-center --init-groups \
+   "$base/current/weir" center --config "$etc/center/config.json" --listen "$listen" --init >/dev/null
  fi
  # 单机角色：本机 Gate 的 Agent 在中心进程里运行（内核仍由 root 辅助程序托管），
- # 中心加入 migate-gate 组以读取设备文件、访问辅助程序套接字，并拥有 Gate 的状态目录。
- local_groups='migate-dsh'; local_env=''; local_paths=''; local_after=''
+ # 中心加入 weir-gate 组以读取设备文件、访问辅助程序套接字，并拥有 Gate 的状态目录。
+ local_groups='weir-dsh'; local_env=''; local_paths=''; local_after=''
  if [ "$role" = standalone ]; then
-  local_groups='migate-dsh migate-gate'
-  local_env='Environment=MIGATE_LOCAL_GATE=/etc/migate/gate/agent.json'
-  local_paths=' /var/lib/migate/gate /run/migate'
-  local_after=' migate-helper.service'
+  local_groups='weir-dsh weir-gate'
+  local_env='Environment=WEIR_LOCAL_GATE=/etc/weir/gate/agent.json'
+  local_paths=' /var/lib/weir/gate /run/weir'
+  local_after=' weir-helper.service'
  fi
- cat > "$units_dir/migate-center.service" <<UNIT
+ cat > "$units_dir/weir-center.service" <<UNIT
 [Unit]
 Description=Weir center
 After=network-online.target$local_after
 Wants=network-online.target$local_after
 [Service]
 Type=simple
-User=migate-center
-Group=migate-center
+User=weir-center
+Group=weir-center
 SupplementaryGroups=$local_groups
-Environment=MIGATE_DSH_DIR=/var/lib/migate/dsh
-Environment=MIGATE_DSH_AGENT=systemd
+Environment=WEIR_DSH_DIR=/var/lib/weir/dsh
+Environment=WEIR_DSH_AGENT=systemd
 $local_env
-ExecStart=/opt/migate/current/migate center --config /etc/migate/center/config.json --serve
+ExecStart=/opt/weir/current/weir center --config /etc/weir/center/config.json --serve
 Restart=on-failure
 UMask=0077
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=/etc/migate/center /var/lib/migate/center /var/lib/migate/dsh/runtime /var/lib/migate/dsh/control$local_paths
+ReadWritePaths=/etc/weir/center /var/lib/weir/center /var/lib/weir/dsh/runtime /var/lib/weir/dsh/control /var/lib/weir/update$local_paths
 [Install]
 WantedBy=multi-user.target
 UNIT
  # dsh 管理进程：只能写自己的状态与家目录，中心与 Gate 的配置、数据目录对它不可见。
- cat > "$units_dir/migate-dsh.service" <<'UNIT'
+ cat > "$units_dir/weir-dsh.service" <<'UNIT'
 [Unit]
 Description=Weir dsh (DeepSeek Harness) agent
-After=network-online.target migate-center.service
+After=network-online.target weir-center.service
 Wants=network-online.target
 [Service]
 Type=simple
-User=migate-dsh
-Group=migate-dsh
-ExecStart=/opt/migate/current/migate dsh agent --dir /var/lib/migate/dsh
+User=weir-dsh
+Group=weir-dsh
+ExecStart=/opt/weir/current/weir dsh agent --dir /var/lib/weir/dsh
 Restart=always
 RestartSec=5
 UMask=0077
@@ -196,72 +183,91 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=/var/lib/migate/dsh/status /var/lib/migate/dsh/state
-InaccessiblePaths=-/etc/migate -/var/lib/migate/center -/var/lib/migate/gate
+ReadWritePaths=/var/lib/weir/dsh/status /var/lib/weir/dsh/state
+InaccessiblePaths=-/etc/weir -/var/lib/weir/center -/var/lib/weir/gate
 [Install]
 WantedBy=multi-user.target
 UNIT
- active="$active migate-center.service migate-dsh.service"
+ # 自更新执行端：中心写入 request.json 后由 path 单元触发，以 root 运行一次。
+ cat > "$units_dir/weir-update.path" <<'UNIT'
+[Unit]
+Description=Weir self-update request watcher
+[Path]
+PathExists=/var/lib/weir/update/request.json
+Unit=weir-update.service
+[Install]
+WantedBy=multi-user.target
+UNIT
+ cat > "$units_dir/weir-update.service" <<'UNIT'
+[Unit]
+Description=Weir self-update (runs as root, downloads and verifies the release itself)
+[Service]
+Type=oneshot
+ExecStart=/opt/weir/current/weir self-update --apply
+TimeoutStartSec=30min
+UMask=0027
+UNIT
+ active="$active weir-center.service weir-dsh.service weir-update.path"
 fi
 
 # —— Gate ——
 if [ "$has_gate" = true ]; then
- id migate-gate >/dev/null 2>&1 || useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin migate-gate
- install -d -m 0750 -o root -g migate-gate "$etc/gate" "$etc/gate/cores" "$etc/gate/certs" "$base/cores"
+ id weir-gate >/dev/null 2>&1 || useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin weir-gate
+ install -d -m 0750 -o root -g weir-gate "$etc/gate" "$etc/gate/cores" "$etc/gate/certs" "$base/cores"
  install -d -m 0755 "$lib"
  if [ "$role" = standalone ]; then
-  install -d -m 0700 -o migate-center -g migate-center "$lib/gate"
-  chown -R migate-center:migate-center "$lib/gate"
-  usermod -a -G migate-gate migate-center
+  install -d -m 0700 -o weir-center -g weir-center "$lib/gate"
+  chown -R weir-center:weir-center "$lib/gate"
+  usermod -a -G weir-gate weir-center
  else
-  install -d -m 0700 -o migate-gate -g migate-gate "$lib/gate"
+  install -d -m 0700 -o weir-gate -g weir-gate "$lib/gate"
  fi
- cat > "$units_dir/migate-helper.service" <<'UNIT'
+ cat > "$units_dir/weir-helper.service" <<'UNIT'
 [Unit]
 Description=Weir bounded core helper
 After=network-online.target
 [Service]
-Group=migate-gate
-RuntimeDirectory=migate
+Group=weir-gate
+RuntimeDirectory=weir
 RuntimeDirectoryMode=0750
-ExecStart=/opt/migate/current/migate gate helper
+ExecStart=/opt/weir/current/weir gate helper
 Restart=on-failure
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=/run/migate /etc/migate/gate /opt/migate/cores /opt/migate
+ReadWritePaths=/run/weir /etc/weir/gate /opt/weir/cores /opt/weir
 [Install]
 WantedBy=multi-user.target
 UNIT
  if [ "$role" = standalone ]; then
   # 旧版单机的独立 Agent 服务：合并进中心进程后删除。
-  systemctl disable --now migate-gate.service >/dev/null 2>&1 || true
-  rm -f "$units_dir/migate-gate.service"
+  systemctl disable --now weir-gate.service >/dev/null 2>&1 || true
+  rm -f "$units_dir/weir-gate.service"
  else
- cat > "$units_dir/migate-gate.service" <<'UNIT'
+ cat > "$units_dir/weir-gate.service" <<'UNIT'
 [Unit]
 Description=Weir Gate agent
-After=network-online.target migate-helper.service
-Requires=migate-helper.service
-ConditionPathExists=/etc/migate/gate/agent.json
+After=network-online.target weir-helper.service
+Requires=weir-helper.service
+ConditionPathExists=/etc/weir/gate/agent.json
 [Service]
-User=migate-gate
-Group=migate-gate
-ExecStart=/opt/migate/current/migate gate run --config /etc/migate/gate/agent.json
+User=weir-gate
+Group=weir-gate
+ExecStart=/opt/weir/current/weir gate run --config /etc/weir/gate/agent.json
 Restart=on-failure
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=/var/lib/migate/gate /run/migate
+ReadWritePaths=/var/lib/weir/gate /run/weir
 [Install]
 WantedBy=multi-user.target
 UNIT
  fi
- # 内核由辅助程序作为子进程托管（降权为 migate-gate、崩溃自动重启），不再单独建 systemd 单元。
- rm -f "$units_dir/migate-xray.service" "$units_dir/migate-sing-box.service"
- active="$active migate-helper.service"
+ # 内核由辅助程序作为子进程托管（降权为 weir-gate、崩溃自动重启），不再单独建 systemd 单元。
+ rm -f "$units_dir/weir-xray.service" "$units_dir/weir-sing-box.service"
+ active="$active weir-helper.service"
 fi
 
 # —— 单机：本机 Gate 用一次性凭证自动配对；中心只存摘要，配对成功后两边都删除 ——
@@ -271,18 +277,18 @@ if [ "$role" = standalone ] && [ ! -f "$etc/gate/agent.json" ]; then
  chmod 0600 "$etc/gate/local-pair.token"
  printf '%s' "$token" | sha256sum | cut -d' ' -f1 > "$etc/center/local-pair.sha256"
  unset token
- chown migate-center:migate-center "$etc/center/local-pair.sha256"
+ chown weir-center:weir-center "$etc/center/local-pair.sha256"
  chmod 0600 "$etc/center/local-pair.sha256"
- cat > "$units_dir/migate-local-pair.service" <<UNIT
+ cat > "$units_dir/weir-local-pair.service" <<UNIT
 [Unit]
 Description=Weir standalone local Gate pairing
-After=network-online.target migate-center.service migate-helper.service
-ConditionPathExists=/etc/migate/gate/local-pair.token
-ConditionPathExists=!/etc/migate/gate/agent.json
+After=network-online.target weir-center.service weir-helper.service
+ConditionPathExists=/etc/weir/gate/local-pair.token
+ConditionPathExists=!/etc/weir/gate/agent.json
 [Service]
 Type=oneshot
 TimeoutStartSec=infinity
-ExecStart=/opt/migate/current/migate gate local-pair --config /etc/migate/gate/agent.json --token-file /etc/migate/gate/local-pair.token --center http://127.0.0.1:$port
+ExecStart=/opt/weir/current/weir gate local-pair --config /etc/weir/gate/agent.json --token-file /etc/weir/gate/local-pair.token --center http://127.0.0.1:$port
 [Install]
 WantedBy=multi-user.target
 UNIT
@@ -298,7 +304,7 @@ done
 if [ "$has_center" = true ]; then
  healthy=false
  for attempt in 1 2 3 4 5 6 7 8 9 10; do
-  if "$base/current/migate" center --config "$etc/center/config.json" --health-check >/dev/null 2>&1; then healthy=true; break; fi
+  if "$base/current/weir" center --config "$etc/center/config.json" --health-check >/dev/null 2>&1; then healthy=true; break; fi
   sleep 1
  done
  [ "$healthy" = true ] || rollback
@@ -306,14 +312,14 @@ fi
 if [ "$has_gate" = true ]; then
  ready=false
  for attempt in 1 2 3 4 5; do
-  if "$base/current/migate" gate helper-health >/dev/null 2>&1; then ready=true; break; fi
+  if "$base/current/weir" gate helper-health >/dev/null 2>&1; then ready=true; break; fi
   sleep 1
  done
  [ "$ready" = true ] || rollback
- if [ "$role" = gate ] && [ -f "$etc/gate/agent.json" ]; then systemctl enable --now migate-gate.service >/dev/null; fi
- if [ -f "$units_dir/migate-local-pair.service" ] && [ ! -f "$etc/gate/agent.json" ]; then
-  systemctl enable migate-local-pair.service >/dev/null
-  systemctl start --no-block migate-local-pair.service
+ if [ "$role" = gate ] && [ -f "$etc/gate/agent.json" ]; then systemctl enable --now weir-gate.service >/dev/null; fi
+ if [ -f "$units_dir/weir-local-pair.service" ] && [ ! -f "$etc/gate/agent.json" ]; then
+  systemctl enable weir-local-pair.service >/dev/null
+  systemctl start --no-block weir-local-pair.service
  fi
 fi
 
@@ -323,16 +329,10 @@ if [ "$has_center" = true ]; then
   echo 'Center is initialized; configuration and data were kept.'
  else
   echo 'Center is not initialized yet. Open https://<your domain> and enter this token in the setup wizard:'
-  setpriv --reuid=migate-center --regid=migate-center --init-groups \
-   "$base/current/migate" center --config "$etc/center/config.json" --token || true
-  echo '  Expired? Run migate and choose 6; it shows a fresh token. Terminal setup: migate center --setup'
+  setpriv --reuid=weir-center --regid=weir-center --init-groups \
+   "$base/current/weir" center --config "$etc/center/config.json" --token || true
+  echo '  Expired? Run weir and choose 6; it shows a fresh token. Terminal setup: weir center --setup'
  fi
 fi
 if [ "$role" = standalone ]; then echo 'The local Gate pairs itself after the center is initialized.'; fi
 if [ "$role" = gate ] && [ ! -f "$etc/gate/agent.json" ]; then echo 'Pair this Gate from the center (Add Gate) to finish.'; fi
-if [ "$legacy" = true ]; then
- echo 'Replaced a previous Weir installation. Old data directories were kept and can be removed manually:'
- for dir in /etc/migate-control /etc/migate-gate /var/lib/migate-control /var/lib/migate-gate; do
-  [ -e "$dir" ] && echo "  $dir"
- done
-fi

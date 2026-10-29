@@ -24,7 +24,7 @@ import (
 )
 
 // ServiceUnit 是中心的 systemd 单元名。
-const ServiceUnit = "migate-center.service"
+const ServiceUnit = "weir-center.service"
 
 // SelectCLIMode 决定无参数运行时做什么：systemd 下（INVOCATION_ID）必须后台服务。
 func SelectCLIMode() string {
@@ -318,7 +318,7 @@ func ResetAdminPassword(ctx context.Context, cfg Config, email, password string)
 	return err
 }
 
-// RunOperatorMenu 是 root 在终端运行 migate 时的中文菜单。
+// RunOperatorMenu 是 root 在终端运行 weir 时的中文菜单。
 func RunOperatorMenu(path string, in io.Reader, out io.Writer) error {
 	p := prompter{in: bufio.NewReader(in), out: out, readSecret: ReadSecret}
 	for {
@@ -436,19 +436,19 @@ func PrintSetupToken(out io.Writer, label, token string) {
 }
 
 // Installer 是每次安装都会复制到本机的安装脚本；卸载只交给它做，菜单不另写一套。
-var Installer = "/usr/local/lib/migate/install.sh"
+var Installer = "/usr/local/lib/weir/install.sh"
 
 // uninstall 确认后调用安装脚本卸载；默认保留配置与数据。返回 done=true 表示已卸载，菜单随即退出。
 func (p prompter) uninstall() (bool, error) {
 	if _, err := os.Stat(Installer); err != nil {
 		return false, fmt.Errorf("找不到安装脚本 %s，请用在线脚本卸载", Installer)
 	}
-	fmt.Fprintln(p.out, "将停止并移除 Weir 的程序和服务。PostgreSQL 的 migate schema 与 Redis 的 migate: 键不会删除。")
+	fmt.Fprintln(p.out, "将停止并移除 Weir 的程序和服务。PostgreSQL 的 weir schema 与 Redis 的 weir: 键不会删除。")
 	if answer, err := p.ask("确认卸载？ [y/N]", "N"); err != nil || !strings.EqualFold(answer, "y") {
 		return false, err
 	}
 	args := []string{Installer, "uninstall"}
-	if answer, err := p.ask("同时删除配置和数据（/etc/migate、/var/lib/migate）？ [y/N]", "N"); err != nil {
+	if answer, err := p.ask("同时删除配置和数据（/etc/weir、/var/lib/weir）？ [y/N]", "N"); err != nil {
 		return false, err
 	} else if strings.EqualFold(answer, "y") {
 		args = append(args, "--purge")

@@ -7,7 +7,7 @@ import { useRowAction } from "../lib/action";
 import { State } from "./feedback";
 import { bytes, date } from "../lib/models";
 import type { Gate, NodeItem } from "../lib/core";
-import { KernelDiagnostics } from "../pages/kernels";
+import { KernelDiagnostics, type KernelInfo } from "../pages/kernels";
 import { GateCerts } from "./node-certs";
 import { HistoryCharts } from "./history-charts";
 import { GateTopology } from "./gate-topology";
@@ -27,7 +27,7 @@ const uptime = (v: unknown) => (typeof v === "number" ? `${Math.floor(v / 86400)
 
 export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host; listening_ports?: Port[]; kernel_pins?: Record<string, string>; xray_stats_port?: number; singbox_stats_port?: number }; nodes: NodeItem[]; close: () => void }) {
   const confirm = useConfirm();
-  const kernels = useQuery({ queryKey: ["kernels"], queryFn: async () => (await api("/admin/kernels")).kernels as Record<string, { default: string; cached: Record<string, string[] | null> }> });
+  const kernels = useQuery({ queryKey: ["kernels"], queryFn: async () => (await api("/admin/kernels")).kernels as Record<string, KernelInfo> });
   const [pins, setPins] = useState<Record<string, string>>(gate.kernel_pins ?? {});
   const [routing, setRouting] = useState(false);
   const [diag, setDiag] = useState<{ kernel: string; result: Record<string, unknown> } | null>(null);
@@ -59,7 +59,7 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
           )}
           <SectionHeader title="内核" description="可为这台 VPS 锁定版本；不锁定时使用默认版本。" />
           {kernels.isPending || kernels.error ? <State loading={kernels.isPending} error={kernels.error} onRetry={() => void kernels.refetch()} /> : (["xray", "sing-box"] as const).map((k) => {
-            const cached = kernels.data[k]?.cached[gate.arch] ?? [];
+            const cached = (kernels.data[k]?.versions ?? []).filter((v) => v.arches[gate.arch] && v.driver).map((v) => v.version);
             return (
               <div key={k} className="stack rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3">
                 <strong>{k} <small className="font-normal text-[var(--mg-ink-3)]">运行中 {gate.kernels_running?.[k] ?? "无"}</small></strong>

@@ -110,7 +110,7 @@ func TestGatePairConfigMeterAndRevoke(t *testing.T) {
 	if b := cfg.Budgets[userKey(u.ID)]; b.Allocated != 10<<30 || b.Unlimited {
 		t.Fatalf("single-gate user must get the whole remaining quota: %+v", b)
 	}
-	if cfg.Kernels["xray"].Version != "26.3.27" || !strings.Contains(cfg.Profiles["xray"], "kernel: xray") {
+	if cfg.Kernels["xray"].Version != "26.3.27" || !strings.Contains(cfg.Drivers["xray"], "kernel: xray") {
 		t.Fatalf("kernels=%v", cfg.Kernels)
 	}
 	// 长轮询：版本未变时挂起，管理员改动后立即返回。

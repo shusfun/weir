@@ -21,6 +21,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/credential"
 	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/gateaction"
+	"github.com/shusfun/weir/internal/store/ent/kerneldriver"
 	"github.com/shusfun/weir/internal/store/ent/link"
 	"github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/outbound"
@@ -57,6 +58,8 @@ type Client struct {
 	Gate *GateClient
 	// GateAction is the client for interacting with the GateAction builders.
 	GateAction *GateActionClient
+	// KernelDriver is the client for interacting with the KernelDriver builders.
+	KernelDriver *KernelDriverClient
 	// Link is the client for interacting with the Link builders.
 	Link *LinkClient
 	// Node is the client for interacting with the Node builders.
@@ -105,6 +108,7 @@ func (c *Client) init() {
 	c.Credential = NewCredentialClient(c.config)
 	c.Gate = NewGateClient(c.config)
 	c.GateAction = NewGateActionClient(c.config)
+	c.KernelDriver = NewKernelDriverClient(c.config)
 	c.Link = NewLinkClient(c.config)
 	c.Node = NewNodeClient(c.config)
 	c.Outbound = NewOutboundClient(c.config)
@@ -219,6 +223,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Credential:   NewCredentialClient(cfg),
 		Gate:         NewGateClient(cfg),
 		GateAction:   NewGateActionClient(cfg),
+		KernelDriver: NewKernelDriverClient(cfg),
 		Link:         NewLinkClient(cfg),
 		Node:         NewNodeClient(cfg),
 		Outbound:     NewOutboundClient(cfg),
@@ -260,6 +265,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		Credential:   NewCredentialClient(cfg),
 		Gate:         NewGateClient(cfg),
 		GateAction:   NewGateActionClient(cfg),
+		KernelDriver: NewKernelDriverClient(cfg),
 		Link:         NewLinkClient(cfg),
 		Node:         NewNodeClient(cfg),
 		Outbound:     NewOutboundClient(cfg),
@@ -305,9 +311,9 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.Audit, c.Budget, c.Certificate, c.Chain, c.Credential, c.Gate, c.GateAction,
-		c.Link, c.Node, c.Outbound, c.Passkey, c.RecoveryCode, c.Resource, c.Route,
-		c.RuleTemplate, c.Sample, c.Setting, c.SubGrant, c.SubNode, c.SubProfile,
-		c.SubSource, c.User,
+		c.KernelDriver, c.Link, c.Node, c.Outbound, c.Passkey, c.RecoveryCode,
+		c.Resource, c.Route, c.RuleTemplate, c.Sample, c.Setting, c.SubGrant,
+		c.SubNode, c.SubProfile, c.SubSource, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -318,9 +324,9 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.Audit, c.Budget, c.Certificate, c.Chain, c.Credential, c.Gate, c.GateAction,
-		c.Link, c.Node, c.Outbound, c.Passkey, c.RecoveryCode, c.Resource, c.Route,
-		c.RuleTemplate, c.Sample, c.Setting, c.SubGrant, c.SubNode, c.SubProfile,
-		c.SubSource, c.User,
+		c.KernelDriver, c.Link, c.Node, c.Outbound, c.Passkey, c.RecoveryCode,
+		c.Resource, c.Route, c.RuleTemplate, c.Sample, c.Setting, c.SubGrant,
+		c.SubNode, c.SubProfile, c.SubSource, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -343,6 +349,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Gate.mutate(ctx, m)
 	case *GateActionMutation:
 		return c.GateAction.mutate(ctx, m)
+	case *KernelDriverMutation:
+		return c.KernelDriver.mutate(ctx, m)
 	case *LinkMutation:
 		return c.Link.mutate(ctx, m)
 	case *NodeMutation:
@@ -1306,6 +1314,139 @@ func (c *GateActionClient) mutate(ctx context.Context, m *GateActionMutation) (V
 		return (&GateActionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown GateAction mutation op: %q", m.Op())
+	}
+}
+
+// KernelDriverClient is a client for the KernelDriver schema.
+type KernelDriverClient struct {
+	config
+}
+
+// NewKernelDriverClient returns a client for the KernelDriver from the given config.
+func NewKernelDriverClient(c config) *KernelDriverClient {
+	return &KernelDriverClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `kerneldriver.Hooks(f(g(h())))`.
+func (c *KernelDriverClient) Use(hooks ...Hook) {
+	c.hooks.KernelDriver = append(c.hooks.KernelDriver, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `kerneldriver.Intercept(f(g(h())))`.
+func (c *KernelDriverClient) Intercept(interceptors ...Interceptor) {
+	c.inters.KernelDriver = append(c.inters.KernelDriver, interceptors...)
+}
+
+// Create returns a builder for creating a KernelDriver entity.
+func (c *KernelDriverClient) Create() *KernelDriverCreate {
+	mutation := newKernelDriverMutation(c.config, OpCreate)
+	return &KernelDriverCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of KernelDriver entities.
+func (c *KernelDriverClient) CreateBulk(builders ...*KernelDriverCreate) *KernelDriverCreateBulk {
+	return &KernelDriverCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *KernelDriverClient) MapCreateBulk(slice any, setFunc func(*KernelDriverCreate, int)) *KernelDriverCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &KernelDriverCreateBulk{err: fmt.Errorf("calling to KernelDriverClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*KernelDriverCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &KernelDriverCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for KernelDriver.
+func (c *KernelDriverClient) Update() *KernelDriverUpdate {
+	mutation := newKernelDriverMutation(c.config, OpUpdate)
+	return &KernelDriverUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *KernelDriverClient) UpdateOne(_m *KernelDriver) *KernelDriverUpdateOne {
+	mutation := newKernelDriverMutation(c.config, OpUpdateOne, withKernelDriver(_m))
+	return &KernelDriverUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *KernelDriverClient) UpdateOneID(id int) *KernelDriverUpdateOne {
+	mutation := newKernelDriverMutation(c.config, OpUpdateOne, withKernelDriverID(id))
+	return &KernelDriverUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for KernelDriver.
+func (c *KernelDriverClient) Delete() *KernelDriverDelete {
+	mutation := newKernelDriverMutation(c.config, OpDelete)
+	return &KernelDriverDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *KernelDriverClient) DeleteOne(_m *KernelDriver) *KernelDriverDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *KernelDriverClient) DeleteOneID(id int) *KernelDriverDeleteOne {
+	builder := c.Delete().Where(kerneldriver.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &KernelDriverDeleteOne{builder}
+}
+
+// Query returns a query builder for KernelDriver.
+func (c *KernelDriverClient) Query() *KernelDriverQuery {
+	return &KernelDriverQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeKernelDriver},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a KernelDriver entity by its id.
+func (c *KernelDriverClient) Get(ctx context.Context, id int) (*KernelDriver, error) {
+	return c.Query().Where(kerneldriver.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *KernelDriverClient) GetX(ctx context.Context, id int) *KernelDriver {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *KernelDriverClient) Hooks() []Hook {
+	return c.hooks.KernelDriver
+}
+
+// Interceptors returns the client interceptors.
+func (c *KernelDriverClient) Interceptors() []Interceptor {
+	return c.inters.KernelDriver
+}
+
+func (c *KernelDriverClient) mutate(ctx context.Context, m *KernelDriverMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&KernelDriverCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&KernelDriverUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&KernelDriverUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&KernelDriverDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown KernelDriver mutation op: %q", m.Op())
 	}
 }
 
@@ -3307,13 +3448,14 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		Audit, Budget, Certificate, Chain, Credential, Gate, GateAction, Link, Node,
-		Outbound, Passkey, RecoveryCode, Resource, Route, RuleTemplate, Sample,
-		Setting, SubGrant, SubNode, SubProfile, SubSource, User []ent.Hook
+		Audit, Budget, Certificate, Chain, Credential, Gate, GateAction, KernelDriver,
+		Link, Node, Outbound, Passkey, RecoveryCode, Resource, Route, RuleTemplate,
+		Sample, Setting, SubGrant, SubNode, SubProfile, SubSource, User []ent.Hook
 	}
 	inters struct {
-		Audit, Budget, Certificate, Chain, Credential, Gate, GateAction, Link, Node,
-		Outbound, Passkey, RecoveryCode, Resource, Route, RuleTemplate, Sample,
-		Setting, SubGrant, SubNode, SubProfile, SubSource, User []ent.Interceptor
+		Audit, Budget, Certificate, Chain, Credential, Gate, GateAction, KernelDriver,
+		Link, Node, Outbound, Passkey, RecoveryCode, Resource, Route, RuleTemplate,
+		Sample, Setting, SubGrant, SubNode, SubProfile, SubSource,
+		User []ent.Interceptor
 	}
 )

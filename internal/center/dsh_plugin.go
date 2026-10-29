@@ -12,21 +12,16 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
-	"github.com/gin-gonic/gin"
 	"gopkg.in/yaml.v3"
 
 	"github.com/shusfun/weir/internal/dsh"
-	"github.com/shusfun/weir/internal/store/ent/setting"
 )
 
 // dshPluginSettingKey 保存管理员确认过的适配插件；没有时使用内置插件。
-const dshPluginSettingKey = "dsh-plugin"
-
 // Weir 维护的 dsh 插件：随程序发布（dshplugin/），由中心写到 runtime/plugins/（dsh 只读）。
-// 插件只用 dsh 的声明式组合（预设、人设、工具行），不含任何脚本；dsh 升级后不兼容时，
-// 管理员可以让 dsh 的创造模式改工作区里的副本，再由 Weir 校验、试启动、确认后启用（适配草稿）。
+// 插件只用 dsh 的声明式组合（预设、人设、工具行、skill 加载），不含任何脚本。dsh 出新版本后由 Weir 测试，
+// 在下一个版本里放宽 package.json 的已验证范围；超出范围时只启用基础预设，后台安全分析暂停。
 
 //go:embed dshplugin/*
 var dshPluginFS embed.FS
@@ -39,7 +34,7 @@ type pluginMeta struct {
 	Version string `json:"version"`
 	Weir    struct {
 		DSH string `json:"dsh"` // 兼容的 dsh 版本范围
-	} `json:"migate"`
+	} `json:"weir"`
 }
 
 // builtinPluginFiles 读取随程序发布的插件文件。
@@ -102,7 +97,7 @@ func validatePlugin(files map[string]string) (pluginMeta, error) {
 		return meta, errors.New("package.json 不是有效的 JSON")
 	}
 	if meta.Name != dshPluginName || !dsh.ValidVersion(meta.Version) || !dsh.ValidRange(meta.Weir.DSH) {
-		return meta, errors.New("package.json 的 name、version 或 migate.dsh 兼容范围无效")
+		return meta, errors.New("package.json 的 name、version 或 weir.dsh 兼容范围无效")
 	}
 	patch := files["cordis.patch.yml"]
 	if strings.Count(patch, dsh.PlaceholderMCPURL) > 1 || strings.Count(patch, dsh.PlaceholderMCPToken) > 1 {
@@ -198,6 +193,10 @@ func checkPluginNode(n *yaml.Node) error {
 				if err := checkMCPRow(n); err != nil {
 					return err
 				}
+			case v == "@deepseek-ai/dsh-skill-filesystem":
+				if err := checkSkillRow(n); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -205,6 +204,26 @@ func checkPluginNode(n *yaml.Node) error {
 		if err := checkPluginNode(c); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// checkSkillRow：skill 只能从 Weir 生成的目录加载（占位符），不读项目与用户目录。
+func checkSkillRow(n *yaml.Node) error {
+	var row struct {
+		Config map[string]any `yaml:"config"`
+	}
+	if err := n.Decode(&row); err != nil {
+		return fmt.Errorf("cordis.patch.yml 第 %d 行：skill 行无效", n.Line)
+	}
+	dirs, _ := row.Config["customSkillDirs"].([]any)
+	for k := range row.Config {
+		if k != "providerName" && k != "includeDefaultRoots" && k != "customSkillDirs" {
+			return fmt.Errorf("cordis.patch.yml 第 %d 行：skill 行不能设置 %s", n.Line, k)
+		}
+	}
+	if row.Config["includeDefaultRoots"] != false || len(dirs) != 1 || dirs[0] != dsh.PlaceholderSkills {
+		return fmt.Errorf("cordis.patch.yml 第 %d 行：skill 只能从 Weir 的目录加载（includeDefaultRoots: false，customSkillDirs 只写占位符）", n.Line)
 	}
 	return nil
 }
@@ -224,7 +243,7 @@ func checkMCPRow(n *yaml.Node) error {
 		return fmt.Errorf("cordis.patch.yml 第 %d 行：Weir 工具行无效", n.Line)
 	}
 	c := row.Config
-	if c.ServerName != "migate" || c.Transport != "streamable-http" || c.URL != dsh.PlaceholderMCPURL || c.Command != "" ||
+	if c.ServerName != "weir" || c.Transport != "streamable-http" || c.URL != dsh.PlaceholderMCPURL || c.Command != "" ||
 		len(c.Headers) != 1 || c.Headers["Authorization"] != "Bearer "+dsh.PlaceholderMCPToken {
 		return fmt.Errorf("cordis.patch.yml 第 %d 行：MCP 只能连接 Weir 自己的工具，地址与令牌必须保持占位符", n.Line)
 	}
@@ -259,43 +278,24 @@ func (s *Server) materializePlugin(source string, files map[string]string) (stri
 	return dir, nil
 }
 
-// adaptedPlugin 是管理员确认过的适配插件（设置键 dsh-plugin）；没有时使用内置插件。
-type adaptedPlugin struct {
-	Dir     string `json:"dir"`
-	Version string `json:"version"`
-	Compat  string `json:"compat"`
-	Hash    string `json:"hash"`
-}
-
-// activePlugin 为当前 dsh 版本选插件：兼容的适配插件优先，其次内置插件；都不兼容时不加载，返回原因。
-func (s *Server) activePlugin(ctx context.Context, dshVersion string) (dir, label, note string) {
-	var a adaptedPlugin
-	if row, err := s.Store.Ent.Setting.Query().Where(setting.KeyEQ(dshPluginSettingKey)).Only(ctx); err == nil {
-		b, _ := json.Marshal(row.Value)
-		_ = json.Unmarshal(b, &a)
-	}
-	var notes []string
-	if a.Dir != "" {
-		inside := strings.HasPrefix(filepath.Clean(a.Dir), filepath.Join(s.dshLayout().Runtime(), "plugins")+string(filepath.Separator))
-		if ok, _ := dsh.InRange(dshVersion, a.Compat); ok && inside {
-			if _, err := os.Stat(filepath.Join(a.Dir, "cordis.patch.yml")); err == nil {
-				return a.Dir, "适配插件 " + a.Version, ""
-			}
-		}
-		notes = append(notes, fmt.Sprintf("适配插件 %s 不支持 dsh %s（兼容范围 %s）", a.Version, dshVersion, a.Compat))
-	}
+// activePlugin 为当前 dsh 版本选插件：在已验证范围内用内置插件；超出范围时不加载，返回原因。
+// verified 为 false 时后台安全分析暂停（它按工具 id 禁用工具，新版本改了 id 时禁用会悄悄失效）。
+func (s *Server) activePlugin(dshVersion string) (dir, label, note string, verified bool) {
 	files := builtinPluginFiles()
 	meta, err := validatePlugin(files)
-	if ok, _ := dsh.InRange(dshVersion, meta.Weir.DSH); err == nil && ok {
-		if dir, err = s.materializePlugin("builtin", files); err == nil {
-			return dir, "内置插件 " + meta.Version, strings.Join(notes, "；")
-		}
+	if err != nil {
+		return "", "", "内置插件无效：" + err.Error(), false
 	}
-	notes = append(notes, fmt.Sprintf("内置插件 %s 不支持 dsh %s（兼容范围 %s），只启用基础预设；可以用创造模式适配", meta.Version, dshVersion, meta.Weir.DSH))
-	return "", "", strings.Join(notes, "；")
+	if ok, _ := dsh.InRange(dshVersion, meta.Weir.DSH); ok {
+		if dir, err = s.materializePlugin("builtin", files); err == nil {
+			return dir, "内置插件 " + meta.Version, "", true
+		}
+		return "", "", "写入插件失败：" + err.Error(), false
+	}
+	return "", "", fmt.Sprintf("这个 dsh 版本（%s）还没验证（已验证 %s），Weir 助手预设未启用、后台安全分析暂停，等 Weir 发版适配", dshVersion, meta.Weir.DSH), false
 }
 
-// fileDiff 是适配草稿与当前插件的一个文件的差异（逐行，未变的长段落折叠）。
+// fileDiff 是两份文本的差异（逐行，未变的长段落折叠）；驱动草稿与驱动历史用它显示改前改后。
 type fileDiff struct {
 	Name  string     `json:"name"`
 	State string     `json:"state"` // added / changed / removed / same
@@ -305,33 +305,6 @@ type fileDiff struct {
 type diffLine struct {
 	Op   string `json:"op"` // " " 未变 / "+" 新增 / "-" 删除 / "…" 折叠
 	Text string `json:"text"`
-}
-
-// diffPlugin 比较两份插件文件。
-func diffPlugin(before, after map[string]string) []fileDiff {
-	var out []fileDiff
-	for _, name := range dsh.PluginFiles {
-		b, hasB := before[name]
-		a, hasA := after[name]
-		d := fileDiff{Name: name}
-		switch {
-		case !hasA && !hasB:
-			continue
-		case !hasB:
-			d.State = "added"
-		case !hasA:
-			d.State = "removed"
-		case a == b:
-			d.State = "same"
-			out = append(out, d)
-			continue
-		default:
-			d.State = "changed"
-		}
-		d.Lines = diffLines(b, a)
-		out = append(out, d)
-	}
-	return out
 }
 
 // diffLines 逐行比较（最长公共子序列）；文件很大时退化为整段删除加整段新增。
@@ -406,155 +379,6 @@ func foldUnchanged(lines []diffLine) []diffLine {
 		}
 		i--
 		out = append(out, diffLine{"…", fmt.Sprintf("（%d 行未变）", n)})
-	}
-	return out
-}
-
-// pluginDraft 是适配草稿的插件部分；文件快照在 runtime/plugin-drafts/<id>/（中心所有，dsh 改不了）。
-type pluginDraft struct {
-	Version string     `json:"version"`
-	Compat  string     `json:"compat"`
-	Hash    string     `json:"hash"`
-	Dir     string     `json:"dir"`
-	DSH     string     `json:"dsh_version"`
-	Warn    []string   `json:"warnings,omitempty"`
-	Files   []fileDiff `json:"files"`
-}
-
-// adaptPlugin 收集工作区里创造模式改好的插件副本 → 校验 → 存快照 → 带着它试启动 dsh → 生成待确认的草稿。
-func (s *Server) adaptPlugin(c *gin.Context) {
-	// 服务的写超时是 3 分钟：收集与试启动一共最多等 150 秒。
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 150*time.Second)
-	defer cancel()
-	set := s.dshSettings(ctx)
-	if _, _, ok := s.dshEndpoint(); !ok || set.Version == "" {
-		failure(c, 409, "dsh_not_running")
-		return
-	}
-	got, err := s.dshJob(ctx, dsh.JobRequest{Kind: "plugin-collect"})
-	if err == nil && got.Error != "" {
-		err = errors.New(got.Error)
-	}
-	if err != nil {
-		failDetail(c, 409, "plugin_draft_invalid", jobErr(err), nil)
-		return
-	}
-	meta, err := validatePlugin(got.Files)
-	if err == nil {
-		if ok, _ := dsh.InRange(set.Version, meta.Weir.DSH); !ok {
-			err = fmt.Errorf("兼容范围 %s 不包含当前 dsh %s", meta.Weir.DSH, set.Version)
-		}
-	}
-	if err != nil {
-		failDetail(c, 400, "plugin_draft_invalid", err.Error(), nil)
-		return
-	}
-	cur, _, _ := s.activePlugin(ctx, set.Version)
-	before := readPluginDir(cur)
-	if pluginHash(got.Files) == pluginHash(before) {
-		failDetail(c, 409, "plugin_draft_invalid", "工作区里的插件与当前使用的插件相同，没有可提交的修改", nil)
-		return
-	}
-	s.smokePluginDraft(c, ctx, set.Version, meta, before, got.Files)
-}
-
-// smokePluginDraft 把草稿存为快照，让管理进程带着它试启动 dsh；通过后生成待确认的草稿。
-func (s *Server) smokePluginDraft(c *gin.Context, ctx context.Context, version string, meta pluginMeta, before, files map[string]string) {
-	id := randomToken(12)
-	dir := filepath.Join(s.dshLayout().Runtime(), "plugin-drafts", id)
-	err := os.MkdirAll(dir, 0o755)
-	for name, body := range files {
-		if err == nil {
-			err = os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644)
-		}
-	}
-	if err != nil {
-		_ = os.RemoveAll(dir)
-		failure(c, 500, "save_failed")
-		return
-	}
-	dsh.Publish(filepath.Dir(dir))
-	res, err := s.dshJob(ctx, dsh.JobRequest{Kind: "plugin-smoke", PluginDir: dir})
-	if err == nil && res.Error != "" {
-		err = errors.New(res.Error)
-	}
-	if err != nil {
-		_ = os.RemoveAll(dir)
-		failDetail(c, 422, "plugin_smoke_failed", jobErr(err), gin.H{"log": lastLines(res.Log, 30)})
-		return
-	}
-	var warn []string
-	for _, l := range res.Log {
-		if low := strings.ToLower(l); (strings.Contains(low, "error") || strings.Contains(low, "warn") || strings.Contains(l, "失败")) && len(warn) < 20 {
-			warn = append(warn, l)
-		}
-	}
-	d := &Draft{ID: id, Kind: "plugin", Source: "dsh", Status: "passed", CreatedAt: time.Now().UTC(),
-		Explain: fmt.Sprintf("dsh 创造模式适配的 Weir 插件 %s（兼容 dsh %s），已用 dsh %s 试启动通过。", meta.Version, meta.Weir.DSH, version),
-		Plugin:  &pluginDraft{Version: meta.Version, Compat: meta.Weir.DSH, Hash: pluginHash(files), Dir: dir, DSH: version, Warn: warn, Files: diffPlugin(before, files)}}
-	if err = s.saveDraft(ctx, d); err != nil {
-		_ = os.RemoveAll(dir)
-		failure(c, 503, "draft_unavailable")
-		return
-	}
-	s.audit(c, "dsh.plugin.draft", meta.Version, "passed")
-	c.JSON(200, d)
-}
-
-// applyPluginDraft 启用确认过的适配插件：快照必须与起草时一致，写到 runtime/plugins/ 后 dsh 按新插件重启。
-func (s *Server) applyPluginDraft(c *gin.Context, d *Draft) {
-	ctx := c.Request.Context()
-	p := d.Plugin
-	drafts := filepath.Join(s.dshLayout().Runtime(), "plugin-drafts") + string(filepath.Separator)
-	if p == nil || !strings.HasPrefix(filepath.Clean(p.Dir), drafts) {
-		failure(c, 409, "draft_invalid")
-		return
-	}
-	files := readPluginDir(p.Dir)
-	if pluginHash(files) != p.Hash {
-		failure(c, 409, "draft_changed")
-		return
-	}
-	meta, err := validatePlugin(files)
-	if err != nil {
-		failDetail(c, 409, "draft_invalid", err.Error(), nil)
-		return
-	}
-	dir, err := s.materializePlugin("adapted", files)
-	if err != nil {
-		failure(c, 500, "save_failed")
-		return
-	}
-	value := map[string]any{"dir": dir, "version": meta.Version, "compat": meta.Weir.DSH, "hash": p.Hash}
-	if err = s.Store.Ent.Setting.Create().SetKey(dshPluginSettingKey).SetValue(value).OnConflictColumns(setting.FieldKey).UpdateNewValues().Exec(ctx); err != nil {
-		failure(c, 500, "save_failed")
-		return
-	}
-	_ = os.RemoveAll(p.Dir)
-	_ = s.Store.KV.Del(ctx, draftPrefix+d.ID)
-	s.wakeDSH()
-	s.audit(c, "dsh.plugin.apply", meta.Version, "ok")
-	c.JSON(200, gin.H{"plugin": value})
-}
-
-// restorePlugin 改回内置插件。
-func (s *Server) restorePlugin(c *gin.Context) {
-	_, _ = s.Store.Ent.Setting.Delete().Where(setting.KeyEQ(dshPluginSettingKey)).Exec(c.Request.Context())
-	s.wakeDSH()
-	s.audit(c, "dsh.plugin.restore", "", "ok")
-	c.Status(204)
-}
-
-// readPluginDir 读取一个插件目录；目录为空时返回内置插件。
-func readPluginDir(dir string) map[string]string {
-	if dir == "" {
-		return builtinPluginFiles()
-	}
-	out := map[string]string{}
-	for _, f := range dsh.PluginFiles {
-		if b, err := os.ReadFile(filepath.Join(dir, f)); err == nil {
-			out[f] = string(b)
-		}
 	}
 	return out
 }

@@ -7,12 +7,8 @@ import { Badge, Button, Collapsible, CopyButton, Dialog, DialogContent, DialogDe
 import { api } from "../api";
 import { useFormAction } from "../lib/action";
 import { emptyReauth, Reauth } from "./system-settings";
+import { DiffView, type DiffLine } from "./diff";
 
-interface FileDiff {
-  name: string;
-  state: "added" | "changed" | "removed" | "same";
-  lines?: { op: " " | "+" | "-" | "…"; text: string }[];
-}
 interface StepField {
   key: string;
   label: string;
@@ -35,54 +31,20 @@ interface Step {
   result?: { latency_ms?: number; stage?: string };
   preview?: string[];
   edited?: string[];
+  diff?: DiffLine[];
 }
 export interface Draft {
   id: string;
-  kind: "actions" | "plugin";
+  kind: "actions";
   source: "dsh" | "analysis";
   explain: string;
   created_at: string;
   steps: Step[] | null;
   danger?: boolean;
-  plugin?: { version: string; compat: string; dsh_version: string; warnings?: string[]; files: FileDiff[] };
 }
 type Edits = Record<string, Record<string, unknown>>;
 
 const editable = (f: StepField) => !f.secret && ["string", "int", "gb", "days", "bool", "enum"].includes(f.kind) && f.key !== "email";
-const fileState: Record<FileDiff["state"], [string, "ok" | "warn" | "bad" | "neutral"]> = {
-  added: ["新增", "ok"],
-  changed: ["修改", "warn"],
-  removed: ["删除", "bad"],
-  same: ["未变", "neutral"],
-};
-const lineClass: Record<string, string> = {
-  "+": "bg-[var(--mg-ok-soft)] text-[var(--mg-ok-ink)]",
-  "-": "bg-[var(--mg-bad-soft)] text-[var(--mg-bad-ink)]",
-  "…": "text-[var(--mg-ink-3)]",
-  " ": "",
-};
-
-// PluginDiff：适配插件的试启动结果与逐文件差异（插件只有声明式配置，没有脚本）。
-function PluginDiff({ p }: { p: NonNullable<Draft["plugin"]> }) {
-  return (
-    <div className="stack">
-      <Notice tone="ok">已用 dsh {p.dsh_version} 带着这份插件试启动通过；兼容范围 <code>{p.compat}</code>。</Notice>
-      {(p.warnings ?? []).length > 0 && <Notice tone="warn">试启动日志里有 {p.warnings!.length} 条提醒：{p.warnings!.slice(0, 3).join("；")}</Notice>}
-      {p.files.map((f) => (
-        <Collapsible key={f.name} variant="card" defaultOpen={f.state !== "same"} title={<><code>{f.name}</code><Badge variant="soft" tone={fileState[f.state][1]}>{fileState[f.state][0]}</Badge></>}>
-          {f.lines && f.lines.length > 0 ? (
-            <pre className="max-h-64 overflow-auto text-xs leading-5">
-              {f.lines.map((l, i) => <div key={i} className={lineClass[l.op] ?? ""}>{(l.op === "…" ? "  " : l.op + " ") + l.text}</div>)}
-            </pre>
-          ) : (
-            <small className="text-[var(--mg-ink-3)]">没有逐行差异。</small>
-          )}
-        </Collapsible>
-      ))}
-    </div>
-  );
-}
-
 // FieldInput：按参数说明生成可编辑控件；引用、对象类只显示名称，不可直接改。
 function FieldInput({ f, value, onChange }: { f: StepField; value: unknown; onChange: (v: unknown) => void }) {
   const label = f.label + (f.unit ? `（${f.unit}）` : "");
@@ -142,6 +104,7 @@ function StepCard({ step, index, total, edits, setEdit }: { step: Step; index: n
         </dl>
       )}
       {step.result && typeof step.result.latency_ms === "number" && <Notice tone="ok">实测通过（{step.result.stage ?? "连接"}，{step.result.latency_ms} ms）。</Notice>}
+      {step.diff && <DiffView lines={step.diff} />}
       {(step.preview ?? []).length > 0 && (
         <ul className="m-0 list-disc space-y-0.5 pl-5 text-[13px] text-[var(--mg-ink-2)]">{step.preview!.map((p) => <li key={p}>{p}</li>)}</ul>
       )}
@@ -164,7 +127,7 @@ export function DraftConfirm() {
     const { draft, apply } = target.current!;
     if (apply) {
       const r = (await api(`/admin/ai/drafts/${draft.id}/apply`, "POST", { edits, ...re })) as { outputs?: { step: string; email?: string; password?: string }[] };
-      toast(draft.kind === "plugin" ? "已启用适配插件，dsh 正在重启" : "草稿已生效", { tone: "ok" });
+      toast("草稿已生效", { tone: "ok" });
       const secrets = (r.outputs ?? []).filter((o) => o.password);
       if (secrets.length > 0) setOutputs(secrets);
     } else {
@@ -205,7 +168,7 @@ export function DraftConfirm() {
     <Dialog open onOpenChange={(o) => !o && !busy && setLater((l) => [...l, d.id])}>
       <DialogContent size="lg">
         <DialogTitle className="flex flex-wrap items-center gap-2">
-          {d.kind === "plugin" ? `确认插件适配 · Weir 插件 ${d.plugin?.version ?? ""}` : steps.length > 1 ? `确认 dsh 草稿 · ${steps.length} 步` : `确认 dsh 草稿 · ${steps[0]?.title ?? ""}`}
+          {steps.length > 1 ? `确认 dsh 草稿 · ${steps.length} 步` : `确认 dsh 草稿 · ${steps[0]?.title ?? ""}`}
           <Badge variant="soft" tone="neutral">{d.source === "analysis" ? "dsh 后台分析" : "dsh 对话"}</Badge>
           {pending > 1 && <Badge variant="soft" tone="warn">还有 {pending - 1} 份待确认</Badge>}
         </DialogTitle>
@@ -217,7 +180,7 @@ export function DraftConfirm() {
               <p className="whitespace-pre-wrap break-words text-sm">{d.explain}</p>
             </div>
           )}
-          {d.kind === "plugin" && d.plugin ? <PluginDiff p={d.plugin} /> : steps.map((st, i) => <StepCard key={i} step={st} index={i} total={steps.length} edits={edits[i] ?? {}} setEdit={setEdit(i)} />)}
+          {steps.map((st, i) => <StepCard key={i} step={st} index={i} total={steps.length} edits={edits[i] ?? {}} setEdit={setEdit(i)} />)}
           {d.danger && (
             <>
               <Notice tone="bad">这份草稿里有不能撤回的危险操作，请输入当前密码（与二次验证码）确认。</Notice>
@@ -229,7 +192,7 @@ export function DraftConfirm() {
         <DialogFooter>
           <Button type="button" variant="ghost" disabled={busy} onClick={() => setLater((l) => [...l, d.id])}>稍后</Button>
           <Button type="button" variant="outline" disabled={busy} onClick={() => decide(false)}>放弃</Button>
-          <Button type="button" variant={d.danger ? "destructive" : "default"} disabled={busy || (d.danger && !re.password)} onClick={() => decide(true)}>{busy ? "正在执行…" : d.kind === "plugin" ? "确认启用" : "确认生效"}</Button>
+          <Button type="button" variant={d.danger ? "destructive" : "default"} disabled={busy || (d.danger && !re.password)} onClick={() => decide(true)}>{busy ? "正在执行…" : "确认生效"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

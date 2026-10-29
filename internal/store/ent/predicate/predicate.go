@@ -27,6 +27,9 @@ type Gate func(*sql.Selector)
 // GateAction is the predicate function for gateaction builders.
 type GateAction func(*sql.Selector)
 
+// KernelDriver is the predicate function for kerneldriver builders.
+type KernelDriver func(*sql.Selector)
+
 // Link is the predicate function for link builders.
 type Link func(*sql.Selector)
 

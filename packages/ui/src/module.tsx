@@ -6,7 +6,7 @@ import { Switch } from "./switch";
 import { StatusLamp } from "./lamp";
 
 export function useLiveSwitch(key: string, initial = true) {
-  const storageKey = "migate-live:" + key;
+  const storageKey = "weir-live:" + key;
   const [live, setLive] = useState(() => {
     try {
       const v = localStorage.getItem(storageKey);

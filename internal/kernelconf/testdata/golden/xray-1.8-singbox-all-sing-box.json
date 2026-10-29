@@ -1,0 +1,412 @@
+{
+  "endpoints": [
+    {
+      "address": [
+        "10.77.0.1/16"
+      ],
+      "listen_port": 25008,
+      "mtu": 1380,
+      "peers": [
+        {
+          "allowed_ips": [
+            "10.77.1.17/32"
+          ],
+          "public_key": "w/pL261kCn/OVSITpa7yOQq6tI5tN4lRB01yNw/m5hM="
+        }
+      ],
+      "private_key": "vz1fCs4zwgDWj6X8zxmfbPcyHncJnQ1f38Pejob2ULY=",
+      "system": false,
+      "tag": "inbound-27-wireguard",
+      "type": "wireguard"
+    }
+  ],
+  "experimental": {
+    "v2ray_api": {
+      "listen": "127.0.0.1:21002",
+      "stats": {
+        "enabled": true,
+        "inbounds": [
+          "hy2-inbound-20",
+          "hy2-inbound-21",
+          "tuic-inbound-22",
+          "tuic-inbound-23",
+          "inbound-24-shadowsocks",
+          "shadowtls-inbound-25",
+          "shadowtls-inbound-26"
+        ],
+        "users": [
+          "c201",
+          "c211",
+          "c221",
+          "c231",
+          "c241",
+          "c251",
+          "c261"
+        ]
+      }
+    }
+  },
+  "inbounds": [
+    {
+      "down_mbps": 200,
+      "listen": "0.0.0.0",
+      "listen_port": 25001,
+      "obfs": {
+        "password": "obfs",
+        "type": "salamander"
+      },
+      "tag": "hy2-inbound-20",
+      "tls": {
+        "certificate_path": "/weir-test-certs/5.crt",
+        "enabled": true,
+        "key_path": "/weir-test-certs/5.key",
+        "server_name": "hy.example.com"
+      },
+      "type": "hysteria2",
+      "up_mbps": 100,
+      "users": [
+        {
+          "name": "c201",
+          "password": "pw-20"
+        }
+      ]
+    },
+    {
+      "listen": "0.0.0.0",
+      "listen_port": 25002,
+      "tag": "hy2-inbound-21",
+      "tls": {
+        "certificate_path": "/weir-test-certs/6.crt",
+        "enabled": true,
+        "key_path": "/weir-test-certs/6.key"
+      },
+      "type": "hysteria2",
+      "users": [
+        {
+          "name": "c211",
+          "password": "pw-21"
+        }
+      ]
+    },
+    {
+      "congestion_control": "cubic",
+      "listen": "0.0.0.0",
+      "listen_port": 25003,
+      "tag": "tuic-inbound-22",
+      "tls": {
+        "alpn": [
+          "h3",
+          "h3-29"
+        ],
+        "certificate_path": "/weir-test-certs/7.crt",
+        "enabled": true,
+        "key_path": "/weir-test-certs/7.key",
+        "server_name": "t.example.com"
+      },
+      "type": "tuic",
+      "users": [
+        {
+          "name": "c221",
+          "password": "pw-22",
+          "uuid": "f9aa20b1-9c77-4146-987a-eeb09267467c"
+        }
+      ],
+      "zero_rtt_handshake": true
+    },
+    {
+      "congestion_control": "bbr",
+      "listen": "0.0.0.0",
+      "listen_port": 25004,
+      "tag": "tuic-inbound-23",
+      "tls": {
+        "alpn": [
+          "h3"
+        ],
+        "certificate_path": "/weir-test-certs/5.crt",
+        "enabled": true,
+        "key_path": "/weir-test-certs/5.key"
+      },
+      "type": "tuic",
+      "users": [
+        {
+          "name": "c231",
+          "password": "pw-23",
+          "uuid": "789e0e28-c251-4baf-b216-6f60b930faf9"
+        }
+      ]
+    },
+    {
+      "listen": "0.0.0.0",
+      "listen_port": 25005,
+      "method": "2022-blake3-aes-128-gcm",
+      "password": "c2VydmVyLWtleS0xNi1iMDE=",
+      "tag": "inbound-24-shadowsocks",
+      "type": "shadowsocks",
+      "users": [
+        {
+          "name": "c241",
+          "password": "pw-24"
+        }
+      ]
+    },
+    {
+      "detour": "shadowtls-inbound-25-ss",
+      "handshake": {
+        "server": "www.microsoft.com",
+        "server_port": 443
+      },
+      "listen": "0.0.0.0",
+      "listen_port": 25006,
+      "tag": "shadowtls-inbound-25",
+      "type": "shadowtls",
+      "users": [
+        {
+          "name": "c251",
+          "password": "pw-25"
+        }
+      ],
+      "version": 3
+    },
+    {
+      "listen": "127.0.0.1",
+      "listen_port": 0,
+      "method": "2022-blake3-aes-128-gcm",
+      "network": "tcp",
+      "password": "c2VydmVyLWtleS0xNi1iMDE=",
+      "tag": "shadowtls-inbound-25-ss",
+      "type": "shadowsocks",
+      "users": [
+        {
+          "name": "c251",
+          "password": "pw-25"
+        }
+      ]
+    },
+    {
+      "listen": "0.0.0.0",
+      "listen_port": 25007,
+      "tag": "shadowtls-inbound-26",
+      "type": "shadowtls",
+      "users": [
+        {
+          "name": "c261",
+          "password": "pw-26"
+        }
+      ],
+      "version": 2
+    }
+  ],
+  "log": {
+    "level": "warn"
+  },
+  "outbounds": [
+    {
+      "tag": "singbox-out-2147483647",
+      "type": "direct"
+    },
+    {
+      "password": "pw",
+      "server": "203.0.113.1",
+      "server_port": 1080,
+      "tag": "singbox-out-40",
+      "type": "socks",
+      "username": "user"
+    },
+    {
+      "server": "203.0.113.2",
+      "server_port": 1081,
+      "tag": "singbox-out-41",
+      "type": "socks"
+    },
+    {
+      "server": "203.0.113.3",
+      "server_port": 8080,
+      "tag": "singbox-out-42",
+      "type": "http",
+      "username": "u"
+    },
+    {
+      "password": "p",
+      "server": "203.0.113.4",
+      "server_port": 443,
+      "tag": "singbox-out-43",
+      "tls": {
+        "alpn": [
+          "http/1.1"
+        ],
+        "enabled": true,
+        "server_name": "p.example.com"
+      },
+      "type": "http",
+      "username": "u"
+    },
+    {
+      "security": "aes-128-gcm",
+      "server": "198.51.100.1",
+      "server_port": 443,
+      "tag": "singbox-out-44",
+      "tls": {
+        "enabled": true,
+        "server_name": "v.example.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "transport": {
+        "headers": {
+          "Host": "v.example.com"
+        },
+        "path": "/v",
+        "type": "ws"
+      },
+      "type": "vmess",
+      "uuid": "33333333-3333-4333-8333-333333333333"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "server": "198.51.100.2",
+      "server_port": 443,
+      "tag": "singbox-out-45",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "PUBKEY",
+          "short_id": "ab"
+        },
+        "server_name": "www.apple.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "safari"
+        }
+      },
+      "type": "vless",
+      "uuid": "44444444-4444-4444-8444-444444444444"
+    },
+    {
+      "password": "tp",
+      "server": "198.51.100.3",
+      "server_port": 443,
+      "tag": "singbox-out-46",
+      "tls": {
+        "alpn": [
+          "h2"
+        ],
+        "certificate": [
+          "-----BEGIN-----",
+          "AAA",
+          "-----END-----"
+        ],
+        "enabled": true,
+        "insecure": true
+      },
+      "transport": {
+        "service_name": "g",
+        "type": "grpc"
+      },
+      "type": "trojan"
+    },
+    {
+      "password": "tw",
+      "server": "198.51.100.4",
+      "server_port": 443,
+      "tag": "singbox-out-47",
+      "transport": {
+        "path": "/w",
+        "type": "ws"
+      },
+      "type": "trojan"
+    },
+    {
+      "method": "chacha20-ietf-poly1305",
+      "password": "sspw",
+      "server": "198.51.100.5",
+      "server_port": 8388,
+      "tag": "singbox-out-48",
+      "type": "shadowsocks"
+    },
+    {
+      "tag": "singbox-out-49",
+      "type": "block"
+    },
+    {
+      "obfs": {
+        "password": "op",
+        "type": "salamander"
+      },
+      "password": "hp",
+      "server": "192.0.2.1",
+      "server_port": 443,
+      "tag": "singbox-out-60",
+      "tls": {
+        "enabled": true,
+        "server_name": "hy.example.com"
+      },
+      "type": "hysteria2"
+    },
+    {
+      "congestion_control": "bbr",
+      "password": "tp",
+      "server": "192.0.2.2",
+      "server_port": 443,
+      "tag": "singbox-out-61",
+      "tls": {
+        "alpn": [
+          "h3"
+        ],
+        "enabled": true
+      },
+      "type": "tuic",
+      "uuid": "55555555-5555-4555-8555-555555555555",
+      "zero_rtt_handshake": true
+    },
+    {
+      "password": "sp",
+      "server": "192.0.2.3",
+      "server_port": 443,
+      "tag": "singbox-out-62",
+      "tls": {
+        "enabled": true,
+        "server_name": "www.microsoft.com"
+      },
+      "type": "shadowtls",
+      "version": 3
+    },
+    {
+      "password": "ap",
+      "server": "192.0.2.4",
+      "server_port": 443,
+      "tag": "singbox-out-63",
+      "tls": {
+        "enabled": true
+      },
+      "type": "anytls"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "inbound": [
+          "hy2-inbound-20"
+        ],
+        "outbound": "singbox-out-60"
+      },
+      {
+        "auth_user": [
+          "grant-221"
+        ],
+        "outbound": "singbox-out-61"
+      },
+      {
+        "domain": [
+          "s.com"
+        ],
+        "ip_cidr": [
+          "8.8.8.8"
+        ],
+        "outbound": "singbox-out-40"
+      }
+    ]
+  }
+}

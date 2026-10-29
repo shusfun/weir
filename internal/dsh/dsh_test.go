@@ -133,7 +133,7 @@ func TestReleasesAndOfficialIntegrity(t *testing.T) {
 
 func TestParseEventsUsesStreamNotExitCode(t *testing.T) {
 	stream := `{"type":"session","sessionId":"s"}
-{"type":"tool_call","callId":"1","tool":"mcp__migate__submit_defense_draft","input":{}}
+{"type":"tool_call","callId":"1","tool":"mcp__weir__submit_defense_draft","input":{}}
 {"type":"status","phase":"turn_end","turn":1,"reason":{"kind":"completed"}}
 {"type":"final","text":"已提交"}
 `
@@ -146,41 +146,31 @@ func TestParseEventsUsesStreamNotExitCode(t *testing.T) {
 	}
 }
 
-// 工作区：写 AGENTS.md（插件副本路径已填入）、工作区补丁；插件补丁填入 MCP 地址与令牌；
-// 工作区里正在改的插件副本在插件来源不变时保留；试启动只接受 plugin-drafts 下的目录。
-func TestPrepareWorkspaceAndPluginCopy(t *testing.T) {
+// 工作区：写 AGENTS.md、工作区补丁；插件补丁填入 MCP 地址、令牌与 skill 目录；没有 skill 目录时不加载插件。
+func TestPrepareWorkspaceFillsPlaceholders(t *testing.T) {
 	l := Layout{Root: t.TempDir()}
 	src := filepath.Join(l.Runtime(), "plugins", "builtin-x")
 	os.MkdirAll(src, 0o755)
-	os.WriteFile(filepath.Join(src, "cordis.patch.yml"), []byte("url: '"+PlaceholderMCPURL+"'\nauth: 'Bearer "+PlaceholderMCPToken+"'\n"), 0o644)
-	os.WriteFile(filepath.Join(src, "package.json"), []byte(`{"name":"x"}`), 0o644)
+	os.WriteFile(filepath.Join(src, "cordis.patch.yml"), []byte("url: '"+PlaceholderMCPURL+"'\nauth: 'Bearer "+PlaceholderMCPToken+"'\nskills: ['"+PlaceholderSkills+"']\n"), 0o644)
 	a := &agent{l: l}
-	d := Desired{Version: "0.2.1-rc.2", WebPatch: "# base\n", Instructions: "副本在 " + placeholderCopy, PluginDir: src, MCPURL: "http://127.0.0.1:9/mcp", MCPToken: "tok"}
+	d := Desired{Version: "0.2.1-rc.2", WebPatch: "# base\n", Instructions: "# Weir\n", PluginDir: src, MCPURL: "http://127.0.0.1:9/mcp", MCPToken: "tok", SkillsDir: "/var/lib/weir/dsh/control/skills"}
 	base, plugin, perr, err := a.prepareWorkspace(d)
 	if err != nil || perr != "" || len(base) != 2 || plugin == "" {
 		t.Fatalf("prepare = %v %q %q %v", base, plugin, perr, err)
 	}
-	notes, _ := os.ReadFile(filepath.Join(l.State(), "home", "AGENTS.md"))
-	if !strings.Contains(string(notes), l.PluginCopy()) {
+	if notes, _ := os.ReadFile(filepath.Join(l.State(), "home", "AGENTS.md")); string(notes) != "# Weir\n" {
 		t.Fatalf("AGENTS.md = %s", notes)
 	}
 	if b, _ := os.ReadFile(base[0]); !strings.Contains(string(b), "documentsDirectory") || !strings.Contains(string(b), "workspace") {
 		t.Fatalf("workspace patch = %s", b)
 	}
-	if b, _ := os.ReadFile(plugin); !strings.Contains(string(b), "http://127.0.0.1:9/mcp") || !strings.Contains(string(b), "Bearer tok") || strings.Contains(string(b), "{{") {
+	b, _ := os.ReadFile(plugin)
+	if !strings.Contains(string(b), "http://127.0.0.1:9/mcp") || !strings.Contains(string(b), "Bearer tok") || !strings.Contains(string(b), "/control/skills") || strings.Contains(string(b), "{{") {
 		t.Fatalf("plugin patch = %s", b)
 	}
-	copied := filepath.Join(l.PluginCopy(), "package.json")
-	os.WriteFile(copied, []byte(`{"name":"editing"}`), 0o600)
-	a.prepareWorkspace(d)
-	if b, _ := os.ReadFile(copied); string(b) != `{"name":"editing"}` {
-		t.Fatal("the copy being edited must be kept while the plugin source is unchanged")
-	}
-	if res := a.collectPlugin(); res.Error != "" || res.Files["package.json"] != `{"name":"editing"}` {
-		t.Fatalf("collect = %+v", res)
-	}
-	if res := a.smokePlugin(t.Context(), d, src); !strings.Contains(res.Error, "插件目录无效") {
-		t.Fatalf("smoke outside plugin-drafts = %+v", res)
+	d.SkillsDir = ""
+	if _, plugin, perr, _ = a.prepareWorkspace(d); plugin != "" || perr == "" {
+		t.Fatalf("missing skills dir must skip the plugin: %q %q", plugin, perr)
 	}
 }
 

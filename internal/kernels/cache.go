@@ -83,6 +83,14 @@ func (c Cache) Get(kernel, version, arch string) (string, string, error) {
 	return bin, strings.TrimSpace(string(want)), nil
 }
 
+// Remove 删除某版本全部架构的缓存。
+func (c Cache) Remove(kernel, version string) error {
+	if _, err := c.path(kernel, version, "amd64"); err != nil {
+		return err
+	}
+	return os.RemoveAll(filepath.Join(c.Dir, kernel, version))
+}
+
 // Versions 列出已缓存的版本（新到旧）。
 func (c Cache) Versions(kernel, arch string) []string {
 	entries, _ := os.ReadDir(filepath.Join(c.Dir, kernel))

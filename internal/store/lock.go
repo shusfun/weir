@@ -17,7 +17,7 @@ type pgLocker struct{ db *sql.DB }
 
 func lockKey(name string) int64 {
 	h := fnv.New64a()
-	_, _ = h.Write([]byte("migate:" + name))
+	_, _ = h.Write([]byte("weir:" + name))
 	return int64(h.Sum64())
 }
 

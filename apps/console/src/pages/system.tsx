@@ -1,4 +1,4 @@
-// 系统设置：按分区用标签页组织（AI 与 dsh / 安全防御 / 登录与令牌 / 通知 / 节点证书 / 备份迁移 / 分发），分区记在地址栏 ?tab=。
+// 系统设置：按分区用标签页组织（版本与更新 / AI 与 dsh / 安全防御 / 登录与令牌 / 通知 / 节点证书 / 备份迁移 / 分发），分区记在地址栏 ?tab=。
 import { Card, CardContent, PageHeader, Tabs, TabsList, TabsPanel, TabsTab } from "@weir/ui";
 import { useSearchParams } from "react-router-dom";
 import { AnnouncementEditor } from "../components/global-announcement";
@@ -8,6 +8,7 @@ import { BlocksCard, EventsCard, LayaCard } from "../components/defense";
 import { DshSettingsCard, useDsh } from "../components/dsh";
 import { APITokensCard, BackupCard, NotifyCard, SecurityCard, SMTPCard } from "../components/system-settings";
 import { NodeCertCard } from "../components/node-certs";
+import { UpdateCard } from "../components/self-update";
 import { systemSections } from "../shell/navigation";
 
 export function SystemPage() {
@@ -21,6 +22,7 @@ export function SystemPage() {
         <TabsList aria-label="系统设置分区">
           {systemSections.map((s) => <TabsTab key={s.key} value={s.key}>{s.label}</TabsTab>)}
         </TabsList>
+        <TabsPanel value="update" className="stack"><UpdateCard /></TabsPanel>
         <TabsPanel value="ai" className="stack"><DshSettingsCard /></TabsPanel>
         <TabsPanel value="defense" className="stack">
           <EventsCard dshReady={!!dsh.data?.ready} />

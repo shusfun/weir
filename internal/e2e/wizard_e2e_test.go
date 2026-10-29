@@ -140,9 +140,9 @@ func (e *env) runSingboxClient(bin string, outbound map[string]any) int {
 // 四步建节点 → 一个窗口建用户 → 订阅 → 真实 sing-box 客户端逐个连接（REALITY / SS2022 / Hysteria2 / TUIC /
 // 节点链经家宽 SOCKS5 / 用户链经另一节点），并核对按用户计量。
 func TestWizardSubscriptionRealClients(t *testing.T) {
-	sb := os.Getenv("MIGATE_E2E_SINGBOX")
+	sb := os.Getenv("WEIR_E2E_SINGBOX")
 	if sb == "" {
-		t.Skip("MIGATE_E2E_SINGBOX not set")
+		t.Skip("WEIR_E2E_SINGBOX not set")
 	}
 	e := setup(t)
 	data, err := os.ReadFile(sb)

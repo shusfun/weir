@@ -21,7 +21,7 @@ import (
 	"github.com/shusfun/weir/packages/contracts"
 )
 
-// Agent 以 migate-gate 身份运行：与中心通信、计量、本地执行额度与到期，经辅助程序应用配置。
+// Agent 以 weir-gate 身份运行：与中心通信、计量、本地执行额度与到期，经辅助程序应用配置。
 type Agent struct {
 	P      Paths
 	cfg    Config
@@ -230,9 +230,9 @@ func (a *Agent) applyLocked(ctx context.Context, cfg contracts.GateConfig) (cont
 	out, err := kernelconf.Build(cfg, kernelconf.Options{CertDir: a.P.CertsDir, Now: time.Now(), Exhausted: exhausted})
 	if err != nil {
 		a.st.Baseline = baseline
-		return contracts.GateState{AppliedRevision: a.st.Applied, FailedRevision: cfg.Revision, Error: err.Error()}, nil
+		return contracts.GateState{AppliedRevision: a.st.Applied, FailedRevision: cfg.Revision, Error: driverLabel(cfg) + err.Error()}, nil
 	}
-	req := ApplyRequest{Kernels: map[string]string{}, Configs: map[string][]byte{"xray": out.Xray, "sing-box": out.Singbox}, StatsPorts: map[string]int{"xray": cfg.Ports.XrayStats, "sing-box": cfg.Ports.SingboxStats}}
+	req := ApplyRequest{Kernels: map[string]string{}, Configs: map[string][]byte{"xray": out.Xray, "sing-box": out.Singbox}, StatsPorts: map[string]int{"xray": cfg.Ports.XrayStats, "sing-box": cfg.Ports.SingboxStats}, Args: out.Args}
 	for name, k := range cfg.Kernels {
 		req.Kernels[name] = k.Version
 	}
@@ -247,7 +247,11 @@ func (a *Agent) applyLocked(ctx context.Context, cfg contracts.GateConfig) (cont
 	}
 	if !res.OK {
 		a.st.Baseline = baseline
-		return contracts.GateState{AppliedRevision: a.st.Applied, FailedRevision: cfg.Revision, Error: res.Error, ConflictPort: res.ConflictPort}, nil
+		msg := res.Error
+		if res.ConflictPort == 0 {
+			msg = driverLabel(cfg) + msg
+		}
+		return contracts.GateState{AppliedRevision: a.st.Applied, FailedRevision: cfg.Revision, Error: msg, ConflictPort: res.ConflictPort}, nil
 	}
 	copy := cfg
 	a.st.Config, a.st.Applied = &copy, cfg.Revision
@@ -425,3 +429,17 @@ func (a *Agent) actionLoop(ctx context.Context) {
 }
 
 var errUnknownAction = errors.New("action not allowed")
+
+// driverLabel 是错误前缀「驱动 xray-26.3、sing-box-1.12：」，让控制台看出是哪个驱动生成的配置出了问题。
+func driverLabel(cfg contracts.GateConfig) string {
+	var names []string
+	for _, k := range []string{"xray", "sing-box"} {
+		if d, err := kernelconf.DriverFor(cfg, k); err == nil && d != nil {
+			names = append(names, d.Name)
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	return "驱动 " + strings.Join(names, "、") + "："
+}

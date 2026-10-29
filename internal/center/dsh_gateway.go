@@ -23,8 +23,8 @@ import (
 // dsh 自己只监听回环；启动令牌只在这里用来换取 dsh 的会话 Cookie，从不出现在浏览器里。
 
 const (
-	dshOpenPath   = "/__migate/open"
-	dshGateCookie = "migate_dsh"
+	dshOpenPath   = "/__weir/open"
+	dshGateCookie = "weir_dsh"
 	dshGateTTL    = 12 * time.Hour
 )
 

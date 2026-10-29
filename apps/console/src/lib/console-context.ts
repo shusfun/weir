@@ -87,7 +87,7 @@ export function field(key: string, label: string, value: unknown, secret = false
 }
 
 // drawerId 是这个浏览器标签的抽屉会话编号（只存在本标签的 sessionStorage）；抽屉没打开过时为空。
-const drawerKey = "migate-dsh-drawer";
+const drawerKey = "weir-dsh-drawer";
 export function drawerId(create = false): string {
   try {
     let id = sessionStorage.getItem(drawerKey) ?? "";

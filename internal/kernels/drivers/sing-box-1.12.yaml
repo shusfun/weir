@@ -1,0 +1,323 @@
+# sing-box 1.12 起的驱动（本项目 CI 加 with_v2ray_api 编译，按用户统计流量需要它）。
+# 格式见 .agents/skills/weir-kernel-driver/SKILL.md；变量见 internal/kernelconf/view.go。
+kernel: sing-box
+name: sing-box-1.12
+min_version: 1.12.0
+notes: 按用户统计流量需要 with_v2ray_api，由本项目 CI 跟随上游标签编译。
+protocols: [hysteria2, tuic, shadowsocks, shadowtls, wireguard]
+networks: [tcp, udp]
+securities: [tls]
+features: [urltest]
+run: [run, -c, "{config}"]
+check: [check, -c, "{config}"]
+
+presets:
+  - id: ss2022
+    order: 50
+    name: Shadowsocks 2022
+    summary: 轻量、无需证书，适合内网中转或对抗性弱的线路
+    protocol: shadowsocks
+    network: tcp
+    security: none
+    cert: none
+    settings: {ss_method: 2022-blake3-aes-128-gcm, ss_password: "$gen:ss2022"}
+  - id: hysteria2
+    order: 60
+    name: Hysteria2
+    summary: 基于 QUIC，高丢包线路速度好；同一台 VPS 共用一张自签证书，订阅中固定指纹
+    protocol: hysteria2
+    network: udp
+    security: tls
+    cert: self_signed_ok
+    settings: {hy2_obfs: salamander, hy2_obfs_password: "$gen:hex24"}
+    fields:
+      - {key: hy2_up_mbps, label: 上行带宽, kind: number, unit: Mbps, hint: 留空不限}
+      - {key: hy2_down_mbps, label: 下行带宽, kind: number, unit: Mbps, hint: 留空不限}
+      - {key: hy2_obfs, label: 混淆, kind: select, options: [[salamander, Salamander], ["", 不混淆]]}
+  - id: tuic
+    order: 70
+    name: TUIC v5
+    summary: 基于 QUIC，延迟低；同一台 VPS 共用一张自签证书，订阅中固定指纹
+    protocol: tuic
+    network: udp
+    security: tls
+    cert: self_signed_ok
+    settings: {tuic_congestion_control: bbr, tls_alpn: h3}
+    fields:
+      - {key: tuic_congestion_control, label: 拥塞控制, kind: select, options: [[bbr, BBR], [cubic, CUBIC], [new_reno, NewReno]]}
+      - {key: tuic_zero_rtt, label: 0-RTT 握手, kind: bool, hint: 更快，但有重放风险}
+  - id: shadowtls
+    order: 80
+    name: ShadowTLS v3 + Shadowsocks 2022
+    summary: 借用大站 TLS 握手伪装，无需证书；Clash / sing-box 订阅可用，没有通用分享链接
+    protocol: shadowtls
+    network: tcp
+    security: none
+    cert: none
+    note: 只有 Clash（mihomo）与 sing-box 订阅里会出现；Surge、Loon、QuanX、Egern 订阅不包含这个节点。
+    settings: {shadowtls_version: 3, tls_sni: www.microsoft.com, ss_method: 2022-blake3-aes-128-gcm, ss_password: "$gen:ss2022"}
+    fields:
+      - {key: tls_sni, label: 握手站点, kind: text, hint: 支持 TLS 1.3 的大站，例如 www.microsoft.com}
+  - id: wireguard
+    order: 90
+    name: WireGuard
+    summary: 内核级 VPN，适合整机接入；UDP
+    protocol: wireguard
+    network: udp
+    security: none
+    cert: none
+    note: 只对不限额度的用户生效：WireGuard 没有按用户的流量统计，无法执行额度，有额度的用户不会拿到这个节点（用户详情与「我的订阅」里会写明原因）。
+    settings: {wg_private_key: "$gen:wg.private", wg_mtu: 1408, wg_address: 10.77.0.1/16}
+    fields:
+      - {key: wg_mtu, label: MTU, kind: number, hint: 默认 1408}
+
+templates:
+  root:
+    log: {level: warn}
+    inbounds:
+      - $each: "${inbounds}"
+        $as: ib
+        $do:
+          $if: "ib.protocol != 'wireguard'"
+          $then: {$use: "inbound.${ib.protocol}", $spread: true}
+    endpoints?:
+      $each: "${inbounds}"
+      $as: ib
+      $do:
+        $if: "ib.protocol == 'wireguard' and ib.wg_private_key"
+        $then: {$use: endpoint.wireguard}
+    outbounds:
+      - $each: "${outbounds}"
+        $as: ob
+        $do:
+          $if: "ob.group"
+          $then: {type: urltest, tag: "${ob.tag}", outbounds: "${ob.group}", url: "${probe.url}", interval: "${probe.interval}"}
+          $else: {$use: "outbound.${ob.protocol}"}
+    route?:
+      $if: "routes"
+      $then:
+        rules:
+          - $each: "${routes}"
+            $as: r
+            $do:
+              outbound: "${r.outbound}"
+              auth_user?: "${r.user | list}"
+              inbound?: "${r.inbound | list}"
+              domain?: "${r.domain | rules}"
+              ip_cidr?: "${r.ip | rules}"
+              protocol?: "${r.protocol | rules}"
+    experimental:
+      v2ray_api:
+        listen: "127.0.0.1:${stats}"
+        stats:
+          enabled: true
+          inbounds?:
+            - $each: "${inbounds}"
+              $as: ib
+              $do:
+                $if: "ib.protocol in ['hysteria2', 'tuic', 'shadowsocks', 'shadowtls']"
+                $then: "${ib.stats_tag}"
+          users?:
+            - $each: "${inbounds}"
+              $as: ib
+              $do:
+                $if: "ib.protocol in ['hysteria2', 'tuic', 'shadowsocks', 'shadowtls']"
+                $then: {$use: stats.users, $spread: true}
+
+  stats.users:
+    - $each: "${ib.clients}"
+      $as: c
+      $do: "${c.stats_name}"
+
+  # —— 入站 ——
+  inbound.hysteria2:
+    type: hysteria2
+    tag: "${ib.stats_tag}"
+    listen: 0.0.0.0
+    listen_port: "${ib.port}"
+    up_mbps?: "${ib.hy2_up_mbps}"
+    down_mbps?: "${ib.hy2_down_mbps}"
+    users:
+      - $each: "${ib.clients}"
+        $as: c
+        $do: {"name?": "${c.stats_name}", "password?": "${c.password}"}
+    obfs?:
+      $if: "ib.hy2_obfs"
+      $then: {type: "${ib.hy2_obfs}", password: "${ib.hy2_obfs_password}"}
+    tls:
+      enabled: true
+      certificate_path?:
+        $if: "ib.security == 'tls' and ib.tls_cert_file and ib.tls_key_file"
+        $then: "${ib.tls_cert_file}"
+      key_path?:
+        $if: "ib.security == 'tls' and ib.tls_cert_file and ib.tls_key_file"
+        $then: "${ib.tls_key_file}"
+      server_name?:
+        $if: "ib.security == 'tls'"
+        $then: "${ib.tls_sni}"
+  inbound.tuic:
+    type: tuic
+    tag: "${ib.stats_tag}"
+    listen: 0.0.0.0
+    listen_port: "${ib.port}"
+    congestion_control: "${ib.tuic_congestion_control | default('bbr')}"
+    zero_rtt_handshake?: "${ib.tuic_zero_rtt}"
+    users:
+      - $each: "${ib.clients}"
+        $as: c
+        $do: {"name?": "${c.stats_name}", "uuid?": "${c.tuic_uuid}", "password?": "${c.password}"}
+    tls:
+      enabled: true
+      certificate_path?:
+        $if: "ib.tls_cert_file and ib.tls_key_file"
+        $then: "${ib.tls_cert_file}"
+      key_path?:
+        $if: "ib.tls_cert_file and ib.tls_key_file"
+        $then: "${ib.tls_key_file}"
+      server_name?: "${ib.tls_sni}"
+      alpn: "${ib.tls_alpn | split | default(['h3'])}"
+  inbound.shadowsocks:
+    type: shadowsocks
+    tag: "${ib.stats_tag}"
+    listen: 0.0.0.0
+    listen_port: "${ib.port}"
+    method?: "${ib.ss_method}"
+    password?: "${ib.ss_password}"
+    users:
+      - $each: "${ib.clients}"
+        $as: c
+        $do: {"name?": "${c.stats_name}", "password?": "${c.password}"}
+  # ShadowTLS v3 + Shadowsocks 2022：ShadowTLS 只做握手伪装，认证后的连接交给只在回环上的 Shadowsocks 入站。
+  inbound.shadowtls:
+    $if: "ib.ss_password"
+    $then:
+      - type: shadowtls
+        tag: "${ib.stats_tag}"
+        listen: 0.0.0.0
+        listen_port: "${ib.port}"
+        version: 3
+        detour: "${ib.stats_tag}-ss"
+        handshake?:
+          $if: "ib.tls_sni"
+          $then: {server: "${ib.tls_sni}", server_port: 443}
+        users:
+          - $each: "${ib.clients}"
+            $as: c
+            $do: {"name?": "${c.stats_name}", "password?": "${c.password}"}
+      - type: shadowsocks
+        tag: "${ib.stats_tag}-ss"
+        listen: 127.0.0.1
+        listen_port: 0
+        network: tcp
+        method: "${ib.ss_method | default('2022-blake3-aes-128-gcm')}"
+        password: "${ib.ss_password}"
+        users:
+          - $each: "${ib.clients}"
+            $as: c
+            $do: {"name?": "${c.stats_name}", "password?": "${c.password}"}
+    $else:
+      - type: shadowtls
+        tag: "${ib.stats_tag}"
+        listen: 0.0.0.0
+        listen_port: "${ib.port}"
+        version: "${ib.shadowtls_version | default(3)}"
+        handshake?:
+          $if: "ib.tls_sni"
+          $then: {server: "${ib.tls_sni}", server_port: 443}
+        users:
+          - $each: "${ib.clients}"
+            $as: c
+            $do: {"name?": "${c.stats_name}", "password?": "${c.password}"}
+  # WireGuard 作服务端：每个凭据一个 peer（客户端私钥存在凭据密码里，地址按凭据 ID 分配）。
+  endpoint.wireguard:
+    type: wireguard
+    tag: "${ib.stats_tag}"
+    system: false
+    address: ["${ib.wg_address | default('10.77.0.1/16')}"]
+    private_key: "${ib.wg_private_key}"
+    listen_port: "${ib.port}"
+    mtu: "${ib.wg_mtu | default(1408)}"
+    peers:
+      - $each: "${ib.clients}"
+        $as: c
+        $do:
+          $if: "c.wg_public"
+          $then: {public_key: "${c.wg_public}", allowed_ips: ["${c.wg_address}"]}
+
+  # —— 出口 ——
+  outbound.freedom: {type: direct, tag: "${ob.tag}"}
+  outbound.blackhole: {type: block, tag: "${ob.tag}"}
+  outbound.socks:
+    $merge:
+      - {type: socks, tag: "${ob.tag}", "server?": "${ob.address}", "server_port?": "${ob.port}", "username?": "${ob.username | trim}", "password?": "${ob.password}"}
+      - $use: oextra
+  outbound.http: &httpOut
+    $merge:
+      - {type: http, tag: "${ob.tag}", "server?": "${ob.address}", "server_port?": "${ob.port}", "username?": "${ob.username | trim}", "password?": "${ob.password}"}
+      - $use: oextra
+  outbound.https: *httpOut
+  outbound.vmess:
+    $merge:
+      - {type: vmess, tag: "${ob.tag}", "server?": "${ob.address}", "server_port?": "${ob.port}", "uuid?": "${ob.username | trim}", security: "${ob.s.method | trim | default('auto')}"}
+      - $use: oextra
+  outbound.vless:
+    $merge:
+      - {type: vless, tag: "${ob.tag}", "server?": "${ob.address}", "server_port?": "${ob.port}", "uuid?": "${ob.username | trim}", "flow?": "${ob.s.flow}"}
+      - $use: oextra
+  outbound.trojan:
+    $merge:
+      - {type: trojan, tag: "${ob.tag}", "server?": "${ob.address}", "server_port?": "${ob.port}", "password?": "${ob.password | trim | first(ob.username | trim)}"}
+      - $use: oextra
+  outbound.shadowsocks:
+    $merge:
+      - {type: shadowsocks, tag: "${ob.tag}", "server?": "${ob.address}", "server_port?": "${ob.port}", "method?": "${ob.username | trim | first(ob.s.method | trim, 'aes-128-gcm')}", "password?": "${ob.password}"}
+      - $use: oextra
+  outbound.hysteria2: &managedOut
+    $merge:
+      - type: "${ob.protocol}"
+        tag: "${ob.tag}"
+        server?: "${ob.address}"
+        server_port?: "${ob.port}"
+        password?: "${ob.password}"
+        obfs?:
+          $if: "ob.s.obfs"
+          $then: {type: "${ob.s.obfs}", password: "${ob.s.obfs_password}"}
+      - $if: "ob.protocol == 'tuic'"
+        $then: {"uuid?": "${ob.username}", "congestion_control?": "${ob.s.congestion_control}", "zero_rtt_handshake?": "${ob.s.zero_rtt}"}
+      - $if: "ob.protocol == 'shadowtls'"
+        $then: {version: "${ob.s.shadowtls_version | default(3)}"}
+      - $use: oextra
+  outbound.tuic: *managedOut
+  outbound.shadowtls: *managedOut
+  outbound.anytls: *managedOut
+
+  # 出口的 TLS 与传输。
+  oextra:
+    tls?:
+      $if: "ob.s.security in ['tls', 'reality']"
+      $then:
+        enabled: true
+        certificate_public_key_sha256?: "${ob.s.spki | list}"
+        server_name?: "${ob.s.sni}"
+        alpn?: "${ob.s.alpn}"
+        certificate?:
+          $if: "ob.s.trusted_certificate"
+          $then: "${ob.s.trusted_certificate | lines}"
+        insecure?: "${ob.s.allow_insecure}"
+        utls?:
+          $if: "ob.s.fingerprint"
+          $then: {enabled: true, fingerprint: "${ob.s.fingerprint}"}
+        reality?:
+          $if: "ob.s.security == 'reality'"
+          $then: {enabled: true, "public_key?": "${ob.s.public_key}", "short_id?": "${ob.s.short_id}"}
+    transport?:
+      $if: "ob.s.network in ['ws', 'websocket']"
+      $then:
+        type: ws
+        path?: "${ob.s.path}"
+        headers?:
+          $if: "ob.s.host"
+          $then: {Host: "${ob.s.host}"}
+      $else:
+        $if: "ob.s.network == 'grpc'"
+        $then: {type: grpc, "service_name?": "${ob.s.service_name}"}

@@ -121,7 +121,7 @@ func Check(ctx context.Context, c Config) error {
 		if err := os.MkdirAll(dir, 0700); err != nil {
 			return err
 		}
-		probe, err := os.CreateTemp(dir, ".migate-probe-*")
+		probe, err := os.CreateTemp(dir, ".weir-probe-*")
 		if err != nil {
 			return err
 		}
@@ -184,14 +184,14 @@ func HasData(ctx context.Context, c Config) (bool, error) {
 
 func postgresHasAccounts(ctx context.Context, db *sql.DB) (bool, error) {
 	var table bool
-	if err := db.QueryRowContext(ctx, "SELECT to_regclass('migate.users') IS NOT NULL").Scan(&table); err != nil {
+	if err := db.QueryRowContext(ctx, "SELECT to_regclass('weir.users') IS NOT NULL").Scan(&table); err != nil {
 		return false, fmt.Errorf("%w: %w", ErrPostgresUnavailable, err)
 	}
 	if !table {
 		return false, nil
 	}
 	var exists bool
-	err := db.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM migate.users)").Scan(&exists)
+	err := db.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM weir.users)").Scan(&exists)
 	return exists, err
 }
 
@@ -241,9 +241,9 @@ func openPostgres(ctx context.Context, c Config) (*Store, error) {
 	if err != nil {
 		return nil, errors.New("invalid PostgreSQL configuration")
 	}
-	// 只使用独立的 migate schema，不触碰共享实例中的其他数据。
-	pc.RuntimeParams["search_path"] = "migate"
-	pc.RuntimeParams["application_name"] = "migate"
+	// 只使用独立的 weir schema，不触碰共享实例中的其他数据。
+	pc.RuntimeParams["search_path"] = "weir"
+	pc.RuntimeParams["application_name"] = "weir"
 	db := stdlib.OpenDB(*pc)
 	db.SetMaxOpenConns(8)
 	db.SetMaxIdleConns(2)
@@ -254,9 +254,9 @@ func openPostgres(ctx context.Context, c Config) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("%w: %w", ErrPostgresUnavailable, err)
 	}
-	if _, err = db.ExecContext(ctx, "CREATE SCHEMA IF NOT EXISTS migate"); err != nil {
+	if _, err = db.ExecContext(ctx, "CREATE SCHEMA IF NOT EXISTS weir"); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("create migate schema: %w", err)
+		return nil, fmt.Errorf("create weir schema: %w", err)
 	}
 	client := ent.NewClient(ent.Driver(entsql.OpenDB(dialect.Postgres, db)))
 	rdb := newRedisClient(c.Redis)

@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"runtime"
 	"strconv"
 	"sync"
 	"time"
@@ -306,16 +305,16 @@ func selfSHA256() (string, string, error) {
 	return exe, selfDigest.sum, selfDigest.err
 }
 
-// agentRelease 把中心自身程序提供给同架构的 Linux Gate 自更新；版本不符或平台不同时不提供。
+// agentRelease 把与中心同版本的程序提供给 Gate 自更新；不同架构的从 GitHub Release 取（见 gate_release.go）。
 func (s *Server) agentRelease(c *gin.Context) {
 	g := gateFrom(c)
-	if c.Param("version") != buildinfo.Version || runtime.GOOS != "linux" || runtime.GOARCH != g.Arch {
+	if c.Param("version") != buildinfo.Version {
 		failure(c, 404, "release_unavailable")
 		return
 	}
-	exe, sum, err := selfSHA256()
+	exe, sum, err := s.gateProgram(c.Request.Context(), g.Arch)
 	if err != nil {
-		failure(c, 503, "release_unavailable")
+		failDetail(c, 503, "release_unavailable", err.Error(), nil)
 		return
 	}
 	c.Header("X-Release-SHA256", sum)

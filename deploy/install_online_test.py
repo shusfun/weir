@@ -26,11 +26,11 @@ def shell_program():
     raise unittest.SkipTest("bash is not installed")
 
 
-def archive(version):
+def archive(version, arch="amd64"):
     payload = io.BytesIO()
     members = {
         "install.sh": "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$INSTALL_LOG\"\n",
-        "migate": "migate",
+        "weir": "weir",
         "VERSION": version + "\n",
     }
     sums = []
@@ -46,7 +46,7 @@ def archive(version):
             info.mode = 0o755
             bundle.addfile(info, io.BytesIO(data))
     body = payload.getvalue()
-    name = f"migate-{version}-linux-amd64.tar.gz"
+    name = f"weir-{version}-linux-{arch}.tar.gz"
     checksum = hashlib.sha256(body).hexdigest() + "  " + name + "\n"
     return body, checksum, name
 
@@ -79,22 +79,22 @@ class OnlineInstallTests(unittest.TestCase):
             if [ -n "$dump" ]; then : > "$dump"; fi
             # 模拟加速镜像：https://<mirror>/https://github.com/...
             case "$url" in
-              https://*/https://github.com/*/migate-*-linux-amd64.tar.gz)
+              https://*/https://github.com/*/weir-*-linux-*.tar.gz)
                 mirror=${url#https://}; mirror=${mirror%%/*}
                 case ",${DEAD_MIRRORS:-}," in *",$mirror,"*) exit 7 ;; esac
                 case ",${BAD_MIRRORS:-}," in *",$mirror,"*) printf 'tampered' > "$out"; printf '200'; exit 0 ;; esac
-                cp "$CURL_FIXTURE"/migate-*-linux-amd64.tar.gz "$out"
+                cp "$CURL_FIXTURE"/weir-*-linux-*.tar.gz "$out"
                 printf '200'
                 exit 0 ;;
             esac
             # 模拟直连附件过慢：首次直连压缩包按速度下限中止（curl 退出码 28）
             case "$url" in
-              https://github.com/*/releases/download/*/migate-*-linux-amd64.tar.gz)
+              https://github.com/*/releases/download/*/weir-*-linux-*.tar.gz)
                 if [ -n "${DIRECT_SLOW:-}" ] && [ ! -e "$DIRECT_SLOW" ]; then : > "$DIRECT_SLOW"; exit 28; fi ;;
             esac
             # 模拟下载挂起，供中断清理测试使用
             case "$url" in
-              https://release-assets.githubusercontent.com/asset/migate-*)
+              https://release-assets.githubusercontent.com/asset/weir-*)
                 if [ -n "${HANG_MARK:-}" ]; then echo $$ > "$HANG_MARK.tmp"; mv "$HANG_MARK.tmp" "$HANG_MARK"; exec sleep 30; fi ;;
             esac
             # 模拟 GitHub 附件 302 到带签名查询串的存储地址
@@ -109,7 +109,7 @@ class OnlineInstallTests(unittest.TestCase):
               */releases/latest) cp "$CURL_FIXTURE/latest.json" "$out" ;;
               *'/releases?per_page=20') cp "$CURL_FIXTURE/latest.json" "$out" ;;
               */asset/checksums.txt\\?*) cp "$CURL_FIXTURE/checksums.txt" "$out" ;;
-              */asset/migate-*-linux-amd64.tar.gz\\?*) cp "$CURL_FIXTURE"/migate-*-linux-amd64.tar.gz "$out" ;;
+              */asset/weir-*-linux-*.tar.gz\\?*) cp "$CURL_FIXTURE"/weir-*-linux-*.tar.gz "$out" ;;
               *) printf 'unexpected\\n' >> "$CURL_LOG"; exit 1 ;;
             esac
             printf '200'
@@ -123,11 +123,12 @@ class OnlineInstallTests(unittest.TestCase):
             "CURL_ARGV": (self.root / "curl-argv.log").as_posix(),
             "CURL_FIXTURE": self.root.as_posix(),
             "INSTALL_LOG": self.install_log.as_posix(),
-            "MIGATE_NONINTERACTIVE": "1",
-            "MIGATE_ALLOW_NON_ROOT": "1",
-            "MIGATE_GITHUB_TOKEN": "sentinel-token-value",
-            "MIGATE_CURL": (self.root / "curl").as_posix(),
+            "WEIR_NONINTERACTIVE": "1",
+            "WEIR_ALLOW_NON_ROOT": "1",
+            "WEIR_GITHUB_TOKEN": "sentinel-token-value",
+            "WEIR_CURL": (self.root / "curl").as_posix(),
             "TMPDIR": self.root.as_posix(),
+            "WEIR_ARCH": "x86_64",
         })
 
     def run_script(self, *args, tty=None):
@@ -135,8 +136,8 @@ class OnlineInstallTests(unittest.TestCase):
         if tty is not None:
             path = self.root / "tty"
             path.write_text(tty, encoding="utf-8", newline="\n")
-            env["MIGATE_DEV_TTY"] = path.as_posix()
-            env.pop("MIGATE_NONINTERACTIVE", None)
+            env["WEIR_DEV_TTY"] = path.as_posix()
+            env.pop("WEIR_NONINTERACTIVE", None)
         return subprocess.run([shell_program(), str(pathlib.Path(__file__).resolve().parent / "install-online.sh"), *args], text=True, capture_output=True, env=env)
 
     def test_checksum_match_runs_package_installer(self):
@@ -146,6 +147,25 @@ class OnlineInstallTests(unittest.TestCase):
         self.assertIn("center 127.0.0.1:19810", recorded)
         self.assertNotIn("sentinel-token-value", completed.stdout + completed.stderr)
         self.assertNotIn("sentinel-token-value", (self.root / "curl-argv.log").read_text(encoding="utf-8"))
+
+    def test_arm64_host_downloads_arm64_package(self):
+        body, checksum, name = archive("0.2.0", "arm64")
+        (self.root / self.name).unlink()
+        (self.root / name).write_bytes(body)
+        (self.root / "checksums.txt").write_text(checksum, encoding="utf-8")
+        self.env["WEIR_ARCH"] = "aarch64"
+        completed = self.run_script("gate")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        urls = (self.root / "curl.log").read_text(encoding="utf-8")
+        self.assertIn("weir-0.2.0-linux-arm64.tar.gz", urls)
+        self.assertNotIn("linux-amd64", urls)
+
+    def test_unsupported_arch_refused(self):
+        self.env["WEIR_ARCH"] = "riscv64"
+        completed = self.run_script("gate")
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("不支持的处理器架构", completed.stderr)
+        self.assertFalse(self.install_log.exists())
 
     def test_release_asset_redirect_to_signed_url(self):
         completed = self.run_script("gate")
@@ -226,17 +246,17 @@ class OnlineInstallTests(unittest.TestCase):
 
     def test_mirrors_off_skips_mirrors(self):
         self.env["DIRECT_SLOW"] = (self.root / "direct-slow").as_posix()
-        self.env["MIGATE_GITHUB_MIRRORS"] = "off"
+        self.env["WEIR_GITHUB_MIRRORS"] = "off"
         completed = self.run_script("gate")
         self.assertEqual(completed.returncode, 0, completed.stderr)
         urls = (self.root / "curl.log").read_text(encoding="utf-8")
         self.assertNotIn("/https://github.com/", urls)
 
     def test_invalid_mirror_rejected_before_download(self):
-        self.env["MIGATE_GITHUB_MIRRORS"] = "evil.example/path?x=1"
+        self.env["WEIR_GITHUB_MIRRORS"] = "evil.example/path?x=1"
         completed = self.run_script("gate")
         self.assertNotEqual(completed.returncode, 0)
-        self.assertIn("MIGATE_GITHUB_MIRRORS", completed.stderr)
+        self.assertIn("WEIR_GITHUB_MIRRORS", completed.stderr)
         self.assertFalse((self.root / "curl.log").exists())
 
     def test_terminate_during_download_removes_workdir(self):
@@ -253,7 +273,7 @@ class OnlineInstallTests(unittest.TestCase):
             """)
         completed = subprocess.run([shell_program(), "-c", wrapper], text=True, capture_output=True, env=self.env, timeout=60)
         self.assertIn("status=143", completed.stdout, completed.stderr)
-        self.assertEqual(list(self.root.glob("migate-install-*")), [])
+        self.assertEqual(list(self.root.glob("weir-install-*")), [])
         self.assertFalse(self.install_log.exists())
 
     def test_non_local_listen_warns_plain_http(self):
@@ -280,8 +300,8 @@ class OnlineInstallTests(unittest.TestCase):
         installer = self.root / "local-install.sh"
         installer.write_text("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$INSTALL_LOG\"\n", encoding="utf-8")
         installer.chmod(installer.stat().st_mode | stat.S_IEXEC)
-        self.env["MIGATE_ROLE_FILE"] = role_file.as_posix()
-        self.env["MIGATE_LOCAL_INSTALLER"] = installer.as_posix()
+        self.env["WEIR_ROLE_FILE"] = role_file.as_posix()
+        self.env["WEIR_LOCAL_INSTALLER"] = installer.as_posix()
 
     def test_uninstall_not_installed(self):
         completed = self.run_script("uninstall", "-y")

@@ -63,20 +63,22 @@ jobs:
             release-go-${{ runner.os }}-${{ runner.arch }}-
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - name: Package linux/amd64
+      - name: Package linux/amd64 and linux/arm64
         shell: bash
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          release="dist/migate-${VERSION}-linux-amd64"
-          mkdir -p "$release"
           revision="$(git rev-parse HEAD)"
           flags="-s -w -X github.com/shusfun/weir/internal/buildinfo.Version=${VERSION} -X github.com/shusfun/weir/internal/buildinfo.Revision=${revision}"
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "$flags" -o "$release/migate" ./apps/weir
-          cp deploy/install.sh deploy/sources.json deploy/github-update.sh deploy/release_fetch.py deploy/version.py "$release/"
-          cp VERSION "$release/VERSION"
-          python3 deploy/package_release.py "$VERSION"
+          for arch in amd64 arm64; do
+            release="dist/weir-${VERSION}-linux-${arch}"
+            mkdir -p "$release"
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -ldflags "$flags" -o "$release/weir" ./apps/weir
+            cp deploy/install.sh deploy/sources.json deploy/version.py "$release/"
+            cp VERSION "$release/VERSION"
+          done
+          python3 deploy/package_release.py "$VERSION" amd64 arm64
       - if: steps.go-cache.outputs.cache-hit != 'true'
         continue-on-error: true
         uses: actions/cache/save@v4
@@ -87,9 +89,9 @@ jobs:
           key: ${{ steps.go-cache.outputs.cache-primary-key }}
       - uses: actions/upload-artifact@v4
         with:
-          name: migate-linux-amd64
+          name: weir-linux
           path: |
-            dist/migate-*-linux-amd64.tar.gz
+            dist/weir-*-linux-*.tar.gz
             dist/checksums.txt
           if-no-files-found: error
 
@@ -104,7 +106,7 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
       - uses: actions/download-artifact@v4
         with:
-          name: migate-linux-amd64
+          name: weir-linux
           path: dist
       - name: Publish release
         if: needs.build.outputs.dry_run != 'true'
@@ -115,9 +117,10 @@ jobs:
         run: |
           set -euo pipefail
           tag="v${VERSION}"
-          test -s "dist/migate-${VERSION}-linux-amd64.tar.gz"
+          test -s "dist/weir-${VERSION}-linux-amd64.tar.gz"
+          test -s "dist/weir-${VERSION}-linux-arm64.tar.gz"
           test -s dist/checksums.txt
-          gh release create "$tag" "dist/migate-${VERSION}-linux-amd64.tar.gz" dist/checksums.txt --title "$tag" --verify-tag
+          gh release create "$tag" "dist/weir-${VERSION}-linux-amd64.tar.gz" "dist/weir-${VERSION}-linux-arm64.tar.gz" dist/checksums.txt --title "$tag" --verify-tag
       - name: Advance patch version
         if: needs.build.outputs.dry_run != 'true'
         env:
@@ -127,7 +130,7 @@ jobs:
         run: |
           set -euo pipefail
           tag="v${VERSION}"
-          gh release view "$tag" --json assets --jq '.assets[].name' | grep -qx "migate-${VERSION}-linux-amd64.tar.gz"
+          gh release view "$tag" --json assets --jq '.assets[].name' | grep -qx "weir-${VERSION}-linux-amd64.tar.gz"
           current=$(python3 deploy/version.py check VERSION)
           if [ "$current" != "$VERSION" ]; then
             echo "default branch VERSION is $current, released $VERSION; not rewriting it"

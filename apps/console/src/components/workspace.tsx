@@ -9,8 +9,9 @@ import { CommandPalette } from "../shell/command-palette";
 import { DshDrawer } from "./dsh";
 import { DraftConfirm } from "./draft-confirm";
 import { CenterOriginBanner } from "./center-origin";
+import { NoticesButton } from "./notices";
 
-const collapseKey = "migate-rail-collapsed";
+const collapseKey = "weir-rail-collapsed";
 function readCollapsed() {
   try {
     return localStorage.getItem(collapseKey) === "1";
@@ -129,6 +130,7 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
                 <span>快速跳转…</span>
                 <Kbd>Ctrl K</Kbd>
               </Button>
+              {admin && <NoticesButton />}
               <ThemeControl />
             </div>
           </header>

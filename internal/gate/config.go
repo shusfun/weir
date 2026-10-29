@@ -1,4 +1,4 @@
-// Package gate 是 Gate 执行端：以 migate-gate 身份运行的 Agent，以及以 root 运行、
+// Package gate 是 Gate 执行端：以 weir-gate 身份运行的 Agent，以及以 root 运行、
 // 只提供白名单操作的辅助程序（内核安装、配置自检与切换、进程托管、端口观测）。
 package gate
 
@@ -39,9 +39,9 @@ type Paths struct {
 
 func DefaultPaths() Paths {
 	return Paths{
-		Config: "/etc/migate/gate/agent.json", Data: "/var/lib/migate/gate", Socket: "/run/migate/helper.sock",
-		CoresDir: "/etc/migate/gate/cores", CertsDir: "/etc/migate/gate/certs", KernelsDir: "/opt/migate/cores",
-		Root: "/opt/migate", RunAs: "migate-gate",
+		Config: "/etc/weir/gate/agent.json", Data: "/var/lib/weir/gate", Socket: "/run/weir/helper.sock",
+		CoresDir: "/etc/weir/gate/cores", CertsDir: "/etc/weir/gate/certs", KernelsDir: "/opt/weir/cores",
+		Root: "/opt/weir", RunAs: "weir-gate",
 	}
 }
 
@@ -87,7 +87,7 @@ func LoadConfig(path string) (Config, error) {
 	return c, nil
 }
 
-// saveConfig 原子写入；以 root 运行时把属组设为 migate-gate 并设 0640，让 Agent 可读、其他账号不可读。
+// saveConfig 原子写入；以 root 运行时把属组设为 weir-gate 并设 0640，让 Agent 可读、其他账号不可读。
 func saveConfig(path string, c Config, group string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
 		return err

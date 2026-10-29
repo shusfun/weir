@@ -12,7 +12,7 @@ import (
 	"github.com/shusfun/weir/internal/gate"
 )
 
-// runGate：Gate 执行端。run 为 Agent（migate-gate 身份），helper 为 root 辅助程序。
+// runGate：Gate 执行端。run 为 Agent（weir-gate 身份），helper 为 root 辅助程序。
 func runGate(args []string) int {
 	command := "run"
 	if len(args) > 0 {
@@ -25,7 +25,7 @@ func runGate(args []string) int {
 	f.StringVar(&p.Socket, "socket", p.Socket, "helper socket")
 	center := f.String("center", "", "center origin, e.g. https://sub.example.com")
 	token := f.String("token", "", "one-time pairing token")
-	tokenFile := f.String("token-file", "/etc/migate/gate/local-pair.token", "local-pair: one-time token written by the installer")
+	tokenFile := f.String("token-file", "/etc/weir/gate/local-pair.token", "local-pair: one-time token written by the installer")
 	name := f.String("name", "", "device name (default: hostname)")
 	caFile := f.String("ca-file", "", "optional CA certificate for a center with a private certificate")
 	f.Parse(args)

@@ -1,0 +1,76 @@
+{
+  "experimental": {
+    "v2ray_api": {
+      "listen": "127.0.0.1:21002",
+      "stats": {
+        "enabled": true,
+        "inbounds": [
+          "inbound-24-shadowsocks",
+          "shadowtls-inbound-25"
+        ],
+        "users": [
+          "c241",
+          "c251"
+        ]
+      }
+    }
+  },
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "listen_port": 25005,
+      "method": "2022-blake3-aes-128-gcm",
+      "password": "c2VydmVyLWtleS0xNi1iMDE=",
+      "tag": "inbound-24-shadowsocks",
+      "type": "shadowsocks",
+      "users": [
+        {
+          "name": "c241",
+          "password": "pw-24"
+        }
+      ]
+    },
+    {
+      "detour": "shadowtls-inbound-25-ss",
+      "handshake": {
+        "server": "www.microsoft.com",
+        "server_port": 443
+      },
+      "listen": "0.0.0.0",
+      "listen_port": 25006,
+      "tag": "shadowtls-inbound-25",
+      "type": "shadowtls",
+      "users": [
+        {
+          "name": "c251",
+          "password": "pw-25"
+        }
+      ],
+      "version": 3
+    },
+    {
+      "listen": "127.0.0.1",
+      "listen_port": 0,
+      "method": "2022-blake3-aes-128-gcm",
+      "network": "tcp",
+      "password": "c2VydmVyLWtleS0xNi1iMDE=",
+      "tag": "shadowtls-inbound-25-ss",
+      "type": "shadowsocks",
+      "users": [
+        {
+          "name": "c251",
+          "password": "pw-25"
+        }
+      ]
+    }
+  ],
+  "log": {
+    "level": "warn"
+  },
+  "outbounds": [
+    {
+      "tag": "singbox-out-2147483647",
+      "type": "direct"
+    }
+  ]
+}
