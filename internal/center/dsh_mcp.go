@@ -63,6 +63,9 @@ func paramSchema(pa Param) map[string]any {
 	if pa.Hint != "" {
 		desc += "。" + pa.Hint
 	}
+	if pa.Secret {
+		desc += "。机密：不要填，留空提交，由管理员在确认窗里填"
+	}
 	m := map[string]any{}
 	switch pa.Kind {
 	case "bool":
@@ -126,10 +129,11 @@ func mcpToolsFor(source string) []mcpTool {
 	tools = append(tools,
 		mcpTool{"list_actions", "列出可以提交草稿的能力：名称、用途、风险、参数说明（中文名、单位、可选值、引用类型）。拼草稿前先读。", obj(map[string]any{})},
 		mcpTool{"submit_draft", "提交草稿。Weir 用手动操作的同一套校验试运行：不通过会返回原因（可以修改后重新提交）；通过后弹出 Weir 的确认窗，管理员确认才生效，你无法确认。" +
-			"一份草稿可以有多步，新建对象的步骤用 as 起名，后面的步骤用 \"$名字\" 引用；任一步失败全部不生效。可提交的能力：" + strings.Join(actions, "、"),
+			fmt.Sprintf("一份草稿可以有 1 到 %d 步，把多项能力拼成一件事（如建节点 → 建用户分配这个节点 → 建链接）：新建对象的步骤用 as 起名，后面的步骤用 \"$名字\" 引用；任一步失败，能撤回的全部撤回。", maxDraftSteps) +
+			"标了机密（secret）的参数不要填，留空提交，由管理员在确认窗里直接填。可提交的能力：" + strings.Join(actions, "、"),
 			obj(map[string]any{
 				"explain": map[string]any{"type": "string", "description": "一句中文说明：为什么这样做。"},
-				"steps": map[string]any{"type": "array", "description": "1 到 10 步", "items": obj(map[string]any{
+				"steps": map[string]any{"type": "array", "description": fmt.Sprintf("1 到 %d 步", maxDraftSteps), "items": obj(map[string]any{
 					"action": map[string]any{"type": "string", "description": "能力名称，见 list_actions"},
 					"as":     map[string]any{"type": "string", "description": "可选：新建对象的占位名（小写字母开头）"},
 					"args":   map[string]any{"type": "object", "description": "参数，见 list_actions"},
@@ -291,6 +295,14 @@ func (s *Server) callTool(ctx context.Context, source, name string, raw json.Raw
 		return err.Error(), true
 	}
 	v, err := c.read(ctx, s, args)
+	if c.Probe {
+		result := "ok"
+		if err != nil {
+			result = "failed"
+		}
+		target, _ := json.Marshal(args)
+		_, _ = s.Store.Ent.Audit.Create().SetAction("dsh.probe").SetTarget(name + " " + string(target)).SetResult(result).Save(ctx)
+	}
 	if err != nil {
 		return err.Error(), true
 	}

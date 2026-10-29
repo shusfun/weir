@@ -179,6 +179,9 @@ func (s *Server) saveProfile(c *gin.Context) {
 			m.SetExpiresAt(t)
 		}
 	}
+	if dryRun(c, dryResult{Preview: []string{"保存订阅组；分配了它的用户下次更新订阅时拿到新内容"}}) {
+		return
+	}
 	var p *ent.SubProfile
 	var err error
 	if create != nil {
@@ -201,6 +204,16 @@ func (s *Server) deleteProfile(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+	if c.GetBool(dryRunKey) {
+		p, err := s.Store.Ent.SubProfile.Get(ctx, id)
+		if err != nil {
+			failure(c, 404, "profile_not_found")
+			return
+		}
+		users, _ := s.Store.Ent.SubGrant.Query().Where(subgrant.ProfileIDEQ(id)).Count(ctx)
+		dryRun(c, dryResult{Preview: []string{fmt.Sprintf("删除订阅组「%s」：分配给 %d 个用户的订阅地址随即失效", p.Name, users)}})
+		return
+	}
 	if _, err := s.Store.Ent.SubGrant.Delete().Where(subgrant.ProfileIDEQ(id)).Exec(ctx); err != nil {
 		failInternal(c, 500, "delete_failed", err)
 		return
@@ -477,6 +490,20 @@ func (s *Server) setGrants(c *gin.Context) {
 	existing, err := s.Store.Ent.SubGrant.Query().Where(subgrant.ProfileIDEQ(id)).All(ctx)
 	if err != nil {
 		failInternal(c, 503, "query_failed", err)
+		return
+	}
+	if c.GetBool(dryRunKey) {
+		removed := 0
+		for _, g := range existing {
+			if !contains(want, g.UserID) {
+				removed++
+			}
+		}
+		preview := []string{fmt.Sprintf("分配给 %d 个用户；新分配的用户各得到一个订阅地址", len(want))}
+		if removed > 0 {
+			preview = append(preview, fmt.Sprintf("取消 %d 个用户的分配，他们的这个订阅地址随即失效", removed))
+		}
+		dryRun(c, dryResult{Preview: preview})
 		return
 	}
 	have := map[int]bool{}

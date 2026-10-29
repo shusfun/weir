@@ -73,6 +73,9 @@ func (s *Server) gateKernelAction(kind string) gin.HandlerFunc {
 			failure(c, 404, "kernel_not_found")
 			return
 		}
+		if kind == contracts.ActionCoreRestart && dryRun(c, dryResult{Preview: []string{"重启 " + g.Name + " 上的 " + kernel + "：这个内核上的节点会断开几秒，客户端自动重连"}}) {
+			return
+		}
 		res, err := s.gateProbe(c.Request.Context(), g, kind, map[string]any{"kernel": kernel}, 30*time.Second)
 		if err != nil {
 			failErr(c, 422, err)

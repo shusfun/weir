@@ -24,11 +24,11 @@ func (s *Server) submitActionDraft(ctx context.Context, source, explain string, 
 	if explain == "" || len(explain) > 2000 {
 		return nil, errors.New("explain 必须是一句不超过 2000 字的说明")
 	}
-	if len(steps) == 0 || len(steps) > 10 {
-		return nil, errors.New("一份草稿要有 1 到 10 步")
+	if len(steps) == 0 || len(steps) > maxDraftSteps {
+		return nil, fmt.Errorf("一份草稿要有 1 到 %d 步", maxDraftSteps)
 	}
 	d := &Draft{ID: randomToken(12), Kind: "actions", Source: source, Explain: explain, CreatedAt: time.Now().UTC(), Steps: steps}
-	if err := s.planDraft(ctx, d); err != nil {
+	if err := s.planDraft(ctx, d, false); err != nil {
 		return nil, err
 	}
 	d.Status = "passed"
@@ -44,9 +44,14 @@ func (s *Server) submitActionDraft(ctx context.Context, source, explain string, 
 	return d, nil
 }
 
+// maxDraftSteps 是一份草稿的步数上限：够从建节点、开用户、分配到建链接一次做完。
+const maxDraftSteps = 20
+
 // planDraft 逐步校验并试运行，填好确认窗的字段与预演，记下所依据的数据版本（d.Versions）。
-func (s *Server) planDraft(ctx context.Context, d *Draft) error {
+// confirm 为真时是管理员点确认后的重新试运行：机密参数此时已由管理员填好。
+func (s *Server) planDraft(ctx context.Context, d *Draft, confirm bool) error {
 	p := newPlanCtx(d.Source)
+	p.confirm = confirm
 	d.Danger = false
 	for i := range d.Steps {
 		st := &d.Steps[i]
@@ -145,7 +150,7 @@ func (s *Server) applyActionDraft(c *gin.Context, d *Draft) {
 			st.Edited = append(st.Edited, k)
 		}
 	}
-	if err := s.planDraft(ctx, d); err != nil {
+	if err := s.planDraft(ctx, d, true); err != nil {
 		failDetail(c, 422, "draft_invalid", err.Error(), nil)
 		return
 	}
@@ -160,6 +165,7 @@ func (s *Server) applyActionDraft(c *gin.Context, d *Draft) {
 	}
 	x := &execCtx{actor: c, created: map[string]int{}}
 	var undo []func(context.Context) error
+	var kept []string // 已执行、没有撤回办法的步骤（如开始下载内核、重启内核）
 	for i := range d.Steps {
 		st := &d.Steps[i]
 		capb, _ := findCap(d.Source, st.Action)
@@ -174,18 +180,25 @@ func (s *Server) applyActionDraft(c *gin.Context, d *Draft) {
 				}
 			}
 			msg := fmt.Sprintf("第 %d 步（%s）失败：%v。前面的步骤已撤回，草稿没有生效。", i+1, st.Title, err)
+			if len(kept) > 0 {
+				msg = fmt.Sprintf("第 %d 步（%s）失败：%v。前面能撤回的步骤已撤回；以下步骤已经执行、无法撤回：%s。", i+1, st.Title, err, strings.Join(kept, "、"))
+			}
 			if len(failed) > 0 {
 				msg += "撤回时出错：" + strings.Join(failed, "；")
 			}
 			failDetail(c, 422, "draft_failed", msg, nil)
 			return
 		}
+		if u == nil && !capb.Last {
+			kept = append(kept, st.Title)
+		}
 		undo = append(undo, u)
 	}
 	_ = s.Store.KV.Del(ctx, draftPrefix+d.ID)
 	steps := make([]map[string]any, 0, len(d.Steps))
 	for _, st := range d.Steps {
-		steps = append(steps, map[string]any{"action": st.Action, "title": st.Title, "args": st.Args, "edited": st.Edited})
+		capb, _ := findCap(d.Source, st.Action)
+		steps = append(steps, map[string]any{"action": st.Action, "title": st.Title, "args": withoutSecrets(capb.Params, st.Args), "edited": st.Edited})
 	}
 	_, _ = s.Store.Ent.Audit.Create().SetActor(c.GetInt("user_id")).SetAction("ai.apply").SetTarget("dsh 草稿 · 管理员确认 " + d.ID).SetResult("ok").SetIP(c.ClientIP()).
 		SetDetail(map[string]any{"source": d.Source, "explain": d.Explain, "steps": steps}).Save(ctx)

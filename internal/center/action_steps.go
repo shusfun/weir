@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"time"
 
@@ -19,29 +20,66 @@ import (
 // invoke 以确认者的身份调用手动操作的处理函数：同一份校验、同一份写入、同一条审计。
 // 请求只在进程内构造，不经过路由，外部无法伪造。
 func invoke(x *execCtx, handler gin.HandlerFunc, method string, params gin.Params, body any) (int, map[string]any) {
+	return call(x.actor, handler, method, params, nil, body, false)
+}
+
+// call 在进程内调用处理函数。dry 为真时是试运行：处理函数做完全部校验与实测，在第一次写入之前
+// 用 dryRun 返回预演并停下（没接入试运行的处理函数不能登记成草稿能力，见 capability_ops.go）。
+func call(actor *gin.Context, handler gin.HandlerFunc, method string, params gin.Params, query url.Values, body any, dry bool) (int, map[string]any) {
 	b, _ := json.Marshal(body)
 	w := httptest.NewRecorder()
 	c, eng := gin.CreateTestContext(w)
 	_ = eng.SetTrustedProxies([]string{"127.0.0.1", "::1"})
-	req := httptest.NewRequest(method, "/internal", strings.NewReader(string(b))).WithContext(x.actor.Request.Context())
+	req := httptest.NewRequest(method, "/internal?"+query.Encode(), strings.NewReader(string(b))).WithContext(actor.Request.Context())
 	req.Header.Set("Content-Type", "application/json")
-	req.RemoteAddr = x.actor.Request.RemoteAddr
+	req.RemoteAddr = actor.Request.RemoteAddr
 	for _, h := range []string{"X-Forwarded-For", "X-Real-IP"} {
-		if v := x.actor.GetHeader(h); v != "" {
+		if v := actor.GetHeader(h); v != "" {
 			req.Header.Set(h, v)
 		}
 	}
 	c.Request, c.Params = req, params
 	for _, k := range []string{"user_id", "account", "role", "session_key", "session"} {
-		if v, ok := x.actor.Get(k); ok {
+		if v, ok := actor.Get(k); ok {
 			c.Set(k, v)
 		}
+	}
+	if dry {
+		c.Set(dryRunKey, true)
 	}
 	handler(c)
 	c.Writer.WriteHeaderNow()
 	var out map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &out)
 	return w.Code, out
+}
+
+// systemActor 是试运行与只读调用用的身份：没有登录会话，来源是本机回环。
+// 只读和试运行不写数据，审计里的操作者以确认时点确认的管理员为准。
+func systemActor(ctx context.Context) *gin.Context {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("GET", "/internal", nil).WithContext(ctx)
+	c.Request.RemoteAddr = "127.0.0.1:0"
+	return c
+}
+
+const dryRunKey = "weir_dry_run"
+
+// dryResult 是试运行的预演：Pin 是系统这次替草稿定下的值（自动分配的端口、实测选中的伪装目标），
+// 写回草稿参数，确认时原样使用、不再重新挑选；Preview 是给人看的预演；Result 是实测结果（如延迟）。
+type dryResult struct {
+	Pin     map[string]any `json:"pin,omitempty"`
+	Preview []string       `json:"preview,omitempty"`
+	Result  map[string]any `json:"result,omitempty"`
+}
+
+// dryRun 在处理函数第一次写入之前调用：试运行时返回预演并结束请求（返回 true），手动操作时什么也不做。
+func dryRun(c *gin.Context, r dryResult) bool {
+	if !c.GetBool(dryRunKey) {
+		return false
+	}
+	c.JSON(200, gin.H{"dry_run": r})
+	return true
 }
 
 // handlerError 取出处理函数返回的错误说明。

@@ -190,6 +190,13 @@ func (s *Server) saveOutbound(c *gin.Context) {
 	var saved *ent.Outbound
 	var err error
 	if oid == 0 {
+		if n, _ := s.Store.Ent.Outbound.Query().Where(outbound.GateIDEQ(g.ID), outbound.TagEQ(req.Tag)).Count(ctx); n > 0 {
+			failure(c, 409, "tag_conflict")
+			return
+		}
+		if dryRun(c, dryResult{Preview: []string{"在 " + g.Name + " 上新建出口 " + req.Tag + "；分流规则引用它后才会有流量经过"}}) {
+			return
+		}
 		n, _ := s.Store.Ent.Outbound.Query().Where(outbound.GateIDEQ(g.ID)).Count(ctx)
 		saved, err = s.Store.Ent.Outbound.Create().SetGateID(g.ID).SetTag(req.Tag).SetName(strings.TrimSpace(req.Name)).SetProtocol(req.Protocol).
 			SetAddress(strings.TrimSpace(req.Address)).SetPort(req.Port).SetUsername(req.Username).SetPassword(sealed).SetPosition(n).SetSettings(settings).Save(ctx)
@@ -211,6 +218,9 @@ func (s *Server) saveOutbound(c *gin.Context) {
 			SetPort(req.Port).SetUsername(req.Username).SetPassword(sealed).SetSettings(settings)
 		if req.Enabled != nil {
 			upd.SetEnabled(*req.Enabled)
+		}
+		if dryRun(c, dryResult{Preview: []string{"保存后 " + g.Name + " 重新生成配置"}}) {
+			return
 		}
 		saved, err = upd.Save(ctx)
 	}
@@ -252,6 +262,9 @@ func (s *Server) deleteOutbound(c *gin.Context) {
 	// 任何规则（含停用的）引用都阻止删除：先改规则。
 	if n, _ := s.Store.Ent.Route.Query().Where(route.GateIDEQ(g.ID), route.OutboundTagEQ(o.Tag)).Count(ctx); n > 0 {
 		failDetail(c, 409, "outbound_in_use", "", gin.H{"routes": n})
+		return
+	}
+	if dryRun(c, dryResult{Preview: []string{"删除 " + g.Name + " 上的出口 " + o.Tag + "（没有分流规则引用它）"}}) {
 		return
 	}
 	if err = s.Store.Ent.Outbound.DeleteOne(o).Exec(ctx); err != nil {
@@ -417,6 +430,9 @@ func (s *Server) saveRoute(c *gin.Context) {
 	var saved *ent.Route
 	var err error
 	if rid == 0 {
+		if dryRun(c, dryResult{Preview: []string{"在 " + g.Name + " 上新建分流规则：匹配的流量走 " + req.OutboundTag}}) {
+			return
+		}
 		saved, err = s.Store.Ent.Route.Create().SetGateID(g.ID).SetNillableNodeID(req.NodeID).SetNillableUserID(req.UserID).
 			SetOutboundTag(req.OutboundTag).SetDomain(domain).SetIP(ip).SetPriority(req.Priority).Save(ctx)
 	} else {
@@ -429,6 +445,9 @@ func (s *Server) saveRoute(c *gin.Context) {
 			SetNillableNodeID(req.NodeID).SetNillableUserID(req.UserID)
 		if req.Enabled != nil {
 			upd.SetEnabled(*req.Enabled)
+		}
+		if dryRun(c, dryResult{Preview: []string{"保存后 " + g.Name + " 重新生成配置"}}) {
+			return
 		}
 		saved, err = upd.Save(ctx)
 	}
@@ -451,6 +470,14 @@ func (s *Server) deleteRoute(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+	if c.GetBool(dryRunKey) {
+		if n, _ := s.Store.Ent.Route.Query().Where(route.IDEQ(rid), route.GateIDEQ(g.ID)).Count(ctx); n == 0 {
+			failure(c, 404, "route_not_found")
+			return
+		}
+		dryRun(c, dryResult{Preview: []string{"删除 " + g.Name + " 上的这条分流规则"}})
+		return
+	}
 	n, err := s.Store.Ent.Route.Delete().Where(route.IDEQ(rid), route.GateIDEQ(g.ID)).Exec(ctx)
 	if err != nil || n == 0 {
 		failure(c, 404, "route_not_found")

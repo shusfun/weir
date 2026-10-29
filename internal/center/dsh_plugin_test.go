@@ -72,7 +72,7 @@ func TestUnverifiedDSHVersionKeepsBasicPresetAndPausesAnalysis(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"weir-driver", "weir-node", "weir-security"} {
+	for _, name := range []string{"weir-driver", "weir-node", "weir-ops", "weir-security"} {
 		if b, err := os.ReadFile(filepath.Join(skills, name, "SKILL.md")); err != nil || !strings.Contains(string(b), "name: "+name) {
 			t.Fatalf("skill %s: %v", name, err)
 		}
