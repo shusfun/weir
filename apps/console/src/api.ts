@@ -418,7 +418,10 @@ export async function api(
   }
   if (!res.ok) {
     const code = String(data?.error?.code ?? "http_" + res.status);
-    const message = (messages[code] ?? `操作失败（${code}），请检查输入与服务状态后重试。`) + (data?.error?.detail ? `（${data.error.detail}）` : "");
+    const base = messages[code] ?? `操作失败（${code}），请检查输入与服务状态后重试。`;
+    const detail = data?.error?.detail ? String(data.error.detail) : "";
+    // 服务端的说明已经包含本地文案时只显示说明，不重复成「A（A，……）」
+    const message = !detail ? base : detail.startsWith(base) ? detail : `${base}（${detail}）`;
     // 页面感知：dsh 能看到最近一次失败提示（上报 / 轮询本身的失败不算）。
     if (!path.startsWith("/admin/dsh/context") && !path.startsWith("/admin/dsh/navigation")) reportError(code, message);
     throw new ApiError(message, code, res.status);

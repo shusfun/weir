@@ -33,7 +33,7 @@ export function SourcesPanel() {
     if (!(await confirm({ title: `删除订阅源「${s.name || s.url}」？`, description: "订阅组中的引用会一并移除。", confirmText: "删除", tone: "danger" }))) return;
     await run(s.id, () => api("/admin/misub/sources/" + s.id, "DELETE"), "订阅源已删除");
   }
-  useConsoleContext({ tab: "订阅源", list: { selected: q.data?.items.length ?? 0, items: (q.data?.items ?? []).slice(0, 20).map((s) => ({ type: "source", name: s.name, id: s.id })) } });
+  useConsoleContext({ tab: "订阅源", list: { total: q.data?.items.length ?? 0, items: (q.data?.items ?? []).slice(0, 20).map((s) => ({ type: "source", name: s.name, id: s.id })) } });
   return (
     <section className="stack">
       <SectionHeader title="订阅源" description="机场订阅地址；节点数与用量来自最近一次拉取，没有报告时显示「未知」。" actions={<Button size="sm" onClick={() => setEdit("new")}><Plus />添加订阅源</Button>} />

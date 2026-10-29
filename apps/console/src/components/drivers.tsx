@@ -55,7 +55,7 @@ export function DriversPanel() {
   const param = useStringDialogParam("driver");
   const open = param.value && param.value !== "new" ? param.value : null;
   const creating = param.value === "new";
-  useConsoleContext({ list: { selected: q.data?.length ?? 0, items: (q.data ?? []).slice(0, 20).map((d) => ({ type: "driver", name: d.name, key: d.name })) } });
+  useConsoleContext({ list: { total: q.data?.length ?? 0, items: (q.data ?? []).slice(0, 20).map((d) => ({ type: "driver", name: d.name, key: d.name })) } });
   return (
     <Card>
       <CardContent className="stack">

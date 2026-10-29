@@ -21,7 +21,8 @@ export interface CtxLayer {
   tab?: string;
   object?: CtxObject;
   dialog?: { title: string; step?: string };
-  list?: { filters?: Record<string, string>; selected?: number; items?: CtxObject[] };
+  // total：列表一共几项（items 只给前 20 项）；selected：真正勾选了几项，列表支持勾选时才填
+  list?: { filters?: Record<string, string>; total?: number; selected?: number; items?: CtxObject[] };
   form?: CtxFormField[];
   notices?: string[];
 }

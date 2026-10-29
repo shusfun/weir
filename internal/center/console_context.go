@@ -59,7 +59,8 @@ type ctxDialog struct {
 
 type ctxList struct {
 	Filters  map[string]string `json:"filters,omitempty"`
-	Selected int               `json:"selected,omitempty"`
+	Total    int               `json:"total,omitempty"`    // 列表里一共有几项（Items 只给前 20 项）
+	Selected int               `json:"selected,omitempty"` // 真正勾选了几项（列表支持勾选时才有）
 	Items    []ctxObject       `json:"items,omitempty"` // 选中较多时只给前 20 项
 }
 
@@ -263,7 +264,7 @@ var consoleTools = []mcpTool{
 	{"get_console_context", "管理员此刻在 Weir 控制台里看什么：页面与标签、正在看的对象、打开的弹窗与步骤、列表筛选与选中项、未保存表单（密码类只标已填 / 未填）、最近的失败提示与页面告警。每轮回答前先读一次；缺失或过期时会说明原因。", obj(map[string]any{})},
 	{"navigate_console", "让控制台打开某个页面、标签或对象（如带管理员去某台 VPS 的详情、某个驱动、某条审计）。只换页面，不改任何数据，不需要确认；不能借此填表或点按钮。给对象时可以不给 page，控制台按对象类型打开它所在的页面。", obj(map[string]any{
 		"page":        map[string]any{"type": "string", "enum": []string{"gates", "users", "kernels", "subscriptions", "pages", "audit", "system"}, "description": "gates=VPS 与节点；users=用户；kernels=内核；subscriptions=订阅管理；pages=公开页面；audit=操作审计；system=系统设置"},
-		"tab":         map[string]any{"type": "string", "description": "可选：页面里的标签，例如 system 的 update / ai / defense / login / notify / certs / backup / distribution，kernels 的 versions / drivers / checks / dsh"},
+		"tab":         map[string]any{"type": "string", "description": "可选：页面里的标签。system：update=版本与更新、ai=AI 与 dsh、defense=安全防御、login=登录与令牌、notify=通知（含邮件 SMTP）、certs=节点证书、backup=备份迁移、distribution=分发；kernels：versions=版本、drivers=驱动、checks=订阅检查、dsh=dsh 版本；subscriptions：sources=订阅源、nodes=手动节点、profiles=订阅组、templates=规则模板、settings=默认设置"},
 		"object_type": map[string]any{"type": "string", "enum": objectTypes, "description": "可选：要打开的对象类型。gate=VPS、node=节点、user=用户、link=订阅链接、chain=链式代理、driver=内核驱动、kernel=内核版本、source=订阅源、profile=订阅组、page=公开页面、cert=证书、audit=审计记录"},
 		"object_id":   map[string]any{"type": "number", "description": "可选：数字编号的对象（VPS、节点、用户、链接、链式代理、订阅源、订阅组、证书、审计记录）"},
 		"object_key":  map[string]any{"type": "string", "description": "可选：按名称的对象：驱动名（如 xray-26.3）、内核版本（如 xray@26.3.27）、公开页面的地址名"},

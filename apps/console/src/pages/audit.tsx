@@ -68,7 +68,7 @@ export function AuditPage() {
   const closeDetail = () => setUrl((p) => { p.delete("audit"); return p; }, { replace: true });
   useConsoleContext({
     page: "操作审计",
-    list: { filters: { 搜索: search, 结果: resultLabels[result] ?? result }, selected: query.data?.total ?? 0, items: (query.data?.items ?? []).slice(0, 20).map((a) => ({ type: "audit", name: a.action, id: a.id })) },
+    list: { filters: { 搜索: search, 结果: resultLabels[result] ?? result }, total: query.data?.total ?? 0, items: (query.data?.items ?? []).slice(0, 20).map((a) => ({ type: "audit", name: a.action, id: a.id })) },
   });
   useConsoleContext(detail ? { object: { type: "audit", name: detail.action, id: detail.id }, dialog: { title: "审计记录 #" + detail.id }, form: [field("target", "目标", detail.target), field("result", "结果", detail.result)] } : null);
   return (

@@ -118,7 +118,7 @@ export function ClientCatalogEditor() {
     setNotice("");
   }
   const visible = items.map((v, index) => ({ v, index })).filter(({ v }) => matches(v, search));
-  useConsoleContext({ dialog: editor ? { title: "编辑客户端" } : confirm ? { title: reset ? "恢复默认客户端目录" : "确认保存客户端目录" } : undefined, list: { selected: items.length }, form: [field("search", "搜索", search), field("password", "当前密码", re.password, true)] });
+  useConsoleContext({ dialog: editor ? { title: "编辑客户端" } : confirm ? { title: reset ? "恢复默认客户端目录" : "确认保存客户端目录" } : undefined, list: { total: items.length }, form: [field("search", "搜索", search), field("password", "当前密码", re.password, true)] });
   return (
     <Card>
       <CardContent className="stack client-catalog-editor">
