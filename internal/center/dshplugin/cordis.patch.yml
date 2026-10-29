@@ -22,8 +22,7 @@
             config:
               allowParallelInProgress: true
           # skill 只从 Weir 生成的目录加载（不读项目与用户目录）；加载是只读的。
-          - id: skill-registry
-            name: '@deepseek-ai/dsh-skill'
+          # skill 注册表（dsh-skill）由 dsh-base 全局加载，预设里再写一次会重复注册「skills」服务，新建会话失败。
           - id: skill-weir
             name: '@deepseek-ai/dsh-skill-filesystem'
             config:

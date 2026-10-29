@@ -34,6 +34,11 @@ func TestBuiltinPluginIsValidAndRejectsDangerousEdits(t *testing.T) {
 		"registry 改别的字段": strings.Replace(patch, "default: weir", "default: weir\n    extra: 1", 1),
 		"skill 读用户目录":    strings.Replace(patch, "includeDefaultRoots: false", "includeDefaultRoots: true", 1),
 		"skill 读别的目录":    strings.Replace(patch, "customSkillDirs: ['{{WEIR_SKILLS_DIR}}']", "customSkillDirs: ['/etc']", 1),
+		// dsh-base 已全局加载 skill 注册表；预设里再写会重复注册「skills」，所有新会话失败（线上 0.2.2-alpha.2 实测）
+		"重复的 skill 注册表": strings.Replace(patch, "          - id: skill-weir\n", "          - id: skill-registry\n            name: '@deepseek-ai/dsh-skill'\n          - id: skill-weir\n", 1),
+	}
+	if strings.Contains(patch, "'@deepseek-ai/dsh-skill'") {
+		t.Fatal("builtin preset must not load dsh-skill again")
 	}
 	for name, p := range bad {
 		f := map[string]string{"package.json": files["package.json"], "cordis.patch.yml": p}
