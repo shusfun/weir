@@ -1,7 +1,7 @@
 // 后台任务（内核 / dsh 下载等）：进度、速度、当前线路、逐条日志与取消。关掉弹窗任务照常进行，回来能接着看。
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge, Button, CodeBlock, Collapsible, Notice, Progress } from "@weir/ui";
+import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogTitle, Progress } from "@weir/ui";
 import { X } from "lucide-react";
 import { api } from "../api";
 import { useRowAction } from "../lib/action";
@@ -103,45 +103,97 @@ export function useJob(id: string | null, onFinish?: (j: Job) => void) {
 const tones = { running: "neutral", done: "ok", failed: "bad", cancelled: "warn" } as const;
 const labels = { running: "进行中", done: "完成", failed: "失败", cancelled: "已取消" } as const;
 
+// 任务的显示都是固定行数：状态行、进度条、一行说明、日志始终在，进度、结果与失败原因只换文字不增减行，
+// 任务从开始到结束，下面的内容不会被顶开。失败原因过长时这一行截断，全文在日志最后一行。
+function progressOf(job: Job) {
+  const p = job.progress;
+  if (job.status === "done") return 100;
+  return p && p.total > 0 ? Math.min(100, Math.round((p.done / p.total) * 100)) : null;
+}
+
+function statusLine(job: Job) {
+  const p = job.progress;
+  if (job.status === "running") {
+    if (!p) return job.step || "正在准备…";
+    const pct = progressOf(job);
+    return `${pct !== null ? `${pct}% · ${size(p.done)} / ${size(p.total)}` : `已下载 ${size(p.done)}`}${p.speed > 0 ? ` · ${size(p.speed)}/s` : ""}${p.source ? ` · ${p.source}` : ""}`;
+  }
+  if (job.error) return job.error;
+  return job.finished_at ? `${clock(job.finished_at)} 完成` : "完成";
+}
+
+function logText(job: Job) {
+  const lines = (job.logs ?? []).map((l) => `${clock(l.at)} ${l.text}`);
+  if (job.error && job.status !== "running") lines.push(`${job.finished_at ? clock(job.finished_at) : ""} ${job.status === "cancelled" ? "已取消" : "失败"}：${job.error}`.trim());
+  return lines.join("\n") || "（还没有日志）";
+}
+
 // JobView 显示一个任务：进度条（总大小未知时只显示已下载）、速度、线路、日志、取消。
-export function JobView({ job, compact }: { job: Job; compact?: boolean }) {
+export function JobView({ job }: { job: Job }) {
   const client = useQueryClient();
   const { run, isBusy } = useRowAction<string>({ refetch: () => void client.invalidateQueries({ queryKey: ["job", job.id] }) });
-  const p = job.progress;
-  const pct = p && p.total > 0 ? Math.min(100, Math.round((p.done / p.total) * 100)) : null;
+  const line = statusLine(job);
   return (
     <div className="stack rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3" aria-live="polite">
-      <div className="flex flex-wrap items-center gap-2">
-        <strong className="text-[13px]">{job.title}</strong>
+      <div className="flex min-h-6 items-center gap-2">
+        <strong className="shrink-0 text-[13px]">{job.title}</strong>
         <Badge variant="soft" tone={tones[job.status]}>{labels[job.status]}</Badge>
-        {job.step && job.status === "running" && <small className="text-[var(--mg-ink-3)]">{job.step}</small>}
-        {job.status === "running" && (
-          <Button className="ml-auto" size="xs" variant="ghost" disabled={isBusy()} onClick={() => void run("cancel", () => api("/admin/jobs/" + encodeURIComponent(job.id) + "/cancel", "POST"), "已取消，已下载的部分保留")}><X />取消</Button>
-        )}
+        <small className="min-w-0 flex-1 truncate text-[var(--mg-ink-3)]">{job.status === "running" ? job.step : ""}</small>
+        <Button className={job.status === "running" ? undefined : "invisible"} size="xs" variant="ghost" disabled={isBusy() || job.status !== "running"} onClick={() => void run("cancel", () => api("/admin/jobs/" + encodeURIComponent(job.id) + "/cancel", "POST"), "已取消，已下载的部分保留")}><X />取消</Button>
       </div>
-      {job.status === "running" && p && (
-        <>
-          <Progress value={pct} aria-label={job.title + " 下载进度"} />
-          <small className="text-[var(--mg-ink-3)]">
-            {pct !== null ? `${pct}% · ${size(p.done)} / ${size(p.total)}` : `已下载 ${size(p.done)}`}
-            {p.speed > 0 ? ` · ${size(p.speed)}/s` : ""}
-            {p.source ? ` · ${p.source}` : ""}
-          </small>
-        </>
-      )}
-      {job.error && <Notice tone={job.status === "cancelled" ? "warn" : "bad"}>{job.error}</Notice>}
-      {!compact && job.logs && job.logs.length > 0 && (
-        <Collapsible title={`日志（${job.logs.length} 行）`} defaultOpen={job.status === "failed"}>
-          <CodeBlock className="block max-h-56 overflow-auto whitespace-pre-wrap text-xs">{job.logs.map((l) => `${clock(l.at)} ${l.text}`).join("\n")}</CodeBlock>
-        </Collapsible>
-      )}
+      <Progress value={progressOf(job)} aria-label={job.title + " 进度"} />
+      <small className={"block truncate tabular-nums " + (job.status === "failed" ? "text-[var(--mg-bad-ink)]" : "text-[var(--mg-ink-3)]")} title={line}>{line}</small>
+      <Collapsible title={`日志（${job.logs?.length ?? 0} 行）`} defaultOpen={job.status === "failed"}>
+        <CodeBlock className="block h-56 overflow-auto whitespace-pre-wrap text-xs">{logText(job)}</CodeBlock>
+      </Collapsible>
     </div>
   );
 }
 
-// JobByID 读取并显示一个任务（列表里只有摘要，这里取带日志的详情）。
-export function JobByID({ id, onFinish }: { id: string; onFinish?: (j: Job) => void }) {
+// JobByID 读取并显示一个任务（列表里只有摘要，这里取带日志的详情）；详情还没回来时先用摘要占位，不出现空白。
+export function JobByID({ id, initial, onFinish }: { id: string; initial?: Job; onFinish?: (j: Job) => void }) {
   const q = useJob(id, onFinish);
-  if (!q.data) return null;
-  return <JobView job={q.data} />;
+  const job = q.data ?? initial;
+  if (!job) return <JobLinePlaceholder text="正在读取任务…" />;
+  return <JobView job={job} />;
+}
+
+function JobLinePlaceholder({ text }: { text: string }) {
+  return (
+    <div className="flex min-h-9 items-center gap-2 rounded-[var(--mg-radius)] border border-dashed border-[var(--mg-line)] px-3 text-[12.5px] text-[var(--mg-ink-3)]">{text}</div>
+  );
+}
+
+// JobLine：卡片与下载窗口里固定占一行的任务位。没有任务时显示 idle；有任务时显示状态、进度与「详情」，
+// 详情在二级弹窗里看日志、取消。行高不随任务开始、结束变化。
+export function JobLine({ job, id, idle, onFinish }: { job?: Job; id?: string | null; idle: string; onFinish?: (j: Job) => void }) {
+  const [open, setOpen] = useState(false);
+  const live = useJob(id ?? job?.id ?? null, onFinish);
+  const j = live.data ?? job;
+  if (!j) return <JobLinePlaceholder text={idle} />;
+  const pct = progressOf(j);
+  const line = statusLine(j);
+  return (
+    <div className="flex min-h-9 items-center gap-2 rounded-[var(--mg-radius)] border border-[var(--mg-line)] px-3 py-1" aria-live="polite">
+      <Badge variant="soft" tone={tones[j.status]}>{labels[j.status]}</Badge>
+      <strong className="shrink-0 text-[12.5px]">{j.title}</strong>
+      <span className="hidden w-24 shrink-0 sm:block"><Progress value={pct} aria-label={j.title + " 进度"} /></span>
+      <small className={"min-w-0 flex-1 truncate tabular-nums " + (j.status === "failed" ? "text-[var(--mg-bad-ink)]" : "text-[var(--mg-ink-3)]")} title={line}>{line}</small>
+      <Button size="xs" variant="ghost" onClick={() => setOpen(true)}>详情</Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent size="lg">
+          <DialogTitle>{j.title}</DialogTitle>
+          <DialogDescription>关掉这个窗口任务照常进行；取消后已下载的部分保留，再次下载时续传。</DialogDescription>
+          <JobByID id={j.id} initial={j} />
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// latestJob：某类任务里最近的一个（正在进行的优先），只看 30 分钟内开始的。卡片上的任务位一直显示它，
+// 不在任务结束后定时消失，避免页面无故跳动。
+export function latestJob(jobs: Job[] | undefined, prefix: string) {
+  const recent = (jobs ?? []).filter((j) => j.id.startsWith(prefix) && (j.status === "running" || Date.now() - Date.parse(j.started_at) < 30 * 60_000));
+  return recent.find((j) => j.status === "running") ?? recent.sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at))[0];
 }

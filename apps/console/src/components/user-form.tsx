@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Button, CheckboxField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, PasswordInput, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField } from "@weir/ui";
 import { api } from "../api";
 import { useFormAction } from "../lib/action";
+import { field, useConsoleContext } from "../lib/console-context";
 import { fromLocalInput, fromUnits, localInput, toUnits, units, type NodeItem, type Unit, type UserItem } from "../lib/core";
 
 export function UserForm({ value, nodes, close, saved }: { value: UserItem | "new" | null; nodes: NodeItem[]; close: () => void; saved: (u: UserItem) => void }) {
@@ -40,6 +41,17 @@ function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new
       onSuccess: saved,
     },
   );
+  // 页面感知：填到哪里（密码只标已填 / 未填），dsh 可以接着这张表拼出草稿
+  useConsoleContext({
+    dialog: { title: isNew ? "创建用户" : "编辑用户" },
+    object: u ? { type: "user", name: u.name || u.email, id: u.id } : undefined,
+    form: [
+      field("email", "邮箱", email), field("name", "备注名", name), field("password", "密码", password, true),
+      field("quota", "额度", quota ? `${quota} ${unit}` : "不限"), field("expires_at", "到期", expiry || "长期"), field("monthly_reset", "按月重置", monthly ? "是" : "否"),
+      field("all_nodes", "全部节点", all ? "是" : "否"), field("node_ids", "选中的节点", nodes.filter((n) => picked.includes(n.id)).map((n) => n.name).join("、")),
+      field("allow_chain", "允许自建链式代理", chain ? "是" : "否"), field("enabled", "启用", enabled ? "是" : "否"),
+    ],
+  });
   return (
     <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
       <DialogContent size="md">
@@ -88,10 +100,9 @@ function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new
           )}
           <SwitchField label="允许用户自建链式代理" checked={chain} onCheckedChange={setChain} />
           {!isNew && <SwitchField label="账户启用" checked={enabled} onCheckedChange={setEnabled} />}
-          {save.error && <Notice tone="bad">{save.error}</Notice>}
-          <DialogFooter>
+          <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
-            <Button type="submit" disabled={save.busy}>{save.busy ? "正在保存…" : isNew ? "创建用户" : "保存"}</Button>
+            <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">{isNew ? "创建用户" : "保存"}</Button>
           </DialogFooter>
         </Form>
       </DialogContent>

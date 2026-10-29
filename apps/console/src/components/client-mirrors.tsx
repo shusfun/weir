@@ -7,6 +7,7 @@ import { Save } from "lucide-react";
 import { api, ApiError, isConflict } from "../api";
 import { State, ConflictNotice } from "./feedback";
 import { emptyReauth, useReauthAction } from "./system-settings";
+import { field, useConsoleContext } from "../lib/console-context";
 
 interface Mirrors { mirrors: string[]; revision: string }
 
@@ -41,6 +42,7 @@ export function ClientMirrorsEditor() {
   useEffect(() => {
     if (query.data) setDraft(query.data.mirrors.join("\n"));
   }, [query.data?.revision]);
+  useConsoleContext({ dialog: confirm ? { title: "确认保存加速镜像" } : undefined, form: [field("mirrors", "加速镜像", draft.split("\n").filter(Boolean).length + " 条"), field("password", "当前密码", re.password, true)] });
   if (query.isPending) return <State loading />;
   if (query.error) return <State error={query.error} onRetry={() => query.refetch()} />;
   const list = parse(draft);

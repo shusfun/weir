@@ -495,7 +495,9 @@ func (s *Server) dshStatus(c *gin.Context) {
 	c.JSON(200, gin.H{"settings": set, "status": st, "installed": installed, "unsupported": supported, "ready": running && s.dshDomain() != "", "plugin": plugin})
 }
 
-// putDSHSettings 修改启用状态与子域名需要重新验证身份；子域名必须与当前控制台同站、不同源。
+// putDSHSettings 保存 dsh 的启用状态、地址与后台分析开关。启用 dsh 等于让 AI 接入面板的工具，
+// 改地址决定中心把哪个地址转给 dsh：这两项要重新验证身份；只改后台分析开关、或停用 dsh 不需要。
+// 地址必须与当前控制台同站、不同源。
 func (s *Server) putDSHSettings(c *gin.Context) {
 	var req struct {
 		Enabled     bool   `json:"enabled"`
@@ -504,10 +506,13 @@ func (s *Server) putDSHSettings(c *gin.Context) {
 		Password    string `json:"password"`
 		Code        string `json:"code"`
 	}
-	if !bind(c, &req) || !s.reauth(c, req.Password, req.Code) {
+	if !bind(c, &req) {
 		return
 	}
 	domain := strings.ToLower(strings.TrimSpace(req.Domain))
+	if cur := s.dshSettings(c.Request.Context()); ((req.Enabled && !cur.Enabled) || domain != cur.Domain) && !s.reauth(c, req.Password, req.Code) {
+		return
+	}
 	if domain != "" {
 		if err := checkDSHDomain(domain, requestHost(c.Request)); err != nil {
 			failDetail(c, 400, "invalid_dsh_domain", err.Error(), nil)
@@ -589,7 +594,12 @@ func (s *Server) dshReleases(c *gin.Context) {
 		c.AbortWithStatusJSON(502, gin.H{"error": gin.H{"code": "upstream_unavailable", "message": "无法获取 dsh 版本：" + err.Error()}})
 		return
 	}
-	c.JSON(200, gin.H{"releases": list})
+	// verified：在 Weir 插件已验证的版本范围内（「Weir 助手」预设与后台分析可用）
+	out := make([]gin.H, 0, len(list))
+	for _, r := range list {
+		out = append(out, gin.H{"version": r.Version, "published_at": r.PublishedAt, "tags": r.Tags, "verified": pluginVerified(r.Version)})
+	}
+	c.JSON(200, gin.H{"releases": out})
 }
 
 // fetchDSH 在后台下载并校验一个版本（任务：进度、日志、可取消，见 jobs.go）。
@@ -620,6 +630,14 @@ func (s *Server) fetchDSH(c *gin.Context) {
 		_, _ = s.Store.Ent.Audit.Create().SetActor(actor).SetAction("dsh.fetch").SetTarget(req.Version).SetResult(res).SetIP(ip).Save(context.Background())
 		if err != nil {
 			return nil, err
+		}
+		// 还没有当前版本时，下载完的这一个就是当前版本：首次配置不用再去点「设为当前」
+		if set := s.dshSettings(bg); set.Version == "" {
+			set.Version = req.Version
+			if err := s.saveDSHSettings(bg, set); err != nil {
+				return nil, err
+			}
+			run.Log("已设为当前版本")
 		}
 		return map[string]any{"integrity": meta.Integrity, "registry": meta.Registry}, nil
 	})

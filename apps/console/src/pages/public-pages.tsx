@@ -1,4 +1,5 @@
 // 公开页面：匿名可访问的介绍页（/p/<slug>），展示已分享的订阅组卡片与留言板。
+import { Link } from "react-router-dom";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, PageHeader, Segmented, SkeletonList, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField, Textarea, useToast, useConfirm } from "@weir/ui";
@@ -8,6 +9,8 @@ import { useFormAction, useRowAction } from "../lib/action";
 import { State } from "../components/feedback";
 import { GuestbookManager } from "../components/guestbook";
 import type { Profile } from "../lib/misub";
+import { dataObject } from "../components/object-link";
+import { field, useConsoleContext } from "../lib/console-context";
 
 interface PageCard {
   profile_id: number;
@@ -47,6 +50,7 @@ export function PublicPagesPage() {
     if (!(await confirm({ title: `删除页面「${p.data.title}」？`, description: "它的留言会一并删除。", confirmText: "删除", tone: "danger" }))) return;
     await run(p.id, () => api("/admin/public-pages/" + p.id, "DELETE"), "页面已删除", { fail: "删除失败" });
   }
+  useConsoleContext({ page: "公开页面", list: { selected: q.data?.length ?? 0, items: (q.data ?? []).slice(0, 20).map((p) => ({ type: "page", name: p.data.title, key: p.slug })) } });
   return (
     <div className="stack">
       <PageHeader eyebrow="订阅与分发" title="公开页面" description="匿名可访问的介绍页，可展示已分享的订阅组与留言板。" actions={<Button onClick={() => setEdit("new")}><Plus />新建页面</Button>} />
@@ -64,7 +68,7 @@ export function PublicPagesPage() {
           <CardContent>
             <ul className="stack">
               {q.data.map((p) => (
-                <li key={p.id} className="flex flex-wrap items-center justify-between gap-2">
+                <li key={p.id} {...dataObject({ type: "page", key: p.slug })} className="flex flex-wrap items-center justify-between gap-2">
                   <span className="min-w-0">
                     <strong>{p.data.title}</strong> <Badge variant="soft" tone={p.data.enabled ? "ok" : "neutral"}>{p.data.enabled ? "已发布" : "草稿"}</Badge>
                     <small className="block text-[var(--mg-ink-3)]">/p/{p.slug} · {p.data.cards?.length ?? 0} 张订阅卡片</small>
@@ -107,6 +111,7 @@ function PageForm({ value, close, saved }: { value: PageItem | "new"; close: () 
     onSuccess: saved,
   });
   const shared = (profiles.data ?? []).filter((x) => x.shared);
+  useConsoleContext({ dialog: { title: p ? "编辑页面" : "新建页面" }, object: p ? { type: "page", name: p.data.title, key: p.slug } : undefined, form: [field("slug", "地址名", slug), field("title", "标题", d.title), field("enabled", "发布", d.enabled ? "是" : "否"), field("cards", "订阅卡片", String(d.cards?.length ?? 0))] });
   return (
     <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
       <DialogContent size="lg">
@@ -154,12 +159,11 @@ function PageForm({ value, close, saved }: { value: PageItem | "new"; close: () 
             <div className="actions">
               <Button type="button" size="sm" variant="outline" disabled={cards.length >= 24 || (profiles.data ?? []).length === 0} onClick={() => set({ cards: [...cards, { profile_id: (shared[0] ?? profiles.data?.[0])?.id ?? 0, target: "clash", title: "" }] })}><Plus />添加卡片</Button>
             </div>
-            {(profiles.data ?? []).length > 0 && shared.length === 0 && <small className="text-[var(--mg-ink-3)]">当前没有已分享的订阅组；先在「订阅管理 → 订阅组」中分享，卡片才会显示。</small>}
+            {(profiles.data ?? []).length > 0 && shared.length === 0 && <small className="text-[var(--mg-ink-3)]">当前没有已分享的订阅组；先分享订阅组，卡片才会显示：<Link className="text-[var(--mg-accent-text)] underline-offset-4 hover:underline" to="/subscriptions?tab=profiles" target="_blank">在新标签页打开「订阅管理 → 订阅组」</Link>。</small>}
           </fieldset>
-          {save.error && <Notice tone="bad">{save.error}</Notice>}
-          <DialogFooter>
+          <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
-            <Button type="submit" disabled={save.busy}>{save.busy ? "正在保存…" : "保存"}</Button>
+            <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           </DialogFooter>
         </Form>
       </DialogContent>

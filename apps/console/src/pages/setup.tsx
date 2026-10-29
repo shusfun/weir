@@ -383,9 +383,7 @@ export function SetupPage({ done }: { done: () => void }) {
                                 )}
                               </>
                             ) : null}
-                            <Button type="button" variant="outline" size="sm" className="self-start" disabled={detecting} onClick={() => void detect()}>
-                              {detecting ? "正在探测…" : "重新探测"}
-                            </Button>
+                            <Button type="button" variant="outline" size="sm" className="self-start" disabled={detecting} onClick={() => void detect()} busy={detecting} busyText="正在探测…">重新探测</Button>
                           </div>
                           <FormGrid>
                             <TextField name={id + "host"} label="PostgreSQL 主机" required value={postgres.host} onChange={(v) => pg("host", v)} />
@@ -492,7 +490,6 @@ export function SetupPage({ done }: { done: () => void }) {
                       <p className="setup-info">二次验证与通行密钥可在安装后的账户安全中设置。</p>
                     </>
                   )}
-                {error && <Notice tone="bad">{error}</Notice>}
                 <div className="setup-actions">
                   {step > 0 && (
                     <Button
@@ -522,6 +519,7 @@ export function SetupPage({ done }: { done: () => void }) {
                     <ArrowRight size={15} />
                   </Button>
                 </div>
+                {error && <Notice tone="bad">{error}</Notice>}
               </Form>
             </CardContent>
           </Card>

@@ -28,6 +28,7 @@ import { api, isConflict } from "../api";
 import { ConflictNotice, State } from "./feedback";
 import { emptyReauth, useReauthAction } from "./system-settings";
 import { PublishedAnnouncement, type NoticeNode, type PublishedNotice } from "./published-announcement";
+import { field, useConsoleContext } from "../lib/console-context";
 
 interface Announcement {
   content_format?: string;
@@ -124,6 +125,7 @@ export function AnnouncementEditor() {
   const contentError = draft.enabled && !draft.content.trim() ? "发布公告需要填写正文" : html && preview.isError ? "富文本包含不支持的标签、属性或链接，请修正后再发布" : "";
   const audienceError = draft.enabled && !draft.authenticated && !draft.public ? "发布公告需要至少选择一个受众" : "";
   const previewReady = !html || (!!preview.data && !preview.isError);
+  useConsoleContext({ tab: "分发", dialog: confirm ? { title: "确认全局公告变更" } : undefined, form: [field("announcement_enabled", "启用全局公告", draft.enabled ? "是" : "否"), field("password", "当前密码", re.password, true)] });
   return (
     <Card>
       <CardContent className="stack announcement-editor">
@@ -242,9 +244,7 @@ export function AnnouncementEditor() {
                 <Button type="button" variant="outline" disabled={save.busy} onClick={closeConfirm}>
                   取消
                 </Button>
-                <Button type="submit" disabled={save.busy}>
-                  {save.busy ? "正在保存…" : "确认保存公告"}
-                </Button>
+                <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">确认保存公告</Button>
               </DialogFooter>
             </Form>
           </DialogContent>

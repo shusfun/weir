@@ -1,6 +1,8 @@
 // 订阅链接与自建链式代理：管理员（按用户）与用户本人共用。base 为 "/admin/users/<id>" 或 "/me"。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { field, useConsoleContext } from "../lib/console-context";
+import { dataObject } from "./object-link";
 import {
   Badge,
   Button,
@@ -108,7 +110,7 @@ export function LinkPanel({
         <State empty="还没有链接" />
       ) : (
         links.data.map((l) => (
-          <div key={l.id} className="stack rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3">
+          <div key={l.id} {...dataObject({ type: "link", id: l.id })} className="stack rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <strong>
                 {l.name || "未命名"}{" "}
@@ -278,6 +280,11 @@ function LinkForm({
     { onSuccess: saved },
   );
   const toggle = (list: number[], id: number, on: boolean) => (on ? [...list, id] : list.filter((x) => x !== id));
+  useConsoleContext({
+    dialog: { title: l ? "编辑链接" : "新链接" },
+    object: l ? { type: "link", name: l.name || "未命名", id: l.id } : undefined,
+    form: [field("name", "名称", name), field("all_nodes", "全部节点", all ? "是" : "否"), field("node_ids", "选中的节点", nodes.filter((n) => picked.includes(n.id)).map((n) => n.name).join("、")), field("chain_ids", "选中的链式代理", chains.filter((c) => pickedChains.includes(c.id)).map((c) => c.name).join("、")), field("enabled", "启用", enabled ? "是" : "否")],
+  });
   return (
     <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
       <DialogContent size="md">
@@ -312,10 +319,9 @@ function LinkForm({
             </>
           )}
           {l && <SwitchField label="启用" checked={enabled} onCheckedChange={setEnabled} />}
-          {save.error && <Notice tone="bad">{save.error}</Notice>}
-          <DialogFooter>
+          <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
-            <Button type="submit" disabled={save.busy}>{save.busy ? "正在保存…" : "保存"}</Button>
+            <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           </DialogFooter>
         </Form>
       </DialogContent>
@@ -370,7 +376,7 @@ export function ChainPanel({ base, nodes, admin }: { base: string; nodes: NodeOp
       ) : (
         <ul className="stack">
           {chains.data.items.map((c) => (
-            <li key={c.id} className="flex flex-wrap items-center justify-between gap-2">
+            <li key={c.id} {...dataObject({ type: "chain", id: c.id })} className="flex flex-wrap items-center justify-between gap-2">
               <span className="min-w-0">
                 <strong>{c.name}</strong>{" "}
                 {!c.enabled && (
@@ -467,6 +473,13 @@ function ChainForm({
         : { entry_not_allowed: "entry", exit_not_allowed: "exitNode", chain_self: "exitNode", chain_cycle: "exitNode", chain_exit_unavailable: "exitNode", chain_exit_unsupported: "exitNode", chain_exit_no_address: "exitNode" },
     onSuccess: saved,
   });
+  useConsoleContext({
+    dialog: { title: "新建链式代理" },
+    form: [
+      field("name", "名称", name), field("entry_node_id", "入口节点", nodes.find((n) => n.id === entry)?.name), field("exit_kind", "出口类型", exit.kind),
+      ...(socks ? [field("address", "SOCKS5 地址", exit.address), field("port", "端口", exit.port), field("username", "用户名", exit.username), field("password", "SOCKS5 密码", exit.password, true)] : []),
+    ],
+  });
   return (
     <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
       <DialogContent size="md">
@@ -538,14 +551,11 @@ function ChainForm({
             </Field>
           )}
           {admin && <CheckboxField label="跳过 VPS 实测（仅管理员）" checked={skip} onCheckedChange={setSkip} />}
-          {save.error && <Notice tone="bad">{save.error}</Notice>}
-          <DialogFooter>
+          <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>
               取消
             </Button>
-            <Button type="submit" disabled={save.busy}>
-              {save.busy ? "正在实测并保存…" : "保存"}
-            </Button>
+            <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在实测并保存…">保存</Button>
           </DialogFooter>
         </Form>
       </DialogContent>

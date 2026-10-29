@@ -90,20 +90,32 @@ func (s *Server) kernelDefaults(ctx context.Context) map[string]string {
 }
 
 // kernelUsers 列出正在使用某个内核版本的 VPS：锁定它的、正在运行它的。
-func (s *Server) kernelUsers(ctx context.Context, kernel, version string) (pinned, running []string) {
+func (s *Server) kernelUsers(ctx context.Context, kernel, version string) (pinned, running []gateRef) {
 	gates, err := s.Store.Ent.Gate.Query().All(ctx)
 	if err != nil {
 		return nil, nil
 	}
 	for _, g := range gates {
 		if g.KernelPins[kernel] == version {
-			pinned = append(pinned, g.Name)
+			pinned = append(pinned, gateRef{g.ID, g.Name})
 		}
 		if g.KernelsRunning[kernel] == version {
-			running = append(running, g.Name)
+			running = append(running, gateRef{g.ID, g.Name})
 		}
 	}
 	return pinned, running
+}
+
+// refNames 保留旧字段（只有名称）给已有的读取方。
+func refNames(refs []gateRef) []string {
+	if refs == nil {
+		return nil
+	}
+	out := make([]string, len(refs))
+	for i, r := range refs {
+		out[i] = r.Name
+	}
+	return out
 }
 
 func (s *Server) listKernels(c *gin.Context) {
@@ -127,7 +139,7 @@ func (s *Server) listKernels(c *gin.Context) {
 				have[arch] = err == nil
 			}
 			pinned, running := s.kernelUsers(ctx, name, v)
-			item := gin.H{"version": v, "arches": have, "default": defaults[name] == v, "pinned_by": pinned, "running_on": running}
+			item := gin.H{"version": v, "arches": have, "default": defaults[name] == v, "pinned_by": refNames(pinned), "running_on": refNames(running), "pinned_refs": nonNilRefs(pinned), "running_refs": nonNilRefs(running)}
 			if name != "mihomo" {
 				if d, _, err := s.drivers(ctx).Select(name, v); err == nil {
 					item["driver"] = d.Name
@@ -275,7 +287,7 @@ func (s *Server) removeKernelVersion(c *gin.Context) {
 		return
 	}
 	if pinned, running := s.kernelUsers(ctx, name, version); len(pinned)+len(running) > 0 {
-		failDetail(c, 409, "kernel_in_use", "仍有 VPS 在用："+strings.Join(append(pinned, running...), "、"), nil)
+		failDetail(c, 409, "kernel_in_use", "仍有 VPS 在用："+strings.Join(refNames(append(pinned, running...)), "、"), nil)
 		return
 	}
 	if err := s.kernelCache().Remove(name, version); err != nil {

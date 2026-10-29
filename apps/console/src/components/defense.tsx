@@ -53,11 +53,11 @@ export function LayaCard() {
             <PasswordInput autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} />
           </Field>
           <Reauth value={re} onChange={setRe} />
-          {save.error && <Notice tone="bad">{save.error}</Notice>}
           <div className="actions">
-            <Button type="submit" disabled={save.busy}>{save.busy ? "正在保存…" : "保存"}</Button>
-            <Button type="button" variant="outline" disabled={isBusy() || !q.data?.enabled} onClick={() => void test()}>{isBusy() ? "正在测试…" : "测试"}</Button>
+            <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
+            <Button type="button" variant="outline" disabled={isBusy() || !q.data?.enabled} onClick={() => void test()} busy={isBusy()} busyText="正在测试…">测试</Button>
           </div>
+          {save.error && <Notice tone="bad">{save.error}</Notice>}
         </Form>
       )}
     </Section>

@@ -5,12 +5,14 @@ import { SourcesPanel } from "../components/misub-sources";
 import { NodesPanel } from "../components/misub-nodes";
 import { ProfilesPanel } from "../components/misub-profiles";
 import { SettingsPanel, TemplatesPanel } from "../components/misub-settings";
+import { field, useConsoleContext } from "../lib/console-context";
 
 const tabs = [["sources", "订阅源"], ["nodes", "手动节点"], ["profiles", "订阅组"], ["templates", "规则模板"], ["settings", "默认设置"]] as const;
 
 export function SubscriptionsPage() {
   const [params, setParams] = useSearchParams();
   const tab = tabs.some(([k]) => k === params.get("tab")) ? params.get("tab")! : "sources";
+  useConsoleContext({ page: "订阅管理", tab: tabs.find(([k]) => k === tab)?.[1] });
   return (
     <div className="stack">
       <PageHeader eyebrow="订阅与分发" title="订阅管理" description="汇集机场订阅与手动节点，按订阅组处理后分配给用户或分享。" />

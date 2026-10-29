@@ -2,10 +2,12 @@
 // 抽屉打开过的那个浏览器标签把合并后的上下文报给中心，dsh 经 get_console_context 读取；不传截图、DOM 或页面原文。
 import { useEffect, useRef } from "react";
 
+// 正在看的对象：类型取 lib/objects.ts 的 ObjectType；数字编号的填 id，驱动、内核版本这类按名称的填 key。
 export interface CtxObject {
   type: string;
   name: string;
-  id: number;
+  id?: number;
+  key?: string;
 }
 export interface CtxFormField {
   key: string;

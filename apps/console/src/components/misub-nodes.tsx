@@ -7,6 +7,7 @@ import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
 import type { ManualNode } from "../lib/misub";
 import { State } from "./feedback";
+import { field, useConsoleContext } from "../lib/console-context";
 
 export function useManualNodes() {
   return useQuery({ queryKey: ["misub-nodes"], queryFn: () => api("/admin/misub/nodes") as Promise<{ items: ManualNode[]; groups: Record<string, number> }> });
@@ -87,6 +88,7 @@ function NodeForm({ value, close, saved }: { value: ManualNode | "new"; close: (
     },
     { fields: { invalid_node_url: "url", invalid_node_group: "group" }, onSuccess: saved },
   );
+  useConsoleContext({ dialog: { title: n ? "编辑节点" : "添加节点" }, form: [field("name", "名称", name), field("url", "节点链接", url, true), field("group", "分组", group)] });
   return (
     <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
       <DialogContent size="md">
@@ -99,10 +101,9 @@ function NodeForm({ value, close, saved }: { value: ManualNode | "new"; close: (
             <Field label="分组（可选）" name="group"><Input value={group} onChange={(e) => setGroup(e.target.value)} /></Field>
           </FormGrid>
           <SwitchField label="名称中的 + 视为空格" checked={plus} onCheckedChange={setPlus} />
-          {save.error && <Notice tone="bad">{save.error}</Notice>}
-          <DialogFooter>
+          <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
-            <Button type="submit" disabled={save.busy}>{save.busy ? "正在保存…" : "保存"}</Button>
+            <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           </DialogFooter>
         </Form>
       </DialogContent>
@@ -117,6 +118,7 @@ function ImportForm({ close, saved }: { close: () => void; saved: (n: number) =>
     fields: { invalid_inventory: "content", invalid_node_group: "group" },
     onSuccess: (r) => saved(r.imported),
   });
+  useConsoleContext({ dialog: { title: "批量导入节点" }, form: [field("content", "节点内容", content, true), field("group", "分组", group)] });
   return (
     <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
       <DialogContent size="lg">
@@ -127,10 +129,9 @@ function ImportForm({ close, saved }: { close: () => void; saved: (n: number) =>
             <Textarea required rows={10} className="font-mono text-xs" value={content} onChange={(e) => setContent(e.target.value)} />
           </Field>
           <Field label="放入分组（可选）" name="group"><Input value={group} onChange={(e) => setGroup(e.target.value)} /></Field>
-          {save.error && <Notice tone="bad">{save.error}</Notice>}
-          <DialogFooter>
+          <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
-            <Button type="submit" disabled={save.busy}>{save.busy ? "正在导入…" : "导入"}</Button>
+            <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在导入…">导入</Button>
           </DialogFooter>
         </Form>
       </DialogContent>

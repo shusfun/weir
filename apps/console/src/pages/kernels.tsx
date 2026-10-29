@@ -10,9 +10,11 @@ import { useRowAction } from "../lib/action";
 import { State } from "../components/feedback";
 import { DshVersions } from "../components/dsh";
 import { SubCheckBadge, type SubCheck } from "../components/sub-check";
-import { JobByID, useJobs, useStartedJob } from "../components/job";
+import { JobLine, latestJob, useJobs, useStartedJob, type Job } from "../components/job";
 import { DriversPanel } from "../components/drivers";
 import { date } from "../lib/models";
+import { ObjectLink, dataObject } from "../components/object-link";
+import { useConsoleContext } from "../lib/console-context";
 
 interface KernelVersion {
   version: string;
@@ -20,6 +22,8 @@ interface KernelVersion {
   default: boolean;
   pinned_by: string[] | null;
   running_on: string[] | null;
+  pinned_refs?: { id: number; name: string }[];
+  running_refs?: { id: number; name: string }[];
   driver?: string;
   driver_error?: string;
 }
@@ -50,6 +54,7 @@ const tabs = [
 export function KernelsPage() {
   const [params, setParams] = useSearchParams();
   const tab = tabs.some((t) => t.key === params.get("tab")) ? params.get("tab")! : "versions";
+  useConsoleContext({ page: "内核", tab: tabs.find((t) => t.key === tab)?.label });
   return (
     <div className="stack">
       <PageHeader eyebrow="工作区" title="内核" description="内核只以独立程序运行，升级不需要更新 Weir。中心拉取后按官方摘要校验，再推送给 VPS；VPS 不访问 GitHub。每个版本怎么配置由内核驱动决定。" />
@@ -85,28 +90,28 @@ function Versions() {
   return (
     <>
       {Object.entries(q.data).sort(([a], [b]) => order.indexOf(a) - order.indexOf(b)).map(([kernel, k]) => {
-        const running = (jobs.data ?? []).filter((j) => j.id.startsWith(`kernel:${kernel}:`) && (j.status === "running" || Date.now() - Date.parse(j.finished_at ?? j.started_at) < 120000));
+        const job = latestJob(jobs.data, `kernel:${kernel}:`);
         return (
-          <Card key={kernel}>
+          <Card key={kernel} {...dataObject({ type: "kernel", key: kernel })}>
             <CardContent className="stack">
               <SectionHeader
                 title={kernelNames[kernel] ?? kernel}
                 description={`${k.default ? `默认版本 ${k.default}` : "未设置默认版本：VPS 保持正在运行的版本，新部署的 VPS 使用已下载的最新版本。下载新版本不会自动替换。"}需要的架构：${k.arches.join("、")}（按中心与已接入的 VPS 自动决定）。`}
                 actions={<Button size="sm" variant="outline" onClick={() => setReleases(kernel)}><Download />拉取版本</Button>}
               />
-              {running.map((j) => <JobByID key={j.id} id={j.id} onFinish={() => void q.refetch()} />)}
+              <JobLine job={job} idle="没有进行中的下载" onFinish={() => void q.refetch()} />
               {k.versions.length === 0 ? <small>尚未下载</small> : (
                 <ul className="m-0 list-none space-y-2 p-0">
                   {k.versions.map((v) => {
-                    const users = [...(v.pinned_by ?? []).map((n) => `${n}（锁定）`), ...(v.running_on ?? []).map((n) => `${n}（运行中）`)];
+                    const users = [...(v.pinned_refs ?? []).map((g) => ({ ...g, how: "锁定" })), ...(v.running_refs ?? []).map((g) => ({ ...g, how: "运行中" }))];
                     const missing = k.arches.filter((a) => !v.arches[a]);
                     return (
-                      <li key={v.version} className="flex flex-wrap items-center gap-2 rounded-[var(--mg-radius)] border border-[var(--mg-line)] px-3 py-2">
+                      <li key={v.version} {...dataObject({ type: "kernel", key: `${kernel}@${v.version}` })} className="flex flex-wrap items-center gap-2 rounded-[var(--mg-radius)] border border-[var(--mg-line)] px-3 py-2">
                         <code className="text-xs">{v.version}</code>
                         {v.default && <Badge variant="soft" tone="ok">默认</Badge>}
                         {missing.length > 0 && <Badge variant="soft" tone="warn">缺 {missing.join("、")}</Badge>}
-                        {kernel !== "mihomo" && (v.driver ? <Badge variant="soft" tone="neutral">驱动 {v.driver}</Badge> : <Badge variant="soft" tone="bad" title={v.driver_error}>没有驱动</Badge>)}
-                        {users.length > 0 && <small className="text-[var(--mg-ink-3)]">{users.join("、")}</small>}
+                        {kernel !== "mihomo" && (v.driver ? <Badge variant="soft" tone="neutral">驱动 <ObjectLink to={{ type: "driver", key: v.driver, name: v.driver }} /></Badge> : <Badge variant="soft" tone="bad" title={v.driver_error}>没有驱动 · <ObjectLink to={{ type: "driver", key: "new", name: "新增驱动" }} /></Badge>)}
+                        {users.length > 0 && <small className="text-[var(--mg-ink-3)]">{users.map((g, i) => <span key={g.how + g.id}>{i > 0 && "、"}<ObjectLink to={{ type: "gate", id: g.id, name: g.name }} />（{g.how}）</span>)}</small>}
                         <span className="ml-auto flex gap-1">
                           {missing.length > 0 && <Button size="xs" variant="ghost" disabled={isBusy()} onClick={() => void run(kernel + v.version, async () => started((await api(`/admin/kernels/${kernel}/fetch`, "POST", { version: v.version })).job.id), `开始下载 ${missing.join("、")}`)}><Download />补下</Button>}
                           {!v.default && <Button size="xs" variant="ghost" disabled={isBusy() || (kernel !== "mihomo" && !v.driver)} onClick={() => void setDefault(kernel, v.version)}><Star />设为默认</Button>}
@@ -121,7 +126,7 @@ function Versions() {
           </Card>
         );
       })}
-      {releases && <ReleasesDialog kernel={releases} close={() => setReleases(null)} fetched={() => void q.refetch()} />}
+      {releases && <ReleasesDialog kernel={releases} arches={q.data[releases]?.arches ?? []} jobs={jobs.data} close={() => setReleases(null)} fetched={() => void q.refetch()} />}
     </>
   );
 }
@@ -162,7 +167,7 @@ function SubChecks() {
   );
 }
 
-function ReleasesDialog({ kernel, close, fetched }: { kernel: string; close: () => void; fetched: () => void }) {
+function ReleasesDialog({ kernel, arches, jobs, close, fetched }: { kernel: string; arches: string[]; jobs?: Job[]; close: () => void; fetched: () => void }) {
   const q = useQuery({ queryKey: ["kernel-releases", kernel], queryFn: () => api(`/admin/kernels/${kernel}/releases`) as Promise<{ releases: Release[]; arches: string[]; recommended: { version: string; reason: string } }> });
   const [job, setJob] = useState<string | null>(null);
   const started = useStartedJob();
@@ -175,23 +180,23 @@ function ReleasesDialog({ kernel, close, fetched }: { kernel: string; close: () 
         <DialogTitle>{kernelNames[kernel] ?? kernel} · 上游版本</DialogTitle>
         <DialogDescription>
           {kernel === "sing-box" ? "sing-box 来自本项目 CI 跟随上游标签编译（带 with_v2ray_api，按用户统计流量需要）；下载量取上游 SagerNet/sing-box。" : "来自上游 GitHub 正式发布。"}
-          下载经镜像回退、可续传，摘要不一致即丢弃。{q.data ? `一次下载 ${q.data.arches.join("、")}。` : ""}关掉窗口下载照常进行。
+          下载经镜像回退、可续传，摘要不一致即丢弃。一次下载 {arches.join("、") || "需要的架构"}。关掉窗口下载照常进行。
         </DialogDescription>
-        {job && <JobByID id={job} onFinish={fetched} />}
-        {q.data?.recommended?.version && <Notice tone="info">推荐 {q.data.recommended.version}：{q.data.recommended.reason}。</Notice>}
+        <JobLine id={job} job={latestJob(jobs, `kernel:${kernel}:`)} idle="点版本右侧的「下载」开始；进度显示在这里" onFinish={fetched} />
         {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} skeleton={<SkeletonList rows={5} lines={1} className="stack" rowClassName="flex items-center justify-between gap-2" />} /> : q.data.releases.length === 0 ? <State empty="没有可用版本" /> : (
           <ul className="stack mg-focus-gutter max-h-[50vh] overflow-y-auto">
             {q.data.releases.map((r) => (
               <li key={r.version} className="flex flex-wrap items-center justify-between gap-2">
                 <span className="flex flex-wrap items-center gap-2">
                   <code>{r.version}</code>
-                  {r.recommended && <Badge variant="soft" tone="ok">推荐</Badge>}
-                  {kernel !== "mihomo" && (r.driver ? <Badge variant="soft" tone="neutral">驱动 {r.driver}</Badge> : <Badge variant="soft" tone="warn">没有驱动</Badge>)}
+                  {r.recommended && <Badge variant="soft" tone="ok" title={q.data.recommended?.reason}>推荐</Badge>}
+                  {kernel !== "mihomo" && (r.driver ? <Badge variant="soft" tone="neutral">驱动 <ObjectLink to={{ type: "driver", key: r.driver, name: r.driver }} /></Badge> : <Badge variant="soft" tone="warn">没有驱动</Badge>)}
                   {r.incompatible && <Badge variant="soft" tone="warn" title={r.incompatible}>有不兼容</Badge>}
                   {r.young && <small className="text-[var(--mg-ink-3)]">发布不满 14 天</small>}
-                  <small className="text-[var(--mg-ink-3)]">{date(r.published_at)}{r.downloads ? ` · ${q.data.arches.join("+")} 下载 ${q.data.arches.reduce((n, a) => n + (r.downloads?.[a] ?? 0), 0)}` : ""}</small>
+                  <small className="tabular-nums text-[var(--mg-ink-3)]">{date(r.published_at)}{r.downloads ? ` · ${q.data.arches.join("+")} 下载 ${q.data.arches.reduce((n, a) => n + (r.downloads?.[a] ?? 0), 0)}` : ""}</small>
                 </span>
                 <Button size="sm" variant="outline" disabled={isBusy()} onClick={() => void download(r.version)}>下载</Button>
+                {r.recommended && q.data.recommended?.reason && <small className="basis-full text-[var(--mg-ink-3)]">推荐理由：{q.data.recommended.reason}</small>}
               </li>
             ))}
           </ul>

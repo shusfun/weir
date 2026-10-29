@@ -1,6 +1,6 @@
 // 用户：一个窗口建用户与套餐；详情中查看 / 管理其订阅链接（含凭据原文）与自建链式代理。
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Badge, Button, Card, CardContent, Meter, PageHeader, SectionHeader, Sheet, SheetContent, SkeletonTable, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, CopyButton, Notice, useToast, useConfirm } from "@weir/ui";
 import { Plus, RotateCcw, Trash2 } from "lucide-react";
@@ -12,28 +12,36 @@ import { HistoryCharts } from "../components/history-charts";
 import { ChainPanel, LinkPanel, type NodeOption } from "../components/link-panel";
 import { bytes, date } from "../lib/models";
 import { useConsoleContext } from "../lib/console-context";
+import { dataObject, useDialogParam } from "../components/object-link";
+import { objectHref, type ObjectRef } from "../lib/objects";
 import type { NodeItem, UserItem, Withheld } from "../lib/core";
 
 export function UsersPage() {
   const confirm = useConfirm();
-  const toast = useToast();
   const users = useQuery({ queryKey: ["users"], queryFn: async () => (await api("/admin/users")).items as UserItem[] });
   const nodes = useQuery({ queryKey: ["nodes"], queryFn: async () => (await api("/admin/nodes")).items as NodeItem[] });
   const [form, setForm] = useState<UserItem | "new" | null>(null);
-  const [detail, setDetail] = useState<UserItem | null>(null);
   const [created, setCreated] = useState<UserItem | null>(null);
   const { run: act, isBusy } = useRowAction<number>({ refetch: users.refetch });
-  // dsh 的界面导航（?user=编号）：打开这个用户的详情。
-  const [params, setParams] = useSearchParams();
+  // 地址栏：?user=编号 是这个用户的详情（对象链接、dsh 的界面导航）；?link= / ?chain= 只知道编号时，
+  // 先向中心查它属于哪个用户，再打开那个用户并高亮这一项。
+  const detailParam = useDialogParam("user", users.data, !users.isFetching);
+  const detail = detailParam.current;
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const toast = useToast();
   useEffect(() => {
-    const id = Number(params.get("user"));
-    const u = id ? users.data?.find((x) => x.id === id) : undefined;
-    if (u) {
-      setDetail(u);
-      params.delete("user");
-      setParams(params, { replace: true });
+    for (const type of ["link", "chain"] as const) {
+      const id = params.get(type);
+      if (!id) continue;
+      void api(`/admin/objects/${type}/${encodeURIComponent(id)}`)
+        .then((r) => navigate(objectHref(r.object as ObjectRef), { replace: true }))
+        .catch(() => {
+          toast("没有找到要打开的对象", { tone: "warn", description: "它可能已被删除。" });
+          navigate("/users", { replace: true });
+        });
     }
-  }, [params, users.data, setParams]);
+  }, [params, navigate, toast]);
   useConsoleContext({ page: "用户", list: { selected: users.data?.length ?? 0, items: (users.data ?? []).slice(0, 20).map((u) => ({ type: "user", name: u.name || u.email, id: u.id })) } });
   useConsoleContext(detail ? { object: { type: "user", name: detail.name || detail.email, id: detail.id }, dialog: { title: "用户详情" } } : null);
   const header = <PageHeader eyebrow="工作区" title="用户" description="建用户时一次设好额度、周期与节点；用户可自行生成多条链接与链式代理。" actions={<Button onClick={() => setForm("new")}><Plus />创建用户</Button>} />;
@@ -67,9 +75,9 @@ export function UsersPage() {
               </TableHeader>
               <TableBody>
                 {users.data.map((u) => (
-                  <TableRow key={u.id}>
+                  <TableRow key={u.id} {...dataObject({ type: "user", id: u.id })}>
                     <TableCell>
-                      <Button variant="link" className="h-auto min-h-0 p-0 text-left text-[var(--mg-ink)]" onClick={() => setDetail(u)}>{u.name || u.email}</Button>
+                      <Button variant="link" className="h-auto min-h-0 p-0 text-left text-[var(--mg-ink)]" onClick={() => detailParam.open(u)}>{u.name || u.email}</Button>
                       <small className="block text-[var(--mg-ink-3)]">{u.email}</small>
                       {u.role === "admin" && <Badge variant="soft" tone="neutral">管理员</Badge>} {!u.enabled && <Badge variant="soft" tone="warn">已停用</Badge>}
                     </TableCell>
@@ -82,7 +90,7 @@ export function UsersPage() {
                     <TableCell>{u.links} / {u.chains}{!u.allow_chain && "（链式关闭）"}</TableCell>
                     <TableCell>
                       <span className="flex flex-nowrap gap-1.5">
-                        <Button size="sm" variant="outline" onClick={() => setDetail(u)}>详情</Button>
+                        <Button size="sm" variant="outline" onClick={() => detailParam.open(u)}>详情</Button>
                         <Button size="sm" variant="outline" onClick={() => setForm(u)}>编辑</Button>
                         <Button size="icon-sm" variant="outline" aria-label={"清零用量 " + u.email} disabled={isBusy(u.id)} onClick={async () => (await confirm({ title: `清零 ${u.email} 本周期用量？`, confirmText: "清零", tone: "danger" })) && act(u.id, () => api(`/admin/users/${u.id}/reset-usage`, "POST"), "用量已清零")}><RotateCcw /></Button>
                         <Button size="icon-sm" variant="destructive" aria-label={"删除 " + u.email} disabled={isBusy(u.id)} onClick={async () => (await confirm({ title: `删除用户 ${u.email}？`, description: "其所有链接立即失效。", confirmText: "删除", tone: "danger" })) && act(u.id, () => api("/admin/users/" + u.id, "DELETE"), "用户已删除")}><Trash2 /></Button>
@@ -101,20 +109,20 @@ export function UsersPage() {
         close={() => setForm(null)}
         saved={(u) => {
           // 新建后直接打开详情：订阅链接与二维码就在那里，一次性密码也显示在顶部。
+          void users.refetch();
           if (form === "new") {
             setCreated(u);
-            setDetail(u);
+            detailParam.open(u.id);
           }
           setForm(null);
           toast("已保存", { tone: "ok" });
-          void users.refetch();
         }}
       />
       <Sheet
         open={!!detail}
         onOpenChange={(o) => {
           if (!o) {
-            setDetail(null);
+            detailParam.close();
             setCreated(null);
           }
         }}

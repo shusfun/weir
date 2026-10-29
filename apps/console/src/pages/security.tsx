@@ -27,6 +27,7 @@ import { passkey } from "../lib/passkey";
 import { date, type Account, type Items } from "../lib/models";
 import { TextField } from "../components/form-field";
 import { State } from "../components/feedback";
+import { field, useConsoleContext } from "../lib/console-context";
 
 type Passkey = { id: number; created_at: string };
 type Action = "totp" | "passkey" | "password" | "disable" | "delete-key";
@@ -157,6 +158,7 @@ export function SecurityPage({ loginRequired }: { loginRequired: () => void }) {
       setBusy(false);
     }
   }
+  useConsoleContext({ page: "账户安全", dialog: action ? { title: titles[action] } : undefined, form: action ? [field("password", "当前密码", password, true), field("code", "验证码", code, true), field("next", "新密码", next, true)] : undefined });
   return (
     <div className="stack security-page">
       <PageHeader title="保护你的账户" description="管理登录方式与有效会话。设备配对身份与账户二次验证分别管理。" />
@@ -347,10 +349,9 @@ export function SecurityPage({ loginRequired }: { loginRequired: () => void }) {
                   type="submit"
                   variant={action === "delete-key" || action === "disable" ? "destructive" : "default"}
                   disabled={busy}
+                  busy={busy}
                 >
-                  {busy
-                    ? "正在处理…"
-                    : enrollment.url
+                  {enrollment.url
                       ? "确认 TOTP"
                       : action === "totp"
                         ? "生成绑定二维码"

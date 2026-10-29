@@ -13,14 +13,17 @@ export type ReauthValue = { password: string; code: string };
 export const emptyReauth: ReauthValue = { password: "", code: "" };
 
 // Reauth 是各卡片共用的「当前密码 + 二次验证码」输入；放在 <Form> 里，服务端的验证错误标在对应字段下方。
-export function Reauth({ value, onChange }: { value: ReauthValue; onChange: (v: ReauthValue) => void }) {
+// reason：为什么要验证（显示在字段下方）。need=false 时这次改动不需要验证：字段保留占位但禁用，
+// 改动在要 / 不要之间切换时表单高度不变。
+export function Reauth({ value, onChange, need = true, reason }: { value: ReauthValue; onChange: (v: ReauthValue) => void; need?: boolean; reason?: string }) {
+  const hint = need ? reason : "这次改动不需要验证身份。";
   return (
     <FormGrid>
-      <Field label="当前密码" name="password">
-        <PasswordInput autoComplete="current-password" required value={value.password} onChange={(e) => onChange({ ...value, password: e.target.value })} />
+      <Field label="当前密码" name="password" hint={hint}>
+        <PasswordInput autoComplete="current-password" required={need} disabled={!need} value={need ? value.password : ""} onChange={(e) => onChange({ ...value, password: e.target.value })} />
       </Field>
       <Field label="二次验证码（如已开启）" name="code">
-        <Input inputMode="numeric" autoComplete="one-time-code" value={value.code} onChange={(e) => onChange({ ...value, code: e.target.value })} />
+        <Input inputMode="numeric" autoComplete="one-time-code" disabled={!need} value={need ? value.code : ""} onChange={(e) => onChange({ ...value, code: e.target.value })} />
       </Field>
     </FormGrid>
   );
@@ -78,10 +81,10 @@ export function SecurityCard() {
             ))}
           </FormGrid>
           <Reauth value={re} onChange={setRe} />
-          {save.error && <Notice tone="bad">{save.error}</Notice>}
           <div className="actions">
-            <Button type="submit" disabled={save.busy}>{save.busy ? "正在保存…" : "保存"}</Button>
+            <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           </div>
+          {save.error && <Notice tone="bad">{save.error}</Notice>}
         </Form>
       )}
     </Section>
@@ -120,15 +123,15 @@ function SMTPForm({ value, saved }: { value: SMTPView; saved: () => void }) {
         </FormGrid>
         <SwitchField label="使用 TLS" description="465 端口直接 TLS，其他端口 STARTTLS。" checked={f.use_tls} onCheckedChange={(use_tls) => set({ use_tls })} />
         <Reauth value={re} onChange={setRe} />
-        {save.error && <Notice tone="bad">{save.error}</Notice>}
         <div className="actions">
-          <Button type="submit" disabled={save.busy}>{save.busy ? "正在保存…" : "保存"}</Button>
+          <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           {value.configured && (
             <Button type="button" variant="outline" disabled={isBusy()} onClick={() => void run("test", () => api("/admin/settings/smtp/test", "POST", {}), "测试邮件已发出")}>
               发送测试邮件
             </Button>
           )}
         </div>
+        {save.error && <Notice tone="bad">{save.error}</Notice>}
       </Form>
     </Section>
   );
@@ -173,15 +176,15 @@ function NotifyForm({ value, saved }: { value: NotifyView; saved: () => void }) 
         </FormGrid>
         <SwitchField label="VPS 离线超过 5 分钟时提醒" checked={f.gate_offline} onCheckedChange={(gate_offline) => set({ gate_offline })} />
         <Reauth value={re} onChange={setRe} />
-        {save.error && <Notice tone="bad">{save.error}</Notice>}
         <div className="actions">
-          <Button type="submit" disabled={save.busy}>{save.busy ? "正在保存…" : "保存"}</Button>
+          <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           {value.enabled && value.token_set && (
             <Button type="button" variant="outline" disabled={isBusy()} onClick={() => void run("test", () => api("/admin/settings/notify/test", "POST", {}), "测试通知已发出")}>
               发送测试通知
             </Button>
           )}
         </div>
+        {save.error && <Notice tone="bad">{save.error}</Notice>}
       </Form>
     </Section>
   );
@@ -253,11 +256,11 @@ function ImportExport() {
         />
       </Field>
       <Reauth value={re} onChange={setRe} />
+      <div className="actions">
+        <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在导入…">导入</Button>
+      </div>
       {save.error && <Notice tone="bad">{save.error}</Notice>}
       {stats && <StatsNotice s={stats} />}
-      <div className="actions">
-        <Button type="submit" disabled={save.busy}>{save.busy ? "正在导入…" : "导入"}</Button>
-      </div>
     </Form>
   );
 }
@@ -300,7 +303,7 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
       {(save.error || restore.error) && <Notice tone="bad">{save.error || restore.error}</Notice>}
       {stats && <StatsNotice s={stats} />}
       <div className="actions">
-        <Button type="submit" disabled={busy}>{save.busy ? "正在保存…" : "保存"}</Button>
+        <Button type="submit" disabled={busy} busy={save.busy} busyText="正在保存…">保存</Button>
         {value.url && (
           <Button type="button" variant="outline" disabled={isBusy()} onClick={() => void run("run", () => api("/admin/backup/webdav/run", "POST", {}), "备份已上传").then((ok) => ok && saved())}>
             立即备份
@@ -333,8 +336,10 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
                     setRestoring(name);
                     void restore.submit();
                   }}
+                  busy={restore.busy && restoring === name}
+                  busyText="正在导入…"
                 >
-                  {restore.busy && restoring === name ? "正在导入…" : "导入这份"}
+                  导入这份
                 </Button>
               </li>
             ))}
@@ -400,10 +405,10 @@ export function APITokensCard() {
           <Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
         <Reauth value={re} onChange={setRe} />
-        {create.error && <Notice tone="bad">{create.error}</Notice>}
         <div className="actions">
-          <Button type="submit" disabled={create.busy}>{create.busy ? "正在创建…" : "创建令牌"}</Button>
+          <Button type="submit" disabled={create.busy} busy={create.busy} busyText="正在创建…">创建令牌</Button>
         </div>
+        {create.error && <Notice tone="bad">{create.error}</Notice>}
       </Form>
     </Section>
   );

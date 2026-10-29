@@ -56,7 +56,7 @@ export function CommandPalette({ open, onOpenChange, admin }: { open: boolean; o
   let lastGroup = "";
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="md" placement="top" className="gap-0 p-0 max-sm:p-0" showCloseButton={false}>
+      <DialogContent size="md" placement="palette" className="gap-0 p-0 max-sm:p-0" showCloseButton={false}>
         <DialogTitle className="sr-only">快速跳转</DialogTitle>
         <div className="command-search">
           <Search size={17} />

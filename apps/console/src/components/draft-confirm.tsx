@@ -8,6 +8,7 @@ import { api } from "../api";
 import { useFormAction } from "../lib/action";
 import { emptyReauth, Reauth } from "./system-settings";
 import { DiffView, type DiffLine } from "./diff";
+import { field, useConsoleContext } from "../lib/console-context";
 
 interface StepField {
   key: string;
@@ -138,6 +139,9 @@ export function DraftConfirm() {
     setRe(emptyReauth);
     await client.invalidateQueries();
   });
+  // 页面感知：正在确认哪份草稿、改过哪些字段（在提前返回之前声明，hook 次数不变）
+  const open = (q.data ?? []).find((x) => !later.includes(x.id));
+  useConsoleContext(open && !outputs ? { dialog: { title: "确认 dsh 草稿", step: `${open.steps?.length ?? 0} 步` }, form: [field("draft", "草稿", open.id), field("edited", "管理员改过的字段", Object.values(edits).reduce((n, e) => n + Object.keys(e).length, 0) + " 个")] } : null);
   if (outputs) {
     return (
       <Dialog open onOpenChange={(o) => !o && setOutputs(null)}>
@@ -187,12 +191,11 @@ export function DraftConfirm() {
               <Reauth value={re} onChange={setRe} />
             </>
           )}
-          {decision.error && <Notice tone="bad">{decision.error}</Notice>}
         </div>
-        <DialogFooter>
+        <DialogFooter error={decision.error}>
           <Button type="button" variant="ghost" disabled={busy} onClick={() => setLater((l) => [...l, d.id])}>稍后</Button>
           <Button type="button" variant="outline" disabled={busy} onClick={() => decide(false)}>放弃</Button>
-          <Button type="button" variant={d.danger ? "destructive" : "default"} disabled={busy || (d.danger && !re.password)} onClick={() => decide(true)}>{busy ? "正在执行…" : "确认生效"}</Button>
+          <Button type="button" variant={d.danger ? "destructive" : "default"} disabled={busy || (d.danger && !re.password)} onClick={() => decide(true)} busy={busy} busyText="正在执行…">确认生效</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -12,6 +12,7 @@ import { GateCerts } from "./node-certs";
 import { HistoryCharts } from "./history-charts";
 import { GateTopology } from "./gate-topology";
 import { GateRouting } from "./gate-routing";
+import { ObjectLink } from "./object-link";
 
 type Host = Record<string, number | string | undefined>;
 interface Port {
@@ -37,7 +38,13 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
   const foreign = (gate.listening_ports ?? []).filter((p) => !own.has(p.port));
   const { run, isBusy } = useRowAction<string>();
   const mine = nodes.filter((n) => n.gate_id === gate.id);
-  const exitName = (n: NodeItem) => n.chain.kind === "none" ? "直连" : n.chain.kind === "socks5" ? `家宽 SOCKS5 ${n.chain.address}:${n.chain.port}` : n.chain.kind === "source" ? "订阅源节点" : `经 ${nodes.find((x) => x.id === n.chain.node_id)?.name ?? "节点"}（${nodes.find((x) => x.id === n.chain.node_id)?.gate_name ?? ""}）`;
+  const exitName = (n: NodeItem) => {
+    if (n.chain.kind === "none") return "直连";
+    if (n.chain.kind === "socks5") return `家宽 SOCKS5 ${n.chain.address}:${n.chain.port}`;
+    if (n.chain.kind === "source") return "订阅源节点";
+    const x = nodes.find((y) => y.id === n.chain.node_id);
+    return <>经 <ObjectLink to={{ type: "node", id: n.chain.node_id ?? undefined, name: x?.name ?? "节点" }} />{x?.gate_name ? `（${x.gate_name}）` : ""}</>;
+  };
   return (
     <Sheet open onOpenChange={(o) => !o && close()}>
       <SheetContent side="right" title={gate.name} description={`${gate.public_host || "等待上报地址"} · ${gate.arch} · 最近心跳 ${date(gate.last_seen_at)}`} className="w-full sm:max-w-[640px]">
@@ -62,7 +69,8 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
             const cached = (kernels.data[k]?.versions ?? []).filter((v) => v.arches[gate.arch] && v.driver).map((v) => v.version);
             return (
               <div key={k} className="stack rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3">
-                <strong>{k} <small className="font-normal text-[var(--mg-ink-3)]">运行中 {gate.kernels_running?.[k] ?? "无"}</small></strong>
+                <strong>{k} <small className="font-normal text-[var(--mg-ink-3)]">运行中 {gate.kernels_running?.[k] ? <ObjectLink to={{ type: "kernel", key: `${k}@${gate.kernels_running[k]}`, name: gate.kernels_running[k] }} /> : "无"}</small></strong>
+                {cached.length === 0 && <small className="text-[var(--mg-ink-3)]">中心还没有适用 {gate.arch} 且有驱动的 {k} 版本，<ObjectLink to={{ type: "kernel", key: k, name: "去内核页下载" }} />。</small>}
                 <Field label={k + " 版本"}>
                   <Select value={pins[k] ?? ""} onValueChange={(v) => setPins({ ...pins, [k]: String(v) })}>
                     <SelectTrigger><SelectValue>{pins[k] || `跟随默认（${kernels.data[k]?.default || "保持当前运行版本"}）`}</SelectValue></SelectTrigger>
@@ -86,9 +94,9 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
           <SectionHeader title="关系图" description="用户 → 入口节点 → 路由（用户自建链式代理、分流规则）→ 出口（只读）；点击跳到对应用户、节点、VPS、订阅源或出口与分流。" />
           <GateTopology gateId={gate.id} openRouting={() => setRouting(true)} />
           {routing && <GateRouting gate={gate} close={() => setRouting(false)} />}
-          <SectionHeader title="节点与出口" description="入口节点 → 出口；分流规则在「出口与分流」中设置。" />
+          <SectionHeader title="节点与出口" description="入口节点 → 出口。" actions={<Button size="sm" variant="outline" onClick={() => setRouting(true)}>出口与分流</Button>} />
           {mine.length === 0 ? <small>这台 VPS 还没有节点。</small> : (
-            <ul className="stack">{mine.map((n) => <li key={n.id} className="text-sm"><strong>{n.name}</strong> :{n.port} → {exitName(n)}{!n.enabled && <Badge variant="soft" tone="warn">停用</Badge>}</li>)}</ul>
+            <ul className="stack">{mine.map((n) => <li key={n.id} className="text-sm"><ObjectLink to={{ type: "node", id: n.id, name: n.name }} className="font-semibold" /> :{n.port} → {exitName(n)}{!n.enabled && <Badge variant="soft" tone="warn">停用</Badge>}</li>)}</ul>
           )}
         </div>
       </SheetContent>

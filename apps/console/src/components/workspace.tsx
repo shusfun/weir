@@ -11,6 +11,7 @@ import { DraftConfirm } from "./draft-confirm";
 import { CenterOriginBanner } from "./center-origin";
 import { NoticesButton } from "./notices";
 import { JobWatcher } from "./job";
+import { FocusFromURL } from "./object-link";
 
 const collapseKey = "weir-rail-collapsed";
 function readCollapsed() {
@@ -163,6 +164,7 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
         {admin && <DshDrawer />}
         {admin && <DraftConfirm />}
         {admin && <JobWatcher />}
+        <FocusFromURL />
       </div>
     </TooltipProvider>
   );

@@ -4,7 +4,8 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, Notice, PageHeader, SkeletonCards, StatusLamp, Switch, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useToast, useConfirm } from "@weir/ui";
 import { FileBadge, Plus, Server, Sparkles, Trash2 } from "lucide-react";
-import { openDsh, useDsh } from "../components/dsh";
+import { openDsh } from "../components/dsh";
+import { ObjectLink, dataObject, useDialogParam } from "../components/object-link";
 import { GateRouting } from "../components/gate-routing";
 import { GateDetail } from "../components/gate-detail";
 import { api } from "../api";
@@ -31,32 +32,25 @@ export function GatesPage() {
   const nodes = useQuery({ queryKey: ["nodes"], queryFn: async () => (await api("/admin/nodes")).items as NodeItem[], refetchInterval: 10_000 });
   const [invite, setInvite] = useState(false);
   const [wizard, setWizard] = useState(false);
-  const [certs, setCerts] = useState(false);
   const [edit, setEdit] = useState<Gate | null>(null);
-  const dsh = useDsh();
   const [routing, setRouting] = useState<Gate | null>(null);
-  const [detail, setDetail] = useState<Gate | null>(null);
   const refresh = () => Promise.all([gates.refetch(), nodes.refetch()]);
-  // 界面导航（dsh 与关系图）：?gate=编号 打开这台 VPS 的详情；?node=编号 关掉详情，滚到并高亮这个节点所在行。
+  // 地址栏（对象链接、dsh 的界面导航、关系图）：?gate=编号 是这台 VPS 的详情；?certs=1 是证书窗口；
+  // ?node=编号 滚到并高亮这个节点所在行（详情窗随之关闭）。
   const [params, setParams] = useSearchParams();
+  const detailParam = useDialogParam("gate", gates.data, !gates.isFetching);
+  const detail = detailParam.current;
+  const certs = params.get("certs") === "1";
+  const setCerts = (on: boolean) => setParams((p) => { if (on) p.set("certs", "1"); else p.delete("certs"); return p; }, { replace: !on });
   const [focusNode, setFocusNode] = useState<number | null>(null);
   useEffect(() => {
-    const id = Number(params.get("gate"));
-    const g = id ? gates.data?.find((x) => x.id === id) : undefined;
-    if (g) {
-      setDetail(g);
-      params.delete("gate");
-      setParams(params, { replace: true });
-    }
     const nid = Number(params.get("node"));
     if (nid && nodes.data?.some((n) => n.id === nid)) {
-      setDetail(null);
       setRouting(null);
       setFocusNode(nid);
-      params.delete("node");
-      setParams(params, { replace: true });
+      setParams((p) => { p.delete("node"); p.delete("gate"); return p; }, { replace: true });
     }
-  }, [params, gates.data, nodes.data, setParams]);
+  }, [params, nodes.data, setParams]);
   useEffect(() => {
     if (!focusNode) return;
     const row = document.querySelector<HTMLElement>(`[data-node-row="${focusNode}"]`);
@@ -93,7 +87,7 @@ export function GatesPage() {
     <>
       <InviteGate open={invite} close={() => setInvite(false)} done={() => void gates.refetch()} />
       <CertManager open={certs} close={() => setCerts(false)} />
-      {detail && <GateDetail gate={gates.data?.find((x) => x.id === detail.id) ?? detail} nodes={nodes.data ?? []} close={() => setDetail(null)} />}
+      {detail && <GateDetail gate={detail} nodes={nodes.data ?? []} close={detailParam.close} />}
       {routing && <GateRouting gate={routing} close={() => setRouting(null)} />}
       {edit && <GateEdit gate={edit} close={() => setEdit(null)} saved={() => { setEdit(null); toast("已保存", { tone: "ok" }); void refresh(); }} />}
       <NodeWizard open={wizard} close={() => setWizard(false)} done={() => { toast("节点已创建", { tone: "ok" }); void refresh(); }} gates={gates.data ?? []} nodes={nodes.data ?? []} />
@@ -126,12 +120,12 @@ export function GatesPage() {
                   </h2>
                   <small className="text-[var(--mg-ink-3)]">
                     {g.public_host || "等待上报地址"} · {g.arch} · 程序 {g.version || "未知"} · 最近心跳 {date(g.last_seen_at)}
-                    {Object.entries(g.kernels_running ?? {}).map(([k, v]) => ` · ${k} ${v}`)}
+                    {Object.entries(g.kernels_running ?? {}).map(([k, v]) => <span key={k}> · <ObjectLink to={{ type: "kernel", key: `${k}@${v}`, name: `${k} ${v}` }} /></span>)}
                   </small>
                   {g.state === "failed" && g.last_error && <p className="text-[var(--mg-bad-ink)] text-sm">{g.last_error}</p>}
                 </div>
                 <span className="flex flex-nowrap gap-1.5">
-                  <Button size="sm" variant="outline" onClick={() => setDetail(g)}>详情</Button>
+                  <Button size="sm" variant="outline" onClick={() => detailParam.open(g)}>详情</Button>
                   <Button size="sm" variant="outline" onClick={() => setRouting(g)}>出口与分流</Button>
                   <Button size="sm" variant="outline" onClick={() => setEdit(g)}>编辑</Button>
                 </span>
@@ -154,11 +148,11 @@ export function GatesPage() {
                     </TableHeader>
                     <TableBody>
                       {list.map((n) => (
-                        <TableRow key={n.id} data-node-row={n.id} tabIndex={focusNode === n.id ? -1 : undefined} className={focusNode === n.id ? "bg-[var(--mg-accent-soft)] transition-colors" : undefined}>
+                        <TableRow key={n.id} data-node-row={n.id} {...dataObject({ type: "node", id: n.id })} tabIndex={focusNode === n.id ? -1 : undefined} className={focusNode === n.id ? "bg-[var(--mg-accent-soft)] transition-colors" : undefined}>
                           <TableCell>{n.name}</TableCell>
                           <TableCell>{protocolNames[n.protocol] ?? n.protocol}{n.security === "reality" ? " + REALITY" : n.network === "ws" ? " + WS" : ""}</TableCell>
                           <TableCell className="font-mono">{n.port}</TableCell>
-                          <TableCell>{n.chain.kind === "none" ? "直连" : n.chain.kind === "socks5" ? `SOCKS5 ${n.chain.address}:${n.chain.port}` : n.chain.kind === "source" ? "订阅源节点" : `经 ${nodes.data.find((x) => x.id === n.chain.node_id)?.name ?? "节点"}`}</TableCell>
+                          <TableCell>{n.chain.kind === "none" ? "直连" : n.chain.kind === "socks5" ? `SOCKS5 ${n.chain.address}:${n.chain.port}` : n.chain.kind === "source" ? "订阅源节点" : <>经 <ObjectLink to={{ type: "node", id: n.chain.node_id ?? undefined, name: nodes.data.find((x) => x.id === n.chain.node_id)?.name ?? "节点" }} /></>}</TableCell>
                           <TableCell>{n.credentials}</TableCell>
                           <TableCell>
                             <Switch aria-label={"启用 " + n.name} checked={n.enabled} disabled={isBusy(n.id)} onCheckedChange={(v) => act(n.id, () => api("/admin/nodes/" + n.id, "PATCH", { enabled: v }), v ? "节点已启用" : "节点已停用")} />
@@ -169,7 +163,7 @@ export function GatesPage() {
                               const r = await api(`/admin/nodes/${n.id}/test`, "POST", {});
                               toast(`实测通过：${r.latency_ms} ms`, { tone: "ok" });
                             }, "实测完成")}>实测</Button>
-                            <Button size="sm" variant="outline" title={dsh.data?.ready ? undefined : "请先在系统设置中启用 dsh"} disabled={!dsh.data?.ready} onClick={() => openDsh({ notice: `dsh 已知道你在看节点「${n.name}」，直接说要怎么调整即可。`, nodeId: n.id, nodeName: n.name })}><Sparkles />AI 调整</Button>
+                            <Button size="sm" variant="outline" onClick={() => openDsh({ notice: `dsh 已知道你在看节点「${n.name}」，直接说要怎么调整即可。`, nodeId: n.id, nodeName: n.name })}><Sparkles />AI 调整</Button>
                             <Button size="icon-sm" variant="destructive" aria-label={"删除 " + n.name} disabled={isBusy(n.id)}
                               onClick={async () => (await confirm({ title: `删除节点「${n.name}」？`, description: "使用它的订阅会立即失效。", confirmText: "删除", tone: "danger" })) && act(n.id, () => api("/admin/nodes/" + n.id, "DELETE"), "节点已删除")}>
                               <Trash2 />
@@ -204,10 +198,9 @@ function GateEdit({ gate, close, saved }: { gate: Gate; close: () => void; saved
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
           <Field label="名称"><Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} /></Field>
           <Field label="公网地址" hint="IP 或解析到这台 VPS 的域名。"><Input value={host} onChange={(e) => setHost(e.target.value)} /></Field>
-          {save.error && <Notice tone="bad">{save.error}</Notice>}
-          <DialogFooter>
+          <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
-            <Button type="submit" disabled={save.busy}>{save.busy ? "正在保存…" : "保存"}</Button>
+            <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           </DialogFooter>
         </Form>
       </DialogContent>

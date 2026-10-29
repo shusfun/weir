@@ -9,6 +9,7 @@ import { ruleLevels, type CustomTemplate, type MisubSettings } from "../lib/misu
 import { OperatorEditor, type Operator } from "./operator-editor";
 import { TemplatePicker, useTemplates } from "./misub-profiles";
 import { State } from "./feedback";
+import { field, useConsoleContext } from "../lib/console-context";
 
 export function TemplatesPanel() {
   const confirm = useConfirm();
@@ -20,6 +21,7 @@ export function TemplatesPanel() {
     if (!(await confirm({ title: `删除模板「${c.name}」？`, confirmText: "删除", tone: "danger" }))) return;
     await run(c.id, () => api("/admin/misub/templates/" + c.id, "DELETE"), "模板已删除");
   }
+  useConsoleContext({ tab: "输出模板" });
   return (
     <section className="stack">
       <SectionHeader title="规则模板" description="决定策略组与分流规则。内置模板可直接使用；也可以粘贴 ini 模板或完整的 Clash YAML 配置。" actions={<Button size="sm" onClick={() => setEdit("new")}><Plus />新建模板</Button>} />
@@ -69,6 +71,7 @@ function TemplateForm({ value, close, saved }: { value: CustomTemplate | "new"; 
     },
     { fields: { invalid_template: "content", invalid_output_template: "content" }, onSuccess: saved },
   );
+  useConsoleContext({ dialog: { title: c ? "编辑模板" : "新建模板" }, form: [field("name", "名称", name), field("format", "格式", format), field("content", "模板内容", content.split("\n").length + " 行")] });
   return (
     <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
       <DialogContent size="xl">
@@ -80,10 +83,9 @@ function TemplateForm({ value, close, saved }: { value: CustomTemplate | "new"; 
             <Field label="格式"><Segmented aria-label="模板格式" value={format} onValueChange={setFormat} options={[["ini", "ini"], ["yaml", "Clash YAML"]] as const} /></Field>
           </FormGrid>
           <Field label="内容" name="content"><Textarea required rows={16} className="font-mono text-xs" value={content} onChange={(e) => setContent(e.target.value)} /></Field>
-          {save.error && <Notice tone="bad">{save.error}</Notice>}
-          <DialogFooter>
+          <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
-            <Button type="submit" disabled={save.busy}>{save.busy ? "正在保存…" : "保存"}</Button>
+            <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           </DialogFooter>
         </Form>
       </DialogContent>
@@ -137,8 +139,8 @@ function SettingsForm({ value, saved }: { value: MisubSettings; saved: () => voi
       <Collapsible title={`默认处理链（${ops.length} 步；订阅组没有自己的处理链时使用）`}>
         <OperatorEditor value={ops} change={setOps} />
       </Collapsible>
+      <div className="actions"><Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存默认设置</Button></div>
       {save.error && <Notice tone="bad">{save.error}</Notice>}
-      <div className="actions"><Button type="submit" disabled={save.busy}>{save.busy ? "正在保存…" : "保存默认设置"}</Button></div>
     </Form>
   );
 }

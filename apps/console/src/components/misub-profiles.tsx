@@ -13,6 +13,8 @@ import { useSources } from "./misub-sources";
 import { useManualNodes } from "./misub-nodes";
 import { State } from "./feedback";
 import { SubCheckBadge } from "./sub-check";
+import { dataObject } from "./object-link";
+import { field, useConsoleContext } from "../lib/console-context";
 
 export function useTemplates() {
   return useQuery({ queryKey: ["misub-templates"], queryFn: () => api("/admin/misub/templates") as Promise<{ builtin: BuiltinTemplate[]; custom: CustomTemplate[] }> });
@@ -55,6 +57,7 @@ export function ProfilesPanel() {
     await run(p.id, () => api("/admin/misub/profiles/" + p.id, "DELETE"), "订阅组已删除");
   }
   const done = (msg: string) => { toast(msg, { tone: "ok" }); void q.refetch(); };
+  useConsoleContext({ tab: "订阅组", list: { selected: q.data?.length ?? 0, items: (q.data ?? []).slice(0, 20).map((p) => ({ type: "profile", name: p.name, id: p.id })) } });
   return (
     <section className="stack">
       <SectionHeader title="订阅组" description="把订阅源与手动节点组合成一份订阅；可分配给用户（各自独立地址）或匿名分享。外部节点的流量不计入用户额度。" actions={<Button size="sm" onClick={() => setEdit("new")}><Plus />新建订阅组</Button>} />
@@ -70,7 +73,7 @@ export function ProfilesPanel() {
       ) : (
         <ul className="stack">
           {q.data.map((p) => (
-            <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3">
+            <li key={p.id} {...dataObject({ type: "profile", id: p.id })} className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3">
               <span className="min-w-0">
                 <strong>{p.name}</strong> {!p.enabled && <Badge variant="soft" tone="warn">停用</Badge>} {p.shared && <Badge variant="soft" tone="ok">已分享</Badge>}
                 <small className="block text-[var(--mg-ink-3)]">
@@ -121,6 +124,7 @@ function ProfileForm({ value, close, saved }: { value: Profile | "new"; close: (
     },
     { fields: { invalid_template: "template" }, onSuccess: saved },
   );
+  useConsoleContext({ dialog: { title: p ? "编辑订阅组" : "新建订阅组" }, object: p ? { type: "profile", name: p.name, id: p.id } : undefined, form: [field("name", "名称", name), field("enabled", "启用", enabled ? "是" : "否"), field("all_sources", "全部订阅源", all ? "是" : "否"), field("source_ids", "订阅源编号", sourceIds.join("、")), field("node_ids", "手动节点编号", nodeIds.join("、")), field("expires_at", "到期", expiry || "长期")] });
   return (
     <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
       <DialogContent size="xl">
@@ -176,10 +180,9 @@ function ProfileForm({ value, close, saved }: { value: Profile | "new"; close: (
             <OperatorEditor value={ops} change={setOps} />
           </Collapsible>
           {p && <SwitchField label="启用" checked={enabled} onCheckedChange={setEnabled} />}
-          {save.error && <Notice tone="bad">{save.error}</Notice>}
-          <DialogFooter>
+          <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
-            <Button type="submit" disabled={save.busy}>{save.busy ? "正在保存…" : "保存"}</Button>
+            <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           </DialogFooter>
         </Form>
       </DialogContent>
@@ -195,6 +198,7 @@ function ProfilePreview({ profile, close }: { profile: Profile; close: () => voi
     queryKey: ["misub-preview", profile.id, target],
     queryFn: () => api(`/admin/misub/profiles/${profile.id}/preview`, "POST", { target }) as Promise<{ nodes: string[]; sources: { SourceID: number; Nodes: number; FromCache: boolean; Error: string }[] | null; output?: string; output_error?: string; check?: { status: "passed" | "failed" | "unknown"; kernel: string; version?: string; error?: string } }>,
   });
+  useConsoleContext({ object: { type: "profile", name: profile.name, id: profile.id }, dialog: { title: "预览订阅组", step: target } });
   return (
     <Dialog open onOpenChange={(o) => !o && close()}>
       <DialogContent size="xl">
@@ -241,6 +245,7 @@ function ShareDialog({ profile, close, changed }: { profile: Profile; close: () 
     },
   });
   const busy = share.busy || revoke.busy;
+  useConsoleContext({ object: { type: "profile", name: profile.name, id: profile.id }, dialog: { title: "匿名分享" }, form: [field("days", "有效天数", days), field("password", "当前密码", password, true), field("code", "二次验证码", code, true)] });
   return (
     <Dialog open onOpenChange={(o) => !o && !busy && close()}>
       <DialogContent size="md">
@@ -275,7 +280,7 @@ function ShareDialog({ profile, close, changed }: { profile: Profile; close: () 
                 </Button>
               )}
               <Button type="button" variant="outline" disabled={busy} onClick={close}>取消</Button>
-              <Button type="submit" disabled={busy}>{share.busy ? "正在生成…" : profile.shared ? "重新生成地址" : "生成分享地址"}</Button>
+              <Button type="submit" disabled={busy} busy={share.busy} busyText="正在生成…">{profile.shared ? "重新生成地址" : "生成分享地址"}</Button>
             </DialogFooter>
           </Form>
         )}
@@ -288,6 +293,7 @@ function GrantDialog({ profile, close, saved }: { profile: Profile; close: () =>
   const users = useQuery({ queryKey: ["users"], queryFn: async () => (await api("/admin/users")).items as UserItem[] });
   const [picked, setPicked] = useState<number[]>(profile.user_ids);
   const save = useFormAction(() => api(`/admin/misub/profiles/${profile.id}/grants`, "PUT", { user_ids: picked }), { onSuccess: saved });
+  useConsoleContext({ object: { type: "profile", name: profile.name, id: profile.id }, dialog: { title: "分配用户" }, form: [field("user_ids", "勾选的用户", (users.data ?? []).filter((u) => picked.includes(u.id)).map((u) => u.email).join("、"))] });
   return (
     <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
       <DialogContent size="md">
@@ -312,10 +318,9 @@ function GrantDialog({ profile, close, saved }: { profile: Profile; close: () =>
               ))}
             </fieldset>
           )}
-          {save.error && <Notice tone="bad">{save.error}</Notice>}
-          <DialogFooter>
+          <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
-            <Button type="submit" disabled={save.busy || users.isPending || !!users.error}>{save.busy ? "正在保存…" : "保存"}</Button>
+            <Button type="submit" disabled={save.busy || users.isPending || !!users.error} busy={save.busy} busyText="正在保存…">保存</Button>
           </DialogFooter>
         </Form>
       </DialogContent>

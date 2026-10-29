@@ -10,11 +10,13 @@ import { APITokensCard, BackupCard, NotifyCard, SecurityCard, SMTPCard } from ".
 import { NodeCertCard } from "../components/node-certs";
 import { UpdateCard } from "../components/self-update";
 import { systemSections } from "../shell/navigation";
+import { field, useConsoleContext } from "../lib/console-context";
 
 export function SystemPage() {
   const [params, setParams] = useSearchParams();
   const tab = systemSections.some((s) => s.key === params.get("tab")) ? params.get("tab")! : systemSections[0].key;
   const dsh = useDsh();
+  useConsoleContext({ page: "系统设置", tab: systemSections.find((s) => s.key === tab)?.label });
   return (
     <div className="stack">
       <PageHeader eyebrow="系统" title="系统设置" />

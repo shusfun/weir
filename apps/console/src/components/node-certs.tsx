@@ -11,6 +11,7 @@ import type { Cert, Gate } from "../lib/core";
 import { State } from "./feedback";
 import { emptyReauth, Reauth, Section, useReauthAction } from "./system-settings";
 import { useCerts } from "./cert-manager";
+import { dataObject } from "./object-link";
 
 export const certSource: Record<string, string> = {
   upload: "手动上传",
@@ -67,8 +68,8 @@ export function NodeCertCard() {
           <Notice tone="warn">
             节点证书域名是兜底方案：同一把私钥会分发到所有用到它的 VPS，其中一台泄露会影响全部；这个域名指向中心，会暴露节点与中心之间的关联。节点连接地址仍是各 VPS 的 IP，这个域名只作 SNI。
           </Notice>
+          <div className="actions"><Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button></div>
           {save.error && <Notice tone="bad">{save.error}</Notice>}
-          <div className="actions"><Button type="submit" disabled={save.busy}>{save.busy ? "正在保存…" : "保存"}</Button></div>
         </Form>
       )}
     </Section>
@@ -104,7 +105,7 @@ export function GateCerts({ gate }: { gate: Gate }) {
       {certs.isPending || certs.error ? <State loading={certs.isPending} error={certs.error} onRetry={() => certs.refetch()} /> : mine.length === 0 ? <small>还没有证书：建 Trojan、WebSocket + TLS 或 QUIC 节点时自动准备。</small> : (
         <ul className="stack">
           {mine.map((c) => (
-            <li key={c.id} className="rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3 text-sm">
+            <li key={c.id} {...dataObject({ type: "cert", id: c.id })} className="rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3 text-sm">
               <div className="flex flex-wrap items-center gap-2">
                 <strong>{c.domain}</strong>
                 <Badge variant="soft" tone="neutral">{certSource[c.source] ?? c.source}</Badge>
@@ -134,13 +135,13 @@ export function GateCerts({ gate }: { gate: Gate }) {
           </FormGrid>
           <SwitchField label="1Panel 使用 HTTPS" checked={https} onCheckedChange={setHttps} />
           <Reauth value={re} onChange={setRe} />
-          {save.error && <Notice tone="bad">{save.error}</Notice>}
           <div className="actions">
             {panel.configured && (
               <Button type="button" variant="outline" disabled={isBusy("panel") || !gate.online} onClick={() => void run("panel", () => api(`/admin/gates/${gate.id}/panel`, "DELETE"), "已移除 1Panel 密钥")}>移除密钥</Button>
             )}
-            <Button type="submit" disabled={save.busy || !gate.online}>{save.busy ? "正在测试连接…" : "测试并保存"}</Button>
+            <Button type="submit" disabled={save.busy || !gate.online} busy={save.busy} busyText="正在测试连接…">测试并保存</Button>
           </div>
+          {save.error && <Notice tone="bad">{save.error}</Notice>}
           {!gate.online && <small className="text-[var(--mg-ink-3)]">VPS 离线时无法填写。</small>}
         </Form>
       </Collapsible>

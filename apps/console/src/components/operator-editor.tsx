@@ -180,8 +180,9 @@ export function OperatorEditor({ value, change }: { value: Operator[]; change: (
                 setOutput("");
                 void preview.submit();
               }}
+              busy={preview.busy}
             >
-              {preview.busy ? "正在处理…" : "预览处理结果"}
+              预览处理结果
             </Button>
           </div>
           {preview.error && <Notice tone="bad">{preview.error}</Notice>}
