@@ -17,7 +17,7 @@ import { InviteGate } from "../components/invite-gate";
 import { CertManager } from "../components/cert-manager";
 import { NodeWizard } from "../components/node-wizard";
 import { date } from "../lib/models";
-import { useConsoleContext } from "../lib/console-context";
+import { field, useConsoleContext } from "../lib/console-context";
 import { protocolNames, type Gate, type NodeItem } from "../lib/core";
 
 const stateText: Record<Gate["state"], [string, "ok" | "warn" | "bad" | "off"]> = {
@@ -202,7 +202,11 @@ export function GatesPage() {
 function GateEdit({ gate, close, saved }: { gate: Gate; close: () => void; saved: () => void }) {
   const [name, setName] = useState(gate.name);
   const [host, setHost] = useState(gate.public_host);
-  const save = useFormAction(() => api("/admin/gates/" + gate.id, "PATCH", { name: name.trim(), public_host: host.trim() }), { onSuccess: saved });
+  const save = useFormAction(() => api("/admin/gates/" + gate.id, "PATCH", { name: name.trim(), public_host: host.trim() }), {
+    fields: { invalid_public_host: "public_host", public_host_not_public: "public_host", public_host_unresolved: "public_host", public_host_lookup_failed: "public_host" },
+    onSuccess: saved,
+  });
+  useConsoleContext({ object: { type: "gate", name: gate.name, id: gate.id }, dialog: { title: "编辑 VPS" }, form: [field("name", "名称", name), field("public_host", "公网地址", host)] });
   return (
     <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
       <DialogContent size="md">
@@ -210,7 +214,7 @@ function GateEdit({ gate, close, saved }: { gate: Gate; close: () => void; saved
         <DialogDescription>公网地址会写进订阅；改动后用户更新订阅即可生效。</DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
           <Field label="名称"><Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} /></Field>
-          <Field label="公网地址" hint={gate.public_host_hint && !host ? `IP 或解析到这台 VPS 的域名；本机网卡上的公网 IP 是 ${gate.public_host_hint}。域名开了 CDN 代理时节点连不上，请填 IP。` : "IP 或解析到这台 VPS 的域名；域名开了 CDN 代理时节点连不上，请填 IP。"}>
+          <Field label="公网地址" name="public_host" hint={gate.public_host_hint && !host ? `IP 或解析到这台 VPS 的域名，粘贴网址也可以；本机网卡上的公网 IP 是 ${gate.public_host_hint}。域名开了 CDN 代理时节点连不上，请填 IP。` : "IP 或解析到这台 VPS 的域名，粘贴网址也可以；域名开了 CDN 代理时节点连不上，请填 IP。"}>
             <Input value={host} placeholder={gate.public_host_hint} onChange={(e) => setHost(e.target.value)} />
           </Field>
           {gate.public_host_hint && !host && <Button type="button" size="sm" variant="outline" onClick={() => setHost(gate.public_host_hint ?? "")}>填入 {gate.public_host_hint}</Button>}

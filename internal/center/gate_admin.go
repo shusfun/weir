@@ -123,9 +123,11 @@ func (s *Server) updateGate(c *gin.Context) {
 	}
 	if req.PublicHost != nil {
 		h := strings.TrimSpace(*req.PublicHost)
-		if h != "" && !validHost(h) {
-			failure(c, 400, "invalid_public_host")
-			return
+		if h != "" {
+			var ok bool
+			if h, ok = checkPublicHost(c, h); !ok {
+				return
+			}
 		}
 		upd.SetPublicHost(h)
 	}

@@ -342,7 +342,7 @@ var readCaps = []Capability{
 			out := []map[string]any{}
 			for _, g := range gs {
 				v := gateView(g)
-				out = append(out, map[string]any{"id": g.ID, "name": g.Name, "public_host": g.PublicHost, "online": v["online"], "state": v["state"], "last_error": g.LastError, "kernels_running": g.KernelsRunning, "panel": g.Panel})
+				out = append(out, map[string]any{"id": g.ID, "name": g.Name, "public_host": g.PublicHost, "public_host_hint": v["public_host_hint"], "colocated": v["colocated"], "online": v["online"], "state": v["state"], "last_error": g.LastError, "kernels_running": g.KernelsRunning, "panel": g.Panel})
 			}
 			return out, err
 		}},

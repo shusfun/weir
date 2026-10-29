@@ -26,6 +26,16 @@ func TestMain(m *testing.M) {
 	acmeDirectory = func(NodeCertSettings) string { return "http://127.0.0.1:1/directory" }
 	// 建节点后会在后台从中心连一次节点端口：测试里不连外部地址，直接当作连不上。
 	reachDial = func(context.Context, string) (net.Conn, error) { return nil, errors.New("test: no dialing") }
+	// VPS 公网地址里的域名不查真实 DNS：只认 testHosts 里的名称，其余当作不存在。
+	lookupPublicHost = func(_ context.Context, host string) ([]net.IP, error) {
+		if v, ok := testHosts[host]; ok {
+			if v == "" {
+				return nil, &net.DNSError{Err: "server misbehaving", Name: host, IsTemporary: true}
+			}
+			return []net.IP{net.ParseIP(v)}, nil
+		}
+		return nil, &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
+	}
 	os.Exit(m.Run())
 }
 
