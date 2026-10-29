@@ -72,7 +72,7 @@ func notifyView(cfg NotifySettings) gin.H {
 func (s *Server) getNotify(c *gin.Context) {
 	cfg, err := s.notifySettings(c.Request.Context())
 	if err != nil {
-		failure(c, 503, "settings_unavailable")
+		failInternal(c, 503, "settings_unavailable", err)
 		return
 	}
 	c.JSON(200, notifyView(cfg))
@@ -108,12 +108,12 @@ func (s *Server) putNotify(c *gin.Context) {
 	} else {
 		var err error
 		if cfg.BotToken, err = s.Crypto.Encrypt(cfg.BotToken); err != nil {
-			failure(c, 500, "encrypt_failed")
+			failInternal(c, 500, "encrypt_failed", err)
 			return
 		}
 	}
 	if err := s.Store.Ent.Setting.Create().SetKey(notifyKey).SetValue(toMap(cfg)).OnConflictColumns(setting.FieldKey).UpdateNewValues().Exec(ctx); err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	s.audit(c, "settings.notify", "", "ok")

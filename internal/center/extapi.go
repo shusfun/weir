@@ -85,7 +85,7 @@ func tokenView(r *ent.Resource) gin.H {
 func (s *Server) listAPITokens(c *gin.Context) {
 	items, err := s.Store.Ent.Resource.Query().Where(resource.KindEQ(kindAPIToken)).Order(ent.Asc(resource.FieldID)).All(c.Request.Context())
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	out := make([]gin.H, 0, len(items))
@@ -117,7 +117,7 @@ func (s *Server) createAPIToken(c *gin.Context) {
 	token := "mg_" + randomToken(24)
 	r, err := s.Store.Ent.Resource.Create().SetKind(kindAPIToken).SetKey(digest(token)).SetData(map[string]any{"name": name, "created_by": c.GetInt("user_id")}).Save(ctx)
 	if err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	s.audit(c, "api_token.create", "token:"+strconv.Itoa(r.ID), "ok")

@@ -69,7 +69,7 @@ func (s *Server) securityPolicy(c *gin.Context) (SecuritySettings, bool) {
 		}
 	}
 	if err != nil {
-		failure(c, 503, "security_policy_unavailable")
+		failInternal(c, 503, "security_policy_unavailable", err)
 		return SecuritySettings{}, false
 	}
 	return policy, true
@@ -78,7 +78,7 @@ func (s *Server) securityPolicy(c *gin.Context) (SecuritySettings, bool) {
 func (s *Server) rate(c *gin.Context, kind string, limit int64) bool {
 	n, err := s.Store.KV.Incr(c.Request.Context(), "limit:"+kind+":"+digest(c.ClientIP()), 10*time.Minute)
 	if err != nil {
-		failure(c, 503, "rate_limit_unavailable")
+		failInternal(c, 503, "rate_limit_unavailable", err)
 		return false
 	}
 	if n > limit {
@@ -135,7 +135,7 @@ func (s *Server) storeSession(c *gin.Context, u *ent.User, mfa bool) error {
 
 func (s *Server) issueSession(c *gin.Context, u *ent.User, mfa bool) {
 	if err := s.storeSession(c, u, mfa); err != nil {
-		failure(c, 503, "session_unavailable")
+		failInternal(c, 503, "session_unavailable", err)
 		return
 	}
 	s.audit(c, "auth.login", fmt.Sprint(u.ID), "ok")
@@ -180,7 +180,7 @@ func (s *Server) login(c *gin.Context) {
 	if u.TotpSecret != "" {
 		challenge := randomToken(32)
 		if err = s.Store.KV.Set(c.Request.Context(), "mfa:"+digest(challenge), strconv.Itoa(u.ID), 5*time.Minute); err != nil {
-			failure(c, 503, "session_unavailable")
+			failInternal(c, 503, "session_unavailable", err)
 			return
 		}
 		c.JSON(200, gin.H{"mfa_required": true, "challenge": challenge})
@@ -359,16 +359,16 @@ func (s *Server) setupTOTP(c *gin.Context) {
 	}
 	key, err := totp.Generate(totp.GenerateOpts{Issuer: "Weir", AccountName: u.Email})
 	if err != nil {
-		failure(c, 500, "key_generation_failed")
+		failInternal(c, 500, "key_generation_failed", err)
 		return
 	}
 	sealed, err := s.Crypto.Encrypt(key.Secret())
 	if err != nil {
-		failure(c, 500, "key_generation_failed")
+		failInternal(c, 500, "key_generation_failed", err)
 		return
 	}
 	if err = s.Store.KV.Set(c.Request.Context(), fmt.Sprintf("totp-setup:%d", u.ID), sealed, 5*time.Minute); err != nil {
-		failure(c, 503, "setup_unavailable")
+		failInternal(c, 503, "setup_unavailable", err)
 		return
 	}
 	c.JSON(200, gin.H{"secret": key.Secret(), "url": key.URL()})
@@ -396,7 +396,7 @@ func (s *Server) confirmTOTP(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	_ = s.Store.KV.Del(ctx, key)
@@ -446,7 +446,7 @@ func (s *Server) disableTOTP(c *gin.Context) {
 	ctx := c.Request.Context()
 	id := c.GetInt("user_id")
 	if _, err := s.Store.Ent.User.UpdateOneID(id).SetTotpSecret("").SetTotpStep(0).Save(ctx); err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	_, _ = s.Store.Ent.RecoveryCode.Delete().Where(recoverycode.UserIDEQ(id)).Exec(ctx)
@@ -470,12 +470,12 @@ func (s *Server) changePassword(c *gin.Context) {
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	id := c.GetInt("user_id")
 	if _, err = s.Store.Ent.User.UpdateOneID(id).SetPasswordHash(string(hash)).Save(c.Request.Context()); err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	_ = s.revokeAll(c.Request.Context(), id)

@@ -83,7 +83,7 @@ func (s *Server) listSessions(c *gin.Context, uid int) {
 	}
 	all, err := s.loadSessions(c.Request.Context(), uid, c.GetString("session_key"))
 	if err != nil {
-		failure(c, 503, "session_directory_unavailable")
+		failInternal(c, 503, "session_directory_unavailable", err)
 		return
 	}
 	filtered := make([]sessionRow, 0, len(all))
@@ -116,7 +116,7 @@ func (s *Server) revokeSession(c *gin.Context, uid int, id string) {
 	}
 	key := sessionPrefix(uid) + id
 	if _, ok, err := s.Store.KV.GetDel(c.Request.Context(), key); err != nil {
-		failure(c, 503, "session_unavailable")
+		failInternal(c, 503, "session_unavailable", err)
 		return
 	} else if !ok {
 		failure(c, 404, "session_not_found")
@@ -140,7 +140,7 @@ func (s *Server) revokeOtherSessions(c *gin.Context) {
 	uid, current := c.GetInt("user_id"), c.GetString("session_key")
 	keys, err := s.Store.KV.Keys(c.Request.Context(), sessionPrefix(uid), 5000)
 	if err != nil {
-		failure(c, 503, "session_directory_unavailable")
+		failInternal(c, 503, "session_directory_unavailable", err)
 		return
 	}
 	others := make([]string, 0, len(keys))
@@ -150,7 +150,7 @@ func (s *Server) revokeOtherSessions(c *gin.Context) {
 		}
 	}
 	if err = s.Store.KV.Del(c.Request.Context(), others...); err != nil {
-		failure(c, 503, "session_unavailable")
+		failInternal(c, 503, "session_unavailable", err)
 		return
 	}
 	s.audit(c, "auth.session.revoke-others", strconv.Itoa(uid), "ok")

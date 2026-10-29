@@ -88,8 +88,8 @@ func (s *Server) passEnabled(c *gin.Context) bool {
 func (s *Server) savePassSession(c *gin.Context, id int, kind string, data *webauthn.SessionData, options any) {
 	token := randomToken(32)
 	b, _ := json.Marshal(passSession{UserID: id, Kind: kind, Data: *data})
-	if s.Store.KV.Set(c.Request.Context(), "passkey:"+digest(token), string(b), 5*time.Minute) != nil {
-		failure(c, 503, "session_unavailable")
+	if err := s.Store.KV.Set(c.Request.Context(), "passkey:"+digest(token), string(b), 5*time.Minute); err != nil {
+		failInternal(c, 503, "session_unavailable", err)
 		return
 	}
 	c.JSON(200, gin.H{"token": token, "options": options})
@@ -122,12 +122,12 @@ func (s *Server) passLoginBegin(c *gin.Context) {
 	}
 	wa, err := s.webAuthn(c.Request)
 	if err != nil {
-		failure(c, 500, "passkey_configuration_invalid")
+		failInternal(c, 500, "passkey_configuration_invalid", err)
 		return
 	}
 	pu, err := s.passUser(c, u)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	options, data, err := wa.BeginLogin(pu)
@@ -154,12 +154,12 @@ func (s *Server) passLoginFinish(c *gin.Context) {
 	}
 	wa, err := s.webAuthn(c.Request)
 	if err != nil {
-		failure(c, 500, "passkey_configuration_invalid")
+		failInternal(c, 500, "passkey_configuration_invalid", err)
 		return
 	}
 	pu, err := s.passUser(c, u)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
@@ -192,12 +192,12 @@ func (s *Server) passRegisterBegin(c *gin.Context) {
 	u := c.MustGet("account").(*ent.User)
 	wa, err := s.webAuthn(c.Request)
 	if err != nil {
-		failure(c, 500, "passkey_configuration_invalid")
+		failInternal(c, 500, "passkey_configuration_invalid", err)
 		return
 	}
 	pu, err := s.passUser(c, u)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	options, data, err := wa.BeginRegistration(pu)
@@ -223,12 +223,12 @@ func (s *Server) passRegisterFinish(c *gin.Context) {
 	u := c.MustGet("account").(*ent.User)
 	wa, err := s.webAuthn(c.Request)
 	if err != nil {
-		failure(c, 500, "passkey_configuration_invalid")
+		failInternal(c, 500, "passkey_configuration_invalid", err)
 		return
 	}
 	pu, err := s.passUser(c, u)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
@@ -249,7 +249,7 @@ func (s *Server) passRegisterFinish(c *gin.Context) {
 func (s *Server) listPasskeys(c *gin.Context) {
 	items, err := s.Store.Ent.Passkey.Query().Where(passkey.UserIDEQ(c.GetInt("user_id"))).Order(ent.Asc(passkey.FieldID)).All(c.Request.Context())
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	out := make([]gin.H, 0, len(items))

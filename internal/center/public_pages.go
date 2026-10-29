@@ -93,7 +93,7 @@ func pageView(r *ent.Resource) gin.H {
 func (s *Server) listPages(c *gin.Context) {
 	items, err := s.Store.Ent.Resource.Query().Where(resource.KindEQ(kindPage)).Order(ent.Asc(resource.FieldID)).All(c.Request.Context())
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	out := make([]gin.H, 0, len(items))
@@ -160,7 +160,7 @@ func (s *Server) savePage(c *gin.Context) {
 		_ = decodeStrict(old.Data, &prev)
 		d.Guestbook = prev.Guestbook
 		if saved, err = old.Update().SetData(toMap(d)).Save(ctx); err != nil {
-			failure(c, 500, "save_failed")
+			failInternal(c, 500, "save_failed", err)
 			return
 		}
 	}
@@ -176,11 +176,11 @@ func (s *Server) deletePage(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	if _, err := s.Store.Ent.Resource.Delete().Where(resource.KindEQ(kindGuestbook), resource.OwnerIDEQ(r.ID)).Exec(ctx); err != nil {
-		failure(c, 500, "delete_failed")
+		failInternal(c, 500, "delete_failed", err)
 		return
 	}
 	if err := s.Store.Ent.Resource.DeleteOne(r).Exec(ctx); err != nil {
-		failure(c, 500, "delete_failed")
+		failInternal(c, 500, "delete_failed", err)
 		return
 	}
 	s.audit(c, "page.delete", "page:"+r.Key, "ok")
@@ -301,7 +301,7 @@ func (s *Server) listMessages(c *gin.Context, pageID int, visibleOnly bool, stat
 	const size = 20
 	rows, err := s.Store.Ent.Resource.Query().Where(resource.KindEQ(kindGuestbook), resource.OwnerIDEQ(pageID)).Order(ent.Desc(resource.FieldID)).All(c.Request.Context())
 	if err != nil {
-		failure(c, 503, "guestbook_unavailable")
+		failInternal(c, 503, "guestbook_unavailable", err)
 		return
 	}
 	var picked []*ent.Resource
@@ -384,7 +384,7 @@ func (s *Server) submitGuestbook(c *gin.Context) {
 		m.UserID = u.ID
 	}
 	if _, err := s.Store.Ent.Resource.Create().SetKind(kindGuestbook).SetKey(randomToken(12)).SetOwnerID(r.ID).SetData(toMap(m)).Save(ctx); err != nil {
-		failure(c, 503, "guestbook_save_failed")
+		failInternal(c, 503, "guestbook_save_failed", err)
 		return
 	}
 	c.JSON(201, gin.H{"pending": m.Status == "pending"})
@@ -396,8 +396,8 @@ func (s *Server) getGuestbookConfig(c *gin.Context) {
 		return
 	}
 	var d publicPageData
-	if decodeStrict(r.Data, &d) != nil {
-		failure(c, 503, "guestbook_unavailable")
+	if err := decodeStrict(r.Data, &d); err != nil {
+		failInternal(c, 503, "guestbook_unavailable", err)
 		return
 	}
 	c.JSON(200, gin.H{"config": d.Guestbook, "revision": digest(string(mustJSONBytes(d.Guestbook)))})
@@ -435,7 +435,7 @@ func (s *Server) putGuestbookConfig(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		failure(c, 503, "guestbook_save_failed")
+		failInternal(c, 503, "guestbook_save_failed", err)
 		return
 	}
 	s.audit(c, "guestbook.config", "page:"+r.Key, "ok")
@@ -511,7 +511,7 @@ func (s *Server) moderateGuestbook(c *gin.Context) {
 	case errors.Is(err, errBadRequest):
 		failure(c, 400, "invalid_guestbook")
 	case err != nil:
-		failure(c, 503, "guestbook_save_failed")
+		failInternal(c, 503, "guestbook_save_failed", err)
 	default:
 		s.audit(c, "guestbook."+req.Action, "page:"+page.Key, "ok")
 		c.JSON(200, gin.H{"ok": true})

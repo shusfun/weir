@@ -325,7 +325,7 @@ func (s *Server) ExportMisub(ctx context.Context) ([]byte, error) {
 func (s *Server) exportBackup(c *gin.Context) {
 	data, err := s.ExportMisub(c.Request.Context())
 	if err != nil {
-		failure(c, 503, "export_failed")
+		failInternal(c, 503, "export_failed", err)
 		return
 	}
 	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="misub-backup-%s.json"`, time.Now().Format("20060102-150405")))
@@ -395,7 +395,7 @@ func webdavView(cfg WebdavConfig) gin.H {
 func (s *Server) getWebdav(c *gin.Context) {
 	cfg, err := s.webdavConfig(c.Request.Context())
 	if err != nil {
-		failure(c, 503, "settings_unavailable")
+		failInternal(c, 503, "settings_unavailable", err)
 		return
 	}
 	c.JSON(200, webdavView(cfg))
@@ -427,11 +427,11 @@ func (s *Server) putWebdav(c *gin.Context) {
 	if req.Password == "" {
 		cfg.Password = old.Password
 	} else if cfg.Password, err = s.Crypto.Encrypt(req.Password); err != nil {
-		failure(c, 500, "encrypt_failed")
+		failInternal(c, 500, "encrypt_failed", err)
 		return
 	}
 	if err = s.saveWebdav(ctx, cfg); err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	s.audit(c, "backup.webdav", "", "ok")
@@ -545,7 +545,7 @@ func (s *Server) listWebdav(c *gin.Context) {
 	ctx := c.Request.Context()
 	cfg, err := s.webdavConfig(ctx)
 	if err != nil {
-		failure(c, 503, "settings_unavailable")
+		failInternal(c, 503, "settings_unavailable", err)
 		return
 	}
 	files, err := s.WebdavFiles(ctx, cfg)
@@ -574,7 +574,7 @@ func (s *Server) restoreWebdav(c *gin.Context) {
 	ctx := c.Request.Context()
 	cfg, err := s.webdavConfig(ctx)
 	if err != nil {
-		failure(c, 503, "settings_unavailable")
+		failInternal(c, 503, "settings_unavailable", err)
 		return
 	}
 	resp, err := s.webdavRequest(ctx, cfg, "GET", req.File, nil, nil)
@@ -589,7 +589,7 @@ func (s *Server) restoreWebdav(c *gin.Context) {
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
 	if err != nil {
-		failure(c, 502, "webdav_failed")
+		failInternal(c, 502, "webdav_failed", err)
 		return
 	}
 	stats, err := s.ImportMisub(ctx, data)

@@ -451,7 +451,7 @@ func (s *Server) toggleDriver(disable bool) gin.HandlerFunc {
 		}
 		rev, err := s.saveDriverVersion(ctx, name, kernel, text.Text, disable, "", "admin", c.GetInt("user_id"))
 		if err != nil {
-			failure(c, 500, "save_failed")
+			failInternal(c, 500, "save_failed", err)
 			return
 		}
 		action := "driver.enable"
@@ -478,7 +478,7 @@ func (s *Server) restoreDriver(c *gin.Context) {
 	}
 	rev, err := s.saveDriverVersion(ctx, name, drv.Kernel, "", false, "恢复内置", "admin", c.GetInt("user_id"))
 	if err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	s.audit(c, "driver.restore", fmt.Sprintf("%s #%d", name, rev), "ok")
@@ -511,7 +511,7 @@ func (s *Server) rollbackDriver(c *gin.Context) {
 	}
 	rev, err := s.saveDriverVersion(ctx, name, check.Kernel, row.Text, row.Disabled, fmt.Sprintf("退回到 #%d", req.Revision), "admin", c.GetInt("user_id"))
 	if err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	s.audit(c, "driver.rollback", fmt.Sprintf("%s #%d → #%d", name, req.Revision, rev), "ok")

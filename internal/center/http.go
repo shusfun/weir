@@ -10,11 +10,13 @@ import (
 )
 
 func failure(c *gin.Context, status int, code string) {
+	c.Set("error_code", code)
 	c.AbortWithStatusJSON(status, gin.H{"error": gin.H{"code": code, "message": code}})
 }
 
 // failDetail 返回固定错误码与附加说明（如 Gate 实测的原因）；extra 中的字段一并返回给页面。
 func failDetail(c *gin.Context, status int, code, detail string, extra gin.H) {
+	c.Set("error_code", code)
 	body := gin.H{"code": code, "message": code, "detail": detail}
 	for k, v := range extra {
 		body[k] = v

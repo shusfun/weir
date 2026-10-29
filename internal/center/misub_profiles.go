@@ -61,7 +61,7 @@ func (s *Server) listSubProfiles(c *gin.Context) {
 	ctx := c.Request.Context()
 	items, err := s.Store.Ent.SubProfile.Query().Order(ent.Asc(subprofile.FieldPosition), ent.Asc(subprofile.FieldID)).All(ctx)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	out := make([]gin.H, 0, len(items))
@@ -202,7 +202,7 @@ func (s *Server) deleteProfile(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	if _, err := s.Store.Ent.SubGrant.Delete().Where(subgrant.ProfileIDEQ(id)).Exec(ctx); err != nil {
-		failure(c, 500, "delete_failed")
+		failInternal(c, 500, "delete_failed", err)
 		return
 	}
 	if err := s.Store.Ent.SubProfile.DeleteOneID(id).Exec(ctx); err != nil {
@@ -476,7 +476,7 @@ func (s *Server) setGrants(c *gin.Context) {
 	}
 	existing, err := s.Store.Ent.SubGrant.Query().Where(subgrant.ProfileIDEQ(id)).All(ctx)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	have := map[int]bool{}
@@ -490,7 +490,7 @@ func (s *Server) setGrants(c *gin.Context) {
 	for _, uid := range want {
 		if !have[uid] {
 			if _, err = s.Store.Ent.SubGrant.Create().SetProfileID(id).SetUserID(uid).SetToken(randomToken(24)).Save(ctx); err != nil {
-				failure(c, 500, "save_failed")
+				failInternal(c, 500, "save_failed", err)
 				return
 			}
 		}
@@ -506,7 +506,7 @@ func (s *Server) myGroups(c *gin.Context) {
 	ctx := c.Request.Context()
 	grants, err := s.Store.Ent.SubGrant.Query().Where(subgrant.UserIDEQ(u.ID)).All(ctx)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	out := []gin.H{}
@@ -583,7 +583,7 @@ func (s *Server) writeGroup(c *gin.Context, p *ent.SubProfile, forced string) {
 	} else {
 		var err error
 		if list, _, tpl, g, err = s.groupNodes(ctx, p, ua, c.Query("refresh") != ""); err != nil {
-			failure(c, 503, "subscription_unavailable")
+			failInternal(c, 503, "subscription_unavailable", err)
 			return
 		}
 	}

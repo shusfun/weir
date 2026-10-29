@@ -61,6 +61,10 @@ CGO_ENABLED=0 GOOS=linux go build -o dist/weir ./apps/weir
 
 按改动选最小的、能发现回归的检查，不默认跑全集；只报告实际跑过的命令和结果。改了什么跑什么、本地开发环境与浏览器验收见 [weir-checks](.agents/skills/weir-checks/SKILL.md)。
 
+## 排查问题
+
+先看日志，再按对象追踪，最后才复现和修改；日志里找不到原因就先补日志，不靠猜。在哪里看、怎么追见 [weir-debug](.agents/skills/weir-debug/SKILL.md)。
+
 ## 规则
 
 - **先读代码再改**，沿用现有架构、命名和风格。服务端只用 Go；Node.js 只用于构建、上游对照测试和托管的 dsh。

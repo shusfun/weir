@@ -76,7 +76,7 @@ func (s *Server) dismissNotice(c *gin.Context) {
 		value = map[string]any{id: value[id]}
 	}
 	if err := s.Store.Ent.Setting.Create().SetKey(dismissKey(uid)).SetValue(value).OnConflictColumns(setting.FieldKey).UpdateNewValues().Exec(ctx); err != nil {
-		failure(c, 500, "save_failed")
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	c.JSON(200, gin.H{"ok": true})

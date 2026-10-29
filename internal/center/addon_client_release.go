@@ -158,7 +158,7 @@ func validCachedRelease(r clientRelease, now time.Time) bool {
 func (s *Server) getClientRelease(c *gin.Context) {
 	d, e := s.readClientCatalog(c.Request.Context())
 	if e != nil {
-		failure(c, 503, "client_catalog_unavailable")
+		failInternal(c, 503, "client_catalog_unavailable", e)
 		return
 	}
 	var item *catalogClient
@@ -190,13 +190,13 @@ func (s *Server) getClientRelease(c *gin.Context) {
 		}
 	}
 	if e != nil {
-		failure(c, 503, "client_release_unavailable")
+		failInternal(c, 503, "client_release_unavailable", e)
 		return
 	}
 	// Shared bounded lease prevents duplicate fetches across processes and users.
 	locked, e := s.Store.KV.SetNX(ctx, key+":fetch", "1", 15*time.Second)
 	if e != nil {
-		failure(c, 503, "client_release_unavailable")
+		failInternal(c, 503, "client_release_unavailable", e)
 		return
 	}
 	if !locked {
@@ -214,8 +214,8 @@ func (s *Server) getClientRelease(c *gin.Context) {
 		ttl = 5 * time.Minute
 	}
 	raw, _ := json.Marshal(result)
-	if s.Store.KV.Set(ctx, key, string(raw), ttl) != nil {
-		failure(c, 503, "client_release_unavailable")
+	if err := s.Store.KV.Set(ctx, key, string(raw), ttl); err != nil {
+		failInternal(c, 503, "client_release_unavailable", err)
 		return
 	}
 	c.JSON(200, result)

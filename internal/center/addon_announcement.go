@@ -73,7 +73,7 @@ func (s *Server) readAnnouncement(ctx context.Context) (globalAnnouncement, erro
 func (s *Server) getAnnouncement(c *gin.Context) {
 	a, e := s.readAnnouncement(c.Request.Context())
 	if e != nil {
-		failure(c, 503, "announcement_unavailable")
+		failInternal(c, 503, "announcement_unavailable", e)
 		return
 	}
 	c.Header("Cache-Control", "no-store")
@@ -85,7 +85,7 @@ func (s *Server) publishedAnnouncement(c *gin.Context) {
 	}
 	a, e := s.readAnnouncement(c.Request.Context())
 	if e != nil {
-		failure(c, 503, "announcement_unavailable")
+		failInternal(c, 503, "announcement_unavailable", e)
 		return
 	}
 	c.Header("Cache-Control", "no-store")
@@ -100,7 +100,7 @@ func (s *Server) publishedAnnouncement(c *gin.Context) {
 	if a.ContentFormat == "html" {
 		nodes, e := parseNoticeContent(a.Content, a.ContentFormat)
 		if e != nil {
-			failure(c, 503, "announcement_unavailable")
+			failInternal(c, 503, "announcement_unavailable", e)
 			return
 		}
 		projection["notice_nodes"] = nodes
@@ -157,7 +157,7 @@ func (s *Server) putAnnouncement(c *gin.Context) {
 		return
 	}
 	if e != nil {
-		failure(c, 503, "announcement_save_failed")
+		failInternal(c, 503, "announcement_save_failed", e)
 		return
 	}
 	s.audit(c, "settings.announcement", "global-announcement", "ok")
