@@ -147,7 +147,12 @@ func Apply(ctx context.Context) error {
 	if err = json.Unmarshal(data, &req); err != nil {
 		return errors.New("请求格式无效")
 	}
-	w := &writer{st: Status{ID: req.ID, Action: req.Action, From: buildinfo.Version, Version: req.Version, State: "downloading", Started: time.Now().UTC(), Logs: []string{}}}
+	// 切回用本机保留的上一版本，不下载
+	state := "downloading"
+	if req.Action == "rollback" {
+		state = "installing"
+	}
+	w := &writer{st: Status{ID: req.ID, Action: req.Action, From: buildinfo.Version, Version: req.Version, State: state, Started: time.Now().UTC(), Logs: []string{}}}
 	if err = req.Valid(); err != nil {
 		w.fail(err)
 		return err
@@ -183,7 +188,8 @@ func (w *writer) set(f func(*Status)) {
 
 func (w *writer) log(s string) {
 	w.set(func(st *Status) {
-		st.Logs = append(st.Logs, time.Now().UTC().Format("15:04:05")+" "+s)
+		// 写完整的 UTC 时间，由控制台换成浏览器本地时间显示
+		st.Logs = append(st.Logs, time.Now().UTC().Format(time.RFC3339)+" "+s)
 		if len(st.Logs) > 300 {
 			st.Logs = st.Logs[len(st.Logs)-300:]
 		}

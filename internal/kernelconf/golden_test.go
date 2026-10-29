@@ -202,3 +202,17 @@ func TestDriversMatchGolden(t *testing.T) {
 		t.Fatal("xray-26.10 must carry the compat note")
 	}
 }
+
+// 继承的驱动写错字段时，错误里的行号要对应原文，而不是展开后重新编码的全文。
+func TestResolveReportsOriginalLine(t *testing.T) {
+	dir := filepath.Join("..", "kernels", "drivers")
+	src := func(n string) (string, bool) {
+		b, err := os.ReadFile(filepath.Join(dir, n+".yaml"))
+		return string(b), err == nil
+	}
+	text := "kernel: xray\nname: xray-test\nextends: xray-1.8\nmin_version: 26.3.27\nbogus_field: 1\n"
+	_, _, err := Resolve(text, src)
+	if err == nil || !strings.Contains(err.Error(), "line 5") || !strings.Contains(err.Error(), "bogus_field") {
+		t.Fatalf("want error at line 5 naming bogus_field, got %v", err)
+	}
+}

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Form, Notice, Progress, useToast } from "@weir/ui";
 import { api } from "../api";
-import { date } from "../lib/models";
+import { clock, date } from "../lib/models";
 import { State } from "./feedback";
 import { size } from "./job";
 import { emptyReauth, Reauth, Section, useReauthAction } from "./system-settings";
@@ -94,7 +94,7 @@ function UpdateStatus({ st }: { st: Status }) {
       {st.error && <Notice tone="bad">{st.error}</Notice>}
       {st.logs.length > 0 && (
         <Collapsible title={`日志（${st.logs.length} 行）`} defaultOpen={st.state === "failed"}>
-          <CodeBlock className="block max-h-56 overflow-auto whitespace-pre-wrap text-xs">{st.logs.join("\n")}</CodeBlock>
+          <CodeBlock className="block max-h-56 overflow-auto whitespace-pre-wrap text-xs">{st.logs.map((l) => { const m = /^(\d{4}-\d\d-\d\dT\S+Z) (.*)$/s.exec(l); return m ? `${clock(m[1])} ${m[2]}` : l; }).join("\n")}</CodeBlock>
         </Collapsible>
       )}
     </div>

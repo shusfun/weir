@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"sort"
 	"strconv"
@@ -343,6 +344,13 @@ func Resolve(text string, source func(name string) (string, bool)) (Driver, stri
 func resolveMap(text string, source func(string) (string, bool), depth int) (map[string]any, error) {
 	if depth > 8 {
 		return nil, errors.New("驱动：extends 层数过多（可能循环继承）")
+	}
+	// 展开后的全文是重新编码的，行号对不上原文：未知字段与类型错误先在原文上严格解析一遍报出来
+	var raw Driver
+	dec := yaml.NewDecoder(strings.NewReader(text))
+	dec.KnownFields(true)
+	if err := dec.Decode(&raw); err != nil && !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("驱动格式：%w", err)
 	}
 	var m map[string]any
 	if err := yaml.Unmarshal([]byte(text), &m); err != nil {

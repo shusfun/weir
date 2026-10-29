@@ -5,6 +5,7 @@ import { Badge, Button, CodeBlock, Collapsible, Notice, Progress } from "@weir/u
 import { X } from "lucide-react";
 import { api } from "../api";
 import { useRowAction } from "../lib/action";
+import { clock } from "../lib/models";
 
 export interface Job {
   id: string;
@@ -131,7 +132,7 @@ export function JobView({ job, compact }: { job: Job; compact?: boolean }) {
       {job.error && <Notice tone={job.status === "cancelled" ? "warn" : "bad"}>{job.error}</Notice>}
       {!compact && job.logs && job.logs.length > 0 && (
         <Collapsible title={`日志（${job.logs.length} 行）`} defaultOpen={job.status === "failed"}>
-          <CodeBlock className="block max-h-56 overflow-auto whitespace-pre-wrap text-xs">{job.logs.map((l) => `${l.at.slice(11, 19)} ${l.text}`).join("\n")}</CodeBlock>
+          <CodeBlock className="block max-h-56 overflow-auto whitespace-pre-wrap text-xs">{job.logs.map((l) => `${clock(l.at)} ${l.text}`).join("\n")}</CodeBlock>
         </Collapsible>
       )}
     </div>
