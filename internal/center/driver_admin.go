@@ -317,6 +317,9 @@ func runCheck(ctx context.Context, bin string, drv kernelconf.Driver, body []byt
 	if len(text) > 1200 {
 		text = text[len(text)-1200:]
 	}
+	if err != nil && text == "" {
+		text = err.Error() // 内核根本没能运行（如程序损坏、架构不对）时没有输出，交回启动错误本身
+	}
 	return text, err
 }
 
