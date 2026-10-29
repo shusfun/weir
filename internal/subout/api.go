@@ -36,10 +36,10 @@ func Render(links []string, target string) ([]byte, string, error) {
 }
 
 // forTarget 去掉目标格式表达不了的节点：ShadowTLS 只有 Clash（mihomo）与 sing-box 支持，
-// Surge / Loon / QuanX / Egern 订阅里不包含它，不让一个节点拖垮整份订阅。
+// Surge / Loon / QuanX / Egern 订阅与通用链接列表（Shadowrocket、v2rayN 等）里不包含它，不让一个节点拖垮整份订阅。
 func forTarget(links []string, target string) []string {
 	switch target {
-	case "surge", "loon", "quanx", "egern":
+	case "surge", "loon", "quanx", "egern", "base64", "":
 	default:
 		return links
 	}

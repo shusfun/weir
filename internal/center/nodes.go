@@ -38,13 +38,14 @@ func (s *Server) nodeRoutes(admin *gin.RouterGroup) {
 	admin.POST("/gates/:id/probe-reality", s.probeReality)
 }
 
-// ChainSpec 描述链式代理出口：家宽 SOCKS5 或另一台 VPS 上的节点。
+// ChainSpec 描述链式代理出口：SOCKS5 / HTTP / HTTPS 代理、单条分享链接、另一台 VPS 上的节点或订阅源里的节点。
 type ChainSpec struct {
-	Kind     string `json:"kind"` // none / socks5 / node / source（订阅源里的节点）
+	Kind     string `json:"kind"` // none / socks5 / http / https / link / node / source
 	Address  string `json:"address"`
 	Port     int    `json:"port"`
 	Username string `json:"username"`
 	Password string `json:"password"`
+	Link     string `json:"link,omitempty"` // link：一条分享链接（不接受订阅地址）
 	NodeID   int    `json:"node_id"`
 	// source：管理员用 source_id（任意订阅源），用户自建用 profile_id（分配给他的订阅组）；mode node / filter，match 名称或正则。
 	SourceID  int    `json:"source_id,omitempty"`
@@ -63,6 +64,7 @@ type chainCtx struct {
 	kernel string
 	userID int
 	admin  bool
+	gate   *ent.Gate // 入口 VPS（订阅源出口按它的内核筛成员）
 }
 
 var errGateOffline = errors.New("gate_offline")
@@ -117,6 +119,12 @@ func (s *Server) chainView(ctx context.Context, n *ent.Node) gin.H {
 		sp := specOf(n.ChainSource)
 		v["source_id"], v["mode"], v["match"], v["source"] = sp.SourceID, sp.Mode, sp.Match, s.exitView(ctx, "node:"+itoa(n.ID))
 	}
+	if l, err := s.reveal(n.ChainLink); err == nil && l != "" {
+		v["link"] = l
+	}
+	if p, ok := s.loadExitProbe(ctx, "node:"+itoa(n.ID)); ok && n.ChainKind != node.ChainKindNone {
+		v["probe"] = p
+	}
 	return v
 }
 
@@ -131,6 +139,12 @@ func (s *Server) nodeView(ctx context.Context, n *ent.Node) gin.H {
 	}
 	if g != nil {
 		view["gate_name"], view["host"] = g.Name, g.PublicHost
+		view["ports"] = nodePorts(n, g)
+	}
+	if r, ok := s.loadReach(ctx, n.ID); ok {
+		view["reach"] = r
+	} else {
+		view["reach"] = reachResult{Status: "unknown", Why: "还没有检查过"}
 	}
 	if n.ChainPassword != "" {
 		if pw, err := s.reveal(n.ChainPassword); err == nil {
@@ -147,7 +161,7 @@ func (s *Server) listNodes(c *gin.Context) {
 	}
 	items, err := q.All(c.Request.Context())
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	out := make([]gin.H, 0, len(items))
@@ -201,72 +215,72 @@ func (s *Server) checkPort(ctx context.Context, g *ent.Gate, port, self int) err
 	return nil
 }
 
-// validateChain 校验链式代理出口并在入口 Gate 上实测（家宽 SOCKS5 必须能握手并经它连出去）。
-func (s *Server) validateChain(ctx context.Context, entry *ent.Gate, self int, spec ChainSpec, publicOnly, probe bool, cc chainCtx) error {
+// resolveChain 把出口描述解析成具体出口（还不实测）。self 是正在保存的节点（不能以自己为出口）。
+func (s *Server) resolveChain(ctx context.Context, self int, spec ChainSpec, publicOnly bool, cc chainCtx) (resolvedExit, error) {
 	switch spec.Kind {
-	case "", "none":
-		return nil
+	case "socks5", "http", "https":
+		if publicOnly && (literalPrivate(spec.Address) || strings.EqualFold(strings.Trim(strings.TrimSpace(spec.Address), "[]"), "localhost")) {
+			return resolvedExit{}, errors.New("exit_not_public: 只能填公网地址")
+		}
+		if !validHostPort(spec.Address, spec.Port) || len(spec.Username) > 255 || len(spec.Password) > 255 {
+			return resolvedExit{}, errors.New("invalid_chain: 请填写有效的地址与 1–65535 的端口")
+		}
+		o := proxyExit(spec.Kind, spec.Address, spec.Port, spec.Username, spec.Password)
+		return resolvedExit{Outbound: o, Links: []string{proxyLink(spec.Kind, spec.Address, spec.Port, spec.Username, spec.Password)}}, nil
+	case "link":
+		o, name, err := parseExitLink(spec.Link)
+		if err != nil {
+			return resolvedExit{}, fmt.Errorf("invalid_link: %v", err)
+		}
+		if publicOnly && (literalPrivate(o.Address) || strings.EqualFold(o.Address, "localhost")) {
+			return resolvedExit{}, errors.New("exit_not_public: 只能用公网地址的节点")
+		}
+		return resolvedExit{Outbound: o, Names: []string{name}, Links: []string{strings.TrimSpace(spec.Link)}}, nil
 	case "source":
 		sp := spec.source()
 		if err := sp.check(); err != nil {
-			return fmt.Errorf("invalid_chain: %v", err)
+			return resolvedExit{}, fmt.Errorf("invalid_chain: %v", err)
 		}
 		if sp.SourceID > 0 && !cc.admin {
-			return errors.New("exit_not_allowed: 只能选择分配给你的订阅组里的节点")
+			return resolvedExit{}, errors.New("exit_not_allowed: 只能选择分配给你的订阅组里的节点")
 		}
 		if sp.SourceID > 0 {
 			if _, err := s.Store.Ent.SubSource.Get(ctx, sp.SourceID); err != nil {
-				return errors.New("source_not_found")
+				return resolvedExit{}, errors.New("source_not_found")
 			}
 		} else if cc.userID > 0 {
 			granted, err := s.grantedProfiles(ctx, cc.userID)
 			if err != nil {
-				return err
+				return resolvedExit{}, err
 			}
 			if !granted[sp.ProfileID] {
-				return errors.New("exit_not_allowed: 这个订阅组没有分配给该用户")
+				return resolvedExit{}, errors.New("exit_not_allowed: 这个订阅组没有分配给该用户")
 			}
 		}
-		ob, _, err := s.resolveSpec(ctx, sp, publicOnly)
+		var kernels []string
+		if cc.kernel != "" {
+			kernels = []string{cc.kernel}
+		}
+		ex, err := s.resolveSpec(ctx, cc.gate, kernels, sp, publicOnly)
 		if err != nil {
-			return fmt.Errorf("chain_exit_unavailable: %v", err)
+			return resolvedExit{}, fmt.Errorf("chain_exit_unavailable: %v", err)
 		}
-		if ob.Protocol == "group" {
-			if err = s.checkGroupSupport(ctx, entry, cc.kernel); err != nil {
-				return fmt.Errorf("group_unsupported: %v", err)
-			}
-		}
-		if probe {
-			return s.probeSpec(ctx, entry, ob, publicOnly)
-		}
-		return nil
-	case "socks5":
-		if strings.TrimSpace(spec.Address) == "" || spec.Port <= 0 || spec.Port > 65535 || len(spec.Username) > 255 || len(spec.Password) > 255 {
-			return errors.New("invalid_chain")
-		}
-		if !probe {
-			return nil
-		}
-		_, err := s.gateProbe(ctx, entry, contracts.ActionChainProbe, map[string]any{"kind": "socks5", "address": spec.Address, "port": spec.Port, "username": spec.Username, "password": spec.Password, "public_only": publicOnly}, 30*time.Second)
-		if err != nil {
-			return fmt.Errorf("chain_probe_failed: %w", err)
-		}
-		return nil
+		return ex, nil
 	case "node":
 		if spec.NodeID == self {
-			return errors.New("chain_self")
+			return resolvedExit{}, errors.New("chain_self")
 		}
 		exit, err := s.Store.Ent.Node.Get(ctx, spec.NodeID)
 		if err != nil || !exit.Enabled {
-			return errors.New("chain_exit_unavailable")
+			return resolvedExit{}, errors.New("chain_exit_unavailable")
 		}
 		if p, ok := s.presetByID(ctx, exit.Preset); ok && !p.ChainExit {
-			return errors.New("chain_exit_unsupported")
+			return resolvedExit{}, errors.New("chain_exit_unsupported")
 		}
 		// 出口节点自身也走链时可能成环：最多追 8 跳。
 		for hop, cur := 0, exit; cur.ChainKind == node.ChainKindNode && cur.ChainNodeID != nil; hop++ {
 			if *cur.ChainNodeID == self || hop > 8 {
-				return errors.New("chain_cycle")
+				return resolvedExit{}, errors.New("chain_cycle")
 			}
 			if cur, err = s.Store.Ent.Node.Get(ctx, *cur.ChainNodeID); err != nil {
 				break
@@ -274,16 +288,41 @@ func (s *Server) validateChain(ctx context.Context, entry *ent.Gate, self int, s
 		}
 		eg, err := s.Store.Ent.Gate.Get(ctx, exit.GateID)
 		if err != nil || eg.PublicHost == "" {
-			return errors.New("chain_exit_no_address")
+			return resolvedExit{}, errors.New("chain_exit_no_address")
 		}
-		if probe {
-			if _, err = s.gateProbe(ctx, entry, contracts.ActionChainProbe, map[string]any{"kind": "node", "address": eg.PublicHost, "port": exit.Port, "public_only": publicOnly}, 30*time.Second); err != nil {
-				return fmt.Errorf("chain_probe_failed: %w", err)
-			}
+		// 入口到出口节点的内部凭据保存后才生成：这里先用占位凭据检查参数与内核能否连接，实测只测端口。
+		o, err := nodeExit("", exit, eg.PublicHost, &ent.Credential{UUID: "00000000-0000-4000-8000-000000000000", Password: "probe"})
+		if err != nil {
+			return resolvedExit{}, errors.New("chain_exit_unsupported")
 		}
-		return nil
+		return resolvedExit{Outbound: o, Names: []string{exit.Name}, TCPOnly: true}, nil
 	}
-	return errors.New("invalid_chain")
+	return resolvedExit{}, errors.New("invalid_chain")
+}
+
+// validateChain 校验链式代理出口、确认入口内核能连接它，并在入口 Gate 上实测（probe 为真时）。
+// 返回实测结果，由调用方在保存后记到所属对象上。
+func (s *Server) validateChain(ctx context.Context, entry *ent.Gate, self int, spec ChainSpec, publicOnly, probe bool, cc chainCtx) (*exitProbe, error) {
+	if spec.Kind == "" || spec.Kind == "none" {
+		return nil, nil
+	}
+	cc.gate = entry
+	ex, err := s.resolveChain(ctx, self, spec, publicOnly, cc)
+	if err != nil {
+		return nil, err
+	}
+	if ex.Outbound.Protocol == "group" {
+		if err = s.checkGroupSupport(ctx, entry, cc.kernel); err != nil {
+			return nil, fmt.Errorf("group_unsupported: %v", err)
+		}
+	}
+	if err = s.checkOutboundKernel(ctx, entry, cc.kernel, ex.members()); err != nil {
+		return nil, fmt.Errorf("exit_unsupported: %v", err)
+	}
+	if !probe {
+		return nil, nil
+	}
+	return s.probeExit(ctx, entry, ex, publicOnly)
 }
 
 func (s *Server) applyChain(m *ent.NodeMutation, spec ChainSpec) error {
@@ -292,20 +331,29 @@ func (s *Server) applyChain(m *ent.NodeMutation, spec ChainSpec) error {
 	m.SetChainPort(0)
 	m.SetChainUsername("")
 	m.SetChainPassword("")
+	m.SetChainLink("")
 	switch spec.Kind {
-	case "socks5":
-		sealed, err := s.Crypto.Encrypt(spec.Password)
+	case "socks5", "http", "https":
+		sealed, err := s.seal(spec.Password)
 		if err != nil {
 			return err
 		}
-		if spec.Password == "" {
-			sealed = ""
-		}
-		m.SetChainKind(node.ChainKindSocks5)
-		m.SetChainAddress(strings.TrimSpace(spec.Address))
+		m.SetChainKind(node.ChainKind(spec.Kind))
+		m.SetChainAddress(strings.Trim(strings.TrimSpace(spec.Address), "[]"))
 		m.SetChainPort(spec.Port)
 		m.SetChainUsername(spec.Username)
 		m.SetChainPassword(sealed)
+	case "link":
+		sealed, err := s.seal(strings.TrimSpace(spec.Link))
+		if err != nil {
+			return err
+		}
+		m.SetChainKind(node.ChainKindLink)
+		m.SetChainLink(sealed)
+		if o, _, err := parseExitLink(spec.Link); err == nil {
+			m.SetChainAddress(o.Address)
+			m.SetChainPort(o.Port)
+		}
 	case "node":
 		m.SetChainKind(node.ChainKindNode)
 		m.SetChainNodeID(spec.NodeID)
@@ -319,6 +367,14 @@ func (s *Server) applyChain(m *ent.NodeMutation, spec ChainSpec) error {
 		m.ClearChainSource()
 	}
 	return nil
+}
+
+// seal 加密保存的出口凭据；空值不加密。
+func (s *Server) seal(plain string) (string, error) {
+	if plain == "" {
+		return "", nil
+	}
+	return s.Crypto.Encrypt(plain)
 }
 
 // afterChainSource 保存后解析一次订阅源出口（节点保存之后才有编号）。
@@ -404,9 +460,14 @@ func (s *Server) createNode(c *gin.Context) {
 		failure(c, 400, "unknown_preset")
 		return
 	}
+	// 没有公网地址时生成不了分享链接：先在 VPS 详情里填好，不建一个用不了的节点。
+	if g.PublicHost == "" {
+		failDetail(c, 422, "gate_no_public_host", "这台 VPS 还没有公网地址，请先在 VPS 详情里填写（客户端用它连接节点）", gin.H{"hint": publicHostHint(g)})
+		return
+	}
 	st, err := presetSettings(p)
 	if err != nil {
-		failure(c, 500, "preset_failed")
+		failInternal(c, 500, "preset_failed", err)
 		return
 	}
 	for k, v := range req.Settings {
@@ -438,7 +499,7 @@ func (s *Server) createNode(c *gin.Context) {
 			if errors.As(err, &why) {
 				failDetail(c, 422, "cert_unavailable", err.Error(), nil)
 			} else {
-				failure(c, 500, "cert_failed")
+				failInternal(c, 500, "cert_failed", err)
 			}
 			return
 		}
@@ -485,7 +546,8 @@ func (s *Server) createNode(c *gin.Context) {
 		failDetail(c, 400, "invalid_node_settings", err.Error(), nil)
 		return
 	}
-	if err = s.validateChain(ctx, g, 0, req.Chain, false, !req.SkipProbe, chainCtx{kernel: p.Kernel, admin: true}); err != nil {
+	probe, err := s.validateChain(ctx, g, 0, req.Chain, false, !req.SkipProbe, chainCtx{kernel: p.Kernel, admin: true})
+	if err != nil {
 		failErr(c, 422, err)
 		return
 	}
@@ -524,7 +586,7 @@ func (s *Server) createNode(c *gin.Context) {
 	create := s.Store.Ent.Node.Create().SetGateID(g.ID).SetName(name).SetPreset(p.ID).SetKernel(p.Kernel).
 		SetProtocol(p.Protocol).SetPort(req.Port).SetNetwork(p.Network).SetSecurity(p.Security).SetSettings(st).SetNillableCertID(certID)
 	if err = s.applyChain(create.Mutation(), req.Chain); err != nil {
-		failure(c, 500, "encrypt_failed")
+		failInternal(c, 500, "encrypt_failed", err)
 		return
 	}
 	n, err := create.Save(ctx)
@@ -541,10 +603,12 @@ func (s *Server) createNode(c *gin.Context) {
 		_ = u.Update().SetNodeIds(append(append([]int{}, u.NodeIds...), n.ID)).Exec(ctx)
 	}
 	if err = s.afterNodeChange(ctx, n); err != nil {
-		failure(c, 500, "sync_failed")
+		failInternal(c, 500, "sync_failed", err)
 		return
 	}
 	s.afterChainSource(ctx, n)
+	s.saveExitProbe(ctx, "node:"+itoa(n.ID), probe)
+	go s.checkReachability(context.WithoutCancel(ctx), n.ID)
 	s.audit(c, "node.create", "node:"+itoa(n.ID), "ok")
 	view := s.nodeView(ctx, n)
 	view["tested"] = tested
@@ -699,12 +763,14 @@ func (s *Server) updateNode(c *gin.Context) {
 	}
 	upd.SetSettings(st)
 	if req.Chain != nil {
-		if err = s.validateChain(ctx, g, n.ID, *req.Chain, false, !req.SkipProbe, chainCtx{kernel: n.Kernel, admin: true}); err != nil {
+		probe, err := s.validateChain(ctx, g, n.ID, *req.Chain, false, !req.SkipProbe, chainCtx{kernel: n.Kernel, admin: true})
+		if err != nil {
 			failErr(c, 422, err)
 			return
 		}
+		defer s.saveExitProbe(ctx, "node:"+itoa(n.ID), probe)
 		if err = s.applyChain(upd.Mutation(), *req.Chain); err != nil {
-			failure(c, 500, "encrypt_failed")
+			failInternal(c, 500, "encrypt_failed", err)
 			return
 		}
 	}
@@ -713,7 +779,7 @@ func (s *Server) updateNode(c *gin.Context) {
 		return
 	}
 	if err = s.afterNodeChange(ctx, n); err != nil {
-		failure(c, 500, "sync_failed")
+		failInternal(c, 500, "sync_failed", err)
 		return
 	}
 	s.afterChainSource(ctx, n)
@@ -740,7 +806,7 @@ func (s *Server) deleteNode(c *gin.Context) {
 	affected := map[int]bool{}
 	chains, err := s.Store.Ent.Chain.Query().Where(chain.Or(chain.EntryNodeIDEQ(n.ID), chain.ExitNodeIDEQ(n.ID))).All(ctx)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	for _, ch := range chains {
@@ -749,7 +815,7 @@ func (s *Server) deleteNode(c *gin.Context) {
 			err = s.Store.Ent.Chain.DeleteOne(ch).Exec(ctx)
 		}
 		if err != nil {
-			failure(c, 500, "delete_failed")
+			failInternal(c, 500, "delete_failed", err)
 			return
 		}
 	}
@@ -759,14 +825,14 @@ func (s *Server) deleteNode(c *gin.Context) {
 		}
 	}
 	if err != nil {
-		failure(c, 500, "delete_failed")
+		failInternal(c, 500, "delete_failed", err)
 		return
 	}
 	if err = s.SyncAll(ctx); err == nil {
 		err = s.bumpGates(ctx, []int{n.GateID})
 	}
 	if err != nil {
-		failure(c, 500, "sync_failed")
+		failInternal(c, 500, "sync_failed", err)
 		return
 	}
 	s.audit(c, "node.delete", "node:"+itoa(n.ID), fmt.Sprintf("ok chains=%d", len(chains)))

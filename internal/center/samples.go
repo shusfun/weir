@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/shusfun/weir/internal/store/ent/gateaction"
 	"github.com/shusfun/weir/internal/store/ent/sample"
 	"github.com/shusfun/weir/packages/contracts"
 )
@@ -44,6 +45,8 @@ func (s *Server) PruneSamples(ctx context.Context, now time.Time) error {
 		return err
 	}
 	_, err := s.Store.Ent.Sample.Delete().Where(sample.AtLT(now.Add(-sampleKeep))).Exec(ctx)
+	// 链路页每 30 秒续一次实时上报：这类动作只在当时有用，一小时后删掉，不留在动作记录里。
+	_, _ = s.Store.Ent.GateAction.Delete().Where(gateaction.KindEQ(contracts.ActionLiveStart), gateaction.CreatedAtLT(now.Add(-time.Hour))).Exec(ctx)
 	return err
 }
 
@@ -121,7 +124,7 @@ func (s *Server) historyHandler(scope sample.Scope, param string) gin.HandlerFun
 		hours := atoiOr(c.DefaultQuery("hours", "1"))
 		points, err := s.history(c.Request.Context(), scope, id, hours)
 		if err != nil {
-			failure(c, 503, "query_failed")
+			failInternal(c, 503, "query_failed", err)
 			return
 		}
 		c.JSON(200, gin.H{"points": points})

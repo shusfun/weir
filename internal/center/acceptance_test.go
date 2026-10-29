@@ -185,7 +185,7 @@ func TestAcceptanceUserIsolationAuditAndSubscriptions(t *testing.T) {
 	}
 
 	// CHAIN-02：本机、内网、云元数据地址一律拒绝；不可达时保存失败并写审计；关闭权限后不能新建。
-	for _, addr := range []string{"127.0.0.1", "localhost", "10.0.0.8", "192.168.1.2", "169.254.169.254", "[::1]", "fd00::1"} {
+	for _, addr := range []string{"127.0.0.1", "localhost", "10.0.0.8", "192.168.1.2", "169.254.169.254", "[::1]", "fd00::1", "100.64.3.4", "198.18.0.1"} {
 		w := ac.do("POST", "/api/v1/me/chains", map[string]any{"name": "家宽", "entry_node_id": id1, "exit": map[string]any{"kind": "socks5", "address": addr, "port": 1080}}, nil)
 		if w.Code != 422 || !strings.Contains(w.Body.String(), "exit_not_public") {
 			t.Fatalf("chain exit %s = %d %s", addr, w.Code, w.Body.String())

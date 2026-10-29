@@ -18,8 +18,9 @@ description: 管理员要支持新的 Xray / sing-box 版本、内核更新后�
 
 ## 格式
 
-- 顶层字段：`kernel`、`name`、`min_version`、`max_version`、`extends`、`notes`、`protocols`、`networks`、`securities`、`features`、`compat`、`run`、`check`、`presets`、`templates`、`strip`。未知字段直接拒绝。
+- 顶层字段：`kernel`、`name`、`min_version`、`max_version`、`extends`、`notes`、`protocols`、`networks`、`securities`、`outbound_networks`、`features`、`compat`、`run`、`check`、`presets`、`templates`、`strip`。未知字段直接拒绝。
 - `features` 没写或为空表示一项都不支持；`protocols` / `networks` / `securities` 为空表示不限制。
+- `outbound_networks` 是作客户端连出去（链式代理、分流出口）时支持的传输，没写时只有 tcp；能连哪些出口协议看模板里有没有 `outbound.<协议>`。保存出口时按入口内核的这两项检查，连不了就报错。
 - `run` / `check` 只能写选项名、子命令和一次 `{config}`。
 - `compat`：`{kernel, range, protocol, security, reason}`，写已知的客户端不兼容（如某版本 REALITY 与 sing-box 1.14.3 不通）。
 - 继承：子驱动的 `templates` 按名称覆盖、`presets` 按 id 覆盖，其他写了的字段整体替换；版本区间只取子驱动自己的。
@@ -36,7 +37,7 @@ description: 管理员要支持新的 Xray / sing-box 版本、内核更新后�
 - `{$merge: [对象, …]}` 合并对象。
 - 表达式：路径、字面量、`== != < <= > >=`、`in`、`not`、`and`、`or`、括号；过滤器 `default(x)`、`trim`、`lower`、`int`、`split`（逗号）、`rules`（逗号 / 换行）、`lines`、`cidr`、`join(sep)`、`list`、`map(key)`、`where(key, v)`、`len`、`first(a, b)`、`flat`。
 
-变量：`inbounds`（ib：节点参数 + tag、stats_tag、clients）、`outbounds`（ob：tag、protocol、address、port、username、password、group、s.出口设置）、`routes`（r：outbound、balancer、inbound、user、domain、ip、protocol）、`groups`、`stats`（统计端口）、`probe`。凭据只能引用，不能生成。
+变量：`inbounds`（ib：节点参数 + tag、stats_tag、clients）、`outbounds`（ob：tag、protocol、address、port、username、password、group、s.出口设置：security、network、sni、fingerprint、alpn、public_key、short_id、path、host、service_name、mode（XHTTP 模式）、flow、method 等）、`routes`（r：outbound、balancer、inbound、user、domain、ip、protocol）、`groups`、`stats`（统计端口）、`probe`。凭据只能引用，不能生成。
 
 ## 引擎强制检查（写错也绕不过）
 

@@ -25,6 +25,8 @@ type Heartbeat struct {
 	Panel          *PanelStatus      `json:"panel,omitempty"`
 	// PanelCerts 是本机 1Panel 证书的当前状态（证书 ID → 摘要与到期），1Panel 续签后中心据此更新。
 	PanelCerts map[string]PanelCert `json:"panel_certs,omitempty"`
+	// Firewall 是本机防火墙的状态（读不到时为空，中心显示「未知」）。
+	Firewall *FirewallStatus `json:"firewall,omitempty"`
 }
 
 // PanelStatus 是 Gate 本机 1Panel 的状态。API 密钥只存在 Gate 本机（root 可读），从不上报。
@@ -40,6 +42,15 @@ type PanelCert struct {
 	CertPEM  string    `json:"cert_pem,omitempty"`
 	SHA256   string    `json:"sha256"`
 	NotAfter time.Time `json:"not_after"`
+}
+
+// FirewallStatus 是 Gate 本机的防火墙：Tool 为 ufw / firewalld / iptables / none（没有防火墙）；
+// Active 为假表示未启用（全部放行）；Rules 是放行的端口，形如 443/tcp、20000:20100/udp、8443（不分协议）。
+type FirewallStatus struct {
+	Tool   string   `json:"tool"`
+	Active bool     `json:"active"`
+	Rules  []string `json:"rules,omitempty"`
+	Error  string   `json:"error,omitempty"`
 }
 
 // HeartbeatReply 是中心对心跳的回复。Center 为中心记录的公共地址；与 Gate 当前连接的不同时，
@@ -98,10 +109,12 @@ const (
 	ActionReleaseReplace = "release.replace"
 	ActionRealityProbe   = "reality.probe"
 	ActionChainProbe     = "chain.probe"
-	ActionOutboundProbe  = "outbound.probe"
-	ActionDiagnostics    = "core.diagnostics"
-	ActionCoreRestart    = "core.restart"
-	ActionUninstall      = "gate.uninstall"
+	// ActionLiveStart 让 Gate 在 seconds 秒内每 2 秒上报一次实时计数（有人打开链路页时才发）。
+	ActionLiveStart     = "live.start"
+	ActionOutboundProbe = "outbound.probe"
+	ActionDiagnostics   = "core.diagnostics"
+	ActionCoreRestart   = "core.restart"
+	ActionUninstall     = "gate.uninstall"
 	// ActionNodeTest 在 Gate 本机回环上实测一份候选入站：起服务端内核与 sing-box 客户端，经代理真实下载。
 	ActionNodeTest = "node.test"
 	// ActionACMEHTTP01 让 Gate 临时在 80 端口应答一次 ACME HTTP-01 验证（只回应验证路径，用完即关）。
@@ -118,4 +131,14 @@ type ActionResult struct {
 	OK     bool           `json:"ok"`
 	Error  string         `json:"error,omitempty"`
 	Result map[string]any `json:"result,omitempty"`
+}
+
+// LiveReport 是实时上报：各凭据与各出口（GateConfig 里的出口标签，两个内核相加）的累计计数，以及网卡收发累计；中心按相邻两次算速率。
+// 只放在中心内存里，不写数据库；额度与用量仍以 MeterReport 为准。
+type LiveReport struct {
+	At        time.Time     `json:"at"`
+	Users     []MeterSample `json:"users"`
+	Outbounds []MeterSample `json:"outbounds"`
+	NetRx     *uint64       `json:"net_rx,omitempty"`
+	NetTx     *uint64       `json:"net_tx,omitempty"`
 }

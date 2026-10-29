@@ -13,6 +13,8 @@ import { HistoryCharts } from "./history-charts";
 import { GateTopology } from "./gate-topology";
 import { GateRouting } from "./gate-routing";
 import { ObjectLink } from "./object-link";
+import { exitKindName, probeText } from "./chain-exit";
+import { NodeAccess } from "./node-access";
 
 type Host = Record<string, number | string | undefined>;
 interface Port {
@@ -40,11 +42,12 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
   const mine = nodes.filter((n) => n.gate_id === gate.id);
   const exitName = (n: NodeItem) => {
     if (n.chain.kind === "none") return "直连";
-    if (n.chain.kind === "socks5") return `家宽 SOCKS5 ${n.chain.address}:${n.chain.port}`;
     if (n.chain.kind === "source") return "订阅源节点";
+    if (n.chain.kind !== "node") return `${exitKindName[n.chain.kind]} ${n.chain.address ?? ""}${n.chain.port ? ":" + n.chain.port : ""}`;
     const x = nodes.find((y) => y.id === n.chain.node_id);
     return <>经 <ObjectLink to={{ type: "node", id: n.chain.node_id ?? undefined, name: x?.name ?? "节点" }} />{x?.gate_name ? `（${x.gate_name}）` : ""}</>;
   };
+  const fw = gate.firewall;
   return (
     <Sheet open onOpenChange={(o) => !o && close()}>
       <SheetContent side="right" title={gate.name} description={`${gate.public_host || "等待上报地址"} · ${gate.arch} · 最近心跳 ${date(gate.last_seen_at)}`} className="w-full sm:max-w-[640px]">
@@ -60,6 +63,10 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
           </dl>
           <SectionHeader title="流量与主机曲线" description="最近 1 / 6 / 24 小时；VPS 离线或读取失败的时段显示为未知，不补零。" />
           <HistoryCharts path={`/admin/gates/${gate.id}/history`} host />
+          <SectionHeader title="本机防火墙" description="只读：节点端口没有放行时在节点上提示，Weir 不改防火墙规则；云厂商的安全组读不到。" />
+          <small>
+            {!fw ? unknown : fw.error ? `${fw.tool}：读取失败（${fw.error}）` : fw.tool === "none" ? "没有检测到防火墙" : !fw.active ? `${fw.tool} 未启用（全部放行）` : `${fw.tool} 已启用，放行 ${fw.rules?.length ? fw.rules.join("、") : "无端口"}`}
+          </small>
           <SectionHeader title="其他程序占用的端口" description="建节点时自动避开这些端口。" />
           {foreign.length === 0 ? <small>{gate.listening_ports ? "没有" : unknown}</small> : (
             <div className="flex flex-wrap gap-1.5">{foreign.map((p) => <Badge key={p.proto + p.port} variant="soft" tone="neutral">{p.port}/{p.proto}{p.process ? ` ${p.process}` : ""}</Badge>)}</div>
@@ -96,7 +103,13 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
           {routing && <GateRouting gate={gate} close={() => setRouting(false)} />}
           <SectionHeader title="节点与出口" description="入口节点 → 出口。" actions={<Button size="sm" variant="outline" onClick={() => setRouting(true)}>出口与分流</Button>} />
           {mine.length === 0 ? <small>这台 VPS 还没有节点。</small> : (
-            <ul className="stack">{mine.map((n) => <li key={n.id} className="text-sm"><ObjectLink to={{ type: "node", id: n.id, name: n.name }} className="font-semibold" /> :{n.port} → {exitName(n)}{!n.enabled && <Badge variant="soft" tone="warn">停用</Badge>}</li>)}</ul>
+            <ul className="stack">{mine.map((n) => (
+              <li key={n.id} className="stack gap-1 text-sm">
+                <span><ObjectLink to={{ type: "node", id: n.id, name: n.name }} className="font-semibold" /> :{n.port} → {exitName(n)}{!n.enabled && <Badge variant="soft" tone="warn">停用</Badge>}</span>
+                {n.chain.kind !== "none" && <small className="text-[var(--mg-ink-3)]">{probeText(n.chain.probe)}</small>}
+                <NodeAccess ports={n.ports} reach={n.reach} />
+              </li>
+            ))}</ul>
           )}
         </div>
       </SheetContent>

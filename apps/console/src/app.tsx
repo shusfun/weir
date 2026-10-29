@@ -58,6 +58,7 @@ const SubPage = page(() => import("./pages/sub-page"), "SubPage");
 const UsersPage = page(() => import("./pages/users"), "UsersPage");
 const SubscriptionPage = page(() => import("./pages/subscription"), "SubscriptionPage");
 const SecurityPage = page(() => import("./pages/security"), "SecurityPage");
+const LinkMapPage = page(() => import("./pages/linkmap"), "LinkMapPage");
 const LoginPage = page(() => import("./pages/login"), "LoginPage");
 const SetupPage = page(() => import("./pages/setup"), "SetupPage");
 const PublicPage = page(() => import("./pages/public-page"), "PublicPage");
@@ -133,7 +134,9 @@ function Console() {
               <Route path="/subscriptions" element={guard(<SubscriptionsPage />)} />
               <Route path="/pages" element={guard(<PublicPagesPage />)} />
               <Route path="/ops/audit" element={guard(<AuditPage />)} />
+              <Route path="/linkmap" element={guard(<LinkMapPage admin />)} />
               <Route path="/subscription" element={<SubscriptionPage />} />
+              <Route path="/my/linkmap" element={<LinkMapPage admin={false} />} />
               <Route path="/security" element={<SecurityPage loginRequired={loginRequired} />} />
               {DevUiPage && <Route path="/dev/ui" element={guard(<DevUiPage />)} />}
               <Route path="*" element={<Navigate to={home} replace />} />

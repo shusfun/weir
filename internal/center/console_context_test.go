@@ -30,13 +30,14 @@ func TestConsoleContextPerDrawerRedactedAndNavigation(t *testing.T) {
 			map[string]any{"key": "name", "label": "节点名称", "value": "香港-01"},
 			map[string]any{"key": "password", "label": "SOCKS5 密码", "value": "hunter2"},
 			map[string]any{"key": "api_key", "label": "1Panel 密钥", "value": "SECRET-KEY"},
+			map[string]any{"key": "chain_link", "label": "分享链接", "value": "ss://YWVz@203.0.113.9:8388#LINK-CRED"},
 		}})
 	text := read()
 	if !strings.Contains(text, "HK-1") || !strings.Contains(text, "第 2 步") || !strings.Contains(text, "香港-01") || !strings.Contains(text, `"status": "当前"`) {
 		t.Fatalf("context = %s", text)
 	}
 	// 密码、密钥类字段不传，只标已填。
-	if strings.Contains(text, "hunter2") || strings.Contains(text, "SECRET-KEY") || !strings.Contains(text, `"filled": true`) {
+	if strings.Contains(text, "hunter2") || strings.Contains(text, "SECRET-KEY") || strings.Contains(text, "LINK-CRED") || !strings.Contains(text, `"filled": true`) {
 		t.Fatalf("form must be redacted: %s", text)
 	}
 	// 另一个标签：各自独立。B 在后台时不覆盖 A；B 到前台打开 dsh 窗口后成为当前会话。

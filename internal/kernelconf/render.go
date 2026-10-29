@@ -373,6 +373,26 @@ type group struct {
 	members []int64
 }
 
+// OutboundNames 把内核里的出口标签（xray-out-<id>、singbox-out-<id>）对应回 GateConfig 的出口标签：
+// 固定直连为 direct，一组的成员为「组标签-m序号」（与 Build 展开的一致）。Gate 上报实时计数时用它换算。
+func OutboundNames(cfg contracts.GateConfig) map[string]string {
+	out := map[string]string{}
+	expanded, _, err := expandGroups(cfg)
+	if err != nil {
+		return out
+	}
+	add := func(id int64, tag string) {
+		for _, k := range []string{db.CoreXray, db.CoreSingbox} {
+			out[db.GeneratedOutboundTag(k, id, tag)] = tag
+		}
+	}
+	add(directID, "direct")
+	for _, o := range expanded.Outbounds {
+		add(o.ID, o.Tag)
+	}
+	return out
+}
+
 // expandGroups 把组展开成成员出口；组本身留一个丢弃出口占位（规则照常指向它，模板再换成 balancer / urltest）。
 func expandGroups(cfg contracts.GateConfig) (contracts.GateConfig, []group, error) {
 	var groups []group

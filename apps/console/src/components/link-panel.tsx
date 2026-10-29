@@ -17,11 +17,9 @@ import {
   DialogTitle,
   Field,
   Form,
-  FormGrid,
   Input,
   Notice,
   SectionHeader,
-  Segmented,
   Select,
   SelectContent,
   SelectItem,
@@ -32,7 +30,6 @@ import {
   SwitchField,
   useToast,
   useConfirm,
-  PasswordInput,
   SecretText,
 } from "@weir/ui";
 import { Plus, QrCode, RefreshCw, Trash2 } from "lucide-react";
@@ -41,7 +38,7 @@ import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
 import { bytes, date } from "../lib/models";
 import type { ChainItem, ChainSpec, LinkItem, SourceResolved } from "../lib/core";
-import { SourcePicker } from "./source-picker";
+import { ChainExitFields, exitErrorFields, exitKindName, probeText } from "./chain-exit";
 import { State } from "./feedback";
 
 export interface NodeOption {
@@ -329,7 +326,8 @@ function LinkForm({
   );
 }
 
-// ChainPanel：用户自建链式代理 = 一个新节点（入口节点 → 家宽 SOCKS5 或另一节点）。出口只允许公网地址，保存前由入口 VPS 实测。
+// ChainPanel：用户自建链式代理 = 一个新节点（入口节点 → 订阅组里的节点、SOCKS5 / HTTP(S) 代理、另一节点或一条分享链接）。
+// 出口只允许公网地址，不接受订阅地址；保存前由入口 VPS 实测，记下实际出口 IP。
 // SourceSummary：订阅源出口一行说明（单个节点 / 一组，及当前用的节点）。
 export function SourceSummary({ choice, resolved }: { choice?: { mode?: string; match?: string } | null; resolved?: SourceResolved }) {
   const names = resolved?.resolved ?? null;
@@ -354,7 +352,7 @@ export function ChainPanel({ base, nodes, admin }: { base: string; nodes: NodeOp
     <section className="stack">
       <SectionHeader
         title="链式代理"
-        description="经入口节点再从家宽或另一节点出去；流量只在入口计量一次。"
+        description="经入口节点再从订阅节点、代理或另一节点出去；流量只在入口计量一次。"
         actions={
           chains.data.allow_chain && (
             <Button
@@ -386,14 +384,19 @@ export function ChainPanel({ base, nodes, admin }: { base: string; nodes: NodeOp
                 )}
                 <small className="block text-[var(--mg-ink-3)]">
                   {c.entry_name ?? name(c.entry_node_id)} →{" "}
-                  {c.exit_kind === "socks5" ? (
+                  {c.exit_kind === "socks5" || c.exit_kind === "http" || c.exit_kind === "https" ? (
                     <>
-                      SOCKS5 {c.exit_address}:{c.exit_port}
+                      {exitKindName[c.exit_kind]} {c.exit_address}:{c.exit_port}
                       {admin && c.exit_username && (
                         <>
                           {" "}（{c.exit_username} / <SecretText value={c.exit_password ?? ""} />）
                         </>
                       )}
+                    </>
+                  ) : c.exit_kind === "link" ? (
+                    <>
+                      分享链接 {c.exit_address}:{c.exit_port}
+                      {admin && c.exit_link && <> （<SecretText value={c.exit_link} />）</>}
                     </>
                   ) : c.exit_kind === "source" ? (
                     <SourceSummary choice={c.exit_source} resolved={c.source} />
@@ -401,6 +404,7 @@ export function ChainPanel({ base, nodes, admin }: { base: string; nodes: NodeOp
                     name(c.exit_node_id)
                   )}
                 </small>
+                <small className="block text-[var(--mg-ink-3)]">{probeText(c.probe)}</small>
               </span>
               <span className="actions">
                 <Switch
@@ -460,24 +464,21 @@ function ChainForm({
 }) {
   const [name, setName] = useState("");
   const [entry, setEntry] = useState(nodes[0]?.id ?? 0);
-  const [exit, setExit] = useState<ChainSpec>({ kind: "socks5" });
+  // 订阅组里的节点排第一个；分给用户的订阅组为空时默认填代理。
+  const groups = useQuery({ queryKey: ["chain-sources", base], queryFn: async () => (await api(base === "/me" ? "/me/chain-sources" : `${base}/chain-sources`)).items as unknown[] });
+  const [exit, setExit] = useState<ChainSpec | null>(null);
+  const current: ChainSpec = exit ?? (groups.data && groups.data.length === 0 ? { kind: "socks5" } : { kind: "source", mode: "filter" });
   const [skip, setSkip] = useState(false);
-  const set = (p: Partial<ChainSpec>) => setExit({ ...exit, ...p });
-  const socks = exit.kind === "socks5";
-  const save = useFormAction(() => api(base + "/chains", "POST", { name: name.trim(), entry_node_id: entry, exit, skip_probe: admin && skip }), {
-    // 错误码按当前出口类型对应到实际显示的字段
-    fields: socks
-      ? { entry_not_allowed: "entry", exit_not_public: "address", invalid_outbound_credentials: "username" }
-      : exit.kind === "source"
-        ? { entry_not_allowed: "entry", exit_not_allowed: "source_id", source_not_found: "source_id", invalid_chain: "match", chain_exit_unavailable: "match", group_unsupported: "match", chain_probe_failed: "match" }
-        : { entry_not_allowed: "entry", exit_not_allowed: "exitNode", chain_self: "exitNode", chain_cycle: "exitNode", chain_exit_unavailable: "exitNode", chain_exit_unsupported: "exitNode", chain_exit_no_address: "exitNode" },
+  const save = useFormAction(() => api(base + "/chains", "POST", { name: name.trim(), entry_node_id: entry, exit: current, skip_probe: admin && skip }), {
+    fields: { entry_not_allowed: "entry", ...exitErrorFields(current.kind) },
     onSuccess: saved,
   });
   useConsoleContext({
     dialog: { title: "新建链式代理" },
     form: [
-      field("name", "名称", name), field("entry_node_id", "入口节点", nodes.find((n) => n.id === entry)?.name), field("exit_kind", "出口类型", exit.kind),
-      ...(socks ? [field("address", "SOCKS5 地址", exit.address), field("port", "端口", exit.port), field("username", "用户名", exit.username), field("password", "SOCKS5 密码", exit.password, true)] : []),
+      field("name", "名称", name), field("entry_node_id", "入口节点", nodes.find((n) => n.id === entry)?.name), field("exit_kind", "出口类型", exitKindName[current.kind]),
+      ...(["socks5", "http", "https"].includes(current.kind) ? [field("address", "代理地址", current.address), field("port", "端口", current.port), field("username", "用户名", current.username), field("password", "代理密码", current.password, true)] : []),
+      ...(current.kind === "link" ? [field("link", "分享链接", current.link, true)] : []),
     ],
   });
   return (
@@ -486,10 +487,10 @@ function ChainForm({
         <DialogTitle>新建链式代理</DialogTitle>
         <DialogDescription>会作为一个新节点出现在订阅里。保存前由入口 VPS 实测出口是否可用。</DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
-          <Field label="名称">
+          <Field label="名称" required>
             <Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
-          <Field label="入口节点" name="entry">
+          <Field label="入口节点" name="entry" required>
             <Select required value={entry ? String(entry) : ""} onValueChange={(v) => setEntry(Number(v))}>
               <SelectTrigger>
                 <SelectValue>{nodes.find((n) => n.id === entry)?.name ?? "请选择"}</SelectValue>
@@ -503,53 +504,14 @@ function ChainForm({
               </SelectContent>
             </Select>
           </Field>
-          <Segmented
-            aria-label="出口类型"
-            value={exit.kind as "socks5" | "node" | "source"}
-            onValueChange={(kind) => setExit({ kind, mode: "filter" })}
-            options={
-              [
-                ["socks5", "家宽 SOCKS5"],
-                ["node", "另一节点"],
-                ["source", "订阅组里的节点"],
-              ] as const
-            }
+          <ChainExitFields
+            value={current}
+            onChange={setExit}
+            admin={false}
+            sourcePath={base === "/me" ? "/me/chain-sources" : `${base}/chain-sources`}
+            nodes={nodes.filter((n) => n.id !== entry)}
+            nodeHint="出口需要你可用的另一个节点。"
           />
-          {exit.kind === "source" ? (
-            <SourcePicker path={base === "/me" ? "/me/chain-sources" : `${base}/chain-sources`} value={exit} onChange={(v) => setExit({ ...exit, ...v, kind: "source" })} />
-          ) : socks ? (
-            <FormGrid>
-              <Field label="公网地址" name="address">
-                <Input required value={exit.address ?? ""} onChange={(e) => set({ address: e.target.value.trim() })} />
-              </Field>
-              <Field label="端口" customError={exit.port && exit.port > 65535 ? "端口须在 1–65535 之间" : ""}>
-                <Input inputMode="numeric" required value={exit.port ? String(exit.port) : ""} onChange={(e) => set({ port: Number(e.target.value.replace(/\D/g, "")) || undefined })} />
-              </Field>
-              <Field label="用户名（可选）" name="username">
-                <Input autoComplete="off" value={exit.username ?? ""} onChange={(e) => set({ username: e.target.value })} />
-              </Field>
-              <Field label="密码（可选）">
-                <PasswordInput autoComplete="new-password" value={exit.password ?? ""} onChange={(e) => set({ password: e.target.value })} />
-              </Field>
-            </FormGrid>
-          ) : (
-            <Field label="出口节点" name="exitNode">
-              <Select required value={exit.node_id ? String(exit.node_id) : ""} onValueChange={(v) => set({ node_id: Number(v) })}>
-                <SelectTrigger>
-                  <SelectValue>{nodes.find((n) => n.id === exit.node_id)?.name ?? "请选择"}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {nodes
-                    .filter((n) => n.id !== entry)
-                    .map((n) => (
-                      <SelectItem key={n.id} value={String(n.id)}>
-                        {n.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          )}
           {admin && <CheckboxField label="跳过 VPS 实测（仅管理员）" checked={skip} onCheckedChange={setSkip} />}
           <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>

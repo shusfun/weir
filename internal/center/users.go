@@ -92,7 +92,7 @@ func (s *Server) listUsers(c *gin.Context) {
 	ctx := c.Request.Context()
 	items, err := s.Store.Ent.User.Query().Order(ent.Asc(user.FieldID)).All(ctx)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	out := make([]gin.H, 0, len(items))
@@ -206,7 +206,7 @@ func (s *Server) createUser(c *gin.Context) {
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		failure(c, 500, "hash_failed")
+		failInternal(c, 500, "hash_failed", err)
 		return
 	}
 	ctx := c.Request.Context()
@@ -224,11 +224,11 @@ func (s *Server) createUser(c *gin.Context) {
 		return
 	}
 	if _, err = s.Store.Ent.Link.Create().SetUserID(u.ID).SetName("默认").SetToken(linkToken()).Save(ctx); err != nil {
-		failure(c, 500, "link_failed")
+		failInternal(c, 500, "link_failed", err)
 		return
 	}
 	if err = s.SyncUser(ctx, u.ID); err != nil {
-		failure(c, 500, "sync_failed")
+		failInternal(c, 500, "sync_failed", err)
 		return
 	}
 	s.audit(c, "user.create", "user:"+itoa(u.ID), "ok")
@@ -249,12 +249,12 @@ func (s *Server) getUser(c *gin.Context) {
 	out := s.adminUserView(ctx, u)
 	links, err := s.linkViews(c, u, true)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	chains, err := s.chainViews(ctx, u)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	out["link_items"], out["chain_items"] = links, chains
@@ -316,21 +316,21 @@ func (s *Server) updateUser(c *gin.Context) {
 		}
 		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 		if err != nil {
-			failure(c, 500, "hash_failed")
+			failInternal(c, 500, "hash_failed", err)
 			return
 		}
 		upd.SetPasswordHash(string(hash))
 	}
 	u, err := upd.Save(ctx)
 	if err != nil {
-		failure(c, 500, "update_failed")
+		failInternal(c, 500, "update_failed", err)
 		return
 	}
 	if (req.Enabled != nil && !*req.Enabled) || req.Password != "" {
 		s.dropSessions(ctx, u.ID)
 	}
 	if err = s.SyncUser(ctx, u.ID); err != nil {
-		failure(c, 500, "sync_failed")
+		failInternal(c, 500, "sync_failed", err)
 		return
 	}
 	s.audit(c, "user.update", "user:"+itoa(u.ID), "ok")
@@ -372,7 +372,7 @@ func (s *Server) deleteUser(c *gin.Context) {
 		func() error { return s.Store.Ent.User.DeleteOne(u).Exec(ctx) },
 	} {
 		if err = del(); err != nil {
-			failure(c, 500, "delete_failed")
+			failInternal(c, 500, "delete_failed", err)
 			return
 		}
 	}
@@ -382,7 +382,7 @@ func (s *Server) deleteUser(c *gin.Context) {
 		err = s.bumpGates(ctx, gates)
 	}
 	if err != nil {
-		failure(c, 500, "sync_failed")
+		failInternal(c, 500, "sync_failed", err)
 		return
 	}
 	s.audit(c, "user.delete", "user:"+itoa(u.ID), "ok")
@@ -406,7 +406,7 @@ func (s *Server) resetUsageHandler(c *gin.Context) {
 		return
 	}
 	if err := s.ResetUsage(c.Request.Context(), u.ID, time.Now()); err != nil {
-		failure(c, 500, "reset_failed")
+		failInternal(c, 500, "reset_failed", err)
 		return
 	}
 	s.audit(c, "user.reset_usage", "user:"+itoa(u.ID), "ok")
@@ -451,7 +451,7 @@ func (s *Server) myNodes(c *gin.Context) {
 	ctx := c.Request.Context()
 	nodes, err := s.userNodeIDs(ctx, u)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	out := []gin.H{}
@@ -486,7 +486,7 @@ func (s *Server) mySubscription(c *gin.Context) {
 	u := c.MustGet("account").(*ent.User)
 	links, err := s.linkViews(c, u, false)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	c.JSON(200, gin.H{"quota": u.Quota, "used": u.Used, "expires_at": u.ExpiresAt, "monthly_reset": u.MonthlyReset, "next_reset": resetHint(u), "links": links,
@@ -550,7 +550,7 @@ func (s *Server) listLinks(c *gin.Context, admin bool) {
 	}
 	items, err := s.linkViews(c, u, true)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	c.JSON(200, gin.H{"items": items})
@@ -627,11 +627,11 @@ func (s *Server) createLink(c *gin.Context, admin bool) {
 	}
 	l, err := create.Save(ctx)
 	if err != nil {
-		failure(c, 500, "create_failed")
+		failInternal(c, 500, "create_failed", err)
 		return
 	}
 	if err = s.SyncUser(ctx, u.ID); err != nil {
-		failure(c, 500, "sync_failed")
+		failInternal(c, 500, "sync_failed", err)
 		return
 	}
 	s.audit(c, "link.create", "link:"+itoa(l.ID), "ok")
@@ -641,7 +641,7 @@ func (s *Server) createLink(c *gin.Context, admin bool) {
 func (s *Server) respondLink(c *gin.Context, u *ent.User, id int) {
 	items, err := s.linkViews(c, u, true)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	for _, v := range items {
@@ -673,11 +673,11 @@ func (s *Server) updateLink(c *gin.Context, admin bool) {
 		return
 	}
 	if _, err := upd.Save(ctx); err != nil {
-		failure(c, 500, "update_failed")
+		failInternal(c, 500, "update_failed", err)
 		return
 	}
 	if err := s.SyncUser(ctx, u.ID); err != nil {
-		failure(c, 500, "sync_failed")
+		failInternal(c, 500, "sync_failed", err)
 		return
 	}
 	s.audit(c, "link.update", "link:"+itoa(l.ID), "ok")
@@ -695,15 +695,15 @@ func (s *Server) deleteLink(c *gin.Context, admin bool) {
 	}
 	ctx := c.Request.Context()
 	if _, err := s.Store.Ent.Credential.Delete().Where(credential.LinkIDEQ(l.ID)).Exec(ctx); err != nil {
-		failure(c, 500, "delete_failed")
+		failInternal(c, 500, "delete_failed", err)
 		return
 	}
 	if err := s.Store.Ent.Link.DeleteOne(l).Exec(ctx); err != nil {
-		failure(c, 500, "delete_failed")
+		failInternal(c, 500, "delete_failed", err)
 		return
 	}
 	if err := s.SyncUser(ctx, u.ID); err != nil {
-		failure(c, 500, "sync_failed")
+		failInternal(c, 500, "sync_failed", err)
 		return
 	}
 	s.audit(c, "link.delete", "link:"+itoa(l.ID), "ok")
@@ -726,16 +726,16 @@ func (s *Server) rotateLink(c *gin.Context, admin bool) {
 	_ = c.ShouldBindJSON(&req)
 	ctx := c.Request.Context()
 	if _, err := l.Update().SetToken(linkToken()).Save(ctx); err != nil {
-		failure(c, 500, "update_failed")
+		failInternal(c, 500, "update_failed", err)
 		return
 	}
 	if req.Credentials {
 		if _, err := s.Store.Ent.Credential.Delete().Where(credential.LinkIDEQ(l.ID)).Exec(ctx); err != nil {
-			failure(c, 500, "update_failed")
+			failInternal(c, 500, "update_failed", err)
 			return
 		}
 		if err := s.SyncUser(ctx, u.ID); err != nil {
-			failure(c, 500, "sync_failed")
+			failInternal(c, 500, "sync_failed", err)
 			return
 		}
 	}
@@ -760,6 +760,12 @@ func (s *Server) chainViews(ctx context.Context, u *ent.User) ([]gin.H, error) {
 		if pw, err := s.reveal(ch.ExitPassword); err == nil {
 			v["exit_password"] = pw
 		}
+		if l, err := s.reveal(ch.ExitLink); err == nil && l != "" {
+			v["exit_link"] = l
+		}
+		if p, ok := s.loadExitProbe(ctx, "chain:"+itoa(ch.ID)); ok {
+			v["probe"] = p
+		}
 		if n, err := s.Store.Ent.Node.Get(ctx, ch.EntryNodeID); err == nil {
 			v["entry_name"] = n.Name
 		}
@@ -775,7 +781,7 @@ func (s *Server) listChains(c *gin.Context, admin bool) {
 	}
 	items, err := s.chainViews(c.Request.Context(), u)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	c.JSON(200, gin.H{"items": items, "allow_chain": u.AllowChain})
@@ -795,43 +801,50 @@ func literalPrivate(host string) bool {
 	return ip != nil && !publicAddr(ip)
 }
 
+// nonPublic4 是 Go 的 IsPrivate 不包含、但同样不是公网的 IPv4 段：运营商级 NAT 与基准测试段（本机代理的 fake-ip 常用它）。
+var nonPublic4 = []*net.IPNet{{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMask(10, 32)}, {IP: net.IPv4(198, 18, 0, 0), Mask: net.CIDRMask(15, 32)}}
+
 func publicAddr(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	for _, n := range nonPublic4 {
+		if n.Contains(ip) {
+			return false
+		}
+	}
 	return !(ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() || len(ip) == net.IPv6len && ip.To4() == nil && ip[0]&0xfe == 0xfc)
 }
 
-// checkUserChain 校验用户自建链：入口与出口节点必须是该用户可用的节点，SOCKS5 出口只允许公网地址，
-// 并由入口 Gate 实测出口可用后才保存。
-func (s *Server) checkUserChain(ctx context.Context, u *ent.User, req chainRequest, admin bool) (*ent.Node, error) {
+// checkUserChain 校验用户自建链：入口必须是该用户可用的节点；出口可以是 SOCKS5 / HTTP(S) 代理、单条分享链接、
+// 分给他的订阅组里的节点或他可用的另一节点，只允许公网地址，不接受订阅地址；由入口 Gate 实测出口可用后才保存。
+func (s *Server) checkUserChain(ctx context.Context, u *ent.User, req chainRequest, admin bool) (*ent.Node, *exitProbe, error) {
 	nodes, err := s.userNodeIDs(ctx, u)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	entry := nodes[req.EntryNodeID]
 	if entry == nil || !entry.Enabled {
-		return nil, errors.New("entry_not_allowed")
+		return nil, nil, errors.New("entry_not_allowed")
 	}
 	switch req.Exit.Kind {
-	case "socks5":
-		if literalPrivate(req.Exit.Address) || strings.EqualFold(strings.TrimSpace(req.Exit.Address), "localhost") {
-			return nil, errors.New("exit_not_public")
-		}
+	case "socks5", "http", "https", "link", "source":
 	case "node":
 		if nodes[req.Exit.NodeID] == nil {
-			return nil, errors.New("exit_not_allowed")
+			return nil, nil, errors.New("exit_not_allowed")
 		}
-	case "source":
-		// 订阅源里的节点：用户自建只能选分配给他的订阅组；管理员代建也可以选任意订阅源。
 	default:
-		return nil, errors.New("invalid_chain")
+		return nil, nil, errors.New("invalid_chain")
 	}
 	g, err := s.Store.Ent.Gate.Get(ctx, entry.GateID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if err = s.validateChain(ctx, g, entry.ID, req.Exit, true, !(admin && req.SkipProbe), chainCtx{kernel: entry.Kernel, userID: u.ID, admin: admin}); err != nil {
-		return nil, err
+	probe, err := s.validateChain(ctx, g, entry.ID, req.Exit, true, !(admin && req.SkipProbe), chainCtx{kernel: entry.Kernel, userID: u.ID, admin: admin})
+	if err != nil {
+		return nil, nil, err
 	}
-	return entry, nil
+	return entry, probe, nil
 }
 
 func (s *Server) saveChainExit(m *ent.ChainMutation, spec ChainSpec) error {
@@ -839,30 +852,54 @@ func (s *Server) saveChainExit(m *ent.ChainMutation, spec ChainSpec) error {
 	m.SetExitPort(0)
 	m.SetExitUsername("")
 	m.SetExitPassword("")
+	m.SetExitLink("")
 	m.ClearExitNodeID()
 	m.ClearExitSource()
-	if spec.Kind == "source" {
+	switch spec.Kind {
+	case "source":
 		m.SetExitKind(chain.ExitKindSource)
 		m.SetExitSource(spec.source().toMap())
-		return nil
-	}
-	if spec.Kind == "socks5" {
-		m.SetExitKind(chain.ExitKindSocks5)
-		m.SetExitAddress(strings.TrimSpace(spec.Address))
+	case "socks5", "http", "https":
+		sealed, err := s.seal(spec.Password)
+		if err != nil {
+			return err
+		}
+		m.SetExitKind(chain.ExitKind(spec.Kind))
+		m.SetExitAddress(strings.Trim(strings.TrimSpace(spec.Address), "[]"))
 		m.SetExitPort(spec.Port)
 		m.SetExitUsername(spec.Username)
-		if spec.Password != "" {
-			sealed, err := s.Crypto.Encrypt(spec.Password)
-			if err != nil {
-				return err
-			}
-			m.SetExitPassword(sealed)
+		m.SetExitPassword(sealed)
+	case "link":
+		sealed, err := s.seal(strings.TrimSpace(spec.Link))
+		if err != nil {
+			return err
 		}
-		return nil
+		m.SetExitKind(chain.ExitKindLink)
+		m.SetExitLink(sealed)
+		if o, _, err := parseExitLink(spec.Link); err == nil {
+			m.SetExitAddress(o.Address)
+			m.SetExitPort(o.Port)
+		}
+	default:
+		m.SetExitKind(chain.ExitKindNode)
+		m.SetExitNodeID(spec.NodeID)
 	}
-	m.SetExitKind(chain.ExitKindNode)
-	m.SetExitNodeID(spec.NodeID)
 	return nil
+}
+
+// chainSpecOf 还原已保存的用户链出口（只改名称或入口时按原出口重新校验）。
+func (s *Server) chainSpecOf(ch *ent.Chain) ChainSpec {
+	spec := ChainSpec{Kind: string(ch.ExitKind), Address: ch.ExitAddress, Port: ch.ExitPort, Username: ch.ExitUsername}
+	spec.Password, _ = s.reveal(ch.ExitPassword)
+	spec.Link, _ = s.reveal(ch.ExitLink)
+	if ch.ExitNodeID != nil {
+		spec.NodeID = *ch.ExitNodeID
+	}
+	if ch.ExitKind == chain.ExitKindSource {
+		sp := specOf(ch.ExitSource)
+		spec.SourceID, spec.ProfileID, spec.Mode, spec.Match = sp.SourceID, sp.ProfileID, sp.Mode, sp.Match
+	}
+	return spec
 }
 
 func (s *Server) createChain(c *gin.Context, admin bool) {
@@ -888,7 +925,7 @@ func (s *Server) createChain(c *gin.Context, admin bool) {
 		failure(c, 400, "invalid_name")
 		return
 	}
-	entry, err := s.checkUserChain(ctx, u, req, admin)
+	entry, probe, err := s.checkUserChain(ctx, u, req, admin)
 	if err != nil {
 		// 校验或 Gate 实测失败也写审计：操作者、目标用户与失败结果。
 		s.audit(c, "chain.create", "user:"+itoa(u.ID), "failed")
@@ -897,18 +934,19 @@ func (s *Server) createChain(c *gin.Context, admin bool) {
 	}
 	create := s.Store.Ent.Chain.Create().SetUserID(u.ID).SetEntryNodeID(entry.ID).SetName(name)
 	if err = s.saveChainExit(create.Mutation(), req.Exit); err != nil {
-		failure(c, 500, "encrypt_failed")
+		failInternal(c, 500, "encrypt_failed", err)
 		return
 	}
 	ch, err := create.Save(ctx)
 	if err != nil {
-		failure(c, 500, "create_failed")
+		failInternal(c, 500, "create_failed", err)
 		return
 	}
 	if err = s.afterChainChange(ctx, u.ID); err != nil {
-		failure(c, 500, "sync_failed")
+		failInternal(c, 500, "sync_failed", err)
 		return
 	}
+	s.saveExitProbe(ctx, "chain:"+itoa(ch.ID), probe)
 	s.audit(c, "chain.create", "chain:"+itoa(ch.ID), "ok")
 	s.respondChain(c, u, ch.ID)
 }
@@ -941,7 +979,7 @@ func (s *Server) afterChainChange(ctx context.Context, uid int) error {
 func (s *Server) respondChain(c *gin.Context, u *ent.User, id int) {
 	items, err := s.chainViews(c.Request.Context(), u)
 	if err != nil {
-		failure(c, 503, "query_failed")
+		failInternal(c, 503, "query_failed", err)
 		return
 	}
 	for _, v := range items {
@@ -1007,32 +1045,29 @@ func (s *Server) updateChain(c *gin.Context, admin bool) {
 		if req.Exit != nil {
 			check.Exit = *req.Exit
 		} else {
-			check.Exit = ChainSpec{Kind: string(ch.ExitKind), Address: ch.ExitAddress, Port: ch.ExitPort, Username: ch.ExitUsername}
-			check.Exit.Password, _ = s.reveal(ch.ExitPassword)
-			if ch.ExitNodeID != nil {
-				check.Exit.NodeID = *ch.ExitNodeID
-			}
+			check.Exit = s.chainSpecOf(ch)
 		}
-		entry, err := s.checkUserChain(ctx, u, check, admin)
+		entry, probe, err := s.checkUserChain(ctx, u, check, admin)
 		if err != nil {
 			s.audit(c, "chain.update", "chain:"+itoa(ch.ID), "failed")
 			failErr(c, 422, err)
 			return
 		}
 		upd.SetEntryNodeID(entry.ID)
+		defer s.saveExitProbe(ctx, "chain:"+itoa(ch.ID), probe)
 		if err = s.saveChainExit(upd.Mutation(), check.Exit); err != nil {
-			failure(c, 500, "encrypt_failed")
+			failInternal(c, 500, "encrypt_failed", err)
 			return
 		}
 		// 入口变化后旧入口上的凭据由同步删除、新入口重新生成。
 	}
 	if _, err := upd.Save(ctx); err != nil {
-		failure(c, 500, "update_failed")
+		failInternal(c, 500, "update_failed", err)
 		return
 	}
 	gates, _ := s.userGates(ctx, u.ID)
 	if err := s.afterChainChange(ctx, u.ID); err != nil {
-		failure(c, 500, "sync_failed")
+		failInternal(c, 500, "sync_failed", err)
 		return
 	}
 	_ = s.bumpGates(ctx, gates)
@@ -1052,11 +1087,11 @@ func (s *Server) deleteChain(c *gin.Context, admin bool) {
 	ctx := c.Request.Context()
 	gates, _ := s.userGates(ctx, u.ID)
 	if _, err := s.Store.Ent.Credential.Delete().Where(credential.ChainIDEQ(ch.ID)).Exec(ctx); err != nil {
-		failure(c, 500, "delete_failed")
+		failInternal(c, 500, "delete_failed", err)
 		return
 	}
 	if err := s.Store.Ent.Chain.DeleteOne(ch).Exec(ctx); err != nil {
-		failure(c, 500, "delete_failed")
+		failInternal(c, 500, "delete_failed", err)
 		return
 	}
 	// 链接里引用这条链的记录一并移除。
@@ -1073,7 +1108,7 @@ func (s *Server) deleteChain(c *gin.Context, admin bool) {
 		}
 	}
 	if err := s.afterChainChange(ctx, u.ID); err != nil {
-		failure(c, 500, "sync_failed")
+		failInternal(c, 500, "sync_failed", err)
 		return
 	}
 	_ = s.bumpGates(ctx, gates)

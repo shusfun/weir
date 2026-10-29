@@ -37,6 +37,26 @@ func (s *Server) exitFor(ctx context.Context, tag string, exitID int, key string
 	return nodeExit(tag, exit, eg.PublicHost, cred)
 }
 
+// fixedExit 生成填写的出口（SOCKS5 / HTTP / HTTPS 代理或单条分享链接）；凭据与链接是加密保存的。
+func (s *Server) fixedExit(kind, address string, port int, username, sealedPassword, sealedLink string) (contracts.Outbound, error) {
+	if kind == "link" {
+		raw, err := s.reveal(sealedLink)
+		if err != nil {
+			return contracts.Outbound{}, err
+		}
+		o, _, err := parseExitLink(raw)
+		return o, err
+	}
+	if _, ok := proxyKinds[kind]; !ok {
+		return contracts.Outbound{}, fmt.Errorf("未知的出口类型 %s", kind)
+	}
+	password, err := s.reveal(sealedPassword)
+	if err != nil {
+		return contracts.Outbound{}, err
+	}
+	return proxyExit(kind, address, port, username, password), nil
+}
+
 // compileRoutes 生成出口与路由。优先级：用户自建链式代理（用户明确选择的出口）→ 管理员规则 → 节点链式代理（兜底）。
 // 某条链式代理出口暂不可用时，只撤下该链的凭据并记入 Meta 提示，其余配置照常下发。
 func (s *Server) compileRoutes(ctx context.Context, g *ent.Gate, cfg *contracts.GateConfig, nodes []*ent.Node, chainKeys map[int][]string) error {
@@ -59,6 +79,16 @@ func (s *Server) compileRoutes(ctx context.Context, g *ent.Gate, cfg *contracts.
 			cfg.Outbounds = append(cfg.Outbounds, ob)
 			continue
 		}
+		if o.Protocol == "link" || o.Protocol == "https" {
+			ob, err := s.fixedExit(o.Protocol, o.Address, o.Port, o.Username, o.Password, o.Password)
+			if err != nil {
+				cfg.Meta[o.Tag] = err.Error()
+				ob = contracts.Outbound{Protocol: "blackhole"}
+			}
+			ob.ID, ob.Tag = int64(o.ID), o.Tag
+			cfg.Outbounds = append(cfg.Outbounds, ob)
+			continue
+		}
 		password, err := s.reveal(o.Password)
 		if err != nil {
 			return err
@@ -73,18 +103,19 @@ func (s *Server) compileRoutes(ctx context.Context, g *ent.Gate, cfg *contracts.
 		}
 		tag := fmt.Sprintf("chain-%d", ch.ID)
 		var ob contracts.Outbound
-		if ch.ExitKind == chain.ExitKindSource {
+		switch {
+		case ch.ExitKind == chain.ExitKindSource:
 			var warn string
 			if ob, warn = s.exitFromStore(ctx, "chain:"+itoa(ch.ID), tag, 0); warn != "" {
 				cfg.Meta[tag] = warn
 			}
-		} else if ch.ExitKind == chain.ExitKindSocks5 {
-			password, rerr := s.reveal(ch.ExitPassword)
-			ob, err = socksExit(tag, ch.ExitAddress, ch.ExitPort, ch.ExitUsername, password), rerr
-		} else if ch.ExitNodeID != nil {
+		case ch.ExitNodeID != nil:
 			ob, err = s.exitFor(ctx, tag, *ch.ExitNodeID, chainExitKey(ch.ID))
-		} else {
+		case ch.ExitKind == chain.ExitKindNode:
 			err = fmt.Errorf("链式代理 %d 没有出口", ch.ID)
+		default:
+			ob, err = s.fixedExit(string(ch.ExitKind), ch.ExitAddress, ch.ExitPort, ch.ExitUsername, ch.ExitPassword, ch.ExitLink)
+			ob.Tag = tag
 		}
 		if err != nil {
 			cfg.Meta[tag] = err.Error()
@@ -135,18 +166,19 @@ func (s *Server) compileRoutes(ctx context.Context, g *ent.Gate, cfg *contracts.
 		}
 		tag := fmt.Sprintf("nodechain-%d", n.ID)
 		var ob contracts.Outbound
-		if n.ChainKind == "source" {
+		switch {
+		case n.ChainKind == "source":
 			var warn string
 			if ob, warn = s.exitFromStore(ctx, "node:"+itoa(n.ID), tag, 0); warn != "" {
 				cfg.Meta[tag] = warn
 			}
-		} else if n.ChainKind == "socks5" {
-			password, rerr := s.reveal(n.ChainPassword)
-			ob, err = socksExit(tag, n.ChainAddress, n.ChainPort, n.ChainUsername, password), rerr
-		} else if n.ChainNodeID != nil {
+		case n.ChainNodeID != nil:
 			ob, err = s.exitFor(ctx, tag, *n.ChainNodeID, nodeExitKey(n.ID))
-		} else {
+		case n.ChainKind == "node":
 			err = fmt.Errorf("节点 %d 的链式代理没有出口", n.ID)
+		default:
+			ob, err = s.fixedExit(string(n.ChainKind), n.ChainAddress, n.ChainPort, n.ChainUsername, n.ChainPassword, n.ChainLink)
+			ob.Tag = tag
 		}
 		if err != nil {
 			cfg.Meta[tag] = err.Error()

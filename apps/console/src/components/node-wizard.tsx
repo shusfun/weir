@@ -1,8 +1,9 @@
 // 四步建节点：协议 → VPS → 链式代理 → 完成。伪装、传输参数由内置方案给出，选完方案可展开「高级」改具体字段；
-// REALITY 目标由 VPS 实测选择；证书由系统按 VPS 准备（手动选择在「高级」里）；第 ④ 步勾选用户，保存后直接给出链接与二维码。
+// REALITY 目标由 VPS 实测选择；证书由系统按 VPS 准备（手动选择在「高级」里）；第 ④ 步勾选用户。
+// 保存后显示要放行的端口（对照本机防火墙）与出口实测结果，勾选了用户时再给出他们的链接与二维码。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, CheckboxField, ChoiceCard, Collapsible, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Step, Steps, PasswordInput, Radio, RadioGroup, SwitchField } from "@weir/ui";
+import { Badge, Button, CheckboxField, ChoiceCard, Collapsible, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Step, Steps, Radio, RadioGroup, SwitchField } from "@weir/ui";
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "../api";
 import { useFormAction } from "../lib/action";
@@ -10,7 +11,8 @@ import { field, useConsoleContext } from "../lib/console-context";
 import type { ChainSpec, Gate, NodeItem, Preset, PresetField, UserItem } from "../lib/core";
 import { useCerts } from "./cert-manager";
 import { State } from "./feedback";
-import { SourcePicker } from "./source-picker";
+import { ChainExitFields, exitErrorFields, exitKindName, probeText } from "./chain-exit";
+import { NodeAccess } from "./node-access";
 import { Link } from "react-router-dom";
 import { objectHref } from "../lib/objects";
 
@@ -40,10 +42,12 @@ export function NodeWizard({ open, close, done, gates, nodes }: { open: boolean;
   const [advanced, setAdvanced] = useState<Record<string, string | number | boolean>>({});
   const [picked, setPicked] = useState<number[]>([]);
   const [shares, setShares] = useState<Share[] | null>(null);
+  const [created, setCreated] = useState<NodeItem | null>(null);
   const active = gates.filter((g) => g.status === "active");
   const chosen = presets.data?.find((p) => p.id === preset);
   const gate = active.find((g) => g.id === gateId);
-  const exits = nodes.filter((n) => n.enabled && n.gate_id !== gateId && ["vless", "vmess", "trojan"].includes(n.protocol));
+  const chainExit = new Set((presets.data ?? []).filter((p) => p.chain_exit).map((p) => p.id));
+  const exits = nodes.filter((n) => n.enabled && n.gate_id !== gateId && chainExit.has(n.preset));
   const allUsers = (users.data ?? []).filter((u) => u.enabled);
   // 「全部节点」的用户本来就会拿到新节点，默认勾上且不能取消；WireGuard 只给不限额度的用户。
   const wgBlocked = (u: UserItem) => chosen?.protocol === "wireguard" && u.quota > 0;
@@ -58,11 +62,11 @@ export function NodeWizard({ open, close, done, gates, nodes }: { open: boolean;
       }) as Promise<NodeItem & { shares?: Share[] }>,
     {
       fields: { port_in_use: "port", invalid_port: "port", no_free_port: "port", invalid_reality_target: "target", reality_probe_failed: "target", invalid_node_settings: "advanced", cert_unavailable: "cert",
-        source_not_found: "source_id", invalid_chain: "match", chain_exit_unavailable: "match", group_unsupported: "match", chain_probe_failed: "match" },
+        gate_no_public_host: "gate", ...exitErrorFields(chain.kind) },
       onSuccess: (n) => {
         done();
-        if (n.shares && n.shares.length > 0) setShares(n.shares);
-        else reset();
+        setCreated(n);
+        setShares(n.shares ?? []);
       },
     },
   );
@@ -76,6 +80,7 @@ export function NodeWizard({ open, close, done, gates, nodes }: { open: boolean;
     setAdvanced({});
     setPicked([]);
     setShares(null);
+    setCreated(null);
     save.reset();
     close();
   };
@@ -84,8 +89,9 @@ export function NodeWizard({ open, close, done, gates, nodes }: { open: boolean;
     dialog: { title: "新建节点", step: `第 ${step + 1} 步 ${stepNames[step]}` },
     object: gate ? { type: "gate", name: gate.name, id: gate.id } : undefined,
     form: [
-      field("preset", "协议方案", chosen?.name), field("gate", "VPS", gate?.name), field("chain", "出口", chain.kind),
-      ...(chain.kind === "socks5" ? [field("chain_address", "SOCKS5 地址", chain.address), field("chain_password", "SOCKS5 密码", chain.password, true)] : []),
+      field("preset", "协议方案", chosen?.name), field("gate", "VPS", gate?.name), field("chain", "出口", exitKindName[chain.kind]),
+      ...(["socks5", "http", "https"].includes(chain.kind) ? [field("chain_address", "代理地址", chain.address), field("chain_port", "代理端口", chain.port), field("chain_password", "代理密码", chain.password, true)] : []),
+      ...(chain.kind === "link" ? [field("chain_link", "分享链接", chain.link, true)] : []),
       field("name", "节点名称", name), field("port", "端口", port), field("target", "伪装目标", target),
       ...Object.entries(advanced).map(([k, v]) => field("set." + k, chosen?.fields.find((f) => f.key === k)?.label ?? k, v)),
     ],
@@ -95,15 +101,17 @@ export function NodeWizard({ open, close, done, gates, nodes }: { open: boolean;
       <Dialog open={open} onOpenChange={(o) => !o && reset()}>
         <DialogContent size="lg">
           <DialogTitle>节点已创建</DialogTitle>
-          <DialogDescription>下面是勾选用户在这个节点上的分享链接；用户的订阅也已包含它。VPS 应用配置约需数秒。</DialogDescription>
-          <ShareList shares={shares} leave={reset} />
+          <DialogDescription>VPS 应用配置约需数秒。{shares.length > 0 ? "下面是勾选用户在这个节点上的分享链接；用户的订阅也已包含它。" : ""}</DialogDescription>
+          {created && <NodeAccess ports={created.ports} reach={created.reach} />}
+          {created && created.chain.kind !== "none" && <small className="text-[var(--mg-ink-3)]">出口 {exitKindName[created.chain.kind]}：{probeText(created.chain.probe)}</small>}
+          {shares.length > 0 && <ShareList shares={shares} leave={reset} />}
           <DialogFooter><Button onClick={reset}>完成</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     );
   }
   // 每一步都是一张表单：“下一步”先按本步的必填项校验，未通过时错误标在字段下方
-  const blocked = (step === 0 && !chosen) || (step === 1 && active.length === 0) || (step === 2 && chain.kind === "node" && exits.length === 0) || (step === 2 && chain.kind === "source" && (!chain.source_id || !chain.match));
+  const blocked = (step === 0 && !chosen) || (step === 1 && (active.length === 0 || !!gate && !gate.public_host)) || (step === 2 && chain.kind === "node" && exits.length === 0) || (step === 2 && chain.kind === "source" && (!chain.source_id || !chain.match));
   return (
     <Dialog open={open} onOpenChange={(o) => !o && !save.busy && reset()}>
       <DialogContent size="lg">
@@ -133,7 +141,7 @@ export function NodeWizard({ open, close, done, gates, nodes }: { open: boolean;
             {active.length === 0 ? (
               <State empty="还没有已连接的 VPS" detail="先在列表页添加 VPS 并执行安装命令。" />
             ) : (
-              <Field label="VPS（入口）">
+              <Field label="VPS（入口）" name="gate">
                 <Select required value={gateId ? String(gateId) : ""} onValueChange={(v) => setGateId(Number(v))}>
                   <SelectTrigger><SelectValue>{gate ? gate.name : "请选择"}</SelectValue></SelectTrigger>
                   <SelectContent>
@@ -167,9 +175,14 @@ export function NodeWizard({ open, close, done, gates, nodes }: { open: boolean;
               </>
             )}
             {gate && !gate.online && <Notice tone="warn">这台 VPS 当前离线，无法实测伪装目标与链式代理。</Notice>}
+            {gate && !gate.public_host && (
+              <Notice tone="warn">
+                这台 VPS 还没有公网地址，生成不了分享链接。请先到 <Link className="underline" to={objectHref({ type: "gate", id: gate.id })} onClick={reset}>VPS 详情</Link> 填写{gate.public_host_hint ? `（本机网卡上的公网 IP 是 ${gate.public_host_hint}）` : ""}。
+              </Notice>
+            )}
           </>
         )}
-        {step === 2 && <ChainStep chain={chain} onChange={setChain} exits={exits} />}
+        {step === 2 && <ChainExitFields value={chain} onChange={setChain} admin sourcePath="/admin/chain-sources" nodes={exits} nodeHint="出口需要另一台 VPS 上能作出口的节点（VLESS / VMess / Trojan 方案）。" />}
         {step === 3 && (
           <>
             <Field label="节点名称" hint="留空时自动命名。">
@@ -306,45 +319,5 @@ function PresetStep({ presets, value, onChange }: { presets: ReturnType<typeof u
         </ChoiceCard>
       ))}
     </RadioGroup>
-  );
-}
-
-function ChainStep({ chain, onChange, exits }: { chain: ChainSpec; onChange: (c: ChainSpec) => void; exits: NodeItem[] }) {
-  const set = (patch: Partial<ChainSpec>) => onChange({ ...chain, ...patch });
-  return (
-    <>
-      <Segmented
-        aria-label="出口"
-        value={chain.kind}
-        onValueChange={(kind) => onChange({ kind, mode: kind === "source" ? "filter" : undefined })}
-        options={[["none", "直接出去"], ["socks5", "家宽 SOCKS5"], ["node", "另一台 VPS"], ["source", "订阅源里的节点"]] as const}
-      />
-      {chain.kind === "source" && <SourcePicker path="/admin/chain-sources" value={chain} onChange={(v) => onChange({ ...chain, ...v, kind: "source" })} />}
-      {chain.kind === "none" && <p className="text-[var(--mg-ink-3)]">流量从这台 VPS 直接访问目标网站。</p>}
-      {chain.kind === "socks5" && (
-        <FormGrid>
-          <Field label="地址"><Input required value={chain.address ?? ""} onChange={(e) => set({ address: e.target.value.trim() })} /></Field>
-          <Field label="端口"><Input inputMode="numeric" required value={chain.port ? String(chain.port) : ""} onChange={(e) => set({ port: Number(e.target.value.replace(/\D/g, "")) || undefined })} /></Field>
-          <Field label="用户名（可选）"><Input autoComplete="off" value={chain.username ?? ""} onChange={(e) => set({ username: e.target.value })} /></Field>
-          <Field label="密码（可选）"><PasswordInput autoComplete="new-password" value={chain.password ?? ""} onChange={(e) => set({ password: e.target.value })} /></Field>
-        </FormGrid>
-      )}
-      {chain.kind === "node" &&
-        (exits.length === 0 ? (
-          <State empty="没有可作出口的节点" detail="出口需要另一台 VPS 上的 VLESS / VMess / Trojan 节点。" />
-        ) : (
-          <Field label="出口节点">
-            <Select required value={chain.node_id ? String(chain.node_id) : ""} onValueChange={(v) => set({ node_id: Number(v) })}>
-              <SelectTrigger><SelectValue>{exits.find((n) => n.id === chain.node_id)?.name ?? "请选择"}</SelectValue></SelectTrigger>
-              <SelectContent>
-                {exits.map((n) => (
-                  <SelectItem key={n.id} value={String(n.id)}>{n.name}（{n.gate_name}）</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-        ))}
-      {chain.kind !== "none" && <Notice role="status">保存前由入口 VPS 实测出口可用；流量只在入口计量一次。</Notice>}
-    </>
   );
 }

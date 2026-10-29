@@ -81,6 +81,10 @@ func shareLink(n *ent.Node, host string, cred *ent.Credential, name string, cert
 		if n.Network == "grpc" {
 			q.Set("serviceName", nodeSetting(st, "grpc_service_name"))
 		}
+		if n.Network == "xhttp" {
+			q.Set("path", firstNonEmpty(nodeSetting(st, "xhttp_path"), "/"))
+			q.Set("mode", firstNonEmpty(nodeSetting(st, "xhttp_mode"), "stream-one"))
+		}
 		switch n.Security {
 		case "reality":
 			q.Set("security", "reality")
@@ -287,7 +291,7 @@ func (s *Server) serveSub(c *gin.Context) {
 	}
 	entries, err := s.linkEntries(ctx, u, l)
 	if err != nil {
-		failure(c, 503, "subscription_unavailable")
+		failInternal(c, 503, "subscription_unavailable", err)
 		return
 	}
 	links := make([]string, 0, len(entries))
@@ -328,7 +332,7 @@ func (s *Server) subInfo(c *gin.Context) {
 	}
 	entries, err := s.linkEntries(ctx, u, l)
 	if err != nil {
-		failure(c, 503, "subscription_unavailable")
+		failInternal(c, 503, "subscription_unavailable", err)
 		return
 	}
 	nodes := make([]gin.H, 0, len(entries))

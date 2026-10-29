@@ -51,6 +51,7 @@ type HelperStatus struct {
 	Running   map[string]int            `json:"running"`
 	Listening []contracts.ListeningPort `json:"listening"`
 	Certs     map[string]string         `json:"certs"` // 证书 ID → 已安装文件摘要
+	Firewall  *contracts.FirewallStatus `json:"firewall,omitempty"`
 }
 
 // Helper 是以 root 运行的辅助程序。只提供白名单接口，不执行任意命令或任意路径。
@@ -65,6 +66,10 @@ type Helper struct {
 	panelRefreshed time.Time
 	panelVersion   string
 	panelError     string
+	// 本机防火墙状态的缓存（见 firewall.go）。
+	fwMu sync.Mutex
+	fw   *contracts.FirewallStatus
+	fwAt time.Time
 }
 
 func NewHelper(p Paths) *Helper { return &Helper{P: p, ProcRoot: "/proc", Sup: NewSupervisor(p)} }
@@ -186,7 +191,7 @@ func (h *Helper) status(w http.ResponseWriter, _ *http.Request) {
 			active[name] = v
 		}
 	}
-	writeJSON(w, 200, HelperStatus{Installed: h.installed(), Active: active, Running: h.Sup.Running(), Listening: ports, Certs: h.certs()})
+	writeJSON(w, 200, HelperStatus{Installed: h.installed(), Active: active, Running: h.Sup.Running(), Listening: ports, Certs: h.certs(), Firewall: h.firewall()})
 }
 
 // certs 返回已安装证书的摘要，Agent 据此决定是否需要重新下载。
@@ -295,6 +300,8 @@ func (h *Helper) Apply(ctx context.Context, req ApplyRequest) ApplyResult {
 			}
 		}
 		if err := h.Sup.Start(name); err != nil || !h.healthy(name, req.StatsPorts[name]) {
+			// 先取日志再停：Stop 会丢掉这个进程的输出，失败原因要写进错误里。
+			logs := h.Sup.Logs(name)
 			h.Sup.Stop(name)
 			if len(oldArgs.Run) > 0 {
 				_ = h.Sup.SetArgs(name, oldArgs)
@@ -308,10 +315,14 @@ func (h *Helper) Apply(ctx context.Context, req ApplyRequest) ApplyResult {
 				_ = h.setPointer(name, old)
 			}
 			msg := name + " 启动后健康检查未通过，已回滚"
-			if logs := h.Sup.Logs(name); len(logs) > 0 {
+			if len(logs) > 0 {
 				msg += "：" + logs[len(logs)-1]
+			} else if p := req.StatsPorts[name]; p > 0 {
+				msg += fmt.Sprintf("（统计端口 127.0.0.1:%d 在 8 秒内没有应答，内核没有输出）", p)
 			}
-			return ApplyResult{Error: msg}
+			// 端口被出站连接的本地端口占着时，应用前的检查（只看监听）发现不了，内核绑定时才失败：
+			// 同样按端口冲突交给中心换一个，不在原端口上一直重试。
+			return ApplyResult{Error: msg, ConflictPort: boundPort(logs, req.Ports)}
 		}
 	}
 	return ApplyResult{OK: true}
@@ -361,6 +372,10 @@ func (h *Helper) cert(w http.ResponseWriter, r *http.Request) {
 var ipv4 = regexp.MustCompile(`\b\d{1,3}(\.\d{1,3}){3}\b`)
 var ipv6 = regexp.MustCompile(`\b[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{0,4}){2,7}\b`)
 
+func maskIPs(line string) string {
+	return ipv6.ReplaceAllString(ipv4.ReplaceAllString(line, "x.x.x.x"), "x:x::x")
+}
+
 // diagnostics 只返回本地分类计数与最近 50 行（IP 地址已遮盖），不回传完整原始日志。
 func (h *Helper) diagnostics(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
@@ -386,7 +401,7 @@ func (h *Helper) diagnostics(w http.ResponseWriter, r *http.Request) {
 	}
 	masked := make([]string, 0, len(logs))
 	for _, line := range logs {
-		masked = append(masked, ipv6.ReplaceAllString(ipv4.ReplaceAllString(line, "x.x.x.x"), "x:x::x"))
+		masked = append(masked, maskIPs(line))
 	}
 	_, running := h.Sup.Running()[name]
 	writeJSON(w, 200, map[string]any{"running": running, "version": h.pointer(name), "counts": counts, "tail": masked, "truncated": len(h.Sup.Logs(name)) > 50})
@@ -479,4 +494,21 @@ func ServeHelper(ctx context.Context, h *Helper) error {
 		return nil
 	}
 	return err
+}
+
+var bindInUse = regexp.MustCompile(`:(\d{1,5}): bind: address already in use`)
+
+// boundPort 从内核日志里找出绑定失败的端口（必须是这次要用的端口之一，否则为 0）。
+func boundPort(logs []string, ports []int) int {
+	for i := len(logs) - 1; i >= 0; i-- {
+		if m := bindInUse.FindStringSubmatch(logs[i]); m != nil {
+			p, _ := strconv.Atoi(m[1])
+			for _, want := range ports {
+				if p == want {
+					return p
+				}
+			}
+		}
+	}
+	return 0
 }

@@ -117,6 +117,14 @@ func testKV(t *testing.T, kv KV, p string) {
 			t.Fatalf("Incr = %d %v, want %d", n, err, want)
 		}
 	}
+	for i, want := range []int64{5000, 5250} {
+		if n, err := kv.IncrBy(ctx, p+"bytes", []int64{5000, 250}[i], time.Minute); err != nil || n != want {
+			t.Fatalf("IncrBy = %d %v, want %d", n, err, want)
+		}
+	}
+	if err := kv.Del(ctx, p+"bytes"); err != nil {
+		t.Fatal(err)
+	}
 	keys, err := kv.Keys(ctx, p, 10)
 	if err != nil || len(keys) != 2 {
 		t.Fatalf("Keys = %v %v", keys, err)

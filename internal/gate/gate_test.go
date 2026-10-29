@@ -149,7 +149,7 @@ func TestChainProbeSocks5(t *testing.T) {
 	if _, err := chainProbe(ctx, base); err == nil || !strings.Contains(err.Error(), "公网") {
 		t.Fatalf("public_only loopback: %v", err)
 	}
-	for _, ip := range []string{"10.0.0.1", "192.168.1.1", "169.254.169.254", "fd00::1", "100.100.100.200"} {
+	for _, ip := range []string{"10.0.0.1", "192.168.1.1", "169.254.169.254", "fd00::1", "100.100.100.200", "100.64.1.2", "198.18.0.1"} {
 		if publicIP(net.ParseIP(ip)) {
 			t.Fatalf("%s treated as public", ip)
 		}
