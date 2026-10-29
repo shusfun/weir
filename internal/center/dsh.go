@@ -26,7 +26,7 @@ import (
 // 托管的 dsh（DeepSeek Harness）：中心像内核一样下载、校验、切换版本，但不运行它。dsh 由独立的管理进程
 // （系统用户 weir-dsh，生产环境是 systemd 单元 weir-dsh）启动，只监听回环，读不到中心的配置、数据库与密钥；
 // 中心与它只通过 control/、status/ 两个目录交换文件（见 internal/dsh/agent.go）。
-// 浏览器只能经 Weir 的 dsh 子域名网关、从控制台抽屉里打开它（见 dsh_gateway.go）。
+// 浏览器只能经 Weir 的 dsh 子域名网关、从控制台的 dsh 窗口里打开它（见 dsh_gateway.go）。
 // DeepSeek 的 Key 只在 dsh 自己的设置里填写，Weir 不保存也不读取。
 
 const dshSettingKey = "dsh"
@@ -363,7 +363,7 @@ func (s *Server) dshJob(ctx context.Context, req dsh.JobRequest) (dsh.JobResult,
 	return dsh.JobResult{}, errors.New("dsh 任务超时")
 }
 
-// mcpPatch 是接入 Weir 工具的 dsh 补丁层（Web 抽屉与后台分析共用这一行）。
+// mcpPatch 是接入 Weir 工具的 dsh 补丁层（dsh 窗口与后台分析共用这一行）。
 func mcpPatch(addr, token string) string {
 	return fmt.Sprintf(`# 由 Weir 生成，每次启动覆盖。
 - insert:
@@ -696,7 +696,7 @@ func (s *Server) restartDSH(c *gin.Context) {
 	c.Status(202)
 }
 
-// dshTicket 给抽屉签发一次性票据（60 秒），绑定当前管理员会话与控制台来源。
+// dshTicket 给 dsh 窗口签发一次性票据（60 秒），绑定当前管理员会话与控制台来源。
 func (s *Server) dshTicket(c *gin.Context) {
 	domain := s.dshDomain()
 	if domain == "" {

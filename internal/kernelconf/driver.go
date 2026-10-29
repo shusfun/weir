@@ -26,6 +26,9 @@ type Driver struct {
 	Protocols  []string `yaml:"protocols,omitempty"`
 	Networks   []string `yaml:"networks,omitempty"`
 	Securities []string `yaml:"securities,omitempty"`
+	// OutboundNetworks 是作客户端连出去（链式代理、分流出口）时支持的传输；没写时只有 tcp。
+	// 出口协议看模板里有没有 outbound.<协议>。
+	OutboundNetworks []string `yaml:"outbound_networks,omitempty"`
 	// Features 是生成配置要用到的内核特性（如 Xray 的 balancer、observatory，sing-box 的 urltest）。
 	// 没写或为空表示一项都不支持——和协议列表「为空即不限制」的含义相反。
 	Features []string `yaml:"features,omitempty"`
@@ -296,6 +299,22 @@ func (d Driver) Allows(protocol, network, security string) error {
 		return fmt.Errorf("%s %s 不支持安全层 %s", d.Kernel, d.MinVersion, security)
 	}
 	return nil
+}
+
+// OutboundAllows 判断这个内核能否作客户端连接某出口：模板里要有 outbound.<协议>，传输要在 outbound_networks 里。
+func (d Driver) OutboundAllows(protocol, network string) error {
+	if _, ok := d.Templates["outbound."+protocol]; !ok {
+		return fmt.Errorf("%s %s 不能连接 %s 出口", d.Kernel, d.MinVersion, protocol)
+	}
+	if network == "" || network == "tcp" {
+		return nil
+	}
+	for _, n := range d.OutboundNetworks {
+		if strings.EqualFold(n, network) {
+			return nil
+		}
+	}
+	return fmt.Errorf("%s %s 作出口时不支持传输 %s", d.Kernel, d.MinVersion, network)
 }
 
 // Covers 判断某内核版本是否在驱动的版本区间里。

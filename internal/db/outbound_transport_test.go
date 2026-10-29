@@ -7,7 +7,9 @@ import (
 
 func TestManagedOutboundTransportRejectsDegradation(t *testing.T) {
 	for _, tc := range []struct{ protocol, settings string }{
-		{"vless", `{"network":"xhttp"}`},
+		{"vless", `{"network":"kcp"}`},
+		{"vless", `{"network":"xhttp","mode":"bogus"}`}, {"vless", `{"network":"ws","mode":"auto"}`},
+		{"hysteria2", `{"path":"/x"}`},
 		{"vless", `{"security":"tls","extra_secret":"must-not-ignore"}`},
 		{"vless", `{} {}`}, {"vless", `{} broken`}, {"vless", `null`},
 		{"trojan", `{"security":"none"}`}, {"https", `{"security":"none"}`},
@@ -40,6 +42,15 @@ func TestManagedOutboundTransportRejectsDegradation(t *testing.T) {
 		s, err := ManagedOutboundSettings(Outbound{Protocol: protocol, SettingsJSON: `{"network":"ws","security":"tls","sni":"example.com","host":"cdn.example.com","path":"/p+a%2B","alpn":["http/1.1"]}`})
 		if err != nil || s.Path != "/p+a%2B" || s.Host != "cdn.example.com" {
 			t.Fatal("valid WS transport lost", protocol, err)
+		}
+	}
+	for _, network := range []string{"xhttp", "httpupgrade"} {
+		raw := `{"network":"` + network + `","security":"tls","sni":"example.com","host":"cdn.example.com","path":"/x"}`
+		if network == "xhttp" {
+			raw = `{"network":"xhttp","security":"tls","sni":"example.com","path":"/x","mode":"packet-up"}`
+		}
+		if s, err := ManagedOutboundSettings(Outbound{Protocol: "vless", SettingsJSON: raw}); err != nil || s.Path != "/x" || s.Network != network {
+			t.Fatal("valid transport rejected", network, err)
 		}
 	}
 	key := base64.RawURLEncoding.EncodeToString(make([]byte, 32))

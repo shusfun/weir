@@ -7,6 +7,7 @@ notes: 按用户统计流量需要 with_v2ray_api，由本项目 CI 跟随上游
 protocols: [hysteria2, tuic, shadowsocks, shadowtls, wireguard]
 networks: [tcp, udp]
 securities: [tls]
+outbound_networks: [tcp, ws, grpc, httpupgrade]
 features: [urltest]
 run: [run, -c, "{config}"]
 check: [check, -c, "{config}"]
@@ -123,6 +124,11 @@ templates:
               $do:
                 $if: "ib.protocol in ['hysteria2', 'tuic', 'shadowsocks', 'shadowtls']"
                 $then: {$use: stats.users, $spread: true}
+          # 按出口计量（链路页的出口速率、一组里当前有流量的成员）。
+          outbounds?:
+            - $each: "${outbounds}"
+              $as: ob
+              $do: "${ob.tag}"
 
   stats.users:
     - $each: "${ib.clients}"
@@ -321,3 +327,6 @@ templates:
       $else:
         $if: "ob.s.network == 'grpc'"
         $then: {type: grpc, "service_name?": "${ob.s.service_name}"}
+        $else:
+          $if: "ob.s.network == 'httpupgrade'"
+          $then: {type: httpupgrade, "path?": "${ob.s.path}", "host?": "${ob.s.host}"}

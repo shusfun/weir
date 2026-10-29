@@ -255,12 +255,13 @@
 .shell[data-collapsed="true"] .rail-collapse > span {
   display: none;
 }
-/* dsh 抽屉入口：右下角浮动按钮，避开移动端底部安全区 */
+/* dsh 入口：右下角浮动按钮，避开移动端底部安全区；缩小时变成「dsh · 已缩小」条。
+   宽屏在页面弹窗之上（开着弹窗也能打开 dsh），窄屏在弹窗之下（不挡底部抽屉的按钮） */
 .dsh-fab {
   position: fixed;
   right: 24px;
   bottom: calc(24px + env(safe-area-inset-bottom));
-  z-index: 40;
+  z-index: 55;
   border-radius: 999px;
   box-shadow: 0 6px 18px -6px var(--mg-shade-strong);
 }
@@ -268,6 +269,46 @@
   .dsh-fab {
     right: 16px;
     bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+}
+@media (max-width: 640px) {
+  .dsh-fab { z-index: 40; }
+}
+
+/* dsh 窗口：不挡页面的浮动窗口。层级在页面弹窗（50）之上、确认框与 dsh 草稿确认窗（57）之下，
+   这样开着弹窗也能和 dsh 对话，确认框永远在最上面。宽屏可移动、拖右下角改大小；窄屏是底部面板 */
+.dsh-window {
+  position: fixed;
+  z-index: 55;
+  flex-direction: column;
+  min-width: 360px;
+  min-height: 320px;
+  overflow: hidden;
+  resize: both;
+  border: 1px solid var(--mg-line);
+  border-radius: var(--mg-radius-lg);
+  background: var(--mg-panel);
+  box-shadow: inset 0 1px 0 var(--mg-highlight), 0 18px 40px -12px var(--mg-shade-strong);
+}
+.dsh-window-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 6px 6px 6px 12px;
+  border-bottom: 1px solid var(--mg-line-soft);
+  user-select: none;
+  touch-action: none;
+}
+@media (max-width: 640px) {
+  .dsh-window {
+    inset: auto 0 0 0;
+    height: 72dvh;
+    min-width: 0;
+    resize: none;
+    border-bottom: 0;
+    border-radius: var(--mg-radius-lg) var(--mg-radius-lg) 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 }
 

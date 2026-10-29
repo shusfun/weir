@@ -54,7 +54,7 @@ type Capability struct {
 	Creates bool   `json:"creates,omitempty"`
 	// Last 表示做了就不能撤回（如删除）：只能是一份草稿的最后一步。
 	Last bool `json:"last,omitempty"`
-	// Sources 是可以使用的来源（dsh 抽屉对话 / analysis 后台分析）；为空表示只有 dsh。
+	// Sources 是可以使用的来源（dsh 窗口里的对话 / analysis 后台分析）；为空表示只有 dsh。
 	Sources []string `json:"-"`
 
 	read func(ctx context.Context, s *Server, args map[string]any) (any, error)

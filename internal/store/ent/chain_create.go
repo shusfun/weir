@@ -122,6 +122,20 @@ func (_c *ChainCreate) SetNillableExitNodeID(v *int) *ChainCreate {
 	return _c
 }
 
+// SetExitLink sets the "exit_link" field.
+func (_c *ChainCreate) SetExitLink(v string) *ChainCreate {
+	_c.mutation.SetExitLink(v)
+	return _c
+}
+
+// SetNillableExitLink sets the "exit_link" field if the given value is not nil.
+func (_c *ChainCreate) SetNillableExitLink(v *string) *ChainCreate {
+	if v != nil {
+		_c.SetExitLink(*v)
+	}
+	return _c
+}
+
 // SetEnabled sets the "enabled" field.
 func (_c *ChainCreate) SetEnabled(v bool) *ChainCreate {
 	_c.mutation.SetEnabled(v)
@@ -201,6 +215,10 @@ func (_c *ChainCreate) defaults() {
 		v := chain.DefaultExitPassword
 		_c.mutation.SetExitPassword(v)
 	}
+	if _, ok := _c.mutation.ExitLink(); !ok {
+		v := chain.DefaultExitLink
+		_c.mutation.SetExitLink(v)
+	}
 	if _, ok := _c.mutation.Enabled(); !ok {
 		v := chain.DefaultEnabled
 		_c.mutation.SetEnabled(v)
@@ -256,6 +274,9 @@ func (_c *ChainCreate) check() error {
 	}
 	if _, ok := _c.mutation.ExitPassword(); !ok {
 		return &ValidationError{Name: "exit_password", err: errors.New(`ent: missing required field "Chain.exit_password"`)}
+	}
+	if _, ok := _c.mutation.ExitLink(); !ok {
+		return &ValidationError{Name: "exit_link", err: errors.New(`ent: missing required field "Chain.exit_link"`)}
 	}
 	if _, ok := _c.mutation.Enabled(); !ok {
 		return &ValidationError{Name: "enabled", err: errors.New(`ent: missing required field "Chain.enabled"`)}
@@ -329,6 +350,10 @@ func (_c *ChainCreate) createSpec() (*Chain, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.ExitNodeID(); ok {
 		_spec.SetField(chain.FieldExitNodeID, field.TypeInt, value)
 		_node.ExitNodeID = &value
+	}
+	if value, ok := _c.mutation.ExitLink(); ok {
+		_spec.SetField(chain.FieldExitLink, field.TypeString, value)
+		_node.ExitLink = value
 	}
 	if value, ok := _c.mutation.Enabled(); ok {
 		_spec.SetField(chain.FieldEnabled, field.TypeBool, value)
@@ -543,6 +568,18 @@ func (u *ChainUpsert) AddExitNodeID(v int) *ChainUpsert {
 // ClearExitNodeID clears the value of the "exit_node_id" field.
 func (u *ChainUpsert) ClearExitNodeID() *ChainUpsert {
 	u.SetNull(chain.FieldExitNodeID)
+	return u
+}
+
+// SetExitLink sets the "exit_link" field.
+func (u *ChainUpsert) SetExitLink(v string) *ChainUpsert {
+	u.Set(chain.FieldExitLink, v)
+	return u
+}
+
+// UpdateExitLink sets the "exit_link" field to the value that was provided on create.
+func (u *ChainUpsert) UpdateExitLink() *ChainUpsert {
+	u.SetExcluded(chain.FieldExitLink)
 	return u
 }
 
@@ -782,6 +819,20 @@ func (u *ChainUpsertOne) UpdateExitNodeID() *ChainUpsertOne {
 func (u *ChainUpsertOne) ClearExitNodeID() *ChainUpsertOne {
 	return u.Update(func(s *ChainUpsert) {
 		s.ClearExitNodeID()
+	})
+}
+
+// SetExitLink sets the "exit_link" field.
+func (u *ChainUpsertOne) SetExitLink(v string) *ChainUpsertOne {
+	return u.Update(func(s *ChainUpsert) {
+		s.SetExitLink(v)
+	})
+}
+
+// UpdateExitLink sets the "exit_link" field to the value that was provided on create.
+func (u *ChainUpsertOne) UpdateExitLink() *ChainUpsertOne {
+	return u.Update(func(s *ChainUpsert) {
+		s.UpdateExitLink()
 	})
 }
 
@@ -1189,6 +1240,20 @@ func (u *ChainUpsertBulk) UpdateExitNodeID() *ChainUpsertBulk {
 func (u *ChainUpsertBulk) ClearExitNodeID() *ChainUpsertBulk {
 	return u.Update(func(s *ChainUpsert) {
 		s.ClearExitNodeID()
+	})
+}
+
+// SetExitLink sets the "exit_link" field.
+func (u *ChainUpsertBulk) SetExitLink(v string) *ChainUpsertBulk {
+	return u.Update(func(s *ChainUpsert) {
+		s.SetExitLink(v)
+	})
+}
+
+// UpdateExitLink sets the "exit_link" field to the value that was provided on create.
+func (u *ChainUpsertBulk) UpdateExitLink() *ChainUpsertBulk {
+	return u.Update(func(s *ChainUpsert) {
+		s.UpdateExitLink()
 	})
 }
 

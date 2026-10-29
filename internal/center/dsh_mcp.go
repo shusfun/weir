@@ -14,7 +14,7 @@ import (
 
 // Weir 给 dsh 的 MCP 工具（Streamable HTTP，JSON 响应）：只监听本机回环的随机端口，不经过反代；
 // 令牌每次中心启动重新生成，只能读取脱敏后的状态、提交草稿，不能确认或执行任何改动。
-// Web 抽屉与后台分析各用一个令牌，草稿据此标明来源。
+// dsh 窗口与后台分析各用一个令牌，草稿据此标明来源。
 
 type mcpServer struct {
 	addr         string
@@ -109,7 +109,7 @@ func paramsSchema(params []Param) map[string]any {
 }
 
 // mcpToolsFor 由能力目录生成工具列表：只读能力各一个工具；提交草稿统一用 submit_draft（list_actions 列出可提交的能力）。
-// 界面导航与控制台上下文只给抽屉对话。
+// 界面导航与控制台上下文只给 dsh 窗口里的对话。
 func mcpToolsFor(source string) []mcpTool {
 	tools := []mcpTool{}
 	if source == "dsh" {

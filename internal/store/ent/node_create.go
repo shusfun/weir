@@ -218,6 +218,20 @@ func (_c *NodeCreate) SetNillableChainNodeID(v *int) *NodeCreate {
 	return _c
 }
 
+// SetChainLink sets the "chain_link" field.
+func (_c *NodeCreate) SetChainLink(v string) *NodeCreate {
+	_c.mutation.SetChainLink(v)
+	return _c
+}
+
+// SetNillableChainLink sets the "chain_link" field if the given value is not nil.
+func (_c *NodeCreate) SetNillableChainLink(v *string) *NodeCreate {
+	if v != nil {
+		_c.SetChainLink(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *NodeCreate) SetCreatedAt(v time.Time) *NodeCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -302,6 +316,10 @@ func (_c *NodeCreate) defaults() {
 	if _, ok := _c.mutation.ChainPassword(); !ok {
 		v := node.DefaultChainPassword
 		_c.mutation.SetChainPassword(v)
+	}
+	if _, ok := _c.mutation.ChainLink(); !ok {
+		v := node.DefaultChainLink
+		_c.mutation.SetChainLink(v)
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := node.DefaultCreatedAt()
@@ -397,6 +415,9 @@ func (_c *NodeCreate) check() error {
 	}
 	if _, ok := _c.mutation.ChainPassword(); !ok {
 		return &ValidationError{Name: "chain_password", err: errors.New(`ent: missing required field "Node.chain_password"`)}
+	}
+	if _, ok := _c.mutation.ChainLink(); !ok {
+		return &ValidationError{Name: "chain_link", err: errors.New(`ent: missing required field "Node.chain_link"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Node.created_at"`)}
@@ -499,6 +520,10 @@ func (_c *NodeCreate) createSpec() (*Node, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.ChainNodeID(); ok {
 		_spec.SetField(node.FieldChainNodeID, field.TypeInt, value)
 		_node.ChainNodeID = &value
+	}
+	if value, ok := _c.mutation.ChainLink(); ok {
+		_spec.SetField(node.FieldChainLink, field.TypeString, value)
+		_node.ChainLink = value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(node.FieldCreatedAt, field.TypeTime, value)
@@ -823,6 +848,18 @@ func (u *NodeUpsert) AddChainNodeID(v int) *NodeUpsert {
 // ClearChainNodeID clears the value of the "chain_node_id" field.
 func (u *NodeUpsert) ClearChainNodeID() *NodeUpsert {
 	u.SetNull(node.FieldChainNodeID)
+	return u
+}
+
+// SetChainLink sets the "chain_link" field.
+func (u *NodeUpsert) SetChainLink(v string) *NodeUpsert {
+	u.Set(node.FieldChainLink, v)
+	return u
+}
+
+// UpdateChainLink sets the "chain_link" field to the value that was provided on create.
+func (u *NodeUpsert) UpdateChainLink() *NodeUpsert {
+	u.SetExcluded(node.FieldChainLink)
 	return u
 }
 
@@ -1183,6 +1220,20 @@ func (u *NodeUpsertOne) UpdateChainNodeID() *NodeUpsertOne {
 func (u *NodeUpsertOne) ClearChainNodeID() *NodeUpsertOne {
 	return u.Update(func(s *NodeUpsert) {
 		s.ClearChainNodeID()
+	})
+}
+
+// SetChainLink sets the "chain_link" field.
+func (u *NodeUpsertOne) SetChainLink(v string) *NodeUpsertOne {
+	return u.Update(func(s *NodeUpsert) {
+		s.SetChainLink(v)
+	})
+}
+
+// UpdateChainLink sets the "chain_link" field to the value that was provided on create.
+func (u *NodeUpsertOne) UpdateChainLink() *NodeUpsertOne {
+	return u.Update(func(s *NodeUpsert) {
+		s.UpdateChainLink()
 	})
 }
 
@@ -1709,6 +1760,20 @@ func (u *NodeUpsertBulk) UpdateChainNodeID() *NodeUpsertBulk {
 func (u *NodeUpsertBulk) ClearChainNodeID() *NodeUpsertBulk {
 	return u.Update(func(s *NodeUpsert) {
 		s.ClearChainNodeID()
+	})
+}
+
+// SetChainLink sets the "chain_link" field.
+func (u *NodeUpsertBulk) SetChainLink(v string) *NodeUpsertBulk {
+	return u.Update(func(s *NodeUpsert) {
+		s.SetChainLink(v)
+	})
+}
+
+// UpdateChainLink sets the "chain_link" field to the value that was provided on create.
+func (u *NodeUpsertBulk) UpdateChainLink() *NodeUpsertBulk {
+	return u.Update(func(s *NodeUpsert) {
+		s.UpdateChainLink()
 	})
 }
 

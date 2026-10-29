@@ -143,12 +143,16 @@ func init() {
 	chainDescExitPassword := chainFields[8].Descriptor()
 	// chain.DefaultExitPassword holds the default value on creation for the exit_password field.
 	chain.DefaultExitPassword = chainDescExitPassword.Default.(string)
+	// chainDescExitLink is the schema descriptor for exit_link field.
+	chainDescExitLink := chainFields[10].Descriptor()
+	// chain.DefaultExitLink holds the default value on creation for the exit_link field.
+	chain.DefaultExitLink = chainDescExitLink.Default.(string)
 	// chainDescEnabled is the schema descriptor for enabled field.
-	chainDescEnabled := chainFields[10].Descriptor()
+	chainDescEnabled := chainFields[11].Descriptor()
 	// chain.DefaultEnabled holds the default value on creation for the enabled field.
 	chain.DefaultEnabled = chainDescEnabled.Default.(bool)
 	// chainDescCreatedAt is the schema descriptor for created_at field.
-	chainDescCreatedAt := chainFields[11].Descriptor()
+	chainDescCreatedAt := chainFields[12].Descriptor()
 	// chain.DefaultCreatedAt holds the default value on creation for the created_at field.
 	chain.DefaultCreatedAt = chainDescCreatedAt.Default.(func() time.Time)
 	credentialFields := schema.Credential{}.Fields()
@@ -212,39 +216,39 @@ func init() {
 	// gate.DefaultArch holds the default value on creation for the arch field.
 	gate.DefaultArch = gateDescArch.Default.(string)
 	// gateDescConfigRevision is the schema descriptor for config_revision field.
-	gateDescConfigRevision := gateFields[14].Descriptor()
+	gateDescConfigRevision := gateFields[15].Descriptor()
 	// gate.DefaultConfigRevision holds the default value on creation for the config_revision field.
 	gate.DefaultConfigRevision = gateDescConfigRevision.Default.(int64)
 	// gateDescAppliedRevision is the schema descriptor for applied_revision field.
-	gateDescAppliedRevision := gateFields[15].Descriptor()
+	gateDescAppliedRevision := gateFields[16].Descriptor()
 	// gate.DefaultAppliedRevision holds the default value on creation for the applied_revision field.
 	gate.DefaultAppliedRevision = gateDescAppliedRevision.Default.(int64)
 	// gateDescFailedRevision is the schema descriptor for failed_revision field.
-	gateDescFailedRevision := gateFields[16].Descriptor()
+	gateDescFailedRevision := gateFields[17].Descriptor()
 	// gate.DefaultFailedRevision holds the default value on creation for the failed_revision field.
 	gate.DefaultFailedRevision = gateDescFailedRevision.Default.(int64)
 	// gateDescLastError is the schema descriptor for last_error field.
-	gateDescLastError := gateFields[17].Descriptor()
+	gateDescLastError := gateFields[18].Descriptor()
 	// gate.DefaultLastError holds the default value on creation for the last_error field.
 	gate.DefaultLastError = gateDescLastError.Default.(string)
 	// gateDescXrayStatsPort is the schema descriptor for xray_stats_port field.
-	gateDescXrayStatsPort := gateFields[18].Descriptor()
+	gateDescXrayStatsPort := gateFields[19].Descriptor()
 	// gate.DefaultXrayStatsPort holds the default value on creation for the xray_stats_port field.
 	gate.DefaultXrayStatsPort = gateDescXrayStatsPort.Default.(int)
 	// gateDescSingboxStatsPort is the schema descriptor for singbox_stats_port field.
-	gateDescSingboxStatsPort := gateFields[19].Descriptor()
+	gateDescSingboxStatsPort := gateFields[20].Descriptor()
 	// gate.DefaultSingboxStatsPort holds the default value on creation for the singbox_stats_port field.
 	gate.DefaultSingboxStatsPort = gateDescSingboxStatsPort.Default.(int)
 	// gateDescMeterEpoch is the schema descriptor for meter_epoch field.
-	gateDescMeterEpoch := gateFields[20].Descriptor()
+	gateDescMeterEpoch := gateFields[21].Descriptor()
 	// gate.DefaultMeterEpoch holds the default value on creation for the meter_epoch field.
 	gate.DefaultMeterEpoch = gateDescMeterEpoch.Default.(string)
 	// gateDescMeterSeq is the schema descriptor for meter_seq field.
-	gateDescMeterSeq := gateFields[21].Descriptor()
+	gateDescMeterSeq := gateFields[22].Descriptor()
 	// gate.DefaultMeterSeq holds the default value on creation for the meter_seq field.
 	gate.DefaultMeterSeq = gateDescMeterSeq.Default.(int64)
 	// gateDescCreatedAt is the schema descriptor for created_at field.
-	gateDescCreatedAt := gateFields[22].Descriptor()
+	gateDescCreatedAt := gateFields[23].Descriptor()
 	// gate.DefaultCreatedAt holds the default value on creation for the created_at field.
 	gate.DefaultCreatedAt = gateDescCreatedAt.Default.(func() time.Time)
 	gateactionFields := schema.GateAction{}.Fields()
@@ -379,8 +383,12 @@ func init() {
 	nodeDescChainPassword := nodeFields[16].Descriptor()
 	// node.DefaultChainPassword holds the default value on creation for the chain_password field.
 	node.DefaultChainPassword = nodeDescChainPassword.Default.(string)
+	// nodeDescChainLink is the schema descriptor for chain_link field.
+	nodeDescChainLink := nodeFields[18].Descriptor()
+	// node.DefaultChainLink holds the default value on creation for the chain_link field.
+	node.DefaultChainLink = nodeDescChainLink.Default.(string)
 	// nodeDescCreatedAt is the schema descriptor for created_at field.
-	nodeDescCreatedAt := nodeFields[18].Descriptor()
+	nodeDescCreatedAt := nodeFields[19].Descriptor()
 	// node.DefaultCreatedAt holds the default value on creation for the created_at field.
 	node.DefaultCreatedAt = nodeDescCreatedAt.Default.(func() time.Time)
 	outboundFields := schema.Outbound{}.Fields()

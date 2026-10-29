@@ -60,7 +60,7 @@ function ConfirmProvider({ children }: { children: ReactNode }) {
       {children}
       <Dialog open={open} onOpenChange={(v) => !v && finish(false)} onOpenChangeComplete={(v) => !v && setRequest(null)}>
         {request && o && (
-          <DialogContent role="alertdialog" size="sm">
+          <DialogContent role="alertdialog" size="sm" layer="top">
             <DialogTitle>{o.title}</DialogTitle>
             {o.description && <DialogDescription>{o.description}</DialogDescription>}
             <Form onSubmit={() => finish(true)}>

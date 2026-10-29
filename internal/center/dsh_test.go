@@ -184,7 +184,7 @@ func TestDSHGatewayOnlyOpensFromConsoleDrawer(t *testing.T) {
 	}
 	// 明文 HTTP 即使带着会话也拒绝。
 	assertDSHDenied(t, b.get("http://dsh.example.com/", iframeNav), "plain http")
-	// dsh 未运行：子域名同样只是空 404，原因只在控制台抽屉里由 Weir 显示。
+	// dsh 未运行：子域名同样只是空 404，原因只在控制台的 dsh 窗口里由 Weir 显示。
 	s.dsh.endpoint = func() (string, string, bool) { return "", "", false }
 	assertDSHDenied(t, b.get("https://dsh.example.com/", iframeNav), "dsh stopped")
 	s.dsh.endpoint = func() (string, string, bool) { return strings.TrimPrefix(f.srv.URL, "http://"), fakeLaunchToken, true }

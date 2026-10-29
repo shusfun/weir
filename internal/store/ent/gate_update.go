@@ -227,6 +227,18 @@ func (_u *GateUpdate) ClearPanel() *GateUpdate {
 	return _u
 }
 
+// SetFirewall sets the "firewall" field.
+func (_u *GateUpdate) SetFirewall(v map[string]interface{}) *GateUpdate {
+	_u.mutation.SetFirewall(v)
+	return _u
+}
+
+// ClearFirewall clears the value of the "firewall" field.
+func (_u *GateUpdate) ClearFirewall() *GateUpdate {
+	_u.mutation.ClearFirewall()
+	return _u
+}
+
 // SetConfigRevision sets the "config_revision" field.
 func (_u *GateUpdate) SetConfigRevision(v int64) *GateUpdate {
 	_u.mutation.ResetConfigRevision()
@@ -515,6 +527,12 @@ func (_u *GateUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.PanelCleared() {
 		_spec.ClearField(gate.FieldPanel, field.TypeJSON)
 	}
+	if value, ok := _u.mutation.Firewall(); ok {
+		_spec.SetField(gate.FieldFirewall, field.TypeJSON, value)
+	}
+	if _u.mutation.FirewallCleared() {
+		_spec.ClearField(gate.FieldFirewall, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.ConfigRevision(); ok {
 		_spec.SetField(gate.FieldConfigRevision, field.TypeInt64, value)
 	}
@@ -772,6 +790,18 @@ func (_u *GateUpdateOne) SetPanel(v map[string]interface{}) *GateUpdateOne {
 // ClearPanel clears the value of the "panel" field.
 func (_u *GateUpdateOne) ClearPanel() *GateUpdateOne {
 	_u.mutation.ClearPanel()
+	return _u
+}
+
+// SetFirewall sets the "firewall" field.
+func (_u *GateUpdateOne) SetFirewall(v map[string]interface{}) *GateUpdateOne {
+	_u.mutation.SetFirewall(v)
+	return _u
+}
+
+// ClearFirewall clears the value of the "firewall" field.
+func (_u *GateUpdateOne) ClearFirewall() *GateUpdateOne {
+	_u.mutation.ClearFirewall()
 	return _u
 }
 
@@ -1092,6 +1122,12 @@ func (_u *GateUpdateOne) sqlSave(ctx context.Context) (_node *Gate, err error) {
 	}
 	if _u.mutation.PanelCleared() {
 		_spec.ClearField(gate.FieldPanel, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.Firewall(); ok {
+		_spec.SetField(gate.FieldFirewall, field.TypeJSON, value)
+	}
+	if _u.mutation.FirewallCleared() {
+		_spec.ClearField(gate.FieldFirewall, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.ConfigRevision(); ok {
 		_spec.SetField(gate.FieldConfigRevision, field.TypeInt64, value)

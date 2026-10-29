@@ -714,6 +714,16 @@ func PanelNotNil() predicate.Gate {
 	return predicate.Gate(sql.FieldNotNull(FieldPanel))
 }
 
+// FirewallIsNil applies the IsNil predicate on the "firewall" field.
+func FirewallIsNil() predicate.Gate {
+	return predicate.Gate(sql.FieldIsNull(FieldFirewall))
+}
+
+// FirewallNotNil applies the NotNil predicate on the "firewall" field.
+func FirewallNotNil() predicate.Gate {
+	return predicate.Gate(sql.FieldNotNull(FieldFirewall))
+}
+
 // ConfigRevisionEQ applies the EQ predicate on the "config_revision" field.
 func ConfigRevisionEQ(v int64) predicate.Gate {
 	return predicate.Gate(sql.FieldEQ(FieldConfigRevision, v))

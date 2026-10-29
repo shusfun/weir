@@ -42,6 +42,8 @@ const (
 	FieldHost = "host"
 	// FieldPanel holds the string denoting the panel field in the database.
 	FieldPanel = "panel"
+	// FieldFirewall holds the string denoting the firewall field in the database.
+	FieldFirewall = "firewall"
 	// FieldConfigRevision holds the string denoting the config_revision field in the database.
 	FieldConfigRevision = "config_revision"
 	// FieldAppliedRevision holds the string denoting the applied_revision field in the database.
@@ -81,6 +83,7 @@ var Columns = []string{
 	FieldKernelPins,
 	FieldHost,
 	FieldPanel,
+	FieldFirewall,
 	FieldConfigRevision,
 	FieldAppliedRevision,
 	FieldFailedRevision,

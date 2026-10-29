@@ -7,6 +7,7 @@ notes: 旧版 Xray，客户端出口仍支持 allowInsecure。
 protocols: [vless, vmess, trojan, shadowsocks, socks, http]
 networks: [tcp, raw, ws, grpc, xhttp, httpupgrade]
 securities: [tls, reality]
+outbound_networks: [tcp, ws, grpc, xhttp, httpupgrade]
 features: [balancer, observatory]
 run: [run, -config, "{config}"]
 check: [run, -test, -config, "{config}"]
@@ -125,7 +126,7 @@ templates:
     stats: {}
     policy:
       levels: {"0": {statsUserUplink: true, statsUserDownlink: true}}
-      system: {statsInboundUplink: true, statsInboundDownlink: true}
+      system: {statsInboundUplink: true, statsInboundDownlink: true, statsOutboundUplink: true, statsOutboundDownlink: true}
     api: {tag: api, services: [StatsService]}
 
   rule:
@@ -322,6 +323,12 @@ templates:
       grpcSettings?:
         $if: "ob.s.network == 'grpc'"
         $then: {"serviceName?": "${ob.s.service_name}"}
+      xhttpSettings?:
+        $if: "ob.s.network == 'xhttp'"
+        $then: {path: "${ob.s.path | default('/')}", "host?": "${ob.s.host}", "mode?": "${ob.s.mode}"}
+      httpupgradeSettings?:
+        $if: "ob.s.network == 'httpupgrade'"
+        $then: {path: "${ob.s.path | default('/')}", "host?": "${ob.s.host}"}
       tlsSettings?:
         $if: "ob.s.security == 'tls'"
         $then:

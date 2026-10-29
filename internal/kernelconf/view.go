@@ -173,7 +173,7 @@ func outboundSettings(ob db.Outbound, kernel string) (map[string]any, error) {
 	return map[string]any{
 		"security": security, "network": strings.ToLower(strings.TrimSpace(s.Network)),
 		"sni": s.SNI, "fingerprint": s.Fingerprint, "alpn": alpn, "public_key": s.PublicKey, "short_id": s.ShortID,
-		"path": s.Path, "host": s.Host, "service_name": s.ServiceName, "allow_insecure": s.AllowInsecure,
+		"path": s.Path, "host": s.Host, "service_name": s.ServiceName, "mode": s.Mode, "allow_insecure": s.AllowInsecure,
 		"trusted_certificate": s.TrustedCertificate, "spki": s.SPKI, "flow": strings.TrimSpace(s.Flow), "method": s.Method,
 		"obfs": s.Obfs, "obfs_password": s.ObfsPassword, "congestion_control": s.CongestionControl, "zero_rtt": s.ZeroRTT,
 		"shadowtls_version": s.ShadowTLSVersion,

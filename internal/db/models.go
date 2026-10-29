@@ -323,6 +323,7 @@ type OutboundSettings struct {
 	ALPN               []string `json:"alpn,omitempty"`
 	Method             string   `json:"method,omitempty"`
 	ServiceName        string   `json:"service_name,omitempty"`
+	Mode               string   `json:"mode,omitempty"` // XHTTP 模式（auto / packet-up / stream-up / stream-one）
 	AllowInsecure      bool     `json:"allow_insecure,omitempty"`
 	TrustedCertificate string   `json:"trusted_certificate,omitempty"`
 }

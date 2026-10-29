@@ -1,4 +1,4 @@
-// 通用确认窗：dsh（抽屉对话或后台分析）提交、系统试运行通过的草稿，在任何页面都由 Weir 自己弹出。
+// 通用确认窗：dsh（窗口里的对话或后台分析）提交、系统试运行通过的草稿，在任何页面都由 Weir 自己弹出。
 // 内容从 Weir 接口读取，不接收 dsh 页面发来的任何消息；按参数说明生成字段：中文名与单位、引用显示名称、改前 / 改后。
 // 管理员可以直接改字段再确认（改过的字段做标记）；危险操作要求当前密码与二次验证码。dsh 无法确认。
 import { useRef, useState } from "react";
@@ -145,7 +145,7 @@ export function DraftConfirm() {
   if (outputs) {
     return (
       <Dialog open onOpenChange={(o) => !o && setOutputs(null)}>
-        <DialogContent size="md">
+        <DialogContent size="md" layer="top">
           <DialogTitle>新用户的初始密码</DialogTitle>
           <DialogDescription>只显示这一次，请现在交给用户；dsh 看不到这些密码。</DialogDescription>
           <ul className="stack">
@@ -170,7 +170,7 @@ export function DraftConfirm() {
   const setEdit = (i: number) => (key: string, v: unknown) => setEdits((e) => ({ ...e, [i]: { ...(e[i] ?? {}), [key]: v } }));
   return (
     <Dialog open onOpenChange={(o) => !o && !busy && setLater((l) => [...l, d.id])}>
-      <DialogContent size="lg">
+      <DialogContent size="lg" layer="top">
         <DialogTitle className="flex flex-wrap items-center gap-2">
           {steps.length > 1 ? `确认 dsh 草稿 · ${steps.length} 步` : `确认 dsh 草稿 · ${steps[0]?.title ?? ""}`}
           <Badge variant="soft" tone="neutral">{d.source === "analysis" ? "dsh 后台分析" : "dsh 对话"}</Badge>

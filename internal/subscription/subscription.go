@@ -70,6 +70,7 @@ type Settings struct {
 	ALPN              []string           `json:"alpn,omitempty"`
 	Method            string             `json:"method,omitempty"`
 	ServiceName       string             `json:"service_name,omitempty"`
+	Mode              string             `json:"mode,omitempty"` // XHTTP 模式
 	AllowInsecure     bool               `json:"allow_insecure,omitempty"`
 	VmessUnsupported  bool               `json:"vmess_unsupported,omitempty"`
 	UnsupportedFields []string           `json:"unsupported_fields,omitempty"`
@@ -578,6 +579,7 @@ func settingsFromQuery(values url.Values, address string) (Settings, error) {
 		PublicKey:     firstQuery(values, "pbk", "publicKey"),
 		ShortID:       firstQuery(values, "sid", "shortId"),
 		ServiceName:   firstQuery(values, "serviceName", "service_name"),
+
 		AllowInsecure: truthy(firstQuery(values, "allowInsecure", "allow_insecure", "skip-cert-verify", "insecure")),
 		Obfs:          firstQuery(values, "obfs"), ObfsPassword: firstQuery(values, "obfs-password", "obfs_password"), CongestionControl: firstQuery(values, "congestion_control"), ZeroRTT: truthy(firstQuery(values, "zero_rtt_handshake")), SPKI: firstQuery(values, "spki"), CertificatePin: firstQuery(values, "pinSHA256"),
 	}
@@ -586,7 +588,7 @@ func settingsFromQuery(values url.Values, address string) (Settings, error) {
 			continue
 		}
 		switch key {
-		case "security", "tls", "type", "network", "sni", "servername", "serverName", "peer", "host", "path", "flow", "fp", "fingerprint", "pbk", "publicKey", "sid", "shortId", "serviceName", "service_name", "allowInsecure", "allow_insecure", "skip-cert-verify", "insecure", "alpn", "obfs", "obfs-password", "obfs_password", "congestion_control", "zero_rtt_handshake", "spki", "pinSHA256":
+		case "security", "tls", "type", "network", "sni", "servername", "serverName", "peer", "host", "path", "flow", "fp", "fingerprint", "pbk", "publicKey", "sid", "shortId", "serviceName", "service_name", "mode", "allowInsecure", "allow_insecure", "skip-cert-verify", "insecure", "alpn", "obfs", "obfs-password", "obfs_password", "congestion_control", "zero_rtt_handshake", "spki", "pinSHA256":
 		case "encryption":
 			if value[0] != "none" {
 				settings.UnsupportedFields = append(settings.UnsupportedFields, key)
@@ -602,6 +604,12 @@ func settingsFromQuery(values url.Values, address string) (Settings, error) {
 	sort.Strings(settings.UnsupportedFields)
 	if settings.SNI == "" && security != "" && security != "none" {
 		settings.SNI = address
+	}
+	if network == "xhttp" {
+		settings.Mode = firstQuery(values, "mode")
+	} else if firstQuery(values, "mode") != "" {
+		settings.UnsupportedFields = append(settings.UnsupportedFields, "mode")
+		sort.Strings(settings.UnsupportedFields)
 	}
 	if security == "tls" {
 		settings.TLS = true

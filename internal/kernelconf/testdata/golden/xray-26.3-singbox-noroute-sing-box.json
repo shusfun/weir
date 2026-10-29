@@ -8,6 +8,9 @@
           "inbound-24-shadowsocks",
           "shadowtls-inbound-25"
         ],
+        "outbounds": [
+          "singbox-out-2147483647"
+        ],
         "users": [
           "c241",
           "c251"

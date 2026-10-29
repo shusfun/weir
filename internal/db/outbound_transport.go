@@ -72,8 +72,18 @@ func ManagedOutboundSettings(out Outbound) (OutboundSettings, error) {
 	if network == "websocket" {
 		network = "ws"
 	}
-	if network != "tcp" && network != "ws" && network != "grpc" {
+	switch network {
+	case "tcp", "ws", "grpc", "xhttp", "httpupgrade":
+	default:
 		return s, errors.New("unsupported outbound transport")
+	}
+	switch s.Mode {
+	case "", "auto", "packet-up", "stream-up", "stream-one":
+	default:
+		return s, errors.New("unsupported XHTTP mode")
+	}
+	if s.Mode != "" && network != "xhttp" {
+		return s, errors.New("XHTTP mode without XHTTP")
 	}
 	security := strings.ToLower(strings.TrimSpace(s.Security))
 	if security == "" {
@@ -128,7 +138,7 @@ func ManagedOutboundSettings(out Outbound) (OutboundSettings, error) {
 		}
 		key, err := base64.RawURLEncoding.DecodeString(s.PublicKey)
 		short, e := hex.DecodeString(s.ShortID)
-		if protocol != "vless" || network != "tcp" || err != nil || len(key) != 32 || e != nil || len(short) > 8 || s.SNI == "" {
+		if protocol != "vless" || network != "tcp" && network != "xhttp" && network != "grpc" || err != nil || len(key) != 32 || e != nil || len(short) > 8 || s.SNI == "" {
 			return s, errors.New("invalid outbound Reality configuration")
 		}
 	} else if s.PublicKey != "" || s.ShortID != "" {
@@ -137,7 +147,7 @@ func ManagedOutboundSettings(out Outbound) (OutboundSettings, error) {
 	if s.Flow != "" && (s.Flow != "xtls-rprx-vision" || protocol != "vless" || network != "tcp" || security == "none") {
 		return s, errors.New("unsupported outbound flow")
 	}
-	if network != "ws" && (s.Path != "" || s.Host != "") {
+	if network != "ws" && network != "xhttp" && network != "httpupgrade" && (s.Path != "" || s.Host != "") {
 		return s, errors.New("WebSocket fields without WebSocket")
 	}
 	if network != "grpc" && s.ServiceName != "" {
@@ -163,7 +173,7 @@ func ManagedOutboundSettings(out Outbound) (OutboundSettings, error) {
 }
 
 func managedSingboxSettings(protocol string, s OutboundSettings) (OutboundSettings, error) {
-	if s.Security != "" && s.Security != "tls" || s.Reality || s.PublicKey != "" || s.ShortID != "" || s.Flow != "" || s.Host != "" || s.Path != "" || s.ServiceName != "" || s.Method != "" {
+	if s.Security != "" && s.Security != "tls" || s.Reality || s.PublicKey != "" || s.ShortID != "" || s.Flow != "" || s.Host != "" || s.Path != "" || s.ServiceName != "" || s.Method != "" || s.Mode != "" {
 		return s, errors.New("unsupported sing-box outbound fields")
 	}
 	if s.Network != "" && s.Network != "tcp" && ((protocol != "hysteria2" && protocol != "tuic") || (s.Network != "udp" && s.Network != "quic")) {
