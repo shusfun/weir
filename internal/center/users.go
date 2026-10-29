@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"sort"
 	"strconv"
@@ -405,6 +406,9 @@ func (s *Server) resetUsageHandler(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if dryRun(c, dryResult{Preview: []string{fmt.Sprintf("把 %s 的已用流量（现在 %.2f GB）清零，从现在重新计算", firstNonEmpty(u.Name, u.Email), float64(u.Used)/(1<<30))}}) {
+		return
+	}
 	if err := s.ResetUsage(c.Request.Context(), u.ID, time.Now()); err != nil {
 		failInternal(c, 500, "reset_failed", err)
 		return
@@ -672,6 +676,9 @@ func (s *Server) updateLink(c *gin.Context, admin bool) {
 		failure(c, 400, err.Error())
 		return
 	}
+	if dryRun(c, dryResult{Preview: []string{"订阅地址不变；客户端下次更新订阅时拿到新内容"}}) {
+		return
+	}
 	if _, err := upd.Save(ctx); err != nil {
 		failInternal(c, 500, "update_failed", err)
 		return
@@ -694,6 +701,9 @@ func (s *Server) deleteLink(c *gin.Context, admin bool) {
 		return
 	}
 	ctx := c.Request.Context()
+	if dryRun(c, dryResult{Preview: []string{"删除 " + firstNonEmpty(u.Name, u.Email) + " 的订阅链接「" + firstNonEmpty(l.Name, "订阅") + "」：这个订阅地址与它在各节点上的凭据随即失效"}}) {
+		return
+	}
 	if _, err := s.Store.Ent.Credential.Delete().Where(credential.LinkIDEQ(l.ID)).Exec(ctx); err != nil {
 		failInternal(c, 500, "delete_failed", err)
 		return

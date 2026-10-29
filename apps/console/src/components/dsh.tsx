@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Form, FormGrid, Input, Notice, SkeletonList, StatusLamp, SwitchField, useConfirm } from "@weir/ui";
-import { Bot, Download, Minus, RotateCcw, Star, Trash2, X } from "lucide-react";
+import { Bot, Download, Maximize2, Minimize2, Minus, RotateCcw, Star, Trash2, X } from "lucide-react";
 import { api, ApiError } from "../api";
 import { useRowAction } from "../lib/action";
 import { date } from "../lib/models";
@@ -78,13 +78,15 @@ function notReady(v: DshView | undefined): string {
 }
 
 // DshWindow：管理员在任何页面都有右下角入口，打开的是一个浮动窗口，不挡页面：页面照常能点、能填，
-// 窗口可以拖动标题栏移动、拖右下角改大小（位置与大小记在本浏览器）。
+// 窗口可以拖动标题栏移动、拖任意一条边或一个角改大小、双击标题栏最大化（位置与大小记在本浏览器）。
 // - 缩小：窗口收起成右下角的「dsh」条，dsh 继续在后台运行、对话不断，页面感知照常上报；点一下恢复原样。
 // - 关闭：卸下 dsh 页面并结束这次连接；再打开时重新连接（dsh 自己保存的会话还在）。
 // dsh 没就绪时窗口里列出还差的步骤并就地完成。「让 dsh 起草」「AI 调整」也打开这里；窄屏时是底部面板。
 type WindowMode = "closed" | "open" | "min";
-type Geometry = { x: number; y: number; w: number; h: number };
+// max：最大化（铺满视口，四周留 8px）；还原时回到 x / y / w / h。
+type Geometry = { x: number; y: number; w: number; h: number; max?: boolean };
 const geometryKey = "weir:dsh-window";
+const minW = 360, minH = 320;
 
 function loadGeometry(): Geometry {
   const w = Math.min(560, window.innerWidth - 32), h = Math.min(720, window.innerHeight - 96);
@@ -100,9 +102,29 @@ function loadGeometry(): Geometry {
 
 // clampGeometry：窗口至少留出标题栏在视口里，不会被拖到找不回来的地方。
 function clampGeometry(g: Geometry): Geometry {
-  const w = Math.max(360, Math.min(g.w, window.innerWidth - 16));
-  const h = Math.max(320, Math.min(g.h, window.innerHeight - 16));
-  return { w, h, x: Math.max(8, Math.min(g.x, window.innerWidth - w - 8)), y: Math.max(8, Math.min(g.y, window.innerHeight - 48)) };
+  const w = Math.max(minW, Math.min(g.w, window.innerWidth - 16));
+  const h = Math.max(minH, Math.min(g.h, window.innerHeight - 16));
+  return { ...g, w, h, x: Math.max(8, Math.min(g.x, window.innerWidth - w - 8)), y: Math.max(8, Math.min(g.y, window.innerHeight - 48)) };
+}
+
+type Edge = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
+const edges: Edge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+const edgeLabel: Record<Edge, string> = { n: "上边", s: "下边", e: "右边", w: "左边", ne: "右上角", nw: "左上角", se: "右下角", sw: "左下角" };
+
+// resizeGeometry：按拖动的边或角改大小；拖左边、上边时对面的边不动，窗口不小于最小尺寸、不出视口。
+function resizeGeometry(start: Geometry, edge: Edge, dx: number, dy: number): Geometry {
+  let { x, y, w, h } = start;
+  if (edge.includes("e")) w = Math.max(minW, Math.min(start.w + dx, window.innerWidth - start.x - 8));
+  if (edge.includes("s")) h = Math.max(minH, Math.min(start.h + dy, window.innerHeight - start.y - 8));
+  if (edge.includes("w")) {
+    x = Math.max(8, Math.min(start.x + dx, start.x + start.w - minW));
+    w = start.w + start.x - x;
+  }
+  if (edge.includes("n")) {
+    y = Math.max(8, Math.min(start.y + dy, start.y + start.h - minH));
+    h = start.h + start.y - y;
+  }
+  return { ...start, x, y, w, h };
 }
 
 function saveGeometry(g: Geometry) {
@@ -198,39 +220,27 @@ export function DshWindow() {
   );
 }
 
-// WindowFrame：窗口外框。宽屏可拖动标题栏移动、拖右下角改大小；窄屏固定为底部面板。
+// WindowFrame：窗口外框。宽屏可拖动标题栏移动、拖边或角改大小、最大化；窄屏固定为底部面板。
 // 缩小时只是隐藏（display: none），里面的 dsh 页面不卸下。从节点打开时把那个节点声明为正在看的对象。
 function WindowFrame({ hidden, minimize, close, hint, clearHint, hintObject, children }: { hidden: boolean; minimize: () => void; close: () => void; hint: DshHint | null; clearHint: () => void; hintObject?: { type: string; name: string; id: number }; children: ReactNode }) {
   useConsoleContext(!hidden && hintObject ? { object: hintObject } : null);
   const [g, setG] = useState<Geometry>(loadGeometry);
   const [dragging, setDragging] = useState(false);
-  const frame = useRef<HTMLDivElement>(null);
   const narrow = useNarrow();
   useEffect(() => {
     const onResize = () => setG((v) => clampGeometry(v));
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
-  // 拖右下角改大小（原生 resize）后记下新的宽高
-  useEffect(() => {
-    const el = frame.current;
-    if (!el || narrow) return;
-    const ro = new ResizeObserver(() => {
-      const r = el.getBoundingClientRect();
-      setG((v) => (Math.abs(v.w - r.width) < 1 && Math.abs(v.h - r.height) < 1 ? v : { ...v, w: r.width, h: r.height }));
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [narrow]);
   useEffect(() => {
     if (!dragging) saveGeometry(g);
   }, [g, dragging]);
-  function startDrag(e: React.PointerEvent) {
-    if (narrow || (e.target as HTMLElement).closest("button")) return;
+  // track：拖动期间跟随指针（拖动时盖住 dsh 页面，鼠标移到 iframe 上也不丢事件）。
+  function track(e: React.PointerEvent, next: (dx: number, dy: number) => void) {
     e.preventDefault();
-    const start = { px: e.clientX, py: e.clientY, x: g.x, y: g.y };
+    const px = e.clientX, py = e.clientY;
     setDragging(true);
-    const move = (ev: PointerEvent) => setG((v) => clampGeometry({ ...v, x: start.x + ev.clientX - start.px, y: start.y + ev.clientY - start.py }));
+    const move = (ev: PointerEvent) => next(ev.clientX - px, ev.clientY - py);
     const up = () => {
       setDragging(false);
       window.removeEventListener("pointermove", move);
@@ -239,22 +249,40 @@ function WindowFrame({ hidden, minimize, close, hint, clearHint, hintObject, chi
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
   }
+  function startMove(e: React.PointerEvent) {
+    if (narrow || g.max || (e.target as HTMLElement).closest("button")) return;
+    const start = g;
+    track(e, (dx, dy) => setG(clampGeometry({ ...start, x: start.x + dx, y: start.y + dy })));
+  }
+  function startResize(edge: Edge, e: React.PointerEvent) {
+    const start = g;
+    track(e, (dx, dy) => setG(resizeGeometry(start, edge, dx, dy)));
+  }
+  const toggleMax = () => setG((v) => ({ ...v, max: !v.max }));
+  const style = narrow ? undefined : g.max ? { left: 8, top: 8, right: 8, bottom: 8 } : { left: g.x, top: g.y, width: g.w, height: g.h };
   return (
     <div
-      ref={frame}
       role="dialog"
       aria-modal="false"
       aria-label="dsh"
       data-dsh-window=""
       hidden={hidden}
       className={"dsh-window " + (hidden ? "hidden" : "flex")}
-      style={narrow ? undefined : { left: g.x, top: g.y, width: g.w, height: g.h }}
+      style={style}
     >
-      <div className={"dsh-window-bar " + (narrow ? "" : "cursor-move")} onPointerDown={startDrag}>
+      <div
+        className={"dsh-window-bar " + (narrow || g.max ? "" : "cursor-move")}
+        onPointerDown={startMove}
+        onDoubleClick={(e) => !narrow && !(e.target as HTMLElement).closest("button") && toggleMax()}
+        title={narrow ? undefined : "拖动移动；双击最大化 / 还原"}
+      >
         <Bot className="size-4 shrink-0 text-[var(--mg-ink-3)]" />
         <strong className="text-[13px]">dsh</strong>
         <small className="min-w-0 flex-1 truncate text-[var(--mg-ink-3)]">草稿会由 Weir 弹窗请你确认</small>
         <Button size="icon-sm" variant="ghost" aria-label="缩小 dsh 窗口（dsh 继续在后台运行）" title="缩小：dsh 继续在后台运行，点右下角恢复" onClick={minimize}><Minus /></Button>
+        {!narrow && (
+          <Button size="icon-sm" variant="ghost" aria-label={g.max ? "还原 dsh 窗口大小" : "最大化 dsh 窗口"} title={g.max ? "还原" : "最大化"} onClick={toggleMax}>{g.max ? <Minimize2 /> : <Maximize2 />}</Button>
+        )}
         <Button size="icon-sm" variant="ghost" aria-label="关闭 dsh 窗口" title="关闭：结束这次连接，再打开时重新连接" onClick={close}><X /></Button>
       </div>
       {hint && (
@@ -268,7 +296,19 @@ function WindowFrame({ hidden, minimize, close, hint, clearHint, hintObject, chi
         {children}
         {dragging && <div className="absolute inset-0" />}
       </div>
+      {/* 四条边与四个角都能拖动改大小；右下角有可见的拖拽标记 */}
+      {!narrow && !g.max && edges.map((edge) => <div key={edge} className={"dsh-resize dsh-resize-" + edge} aria-hidden onPointerDown={(e) => startResize(edge, e)} title={"拖动" + edgeLabel[edge] + "改大小"} />)}
+      {!narrow && !g.max && <Grip className="dsh-resize-grip" aria-hidden />}
     </div>
+  );
+}
+
+// Grip：右下角的拖拽标记（三道斜线），只是提示，事件由下面的角落拖动区处理。
+function Grip({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 12 12" width="12" height="12">
+      <path d="M11 4 4 11M11 7.5 7.5 11M11 1 1 11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" fill="none" />
+    </svg>
   );
 }
 
@@ -328,7 +368,7 @@ export function DshSetup({ view }: { view?: DshView }) {
   ];
   return (
     <ol className="m-0 list-none space-y-3 p-0" aria-label="dsh 配置步骤">
-      <li className="text-[13px] text-[var(--mg-ink-2)]">dsh 是 Weir 的 AI 助手：在任何页面都知道你正在看什么，帮你调节点、写驱动、研判安全事件。用之前还差下面几步。</li>
+      <li className="text-[13px] text-[var(--mg-ink-2)]">dsh 是 Weir 的 AI 助手：在任何页面都知道你正在看什么，帮你建节点、开用户、配出口与分流、管订阅、写驱动、研判安全事件；它做的每件事都先交给你确认。用之前还差下面几步。</li>
       {view.unsupported && <li><Notice tone="warn">{view.unsupported}。</Notice></li>}
       <SetupStep n={1} title={steps[0][0]} state={steps[0][1]} done={set.version ? `已下载 ${set.version}` : ""}>
         <DshFetchStep blocked={!!view.unsupported} />

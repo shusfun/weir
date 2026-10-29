@@ -276,7 +276,7 @@
 }
 
 /* dsh 窗口：不挡页面的浮动窗口。层级在页面弹窗（50）之上、确认框与 dsh 草稿确认窗（57）之下，
-   这样开着弹窗也能和 dsh 对话，确认框永远在最上面。宽屏可移动、拖右下角改大小；窄屏是底部面板 */
+   这样开着弹窗也能和 dsh 对话，确认框永远在最上面。宽屏可移动、拖任意边或角改大小、最大化；窄屏是底部面板 */
 .dsh-window {
   position: fixed;
   z-index: 55;
@@ -284,7 +284,6 @@
   min-width: 360px;
   min-height: 320px;
   overflow: hidden;
-  resize: both;
   border: 1px solid var(--mg-line);
   border-radius: var(--mg-radius-lg);
   background: var(--mg-panel);
@@ -300,12 +299,37 @@
   user-select: none;
   touch-action: none;
 }
+/* 改大小的拖动区：边 6px、角 20px，盖在内容（含 dsh 的 iframe）之上，否则指针一进 iframe 就收不到事件。
+   窗口是圆角并裁掉溢出，角上最外面几个像素点不到，所以角的拖动区比圆角大 */
+.dsh-resize {
+  position: absolute;
+  z-index: 2;
+  touch-action: none;
+}
+.dsh-resize-n, .dsh-resize-s { left: 20px; right: 20px; height: 6px; cursor: ns-resize; }
+.dsh-resize-e, .dsh-resize-w { top: 20px; bottom: 20px; width: 6px; cursor: ew-resize; }
+.dsh-resize-n { top: 0; }
+.dsh-resize-s { bottom: 0; }
+.dsh-resize-e { right: 0; }
+.dsh-resize-w { left: 0; }
+.dsh-resize-ne, .dsh-resize-nw, .dsh-resize-se, .dsh-resize-sw { width: 20px; height: 20px; }
+.dsh-resize-ne { top: 0; right: 0; cursor: nesw-resize; }
+.dsh-resize-sw { bottom: 0; left: 0; cursor: nesw-resize; }
+.dsh-resize-nw { top: 0; left: 0; cursor: nwse-resize; }
+.dsh-resize-se { bottom: 0; right: 0; cursor: nwse-resize; }
+.dsh-resize-grip {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  z-index: 1;
+  color: var(--mg-ink-3);
+  pointer-events: none;
+}
 @media (max-width: 640px) {
   .dsh-window {
     inset: auto 0 0 0;
     height: 72dvh;
     min-width: 0;
-    resize: none;
     border-bottom: 0;
     border-radius: var(--mg-radius-lg) var(--mg-radius-lg) 0 0;
     padding-bottom: env(safe-area-inset-bottom, 0px);

@@ -140,6 +140,9 @@ func (s *Server) updateGate(c *gin.Context) {
 		}
 		upd.SetKernelPins(pins)
 	}
+	if dryRun(c, dryResult{Preview: []string{"保存后这台 VPS 按新设置重新生成配置"}}) {
+		return
+	}
 	g, err := upd.Save(c.Request.Context())
 	if err != nil {
 		failInternal(c, 500, "save_failed", err)

@@ -3,7 +3,7 @@
 // 管理员可以直接改字段再确认（改过的字段做标记）；危险操作要求当前密码与二次验证码。dsh 无法确认。
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge, Button, Collapsible, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Input, Notice, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, useToast } from "@weir/ui";
+import { Badge, Button, Collapsible, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Input, Notice, PasswordInput, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, useToast } from "@weir/ui";
 import { api } from "../api";
 import { useFormAction } from "../lib/action";
 import { emptyReauth, Reauth } from "./system-settings";
@@ -19,6 +19,7 @@ interface StepField {
   options?: [string, string][];
   hint?: string;
   secret?: boolean;
+  required?: boolean;
   value: unknown;
   display: string;
   before?: string;
@@ -47,8 +48,12 @@ type Edits = Record<string, Record<string, unknown>>;
 
 const editable = (f: StepField) => !f.secret && ["string", "int", "gb", "days", "bool", "enum"].includes(f.kind) && f.key !== "email";
 // FieldInput：按参数说明生成可编辑控件；引用、对象类只显示名称，不可直接改。
+// 机密参数（订阅地址、代理密码、分享链接）不经过 dsh，总是由管理员在这里直接填，值不回显。
 function FieldInput({ f, value, onChange }: { f: StepField; value: unknown; onChange: (v: unknown) => void }) {
   const label = f.label + (f.unit ? `（${f.unit}）` : "");
+  if (f.secret) {
+    return <PasswordInput aria-label={label} autoComplete="off" placeholder={f.display === "不改" ? "不填则不改" : f.required ? "必填" : "可不填"} value={String(value ?? "")} onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)} />;
+  }
   switch (f.kind) {
     case "bool":
       return <Switch aria-label={label} checked={value === true} onCheckedChange={onChange} />;
@@ -90,14 +95,16 @@ function StepCard({ step, index, total, edits, setEdit }: { step: Step; index: n
               <div key={f.key} className="contents">
                 <dt className="text-[var(--mg-ink-3)]">{f.label}{f.unit ? `（${f.unit}）` : ""}</dt>
                 <dd className="min-w-0 break-words">
-                  {editing && editable(f) ? (
+                  {f.secret ? (
+                    <FieldInput f={f} value={edits[f.key]} onChange={(v) => setEdit(f.key, v)} />
+                  ) : editing && editable(f) ? (
                     <FieldInput f={f} value={edited ? edits[f.key] : f.value} onChange={(v) => setEdit(f.key, v)} />
                   ) : f.before !== undefined && f.changed ? (
                     <span><span className="text-[var(--mg-ink-3)] line-through">{f.before}</span> → <strong>{edited ? String(edits[f.key]) : f.display}</strong></span>
                   ) : (
                     <span>{edited ? String(edits[f.key]) : f.display}</span>
                   )}
-                  {edited && <Badge className="ml-2" variant="soft" tone="warn">已改</Badge>}
+                  {edited && !f.secret && <Badge className="ml-2" variant="soft" tone="warn">已改</Badge>}
                 </dd>
               </div>
             );
@@ -176,7 +183,7 @@ export function DraftConfirm() {
           <Badge variant="soft" tone="neutral">{d.source === "analysis" ? "dsh 后台分析" : "dsh 对话"}</Badge>
           {pending > 1 && <Badge variant="soft" tone="warn">还有 {pending - 1} 份待确认</Badge>}
         </DialogTitle>
-        <DialogDescription>草稿由 dsh 提交，已用手动操作的同一套校验试运行通过。确认之前不会生效；多步草稿整体生效，任一步失败全部撤回。dsh 无法替你确认。</DialogDescription>
+        <DialogDescription>草稿由 dsh 提交，已用手动操作的同一套校验试运行（要你填写的机密、引用前面新建对象的步骤，在确认时再试运行）。确认之前不会生效；多步草稿按顺序执行，任一步失败，能撤回的步骤全部撤回。dsh 无法替你确认。</DialogDescription>
         <div className="stack max-h-[62vh] overflow-y-auto">
           {d.explain && (
             <div className="stack">

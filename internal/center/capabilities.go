@@ -56,7 +56,11 @@ type Capability struct {
 	Last bool `json:"last,omitempty"`
 	// Sources 是可以使用的来源（dsh 窗口里的对话 / analysis 后台分析）；为空表示只有 dsh。
 	Sources []string `json:"-"`
+	// Probe 表示这项只读能力会让 VPS 实际发起连接（实测、探测、读诊断）：不改数据，每次调用记审计。
+	Probe bool `json:"probe,omitempty"`
 
+	// op 是声明式登记的后端操作（见 capability_ops.go）：plan / exec 由通用逻辑生成。
+	op   *opSpec
 	read func(ctx context.Context, s *Server, args map[string]any) (any, error)
 	// plan 校验并试运行（不改任何数据）：填好每个字段的改前值与预演结果，记下所依据的数据版本。
 	plan func(ctx context.Context, s *Server, p *planCtx, st *DraftStep) error
@@ -80,6 +84,8 @@ type DraftStep struct {
 	Tested string `json:"tested,omitempty"`
 	// Diff 是长文本参数（如驱动原文）与当前版本的逐行差异，确认窗按差异显示。
 	Diff []diffLine `json:"diff,omitempty"`
+	// Checked 是试运行的预演（声明式能力）：确认时参数没变就沿用，不再试运行。
+	Checked []string `json:"checked,omitempty"`
 }
 
 // StepField 是确认窗里的一行：参数说明 + 现值 / 草稿值的显示文本；Value 是可编辑的原值。
@@ -97,6 +103,8 @@ type planCtx struct {
 	refs     map[string]string // 占位名 → 对象类型
 	names    map[string]string // 占位名 → 显示名
 	versions map[string]string // "user:3" → 版本摘要
+	// confirm 为真表示管理员正在确认窗里点确认：机密参数此时由管理员填好，必填的不能再缺。
+	confirm bool
 }
 
 func newPlanCtx(source string) *planCtx {
@@ -132,8 +140,15 @@ func (s *Server) checkArgs(ctx context.Context, p *planCtx, params []Param, args
 	}
 	for _, pa := range params {
 		v, ok := args[pa.Key]
-		if !ok || v == nil {
-			if pa.Required {
+		// 机密参数（订阅地址、代理密码、分享链接）不经过 dsh：草稿里留空，由管理员在确认窗里填。
+		if pa.Secret && !p.confirm && ok && v != nil && v != "" {
+			return fmt.Errorf("参数 %s（%s）是机密，不要填写：留空提交，由管理员在 Weir 的确认窗里直接填", pa.Key, pa.Label)
+		}
+		if !ok || v == nil || pa.Secret && v == "" {
+			if pa.Required && (!pa.Secret || p.confirm) {
+				if pa.Secret {
+					return fmt.Errorf("请在确认窗里填写「%s」", pa.Label)
+				}
 				return fmt.Errorf("缺少参数 %s（%s）", pa.Key, pa.Label)
 			}
 			continue
@@ -252,11 +267,60 @@ func (s *Server) refName(ctx context.Context, p *planCtx, kind string, v any) (s
 		// 只看是否已处理：起草、分析中等状态变化不算数据改动。
 		p.versions[key] = version(e.Status == "blocked" || e.Status == "dismissed")
 		return fmt.Sprintf("安全事件 #%d（%s）", e.ID, e.Kind), nil
+	case "outbound":
+		o, err := s.Store.Ent.Outbound.Get(ctx, id)
+		if err != nil {
+			return "", fmt.Errorf("出口 %d 不存在", id)
+		}
+		p.versions[key] = version([]any{o.Tag, o.Name, o.Protocol, o.Address, o.Port, o.Username, o.Password, o.Enabled, o.Settings})
+		return o.Tag, nil
+	case "route":
+		r, err := s.Store.Ent.Route.Get(ctx, id)
+		if err != nil {
+			return "", fmt.Errorf("分流规则 %d 不存在", id)
+		}
+		p.versions[key] = version([]any{r.OutboundTag, r.Domain, r.IP, r.NodeID, r.UserID, r.Enabled, r.Priority})
+		return fmt.Sprintf("规则 #%d → %s", r.ID, r.OutboundTag), nil
+	case "source":
+		v, err := s.Store.Ent.SubSource.Get(ctx, id)
+		if err != nil {
+			return "", fmt.Errorf("订阅源 %d 不存在", id)
+		}
+		p.versions[key] = version([]any{v.Name, v.URL, v.Enabled, v.UserAgent, v.FilterInclude, v.FilterExclude, v.PlusAsSpace, v.NodeCache, v.ExcludeTraffic, v.Website, v.Remark})
+		return firstNonEmpty(v.Name, fmt.Sprintf("订阅源 #%d", v.ID)), nil
+	case "profile":
+		v, err := s.Store.Ent.SubProfile.Get(ctx, id)
+		if err != nil {
+			return "", fmt.Errorf("订阅组 %d 不存在", id)
+		}
+		p.versions[key] = version([]any{v.Name, v.Enabled, v.AllSources, v.SourceIds, v.NodeIds, v.Settings, v.ExpiresAt})
+		return v.Name, nil
+	case "template":
+		v, err := s.Store.Ent.RuleTemplate.Get(ctx, id)
+		if err != nil {
+			return "", fmt.Errorf("规则模板 %d 不存在", id)
+		}
+		p.versions[key] = version([]any{v.Name, v.Format, v.Content})
+		return v.Name, nil
+	case "manual":
+		v, err := s.Store.Ent.SubNode.Get(ctx, id)
+		if err != nil {
+			return "", fmt.Errorf("手动节点 %d 不存在", id)
+		}
+		p.versions[key] = version([]any{v.Name, v.URL, v.Group, v.Enabled})
+		return firstNonEmpty(v.Name, fmt.Sprintf("手动节点 #%d", v.ID)), nil
+	case "cert":
+		v, err := s.Store.Ent.Certificate.Get(ctx, id)
+		if err != nil {
+			return "", fmt.Errorf("证书 %d 不存在", id)
+		}
+		return firstNonEmpty(v.Name, v.Domain), nil
 	}
 	return "", fmt.Errorf("不支持的引用类型 %s", kind)
 }
 
-var objectNames = map[string]string{"user": "用户", "node": "节点", "gate": "VPS", "link": "链接", "event": "安全事件"}
+var objectNames = map[string]string{"user": "用户", "node": "节点", "gate": "VPS", "link": "链接", "event": "安全事件",
+	"outbound": "出口", "route": "分流规则", "source": "订阅源", "profile": "订阅组", "template": "规则模板", "manual": "手动节点", "cert": "证书"}
 
 // display 把参数值写成给人看的文本：单位、枚举显示名、引用名称；密码类只标已填 / 未填。
 func (s *Server) display(ctx context.Context, p *planCtx, pa Param, v any) string {
@@ -323,10 +387,18 @@ func (s *Server) fields(ctx context.Context, p *planCtx, params []Param, args ma
 	out := []StepField{}
 	for _, pa := range params {
 		v, ok := args[pa.Key]
-		if !ok {
+		if !ok && !pa.Secret {
 			continue
 		}
-		out = append(out, StepField{Param: pa, Value: v, Display: s.display(ctx, p, pa, v)})
+		// 机密参数总是列出来，由管理员在确认窗里填；值不回传给页面，只标已填 / 未填。
+		f := StepField{Param: pa, Value: v, Display: s.display(ctx, p, pa, v)}
+		if pa.Secret {
+			f.Value = nil
+			if !ok || v == nil || v == "" {
+				f.Display = "未填"
+			}
+		}
+		out = append(out, f)
 	}
 	return out
 }
@@ -457,7 +529,7 @@ var draftCaps = []Capability{
 // catalog 返回某个来源可用的能力（后台分析只能读安全事件、提交封禁草稿）。
 func catalog(source string) []Capability {
 	var out []Capability
-	for _, list := range [][]Capability{readCaps, driverReadCaps, draftCaps, driverDraftCaps} {
+	for _, list := range [][]Capability{readCaps, opReadCaps, driverReadCaps, draftCaps, opDraftCaps, driverDraftCaps} {
 		for _, c := range list {
 			if c.Role == "" {
 				c.Role = "admin"

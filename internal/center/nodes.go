@@ -533,7 +533,8 @@ func (s *Server) createNode(c *gin.Context) {
 		}
 		st["reality_dest"], st["reality_server_names"] = realityCandidates[0]+":443", realityCandidates[0]
 	}
-	if req.Port == 0 {
+	autoPort := req.Port == 0
+	if autoPort {
 		if req.Port, err = s.allocateNodePort(ctx, g, p.Security == "reality"); err != nil {
 			failure(c, 409, "no_free_port")
 			return
@@ -581,7 +582,32 @@ func (s *Server) createNode(c *gin.Context) {
 			failDetail(c, 422, "node_test_failed", strings.Join(failed, "；"), gin.H{"result": res})
 			return
 		}
-		tested = gin.H{"done": true, "latency_ms": res["latency_ms"], "skipped_targets": failed}
+		tested = gin.H{"done": true, "latency_ms": res["latency_ms"], "skipped_targets": failed, "stage": res["stage"]}
+	}
+	if c.GetBool(dryRunKey) {
+		r := dryResult{Pin: map[string]any{"port": req.Port}, Preview: []string{fmt.Sprintf("在 %s 上新建 %s 节点「%s」，端口 %d", g.Name, p.Name, name, req.Port)}}
+		// 自动选中的 443 不能作为手动端口写回（手动端口要 ≥ 1024）：确认时它仍空闲就再次选中，否则换一个随机端口。
+		if autoPort && req.Port < 1024 {
+			delete(r.Pin, "port")
+			r.Preview[0] += "（确认时 443 已被占用就自动换一个端口）"
+		}
+		if len(realityCandidates) > 0 {
+			r.Pin["reality_target"] = nodeSetting(st, "reality_server_names")
+			if strings.TrimSpace(req.RealityTarget) == "" {
+				r.Preview = append(r.Preview, "伪装目标 "+nodeSetting(st, "reality_server_names")+"（这台 VPS 实测候选站点后选中）")
+			} else {
+				r.Preview = append(r.Preview, "伪装目标 "+nodeSetting(st, "reality_server_names"))
+			}
+		}
+		if tested["done"] == true {
+			r.Result = map[string]any{"latency_ms": tested["latency_ms"], "stage": tested["stage"]}
+			r.Preview = append(r.Preview, "已在这台 VPS 上用真实内核实测通过")
+		}
+		if certID != nil {
+			r.Preview = append(r.Preview, "使用证书 "+nodeSetting(st, "tls_sni"))
+		}
+		dryRun(c, r)
+		return
 	}
 	create := s.Store.Ent.Node.Create().SetGateID(g.ID).SetName(name).SetPreset(p.ID).SetKernel(p.Kernel).
 		SetProtocol(p.Protocol).SetPort(req.Port).SetNetwork(p.Network).SetSecurity(p.Security).SetSettings(st).SetNillableCertID(certID)
@@ -807,6 +833,15 @@ func (s *Server) deleteNode(c *gin.Context) {
 	chains, err := s.Store.Ent.Chain.Query().Where(chain.Or(chain.EntryNodeIDEQ(n.ID), chain.ExitNodeIDEQ(n.ID))).All(ctx)
 	if err != nil {
 		failInternal(c, 503, "query_failed", err)
+		return
+	}
+	if c.GetBool(dryRunKey) {
+		creds, _ := s.Store.Ent.Credential.Query().Where(credential.NodeIDEQ(n.ID), credential.InternalEQ(false)).Count(ctx)
+		preview := []string{fmt.Sprintf("删除节点「%s」：%d 份用户凭据随之删除，已导入客户端的这个节点随即失效", n.Name, creds)}
+		if len(chains) > 0 {
+			preview = append(preview, fmt.Sprintf("一并删除以它为入口或出口的 %d 条用户自建链式代理", len(chains)))
+		}
+		dryRun(c, dryResult{Preview: preview})
 		return
 	}
 	for _, ch := range chains {

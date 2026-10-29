@@ -271,6 +271,9 @@ func (s *Server) fetchKernel(c *gin.Context) {
 		failure(c, 400, "invalid_version")
 		return
 	}
+	if dryRun(c, dryResult{Preview: []string{"开始下载 " + name + " " + version + "（按官方摘要校验）；进度在「内核 → 版本」里看"}}) {
+		return
+	}
 	job := s.startKernelFetch(c.Request.Context(), name, version, c.GetInt("user_id"), c.ClientIP())
 	c.JSON(202, gin.H{"job": job})
 }

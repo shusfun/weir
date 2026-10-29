@@ -317,6 +317,10 @@ func (s *Server) saveSource(c *gin.Context) {
 			set(*v)
 		}
 	}
+	if create != nil && dryRun(c, dryResult{Preview: []string{"新建订阅源；保存后到「订阅管理 → 订阅源」点刷新拉取节点（或在草稿里加一步 source.refresh）"}}) ||
+		create == nil && dryRun(c, dryResult{Preview: []string{"修改订阅源「" + old.Name + "」；改了地址时清掉旧的节点缓存与用量"}}) {
+		return
+	}
 	// 更改 URL、UA 或名称修正方式后旧缓存与用量不再对应这个源：清除。
 	if old != nil && (req.URL != nil && *req.URL != old.URL || req.UserAgent != nil && *req.UserAgent != old.UserAgent || req.PlusAsSpace != nil && *req.PlusAsSpace != old.PlusAsSpace) {
 		m.SetNodeCount(0)
@@ -348,6 +352,15 @@ func (s *Server) deleteSource(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+	if c.GetBool(dryRunKey) {
+		src, err := s.Store.Ent.SubSource.Get(ctx, id)
+		if err != nil {
+			failure(c, 404, "source_not_found")
+			return
+		}
+		dryRun(c, dryResult{Preview: []string{"删除订阅源「" + src.Name + "」，并从所有订阅组里移除"}})
+		return
+	}
 	if err := s.Store.Ent.SubSource.DeleteOneID(id).Exec(ctx); err != nil {
 		failure(c, 404, "source_not_found")
 		return
@@ -451,6 +464,9 @@ func (s *Server) refreshSource(c *gin.Context) {
 	src, err := s.Store.Ent.SubSource.Get(ctx, id)
 	if err != nil {
 		failure(c, 404, "source_not_found")
+		return
+	}
+	if dryRun(c, dryResult{Preview: []string{"重新拉取订阅源「" + src.Name + "」，更新节点缓存与用量"}}) {
 		return
 	}
 	list, results := misub.Combine(ctx, s.subFetcher(), kvCache{s}, []misub.Source{toSource(src)}, nil, misub.Options{UserAgent: "clash-meta/2.5.0"})
@@ -567,6 +583,9 @@ func (s *Server) saveManualNode(c *gin.Context) {
 	if req.PlusAsSpace != nil {
 		m.SetPlusAsSpace(*req.PlusAsSpace)
 	}
+	if dryRun(c, dryResult{Preview: []string{"保存手动节点；包含它的订阅组随即更新"}}) {
+		return
+	}
 	var saved *ent.SubNode
 	var err error
 	if create != nil {
@@ -621,6 +640,15 @@ func (s *Server) deleteManualNode(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+	if c.GetBool(dryRunKey) {
+		v, err := s.Store.Ent.SubNode.Get(ctx, id)
+		if err != nil {
+			failure(c, 404, "node_not_found")
+			return
+		}
+		dryRun(c, dryResult{Preview: []string{"删除手动节点「" + firstNonEmpty(v.Name, "未命名") + "」，并从所有订阅组里移除"}})
+		return
+	}
 	if err := s.Store.Ent.SubNode.DeleteOneID(id).Exec(ctx); err != nil {
 		failure(c, 404, "node_not_found")
 		return
@@ -718,6 +746,15 @@ func (s *Server) saveTemplate(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+	if id != 0 {
+		if _, err := s.Store.Ent.RuleTemplate.Get(ctx, id); err != nil {
+			failure(c, 404, "template_not_found")
+			return
+		}
+	}
+	if dryRun(c, dryResult{Preview: []string{"规则模板已通过格式检查；用它的订阅组随即按新内容输出"}}) {
+		return
+	}
 	var err error
 	if id == 0 {
 		var t *ent.RuleTemplate
@@ -753,6 +790,14 @@ func (s *Server) deleteTemplate(c *gin.Context) {
 			failure(c, 409, "template_in_use")
 			return
 		}
+	}
+	if c.GetBool(dryRunKey) {
+		if _, err := s.Store.Ent.RuleTemplate.Get(ctx, id); err != nil {
+			failure(c, 404, "template_not_found")
+			return
+		}
+		dryRun(c, dryResult{Preview: []string{"删除这个规则模板（没有订阅组在用）"}})
+		return
 	}
 	if err := s.Store.Ent.RuleTemplate.DeleteOneID(id).Exec(ctx); err != nil {
 		failure(c, 404, "template_not_found")

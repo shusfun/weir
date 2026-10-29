@@ -706,6 +706,9 @@ func (s *Server) renewCertNow(c *gin.Context) {
 		failDetail(c, 409, "cert_not_renewable", "只有中心签发的证书可以在这里续签；1Panel 证书由 1Panel 续签", nil)
 		return
 	}
+	if dryRun(c, dryResult{Preview: []string{"立即续签证书 " + ct.Domain + "，用它的节点随后换上新证书"}}) {
+		return
+	}
 	_ = s.Store.KV.Del(ctx, fmt.Sprintf("cert-renew-wait:%d", id))
 	if err = s.renewCert(ctx, ct); err != nil {
 		failDetail(c, 422, "renew_failed", trimErr(err), nil)
