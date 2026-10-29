@@ -111,7 +111,9 @@ function Field({
     const el = box.current;
     if (!el) return null;
     const byId = el.querySelector<HTMLElement>("#" + CSS.escape(labelFor));
-    if (byId && byId.getAttribute("aria-hidden") !== "true") return byId;
+    // 唯一的子元素是包了一层的容器（如「输入框 + 随机生成」）时，id 落在容器上：不算控件，往里找真正的输入，
+    // 否则标签指向容器，点标签不聚焦、读屏也读不到
+    if (byId && byId.getAttribute("aria-hidden") !== "true" && byId.matches("input, textarea, select, button, [role], [tabindex]")) return byId;
     const v = validityTarget();
     if (v && v.getAttribute("aria-hidden") !== "true") return v;
     return el.querySelector<HTMLElement>("button, [tabindex]:not([tabindex='-1'])");
