@@ -1,4 +1,4 @@
-// 订阅管理的接口类型：订阅源、手动节点、订阅组、规则模板与全局设置。
+// 订阅源页的接口类型：订阅源、手动节点、订阅组、规则模板与全局设置。
 import type { Operator } from "../components/operator-editor";
 
 export interface UserInfo {

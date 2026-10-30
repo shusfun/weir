@@ -38,6 +38,8 @@ const (
 	FieldExitLink = "exit_link"
 	// FieldEnabled holds the string denoting the enabled field in the database.
 	FieldEnabled = "enabled"
+	// FieldPolicyType holds the string denoting the policy_type field in the database.
+	FieldPolicyType = "policy_type"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// Table holds the table name of the chain in the database.
@@ -59,6 +61,7 @@ var Columns = []string{
 	FieldExitNodeID,
 	FieldExitLink,
 	FieldEnabled,
+	FieldPolicyType,
 	FieldCreatedAt,
 }
 
@@ -91,6 +94,10 @@ var (
 	DefaultExitLink string
 	// DefaultEnabled holds the default value on creation for the "enabled" field.
 	DefaultEnabled bool
+	// DefaultPolicyType holds the default value on creation for the "policy_type" field.
+	DefaultPolicyType string
+	// PolicyTypeValidator is a validator for the "policy_type" field. It is called by the builders before save.
+	PolicyTypeValidator func(string) error
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 )
@@ -183,6 +190,11 @@ func ByExitLink(opts ...sql.OrderTermOption) OrderOption {
 // ByEnabled orders the results by the enabled field.
 func ByEnabled(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEnabled, opts...).ToFunc()
+}
+
+// ByPolicyType orders the results by the policy_type field.
+func ByPolicyType(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPolicyType, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

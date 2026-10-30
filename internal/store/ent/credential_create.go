@@ -160,6 +160,20 @@ func (_c *CredentialCreate) SetNillableMeterDown(v *int64) *CredentialCreate {
 	return _c
 }
 
+// SetMeterAt sets the "meter_at" field.
+func (_c *CredentialCreate) SetMeterAt(v time.Time) *CredentialCreate {
+	_c.mutation.SetMeterAt(v)
+	return _c
+}
+
+// SetNillableMeterAt sets the "meter_at" field if the given value is not nil.
+func (_c *CredentialCreate) SetNillableMeterAt(v *time.Time) *CredentialCreate {
+	if v != nil {
+		_c.SetMeterAt(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *CredentialCreate) SetCreatedAt(v time.Time) *CredentialCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -338,6 +352,10 @@ func (_c *CredentialCreate) createSpec() (*Credential, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.MeterDown(); ok {
 		_spec.SetField(credential.FieldMeterDown, field.TypeInt64, value)
 		_node.MeterDown = value
+	}
+	if value, ok := _c.mutation.MeterAt(); ok {
+		_spec.SetField(credential.FieldMeterAt, field.TypeTime, value)
+		_node.MeterAt = &value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(credential.FieldCreatedAt, field.TypeTime, value)
@@ -578,6 +596,24 @@ func (u *CredentialUpsert) UpdateMeterDown() *CredentialUpsert {
 // AddMeterDown adds v to the "meter_down" field.
 func (u *CredentialUpsert) AddMeterDown(v int64) *CredentialUpsert {
 	u.Add(credential.FieldMeterDown, v)
+	return u
+}
+
+// SetMeterAt sets the "meter_at" field.
+func (u *CredentialUpsert) SetMeterAt(v time.Time) *CredentialUpsert {
+	u.Set(credential.FieldMeterAt, v)
+	return u
+}
+
+// UpdateMeterAt sets the "meter_at" field to the value that was provided on create.
+func (u *CredentialUpsert) UpdateMeterAt() *CredentialUpsert {
+	u.SetExcluded(credential.FieldMeterAt)
+	return u
+}
+
+// ClearMeterAt clears the value of the "meter_at" field.
+func (u *CredentialUpsert) ClearMeterAt() *CredentialUpsert {
+	u.SetNull(credential.FieldMeterAt)
 	return u
 }
 
@@ -840,6 +876,27 @@ func (u *CredentialUpsertOne) AddMeterDown(v int64) *CredentialUpsertOne {
 func (u *CredentialUpsertOne) UpdateMeterDown() *CredentialUpsertOne {
 	return u.Update(func(s *CredentialUpsert) {
 		s.UpdateMeterDown()
+	})
+}
+
+// SetMeterAt sets the "meter_at" field.
+func (u *CredentialUpsertOne) SetMeterAt(v time.Time) *CredentialUpsertOne {
+	return u.Update(func(s *CredentialUpsert) {
+		s.SetMeterAt(v)
+	})
+}
+
+// UpdateMeterAt sets the "meter_at" field to the value that was provided on create.
+func (u *CredentialUpsertOne) UpdateMeterAt() *CredentialUpsertOne {
+	return u.Update(func(s *CredentialUpsert) {
+		s.UpdateMeterAt()
+	})
+}
+
+// ClearMeterAt clears the value of the "meter_at" field.
+func (u *CredentialUpsertOne) ClearMeterAt() *CredentialUpsertOne {
+	return u.Update(func(s *CredentialUpsert) {
+		s.ClearMeterAt()
 	})
 }
 
@@ -1268,6 +1325,27 @@ func (u *CredentialUpsertBulk) AddMeterDown(v int64) *CredentialUpsertBulk {
 func (u *CredentialUpsertBulk) UpdateMeterDown() *CredentialUpsertBulk {
 	return u.Update(func(s *CredentialUpsert) {
 		s.UpdateMeterDown()
+	})
+}
+
+// SetMeterAt sets the "meter_at" field.
+func (u *CredentialUpsertBulk) SetMeterAt(v time.Time) *CredentialUpsertBulk {
+	return u.Update(func(s *CredentialUpsert) {
+		s.SetMeterAt(v)
+	})
+}
+
+// UpdateMeterAt sets the "meter_at" field to the value that was provided on create.
+func (u *CredentialUpsertBulk) UpdateMeterAt() *CredentialUpsertBulk {
+	return u.Update(func(s *CredentialUpsert) {
+		s.UpdateMeterAt()
+	})
+}
+
+// ClearMeterAt clears the value of the "meter_at" field.
+func (u *CredentialUpsertBulk) ClearMeterAt() *CredentialUpsertBulk {
+	return u.Update(func(s *CredentialUpsert) {
+		s.ClearMeterAt()
 	})
 }
 

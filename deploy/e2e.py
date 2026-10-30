@@ -27,7 +27,8 @@ def main(argv):
     subprocess.run(["go", "test", "-c", "-tags", "e2e", "-o", str(OUT / "e2e.test"), "./internal/e2e"], cwd=ROOT, env=env, check=True)
     # 单机合并为一个进程的验收要用真实的 weir 程序（中心 + 本机 Gate + 辅助程序）。
     subprocess.run(["go", "build", "-o", str(OUT / "weir"), "./apps/weir"], cwd=ROOT, env=env, check=True)
-    args = ["-test.v", "-test.timeout", "15m", *argv]
+    # 测试程序只认 -test.run；文档与习惯写的 -run 在这里换过去
+    args = ["-test.v", "-test.timeout", "15m", *("-test.run" if a == "-run" else a for a in argv)]
     cmd = ["docker", "run", "--rm",
            "-v", f"{OUT}:/t", "-v", f"{XRAY}:/cores/xray:ro", "-v", f"{SINGBOX}:/cores/sing-box:ro",
            "-e", "WEIR_E2E_XRAY=/cores/xray", "-e", "WEIR_E2E_SINGBOX=/cores/sing-box", "-e", "WEIR_E2E_BINARY=/t/weir"]

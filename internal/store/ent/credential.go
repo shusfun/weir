@@ -39,6 +39,8 @@ type Credential struct {
 	MeterUp int64 `json:"meter_up,omitempty"`
 	// MeterDown holds the value of the "meter_down" field.
 	MeterDown int64 `json:"meter_down,omitempty"`
+	// MeterAt holds the value of the "meter_at" field.
+	MeterAt *time.Time `json:"meter_at,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt    time.Time `json:"created_at,omitempty"`
 	selectValues sql.SelectValues
@@ -55,7 +57,7 @@ func (*Credential) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullInt64)
 		case credential.FieldStatsKey, credential.FieldUUID, credential.FieldPassword, credential.FieldMeterEpoch:
 			values[i] = new(sql.NullString)
-		case credential.FieldCreatedAt:
+		case credential.FieldMeterAt, credential.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -147,6 +149,13 @@ func (_m *Credential) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.MeterDown = value.Int64
 			}
+		case credential.FieldMeterAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field meter_at", values[i])
+			} else if value.Valid {
+				_m.MeterAt = new(time.Time)
+				*_m.MeterAt = value.Time
+			}
 		case credential.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field created_at", values[i])
@@ -225,6 +234,11 @@ func (_m *Credential) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("meter_down=")
 	builder.WriteString(fmt.Sprintf("%v", _m.MeterDown))
+	builder.WriteString(", ")
+	if v := _m.MeterAt; v != nil {
+		builder.WriteString("meter_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

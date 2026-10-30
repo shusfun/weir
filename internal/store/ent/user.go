@@ -44,6 +44,8 @@ type User struct {
 	NodeIds []int `json:"node_ids,omitempty"`
 	// AllowChain holds the value of the "allow_chain" field.
 	AllowChain bool `json:"allow_chain,omitempty"`
+	// ProxyPolicy holds the value of the "proxy_policy" field.
+	ProxyPolicy map[string]interface{} `json:"proxy_policy,omitempty"`
 	// TotpSecret holds the value of the "totp_secret" field.
 	TotpSecret string `json:"-"`
 	// TotpStep holds the value of the "totp_step" field.
@@ -60,7 +62,7 @@ func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case user.FieldNodeIds:
+		case user.FieldNodeIds, user.FieldProxyPolicy:
 			values[i] = new([]byte)
 		case user.FieldEnabled, user.FieldMonthlyReset, user.FieldAllNodes, user.FieldAllowChain:
 			values[i] = new(sql.NullBool)
@@ -172,6 +174,14 @@ func (_m *User) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.AllowChain = value.Bool
 			}
+		case user.FieldProxyPolicy:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field proxy_policy", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.ProxyPolicy); err != nil {
+					return fmt.Errorf("unmarshal field proxy_policy: %w", err)
+				}
+			}
 		case user.FieldTotpSecret:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field totp_secret", values[i])
@@ -271,6 +281,9 @@ func (_m *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("allow_chain=")
 	builder.WriteString(fmt.Sprintf("%v", _m.AllowChain))
+	builder.WriteString(", ")
+	builder.WriteString("proxy_policy=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ProxyPolicy))
 	builder.WriteString(", ")
 	builder.WriteString("totp_secret=<sensitive>")
 	builder.WriteString(", ")

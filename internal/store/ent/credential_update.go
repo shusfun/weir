@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -241,6 +242,26 @@ func (_u *CredentialUpdate) AddMeterDown(v int64) *CredentialUpdate {
 	return _u
 }
 
+// SetMeterAt sets the "meter_at" field.
+func (_u *CredentialUpdate) SetMeterAt(v time.Time) *CredentialUpdate {
+	_u.mutation.SetMeterAt(v)
+	return _u
+}
+
+// SetNillableMeterAt sets the "meter_at" field if the given value is not nil.
+func (_u *CredentialUpdate) SetNillableMeterAt(v *time.Time) *CredentialUpdate {
+	if v != nil {
+		_u.SetMeterAt(*v)
+	}
+	return _u
+}
+
+// ClearMeterAt clears the value of the "meter_at" field.
+func (_u *CredentialUpdate) ClearMeterAt() *CredentialUpdate {
+	_u.mutation.ClearMeterAt()
+	return _u
+}
+
 // Mutation returns the CredentialMutation object of the builder.
 func (_u *CredentialUpdate) Mutation() *CredentialMutation {
 	return _u.mutation
@@ -341,6 +362,12 @@ func (_u *CredentialUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	}
 	if value, ok := _u.mutation.AddedMeterDown(); ok {
 		_spec.AddField(credential.FieldMeterDown, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.MeterAt(); ok {
+		_spec.SetField(credential.FieldMeterAt, field.TypeTime, value)
+	}
+	if _u.mutation.MeterAtCleared() {
+		_spec.ClearField(credential.FieldMeterAt, field.TypeTime)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -576,6 +603,26 @@ func (_u *CredentialUpdateOne) AddMeterDown(v int64) *CredentialUpdateOne {
 	return _u
 }
 
+// SetMeterAt sets the "meter_at" field.
+func (_u *CredentialUpdateOne) SetMeterAt(v time.Time) *CredentialUpdateOne {
+	_u.mutation.SetMeterAt(v)
+	return _u
+}
+
+// SetNillableMeterAt sets the "meter_at" field if the given value is not nil.
+func (_u *CredentialUpdateOne) SetNillableMeterAt(v *time.Time) *CredentialUpdateOne {
+	if v != nil {
+		_u.SetMeterAt(*v)
+	}
+	return _u
+}
+
+// ClearMeterAt clears the value of the "meter_at" field.
+func (_u *CredentialUpdateOne) ClearMeterAt() *CredentialUpdateOne {
+	_u.mutation.ClearMeterAt()
+	return _u
+}
+
 // Mutation returns the CredentialMutation object of the builder.
 func (_u *CredentialUpdateOne) Mutation() *CredentialMutation {
 	return _u.mutation
@@ -706,6 +753,12 @@ func (_u *CredentialUpdateOne) sqlSave(ctx context.Context) (_node *Credential, 
 	}
 	if value, ok := _u.mutation.AddedMeterDown(); ok {
 		_spec.AddField(credential.FieldMeterDown, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.MeterAt(); ok {
+		_spec.SetField(credential.FieldMeterAt, field.TypeTime, value)
+	}
+	if _u.mutation.MeterAtCleared() {
+		_spec.ClearField(credential.FieldMeterAt, field.TypeTime)
 	}
 	_node = &Credential{config: _u.config}
 	_spec.Assign = _node.assignValues

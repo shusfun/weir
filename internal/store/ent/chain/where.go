@@ -104,6 +104,11 @@ func Enabled(v bool) predicate.Chain {
 	return predicate.Chain(sql.FieldEQ(FieldEnabled, v))
 }
 
+// PolicyType applies equality check predicate on the "policy_type" field. It's identical to PolicyTypeEQ.
+func PolicyType(v string) predicate.Chain {
+	return predicate.Chain(sql.FieldEQ(FieldPolicyType, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.Chain {
 	return predicate.Chain(sql.FieldEQ(FieldCreatedAt, v))
@@ -642,6 +647,71 @@ func EnabledEQ(v bool) predicate.Chain {
 // EnabledNEQ applies the NEQ predicate on the "enabled" field.
 func EnabledNEQ(v bool) predicate.Chain {
 	return predicate.Chain(sql.FieldNEQ(FieldEnabled, v))
+}
+
+// PolicyTypeEQ applies the EQ predicate on the "policy_type" field.
+func PolicyTypeEQ(v string) predicate.Chain {
+	return predicate.Chain(sql.FieldEQ(FieldPolicyType, v))
+}
+
+// PolicyTypeNEQ applies the NEQ predicate on the "policy_type" field.
+func PolicyTypeNEQ(v string) predicate.Chain {
+	return predicate.Chain(sql.FieldNEQ(FieldPolicyType, v))
+}
+
+// PolicyTypeIn applies the In predicate on the "policy_type" field.
+func PolicyTypeIn(vs ...string) predicate.Chain {
+	return predicate.Chain(sql.FieldIn(FieldPolicyType, vs...))
+}
+
+// PolicyTypeNotIn applies the NotIn predicate on the "policy_type" field.
+func PolicyTypeNotIn(vs ...string) predicate.Chain {
+	return predicate.Chain(sql.FieldNotIn(FieldPolicyType, vs...))
+}
+
+// PolicyTypeGT applies the GT predicate on the "policy_type" field.
+func PolicyTypeGT(v string) predicate.Chain {
+	return predicate.Chain(sql.FieldGT(FieldPolicyType, v))
+}
+
+// PolicyTypeGTE applies the GTE predicate on the "policy_type" field.
+func PolicyTypeGTE(v string) predicate.Chain {
+	return predicate.Chain(sql.FieldGTE(FieldPolicyType, v))
+}
+
+// PolicyTypeLT applies the LT predicate on the "policy_type" field.
+func PolicyTypeLT(v string) predicate.Chain {
+	return predicate.Chain(sql.FieldLT(FieldPolicyType, v))
+}
+
+// PolicyTypeLTE applies the LTE predicate on the "policy_type" field.
+func PolicyTypeLTE(v string) predicate.Chain {
+	return predicate.Chain(sql.FieldLTE(FieldPolicyType, v))
+}
+
+// PolicyTypeContains applies the Contains predicate on the "policy_type" field.
+func PolicyTypeContains(v string) predicate.Chain {
+	return predicate.Chain(sql.FieldContains(FieldPolicyType, v))
+}
+
+// PolicyTypeHasPrefix applies the HasPrefix predicate on the "policy_type" field.
+func PolicyTypeHasPrefix(v string) predicate.Chain {
+	return predicate.Chain(sql.FieldHasPrefix(FieldPolicyType, v))
+}
+
+// PolicyTypeHasSuffix applies the HasSuffix predicate on the "policy_type" field.
+func PolicyTypeHasSuffix(v string) predicate.Chain {
+	return predicate.Chain(sql.FieldHasSuffix(FieldPolicyType, v))
+}
+
+// PolicyTypeEqualFold applies the EqualFold predicate on the "policy_type" field.
+func PolicyTypeEqualFold(v string) predicate.Chain {
+	return predicate.Chain(sql.FieldEqualFold(FieldPolicyType, v))
+}
+
+// PolicyTypeContainsFold applies the ContainsFold predicate on the "policy_type" field.
+func PolicyTypeContainsFold(v string) predicate.Chain {
+	return predicate.Chain(sql.FieldContainsFold(FieldPolicyType, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

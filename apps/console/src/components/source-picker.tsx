@@ -40,7 +40,7 @@ export function SourcePicker({ path, value, onChange }: { path: string; value: S
     return path.startsWith("/admin/chain-sources") ? (
       <div className="stack">
         <State empty="还没有订阅源" detail="先添加订阅源并拉取一次，再回来选组里的节点作出口。" />
-        <Link className="self-start text-[13px] text-[var(--weir-accent-text)] underline-offset-4 hover:underline" to="/subscriptions?tab=sources" target="_blank">在新标签页打开「订阅管理 → 订阅源」</Link>
+        <Link className="self-start text-[13px] text-[var(--weir-accent-text)] underline-offset-4 hover:underline" to="/subscriptions?tab=sources" target="_blank">在新标签页打开「订阅源」</Link>
       </div>
     ) : <State empty="没有分配给这个用户的订阅组" detail="管理员把订阅组分配给用户后，就能选组里的节点作出口。" />;
   }

@@ -92,10 +92,12 @@ func ruleCovers(rule string, port int, proto string) bool {
 }
 
 // reachResult 是中心从外部连接节点端口的结果；保存在 reach:node:<id>。
+// LatencyMS 是从中心所在位置建立 TCP 连接用的时间，只在节点状况里显示；代理页排序看节点自己统计的速率，不看它。
 type reachResult struct {
-	Status string    `json:"status"` // ok / failed / unknown
-	Why    string    `json:"why,omitempty"`
-	At     time.Time `json:"at"`
+	Status    string    `json:"status"` // ok / failed / unknown
+	Why       string    `json:"why,omitempty"`
+	LatencyMS int       `json:"latency_ms,omitempty"`
+	At        time.Time `json:"at"`
 }
 
 func reachKey(id int) string { return "reach:node:" + itoa(id) }
@@ -146,12 +148,13 @@ func (s *Server) checkReachability(ctx context.Context, id int) {
 	case !containsStr(nodeProtos(n.Protocol), "tcp"):
 		r.Why = "UDP 端口无法从外部确认，请在客户端实际连接"
 	default:
+		begin := time.Now()
 		conn, err := reachDial(ctx, net.JoinHostPort(g.PublicHost, strconv.Itoa(n.Port)))
 		if err != nil {
 			r.Status, r.Why = "failed", "中心连不上 "+net.JoinHostPort(g.PublicHost, strconv.Itoa(n.Port))+"：可能是防火墙或云厂商安全组没有放行"
 		} else {
 			conn.Close()
-			r.Status = "ok"
+			r.Status, r.LatencyMS = "ok", max(1, int(time.Since(begin).Milliseconds()))
 		}
 	}
 	b, _ := json.Marshal(r)

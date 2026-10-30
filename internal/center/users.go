@@ -85,7 +85,7 @@ func (s *Server) adminUserView(ctx context.Context, u *ent.User) gin.H {
 	v := userView(u)
 	v["node_ids"], v["usage_reset_at"], v["updated_at"] = u.NodeIds, u.UsageResetAt, u.UpdatedAt
 	v["links"], _ = s.Store.Ent.Link.Query().Where(link.UserIDEQ(u.ID)).Count(ctx)
-	v["chains"], _ = s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(u.ID)).Count(ctx)
+	v["chains"], _ = s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(u.ID), chain.PolicyTypeEQ("")).Count(ctx)
 	return v
 }
 
@@ -533,6 +533,11 @@ func (s *Server) linkViews(c *gin.Context, u *ent.User, withCreds bool) ([]gin.H
 			"id": l.ID, "name": l.Name, "token": l.Token, "url": s.siteOrigin(c) + "/sub/" + l.Token,
 			"all_nodes": l.AllNodes, "node_ids": l.NodeIds, "chain_ids": l.ChainIds, "enabled": l.Enabled,
 			"used": l.Used, "last_used_at": l.LastUsedAt, "created_at": l.CreatedAt,
+			"starts_at": l.StartsAt, "ends_at": l.EndsAt, "state": windowState(u, l, time.Now()),
+		}
+		// 实际结束时间：链接的结束与用户到期取早的那个（用户到期更早时页面要说明是套餐到期）
+		if _, end := linkWindow(u, l); end != nil {
+			v["effective_ends_at"] = end
 		}
 		entries, err := s.linkEntries(ctx, u, l)
 		if err != nil {
@@ -561,15 +566,47 @@ func (s *Server) listLinks(c *gin.Context, admin bool) {
 }
 
 type linkRequest struct {
-	Name     *string `json:"name"`
-	AllNodes *bool   `json:"all_nodes"`
-	NodeIDs  *[]int  `json:"node_ids"`
-	ChainIDs *[]int  `json:"chain_ids"`
-	Enabled  *bool   `json:"enabled"`
+	Name     *string         `json:"name"`
+	AllNodes *bool           `json:"all_nodes"`
+	NodeIDs  *[]int          `json:"node_ids"`
+	ChainIDs *[]int          `json:"chain_ids"`
+	Enabled  *bool           `json:"enabled"`
+	StartsAt json.RawMessage `json:"starts_at"`
+	EndsAt   json.RawMessage `json:"ends_at"`
 }
 
-// applyLink 只接受该用户自己可用的节点与自己的链式代理。
-func (s *Server) applyLink(ctx context.Context, u *ent.User, m *ent.LinkMutation, req linkRequest) error {
+// applyLink 只接受该用户自己可用的节点与自己的链式代理。cur 是修改前的链接（新建时为空），
+// 只改开始或结束其中一个时与另一个已保存的值一起校验。
+func (s *Server) applyLink(ctx context.Context, u *ent.User, cur *ent.Link, m *ent.LinkMutation, req linkRequest) error {
+	start, startSet, err := optionalTime(req.StartsAt)
+	if err != nil {
+		return err
+	}
+	end, endSet, err := optionalTime(req.EndsAt)
+	if err != nil {
+		return err
+	}
+	if startSet || endSet {
+		if cur != nil && !startSet {
+			start = cur.StartsAt
+		}
+		if cur != nil && !endSet {
+			end = cur.EndsAt
+		}
+		if err := checkLinkWindow(u, start, end); err != nil {
+			return err
+		}
+		if start != nil {
+			m.SetStartsAt(start.UTC())
+		} else {
+			m.ClearStartsAt()
+		}
+		if end != nil {
+			m.SetEndsAt(end.UTC())
+		} else {
+			m.ClearEndsAt()
+		}
+	}
 	if req.Name != nil {
 		name := strings.TrimSpace(*req.Name)
 		if len(name) > 100 {
@@ -596,7 +633,7 @@ func (s *Server) applyLink(ctx context.Context, u *ent.User, m *ent.LinkMutation
 	if req.ChainIDs != nil {
 		ids := dedupe(*req.ChainIDs)
 		if len(ids) > 0 {
-			n, err := s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(u.ID), chain.IDIn(ids...)).Count(ctx)
+			n, err := s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(u.ID), chain.IDIn(ids...), chain.PolicyTypeEQ("")).Count(ctx)
 			if err != nil || n != len(ids) {
 				return errors.New("chain_not_allowed")
 			}
@@ -625,7 +662,7 @@ func (s *Server) createLink(c *gin.Context, admin bool) {
 		return
 	}
 	create := s.Store.Ent.Link.Create().SetUserID(u.ID).SetToken(linkToken())
-	if err := s.applyLink(ctx, u, create.Mutation(), req); err != nil {
+	if err := s.applyLink(ctx, u, nil, create.Mutation(), req); err != nil {
 		failure(c, 400, err.Error())
 		return
 	}
@@ -672,7 +709,7 @@ func (s *Server) updateLink(c *gin.Context, admin bool) {
 	}
 	ctx := c.Request.Context()
 	upd := l.Update()
-	if err := s.applyLink(ctx, u, upd.Mutation(), req); err != nil {
+	if err := s.applyLink(ctx, u, l, upd.Mutation(), req); err != nil {
 		failure(c, 400, err.Error())
 		return
 	}
@@ -756,7 +793,7 @@ func (s *Server) rotateLink(c *gin.Context, admin bool) {
 // ---- 用户自建链式代理：生成一个新节点（入口节点 → 出口），只在入口计量一次 ----
 
 func (s *Server) chainViews(ctx context.Context, u *ent.User) ([]gin.H, error) {
-	items, err := s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(u.ID)).Order(ent.Asc(chain.FieldID)).All(ctx)
+	items, err := s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(u.ID), chain.PolicyTypeEQ("")).Order(ent.Asc(chain.FieldID)).All(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -926,7 +963,7 @@ func (s *Server) createChain(c *gin.Context, admin bool) {
 		return
 	}
 	ctx := c.Request.Context()
-	if n, _ := s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(u.ID)).Count(ctx); n >= maxChains {
+	if n, _ := s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(u.ID), chain.PolicyTypeEQ("")).Count(ctx); n >= maxChains {
 		failure(c, 409, "chain_limit")
 		return
 	}
@@ -1007,7 +1044,7 @@ func (s *Server) chainParam(c *gin.Context, u *ent.User) (*ent.Chain, bool) {
 		failure(c, 400, "invalid_id")
 		return nil, false
 	}
-	ch, err := s.Store.Ent.Chain.Query().Where(chain.IDEQ(id), chain.UserIDEQ(u.ID)).Only(c.Request.Context())
+	ch, err := s.Store.Ent.Chain.Query().Where(chain.IDEQ(id), chain.UserIDEQ(u.ID), chain.PolicyTypeEQ("")).Only(c.Request.Context())
 	if err != nil {
 		failure(c, 404, "chain_not_found")
 		return nil, false

@@ -153,6 +153,18 @@ func (f PasskeyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PasskeyMutation", m)
 }
 
+// The RateSampleFunc type is an adapter to allow the use of ordinary
+// function as RateSample mutator.
+type RateSampleFunc func(context.Context, *ent.RateSampleMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f RateSampleFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.RateSampleMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RateSampleMutation", m)
+}
+
 // The RecoveryCodeFunc type is an adapter to allow the use of ordinary
 // function as RecoveryCode mutator.
 type RecoveryCodeFunc func(context.Context, *ent.RecoveryCodeMutation) (ent.Value, error)
@@ -259,6 +271,18 @@ func (f SubProfileFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, 
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SubProfileMutation", m)
+}
+
+// The SubPullFunc type is an adapter to allow the use of ordinary
+// function as SubPull mutator.
+type SubPullFunc func(context.Context, *ent.SubPullMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SubPullFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SubPullMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SubPullMutation", m)
 }
 
 // The SubSourceFunc type is an adapter to allow the use of ordinary

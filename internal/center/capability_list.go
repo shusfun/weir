@@ -220,7 +220,7 @@ func loadRoute(ctx context.Context, s *Server, args map[string]any) (map[string]
 		"priority": float64(r.Priority), "enabled": r.Enabled}, nil
 }
 
-// —— 订阅管理 ——
+// —— 订阅源 ——
 
 func sourceParams(update bool) []Param {
 	ps := []Param{}
@@ -350,7 +350,14 @@ func loadLink(ctx context.Context, s *Server, args map[string]any) (map[string]a
 	if err != nil {
 		return nil, errors.New("链接不存在")
 	}
-	return map[string]any{"name": l.Name, "all_nodes": l.AllNodes, "node_ids": idList(l.NodeIds), "enabled": l.Enabled}, nil
+	v := map[string]any{"name": l.Name, "all_nodes": l.AllNodes, "node_ids": idList(l.NodeIds), "enabled": l.Enabled, "starts_at": nil, "ends_at": nil}
+	if l.StartsAt != nil {
+		v["starts_at"] = l.StartsAt.Format(time.RFC3339)
+	}
+	if l.EndsAt != nil {
+		v["ends_at"] = l.EndsAt.Format(time.RFC3339)
+	}
+	return v, nil
 }
 
 func h(f func(s *Server) gin.HandlerFunc) func(*Server) gin.HandlerFunc { return f }
@@ -485,10 +492,12 @@ var opDraftCaps = []Capability{
 	{Name: "user.reset_usage", Title: "清零用量", Purpose: "把用户的已用流量清零、从现在重新计算。不能撤回，只能是最后一步。",
 		Kind: "draft", Risk: "normal", Object: "user", Last: true, Params: []Param{{Key: "user_id", Label: "用户", Kind: "ref", Ref: "user", Required: true}},
 		op: &opSpec{kind: "action", method: "POST", handler: h(func(s *Server) gin.HandlerFunc { return s.resetUsageHandler }), path: keys("user_id", "uid"), pathKeys: []string{"user_id"}, self: "user_id"}},
-	{Name: "link.update", Title: "修改订阅链接", Purpose: "修改订阅链接的名称、包含的节点或是否启用；订阅地址不变。",
+	{Name: "link.update", Title: "修改订阅链接", Purpose: "修改订阅链接的名称、包含的节点、生效时间或是否启用；订阅地址不变。生效时间之外拉不到节点，VPS 也停用这条链接的凭据。",
 		Kind: "draft", Risk: "normal", Object: "link",
 		Params: []Param{{Key: "link_id", Label: "链接", Kind: "ref", Ref: "link", Required: true}, {Key: "name", Label: "名称", Kind: "string"},
-			{Key: "all_nodes", Label: "包含全部节点", Kind: "bool"}, {Key: "node_ids", Label: "包含的节点", Kind: "refs", Ref: "node"}, {Key: "enabled", Label: "启用", Kind: "bool"}},
+			{Key: "all_nodes", Label: "包含全部节点", Kind: "bool"}, {Key: "node_ids", Label: "包含的节点", Kind: "refs", Ref: "node"}, {Key: "enabled", Label: "启用", Kind: "bool"},
+			{Key: "starts_at", Label: "开始时间", Kind: "string", Hint: "RFC 3339 时间，如 2026-11-01T00:00:00+08:00；null 为不限"},
+			{Key: "ends_at", Label: "结束时间", Kind: "string", Hint: "RFC 3339 时间；null 为不限；不能晚于用户到期时间"}},
 		op: &opSpec{kind: "update", method: "PATCH", handler: func(s *Server) gin.HandlerFunc { return func(c *gin.Context) { s.updateLink(c, true) } }, path: linkPath, pathKeys: []string{"link_id"},
 			self: "link_id", load: loadLink}},
 	{Name: "link.delete", Title: "删除订阅链接", Purpose: "删除订阅链接：这个订阅地址与它在各节点上的凭据随即失效。不能撤回，只能是最后一步。",

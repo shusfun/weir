@@ -89,6 +89,16 @@ func LastUsedAt(v time.Time) predicate.Link {
 	return predicate.Link(sql.FieldEQ(FieldLastUsedAt, v))
 }
 
+// StartsAt applies equality check predicate on the "starts_at" field. It's identical to StartsAtEQ.
+func StartsAt(v time.Time) predicate.Link {
+	return predicate.Link(sql.FieldEQ(FieldStartsAt, v))
+}
+
+// EndsAt applies equality check predicate on the "ends_at" field. It's identical to EndsAtEQ.
+func EndsAt(v time.Time) predicate.Link {
+	return predicate.Link(sql.FieldEQ(FieldEndsAt, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.Link {
 	return predicate.Link(sql.FieldEQ(FieldCreatedAt, v))
@@ -392,6 +402,106 @@ func LastUsedAtIsNil() predicate.Link {
 // LastUsedAtNotNil applies the NotNil predicate on the "last_used_at" field.
 func LastUsedAtNotNil() predicate.Link {
 	return predicate.Link(sql.FieldNotNull(FieldLastUsedAt))
+}
+
+// StartsAtEQ applies the EQ predicate on the "starts_at" field.
+func StartsAtEQ(v time.Time) predicate.Link {
+	return predicate.Link(sql.FieldEQ(FieldStartsAt, v))
+}
+
+// StartsAtNEQ applies the NEQ predicate on the "starts_at" field.
+func StartsAtNEQ(v time.Time) predicate.Link {
+	return predicate.Link(sql.FieldNEQ(FieldStartsAt, v))
+}
+
+// StartsAtIn applies the In predicate on the "starts_at" field.
+func StartsAtIn(vs ...time.Time) predicate.Link {
+	return predicate.Link(sql.FieldIn(FieldStartsAt, vs...))
+}
+
+// StartsAtNotIn applies the NotIn predicate on the "starts_at" field.
+func StartsAtNotIn(vs ...time.Time) predicate.Link {
+	return predicate.Link(sql.FieldNotIn(FieldStartsAt, vs...))
+}
+
+// StartsAtGT applies the GT predicate on the "starts_at" field.
+func StartsAtGT(v time.Time) predicate.Link {
+	return predicate.Link(sql.FieldGT(FieldStartsAt, v))
+}
+
+// StartsAtGTE applies the GTE predicate on the "starts_at" field.
+func StartsAtGTE(v time.Time) predicate.Link {
+	return predicate.Link(sql.FieldGTE(FieldStartsAt, v))
+}
+
+// StartsAtLT applies the LT predicate on the "starts_at" field.
+func StartsAtLT(v time.Time) predicate.Link {
+	return predicate.Link(sql.FieldLT(FieldStartsAt, v))
+}
+
+// StartsAtLTE applies the LTE predicate on the "starts_at" field.
+func StartsAtLTE(v time.Time) predicate.Link {
+	return predicate.Link(sql.FieldLTE(FieldStartsAt, v))
+}
+
+// StartsAtIsNil applies the IsNil predicate on the "starts_at" field.
+func StartsAtIsNil() predicate.Link {
+	return predicate.Link(sql.FieldIsNull(FieldStartsAt))
+}
+
+// StartsAtNotNil applies the NotNil predicate on the "starts_at" field.
+func StartsAtNotNil() predicate.Link {
+	return predicate.Link(sql.FieldNotNull(FieldStartsAt))
+}
+
+// EndsAtEQ applies the EQ predicate on the "ends_at" field.
+func EndsAtEQ(v time.Time) predicate.Link {
+	return predicate.Link(sql.FieldEQ(FieldEndsAt, v))
+}
+
+// EndsAtNEQ applies the NEQ predicate on the "ends_at" field.
+func EndsAtNEQ(v time.Time) predicate.Link {
+	return predicate.Link(sql.FieldNEQ(FieldEndsAt, v))
+}
+
+// EndsAtIn applies the In predicate on the "ends_at" field.
+func EndsAtIn(vs ...time.Time) predicate.Link {
+	return predicate.Link(sql.FieldIn(FieldEndsAt, vs...))
+}
+
+// EndsAtNotIn applies the NotIn predicate on the "ends_at" field.
+func EndsAtNotIn(vs ...time.Time) predicate.Link {
+	return predicate.Link(sql.FieldNotIn(FieldEndsAt, vs...))
+}
+
+// EndsAtGT applies the GT predicate on the "ends_at" field.
+func EndsAtGT(v time.Time) predicate.Link {
+	return predicate.Link(sql.FieldGT(FieldEndsAt, v))
+}
+
+// EndsAtGTE applies the GTE predicate on the "ends_at" field.
+func EndsAtGTE(v time.Time) predicate.Link {
+	return predicate.Link(sql.FieldGTE(FieldEndsAt, v))
+}
+
+// EndsAtLT applies the LT predicate on the "ends_at" field.
+func EndsAtLT(v time.Time) predicate.Link {
+	return predicate.Link(sql.FieldLT(FieldEndsAt, v))
+}
+
+// EndsAtLTE applies the LTE predicate on the "ends_at" field.
+func EndsAtLTE(v time.Time) predicate.Link {
+	return predicate.Link(sql.FieldLTE(FieldEndsAt, v))
+}
+
+// EndsAtIsNil applies the IsNil predicate on the "ends_at" field.
+func EndsAtIsNil() predicate.Link {
+	return predicate.Link(sql.FieldIsNull(FieldEndsAt))
+}
+
+// EndsAtNotNil applies the NotNil predicate on the "ends_at" field.
+func EndsAtNotNil() predicate.Link {
+	return predicate.Link(sql.FieldNotNull(FieldEndsAt))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

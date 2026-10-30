@@ -35,6 +35,8 @@ const (
 	FieldMeterUp = "meter_up"
 	// FieldMeterDown holds the string denoting the meter_down field in the database.
 	FieldMeterDown = "meter_down"
+	// FieldMeterAt holds the string denoting the meter_at field in the database.
+	FieldMeterAt = "meter_at"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// Table holds the table name of the credential in the database.
@@ -55,6 +57,7 @@ var Columns = []string{
 	FieldMeterEpoch,
 	FieldMeterUp,
 	FieldMeterDown,
+	FieldMeterAt,
 	FieldCreatedAt,
 }
 
@@ -146,6 +149,11 @@ func ByMeterUp(opts ...sql.OrderTermOption) OrderOption {
 // ByMeterDown orders the results by the meter_down field.
 func ByMeterDown(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldMeterDown, opts...).ToFunc()
+}
+
+// ByMeterAt orders the results by the meter_at field.
+func ByMeterAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMeterAt, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

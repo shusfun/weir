@@ -36,6 +36,8 @@ type Tx struct {
 	Outbound *OutboundClient
 	// Passkey is the client for interacting with the Passkey builders.
 	Passkey *PasskeyClient
+	// RateSample is the client for interacting with the RateSample builders.
+	RateSample *RateSampleClient
 	// RecoveryCode is the client for interacting with the RecoveryCode builders.
 	RecoveryCode *RecoveryCodeClient
 	// Resource is the client for interacting with the Resource builders.
@@ -54,6 +56,8 @@ type Tx struct {
 	SubNode *SubNodeClient
 	// SubProfile is the client for interacting with the SubProfile builders.
 	SubProfile *SubProfileClient
+	// SubPull is the client for interacting with the SubPull builders.
+	SubPull *SubPullClient
 	// SubSource is the client for interacting with the SubSource builders.
 	SubSource *SubSourceClient
 	// User is the client for interacting with the User builders.
@@ -201,6 +205,7 @@ func (tx *Tx) init() {
 	tx.Node = NewNodeClient(tx.config)
 	tx.Outbound = NewOutboundClient(tx.config)
 	tx.Passkey = NewPasskeyClient(tx.config)
+	tx.RateSample = NewRateSampleClient(tx.config)
 	tx.RecoveryCode = NewRecoveryCodeClient(tx.config)
 	tx.Resource = NewResourceClient(tx.config)
 	tx.Route = NewRouteClient(tx.config)
@@ -210,6 +215,7 @@ func (tx *Tx) init() {
 	tx.SubGrant = NewSubGrantClient(tx.config)
 	tx.SubNode = NewSubNodeClient(tx.config)
 	tx.SubProfile = NewSubProfileClient(tx.config)
+	tx.SubPull = NewSubPullClient(tx.config)
 	tx.SubSource = NewSubSourceClient(tx.config)
 	tx.User = NewUserClient(tx.config)
 }

@@ -29,6 +29,8 @@ func (User) Fields() []ent.Field {
 		field.Bool("all_nodes").Default(false),
 		field.JSON("node_ids", []int{}).Optional(),
 		field.Bool("allow_chain").Default(true),
+		// proxy_policy：代理页的设置（按类型开关、分流规则、自动选择），结构见 contracts.ProxyPolicy；空表示默认。
+		field.JSON("proxy_policy", map[string]any{}).Optional(),
 		field.String("totp_secret").Sensitive().Default(""),
 		field.Int64("totp_step").Default(0),
 		field.Time("created_at").Default(time.Now).Immutable(),

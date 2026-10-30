@@ -143,7 +143,7 @@ export function UsersPage() {
               <WithheldNotice userId={detail.id} />
               <SectionHeader title="流量" description="最近 1 / 6 / 24 小时，按 VPS 上报的计数；缺失的时段显示为未知。" />
               <HistoryCharts path={`/admin/users/${detail.id}/history`} />
-              <LinkPanel base={`/admin/users/${detail.id}`} nodes={optionsFor(detail)} showCredentials inlineQr={created?.id === detail.id} />
+              <LinkPanel base={`/admin/users/${detail.id}`} nodes={optionsFor(detail)} planEnds={detail.expires_at} showCredentials inlineQr={created?.id === detail.id} />
               <ChainPanel base={`/admin/users/${detail.id}`} nodes={optionsFor(detail)} admin />
             </div>
           </SheetContent>

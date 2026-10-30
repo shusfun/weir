@@ -564,6 +564,16 @@ func AllowChainNEQ(v bool) predicate.User {
 	return predicate.User(sql.FieldNEQ(FieldAllowChain, v))
 }
 
+// ProxyPolicyIsNil applies the IsNil predicate on the "proxy_policy" field.
+func ProxyPolicyIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldProxyPolicy))
+}
+
+// ProxyPolicyNotNil applies the NotNil predicate on the "proxy_policy" field.
+func ProxyPolicyNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldProxyPolicy))
+}
+
 // TotpSecretEQ applies the EQ predicate on the "totp_secret" field.
 func TotpSecretEQ(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldTotpSecret, v))

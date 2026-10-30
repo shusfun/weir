@@ -26,6 +26,8 @@ func (Credential) Fields() []ent.Field {
 		field.String("meter_epoch").Default(""),
 		field.Int64("meter_up").Default(0),
 		field.Int64("meter_down").Default(0),
+		// meter_at：上一次收到这条凭据计数的时间，用来按两次上报的间隔算下载速率
+		field.Time("meter_at").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable(),
 	}
 }

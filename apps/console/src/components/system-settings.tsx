@@ -1,7 +1,7 @@
 // 系统设置卡片：安全策略、邮件服务、通知、WebDAV 备份、订阅备份导入导出、API 令牌。修改都需要重新输入密码。
 import { useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Button, Card, CardContent, CopyButton, Field, Form, FormGrid, Input, Notice, PasswordInput, SectionHeader, SwitchField, Textarea, useConfirm } from "@weir/ui";
+import { Button, Card, CardContent, CopyButton, Field, FilePicker, Form, FormGrid, Input, Notice, PasswordInput, SectionHeader, SwitchField, Textarea, useConfirm } from "@weir/ui";
 import { Download, Trash2 } from "lucide-react";
 import { api, reauthFields } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -226,6 +226,7 @@ async function exportBackup() {
 
 function ImportExport() {
   const [content, setContent] = useState("");
+  const [fileError, setFileError] = useState("");
   const [re, setRe] = useState(emptyReauth);
   const [stats, setStats] = useState<ImportStats | null>(null);
   const save = useReauthAction(() => api("/admin/backup/import", "POST", { content, ...re }) as Promise<ImportStats>, {
@@ -245,15 +246,10 @@ function ImportExport() {
       <Field label="导入备份" name="content" hint="粘贴备份文件内容，或在下方选择文件。" customError={content && !content.trim() ? "请输入备份内容" : ""}>
         <Textarea required rows={4} className="font-mono text-xs" value={content} onChange={(e) => setContent(e.target.value)} />
       </Field>
-      <Field label="选择备份文件">
-        <Input
-          type="file"
-          accept="application/json,.json"
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (file) setContent(await file.text());
-          }}
-        />
+      <Field label="选择备份文件" error={fileError}>
+        <FilePicker accept="application/json,.json" onError={setFileError} onFile={async (file) => { setFileError(""); setContent(await file.text()); }}>
+          选择备份文件（.json），或拖到这里
+        </FilePicker>
       </Field>
       <Reauth value={re} onChange={setRe} />
       <div className="actions">

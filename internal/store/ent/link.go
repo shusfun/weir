@@ -36,6 +36,10 @@ type Link struct {
 	Used int64 `json:"used,omitempty"`
 	// LastUsedAt holds the value of the "last_used_at" field.
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+	// StartsAt holds the value of the "starts_at" field.
+	StartsAt *time.Time `json:"starts_at,omitempty"`
+	// EndsAt holds the value of the "ends_at" field.
+	EndsAt *time.Time `json:"ends_at,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt    time.Time `json:"created_at,omitempty"`
 	selectValues sql.SelectValues
@@ -54,7 +58,7 @@ func (*Link) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullInt64)
 		case link.FieldName, link.FieldToken:
 			values[i] = new(sql.NullString)
-		case link.FieldLastUsedAt, link.FieldCreatedAt:
+		case link.FieldLastUsedAt, link.FieldStartsAt, link.FieldEndsAt, link.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -136,6 +140,20 @@ func (_m *Link) assignValues(columns []string, values []any) error {
 				_m.LastUsedAt = new(time.Time)
 				*_m.LastUsedAt = value.Time
 			}
+		case link.FieldStartsAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field starts_at", values[i])
+			} else if value.Valid {
+				_m.StartsAt = new(time.Time)
+				*_m.StartsAt = value.Time
+			}
+		case link.FieldEndsAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field ends_at", values[i])
+			} else if value.Valid {
+				_m.EndsAt = new(time.Time)
+				*_m.EndsAt = value.Time
+			}
 		case link.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field created_at", values[i])
@@ -204,6 +222,16 @@ func (_m *Link) String() string {
 	builder.WriteString(", ")
 	if v := _m.LastUsedAt; v != nil {
 		builder.WriteString("last_used_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.StartsAt; v != nil {
+		builder.WriteString("starts_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.EndsAt; v != nil {
+		builder.WriteString("ends_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteString(", ")

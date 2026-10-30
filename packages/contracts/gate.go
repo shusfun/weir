@@ -86,6 +86,7 @@ type Route struct {
 
 // Credential 是某个链接在某个节点上的独立凭据。StatsKey 用作内核里的用户标识。
 // Internal 为真时是系统内部凭据（如链式代理入口到出口那一跳），不计入用户额度。
+// StartsAt / ExpiresAt 是这条凭据的可用时段（链接的生效时间与用户到期取交集），Gate 本地按时启停。
 type Credential struct {
 	ID        int64      `json:"id"`
 	InboundID int64      `json:"inbound_id"`
@@ -93,8 +94,17 @@ type Credential struct {
 	UserKey   string     `json:"user_key"`
 	UUID      string     `json:"uuid,omitempty"`
 	Password  string     `json:"password,omitempty"`
+	StartsAt  *time.Time `json:"starts_at,omitempty"`
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 	Internal  bool       `json:"internal,omitempty"`
+}
+
+// InWindow 判断此刻是否在凭据的可用时段内。
+func (c Credential) InWindow(now time.Time) bool {
+	if c.StartsAt != nil && now.Before(*c.StartsAt) {
+		return false
+	}
+	return c.ExpiresAt == nil || now.Before(*c.ExpiresAt)
 }
 
 // GateBudget 是某用户在本 Gate 上累计可用的字节数；Unlimited 时不限。

@@ -42,6 +42,9 @@ type Outbound func(*sql.Selector)
 // Passkey is the predicate function for passkey builders.
 type Passkey func(*sql.Selector)
 
+// RateSample is the predicate function for ratesample builders.
+type RateSample func(*sql.Selector)
+
 // RecoveryCode is the predicate function for recoverycode builders.
 type RecoveryCode func(*sql.Selector)
 
@@ -68,6 +71,9 @@ type SubNode func(*sql.Selector)
 
 // SubProfile is the predicate function for subprofile builders.
 type SubProfile func(*sql.Selector)
+
+// SubPull is the predicate function for subpull builders.
+type SubPull func(*sql.Selector)
 
 // SubSource is the predicate function for subsource builders.
 type SubSource func(*sql.Selector)

@@ -28,6 +28,7 @@ import {
   DialogFooter,
   PasswordInput,
   useConfirm,
+  FilePicker,
 } from "@weir/ui";
 import { Plus } from "lucide-react";
 import { ClientIcon } from "./client-icon";
@@ -323,14 +324,9 @@ function ClientForm({ value, cancel, done }: { value: CatalogClient; cancel: () 
         </Field>
       </FormGrid>
       <Field label="上传客户端图标（可选）" error={iconError} hint="PNG / JPEG ≤ 200 KiB、边长 ≤ 512 像素；发布时由服务器重新编码。留空使用统一图标，整个目录上限 768 KiB。">
-        <Input
-          type="file"
-          accept="image/png,image/jpeg"
-          onChange={(e) => {
-            void uploadIcon(e.target.files?.[0]);
-            e.target.value = "";
-          }}
-        />
+        <FilePicker accept="image/png,image/jpeg" maxBytes={200 * 1024} onError={setIconError} onFile={(f) => void uploadIcon(f)}>
+          选择图标（PNG / JPEG），或拖到这里
+        </FilePicker>
       </Field>
       {c.icon_data && (
         <div className="actions">

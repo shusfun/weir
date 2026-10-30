@@ -2,6 +2,8 @@
 // 本地新增：lamp / readout / faceplate / segmented / tabs / overlay / page / toast / form / choice-field / collapsible / password-input / confirm / radio-group，基于 @base-ui/react 1.9。
 // 动效部件：check-mark（描绘对勾）/ skeleton / menu-toggle / drawer（底部抽屉）/ ripple / burst /
 // slider / flip-card / card-stack / carousel；动效令牌 --weir-bounce / --weir-decel / --weir-settle。
+// 点击处展开：press-origin 记下按压点，弹窗从那里展开、收回；chip（标签键）、split-button（分体按钮）、
+// file-picker（选择 / 拖入文件）按下有水波。
 // 样式入口：src/styles/tokens.css（令牌）、theme.css（Tailwind 映射与材质类）、instruments.css（仪表部件）、
 // controls.css（拟物控件）、motion.css（动效部件）。
 export * from "./button";
@@ -50,3 +52,7 @@ export * from "./slider";
 export * from "./flip-card";
 export * from "./card-stack";
 export * from "./carousel";
+export * from "./chip";
+export * from "./split-button";
+export * from "./file-picker";
+export * from "./press-origin";

@@ -19,12 +19,12 @@ import (
 	"github.com/shusfun/weir/internal/subgroup"
 )
 
-// 订阅管理：订阅源 + 手动节点 → 订阅组（处理链、规则模板）→ 分配给用户或分享。
+// 订阅源页：订阅源 + 手动节点 → 订阅组（处理链、规则模板）→ 分配给用户或分享。
 // 订阅组的节点来自外部机场，流量不经本项目的 Gate，因此不计入用户额度；到期与停用仍然生效。
 
 const subscriptionSettingKey = "subscription-settings"
 
-// SubscriptionSettings 是订阅管理的全局默认值（订阅组可逐项覆盖）。
+// SubscriptionSettings 是订阅源页的全局默认值（订阅组可逐项覆盖）。
 type SubscriptionSettings struct {
 	FlagEmoji        bool           `json:"flag_emoji"`
 	PrependManual    bool           `json:"prepend_manual"`
@@ -317,7 +317,7 @@ func (s *Server) saveSource(c *gin.Context) {
 			set(*v)
 		}
 	}
-	if create != nil && dryRun(c, dryResult{Preview: []string{"新建订阅源；保存后到「订阅管理 → 订阅源」点刷新拉取节点（或在草稿里加一步 source.refresh）"}}) ||
+	if create != nil && dryRun(c, dryResult{Preview: []string{"新建订阅源；保存后到「订阅源」页点刷新拉取节点（或在草稿里加一步 source.refresh）"}}) ||
 		create == nil && dryRun(c, dryResult{Preview: []string{"修改订阅源「" + old.Name + "」；改了地址时清掉旧的节点缓存与用量"}}) {
 		return
 	}

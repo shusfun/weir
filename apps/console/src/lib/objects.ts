@@ -56,6 +56,8 @@ export function objectHref(ref: ObjectRef): string {
     case "user":
       return `/users?user=${k}`;
     case "link":
+      // 订阅链接在「订阅管理」里：管理员按所属用户筛选后滚到这条
+      return ref.owner ? `/links?user=${ref.owner}&${focus}` : `/links?${focus}`;
     case "chain":
       return ref.owner ? `/users?user=${ref.owner}&${focus}` : `/users?${ref.type}=${k}`;
     case "driver":

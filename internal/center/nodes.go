@@ -146,6 +146,8 @@ func (s *Server) nodeView(ctx context.Context, n *ent.Node) gin.H {
 	} else {
 		view["reach"] = reachResult{Status: "unknown", Why: "还没有检查过"}
 	}
+	// 全部用户直连这个节点时的下载速率（近 24 小时第 90 百分位）；没有流量时 minutes 为 0，页面显示「未知」
+	view["rate"] = s.nodeRates(ctx, []int{n.ID})[n.ID]
 	if n.ChainPassword != "" {
 		if pw, err := s.reveal(n.ChainPassword); err == nil {
 			view["chain"].(gin.H)["password"] = pw

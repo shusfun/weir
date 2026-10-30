@@ -101,7 +101,9 @@ func (s *Server) syncUserLocked(ctx context.Context, uid int) ([]int, error) {
 		}
 		for _, ch := range chains {
 			entry, ok := nodes[ch.EntryNodeID]
-			if !ok || wgBlocked(entry.Protocol) || !(l.AllNodes || contains(l.ChainIds, ch.ID)) {
+			// 类型出口生成的链跟着它的入口节点走：链接包含这个入口，就包含经出口的那条
+			picked := contains(l.ChainIds, ch.ID) || ch.PolicyType != "" && contains(l.NodeIds, ch.EntryNodeID)
+			if !ok || wgBlocked(entry.Protocol) || !(l.AllNodes || picked) {
 				continue
 			}
 			desired[credKey(l.ID, ch.EntryNodeID, ch.ID)] = want{l.ID, ch.EntryNodeID, ch.ID, entry.Protocol}

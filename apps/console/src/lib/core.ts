@@ -43,6 +43,7 @@ export interface PortNeed {
 export interface Reach {
   status: "ok" | "failed" | "unknown";
   why?: string;
+  latency_ms?: number;
   at?: string;
 }
 
@@ -121,6 +122,8 @@ export interface NodeItem {
   chain: { kind: ExitKind; address?: string; port?: number; username?: string; password?: string; link?: string; node_id?: number | null; source?: SourceResolved; probe?: ExitProbe };
   ports?: PortNeed[];
   reach?: Reach;
+  // 全部用户直连这个节点时的下载速率
+  rate?: RateStat;
 }
 
 export interface Cert {
@@ -162,7 +165,91 @@ export interface LinkItem {
   used: number;
   nodes: number;
   last_used_at?: string;
+  // 生效时间（都可空）；effective_ends_at 是与用户到期取早者后的实际结束时间
+  starts_at?: string | null;
+  ends_at?: string | null;
+  effective_ends_at?: string | null;
+  state: LinkState;
   entries?: Entry[];
+}
+
+export type LinkState = "active" | "not_started" | "expired";
+
+// LinkStats 是「订阅管理」里一条链接的拉取统计（最近 30 天）。
+export interface LinkStats {
+  id: number;
+  name: string;
+  user_id: number;
+  user: string;
+  enabled: boolean;
+  state: LinkState;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  used: number;
+  pulls_24h: number;
+  pulls_30d: number;
+  refused_30d: number;
+  sources_30d: number;
+  clients: { name: string; count: number }[];
+  last_used_at?: string | null;
+  last_pull?: Pull;
+}
+
+export interface Pull {
+  at: string;
+  target: string;
+  client: string;
+  user_agent: string;
+  ip: string;
+  status: "ok" | "not_started" | "expired" | "failed";
+  place?: string;
+  org?: string;
+}
+
+// ---- 代理页 ----
+export type Health = "ok" | "down" | "unknown";
+
+// RateStat 是节点自己统计的下载速率：最近 24 小时有流量的分钟的第 90 百分位（字节/秒）。minutes 为 0 是没有数据（未知）；
+// from：self 是这个用户自己的，all 是全部用户的（他自己没有数据时补上）。
+export interface RateStat {
+  p90_bps: number;
+  minutes: number;
+  from: "self" | "all" | "";
+}
+
+export interface ProxyNode {
+  id: number;
+  name: string;
+  gate_id?: number;
+  gate_name?: string;
+  health: Health;
+  why?: string;
+  rate: RateStat;
+}
+
+export interface ProxyType {
+  key: string;
+  label: string;
+  enabled: boolean;
+  online: number;
+  nodes: ProxyNode[];
+  exit?: { kind: Exclude<ExitKind, "none">; address?: string; port?: number; username?: string; password?: string; link?: string; node_id?: number | null; source?: { source_id?: number; profile_id?: number; mode?: "node" | "filter"; match?: string } | null };
+  missing_exit?: string[] | null;
+}
+
+export interface ProxyPolicy {
+  disabled?: string[];
+  rules?: Record<string, string>;
+  auto: { mode: "latency" | "ranked"; top: number; refresh_minutes: number };
+}
+
+export interface ProxyView {
+  policy: ProxyPolicy;
+  types: ProxyType[];
+  categories: { key: string; label: string; hint?: string; default: string; target: string }[];
+  ranking: { node_id: number; name: string; type: string; health: Health; why?: string; rate: RateStat; rank: number; auto: boolean; exploring: boolean }[];
+  allow_chain: boolean;
+  min_refresh: number;
 }
 
 export interface ChainItem {

@@ -116,6 +116,34 @@ func (_c *LinkCreate) SetNillableLastUsedAt(v *time.Time) *LinkCreate {
 	return _c
 }
 
+// SetStartsAt sets the "starts_at" field.
+func (_c *LinkCreate) SetStartsAt(v time.Time) *LinkCreate {
+	_c.mutation.SetStartsAt(v)
+	return _c
+}
+
+// SetNillableStartsAt sets the "starts_at" field if the given value is not nil.
+func (_c *LinkCreate) SetNillableStartsAt(v *time.Time) *LinkCreate {
+	if v != nil {
+		_c.SetStartsAt(*v)
+	}
+	return _c
+}
+
+// SetEndsAt sets the "ends_at" field.
+func (_c *LinkCreate) SetEndsAt(v time.Time) *LinkCreate {
+	_c.mutation.SetEndsAt(v)
+	return _c
+}
+
+// SetNillableEndsAt sets the "ends_at" field if the given value is not nil.
+func (_c *LinkCreate) SetNillableEndsAt(v *time.Time) *LinkCreate {
+	if v != nil {
+		_c.SetEndsAt(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *LinkCreate) SetCreatedAt(v time.Time) *LinkCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -277,6 +305,14 @@ func (_c *LinkCreate) createSpec() (*Link, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.LastUsedAt(); ok {
 		_spec.SetField(link.FieldLastUsedAt, field.TypeTime, value)
 		_node.LastUsedAt = &value
+	}
+	if value, ok := _c.mutation.StartsAt(); ok {
+		_spec.SetField(link.FieldStartsAt, field.TypeTime, value)
+		_node.StartsAt = &value
+	}
+	if value, ok := _c.mutation.EndsAt(); ok {
+		_spec.SetField(link.FieldEndsAt, field.TypeTime, value)
+		_node.EndsAt = &value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(link.FieldCreatedAt, field.TypeTime, value)
@@ -469,6 +505,42 @@ func (u *LinkUpsert) UpdateLastUsedAt() *LinkUpsert {
 // ClearLastUsedAt clears the value of the "last_used_at" field.
 func (u *LinkUpsert) ClearLastUsedAt() *LinkUpsert {
 	u.SetNull(link.FieldLastUsedAt)
+	return u
+}
+
+// SetStartsAt sets the "starts_at" field.
+func (u *LinkUpsert) SetStartsAt(v time.Time) *LinkUpsert {
+	u.Set(link.FieldStartsAt, v)
+	return u
+}
+
+// UpdateStartsAt sets the "starts_at" field to the value that was provided on create.
+func (u *LinkUpsert) UpdateStartsAt() *LinkUpsert {
+	u.SetExcluded(link.FieldStartsAt)
+	return u
+}
+
+// ClearStartsAt clears the value of the "starts_at" field.
+func (u *LinkUpsert) ClearStartsAt() *LinkUpsert {
+	u.SetNull(link.FieldStartsAt)
+	return u
+}
+
+// SetEndsAt sets the "ends_at" field.
+func (u *LinkUpsert) SetEndsAt(v time.Time) *LinkUpsert {
+	u.Set(link.FieldEndsAt, v)
+	return u
+}
+
+// UpdateEndsAt sets the "ends_at" field to the value that was provided on create.
+func (u *LinkUpsert) UpdateEndsAt() *LinkUpsert {
+	u.SetExcluded(link.FieldEndsAt)
+	return u
+}
+
+// ClearEndsAt clears the value of the "ends_at" field.
+func (u *LinkUpsert) ClearEndsAt() *LinkUpsert {
+	u.SetNull(link.FieldEndsAt)
 	return u
 }
 
@@ -675,6 +747,48 @@ func (u *LinkUpsertOne) UpdateLastUsedAt() *LinkUpsertOne {
 func (u *LinkUpsertOne) ClearLastUsedAt() *LinkUpsertOne {
 	return u.Update(func(s *LinkUpsert) {
 		s.ClearLastUsedAt()
+	})
+}
+
+// SetStartsAt sets the "starts_at" field.
+func (u *LinkUpsertOne) SetStartsAt(v time.Time) *LinkUpsertOne {
+	return u.Update(func(s *LinkUpsert) {
+		s.SetStartsAt(v)
+	})
+}
+
+// UpdateStartsAt sets the "starts_at" field to the value that was provided on create.
+func (u *LinkUpsertOne) UpdateStartsAt() *LinkUpsertOne {
+	return u.Update(func(s *LinkUpsert) {
+		s.UpdateStartsAt()
+	})
+}
+
+// ClearStartsAt clears the value of the "starts_at" field.
+func (u *LinkUpsertOne) ClearStartsAt() *LinkUpsertOne {
+	return u.Update(func(s *LinkUpsert) {
+		s.ClearStartsAt()
+	})
+}
+
+// SetEndsAt sets the "ends_at" field.
+func (u *LinkUpsertOne) SetEndsAt(v time.Time) *LinkUpsertOne {
+	return u.Update(func(s *LinkUpsert) {
+		s.SetEndsAt(v)
+	})
+}
+
+// UpdateEndsAt sets the "ends_at" field to the value that was provided on create.
+func (u *LinkUpsertOne) UpdateEndsAt() *LinkUpsertOne {
+	return u.Update(func(s *LinkUpsert) {
+		s.UpdateEndsAt()
+	})
+}
+
+// ClearEndsAt clears the value of the "ends_at" field.
+func (u *LinkUpsertOne) ClearEndsAt() *LinkUpsertOne {
+	return u.Update(func(s *LinkUpsert) {
+		s.ClearEndsAt()
 	})
 }
 
@@ -1047,6 +1161,48 @@ func (u *LinkUpsertBulk) UpdateLastUsedAt() *LinkUpsertBulk {
 func (u *LinkUpsertBulk) ClearLastUsedAt() *LinkUpsertBulk {
 	return u.Update(func(s *LinkUpsert) {
 		s.ClearLastUsedAt()
+	})
+}
+
+// SetStartsAt sets the "starts_at" field.
+func (u *LinkUpsertBulk) SetStartsAt(v time.Time) *LinkUpsertBulk {
+	return u.Update(func(s *LinkUpsert) {
+		s.SetStartsAt(v)
+	})
+}
+
+// UpdateStartsAt sets the "starts_at" field to the value that was provided on create.
+func (u *LinkUpsertBulk) UpdateStartsAt() *LinkUpsertBulk {
+	return u.Update(func(s *LinkUpsert) {
+		s.UpdateStartsAt()
+	})
+}
+
+// ClearStartsAt clears the value of the "starts_at" field.
+func (u *LinkUpsertBulk) ClearStartsAt() *LinkUpsertBulk {
+	return u.Update(func(s *LinkUpsert) {
+		s.ClearStartsAt()
+	})
+}
+
+// SetEndsAt sets the "ends_at" field.
+func (u *LinkUpsertBulk) SetEndsAt(v time.Time) *LinkUpsertBulk {
+	return u.Update(func(s *LinkUpsert) {
+		s.SetEndsAt(v)
+	})
+}
+
+// UpdateEndsAt sets the "ends_at" field to the value that was provided on create.
+func (u *LinkUpsertBulk) UpdateEndsAt() *LinkUpsertBulk {
+	return u.Update(func(s *LinkUpsert) {
+		s.UpdateEndsAt()
+	})
+}
+
+// ClearEndsAt clears the value of the "ends_at" field.
+func (u *LinkUpsertBulk) ClearEndsAt() *LinkUpsertBulk {
+	return u.Update(func(s *LinkUpsert) {
+		s.ClearEndsAt()
 	})
 }
 

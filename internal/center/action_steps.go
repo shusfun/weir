@@ -281,14 +281,57 @@ func execUserDelete(ctx context.Context, s *Server, x *execCtx, st *DraftStep) (
 func planLinkCreate(ctx context.Context, s *Server, p *planCtx, st *DraftStep) error {
 	name, _ := s.refName(ctx, p, "user", st.Args["user_id"])
 	st.Title = "为 " + name + " 新建订阅链接"
-	st.Preview = []string{"生成一个新的订阅令牌；订阅地址确认后在用户详情里查看"}
+	st.Preview = []string{"生成一个新的订阅令牌；订阅地址确认后在「订阅管理」里查看"}
+	// 生效时间在提交草稿时就校验（与手动新建的规则相同），不等到确认时才报错
+	start, _, err := optionalTime(rawArg(st.Args["starts_at"]))
+	if err != nil {
+		return errors.New("开始时间格式无效，要 RFC 3339 时间")
+	}
+	end, _, err := optionalTime(rawArg(st.Args["ends_at"]))
+	if err != nil {
+		return errors.New("结束时间格式无效，要 RFC 3339 时间")
+	}
+	if uid, ok := st.Args["user_id"].(float64); ok {
+		if u, err := s.Store.Ent.User.Get(ctx, int(uid)); err == nil {
+			switch err := checkLinkWindow(u, start, end); {
+			case err == nil:
+			case err.Error() == "link_window_order":
+				return errors.New("结束时间要晚于开始时间")
+			default:
+				return errors.New("生效时间不能超过用户到期时间")
+			}
+		}
+	}
+	if start != nil || end != nil {
+		st.Preview = append(st.Preview, "生效时间："+windowPreview(start, end)+"；不在这段时间里拉不到节点，VPS 也停用这条链接的凭据")
+	}
 	return nil
+}
+
+// rawArg 把草稿参数换成 optionalTime 认的 JSON；没给时为空（不改）。
+func rawArg(v any) json.RawMessage {
+	if v == nil {
+		return nil
+	}
+	b, _ := json.Marshal(v)
+	return b
+}
+
+func windowPreview(start, end *time.Time) string {
+	from, to := "现在起", "不限结束"
+	if start != nil {
+		from = start.Local().Format("2006-01-02 15:04") + " 起"
+	}
+	if end != nil {
+		to = "到 " + end.Local().Format("2006-01-02 15:04")
+	}
+	return from + "，" + to
 }
 
 func execLinkCreate(ctx context.Context, s *Server, x *execCtx, st *DraftStep) (func(context.Context) error, error) {
 	uid := numberOf(x.resolve(st.Args["user_id"]))
 	body := map[string]any{}
-	for _, k := range []string{"name", "all_nodes"} {
+	for _, k := range []string{"name", "all_nodes", "starts_at", "ends_at"} {
 		if v, ok := st.Args[k]; ok {
 			body[k] = v
 		}

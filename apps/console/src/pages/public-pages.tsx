@@ -159,7 +159,7 @@ function PageForm({ value, close, saved }: { value: PageItem | "new"; close: () 
             <div className="actions">
               <Button type="button" size="sm" variant="outline" disabled={cards.length >= 24 || (profiles.data ?? []).length === 0} onClick={() => set({ cards: [...cards, { profile_id: (shared[0] ?? profiles.data?.[0])?.id ?? 0, target: "clash", title: "" }] })}><Plus />添加卡片</Button>
             </div>
-            {(profiles.data ?? []).length > 0 && shared.length === 0 && <small className="text-[var(--weir-ink-3)]">当前没有已分享的订阅组；先分享订阅组，卡片才会显示：<Link className="text-[var(--weir-accent-text)] underline-offset-4 hover:underline" to="/subscriptions?tab=profiles" target="_blank">在新标签页打开「订阅管理 → 订阅组」</Link>。</small>}
+            {(profiles.data ?? []).length > 0 && shared.length === 0 && <small className="text-[var(--weir-ink-3)]">当前没有已分享的订阅组；先分享订阅组，卡片才会显示：<Link className="text-[var(--weir-accent-text)] underline-offset-4 hover:underline" to="/subscriptions?tab=profiles" target="_blank">在新标签页打开「订阅源 → 订阅组」</Link>。</small>}
           </fieldset>
           <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
