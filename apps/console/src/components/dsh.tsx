@@ -30,6 +30,8 @@ interface DshInstalled {
 export interface DshView {
   settings: DshSettings;
   status: { state: "stopped" | "starting" | "running" | "failed"; version?: string; error?: string; started_at?: string; logs: string[] };
+  // waiting：还在「正在启动」的原因（如中心刚重启、在等 dsh 换上新的连接设置），不是错误
+  waiting?: string;
   installed: DshInstalled[];
   unsupported: string;
   ready: boolean;
@@ -438,6 +440,7 @@ function DshStartStep({ view }: { view: DshView }) {
         {st.error && <small className="min-w-0 flex-1 truncate text-[var(--weir-bad-ink)]" title={st.error}>{st.error}</small>}
         <Button className="ml-auto" size="sm" variant="outline" disabled={isBusy()} busy={isBusy()} busyText="正在重启…" onClick={() => void run("restart", () => api("/admin/dsh/restart", "POST"), "正在重启 dsh")}><RotateCcw />重启</Button>
       </div>
+      {view.waiting && !st.error && <small className="text-[var(--weir-ink-3)]">{view.waiting}</small>}
       <Collapsible title={`运行日志（最近 ${st.logs.length} 行，令牌已隐藏）`} defaultOpen={st.state === "failed"}>
         <CodeBlock className="block h-48 overflow-auto whitespace-pre text-xs">{st.logs.join("\n") || "（还没有日志）"}</CodeBlock>
       </Collapsible>

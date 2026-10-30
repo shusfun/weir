@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -55,10 +56,26 @@ type dshHost struct {
 	// pluginNote 是插件没有加载的原因（版本未验证等）；verified 为真表示当前 dsh 版本在插件的已验证范围内。
 	pluginNote string
 	verified   bool
+	// log 记录对账失败：同一原因只记一次，恢复时再记一次（泳道「中心 → dsh」）。
+	log taskLog
 	// endpoint / jobRunner 只在测试中替换：假 dsh 的地址与启动令牌、假的任务执行。
 	endpoint  func() (string, string, bool)
 	jobRunner func(context.Context, dsh.JobRequest) (dsh.JobResult, error)
 }
+
+// dshLog 返回对账失败的记录器（加锁，测试会直接调用对账）。
+type dshLogger struct{ s *Server }
+
+func (l dshLogger) note(task string, err error) {
+	l.s.dsh.mu.Lock()
+	defer l.s.dsh.mu.Unlock()
+	if l.s.dsh.log == nil {
+		l.s.dsh.log = taskLog{}
+	}
+	l.s.dsh.log.note(task, err)
+}
+
+func (s *Server) dshLogNote() dshLogger { return dshLogger{s} }
 
 // dshDir 是中心与 dsh 管理进程共用的托管目录；生产环境由安装脚本设置 WEIR_DSH_DIR（/var/lib/weir/dsh）。
 func (s *Server) dshDir() string {
@@ -189,6 +206,7 @@ func (s *Server) reconcileDSH(ctx context.Context) {
 	if domain != "" && set.Version != "" && s.dshInstaller().Has(set.Version) {
 		m, err := s.ensureMCP()
 		if err != nil {
+			s.dshLogNote().note("dsh-reconcile", fmt.Errorf("MCP 无法监听：%w", err))
 			return
 		}
 		url := "http://" + m.addr + "/mcp"
@@ -204,6 +222,7 @@ func (s *Server) reconcileDSH(ctx context.Context) {
 		s.dsh.mu.Unlock()
 	}
 	if err := s.prepareDSHDirs(); err != nil {
+		s.dshLogNote().note("dsh-reconcile", fmt.Errorf("准备 dsh 目录失败：%w", err))
 		return
 	}
 	if want.Version != "" {
@@ -221,8 +240,18 @@ func (s *Server) reconcileDSH(ctx context.Context) {
 	// 用时间作 Generation：中心重启后不会与上一次撞号（MCP 的端口与令牌每次启动都会换，dsh 必须跟着重启）。
 	want.Generation = time.Now().UnixNano()
 	if err := dsh.WriteShared(filepath.Join(s.dshLayout().Control(), "desired.json"), want); err != nil {
+		s.dshLogNote().note("dsh-reconcile", fmt.Errorf("写期望状态失败：%w", err))
 		return
 	}
+	s.dshLogNote().note("dsh-reconcile", nil)
+	why := "settings changed"
+	switch {
+	case force:
+		why = "manual restart"
+	case cur.Generation == 0:
+		why = "center started"
+	}
+	slog.Info("dsh desired state written", "generation", want.Generation, "version", want.Version, "why", why)
 	s.dsh.mu.Lock()
 	s.dsh.desired, s.dsh.force = want, false
 	s.dsh.mu.Unlock()
@@ -478,6 +507,9 @@ func (s *Server) dshStatus(c *gin.Context) {
 		}
 	case st.State == "running":
 		st.State = "starting" // 进程在跑，但还是上一份期望状态
+		if agent.Waiting == "" {
+			agent.Waiting = "dsh 正在按中心的新设置重启（中心升级或重启后会这样，通常不到一分钟）"
+		}
 	}
 	supported := ""
 	if err := dsh.Supported(); err != nil {
@@ -494,7 +526,11 @@ func (s *Server) dshStatus(c *gin.Context) {
 	verified := s.dsh.verified
 	s.dsh.mu.Unlock()
 	plugin := gin.H{"label": want.PluginLabel, "note": note, "loaded": agent.Plugin, "error": agent.PluginError, "verified": verified}
-	c.JSON(200, gin.H{"settings": set, "status": st, "installed": installed, "unsupported": supported, "ready": running && s.dshDomain() != "", "plugin": plugin})
+	waiting := ""
+	if !running {
+		waiting = agent.Waiting
+	}
+	c.JSON(200, gin.H{"settings": set, "status": st, "waiting": waiting, "installed": installed, "unsupported": supported, "ready": running && s.dshDomain() != "", "plugin": plugin})
 }
 
 // putDSHSettings 保存 dsh 的启用状态、地址与后台分析开关。启用 dsh 等于让 AI 接入面板的工具，

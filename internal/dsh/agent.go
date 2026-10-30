@@ -10,6 +10,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -55,6 +59,7 @@ type AgentStatus struct {
 	Heartbeat   time.Time `json:"heartbeat"`
 	Plugin      string    `json:"plugin,omitempty"`       // 实际加载的插件；为空表示只有基础预设
 	PluginError string    `json:"plugin_error,omitempty"` // 插件导致 dsh 启动失败时的原因（已去掉插件重启）
+	Waiting     string    `json:"waiting,omitempty"`      // 还没按最新的期望状态启动 dsh 的原因（如在等中心）
 }
 
 // JobRequest / JobResult 是交给管理进程的一次任务（目前只有 analysis：后台安全分析）。
@@ -157,6 +162,49 @@ type agent struct {
 	// plugin 是实际加载的插件；pluginErr 是插件没能加载的原因。
 	plugin    string
 	pluginErr string
+	// waitSince 是开始等中心的时刻：期望状态里的 MCP 地址连不上（中心重启后还没写新的期望状态）。
+	waitSince time.Time
+	waitWhy   string
+}
+
+// mcpWaitLimit 之后仍连不上中心的 MCP，把等待当作错误显示：中心正常运行时几秒内就会写新的期望状态。
+const mcpWaitLimit = 2 * time.Minute
+
+// mcpReachable 确认期望状态里的 MCP 地址能连上。中心每次启动都会换 MCP 的端口与令牌：
+// 管理进程与中心一起重启时，control/ 里还是上一次的期望状态，按它启动 dsh 只会连到已经不存在的地址，
+// 还要等最多 2 分钟的启动超时，之后中心写来新的期望状态又得再启动一次。
+func mcpReachable(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return fmt.Errorf("期望状态里的 MCP 地址无效：%q", raw)
+	}
+	c, err := net.DialTimeout("tcp", u.Host, time.Second)
+	if err != nil {
+		return err
+	}
+	_ = c.Close()
+	return nil
+}
+
+// ready 判断能否按这份期望状态启动 dsh；不能时记下原因（只在原因变化时写日志）。
+func (a *agent) ready(d Desired) bool {
+	err := mcpReachable(d.MCPURL)
+	if err == nil {
+		if !a.waitSince.IsZero() {
+			slog.Info("dsh: center MCP reachable, starting", "generation", d.Generation, "waited", time.Since(a.waitSince).Round(time.Second).String())
+		}
+		a.waitSince, a.waitWhy = time.Time{}, ""
+		return true
+	}
+	if a.waitSince.IsZero() {
+		a.waitSince = time.Now()
+		slog.Warn("dsh: waiting for center, MCP address in desired state unreachable", "generation", d.Generation, "mcp", d.MCPURL, "err", err)
+	}
+	a.waitWhy = "等中心写入新的连接设置（中心刚重启时会这样，通常几秒）"
+	if time.Since(a.waitSince) > mcpWaitLimit {
+		a.waitWhy = fmt.Sprintf("已等 %s 仍连不上中心的 MCP（%s）：%v。请确认 weir-center 在运行", time.Since(a.waitSince).Round(time.Second), d.MCPURL, err)
+	}
+	return false
 }
 
 func (a *agent) paths(version string) Paths {
@@ -179,14 +227,21 @@ func (a *agent) step(ctx context.Context) {
 	switch {
 	case d.Version == "":
 		if st.State == "running" || st.State == "starting" {
+			slog.Info("dsh: stopping, disabled by center", "generation", d.Generation)
 			a.runner.Stop()
 		}
+		a.waitSince, a.waitWhy = time.Time{}, ""
 		a.applied = d.Generation
 	case d.Generation != a.applied:
-		a.failures = 0
-		a.start(ctx, d)
+		// 连不上中心时先不动：正在运行的旧 dsh 保持原样，applied 不变，下一轮再看。
+		if a.ready(d) {
+			a.failures = 0
+			a.start(ctx, d)
+		}
 	case st.State != "running" && !time.Now().Before(a.nextTry):
-		a.start(ctx, d) // 进程退出或上次启动失败：退避后重试
+		if a.ready(d) {
+			a.start(ctx, d) // 进程退出或上次启动失败：退避后重试
+		}
 	}
 	a.writeStatus()
 	a.jobs(ctx)
@@ -196,6 +251,7 @@ func (a *agent) fail(msg string) {
 	a.err = msg
 	a.failures++
 	a.nextTry = time.Now().Add(time.Duration(min(a.failures, 20)) * 30 * time.Second)
+	slog.Warn("dsh: start failed", "generation", a.applied, "failures", a.failures, "retry_in", time.Until(a.nextTry).Round(time.Second).String(), "err", msg)
 }
 
 func (a *agent) start(ctx context.Context, d Desired) {
@@ -255,6 +311,7 @@ func (a *agent) start(ctx context.Context, d Desired) {
 	}
 	_ = os.WriteFile(marker, []byte(d.Version), 0o600)
 	a.err, a.failures = "", 0
+	slog.Info("dsh: running", "generation", d.Generation, "version", d.Version, "port", opts.Port, "plugin", a.plugin != "")
 }
 
 func (a *agent) writeStatus() {
@@ -262,6 +319,16 @@ func (a *agent) writeStatus() {
 	out := AgentStatus{Status: st, Generation: a.applied, Heartbeat: time.Now().UTC(), Plugin: a.plugin, PluginError: a.pluginErr}
 	if st.State != "running" && a.err != "" {
 		out.Error = a.err
+	}
+	// 在等中心：还没按新的期望状态启动。没有在跑的 dsh 时显示「正在启动」与等待原因，等太久才算错误。
+	if !a.waitSince.IsZero() {
+		out.Waiting = a.waitWhy
+		if st.State != "running" {
+			out.State = "starting"
+		}
+		if time.Since(a.waitSince) > mcpWaitLimit {
+			out.Error = a.waitWhy
+		}
 	}
 	if _, token, ok := a.runner.Endpoint(); ok {
 		o := a.runner.Options()
