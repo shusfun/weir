@@ -1,6 +1,7 @@
 package center
 
 import (
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -267,4 +268,86 @@ func (s *Server) mustGateName(t *testing.T, id int) string {
 		t.Fatal(err)
 	}
 	return g.Name
+}
+
+// 只读工具的引用参数：参数说明写明整数类型、不提 "$名字"；模型把编号传成字符串（"1"）也能用，
+// 传名称或 "$名字" 时报错说清该填什么；失败的工具调用带排查编号写进中心日志（泳道「Weir MCP」）。
+func TestReadToolRefsAcceptStringIDsAndExplainErrors(t *testing.T) {
+	s, admin, g := setupGate(t)
+	m, _ := s.ensureMCP()
+	h := s.mcpHandler(m)
+	var seen []map[string]any
+	stop := make(chan struct{})
+	defer func() {
+		close(stop)
+		s.enqueueAction(t.Context(), int(g.id), contracts.ActionDiagnostics, nil, time.Second)
+	}()
+	g.serveNodeTests(t, 0, &seen, stop)
+	gid := itoa(int(g.id))
+	n := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": g.id, "preset": "ss2022", "skip_probe": true}, 200)
+	u := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "ref@example.test"}, 200)
+
+	_, list := mcpCall(t, h, m.webToken, "tools/list", nil)
+	for _, tool := range list["tools"].([]any) {
+		tm := tool.(map[string]any)
+		for key, p := range tm["inputSchema"].(map[string]any)["properties"].(map[string]any) {
+			pm := p.(map[string]any)
+			desc, _ := pm["description"].(string)
+			if strings.HasSuffix(key, "_id") && tm["name"] != "submit_draft" && (pm["type"] != "integer" || strings.Contains(desc, "$")) {
+				t.Fatalf("%s.%s schema = %v", tm["name"], key, pm)
+			}
+		}
+	}
+
+	// dsh 线上实际传的就是字符串编号。
+	for _, c := range []struct {
+		tool string
+		args map[string]any
+	}{
+		{"get_gate", map[string]any{"gate_id": gid}},
+		{"check_port", map[string]any{"gate_id": gid, "reality": true}},
+		{"probe_reality", map[string]any{"gate_id": gid}},
+		{"list_outbounds", map[string]any{"gate_id": gid}},
+		{"list_routes", map[string]any{"gate_id": gid}},
+		{"get_kernel_diagnostics", map[string]any{"gate_id": gid, "kernel": "sing-box"}},
+		{"get_node_state", map[string]any{"node_id": itoa(int(n["id"].(float64)))}},
+		{"test_node", map[string]any{"node_id": itoa(int(n["id"].(float64)))}},
+		{"get_user", map[string]any{"user_id": itoa(int(u["id"].(float64)))}},
+	} {
+		if text, isErr := toolText(t, h, m.webToken, c.tool, c.args); isErr {
+			t.Fatalf("%s with string id = %s", c.tool, text)
+		}
+	}
+
+	var logs strings.Builder
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	defer slog.SetDefault(prev)
+	text, isErr := toolText(t, h, m.webToken, "check_port", map[string]any{"gate_id": "本机"})
+	if !isErr || !strings.Contains(text, "不能填名称") || !strings.Contains(text, "list_gates") || !strings.Contains(text, "排查编号") {
+		t.Fatalf("name instead of id = %q", text)
+	}
+	trace := text[strings.LastIndex(text, "排查编号 ")+len("排查编号 "):]
+	trace = strings.TrimSuffix(trace, "）")
+	if line := logs.String(); !strings.Contains(line, "mcp tool failed") || !strings.Contains(line, "trace="+trace) || !strings.Contains(line, "gate_id:string") {
+		t.Fatalf("mcp lane log = %s", line)
+	}
+	// 模型误填的机密被拒绝，日志里只有参数概况，没有值。
+	logs.Reset()
+	toolText(t, h, m.webToken, "submit_draft", map[string]any{"explain": "x", "steps": []any{map[string]any{"action": "source.create", "args": map[string]any{"url": "https://sub.example.com/?token=LEAKME"}}}})
+	if line := logs.String(); !strings.Contains(line, "steps:[source.create]") || strings.Contains(line, "LEAKME") {
+		t.Fatalf("secret in mcp lane log = %s", line)
+	}
+	if text, isErr := toolText(t, h, m.webToken, "get_gate", map[string]any{"gate_id": "$1"}); !isErr || !strings.Contains(text, "只能在 submit_draft") {
+		t.Fatalf("placeholder in read tool = %q", text)
+	}
+	// 草稿里字符串编号同样能用，执行时处理函数拿到的是数字。
+	if text, isErr := toolText(t, h, m.webToken, "submit_draft", map[string]any{"explain": "改名", "steps": []any{map[string]any{"action": "gate.update", "args": map[string]any{"gate_id": gid, "name": "HK-9"}}}}); isErr {
+		t.Fatal(text)
+	}
+	d := mustJSON(t, admin, "GET", "/api/v1/admin/ai/drafts", nil, 200)["drafts"].([]any)[0].(map[string]any)
+	mustJSON(t, admin, "POST", "/api/v1/admin/ai/drafts/"+d["id"].(string)+"/apply", nil, 200)
+	if s.mustGateName(t, int(g.id)) != "HK-9" {
+		t.Fatal("gate not renamed")
+	}
 }

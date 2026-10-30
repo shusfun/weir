@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strconv"
 	"strings"
@@ -104,7 +105,8 @@ func (s *Server) applyActionDraft(c *gin.Context, d *Draft) {
 		Code     string                    `json:"code"`
 	}
 	_ = c.ShouldBindJSON(&req)
-	ctx := c.Request.Context()
+	// 确认时的重新试运行与执行都带上这次请求的编号：处理函数的 5xx 与下面的失败记录用同一个编号。
+	ctx := withTrace(c.Request.Context(), c.GetString("request_id"))
 	before := d.Versions
 	// 先只读一遍引用对象的版本：数据已被改动就直接拒绝，不在旧数据上再跑一次实测。
 	quick := newPlanCtx(d.Source)
@@ -151,6 +153,7 @@ func (s *Server) applyActionDraft(c *gin.Context, d *Draft) {
 		}
 	}
 	if err := s.planDraft(ctx, d, true); err != nil {
+		slog.Warn("draft rejected at confirm", "trace", c.GetString("request_id"), "draft", d.ID, "err", redact(err.Error()))
 		failDetail(c, 422, "draft_invalid", err.Error(), nil)
 		return
 	}
@@ -186,6 +189,7 @@ func (s *Server) applyActionDraft(c *gin.Context, d *Draft) {
 			if len(failed) > 0 {
 				msg += "撤回时出错：" + strings.Join(failed, "；")
 			}
+			slog.Warn("draft failed", "trace", c.GetString("request_id"), "draft", d.ID, "step", i+1, "action", st.Action, "err", redact(msg))
 			failDetail(c, 422, "draft_failed", msg, nil)
 			return
 		}

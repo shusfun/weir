@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -129,6 +131,7 @@ func version(v any) string {
 
 // checkArgs 按参数说明校验：未知字段、必填、类型、范围、枚举、引用（已有对象的编号或前面步骤的 $名字）。
 func (s *Server) checkArgs(ctx context.Context, p *planCtx, params []Param, args map[string]any) error {
+	normalizeRefs(params, args)
 	known := map[string]Param{}
 	for _, pa := range params {
 		known[pa.Key] = pa
@@ -227,7 +230,10 @@ func (s *Server) refName(ctx context.Context, p *planCtx, kind string, v any) (s
 	}
 	f, ok := v.(float64)
 	if !ok || f != float64(int(f)) || f <= 0 {
-		return "", fmt.Errorf("必须是%s编号或 $名字", objectNames[kind])
+		if s, isStr := v.(string); isStr && strings.TrimSpace(s) != "" {
+			return "", fmt.Errorf("要填%s编号（数字，如 1），不能填名称 %q%s；草稿里引用前面新建的对象才用 \"$名字\"", objectNames[kind], s, listHint(kind))
+		}
+		return "", fmt.Errorf("要填%s编号（正整数，如 1）%s", objectNames[kind], listHint(kind))
 	}
 	id := int(f)
 	key := fmt.Sprintf("%s:%d", kind, id)
@@ -321,6 +327,45 @@ func (s *Server) refName(ctx context.Context, p *planCtx, kind string, v any) (s
 
 var objectNames = map[string]string{"user": "用户", "node": "节点", "gate": "VPS", "link": "链接", "event": "安全事件",
 	"outbound": "出口", "route": "分流规则", "source": "订阅源", "profile": "订阅组", "template": "规则模板", "manual": "手动节点", "cert": "证书"}
+
+// listTools 是查各类对象编号的只读工具，写进参数说明与报错里。
+var listTools = map[string]string{"user": "list_users", "node": "list_nodes", "gate": "list_gates", "link": "get_user", "event": "list_security_events",
+	"outbound": "list_outbounds", "route": "list_routes", "source": "list_sources", "profile": "list_profiles", "template": "list_templates",
+	"manual": "list_manual_nodes", "cert": "list_certs"}
+
+func listHint(kind string) string {
+	if t := listTools[kind]; t != "" {
+		return "，见 " + t
+	}
+	return ""
+}
+
+var digits = regexp.MustCompile(`^[1-9][0-9]{0,9}$`)
+
+// normalizeRefs 把引用参数里写成字符串的编号（"1"）换成数字：不同客户端对没写类型的参数编码不一样，
+// 草稿执行时处理函数要的也是数字。名称、"$名字" 原样保留，交给 refName 判断。
+func normalizeRefs(params []Param, args map[string]any) {
+	num := func(v any) any {
+		if s, ok := v.(string); ok && digits.MatchString(strings.TrimSpace(s)) {
+			n, _ := strconv.Atoi(strings.TrimSpace(s))
+			return float64(n)
+		}
+		return v
+	}
+	for _, pa := range params {
+		switch v, ok := args[pa.Key]; {
+		case !ok:
+		case pa.Kind == "ref":
+			args[pa.Key] = num(v)
+		case pa.Kind == "refs":
+			if list, ok := v.([]any); ok {
+				for i := range list {
+					list[i] = num(list[i])
+				}
+			}
+		}
+	}
+}
 
 // display 把参数值写成给人看的文本：单位、枚举显示名、引用名称；密码类只标已填 / 未填。
 func (s *Server) display(ctx context.Context, p *planCtx, pa Param, v any) string {
@@ -560,9 +605,18 @@ func containsStr(list []string, v string) bool {
 	return false
 }
 
+// intArg 取整数参数；写成字符串的编号（"3"）也认，不同客户端对编号的编码不一样。
 func intArg(args map[string]any, key string) int {
-	f, _ := args[key].(float64)
-	return int(f)
+	switch v := args[key].(type) {
+	case float64:
+		return int(v)
+	case string:
+		if digits.MatchString(strings.TrimSpace(v)) {
+			n, _ := strconv.Atoi(strings.TrimSpace(v))
+			return n
+		}
+	}
+	return 0
 }
 
 // marker: capabilities-append
