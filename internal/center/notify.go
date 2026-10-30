@@ -13,12 +13,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/shusfun/weir/internal/misub"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/setting"
 	"github.com/shusfun/weir/internal/store/ent/subsource"
 	"github.com/shusfun/weir/internal/store/ent/user"
+	"github.com/shusfun/weir/internal/subgroup"
 )
 
 // Telegram 通知与周期任务（订阅源定时刷新、WebDAV 自动备份）。通知只含名称与数值，不含任何凭据或订阅地址；
@@ -191,7 +191,7 @@ func (s *Server) CheckAlerts(ctx context.Context, now time.Time) error {
 	for _, u := range users {
 		name := firstNonEmpty(u.Name, u.Email)
 		if cfg.UserQuota > 0 && u.Quota > 0 && u.Used*100 >= u.Quota*int64(cfg.UserQuota) {
-			s.notifyOnce(ctx, fmt.Sprintf("quota:%d:%d", u.ID, u.UsageResetAt.Unix()), fmt.Sprintf("用户「%s」已用 %s / %s。", name, misub.FormatBytes(u.Used), misub.FormatBytes(u.Quota)))
+			s.notifyOnce(ctx, fmt.Sprintf("quota:%d:%d", u.ID, u.UsageResetAt.Unix()), fmt.Sprintf("用户「%s」已用 %s / %s。", name, subgroup.FormatBytes(u.Used), subgroup.FormatBytes(u.Quota)))
 		}
 		if cfg.UserExpiry > 0 && u.ExpiresAt != nil && u.ExpiresAt.After(now) && u.ExpiresAt.Sub(now) <= time.Duration(cfg.UserExpiry)*24*time.Hour {
 			s.notifyOnce(ctx, fmt.Sprintf("expiry:%d:%d", u.ID, u.ExpiresAt.Unix()), fmt.Sprintf("用户「%s」将于 %s 到期。", name, u.ExpiresAt.Local().Format("2006-01-02")))
@@ -227,11 +227,11 @@ func (s *Server) RefreshSources(ctx context.Context, now time.Time) error {
 	if err != nil || len(rows) == 0 {
 		return err
 	}
-	sources := make([]misub.Source, 0, len(rows))
+	sources := make([]subgroup.Source, 0, len(rows))
 	for _, r := range rows {
 		sources = append(sources, toSource(r))
 	}
-	_, results := misub.Combine(ctx, s.subFetcher(), kvCache{s}, sources, nil, misub.Options{UserAgent: "clash-meta/2.5.0"})
+	_, results := subgroup.Combine(ctx, s.subFetcher(), kvCache{s}, sources, nil, subgroup.Options{UserAgent: "clash-meta/2.5.0"})
 	s.recordResults(ctx, results)
 	s.invalidateGroups(ctx)
 	return nil

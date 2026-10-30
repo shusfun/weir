@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// MiSub 4952c16 node-cleaner.js parseFilterRuleText/buildRuleSet semantics:
+// JS 参考实现 4952c16 node-cleaner.js parseFilterRuleText/buildRuleSet semantics:
 // before --- excludes, after --- and keep: include; protocol/name rules OR.
 // RE2 and strict errors replace JS regex and silent invalid-regex skipping.
 type sourceRuleSet struct {

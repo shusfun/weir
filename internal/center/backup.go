@@ -18,16 +18,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/shusfun/weir/internal/misub"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/ruletemplate"
 	"github.com/shusfun/weir/internal/store/ent/setting"
 	"github.com/shusfun/weir/internal/store/ent/subnode"
 	"github.com/shusfun/weir/internal/store/ent/subprofile"
 	"github.com/shusfun/weir/internal/store/ent/subsource"
+	"github.com/shusfun/weir/internal/subgroup"
 )
 
-// 备份与导入：格式与 MiSub 的 misub-backup 一致（订阅、订阅组、规则模板），旧 MiSub 的备份可直接导入。
+// 订阅备份与导入：订阅源、手动节点、订阅组与规则模板（type weir-subscriptions）。
 // 导入只新增、不删除现有数据；不安全的订阅地址与无效节点会被跳过并计数。用户、VPS、节点等中心数据不在其中。
 
 func (s *Server) backupRoutes(admin *gin.RouterGroup) {
@@ -99,8 +99,8 @@ func idOf(v any) string {
 
 var iniShape = regexp.MustCompile(`(?i)\[(custom|proxy\s*group|rule|ruleset|proxy)\]`)
 
-// ImportMisub 在一个事务里导入 MiSub 备份。
-func (s *Server) ImportMisub(ctx context.Context, raw []byte) (ImportStats, error) {
+// ImportSubscriptions 在一个事务里导入订阅备份。
+func (s *Server) ImportSubscriptions(ctx context.Context, raw []byte) (ImportStats, error) {
 	var st ImportStats
 	var b backupFile
 	if err := json.Unmarshal(raw, &b); err != nil {
@@ -134,7 +134,7 @@ func (s *Server) ImportMisub(ctx context.Context, raw []byte) (ImportStats, erro
 		include, exclude := str(it, "filterInclude"), str(it, "filterExclude", "exclude")
 		switch {
 		case strings.HasPrefix(strings.ToLower(u), "http://") || strings.HasPrefix(strings.ToLower(u), "https://"):
-			if _, err := misub.CheckURL(u); err != nil && !(s.AllowPrivateSources && err.Error() == "source_url_private") {
+			if _, err := subgroup.CheckURL(u); err != nil && !(s.AllowPrivateSources && err.Error() == "source_url_private") {
 				st.Skipped = append(st.Skipped, fmt.Sprintf("%s：订阅地址不安全（%s）", firstNonEmpty(name, u), err.Error()))
 				continue
 			}
@@ -173,7 +173,7 @@ func (s *Server) ImportMisub(ctx context.Context, raw []byte) (ImportStats, erro
 		if !iniShape.MatchString(content) {
 			format = "yaml"
 		}
-		if content == "" || len(content) > 512<<10 || misub.CheckTemplate(format, content) != nil {
+		if content == "" || len(content) > 512<<10 || subgroup.CheckTemplate(format, content) != nil {
 			st.Skipped = append(st.Skipped, fmt.Sprintf("模板 %s：内容无效", name))
 			continue
 		}
@@ -218,9 +218,9 @@ func (s *Server) ImportMisub(ctx context.Context, raw []byte) (ImportStats, erro
 			}
 		}
 		if tpl := str(p, "transformConfig"); tpl != "" {
-			if t, ok := misub.BuiltinTemplate(tpl); ok && t.Text != "" {
+			if t, ok := subgroup.BuiltinTemplate(tpl); ok && t.Text != "" {
 				settings["template"] = "builtin:" + tpl
-			} else if u, err := misub.CheckURL(tpl); err == nil && u.Scheme == "https" {
+			} else if u, err := subgroup.CheckURL(tpl); err == nil && u.Scheme == "https" {
 				settings["template"] = "remote:" + tpl
 			}
 		}
@@ -257,9 +257,9 @@ func trimTo(v string, n int) string {
 	return string(r)
 }
 
-// ExportMisub 生成 MiSub 格式的备份（订阅源 s<ID>、手动节点 n<ID>），可再导入本项目或上游 MiSub。
-func (s *Server) ExportMisub(ctx context.Context) ([]byte, error) {
-	b := backupFile{Version: 1, App: "MiSub", Type: "misub-backup", ExportedAt: time.Now().UTC()}
+// ExportSubscriptions 生成订阅备份（订阅源 s<ID>、手动节点 n<ID>），可再导入。
+func (s *Server) ExportSubscriptions(ctx context.Context) ([]byte, error) {
+	b := backupFile{Version: 1, App: "Weir", Type: "weir-subscriptions", ExportedAt: time.Now().UTC()}
 	sources, err := s.Store.Ent.SubSource.Query().Order(ent.Asc(subsource.FieldPosition), ent.Asc(subsource.FieldID)).All(ctx)
 	if err != nil {
 		return nil, err
@@ -323,12 +323,12 @@ func (s *Server) ExportMisub(ctx context.Context) ([]byte, error) {
 }
 
 func (s *Server) exportBackup(c *gin.Context) {
-	data, err := s.ExportMisub(c.Request.Context())
+	data, err := s.ExportSubscriptions(c.Request.Context())
 	if err != nil {
 		failInternal(c, 503, "export_failed", err)
 		return
 	}
-	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="misub-backup-%s.json"`, time.Now().Format("20060102-150405")))
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="weir-subscriptions-%s.json"`, time.Now().Format("20060102-150405")))
 	c.Data(200, "application/json", data)
 }
 
@@ -346,7 +346,7 @@ func (s *Server) importBackup(c *gin.Context) {
 	if !s.reauth(c, req.Password, req.Code) {
 		return
 	}
-	stats, err := s.ImportMisub(c.Request.Context(), []byte(req.Content))
+	stats, err := s.ImportSubscriptions(c.Request.Context(), []byte(req.Content))
 	if err != nil {
 		failDetail(c, 400, "import_failed", err.Error(), nil)
 		return
@@ -471,7 +471,7 @@ type davMultistatus struct {
 	} `xml:"response"`
 }
 
-// WebdavFiles 列出备份目录里的 misub-backup-*.json，按名称（即时间）从新到旧。
+// WebdavFiles 列出备份目录里的 weir-subscriptions-*.json，按名称（即时间）从新到旧。
 func (s *Server) WebdavFiles(ctx context.Context, cfg WebdavConfig) ([]string, error) {
 	resp, err := s.webdavRequest(ctx, cfg, "PROPFIND", "", nil, map[string]string{"Depth": "1", "Content-Type": "application/xml"})
 	if err != nil {
@@ -488,7 +488,7 @@ func (s *Server) WebdavFiles(ctx context.Context, cfg WebdavConfig) ([]string, e
 	var out []string
 	for _, r := range ms.Responses {
 		name, _ := url.PathUnescape(path.Base(strings.TrimRight(r.Href, "/")))
-		if strings.HasPrefix(name, "misub-backup-") && strings.HasSuffix(name, ".json") {
+		if strings.HasPrefix(name, "weir-subscriptions-") && strings.HasSuffix(name, ".json") {
 			out = append(out, name)
 		}
 	}
@@ -502,9 +502,9 @@ func (s *Server) RunWebdavBackup(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	data, err := s.ExportMisub(ctx)
+	data, err := s.ExportSubscriptions(ctx)
 	if err == nil {
-		name := "misub-backup-" + time.Now().UTC().Format("20060102-150405") + ".json"
+		name := "weir-subscriptions-" + time.Now().UTC().Format("20060102-150405") + ".json"
 		var resp *http.Response
 		if resp, err = s.webdavRequest(ctx, cfg, "PUT", name, data, map[string]string{"Content-Type": "application/json"}); err == nil {
 			resp.Body.Close()
@@ -556,7 +556,7 @@ func (s *Server) listWebdav(c *gin.Context) {
 	c.JSON(200, gin.H{"files": files})
 }
 
-var backupName = regexp.MustCompile(`^misub-backup-[0-9A-Za-z_.-]{1,64}\.json$`)
+var backupName = regexp.MustCompile(`^weir-subscriptions-[0-9A-Za-z_.-]{1,64}\.json$`)
 
 func (s *Server) restoreWebdav(c *gin.Context) {
 	var req struct {
@@ -592,7 +592,7 @@ func (s *Server) restoreWebdav(c *gin.Context) {
 		failInternal(c, 502, "webdav_failed", err)
 		return
 	}
-	stats, err := s.ImportMisub(ctx, data)
+	stats, err := s.ImportSubscriptions(ctx, data)
 	if err != nil {
 		failDetail(c, 400, "import_failed", err.Error(), nil)
 		return

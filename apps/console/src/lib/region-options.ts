@@ -1,4 +1,4 @@
-// MiSub 4952c16 geo-utils.js (MIT); derived from services/subscriptions/regions.json.
+// JS 参考实现 4952c16 geo-utils.js (MIT); derived from services/subscriptions/regions.json.
 export const regionOptions: string[][] = [
   ["香港", "香港"],
   ["台湾", "台湾"],

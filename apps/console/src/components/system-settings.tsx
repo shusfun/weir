@@ -1,4 +1,4 @@
-// 系统设置卡片：安全策略、邮件服务、通知、WebDAV 备份、MiSub 备份导入导出、API 令牌。修改都需要重新输入密码。
+// 系统设置卡片：安全策略、邮件服务、通知、WebDAV 备份、订阅备份导入导出、API 令牌。修改都需要重新输入密码。
 import { useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button, Card, CardContent, CopyButton, Field, Form, FormGrid, Input, Notice, PasswordInput, SectionHeader, SwitchField, Textarea, useConfirm } from "@weir/ui";
@@ -196,7 +196,7 @@ interface ImportStats { sources: number; nodes: number; profiles: number; templa
 export function BackupCard() {
   const q = useQuery({ queryKey: ["webdav"], queryFn: () => api("/admin/backup/webdav") as Promise<WebdavView> });
   return (
-    <Section title="备份与迁移" description="格式与 MiSub 备份一致：订阅源、手动节点、订阅组与规则模板。导入只新增，不删除现有数据；用户与 VPS 不在备份里。">
+    <Section title="备份与迁移" description="订阅源、手动节点、订阅组与规则模板。导入只新增，不删除现有数据；用户与 VPS 不在备份里。">
       <ImportExport />
       {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : <WebdavForm key={q.dataUpdatedAt} value={q.data} saved={() => q.refetch()} />}
     </Section>
@@ -220,7 +220,7 @@ function StatsNotice({ s }: { s: ImportStats }) {
 async function exportBackup() {
   const res = await fetch("/api/v1/admin/backup/export", { credentials: "same-origin" });
   if (!res.ok) throw new Error("导出失败，请重试。");
-  const name = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? "misub-backup.json";
+  const name = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? "weir-subscriptions.json";
   saveBlob(await res.blob(), name);
 }
 
@@ -242,7 +242,7 @@ function ImportExport() {
           导出备份
         </Button>
       </div>
-      <Field label="导入 MiSub 备份" name="content" hint="粘贴备份文件内容，或在下方选择文件。" customError={content && !content.trim() ? "请输入备份内容" : ""}>
+      <Field label="导入备份" name="content" hint="粘贴备份文件内容，或在下方选择文件。" customError={content && !content.trim() ? "请输入备份内容" : ""}>
         <Textarea required rows={4} className="font-mono text-xs" value={content} onChange={(e) => setContent(e.target.value)} />
       </Field>
       <Field label="选择备份文件">

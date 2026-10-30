@@ -8,7 +8,7 @@ import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
 import { State } from "../components/feedback";
 import { GuestbookManager } from "../components/guestbook";
-import type { Profile } from "../lib/misub";
+import type { Profile } from "../lib/subscriptions";
 import { dataObject } from "../components/object-link";
 import { field, useConsoleContext } from "../lib/console-context";
 
@@ -100,7 +100,7 @@ const flags = [
 
 function PageForm({ value, close, saved }: { value: PageItem | "new"; close: () => void; saved: () => void }) {
   const p = value === "new" ? undefined : value;
-  const profiles = useQuery({ queryKey: ["misub-profiles"], queryFn: async () => (await api("/admin/misub/profiles")).items as Profile[] });
+  const profiles = useQuery({ queryKey: ["subscription-profiles"], queryFn: async () => (await api("/admin/subscriptions/profiles")).items as Profile[] });
   const [slug, setSlug] = useState(p?.slug ?? "");
   const [d, setD] = useState<PageData>({ ...blank, ...p?.data, cards: p?.data.cards ?? [] });
   const set = (patch: Partial<PageData>) => setD({ ...d, ...patch });

@@ -1,5 +1,5 @@
 // Package jscompat 提供与 JavaScript 语义一致的值模型与内建函数实现，
-// 供 MiSub 订阅引擎逐文件移植时保持与上游行为一致。
+// 供原 JS 订阅引擎逐文件移植时保持与原版行为一致。
 //
 // 约定：Go 的 nil 表示 JS 的 undefined，Null 表示 JS 的 null；
 // 数字统一使用 float64；对象使用保持插入顺序的 *Object，数组使用 *Array（引用语义）。

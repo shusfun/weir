@@ -245,7 +245,7 @@ func (s *Server) linkByToken(ctx context.Context, token string) (*ent.Link, *ent
 
 // disguised：订阅地址打开了伪装页开关。
 func (s *Server) disguised(ctx context.Context) bool {
-	g, err := s.misubSettings(ctx)
+	g, err := s.subscriptionSettings(ctx)
 	return err == nil && g.Disguise
 }
 

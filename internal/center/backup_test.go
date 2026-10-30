@@ -13,7 +13,7 @@ import (
 )
 
 const upstreamBackup = `{
-  "version": 1, "app": "MiSub", "type": "misub-backup", "exportedAt": "2026-10-01T00:00:00Z",
+  "version": 1, "app": "Weir", "type": "weir-subscriptions", "exportedAt": "2026-10-01T00:00:00Z",
   "data": {
     "subscriptions": [
       {"id": "a1", "name": "机场A", "url": "https://sub.example.com/link?token=x", "enabled": true, "customUserAgent": "clash-meta/2.5.0", "exclude": "过期", "enableNodeCache": true, "website": "https://example.com", "notes": "月付"},
@@ -28,7 +28,7 @@ const upstreamBackup = `{
   }
 }`
 
-func TestMisubBackupImportExportAndWebdav(t *testing.T) {
+func TestSubscriptionBackupImportExportAndWebdav(t *testing.T) {
 	s, admin := newInstalledServer(t)
 	mustJSON(t, admin, "POST", "/api/v1/admin/backup/import", map[string]any{"content": upstreamBackup, "password": "wrong"}, 401)
 	st := mustJSON(t, admin, "POST", "/api/v1/admin/backup/import", map[string]any{"content": upstreamBackup, "password": "Passw0rd"}, 200)
@@ -48,7 +48,7 @@ func TestMisubBackupImportExportAndWebdav(t *testing.T) {
 
 	// 导出后再导入：数量翻倍（导入只新增），订阅组引用指向新建的源与节点。
 	w := admin.do("GET", "/api/v1/admin/backup/export", nil, nil)
-	if w.Code != 200 || !strings.Contains(w.Header().Get("Content-Disposition"), "misub-backup-") {
+	if w.Code != 200 || !strings.Contains(w.Header().Get("Content-Disposition"), "weir-subscriptions-") {
 		t.Fatalf("export = %d", w.Code)
 	}
 	again := mustJSON(t, admin, "POST", "/api/v1/admin/backup/import", map[string]any{"content": w.Body.String(), "password": "Passw0rd"}, 200)
@@ -106,7 +106,7 @@ func TestMisubBackupImportExportAndWebdav(t *testing.T) {
 	}
 	mustJSON(t, admin, "POST", "/api/v1/admin/backup/webdav/run", nil, 200)
 	mu.Lock()
-	files["misub-backup-00000000-000000.json"] = []byte(upstreamBackup) // 更旧的一份
+	files["weir-subscriptions-00000000-000000.json"] = []byte(upstreamBackup) // 更旧的一份
 	mu.Unlock()
 	mustJSON(t, admin, "POST", "/api/v1/admin/backup/webdav/run", nil, 200)
 	list := mustJSON(t, admin, "GET", "/api/v1/admin/backup/webdav/files", nil, 200)["files"].([]any)

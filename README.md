@@ -1,6 +1,6 @@
 # Weir
 
-个人使用的代理管理面板，合并 [MiGate](https://github.com/imzyb/MiGate)（Gate 设备、Xray / sing-box 内核管理）与 [MiSub](https://github.com/imzyb/MiSub)（订阅管理）。中心管理用户、节点和订阅；Gate 在 VPS 上运行内核，代理流量直达 Gate，不经过中心。业务基线见 `docs/design.html`，阶段与进度见 `docs/implementation.html`。
+个人使用的代理管理面板，合并 [MiGate](https://github.com/imzyb/MiGate)（Gate 设备、Xray / sing-box 内核管理）与原来的订阅管理（JS 版，已逐文件迁移到 Go）。中心管理用户、节点和订阅；Gate 在 VPS 上运行内核，代理流量直达 Gate，不经过中心。业务基线见 `docs/design.html`，阶段与进度见 `docs/implementation.html`。
 
 只发布一个程序 `weir`，按安装角色运行：
 

@@ -23,7 +23,7 @@ func TestNamePlusUpstreamComparison(t *testing.T) {
 	} {
 		for _, enabled := range []bool{false, true} {
 			input, _ := json.Marshal(map[string]any{"link": link, "enabled": enabled})
-			cmd := exec.Command("node", filepath.Join("..", "..", "third_party", "misub", "reference", "compare-name-plus.mjs"))
+			cmd := exec.Command("node", filepath.Join("..", "..", "third_party", "subscription-reference", "reference", "compare-name-plus.mjs"))
 			cmd.Stdin = bytes.NewReader(input)
 			raw, err := cmd.Output()
 			if err != nil {

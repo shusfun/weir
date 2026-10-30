@@ -19,9 +19,9 @@ func TestDisguiseHidesBrowserPageButNotClients(t *testing.T) {
 	}
 	mustJSON(t, admin, "GET", "/api/v1/sub-info/"+token, nil, 200)
 
-	set := mustJSON(t, admin, "GET", "/api/v1/admin/misub/settings", nil, 200)
+	set := mustJSON(t, admin, "GET", "/api/v1/admin/subscriptions/settings", nil, 200)
 	set["disguise"] = true
-	mustJSON(t, admin, "PUT", "/api/v1/admin/misub/settings", set, 200)
+	mustJSON(t, admin, "PUT", "/api/v1/admin/subscriptions/settings", set, 200)
 
 	// 打开后：浏览器只看到伪装页，不出现 Weir 与用量；信息接口与不存在的订阅一样 404。
 	w := admin.do("GET", "/sub/"+token, nil, browser)

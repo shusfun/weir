@@ -8,7 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Field mapping follows MiSub 4952c16 render-egern.js (MIT). No unknown
+// Field mapping follows JS 参考实现 4952c16 render-egern.js (MIT). No unknown
 // protocol fallback: emitting an unauthenticated proxy would lose credentials.
 func egernOutput(links []string) ([]byte, error) {
 	parsed, err := subscription.ParseLinks(links)

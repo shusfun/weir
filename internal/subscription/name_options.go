@@ -2,7 +2,7 @@ package subscription
 
 import "strings"
 
-// DecodeInventoryWithNameOptions follows MiSub 4952c16 node-cleaner.js's
+// DecodeInventoryWithNameOptions follows JS 参考实现 4952c16 node-cleaner.js's
 // opt-in plusAsSpace fragment policy. Only literal '+' in a URI name changes:
 // credentials, queries, VMess JSON names and encoded %2B remain untouched.
 // Unlike upstream, repeated percent decoding is deliberately not performed.

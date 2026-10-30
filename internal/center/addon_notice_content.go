@@ -1,6 +1,6 @@
 package center
 
-// Restrict the fixed MiSub announcement markup to a data tree. No raw HTML is
+// Restrict the original announcement markup to a data tree. No raw HTML is
 // sent to an HTML sink; React creates only these explicit elements/attributes.
 import (
 	"errors"

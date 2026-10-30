@@ -14,7 +14,7 @@ func GenerateBuiltinEgernConfig(nodeList string, options *js.Object) (string, er
 	if options == nil {
 		options = js.NewObject()
 	}
-	tpl := GetBuiltinTemplate("clash_misub_minimal")
+	tpl := GetBuiltinTemplate("clash_weir_minimal")
 	if tpl == nil {
 		tpl = GetBuiltinTemplate("clash_acl4ssr_lite")
 	}
@@ -23,7 +23,7 @@ func GenerateBuiltinEgernConfig(nodeList string, options *js.Object) (string, er
 	}
 	return RenderEgernFromIniTemplate(tpl.Content, js.Obj(
 		"nodeList", nodeList,
-		"fileName", js.Or(options.Get("fileName"), "MiSub"),
+		"fileName", js.Or(options.Get("fileName"), "Weir"),
 		"targetFormat", "egern",
 		"ruleLevel", js.Or(options.Get("ruleLevel"), "std"),
 		"interval", js.Or(options.Get("interval"), 86400.0),

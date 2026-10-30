@@ -1,10 +1,10 @@
-// 订阅管理（MiSub）：订阅源 → 手动节点 → 订阅组 → 规则模板 → 默认设置。
+// 订阅管理：订阅源 → 手动节点 → 订阅组 → 规则模板 → 默认设置。
 import { Card, CardContent, PageHeader, Tabs, TabsList, TabsPanel, TabsTab } from "@weir/ui";
 import { useSearchParams } from "react-router-dom";
-import { SourcesPanel } from "../components/misub-sources";
-import { NodesPanel } from "../components/misub-nodes";
-import { ProfilesPanel } from "../components/misub-profiles";
-import { SettingsPanel, TemplatesPanel } from "../components/misub-settings";
+import { SourcesPanel } from "../components/subscription-sources";
+import { NodesPanel } from "../components/subscription-nodes";
+import { ProfilesPanel } from "../components/subscription-profiles";
+import { SettingsPanel, TemplatesPanel } from "../components/subscription-settings";
 import { field, useConsoleContext } from "../lib/console-context";
 
 const tabs = [["sources", "订阅源"], ["nodes", "手动节点"], ["profiles", "订阅组"], ["templates", "规则模板"], ["settings", "默认设置"]] as const;

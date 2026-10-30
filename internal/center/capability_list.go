@@ -10,7 +10,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/shusfun/weir/internal/misub"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/audit"
 	"github.com/shusfun/weir/internal/store/ent/certificate"
@@ -22,6 +21,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/subnode"
 	"github.com/shusfun/weir/internal/store/ent/subprofile"
 	"github.com/shusfun/weir/internal/store/ent/subsource"
+	"github.com/shusfun/weir/internal/subgroup"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -401,7 +401,7 @@ var opDraftCaps = []Capability{
 		Kind: "draft", Risk: "danger", Object: "route", Last: true, Params: []Param{{Key: "route_id", Label: "分流规则", Kind: "ref", Ref: "route", Required: true}},
 		op: &opSpec{kind: "delete", method: "DELETE", handler: h(func(s *Server) gin.HandlerFunc { return s.deleteRoute }), path: routePath, pathKeys: []string{"route_id"}, self: "route_id"}},
 
-	{Name: "source.create", Title: "新建订阅源", Purpose: "新建订阅源（MiSub 的上游订阅）。订阅地址带令牌，草稿里留空，由管理员在确认窗里粘贴；保存后可以加一步 source.refresh 拉取节点。",
+	{Name: "source.create", Title: "新建订阅源", Purpose: "新建订阅源（机场等上游订阅）。订阅地址带令牌，草稿里留空，由管理员在确认窗里粘贴；保存后可以加一步 source.refresh 拉取节点。",
 		Kind: "draft", Risk: "normal", Object: "source", Creates: true, Params: sourceParams(false),
 		op: &opSpec{kind: "create", method: "POST", handler: h(func(s *Server) gin.HandlerFunc { return s.saveSource }), path: noPath, undo: "source.delete", idKey: "source_id"}},
 	{Name: "source.update", Title: "修改订阅源", Purpose: "修改订阅源；没给的字段保持原样（订阅地址不给就不改）。",
@@ -496,7 +496,7 @@ var opDraftCaps = []Capability{
 		op: &opSpec{kind: "delete", method: "DELETE", handler: func(s *Server) gin.HandlerFunc { return func(c *gin.Context) { s.deleteLink(c, true) } }, path: linkPath, pathKeys: []string{"link_id"}, self: "link_id"}},
 }
 
-func misubBuiltinTemplates() any { return misub.BuiltinTemplates() }
+func subgroupBuiltinTemplates() any { return subgroup.BuiltinTemplates() }
 
 func listOf[T any](items []T, view func(T) any) []any {
 	out := make([]any, 0, len(items))
@@ -629,7 +629,7 @@ var opReadCaps = []Capability{
 			custom := listOf(items, func(v *ent.RuleTemplate) any {
 				return map[string]any{"id": v.ID, "ref": "custom:" + itoa(v.ID), "name": v.Name, "format": v.Format, "content": v.Content, "updated_at": v.UpdatedAt}
 			})
-			return map[string]any{"builtin": toModel(misubBuiltinTemplates()), "custom": custom}, err
+			return map[string]any{"builtin": toModel(subgroupBuiltinTemplates()), "custom": custom}, err
 		}},
 	{Name: "list_certs", Title: "证书", Purpose: "列出证书：编号、名称、域名、来源（上传 / 自签 / 中心签发 / 1Panel）、所属 VPS、到期时间与状态、续签错误。不含私钥。", Kind: "read",
 		read: func(ctx context.Context, s *Server, _ map[string]any) (any, error) {

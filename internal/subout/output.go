@@ -1,5 +1,5 @@
 // Package subout 把分享链接列表渲染成各客户端的订阅格式（Clash / mihomo、sing-box、Surge / Loon / QuanX、Egern、Base64）。
-// 输入只有链接文本：中心生成的自有节点与 MiSub 引擎处理后的外部节点走同一条输出路径。
+// 输入只有链接文本：中心生成的自有节点与订阅引擎处理后的外部节点走同一条输出路径。
 package subout
 
 import (

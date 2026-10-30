@@ -64,7 +64,7 @@ func TestSourceFiltersUpstreamComparison(t *testing.T) {
 				include, exclude = rule, ""
 			}
 			body, _ := json.Marshal(map[string]any{"links": sourceFilterLinks, "include": include, "exclude": exclude})
-			cmd := exec.Command("node", filepath.Join("..", "..", "third_party", "misub", "reference", "compare-source-filters.mjs"))
+			cmd := exec.Command("node", filepath.Join("..", "..", "third_party", "subscription-reference", "reference", "compare-source-filters.mjs"))
 			cmd.Stdin = bytes.NewReader(body)
 			out, err := cmd.Output()
 			if err != nil {

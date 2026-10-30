@@ -1,6 +1,6 @@
 package center
 
-// Adapted interaction from MiSub 4952c16 github-proxy-handler.js (MIT).
+// Adapted interaction from JS 参考实现 4952c16 github-proxy-handler.js (MIT).
 // Only catalog-owned repository metadata is fetched; never client URLs or tokens.
 import (
 	"context"

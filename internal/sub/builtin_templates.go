@@ -24,16 +24,16 @@ func (t *BuiltinTemplate) Value() *js.Object {
 
 // BuiltinTemplateIDs 保持上游注册表顺序。
 var BuiltinTemplateIDs = []string{
-	"clash_misub_minimal", "clash_acl4ssr_lite", "clash_misub_media_ai", "clash_acl4ssr_full", "clash_exclusive_ai", "clash_game_optimized",
+	"clash_weir_minimal", "clash_acl4ssr_lite", "clash_weir_media_ai", "clash_acl4ssr_full", "clash_exclusive_ai", "clash_game_optimized",
 }
 
 var builtinTemplateMeta = map[string][2]string{
-	"clash_misub_minimal":  {"MiSub 极简默认分流", "更偏日常使用的极简模板，仅保留主选择、自动选择、常用媒体与兜底分组，适合作为统一模板主线默认配置。"},
+	"clash_weir_minimal":   {"极简默认分流", "更偏日常使用的极简模板，仅保留主选择、自动选择、常用媒体与兜底分组，适合作为统一模板主线默认配置。"},
 	"clash_acl4ssr_lite":   {"ACL4SSR 精简分流", "内置精简 ACL4SSR 分流模板，保留常用分组和核心规则，适合作为轻量默认预设。"},
-	"clash_misub_media_ai": {"MiSub 流媒体与 AI 分流", "面向常见流媒体和 AI 服务场景的内置模板，保留自动选择、地区组和核心服务分流。"},
+	"clash_weir_media_ai":  {"流媒体与 AI 分流", "面向常见流媒体和 AI 服务场景的内置模板，保留自动选择、地区组和核心服务分流。"},
 	"clash_acl4ssr_full":   {"ACL4SSR 完整分流", "内置完整 ACL4SSR 分流模板，适合作为 Clash 系列的高完整度规则预设。"},
-	"clash_exclusive_ai":   {"MiSub 深度 AI 开发者模板", "专为 AI 开发者优化，强化 OpenAI/Claude 路由，增加固定节点漂移保护与纯净度检测引导。"},
-	"clash_game_optimized": {"MiSub 游戏加速竞技模板", "强化各平台游戏规则（Steam, Epic, Sony 等），优先选择低延迟线路。"},
+	"clash_exclusive_ai":   {"深度 AI 开发者模板", "专为 AI 开发者优化，强化 OpenAI/Claude 路由，增加固定节点漂移保护与纯净度检测引导。"},
+	"clash_game_optimized": {"游戏加速竞技模板", "强化各平台游戏规则（Steam, Epic, Sony 等），优先选择低延迟线路。"},
 }
 
 // GetBuiltinTemplate 对应 getBuiltinTemplate；不存在返回 nil。

@@ -1,6 +1,6 @@
 package center
 
-// Adapted interaction/data contract from fixed MiSub AnnouncementSettings.vue.
+// Adapted interaction/data contract from the original JS AnnouncementSettings.vue.
 // Plain text only; public distribution always requires explicit audience opt-in.
 import (
 	"bytes"

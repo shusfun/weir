@@ -1,4 +1,4 @@
-// Package sub 是 MiSub 订阅引擎（functions/ 下的纯逻辑部分）的 Go 移植，
+// Package sub 是原 JS 订阅引擎（functions/ 下的纯逻辑部分）的 Go 移植，
 // 对应上游提交 4952c16fef2423b2881c8aeecc63647526f42bda（MIT）。
 //
 // 每个文件对应一个上游模块，导出函数与上游导出名一一对应（如 parseNodeList → ParseNodeList），

@@ -73,7 +73,7 @@ func TestFillDetectedSecretsOnlyForMatchingLocalInstance(t *testing.T) {
 }
 
 func TestRecommendDatabaseSkipsExistingData(t *testing.T) {
-	dbs := []store.PostgresDatabase{{Name: "gate", HasData: true}, {Name: "misub"}, {Name: "postgres"}, {Name: "user_abc"}}
+	dbs := []store.PostgresDatabase{{Name: "gate", HasData: true}, {Name: "legacy"}, {Name: "postgres"}, {Name: "user_abc"}}
 	if got := recommendDatabase(dbs, "user_abc"); got != "user_abc" {
 		t.Fatalf("recommend = %q", got)
 	}

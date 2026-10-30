@@ -51,7 +51,7 @@ export function OperatorEditor({ value, change }: { value: Operator[]; change: (
   const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
   const preview = useFormAction(
-    () => api("/admin/misub/operators/preview", "POST", { links: input.split(/\r?\n/).filter(Boolean), operators: value }) as Promise<{ output?: string }>,
+    () => api("/admin/subscriptions/operators/preview", "POST", { links: input.split(/\r?\n/).filter(Boolean), operators: value }) as Promise<{ output?: string }>,
     { onSuccess: (r) => setOutput(r.output || "处理后为空") },
   );
   function set(i: number, patch: Partial<Operator>) {

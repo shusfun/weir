@@ -12,7 +12,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/user"
 )
 
-// 外部接口（对应 MiSub 的 external API）：管理员创建的 API 令牌以 Bearer 方式调用，
+// 外部管理接口：管理员创建的 API 令牌以 Bearer 方式调用，
 // 只能管理订阅源、手动节点与订阅组，不能触及用户、VPS、节点或系统设置。令牌只在创建时显示一次，库里存摘要。
 
 const kindAPIToken = "api-token"
