@@ -14,7 +14,7 @@ function TableHeader({ className, ...props }: ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("border-b border-[var(--mg-line-soft)] text-left", className)}
+      className={cn("border-b border-[var(--weir-line-soft)] text-left", className)}
       {...props}
     />
   );
@@ -28,7 +28,7 @@ function TableFooter({ className, ...props }: ComponentProps<"tfoot">) {
   return (
     <tfoot
       data-slot="table-footer"
-      className={cn("border-t border-[var(--mg-line)] bg-[var(--mg-well)] font-medium", className)}
+      className={cn("border-t border-[var(--weir-line)] bg-[var(--weir-well)] font-medium", className)}
       {...props}
     />
   );
@@ -39,7 +39,7 @@ function TableRow({ className, ...props }: ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "border-b border-[var(--mg-line-soft)] transition-colors duration-[var(--mg-fast)] hover:bg-[color-mix(in_srgb,var(--mg-well)_55%,transparent)] data-[state=selected]:bg-[var(--mg-accent-soft)]",
+        "border-b border-[var(--weir-line-soft)] transition-colors duration-[var(--weir-fast)] hover:bg-[color-mix(in_srgb,var(--weir-well)_55%,transparent)] data-[state=selected]:bg-[var(--weir-accent-soft)]",
         className,
       )}
       {...props}
@@ -52,7 +52,7 @@ function TableHead({ className, ...props }: ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "mg-engraved h-10 px-3 align-middle whitespace-nowrap first:pl-5 last:pr-5 [&:has([role=checkbox])]:pr-0",
+        "weir-engraved h-10 px-3 align-middle whitespace-nowrap first:pl-5 last:pr-5 [&:has([role=checkbox])]:pr-0",
         className,
       )}
       {...props}
@@ -71,7 +71,7 @@ function TableCell({ className, ...props }: ComponentProps<"td">) {
 }
 
 function TableCaption({ className, ...props }: ComponentProps<"caption">) {
-  return <caption data-slot="table-caption" className={cn("mt-4 text-xs text-[var(--mg-ink-3)]", className)} {...props} />;
+  return <caption data-slot="table-caption" className={cn("mt-4 text-xs text-[var(--weir-ink-3)]", className)} {...props} />;
 }
 
 export { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell, TableCaption };

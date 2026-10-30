@@ -120,13 +120,13 @@ export function GatesPage() {
                     {g.name}
                     <Badge variant="soft" tone={tone === "off" ? "neutral" : tone}>{label}</Badge>
                   </h2>
-                  <small className="text-[var(--mg-ink-3)]">
+                  <small className="text-[var(--weir-ink-3)]">
                     {g.public_host || "等待上报地址"} · {g.arch} · 程序 {g.version || "未知"} · 最近心跳 {date(g.last_seen_at)}
                     {Object.entries(g.kernels_running ?? {}).map(([k, v]) => <span key={k}> · <ObjectLink to={{ type: "kernel", key: `${k}@${v}`, name: `${k} ${v}` }} /></span>)}
                   </small>
-                  {g.state === "failed" && g.last_error && <p className="text-[var(--mg-bad-ink)] text-sm">{g.last_error}</p>}
+                  {g.state === "failed" && g.last_error && <p className="text-[var(--weir-bad-ink)] text-sm">{g.last_error}</p>}
                   {!g.public_host && (
-                    <p className="text-sm text-[var(--mg-warn-ink)]">
+                    <p className="text-sm text-[var(--weir-warn-ink)]">
                       还没有公网地址，这台 VPS 上的节点生成不了分享链接。{g.colocated ? "中心与它在同一台机器上，记录不到来源地址；" : ""}请点「编辑」填写{g.public_host_hint ? `（本机网卡上的公网 IP 是 ${g.public_host_hint}）` : ""}。
                     </p>
                   )}
@@ -155,7 +155,7 @@ export function GatesPage() {
                     </TableHeader>
                     <TableBody>
                       {list.map((n) => (
-                        <TableRow key={n.id} data-node-row={n.id} {...dataObject({ type: "node", id: n.id })} tabIndex={focusNode === n.id ? -1 : undefined} className={focusNode === n.id ? "bg-[var(--mg-accent-soft)] transition-colors" : undefined}>
+                        <TableRow key={n.id} data-node-row={n.id} {...dataObject({ type: "node", id: n.id })} tabIndex={focusNode === n.id ? -1 : undefined} className={focusNode === n.id ? "bg-[var(--weir-accent-soft)] transition-colors" : undefined}>
                           <TableCell>{n.name}</TableCell>
                           <TableCell>{protocolNames[n.protocol] ?? n.protocol}{n.security === "reality" ? " + REALITY" : n.network === "ws" ? " + WS" : ""}</TableCell>
                           <TableCell className="font-mono">
@@ -164,7 +164,7 @@ export function GatesPage() {
                           </TableCell>
                           <TableCell>
                             {n.chain.kind === "none" ? "直连" : n.chain.kind === "node" ? <>经 <ObjectLink to={{ type: "node", id: n.chain.node_id ?? undefined, name: nodes.data.find((x) => x.id === n.chain.node_id)?.name ?? "节点" }} /></> : n.chain.kind === "source" ? "订阅源节点" : `${exitKindName[n.chain.kind]} ${n.chain.address ?? ""}${n.chain.port ? ":" + n.chain.port : ""}`}
-                            {n.chain.kind !== "none" && <small className="block text-[var(--mg-ink-3)]">{probeText(n.chain.probe)}</small>}
+                            {n.chain.kind !== "none" && <small className="block text-[var(--weir-ink-3)]">{probeText(n.chain.probe)}</small>}
                           </TableCell>
                           <TableCell>{n.credentials}</TableCell>
                           <TableCell>

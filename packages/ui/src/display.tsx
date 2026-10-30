@@ -16,11 +16,11 @@ const tileSizes = {
 } as const;
 const tileTones = {
   // 凹槽底 + 强调色图标：安全方式、登录页头
-  accent: "mg-well text-[var(--mg-accent-text)]",
+  accent: "weir-well text-[var(--weir-accent-text)]",
   // 凹槽底 + 中性图标 / 文字：账户头像
-  neutral: "mg-well text-[var(--mg-ink-2)]",
+  neutral: "weir-well text-[var(--weir-ink-2)]",
   // 浅强调底：公开页卡片（随页面主题色）
-  soft: "bg-[var(--mg-accent-soft)] text-[var(--mg-accent-text)]",
+  soft: "bg-[var(--weir-accent-soft)] text-[var(--weir-accent-text)]",
 } as const;
 
 function IconTile({
@@ -45,7 +45,7 @@ function CodeBlock({ className, ...props }: ComponentProps<"code">) {
     <code
       data-slot="code-block"
       className={cn(
-        "mg-well block px-3 py-2.5 font-mono text-[11.5px] leading-relaxed break-all text-[var(--mg-ink-2)]",
+        "weir-well block px-3 py-2.5 font-mono text-[11.5px] leading-relaxed break-all text-[var(--weir-ink-2)]",
         className,
       )}
       {...props}
@@ -77,11 +77,11 @@ function ChoiceCard({
           </>
         ),
         className: cn(
-          "relative flex min-w-0 flex-col gap-2.5 rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3.5",
-          "bg-[linear-gradient(180deg,var(--mg-raised),var(--mg-panel))] shadow-[inset_0_1px_0_var(--mg-highlight),0_1px_2px_var(--mg-shade)]",
+          "relative flex min-w-0 flex-col gap-2.5 rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3.5",
+          "bg-[linear-gradient(180deg,var(--weir-raised),var(--weir-panel))] shadow-[inset_0_1px_0_var(--weir-highlight),0_1px_2px_var(--weir-shade)]",
           featured &&
-            "gap-3 rounded-[var(--mg-radius-lg)] border-[color-mix(in_srgb,var(--mg-accent-text)_45%,var(--mg-line))] bg-[linear-gradient(180deg,var(--mg-raised),var(--mg-accent-soft))] p-[18px]",
-          selected && "border-[var(--mg-accent-text)] shadow-[inset_0_1px_0_var(--mg-highlight),0_0_0_2px_var(--mg-ring)]",
+            "gap-3 rounded-[var(--weir-radius-lg)] border-[color-mix(in_srgb,var(--weir-accent-text)_45%,var(--weir-line))] bg-[linear-gradient(180deg,var(--weir-raised),var(--weir-accent-soft))] p-[18px]",
+          selected && "border-[var(--weir-accent-text)] shadow-[inset_0_1px_0_var(--weir-highlight),0_0_0_2px_var(--weir-ring)]",
           className,
         ),
         "data-selected": selected || undefined,
@@ -106,7 +106,7 @@ function OptionRow({
       className={cn(
         // 文字列只匹配不带 data-slot 的 span：复选框（Base UI 渲染为 span）和水波层不能被撑开
         "relative flex min-w-0 cursor-pointer items-start gap-3 wrap-anywhere [&>span:not([data-slot])]:grid [&>span:not([data-slot])]:min-w-0 [&>span:not([data-slot])]:flex-1 [&>span:not([data-slot])]:gap-[3px] [&>[data-slot=checkbox]]:mt-0.5 [&_small]:block",
-        compact ? "items-center gap-2.5 text-[12.5px]" : "border-b border-[var(--mg-line-soft)] py-3",
+        compact ? "items-center gap-2.5 text-[12.5px]" : "border-b border-[var(--weir-line-soft)] py-3",
         inset && "px-3.5",
         className,
       )}
@@ -134,7 +134,7 @@ function Steps({
         "group/steps m-0 list-none p-0",
         orientation === "vertical"
           ? "grid gap-4 max-md:grid-flow-col max-md:auto-cols-fr max-md:gap-2"
-          : "mg-segmented flex items-stretch gap-0.5 rounded-[var(--mg-radius-lg)] p-[3px]",
+          : "weir-segmented flex items-stretch gap-0.5 rounded-[var(--weir-radius-lg)] p-[3px]",
         className,
       )}
       {...props}
@@ -168,10 +168,10 @@ function Step({
         className={cn(
           "grid size-[22px] shrink-0 place-items-center rounded-full border font-mono text-[11px] font-semibold group-data-[orientation=vertical]/steps:size-[34px] group-data-[orientation=vertical]/steps:text-xs [&_svg]:size-[17px]",
           status === "current"
-            ? "border-[var(--mg-accent-lo)] bg-[var(--mg-accent)] text-[var(--mg-accent-ink)] shadow-[0_0_8px_1px_color-mix(in_srgb,var(--mg-accent)_40%,transparent)]"
+            ? "border-[var(--weir-accent-lo)] bg-[var(--weir-accent)] text-[var(--weir-accent-ink)] shadow-[0_0_8px_1px_color-mix(in_srgb,var(--weir-accent)_40%,transparent)]"
             : status === "complete"
-              ? "border-[var(--mg-line)] bg-[var(--mg-well)] text-[var(--mg-ok)]"
-              : "border-[var(--mg-line)] bg-[var(--mg-panel)] text-[var(--mg-ink-3)]",
+              ? "border-[var(--weir-line)] bg-[var(--weir-well)] text-[var(--weir-ok)]"
+              : "border-[var(--weir-line)] bg-[var(--weir-panel)] text-[var(--weir-ink-3)]",
         )}
       >
         {status === "complete" ? <Check className="size-3.5" /> : (icon ?? index + 1)}
@@ -186,12 +186,12 @@ function Step({
     "flex min-w-0 items-center gap-3 no-underline",
     // 纵向步骤在窄屏改为横排四列、文字居中
     "max-md:group-data-[orientation=vertical]/steps:flex-col max-md:group-data-[orientation=vertical]/steps:gap-1.5 max-md:group-data-[orientation=vertical]/steps:text-center",
-    status === "current" ? "text-[var(--mg-ink)]" : status === "complete" ? "text-[var(--mg-ok-ink)]" : "text-[var(--mg-ink-3)]",
+    status === "current" ? "text-[var(--weir-ink)]" : status === "complete" ? "text-[var(--weir-ok-ink)]" : "text-[var(--weir-ink-3)]",
     // 横向：每步是可点击的标签，当前步点亮为选中色
-    "group-data-[orientation=horizontal]/steps:flex-[1_0_auto] group-data-[orientation=horizontal]/steps:rounded-[calc(var(--mg-radius-lg)-3px)] group-data-[orientation=horizontal]/steps:px-3.5 group-data-[orientation=horizontal]/steps:py-[9px] group-data-[orientation=horizontal]/steps:hover:text-[var(--mg-ink)] max-md:group-data-[orientation=horizontal]/steps:px-2.5",
+    "group-data-[orientation=horizontal]/steps:flex-[1_0_auto] group-data-[orientation=horizontal]/steps:rounded-[calc(var(--weir-radius-lg)-3px)] group-data-[orientation=horizontal]/steps:px-3.5 group-data-[orientation=horizontal]/steps:py-[9px] group-data-[orientation=horizontal]/steps:hover:text-[var(--weir-ink)] max-md:group-data-[orientation=horizontal]/steps:px-2.5",
     status === "current" &&
-      "group-data-[orientation=horizontal]/steps:bg-[var(--mg-key-selected)] group-data-[orientation=horizontal]/steps:shadow-[inset_0_0_0_1px_var(--mg-key-selected-ring)]",
-    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mg-accent-text)]",
+      "group-data-[orientation=horizontal]/steps:bg-[var(--weir-key-selected)] group-data-[orientation=horizontal]/steps:shadow-[inset_0_0_0_1px_var(--weir-key-selected-ring)]",
+    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--weir-accent-text)]",
   );
   const item = useRender({
     defaultTagName: "span",
@@ -200,7 +200,7 @@ function Step({
   });
   return (
     <li className="flex min-w-0 items-center gap-0.5 group-data-[orientation=horizontal]/steps:flex-[1_0_auto]" aria-current={!render && status === "current" ? "step" : undefined}>
-      {separator && index > 0 && <span className="flex-none text-[var(--mg-ink-engraved)] max-md:hidden">{separator}</span>}
+      {separator && index > 0 && <span className="flex-none text-[var(--weir-ink-engraved)] max-md:hidden">{separator}</span>}
       {item}
     </li>
   );

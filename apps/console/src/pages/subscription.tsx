@@ -89,7 +89,7 @@ function GroupsCard() {
         ) : (
           q.data!.map((g) => (
             <div key={g.id} className="stack">
-              <strong>{g.name}{g.expires_at ? <small className="ml-2 text-[var(--mg-ink-3)]">到期 {date(g.expires_at)}</small> : null}</strong>
+              <strong>{g.name}{g.expires_at ? <small className="ml-2 text-[var(--weir-ink-3)]">到期 {date(g.expires_at)}</small> : null}</strong>
               <div className="subscription-url">
                 <Input readOnly className="font-mono text-xs" aria-label={g.name + " 订阅地址"} value={g.url} />
                 <CopyButton value={g.url}>复制</CopyButton>
@@ -118,10 +118,10 @@ function ClientsCard() {
         ) : (
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((c) => (
-              <li key={c.id} className="flex min-w-0 items-center justify-between gap-2 rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3">
+              <li key={c.id} className="flex min-w-0 items-center justify-between gap-2 rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3">
                 <span className="flex min-w-0 items-center gap-2">
                   <ClientIcon icon={c.icon} data={c.icon_data} />
-                  <span className="min-w-0"><strong>{c.name}</strong><small className="block truncate text-[var(--mg-ink-3)]">{c.description}</small></span>
+                  <span className="min-w-0"><strong>{c.name}</strong><small className="block truncate text-[var(--weir-ink-3)]">{c.description}</small></span>
                 </span>
                 <ClientDownload client={c} />
               </li>

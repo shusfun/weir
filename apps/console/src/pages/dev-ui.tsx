@@ -137,7 +137,7 @@ export function DevUiPage() {
               {["SQLite 单机", "PostgreSQL + Redis"].map((name, i) => (
                 <ChoiceCard key={name} selected={choice === i} render={<button type="button" />} onClick={() => setChoice(i)} className="text-left">
                   <strong>{name}</strong>
-                  <small className="text-[var(--mg-ink-3)]">点击卡片任意位置</small>
+                  <small className="text-[var(--weir-ink-3)]">点击卡片任意位置</small>
                 </ChoiceCard>
               ))}
             </div>
@@ -145,7 +145,7 @@ export function DevUiPage() {
               <Checkbox defaultChecked />
               <span>
                 <strong>勾选行</strong>
-                <small className="text-[var(--mg-ink-3)]">整行可点，水波从按压点散开</small>
+                <small className="text-[var(--weir-ink-3)]">整行可点，水波从按压点散开</small>
               </span>
             </OptionRow>
           </Demo>
@@ -165,7 +165,7 @@ export function DevUiPage() {
               <Button variant="outline" onClick={() => toast("已保存", { description: "配置已下发到 3 台 VPS。" })}>成功提示</Button>
             </div>
             <div className="actions">
-              <span className="text-[var(--mg-ok)] [&>svg]:size-10">
+              <span className="text-[var(--weir-ok)] [&>svg]:size-10">
                 <CheckMark key={replay} circle />
               </span>
               <Button variant="ghost" size="sm" onClick={() => setReplay((v) => v + 1)}>重播</Button>
@@ -225,16 +225,16 @@ export function DevUiPage() {
           <Demo index={9} title="卡片翻面" description="两面各自藏好背面；背向的一面不可聚焦。">
             <FlipCard
               front={
-                <div className="mg-panel stack p-5">
+                <div className="weir-panel stack p-5">
                   <strong>订阅地址</strong>
-                  <small className="text-[var(--mg-ink-3)]">翻到背面查看二维码说明</small>
+                  <small className="text-[var(--weir-ink-3)]">翻到背面查看二维码说明</small>
                   <FlipCardToggle className="justify-self-start">查看背面</FlipCardToggle>
                 </div>
               }
               back={
-                <div className="mg-panel stack p-5">
+                <div className="weir-panel stack p-5">
                   <strong>二维码</strong>
-                  <small className="text-[var(--mg-ink-3)]">用客户端扫码导入，地址只显示一次。</small>
+                  <small className="text-[var(--weir-ink-3)]">用客户端扫码导入，地址只显示一次。</small>
                   <FlipCardToggle className="justify-self-start">返回正面</FlipCardToggle>
                 </div>
               }
@@ -246,7 +246,7 @@ export function DevUiPage() {
               <Button variant="outline" size="icon" aria-label={menu ? "关闭菜单" : "打开菜单"} aria-expanded={menu} onClick={() => setMenu((v) => !v)}>
                 <MenuToggle open={menu} />
               </Button>
-              <small className="text-[var(--mg-ink-3)]">移动端导航（宽度 ≤ 900px）使用同一个元件。</small>
+              <small className="text-[var(--weir-ink-3)]">移动端导航（宽度 ≤ 900px）使用同一个元件。</small>
             </div>
           </Demo>
 
@@ -258,7 +258,7 @@ export function DevUiPage() {
               renderItem={(c) => (
                 <div className="stack p-5">
                   <strong>{c.name}</strong>
-                  <small className="text-[var(--mg-ink-3)]">向左或向右拖动，甩出即可切到下一张。</small>
+                  <small className="text-[var(--weir-ink-3)]">向左或向右拖动，甩出即可切到下一张。</small>
                 </div>
               )}
             />
@@ -273,7 +273,7 @@ export function DevUiPage() {
                   description="拖动顶部把手向下滑即可关闭。"
                   footer={<DrawerClose render={<Button />}>完成</DrawerClose>}
                 >
-                  <p className="text-[var(--mg-ink-2)]">匿名访客通过分享链接只能看到订阅组内的节点，不包含用户账号信息。</p>
+                  <p className="text-[var(--weir-ink-2)]">匿名访客通过分享链接只能看到订阅组内的节点，不包含用户账号信息。</p>
                 </DrawerContent>
               </Drawer>
               <Button variant="outline" onClick={() => setDialog(true)}>打开普通弹窗</Button>

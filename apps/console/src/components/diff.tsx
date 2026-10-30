@@ -5,16 +5,16 @@ export interface DiffLine {
 }
 
 const lineClass: Record<string, string> = {
-  "+": "bg-[var(--mg-ok-soft)] text-[var(--mg-ok-ink)]",
-  "-": "bg-[var(--mg-bad-soft)] text-[var(--mg-bad-ink)]",
-  "…": "text-[var(--mg-ink-3)]",
+  "+": "bg-[var(--weir-ok-soft)] text-[var(--weir-ok-ink)]",
+  "-": "bg-[var(--weir-bad-soft)] text-[var(--weir-bad-ink)]",
+  "…": "text-[var(--weir-ink-3)]",
   " ": "",
 };
 
 export function DiffView({ lines, empty = "没有改动。" }: { lines: DiffLine[] | null | undefined; empty?: string }) {
-  if (!lines || !lines.some((l) => l.op === "+" || l.op === "-")) return <small className="text-[var(--mg-ink-3)]">{empty}</small>;
+  if (!lines || !lines.some((l) => l.op === "+" || l.op === "-")) return <small className="text-[var(--weir-ink-3)]">{empty}</small>;
   return (
-    <pre className="max-h-80 overflow-auto rounded-[var(--mg-radius)] border border-[var(--mg-line)] bg-[var(--mg-well)] p-2 text-xs leading-5" aria-label="改动">
+    <pre className="max-h-80 overflow-auto rounded-[var(--weir-radius)] border border-[var(--weir-line)] bg-[var(--weir-well)] p-2 text-xs leading-5" aria-label="改动">
       {lines.map((l, i) => <div key={i} className={lineClass[l.op] ?? ""}>{(l.op === "…" ? "  " : l.op + " ") + l.text}</div>)}
     </pre>
   );

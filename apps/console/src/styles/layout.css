@@ -5,7 +5,7 @@
 .actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .row-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .scroll, .table-scroll { overflow: auto; scrollbar-width: thin; }
-.eyebrow { font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mg-ink-engraved); }
+.eyebrow { font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--weir-ink-engraved); }
 
 
 
@@ -17,15 +17,15 @@
 .form-grid, .settings-field-grid, .template-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .quota-input { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 8px; }
 
-.help-note { display: flex; gap: 10px; align-items: flex-start; padding: 2px 4px; font-size: 12px; color: var(--mg-ink-3); }
-.help-note > svg { margin-top: 2px; color: var(--mg-ink-engraved); }
+.help-note { display: flex; gap: 10px; align-items: flex-start; padding: 2px 4px; font-size: 12px; color: var(--weir-ink-3); }
+.help-note > svg { margin-top: 2px; color: var(--weir-ink-engraved); }
 .help-note p { margin: 0; font-size: 12px; }
-.tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 5px; font-size: 11px; border: 1px solid var(--mg-line); background: var(--mg-well); color: var(--mg-ink-2); }
+.tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 5px; font-size: 11px; border: 1px solid var(--weir-line); background: var(--weir-well); color: var(--weir-ink-2); }
 
 
 .detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px 24px; }
 .detail-grid > div { display: grid; gap: 4px; min-width: 0; }
-.detail-grid span { font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--mg-ink-engraved); }
+.detail-grid span { font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--weir-ink-engraved); }
 .detail-grid strong { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
 .detail-grid .full { grid-column: 1 / -1; }
 
@@ -46,6 +46,6 @@
 }
 
 /* 对象链接跳过来时高亮目标行约 2 秒（FocusFromURL） */
-@keyframes mg-flash { 0%, 60% { background-color: var(--mg-accent-soft); } 100% { background-color: transparent; } }
-.mg-flash { animation: mg-flash 2.2s var(--mg-ease); border-radius: var(--mg-radius); }
-@media (prefers-reduced-motion: reduce) { .mg-flash { animation: none; outline: 2px solid var(--mg-accent); } }
+@keyframes weir-flash { 0%, 60% { background-color: var(--weir-accent-soft); } 100% { background-color: transparent; } }
+.weir-flash { animation: weir-flash 2.2s var(--weir-ease); border-radius: var(--weir-radius); }
+@media (prefers-reduced-motion: reduce) { .weir-flash { animation: none; outline: 2px solid var(--weir-accent); } }

@@ -105,17 +105,17 @@ export function GateCerts({ gate }: { gate: Gate }) {
       {certs.isPending || certs.error ? <State loading={certs.isPending} error={certs.error} onRetry={() => certs.refetch()} /> : mine.length === 0 ? <small>还没有证书：建 Trojan、WebSocket + TLS 或 QUIC 节点时自动准备。</small> : (
         <ul className="stack">
           {mine.map((c) => (
-            <li key={c.id} {...dataObject({ type: "cert", id: c.id })} className="rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3 text-sm">
+            <li key={c.id} {...dataObject({ type: "cert", id: c.id })} className="rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3 text-sm">
               <div className="flex flex-wrap items-center gap-2">
                 <strong>{c.domain}</strong>
                 <Badge variant="soft" tone="neutral">{certSource[c.source] ?? c.source}</Badge>
                 <CertHealth cert={c} />
-                <small className="text-[var(--mg-ink-3)]">{c.not_after ? `有效期至 ${date(c.not_after)}` : "有效期未知"}</small>
+                <small className="text-[var(--weir-ink-3)]">{c.not_after ? `有效期至 ${date(c.not_after)}` : "有效期未知"}</small>
                 {c.source === "acme" && (
                   <Button className="ml-auto" size="xs" variant="outline" disabled={isBusy(c.id)} onClick={() => void run(c.id, () => api(`/admin/certs/${c.id}/renew`, "POST"), "已续签")}><RefreshCw />立即续签</Button>
                 )}
               </div>
-              {c.last_error && <small className="mt-1 block text-[var(--mg-bad-ink)]">{c.last_error}</small>}
+              {c.last_error && <small className="mt-1 block text-[var(--weir-bad-ink)]">{c.last_error}</small>}
             </li>
           ))}
         </ul>
@@ -142,7 +142,7 @@ export function GateCerts({ gate }: { gate: Gate }) {
             <Button type="submit" disabled={save.busy || !gate.online} busy={save.busy} busyText="正在测试连接…">测试并保存</Button>
           </div>
           {save.error && <Notice tone="bad">{save.error}</Notice>}
-          {!gate.online && <small className="text-[var(--mg-ink-3)]">VPS 离线时无法填写。</small>}
+          {!gate.online && <small className="text-[var(--weir-ink-3)]">VPS 离线时无法填写。</small>}
         </Form>
       </Collapsible>
     </>

@@ -170,12 +170,12 @@ function Field({
 
   const hintNode = hint ? (
     // block：与错误行同高（行内元素会被父级行高撑高，说明换成错误时布局会跳）
-    <small id={hintId} className="block text-[11.5px] leading-[18px] text-[var(--mg-ink-3)]">
+    <small id={hintId} className="block text-[11.5px] leading-[18px] text-[var(--weir-ink-3)]">
       {hint}
     </small>
   ) : null;
   const errorNode = invalid ? (
-    <span id={errorId} role="alert" className="block text-xs leading-[18px] text-[var(--mg-bad-ink)] animate-[mg-field-error_160ms_ease-out]">
+    <span id={errorId} role="alert" className="block text-xs leading-[18px] text-[var(--weir-bad-ink)] animate-[weir-field-error_160ms_ease-out]">
       {shown}
     </span>
   ) : null;
@@ -206,7 +206,7 @@ function Field({
         <Label id={labelId} htmlFor={labelFor}>
           {/* 必填标记只给视觉；读屏通过控件的 required 得知必填，不把 * 读进名称 */}
           {star && (
-            <span aria-hidden="true" className="-mr-1 text-[var(--mg-bad-ink)]">
+            <span aria-hidden="true" className="-mr-1 text-[var(--weir-bad-ink)]">
               *
             </span>
           )}

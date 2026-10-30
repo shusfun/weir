@@ -4,8 +4,8 @@
    * 状态灯：纯色圆点 + 同色发光，不做拟物（无灯座、无高光）。
    * 熄灭为灰点无光；未知为虚线空心圆无光，绝不显示为正常色。无动画。
    */
-  .mg-lamp {
-    --lamp: var(--mg-off);
+  .weir-lamp {
+    --lamp: var(--weir-off);
     display: inline-block;
     flex-shrink: 0;
     width: 8px;
@@ -17,113 +17,113 @@
       0 0 4px 1px color-mix(in srgb, var(--lamp) 65%, transparent),
       0 0 10px 2px color-mix(in srgb, var(--lamp) 30%, transparent);
   }
-  .mg-lamp[data-size="lg"] {
+  .weir-lamp[data-size="lg"] {
     width: 10px;
     height: 10px;
   }
   /* 导航指示灯等紧凑场景 */
-  .mg-lamp[data-size="sm"] {
+  .weir-lamp[data-size="sm"] {
     width: 6px;
     height: 6px;
   }
-  .mg-lamp[data-tone="ok"] { --lamp: var(--mg-ok); }
-  .mg-lamp[data-tone="warn"] { --lamp: var(--mg-warn); }
-  .mg-lamp[data-tone="bad"] { --lamp: var(--mg-bad); }
-  .mg-lamp[data-tone="info"] { --lamp: var(--mg-info); }
+  .weir-lamp[data-tone="ok"] { --lamp: var(--weir-ok); }
+  .weir-lamp[data-tone="warn"] { --lamp: var(--weir-warn); }
+  .weir-lamp[data-tone="bad"] { --lamp: var(--weir-bad); }
+  .weir-lamp[data-tone="info"] { --lamp: var(--weir-info); }
   /* 选中 / 开启指示灯 */
-  .mg-lamp[data-tone="active"] { --lamp: var(--mg-indicator); }
-  .mg-lamp[data-tone="off"] { box-shadow: none; }
-  .mg-lamp[data-tone="unknown"] {
+  .weir-lamp[data-tone="active"] { --lamp: var(--weir-indicator); }
+  .weir-lamp[data-tone="off"] { box-shadow: none; }
+  .weir-lamp[data-tone="unknown"] {
     background: transparent;
     box-shadow: none;
-    border: 1.5px dashed var(--mg-ink-engraved);
+    border: 1.5px dashed var(--weir-ink-engraved);
   }
 
-  .mg-readout {
+  .weir-readout {
     display: grid;
     gap: 6px;
     min-width: 0;
     padding: 14px 16px;
-    border-radius: var(--mg-radius-lg);
-    background: var(--mg-panel);
-    border: 1px solid var(--mg-line-soft);
+    border-radius: var(--weir-radius-lg);
+    background: var(--weir-panel);
+    border: 1px solid var(--weir-line-soft);
   }
-  .mg-readout[data-variant="lcd"] {
+  .weir-readout[data-variant="lcd"] {
     /* 与面板色混合而非固定白色，深色下不会出现发亮的顶边 */
-    background: linear-gradient(180deg, color-mix(in srgb, var(--mg-lcd) 88%, var(--mg-panel)), var(--mg-lcd));
-    color: var(--mg-lcd-ink);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--weir-lcd) 88%, var(--weir-panel)), var(--weir-lcd));
+    color: var(--weir-lcd-ink);
   }
-  .mg-readout-value {
-    font-family: var(--mg-mono);
+  .weir-readout-value {
+    font-family: var(--weir-mono);
     font-variant-numeric: tabular-nums;
     font-size: 24px;
     line-height: 1.15;
     font-weight: 600;
     letter-spacing: -0.03em;
-    color: var(--mg-ink);
+    color: var(--weir-ink);
     overflow-wrap: anywhere;
   }
-  .mg-readout[data-variant="lcd"] .mg-readout-value { color: var(--mg-lcd-ink); }
-  .mg-readout[data-unknown="true"] .mg-readout-value {
-    color: var(--mg-ink-engraved);
-    font-family: var(--mg-font);
+  .weir-readout[data-variant="lcd"] .weir-readout-value { color: var(--weir-lcd-ink); }
+  .weir-readout[data-unknown="true"] .weir-readout-value {
+    color: var(--weir-ink-engraved);
+    font-family: var(--weir-font);
     font-size: 18px;
   }
-  .mg-readout-unit {
+  .weir-readout-unit {
     font-size: 12px;
     font-weight: 500;
     margin-left: 4px;
-    color: var(--mg-ink-3);
+    color: var(--weir-ink-3);
   }
-  .mg-readout-caption {
+  .weir-readout-caption {
     font-size: 11.5px;
-    color: var(--mg-ink-3);
+    color: var(--weir-ink-3);
   }
 
-  .mg-meter {
+  .weir-meter {
     position: relative;
     height: 10px;
     border-radius: 999px;
-    background: var(--mg-well-deep);
-    border: 1px solid var(--mg-line);
-    box-shadow: inset 0 1px 2px var(--mg-inset);
+    background: var(--weir-well-deep);
+    border: 1px solid var(--weir-line);
+    box-shadow: inset 0 1px 2px var(--weir-inset);
     overflow: hidden;
   }
-  .mg-meter > span {
+  .weir-meter > span {
     position: absolute;
     inset: 0 auto 0 0;
     border-radius: inherit;
-    background: linear-gradient(180deg, var(--mg-accent-hi), var(--mg-accent));
+    background: linear-gradient(180deg, var(--weir-accent-hi), var(--weir-accent));
   }
-  .mg-meter[data-tone="warn"] > span { background: var(--mg-warn); }
-  .mg-meter[data-tone="bad"] > span { background: var(--mg-bad); }
+  .weir-meter[data-tone="warn"] > span { background: var(--weir-warn); }
+  .weir-meter[data-tone="bad"] > span { background: var(--weir-bad); }
   /* 刻度：静态背景，不需要额外节点 */
-  .mg-meter::after {
+  .weir-meter::after {
     content: "";
     position: absolute;
     inset: 0;
     /* 刻度跟随文字色，深色下仍可见 */
-    background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), color-mix(in srgb, var(--mg-ink) 12%, transparent) calc(10% - 1px) 10%);
+    background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), color-mix(in srgb, var(--weir-ink) 12%, transparent) calc(10% - 1px) 10%);
     pointer-events: none;
   }
-  .mg-meter[data-unknown="true"] {
-    background: repeating-linear-gradient(135deg, var(--mg-well) 0 6px, var(--mg-well-deep) 6px 12px);
+  .weir-meter[data-unknown="true"] {
+    background: repeating-linear-gradient(135deg, var(--weir-well) 0 6px, var(--weir-well-deep) 6px 12px);
   }
 
-  .mg-faceplate {
+  .weir-faceplate {
     position: relative;
     display: flex;
     align-items: center;
     gap: 16px;
     min-width: 0;
     padding: 14px 18px;
-    border-radius: var(--mg-radius-lg);
-    border: 1px solid var(--mg-line-soft);
-    background: var(--mg-panel);
+    border-radius: var(--weir-radius-lg);
+    border: 1px solid var(--weir-line-soft);
+    background: var(--weir-panel);
   }
   /* 机架耳与螺丝：纯渐变绘制 */
-  .mg-faceplate::before,
-  .mg-faceplate::after {
+  .weir-faceplate::before,
+  .weir-faceplate::after {
     content: "";
     position: absolute;
     top: 8px;
@@ -131,48 +131,48 @@
     width: 26px;
     border-radius: 6px;
     background:
-      radial-gradient(circle at 50% 22%, var(--mg-ink-engraved) 0 2px, var(--mg-well-deep) 2.5px 4px, transparent 4.5px),
-      radial-gradient(circle at 50% 78%, var(--mg-ink-engraved) 0 2px, var(--mg-well-deep) 2.5px 4px, transparent 4.5px),
-      var(--mg-well);
-    box-shadow: inset 0 1px 2px var(--mg-inset);
+      radial-gradient(circle at 50% 22%, var(--weir-ink-engraved) 0 2px, var(--weir-well-deep) 2.5px 4px, transparent 4.5px),
+      radial-gradient(circle at 50% 78%, var(--weir-ink-engraved) 0 2px, var(--weir-well-deep) 2.5px 4px, transparent 4.5px),
+      var(--weir-well);
+    box-shadow: inset 0 1px 2px var(--weir-inset);
   }
-  .mg-faceplate::before { left: 12px; }
-  .mg-faceplate::after { right: 12px; }
+  .weir-faceplate::before { left: 12px; }
+  .weir-faceplate::after { right: 12px; }
   /* 面板非交互，按“拟物只给可交互元素”去掉机架耳与螺丝 */
-  .mg-faceplate::before,
-  .mg-faceplate::after { display: none; }
-  .mg-faceplate[data-compact="true"] {
+  .weir-faceplate::before,
+  .weir-faceplate::after { display: none; }
+  .weir-faceplate[data-compact="true"] {
     padding: 12px 18px;
   }
-  .mg-faceplate[data-compact="true"]::before,
-  .mg-faceplate[data-compact="true"]::after { display: none; }
+  .weir-faceplate[data-compact="true"]::before,
+  .weir-faceplate[data-compact="true"]::after { display: none; }
 
-  .mg-kbd {
+  .weir-kbd {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     min-width: 20px;
     height: 20px;
     padding: 0 5px;
-    font: 600 10.5px/1 var(--mg-mono);
-    color: var(--mg-ink-3);
+    font: 600 10.5px/1 var(--weir-mono);
+    color: var(--weir-ink-3);
     border-radius: 5px;
-    border: 1px solid var(--mg-line);
-    background: linear-gradient(180deg, var(--mg-raised), var(--mg-panel));
-    box-shadow: inset 0 -1px 0 var(--mg-line), 0 1px 0 var(--mg-shade);
+    border: 1px solid var(--weir-line);
+    background: linear-gradient(180deg, var(--weir-raised), var(--weir-panel));
+    box-shadow: inset 0 -1px 0 var(--weir-line), 0 1px 0 var(--weir-shade);
   }
 
-  .mg-skeleton {
-    border-radius: var(--mg-radius-sm);
-    background: var(--mg-well);
-    box-shadow: inset 0 1px 1px var(--mg-inset);
+  .weir-skeleton {
+    border-radius: var(--weir-radius-sm);
+    background: var(--weir-well);
+    box-shadow: inset 0 1px 1px var(--weir-inset);
   }
 }
 
 @media (max-width: 700px) {
-  .mg-faceplate {
+  .weir-faceplate {
     padding: 14px 16px;
   }
-  .mg-faceplate::before,
-  .mg-faceplate::after { display: none; }
+  .weir-faceplate::before,
+  .weir-faceplate::after { display: none; }
 }

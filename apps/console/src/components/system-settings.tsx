@@ -287,7 +287,7 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
   return (
     <Form ref={form} busy={busy} errors={save.errors ?? restore.errors} onSubmit={() => void save.submit()}>
       <h3 className="text-sm font-semibold">WebDAV 备份</h3>
-      <small className="text-[var(--mg-ink-3)]">
+      <small className="text-[var(--weir-ink-3)]">
         最近一次：{date(value.last_run_at ?? undefined)}
         {value.last_error ? ` · 失败：${value.last_error}` : ""}
       </small>
@@ -378,7 +378,7 @@ export function APITokensCard() {
             <li key={t.id} className="flex items-center justify-between gap-2">
               <span>
                 {t.name}
-                <small className="block text-[var(--mg-ink-3)]">创建 {date(t.created_at)} · 最近使用 {date(t.last_used_at)}</small>
+                <small className="block text-[var(--weir-ink-3)]">创建 {date(t.created_at)} · 最近使用 {date(t.last_used_at)}</small>
               </span>
               <Button
                 size="icon-sm"

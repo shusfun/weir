@@ -7,7 +7,7 @@ function Faceplate({
   className,
   ...props
 }: ComponentProps<"div"> & { compact?: boolean }) {
-  return <div data-slot="faceplate" data-compact={compact} className={cn("mg-faceplate", className)} {...props} />;
+  return <div data-slot="faceplate" data-compact={compact} className={cn("weir-faceplate", className)} {...props} />;
 }
 
 function FaceplateTitle({
@@ -23,9 +23,9 @@ function FaceplateTitle({
 }) {
   return (
     <div className={cn("min-w-0 flex-1", className)}>
-      {eyebrow && <div className="mg-engraved mb-1">{eyebrow}</div>}
-      <div className="truncate text-[17px] font-semibold tracking-[-0.015em] text-[var(--mg-ink)]">{title}</div>
-      {meta && <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--mg-ink-3)]">{meta}</div>}
+      {eyebrow && <div className="weir-engraved mb-1">{eyebrow}</div>}
+      <div className="truncate text-[17px] font-semibold tracking-[-0.015em] text-[var(--weir-ink)]">{title}</div>
+      {meta && <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--weir-ink-3)]">{meta}</div>}
     </div>
   );
 }

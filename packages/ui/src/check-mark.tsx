@@ -25,11 +25,11 @@ function CheckMark({
       height={24}
       aria-hidden
       // 与 lucide 图标一致不带尺寸类，按钮等容器的 [&_svg] 尺寸规则照常生效
-      className={cn("mg-check-mark", className)}
+      className={cn("weir-check-mark", className)}
       {...props}
     >
-      {circle && <circle className="mg-check-mark-ring" cx="12" cy="12" r="10" pathLength={1} />}
-      <path className="mg-check-mark-tick" d={circle ? "M7.5 12.5l3 3 6-6.5" : "M5 12.5l4.5 4.5L19 7.5"} pathLength={1} />
+      {circle && <circle className="weir-check-mark-ring" cx="12" cy="12" r="10" pathLength={1} />}
+      <path className="weir-check-mark-tick" d={circle ? "M7.5 12.5l3 3 6-6.5" : "M5 12.5l4.5 4.5L19 7.5"} pathLength={1} />
     </svg>
   );
 }

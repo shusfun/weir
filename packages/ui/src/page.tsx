@@ -21,10 +21,10 @@ function PageHeader({
     <header data-slot="page-header" className={cn("flex flex-wrap items-end justify-between gap-x-6 gap-y-3", className)}>
       {/* 标题区至少留 16em（容器更窄时取满宽）：放不下操作区时操作区整体换到下一行，标题不会被挤成一字一行 */}
       <div className="min-w-[min(100%,16em)] flex-1">
-        {eyebrow && <div className="mg-engraved mb-1.5">{eyebrow}</div>}
-        <h2 className="m-0 text-[19px] font-semibold tracking-[-0.02em] text-[var(--mg-ink)]">{title}</h2>
+        {eyebrow && <div className="weir-engraved mb-1.5">{eyebrow}</div>}
+        <h2 className="m-0 text-[19px] font-semibold tracking-[-0.02em] text-[var(--weir-ink)]">{title}</h2>
         {/* ch 按西文字符计宽，中文约两倍；用 em 控制约 46 个汉字一行 */}
-        {description && <p className="mt-1.5 mb-0 max-w-[46em] text-[13px] leading-relaxed text-[var(--mg-ink-3)]">{description}</p>}
+        {description && <p className="mt-1.5 mb-0 max-w-[46em] text-[13px] leading-relaxed text-[var(--weir-ink-3)]">{description}</p>}
       </div>
       {actions && <div className="flex max-w-full flex-wrap items-center gap-2">{actions}</div>}
     </header>
@@ -67,17 +67,17 @@ function SectionHeader({
       <div className="min-w-0 flex-1">
         <Heading
           className={cn(
-            "m-0 block min-w-0 wrap-anywhere text-[var(--mg-ink)] [&>svg]:mr-1.5 [&>svg]:inline [&>svg]:align-[-3px]",
+            "m-0 block min-w-0 wrap-anywhere text-[var(--weir-ink)] [&>svg]:mr-1.5 [&>svg]:inline [&>svg]:align-[-3px]",
             size === "sm" ? "text-[13px] font-semibold" : "text-[14.5px] font-[650] tracking-[-0.015em]",
           )}
         >
           {title}
         </Heading>
-        {description && <p className="mt-1 mb-0 text-[12.5px] leading-relaxed text-[var(--mg-ink-3)]">{description}</p>}
+        {description && <p className="mt-1 mb-0 text-[12.5px] leading-relaxed text-[var(--weir-ink-3)]">{description}</p>}
       </div>
       {actions && (
         // max-w-full：操作较多时在标题下方另起一行并在卡片内换行，不会撑出卡片
-        <div className="flex max-w-full min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 [&>svg]:text-[var(--mg-ink-engraved)]">{actions}</div>
+        <div className="flex max-w-full min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 [&>svg]:text-[var(--weir-ink-engraved)]">{actions}</div>
       )}
     </div>
   );
@@ -109,9 +109,9 @@ function PageState({
         data-slot="page-state"
         data-kind={kind}
         role={kind === "error" || kind === "forbidden" ? "alert" : "status"}
-        className={cn("flex items-center gap-2.5 py-4 text-[12.5px] text-[var(--mg-ink-3)]", className)}
+        className={cn("flex items-center gap-2.5 py-4 text-[12.5px] text-[var(--weir-ink-3)]", className)}
       >
-        <Icon className={cn("size-4 shrink-0 text-[var(--mg-ink-engraved)]", kind === "loading" && "animate-spin")} />
+        <Icon className={cn("size-4 shrink-0 text-[var(--weir-ink-engraved)]", kind === "loading" && "animate-spin")} />
         <span className="min-w-0">
           {title}
           {detail && <span className="block text-xs">{detail}</span>}
@@ -126,11 +126,11 @@ function PageState({
       role={kind === "error" || kind === "forbidden" ? "alert" : "status"}
       className={cn("flex min-h-52 flex-col items-center justify-center gap-3 px-6 py-8 text-center", className)}
     >
-      <span className="mg-well grid size-12 place-items-center rounded-full text-[var(--mg-ink-engraved)] in-data-[kind=error]:text-[var(--mg-bad)] in-data-[kind=success]:text-[var(--mg-ok)]">
+      <span className="weir-well grid size-12 place-items-center rounded-full text-[var(--weir-ink-engraved)] in-data-[kind=error]:text-[var(--weir-bad)] in-data-[kind=success]:text-[var(--weir-ok)]">
         <Icon className={cn("size-5", kind === "loading" && "animate-spin")} />
       </span>
-      <strong className="text-[13.5px] font-semibold text-[var(--mg-ink-2)]">{title}</strong>
-      {detail && <p className="m-0 max-w-[48ch] text-xs leading-relaxed text-[var(--mg-ink-3)]">{detail}</p>}
+      <strong className="text-[13.5px] font-semibold text-[var(--weir-ink-2)]">{title}</strong>
+      {detail && <p className="m-0 max-w-[48ch] text-xs leading-relaxed text-[var(--weir-ink-3)]">{detail}</p>}
       {action}
     </div>
   );
@@ -164,12 +164,12 @@ function Pager({
     <nav
       aria-label={name ? name + "分页" : "分页"}
       className={cn(
-        "flex items-center justify-between gap-3 text-xs text-[var(--mg-ink-3)]",
-        variant === "bar" ? "border-t border-[var(--mg-line-soft)] px-5 py-3" : "pt-3",
+        "flex items-center justify-between gap-3 text-xs text-[var(--weir-ink-3)]",
+        variant === "bar" ? "border-t border-[var(--weir-line-soft)] px-5 py-3" : "pt-3",
         className,
       )}
     >
-      <span className="mg-digits">
+      <span className="weir-digits">
         {total === undefined ? (busy ? "共 … " + label : "总数未知") : `共 ${total} ${label}`} · 第 {page}
         {pages ? ` / ${pages}` : ""} 页
       </span>
@@ -192,11 +192,11 @@ function Pager({
 }
 
 function Skeleton({ className, ...props }: ComponentProps<"div">) {
-  return <div data-slot="skeleton" aria-hidden className={cn("mg-skeleton h-4", className)} {...props} />;
+  return <div data-slot="skeleton" aria-hidden className={cn("weir-skeleton h-4", className)} {...props} />;
 }
 
 function Kbd({ className, ...props }: ComponentProps<"kbd">) {
-  return <kbd data-slot="kbd" className={cn("mg-kbd", className)} {...props} />;
+  return <kbd data-slot="kbd" className={cn("weir-kbd", className)} {...props} />;
 }
 
 export { PageHeader, SectionHeader, PageState, Pager, Skeleton, Kbd };

@@ -134,15 +134,15 @@ export function JobView({ job }: { job: Job }) {
   const { run, isBusy } = useRowAction<string>({ refetch: () => void client.invalidateQueries({ queryKey: ["job", job.id] }) });
   const line = statusLine(job);
   return (
-    <div className="stack rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3" aria-live="polite">
+    <div className="stack rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3" aria-live="polite">
       <div className="flex min-h-6 items-center gap-2">
         <strong className="shrink-0 text-[13px]">{job.title}</strong>
         <Badge variant="soft" tone={tones[job.status]}>{labels[job.status]}</Badge>
-        <small className="min-w-0 flex-1 truncate text-[var(--mg-ink-3)]">{job.status === "running" ? job.step : ""}</small>
+        <small className="min-w-0 flex-1 truncate text-[var(--weir-ink-3)]">{job.status === "running" ? job.step : ""}</small>
         <Button className={job.status === "running" ? undefined : "invisible"} size="xs" variant="ghost" disabled={isBusy() || job.status !== "running"} onClick={() => void run("cancel", () => api("/admin/jobs/" + encodeURIComponent(job.id) + "/cancel", "POST"), "已取消，已下载的部分保留")}><X />取消</Button>
       </div>
       <Progress value={progressOf(job)} aria-label={job.title + " 进度"} />
-      <small className={"block truncate tabular-nums " + (job.status === "failed" ? "text-[var(--mg-bad-ink)]" : "text-[var(--mg-ink-3)]")} title={line}>{line}</small>
+      <small className={"block truncate tabular-nums " + (job.status === "failed" ? "text-[var(--weir-bad-ink)]" : "text-[var(--weir-ink-3)]")} title={line}>{line}</small>
       <Collapsible title={`日志（${job.logs?.length ?? 0} 行）`} defaultOpen={job.status === "failed"}>
         <CodeBlock className="block h-56 overflow-auto whitespace-pre-wrap text-xs">{logText(job)}</CodeBlock>
       </Collapsible>
@@ -160,7 +160,7 @@ export function JobByID({ id, initial, onFinish }: { id: string; initial?: Job; 
 
 function JobLinePlaceholder({ text }: { text: string }) {
   return (
-    <div className="flex min-h-9 items-center gap-2 rounded-[var(--mg-radius)] border border-dashed border-[var(--mg-line)] px-3 text-[12.5px] text-[var(--mg-ink-3)]">{text}</div>
+    <div className="flex min-h-9 items-center gap-2 rounded-[var(--weir-radius)] border border-dashed border-[var(--weir-line)] px-3 text-[12.5px] text-[var(--weir-ink-3)]">{text}</div>
   );
 }
 
@@ -174,11 +174,11 @@ export function JobLine({ job, id, idle, onFinish }: { job?: Job; id?: string | 
   const pct = progressOf(j);
   const line = statusLine(j);
   return (
-    <div className="flex min-h-9 items-center gap-2 rounded-[var(--mg-radius)] border border-[var(--mg-line)] px-3 py-1" aria-live="polite">
+    <div className="flex min-h-9 items-center gap-2 rounded-[var(--weir-radius)] border border-[var(--weir-line)] px-3 py-1" aria-live="polite">
       <Badge variant="soft" tone={tones[j.status]}>{labels[j.status]}</Badge>
       <strong className="shrink-0 text-[12.5px]">{j.title}</strong>
       <span className="hidden w-24 shrink-0 sm:block"><Progress value={pct} aria-label={j.title + " 进度"} /></span>
-      <small className={"min-w-0 flex-1 truncate tabular-nums " + (j.status === "failed" ? "text-[var(--mg-bad-ink)]" : "text-[var(--mg-ink-3)]")} title={line}>{line}</small>
+      <small className={"min-w-0 flex-1 truncate tabular-nums " + (j.status === "failed" ? "text-[var(--weir-bad-ink)]" : "text-[var(--weir-ink-3)]")} title={line}>{line}</small>
       <Button size="xs" variant="ghost" onClick={() => setOpen(true)}>详情</Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent size="lg">

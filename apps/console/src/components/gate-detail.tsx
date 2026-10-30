@@ -75,9 +75,9 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
           {kernels.isPending || kernels.error ? <State loading={kernels.isPending} error={kernels.error} onRetry={() => void kernels.refetch()} /> : (["xray", "sing-box"] as const).map((k) => {
             const cached = (kernels.data[k]?.versions ?? []).filter((v) => v.arches[gate.arch] && v.driver).map((v) => v.version);
             return (
-              <div key={k} className="stack rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3">
-                <strong>{k} <small className="font-normal text-[var(--mg-ink-3)]">运行中 {gate.kernels_running?.[k] ? <ObjectLink to={{ type: "kernel", key: `${k}@${gate.kernels_running[k]}`, name: gate.kernels_running[k] }} /> : "无"}</small></strong>
-                {cached.length === 0 && <small className="text-[var(--mg-ink-3)]">中心还没有适用 {gate.arch} 且有驱动的 {k} 版本，<ObjectLink to={{ type: "kernel", key: k, name: "去内核页下载" }} />。</small>}
+              <div key={k} className="stack rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3">
+                <strong>{k} <small className="font-normal text-[var(--weir-ink-3)]">运行中 {gate.kernels_running?.[k] ? <ObjectLink to={{ type: "kernel", key: `${k}@${gate.kernels_running[k]}`, name: gate.kernels_running[k] }} /> : "无"}</small></strong>
+                {cached.length === 0 && <small className="text-[var(--weir-ink-3)]">中心还没有适用 {gate.arch} 且有驱动的 {k} 版本，<ObjectLink to={{ type: "kernel", key: k, name: "去内核页下载" }} />。</small>}
                 <Field label={k + " 版本"}>
                   <Select value={pins[k] ?? ""} onValueChange={(v) => setPins({ ...pins, [k]: String(v) })}>
                     <SelectTrigger><SelectValue>{pins[k] || `跟随默认（${kernels.data[k]?.default || "保持当前运行版本"}）`}</SelectValue></SelectTrigger>
@@ -106,7 +106,7 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
             <ul className="stack">{mine.map((n) => (
               <li key={n.id} className="stack gap-1 text-sm">
                 <span><ObjectLink to={{ type: "node", id: n.id, name: n.name }} className="font-semibold" /> :{n.port} → {exitName(n)}{!n.enabled && <Badge variant="soft" tone="warn">停用</Badge>}</span>
-                {n.chain.kind !== "none" && <small className="text-[var(--mg-ink-3)]">{probeText(n.chain.probe)}</small>}
+                {n.chain.kind !== "none" && <small className="text-[var(--weir-ink-3)]">{probeText(n.chain.probe)}</small>}
                 <NodeAccess ports={n.ports} reach={n.reach} />
               </li>
             ))}</ul>

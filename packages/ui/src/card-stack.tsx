@@ -90,9 +90,9 @@ function CardStack<T>({
   );
   const dragging = !!start.current;
   return (
-    <div data-slot="card-stack" className={cn("mg-stack", className)}>
+    <div data-slot="card-stack" className={cn("weir-stack", className)}>
       <div
-        className="mg-stack-deck"
+        className="weir-stack-deck"
         role="group"
         aria-roledescription="卡片堆叠"
         aria-label={`${label}，第 ${index + 1} / ${count} 张`}
@@ -105,14 +105,14 @@ function CardStack<T>({
             // 顶卡飞出时，后面的卡提前往前补一位
             const slot = drag?.leaving && !top ? k - 1 : k;
             const style = {
-              "--mg-stack-k": slot,
+              "--weir-stack-k": slot,
               zIndex: depth - k,
               ...(top && drag ? { translate: `${drag.x}px 0`, rotate: `${drag.x * 0.04}deg` } : null),
             } as CSSProperties;
             return (
               <div
                 key={getKey(item)}
-                className="mg-stack-card"
+                className="weir-stack-card"
                 data-top={top || undefined}
                 data-dragging={(top && dragging) || undefined}
                 data-leaving={(top && drag?.leaving) || undefined}
@@ -136,11 +136,11 @@ function CardStack<T>({
           })
           .reverse()}
       </div>
-      <div className="mg-stack-controls">
+      <div className="weir-stack-controls">
         <Button variant="outline" size="icon-sm" aria-label="上一张" disabled={!canPrev} onClick={back}>
           <ChevronLeft />
         </Button>
-        <span className="mg-digits text-xs text-[var(--mg-ink-3)]" aria-live="polite">
+        <span className="weir-digits text-xs text-[var(--weir-ink-3)]" aria-live="polite">
           {index + 1} / {count}
         </span>
         <Button variant="outline" size="icon-sm" aria-label="下一张" disabled={!canNext} onClick={() => dismiss(1)}>

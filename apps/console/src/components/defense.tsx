@@ -104,9 +104,9 @@ export function EventsCard({ dshReady }: { dshReady: boolean }) {
                 return (
                   <TableRow key={e.id}>
                     <TableCell className="whitespace-nowrap text-xs">{date(e.created_at)}</TableCell>
-                    <TableCell>{kinds[e.kind] ?? e.kind}<small className="block text-[var(--mg-ink-3)]">10 分钟内失败登录 {e.failed_logins_10m} 次</small></TableCell>
+                    <TableCell>{kinds[e.kind] ?? e.kind}<small className="block text-[var(--weir-ink-3)]">10 分钟内失败登录 {e.failed_logins_10m} 次</small></TableCell>
                     <TableCell><code className="text-xs">{e.source_ip || "未知"}</code></TableCell>
-                    <TableCell>{e.laya ? <Badge variant="soft" tone={e.laya.category === "suspicious" ? "bad" : e.laya.category === "normal" ? "ok" : "neutral"}>{verdicts[e.laya.category]} {Math.round(e.laya.confidence * 100)}%</Badge> : <small className="text-[var(--mg-ink-3)]" title={e.laya_error}>未知</small>}</TableCell>
+                    <TableCell>{e.laya ? <Badge variant="soft" tone={e.laya.category === "suspicious" ? "bad" : e.laya.category === "normal" ? "ok" : "neutral"}>{verdicts[e.laya.category]} {Math.round(e.laya.confidence * 100)}%</Badge> : <small className="text-[var(--weir-ink-3)]" title={e.laya_error}>未知</small>}</TableCell>
                     <TableCell><Badge variant="soft" tone={tone}>{label}</Badge>{e.analysis && <small className="mt-1 block max-w-[28ch] whitespace-pre-wrap break-words">{e.analysis}</small>}</TableCell>
                     <TableCell>
                       {(e.status === "new" || e.status === "no_action") && (
@@ -144,8 +144,8 @@ export function BlocksCard() {
       {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : q.data.length === 0 ? <State empty="没有封禁中的来源" /> : (
         <ul className="stack">
           {q.data.map((b) => (
-            <li key={b.key} className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-2">
-              <span><code>{b.ip}</code><small className="ml-2 text-[var(--mg-ink-3)]">到 {date(b.until)} · 事件 #{b.event_id}</small><small className="block whitespace-pre-wrap break-words">{b.reason}</small></span>
+            <li key={b.key} className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-2">
+              <span><code>{b.ip}</code><small className="ml-2 text-[var(--weir-ink-3)]">到 {date(b.until)} · 事件 #{b.event_id}</small><small className="block whitespace-pre-wrap break-words">{b.reason}</small></span>
               <Button size="sm" variant="outline" disabled={isBusy(b.key)} onClick={() => void unblock(b)}>解封</Button>
             </li>
           ))}

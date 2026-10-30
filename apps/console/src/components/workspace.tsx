@@ -29,7 +29,7 @@ function AccountMenu({ admin, email, onLogout }: { admin: boolean; email: string
     <Menu>
       <MenuTrigger
         render={
-          <button type="button" className="mg-key rail-account" aria-label={"个人中心：" + email}>
+          <button type="button" className="weir-key rail-account" aria-label={"个人中心：" + email}>
             <IconTile size="sm" tone="neutral">{email.slice(0, 1).toUpperCase() || "?"}</IconTile>
             <span className="rail-account-text">
               <strong>{email}</strong>
@@ -83,10 +83,10 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
       if (!items.length) return null;
       return (
         <div className="rail-group" key={group}>
-          <span className="rail-group-label mg-engraved">{group}</span>
+          <span className="rail-group-label weir-engraved">{group}</span>
           {items.map(({ key, path, label, icon: Icon }) => {
             const link = (
-              <NavLink key={key} to={path} className={({ isActive }) => "mg-key rail-item" + (isActive ? " active is-pressed" : "")}>
+              <NavLink key={key} to={path} className={({ isActive }) => "weir-key rail-item" + (isActive ? " active is-pressed" : "")}>
                 {({ isActive }) => (
                   <>
                     <Icon />
@@ -127,7 +127,7 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
               <h1>{current?.label ?? "Weir"}</h1>
             </div>
             <div className="topbar-tools">
-              <Button className="command-trigger min-w-[220px] justify-start text-[var(--mg-ink-3)] max-[1100px]:min-w-0" variant="outline" size="sm" onClick={() => setPalette(true)} aria-label="快速跳转">
+              <Button className="command-trigger min-w-[220px] justify-start text-[var(--weir-ink-3)] max-[1100px]:min-w-0" variant="outline" size="sm" onClick={() => setPalette(true)} aria-label="快速跳转">
                 <Search />
                 <span>快速跳转…</span>
                 <Kbd>Ctrl K</Kbd>

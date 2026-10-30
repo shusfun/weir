@@ -88,18 +88,18 @@ export function readColors() {
   const cs = getComputedStyle(document.documentElement);
   const v = (name: string, fallback: string) => cs.getPropertyValue(name).trim() || fallback;
   return {
-    sea: v("--mg-well-deep", "#e9e9ef"),
-    land: v("--mg-panel", "#ffffff"),
-    border: v("--mg-line", "#d6d6de"),
-    ink: v("--mg-ink", "#111"),
-    ink3: v("--mg-ink-3", "#888"),
-    accent: v("--mg-accent", "#0a84ff"),
-    ok: v("--mg-ok", "#30d158"),
-    warn: v("--mg-warn", "#ff9f0a"),
-    bad: v("--mg-bad", "#ff453a"),
-    info: v("--mg-info", "#64d2ff"),
-    off: v("--mg-off", "#8e8e93"),
-    font: v("--mg-font", "system-ui, sans-serif"),
+    sea: v("--weir-well-deep", "#e9e9ef"),
+    land: v("--weir-panel", "#ffffff"),
+    border: v("--weir-line", "#d6d6de"),
+    ink: v("--weir-ink", "#111"),
+    ink3: v("--weir-ink-3", "#888"),
+    accent: v("--weir-accent", "#0a84ff"),
+    ok: v("--weir-ok", "#30d158"),
+    warn: v("--weir-warn", "#ff9f0a"),
+    bad: v("--weir-bad", "#ff453a"),
+    info: v("--weir-info", "#64d2ff"),
+    off: v("--weir-off", "#8e8e93"),
+    font: v("--weir-font", "system-ui, sans-serif"),
   };
 }
 export type Colors = ReturnType<typeof readColors>;

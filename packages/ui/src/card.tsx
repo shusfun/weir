@@ -5,8 +5,8 @@ import { cn } from "cn";
 // size：sm 16px（紧凑卡片、拓扑节点）/ default 20px / lg 24px（登录、初始化、公开页），窄屏 lg 收为 20px。
 // variant：default 面板；inset 嵌套在面板里的浅凹分组（模板策略组 / 规则）；plain 去掉外框，只保留结构（弹窗内分区）。
 const cardVariants = {
-  default: "mg-panel",
-  inset: "rounded-[var(--mg-radius)] border border-transparent bg-[color-mix(in_srgb,var(--mg-panel)_70%,var(--mg-well))]",
+  default: "weir-panel",
+  inset: "rounded-[var(--weir-radius)] border border-transparent bg-[color-mix(in_srgb,var(--weir-panel)_70%,var(--weir-well))]",
   plain: "border-0 bg-transparent shadow-none",
 } as const;
 
@@ -32,7 +32,7 @@ function CardHeader({ className, ...props }: ComponentProps<"div">) {
     <div
       data-slot="card-header"
       className={cn(
-        "flex items-start justify-between gap-3 border-b border-[var(--mg-line-soft)] px-5 py-4 group-data-[size=sm]/card:px-4 group-data-[size=sm]/card:py-3 group-data-[size=lg]/card:px-6 group-data-[variant=plain]/card:px-0",
+        "flex items-start justify-between gap-3 border-b border-[var(--weir-line-soft)] px-5 py-4 group-data-[size=sm]/card:px-4 group-data-[size=sm]/card:py-3 group-data-[size=lg]/card:px-6 group-data-[variant=plain]/card:px-0",
         className,
       )}
       {...props}
@@ -44,7 +44,7 @@ function CardTitle({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       data-slot="card-title"
-      className={cn("text-sm font-semibold tracking-[-0.01em] text-[var(--mg-ink)]", className)}
+      className={cn("text-sm font-semibold tracking-[-0.01em] text-[var(--weir-ink)]", className)}
       {...props}
     />
   );
@@ -54,7 +54,7 @@ function CardDescription({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       data-slot="card-description"
-      className={cn("mt-1 text-xs text-[var(--mg-ink-3)]", className)}
+      className={cn("mt-1 text-xs text-[var(--weir-ink-3)]", className)}
       {...props}
     />
   );
@@ -88,7 +88,7 @@ function CardFooter({ className, ...props }: ComponentProps<"div">) {
     <div
       data-slot="card-footer"
       className={cn(
-        "flex items-center gap-2 rounded-b-[var(--mg-radius-lg)] border-t border-[var(--mg-line-soft)] px-5 py-3 group-data-[size=sm]/card:px-4 group-data-[size=lg]/card:px-6 group-data-[variant=plain]/card:px-0",
+        "flex items-center gap-2 rounded-b-[var(--weir-radius-lg)] border-t border-[var(--weir-line-soft)] px-5 py-3 group-data-[size=sm]/card:px-4 group-data-[size=lg]/card:px-6 group-data-[variant=plain]/card:px-0",
         className,
       )}
       {...props}

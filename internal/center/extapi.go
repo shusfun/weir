@@ -114,7 +114,7 @@ func (s *Server) createAPIToken(c *gin.Context) {
 		failure(c, 409, "api_token_limit")
 		return
 	}
-	token := "mg_" + randomToken(24)
+	token := "weir_" + randomToken(24)
 	r, err := s.Store.Ent.Resource.Create().SetKind(kindAPIToken).SetKey(digest(token)).SetData(map[string]any{"name": name, "created_by": c.GetInt("user_id")}).Save(ctx)
 	if err != nil {
 		failInternal(c, 500, "save_failed", err)

@@ -158,7 +158,7 @@ export function LinkMapCanvas({ map, store, focus, selected, onSelect, tooltip }
   const reset = () => (view.current = { k: 1, x: 0, y: 0 });
   const center = (f: number) => zoomAt(f, size.w / 2, size.h / 2);
   return (
-    <div ref={wrap} className="relative w-full overflow-hidden rounded-[var(--mg-radius)] border border-[var(--mg-line)] bg-[var(--mg-well-deep)]" style={{ height: size.h || 240 }}>
+    <div ref={wrap} className="relative w-full overflow-hidden rounded-[var(--weir-radius)] border border-[var(--weir-line)] bg-[var(--weir-well-deep)]" style={{ height: size.h || 240 }}>
       <canvas
         ref={canvas}
         role="img"
@@ -174,7 +174,7 @@ export function LinkMapCanvas({ map, store, focus, selected, onSelect, tooltip }
           if (tip.current) tip.current.hidden = true;
         }}
       />
-      <div ref={tip} hidden className="pointer-events-none absolute left-0 top-0 max-w-[220px] whitespace-pre-line rounded-[var(--mg-radius-sm)] border border-[var(--mg-line)] bg-[var(--mg-panel)] px-2 py-1 text-xs text-[var(--mg-ink)] shadow" />
+      <div ref={tip} hidden className="pointer-events-none absolute left-0 top-0 max-w-[220px] whitespace-pre-line rounded-[var(--weir-radius-sm)] border border-[var(--weir-line)] bg-[var(--weir-panel)] px-2 py-1 text-xs text-[var(--weir-ink)] shadow" />
       <div className="absolute right-2 top-2 flex flex-col gap-1">
         <Button size="icon-sm" variant="outline" aria-label="放大" onClick={() => center(1.6)}><Plus /></Button>
         <Button size="icon-sm" variant="outline" aria-label="缩小" onClick={() => center(1 / 1.6)}><Minus /></Button>

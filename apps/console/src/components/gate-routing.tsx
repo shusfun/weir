@@ -71,7 +71,7 @@ export function GateRouting({ gate, close }: { gate: Gate; close: () => void }) 
               <li key={o.id} className="flex flex-wrap items-center justify-between gap-2">
                 <span className="min-w-0">
                   <code>{o.tag}</code> {o.name} <Badge variant="soft" tone="neutral">{protoNames[o.protocol] ?? o.protocol}</Badge>{o.address && <small className="ml-1">{o.address}:{o.port}</small>}{o.protocol === "source" && <small className="ml-1"><SourceSummary choice={o.settings} resolved={o.source} /></small>}{!o.enabled && <Badge variant="soft" tone="warn">停用</Badge>}
-                  {o.address && <small className="block text-[var(--mg-ink-3)]">{probeText(o.probe)}</small>}
+                  {o.address && <small className="block text-[var(--weir-ink-3)]">{probeText(o.probe)}</small>}
                 </span>
                 <span className="flex flex-nowrap gap-1.5">
                   {o.address && <Button size="sm" variant="outline" disabled={isBusy("p" + o.id)} onClick={() => run("p" + o.id, () => api(`${base}/outbounds/${o.id}/probe`, "POST", {}), "实测可用", { detail: probed })}>实测</Button>}
@@ -93,7 +93,7 @@ export function GateRouting({ gate, close }: { gate: Gate; close: () => void }) 
               <li key={r.id} className="flex flex-wrap items-center justify-between gap-2">
                 <span className="min-w-0">
                   <Badge variant="soft" tone="neutral">#{r.priority}</Badge> → <code>{r.outbound_tag}</code>
-                  <small className="block max-w-xl truncate text-[var(--mg-ink-3)]">{[r.domain && "域名 " + r.domain, r.ip && "IP " + r.ip].filter(Boolean).join(" · ") || "全部流量"}</small>
+                  <small className="block max-w-xl truncate text-[var(--weir-ink-3)]">{[r.domain && "域名 " + r.domain, r.ip && "IP " + r.ip].filter(Boolean).join(" · ") || "全部流量"}</small>
                 </span>
                 <span className="flex flex-nowrap gap-1.5">
                   <Switch aria-label="启用规则" checked={r.enabled} disabled={isBusy("r" + r.id)} onCheckedChange={(v) => run("r" + r.id, () => api(`${base}/routes/${r.id}`, "PATCH", { ...r, enabled: v }), v ? "已启用" : "已停用")} />

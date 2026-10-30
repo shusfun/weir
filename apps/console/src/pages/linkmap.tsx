@@ -76,15 +76,15 @@ export function LinkMapPage({ admin }: { admin: boolean }) {
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="stack gap-2 min-w-0">
           <LinkMapCanvas map={m} store={store} focus={{ user, gate }} selected={selected} onSelect={(id) => set({ sel: id ?? undefined })} tooltip={tooltip} />
-          <small className="text-[var(--mg-ink-3)]">
+          <small className="text-[var(--weir-ink-3)]">
             {store.connected ? "实时连接正常" : "实时连接中断，正在重连"} · 圆点是 VPS，菱形是出口，VPS 外的虚线圈是直接出去；线越粗流动越快表示速率越高，灰色虚线表示速率未知。
             {m.geo.ready ? " IP 定位数据来自 DB-IP（CC BY 4.0）。" : ` IP 定位：${m.geo.error ?? "未就绪"}。`}
           </small>
           {unknownPlaces.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 text-[12.5px]">
-              <span className="text-[var(--mg-ink-3)]">位置未知：</span>
+              <span className="text-[var(--weir-ink-3)]">位置未知：</span>
               {unknownPlaces.map((u) => (
-                <button key={u.id} type="button" className="rounded-[var(--mg-radius-sm)] border border-[var(--mg-line)] px-1.5 py-0.5 hover:bg-[var(--mg-well)]" title={u.why} onClick={() => set({ sel: u.id })}>{u.name}</button>
+                <button key={u.id} type="button" className="rounded-[var(--weir-radius-sm)] border border-[var(--weir-line)] px-1.5 py-0.5 hover:bg-[var(--weir-well)]" title={u.why} onClick={() => set({ sel: u.id })}>{u.name}</button>
               ))}
             </div>
           )}
@@ -114,7 +114,7 @@ export function LinkMapPage({ admin }: { admin: boolean }) {
                     const v = store.stale(p.gate_id) ? null : store.smooth(store.paths.get(p.id));
                     const on = selected === p.id;
                     return (
-                      <TableRow key={p.id} tabIndex={0} aria-selected={on} className={on ? "bg-[var(--mg-accent-soft)]" : "cursor-pointer"}
+                      <TableRow key={p.id} tabIndex={0} aria-selected={on} className={on ? "bg-[var(--weir-accent-soft)]" : "cursor-pointer"}
                         onClick={() => set({ sel: p.id })} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), set({ sel: p.id }))}>
                         {admin && <TableCell>{p.user}</TableCell>}
                         <TableCell>{m.gates.find((g) => g.id === p.gate_id)?.name} · {p.node}</TableCell>

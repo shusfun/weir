@@ -40,15 +40,15 @@ export function NodesPanel() {
           loading={q.isPending}
           error={q.error}
           onRetry={() => q.refetch()}
-          skeleton={<SkeletonList rows={3} lines={2} className="stack rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3" rowClassName="flex items-center justify-between gap-2" />}
+          skeleton={<SkeletonList rows={3} lines={2} className="stack rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3" rowClassName="flex items-center justify-between gap-2" />}
         />
       ) : q.data.items.length === 0 ? (
         <State empty="还没有手动节点" />
       ) : (
         groups.map((g) => (
-          <div key={g || "_"} className="stack rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3">
+          <div key={g || "_"} className="stack rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3">
             <div className="flex items-center justify-between gap-2">
-              <strong>{g || "未分组"} <small className="text-[var(--mg-ink-3)]">（{q.data.groups[g]}）</small></strong>
+              <strong>{g || "未分组"} <small className="text-[var(--weir-ink-3)]">（{q.data.groups[g]}）</small></strong>
               {g && <Button size="sm" variant="outline" disabled={isBusy(-1)} onClick={() => renameGroup(g)}>重命名 / 解散</Button>}
             </div>
             <ul className="stack">

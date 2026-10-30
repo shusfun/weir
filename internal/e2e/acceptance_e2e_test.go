@@ -154,7 +154,7 @@ func TestRealityPrefers443WithDroppedPrivileges(t *testing.T) {
 	}
 	u := e.post("/api/v1/admin/users", map[string]any{"email": "p443@e2e.test", "password": "E2eUser1"}, nil)
 	e.applied("REALITY on 443")
-	pid := helperRunning(t, filepath.Join("/tmp", "mg-p443.sock"))["xray"]
+	pid := helperRunning(t, filepath.Join("/tmp", "weir-p443.sock"))["xray"]
 	acct, _ := user.Lookup("weir-e2e")
 	if pid == 0 || procUID(pid) != acct.Uid {
 		t.Fatalf("xray pid %d runs as uid %q, want %s", pid, procUID(pid), acct.Uid)
@@ -400,7 +400,7 @@ func (e *env) pairHTTPS(name, center, caFile string) (string, func()) {
 	t := e.t
 	inv := e.post("/api/v1/admin/gates/invite", map[string]string{"name": name}, nil)
 	gd := filepath.Join(e.dir, name)
-	p := gate.Paths{Config: filepath.Join(gd, "agent.json"), Data: filepath.Join(gd, "data"), Socket: filepath.Join("/tmp", "mg-"+name+".sock"),
+	p := gate.Paths{Config: filepath.Join(gd, "agent.json"), Data: filepath.Join(gd, "data"), Socket: filepath.Join("/tmp", "weir-"+name+".sock"),
 		CoresDir: filepath.Join(gd, "cores"), CertsDir: filepath.Join(gd, "certs"), KernelsDir: filepath.Join(gd, "kernels"), Root: filepath.Join(gd, "root")}
 	ctx, cancel := context.WithCancel(e.ctx)
 	go gate.ServeHelper(ctx, gate.NewHelper(p))
@@ -487,7 +487,7 @@ func TestGateFollowsCenterOrigin(t *testing.T) {
 		t.Fatalf("audit actions = %v", seen)
 	}
 	// 离线的 Gate 在旧域名还可用时回来：心跳收到新地址，认证成功后切换，「仍连接旧地址」清空。
-	a, err := gate.NewAgent(gate.Paths{Config: offlineCfg, Data: filepath.Join(e.dir, "offline", "data"), Socket: filepath.Join("/tmp", "mg-offline.sock"),
+	a, err := gate.NewAgent(gate.Paths{Config: offlineCfg, Data: filepath.Join(e.dir, "offline", "data"), Socket: filepath.Join("/tmp", "weir-offline.sock"),
 		CoresDir: filepath.Join(e.dir, "offline", "cores"), CertsDir: filepath.Join(e.dir, "offline", "certs"), KernelsDir: filepath.Join(e.dir, "offline", "kernels"), Root: filepath.Join(e.dir, "offline", "root")})
 	if err != nil {
 		t.Fatal(err)
@@ -495,7 +495,7 @@ func TestGateFollowsCenterOrigin(t *testing.T) {
 	a.MeterEvery, a.HeartbeatEvery, a.ReportEvery = time.Second, time.Second, 1
 	ctx, cancel := context.WithCancel(e.ctx)
 	t.Cleanup(cancel)
-	go gate.ServeHelper(ctx, gate.NewHelper(gate.Paths{Config: offlineCfg, Data: filepath.Join(e.dir, "offline", "data"), Socket: filepath.Join("/tmp", "mg-offline.sock"),
+	go gate.ServeHelper(ctx, gate.NewHelper(gate.Paths{Config: offlineCfg, Data: filepath.Join(e.dir, "offline", "data"), Socket: filepath.Join("/tmp", "weir-offline.sock"),
 		CoresDir: filepath.Join(e.dir, "offline", "cores"), CertsDir: filepath.Join(e.dir, "offline", "certs"), KernelsDir: filepath.Join(e.dir, "offline", "kernels"), Root: filepath.Join(e.dir, "offline", "root")}))
 	go a.Run(ctx)
 	eventually(t, 20*time.Second, "offline gate switches when it comes back", func() bool { return gateCenter(t, offlineCfg) == newOrigin })

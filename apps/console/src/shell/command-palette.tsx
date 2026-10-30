@@ -94,7 +94,7 @@ export function CommandPalette({ open, onOpenChange, admin }: { open: boolean; o
               const Icon = entry.icon;
               return (
                 <li key={entry.id} role="presentation">
-                  {heading && <div className="command-group mg-engraved" role="presentation">{entry.group}</div>}
+                  {heading && <div className="command-group weir-engraved" role="presentation">{entry.group}</div>}
                   <div
                     id={"command-" + entry.id}
                     role="option"

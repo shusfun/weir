@@ -103,7 +103,7 @@ export function NodeWizard({ open, close, done, gates, nodes }: { open: boolean;
           <DialogTitle>节点已创建</DialogTitle>
           <DialogDescription>VPS 应用配置约需数秒。{shares.length > 0 ? "下面是勾选用户在这个节点上的分享链接；用户的订阅也已包含它。" : ""}</DialogDescription>
           {created && <NodeAccess ports={created.ports} reach={created.reach} />}
-          {created && created.chain.kind !== "none" && <small className="text-[var(--mg-ink-3)]">出口 {exitKindName[created.chain.kind]}：{probeText(created.chain.probe)}</small>}
+          {created && created.chain.kind !== "none" && <small className="text-[var(--weir-ink-3)]">出口 {exitKindName[created.chain.kind]}：{probeText(created.chain.probe)}</small>}
           {shares.length > 0 && <ShareList shares={shares} leave={reset} />}
           <DialogFooter><Button onClick={reset}>完成</Button></DialogFooter>
         </DialogContent>
@@ -277,11 +277,11 @@ function ShareList({ shares, leave }: { shares: Share[]; leave: () => void }) {
   return (
     <ul className="stack max-h-[60vh] overflow-y-auto">
       {shares.map((s) => (
-        <li key={s.user_id} className="rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3">
-          <Link to={objectHref({ type: "user", id: s.user_id })} onClick={leave} className="text-sm font-semibold text-[var(--mg-accent-text)] underline-offset-4 hover:underline">{s.name ? `${s.name}（${s.email}）` : s.email}</Link>
+        <li key={s.user_id} className="rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3">
+          <Link to={objectHref({ type: "user", id: s.user_id })} onClick={leave} className="text-sm font-semibold text-[var(--weir-accent-text)] underline-offset-4 hover:underline">{s.name ? `${s.name}（${s.email}）` : s.email}</Link>
           {s.error ? (
             <div className="mt-1 flex flex-wrap items-center gap-2">
-              <small className="text-[var(--mg-warn-ink)]">{s.error}</small>
+              <small className="text-[var(--weir-warn-ink)]">{s.error}</small>
               <Button size="xs" variant="outline" render={<Link to={objectHref({ type: "user", id: s.user_id })} onClick={leave} />}>去用户详情加上</Button>
             </div>
           ) : s.links.map((l) => (
@@ -293,7 +293,7 @@ function ShareList({ shares, leave }: { shares: Share[]; leave: () => void }) {
                     <CopyButton value={l.uri}>复制链接</CopyButton>
                     <Button size="xs" variant="outline" aria-expanded={qr === l.uri} onClick={() => setQr(qr === l.uri ? "" : l.uri)}>二维码</Button>
                   </>
-                ) : <small className="text-[var(--mg-bad-ink)]">{l.error || "暂时生成不了链接"}</small>}
+                ) : <small className="text-[var(--weir-bad-ink)]">{l.error || "暂时生成不了链接"}</small>}
               </div>
               {l.uri && <Input readOnly className="font-mono text-xs" aria-label="分享链接" value={l.uri} />}
               {qr === l.uri && l.uri && <div className="qr-code mx-auto"><QRCodeSVG value={l.uri} size={200} title="节点二维码" /></div>}
@@ -315,7 +315,7 @@ function PresetStep({ presets, value, onChange }: { presets: ReturnType<typeof u
             <Radio value={p.id} />
             <strong>{p.name}</strong>
           </span>
-          <small className="text-[var(--mg-ink-3)]">{p.summary}</small>
+          <small className="text-[var(--weir-ink-3)]">{p.summary}</small>
         </ChoiceCard>
       ))}
     </RadioGroup>

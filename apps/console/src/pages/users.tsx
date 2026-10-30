@@ -77,8 +77,8 @@ export function UsersPage() {
                 {users.data.map((u) => (
                   <TableRow key={u.id} {...dataObject({ type: "user", id: u.id })}>
                     <TableCell>
-                      <Button variant="link" className="h-auto min-h-0 p-0 text-left text-[var(--mg-ink)]" onClick={() => detailParam.open(u)}>{u.name || u.email}</Button>
-                      <small className="block text-[var(--mg-ink-3)]">{u.email}</small>
+                      <Button variant="link" className="h-auto min-h-0 p-0 text-left text-[var(--weir-ink)]" onClick={() => detailParam.open(u)}>{u.name || u.email}</Button>
+                      <small className="block text-[var(--weir-ink-3)]">{u.email}</small>
                       {u.role === "admin" && <Badge variant="soft" tone="neutral">管理员</Badge>} {!u.enabled && <Badge variant="soft" tone="warn">已停用</Badge>}
                     </TableCell>
                     <TableCell className="min-w-40">

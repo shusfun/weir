@@ -1,6 +1,6 @@
-// 照片跟手：滑一下，照片跟着手指转起来。一个连续的位置变量 --mg-carousel-pos 同时驱动轨道位移
+// 照片跟手：滑一下，照片跟着手指转起来。一个连续的位置变量 --weir-carousel-pos 同时驱动轨道位移
 // 和每张图的 rotateY / 缩放（离中心越远转得越多），拖动时逐帧跟手，松手按距离和速度吸附到最近一张，
-// 用 --mg-decel 慢慢停住。拖动只写 CSS 变量，不触发 React 重渲染。
+// 用 --weir-decel 慢慢停住。拖动只写 CSS 变量，不触发 React 重渲染。
 // 键盘：区域获得焦点后左右方向键切换；另有前后按钮与页码点。减少动态效果时直接跳转。
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -32,7 +32,7 @@ function Carousel({
     const w = root.current?.offsetWidth ?? 0;
     return (w * slideWidth) / 100 + gap;
   };
-  const setPos = (pos: number) => root.current?.style.setProperty("--mg-carousel-pos", String(pos));
+  const setPos = (pos: number) => root.current?.style.setProperty("--weir-carousel-pos", String(pos));
   const go = (next: number) => {
     const i = Math.min(count - 1, Math.max(0, next));
     setIndex(i);
@@ -89,16 +89,16 @@ function Carousel({
   };
 
   return (
-    <div data-slot="carousel" className={cn("mg-carousel", className)}>
+    <div data-slot="carousel" className={cn("weir-carousel", className)}>
       <div
         ref={root}
-        className="mg-carousel-viewport"
+        className="weir-carousel-viewport"
         data-dragging={dragging || undefined}
         role="region"
         aria-roledescription="轮播"
         aria-label={`${label}，第 ${index + 1} / ${count} 张`}
         tabIndex={0}
-        style={{ "--mg-carousel-slide": slideWidth + "%", "--mg-carousel-gap": gap + "px" } as CSSProperties}
+        style={{ "--weir-carousel-slide": slideWidth + "%", "--weir-carousel-gap": gap + "px" } as CSSProperties}
         onKeyDown={onKeyDown}
         onDragStart={(e) => e.preventDefault()}
         onPointerDown={onPointerDown}
@@ -106,31 +106,31 @@ function Carousel({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
-        <div className="mg-carousel-track">
+        <div className="weir-carousel-track">
           {slides.map((slide, k) => (
             <div
               key={k}
-              className="mg-carousel-slide"
+              className="weir-carousel-slide"
               aria-roledescription="幻灯片"
               aria-label={`${k + 1} / ${count}`}
               aria-hidden={k !== index || undefined}
-              style={{ "--mg-carousel-k": k } as CSSProperties}
+              style={{ "--weir-carousel-k": k } as CSSProperties}
             >
               {slide}
             </div>
           ))}
         </div>
       </div>
-      <div className="mg-carousel-controls">
+      <div className="weir-carousel-controls">
         <Button variant="outline" size="icon-sm" aria-label="上一张" disabled={index === 0} onClick={() => go(index - 1)}>
           <ChevronLeft />
         </Button>
-        <span className="mg-carousel-dots">
+        <span className="weir-carousel-dots">
           {slides.map((_, k) => (
             <button
               key={k}
               type="button"
-              className="mg-carousel-dot"
+              className="weir-carousel-dot"
               aria-label={`第 ${k + 1} 张`}
               aria-current={k === index || undefined}
               onClick={() => go(k)}

@@ -12,7 +12,7 @@ export function NodeAccess({ ports, reach, compact }: { ports?: PortNeed[]; reac
   return (
     <div className="stack gap-1 text-[12.5px]">
       <div className="flex flex-wrap items-center gap-1.5">
-        {!compact && <span className="text-[var(--mg-ink-3)]">需放行</span>}
+        {!compact && <span className="text-[var(--weir-ink-3)]">需放行</span>}
         {ports.map((p) => (
           <Badge key={p.proto} variant="soft" tone={fwTone[p.firewall]} title={p.why}>
             {p.proto.toUpperCase()} {p.port} · {compact ? "" : "本机防火墙"}{fwText[p.firewall]}
@@ -25,7 +25,7 @@ export function NodeAccess({ ports, reach, compact }: { ports?: PortNeed[]; reac
         )}
       </div>
       {!compact && (
-        <small className="text-[var(--mg-ink-3)]">
+        <small className="text-[var(--weir-ink-3)]">
           {blocked ? ports.find((p) => p.firewall === "blocked")?.why ?? reach?.why : reach?.why}
           {" "}云服务器还要在云厂商控制台的安全组里放行这些端口，Weir 读不到安全组。
         </small>

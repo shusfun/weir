@@ -11,7 +11,7 @@ export function ObjectLink({ to, children, className }: { to: ObjectRef; childre
     <Link
       to={objectHref(to)}
       title={`打开${objectLabels[to.type]}「${to.name ?? objectKey(to)}」`}
-      className={"text-[var(--mg-accent-text)] underline-offset-4 hover:underline " + (className ?? "")}
+      className={"text-[var(--weir-accent-text)] underline-offset-4 hover:underline " + (className ?? "")}
     >
       {label}
     </Link>
@@ -42,8 +42,8 @@ export function FocusFromURL() {
       if (el) {
         window.clearInterval(timer);
         el.scrollIntoView({ block: "center", behavior: "smooth" });
-        el.classList.add("mg-flash");
-        window.setTimeout(() => el.classList.remove("mg-flash"), 2200);
+        el.classList.add("weir-flash");
+        window.setTimeout(() => el.classList.remove("weir-flash"), 2200);
         clear();
       } else if (++tries > 30) {
         window.clearInterval(timer);

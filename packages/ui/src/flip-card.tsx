@@ -39,12 +39,12 @@ function FlipCard({
   }, [flipped]);
   return (
     <FlipContext.Provider value={{ flipped, flip }}>
-      <div data-slot="flip-card" className={cn("mg-flip", className)}>
-        <div className="mg-flip-inner" data-flipped={flipped || undefined}>
-          <div ref={(el) => void (faces.current[0] = el)} className="mg-flip-face" inert={flipped} aria-hidden={flipped || undefined}>
+      <div data-slot="flip-card" className={cn("weir-flip", className)}>
+        <div className="weir-flip-inner" data-flipped={flipped || undefined}>
+          <div ref={(el) => void (faces.current[0] = el)} className="weir-flip-face" inert={flipped} aria-hidden={flipped || undefined}>
             {front}
           </div>
-          <div ref={(el) => void (faces.current[1] = el)} className="mg-flip-face mg-flip-back" inert={!flipped} aria-hidden={!flipped || undefined}>
+          <div ref={(el) => void (faces.current[1] = el)} className="weir-flip-face weir-flip-back" inert={!flipped} aria-hidden={!flipped || undefined}>
             {back}
           </div>
         </div>

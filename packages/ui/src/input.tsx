@@ -4,7 +4,7 @@ import { Input as InputPrimitive } from "@base-ui/react/input";
 import { cn } from "cn";
 
 export const fieldClass =
-  "mg-well block w-full min-w-0 px-3 text-[13px] text-[var(--mg-ink)] placeholder:text-[var(--mg-ink-engraved)] outline-none transition-[border-color,box-shadow] duration-[var(--mg-fast)] focus:border-[var(--mg-accent-text)] focus:shadow-[inset_0_1px_2px_var(--mg-inset),0_0_0_3px_var(--mg-ring)] disabled:cursor-not-allowed disabled:opacity-55 read-only:bg-[var(--mg-well-deep)] aria-invalid:border-destructive";
+  "weir-well block w-full min-w-0 px-3 text-[13px] text-[var(--weir-ink)] placeholder:text-[var(--weir-ink-engraved)] outline-none transition-[border-color,box-shadow] duration-[var(--weir-fast)] focus:border-[var(--weir-accent-text)] focus:shadow-[inset_0_1px_2px_var(--weir-inset),0_0_0_3px_var(--weir-ring)] disabled:cursor-not-allowed disabled:opacity-55 read-only:bg-[var(--weir-well-deep)] aria-invalid:border-destructive";
 
 function Input({ className, type, ...props }: ComponentProps<"input">) {
   return (

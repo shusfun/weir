@@ -55,7 +55,7 @@ function ModuleCard({
         </div>
         <CardAction>
           {actions}
-          <div className="mg-module-toggle">
+          <div className="weir-module-toggle">
             <StatusLamp tone={live ? "active" : "off"} />
             <span>{live ? "实时" : "已暂停"}</span>
             <Switch size="sm" checked={live} onCheckedChange={onLiveChange} aria-label={title + "实时刷新"} />
@@ -64,11 +64,11 @@ function ModuleCard({
       </CardHeader>
       <CardContent>
         {!live && (
-          <p className="mg-module-paused" role="status">
+          <p className="weir-module-paused" role="status">
             已暂停实时刷新，显示的是 {pausedAt ?? "暂停前"} 的数据。
           </p>
         )}
-        <div className="mg-module-body" data-live={live}>
+        <div className="weir-module-body" data-live={live}>
           {children}
         </div>
       </CardContent>

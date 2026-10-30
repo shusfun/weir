@@ -78,7 +78,7 @@ function StepCard({ step, index, total, edits, setEdit }: { step: Step; index: n
   const [editing, setEditing] = useState(false);
   const danger = step.risk === "danger";
   return (
-    <section className={"stack rounded-[var(--mg-radius)] border p-3 " + (danger ? "border-[var(--mg-bad)]" : "border-[var(--mg-line)]")} aria-label={step.title}>
+    <section className={"stack rounded-[var(--weir-radius)] border p-3 " + (danger ? "border-[var(--weir-bad)]" : "border-[var(--weir-line)]")} aria-label={step.title}>
       <div className="flex flex-wrap items-center gap-2">
         {total > 1 && <Badge variant="soft" tone="neutral">第 {index + 1} / {total} 步</Badge>}
         <strong className="text-sm">{step.title}</strong>
@@ -93,14 +93,14 @@ function StepCard({ step, index, total, edits, setEdit }: { step: Step; index: n
             const edited = f.key in edits;
             return (
               <div key={f.key} className="contents">
-                <dt className="text-[var(--mg-ink-3)]">{f.label}{f.unit ? `（${f.unit}）` : ""}</dt>
+                <dt className="text-[var(--weir-ink-3)]">{f.label}{f.unit ? `（${f.unit}）` : ""}</dt>
                 <dd className="min-w-0 break-words">
                   {f.secret ? (
                     <FieldInput f={f} value={edits[f.key]} onChange={(v) => setEdit(f.key, v)} />
                   ) : editing && editable(f) ? (
                     <FieldInput f={f} value={edited ? edits[f.key] : f.value} onChange={(v) => setEdit(f.key, v)} />
                   ) : f.before !== undefined && f.changed ? (
-                    <span><span className="text-[var(--mg-ink-3)] line-through">{f.before}</span> → <strong>{edited ? String(edits[f.key]) : f.display}</strong></span>
+                    <span><span className="text-[var(--weir-ink-3)] line-through">{f.before}</span> → <strong>{edited ? String(edits[f.key]) : f.display}</strong></span>
                   ) : (
                     <span>{edited ? String(edits[f.key]) : f.display}</span>
                   )}
@@ -114,7 +114,7 @@ function StepCard({ step, index, total, edits, setEdit }: { step: Step; index: n
       {step.result && typeof step.result.latency_ms === "number" && <Notice tone="ok">实测通过（{step.result.stage ?? "连接"}，{step.result.latency_ms} ms）。</Notice>}
       {step.diff && <DiffView lines={step.diff} />}
       {(step.preview ?? []).length > 0 && (
-        <ul className="m-0 list-disc space-y-0.5 pl-5 text-[13px] text-[var(--mg-ink-2)]">{step.preview!.map((p) => <li key={p}>{p}</li>)}</ul>
+        <ul className="m-0 list-disc space-y-0.5 pl-5 text-[13px] text-[var(--weir-ink-2)]">{step.preview!.map((p) => <li key={p}>{p}</li>)}</ul>
       )}
     </section>
   );
@@ -187,7 +187,7 @@ export function DraftConfirm() {
         <div className="stack max-h-[62vh] overflow-y-auto">
           {d.explain && (
             <div className="stack">
-              <small className="text-[var(--mg-ink-3)]">dsh 的说明</small>
+              <small className="text-[var(--weir-ink-3)]">dsh 的说明</small>
               <p className="whitespace-pre-wrap break-words text-sm">{d.explain}</p>
             </div>
           )}
