@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -214,5 +215,43 @@ func TestAgentFileProtocol(t *testing.T) {
 	a.step(t.Context())
 	if _, err := os.Stat(out); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("the result must be removed once the center deletes the request")
+	}
+}
+
+// 中心重启后 control/ 里还是上一次的期望状态，MCP 地址已经不存在：管理进程不按它启动 dsh（否则要等启动超时、
+// 再按新状态启动一次），而是写「正在启动」与原因等中心；连上之后照常启动；等太久显示为错误。
+func TestAgentWaitsForCenterMCP(t *testing.T) {
+	l := Layout{Root: t.TempDir()}
+	for _, d := range []string{filepath.Join(l.Control(), "jobs"), filepath.Join(l.Status(), "jobs"), l.State()} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gone, _ := net.Listen("tcp", "127.0.0.1:0")
+	stale := "http://" + gone.Addr().String() + "/mcp"
+	gone.Close()
+	WriteShared(filepath.Join(l.Control(), "desired.json"), Desired{Generation: 7, Version: "0.0.0-test", MCPURL: stale})
+	a := &agent{l: l}
+	a.step(t.Context())
+	var st AgentStatus
+	if err := ReadJSON(filepath.Join(l.Status(), "status.json"), &st); err != nil || st.State != "starting" || st.Generation != 0 || st.Waiting == "" || st.Error != "" || a.err != "" {
+		t.Fatalf("stale desired state must wait, not start: %+v %v (err %q)", st, err, a.err)
+	}
+	a.waitSince = time.Now().Add(-mcpWaitLimit - time.Second)
+	a.step(t.Context())
+	st = AgentStatus{}
+	ReadJSON(filepath.Join(l.Status(), "status.json"), &st)
+	if !strings.Contains(st.Error, "仍连不上中心的 MCP") {
+		t.Fatalf("waiting too long must show an error: %+v", st)
+	}
+	live, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer live.Close()
+	WriteShared(filepath.Join(l.Control(), "desired.json"), Desired{Generation: 8, Version: "0.0.0-test", MCPURL: "http://" + live.Addr().String() + "/mcp"})
+	a.step(t.Context())
+	st = AgentStatus{}
+	ReadJSON(filepath.Join(l.Status(), "status.json"), &st)
+	// 连上后照常尝试启动（测试环境没有 Node.js，启动失败的原因如实显示），不再等待。
+	if st.Waiting != "" || st.Generation != 8 || a.err == "" || !a.waitSince.IsZero() {
+		t.Fatalf("reachable center must proceed to start: %+v (err %q)", st, a.err)
 	}
 }
