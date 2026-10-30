@@ -1,7 +1,7 @@
 // 四步建节点：协议 → VPS → 链式代理 → 完成。伪装、传输参数由内置方案给出，选完方案可展开「高级」改具体字段；
 // REALITY 目标由 VPS 实测选择；证书由系统按 VPS 准备（手动选择在「高级」里）；第 ④ 步勾选用户。
 // 保存后显示要放行的端口（对照本机防火墙）与出口实测结果，勾选了用户时再给出他们的链接与二维码。
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge, Button, CheckboxField, ChoiceCard, Collapsible, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Step, Steps, Radio, RadioGroup, SwitchField } from "@weir/ui";
 import { QRCodeSVG } from "qrcode.react";
@@ -26,13 +26,18 @@ interface Share {
   error?: string;
 }
 
-export function NodeWizard({ open, close, done, gates, nodes }: { open: boolean; close: () => void; done: () => void; gates: Gate[]; nodes: NodeItem[] }) {
+// gateId：从某台 VPS 的「＋ 协议」打开时已选好这台 VPS（第 ② 步仍可改，证书说明也在那一步）。
+export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGate }: { open: boolean; close: () => void; done: () => void; gates: Gate[]; nodes: NodeItem[]; gateId?: number }) {
   const presets = useQuery({ queryKey: ["presets"], queryFn: async () => (await api("/admin/presets")).items as Preset[], enabled: open });
   const users = useQuery({ queryKey: ["users"], queryFn: async () => (await api("/admin/users")).items as UserItem[], enabled: open });
   const certs = useCerts();
   const [step, setStep] = useState(0);
   const [preset, setPreset] = useState("vless-reality");
-  const [gateId, setGateId] = useState<number | null>(null);
+  const [gateId, setGateId] = useState<number | null>(initialGate ?? null);
+  // 每次打开时用这一次的 VPS（关闭后状态保留在组件里）
+  useEffect(() => {
+    if (open) setGateId(initialGate ?? null);
+  }, [open, initialGate]);
   const [certId, setCertId] = useState(0);
   const [chain, setChain] = useState<ChainSpec>({ kind: "none" });
   const [name, setName] = useState("");

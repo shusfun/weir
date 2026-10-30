@@ -28,6 +28,8 @@ import { cn } from "cn";
 
 // assets
 import { XIcon } from "lucide-react";
+import { originFor, pressOrigin } from "./press-origin";
+import { prefersReducedMotion } from "./motion";
 
 type DialogSlots = { host: HTMLElement | null; formId: string | null };
 const DialogSlotContext = createContext<DialogSlots | null>(null);
@@ -216,20 +218,30 @@ function DialogLayer({
 }: Omit<ContentProps, "children"> & { id: string; formId: string | null; header: ReactNode[]; body: ReactNode[] }) {
   const depth = useDialogDepth(id);
   const [host, setHost] = useState<HTMLElement | null>(null);
+  const [popup, setPopup] = useState<HTMLElement | null>(null);
   const slots = useMemo(() => ({ host, formId }), [host, formId]);
   const sheet = placement === "top";
+  // 从点击的地方展开：挂载时（首帧绘制前）记下按压点作为缩放中心，起始缩放加大；关闭时沿用同一中心收回去。
+  // 窄屏是底部抽屉（不缩放），减少动态效果时只淡入。
+  useLayoutEffect(() => {
+    const p = pressOrigin();
+    if (!popup || !p || prefersReducedMotion()) return;
+    popup.style.transformOrigin = originFor(popup, p);
+    popup.style.setProperty("--weir-pop-from", "0.6");
+  }, [popup]);
   return (
     <>
       <DialogOverlay depth={depth} className={layer === "top" ? "z-[57]" : undefined} />
       <DialogSlotContext.Provider value={slots}>
       <DialogPrimitive.Popup
+        ref={setPopup}
         data-slot="dialog-content"
         data-size={size}
         data-depth={depth}
         style={{ "--weir-dialog-depth": depth, ...(style as CSSProperties) } as CSSProperties}
         className={cn(
           layer === "top" ? "z-[57]" : "z-50",
-          "group/dialog fixed left-1/2 flex w-full max-w-[calc(100%-2rem)] -translate-x-1/2 flex-col gap-4 overflow-hidden rounded-[var(--weir-radius-lg)] border border-[var(--weir-line)] bg-[linear-gradient(180deg,var(--weir-panel-top),var(--weir-panel)_64px)] p-6 text-sm text-card-foreground shadow-[inset_0_1px_0_var(--weir-highlight),0_18px_40px_-12px_var(--weir-shade-strong)] outline-none transition-[opacity,scale] duration-[var(--weir-mid)] ease-[var(--weir-ease)] data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.98] data-[ending-style]:opacity-0 max-sm:p-5",
+          "group/dialog fixed left-1/2 flex w-full max-w-[calc(100%-2rem)] -translate-x-1/2 flex-col gap-4 overflow-hidden rounded-[var(--weir-radius-lg)] border border-[var(--weir-line)] bg-[linear-gradient(180deg,var(--weir-panel-top),var(--weir-panel)_64px)] p-6 text-sm text-card-foreground shadow-[inset_0_1px_0_var(--weir-highlight),0_18px_40px_-12px_var(--weir-shade-strong)] outline-none transition-[opacity,scale] duration-[var(--weir-mid)] ease-[var(--weir-ease)] data-[starting-style]:scale-(--weir-pop-from,0.98) data-[starting-style]:opacity-0 data-[ending-style]:scale-(--weir-pop-from,0.98) data-[ending-style]:opacity-0 max-sm:p-5",
           placement === "palette" ? "top-[14vh] max-h-[calc(86dvh-16px)]" : cn(anchored, sheetBase, size === "sm" ? sheetFit : sheetFull),
           dialogSizes[size],
           className,

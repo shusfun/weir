@@ -17,6 +17,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/outbound"
 	"github.com/shusfun/weir/internal/store/ent/passkey"
+	"github.com/shusfun/weir/internal/store/ent/ratesample"
 	"github.com/shusfun/weir/internal/store/ent/recoverycode"
 	"github.com/shusfun/weir/internal/store/ent/resource"
 	"github.com/shusfun/weir/internal/store/ent/route"
@@ -27,6 +28,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/subgrant"
 	"github.com/shusfun/weir/internal/store/ent/subnode"
 	"github.com/shusfun/weir/internal/store/ent/subprofile"
+	"github.com/shusfun/weir/internal/store/ent/subpull"
 	"github.com/shusfun/weir/internal/store/ent/subsource"
 	"github.com/shusfun/weir/internal/store/ent/user"
 )
@@ -151,8 +153,14 @@ func init() {
 	chainDescEnabled := chainFields[11].Descriptor()
 	// chain.DefaultEnabled holds the default value on creation for the enabled field.
 	chain.DefaultEnabled = chainDescEnabled.Default.(bool)
+	// chainDescPolicyType is the schema descriptor for policy_type field.
+	chainDescPolicyType := chainFields[12].Descriptor()
+	// chain.DefaultPolicyType holds the default value on creation for the policy_type field.
+	chain.DefaultPolicyType = chainDescPolicyType.Default.(string)
+	// chain.PolicyTypeValidator is a validator for the "policy_type" field. It is called by the builders before save.
+	chain.PolicyTypeValidator = chainDescPolicyType.Validators[0].(func(string) error)
 	// chainDescCreatedAt is the schema descriptor for created_at field.
-	chainDescCreatedAt := chainFields[12].Descriptor()
+	chainDescCreatedAt := chainFields[13].Descriptor()
 	// chain.DefaultCreatedAt holds the default value on creation for the created_at field.
 	chain.DefaultCreatedAt = chainDescCreatedAt.Default.(func() time.Time)
 	credentialFields := schema.Credential{}.Fields()
@@ -182,7 +190,7 @@ func init() {
 	// credential.DefaultMeterDown holds the default value on creation for the meter_down field.
 	credential.DefaultMeterDown = credentialDescMeterDown.Default.(int64)
 	// credentialDescCreatedAt is the schema descriptor for created_at field.
-	credentialDescCreatedAt := credentialFields[11].Descriptor()
+	credentialDescCreatedAt := credentialFields[12].Descriptor()
 	// credential.DefaultCreatedAt holds the default value on creation for the created_at field.
 	credential.DefaultCreatedAt = credentialDescCreatedAt.Default.(func() time.Time)
 	gateFields := schema.Gate{}.Fields()
@@ -324,7 +332,7 @@ func init() {
 	// link.DefaultUsed holds the default value on creation for the used field.
 	link.DefaultUsed = linkDescUsed.Default.(int64)
 	// linkDescCreatedAt is the schema descriptor for created_at field.
-	linkDescCreatedAt := linkFields[9].Descriptor()
+	linkDescCreatedAt := linkFields[11].Descriptor()
 	// link.DefaultCreatedAt holds the default value on creation for the created_at field.
 	link.DefaultCreatedAt = linkDescCreatedAt.Default.(func() time.Time)
 	nodeFields := schema.Node{}.Fields()
@@ -451,6 +459,24 @@ func init() {
 	passkeyDescCreatedAt := passkeyFields[4].Descriptor()
 	// passkey.DefaultCreatedAt holds the default value on creation for the created_at field.
 	passkey.DefaultCreatedAt = passkeyDescCreatedAt.Default.(func() time.Time)
+	ratesampleFields := schema.RateSample{}.Fields()
+	_ = ratesampleFields
+	// ratesampleDescChainID is the schema descriptor for chain_id field.
+	ratesampleDescChainID := ratesampleFields[2].Descriptor()
+	// ratesample.DefaultChainID holds the default value on creation for the chain_id field.
+	ratesample.DefaultChainID = ratesampleDescChainID.Default.(int)
+	// ratesampleDescBytes is the schema descriptor for bytes field.
+	ratesampleDescBytes := ratesampleFields[4].Descriptor()
+	// ratesample.DefaultBytes holds the default value on creation for the bytes field.
+	ratesample.DefaultBytes = ratesampleDescBytes.Default.(int64)
+	// ratesampleDescSeconds is the schema descriptor for seconds field.
+	ratesampleDescSeconds := ratesampleFields[5].Descriptor()
+	// ratesample.DefaultSeconds holds the default value on creation for the seconds field.
+	ratesample.DefaultSeconds = ratesampleDescSeconds.Default.(float64)
+	// ratesampleDescCreatedAt is the schema descriptor for created_at field.
+	ratesampleDescCreatedAt := ratesampleFields[6].Descriptor()
+	// ratesample.DefaultCreatedAt holds the default value on creation for the created_at field.
+	ratesample.DefaultCreatedAt = ratesampleDescCreatedAt.Default.(func() time.Time)
 	recoverycodeFields := schema.RecoveryCode{}.Fields()
 	_ = recoverycodeFields
 	// recoverycodeDescCreatedAt is the schema descriptor for created_at field.
@@ -613,6 +639,42 @@ func init() {
 	subprofileDescCreatedAt := subprofileFields[12].Descriptor()
 	// subprofile.DefaultCreatedAt holds the default value on creation for the created_at field.
 	subprofile.DefaultCreatedAt = subprofileDescCreatedAt.Default.(func() time.Time)
+	subpullFields := schema.SubPull{}.Fields()
+	_ = subpullFields
+	// subpullDescAt is the schema descriptor for at field.
+	subpullDescAt := subpullFields[2].Descriptor()
+	// subpull.DefaultAt holds the default value on creation for the at field.
+	subpull.DefaultAt = subpullDescAt.Default.(func() time.Time)
+	// subpullDescTarget is the schema descriptor for target field.
+	subpullDescTarget := subpullFields[3].Descriptor()
+	// subpull.DefaultTarget holds the default value on creation for the target field.
+	subpull.DefaultTarget = subpullDescTarget.Default.(string)
+	// subpull.TargetValidator is a validator for the "target" field. It is called by the builders before save.
+	subpull.TargetValidator = subpullDescTarget.Validators[0].(func(string) error)
+	// subpullDescClient is the schema descriptor for client field.
+	subpullDescClient := subpullFields[4].Descriptor()
+	// subpull.DefaultClient holds the default value on creation for the client field.
+	subpull.DefaultClient = subpullDescClient.Default.(string)
+	// subpull.ClientValidator is a validator for the "client" field. It is called by the builders before save.
+	subpull.ClientValidator = subpullDescClient.Validators[0].(func(string) error)
+	// subpullDescUserAgent is the schema descriptor for user_agent field.
+	subpullDescUserAgent := subpullFields[5].Descriptor()
+	// subpull.DefaultUserAgent holds the default value on creation for the user_agent field.
+	subpull.DefaultUserAgent = subpullDescUserAgent.Default.(string)
+	// subpull.UserAgentValidator is a validator for the "user_agent" field. It is called by the builders before save.
+	subpull.UserAgentValidator = subpullDescUserAgent.Validators[0].(func(string) error)
+	// subpullDescIP is the schema descriptor for ip field.
+	subpullDescIP := subpullFields[6].Descriptor()
+	// subpull.DefaultIP holds the default value on creation for the ip field.
+	subpull.DefaultIP = subpullDescIP.Default.(string)
+	// subpull.IPValidator is a validator for the "ip" field. It is called by the builders before save.
+	subpull.IPValidator = subpullDescIP.Validators[0].(func(string) error)
+	// subpullDescStatus is the schema descriptor for status field.
+	subpullDescStatus := subpullFields[7].Descriptor()
+	// subpull.DefaultStatus holds the default value on creation for the status field.
+	subpull.DefaultStatus = subpullDescStatus.Default.(string)
+	// subpull.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	subpull.StatusValidator = subpullDescStatus.Validators[0].(func(string) error)
 	subsourceFields := schema.SubSource{}.Fields()
 	_ = subsourceFields
 	// subsourceDescName is the schema descriptor for name field.
@@ -740,19 +802,19 @@ func init() {
 	// user.DefaultAllowChain holds the default value on creation for the allow_chain field.
 	user.DefaultAllowChain = userDescAllowChain.Default.(bool)
 	// userDescTotpSecret is the schema descriptor for totp_secret field.
-	userDescTotpSecret := userFields[13].Descriptor()
+	userDescTotpSecret := userFields[14].Descriptor()
 	// user.DefaultTotpSecret holds the default value on creation for the totp_secret field.
 	user.DefaultTotpSecret = userDescTotpSecret.Default.(string)
 	// userDescTotpStep is the schema descriptor for totp_step field.
-	userDescTotpStep := userFields[14].Descriptor()
+	userDescTotpStep := userFields[15].Descriptor()
 	// user.DefaultTotpStep holds the default value on creation for the totp_step field.
 	user.DefaultTotpStep = userDescTotpStep.Default.(int64)
 	// userDescCreatedAt is the schema descriptor for created_at field.
-	userDescCreatedAt := userFields[15].Descriptor()
+	userDescCreatedAt := userFields[16].Descriptor()
 	// user.DefaultCreatedAt holds the default value on creation for the created_at field.
 	user.DefaultCreatedAt = userDescCreatedAt.Default.(func() time.Time)
 	// userDescUpdatedAt is the schema descriptor for updated_at field.
-	userDescUpdatedAt := userFields[16].Descriptor()
+	userDescUpdatedAt := userFields[17].Descriptor()
 	// user.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	user.DefaultUpdatedAt = userDescUpdatedAt.Default.(func() time.Time)
 	// user.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

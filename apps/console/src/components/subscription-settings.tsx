@@ -1,4 +1,4 @@
-// 规则模板（6 个内置 + 自定义 ini / Clash YAML）与订阅管理的默认设置。
+// 规则模板（6 个内置 + 自定义 ini / Clash YAML）与订阅源页的默认设置。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge, Button, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, SectionHeader, Segmented, SwitchField, Textarea, useToast, useConfirm } from "@weir/ui";

@@ -227,6 +227,20 @@ func (_u *ChainUpdate) SetNillableEnabled(v *bool) *ChainUpdate {
 	return _u
 }
 
+// SetPolicyType sets the "policy_type" field.
+func (_u *ChainUpdate) SetPolicyType(v string) *ChainUpdate {
+	_u.mutation.SetPolicyType(v)
+	return _u
+}
+
+// SetNillablePolicyType sets the "policy_type" field if the given value is not nil.
+func (_u *ChainUpdate) SetNillablePolicyType(v *string) *ChainUpdate {
+	if v != nil {
+		_u.SetPolicyType(*v)
+	}
+	return _u
+}
+
 // Mutation returns the ChainMutation object of the builder.
 func (_u *ChainUpdate) Mutation() *ChainMutation {
 	return _u.mutation
@@ -279,6 +293,11 @@ func (_u *ChainUpdate) check() error {
 	if v, ok := _u.mutation.ExitUsername(); ok {
 		if err := chain.ExitUsernameValidator(v); err != nil {
 			return &ValidationError{Name: "exit_username", err: fmt.Errorf(`ent: validator failed for field "Chain.exit_username": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.PolicyType(); ok {
+		if err := chain.PolicyTypeValidator(v); err != nil {
+			return &ValidationError{Name: "policy_type", err: fmt.Errorf(`ent: validator failed for field "Chain.policy_type": %w`, err)}
 		}
 	}
 	return nil
@@ -349,6 +368,9 @@ func (_u *ChainUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Enabled(); ok {
 		_spec.SetField(chain.FieldEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.PolicyType(); ok {
+		_spec.SetField(chain.FieldPolicyType, field.TypeString, value)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -570,6 +592,20 @@ func (_u *ChainUpdateOne) SetNillableEnabled(v *bool) *ChainUpdateOne {
 	return _u
 }
 
+// SetPolicyType sets the "policy_type" field.
+func (_u *ChainUpdateOne) SetPolicyType(v string) *ChainUpdateOne {
+	_u.mutation.SetPolicyType(v)
+	return _u
+}
+
+// SetNillablePolicyType sets the "policy_type" field if the given value is not nil.
+func (_u *ChainUpdateOne) SetNillablePolicyType(v *string) *ChainUpdateOne {
+	if v != nil {
+		_u.SetPolicyType(*v)
+	}
+	return _u
+}
+
 // Mutation returns the ChainMutation object of the builder.
 func (_u *ChainUpdateOne) Mutation() *ChainMutation {
 	return _u.mutation
@@ -635,6 +671,11 @@ func (_u *ChainUpdateOne) check() error {
 	if v, ok := _u.mutation.ExitUsername(); ok {
 		if err := chain.ExitUsernameValidator(v); err != nil {
 			return &ValidationError{Name: "exit_username", err: fmt.Errorf(`ent: validator failed for field "Chain.exit_username": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.PolicyType(); ok {
+		if err := chain.PolicyTypeValidator(v); err != nil {
+			return &ValidationError{Name: "policy_type", err: fmt.Errorf(`ent: validator failed for field "Chain.policy_type": %w`, err)}
 		}
 	}
 	return nil
@@ -722,6 +763,9 @@ func (_u *ChainUpdateOne) sqlSave(ctx context.Context) (_node *Chain, err error)
 	}
 	if value, ok := _u.mutation.Enabled(); ok {
 		_spec.SetField(chain.FieldEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.PolicyType(); ok {
+		_spec.SetField(chain.FieldPolicyType, field.TypeString, value)
 	}
 	_node = &Chain{config: _u.config}
 	_spec.Assign = _node.assignValues

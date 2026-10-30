@@ -30,6 +30,9 @@ func (Chain) Fields() []ent.Field {
 		// exit_link：exit_kind 为 link 时的分享链接（含凭据，加密存储）。
 		field.String("exit_link").Sensitive().Default(""),
 		field.Bool("enabled").Default(true),
+		// policy_type 非空：代理页「给这个类型加出口」生成的链（每个该类型节点一条），随类型出口一起改、删，
+		// 不在链式代理列表里单独显示，不占每人 10 条的上限。订阅里用它替换同一入口的直连节点。
+		field.String("policy_type").MaxLen(64).Default(""),
 		field.Time("created_at").Default(time.Now).Immutable(),
 	}
 }

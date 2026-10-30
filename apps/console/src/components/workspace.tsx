@@ -4,7 +4,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { IconTile, Button, Kbd, Menu, MenuTrigger, MenuContent, MenuItem, MenuSeparator, MenuToggle, Sheet, SheetClose, SheetContent, StatusLamp, Tooltip, TooltipProvider } from "@weir/ui";
 import { PanelLeftClose, PanelLeftOpen, LogOut, ShieldCheck, Link2, Search, Activity, ChevronsUpDown } from "lucide-react";
 import { ThemeControl } from "../theme";
-import { navigation, navGroups, currentNav } from "../shell/navigation";
+import { navigation, navGroups, currentNav, visibleFor } from "../shell/navigation";
 import { CommandPalette } from "../shell/command-palette";
 import { DshWindow } from "./dsh";
 import { DraftConfirm } from "./draft-confirm";
@@ -22,7 +22,7 @@ function readCollapsed() {
   }
 }
 
-// 左下角个人中心：头像 + 账户，点开为我的订阅 / 账户安全 / 退出
+// 左下角个人中心：头像 + 账户，点开为订阅管理 / 账户安全 / 退出
 function AccountMenu({ admin, email, onLogout }: { admin: boolean; email: string; onLogout: () => void }) {
   const navigate = useNavigate();
   return (
@@ -40,7 +40,7 @@ function AccountMenu({ admin, email, onLogout }: { admin: boolean; email: string
         }
       />
       <MenuContent side="top" align="start">
-        <MenuItem onClick={() => navigate("/subscription")}><Link2 />我的订阅</MenuItem>
+        <MenuItem onClick={() => navigate("/links")}><Link2 />订阅管理</MenuItem>
         <MenuItem onClick={() => navigate("/security")}><ShieldCheck />账户安全</MenuItem>
         <MenuSeparator />
         <MenuItem onClick={onLogout}><LogOut />退出登录</MenuItem>
@@ -76,10 +76,10 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // 管理员的个人页面收进左下角个人中心；普通用户只有个人页面，保留在导航中
+  // 管理员的个人页面收进左下角个人中心；代理与订阅管理是共用页面，两种账户都在导航里
   const nav = (compact: boolean) =>
     navGroups.map((group) => {
-      const items = navigation.filter((item) => item.group === group && (admin ? item.admin : !item.admin));
+      const items = navigation.filter((item) => item.group === group && visibleFor(item, admin));
       if (!items.length) return null;
       return (
         <div className="rail-group" key={group}>
@@ -106,7 +106,7 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
     <TooltipProvider delay={300}>
       <div className="shell" data-collapsed={collapsed}>
         <aside className="rail">
-          <NavLink to={admin ? "/gates" : "/subscription"} className="rail-brand" aria-label="Weir 首页">
+          <NavLink to={admin ? "/gates" : "/links"} className="rail-brand" aria-label="Weir 首页">
             <span className="rail-mark"><Activity size={19} /></span>
             <strong>Weir</strong>
           </NavLink>

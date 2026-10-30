@@ -106,8 +106,15 @@ func TestNodeWizardUsersLinksChainsAndSubscription(t *testing.T) {
 	if err != nil || len(parsed.Nodes) != 3 || len(parsed.Skipped) != 0 {
 		t.Fatalf("own share links must parse: %v %+v", err, parsed.Skipped)
 	}
-	if w = admin.do("GET", "/sub/"+token, nil, map[string]string{"User-Agent": "clash.meta/1.19"}); w.Code != 200 || !strings.Contains(w.Body.String(), "proxies:") || !strings.Contains(w.Body.String(), "fingerprint:") {
+	// Clash：分组与规则在整份配置里，节点放在 proxy-providers（按类型各一份、自动选择一份），按代理页的间隔刷新。
+	if w = admin.do("GET", "/sub/"+token, nil, map[string]string{"User-Agent": "clash.meta/1.19"}); w.Code != 200 || !strings.Contains(w.Body.String(), "proxy-providers:") || !strings.Contains(w.Body.String(), "/sub/"+token+"/provider/auto") {
 		t.Fatalf("clash sub = %d %s", w.Code, w.Body.String())
+	}
+	if w = admin.do("GET", "/sub/"+token+"/provider/auto", nil, map[string]string{"User-Agent": "clash.meta/1.19"}); w.Code != 200 || !strings.Contains(w.Body.String(), "proxies:") || !strings.Contains(w.Body.String(), "fingerprint:") {
+		t.Fatalf("clash provider = %d %s", w.Code, w.Body.String())
+	}
+	if w = admin.do("GET", "/sub/"+token+"/provider/no-such-type", nil, nil); w.Code != 404 {
+		t.Fatalf("unknown provider = %d", w.Code)
 	}
 	if w = admin.do("GET", "/sub/"+token, nil, map[string]string{"User-Agent": "SFA/1.12"}); w.Code != 200 || !strings.Contains(w.Body.String(), `"outbounds"`) {
 		t.Fatalf("sing-box sub = %d %s", w.Code, w.Body.String())

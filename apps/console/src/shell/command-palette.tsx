@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { PageState, Dialog, DialogContent, DialogTitle, Kbd } from "@weir/ui";
 import { Search, Server, User, CornerDownLeft, type LucideIcon } from "lucide-react";
 import { api } from "../api";
-import { navigation } from "./navigation";
+import { navigation, visibleFor } from "./navigation";
 
 interface Entry {
   id: string;
@@ -35,7 +35,7 @@ export function CommandPalette({ open, onOpenChange, admin }: { open: boolean; o
     const q = query.trim().toLowerCase();
     const hit = (text: string) => !q || text.toLowerCase().includes(q);
     const list: Entry[] = navigation
-      .filter((item) => (admin || !item.admin) && hit(item.label))
+      .filter((item) => (admin || visibleFor(item, false)) && hit(item.label))
       .map((item) => ({ id: "nav:" + item.key, group: "页面", label: item.label, hint: item.group, to: item.path, icon: item.icon }));
     for (const d of devices.data?.items ?? [])
       if (hit(d.name || "") || q === String(d.id))

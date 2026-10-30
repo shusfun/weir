@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -506,7 +507,7 @@ var readCaps = []Capability{
 			}
 			return out, err
 		}},
-	{Name: "get_user", Title: "用户详情", Purpose: "读取一个用户与他的链接（链接只给名称、编号、包含的节点，不含订阅地址与令牌）。", Kind: "read",
+	{Name: "get_user", Title: "用户详情", Purpose: "读取一个用户与他的链接（链接只给名称、编号、包含的节点、生效时间与状态：active 生效中 / not_started 未开始 / expired 已结束；effective_ends_at 是与用户到期取早者后的实际结束时间。不含订阅地址与令牌）。", Kind: "read",
 		Params: []Param{{Key: "user_id", Label: "用户", Kind: "ref", Ref: "user", Required: true}},
 		read: func(ctx context.Context, s *Server, args map[string]any) (any, error) {
 			u, err := s.Store.Ent.User.Get(ctx, intArg(args, "user_id"))
@@ -516,7 +517,9 @@ var readCaps = []Capability{
 			links, _ := s.Store.Ent.Link.Query().Where(link.UserIDEQ(u.ID)).Order(ent.Asc(link.FieldID)).All(ctx)
 			ls := []map[string]any{}
 			for _, l := range links {
-				ls = append(ls, map[string]any{"id": l.ID, "name": l.Name, "enabled": l.Enabled, "all_nodes": l.AllNodes, "node_ids": l.NodeIds, "chain_ids": l.ChainIds, "last_used_at": l.LastUsedAt})
+				_, end := linkWindow(u, l)
+				ls = append(ls, map[string]any{"id": l.ID, "name": l.Name, "enabled": l.Enabled, "all_nodes": l.AllNodes, "node_ids": l.NodeIds, "chain_ids": l.ChainIds, "last_used_at": l.LastUsedAt,
+					"starts_at": l.StartsAt, "ends_at": l.EndsAt, "effective_ends_at": end, "state": windowState(u, l, time.Now())})
 			}
 			return map[string]any{"id": u.ID, "email": u.Email, "name": u.Name, "role": u.Role, "enabled": u.Enabled, "quota_bytes": u.Quota, "used_bytes": u.Used, "expires_at": u.ExpiresAt,
 				"monthly_reset": u.MonthlyReset, "all_nodes": u.AllNodes, "node_ids": u.NodeIds, "allow_chain": u.AllowChain, "links": ls}, nil
@@ -558,9 +561,11 @@ var draftCaps = []Capability{
 		Params: append([]Param{{Key: "email", Label: "邮箱", Kind: "string", Required: true}}, planParams...), plan: planUserCreate, exec: execUserCreate},
 	{Name: "user.update", Title: "修改用户", Purpose: "修改用户的名称、额度、有效期、可用节点、是否启用；不能修改角色与密码。", Kind: "draft", Risk: "normal", Object: "user",
 		Params: append(append([]Param{{Key: "user_id", Label: "用户", Kind: "ref", Ref: "user", Required: true}}, planParams...), Param{Key: "enabled", Label: "启用", Kind: "bool"}), plan: planUserUpdate, exec: execUserUpdate},
-	{Name: "link.create", Title: "新建订阅链接", Purpose: "为用户新建一条订阅链接（生成新的订阅令牌）；可以只包含部分节点。", Kind: "draft", Risk: "normal", Object: "link", Creates: true,
+	{Name: "link.create", Title: "新建订阅链接", Purpose: "为用户新建一条订阅链接（生成新的订阅令牌）；可以只包含部分节点，可以设生效时间（开始、结束都可不填，结束不能晚于用户到期）。", Kind: "draft", Risk: "normal", Object: "link", Creates: true,
 		Params: []Param{{Key: "user_id", Label: "用户", Kind: "ref", Ref: "user", Required: true}, {Key: "name", Label: "名称", Kind: "string"},
-			{Key: "all_nodes", Label: "包含全部节点", Kind: "bool"}, {Key: "node_ids", Label: "包含的节点", Kind: "refs", Ref: "node"}}, plan: planLinkCreate, exec: execLinkCreate},
+			{Key: "all_nodes", Label: "包含全部节点", Kind: "bool"}, {Key: "node_ids", Label: "包含的节点", Kind: "refs", Ref: "node"},
+			{Key: "starts_at", Label: "开始时间", Kind: "string", Hint: "RFC 3339 时间，如 2026-11-01T00:00:00+08:00；不给为现在就能用"},
+			{Key: "ends_at", Label: "结束时间", Kind: "string", Hint: "RFC 3339 时间；不给为不限；不能晚于用户到期时间"}}, plan: planLinkCreate, exec: execLinkCreate},
 	{Name: "node.update", Title: "修改节点", Purpose: "修改节点参数（只能用 get_node_state 的 editable_fields，值为 null 表示删除）、名称或启用状态。Weir 在节点所在 VPS 上用真实内核实测，通过才可确认。", Kind: "draft", Risk: "normal", Object: "node",
 		Params: []Param{{Key: "node_id", Label: "节点", Kind: "ref", Ref: "node", Required: true}, {Key: "name", Label: "名称", Kind: "string"}, {Key: "enabled", Label: "启用", Kind: "bool"},
 			{Key: "set", Label: "修改的参数", Kind: "object", Hint: "字段 → 新值"}}, plan: planNodeUpdate, exec: execNodeUpdate},

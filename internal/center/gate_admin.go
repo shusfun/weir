@@ -1,7 +1,6 @@
 package center
 
 import (
-	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -91,9 +90,8 @@ func (s *Server) inviteGate(c *gin.Context) {
 		failure(c, 400, "invalid_name")
 		return
 	}
-	token := randomToken(32)
-	b, _ := json.Marshal(pairInvite{Name: name})
-	if err := s.Store.KV.Set(c.Request.Context(), "pair:"+digest(token), string(b), time.Hour); err != nil {
+	token, err := s.newInvite(c.Request.Context(), name)
+	if err != nil {
 		failInternal(c, 503, "invite_unavailable", err)
 		return
 	}

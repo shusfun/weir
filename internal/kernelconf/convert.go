@@ -11,10 +11,10 @@ import (
 	"github.com/shusfun/weir/packages/contracts"
 )
 
-// active 判断凭据此刻是否应下发到内核：到期或所属用户额度用尽的凭据被剔除；
+// active 判断凭据此刻是否应下发到内核：不在可用时段或所属用户额度用尽的凭据被剔除；
 // 系统内部凭据（链式代理入口到出口那一跳）不受用户额度影响。
 func active(c contracts.Credential, now time.Time, exhausted map[string]bool) bool {
-	if c.ExpiresAt != nil && !now.Before(*c.ExpiresAt) {
+	if !c.InWindow(now) {
 		return false
 	}
 	return c.Internal || !exhausted[c.UserKey]

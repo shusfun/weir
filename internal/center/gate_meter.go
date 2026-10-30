@@ -101,8 +101,11 @@ func (s *Server) applyMeter(ctx context.Context, g *ent.Gate, rep contracts.Mete
 		if !ok {
 			continue
 		}
-		if err = cred.Update().SetMeterEpoch(rep.Epoch).SetMeterUp(sample.Up).SetMeterDown(sample.Down).Exec(ctx); err != nil {
+		if err = cred.Update().SetMeterEpoch(rep.Epoch).SetMeterUp(sample.Up).SetMeterDown(sample.Down).SetMeterAt(now).Exec(ctx); err != nil {
 			return nil, err
+		}
+		if fresh && !cred.Internal && cred.UserID != nil {
+			s.recordRate(ctx, cred, rep.Epoch, sample.Down, now)
 		}
 		if delta > 0 {
 			// 按天累计（中心本地日期），链路页显示每条路径今天的流量；内部凭据也记，用于出口一侧的连线。

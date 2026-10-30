@@ -109,6 +109,11 @@ func MeterDown(v int64) predicate.Credential {
 	return predicate.Credential(sql.FieldEQ(FieldMeterDown, v))
 }
 
+// MeterAt applies equality check predicate on the "meter_at" field. It's identical to MeterAtEQ.
+func MeterAt(v time.Time) predicate.Credential {
+	return predicate.Credential(sql.FieldEQ(FieldMeterAt, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.Credential {
 	return predicate.Credential(sql.FieldEQ(FieldCreatedAt, v))
@@ -652,6 +657,56 @@ func MeterDownLT(v int64) predicate.Credential {
 // MeterDownLTE applies the LTE predicate on the "meter_down" field.
 func MeterDownLTE(v int64) predicate.Credential {
 	return predicate.Credential(sql.FieldLTE(FieldMeterDown, v))
+}
+
+// MeterAtEQ applies the EQ predicate on the "meter_at" field.
+func MeterAtEQ(v time.Time) predicate.Credential {
+	return predicate.Credential(sql.FieldEQ(FieldMeterAt, v))
+}
+
+// MeterAtNEQ applies the NEQ predicate on the "meter_at" field.
+func MeterAtNEQ(v time.Time) predicate.Credential {
+	return predicate.Credential(sql.FieldNEQ(FieldMeterAt, v))
+}
+
+// MeterAtIn applies the In predicate on the "meter_at" field.
+func MeterAtIn(vs ...time.Time) predicate.Credential {
+	return predicate.Credential(sql.FieldIn(FieldMeterAt, vs...))
+}
+
+// MeterAtNotIn applies the NotIn predicate on the "meter_at" field.
+func MeterAtNotIn(vs ...time.Time) predicate.Credential {
+	return predicate.Credential(sql.FieldNotIn(FieldMeterAt, vs...))
+}
+
+// MeterAtGT applies the GT predicate on the "meter_at" field.
+func MeterAtGT(v time.Time) predicate.Credential {
+	return predicate.Credential(sql.FieldGT(FieldMeterAt, v))
+}
+
+// MeterAtGTE applies the GTE predicate on the "meter_at" field.
+func MeterAtGTE(v time.Time) predicate.Credential {
+	return predicate.Credential(sql.FieldGTE(FieldMeterAt, v))
+}
+
+// MeterAtLT applies the LT predicate on the "meter_at" field.
+func MeterAtLT(v time.Time) predicate.Credential {
+	return predicate.Credential(sql.FieldLT(FieldMeterAt, v))
+}
+
+// MeterAtLTE applies the LTE predicate on the "meter_at" field.
+func MeterAtLTE(v time.Time) predicate.Credential {
+	return predicate.Credential(sql.FieldLTE(FieldMeterAt, v))
+}
+
+// MeterAtIsNil applies the IsNil predicate on the "meter_at" field.
+func MeterAtIsNil() predicate.Credential {
+	return predicate.Credential(sql.FieldIsNull(FieldMeterAt))
+}
+
+// MeterAtNotNil applies the NotNil predicate on the "meter_at" field.
+func MeterAtNotNil() predicate.Credential {
+	return predicate.Credential(sql.FieldNotNull(FieldMeterAt))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

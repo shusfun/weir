@@ -45,40 +45,49 @@ func iniValue(s string) (string, error) {
 	return s, nil
 }
 func iniOutput(links []string, target string) ([]byte, error) {
+	lines, names, sections, err := iniNodes(links, target, map[string]bool{"PROXY": true, "DIRECT": true, "REJECT": true, "direct": true, "reject": true})
+	if err != nil {
+		return nil, err
+	}
+	if target == "quanx" {
+		return []byte("[server_local]\n" + strings.Join(lines, "\n") + "\n\n[policy]\nstatic=PROXY, " + strings.Join(names, ", ") + "\n\n[filter_local]\nfinal, PROXY\n"), nil
+	}
+	return []byte("[General]\n\n[Proxy]\n" + strings.Join(lines, "\n") + "\n\n[Proxy Group]\nPROXY = select, " + strings.Join(names, ", ") + "\n\n[Rule]\nFINAL, PROXY\n\n" + strings.Join(sections, "\n\n")), nil
+}
+
+// iniNodes 把链接转成 Surge / Loon / QuanX 的节点行；names 与 links 一一对应，sections 是 WireGuard 的附加段落。
+func iniNodes(links []string, target string, used map[string]bool) (lines, names, sections []string, err error) {
 	if target != "surge" && target != "loon" && target != "quanx" {
-		return nil, fmt.Errorf("unsupported INI target")
+		return nil, nil, nil, fmt.Errorf("unsupported INI target")
 	}
 	parsed, err := subscription.ParseLinks(links)
 	if err != nil || len(parsed.Skipped) > 0 {
-		return nil, fmt.Errorf("invalid INI node")
+		return nil, nil, nil, fmt.Errorf("invalid INI node")
 	}
-	names := []string{}
-	lines := []string{}
-	sections := []string{}
-	used := map[string]bool{"PROXY": true, "DIRECT": true, "REJECT": true, "direct": true, "reject": true}
+	names, lines, sections = []string{}, []string{}, []string{}
 	for _, n := range parsed.Nodes {
 		var s subscription.Settings
 		if err = json.Unmarshal([]byte(n.SettingsJSON), &s); err != nil {
-			return nil, err
+			return nil, nil, nil, err
 		}
 		if !supportedSubscriptionSettings(n.Protocol, s) || s.Network == "grpc" || s.SPKI != "" || s.CertificatePin != "" || s.Obfs != "" || s.CongestionControl != "" || s.ZeroRTT {
-			return nil, fmt.Errorf("unsupported INI protocol fields")
+			return nil, nil, nil, fmt.Errorf("unsupported INI protocol fields")
 		}
 		if s.Fingerprint != "" && target != "loon" || len(s.ALPN) > 1 || len(s.ALPN) > 0 && target != "loon" || s.Reality && target != "loon" {
-			return nil, fmt.Errorf("unsupported INI TLS fields")
+			return nil, nil, nil, fmt.Errorf("unsupported INI TLS fields")
 		}
 		if s.Flow != "" && target != "loon" {
-			return nil, fmt.Errorf("unsupported INI flow")
+			return nil, nil, nil, fmt.Errorf("unsupported INI flow")
 		}
 		if strings.ContainsAny(n.Address, "\r\n,;#[] ") {
-			return nil, fmt.Errorf("invalid INI address")
+			return nil, nil, nil, fmt.Errorf("invalid INI address")
 		}
 		name := uniqueNodeName(iniNodeName(n.Remark), used)
 		names = append(names, name)
 		if n.Protocol == "snell" {
 			line, e := snellINI(n, s, name, target)
 			if e != nil {
-				return nil, e
+				return nil, nil, nil, e
 			}
 			lines = append(lines, line)
 			continue
@@ -86,7 +95,7 @@ func iniOutput(links []string, target string) ([]byte, error) {
 		if n.Protocol == "wireguard" {
 			line, section, e := wireGuardINI(n, s, name, target)
 			if e != nil {
-				return nil, e
+				return nil, nil, nil, e
 			}
 			lines = append(lines, line)
 			if section != "" {
@@ -99,7 +108,7 @@ func iniOutput(links []string, target string) ([]byte, error) {
 		for i, v := range values {
 			quoted[i], err = iniValue(v)
 			if err != nil {
-				return nil, err
+				return nil, nil, nil, err
 			}
 		}
 		user, password, sni, host, path, pbk, sid, fp, flow, method := quoted[0], quoted[1], quoted[2], quoted[3], quoted[4], quoted[5], quoted[6], quoted[7], quoted[8], quoted[9]
@@ -110,7 +119,7 @@ func iniOutput(links []string, target string) ([]byte, error) {
 			// not emit ambiguous commas or encode a different password.
 			for _, v := range values {
 				if strings.ContainsAny(v, ", \t\"=") {
-					return nil, fmt.Errorf("QuanX value cannot be represented losslessly")
+					return nil, nil, nil, fmt.Errorf("QuanX value cannot be represented losslessly")
 				}
 			}
 			endpoint := net.JoinHostPort(n.Address, strconv.Itoa(n.Port))
@@ -124,7 +133,7 @@ func iniOutput(links []string, target string) ([]byte, error) {
 				parts = []string{"vmess=" + endpoint, "method=" + method, "password=" + user}
 			case "trojan":
 				if !s.TLS && s.Security != "tls" {
-					return nil, fmt.Errorf("QuanX Trojan requires TLS")
+					return nil, nil, nil, fmt.Errorf("QuanX Trojan requires TLS")
 				}
 				parts = []string{"trojan=" + endpoint, "password=" + password}
 			case "http":
@@ -132,14 +141,14 @@ func iniOutput(links []string, target string) ([]byte, error) {
 			case "anytls":
 				parts = []string{"anytls=" + endpoint, "password=" + password}
 			default:
-				return nil, fmt.Errorf("protocol unsupported by QuanX conversion")
+				return nil, nil, nil, fmt.Errorf("protocol unsupported by QuanX conversion")
 			}
 			if s.Network == "ws" {
 				if kind == "vmess" && sni != "" && host != "" && sni != host {
-					return nil, fmt.Errorf("QuanX WS distinct SNI/Host cannot be preserved")
+					return nil, nil, nil, fmt.Errorf("QuanX WS distinct SNI/Host cannot be preserved")
 				}
 				if kind != "vmess" && kind != "trojan" {
-					return nil, fmt.Errorf("unsupported QuanX WS")
+					return nil, nil, nil, fmt.Errorf("unsupported QuanX WS")
 				}
 				obfs := "ws"
 				if s.TLS && kind != "trojan" {
@@ -180,11 +189,11 @@ func iniOutput(links []string, target string) ([]byte, error) {
 			}
 		}
 		if kind == "vless" && target == "surge" {
-			return nil, fmt.Errorf("Surge does not support VLESS")
+			return nil, nil, nil, fmt.Errorf("Surge does not support VLESS")
 		}
 		if kind == "http" || kind == "socks5" {
 			if target == "loon" {
-				return nil, fmt.Errorf("Loon HTTP/SOCKS conversion not adapted")
+				return nil, nil, nil, fmt.Errorf("Loon HTTP/SOCKS conversion not adapted")
 			}
 			if s.TLS {
 				if kind == "http" {
@@ -213,7 +222,7 @@ func iniOutput(links []string, target string) ([]byte, error) {
 			case "http", "socks5":
 				parts = append(parts, user, password)
 			default:
-				return nil, fmt.Errorf("unsupported Surge protocol")
+				return nil, nil, nil, fmt.Errorf("unsupported Surge protocol")
 			}
 		} else {
 			switch n.Protocol {
@@ -243,12 +252,12 @@ func iniOutput(links []string, target string) ([]byte, error) {
 			case "trojan", "anytls", "hysteria2":
 				parts = append(parts, password)
 			default:
-				return nil, fmt.Errorf("unsupported Loon protocol")
+				return nil, nil, nil, fmt.Errorf("unsupported Loon protocol")
 			}
 		}
 		if s.Network == "ws" {
 			if n.Protocol != "vmess" && n.Protocol != "vless" && n.Protocol != "trojan" {
-				return nil, fmt.Errorf("unsupported INI WS")
+				return nil, nil, nil, fmt.Errorf("unsupported INI WS")
 			}
 			if target == "surge" {
 				parts = append(parts, "ws=true")
@@ -279,7 +288,7 @@ func iniOutput(links []string, target string) ([]byte, error) {
 		if len(s.ALPN) == 1 {
 			alpn, e := iniValue(s.ALPN[0])
 			if e != nil {
-				return nil, e
+				return nil, nil, nil, e
 			}
 			parts = append(parts, "alpn="+alpn)
 		}
@@ -289,10 +298,7 @@ func iniOutput(links []string, target string) ([]byte, error) {
 		lines = append(lines, strings.Join(parts, ", "))
 	}
 	if len(names) == 0 {
-		return nil, fmt.Errorf("no eligible INI nodes")
+		return nil, nil, nil, fmt.Errorf("no eligible INI nodes")
 	}
-	if target == "quanx" {
-		return []byte("[server_local]\n" + strings.Join(lines, "\n") + "\n\n[policy]\nstatic=PROXY, " + strings.Join(names, ", ") + "\n\n[filter_local]\nfinal, PROXY\n"), nil
-	}
-	return []byte("[General]\n\n[Proxy]\n" + strings.Join(lines, "\n") + "\n\n[Proxy Group]\nPROXY = select, " + strings.Join(names, ", ") + "\n\n[Rule]\nFINAL, PROXY\n\n" + strings.Join(sections, "\n\n")), nil
+	return lines, names, sections, nil
 }

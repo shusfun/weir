@@ -56,7 +56,8 @@ const KernelsPage = page(() => import("./pages/kernels"), "KernelsPage");
 const SystemPage = page(() => import("./pages/system"), "SystemPage");
 const SubPage = page(() => import("./pages/sub-page"), "SubPage");
 const UsersPage = page(() => import("./pages/users"), "UsersPage");
-const SubscriptionPage = page(() => import("./pages/subscription"), "SubscriptionPage");
+const LinksPage = page(() => import("./pages/links"), "LinksPage");
+const ProxyPage = page(() => import("./pages/proxy"), "ProxyPage");
 const SecurityPage = page(() => import("./pages/security"), "SecurityPage");
 const LinkMapPage = page(() => import("./pages/linkmap"), "LinkMapPage");
 const LoginPage = page(() => import("./pages/login"), "LoginPage");
@@ -117,8 +118,8 @@ function Console() {
     return <Suspense fallback={<div className="auth">{loading("正在加载账户页面…")}</div>}>{status === "setup" ? <SetupPage done={boot} /> : <LoginPage done={boot} />}</Suspense>;
 
   const admin = me.role === "admin";
-  const home = admin ? "/gates" : "/subscription";
-  const guard = (node: ReactNode) => (admin ? node : <Navigate to="/subscription" replace />);
+  const home = admin ? "/gates" : "/links";
+  const guard = (node: ReactNode) => (admin ? node : <Navigate to="/links" replace />);
   return (
     <Workspace admin={admin} email={me.email ?? ""} onLogout={logout}>
       <main className="shell-main">
@@ -135,7 +136,10 @@ function Console() {
               <Route path="/pages" element={guard(<PublicPagesPage />)} />
               <Route path="/ops/audit" element={guard(<AuditPage />)} />
               <Route path="/linkmap" element={guard(<LinkMapPage admin />)} />
-              <Route path="/subscription" element={<SubscriptionPage />} />
+              <Route path="/links" element={<LinksPage admin={admin} />} />
+              <Route path="/proxy" element={<ProxyPage admin={admin} />} />
+              {/* 旧地址：「我的订阅」并进了订阅管理 */}
+              <Route path="/subscription" element={<Navigate to="/links" replace />} />
               <Route path="/my/linkmap" element={<LinkMapPage admin={false} />} />
               <Route path="/security" element={<SecurityPage loginRequired={loginRequired} />} />
               {DevUiPage && <Route path="/dev/ui" element={guard(<DevUiPage />)} />}

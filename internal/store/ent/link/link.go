@@ -31,6 +31,10 @@ const (
 	FieldUsed = "used"
 	// FieldLastUsedAt holds the string denoting the last_used_at field in the database.
 	FieldLastUsedAt = "last_used_at"
+	// FieldStartsAt holds the string denoting the starts_at field in the database.
+	FieldStartsAt = "starts_at"
+	// FieldEndsAt holds the string denoting the ends_at field in the database.
+	FieldEndsAt = "ends_at"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// Table holds the table name of the link in the database.
@@ -49,6 +53,8 @@ var Columns = []string{
 	FieldEnabled,
 	FieldUsed,
 	FieldLastUsedAt,
+	FieldStartsAt,
+	FieldEndsAt,
 	FieldCreatedAt,
 }
 
@@ -118,6 +124,16 @@ func ByUsed(opts ...sql.OrderTermOption) OrderOption {
 // ByLastUsedAt orders the results by the last_used_at field.
 func ByLastUsedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLastUsedAt, opts...).ToFunc()
+}
+
+// ByStartsAt orders the results by the starts_at field.
+func ByStartsAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStartsAt, opts...).ToFunc()
+}
+
+// ByEndsAt orders the results by the ends_at field.
+func ByEndsAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEndsAt, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

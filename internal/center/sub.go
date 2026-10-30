@@ -25,6 +25,7 @@ import (
 
 func (s *Server) subRoutes(r *gin.Engine, ready *gin.RouterGroup) {
 	r.GET("/sub/:token", s.serveSub)
+	r.GET("/sub/:token/provider/:key", s.serveProvider)
 	ready.GET("/sub-info/:token", s.subInfo)
 }
 
@@ -34,6 +35,7 @@ type Entry struct {
 	NodeID   int    `json:"node_id"`
 	ChainID  int    `json:"chain_id,omitempty"`
 	Protocol string `json:"protocol"`
+	Type     string `json:"type"` // 代理页的类型（协议方案）
 	Host     string `json:"host"`
 	Port     int    `json:"port"`
 	UUID     string `json:"uuid,omitempty"`
@@ -181,10 +183,28 @@ func firstNonEmpty(v ...string) string {
 }
 
 // linkEntries 列出某条链接在订阅里输出的节点（停用的节点、链式代理不输出）。
+// 代理页的设置在这里生效：关掉的类型不输出；类型加了出口时，同一入口只输出经出口的那条，不再输出直连。
 func (s *Server) linkEntries(ctx context.Context, u *ent.User, l *ent.Link) ([]Entry, error) {
 	creds, err := s.Store.Ent.Credential.Query().Where(credential.LinkIDEQ(l.ID), credential.InternalEQ(false)).Order(ent.Asc(credential.FieldNodeID), ent.Asc(credential.FieldID)).All(ctx)
 	if err != nil {
 		return nil, err
+	}
+	pol := loadPolicy(u)
+	disabled := map[string]bool{}
+	for _, t := range pol.Disabled {
+		disabled[t] = true
+	}
+	ti := s.typeIndex(ctx)
+	viaExit := map[int]bool{} // 入口节点 → 有类型出口
+	if u.AllowChain {
+		for _, c := range creds {
+			if c.ChainID == nil {
+				continue
+			}
+			if ch, err := s.Store.Ent.Chain.Get(ctx, *c.ChainID); err == nil && ch.Enabled && ch.PolicyType != "" {
+				viaExit[c.NodeID] = true
+			}
+		}
 	}
 	out := make([]Entry, 0, len(creds))
 	for _, c := range creds {
@@ -192,12 +212,16 @@ func (s *Server) linkEntries(ctx context.Context, u *ent.User, l *ent.Link) ([]E
 		if err != nil || !n.Enabled {
 			continue
 		}
+		typ := ti.of(n).Key
+		if disabled[typ] || c.ChainID == nil && viaExit[c.NodeID] {
+			continue
+		}
 		g, err := s.Store.Ent.Gate.Get(ctx, n.GateID)
 		if err != nil || g.Status != "active" {
 			continue
 		}
 		name := n.Name
-		e := Entry{NodeID: n.ID, Protocol: n.Protocol, Host: g.PublicHost, Port: n.Port, UUID: c.UUID, Password: c.Password}
+		e := Entry{NodeID: n.ID, Protocol: n.Protocol, Type: typ, Host: g.PublicHost, Port: n.Port, UUID: c.UUID, Password: c.Password}
 		if c.ChainID != nil {
 			ch, err := s.Store.Ent.Chain.Get(ctx, *c.ChainID)
 			if err != nil || !ch.Enabled || !u.AllowChain {
@@ -265,7 +289,8 @@ func wantsBrowserPage(c *gin.Context) bool {
 }
 
 // serveSub 输出订阅：客户端按 User-Agent 自动选格式（?target= 可指定）；浏览器打开时显示一键导入页。
-// 获取订阅不创建任何资源；到期 / 超额由 Gate 执行，这里仍返回节点并在响应头标明用量与到期。
+// 不在生效时间内（链接的开始 / 结束与用户到期取交集）时拿不到节点；超额由 Gate 执行，这里仍返回节点。
+// 节点按代理页的设置分组、分流；target=weir 是 Weir 自己的结构化格式。每次拉取记一条，供「订阅管理」统计。
 func (s *Server) serveSub(c *gin.Context) {
 	if !s.Config.Installed || s.Store == nil {
 		failure(c, 503, "setup_required")
@@ -289,32 +314,123 @@ func (s *Server) serveSub(c *gin.Context) {
 	if target == "" {
 		target = subout.TargetForUA(c.GetHeader("User-Agent"))
 	}
+	if state := windowState(u, l, time.Now()); state != "active" {
+		s.recordPull(c, l, target, state)
+		failure(c, 403, "subscription_"+state)
+		return
+	}
+	entries, err := s.linkEntries(ctx, u, l)
+	if err != nil {
+		s.recordPull(c, l, target, "failed")
+		failInternal(c, 503, "subscription_unavailable", err)
+		return
+	}
+	p := s.planEntries(ctx, u, entries, true)
+	var body []byte
+	contentType := "application/json"
+	if target == "weir" {
+		body, err = json.Marshal(s.weirSubscription(ctx, u, l, p))
+	} else {
+		plan, items := s.subPlan(ctx, p)
+		origin := s.siteOrigin(c)
+		switch target {
+		case "clash", "mihomo":
+			plan.Providers = func(key string) string { return origin + "/sub/" + l.Token + "/provider/" + url.PathEscape(key) }
+		case "surge":
+			plan.ManagedURL = origin + "/sub/" + l.Token + "?target=surge"
+		}
+		body, contentType, err = subout.RenderPlan(items, target, plan)
+	}
+	if err != nil {
+		s.recordPull(c, l, target, "failed")
+		failure(c, 422, "format_conversion_failed")
+		return
+	}
+	_, end := linkWindow(u, l)
+	expire := int64(0)
+	if end != nil {
+		expire = end.Unix()
+	}
+	c.Header("Subscription-Userinfo", fmt.Sprintf("upload=0; download=%d; total=%d; expire=%d", u.Used, u.Quota, expire))
+	// 整份配置按小时更新（客户端只认小时）；节点列表另按代理页的刷新间隔经 proxy-providers 更新
+	c.Header("Profile-Update-Interval", strconv.Itoa(max(1, (p.Policy.Auto.RefreshMinutes+59)/60)))
+	c.Header("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape("Weir-"+firstNonEmpty(l.Name, "订阅")))
+	_ = l.Update().SetLastUsedAt(time.Now()).Exec(ctx)
+	s.recordPull(c, l, target, "ok")
+	s.recordSubCheck("link-"+itoa(l.ID), firstNonEmpty(l.Name, "订阅")+" · "+u.Email, target, body)
+	c.Data(200, contentType, body)
+}
+
+// serveProvider 是 Clash proxy-providers 的一份节点列表（key 为 auto 或某个类型），客户端按代理页的刷新间隔拉取。
+// 生效时间与主订阅相同；不单独计一次拉取（刷新频繁，统计里只看整份配置的拉取）。
+func (s *Server) serveProvider(c *gin.Context) {
+	if !s.Config.Installed || s.Store == nil {
+		failure(c, 503, "setup_required")
+		return
+	}
+	ctx := c.Request.Context()
+	l, u, ok := s.linkByToken(ctx, c.Param("token"))
+	if !ok {
+		failure(c, 404, "subscription_not_found")
+		return
+	}
+	if state := windowState(u, l, time.Now()); state != "active" {
+		failure(c, 403, "subscription_"+state)
+		return
+	}
 	entries, err := s.linkEntries(ctx, u, l)
 	if err != nil {
 		failInternal(c, 503, "subscription_unavailable", err)
 		return
 	}
-	links := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if e.URI != "" {
-			links = append(links, e.URI)
-		}
+	plan, items := s.subPlan(ctx, s.planEntries(ctx, u, entries, false))
+	key := c.Param("key")
+	found := key == subout.AutoProvider
+	for _, t := range plan.Types {
+		found = found || t.Key == key
 	}
-	body, contentType, err := subout.Render(links, target)
+	if !found {
+		// 类型已不存在时返回 404：客户端保留上一次的列表，而不是换成空列表
+		failure(c, 404, "provider_not_found")
+		return
+	}
+	body, err := subout.ClashProvider(items, plan, key)
 	if err != nil {
 		failure(c, 422, "format_conversion_failed")
 		return
 	}
-	expire := int64(0)
-	if u.ExpiresAt != nil {
-		expire = u.ExpiresAt.Unix()
+	c.Data(200, "application/yaml; charset=utf-8", body)
+}
+
+// weirSubscription 是 target=weir 的内容：节点仍是分享链接，带名次、状况与分组、规则。
+func (s *Server) weirSubscription(ctx context.Context, u *ent.User, l *ent.Link, p planned) contracts.WeirSubscription {
+	plan, items := s.subPlan(ctx, p)
+	start, end := linkWindow(u, l)
+	out := contracts.WeirSubscription{Version: contracts.WeirSubscriptionVersion, Name: firstNonEmpty(l.Name, "订阅"), Generated: time.Now().UTC(),
+		Usage: contracts.WeirUsage{Used: u.Used, Quota: u.Quota}, Window: contracts.WeirWindow{StartsAt: start, EndsAt: end},
+		Refresh: p.Policy.Auto.RefreshMinutes, Auto: p.Policy.Auto, Types: map[string]string{}}
+	used := map[string]bool{subout.GroupSelect: true, subout.GroupAuto: true, "DIRECT": true, "REJECT": true}
+	for _, t := range plan.Types {
+		used[t.Label] = true
+		out.Types[t.Key] = t.Label
 	}
-	c.Header("Subscription-Userinfo", fmt.Sprintf("upload=0; download=%d; total=%d; expire=%d", u.Used, u.Quota, expire))
-	c.Header("Profile-Update-Interval", "12")
-	c.Header("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape("Weir-"+firstNonEmpty(l.Name, "订阅")))
-	_ = l.Update().SetLastUsedAt(time.Now()).Exec(ctx)
-	s.recordSubCheck("link-"+itoa(l.ID), firstNonEmpty(l.Name, "订阅")+" · "+u.Email, target, body)
-	c.Data(200, contentType, body)
+	names := make([]string, len(items))
+	for i, e := range p.Entries {
+		name := e.Name
+		for n := 2; used[name]; n++ {
+			name = fmt.Sprintf("%s (%d)", e.Name, n)
+		}
+		used[name], names[i] = true, name
+		r := p.Ranked[i]
+		health := map[string]string{"ok": "ok", "down": "degraded"}[r.Health.Status]
+		node := contracts.WeirNode{Name: name, Type: e.Type, URI: e.URI, Rank: r.Rank, Health: firstNonEmpty(health, "unknown"), Auto: r.Auto, Exploring: r.Exploring}
+		if r.Rate.known() {
+			node.RateBps, node.RateMinutes, node.RateFrom = int64(r.Rate.P90), r.Rate.Minutes, r.Rate.From
+		}
+		out.Nodes = append(out.Nodes, node)
+	}
+	out.Groups, out.Rules = plan.Layout(names, items)
+	return out
 }
 
 // subInfo 供浏览器订阅页使用：只返回本链接的用量、到期与节点名称，不含凭据。
@@ -339,6 +455,7 @@ func (s *Server) subInfo(c *gin.Context) {
 	for _, e := range entries {
 		nodes = append(nodes, gin.H{"name": e.Name, "protocol": e.Protocol, "chain": e.ChainID != 0, "available": e.URI != ""})
 	}
-	c.JSON(200, gin.H{"name": l.Name, "quota": u.Quota, "used": u.Used, "expires_at": u.ExpiresAt, "next_reset": resetHint(u),
+	start, end := linkWindow(u, l)
+	c.JSON(200, gin.H{"name": l.Name, "quota": u.Quota, "used": u.Used, "expires_at": end, "starts_at": start, "state": windowState(u, l, time.Now()), "next_reset": resetHint(u),
 		"formats": subout.Formats, "url": s.siteOrigin(c) + "/sub/" + l.Token, "nodes": nodes})
 }

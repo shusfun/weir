@@ -302,12 +302,12 @@ func TestAcceptanceUserIsolationAuditAndSubscriptions(t *testing.T) {
 		t.Fatalf("subscription with disabled node = %d %v", code, uris)
 	}
 	s.Store.Ent.Node.Update().Where(node.IDEQ(id1)).SetEnabled(true).ExecX(ctx)
-	// 到期、额度用尽：订阅照常返回节点并在响应头标明用量与到期，由 Gate 拒绝连接（凭据带到期时间，额度为 0 时不再分配）。
+	// 到期：拉不到节点（403 subscription_expired），Gate 也按到期时间停用凭据，已导入的客户端随之不能用。
 	past := time.Now().Add(-time.Hour).UTC().Truncate(time.Second)
 	mustJSON(t, admin, "PATCH", "/api/v1/admin/users/"+itoa(aid), map[string]any{"expires_at": past}, 200)
 	w := admin.do("GET", "/sub/"+tok1, nil, map[string]string{"User-Agent": "v2rayN/7.0"})
-	if w.Code != 200 || !strings.Contains(w.Header().Get("Subscription-Userinfo"), "expire="+itoa(int(past.Unix()))) {
-		t.Fatalf("expired user's subscription = %d %v", w.Code, w.Header())
+	if w.Code != 403 || !strings.Contains(w.Body.String(), "subscription_expired") {
+		t.Fatalf("expired user's subscription = %d %s", w.Code, w.Body.String())
 	}
 	for _, c := range g.config(0).Credentials {
 		if c.UserKey == userKey(aid) && (c.ExpiresAt == nil || c.ExpiresAt.After(time.Now())) {

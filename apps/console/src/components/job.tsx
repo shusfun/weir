@@ -42,6 +42,7 @@ export function useJobs(kind: string) {
 const refreshAfter: Record<string, string[][]> = {
   kernel: [["kernels"], ["notices"], ["drivers"], ["kernel-releases"]],
   "gate-release": [["gates"]],
+  "gate-ssh": [["gates"], ["nodes"]],
   dsh: [["dsh"], ["notices"]],
 };
 
@@ -129,7 +130,8 @@ function logText(job: Job) {
 }
 
 // JobView 显示一个任务：进度条（总大小未知时只显示已下载）、速度、线路、日志、取消。
-export function JobView({ job }: { job: Job }) {
+// openLogs：一开始就展开日志（SSH 安装这类主要看输出的任务）。
+export function JobView({ job, openLogs }: { job: Job; openLogs?: boolean }) {
   const client = useQueryClient();
   const { run, isBusy } = useRowAction<string>({ refetch: () => void client.invalidateQueries({ queryKey: ["job", job.id] }) });
   const line = statusLine(job);
@@ -139,11 +141,11 @@ export function JobView({ job }: { job: Job }) {
         <strong className="shrink-0 text-[13px]">{job.title}</strong>
         <Badge variant="soft" tone={tones[job.status]}>{labels[job.status]}</Badge>
         <small className="min-w-0 flex-1 truncate text-[var(--weir-ink-3)]">{job.status === "running" ? job.step : ""}</small>
-        <Button className={job.status === "running" ? undefined : "invisible"} size="xs" variant="ghost" disabled={isBusy() || job.status !== "running"} onClick={() => void run("cancel", () => api("/admin/jobs/" + encodeURIComponent(job.id) + "/cancel", "POST"), "已取消，已下载的部分保留")}><X />取消</Button>
+        <Button className={job.status === "running" ? undefined : "invisible"} size="xs" variant="ghost" disabled={isBusy() || job.status !== "running"} onClick={() => void run("cancel", () => api("/admin/jobs/" + encodeURIComponent(job.id) + "/cancel", "POST"), job.kind === "gate-ssh" ? "已取消安装" : "已取消，已下载的部分保留")}><X />取消</Button>
       </div>
       <Progress value={progressOf(job)} aria-label={job.title + " 进度"} />
       <small className={"block truncate tabular-nums " + (job.status === "failed" ? "text-[var(--weir-bad-ink)]" : "text-[var(--weir-ink-3)]")} title={line}>{line}</small>
-      <Collapsible title={`日志（${job.logs?.length ?? 0} 行）`} defaultOpen={job.status === "failed"}>
+      <Collapsible title={`日志（${job.logs?.length ?? 0} 行）`} defaultOpen={openLogs || job.status === "failed"}>
         <CodeBlock className="block h-56 overflow-auto whitespace-pre-wrap text-xs">{logText(job)}</CodeBlock>
       </Collapsible>
     </div>
@@ -151,11 +153,11 @@ export function JobView({ job }: { job: Job }) {
 }
 
 // JobByID 读取并显示一个任务（列表里只有摘要，这里取带日志的详情）；详情还没回来时先用摘要占位，不出现空白。
-export function JobByID({ id, initial, onFinish }: { id: string; initial?: Job; onFinish?: (j: Job) => void }) {
+export function JobByID({ id, initial, onFinish, openLogs }: { id: string; initial?: Job; onFinish?: (j: Job) => void; openLogs?: boolean }) {
   const q = useJob(id, onFinish);
   const job = q.data ?? initial;
   if (!job) return <JobLinePlaceholder text="正在读取任务…" />;
-  return <JobView job={job} />;
+  return <JobView job={job} openLogs={openLogs} />;
 }
 
 function JobLinePlaceholder({ text }: { text: string }) {

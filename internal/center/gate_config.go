@@ -130,6 +130,7 @@ func (s *Server) addCredentials(ctx context.Context, g *ent.Gate, cfg *contracts
 		if !u.Enabled {
 			continue
 		}
+		var lk *ent.Link
 		if c.LinkID != nil {
 			l, ok := links[*c.LinkID]
 			if !ok {
@@ -141,6 +142,7 @@ func (s *Server) addCredentials(ctx context.Context, g *ent.Gate, cfg *contracts
 			if !l.Enabled {
 				continue
 			}
+			lk = l
 		}
 		if c.ChainID != nil {
 			ch, ok := chains[*c.ChainID]
@@ -156,7 +158,8 @@ func (s *Server) addCredentials(ctx context.Context, g *ent.Gate, cfg *contracts
 			chainKeys[ch.ID] = append(chainKeys[ch.ID], c.StatsKey)
 		}
 		key := userKey(u.ID)
-		item.UserKey, item.ExpiresAt = key, u.ExpiresAt
+		item.UserKey = key
+		item.StartsAt, item.ExpiresAt = linkWindow(u, lk)
 		cfg.Credentials = append(cfg.Credentials, item)
 		if _, done := cfg.Budgets[key]; done {
 			continue

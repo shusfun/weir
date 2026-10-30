@@ -56,6 +56,33 @@ const messages: Record<string, string> = {
  probe_unsupported:"这类出口不需要实测。",
  invalid_live_report:"实时上报格式不对。",
  chain_disabled:"管理员未开放链式代理。",
+ link_window_order:"结束时间要晚于开始时间。",
+ link_window_exceeds_plan:"生效时间不能超过套餐到期时间。",
+ invalid_link_window:"时间格式无效。",
+ subscription_not_started:"这条订阅还没到开始时间。",
+ subscription_expired:"这条订阅已过结束时间。",
+ provider_not_found:"这一组节点已不存在。",
+ unknown_rule_category:"不认识的网站类别。",
+ invalid_rule_target:"分流目标无效：只能是自动选择、节点选择、直连、拒绝或你有的某个类型；「其余流量」不能拒绝。",
+ invalid_auto_mode:"自动选择方式无效。",
+ invalid_refresh:"刷新间隔最短 30 分钟、最长 24 小时。",
+ invalid_top:"进自动选择的节点数为 1–20。",
+ type_not_found:"没有这个类型的可用节点。",
+ type_exit_failed:"有节点经这个出口连不通，没有保存。",
+ type_exit_no_nodes:"这个类型没有可以加出口的节点。",
+ type_exit_not_found:"这个类型还没有出口。",
+ invalid_ssh_host:"SSH 地址无效。",
+ invalid_ssh_port:"SSH 端口无效。",
+ invalid_ssh_user:"SSH 用户名无效。",
+ ssh_not_public:"只能连接公网地址的 VPS。",
+ ssh_unresolved:"这个地址解析不到。",
+ ssh_unreachable:"连不上这台 VPS 的 SSH 端口。",
+ ssh_handshake_failed:"SSH 握手失败。",
+ ssh_auth_required:"请填写登录密码或私钥。",
+ invalid_ssh_key:"私钥格式无效。",
+ ssh_key_passphrase_required:"这个私钥有密码保护，请填写私钥密码。",
+ ssh_fingerprint_required:"请先核对主机指纹。",
+ center_origin_required:"还没有记录中心的 HTTPS 地址，VPS 不知道连哪里：请先用域名打开控制台并确认中心地址。",
  chain_limit:"每个用户最多 10 条链式代理。",
  entry_not_allowed:"只能选择你可用的节点作为入口。",
  exit_not_allowed:"只能选择你可用的节点作为出口。",
@@ -352,6 +379,8 @@ export class ApiError extends Error {
     message: string,
     readonly code: string,
     readonly status: number,
+    // extra：错误里除 code / message / detail 以外的字段（如类型出口逐个节点的失败原因）
+    readonly extra: Record<string, unknown> = {},
   ) {
     super(message);
     this.name = "ApiError";
@@ -433,7 +462,8 @@ export async function api(
     const message = !detail ? base : detail.startsWith(base) ? detail : `${base}（${detail}）`;
     // 页面感知：dsh 能看到最近一次失败提示（上报 / 轮询本身的失败不算）。
     if (!path.startsWith("/admin/dsh/context") && !path.startsWith("/admin/dsh/navigation")) reportError(code, message);
-    throw new ApiError(message, code, res.status);
+    const { code: _c, message: _m, detail: _d, ...extra } = (data?.error ?? {}) as Record<string, unknown>;
+    throw new ApiError(message, code, res.status, extra);
   }
   return data;
 }

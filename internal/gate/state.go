@@ -122,11 +122,11 @@ func (st *State) exhausted(cfg contracts.GateConfig) map[string]bool {
 	return out
 }
 
-// signature 标识「此刻应下发的凭据集合」：到期或额度变化导致集合变化时，Agent 在本地重建配置。
+// signature 标识「此刻应下发的凭据集合」：到了生效 / 到期时间或额度变化导致集合变化时，Agent 在本地重建配置。
 func signature(cfg contracts.GateConfig, now time.Time, exhausted map[string]bool) string {
 	var keys []string
 	for _, c := range cfg.Credentials {
-		if c.ExpiresAt != nil && !now.Before(*c.ExpiresAt) {
+		if !c.InWindow(now) {
 			continue
 		}
 		if !c.Internal && exhausted[c.UserKey] {

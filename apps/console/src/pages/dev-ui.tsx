@@ -58,6 +58,8 @@ import {
   TableRow,
   useBurst,
   useToast,
+  Chip,
+  SplitButton,
 } from "@weir/ui";
 import { Sparkles } from "lucide-react";
 
@@ -101,6 +103,7 @@ export function DevUiPage() {
   const [checked, setChecked] = useState(true);
   const [choice, setChoice] = useState(0);
   const [replay, setReplay] = useState(0);
+  const [originDemo, setOriginDemo] = useState(false);
   const [volume, setVolume] = useState(40);
   const [amount, setAmount] = useState(1280);
   const [loading, setLoading] = useState(true);
@@ -292,6 +295,24 @@ export function DevUiPage() {
           <Demo index={13} title="照片跟手" description="拖动时照片跟着手指转起来，松手按速度吸附到最近一张。">
             <Carousel slides={photos} label="示例照片" />
           </Demo>
+
+          <Demo index={14} title="从点击处展开" description="标签键、分体按钮按下有水波；点开的弹窗从按下的位置展开、收回到那里。">
+            <div className="flex flex-wrap gap-2">
+              <Chip tone="ok" meta="在线" onClick={() => setOriginDemo(true)}>VLESS + REALITY</Chip>
+              <Chip tone="bad" meta="连不上" onClick={() => setOriginDemo(true)}>Hysteria2</Chip>
+              <Chip add onClick={() => setOriginDemo(true)}>＋ 协议</Chip>
+            </div>
+            <SplitButton
+              main={<CopyButton size="sm" variant="outline" ripple value="https://example.com/sub/demo">复制</CopyButton>}
+              items={[{ label: "二维码", onSelect: () => setOriginDemo(true) }, "separator", { label: "删除", danger: true, onSelect: () => toast("已删除") }]}
+            />
+            <Dialog open={originDemo} onOpenChange={setOriginDemo}>
+              <DialogContent size="sm">
+                <DialogTitle>从这里展开</DialogTitle>
+                <DialogDescription>关闭时收回到刚才按下的位置。</DialogDescription>
+              </DialogContent>
+            </Dialog>
+          </Demo>
         </div>
         <FormDemo />
     </div>
@@ -312,7 +333,7 @@ function FormDemo() {
   const [agree, setAgree] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>();
   return (
-    <Demo index={14} title="表单校验" description="参照 Element Plus：必填项带红色 *，失焦校验，出错后随输入实时更新；提交时聚焦第一个错误。错误行预留空间，不推动布局。">
+    <Demo index={15} title="表单校验" description="参照 Element Plus：必填项带红色 *，失焦校验，出错后随输入实时更新；提交时聚焦第一个错误。错误行预留空间，不推动布局。">
       <Form
         errors={errors}
         onSubmit={() => {

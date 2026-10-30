@@ -100,6 +100,7 @@ var (
 		{Name: "exit_node_id", Type: field.TypeInt, Nullable: true},
 		{Name: "exit_link", Type: field.TypeString, Default: ""},
 		{Name: "enabled", Type: field.TypeBool, Default: true},
+		{Name: "policy_type", Type: field.TypeString, Size: 64, Default: ""},
 		{Name: "created_at", Type: field.TypeTime},
 	}
 	// ChainsTable holds the schema information for the "chains" table.
@@ -129,6 +130,7 @@ var (
 		{Name: "meter_epoch", Type: field.TypeString, Default: ""},
 		{Name: "meter_up", Type: field.TypeInt64, Default: 0},
 		{Name: "meter_down", Type: field.TypeInt64, Default: 0},
+		{Name: "meter_at", Type: field.TypeTime, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 	}
 	// CredentialsTable holds the schema information for the "credentials" table.
@@ -252,6 +254,8 @@ var (
 		{Name: "enabled", Type: field.TypeBool, Default: true},
 		{Name: "used", Type: field.TypeInt64, Default: 0},
 		{Name: "last_used_at", Type: field.TypeTime, Nullable: true},
+		{Name: "starts_at", Type: field.TypeTime, Nullable: true},
+		{Name: "ends_at", Type: field.TypeTime, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 	}
 	// LinksTable holds the schema information for the "links" table.
@@ -353,6 +357,40 @@ var (
 				Name:    "passkey_user_id",
 				Unique:  false,
 				Columns: []*schema.Column{PasskeysColumns[1]},
+			},
+		},
+	}
+	// RateSamplesColumns holds the columns for the "rate_samples" table.
+	RateSamplesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "user_id", Type: field.TypeInt},
+		{Name: "node_id", Type: field.TypeInt},
+		{Name: "chain_id", Type: field.TypeInt, Default: 0},
+		{Name: "at", Type: field.TypeTime},
+		{Name: "bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "seconds", Type: field.TypeFloat64, Default: 0},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// RateSamplesTable holds the schema information for the "rate_samples" table.
+	RateSamplesTable = &schema.Table{
+		Name:       "rate_samples",
+		Columns:    RateSamplesColumns,
+		PrimaryKey: []*schema.Column{RateSamplesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "ratesample_user_id_node_id_chain_id_at",
+				Unique:  true,
+				Columns: []*schema.Column{RateSamplesColumns[1], RateSamplesColumns[2], RateSamplesColumns[3], RateSamplesColumns[4]},
+			},
+			{
+				Name:    "ratesample_node_id_at",
+				Unique:  false,
+				Columns: []*schema.Column{RateSamplesColumns[2], RateSamplesColumns[4]},
+			},
+			{
+				Name:    "ratesample_at",
+				Unique:  false,
+				Columns: []*schema.Column{RateSamplesColumns[4]},
 			},
 		},
 	}
@@ -562,6 +600,41 @@ var (
 			},
 		},
 	}
+	// SubPullsColumns holds the columns for the "sub_pulls" table.
+	SubPullsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "link_id", Type: field.TypeInt},
+		{Name: "user_id", Type: field.TypeInt},
+		{Name: "at", Type: field.TypeTime},
+		{Name: "target", Type: field.TypeString, Size: 16, Default: ""},
+		{Name: "client", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "user_agent", Type: field.TypeString, Size: 256, Default: ""},
+		{Name: "ip", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "status", Type: field.TypeString, Size: 16, Default: "ok"},
+	}
+	// SubPullsTable holds the schema information for the "sub_pulls" table.
+	SubPullsTable = &schema.Table{
+		Name:       "sub_pulls",
+		Columns:    SubPullsColumns,
+		PrimaryKey: []*schema.Column{SubPullsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "subpull_link_id_at",
+				Unique:  false,
+				Columns: []*schema.Column{SubPullsColumns[1], SubPullsColumns[3]},
+			},
+			{
+				Name:    "subpull_user_id_at",
+				Unique:  false,
+				Columns: []*schema.Column{SubPullsColumns[2], SubPullsColumns[3]},
+			},
+			{
+				Name:    "subpull_at",
+				Unique:  false,
+				Columns: []*schema.Column{SubPullsColumns[3]},
+			},
+		},
+	}
 	// SubSourcesColumns holds the columns for the "sub_sources" table.
 	SubSourcesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -608,6 +681,7 @@ var (
 		{Name: "all_nodes", Type: field.TypeBool, Default: false},
 		{Name: "node_ids", Type: field.TypeJSON, Nullable: true},
 		{Name: "allow_chain", Type: field.TypeBool, Default: true},
+		{Name: "proxy_policy", Type: field.TypeJSON, Nullable: true},
 		{Name: "totp_secret", Type: field.TypeString, Default: ""},
 		{Name: "totp_step", Type: field.TypeInt64, Default: 0},
 		{Name: "created_at", Type: field.TypeTime},
@@ -640,6 +714,7 @@ var (
 		NodesTable,
 		OutboundsTable,
 		PasskeysTable,
+		RateSamplesTable,
 		RecoveryCodesTable,
 		ResourcesTable,
 		RoutesTable,
@@ -649,6 +724,7 @@ var (
 		SubGrantsTable,
 		SubNodesTable,
 		SubProfilesTable,
+		SubPullsTable,
 		SubSourcesTable,
 		UsersTable,
 	}

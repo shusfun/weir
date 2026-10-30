@@ -24,6 +24,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/outbound"
 	"github.com/shusfun/weir/internal/store/ent/passkey"
+	"github.com/shusfun/weir/internal/store/ent/ratesample"
 	"github.com/shusfun/weir/internal/store/ent/recoverycode"
 	"github.com/shusfun/weir/internal/store/ent/resource"
 	"github.com/shusfun/weir/internal/store/ent/route"
@@ -33,6 +34,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/subgrant"
 	"github.com/shusfun/weir/internal/store/ent/subnode"
 	"github.com/shusfun/weir/internal/store/ent/subprofile"
+	"github.com/shusfun/weir/internal/store/ent/subpull"
 	"github.com/shusfun/weir/internal/store/ent/subsource"
 	"github.com/shusfun/weir/internal/store/ent/user"
 )
@@ -107,6 +109,7 @@ func checkColumn(t, c string) error {
 			node.Table:         node.ValidColumn,
 			outbound.Table:     outbound.ValidColumn,
 			passkey.Table:      passkey.ValidColumn,
+			ratesample.Table:   ratesample.ValidColumn,
 			recoverycode.Table: recoverycode.ValidColumn,
 			resource.Table:     resource.ValidColumn,
 			route.Table:        route.ValidColumn,
@@ -116,6 +119,7 @@ func checkColumn(t, c string) error {
 			subgrant.Table:     subgrant.ValidColumn,
 			subnode.Table:      subnode.ValidColumn,
 			subprofile.Table:   subprofile.ValidColumn,
+			subpull.Table:      subpull.ValidColumn,
 			subsource.Table:    subsource.ValidColumn,
 			user.Table:         user.ValidColumn,
 		})

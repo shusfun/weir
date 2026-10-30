@@ -150,6 +150,20 @@ func (_c *ChainCreate) SetNillableEnabled(v *bool) *ChainCreate {
 	return _c
 }
 
+// SetPolicyType sets the "policy_type" field.
+func (_c *ChainCreate) SetPolicyType(v string) *ChainCreate {
+	_c.mutation.SetPolicyType(v)
+	return _c
+}
+
+// SetNillablePolicyType sets the "policy_type" field if the given value is not nil.
+func (_c *ChainCreate) SetNillablePolicyType(v *string) *ChainCreate {
+	if v != nil {
+		_c.SetPolicyType(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *ChainCreate) SetCreatedAt(v time.Time) *ChainCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -223,6 +237,10 @@ func (_c *ChainCreate) defaults() {
 		v := chain.DefaultEnabled
 		_c.mutation.SetEnabled(v)
 	}
+	if _, ok := _c.mutation.PolicyType(); !ok {
+		v := chain.DefaultPolicyType
+		_c.mutation.SetPolicyType(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := chain.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -280,6 +298,14 @@ func (_c *ChainCreate) check() error {
 	}
 	if _, ok := _c.mutation.Enabled(); !ok {
 		return &ValidationError{Name: "enabled", err: errors.New(`ent: missing required field "Chain.enabled"`)}
+	}
+	if _, ok := _c.mutation.PolicyType(); !ok {
+		return &ValidationError{Name: "policy_type", err: errors.New(`ent: missing required field "Chain.policy_type"`)}
+	}
+	if v, ok := _c.mutation.PolicyType(); ok {
+		if err := chain.PolicyTypeValidator(v); err != nil {
+			return &ValidationError{Name: "policy_type", err: fmt.Errorf(`ent: validator failed for field "Chain.policy_type": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Chain.created_at"`)}
@@ -358,6 +384,10 @@ func (_c *ChainCreate) createSpec() (*Chain, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Enabled(); ok {
 		_spec.SetField(chain.FieldEnabled, field.TypeBool, value)
 		_node.Enabled = value
+	}
+	if value, ok := _c.mutation.PolicyType(); ok {
+		_spec.SetField(chain.FieldPolicyType, field.TypeString, value)
+		_node.PolicyType = value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(chain.FieldCreatedAt, field.TypeTime, value)
@@ -592,6 +622,18 @@ func (u *ChainUpsert) SetEnabled(v bool) *ChainUpsert {
 // UpdateEnabled sets the "enabled" field to the value that was provided on create.
 func (u *ChainUpsert) UpdateEnabled() *ChainUpsert {
 	u.SetExcluded(chain.FieldEnabled)
+	return u
+}
+
+// SetPolicyType sets the "policy_type" field.
+func (u *ChainUpsert) SetPolicyType(v string) *ChainUpsert {
+	u.Set(chain.FieldPolicyType, v)
+	return u
+}
+
+// UpdatePolicyType sets the "policy_type" field to the value that was provided on create.
+func (u *ChainUpsert) UpdatePolicyType() *ChainUpsert {
+	u.SetExcluded(chain.FieldPolicyType)
 	return u
 }
 
@@ -847,6 +889,20 @@ func (u *ChainUpsertOne) SetEnabled(v bool) *ChainUpsertOne {
 func (u *ChainUpsertOne) UpdateEnabled() *ChainUpsertOne {
 	return u.Update(func(s *ChainUpsert) {
 		s.UpdateEnabled()
+	})
+}
+
+// SetPolicyType sets the "policy_type" field.
+func (u *ChainUpsertOne) SetPolicyType(v string) *ChainUpsertOne {
+	return u.Update(func(s *ChainUpsert) {
+		s.SetPolicyType(v)
+	})
+}
+
+// UpdatePolicyType sets the "policy_type" field to the value that was provided on create.
+func (u *ChainUpsertOne) UpdatePolicyType() *ChainUpsertOne {
+	return u.Update(func(s *ChainUpsert) {
+		s.UpdatePolicyType()
 	})
 }
 
@@ -1268,6 +1324,20 @@ func (u *ChainUpsertBulk) SetEnabled(v bool) *ChainUpsertBulk {
 func (u *ChainUpsertBulk) UpdateEnabled() *ChainUpsertBulk {
 	return u.Update(func(s *ChainUpsert) {
 		s.UpdateEnabled()
+	})
+}
+
+// SetPolicyType sets the "policy_type" field.
+func (u *ChainUpsertBulk) SetPolicyType(v string) *ChainUpsertBulk {
+	return u.Update(func(s *ChainUpsert) {
+		s.SetPolicyType(v)
+	})
+}
+
+// UpdatePolicyType sets the "policy_type" field to the value that was provided on create.
+func (u *ChainUpsertBulk) UpdatePolicyType() *ChainUpsertBulk {
+	return u.Update(func(s *ChainUpsert) {
+		s.UpdatePolicyType()
 	})
 }
 

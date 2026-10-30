@@ -235,6 +235,18 @@ func (_u *UserUpdate) SetNillableAllowChain(v *bool) *UserUpdate {
 	return _u
 }
 
+// SetProxyPolicy sets the "proxy_policy" field.
+func (_u *UserUpdate) SetProxyPolicy(v map[string]interface{}) *UserUpdate {
+	_u.mutation.SetProxyPolicy(v)
+	return _u
+}
+
+// ClearProxyPolicy clears the value of the "proxy_policy" field.
+func (_u *UserUpdate) ClearProxyPolicy() *UserUpdate {
+	_u.mutation.ClearProxyPolicy()
+	return _u
+}
+
 // SetTotpSecret sets the "totp_secret" field.
 func (_u *UserUpdate) SetTotpSecret(v string) *UserUpdate {
 	_u.mutation.SetTotpSecret(v)
@@ -414,6 +426,12 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AllowChain(); ok {
 		_spec.SetField(user.FieldAllowChain, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.ProxyPolicy(); ok {
+		_spec.SetField(user.FieldProxyPolicy, field.TypeJSON, value)
+	}
+	if _u.mutation.ProxyPolicyCleared() {
+		_spec.ClearField(user.FieldProxyPolicy, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.TotpSecret(); ok {
 		_spec.SetField(user.FieldTotpSecret, field.TypeString, value)
@@ -653,6 +671,18 @@ func (_u *UserUpdateOne) SetNillableAllowChain(v *bool) *UserUpdateOne {
 	return _u
 }
 
+// SetProxyPolicy sets the "proxy_policy" field.
+func (_u *UserUpdateOne) SetProxyPolicy(v map[string]interface{}) *UserUpdateOne {
+	_u.mutation.SetProxyPolicy(v)
+	return _u
+}
+
+// ClearProxyPolicy clears the value of the "proxy_policy" field.
+func (_u *UserUpdateOne) ClearProxyPolicy() *UserUpdateOne {
+	_u.mutation.ClearProxyPolicy()
+	return _u
+}
+
 // SetTotpSecret sets the "totp_secret" field.
 func (_u *UserUpdateOne) SetTotpSecret(v string) *UserUpdateOne {
 	_u.mutation.SetTotpSecret(v)
@@ -862,6 +892,12 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.AllowChain(); ok {
 		_spec.SetField(user.FieldAllowChain, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.ProxyPolicy(); ok {
+		_spec.SetField(user.FieldProxyPolicy, field.TypeJSON, value)
+	}
+	if _u.mutation.ProxyPolicyCleared() {
+		_spec.ClearField(user.FieldProxyPolicy, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.TotpSecret(); ok {
 		_spec.SetField(user.FieldTotpSecret, field.TypeString, value)

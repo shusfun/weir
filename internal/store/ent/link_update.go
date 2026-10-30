@@ -183,6 +183,46 @@ func (_u *LinkUpdate) ClearLastUsedAt() *LinkUpdate {
 	return _u
 }
 
+// SetStartsAt sets the "starts_at" field.
+func (_u *LinkUpdate) SetStartsAt(v time.Time) *LinkUpdate {
+	_u.mutation.SetStartsAt(v)
+	return _u
+}
+
+// SetNillableStartsAt sets the "starts_at" field if the given value is not nil.
+func (_u *LinkUpdate) SetNillableStartsAt(v *time.Time) *LinkUpdate {
+	if v != nil {
+		_u.SetStartsAt(*v)
+	}
+	return _u
+}
+
+// ClearStartsAt clears the value of the "starts_at" field.
+func (_u *LinkUpdate) ClearStartsAt() *LinkUpdate {
+	_u.mutation.ClearStartsAt()
+	return _u
+}
+
+// SetEndsAt sets the "ends_at" field.
+func (_u *LinkUpdate) SetEndsAt(v time.Time) *LinkUpdate {
+	_u.mutation.SetEndsAt(v)
+	return _u
+}
+
+// SetNillableEndsAt sets the "ends_at" field if the given value is not nil.
+func (_u *LinkUpdate) SetNillableEndsAt(v *time.Time) *LinkUpdate {
+	if v != nil {
+		_u.SetEndsAt(*v)
+	}
+	return _u
+}
+
+// ClearEndsAt clears the value of the "ends_at" field.
+func (_u *LinkUpdate) ClearEndsAt() *LinkUpdate {
+	_u.mutation.ClearEndsAt()
+	return _u
+}
+
 // Mutation returns the LinkMutation object of the builder.
 func (_u *LinkUpdate) Mutation() *LinkMutation {
 	return _u.mutation
@@ -288,6 +328,18 @@ func (_u *LinkUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.LastUsedAtCleared() {
 		_spec.ClearField(link.FieldLastUsedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.StartsAt(); ok {
+		_spec.SetField(link.FieldStartsAt, field.TypeTime, value)
+	}
+	if _u.mutation.StartsAtCleared() {
+		_spec.ClearField(link.FieldStartsAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.EndsAt(); ok {
+		_spec.SetField(link.FieldEndsAt, field.TypeTime, value)
+	}
+	if _u.mutation.EndsAtCleared() {
+		_spec.ClearField(link.FieldEndsAt, field.TypeTime)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -463,6 +515,46 @@ func (_u *LinkUpdateOne) ClearLastUsedAt() *LinkUpdateOne {
 	return _u
 }
 
+// SetStartsAt sets the "starts_at" field.
+func (_u *LinkUpdateOne) SetStartsAt(v time.Time) *LinkUpdateOne {
+	_u.mutation.SetStartsAt(v)
+	return _u
+}
+
+// SetNillableStartsAt sets the "starts_at" field if the given value is not nil.
+func (_u *LinkUpdateOne) SetNillableStartsAt(v *time.Time) *LinkUpdateOne {
+	if v != nil {
+		_u.SetStartsAt(*v)
+	}
+	return _u
+}
+
+// ClearStartsAt clears the value of the "starts_at" field.
+func (_u *LinkUpdateOne) ClearStartsAt() *LinkUpdateOne {
+	_u.mutation.ClearStartsAt()
+	return _u
+}
+
+// SetEndsAt sets the "ends_at" field.
+func (_u *LinkUpdateOne) SetEndsAt(v time.Time) *LinkUpdateOne {
+	_u.mutation.SetEndsAt(v)
+	return _u
+}
+
+// SetNillableEndsAt sets the "ends_at" field if the given value is not nil.
+func (_u *LinkUpdateOne) SetNillableEndsAt(v *time.Time) *LinkUpdateOne {
+	if v != nil {
+		_u.SetEndsAt(*v)
+	}
+	return _u
+}
+
+// ClearEndsAt clears the value of the "ends_at" field.
+func (_u *LinkUpdateOne) ClearEndsAt() *LinkUpdateOne {
+	_u.mutation.ClearEndsAt()
+	return _u
+}
+
 // Mutation returns the LinkMutation object of the builder.
 func (_u *LinkUpdateOne) Mutation() *LinkMutation {
 	return _u.mutation
@@ -598,6 +690,18 @@ func (_u *LinkUpdateOne) sqlSave(ctx context.Context) (_node *Link, err error) {
 	}
 	if _u.mutation.LastUsedAtCleared() {
 		_spec.ClearField(link.FieldLastUsedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.StartsAt(); ok {
+		_spec.SetField(link.FieldStartsAt, field.TypeTime, value)
+	}
+	if _u.mutation.StartsAtCleared() {
+		_spec.ClearField(link.FieldStartsAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.EndsAt(); ok {
+		_spec.SetField(link.FieldEndsAt, field.TypeTime, value)
+	}
+	if _u.mutation.EndsAtCleared() {
+		_spec.ClearField(link.FieldEndsAt, field.TypeTime)
 	}
 	_node = &Link{config: _u.config}
 	_spec.Assign = _node.assignValues

@@ -40,6 +40,8 @@ const (
 	FieldNodeIds = "node_ids"
 	// FieldAllowChain holds the string denoting the allow_chain field in the database.
 	FieldAllowChain = "allow_chain"
+	// FieldProxyPolicy holds the string denoting the proxy_policy field in the database.
+	FieldProxyPolicy = "proxy_policy"
 	// FieldTotpSecret holds the string denoting the totp_secret field in the database.
 	FieldTotpSecret = "totp_secret"
 	// FieldTotpStep holds the string denoting the totp_step field in the database.
@@ -68,6 +70,7 @@ var Columns = []string{
 	FieldAllNodes,
 	FieldNodeIds,
 	FieldAllowChain,
+	FieldProxyPolicy,
 	FieldTotpSecret,
 	FieldTotpStep,
 	FieldCreatedAt,

@@ -45,6 +45,12 @@ func (s *Server) PruneSamples(ctx context.Context, now time.Time) error {
 		return err
 	}
 	_, err := s.Store.Ent.Sample.Delete().Where(sample.AtLT(now.Add(-sampleKeep))).Exec(ctx)
+	if perr := s.prunePulls(ctx, now); err == nil {
+		err = perr
+	}
+	if rerr := s.pruneRates(ctx, now); err == nil {
+		err = rerr
+	}
 	// 链路页每 30 秒续一次实时上报：这类动作只在当时有用，一小时后删掉，不留在动作记录里。
 	_, _ = s.Store.Ent.GateAction.Delete().Where(gateaction.KindEQ(contracts.ActionLiveStart), gateaction.CreatedAtLT(now.Add(-time.Hour))).Exec(ctx)
 	return err

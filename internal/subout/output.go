@@ -11,21 +11,29 @@ import (
 )
 
 func clashOutput(links []string) ([]byte, error) {
-	nodes, err := subscription.ParseLinks(links)
+	proxies, names, err := clashProxies(links, map[string]bool{"PROXY": true, "DIRECT": true, "REJECT": true})
 	if err != nil {
 		return nil, err
 	}
+	return yaml.Marshal(map[string]any{"mixed-port": 7890, "mode": "rule", "proxies": proxies, "proxy-groups": []any{map[string]any{"name": "PROXY", "type": "select", "proxies": names}}, "rules": []string{"MATCH,PROXY"}})
+}
+
+// clashProxies 把链接转成 Clash 的 proxies，names 与 links 一一对应（重名时加序号）。
+func clashProxies(links []string, usedNames map[string]bool) ([]map[string]any, []string, error) {
+	nodes, err := subscription.ParseLinks(links)
+	if err != nil {
+		return nil, nil, err
+	}
 	proxies := []map[string]any{}
 	if len(nodes.Skipped) > 0 {
-		return nil, fmt.Errorf("unrecognized nodes")
+		return nil, nil, fmt.Errorf("unrecognized nodes")
 	}
 	names := []string{}
-	usedNames := map[string]bool{"PROXY": true, "DIRECT": true, "REJECT": true}
 	for i, n := range nodes.Nodes {
 		var settings subscription.Settings
 		json.Unmarshal([]byte(n.SettingsJSON), &settings)
 		if !supportedSubscriptionSettings(n.Protocol, settings) {
-			return nil, fmt.Errorf("unsupported transport")
+			return nil, nil, fmt.Errorf("unsupported transport")
 		}
 		name := n.Remark
 		if name == "" {
@@ -35,7 +43,7 @@ func clashOutput(links []string) ([]byte, error) {
 		p := map[string]any{"name": name, "type": n.Protocol, "server": n.Address, "port": n.Port, "udp": true}
 		if n.Protocol == "snell" || n.Protocol == "wireguard" {
 			if err := extendedClash(p, n, settings); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			proxies = append(proxies, p)
 			names = append(names, name)
@@ -79,7 +87,7 @@ func clashOutput(links []string) ([]byte, error) {
 				p["plugin-opts"] = map[string]any{"host": st.Host, "password": st.Password, "version": st.Version}
 			}
 		default:
-			return nil, fmt.Errorf("unsupported protocol %s", n.Protocol)
+			return nil, nil, fmt.Errorf("unsupported protocol %s", n.Protocol)
 		}
 		if settings.TLS || settings.Security == "tls" || settings.Reality {
 			p["tls"] = true
@@ -115,25 +123,38 @@ func clashOutput(links []string) ([]byte, error) {
 		}
 		names = append(names, name)
 	}
-	return yaml.Marshal(map[string]any{"mixed-port": 7890, "mode": "rule", "proxies": proxies, "proxy-groups": []any{map[string]any{"name": "PROXY", "type": "select", "proxies": names}}, "rules": []string{"MATCH,PROXY"}})
+	return proxies, names, nil
 }
 func singboxOutput(links []string) ([]byte, error) {
-	nodes, err := subscription.ParseLinks(links)
+	out, endpoints, names, err := singboxNodes(links, map[string]bool{"proxy": true})
 	if err != nil {
 		return nil, err
+	}
+	out = append([]map[string]any{{"type": "selector", "tag": "proxy", "outbounds": names}}, out...)
+	cfg := map[string]any{"outbounds": out, "route": map[string]any{"final": "proxy"}}
+	if len(endpoints) > 0 {
+		cfg["endpoints"] = endpoints
+	}
+	return json.MarshalIndent(cfg, "", "  ")
+}
+
+// singboxNodes 把链接转成 sing-box 的出站与 WireGuard 端点；names 与 links 一一对应。
+func singboxNodes(links []string, usedNames map[string]bool) ([]map[string]any, []map[string]any, []string, error) {
+	nodes, err := subscription.ParseLinks(links)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 	out := []map[string]any{}
 	endpoints := []map[string]any{}
 	if len(nodes.Skipped) > 0 {
-		return nil, fmt.Errorf("unrecognized nodes")
+		return nil, nil, nil, fmt.Errorf("unrecognized nodes")
 	}
 	names := []string{}
-	usedNames := map[string]bool{"proxy": true}
 	for i, n := range nodes.Nodes {
 		var settings subscription.Settings
 		json.Unmarshal([]byte(n.SettingsJSON), &settings)
 		if !supportedSubscriptionSettings(n.Protocol, settings) {
-			return nil, fmt.Errorf("unsupported transport")
+			return nil, nil, nil, fmt.Errorf("unsupported transport")
 		}
 		name := n.Remark
 		if name == "" {
@@ -144,7 +165,7 @@ func singboxOutput(links []string) ([]byte, error) {
 		if n.Protocol == "wireguard" {
 			ep, e := wireGuardEndpoint(n, settings, name)
 			if e != nil {
-				return nil, e
+				return nil, nil, nil, e
 			}
 			endpoints = append(endpoints, ep)
 			names = append(names, name)
@@ -161,7 +182,7 @@ func singboxOutput(links []string) ([]byte, error) {
 		case "http", "socks5":
 			if n.Protocol == "socks5" {
 				if settings.TLS || settings.Security == "tls" {
-					return nil, fmt.Errorf("sing-box SOCKS TLS outbound unsupported")
+					return nil, nil, nil, fmt.Errorf("sing-box SOCKS TLS outbound unsupported")
 				}
 				p["type"] = "socks"
 				p["version"] = "5"
@@ -194,7 +215,7 @@ func singboxOutput(links []string) ([]byte, error) {
 				p["detour"] = stTag
 			}
 		default:
-			return nil, fmt.Errorf("unsupported protocol")
+			return nil, nil, nil, fmt.Errorf("unsupported protocol")
 		}
 		if settings.Flow != "" {
 			p["flow"] = settings.Flow
@@ -210,7 +231,7 @@ func singboxOutput(links []string) ([]byte, error) {
 			if settings.SPKI != "" {
 				tls["certificate_public_key_sha256"] = []string{settings.SPKI}
 			} else if settings.CertificatePin != "" {
-				return nil, fmt.Errorf("certificate pin conversion requires SPKI")
+				return nil, nil, nil, fmt.Errorf("certificate pin conversion requires SPKI")
 			}
 			if settings.Reality {
 				tls["reality"] = map[string]any{"enabled": true, "public_key": settings.PublicKey, "short_id": settings.ShortID}
@@ -229,12 +250,7 @@ func singboxOutput(links []string) ([]byte, error) {
 		}
 		names = append(names, name)
 	}
-	out = append([]map[string]any{{"type": "selector", "tag": "proxy", "outbounds": names}}, out...)
-	cfg := map[string]any{"outbounds": out, "route": map[string]any{"final": "proxy"}}
-	if len(endpoints) > 0 {
-		cfg["endpoints"] = endpoints
-	}
-	return json.MarshalIndent(cfg, "", "  ")
+	return out, endpoints, names, nil
 }
 
 func supportedSubscriptionSettings(protocol string, s subscription.Settings) bool {

@@ -180,6 +180,12 @@ func (_c *UserCreate) SetNillableAllowChain(v *bool) *UserCreate {
 	return _c
 }
 
+// SetProxyPolicy sets the "proxy_policy" field.
+func (_c *UserCreate) SetProxyPolicy(v map[string]interface{}) *UserCreate {
+	_c.mutation.SetProxyPolicy(v)
+	return _c
+}
+
 // SetTotpSecret sets the "totp_secret" field.
 func (_c *UserCreate) SetTotpSecret(v string) *UserCreate {
 	_c.mutation.SetTotpSecret(v)
@@ -476,6 +482,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		_spec.SetField(user.FieldAllowChain, field.TypeBool, value)
 		_node.AllowChain = value
 	}
+	if value, ok := _c.mutation.ProxyPolicy(); ok {
+		_spec.SetField(user.FieldProxyPolicy, field.TypeJSON, value)
+		_node.ProxyPolicy = value
+	}
 	if value, ok := _c.mutation.TotpSecret(); ok {
 		_spec.SetField(user.FieldTotpSecret, field.TypeString, value)
 		_node.TotpSecret = value
@@ -721,6 +731,24 @@ func (u *UserUpsert) SetAllowChain(v bool) *UserUpsert {
 // UpdateAllowChain sets the "allow_chain" field to the value that was provided on create.
 func (u *UserUpsert) UpdateAllowChain() *UserUpsert {
 	u.SetExcluded(user.FieldAllowChain)
+	return u
+}
+
+// SetProxyPolicy sets the "proxy_policy" field.
+func (u *UserUpsert) SetProxyPolicy(v map[string]interface{}) *UserUpsert {
+	u.Set(user.FieldProxyPolicy, v)
+	return u
+}
+
+// UpdateProxyPolicy sets the "proxy_policy" field to the value that was provided on create.
+func (u *UserUpsert) UpdateProxyPolicy() *UserUpsert {
+	u.SetExcluded(user.FieldProxyPolicy)
+	return u
+}
+
+// ClearProxyPolicy clears the value of the "proxy_policy" field.
+func (u *UserUpsert) ClearProxyPolicy() *UserUpsert {
+	u.SetNull(user.FieldProxyPolicy)
 	return u
 }
 
@@ -1018,6 +1046,27 @@ func (u *UserUpsertOne) SetAllowChain(v bool) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateAllowChain() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateAllowChain()
+	})
+}
+
+// SetProxyPolicy sets the "proxy_policy" field.
+func (u *UserUpsertOne) SetProxyPolicy(v map[string]interface{}) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetProxyPolicy(v)
+	})
+}
+
+// UpdateProxyPolicy sets the "proxy_policy" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateProxyPolicy() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateProxyPolicy()
+	})
+}
+
+// ClearProxyPolicy clears the value of the "proxy_policy" field.
+func (u *UserUpsertOne) ClearProxyPolicy() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearProxyPolicy()
 	})
 }
 
@@ -1488,6 +1537,27 @@ func (u *UserUpsertBulk) SetAllowChain(v bool) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateAllowChain() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateAllowChain()
+	})
+}
+
+// SetProxyPolicy sets the "proxy_policy" field.
+func (u *UserUpsertBulk) SetProxyPolicy(v map[string]interface{}) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetProxyPolicy(v)
+	})
+}
+
+// UpdateProxyPolicy sets the "proxy_policy" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateProxyPolicy() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateProxyPolicy()
+	})
+}
+
+// ClearProxyPolicy clears the value of the "proxy_policy" field.
+func (u *UserUpsertBulk) ClearProxyPolicy() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearProxyPolicy()
 	})
 }
 
