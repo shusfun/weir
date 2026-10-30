@@ -1,5 +1,5 @@
 // 订阅链接与自建链式代理：管理员（按用户）与用户本人共用。base 为 "/admin/users/<id>" 或 "/me"。
-// 每条链接一张卡片，右上角是「复制」与展开更多操作的三角；生效时间（开始、结束都可不填）与拉取记录都在这里。
+// 每条链接一张卡片：地址框末尾是复制图标，右上角「更多」里是其余操作；生效时间（开始、结束都可不填）与拉取记录都在这里。
 import { useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { field, useConsoleContext } from "../lib/console-context";
@@ -10,7 +10,7 @@ import {
   CheckboxField,
   CodeBlock,
   Collapsible,
-  CopyButton,
+  CopyField,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -27,7 +27,11 @@ import {
   SelectTrigger,
   SelectValue,
   SkeletonList,
-  SplitButton,
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuSeparator,
+  MenuTrigger,
   Switch,
   SwitchField,
   Table,
@@ -40,7 +44,7 @@ import {
   useConfirm,
   SecretText,
 } from "@weir/ui";
-import { CirclePause, CirclePlay, ExternalLink, History, Pencil, Plus, QrCode, RefreshCw, KeyRound, Trash2 } from "lucide-react";
+import { ChevronDown, CirclePause, CirclePlay, ExternalLink, History, Pencil, Plus, QrCode, RefreshCw, KeyRound, Trash2 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -159,7 +163,7 @@ export function LinkPanel({
   );
 }
 
-// LinkCard：一条链接。右上角「复制」是最常用的操作，三角里是其余操作；危险操作都要再确认。
+// LinkCard：一条链接。复制在地址框末尾（最常用），其余操作在右上角「更多」里；危险操作都要再确认。
 function LinkCard({ base, link: l, stats, showCredentials, inlineQr, onEdit, refetch }: {
   base: string;
   link: LinkItem;
@@ -201,26 +205,26 @@ function LinkCard({ base, link: l, stats, showCredentials, inlineQr, onEdit, ref
               : <>最近获取 {date(l.last_used_at)}</>}
           </small>
         </div>
-        <SplitButton
-          className="shrink-0"
-          main={<CopyButton size="sm" variant="outline" ripple value={l.url} onError={() => toast("复制失败", { description: "请在下方地址框里手动选择复制。", tone: "warn" })}>复制</CopyButton>}
-          disabled={busy}
-          items={[
-            { label: "二维码", icon: <QrCode />, onSelect: () => setQr(true) },
-            { label: "一键导入页", icon: <ExternalLink />, onSelect: () => window.open(l.url, "_blank", "noopener,noreferrer") },
-            { label: "编辑与生效时间", icon: <Pencil />, onSelect: onEdit },
-            { label: "拉取记录", icon: <History />, onSelect: () => setPulls(true) },
-            "separator",
-            l.enabled
-              ? { label: "停用", icon: <CirclePause />, onSelect: () => act(l.id, () => api(`${base}/links/${l.id}`, "PATCH", { enabled: false }), "链接已停用") }
-              : { label: "启用", icon: <CirclePlay />, onSelect: () => act(l.id, () => api(`${base}/links/${l.id}`, "PATCH", { enabled: true }), "链接已启用") },
-            { label: "换地址", icon: <RefreshCw />, onSelect: () => void rotate(false) },
-            { label: "换凭据", icon: <KeyRound />, onSelect: () => void rotate(true) },
-            { label: "删除", icon: <Trash2 />, danger: true, onSelect: async () => (await confirm({ title: `删除链接「${l.name || "未命名"}」？`, confirmText: "删除", tone: "danger" })) && act(l.id, () => api(`${base}/links/${l.id}`, "DELETE"), "链接已删除") },
-          ]}
-        />
+        <Menu>
+          <MenuTrigger render={<Button size="sm" variant="outline" ripple disabled={busy} aria-label={`${l.name || "未命名"} 更多操作`} className="shrink-0 data-[popup-open]:[&_svg]:rotate-180 [&_svg]:transition-transform" />}>
+            更多<ChevronDown />
+          </MenuTrigger>
+          <MenuContent align="end">
+            <MenuItem onClick={() => setQr(true)}><QrCode />二维码</MenuItem>
+            <MenuItem onClick={() => window.open(l.url, "_blank", "noopener,noreferrer")}><ExternalLink />一键导入页</MenuItem>
+            <MenuItem onClick={onEdit}><Pencil />编辑与生效时间</MenuItem>
+            <MenuItem onClick={() => setPulls(true)}><History />拉取记录</MenuItem>
+            <MenuSeparator />
+            {l.enabled
+              ? <MenuItem onClick={() => act(l.id, () => api(`${base}/links/${l.id}`, "PATCH", { enabled: false }), "链接已停用")}><CirclePause />停用</MenuItem>
+              : <MenuItem onClick={() => act(l.id, () => api(`${base}/links/${l.id}`, "PATCH", { enabled: true }), "链接已启用")}><CirclePlay />启用</MenuItem>}
+            <MenuItem onClick={() => void rotate(false)}><RefreshCw />换地址</MenuItem>
+            <MenuItem onClick={() => void rotate(true)}><KeyRound />换凭据</MenuItem>
+            <MenuItem className="text-[var(--weir-bad-ink)] [&_svg]:!text-[var(--weir-bad-ink)]" onClick={async () => (await confirm({ title: `删除链接「${l.name || "未命名"}」？`, confirmText: "删除", tone: "danger" })) && act(l.id, () => api(`${base}/links/${l.id}`, "DELETE"), "链接已删除")}><Trash2 />删除</MenuItem>
+          </MenuContent>
+        </Menu>
       </div>
-      <Input readOnly className="font-mono text-xs" aria-label="订阅地址" value={l.url} onFocus={(e) => e.currentTarget.select()} />
+      <CopyField label="订阅地址" value={l.url} onError={() => toast("复制失败", { description: "浏览器未允许复制，请在地址框里手动复制。", tone: "warn" })} />
       {inlineQr && l.enabled && (
         <div className="qr-code mx-auto">
           <QRCodeSVG value={l.url} size={180} title={(l.name || "订阅链接") + " 二维码"} />
@@ -411,7 +415,7 @@ function LinkForm({
   );
 }
 
-// ChainPanel：用户自建链式代理 = 一个新节点（入口节点 → 订阅组里的节点、SOCKS5 / HTTP(S) 代理、另一节点或一条分享链接）。
+// ChainPanel：用户自建链式代理 = 一个新节点（入口节点 → 订阅组里的节点、SOCKS5 / HTTP(S) 代理、另一节点或一条节点链接）。
 // 出口只允许公网地址，不接受订阅地址；保存前由入口 VPS 实测，记下实际出口 IP。
 // SourceSummary：订阅源出口一行说明（单个节点 / 一组，及当前用的节点）。
 export function SourceSummary({ choice, resolved }: { choice?: { mode?: string; match?: string } | null; resolved?: SourceResolved }) {
@@ -480,7 +484,7 @@ export function ChainPanel({ base, nodes, admin }: { base: string; nodes: NodeOp
                     </>
                   ) : c.exit_kind === "link" ? (
                     <>
-                      分享链接 {c.exit_address}:{c.exit_port}
+                      节点链接 {c.exit_address}:{c.exit_port}
                       {admin && c.exit_link && <> （<SecretText value={c.exit_link} />）</>}
                     </>
                   ) : c.exit_kind === "source" ? (
@@ -563,7 +567,7 @@ function ChainForm({
     form: [
       field("name", "名称", name), field("entry_node_id", "入口节点", nodes.find((n) => n.id === entry)?.name), field("exit_kind", "出口类型", exitKindName[current.kind]),
       ...(["socks5", "http", "https"].includes(current.kind) ? [field("address", "代理地址", current.address), field("port", "端口", current.port), field("username", "用户名", current.username), field("password", "代理密码", current.password, true)] : []),
-      ...(current.kind === "link" ? [field("link", "分享链接", current.link, true)] : []),
+      ...(current.kind === "link" ? [field("link", "节点链接", current.link, true)] : []),
     ],
   });
   return (

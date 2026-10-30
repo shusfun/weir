@@ -1,7 +1,7 @@
 // 浏览器打开订阅地址时的一键导入页：不需要登录，只显示本链接的用量、到期与节点名称（不含凭据）。
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
-import { Badge, Button, Card, CardContent, CopyButton, Input, Meter, PageHeader, Readout } from "@weir/ui";
+import { Badge, Button, Card, CardContent, CopyField, Meter, PageHeader, Readout } from "@weir/ui";
 import { ArrowUpRight } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "../api";
@@ -67,10 +67,7 @@ export function SubPage() {
               <Readout label="下次重置" value={d.next_reset ? date(d.next_reset) : "不重置"} />
             </div>
             {d.quota > 0 && <Meter label="流量使用" value={d.used} max={d.quota} />}
-            <div className="subscription-url">
-              <Input readOnly className="font-mono text-xs" aria-label="订阅地址" value={d.url} />
-              <CopyButton value={d.url}>复制地址</CopyButton>
-            </div>
+            <CopyField label="订阅地址" value={d.url} />
           </div>
           <div className="qr-code justify-self-center"><QRCodeSVG value={d.url} size={168} title="订阅二维码" /></div>
         </CardContent>

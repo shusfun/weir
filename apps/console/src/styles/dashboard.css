@@ -36,8 +36,6 @@
 
 
 .subscription-grid { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 18px; }
-.subscription-url { display: flex; gap: 8px; }
-.subscription-url input { min-width: 0; }
 .qr-panel { display: flex; flex-direction: column; align-items: center; text-align: center; }
 .qr-panel p { font-size: 12px; }
 .qr-code { display: inline-block; margin: 16px auto 10px; padding: 12px; border-radius: var(--weir-radius); background: #fff; border: 1px solid var(--weir-line); box-shadow: inset 0 1px 2px var(--weir-inset); }
@@ -80,6 +78,4 @@
   .rack-row { grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; }
   .rack-row .rack-fact { display: none; }
   .client-choice-grid { grid-template-columns: 1fr; }
-  .subscription-url { flex-wrap: wrap; }
-  .subscription-url > * { width: 100%; }
 }

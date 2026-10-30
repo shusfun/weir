@@ -10,7 +10,7 @@ import (
 
 // Node 是 Gate 上的一个入站。preset 记录建节点时选用的内置方案；
 // settings 保存协议参数（含 REALITY 私钥等，仅中心与 Gate 使用）。
-// chain_kind 为管理员链式代理出口：none / socks5 / http / https（代理）/ link（单条分享链接）/ node（另一台 Gate 的节点）/ source（订阅源里的节点）。
+// chain_kind 为管理员链式代理出口：none / socks5 / http / https（代理）/ link（单条节点链接）/ node（另一台 Gate 的节点）/ source（订阅源里的节点）。
 type Node struct{ ent.Schema }
 
 func (Node) Fields() []ent.Field {
@@ -34,7 +34,7 @@ func (Node) Fields() []ent.Field {
 		field.String("chain_username").MaxLen(255).Default(""),
 		field.String("chain_password").Sensitive().Default(""),
 		field.Int("chain_node_id").Optional().Nillable(),
-		// chain_link：chain_kind 为 link 时的分享链接（含凭据，加密存储）。
+		// chain_link：chain_kind 为 link 时的节点链接（含凭据，加密存储）。
 		field.String("chain_link").Sensitive().Default(""),
 		field.Time("created_at").Default(time.Now).Immutable(),
 	}

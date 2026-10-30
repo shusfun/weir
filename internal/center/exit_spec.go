@@ -21,15 +21,15 @@ import (
 
 // 出口的统一表示：链式代理（管理员第 ③ 步、用户自建）与分流出口都先解析成 resolvedExit，
 // 再按入口内核检查能不能连、由入口 Gate 实测、编译进 Gate 配置。
-// 每个成员同时保留一条分享链接，实测时据此生成 sing-box 客户端。
+// 每个成员同时保留一条节点链接，实测时据此生成 sing-box 客户端。
 
-// proxyKinds 是填地址的代理出口；link 是单条分享链接。
+// proxyKinds 是填地址的代理出口；link 是单条节点链接。
 var proxyKinds = map[string]string{"socks5": "socks", "http": "http", "https": "https"}
 
 type resolvedExit struct {
 	Outbound contracts.Outbound // 单个出口，或 Protocol 为 group 的一组
 	Names    []string           // 成员名称（订阅源节点）
-	Links    []string           // 每个成员的分享链接，与成员一一对应
+	Links    []string           // 每个成员的节点链接，与成员一一对应
 	Skipped  []string           // 订阅源里匹配但不能作出口的节点及原因
 	TCPOnly  bool               // 只能测端口（另一台 VPS 的节点：内部凭据保存后才生成）
 }
@@ -59,7 +59,7 @@ func proxyExit(kind, address string, port int, username, password string) contra
 	return o
 }
 
-// proxyLink 是代理出口对应的分享链接（实测时生成客户端用）。
+// proxyLink 是代理出口对应的节点链接（实测时生成客户端用）。
 func proxyLink(kind, address string, port int, username, password string) string {
 	scheme := map[string]string{"socks5": "socks5", "http": "http", "https": "https"}[kind]
 	u := url.URL{Scheme: scheme, Host: net.JoinHostPort(strings.Trim(strings.TrimSpace(address), "[]"), strconv.Itoa(port))}
@@ -78,7 +78,7 @@ func subscriptionURL(raw string) bool {
 	return (u.Path != "" && u.Path != "/") || u.RawQuery != ""
 }
 
-// linkOutbound 把一条分享链接转成出口；表达不了的参数明确报错，不悄悄丢掉。
+// linkOutbound 把一条节点链接转成出口；表达不了的参数明确报错，不悄悄丢掉。
 func linkOutbound(n subscription.ParsedLink) (contracts.Outbound, error) {
 	var s subscription.Settings
 	if n.SettingsJSON != "" {
@@ -139,18 +139,18 @@ func linkOutbound(n subscription.ParsedLink) (contracts.Outbound, error) {
 	return o, nil
 }
 
-// parseExitLink 解析单条分享链接作出口。订阅地址不接受：出口只能是一个确定的节点。
+// parseExitLink 解析单条节点链接作出口。订阅地址不接受：出口只能是一个确定的节点。
 func parseExitLink(raw string) (contracts.Outbound, string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || len(raw) > 4096 || strings.ContainsAny(raw, "\r\n") {
-		return contracts.Outbound{}, "", errors.New("请粘贴一条分享链接")
+		return contracts.Outbound{}, "", errors.New("请粘贴一条节点链接")
 	}
 	if subscriptionURL(raw) {
-		return contracts.Outbound{}, "", errors.New("这是订阅地址，不能作出口；请粘贴其中一个节点的分享链接")
+		return contracts.Outbound{}, "", errors.New("这是订阅地址，不能作出口；请粘贴其中一个节点的链接")
 	}
 	n, err := subscription.ParseLink(raw)
 	if err != nil {
-		return contracts.Outbound{}, "", errors.New("无法识别的分享链接（支持 vless / vmess / trojan / ss / hysteria2 / tuic / anytls / socks5 / http）")
+		return contracts.Outbound{}, "", errors.New("无法识别的节点链接（支持 vless / vmess / trojan / ss / hysteria2 / tuic / anytls / socks5 / http）")
 	}
 	o, err := linkOutbound(n)
 	if err != nil {
@@ -189,7 +189,7 @@ func (s *Server) probeTarget(ctx context.Context) string {
 	return "https://www.gstatic.com/generate_204"
 }
 
-// clientOutbound 把分享链接生成 sing-box 客户端出站（与订阅里的写法一致）；生成不了时返回错误，调用方退回只测端口。
+// clientOutbound 把节点链接生成 sing-box 客户端出站（与订阅里的写法一致）；生成不了时返回错误，调用方退回只测端口。
 func clientOutbound(link string) (map[string]any, error) {
 	body, _, err := subout.Render([]string{link}, "singbox")
 	if err != nil {
@@ -241,7 +241,7 @@ func (s *Server) loadExitProbe(ctx context.Context, owner string) (exitProbe, bo
 	return p, true
 }
 
-// probeExit 由入口 Gate 实测出口：有分享链接时用 sing-box 客户端按协议真连一次，经它访问中心拿到实际出口 IP；
+// probeExit 由入口 Gate 实测出口：有节点链接时用 sing-box 客户端按协议真连一次，经它访问中心拿到实际出口 IP；
 // sing-box 表达不了这个出口或入口 VPS 拿不到 sing-box 时退回只测端口，并在结果里写明。一组至少一个成员通过（最多试 5 个）。
 func (s *Server) probeExit(ctx context.Context, entry *ent.Gate, ex resolvedExit, publicOnly bool) (*exitProbe, error) {
 	members := ex.members()

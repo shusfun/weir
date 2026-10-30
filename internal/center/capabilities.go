@@ -144,7 +144,7 @@ func (s *Server) checkArgs(ctx context.Context, p *planCtx, params []Param, args
 	}
 	for _, pa := range params {
 		v, ok := args[pa.Key]
-		// 机密参数（订阅地址、代理密码、分享链接）不经过 dsh：草稿里留空，由管理员在确认窗里填。
+		// 机密参数（订阅地址、代理密码、节点链接）不经过 dsh：草稿里留空，由管理员在确认窗里填。
 		if pa.Secret && !p.confirm && ok && v != nil && v != "" {
 			return fmt.Errorf("参数 %s（%s）是机密，不要填写：留空提交，由管理员在 Weir 的确认窗里直接填", pa.Key, pa.Label)
 		}

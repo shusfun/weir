@@ -414,7 +414,7 @@ func (s *Server) readVia(ctx context.Context, handler gin.HandlerFunc, method st
 }
 
 // modelSafe 去掉发给模型的数据里的机密：按字段名识别的密码、密钥、令牌、UUID 换成 <redacted>，
-// 地址类字段（订阅地址、分享链接）只留协议与主机。
+// 地址类字段（订阅地址、节点链接）只留协议与主机。
 func modelSafe(v any) any {
 	switch t := v.(type) {
 	case map[string]any:
@@ -451,7 +451,7 @@ func modelSafe(v any) any {
 
 func isBool(v any) bool { _, ok := v.(bool); return ok }
 
-// maskURL 只留协议与主机（订阅地址的路径和查询里常带令牌，分享链接的用户名就是密码）。
+// maskURL 只留协议与主机（订阅地址的路径和查询里常带令牌，节点链接的用户名就是密码）。
 func maskURL(raw string) string {
 	if strings.TrimSpace(raw) == "" {
 		return raw

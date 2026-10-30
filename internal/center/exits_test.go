@@ -10,7 +10,7 @@ import (
 
 const ss2022Link = "ss://2022-blake3-aes-128-gcm:AAAAAAAAAAAAAAAAAAAAAA%3D%3D@203.0.113.20:8388#SS-HK"
 
-// 单条分享链接作出口：能表达的协议都转成出口；订阅地址、跳过证书校验、证书指纹一律明确拒绝。
+// 单条节点链接作出口：能表达的协议都转成出口；订阅地址、跳过证书校验、证书指纹一律明确拒绝。
 func TestParseExitLink(t *testing.T) {
 	for raw, want := range map[string]string{
 		ss2022Link: "shadowsocks",
@@ -42,7 +42,7 @@ func TestParseExitLink(t *testing.T) {
 	}
 }
 
-// 用户自建链式代理的出口：HTTP / HTTPS 代理、单条分享链接都能用，按入口内核检查，实测结果（实际出口 IP）记在链上。
+// 用户自建链式代理的出口：HTTP / HTTPS 代理、单条节点链接都能用，按入口内核检查，实测结果（实际出口 IP）记在链上。
 func TestUserChainExitKinds(t *testing.T) {
 	s, admin, g := setupGate(t)
 	gid := int(g.id)

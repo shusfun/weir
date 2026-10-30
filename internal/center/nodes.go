@@ -38,14 +38,14 @@ func (s *Server) nodeRoutes(admin *gin.RouterGroup) {
 	admin.POST("/gates/:id/probe-reality", s.probeReality)
 }
 
-// ChainSpec 描述链式代理出口：SOCKS5 / HTTP / HTTPS 代理、单条分享链接、另一台 VPS 上的节点或订阅源里的节点。
+// ChainSpec 描述链式代理出口：SOCKS5 / HTTP / HTTPS 代理、单条节点链接、另一台 VPS 上的节点或订阅源里的节点。
 type ChainSpec struct {
 	Kind     string `json:"kind"` // none / socks5 / http / https / link / node / source
 	Address  string `json:"address"`
 	Port     int    `json:"port"`
 	Username string `json:"username"`
 	Password string `json:"password"`
-	Link     string `json:"link,omitempty"` // link：一条分享链接（不接受订阅地址）
+	Link     string `json:"link,omitempty"` // link：一条节点链接（不接受订阅地址）
 	NodeID   int    `json:"node_id"`
 	// source：管理员用 source_id（任意订阅源），用户自建用 profile_id（分配给他的订阅组）；mode node / filter，match 名称或正则。
 	SourceID  int    `json:"source_id,omitempty"`
@@ -445,7 +445,7 @@ func (s *Server) createNode(c *gin.Context) {
 		Chain         ChainSpec      `json:"chain"`
 		Settings      map[string]any `json:"settings"` // 高级：只能改预设列出的字段
 		SkipProbe     bool           `json:"skip_probe"`
-		// UserIDs 是第 ④ 步勾选的用户：把这个节点分给他们，保存后返回他们的分享链接。
+		// UserIDs 是第 ④ 步勾选的用户：把这个节点分给他们，保存后返回他们的节点链接。
 		UserIDs []int `json:"user_ids"`
 	}
 	if !bind(c, &req) {
@@ -462,7 +462,7 @@ func (s *Server) createNode(c *gin.Context) {
 		failure(c, 400, "unknown_preset")
 		return
 	}
-	// 没有公网地址时生成不了分享链接：先在 VPS 详情里填好，不建一个用不了的节点。
+	// 没有公网地址时生成不了节点链接：先在 VPS 详情里填好，不建一个用不了的节点。
 	if g.PublicHost == "" {
 		failDetail(c, 422, "gate_no_public_host", "这台 VPS 还没有公网地址，请先在 VPS 详情里填写（客户端用它连接节点）", gin.H{"hint": publicHostHint(g)})
 		return
@@ -644,7 +644,7 @@ func (s *Server) createNode(c *gin.Context) {
 	c.JSON(200, view)
 }
 
-// nodeShares 是勾选用户在这个节点上的分享链接（每条包含该节点的链接一条）；拿不到时说明原因。
+// nodeShares 是勾选用户在这个节点上的节点链接（每条包含该节点的链接一条）；拿不到时说明原因。
 func (s *Server) nodeShares(ctx context.Context, n *ent.Node, uids []int) []gin.H {
 	out := []gin.H{}
 	for _, uid := range dedupe(uids) {

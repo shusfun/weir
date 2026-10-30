@@ -142,7 +142,7 @@ func CertSum(certPEM, keyPEM string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// WireGuard 地址：服务端固定 10.77.0.1/16，每个凭据按 ID 分到一个 /32（中心生成分享链接、Gate 生成配置都用它）。
+// WireGuard 地址：服务端固定 10.77.0.1/16，每个凭据按 ID 分到一个 /32（中心生成节点链接、Gate 生成配置都用它）。
 const WGServerAddress = "10.77.0.1/16"
 
 func WGClientAddress(credentialID int64) string {

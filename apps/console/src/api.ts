@@ -46,7 +46,7 @@ const messages: Record<string, string> = {
  chain_exit_unsupported:"该协议不能作为链式代理出口。",
  chain_exit_no_address:"出口节点所在 VPS 没有公网地址。",
  chain_probe_failed:"VPS 实测出口失败，请检查地址、端口和账号。",
- invalid_link:"这条分享链接不能作出口",
+ invalid_link:"这条节点链接不能作出口",
  exit_unsupported:"入口节点用的内核连不了这个出口",
  gate_no_public_host:"这台 VPS 还没有公网地址",
  invalid_public_host:"公网地址格式无效，请填 IP 或域名。",

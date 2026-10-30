@@ -3,7 +3,7 @@
 // 保存后显示要放行的端口（对照本机防火墙）与出口实测结果，勾选了用户时再给出他们的链接与二维码。
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, CheckboxField, ChoiceCard, Collapsible, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Step, Steps, Radio, RadioGroup, SwitchField } from "@weir/ui";
+import { Badge, Button, CheckboxField, ChoiceCard, Collapsible, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Step, Steps, Radio, RadioGroup, SwitchField } from "@weir/ui";
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "../api";
 import { useFormAction } from "../lib/action";
@@ -96,7 +96,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
     form: [
       field("preset", "协议方案", chosen?.name), field("gate", "VPS", gate?.name), field("chain", "出口", exitKindName[chain.kind]),
       ...(["socks5", "http", "https"].includes(chain.kind) ? [field("chain_address", "代理地址", chain.address), field("chain_port", "代理端口", chain.port), field("chain_password", "代理密码", chain.password, true)] : []),
-      ...(chain.kind === "link" ? [field("chain_link", "分享链接", chain.link, true)] : []),
+      ...(chain.kind === "link" ? [field("chain_link", "节点链接", chain.link, true)] : []),
       field("name", "节点名称", name), field("port", "端口", port), field("target", "伪装目标", target),
       ...Object.entries(advanced).map(([k, v]) => field("set." + k, chosen?.fields.find((f) => f.key === k)?.label ?? k, v)),
     ],
@@ -106,7 +106,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
       <Dialog open={open} onOpenChange={(o) => !o && reset()}>
         <DialogContent size="lg">
           <DialogTitle>节点已创建</DialogTitle>
-          <DialogDescription>VPS 应用配置约需数秒。{shares.length > 0 ? "下面是勾选用户在这个节点上的分享链接；用户的订阅也已包含它。" : ""}</DialogDescription>
+          <DialogDescription>VPS 应用配置约需数秒。{shares.length > 0 ? "下面是勾选用户在这个节点上的节点链接；用户的订阅也已包含它。" : ""}</DialogDescription>
           {created && <NodeAccess ports={created.ports} reach={created.reach} />}
           {created && created.chain.kind !== "none" && <small className="text-[var(--weir-ink-3)]">出口 {exitKindName[created.chain.kind]}：{probeText(created.chain.probe)}</small>}
           {shares.length > 0 && <ShareList shares={shares} leave={reset} />}
@@ -182,7 +182,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
             {gate && !gate.online && <Notice tone="warn">这台 VPS 当前离线，无法实测伪装目标与链式代理。</Notice>}
             {gate && !gate.public_host && (
               <Notice tone="warn">
-                这台 VPS 还没有公网地址，生成不了分享链接。请先到 <Link className="underline" to={objectHref({ type: "gate", id: gate.id })} onClick={reset}>VPS 详情</Link> 填写{gate.public_host_hint ? `（本机网卡上的公网 IP 是 ${gate.public_host_hint}）` : ""}。
+                这台 VPS 还没有公网地址，生成不了节点链接。请先到 <Link className="underline" to={objectHref({ type: "gate", id: gate.id })} onClick={reset}>VPS 详情</Link> 填写{gate.public_host_hint ? `（本机网卡上的公网 IP 是 ${gate.public_host_hint}）` : ""}。
               </Notice>
             )}
           </>
@@ -294,13 +294,10 @@ function ShareList({ shares, leave }: { shares: Share[]; leave: () => void }) {
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="soft" tone="neutral">{l.link}</Badge>
                 {l.uri ? (
-                  <>
-                    <CopyButton value={l.uri}>复制链接</CopyButton>
-                    <Button size="xs" variant="outline" aria-expanded={qr === l.uri} onClick={() => setQr(qr === l.uri ? "" : l.uri)}>二维码</Button>
-                  </>
+                  <Button size="xs" variant="outline" aria-expanded={qr === l.uri} onClick={() => setQr(qr === l.uri ? "" : l.uri)}>二维码</Button>
                 ) : <small className="text-[var(--weir-bad-ink)]">{l.error || "暂时生成不了链接"}</small>}
               </div>
-              {l.uri && <Input readOnly className="font-mono text-xs" aria-label="分享链接" value={l.uri} />}
+              {l.uri && <CopyField label="节点链接" value={l.uri} />}
               {qr === l.uri && l.uri && <div className="qr-code mx-auto"><QRCodeSVG value={l.uri} size={200} title="节点二维码" /></div>}
             </div>
           ))}

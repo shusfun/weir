@@ -15,7 +15,7 @@ description: 改 Weir 的内核驱动（internal/kernels/drivers）、驱动格�
 | 已知的客户端不兼容 | 驱动的 `compat` |
 | 建节点方案、高级字段 | 驱动的 `presets` |
 | 模板需要一个引擎还没提供的值 | `kernelconf/view.go` 加变量，并更新两份 skill 的变量说明 |
-| 全新协议、新的统计方式、新的分享链接格式 | Go 代码（`view.go`、`center/presets.go` 的 `newSecret`、`internal/subout` 等）+ 驱动 |
+| 全新协议、新的统计方式、新的节点链接格式 | Go 代码（`view.go`、`center/presets.go` 的 `newSecret`、`internal/subout` 等）+ 驱动 |
 | 安全约束 | `kernelconf/render.go` 的 `enforce`，不要只写在驱动里 |
 
 ## 规则

@@ -77,7 +77,7 @@ export interface ChainSpec {
   port?: number;
   username?: string;
   password?: string;
-  // link：一条分享链接（不接受订阅地址）
+  // link：一条节点链接（不接受订阅地址）
   link?: string;
   node_id?: number;
   // source：管理员用 source_id（订阅源），用户自建用 profile_id（分给他的订阅组）；mode node / filter

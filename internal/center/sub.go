@@ -59,7 +59,7 @@ func certPins(certPEM string) (string, string) {
 	return fmt.Sprintf("%x", der), base64.StdEncoding.EncodeToString(spki[:])
 }
 
-// shareLink 生成节点的标准分享链接；参数与入站配置一致，自签证书时附带指纹固定。
+// shareLink 生成节点的标准节点链接；参数与入站配置一致，自签证书时附带指纹固定。
 func shareLink(n *ent.Node, host string, cred *ent.Credential, name string, cert *ent.Certificate) (string, error) {
 	if host == "" {
 		return "", fmt.Errorf("VPS 没有公网地址")
@@ -145,7 +145,7 @@ func shareLink(n *ent.Node, host string, cred *ent.Credential, name string, cert
 		}
 		return (&url.URL{Scheme: scheme, User: url.UserPassword(cred.UUID, cred.Password), Host: addr, Fragment: name}).String(), nil
 	case "shadowtls":
-		// 没有通用分享链接：按 SIP003 写成带 shadow-tls 插件的 Shadowsocks 2022，Clash / sing-box 订阅据此生成。
+		// 没有通用节点链接：按 SIP003 写成带 shadow-tls 插件的 Shadowsocks 2022，Clash / sing-box 订阅据此生成。
 		q.Set("plugin", "shadow-tls;host="+firstNonEmpty(nodeSetting(st, "tls_sni"), "www.microsoft.com")+";password="+cred.Password+";version=3")
 		secret := nodeSetting(st, "ss_password") + ":" + cred.Password
 		return "ss://" + url.UserPassword(firstNonEmpty(nodeSetting(st, "ss_method"), ss2022Method), secret).String() + "@" + addr + "?" + q.Encode() + frag, nil
@@ -170,7 +170,7 @@ func shareLink(n *ent.Node, host string, cred *ent.Credential, name string, cert
 		}
 		return "tuic://" + cred.UUID + ":" + url.PathEscape(cred.Password) + "@" + addr + "?" + q.Encode() + frag, nil
 	}
-	return "", fmt.Errorf("协议 %s 暂不能生成分享链接", n.Protocol)
+	return "", fmt.Errorf("协议 %s 暂不能生成节点链接", n.Protocol)
 }
 
 func firstNonEmpty(v ...string) string {
@@ -402,7 +402,7 @@ func (s *Server) serveProvider(c *gin.Context) {
 	c.Data(200, "application/yaml; charset=utf-8", body)
 }
 
-// weirSubscription 是 target=weir 的内容：节点仍是分享链接，带名次、状况与分组、规则。
+// weirSubscription 是 target=weir 的内容：节点仍是节点链接，带名次、状况与分组、规则。
 func (s *Server) weirSubscription(ctx context.Context, u *ent.User, l *ent.Link, p planned) contracts.WeirSubscription {
 	plan, items := s.subPlan(ctx, p)
 	start, end := linkWindow(u, l)

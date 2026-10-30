@@ -413,7 +413,7 @@ func exitLabel(spec ChainSpec) string {
 	case "socks5", "http", "https":
 		return exitKindLabels[spec.Kind]
 	case "link":
-		return "分享链接"
+		return "节点链接"
 	case "source":
 		return "订阅节点"
 	case "node":

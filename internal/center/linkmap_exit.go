@@ -11,7 +11,7 @@ import (
 )
 
 var exitLabels = map[string]string{
-	"direct": "直接出去", "socks5": "SOCKS5 代理", "http": "HTTP 代理", "https": "HTTPS 代理", "link": "分享链接节点",
+	"direct": "直接出去", "socks5": "SOCKS5 代理", "http": "HTTP 代理", "https": "HTTPS 代理", "link": "节点链接",
 	"node": "另一台 VPS", "source": "订阅源节点", "block": "丢弃",
 }
 
