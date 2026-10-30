@@ -863,7 +863,7 @@ func publicAddr(ip net.IP) bool {
 	return !(ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() || len(ip) == net.IPv6len && ip.To4() == nil && ip[0]&0xfe == 0xfc)
 }
 
-// checkUserChain 校验用户自建链：入口必须是该用户可用的节点；出口可以是 SOCKS5 / HTTP(S) 代理、单条分享链接、
+// checkUserChain 校验用户自建链：入口必须是该用户可用的节点；出口可以是 SOCKS5 / HTTP(S) 代理、单条节点链接、
 // 分给他的订阅组里的节点或他可用的另一节点，只允许公网地址，不接受订阅地址；由入口 Gate 实测出口可用后才保存。
 func (s *Server) checkUserChain(ctx context.Context, u *ent.User, req chainRequest, admin bool) (*ent.Node, *exitProbe, error) {
 	nodes, err := s.userNodeIDs(ctx, u)

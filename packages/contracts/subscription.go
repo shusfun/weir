@@ -55,7 +55,7 @@ func (p ProxyPolicy) Normalized() ProxyPolicy {
 }
 
 // WeirSubscription 是 ?target=weir 的输出：给以后的 Weir 客户端用，带版本号的结构化订阅。
-// 节点仍是标准分享链接；分组与规则和其他格式由同一份计划生成，客户端不必再解析 Clash 文本。
+// 节点仍是标准节点链接；分组与规则和其他格式由同一份计划生成，客户端不必再解析 Clash 文本。
 type WeirSubscription struct {
 	Version   int               `json:"version"`
 	Name      string            `json:"name"`

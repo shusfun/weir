@@ -1,5 +1,5 @@
 // 链式代理出口的填写：建节点第 ③ 步（管理员）与用户自建链式代理共用。
-// 代理支持 SOCKS5 / HTTP / HTTPS，可以直接粘贴商家给的文本自动拆开；分享链接只接受单个节点，订阅地址会被拒绝。
+// 代理支持 SOCKS5 / HTTP / HTTPS，可以直接粘贴商家给的文本自动拆开；节点链接只接受单个节点，订阅地址会被拒绝。
 import { useState } from "react";
 import { Field, FormGrid, Input, Notice, PasswordInput, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea } from "@weir/ui";
 import type { ChainSpec, ExitKind, ExitProbe } from "../lib/core";
@@ -12,7 +12,7 @@ const topOf = (k: ExitKind): Top => (k === "socks5" || k === "http" || k === "ht
 const proxyKinds = [["socks5", "SOCKS5"], ["http", "HTTP"], ["https", "HTTPS"]] as const;
 
 export const exitKindName: Record<string, string> = {
-  none: "直接出去", socks5: "SOCKS5 代理", http: "HTTP 代理", https: "HTTPS 代理", link: "分享链接节点", node: "另一台 VPS", source: "订阅源节点",
+  none: "直接出去", socks5: "SOCKS5 代理", http: "HTTP 代理", https: "HTTPS 代理", link: "节点链接", node: "另一台 VPS", source: "订阅源节点",
 };
 
 // exitErrorFields 把出口相关的错误码标到实际显示的字段上（按当前出口类型）。
@@ -51,8 +51,8 @@ export function ChainExitFields({ value, onChange, admin, sourcePath, nodes, nod
   const top = topOf(value.kind);
   const set = (patch: Partial<ChainSpec>) => onChange({ ...value, ...patch });
   const options: (readonly [Top, string])[] = admin
-    ? [["none", "直接出去"], ["source", "订阅源节点"], ["proxy", "代理"], ["node", "另一台 VPS"], ["link", "分享链接"]]
-    : [["source", "订阅组里的节点"], ["proxy", "代理"], ["node", "另一节点"], ["link", "分享链接"]];
+    ? [["none", "直接出去"], ["source", "订阅源节点"], ["proxy", "代理"], ["node", "另一台 VPS"], ["link", "节点链接"]]
+    : [["source", "订阅组里的节点"], ["proxy", "代理"], ["node", "另一节点"], ["link", "节点链接"]];
   const pick = (t: Top) => onChange(t === "proxy" ? { kind: "socks5" } : t === "source" ? { kind: "source", mode: "filter" } : { kind: t });
   return (
     <>
@@ -76,7 +76,7 @@ export function ChainExitFields({ value, onChange, admin, sourcePath, nodes, nod
             </Select>
           </Field>
         ))}
-      {top !== "none" && <Notice role="status">保存前由入口 VPS 实测：代理、分享链接与订阅节点按协议真连一次并记下实际出口 IP；流量只在入口计量一次。</Notice>}
+      {top !== "none" && <Notice role="status">保存前由入口 VPS 实测：代理、节点链接与订阅节点按协议真连一次并记下实际出口 IP；流量只在入口计量一次。</Notice>}
     </>
   );
 }
@@ -92,7 +92,7 @@ function ProxyFields({ value, set }: { value: ChainSpec; set: (p: Partial<ChainS
       setPasteError("");
       set({ kind: r.proxy.kind ?? (value.kind as ProxyKind), address: r.proxy.address, port: r.proxy.port, username: r.proxy.username ?? "", password: r.proxy.password ?? "" });
     } else if (r.type === "link") {
-      setPasteError("这是一条分享链接，请改选「分享链接」");
+      setPasteError("这是一条节点链接，请改选「节点链接」");
     } else if (r.type === "subscription") {
       setPasteError("这是订阅地址，不能作出口");
     } else {
@@ -125,9 +125,9 @@ function ProxyFields({ value, set }: { value: ChainSpec; set: (p: Partial<ChainS
 
 function LinkField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const r = value.trim() ? parseExitText(value) : null;
-  const hint = r?.type === "subscription" ? "这是订阅地址，不能作出口；请粘贴其中一个节点的分享链接" : r?.type === "proxy" ? "这是代理地址，请改选「代理」" : r?.type === "error" && r.message !== "内容为空" ? r.message : "";
+  const hint = r?.type === "subscription" ? "这是订阅地址，不能作出口；请粘贴其中一个节点的链接" : r?.type === "proxy" ? "这是代理地址，请改选「代理」" : r?.type === "error" && r.message !== "内容为空" ? r.message : "";
   return (
-    <Field label="分享链接" name="link" required customError={hint} hint="一个节点的链接：vless:// vmess:// trojan:// ss:// hysteria2:// tuic:// anytls://。跳过证书校验或只用证书指纹的节点不能作出口。">
+    <Field label="节点链接" name="link" required customError={hint} hint="一个节点的链接：vless:// vmess:// trojan:// ss:// hysteria2:// tuic:// anytls://。跳过证书校验或只用证书指纹的节点不能作出口。">
       <Textarea required rows={3} spellCheck={false} className="font-mono text-xs" value={value} onChange={(e) => onChange(e.target.value.trim())} />
     </Field>
   );

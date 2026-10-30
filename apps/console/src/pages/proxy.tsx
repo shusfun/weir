@@ -181,7 +181,7 @@ function TypeCount({ type: t }: { type: ProxyType }) {
 function ExitSummary({ exit }: { exit: NonNullable<ProxyType["exit"]> }) {
   if (exit.kind === "source") return <SourceSummary choice={exit.source} />;
   if (exit.kind === "node") return <>经节点 {exit.node_id ? <ObjectLink to={{ type: "node", id: exit.node_id }} /> : ""}</>;
-  if (exit.kind === "link") return <>分享链接 {exit.address}:{exit.port}</>;
+  if (exit.kind === "link") return <>节点链接 {exit.address}:{exit.port}</>;
   return <>{exitKindName[exit.kind]} {exit.address}:{exit.port}</>;
 }
 
@@ -202,7 +202,7 @@ function TypeExitDialog({ base, type, nodes, admin, close, saved }: { base: stri
     form: [
       field("exit_kind", "出口类型", exitKindName[exit.kind]),
       ...(["socks5", "http", "https"].includes(exit.kind) ? [field("address", "代理地址", exit.address), field("port", "端口", exit.port), field("username", "用户名", exit.username), field("password", "代理密码", exit.password, true)] : []),
-      ...(exit.kind === "link" ? [field("link", "分享链接", exit.link, true)] : []),
+      ...(exit.kind === "link" ? [field("link", "节点链接", exit.link, true)] : []),
     ],
   });
   return (

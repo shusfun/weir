@@ -13,6 +13,19 @@
   .weir-check-mark[data-animate][data-circle] .weir-check-mark-ring { animation-duration: 420ms; }
   .weir-check-mark[data-animate][data-circle] .weir-check-mark-tick { animation-delay: 300ms; }
 
+  /* 复制图标：复制与对勾叠在同一格，复制成功时复制图标缩小淡出、对勾回弹放大并描绘；切回时反向 */
+  .weir-copy-icon {
+    display: inline-grid;
+    place-items: center;
+  }
+  .weir-copy-icon > * {
+    grid-area: 1 / 1;
+    transition: opacity var(--weir-fast) ease, transform var(--weir-bounce-dur) var(--weir-bounce);
+  }
+  .weir-copy-icon-check { opacity: 0; transform: scale(0.4); color: var(--weir-ok-ink); }
+  .weir-copy-icon[data-copied] .weir-copy-icon-copy { opacity: 0; transform: scale(0.4) rotate(-30deg); }
+  .weir-copy-icon[data-copied] .weir-copy-icon-check { opacity: 1; transform: scale(1); }
+
   /* 水波：宿主内的裁剪层，不裁掉键帽外阴影；圆从按压点放大并淡出 */
   .weir-ripple-host {
     position: absolute;

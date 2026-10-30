@@ -30,6 +30,7 @@ import {
   Checkbox,
   ChoiceCard,
   CopyButton,
+  CopyField,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -160,9 +161,11 @@ export function DevUiPage() {
             </Button>
           </Demo>
 
-          <Demo index={5} title="成功勾选" description="对勾沿路径一笔画出；首屏已勾选的直接显示。">
+          <Demo index={5} title="成功勾选" description="对勾沿路径一笔画出；首屏已勾选的直接显示。复制：复制图标缩小淡出、对勾放大并描绘。">
+            <CopyField label="订阅地址" value="https://example.com/sub/demo" />
             <div className="actions">
               <CopyButton variant="outline" value="weir">复制示例文本</CopyButton>
+              <CopyButton value="weir" aria-label="复制示例文本" />
               <Checkbox id="dev-check" checked={checked} onCheckedChange={setChecked} />
               <Label htmlFor="dev-check">复选框</Label>
               <Button variant="outline" onClick={() => toast("已保存", { description: "配置已下发到 3 台 VPS。" })}>成功提示</Button>

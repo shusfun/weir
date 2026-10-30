@@ -8,7 +8,7 @@ import (
 	"entgo.io/ent/schema/index"
 )
 
-// Chain 是用户自建的链式代理：以本人已有节点为入口，出口为 SOCKS5 / HTTP(S) 代理、单条分享链接、
+// Chain 是用户自建的链式代理：以本人已有节点为入口，出口为 SOCKS5 / HTTP(S) 代理、单条节点链接、
 // 分给他的订阅组里的节点或本人有权限的另一节点（不接受订阅地址）。
 // 它表现为一个新节点，可被该用户的任意链接勾选。出口密码加密存储，管理员可看原文。
 type Chain struct{ ent.Schema }
@@ -27,7 +27,7 @@ func (Chain) Fields() []ent.Field {
 		field.String("exit_username").MaxLen(255).Default(""),
 		field.String("exit_password").Sensitive().Default(""),
 		field.Int("exit_node_id").Optional().Nillable(),
-		// exit_link：exit_kind 为 link 时的分享链接（含凭据，加密存储）。
+		// exit_link：exit_kind 为 link 时的节点链接（含凭据，加密存储）。
 		field.String("exit_link").Sensitive().Default(""),
 		field.Bool("enabled").Default(true),
 		// policy_type 非空：代理页「给这个类型加出口」生成的链（每个该类型节点一条），随类型出口一起改、删，

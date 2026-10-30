@@ -1,4 +1,4 @@
-// VPS 的出口与分流规则：例如把流媒体域名经家宽代理出去。出口可以是 SOCKS5 / HTTP / HTTPS 代理、一条分享链接、
+// VPS 的出口与分流规则：例如把流媒体域名经家宽代理出去。出口可以是 SOCKS5 / HTTP / HTTPS 代理、一条节点链接、
 // 订阅源节点、直连或拦截；被规则引用的出口不能停用、改名或删除。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -41,7 +41,7 @@ interface Route {
   user_id?: number | null;
 }
 
-const protoNames: Record<string, string> = { socks: "SOCKS5", http: "HTTP 代理", https: "HTTPS 代理", link: "分享链接", freedom: "直连", blackhole: "拦截", source: "订阅源节点" };
+const protoNames: Record<string, string> = { socks: "SOCKS5", http: "HTTP 代理", https: "HTTPS 代理", link: "节点链接", freedom: "直连", blackhole: "拦截", source: "订阅源节点" };
 const probed = (r: unknown) => probeText(r as ExitProbe);
 const portError = (v: string) => (v && (Number(v) < 1 || Number(v) > 65535) ? "端口须在 1–65535 之间" : "");
 
@@ -120,7 +120,7 @@ function OutboundForm({ base, value, close, saved }: { base: string; value: Outb
   const remote = f.protocol === "socks" || f.protocol === "http" || f.protocol === "https";
   const [paste, setPaste] = useState("");
   const parsed = paste.trim() ? parseExitText(paste) : null;
-  const pasteError = parsed?.type === "subscription" ? "这是订阅地址，不能作出口" : parsed?.type === "link" ? "这是分享链接，请改选「分享链接」" : parsed?.type === "error" ? parsed.message : "";
+  const pasteError = parsed?.type === "subscription" ? "这是订阅地址，不能作出口" : parsed?.type === "link" ? "这是节点链接，请改选「节点链接」" : parsed?.type === "error" ? parsed.message : "";
   const applyPaste = (text: string) => {
     setPaste(text);
     const r = text.trim() ? parseExitText(text) : null;
@@ -144,14 +144,14 @@ function OutboundForm({ base, value, close, saved }: { base: string; value: Outb
         <DialogTitle>{o ? "编辑出口" : "添加出口"}</DialogTitle>
         <DialogDescription>标签只能用小写字母、数字、- 和 _；不能使用 direct、chain-、node- 等系统保留名称。</DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
-          <Segmented aria-label="出口类型" value={f.protocol} onValueChange={(protocol) => set({ protocol })} options={[["socks", "SOCKS5"], ["http", "HTTP"], ["https", "HTTPS"], ["link", "分享链接"], ["source", "订阅源节点"], ["freedom", "直连"], ["blackhole", "拦截"]] as const} />
+          <Segmented aria-label="出口类型" value={f.protocol} onValueChange={(protocol) => set({ protocol })} options={[["socks", "SOCKS5"], ["http", "HTTP"], ["https", "HTTPS"], ["link", "节点链接"], ["source", "订阅源节点"], ["freedom", "直连"], ["blackhole", "拦截"]] as const} />
           {remote && (
             <Field label="粘贴识别（可选）" customError={pasteError} hint="支持 host:port、host:port:用户名:密码、用户名:密码@host:port、socks5:// 与 http(s):// 地址。">
               <Input autoComplete="off" spellCheck={false} value={paste} placeholder="1.2.3.4:1080:user:pass" onChange={(e) => applyPaste(e.target.value)} />
             </Field>
           )}
           {f.protocol === "link" && (
-            <Field label="分享链接" name="link" required hint="一个节点的链接（vless / vmess / trojan / ss / hysteria2 / tuic / anytls）；订阅地址不能作出口。这台 VPS 上的每个内核都要能连接它。">
+            <Field label="节点链接" name="link" required hint="一个节点的链接（vless / vmess / trojan / ss / hysteria2 / tuic / anytls）；订阅地址不能作出口。这台 VPS 上的每个内核都要能连接它。">
               <Textarea required rows={3} spellCheck={false} className="font-mono text-xs" value={f.link} onChange={(e) => set({ link: e.target.value.trim() })} />
             </Field>
           )}

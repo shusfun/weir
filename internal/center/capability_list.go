@@ -75,7 +75,7 @@ var nodeCreateParams = []Param{
 	{Key: "cert_id", Label: "证书", Kind: "ref", Ref: "cert", Hint: "只用于需要证书的方案；不填时由中心为这台 VPS 准备"},
 	{Key: "settings", Label: "高级参数", Kind: "object", Hint: "只能改方案 fields 里列出的字段"},
 	{Key: "chain_kind", Label: "出口", Kind: "enum", Options: [][2]string{{"none", "直接出去"}, {"node", "经另一台 VPS 上的节点"}, {"source", "经订阅源里的节点"}},
-		Hint: "SOCKS5 / HTTP 代理或分享链接出口带密码，请改用 outbound.create 建出口再加分流规则"},
+		Hint: "SOCKS5 / HTTP 代理或节点链接出口带密码，请改用 outbound.create 建出口再加分流规则"},
 	{Key: "chain_node_id", Label: "出口节点", Kind: "ref", Ref: "node"},
 	{Key: "chain_source_id", Label: "出口订阅源", Kind: "ref", Ref: "source"},
 	{Key: "chain_mode", Label: "选择方式", Kind: "enum", Options: [][2]string{{"node", "指定一个节点"}, {"filter", "按名称筛选一组，由内核自动选择"}}},
@@ -130,12 +130,12 @@ func outboundParams(update bool) []Param {
 		{Key: "tag", Label: "标签", Kind: "string", Required: !update, Hint: "小写字母、数字、- 与 _，分流规则用它引用这个出口"},
 		{Key: "name", Label: "名称", Kind: "string"},
 		{Key: "protocol", Label: "类型", Kind: "enum", Required: !update, Options: [][2]string{{"socks", "SOCKS5 代理"}, {"http", "HTTP 代理"}, {"https", "HTTPS 代理"},
-			{"link", "分享链接"}, {"source", "订阅源里的节点"}, {"freedom", "直连"}, {"blackhole", "丢弃"}}},
+			{"link", "节点链接"}, {"source", "订阅源里的节点"}, {"freedom", "直连"}, {"blackhole", "丢弃"}}},
 		{Key: "address", Label: "地址", Kind: "string", Hint: "代理类填写"},
 		{Key: "port", Label: "端口", Kind: "int", Min: num(1), Max: num(65535)},
 		{Key: "username", Label: "用户名", Kind: "string"},
 		{Key: "password", Label: "密码", Kind: "string", Secret: true, Hint: "代理密码由管理员在确认窗里填，草稿里留空"},
-		{Key: "link", Label: "分享链接", Kind: "string", Secret: true, Hint: "一个节点的链接，由管理员在确认窗里粘贴，草稿里留空"},
+		{Key: "link", Label: "节点链接", Kind: "string", Secret: true, Hint: "一个节点的链接，由管理员在确认窗里粘贴，草稿里留空"},
 		{Key: "source_id", Label: "订阅源", Kind: "ref", Ref: "source"},
 		{Key: "mode", Label: "选择方式", Kind: "enum", Options: [][2]string{{"node", "指定一个节点"}, {"filter", "按名称筛选一组，由内核自动选择"}}},
 		{Key: "match", Label: "节点名称或筛选", Kind: "string", Hint: "指定节点时填完整名称；筛选时填正则，如 ^HK"},
@@ -161,7 +161,7 @@ func outboundPath(ctx context.Context, s *Server, args map[string]any) (gin.Para
 	return pathOf("id", itoa(o.GateID), "oid", itoa(o.ID)), nil
 }
 
-// loadOutbound 读出口的现值；密码与分享链接只在中心内部用于整体覆盖，给人看时只标已填 / 未填。
+// loadOutbound 读出口的现值；密码与节点链接只在中心内部用于整体覆盖，给人看时只标已填 / 未填。
 func loadOutbound(ctx context.Context, s *Server, args map[string]any) (map[string]any, error) {
 	o, err := s.Store.Ent.Outbound.Get(ctx, numberOf(args["outbound_id"]))
 	if err != nil {
@@ -323,7 +323,7 @@ func manualParams(update bool) []Param {
 	}
 	return append(ps,
 		Param{Key: "name", Label: "显示名称", Kind: "string"},
-		Param{Key: "url", Label: "节点链接", Kind: "string", Secret: true, Required: !update, Hint: "分享链接里带密码，由管理员在确认窗里粘贴，草稿里留空"},
+		Param{Key: "url", Label: "节点链接", Kind: "string", Secret: true, Required: !update, Hint: "节点链接里带密码，由管理员在确认窗里粘贴，草稿里留空"},
 		Param{Key: "group", Label: "分组", Kind: "string"},
 		Param{Key: "enabled", Label: "启用", Kind: "bool"},
 	)
@@ -385,11 +385,11 @@ var opDraftCaps = []Capability{
 			{Key: "kernel_pins", Label: "内核版本锁定", Kind: "object", Hint: "如 {\"xray\": \"26.3.27\"}；不写某个内核表示跟随默认版本"}},
 		op: &opSpec{kind: "update", method: "PATCH", handler: h(func(s *Server) gin.HandlerFunc { return s.updateGate }), path: keys("gate_id", "id"), pathKeys: []string{"gate_id"}, self: "gate_id", load: loadGate}},
 
-	{Name: "outbound.create", Title: "新建出口", Purpose: "在一台 VPS 上新建出口（SOCKS5 / HTTP / HTTPS 代理、分享链接、订阅源里的节点、直连、丢弃）；出口要由分流规则引用才有流量。保存前确认这台 VPS 上用到的每个内核都能连接它。",
+	{Name: "outbound.create", Title: "新建出口", Purpose: "在一台 VPS 上新建出口（SOCKS5 / HTTP / HTTPS 代理、节点链接、订阅源里的节点、直连、丢弃）；出口要由分流规则引用才有流量。保存前确认这台 VPS 上用到的每个内核都能连接它。",
 		Kind: "draft", Risk: "normal", Object: "outbound", Creates: true, Params: outboundParams(false),
 		op: &opSpec{kind: "create", method: "POST", handler: h(func(s *Server) gin.HandlerFunc { return s.saveOutbound }), path: keys("gate_id", "id"), pathKeys: []string{"gate_id"},
 			needs: outboundNeeds, undo: "outbound.delete", idKey: "outbound_id"}},
-	{Name: "outbound.update", Title: "修改出口", Purpose: "修改出口；没给的字段保持原样（密码、分享链接不给就不改）。仍被启用的分流规则引用时不能改标签或停用。",
+	{Name: "outbound.update", Title: "修改出口", Purpose: "修改出口；没给的字段保持原样（密码、节点链接不给就不改）。仍被启用的分流规则引用时不能改标签或停用。",
 		Kind: "draft", Risk: "normal", Object: "outbound", Params: outboundParams(true),
 		op: &opSpec{kind: "update", method: "PATCH", handler: h(func(s *Server) gin.HandlerFunc { return s.saveOutbound }), path: outboundPath, pathKeys: []string{"outbound_id"},
 			self: "outbound_id", load: loadOutbound, full: true, needs: outboundNeeds}},
@@ -452,7 +452,7 @@ var opDraftCaps = []Capability{
 	{Name: "template.delete", Title: "删除规则模板", Purpose: "删除自定义规则模板；还有订阅组或默认设置在用时拒绝。不能撤回，只能是最后一步。",
 		Kind: "draft", Risk: "danger", Object: "template", Last: true, Params: []Param{{Key: "template_id", Label: "规则模板", Kind: "ref", Ref: "template", Required: true}},
 		op: &opSpec{kind: "delete", method: "DELETE", handler: h(func(s *Server) gin.HandlerFunc { return s.deleteTemplate }), path: keys("template_id", "id"), pathKeys: []string{"template_id"}, self: "template_id"}},
-	{Name: "manual.create", Title: "新建手动节点", Purpose: "新建手动节点（一条节点分享链接，给订阅组用）。链接带密码，草稿里留空，由管理员在确认窗里粘贴。",
+	{Name: "manual.create", Title: "新建手动节点", Purpose: "新建手动节点（一条节点链接，给订阅组用）。链接带密码，草稿里留空，由管理员在确认窗里粘贴。",
 		Kind: "draft", Risk: "normal", Object: "manual", Creates: true, Params: manualParams(false),
 		op: &opSpec{kind: "create", method: "POST", handler: h(func(s *Server) gin.HandlerFunc { return s.saveManualNode }), path: noPath, undo: "manual.delete", idKey: "manual_id"}},
 	{Name: "manual.update", Title: "修改手动节点", Purpose: "修改手动节点；没给的字段保持原样（链接不给就不改）。",
@@ -574,7 +574,7 @@ var opReadCaps = []Capability{
 		read: func(ctx context.Context, s *Server, args map[string]any) (any, error) {
 			return s.readVia(ctx, s.testNodeHandler, "POST", pathOf("id", itoa(intArg(args, "node_id"))), nil, nil)
 		}},
-	{Name: "probe_outbound", Title: "出口实测", Purpose: "让出口所在 VPS 经这个出口真连一次，返回实际出口 IP 与延迟（代理与分享链接类出口）。会让 VPS 实际发起连接，记审计。", Kind: "read", Probe: true,
+	{Name: "probe_outbound", Title: "出口实测", Purpose: "让出口所在 VPS 经这个出口真连一次，返回实际出口 IP 与延迟（代理与节点链接类出口）。会让 VPS 实际发起连接，记审计。", Kind: "read", Probe: true,
 		Params: []Param{{Key: "outbound_id", Label: "出口", Kind: "ref", Ref: "outbound", Required: true}},
 		read: func(ctx context.Context, s *Server, args map[string]any) (any, error) {
 			p, err := outboundPath(ctx, s, args)

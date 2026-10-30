@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CopyButton, Input, Meter, Notice, PageHeader, Readout, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SkeletonCards } from "@weir/ui";
+import { Card, CardContent, CopyField, Meter, Notice, PageHeader, Readout, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SkeletonCards } from "@weir/ui";
 import { api } from "../api";
 import { client } from "../lib/client";
 import { ClientDownload } from "../components/client-download";
@@ -183,10 +183,7 @@ function GroupsCard() {
           q.data!.map((g) => (
             <div key={g.id} className="stack">
               <strong>{g.name}{g.expires_at ? <small className="ml-2 text-[var(--weir-ink-3)]">到期 {date(g.expires_at)}</small> : null}</strong>
-              <div className="subscription-url">
-                <Input readOnly className="font-mono text-xs" aria-label={g.name + " 订阅地址"} value={g.url} />
-                <CopyButton value={g.url}>复制</CopyButton>
-              </div>
+              <CopyField label={g.name + " 订阅地址"} value={g.url} />
             </div>
           ))
         )}

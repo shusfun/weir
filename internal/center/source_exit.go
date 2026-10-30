@@ -67,7 +67,7 @@ func (sp sourceSpec) check() error {
 	return nil
 }
 
-// specLinks 是订阅源（缓存的节点）或订阅组（处理后的节点）里的分享链接。
+// specLinks 是订阅源（缓存的节点）或订阅组（处理后的节点）里的节点链接。
 func (s *Server) specLinks(ctx context.Context, sp sourceSpec) ([]string, error) {
 	if sp.ProfileID > 0 {
 		p, err := s.Store.Ent.SubProfile.Get(ctx, sp.ProfileID)

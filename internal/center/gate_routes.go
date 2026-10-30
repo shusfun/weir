@@ -37,7 +37,7 @@ func (s *Server) exitFor(ctx context.Context, tag string, exitID int, key string
 	return nodeExit(tag, exit, eg.PublicHost, cred)
 }
 
-// fixedExit 生成填写的出口（SOCKS5 / HTTP / HTTPS 代理或单条分享链接）；凭据与链接是加密保存的。
+// fixedExit 生成填写的出口（SOCKS5 / HTTP / HTTPS 代理或单条节点链接）；凭据与链接是加密保存的。
 func (s *Server) fixedExit(kind, address string, port int, username, sealedPassword, sealedLink string) (contracts.Outbound, error) {
 	if kind == "link" {
 		raw, err := s.reveal(sealedLink)

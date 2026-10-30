@@ -23,7 +23,7 @@ type Plan struct {
 
 type TypeGroup struct{ Key, Label string }
 
-// Item 是一个节点：分享链接、所属类型、是否放进「自动选择」组。
+// Item 是一个节点：节点链接、所属类型、是否放进「自动选择」组。
 type Item struct {
 	Link string
 	Type string

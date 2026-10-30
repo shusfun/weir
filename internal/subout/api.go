@@ -53,7 +53,7 @@ func forTarget(links []string, target string) []string {
 	return out
 }
 
-// TargetForUA 按客户端 User-Agent 推断格式；无法识别时为 base64（通用分享链接列表）。
+// TargetForUA 按客户端 User-Agent 推断格式；无法识别时为 base64（通用节点链接列表）。
 func TargetForUA(ua string) string {
 	ua = strings.ToLower(ua)
 	switch {

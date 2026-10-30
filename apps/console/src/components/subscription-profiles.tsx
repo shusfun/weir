@@ -1,7 +1,7 @@
 // 订阅组：选订阅源与手动节点（或全部），配处理链与规则模板；预览、分配给用户、匿名分享。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, CheckboxField, CodeBlock, Collapsible, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, SectionHeader, Segmented, SkeletonList, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField, Textarea, useToast, useConfirm, PasswordInput } from "@weir/ui";
+import { Badge, Button, CheckboxField, CodeBlock, Collapsible, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, SectionHeader, Segmented, SkeletonList, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField, Textarea, useToast, useConfirm, PasswordInput } from "@weir/ui";
 import { Eye, Plus, Share2, Trash2, Users } from "lucide-react";
 import { api, reauthFields } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -253,7 +253,7 @@ function ShareDialog({ profile, close, changed }: { profile: Profile; close: () 
         <DialogDescription>任何拿到地址的人都能下载这份订阅。重新生成会让旧地址失效；已下载到客户端的节点无法随撤下收回。</DialogDescription>
         {url ? (
           <div className="stack">
-            <div className="subscription-url"><Input readOnly className="font-mono text-xs" aria-label="分享地址" value={url} /><CopyButton value={url}>复制</CopyButton></div>
+            <CopyField label="分享地址" value={url} />
             <Notice role="status">地址只显示这一次，请现在复制。</Notice>
             <DialogFooter><Button onClick={close}>完成</Button></DialogFooter>
           </div>

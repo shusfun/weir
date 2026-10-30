@@ -1,7 +1,7 @@
 // 系统设置卡片：安全策略、邮件服务、通知、WebDAV 备份、订阅备份导入导出、API 令牌。修改都需要重新输入密码。
 import { useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Button, Card, CardContent, CopyButton, Field, FilePicker, Form, FormGrid, Input, Notice, PasswordInput, SectionHeader, SwitchField, Textarea, useConfirm } from "@weir/ui";
+import { Button, Card, CardContent, CopyField, Field, FilePicker, Form, FormGrid, Input, Notice, PasswordInput, SectionHeader, SwitchField, Textarea, useConfirm } from "@weir/ui";
 import { Download, Trash2 } from "lucide-react";
 import { api, reauthFields } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -390,10 +390,7 @@ export function APITokensCard() {
         </ul>
       )}
       {created && (
-        <div className="subscription-url">
-          <Input readOnly className="font-mono text-xs" aria-label="新令牌" value={created} />
-          <CopyButton value={created}>复制</CopyButton>
-        </div>
+        <CopyField label="新令牌" value={created} />
       )}
       {created && <Notice role="status">令牌只显示这一次，请现在复制保存。</Notice>}
       <Form busy={create.busy} errors={create.errors} onSubmit={() => void create.submit()}>

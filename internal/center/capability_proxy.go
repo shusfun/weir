@@ -89,12 +89,12 @@ func typeExitParams() []Param {
 		{Key: "user_id", Label: "用户", Kind: "ref", Ref: "user", Required: true},
 		{Key: "type_key", Label: "类型", Kind: "string", Required: true, Hint: "类型的 key（见 get_proxy 的 types）"},
 		{Key: "kind", Label: "出口类型", Kind: "enum", Required: true, Options: [][2]string{{"socks5", "SOCKS5 代理"}, {"http", "HTTP 代理"}, {"https", "HTTPS 代理"},
-			{"link", "分享链接"}, {"node", "另一节点"}, {"source", "订阅组里的节点"}}},
+			{"link", "节点链接"}, {"node", "另一节点"}, {"source", "订阅组里的节点"}}},
 		{Key: "address", Label: "地址", Kind: "string", Hint: "代理类填写；只能是公网地址"},
 		{Key: "port", Label: "端口", Kind: "int", Min: num(1), Max: num(65535)},
 		{Key: "username", Label: "用户名", Kind: "string"},
 		{Key: "password", Label: "代理密码", Kind: "string", Secret: true, Hint: "由管理员在确认窗里填，草稿里留空"},
-		{Key: "link", Label: "分享链接", Kind: "string", Secret: true, Hint: "一个节点的链接，由管理员在确认窗里粘贴，草稿里留空"},
+		{Key: "link", Label: "节点链接", Kind: "string", Secret: true, Hint: "一个节点的链接，由管理员在确认窗里粘贴，草稿里留空"},
 		{Key: "node_id", Label: "出口节点", Kind: "ref", Ref: "node", Hint: "kind 为 node 时填；这个用户可用的另一个节点"},
 		{Key: "profile_id", Label: "订阅组", Kind: "ref", Ref: "profile", Hint: "kind 为 source 时填；分给这个用户的订阅组"},
 		{Key: "mode", Label: "选择方式", Kind: "enum", Options: [][2]string{{"node", "指定一个节点"}, {"filter", "按名称筛选一组，由内核自动选择"}}},
@@ -133,7 +133,7 @@ var proxyDraftCaps = []Capability{
 }
 
 var proxyReadCaps = []Capability{
-	{Name: "get_proxy", Title: "代理设置与速率", Purpose: "读取一个用户代理页的内容：节点按类型（协议方案）归类，每类是否放进订阅、可用节点数、统一出口（密码与分享链接不给）、还没加出口的节点；分流规则（每个类别现在走哪一组）；自动选择设置；此刻的排序——每个节点的状况、下载速率（rate.p90_bps 是近 24 小时有流量的分钟的第 90 百分位，字节/秒；minutes 为 0 是没有数据，不是 0；from 是 self 自己的或 all 全部用户的）、是否在自动选择里、是不是轮换位。",
+	{Name: "get_proxy", Title: "代理设置与速率", Purpose: "读取一个用户代理页的内容：节点按类型（协议方案）归类，每类是否放进订阅、可用节点数、统一出口（密码与节点链接不给）、还没加出口的节点；分流规则（每个类别现在走哪一组）；自动选择设置；此刻的排序——每个节点的状况、下载速率（rate.p90_bps 是近 24 小时有流量的分钟的第 90 百分位，字节/秒；minutes 为 0 是没有数据，不是 0；from 是 self 自己的或 all 全部用户的）、是否在自动选择里、是不是轮换位。",
 		Kind: "read", Params: []Param{{Key: "user_id", Label: "用户", Kind: "ref", Ref: "user", Required: true}},
 		read: func(ctx context.Context, s *Server, args map[string]any) (any, error) {
 			u, err := s.Store.Ent.User.Get(ctx, intArg(args, "user_id"))

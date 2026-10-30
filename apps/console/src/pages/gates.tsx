@@ -150,7 +150,7 @@ export function GatesPage() {
                   {g.state === "failed" && g.last_error && <p className="text-sm text-[var(--weir-bad-ink)]">{g.last_error}</p>}
                   {!g.public_host && (
                     <p className="text-sm text-[var(--weir-warn-ink)]">
-                      还没有公网地址，这台 VPS 上的节点生成不了分享链接。{g.colocated ? "中心与它在同一台机器上，记录不到来源地址；" : ""}请点「编辑」填写{g.public_host_hint ? `（本机网卡上的公网 IP 是 ${g.public_host_hint}）` : ""}。
+                      还没有公网地址，这台 VPS 上的节点生成不了节点链接。{g.colocated ? "中心与它在同一台机器上，记录不到来源地址；" : ""}请点「编辑」填写{g.public_host_hint ? `（本机网卡上的公网 IP 是 ${g.public_host_hint}）` : ""}。
                     </p>
                   )}
                 </div>

@@ -48,7 +48,7 @@ type Edits = Record<string, Record<string, unknown>>;
 
 const editable = (f: StepField) => !f.secret && ["string", "int", "gb", "days", "bool", "enum"].includes(f.kind) && f.key !== "email";
 // FieldInput：按参数说明生成可编辑控件；引用、对象类只显示名称，不可直接改。
-// 机密参数（订阅地址、代理密码、分享链接）不经过 dsh，总是由管理员在这里直接填，值不回显。
+// 机密参数（订阅地址、代理密码、节点链接）不经过 dsh，总是由管理员在这里直接填，值不回显。
 function FieldInput({ f, value, onChange }: { f: StepField; value: unknown; onChange: (v: unknown) => void }) {
   const label = f.label + (f.unit ? `（${f.unit}）` : "");
   if (f.secret) {

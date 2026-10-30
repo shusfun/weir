@@ -114,7 +114,7 @@ func (s *Server) saveOutbound(c *gin.Context) {
 		SourceID int    `json:"source_id"`
 		Mode     string `json:"mode"`
 		Match    string `json:"match"`
-		// link：一条分享链接（不接受订阅地址），加密保存。
+		// link：一条节点链接（不接受订阅地址），加密保存。
 		Link string `json:"link"`
 	}
 	if !bind(c, &req) {
@@ -300,7 +300,7 @@ func (s *Server) checkGateKernels(ctx context.Context, g *ent.Gate, spec ChainSp
 	return nil
 }
 
-// probeOutbound 由该 Gate 实测出口：代理与分享链接按协议真连一次，经它访问中心拿到实际出口 IP。
+// probeOutbound 由该 Gate 实测出口：代理与节点链接按协议真连一次，经它访问中心拿到实际出口 IP。
 func (s *Server) probeOutbound(c *gin.Context) {
 	g, ok := s.gateParam(c)
 	if !ok {

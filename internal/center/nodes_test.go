@@ -95,7 +95,7 @@ func TestNodeWizardUsersLinksChainsAndSubscription(t *testing.T) {
 	}
 	token := first["token"].(string)
 
-	// 订阅：按 UA 选格式；浏览器显示订阅页；分享链接能被订阅解析器读回。
+	// 订阅：按 UA 选格式；浏览器显示订阅页；节点链接能被订阅解析器读回。
 	w := admin.do("GET", "/sub/"+token, nil, map[string]string{"User-Agent": "v2rayN/7.0"})
 	raw, _ := base64.StdEncoding.DecodeString(w.Body.String())
 	uris := strings.Split(string(raw), "\n")
