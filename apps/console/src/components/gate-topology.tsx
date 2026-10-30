@@ -20,10 +20,10 @@ const colWidth = 180;
 const nodeWidth = 140;
 const headings = ["用户", "入口节点", "路由", "出口"];
 const tone: Record<TopoNode["kind"], string> = {
-  user: "var(--mg-info)",
-  node: "var(--mg-accent)",
-  route: "var(--mg-warn)",
-  exit: "var(--mg-ok)",
+  user: "var(--weir-info)",
+  node: "var(--weir-accent)",
+  route: "var(--weir-warn)",
+  exit: "var(--weir-ok)",
 };
 
 export function GateTopology({ gateId, openRouting }: { gateId: number; openRouting?: () => void }) {
@@ -40,22 +40,22 @@ export function GateTopology({ gateId, openRouting }: { gateId: number; openRout
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
         position: { x: col * colWidth, y },
-        data: { label: <span className="block text-left text-xs leading-tight"><strong className="block truncate">{n.label}</strong>{n.sub && <small className="block truncate text-[var(--mg-ink-3)]">{n.sub}</small>}</span>, link: n.link },
+        data: { label: <span className="block text-left text-xs leading-tight"><strong className="block truncate">{n.label}</strong>{n.sub && <small className="block truncate text-[var(--weir-ink-3)]">{n.sub}</small>}</span>, link: n.link },
         draggable: false,
         connectable: false,
-        style: { width: nodeWidth, padding: "6px 8px", borderRadius: 8, borderColor: tone[n.kind], background: "var(--mg-panel)", color: "var(--mg-ink)", cursor: n.link ? "pointer" : "default" },
+        style: { width: nodeWidth, padding: "6px 8px", borderRadius: 8, borderColor: tone[n.kind], background: "var(--weir-panel)", color: "var(--weir-ink)", cursor: n.link ? "pointer" : "default" },
       };
     });
     // 列标题不是图上的对象：隐藏连接点（见 .topo-heading 样式）。
     const labels: Node[] = headings.map((h, i) => ({ id: "label-" + i, type: "output", position: { x: i * colWidth, y: 0 }, data: { label: h }, draggable: false, selectable: false, connectable: false,
-      targetPosition: Position.Left, className: "topo-heading", style: { width: nodeWidth, border: "none", background: "transparent", boxShadow: "none", fontSize: 11, color: "var(--mg-ink-3)", padding: 0 } }));
+      targetPosition: Position.Left, className: "topo-heading", style: { width: nodeWidth, border: "none", background: "transparent", boxShadow: "none", fontSize: 11, color: "var(--weir-ink-3)", padding: 0 } }));
     const edges: Edge[] = (q.data?.edges ?? []).map((e, i) => ({ id: "e" + i, source: e.from, target: e.to }));
     return { nodes: [...labels, ...nodes], edges, height: Math.max(...rows, 1) * 64 + 56 };
   }, [q.data]);
   if (q.isPending || q.error) return <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} />;
-  if ((q.data?.nodes ?? []).length === 0) return <small className="text-[var(--mg-ink-3)]">这台 VPS 还没有节点。</small>;
+  if ((q.data?.nodes ?? []).length === 0) return <small className="text-[var(--weir-ink-3)]">这台 VPS 还没有节点。</small>;
   return (
-    <div className="topology w-full rounded-[var(--mg-radius)] border border-[var(--mg-line)]" style={{ height: Math.min(Math.max(graph.height, 180), 420) }}>
+    <div className="topology w-full rounded-[var(--weir-radius)] border border-[var(--weir-line)]" style={{ height: Math.min(Math.max(graph.height, 180), 420) }}>
       <div style={{ height: "100%" }}>
         <ReactFlow
           nodes={graph.nodes}

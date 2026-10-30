@@ -1,21 +1,21 @@
-// 来源 codedthemes/uiable button；本地改为新拟物键帽（.mg-key）：按下外阴影转内阴影并下沉 2px，松手弹簧回弹。
+// 来源 codedthemes/uiable button；本地改为新拟物键帽（.weir-key）：按下外阴影转内阴影并下沉 2px，松手弹簧回弹。
 import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 import { Ripple } from "./ripple";
 
 const buttonVariants = cva(
-  "mg-key group/button inline-flex shrink-0 items-center justify-center gap-2 rounded-[var(--mg-radius)] font-medium whitespace-nowrap select-none disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "weir-key group/button inline-flex shrink-0 items-center justify-center gap-2 rounded-[var(--weir-radius)] font-medium whitespace-nowrap select-none disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default: "bg-[var(--mg-accent)] text-[var(--mg-accent-ink)] hover:bg-[var(--mg-accent-hi)]",
-        outline: "text-[var(--mg-ink)]",
+        default: "bg-[var(--weir-accent)] text-[var(--weir-accent-ink)] hover:bg-[var(--weir-accent-hi)]",
+        outline: "text-[var(--weir-ink)]",
         // 选中态：保持按下
-        secondary: "is-pressed text-[var(--mg-accent-soft-ink)]",
-        ghost: "mg-key-ghost text-[var(--mg-ink-2)] hover:text-[var(--mg-ink)]",
-        destructive: "text-[var(--mg-bad-ink)]",
-        link: "!bg-transparent px-0 text-[var(--mg-accent-text)] underline-offset-4 before:hidden after:hidden hover:underline active:!translate-none active:!scale-none",
+        secondary: "is-pressed text-[var(--weir-accent-soft-ink)]",
+        ghost: "weir-key-ghost text-[var(--weir-ink-2)] hover:text-[var(--weir-ink)]",
+        destructive: "text-[var(--weir-bad-ink)]",
+        link: "!bg-transparent px-0 text-[var(--weir-accent-text)] underline-offset-4 before:hidden after:hidden hover:underline active:!translate-none active:!scale-none",
       },
       size: {
         default: "min-h-9 px-3.5 py-1.5 text-[13px]",

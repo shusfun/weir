@@ -87,11 +87,11 @@ function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new
           <SwitchField label="全部节点" description="以后新建的节点自动加入。" checked={all} onCheckedChange={setAll} />
           {!all && (
             <fieldset className="grid gap-2">
-              <legend className="mb-1 text-[12.5px] font-medium text-[var(--mg-ink-2)]">可用节点</legend>
+              <legend className="mb-1 text-[12.5px] font-medium text-[var(--weir-ink-2)]">可用节点</legend>
               {nodes.length === 0 ? <small>还没有节点。</small> : nodes.map((n) => (
                 <CheckboxField
                   key={n.id}
-                  label={<>{n.name}<small className="text-[var(--mg-ink-3)]">（{n.gate_name}）</small></>}
+                  label={<>{n.name}<small className="text-[var(--weir-ink-3)]">（{n.gate_name}）</small></>}
                   checked={picked.includes(n.id)}
                   onCheckedChange={(v) => setPicked(v ? [...picked, n.id] : picked.filter((x) => x !== n.id))}
                 />

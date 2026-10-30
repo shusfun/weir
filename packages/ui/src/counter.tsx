@@ -20,12 +20,12 @@ function Column({ digit, turns, dir, tick }: { digit: number; turns: number; dir
     setState({ index: middle + p + dir * steps, animate: true });
   }, [digit, turns, dir, tick]);
   return (
-    <span className="mg-counter-digit" aria-hidden>
+    <span className="weir-counter-digit" aria-hidden>
       <span
-        className="mg-counter-strip"
+        className="weir-counter-strip"
         style={{
           transform: `translateY(${-state.index * 1.2}em)`,
-          transition: state.animate ? "transform var(--mg-settle) var(--mg-decel)" : "none",
+          transition: state.animate ? "transform var(--weir-settle) var(--weir-decel)" : "none",
         }}
         // 停稳后无动画地归位到中间一份，下次可继续双向滚动
         onTransitionEnd={() => setState({ index: middle + digit, animate: false })}
@@ -60,14 +60,14 @@ function Counter({ value, framed = false, className }: { value: string | number;
   const chars = [...head];
   let position = chars.filter((c) => /\d/.test(c)).length;
   return (
-    <span className={cn("mg-counter", className)} data-framed={framed} role="img" aria-label={text}>
+    <span className={cn("weir-counter", className)} data-framed={framed} role="img" aria-label={text}>
       {chars.map((c, i) => {
-        if (!/\d/.test(c)) return <span key={"s" + i} className="mg-counter-static" aria-hidden>{c}</span>;
+        if (!/\d/.test(c)) return <span key={"s" + i} className="weir-counter-static" aria-hidden>{c}</span>;
         position -= 1;
         const turns = Math.min(2, Math.floor(Math.abs(snap.delta) / 10 ** (position + 1)));
         return <Column key={"d" + (chars.length - i)} digit={Number(c)} turns={turns} dir={dir} tick={snap.tick} />;
       })}
-      {tail && <span className="mg-counter-static mg-readout-unit" aria-hidden>{tail}</span>}
+      {tail && <span className="weir-counter-static weir-readout-unit" aria-hidden>{tail}</span>}
     </span>
   );
 }

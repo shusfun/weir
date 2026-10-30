@@ -29,7 +29,7 @@ function Ripple() {
       // 半径取到最远角的距离，波纹正好铺满整块
       const r = Math.hypot(Math.max(x, w - x), Math.max(y, h - y));
       const wave = document.createElement("span");
-      wave.className = "mg-ripple";
+      wave.className = "weir-ripple";
       wave.style.cssText = `left:${x - r}px;top:${y - r}px;width:${r * 2}px;height:${r * 2}px`;
       wave.addEventListener("animationend", () => wave.remove(), { once: true });
       while (layer.childElementCount >= maxWaves) layer.firstElementChild?.remove();
@@ -51,7 +51,7 @@ function Ripple() {
       host.removeEventListener("keydown", onKey);
     };
   }, []);
-  return <span ref={ref} aria-hidden data-slot="ripple" className="mg-ripple-host" />;
+  return <span ref={ref} aria-hidden data-slot="ripple" className="weir-ripple-host" />;
 }
 
 export { Ripple };

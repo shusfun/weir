@@ -66,17 +66,17 @@ export function ProfilesPanel() {
           loading={q.isPending}
           error={q.error}
           onRetry={() => q.refetch()}
-          skeleton={<SkeletonList rows={3} lines={2} className="stack" rowClassName="flex items-center justify-between gap-2 rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3" />}
+          skeleton={<SkeletonList rows={3} lines={2} className="stack" rowClassName="flex items-center justify-between gap-2 rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3" />}
         />
       ) : q.data.length === 0 ? (
         <State empty="还没有订阅组" />
       ) : (
         <ul className="stack">
           {q.data.map((p) => (
-            <li key={p.id} {...dataObject({ type: "profile", id: p.id })} className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3">
+            <li key={p.id} {...dataObject({ type: "profile", id: p.id })} className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3">
               <span className="min-w-0">
                 <strong>{p.name}</strong> {!p.enabled && <Badge variant="soft" tone="warn">停用</Badge>} {p.shared && <Badge variant="soft" tone="ok">已分享</Badge>}
-                <small className="block text-[var(--mg-ink-3)]">
+                <small className="block text-[var(--weir-ink-3)]">
                   {p.all_sources ? "全部订阅源与手动节点" : `${p.source_ids?.length ?? 0} 个订阅源 · ${p.node_ids?.length ?? 0} 个手动节点`} · {p.user_ids.length} 个用户 · 下载 {p.downloads} 次{p.expires_at ? ` · 到期 ${date(p.expires_at)}` : ""}
                 </small>
               </span>
@@ -138,19 +138,19 @@ function ProfileForm({ value, close, saved }: { value: Profile | "new"; close: (
           <SwitchField label="包含全部已启用的订阅源与手动节点" checked={all} onCheckedChange={setAll} />
           {!all && (
             <FormGrid>
-              <fieldset className="mg-focus-gutter grid max-h-56 content-start gap-2 overflow-y-auto">
-                <legend className="mb-1 text-[12.5px] font-medium text-[var(--mg-ink-2)]">订阅源</legend>
+              <fieldset className="weir-focus-gutter grid max-h-56 content-start gap-2 overflow-y-auto">
+                <legend className="mb-1 text-[12.5px] font-medium text-[var(--weir-ink-2)]">订阅源</legend>
                 {(sources.data?.items ?? []).map((s) => (
                   <CheckboxField key={s.id} label={s.name || s.url} checked={sourceIds.includes(s.id)} onCheckedChange={(v) => setSourceIds(toggle(sourceIds, s.id, v))} />
                 ))}
                 {sources.data?.items.length === 0 && <small>还没有订阅源。</small>}
               </fieldset>
-              <fieldset className="mg-focus-gutter grid max-h-56 content-start gap-2 overflow-y-auto">
-                <legend className="mb-1 text-[12.5px] font-medium text-[var(--mg-ink-2)]">手动节点</legend>
+              <fieldset className="weir-focus-gutter grid max-h-56 content-start gap-2 overflow-y-auto">
+                <legend className="mb-1 text-[12.5px] font-medium text-[var(--weir-ink-2)]">手动节点</legend>
                 {(nodes.data?.items ?? []).map((n) => (
                   <CheckboxField
                     key={n.id}
-                    label={<>{n.name || decodeURIComponent(n.url.split("#")[1] ?? "") || n.id}{n.group && <small className="text-[var(--mg-ink-3)]">（{n.group}）</small>}</>}
+                    label={<>{n.name || decodeURIComponent(n.url.split("#")[1] ?? "") || n.id}{n.group && <small className="text-[var(--weir-ink-3)]">（{n.group}）</small>}</>}
                     checked={nodeIds.includes(n.id)}
                     onCheckedChange={(v) => setNodeIds(toggle(nodeIds, n.id, v))}
                   />
@@ -213,7 +213,7 @@ function ProfilePreview({ profile, close }: { profile: Profile; close: () => voi
             {q.data.check && (
               <div className="flex flex-wrap items-center gap-2">
                 <SubCheckBadge check={q.data.check} />
-                {q.data.check.error && <small className={q.data.check.status === "failed" ? "text-[var(--mg-bad-ink)]" : "text-[var(--mg-ink-3)]"}>{q.data.check.error}</small>}
+                {q.data.check.error && <small className={q.data.check.status === "failed" ? "text-[var(--weir-bad-ink)]" : "text-[var(--weir-ink-3)]"}>{q.data.check.error}</small>}
               </div>
             )}
             {q.data.output_error ? <Notice tone="bad">{q.data.output_error}</Notice> : <CodeBlock className="block max-h-[55vh] overflow-auto whitespace-pre text-xs">{q.data.output}</CodeBlock>}
@@ -305,7 +305,7 @@ function GrantDialog({ profile, close, saved }: { profile: Profile; close: () =>
           ) : users.data.length === 0 ? (
             <State empty="还没有用户" />
           ) : (
-            <fieldset className="mg-focus-gutter grid max-h-80 content-start gap-2 overflow-y-auto">
+            <fieldset className="weir-focus-gutter grid max-h-80 content-start gap-2 overflow-y-auto">
               <legend className="sr-only">用户</legend>
               {users.data.map((u) => (
                 <CheckboxField

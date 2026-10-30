@@ -11,7 +11,7 @@ const widths = ["72%", "48%", "60%", "36%", "54%"];
 const cellWidths = ["7em", "4.5em", "5.5em", "3.5em", "6em"];
 
 function SkeletonLine({ width, className }: { width?: string; className?: string }) {
-  return <span aria-hidden className={cn("mg-skeleton-line", className)} style={width ? ({ "--mg-skeleton-w": width } as CSSProperties) : undefined} />;
+  return <span aria-hidden className={cn("weir-skeleton-line", className)} style={width ? ({ "--weir-skeleton-w": width } as CSSProperties) : undefined} />;
 }
 
 // 一段文字的骨架：第一行跟随当前字号，其余行按说明文字排
@@ -105,9 +105,9 @@ function SkeletonList({
   return (
     <div aria-hidden className={className}>
       {Array.from({ length: rows }, (_, r) => (
-        <div key={r} className={cn(rowClassName ?? "flex items-center justify-between gap-3.5 border-b border-[var(--mg-line-soft)] py-[13px] last:border-b-0")}>
+        <div key={r} className={cn(rowClassName ?? "flex items-center justify-between gap-3.5 border-b border-[var(--weir-line-soft)] py-[13px] last:border-b-0")}>
           <SkeletonText lines={lines} seed={r} className="flex-1 text-[13px]" />
-          {action && <span className="mg-skeleton block h-8 w-16 shrink-0" />}
+          {action && <span className="weir-skeleton block h-8 w-16 shrink-0" />}
         </div>
       ))}
     </div>

@@ -31,9 +31,9 @@ export function TemplatesPanel() {
         <>
           <ul className="grid gap-2 sm:grid-cols-2">
             {t.data.builtin.map((b) => (
-              <li key={b.id} className="rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3">
+              <li key={b.id} className="rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3">
                 <strong>{b.name}</strong> <Badge variant="soft" tone="neutral">内置</Badge>
-                <small className="block text-[var(--mg-ink-3)]">{b.description}</small>
+                <small className="block text-[var(--weir-ink-3)]">{b.description}</small>
               </li>
             ))}
           </ul>

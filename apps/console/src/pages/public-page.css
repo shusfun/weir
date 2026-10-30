@@ -7,13 +7,13 @@
   --public-fill: #7154d8;
   --public-soft: #f0ebff;
   /* 页面内的通用部件（图标方块、链接、焦点轮廓）随公开页主题色 */
-  --mg-accent-text: var(--public-accent);
-  --mg-accent-soft: var(--public-soft);
+  --weir-accent-text: var(--public-accent);
+  --weir-accent-soft: var(--public-soft);
   max-width: 1120px;
   margin: 0 auto;
   padding: 0 36px 36px;
   min-height: 100dvh;
-  color: var(--mg-ink);
+  color: var(--weir-ink);
 }
 .published-page[data-theme="ocean"] {
   --public-accent: #187598;
@@ -44,7 +44,7 @@
   align-items: center;
   gap: 16px;
   padding: 26px 0;
-  border-bottom: 1px solid var(--mg-line-soft);
+  border-bottom: 1px solid var(--weir-line-soft);
 }
 .published-brand {
   display: inline-flex;
@@ -71,7 +71,7 @@
 .published-description {
   font-size: 16px;
   line-height: 1.85;
-  color: var(--mg-ink-3);
+  color: var(--weir-ink-3);
   white-space: pre-wrap;
 }
 .published-actions {
@@ -82,7 +82,7 @@
 }
 .published-actions button:first-child {
   background: var(--public-fill);
-  color: var(--mg-accent-ink);
+  color: var(--weir-accent-ink);
 }
 .published-section-title {
   display: flex;
@@ -101,7 +101,7 @@
   overflow-wrap: anywhere;
   line-height: 1.8;
   font-size: 14px;
-  color: var(--mg-ink-2);
+  color: var(--weir-ink-2);
 }
 .published-directory {
   margin-top: 44px;
@@ -118,7 +118,7 @@
   font-weight: 700;
 }
 .published-directory-heading span {
-  color: var(--mg-ink-3);
+  color: var(--weir-ink-3);
   font-size: 13px;
 }
 .published-grid {
@@ -146,7 +146,7 @@
 }
 .published-card-link:hover .published-card {
   border-color: var(--public-accent);
-  box-shadow: 0 6px 22px var(--mg-shade);
+  box-shadow: 0 6px 22px var(--weir-shade);
 }
 .published-card-body {
   display: flex;
@@ -163,7 +163,7 @@
 }
 .published-card-link p {
   font-size: 13px;
-  color: var(--mg-ink-3);
+  color: var(--weir-ink-3);
   line-height: 1.8;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -181,9 +181,9 @@
 .published-footer {
   margin-top: 64px;
   padding-top: 24px;
-  border-top: 1px solid var(--mg-line-soft);
+  border-top: 1px solid var(--weir-line-soft);
   font-size: 12px;
-  color: var(--mg-ink-engraved);
+  color: var(--weir-ink-engraved);
   text-align: center;
 }
 .published-qr > svg {

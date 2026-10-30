@@ -49,8 +49,8 @@ export function CertManager({ open, close }: { open: boolean; close: () => void 
               <li key={c.id} {...dataObject({ type: "cert", id: c.id })} className="flex flex-wrap items-center justify-between gap-2">
                 <span className="min-w-0">
                   <strong>{c.domain}</strong> <Badge variant="soft" tone="neutral">{certSource[c.source] ?? c.source}</Badge> <CertHealth cert={c} />
-                  <small className="block text-[var(--mg-ink-3)]">{c.not_after ? `有效期至 ${date(c.not_after)}` : "有效期未知"}</small>
-                  {c.last_error && <small className="block text-[var(--mg-bad-ink)]">{c.last_error}</small>}
+                  <small className="block text-[var(--weir-ink-3)]">{c.not_after ? `有效期至 ${date(c.not_after)}` : "有效期未知"}</small>
+                  {c.last_error && <small className="block text-[var(--weir-bad-ink)]">{c.last_error}</small>}
                 </span>
                 <Button
                   size="sm"

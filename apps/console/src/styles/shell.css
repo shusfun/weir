@@ -16,8 +16,8 @@
   gap: 4px;
   padding: 18px 12px 14px;
   /* 新拟物底座：与键帽同色、纯平 */
-  background: var(--mg-key);
-  border-right: 1px solid var(--mg-line-soft);
+  background: var(--weir-key);
+  border-right: 1px solid var(--weir-line-soft);
   z-index: 20;
 }
 .rail-brand {
@@ -26,7 +26,7 @@
   gap: 10px;
   padding: 4px 8px 18px;
   text-decoration: none;
-  color: var(--mg-ink);
+  color: var(--weir-ink);
 }
 .rail-mark {
   display: grid;
@@ -34,12 +34,12 @@
   width: 34px;
   height: 34px;
   border-radius: 9px;
-  color: var(--mg-accent-ink);
-  background: linear-gradient(180deg, var(--mg-accent-hi), var(--mg-accent-lo));
-  border: 1px solid var(--mg-accent-lo);
+  color: var(--weir-accent-ink);
+  background: linear-gradient(180deg, var(--weir-accent-hi), var(--weir-accent-lo));
+  border: 1px solid var(--weir-accent-lo);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.3),
-    0 1px 2px var(--mg-shade-strong);
+    0 1px 2px var(--weir-shade-strong);
 }
 .rail-brand strong {
   display: block;
@@ -70,8 +70,8 @@
   gap: 10px;
   min-height: 38px;
   padding: 0 10px;
-  border-radius: var(--mg-radius);
-  color: var(--mg-ink-2);
+  border-radius: var(--weir-radius);
+  color: var(--weir-ink-2);
   font-size: 13px;
   text-decoration: none;
 }
@@ -85,18 +85,18 @@
 .rail-item svg {
   width: 17px;
   height: 17px;
-  color: var(--mg-ink-3);
+  color: var(--weir-ink-3);
 }
 .rail-item:hover {
-  color: var(--mg-ink);
+  color: var(--weir-ink);
 }
-/* 当前项：保持按下（.mg-key.active）+ 蓝色指示灯点亮 */
+/* 当前项：保持按下（.weir-key.active）+ 蓝色指示灯点亮 */
 .rail-item.active {
-  color: var(--mg-ink);
+  color: var(--weir-ink);
   font-weight: 600;
 }
 .rail-item.active svg {
-  color: var(--mg-accent-text);
+  color: var(--weir-accent-text);
 }
 /* 导航指示灯使用 StatusLamp（size=sm，当前项 tone=active）；这里只处理未选中时的淡化 */
 .rail-item:not(.active) .rail-led {
@@ -106,7 +106,7 @@
   display: grid;
   gap: 8px;
   padding-top: 10px;
-  border-top: 1px solid var(--mg-line-soft);
+  border-top: 1px solid var(--weir-line-soft);
 }
 /* 左下角个人中心：凸起铭牌，点开向上弹出菜单 */
 .rail-account {
@@ -116,8 +116,8 @@
   width: 100%;
   min-width: 0;
   padding: 7px 8px;
-  border-radius: var(--mg-radius);
-  color: var(--mg-ink);
+  border-radius: var(--weir-radius);
+  color: var(--weir-ink);
   text-align: left;
 }
 .rail-account-text {
@@ -138,7 +138,7 @@
 .rail-account > svg {
   width: 15px;
   height: 15px;
-  color: var(--mg-ink-3);
+  color: var(--weir-ink-3);
 }
 .shell[data-collapsed="true"] .rail {
   padding-inline: 10px;
@@ -171,9 +171,9 @@
   gap: 12px;
   min-height: 60px;
   padding: 0 28px;
-  background: color-mix(in srgb, var(--mg-base) 94%, var(--mg-panel));
-  border-bottom: 1px solid var(--mg-line);
-  box-shadow: 0 1px 0 var(--mg-highlight);
+  background: color-mix(in srgb, var(--weir-base) 94%, var(--weir-panel));
+  border-bottom: 1px solid var(--weir-line);
+  box-shadow: 0 1px 0 var(--weir-highlight);
 }
 .topbar-title {
   min-width: 0;
@@ -191,7 +191,7 @@
   align-items: center;
   gap: 8px;
 }
-.command-trigger .mg-kbd {
+.command-trigger .weir-kbd {
   margin-left: auto;
 }
 .tray-count {
@@ -199,10 +199,10 @@
   height: 18px;
   padding: 0 5px;
   border-radius: 9px;
-  font: 600 10.5px/18px var(--mg-mono);
+  font: 600 10.5px/18px var(--weir-mono);
   text-align: center;
-  color: var(--mg-accent-ink);
-  background: var(--mg-accent);
+  color: var(--weir-accent-ink);
+  background: var(--weir-accent);
 }
 .origin-banner {
   display: grid;
@@ -228,7 +228,7 @@
 
 
 @media (max-width: 1100px) {
-  .command-trigger > span:not(.mg-kbd) {
+  .command-trigger > span:not(.weir-kbd) {
     display: none;
   }
 }
@@ -248,7 +248,7 @@
     padding: 18px 16px 32px;
   }
 
-  .command-trigger .mg-kbd {
+  .command-trigger .weir-kbd {
     display: none;
   }
 }
@@ -263,7 +263,7 @@
   bottom: calc(24px + env(safe-area-inset-bottom));
   z-index: 55;
   border-radius: 999px;
-  box-shadow: 0 6px 18px -6px var(--mg-shade-strong);
+  box-shadow: 0 6px 18px -6px var(--weir-shade-strong);
 }
 @media (max-width: 900px) {
   .dsh-fab {
@@ -284,10 +284,10 @@
   min-width: 360px;
   min-height: 320px;
   overflow: hidden;
-  border: 1px solid var(--mg-line);
-  border-radius: var(--mg-radius-lg);
-  background: var(--mg-panel);
-  box-shadow: inset 0 1px 0 var(--mg-highlight), 0 18px 40px -12px var(--mg-shade-strong);
+  border: 1px solid var(--weir-line);
+  border-radius: var(--weir-radius-lg);
+  background: var(--weir-panel);
+  box-shadow: inset 0 1px 0 var(--weir-highlight), 0 18px 40px -12px var(--weir-shade-strong);
 }
 .dsh-window-bar {
   display: flex;
@@ -295,7 +295,7 @@
   gap: 8px;
   flex-shrink: 0;
   padding: 6px 6px 6px 12px;
-  border-bottom: 1px solid var(--mg-line-soft);
+  border-bottom: 1px solid var(--weir-line-soft);
   user-select: none;
   touch-action: none;
 }
@@ -322,7 +322,7 @@
   right: 3px;
   bottom: 3px;
   z-index: 1;
-  color: var(--mg-ink-3);
+  color: var(--weir-ink-3);
   pointer-events: none;
 }
 @media (max-width: 640px) {
@@ -331,7 +331,7 @@
     height: 72dvh;
     min-width: 0;
     border-bottom: 0;
-    border-radius: var(--mg-radius-lg) var(--mg-radius-lg) 0 0;
+    border-radius: var(--weir-radius-lg) var(--weir-radius-lg) 0 0;
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 }

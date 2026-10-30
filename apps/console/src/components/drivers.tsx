@@ -73,13 +73,13 @@ export function DriversPanel() {
           <ul className="m-0 list-none space-y-2 p-0">
             {q.data.map((d) => (
               <li key={d.name} {...dataObject({ type: "driver", key: d.name })}>
-                <button type="button" className="flex w-full flex-wrap items-center gap-2 rounded-[var(--mg-radius)] border border-[var(--mg-line)] px-3 py-2 text-left hover:bg-[var(--mg-well)]" onClick={() => param.open(d.name)}>
+                <button type="button" className="flex w-full flex-wrap items-center gap-2 rounded-[var(--weir-radius)] border border-[var(--weir-line)] px-3 py-2 text-left hover:bg-[var(--weir-well)]" onClick={() => param.open(d.name)}>
                   <code className="text-xs">{d.name}</code>
                   <Badge variant="soft" tone={sourceLabel[d.source][1]}>{sourceLabel[d.source][0]}</Badge>
                   {d.disabled && <Badge variant="soft" tone="bad">已停用</Badge>}
                   {d.error && <Badge variant="soft" tone="bad">无法展开</Badge>}
-                  <small className="text-[var(--mg-ink-3)]">{d.kernel} {d.min_version} – {d.max_version || "最新"}{d.extends ? ` · 继承 ${d.extends}` : ""}</small>
-                  <small className="ml-auto text-[var(--mg-ink-3)]">{d.versions.length > 0 ? `已下载 ${d.versions.join("、")}` : "没有已下载的版本"}{d.gates.length > 0 ? ` · ${d.gates.length} 台 VPS 在用` : ""}</small>
+                  <small className="text-[var(--weir-ink-3)]">{d.kernel} {d.min_version} – {d.max_version || "最新"}{d.extends ? ` · 继承 ${d.extends}` : ""}</small>
+                  <small className="ml-auto text-[var(--weir-ink-3)]">{d.versions.length > 0 ? `已下载 ${d.versions.join("、")}` : "没有已下载的版本"}{d.gates.length > 0 ? ` · ${d.gates.length} 台 VPS 在用` : ""}</small>
                 </button>
               </li>
             ))}
@@ -106,7 +106,7 @@ function CheckView({ c }: { c: DriverCheck }) {
           {c.samples.map((s) => <Badge key={s.preset} variant="soft" tone={s.state === "passed" ? "ok" : s.state === "failed" ? "bad" : "neutral"} title={s.log}>{s.preset}：{s.state === "passed" ? "通过" : s.state === "failed" ? "未通过" : "未知"}</Badge>)}
         </div>
       )}
-      {c.samples.filter((s) => s.log).map((s) => <pre key={s.preset} className="max-h-40 overflow-auto rounded-[var(--mg-radius)] bg-[var(--mg-well)] p-2 text-xs">{s.preset}：{s.log}</pre>)}
+      {c.samples.filter((s) => s.log).map((s) => <pre key={s.preset} className="max-h-40 overflow-auto rounded-[var(--weir-radius)] bg-[var(--weir-well)] p-2 text-xs">{s.preset}：{s.log}</pre>)}
     </div>
   );
 }
@@ -170,11 +170,11 @@ function DriverDialog({ name, close, changed }: { name: string; close: () => voi
               {check && <CheckView c={check} />}
             </Form>
             <Collapsible title="展开 extends 后的全文">
-              <pre className="max-h-80 overflow-auto rounded-[var(--mg-radius)] bg-[var(--mg-well)] p-2 text-xs">{q.data.resolved || "（无法展开）"}</pre>
+              <pre className="max-h-80 overflow-auto rounded-[var(--weir-radius)] bg-[var(--weir-well)] p-2 text-xs">{q.data.resolved || "（无法展开）"}</pre>
             </Collapsible>
             <SectionHeader title="历史" description={q.data.history.length === 0 ? "还没有保存过，当前是内置版本。" : "每次保存都是新版本；退回也会先检查。"} />
             {q.data.history.map((h) => (
-              <Collapsible key={h.revision} variant="card" title={<span className="flex flex-wrap items-center gap-2"><code>#{h.revision}</code>{h.restored && <Badge variant="soft" tone="neutral">恢复内置</Badge>}{h.disabled && <Badge variant="soft" tone="bad">停用</Badge>}{h.source === "dsh" && <Badge variant="soft" tone="neutral">dsh 草稿</Badge>}<small className="text-[var(--mg-ink-3)]">{date(h.at)}{h.note ? " · " + h.note : ""}</small></span>}>
+              <Collapsible key={h.revision} variant="card" title={<span className="flex flex-wrap items-center gap-2"><code>#{h.revision}</code>{h.restored && <Badge variant="soft" tone="neutral">恢复内置</Badge>}{h.disabled && <Badge variant="soft" tone="bad">停用</Badge>}{h.source === "dsh" && <Badge variant="soft" tone="neutral">dsh 草稿</Badge>}<small className="text-[var(--weir-ink-3)]">{date(h.at)}{h.note ? " · " + h.note : ""}</small></span>}>
                 <div className="stack">
                   <DiffView lines={h.diff} empty="与上一版本相同。" />
                   <div className="actions"><Button size="sm" variant="outline" disabled={isBusy()} onClick={() => void run("rb" + h.revision, () => api(`/admin/drivers/${encodeURIComponent(name)}/rollback`, "POST", { revision: h.revision }), `已退回到 #${h.revision}`)}>退回到这一版</Button></div>
@@ -221,8 +221,8 @@ function NewDriverDialog({ close, created }: { close: () => void; created: (name
             <div className="flex flex-wrap gap-2">{parents.map((p) => <Button key={p.name} type="button" size="sm" variant={parent === p.name ? "default" : "outline"} onClick={() => setF({ ...f, parent: p.name })}>{p.name}</Button>)}</div>
           </Field>
           {/* 检查结果区固定高度、内部滚动：结果出现时下面的按钮不被顶走 */}
-          <div className="h-32 overflow-y-auto rounded-[var(--mg-radius)] border border-dashed border-[var(--mg-line)] p-2">
-            {check ? <CheckView c={check} /> : <small className="text-[var(--mg-ink-3)]">点「检查并新增」后，每个方案的样例配置检查结果显示在这里。</small>}
+          <div className="h-32 overflow-y-auto rounded-[var(--weir-radius)] border border-dashed border-[var(--weir-line)] p-2">
+            {check ? <CheckView c={check} /> : <small className="text-[var(--weir-ink-3)]">点「检查并新增」后，每个方案的样例配置检查结果显示在这里。</small>}
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={close}>取消</Button>

@@ -17,7 +17,6 @@ var (
 	XrayBinary      = "/usr/local/bin/xray"
 	SingboxBinary   = "/usr/local/bin/sing-box"
 	WeirBinary      = "/usr/local/bin/weir"
-	WeirCLI         = "/usr/local/bin/mg"
 	Installer       = "/usr/local/bin/weir-install"
 	DefaultHTTPPort = 9999
 )

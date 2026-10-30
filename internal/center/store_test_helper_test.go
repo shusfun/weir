@@ -20,7 +20,7 @@ func testStore(t *testing.T, dir string) map[string]any {
 	if os.Getenv("WEIR_CENTER_STORE") != "postgres" {
 		return map[string]any{"driver": "sqlite", "sqlite_path": filepath.Join(dir, "weir.db")}
 	}
-	admin, err := sql.Open("pgx", "postgres://gate:local-test-only@127.0.0.1:25432/gate?sslmode=disable")
+	admin, err := sql.Open("pgx", "postgres://weir:local-test-only@127.0.0.1:25432/weir?sslmode=disable")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,6 +45,6 @@ func testStore(t *testing.T, dir string) map[string]any {
 		admin.Close()
 	})
 	return map[string]any{"driver": "postgres",
-		"postgres": map[string]any{"host": "127.0.0.1", "port": 25432, "user": "gate", "password": "local-test-only", "database": name, "ssl_mode": "disable"},
+		"postgres": map[string]any{"host": "127.0.0.1", "port": 25432, "user": "weir", "password": "local-test-only", "database": name, "ssl_mode": "disable"},
 		"redis":    map[string]any{"address": "127.0.0.1:26379", "username": "weir", "password": "local-test-only"}}
 }

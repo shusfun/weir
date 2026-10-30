@@ -28,15 +28,15 @@ function Readout({
       data-slot="readout"
       data-variant={variant}
       data-unknown={unknown}
-      className={cn("mg-readout", className)}
+      className={cn("weir-readout", className)}
       {...props}
     >
-      <span className="mg-engraved">{label}</span>
-      <span className="mg-readout-value">
+      <span className="weir-engraved">{label}</span>
+      <span className="weir-readout-value">
         {unknown ? "未知" : isCountable(value) ? <Counter value={value as string | number} framed={framed} /> : value}
-        {!unknown && unit && <span className="mg-readout-unit">{unit}</span>}
+        {!unknown && unit && <span className="weir-readout-unit">{unit}</span>}
       </span>
-      {caption && <span className="mg-readout-caption">{caption}</span>}
+      {caption && <span className="weir-readout-caption">{caption}</span>}
       {children}
     </div>
   );
@@ -63,7 +63,7 @@ function Meter({
       aria-valuetext={known ? Math.round(ratio * 100) + "%" : "未知"}
       data-unknown={!known}
       data-tone={tone}
-      className={cn("mg-meter", className)}
+      className={cn("weir-meter", className)}
       {...props}
     >
       {known && <span style={{ width: ratio * 100 + "%" }} />}

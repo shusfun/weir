@@ -25,7 +25,7 @@ export function systemIsDark() {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
-// 与 tokens.css 的 --mg-base 保持一致，供浏览器地址栏 / 状态栏着色
+// 与 tokens.css 的 --weir-base 保持一致，供浏览器地址栏 / 状态栏着色
 const themeColors = { light: "#f2f2f7", dark: "#1c1c1e" } as const;
 // 当前生效模式；浏览器禁止存储时仍以本次选择为准
 let activeTheme: ThemeMode = "system";

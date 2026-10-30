@@ -39,7 +39,7 @@ func TestProbePostgresMarksLegacyData(t *testing.T) {
 		t.Skip("set WEIR_INTEGRATION=1 with deploy/test.compose.yml running")
 	}
 	ctx := context.Background()
-	admin, err := sql.Open("pgx", "postgres://gate:local-test-only@127.0.0.1:25432/gate?sslmode=disable")
+	admin, err := sql.Open("pgx", "postgres://weir:local-test-only@127.0.0.1:25432/weir?sslmode=disable")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestProbePostgresMarksLegacyData(t *testing.T) {
 		}
 		t.Cleanup(func() { _, _ = admin.Exec("DROP DATABASE IF EXISTS " + name + " WITH (FORCE)") })
 	}
-	p := PostgresConfig{Host: "127.0.0.1", Port: 25432, User: "gate", Password: "local-test-only", Database: legacy}
+	p := PostgresConfig{Host: "127.0.0.1", Port: 25432, User: "weir", Password: "local-test-only", Database: legacy}
 	db, err := sql.Open("pgx", postgresDSN(p))
 	if err != nil {
 		t.Fatal(err)
@@ -76,7 +76,7 @@ func TestProbePostgresMarksLegacyData(t *testing.T) {
 	if has, err := HasData(ctx, cfg); err != nil || has {
 		t.Fatalf("empty: has=%v err=%v", has, err)
 	}
-	version, dbs, err := ProbePostgres(ctx, PostgresConfig{Host: "127.0.0.1", Port: 25432, User: "gate", Password: "local-test-only", Database: "postgres"})
+	version, dbs, err := ProbePostgres(ctx, PostgresConfig{Host: "127.0.0.1", Port: 25432, User: "weir", Password: "local-test-only", Database: "postgres"})
 	if err != nil || version == "" {
 		t.Fatalf("probe: %q %v", version, err)
 	}

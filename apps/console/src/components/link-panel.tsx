@@ -99,7 +99,7 @@ export function LinkPanel({
               rows={2}
               lines={2}
               className="stack"
-              rowClassName="rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3"
+              rowClassName="rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3"
             />
           }
         />
@@ -107,7 +107,7 @@ export function LinkPanel({
         <State empty="还没有链接" />
       ) : (
         links.data.map((l) => (
-          <div key={l.id} {...dataObject({ type: "link", id: l.id })} className="stack rounded-[var(--mg-radius)] border border-[var(--mg-line)] p-3">
+          <div key={l.id} {...dataObject({ type: "link", id: l.id })} className="stack rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <strong>
                 {l.name || "未命名"}{" "}
@@ -117,7 +117,7 @@ export function LinkPanel({
                   </Badge>
                 )}
               </strong>
-              <small className="text-[var(--mg-ink-3)]">
+              <small className="text-[var(--weir-ink-3)]">
                 {l.all_nodes ? "全部节点" : "部分节点"} · {l.nodes} 个节点 · 已用 {bytes(l.used)} · 最近获取{" "}
                 {date(l.last_used_at)}
               </small>
@@ -209,7 +209,7 @@ export function LinkPanel({
                       {e.uri ? (
                         <CodeBlock className="block break-all text-xs">{e.uri}</CodeBlock>
                       ) : (
-                        <small className="text-[var(--mg-bad-ink)]">{e.error}</small>
+                        <small className="text-[var(--weir-bad-ink)]">{e.error}</small>
                       )}
                     </li>
                   ))}
@@ -295,11 +295,11 @@ function LinkForm({
           {!all && (
             <>
               <fieldset className="grid gap-2">
-                <legend className="mb-1 text-[12.5px] font-medium text-[var(--mg-ink-2)]">节点</legend>
+                <legend className="mb-1 text-[12.5px] font-medium text-[var(--weir-ink-2)]">节点</legend>
                 {nodes.map((n) => (
                   <CheckboxField
                     key={n.id}
-                    label={<>{n.name}{n.gate_name && <small className="text-[var(--mg-ink-3)]">（{n.gate_name}）</small>}</>}
+                    label={<>{n.name}{n.gate_name && <small className="text-[var(--weir-ink-3)]">（{n.gate_name}）</small>}</>}
                     checked={picked.includes(n.id)}
                     onCheckedChange={(v) => setPicked(toggle(picked, n.id, v))}
                   />
@@ -307,7 +307,7 @@ function LinkForm({
               </fieldset>
               {chains.length > 0 && (
                 <fieldset className="grid gap-2">
-                  <legend className="mb-1 text-[12.5px] font-medium text-[var(--mg-ink-2)]">链式代理</legend>
+                  <legend className="mb-1 text-[12.5px] font-medium text-[var(--weir-ink-2)]">链式代理</legend>
                   {chains.map((c) => (
                     <CheckboxField key={c.id} label={c.name} checked={pickedChains.includes(c.id)} onCheckedChange={(v) => setPickedChains(toggle(pickedChains, c.id, v))} />
                   ))}
@@ -382,7 +382,7 @@ export function ChainPanel({ base, nodes, admin }: { base: string; nodes: NodeOp
                     已停用
                   </Badge>
                 )}
-                <small className="block text-[var(--mg-ink-3)]">
+                <small className="block text-[var(--weir-ink-3)]">
                   {c.entry_name ?? name(c.entry_node_id)} →{" "}
                   {c.exit_kind === "socks5" || c.exit_kind === "http" || c.exit_kind === "https" ? (
                     <>
@@ -404,7 +404,7 @@ export function ChainPanel({ base, nodes, admin }: { base: string; nodes: NodeOp
                     name(c.exit_node_id)
                   )}
                 </small>
-                <small className="block text-[var(--mg-ink-3)]">{probeText(c.probe)}</small>
+                <small className="block text-[var(--weir-ink-3)]">{probeText(c.probe)}</small>
               </span>
               <span className="actions">
                 <Switch

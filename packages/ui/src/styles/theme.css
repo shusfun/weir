@@ -1,86 +1,86 @@
 /* Tailwind 语义色映射到材质令牌；深色只需重定义 --mg-*。 */
 @theme inline {
-  --color-background: var(--mg-base);
-  --color-foreground: var(--mg-ink);
-  --color-card: var(--mg-panel);
-  --color-card-foreground: var(--mg-ink);
-  --color-popover: var(--mg-raised);
-  --color-popover-foreground: var(--mg-ink);
-  --color-primary: var(--mg-accent);
-  --color-primary-600: var(--mg-accent-lo);
-  --color-primary-foreground: var(--mg-accent-ink);
-  --color-secondary: var(--mg-accent-soft);
-  --color-secondary-foreground: var(--mg-accent-soft-ink);
-  --color-accent: var(--mg-accent-soft);
-  --color-accent-foreground: var(--mg-accent-soft-ink);
-  --color-muted: var(--mg-well);
-  --color-muted-foreground: var(--mg-ink-3);
-  --color-border: var(--mg-line);
-  --color-input: var(--mg-well);
-  --color-ring: var(--mg-ring);
-  --color-destructive: var(--mg-bad);
-  --font-sans: var(--mg-font);
-  --font-mono: var(--mg-mono);
-  --radius: var(--mg-radius);
+  --color-background: var(--weir-base);
+  --color-foreground: var(--weir-ink);
+  --color-card: var(--weir-panel);
+  --color-card-foreground: var(--weir-ink);
+  --color-popover: var(--weir-raised);
+  --color-popover-foreground: var(--weir-ink);
+  --color-primary: var(--weir-accent);
+  --color-primary-600: var(--weir-accent-lo);
+  --color-primary-foreground: var(--weir-accent-ink);
+  --color-secondary: var(--weir-accent-soft);
+  --color-secondary-foreground: var(--weir-accent-soft-ink);
+  --color-accent: var(--weir-accent-soft);
+  --color-accent-foreground: var(--weir-accent-soft-ink);
+  --color-muted: var(--weir-well);
+  --color-muted-foreground: var(--weir-ink-3);
+  --color-border: var(--weir-line);
+  --color-input: var(--weir-well);
+  --color-ring: var(--weir-ring);
+  --color-destructive: var(--weir-bad);
+  --font-sans: var(--weir-font);
+  --font-mono: var(--weir-mono);
+  --radius: var(--weir-radius);
 }
 
 @layer components {
   /* 面板：平整，只有细边框（非交互元素不做拟物） */
-  .mg-panel {
-    background: var(--mg-panel);
-    border: 1px solid var(--mg-line-soft);
-    border-radius: var(--mg-radius-lg);
+  .weir-panel {
+    background: var(--weir-panel);
+    border: 1px solid var(--weir-line-soft);
+    border-radius: var(--weir-radius-lg);
   }
   /* 凹槽：输入框、计数窗 */
-  .mg-well {
-    background: var(--mg-well);
+  .weir-well {
+    background: var(--weir-well);
     border: 1px solid transparent;
-    border-radius: var(--mg-radius);
+    border-radius: var(--weir-radius);
     box-shadow:
-      inset 2px 2px 4px var(--mg-neu-lo),
-      inset -2px -2px 4px var(--mg-neu-hi);
+      inset 2px 2px 4px var(--weir-neu-lo),
+      inset -2px -2px 4px var(--weir-neu-hi);
   }
-  .mg-raised {
-    background: var(--mg-key);
+  .weir-raised {
+    background: var(--weir-key);
     border: 1px solid transparent;
   }
 
   /*
    * 新拟物键帽：外凸与内凹两层阴影各画在一个伪元素上，按下时交叉淡入淡出，
    * 键帽本体只做位移与缩放，不逐帧重绘阴影。
-   * 按压回弹：按下下沉 2px 并缩到 0.97；松手走 --mg-bounce，先冲过原位（上浮、略放大）再落回，
+   * 按压回弹：按下下沉 2px 并缩到 0.97；松手走 --weir-bounce，先冲过原位（上浮、略放大）再落回，
    * 不是“缩一下就回来”。位移和缩放用独立的 translate / scale 属性，不覆盖业务类里的 transform。
    */
-  .mg-key {
+  .weir-key {
     position: relative;
     isolation: isolate;
-    background: var(--mg-key);
+    background: var(--weir-key);
     border: 1px solid transparent;
     transition:
-      translate var(--mg-bounce-dur) var(--mg-bounce),
-      scale var(--mg-bounce-dur) var(--mg-bounce),
-      color var(--mg-fast) ease;
+      translate var(--weir-bounce-dur) var(--weir-bounce),
+      scale var(--weir-bounce-dur) var(--weir-bounce),
+      color var(--weir-fast) ease;
   }
-  .mg-key::before,
-  .mg-key::after {
+  .weir-key::before,
+  .weir-key::after {
     content: "";
     position: absolute;
     inset: 0;
     z-index: -1;
     border-radius: inherit;
     pointer-events: none;
-    transition: opacity var(--mg-fast) ease;
+    transition: opacity var(--weir-fast) ease;
   }
-  .mg-key::before {
+  .weir-key::before {
     box-shadow:
-      -3px -3px 6px var(--mg-neu-hi),
-      3px 3px 7px var(--mg-neu-lo);
+      -3px -3px 6px var(--weir-neu-hi),
+      3px 3px 7px var(--weir-neu-lo);
   }
-  .mg-key::after {
+  .weir-key::after {
     opacity: 0;
     box-shadow:
-      inset 2px 2px 5px var(--mg-neu-lo),
-      inset -2px -2px 5px var(--mg-neu-hi);
+      inset 2px 2px 5px var(--weir-neu-lo),
+      inset -2px -2px 5px var(--weir-neu-hi);
   }
   /*
    * 选中态只认组件显式给出的 .is-pressed（Segmented 选项、导航当前项、secondary 变体）。
@@ -88,75 +88,75 @@
    * 按下时自动加上，泛化匹配会把实心主按钮盖成浅色底。
    * 常驻选中只下沉 1px；手指按下的瞬时反馈为 2px。
    */
-  .mg-key.is-pressed {
+  .weir-key.is-pressed {
     translate: 0 1px;
     transition:
-      translate var(--mg-fast) ease-out,
-      scale var(--mg-fast) ease-out,
-      color var(--mg-fast) ease;
+      translate var(--weir-fast) ease-out,
+      scale var(--weir-fast) ease-out,
+      color var(--weir-fast) ease;
   }
-  .mg-key:active {
+  .weir-key:active {
     translate: 0 2px;
     scale: 0.97;
     transition:
-      translate var(--mg-fast) ease-out,
-      scale var(--mg-fast) ease-out,
-      color var(--mg-fast) ease;
+      translate var(--weir-fast) ease-out,
+      scale var(--weir-fast) ease-out,
+      color var(--weir-fast) ease;
   }
-  .mg-key:active::before,
-  .mg-key.is-pressed::before {
+  .weir-key:active::before,
+  .weir-key.is-pressed::before {
     opacity: 0;
   }
-  .mg-key:active::after,
-  .mg-key.is-pressed::after {
+  .weir-key:active::after,
+  .weir-key.is-pressed::after {
     opacity: 1;
   }
   /*
    * 常驻选中：无方向的柔和内发光（参考导航指示灯），零偏移阴影沿圆角均匀分布，
    * 不再有左上暗 / 右下亮在拐角处的折痕。放在 :active 之后，按住选中键时底色不跳回灰色。
    */
-  .mg-key.is-pressed::after {
-    background: var(--mg-key-selected);
+  .weir-key.is-pressed::after {
+    background: var(--weir-key-selected);
     box-shadow:
-      inset 0 0 0 1px var(--mg-key-selected-ring),
-      inset 0 0 8px 1px var(--mg-key-selected-glow);
+      inset 0 0 0 1px var(--weir-key-selected-ring),
+      inset 0 0 8px 1px var(--weir-key-selected-glow);
   }
   /* 幽灵键：静止时平，悬停才浮起 */
-  .mg-key-ghost {
+  .weir-key-ghost {
     background: transparent;
   }
-  .mg-key-ghost::before {
+  .weir-key-ghost::before {
     opacity: 0;
   }
-  .mg-key-ghost:hover {
-    background: var(--mg-key);
+  .weir-key-ghost:hover {
+    background: var(--weir-key);
   }
-  .mg-key-ghost:hover::before {
+  .weir-key-ghost:hover::before {
     opacity: 1;
   }
-  .mg-key:focus-visible {
-    outline: 2px solid var(--mg-accent-text);
+  .weir-key:focus-visible {
+    outline: 2px solid var(--weir-accent-text);
     outline-offset: 2px;
   }
-  .mg-key:disabled,
-  .mg-key[aria-disabled="true"] {
+  .weir-key:disabled,
+  .weir-key[aria-disabled="true"] {
     translate: none;
     scale: none;
   }
   @media (forced-colors: active) {
-    .mg-key { border-color: ButtonText; }
-    .mg-key.is-pressed { border-width: 2px; }
+    .weir-key { border-color: ButtonText; }
+    .weir-key.is-pressed { border-width: 2px; }
   }
 
-  .mg-engraved {
-    color: var(--mg-ink-engraved);
+  .weir-engraved {
+    color: var(--weir-ink-engraved);
     font-size: 10.5px;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
   }
-  .mg-digits {
-    font-family: var(--mg-mono);
+  .weir-digits {
+    font-family: var(--weir-mono);
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.01em;
   }

@@ -8,7 +8,7 @@ import { XIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 const floating =
-  "z-50 min-w-44 rounded-[var(--mg-radius)] border border-[var(--mg-line)] bg-popover p-1 text-popover-foreground shadow-[inset_0_1px_0_var(--mg-highlight),0_10px_24px_-8px_var(--mg-shade-strong)] outline-none transition-[opacity,transform] duration-[var(--mg-fast)] origin-(--transform-origin) data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0 data-[ending-style]:opacity-0";
+  "z-50 min-w-44 rounded-[var(--weir-radius)] border border-[var(--weir-line)] bg-popover p-1 text-popover-foreground shadow-[inset_0_1px_0_var(--weir-highlight),0_10px_24px_-8px_var(--weir-shade-strong)] outline-none transition-[opacity,transform] duration-[var(--weir-fast)] origin-(--transform-origin) data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0 data-[ending-style]:opacity-0";
 
 const Menu = MenuPrimitive.Root;
 const MenuTrigger = MenuPrimitive.Trigger;
@@ -34,7 +34,7 @@ function MenuItem({ className, ...props }: MenuPrimitive.Item.Props) {
     <MenuPrimitive.Item
       data-slot="menu-item"
       className={cn(
-        "flex min-h-8 cursor-default items-center gap-2 rounded-[var(--mg-radius-sm)] px-2.5 text-[13px] outline-none select-none data-[highlighted]:bg-[var(--mg-accent-soft)] data-[highlighted]:text-[var(--mg-accent-soft-ink)] data-disabled:opacity-50 [&_svg]:size-4 [&_svg]:text-[var(--mg-ink-3)]",
+        "flex min-h-8 cursor-default items-center gap-2 rounded-[var(--weir-radius-sm)] px-2.5 text-[13px] outline-none select-none data-[highlighted]:bg-[var(--weir-accent-soft)] data-[highlighted]:text-[var(--weir-accent-soft-ink)] data-disabled:opacity-50 [&_svg]:size-4 [&_svg]:text-[var(--weir-ink-3)]",
         className,
       )}
       {...props}
@@ -43,11 +43,11 @@ function MenuItem({ className, ...props }: MenuPrimitive.Item.Props) {
 }
 
 function MenuLabel({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn("mg-engraved px-2.5 pt-2 pb-1", className)}>{children}</div>;
+  return <div className={cn("weir-engraved px-2.5 pt-2 pb-1", className)}>{children}</div>;
 }
 
 function MenuSeparator({ className }: { className?: string }) {
-  return <MenuPrimitive.Separator className={cn("mx-1 my-1 h-px bg-[var(--mg-line)]", className)} />;
+  return <MenuPrimitive.Separator className={cn("mx-1 my-1 h-px bg-[var(--weir-line)]", className)} />;
 }
 
 const Popover = PopoverPrimitive.Root;
@@ -84,7 +84,7 @@ function Tooltip({
       <TooltipPrimitive.Trigger render={children} />
       <TooltipPrimitive.Portal>
         <TooltipPrimitive.Positioner side={side} sideOffset={8} className="z-50">
-          <TooltipPrimitive.Popup className="rounded-[var(--mg-radius-sm)] border border-[var(--mg-line)] bg-[var(--mg-ink)] px-2 py-1 text-xs text-[var(--mg-base)] shadow-[0_4px_10px_-4px_var(--mg-shade-strong)] transition-opacity duration-[var(--mg-fast)] data-[starting-style]:opacity-0 data-[ending-style]:opacity-0">
+          <TooltipPrimitive.Popup className="rounded-[var(--weir-radius-sm)] border border-[var(--weir-line)] bg-[var(--weir-ink)] px-2 py-1 text-xs text-[var(--weir-base)] shadow-[0_4px_10px_-4px_var(--weir-shade-strong)] transition-opacity duration-[var(--weir-fast)] data-[starting-style]:opacity-0 data-[ending-style]:opacity-0">
             {content}
           </TooltipPrimitive.Popup>
         </TooltipPrimitive.Positioner>
@@ -120,13 +120,13 @@ function SheetContent({
 }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-[rgb(20_18_14/0.38)] transition-opacity duration-[var(--mg-mid)] data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 dark:bg-[rgb(0_0_0/0.6)]" />
+      <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-[rgb(20_18_14/0.38)] transition-opacity duration-[var(--weir-mid)] data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 dark:bg-[rgb(0_0_0/0.6)]" />
       <DialogPrimitive.Popup
         data-slot="sheet-content"
         finalFocus={finalFocus}
         data-side={side}
         className={cn(
-          "fixed inset-y-0 z-50 flex w-[min(320px,88vw)] flex-col gap-4 overflow-hidden border-[var(--mg-line)] bg-[var(--mg-panel)] p-5 shadow-[0_0_30px_-10px_var(--mg-shade-strong)] outline-none transition-transform duration-[var(--mg-mid)] ease-[var(--mg-ease)] data-[side=left]:left-0 data-[side=left]:border-r data-[side=right]:right-0 data-[side=right]:border-l data-[side=left]:data-[starting-style]:-translate-x-full data-[side=left]:data-[ending-style]:-translate-x-full data-[side=right]:data-[starting-style]:translate-x-full data-[side=right]:data-[ending-style]:translate-x-full",
+          "fixed inset-y-0 z-50 flex w-[min(320px,88vw)] flex-col gap-4 overflow-hidden border-[var(--weir-line)] bg-[var(--weir-panel)] p-5 shadow-[0_0_30px_-10px_var(--weir-shade-strong)] outline-none transition-transform duration-[var(--weir-mid)] ease-[var(--weir-ease)] data-[side=left]:left-0 data-[side=left]:border-r data-[side=right]:right-0 data-[side=right]:border-l data-[side=left]:data-[starting-style]:-translate-x-full data-[side=left]:data-[ending-style]:-translate-x-full data-[side=right]:data-[starting-style]:translate-x-full data-[side=right]:data-[ending-style]:translate-x-full",
           className,
         )}
       >
@@ -134,19 +134,19 @@ function SheetContent({
           <div className="min-w-0">
             <DialogPrimitive.Title className="text-base font-semibold">{title}</DialogPrimitive.Title>
             {description && (
-              <DialogPrimitive.Description className="mt-1 text-xs text-[var(--mg-ink-3)]">{description}</DialogPrimitive.Description>
+              <DialogPrimitive.Description className="mt-1 text-xs text-[var(--weir-ink-3)]">{description}</DialogPrimitive.Description>
             )}
           </div>
           {close ?? (
             <DialogPrimitive.Close
               aria-label="关闭"
-              className="inline-flex size-8 items-center justify-center rounded-[var(--mg-radius-sm)] text-[var(--mg-ink-3)] hover:bg-[var(--mg-well)] focus-visible:ring-3 focus-visible:ring-ring"
+              className="inline-flex size-8 items-center justify-center rounded-[var(--weir-radius-sm)] text-[var(--weir-ink-3)] hover:bg-[var(--weir-well)] focus-visible:ring-3 focus-visible:ring-ring"
             >
               <XIcon className="size-4" />
             </DialogPrimitive.Close>
           )}
         </div>
-        <div className="mg-focus-gutter min-h-0 flex-1 overflow-y-auto">{children}</div>
+        <div className="weir-focus-gutter min-h-0 flex-1 overflow-y-auto">{children}</div>
       </DialogPrimitive.Popup>
     </DialogPrimitive.Portal>
   );

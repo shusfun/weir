@@ -32,7 +32,7 @@ func openPostgresForTest(t *testing.T) *Store {
 	if os.Getenv("WEIR_INTEGRATION") != "1" {
 		t.Skip("set WEIR_INTEGRATION=1 with deploy/test.compose.yml running")
 	}
-	admin, err := sql.Open("pgx", "postgres://gate:local-test-only@127.0.0.1:25432/gate?sslmode=disable")
+	admin, err := sql.Open("pgx", "postgres://weir:local-test-only@127.0.0.1:25432/weir?sslmode=disable")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func openPostgresForTest(t *testing.T) *Store {
 	t.Cleanup(func() { _, _ = admin.Exec("DROP DATABASE IF EXISTS " + name + " WITH (FORCE)") })
 	s, err := Open(context.Background(), Config{
 		Driver:   DriverPostgres,
-		Postgres: PostgresConfig{Host: "127.0.0.1", Port: 25432, User: "gate", Password: "local-test-only", Database: name},
+		Postgres: PostgresConfig{Host: "127.0.0.1", Port: 25432, User: "weir", Password: "local-test-only", Database: name},
 		Redis:    RedisConfig{Address: "127.0.0.1:26379", Username: "weir", Password: "local-test-only"},
 	})
 	if err != nil {

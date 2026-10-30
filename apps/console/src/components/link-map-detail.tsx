@@ -26,7 +26,7 @@ export function Spark({ s }: { s?: Series }) {
   });
   if (cur) segs.push(cur);
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden className="block text-[var(--mg-accent)]">
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden className="block text-[var(--weir-accent)]">
       {segs.map((d) => <path key={d} d={d} fill="none" stroke="currentColor" strokeWidth={1.5} />)}
     </svg>
   );
@@ -39,7 +39,7 @@ const size = (v: unknown) => (typeof v === "number" ? bytes(v) : unknown);
 function Row({ k, children }: { k: string; children: React.ReactNode }) {
   return (
     <>
-      <dt className="text-[var(--mg-ink-3)]">{k}</dt>
+      <dt className="text-[var(--weir-ink-3)]">{k}</dt>
       <dd className="min-w-0 break-words">{children}</dd>
     </>
   );
@@ -52,7 +52,7 @@ function Live({ store, s, gate }: { store: LiveStore; s?: Series; gate: number }
   return (
     <div className="flex flex-wrap items-center gap-2">
       <strong className="tabular-nums">{stale ? unknown : rateText(v)}</strong>
-      {stale && <small className="text-[var(--mg-warn-ink)]">{at ? `数据中断 ${Math.round((Date.now() - at) / 1000)} 秒` : store.connected ? "等待 VPS 上报" : "实时连接中断，正在重连"}</small>}
+      {stale && <small className="text-[var(--weir-warn-ink)]">{at ? `数据中断 ${Math.round((Date.now() - at) / 1000)} 秒` : store.connected ? "等待 VPS 上报" : "实时连接中断，正在重连"}</small>}
       <Spark s={s} />
     </div>
   );
@@ -90,12 +90,12 @@ function GateDetail({ m, g, store }: { m: LinkMap; g: MapGate; store: LiveStore 
               return x === null ? sum : (sum ?? 0) + x;
             }, null);
             return (
-              <li key={n.id} className="stack gap-1 rounded-[var(--mg-radius-sm)] border border-[var(--mg-line)] p-2">
+              <li key={n.id} className="stack gap-1 rounded-[var(--weir-radius-sm)] border border-[var(--weir-line)] p-2">
                 <span className="flex flex-wrap items-center justify-between gap-2">
                   <strong className="text-[12.5px]">{m.admin ? <ObjectLink to={{ type: "node", id: n.id, name: n.name }} /> : n.name}</strong>
                   <small className="tabular-nums">{store.stale(g.id) ? unknown : rateText(r)}</small>
                 </span>
-                <small className="text-[var(--mg-ink-3)]">{n.protocol} · {n.network}{n.security !== "none" ? " · " + n.security : ""} · 端口 {n.port}{n.kernel ? ` · ${n.kernel}` : ""}{n.users !== undefined ? ` · ${n.users} 个用户` : ""}{!n.enabled ? " · 已停用" : ""}</small>
+                <small className="text-[var(--weir-ink-3)]">{n.protocol} · {n.network}{n.security !== "none" ? " · " + n.security : ""} · 端口 {n.port}{n.kernel ? ` · ${n.kernel}` : ""}{n.users !== undefined ? ` · ${n.users} 个用户` : ""}{!n.enabled ? " · 已停用" : ""}</small>
                 {m.admin && <NodeAccess ports={n.ports} reach={n.reach} compact />}
               </li>
             );
@@ -125,13 +125,13 @@ function ExitDetail({ m, x, store }: { m: LinkMap; x: MapExit; store: LiveStore 
       </dl>
       {x.members && x.members.length > 0 && (
         <div className="stack gap-1">
-          <small className="text-[var(--mg-ink-3)]">{x.group ? "一组，由内核按延迟自动选择与切换" : "订阅节点"}{x.skipped ? `；另有 ${x.skipped} 个匹配的节点不能作出口` : ""}</small>
+          <small className="text-[var(--weir-ink-3)]">{x.group ? "一组，由内核按延迟自动选择与切换" : "订阅节点"}{x.skipped ? `；另有 ${x.skipped} 个匹配的节点不能作出口` : ""}</small>
           <ul className="flex flex-wrap gap-1">
             {x.members.map((name, i) => (
               <li key={name + i}><Badge variant="soft" tone={x.group && active === i ? "ok" : "neutral"}>{name}{x.group && active === i ? " · 当前有流量" : ""}</Badge></li>
             ))}
           </ul>
-          {x.group && m.admin && <small className="text-[var(--mg-ink-3)]">{active === undefined ? "当前成员：未知（还没有实时数据）" : active < 0 ? "这一刻没有流量" : ""}</small>}
+          {x.group && m.admin && <small className="text-[var(--weir-ink-3)]">{active === undefined ? "当前成员：未知（还没有实时数据）" : active < 0 ? "这一刻没有流量" : ""}</small>}
         </div>
       )}
     </div>
@@ -151,7 +151,7 @@ function PathDetail({ m, p, store }: { m: LinkMap; p: MapPath; store: LiveStore 
         <Row k="实时">{<Live store={store} s={store.paths.get(p.id)} gate={p.gate_id} />}</Row>
         <Row k="今天">{p.today_bytes === null ? unknown : bytes(p.today_bytes)}</Row>
       </dl>
-      {!m.admin && (m.hidden_rules ?? 0) > 0 && <small className="text-[var(--mg-ink-3)]">入口上有 {m.hidden_rules} 条管理员分流规则，部分网站可能从别的出口出去。</small>}
+      {!m.admin && (m.hidden_rules ?? 0) > 0 && <small className="text-[var(--weir-ink-3)]">入口上有 {m.hidden_rules} 条管理员分流规则，部分网站可能从别的出口出去。</small>}
     </div>
   );
 }
@@ -183,7 +183,7 @@ export function LinkMapDetail({ m, store, selected }: { m: LinkMap; store: LiveS
         <Row k="路径">{m.paths.length}</Row>
         <Row k="实时合计">{rateText(total)}</Row>
       </dl>
-      <small className="text-[var(--mg-ink-3)]">点地图上的点或线、或下面列表里的一行查看详情。</small>
+      <small className="text-[var(--weir-ink-3)]">点地图上的点或线、或下面列表里的一行查看详情。</small>
     </div>
   );
 }

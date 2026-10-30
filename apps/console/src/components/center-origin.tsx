@@ -116,7 +116,7 @@ function ChangeOrigin({ value, close }: { value: CenterOrigin; close: () => void
           把中心地址从 <code>{value.origin}</code> 改为 <code>{value.current}</code>。
         </DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
-          <ul className="m-0 list-disc space-y-1 pl-5 text-[13px] text-[var(--mg-ink-2)]">
+          <ul className="m-0 list-disc space-y-1 pl-5 text-[13px] text-[var(--weir-ink-2)]">
             <li>用户订阅地址、订阅组分享地址、托管配置地址与「添加 Gate」命令立即改用新地址。</li>
             <li>已导入客户端的旧订阅地址无法自动更新；旧域名停用后，用户需要重新导入。</li>
             <li>已配对的 Gate 在下次心跳时先用新地址完成设备认证，成功后自动切换；失败的 10 分钟后重试。</li>

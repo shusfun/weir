@@ -35,8 +35,8 @@ function Chart({ data, series, unit }: { data: Record<string, unknown>[]; series
         <ChartTooltip
           content={({ active, payload, label }) =>
             active && payload ? (
-              <div className="rounded-[var(--mg-radius)] border border-[var(--mg-line)] bg-[var(--mg-panel)] px-2.5 py-1.5 text-xs shadow">
-                <div className="mb-1 text-[var(--mg-ink-3)]">{time(String(label))}</div>
+              <div className="rounded-[var(--weir-radius)] border border-[var(--weir-line)] bg-[var(--weir-panel)] px-2.5 py-1.5 text-xs shadow">
+                <div className="mb-1 text-[var(--weir-ink-3)]">{time(String(label))}</div>
                 {series.map((s) => {
                   const v = (payload[0]?.payload as Record<string, unknown>)[s.key];
                   return <div key={s.key}>{s.label}：{typeof v === "number" ? s.format(v) : "未知"}</div>;
@@ -61,14 +61,14 @@ export function HistoryCharts({ path, host }: { path: string; host?: boolean }) 
     <div className="stack">
       <Segmented aria-label="时间范围" value={hours} onValueChange={setHours} options={ranges} />
       {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : !known ? (
-        <small className="text-[var(--mg-ink-3)]">这段时间没有数据（未知）：VPS 离线或尚未上报。</small>
+        <small className="text-[var(--weir-ink-3)]">这段时间没有数据（未知）：VPS 离线或尚未上报。</small>
       ) : (
         <>
-          <Chart data={data} series={[{ key: "traffic", label: "流量", color: "var(--mg-accent)", format: (v) => bytes(v) }]} />
+          <Chart data={data} series={[{ key: "traffic", label: "流量", color: "var(--weir-accent)", format: (v) => bytes(v) }]} />
           {host && <Chart unit="%" data={data} series={[
-            { key: "cpu", label: "CPU", color: "var(--mg-info)", format: (v) => v.toFixed(1) + "%" },
-            { key: "mem", label: "内存", color: "var(--mg-warn)", format: (v) => v.toFixed(1) + "%" },
-            { key: "disk", label: "磁盘", color: "var(--mg-ok)", format: (v) => v.toFixed(1) + "%" },
+            { key: "cpu", label: "CPU", color: "var(--weir-info)", format: (v) => v.toFixed(1) + "%" },
+            { key: "mem", label: "内存", color: "var(--weir-warn)", format: (v) => v.toFixed(1) + "%" },
+            { key: "disk", label: "磁盘", color: "var(--weir-ok)", format: (v) => v.toFixed(1) + "%" },
           ]} />}
         </>
       )}

@@ -65,9 +65,9 @@ function ConfirmProvider({ children }: { children: ReactNode }) {
             {o.description && <DialogDescription>{o.description}</DialogDescription>}
             <Form onSubmit={() => finish(true)}>
               {request.kind === "prompt" && (
-                <Field label={request.options.label} htmlFor="mg-prompt-input">
+                <Field label={request.options.label} htmlFor="weir-prompt-input">
                   <Input
-                    id="mg-prompt-input"
+                    id="weir-prompt-input"
                     autoFocus
                     aria-label={request.options.label ? undefined : typeof o.title === "string" ? o.title : "输入"}
                     value={value}

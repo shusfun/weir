@@ -15,7 +15,7 @@ function InputGroup({ className, ...props }: ComponentProps<"div">) {
       data-slot="input-group"
       role="group"
       className={cn(
-        "mg-well group/input-group relative flex h-9.5 w-full min-w-0 items-center transition-[border-color,box-shadow] outline-none has-[[data-slot=input-group-control]:focus-visible]:shadow-[inset_0_1px_2px_var(--mg-inset),0_0_0_3px_var(--mg-ring)] in-data-[slot=combobox-content]:focus-within:border-inherit in-data-[slot=combobox-content]:focus-within:ring-0 has-disabled:bg-input/50 has-disabled:opacity-50 has-[[data-slot=input-group-control]:focus-visible]:border-[var(--mg-accent-text)] has-[[data-slot=input-group-control]:focus-visible]:ring-0 has-[[data-slot=input-group-control]:focus-visible]:ring-[var(--mg-accent-text)] has-[[data-slot][aria-invalid=true]]:border-destructive has-[[data-slot][aria-invalid=true]]:ring-0 has-[[data-slot][aria-invalid=true]]:ring-destructive/20 has-[>[data-align=block-end]]:h-auto has-[>[data-align=block-end]]:flex-col has-[>[data-align=block-start]]:h-auto has-[>[data-align=block-start]]:flex-col has-[>textarea]:h-auto dark:bg-input/30 dark:has-disabled:bg-input/80 dark:has-[[data-slot][aria-invalid=true]]:ring-destructive/40 has-[>[data-align=block-end]]:[&>input]:pt-3 has-[>[data-align=block-start]]:[&>input]:pb-3 has-[>[data-align=inline-end]]:[&>input]:pr-1.5 has-[>[data-align=inline-start]]:[&>input]:pl-1.5",
+        "weir-well group/input-group relative flex h-9.5 w-full min-w-0 items-center transition-[border-color,box-shadow] outline-none has-[[data-slot=input-group-control]:focus-visible]:shadow-[inset_0_1px_2px_var(--weir-inset),0_0_0_3px_var(--weir-ring)] in-data-[slot=combobox-content]:focus-within:border-inherit in-data-[slot=combobox-content]:focus-within:ring-0 has-disabled:bg-input/50 has-disabled:opacity-50 has-[[data-slot=input-group-control]:focus-visible]:border-[var(--weir-accent-text)] has-[[data-slot=input-group-control]:focus-visible]:ring-0 has-[[data-slot=input-group-control]:focus-visible]:ring-[var(--weir-accent-text)] has-[[data-slot][aria-invalid=true]]:border-destructive has-[[data-slot][aria-invalid=true]]:ring-0 has-[[data-slot][aria-invalid=true]]:ring-destructive/20 has-[>[data-align=block-end]]:h-auto has-[>[data-align=block-end]]:flex-col has-[>[data-align=block-start]]:h-auto has-[>[data-align=block-start]]:flex-col has-[>textarea]:h-auto dark:bg-input/30 dark:has-disabled:bg-input/80 dark:has-[[data-slot][aria-invalid=true]]:ring-destructive/40 has-[>[data-align=block-end]]:[&>input]:pt-3 has-[>[data-align=block-start]]:[&>input]:pb-3 has-[>[data-align=inline-end]]:[&>input]:pr-1.5 has-[>[data-align=inline-start]]:[&>input]:pl-1.5",
         className,
       )}
       {...props}
@@ -144,7 +144,7 @@ function SearchInput({ className, ...props }: ComponentProps<"input">) {
   return (
     <InputGroup className={cn("w-[280px] max-w-full max-sm:w-full", className)}>
       <InputGroupAddon>
-        <SearchIcon className="text-[var(--mg-ink-engraved)]" />
+        <SearchIcon className="text-[var(--weir-ink-engraved)]" />
       </InputGroupAddon>
       <InputGroupInput {...props} />
     </InputGroup>

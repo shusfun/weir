@@ -57,7 +57,7 @@ export function ChainExitFields({ value, onChange, admin, sourcePath, nodes, nod
   return (
     <>
       <Segmented aria-label="出口类型" value={top} onValueChange={pick} options={options} />
-      {top === "none" && <p className="text-[var(--mg-ink-3)]">流量从这台 VPS 直接访问目标网站。</p>}
+      {top === "none" && <p className="text-[var(--weir-ink-3)]">流量从这台 VPS 直接访问目标网站。</p>}
       {top === "source" && <SourcePicker path={sourcePath} value={value} onChange={(v) => onChange({ ...value, ...v, kind: "source" })} />}
       {top === "proxy" && <ProxyFields value={value} set={set} />}
       {top === "link" && <LinkField value={value.link ?? ""} onChange={(link) => set({ link })} />}

@@ -13,14 +13,14 @@ function Radio({ className, ...props }: RadioPrimitive.Root.Props) {
     <RadioPrimitive.Root
       data-slot="radio"
       className={cn(
-        "peer relative flex size-[18px] shrink-0 items-center justify-center rounded-full border border-[var(--mg-line)] bg-[var(--mg-well)] shadow-[inset_0_1px_2px_var(--mg-inset)] outline-none [transition:background-color_var(--mg-fast),border-color_var(--mg-fast),scale_var(--mg-bounce-dur)_var(--mg-bounce)] after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:ring-3 focus-visible:ring-ring active:scale-90 data-disabled:cursor-not-allowed data-disabled:opacity-50 data-disabled:active:scale-100 aria-invalid:border-destructive data-checked:border-[var(--mg-accent-lo)] data-checked:bg-[var(--mg-accent)] data-checked:shadow-[inset_0_1px_0_rgb(255_255_255/0.25)]",
+        "peer relative flex size-[18px] shrink-0 items-center justify-center rounded-full border border-[var(--weir-line)] bg-[var(--weir-well)] shadow-[inset_0_1px_2px_var(--weir-inset)] outline-none [transition:background-color_var(--weir-fast),border-color_var(--weir-fast),scale_var(--weir-bounce-dur)_var(--weir-bounce)] after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:ring-3 focus-visible:ring-ring active:scale-90 data-disabled:cursor-not-allowed data-disabled:opacity-50 data-disabled:active:scale-100 aria-invalid:border-destructive data-checked:border-[var(--weir-accent-lo)] data-checked:bg-[var(--weir-accent)] data-checked:shadow-[inset_0_1px_0_rgb(255_255_255/0.25)]",
         className,
       )}
       {...props}
     >
       <RadioPrimitive.Indicator
         data-slot="radio-indicator"
-        className="size-[7px] rounded-full bg-[var(--mg-accent-ink)] transition-[scale] duration-[var(--mg-fast)] data-[starting-style]:scale-0 data-[ending-style]:scale-0"
+        className="size-[7px] rounded-full bg-[var(--weir-accent-ink)] transition-[scale] duration-[var(--weir-fast)] data-[starting-style]:scale-0 data-[ending-style]:scale-0"
       />
     </RadioPrimitive.Root>
   );

@@ -30,22 +30,22 @@ function Collapsible({
       defaultOpen={defaultOpen}
       open={open}
       onOpenChange={onOpenChange ? (v) => onOpenChange(v) : undefined}
-      className={cn("min-w-0", variant === "card" && "rounded-[var(--mg-radius)] border border-[var(--mg-line)]", className)}
+      className={cn("min-w-0", variant === "card" && "rounded-[var(--weir-radius)] border border-[var(--weir-line)]", className)}
     >
       <CollapsiblePrimitive.Trigger
         data-slot="collapsible-trigger"
         className={cn(
-          "group/collapsible flex max-w-full cursor-pointer items-center gap-1.5 rounded-[4px] text-left text-[12.5px] text-[var(--mg-accent-text)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mg-accent-text)]",
-          variant === "card" && "w-full px-2 py-1.5 text-[var(--mg-ink)]",
+          "group/collapsible flex max-w-full cursor-pointer items-center gap-1.5 rounded-[4px] text-left text-[12.5px] text-[var(--weir-accent-text)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--weir-accent-text)]",
+          variant === "card" && "w-full px-2 py-1.5 text-[var(--weir-ink)]",
         )}
       >
-        <ChevronRight className="size-3.5 shrink-0 transition-[rotate] duration-[var(--mg-fast)] group-data-[panel-open]/collapsible:rotate-90" aria-hidden />
+        <ChevronRight className="size-3.5 shrink-0 transition-[rotate] duration-[var(--weir-fast)] group-data-[panel-open]/collapsible:rotate-90" aria-hidden />
         <span className="flex min-w-0 flex-wrap items-center gap-2">{title}</span>
       </CollapsiblePrimitive.Trigger>
       <CollapsiblePrimitive.Panel
         data-slot="collapsible-panel"
         className={cn(
-          "h-[var(--collapsible-panel-height)] overflow-hidden transition-[height] duration-[var(--mg-mid)] ease-[var(--mg-ease)] data-[ending-style]:h-0 data-[starting-style]:h-0",
+          "h-[var(--collapsible-panel-height)] overflow-hidden transition-[height] duration-[var(--weir-mid)] ease-[var(--weir-ease)] data-[ending-style]:h-0 data-[starting-style]:h-0",
           panelClassName,
         )}
       >

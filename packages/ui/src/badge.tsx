@@ -5,19 +5,19 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 
 const badgeVariants = cva(
-  "group/badge inline-flex w-fit shrink-0 items-center justify-center gap-1.5 overflow-hidden rounded-[var(--mg-radius-sm)] border px-2 py-0.5 text-[11px] leading-[1.45] font-medium whitespace-nowrap [&>svg]:pointer-events-none [&>svg]:size-3!",
+  "group/badge inline-flex w-fit shrink-0 items-center justify-center gap-1.5 overflow-hidden rounded-[var(--weir-radius-sm)] border px-2 py-0.5 text-[11px] leading-[1.45] font-medium whitespace-nowrap [&>svg]:pointer-events-none [&>svg]:size-3!",
   {
     variants: {
       variant: {
-        default: "border-[var(--mg-accent-lo)] bg-[var(--mg-accent)] text-[var(--mg-accent-ink)]",
+        default: "border-[var(--weir-accent-lo)] bg-[var(--weir-accent)] text-[var(--weir-accent-ink)]",
         secondary:
-          "border-[color-mix(in_srgb,var(--mg-accent)_25%,var(--mg-line))] bg-[var(--mg-accent-soft)] text-[var(--mg-accent-soft-ink)]",
+          "border-[color-mix(in_srgb,var(--weir-accent)_25%,var(--weir-line))] bg-[var(--weir-accent-soft)] text-[var(--weir-accent-soft-ink)]",
         destructive:
-          "border-[color-mix(in_srgb,var(--mg-bad)_35%,var(--mg-line))] bg-[var(--mg-bad-soft)] text-[var(--mg-bad-ink)]",
+          "border-[color-mix(in_srgb,var(--weir-bad)_35%,var(--weir-line))] bg-[var(--weir-bad-soft)] text-[var(--weir-bad-ink)]",
         outline:
-          "border-[var(--mg-line-soft)] bg-transparent text-[var(--mg-ink-2)]",
-        ghost: "border-transparent text-[var(--mg-ink-3)]",
-        link: "border-transparent text-[var(--mg-accent-text)] underline-offset-4 hover:underline",
+          "border-[var(--weir-line-soft)] bg-transparent text-[var(--weir-ink-2)]",
+        ghost: "border-transparent text-[var(--weir-ink-3)]",
+        link: "border-transparent text-[var(--weir-accent-text)] underline-offset-4 hover:underline",
         // 状态色浅底标签：配合 tone 使用（事件级别、处理状态、已设置 / 未绑定等）
         soft: "",
         // 状态文字：透明底 + 状态色文字，通常前置 StatusLamp（任务 / 设备 / 授权状态）
@@ -32,16 +32,16 @@ const badgeVariants = cva(
       },
     },
     compoundVariants: [
-      { variant: "soft", tone: "neutral", className: "border-[var(--mg-line)] bg-[var(--mg-well)] text-[var(--mg-ink-2)]" },
-      { variant: "soft", tone: "ok", className: "border-[color-mix(in_srgb,var(--mg-ok)_30%,var(--mg-line))] bg-[var(--mg-ok-soft)] text-[var(--mg-ok-ink)]" },
-      { variant: "soft", tone: "warn", className: "border-[color-mix(in_srgb,var(--mg-warn)_30%,var(--mg-line))] bg-[var(--mg-warn-soft)] text-[var(--mg-warn-ink)]" },
-      { variant: "soft", tone: "bad", className: "border-[color-mix(in_srgb,var(--mg-bad)_30%,var(--mg-line))] bg-[var(--mg-bad-soft)] text-[var(--mg-bad-ink)]" },
-      { variant: "soft", tone: "info", className: "border-[color-mix(in_srgb,var(--mg-info)_30%,var(--mg-line))] bg-[var(--mg-info-soft)] text-[var(--mg-info-ink)]" },
-      { variant: "status", tone: "neutral", className: "text-[var(--mg-ink-2)]" },
-      { variant: "status", tone: "ok", className: "text-[var(--mg-ok-ink)]" },
-      { variant: "status", tone: "warn", className: "text-[var(--mg-warn-ink)]" },
-      { variant: "status", tone: "bad", className: "text-[var(--mg-bad-ink)]" },
-      { variant: "status", tone: "info", className: "text-[var(--mg-info-ink)]" },
+      { variant: "soft", tone: "neutral", className: "border-[var(--weir-line)] bg-[var(--weir-well)] text-[var(--weir-ink-2)]" },
+      { variant: "soft", tone: "ok", className: "border-[color-mix(in_srgb,var(--weir-ok)_30%,var(--weir-line))] bg-[var(--weir-ok-soft)] text-[var(--weir-ok-ink)]" },
+      { variant: "soft", tone: "warn", className: "border-[color-mix(in_srgb,var(--weir-warn)_30%,var(--weir-line))] bg-[var(--weir-warn-soft)] text-[var(--weir-warn-ink)]" },
+      { variant: "soft", tone: "bad", className: "border-[color-mix(in_srgb,var(--weir-bad)_30%,var(--weir-line))] bg-[var(--weir-bad-soft)] text-[var(--weir-bad-ink)]" },
+      { variant: "soft", tone: "info", className: "border-[color-mix(in_srgb,var(--weir-info)_30%,var(--weir-line))] bg-[var(--weir-info-soft)] text-[var(--weir-info-ink)]" },
+      { variant: "status", tone: "neutral", className: "text-[var(--weir-ink-2)]" },
+      { variant: "status", tone: "ok", className: "text-[var(--weir-ok-ink)]" },
+      { variant: "status", tone: "warn", className: "text-[var(--weir-warn-ink)]" },
+      { variant: "status", tone: "bad", className: "text-[var(--weir-bad-ink)]" },
+      { variant: "status", tone: "info", className: "text-[var(--weir-info-ink)]" },
     ],
     defaultVariants: { variant: "default", tone: "neutral" },
   },

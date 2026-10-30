@@ -72,8 +72,8 @@ export function SourcesPanel() {
                     <TableRow key={s.id} {...dataObject({ type: "source", id: s.id })}>
                       <TableCell>
                         <strong>{s.name || s.title || "未命名"}</strong> {!s.enabled && <Badge variant="soft" tone="warn">停用</Badge>}
-                        <small className="block max-w-72 truncate text-[var(--mg-ink-3)]" title={s.url}>{s.url}</small>
-                        {s.last_error && <small className="block text-[var(--mg-bad-ink)]">{s.last_error}</small>}
+                        <small className="block max-w-72 truncate text-[var(--weir-ink-3)]" title={s.url}>{s.url}</small>
+                        {s.last_error && <small className="block text-[var(--weir-bad-ink)]">{s.last_error}</small>}
                       </TableCell>
                       <TableCell>{s.fetched_at ? s.node_count : "未知"}</TableCell>
                       <TableCell className="whitespace-nowrap">{ui?.total ? `${bytes((ui.upload ?? 0) + (ui.download ?? 0))} / ${bytes(ui.total)}` : "未知"}{ui?.expire ? <small className="block">到期 {date(ui.expire)}</small> : null}</TableCell>

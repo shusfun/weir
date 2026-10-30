@@ -224,7 +224,7 @@ export function SetupPage({ done }: { done: () => void }) {
     return (
       <main className="auth-screen setup-screen" data-setup-phase={phase}>
         <div className="setup-container flex flex-col items-center text-center">
-          <IconTile ref={readyMark} size="xl" tone="neutral" className="rounded-full text-[var(--mg-ok)]">
+          <IconTile ref={readyMark} size="xl" tone="neutral" className="rounded-full text-[var(--weir-ok)]">
             <CheckMark circle />
           </IconTile>
           <header className="setup-heading">

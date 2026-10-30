@@ -17,14 +17,14 @@ function Switch({
       data-slot="switch"
       data-size={size}
       data-moved={moved || undefined}
-      className={cn("mg-switch peer group/switch", className)}
+      className={cn("weir-switch peer group/switch", className)}
       onCheckedChange={(checked, details) => {
         setMoved(true);
         onCheckedChange?.(checked, details);
       }}
       {...props}
     >
-      <SwitchPrimitive.Thumb data-slot="switch-thumb" className="mg-switch-thumb" />
+      <SwitchPrimitive.Thumb data-slot="switch-thumb" className="weir-switch-thumb" />
     </SwitchPrimitive.Root>
   );
 }

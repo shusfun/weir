@@ -22,7 +22,7 @@ function ChoiceRow({ id, label, description, disabled, className, placement = "s
       data-slot="choice-field"
       data-disabled={disabled || undefined}
       className={cn(
-        "flex min-w-0 cursor-pointer items-start gap-2.5 text-[13px] leading-[20px] text-[var(--mg-ink)] select-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-55",
+        "flex min-w-0 cursor-pointer items-start gap-2.5 text-[13px] leading-[20px] text-[var(--weir-ink)] select-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-55",
         placement === "end" && "flex-row-reverse items-center justify-between gap-6",
         className,
       )}
@@ -31,7 +31,7 @@ function ChoiceRow({ id, label, description, disabled, className, placement = "s
       <span className={cn("grid min-w-0", placement === "end" && "gap-0.5")}>
         <span id={id + "-label"} className={cn(placement === "end" && "font-[550]")}>{label}</span>
         {description && (
-          <small id={id + "-description"} className="text-[11.5px] leading-relaxed text-[var(--mg-ink-3)]">
+          <small id={id + "-description"} className="text-[11.5px] leading-relaxed text-[var(--weir-ink-3)]">
             {description}
           </small>
         )}

@@ -22,12 +22,12 @@ function MenuToggle({
       height={24}
       fill="currentColor"
       aria-hidden
-      className={cn("mg-menu-toggle", className)}
+      className={cn("weir-menu-toggle", className)}
       {...props}
     >
-      <rect className="mg-menu-toggle-top" x="4" y="5" width="16" height="2" rx="1" />
-      <rect className="mg-menu-toggle-mid" x="4" y="11" width="16" height="2" rx="1" />
-      <rect className="mg-menu-toggle-bottom" x="4" y="17" width="16" height="2" rx="1" />
+      <rect className="weir-menu-toggle-top" x="4" y="5" width="16" height="2" rx="1" />
+      <rect className="weir-menu-toggle-mid" x="4" y="11" width="16" height="2" rx="1" />
+      <rect className="weir-menu-toggle-bottom" x="4" y="17" width="16" height="2" rx="1" />
     </svg>
   );
 }

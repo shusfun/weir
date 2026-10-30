@@ -131,7 +131,7 @@ func setup(t *testing.T) *env {
 func (e *env) startGate(name string) {
 	inv := e.post("/api/v1/admin/gates/invite", map[string]string{"name": name}, nil)
 	gd := filepath.Join(e.dir, name)
-	p := gate.Paths{Config: filepath.Join(gd, "agent.json"), Data: filepath.Join(gd, "data"), Socket: filepath.Join("/tmp", "mg-"+name+".sock"),
+	p := gate.Paths{Config: filepath.Join(gd, "agent.json"), Data: filepath.Join(gd, "data"), Socket: filepath.Join("/tmp", "weir-"+name+".sock"),
 		CoresDir: filepath.Join(gd, "cores"), CertsDir: filepath.Join(gd, "certs"), KernelsDir: filepath.Join(gd, "kernels"), Root: filepath.Join(gd, "root"), RunAs: e.runAs}
 	go gate.ServeHelper(e.ctx, gate.NewHelper(p))
 	eventually(e.t, 5*time.Second, "helper socket", func() bool { _, err := os.Stat(p.Socket); return err == nil })

@@ -106,12 +106,12 @@ function Versions() {
                     const users = [...(v.pinned_refs ?? []).map((g) => ({ ...g, how: "锁定" })), ...(v.running_refs ?? []).map((g) => ({ ...g, how: "运行中" }))];
                     const missing = k.arches.filter((a) => !v.arches[a]);
                     return (
-                      <li key={v.version} {...dataObject({ type: "kernel", key: `${kernel}@${v.version}` })} className="flex flex-wrap items-center gap-2 rounded-[var(--mg-radius)] border border-[var(--mg-line)] px-3 py-2">
+                      <li key={v.version} {...dataObject({ type: "kernel", key: `${kernel}@${v.version}` })} className="flex flex-wrap items-center gap-2 rounded-[var(--weir-radius)] border border-[var(--weir-line)] px-3 py-2">
                         <code className="text-xs">{v.version}</code>
                         {v.default && <Badge variant="soft" tone="ok">默认</Badge>}
                         {missing.length > 0 && <Badge variant="soft" tone="warn">缺 {missing.join("、")}</Badge>}
                         {kernel !== "mihomo" && (v.driver ? <Badge variant="soft" tone="neutral">驱动 <ObjectLink to={{ type: "driver", key: v.driver, name: v.driver }} /></Badge> : <Badge variant="soft" tone="bad" title={v.driver_error}>没有驱动 · <ObjectLink to={{ type: "driver", key: "new", name: "新增驱动" }} /></Badge>)}
-                        {users.length > 0 && <small className="text-[var(--mg-ink-3)]">{users.map((g, i) => <span key={g.how + g.id}>{i > 0 && "、"}<ObjectLink to={{ type: "gate", id: g.id, name: g.name }} />（{g.how}）</span>)}</small>}
+                        {users.length > 0 && <small className="text-[var(--weir-ink-3)]">{users.map((g, i) => <span key={g.how + g.id}>{i > 0 && "、"}<ObjectLink to={{ type: "gate", id: g.id, name: g.name }} />（{g.how}）</span>)}</small>}
                         <span className="ml-auto flex gap-1">
                           {missing.length > 0 && <Button size="xs" variant="ghost" disabled={isBusy()} onClick={() => void run(kernel + v.version, async () => started((await api(`/admin/kernels/${kernel}/fetch`, "POST", { version: v.version })).job.id), `开始下载 ${missing.join("、")}`)}><Download />补下</Button>}
                           {!v.default && <Button size="xs" variant="ghost" disabled={isBusy() || (kernel !== "mihomo" && !v.driver)} onClick={() => void setDefault(kernel, v.version)}><Star />设为默认</Button>}
@@ -142,18 +142,18 @@ function SubChecks() {
           <div className="stack">
             <div className="flex flex-wrap gap-3 text-[13px]">
               {Object.entries(q.data.kernels).map(([k, v]) => (
-                <span key={k}>{k}：{v.available ? <code>{v.version}</code> : <span className="text-[var(--mg-ink-3)]">不可用（{v.error}）</span>}</span>
+                <span key={k}>{k}：{v.available ? <code>{v.version}</code> : <span className="text-[var(--weir-ink-3)]">不可用（{v.error}）</span>}</span>
               ))}
             </div>
-            {q.data.items.length === 0 ? <small className="text-[var(--mg-ink-3)]">还没有检查记录：客户端拉取 Clash / sing-box 订阅后会出现在这里。</small> : (
+            {q.data.items.length === 0 ? <small className="text-[var(--weir-ink-3)]">还没有检查记录：客户端拉取 Clash / sing-box 订阅后会出现在这里。</small> : (
               <ul className="m-0 list-none space-y-2 p-0">
                 {q.data.items.map((c) => (
-                  <li key={c.ref + c.target} className="rounded-[var(--mg-radius)] border border-[var(--mg-line)] px-3 py-2">
+                  <li key={c.ref + c.target} className="rounded-[var(--weir-radius)] border border-[var(--weir-line)] px-3 py-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <strong className="text-[13px]">{c.name}</strong>
                       <SubCheckBadge check={c} />
                       {c.version && <code className="text-xs">{c.version}</code>}
-                      <small className="ml-auto text-[var(--mg-ink-3)]">{date(c.at)}</small>
+                      <small className="ml-auto text-[var(--weir-ink-3)]">{date(c.at)}</small>
                     </div>
                     {c.error && <CodeBlock className="mt-2 block max-h-40 overflow-auto whitespace-pre-wrap text-xs">{c.error}</CodeBlock>}
                   </li>
@@ -184,7 +184,7 @@ function ReleasesDialog({ kernel, arches, jobs, close, fetched }: { kernel: stri
         </DialogDescription>
         <JobLine id={job} job={latestJob(jobs, `kernel:${kernel}:`)} idle="点版本右侧的「下载」开始；进度显示在这里" onFinish={fetched} />
         {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} skeleton={<SkeletonList rows={5} lines={1} className="stack" rowClassName="flex items-center justify-between gap-2" />} /> : q.data.releases.length === 0 ? <State empty="没有可用版本" /> : (
-          <ul className="stack mg-focus-gutter max-h-[50vh] overflow-y-auto">
+          <ul className="stack weir-focus-gutter max-h-[50vh] overflow-y-auto">
             {q.data.releases.map((r) => (
               <li key={r.version} className="flex flex-wrap items-center justify-between gap-2">
                 <span className="flex flex-wrap items-center gap-2">
@@ -192,11 +192,11 @@ function ReleasesDialog({ kernel, arches, jobs, close, fetched }: { kernel: stri
                   {r.recommended && <Badge variant="soft" tone="ok" title={q.data.recommended?.reason}>推荐</Badge>}
                   {kernel !== "mihomo" && (r.driver ? <Badge variant="soft" tone="neutral">驱动 <ObjectLink to={{ type: "driver", key: r.driver, name: r.driver }} /></Badge> : <Badge variant="soft" tone="warn">没有驱动</Badge>)}
                   {r.incompatible && <Badge variant="soft" tone="warn" title={r.incompatible}>有不兼容</Badge>}
-                  {r.young && <small className="text-[var(--mg-ink-3)]">发布不满 14 天</small>}
-                  <small className="tabular-nums text-[var(--mg-ink-3)]">{date(r.published_at)}{r.downloads ? ` · ${q.data.arches.join("+")} 下载 ${q.data.arches.reduce((n, a) => n + (r.downloads?.[a] ?? 0), 0)}` : ""}</small>
+                  {r.young && <small className="text-[var(--weir-ink-3)]">发布不满 14 天</small>}
+                  <small className="tabular-nums text-[var(--weir-ink-3)]">{date(r.published_at)}{r.downloads ? ` · ${q.data.arches.join("+")} 下载 ${q.data.arches.reduce((n, a) => n + (r.downloads?.[a] ?? 0), 0)}` : ""}</small>
                 </span>
                 <Button size="sm" variant="outline" disabled={isBusy()} onClick={() => void download(r.version)}>下载</Button>
-                {r.recommended && q.data.recommended?.reason && <small className="basis-full text-[var(--mg-ink-3)]">推荐理由：{q.data.recommended.reason}</small>}
+                {r.recommended && q.data.recommended?.reason && <small className="basis-full text-[var(--weir-ink-3)]">推荐理由：{q.data.recommended.reason}</small>}
               </li>
             ))}
           </ul>
@@ -212,7 +212,7 @@ export function KernelDiagnostics({ result }: { result: { running?: boolean; ver
     <div className="stack">
       <small>{result.running ? "运行中" : "未运行"}{result.version ? ` · ${result.version}` : ""}{result.counts ? " · " + Object.entries(result.counts).map(([k, v]) => `${k} ${v}`).join("，") : ""}</small>
       <CodeBlock className="block max-h-64 overflow-auto whitespace-pre text-xs">{(result.tail ?? []).join("\n") || "（没有日志）"}</CodeBlock>
-      {result.truncated && <small className="text-[var(--mg-ink-3)]">只显示最近 50 行。</small>}
+      {result.truncated && <small className="text-[var(--weir-ink-3)]">只显示最近 50 行。</small>}
     </div>
   );
 }

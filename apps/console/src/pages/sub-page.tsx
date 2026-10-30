@@ -81,12 +81,12 @@ export function SubPage() {
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {importClients.map((c) => (
               <Button key={c.name} variant="outline" className="justify-between" render={<a href={c.href(d.url, title)} />}>
-                <span className="text-left">{c.name}<small className="block text-[var(--mg-ink-3)]">{c.platforms}</small></span>
+                <span className="text-left">{c.name}<small className="block text-[var(--weir-ink-3)]">{c.platforms}</small></span>
                 <ArrowUpRight />
               </Button>
             ))}
           </div>
-          <small className="text-[var(--mg-ink-3)]">没有反应时说明本机未安装该客户端；v2rayN 等请复制地址后在客户端里添加订阅。</small>
+          <small className="text-[var(--weir-ink-3)]">没有反应时说明本机未安装该客户端；v2rayN 等请复制地址后在客户端里添加订阅。</small>
         </CardContent>
       </Card>
       <Card>

@@ -9,7 +9,7 @@ import { prefersReducedMotion } from "./motion";
 type BurstOrigin = Element | { clientX: number; clientY: number } | { x: number; y: number };
 type BurstOptions = { count?: number; distance?: number; colors?: string[] };
 
-const defaultColors = ["var(--mg-accent)", "var(--mg-ok)", "var(--mg-warn)", "var(--mg-info)"];
+const defaultColors = ["var(--weir-accent)", "var(--weir-ok)", "var(--weir-warn)", "var(--weir-info)"];
 
 function center(el: Element) {
   const r = el.getBoundingClientRect();
@@ -35,12 +35,12 @@ function useBurst() {
     live.current?.remove();
     const { x, y } = point(origin);
     const host = document.createElement("div");
-    host.className = "mg-burst";
+    host.className = "weir-burst";
     host.setAttribute("aria-hidden", "true");
     host.style.left = x + "px";
     host.style.top = y + "px";
     const ring = document.createElement("span");
-    ring.className = "mg-burst-ring";
+    ring.className = "weir-burst-ring";
     host.appendChild(ring);
     for (let i = 0; i < count; i += 1) {
       const p = document.createElement("span");
@@ -48,10 +48,10 @@ function useBurst() {
       const angle = (360 / count) * i + (Math.random() * 16 - 8);
       const reach = distance * (0.7 + Math.random() * 0.5);
       if (i % 3 === 1) p.dataset.shape = "bar";
-      p.style.setProperty("--mg-burst-angle", angle + "deg");
-      p.style.setProperty("--mg-burst-distance", reach + "px");
-      p.style.setProperty("--mg-burst-color", colors[i % colors.length]);
-      p.style.setProperty("--mg-burst-size", 5 + (i % 2) * 2 + "px");
+      p.style.setProperty("--weir-burst-angle", angle + "deg");
+      p.style.setProperty("--weir-burst-distance", reach + "px");
+      p.style.setProperty("--weir-burst-color", colors[i % colors.length]);
+      p.style.setProperty("--weir-burst-size", 5 + (i % 2) * 2 + "px");
       host.appendChild(p);
     }
     document.body.appendChild(host);

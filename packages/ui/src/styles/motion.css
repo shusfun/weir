@@ -5,140 +5,140 @@
  */
 @layer components {
   /* 成功勾选：pathLength=1，dasharray/offset 从 1 走到 0 即一笔画完；有外圈时先画圈再画勾 */
-  .mg-check-mark[data-animate] :is(path, circle) {
+  .weir-check-mark[data-animate] :is(path, circle) {
     stroke-dasharray: 1;
     stroke-dashoffset: 1;
-    animation: mg-draw 340ms var(--mg-decel) forwards;
+    animation: weir-draw 340ms var(--weir-decel) forwards;
   }
-  .mg-check-mark[data-animate][data-circle] .mg-check-mark-ring { animation-duration: 420ms; }
-  .mg-check-mark[data-animate][data-circle] .mg-check-mark-tick { animation-delay: 300ms; }
+  .weir-check-mark[data-animate][data-circle] .weir-check-mark-ring { animation-duration: 420ms; }
+  .weir-check-mark[data-animate][data-circle] .weir-check-mark-tick { animation-delay: 300ms; }
 
   /* 水波：宿主内的裁剪层，不裁掉键帽外阴影；圆从按压点放大并淡出 */
-  .mg-ripple-host {
+  .weir-ripple-host {
     position: absolute;
     inset: 0;
     overflow: hidden;
     border-radius: inherit;
     pointer-events: none;
   }
-  .mg-ripple {
+  .weir-ripple {
     position: absolute;
     border-radius: 50%;
     background: currentColor;
     opacity: 0;
     scale: 0;
-    animation: mg-ripple 560ms var(--mg-decel) forwards;
+    animation: weir-ripple 560ms var(--weir-decel) forwards;
   }
 
   /* 爆散：粒子沿各自角度飞出、缩小、淡出；中心一圈冲击环 */
-  .mg-burst {
+  .weir-burst {
     position: fixed;
     z-index: 70;
     width: 0;
     height: 0;
     pointer-events: none;
   }
-  .mg-burst > span {
+  .weir-burst > span {
     position: absolute;
     top: 0;
     left: 0;
-    width: var(--mg-burst-size, 6px);
-    height: var(--mg-burst-size, 6px);
-    margin: calc(var(--mg-burst-size, 6px) / -2) 0 0 calc(var(--mg-burst-size, 6px) / -2);
+    width: var(--weir-burst-size, 6px);
+    height: var(--weir-burst-size, 6px);
+    margin: calc(var(--weir-burst-size, 6px) / -2) 0 0 calc(var(--weir-burst-size, 6px) / -2);
     border-radius: 50%;
-    background: var(--mg-burst-color, var(--mg-accent));
-    animation: mg-burst-fly 680ms linear forwards;
+    background: var(--weir-burst-color, var(--weir-accent));
+    animation: weir-burst-fly 680ms linear forwards;
   }
   /* 条形粒子沿半径方向（旋转后 X 轴即飞行方向） */
-  .mg-burst > span[data-shape="bar"] {
+  .weir-burst > span[data-shape="bar"] {
     width: 10px;
     height: 3px;
     margin: -1.5px 0 0 -5px;
     border-radius: 2px;
   }
-  .mg-burst > .mg-burst-ring {
+  .weir-burst > .weir-burst-ring {
     width: 64px;
     height: 64px;
     margin: -32px 0 0 -32px;
     background: transparent;
-    border: 2px solid var(--mg-accent);
-    animation: mg-burst-ring 560ms ease-out forwards;
+    border: 2px solid var(--weir-accent);
+    animation: weir-burst-ring 560ms ease-out forwards;
   }
 
   /*
    * 骨架行：高度正好是当前字号下的一行（1lh），条本身只占 0.72em 并垂直居中。
    * 骨架放进真实的表格、卡片、列表容器里，内容到达时高度不跳。
    */
-  .mg-skeleton-line {
+  .weir-skeleton-line {
     position: relative;
     display: block;
-    width: var(--mg-skeleton-w, 100%);
+    width: var(--weir-skeleton-w, 100%);
     max-width: 100%;
     height: 1lh;
   }
-  .mg-skeleton-line::before {
+  .weir-skeleton-line::before {
     content: "";
     position: absolute;
     inset-inline: 0;
     top: 50%;
     height: 0.72em;
     translate: 0 -50%;
-    border-radius: var(--mg-radius-sm);
-    background: var(--mg-well);
-    box-shadow: inset 0 1px 1px var(--mg-inset);
+    border-radius: var(--weir-radius-sm);
+    background: var(--weir-well);
+    box-shadow: inset 0 1px 1px var(--weir-inset);
   }
 
   /*
    * 汉堡变叉：同一个 SVG 里三条线。打开：上下两条先并到中线，再各自转 45°；中线收起。
    * 关闭时顺序反过来：先转回水平，再分开。用户全程看到的是同一个元件。
    */
-  /* follow 模式下 --mg-menu-delay 让抽屉先滑到位再变形，变形发生在用户原来看的位置上 */
-  .mg-menu-toggle { --mg-menu-delay: 0ms; }
-  .mg-menu-toggle[data-follow] { --mg-menu-delay: 180ms; }
-  .mg-menu-toggle rect {
+  /* follow 模式下 --weir-menu-delay 让抽屉先滑到位再变形，变形发生在用户原来看的位置上 */
+  .weir-menu-toggle { --weir-menu-delay: 0ms; }
+  .weir-menu-toggle[data-follow] { --weir-menu-delay: 180ms; }
+  .weir-menu-toggle rect {
     transform-box: fill-box;
     transform-origin: center;
     transition:
-      translate 160ms var(--mg-ease) 160ms,
-      rotate 200ms var(--mg-ease) 0ms,
-      scale 160ms var(--mg-ease) 120ms,
+      translate 160ms var(--weir-ease) 160ms,
+      rotate 200ms var(--weir-ease) 0ms,
+      scale 160ms var(--weir-ease) 120ms,
       opacity 120ms ease 120ms;
   }
-  .mg-menu-toggle[data-open] rect,
-  [data-open]:not([data-starting-style]) .mg-menu-toggle[data-follow] rect {
+  .weir-menu-toggle[data-open] rect,
+  [data-open]:not([data-starting-style]) .weir-menu-toggle[data-follow] rect {
     transition:
-      translate 160ms var(--mg-ease) var(--mg-menu-delay),
-      /* 旋转只要小幅过冲（约 12%），--mg-bounce 的 1.6 倍会把 45° 甩到 70° */
-      rotate 280ms cubic-bezier(0.34, 1.4, 0.64, 1) calc(var(--mg-menu-delay) + 150ms),
-      scale 140ms var(--mg-ease) var(--mg-menu-delay),
-      opacity 100ms ease var(--mg-menu-delay);
+      translate 160ms var(--weir-ease) var(--weir-menu-delay),
+      /* 旋转只要小幅过冲（约 12%），--weir-bounce 的 1.6 倍会把 45° 甩到 70° */
+      rotate 280ms cubic-bezier(0.34, 1.4, 0.64, 1) calc(var(--weir-menu-delay) + 150ms),
+      scale 140ms var(--weir-ease) var(--weir-menu-delay),
+      opacity 100ms ease var(--weir-menu-delay);
   }
-  .mg-menu-toggle[data-open] .mg-menu-toggle-top,
-  [data-open]:not([data-starting-style]) .mg-menu-toggle[data-follow] .mg-menu-toggle-top { translate: 0 6px; rotate: 45deg; }
-  .mg-menu-toggle[data-open] .mg-menu-toggle-mid,
-  [data-open]:not([data-starting-style]) .mg-menu-toggle[data-follow] .mg-menu-toggle-mid { scale: 0 1; opacity: 0; }
-  .mg-menu-toggle[data-open] .mg-menu-toggle-bottom,
-  [data-open]:not([data-starting-style]) .mg-menu-toggle[data-follow] .mg-menu-toggle-bottom { translate: 0 -6px; rotate: -45deg; }
+  .weir-menu-toggle[data-open] .weir-menu-toggle-top,
+  [data-open]:not([data-starting-style]) .weir-menu-toggle[data-follow] .weir-menu-toggle-top { translate: 0 6px; rotate: 45deg; }
+  .weir-menu-toggle[data-open] .weir-menu-toggle-mid,
+  [data-open]:not([data-starting-style]) .weir-menu-toggle[data-follow] .weir-menu-toggle-mid { scale: 0 1; opacity: 0; }
+  .weir-menu-toggle[data-open] .weir-menu-toggle-bottom,
+  [data-open]:not([data-starting-style]) .weir-menu-toggle[data-follow] .weir-menu-toggle-bottom { translate: 0 -6px; rotate: -45deg; }
 
   /*
    * 底部抽屉（Base UI Drawer）。--bleed：面板向下多画 3rem，往上拖过头时底部不露缝。
    * 拖动跟手用 transform（Base UI 写入 --drawer-swipe-movement-y），入场停顿用 translate 关键帧。
    */
-  .mg-drawer-backdrop {
+  .weir-drawer-backdrop {
     position: fixed;
     inset: 0;
     z-index: 50;
     min-height: 100dvh;
     background: rgb(20 18 14);
     opacity: calc(0.38 * (1 - var(--drawer-swipe-progress, 0)));
-    transition: opacity 400ms var(--mg-decel);
+    transition: opacity 400ms var(--weir-decel);
   }
-  .dark .mg-drawer-backdrop { opacity: calc(0.6 * (1 - var(--drawer-swipe-progress, 0))); background: #000; }
-  .mg-drawer-backdrop[data-starting-style],
-  .mg-drawer-backdrop[data-ending-style] { opacity: 0; }
-  .mg-drawer-backdrop[data-swiping] { transition-duration: 0ms; }
-  .mg-drawer-backdrop[data-ending-style] { transition-duration: calc(var(--drawer-swipe-strength, 1) * 400ms); }
-  .mg-drawer-viewport {
+  .dark .weir-drawer-backdrop { opacity: calc(0.6 * (1 - var(--drawer-swipe-progress, 0))); background: #000; }
+  .weir-drawer-backdrop[data-starting-style],
+  .weir-drawer-backdrop[data-ending-style] { opacity: 0; }
+  .weir-drawer-backdrop[data-swiping] { transition-duration: 0ms; }
+  .weir-drawer-backdrop[data-ending-style] { transition-duration: calc(var(--drawer-swipe-strength, 1) * 400ms); }
+  .weir-drawer-viewport {
     position: fixed;
     inset: 0;
     z-index: 50;
@@ -146,7 +146,7 @@
     align-items: flex-end;
     justify-content: center;
   }
-  .mg-drawer-popup {
+  .weir-drawer-popup {
     --bleed: 3rem;
     box-sizing: border-box;
     display: flex;
@@ -156,46 +156,46 @@
     max-height: calc(88dvh + var(--bleed));
     margin-bottom: calc(-1 * var(--bleed));
     padding: 8px 20px calc(20px + env(safe-area-inset-bottom, 0px) + var(--bleed));
-    border: 1px solid var(--mg-line);
+    border: 1px solid var(--weir-line);
     border-bottom: 0;
-    border-radius: var(--mg-radius-lg) var(--mg-radius-lg) 0 0;
-    background: linear-gradient(180deg, var(--mg-panel-top), var(--mg-panel) 64px);
-    box-shadow: inset 0 1px 0 var(--mg-highlight), 0 -12px 32px -12px var(--mg-shade-strong);
-    color: var(--mg-ink);
+    border-radius: var(--weir-radius-lg) var(--weir-radius-lg) 0 0;
+    background: linear-gradient(180deg, var(--weir-panel-top), var(--weir-panel) 64px);
+    box-shadow: inset 0 1px 0 var(--weir-highlight), 0 -12px 32px -12px var(--weir-shade-strong);
+    color: var(--weir-ink);
     outline: none;
     overflow: hidden;
     overscroll-behavior: contain;
     transform: translateY(var(--drawer-swipe-movement-y, 0px));
-    transition: transform 420ms var(--mg-decel);
+    transition: transform 420ms var(--weir-decel);
   }
-  .mg-drawer-popup[data-open] { animation: mg-sheet-rise 560ms linear; }
-  .mg-drawer-popup[data-swiping] { transition-duration: 0ms; user-select: none; }
-  .mg-drawer-popup[data-ending-style] {
+  .weir-drawer-popup[data-open] { animation: weir-sheet-rise 560ms linear; }
+  .weir-drawer-popup[data-swiping] { transition-duration: 0ms; user-select: none; }
+  .weir-drawer-popup[data-ending-style] {
     transform: translateY(calc(100% - var(--bleed) + 2px));
     transition-duration: calc(var(--drawer-swipe-strength, 1) * 400ms);
   }
-  .mg-drawer-handle {
+  .weir-drawer-handle {
     flex-shrink: 0;
     width: 40px;
     height: 5px;
     margin: 0 auto 12px;
     border-radius: 999px;
-    background: var(--mg-well-deep);
-    box-shadow: inset 0 1px 1px var(--mg-inset);
+    background: var(--weir-well-deep);
+    box-shadow: inset 0 1px 1px var(--weir-inset);
   }
-  .mg-drawer-content {
+  .weir-drawer-content {
     display: flex;
     min-height: 0;
     flex-direction: column;
   }
-  .mg-drawer-popup[data-open] .mg-drawer-content { animation: mg-sheet-content 560ms linear; }
-  .mg-drawer-body {
+  .weir-drawer-popup[data-open] .weir-drawer-content { animation: weir-sheet-content 560ms linear; }
+  .weir-drawer-body {
     min-height: 0;
     margin-top: 16px;
     overflow-y: auto;
     font-size: 13px;
   }
-  .mg-drawer-footer {
+  .weir-drawer-footer {
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
@@ -204,74 +204,74 @@
   }
 
   /*
-   * 液态滑块：--mg-slider-p（0–1）与 --mg-slider-w（轨道像素宽）由组件写入。
+   * 液态滑块：--weir-slider-p（0–1）与 --weir-slider-w（轨道像素宽）由组件写入。
    * 填充 scaleX、滑钮 translate、气泡跟随滑钮，三者同一时长同一曲线；拖动时（data-follow）全部去掉过渡。
    */
-  .mg-slider { position: relative; width: 100%; touch-action: none; }
-  .mg-slider[data-disabled] { opacity: 0.5; }
-  .mg-slider-control {
+  .weir-slider { position: relative; width: 100%; touch-action: none; }
+  .weir-slider[data-disabled] { opacity: 0.5; }
+  .weir-slider-control {
     display: flex;
     align-items: center;
     height: 28px;
     cursor: pointer;
   }
-  .mg-slider[data-disabled] .mg-slider-control { cursor: not-allowed; }
-  .mg-slider-track {
+  .weir-slider[data-disabled] .weir-slider-control { cursor: not-allowed; }
+  .weir-slider-track {
     position: relative;
     width: 100%;
     height: 6px;
     border-radius: 999px;
-    background: var(--mg-well);
-    box-shadow: inset 1px 1px 2px var(--mg-neu-lo), inset -1px -1px 2px var(--mg-neu-hi);
+    background: var(--weir-well);
+    box-shadow: inset 1px 1px 2px var(--weir-neu-lo), inset -1px -1px 2px var(--weir-neu-hi);
   }
   /* 填充放在圆角裁剪层里，scaleX 时两端圆角不被压扁 */
-  .mg-slider-fill-clip {
+  .weir-slider-fill-clip {
     position: absolute;
     inset: 0;
     overflow: hidden;
     border-radius: inherit;
   }
-  .mg-slider-fill {
+  .weir-slider-fill {
     position: absolute;
     inset: 0;
-    background: linear-gradient(90deg, var(--mg-accent-lo), var(--mg-accent));
+    background: linear-gradient(90deg, var(--weir-accent-lo), var(--weir-accent));
     transform-origin: left center;
-    scale: var(--mg-slider-p) 1;
-    transition: scale var(--mg-settle) var(--mg-decel);
+    scale: var(--weir-slider-p) 1;
+    transition: scale var(--weir-settle) var(--weir-decel);
   }
-  .mg-slider-thumb {
+  .weir-slider-thumb {
     /* 覆盖 Base UI 内联的 left 百分比定位：位置改由 translate 表达 */
     inset-inline-start: 0 !important;
     top: 50% !important;
-    translate: calc(var(--mg-slider-p) * var(--mg-slider-w) - 50%) -50% !important;
+    translate: calc(var(--weir-slider-p) * var(--weir-slider-w) - 50%) -50% !important;
     width: 22px;
     height: 22px;
     outline: none;
-    transition: translate var(--mg-settle) var(--mg-decel);
+    transition: translate var(--weir-settle) var(--weir-decel);
   }
-  .mg-slider[data-follow] :is(.mg-slider-fill, .mg-slider-thumb) { transition: none; }
-  .mg-slider-knob {
+  .weir-slider[data-follow] :is(.weir-slider-fill, .weir-slider-thumb) { transition: none; }
+  .weir-slider-knob {
     position: absolute;
     inset: 0;
     border-radius: 50%;
     background: linear-gradient(145deg, #ffffff, #e6e6eb);
     box-shadow: 1px 2px 4px rgb(0 0 0 / 0.24), inset 0 1px 0 rgb(255 255 255 / 0.9);
-    transition: scale var(--mg-bounce-dur) var(--mg-bounce);
+    transition: scale var(--weir-bounce-dur) var(--weir-bounce);
   }
-  .dark .mg-slider-knob { background: linear-gradient(145deg, #e5e5ea, #a1a1a6); }
-  .mg-slider[data-dragging] .mg-slider-knob,
-  .mg-slider-thumb:active .mg-slider-knob { scale: 1.18; transition-duration: var(--mg-fast); transition-timing-function: ease-out; }
-  .mg-slider-thumb:has(:focus-visible) .mg-slider-knob { outline: 2px solid var(--mg-accent-text); outline-offset: 2px; }
-  .mg-slider-bubble {
+  .dark .weir-slider-knob { background: linear-gradient(145deg, #e5e5ea, #a1a1a6); }
+  .weir-slider[data-dragging] .weir-slider-knob,
+  .weir-slider-thumb:active .weir-slider-knob { scale: 1.18; transition-duration: var(--weir-fast); transition-timing-function: ease-out; }
+  .weir-slider-thumb:has(:focus-visible) .weir-slider-knob { outline: 2px solid var(--weir-accent-text); outline-offset: 2px; }
+  .weir-slider-bubble {
     position: absolute;
     bottom: calc(100% + 8px);
     left: 50%;
     min-width: 30px;
     padding: 2px 7px;
-    border-radius: var(--mg-radius-sm);
-    background: var(--mg-ink);
-    color: var(--mg-base);
-    font: 600 11.5px/1.4 var(--mg-mono);
+    border-radius: var(--weir-radius-sm);
+    background: var(--weir-ink);
+    color: var(--weir-base);
+    font: 600 11.5px/1.4 var(--weir-mono);
     text-align: center;
     white-space: nowrap;
     pointer-events: none;
@@ -281,63 +281,63 @@
     scale: 0.6;
     /* 气泡从 0.6 弹出：位移量大，用小过冲曲线，避免冲到 1.2 倍 */
     transition:
-      opacity var(--mg-fast) ease,
+      opacity var(--weir-fast) ease,
       scale 320ms cubic-bezier(0.34, 1.4, 0.64, 1);
   }
-  .mg-slider:hover .mg-slider-bubble,
-  .mg-slider[data-dragging] .mg-slider-bubble,
-  .mg-slider-thumb:has(:focus-visible) .mg-slider-bubble { opacity: 1; scale: 1; }
+  .weir-slider:hover .weir-slider-bubble,
+  .weir-slider[data-dragging] .weir-slider-bubble,
+  .weir-slider-thumb:has(:focus-visible) .weir-slider-bubble { opacity: 1; scale: 1; }
 
   /* 卡片翻面：两面叠在同一格，各自隐藏背面；轻微过冲的曲线让翻转落定有分量 */
-  .mg-flip { perspective: 1200px; }
-  .mg-flip-inner {
+  .weir-flip { perspective: 1200px; }
+  .weir-flip-inner {
     display: grid;
     transform-style: preserve-3d;
     transition: rotate 680ms cubic-bezier(0.3, 1.3, 0.5, 1);
   }
-  .mg-flip-inner[data-flipped] { rotate: y 180deg; }
-  .mg-flip-face {
+  .weir-flip-inner[data-flipped] { rotate: y 180deg; }
+  .weir-flip-face {
     grid-area: 1 / 1;
     min-width: 0;
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
   }
-  .mg-flip-back { rotate: y 180deg; }
+  .weir-flip-back { rotate: y 180deg; }
 
-  /* 卡片堆叠：--mg-stack-k 是卡在堆里的位置（0 为顶卡），越往后越小、越低、越淡，底边露出来 */
-  .mg-stack { display: grid; gap: 12px; }
-  .mg-stack-deck {
+  /* 卡片堆叠：--weir-stack-k 是卡在堆里的位置（0 为顶卡），越往后越小、越低、越淡，底边露出来 */
+  .weir-stack { display: grid; gap: 12px; }
+  .weir-stack-deck {
     display: grid;
     padding-bottom: 26px;
-    border-radius: var(--mg-radius-lg);
+    border-radius: var(--weir-radius-lg);
     outline: none;
     touch-action: pan-y;
   }
-  .mg-stack-deck:focus-visible { outline: 2px solid var(--mg-accent-text); outline-offset: 4px; }
-  .mg-stack-card {
+  .weir-stack-deck:focus-visible { outline: 2px solid var(--weir-accent-text); outline-offset: 4px; }
+  .weir-stack-card {
     grid-area: 1 / 1;
     min-width: 0;
-    border: 1px solid var(--mg-line);
-    border-radius: var(--mg-radius-lg);
-    background: linear-gradient(180deg, var(--mg-panel-top), var(--mg-panel) 64px);
-    box-shadow: inset 0 1px 0 var(--mg-highlight), 0 10px 24px -14px var(--mg-shade-strong);
+    border: 1px solid var(--weir-line);
+    border-radius: var(--weir-radius-lg);
+    background: linear-gradient(180deg, var(--weir-panel-top), var(--weir-panel) 64px);
+    box-shadow: inset 0 1px 0 var(--weir-highlight), 0 10px 24px -14px var(--weir-shade-strong);
     transform-origin: 50% 100%;
-    translate: 0 calc(var(--mg-stack-k) * 13px);
-    scale: calc(1 - var(--mg-stack-k) * 0.06);
-    opacity: calc(1 - var(--mg-stack-k) * 0.18);
+    translate: 0 calc(var(--weir-stack-k) * 13px);
+    scale: calc(1 - var(--weir-stack-k) * 0.06);
+    opacity: calc(1 - var(--weir-stack-k) * 0.18);
     user-select: none;
     transition:
-      translate 420ms var(--mg-decel),
-      rotate 420ms var(--mg-decel),
-      scale 420ms var(--mg-decel),
-      opacity 420ms var(--mg-decel);
+      translate 420ms var(--weir-decel),
+      rotate 420ms var(--weir-decel),
+      scale 420ms var(--weir-decel),
+      opacity 420ms var(--weir-decel);
   }
-  .mg-stack-card[data-top] { cursor: grab; }
-  .mg-stack-card[data-dragging] { cursor: grabbing; transition: none; }
-  .mg-stack-card[data-leaving] { opacity: 0; transition-duration: 380ms; }
-  .mg-stack-card[data-entering] { transition: none; }
-  .mg-stack-controls,
-  .mg-carousel-controls {
+  .weir-stack-card[data-top] { cursor: grab; }
+  .weir-stack-card[data-dragging] { cursor: grabbing; transition: none; }
+  .weir-stack-card[data-leaving] { opacity: 0; transition-duration: 380ms; }
+  .weir-stack-card[data-entering] { transition: none; }
+  .weir-stack-controls,
+  .weir-carousel-controls {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -345,80 +345,80 @@
   }
 
   /*
-   * 轮播：--mg-carousel-pos 是连续位置（已注册为 <number>，可直接过渡）。
+   * 轮播：--weir-carousel-pos 是连续位置（已注册为 <number>，可直接过渡）。
    * 轨道位移和每张图的 rotateY / 缩放都由它算出：d = 图序号 − 位置，离中心越远转得越多。
    */
-  .mg-carousel { display: grid; gap: 12px; }
-  .mg-carousel-viewport {
-    --mg-carousel-pos: 0;
+  .weir-carousel { display: grid; gap: 12px; }
+  .weir-carousel-viewport {
+    --weir-carousel-pos: 0;
     overflow: hidden;
     padding-block: 6px;
-    border-radius: var(--mg-radius-lg);
+    border-radius: var(--weir-radius-lg);
     outline: none;
     perspective: 1100px;
     touch-action: pan-y;
     user-select: none;
     cursor: grab;
-    transition: --mg-carousel-pos var(--mg-settle) var(--mg-decel);
+    transition: --weir-carousel-pos var(--weir-settle) var(--weir-decel);
   }
-  .mg-carousel-viewport:focus-visible { outline: 2px solid var(--mg-accent-text); outline-offset: 2px; }
-  .mg-carousel-viewport[data-dragging] { cursor: grabbing; transition: none; }
-  .mg-carousel-track {
+  .weir-carousel-viewport:focus-visible { outline: 2px solid var(--weir-accent-text); outline-offset: 2px; }
+  .weir-carousel-viewport[data-dragging] { cursor: grabbing; transition: none; }
+  .weir-carousel-track {
     display: flex;
-    gap: var(--mg-carousel-gap);
+    gap: var(--weir-carousel-gap);
     transform-style: preserve-3d;
-    translate: calc((100% - var(--mg-carousel-slide)) / 2 - var(--mg-carousel-pos) * (var(--mg-carousel-slide) + var(--mg-carousel-gap))) 0;
+    translate: calc((100% - var(--weir-carousel-slide)) / 2 - var(--weir-carousel-pos) * (var(--weir-carousel-slide) + var(--weir-carousel-gap))) 0;
   }
-  .mg-carousel-slide {
-    --mg-carousel-d: clamp(-1, calc(var(--mg-carousel-k) - var(--mg-carousel-pos)), 1);
-    flex: 0 0 var(--mg-carousel-slide);
+  .weir-carousel-slide {
+    --weir-carousel-d: clamp(-1, calc(var(--weir-carousel-k) - var(--weir-carousel-pos)), 1);
+    flex: 0 0 var(--weir-carousel-slide);
     min-width: 0;
     overflow: hidden;
-    border-radius: var(--mg-radius-lg);
+    border-radius: var(--weir-radius-lg);
     /* 以靠近中心的一侧为轴转：右边的图绕左边缘、左边的图绕右边缘，转起来时边缘仍露在两侧 */
-    transform-origin: calc(50% - var(--mg-carousel-d) * 50%) 50%;
-    rotate: y calc(var(--mg-carousel-d) * -34deg);
-    scale: calc(1 - 0.1 * max(var(--mg-carousel-d), -1 * var(--mg-carousel-d)));
-    opacity: calc(1 - 0.35 * max(var(--mg-carousel-d), -1 * var(--mg-carousel-d)));
+    transform-origin: calc(50% - var(--weir-carousel-d) * 50%) 50%;
+    rotate: y calc(var(--weir-carousel-d) * -34deg);
+    scale: calc(1 - 0.1 * max(var(--weir-carousel-d), -1 * var(--weir-carousel-d)));
+    opacity: calc(1 - 0.35 * max(var(--weir-carousel-d), -1 * var(--weir-carousel-d)));
   }
-  .mg-carousel-slide :is(img, svg) { display: block; width: 100%; pointer-events: none; -webkit-user-drag: none; }
-  .mg-carousel-dots { display: flex; align-items: center; gap: 6px; }
-  .mg-carousel-dot {
+  .weir-carousel-slide :is(img, svg) { display: block; width: 100%; pointer-events: none; -webkit-user-drag: none; }
+  .weir-carousel-dots { display: flex; align-items: center; gap: 6px; }
+  .weir-carousel-dot {
     width: 8px;
     height: 8px;
     padding: 0;
     border: 0;
     border-radius: 999px;
-    background: var(--mg-line);
+    background: var(--weir-line);
     cursor: pointer;
-    transition: scale var(--mg-mid) var(--mg-ease), background-color var(--mg-fast);
+    transition: scale var(--weir-mid) var(--weir-ease), background-color var(--weir-fast);
   }
-  .mg-carousel-dot[aria-current] { background: var(--mg-accent-text); scale: 1.35; }
-  .mg-carousel-dot:focus-visible { outline: 2px solid var(--mg-accent-text); outline-offset: 2px; }
+  .weir-carousel-dot[aria-current] { background: var(--weir-accent-text); scale: 1.35; }
+  .weir-carousel-dot:focus-visible { outline: 2px solid var(--weir-accent-text); outline-offset: 2px; }
 }
 
-@property --mg-carousel-pos {
+@property --weir-carousel-pos {
   syntax: "<number>";
   inherits: true;
   initial-value: 0;
 }
 
-@keyframes mg-draw {
+@keyframes weir-draw {
   to { stroke-dashoffset: 0; }
 }
-@keyframes mg-ripple {
+@keyframes weir-ripple {
   0% { scale: 0; opacity: 0.2; }
   60% { opacity: 0.12; }
   100% { scale: 1; opacity: 0; }
 }
 /* 前 30% 冲出四分之三距离并略放大，之后慢慢飘到终点、缩小淡出——爆发有冲劲，收尾不突兀 */
-@keyframes mg-burst-fly {
-  0% { transform: rotate(var(--mg-burst-angle)) translateX(0) scale(0.4); opacity: 1; animation-timing-function: cubic-bezier(0.2, 0.8, 0.4, 1); }
-  30% { transform: rotate(var(--mg-burst-angle)) translateX(calc(var(--mg-burst-distance) * 0.75)) scale(1.15); animation-timing-function: ease-out; }
+@keyframes weir-burst-fly {
+  0% { transform: rotate(var(--weir-burst-angle)) translateX(0) scale(0.4); opacity: 1; animation-timing-function: cubic-bezier(0.2, 0.8, 0.4, 1); }
+  30% { transform: rotate(var(--weir-burst-angle)) translateX(calc(var(--weir-burst-distance) * 0.75)) scale(1.15); animation-timing-function: ease-out; }
   65% { opacity: 1; }
-  100% { transform: rotate(var(--mg-burst-angle)) translateX(var(--mg-burst-distance)) scale(0.3); opacity: 0; }
+  100% { transform: rotate(var(--weir-burst-angle)) translateX(var(--weir-burst-distance)) scale(0.3); opacity: 0; }
 }
-@keyframes mg-burst-ring {
+@keyframes weir-burst-ring {
   0% { scale: 0.2; opacity: 0.8; }
   100% { scale: 1.6; opacity: 0; }
 }
@@ -426,18 +426,18 @@
  * 底部抽屉：0–56% 升到位（强减速），56–74% 静止不动——状态靠停住被读出来，之后内容再落稳。
  * 面板只动 translate，与 Base UI 抽屉拖动用的 transform 互不干扰。
  */
-@keyframes mg-sheet-rise {
+@keyframes weir-sheet-rise {
   0% { translate: 0 100%; animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); }
   56% { translate: 0 0; }
   100% { translate: 0 0; }
 }
-@keyframes mg-sheet-content {
+@keyframes weir-sheet-content {
   0%, 74% { opacity: 0.55; translate: 0 6px; animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); }
   100% { opacity: 1; translate: 0 0; }
 }
 
 /* 表单校验提示：从输入框下沿轻落出现（参照 Element Plus el-form-item__error） */
-@keyframes mg-field-error {
+@keyframes weir-field-error {
   from { opacity: 0; translate: 0 -4px; }
   to { opacity: 1; translate: 0 0; }
 }

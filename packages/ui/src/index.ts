@@ -1,7 +1,7 @@
 // @weir/ui：基础控件来源 codedthemes/uiable（MIT，见 LICENSE），已移植到 Vite 并统一为 Weir 触感材质。
 // 本地新增：lamp / readout / faceplate / segmented / tabs / overlay / page / toast / form / choice-field / collapsible / password-input / confirm / radio-group，基于 @base-ui/react 1.9。
 // 动效部件：check-mark（描绘对勾）/ skeleton / menu-toggle / drawer（底部抽屉）/ ripple / burst /
-// slider / flip-card / card-stack / carousel；动效令牌 --mg-bounce / --mg-decel / --mg-settle。
+// slider / flip-card / card-stack / carousel；动效令牌 --weir-bounce / --weir-decel / --weir-settle。
 // 样式入口：src/styles/tokens.css（令牌）、theme.css（Tailwind 映射与材质类）、instruments.css（仪表部件）、
 // controls.css（拟物控件）、motion.css（动效部件）。
 export * from "./button";
