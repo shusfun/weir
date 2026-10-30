@@ -146,6 +146,8 @@ if [ "$has_center" = true ]; then
 Description=Weir center
 After=network-online.target$local_after
 Wants=network-online.target$local_after
+# 开机时存储容器可能比中心晚起来：不限次数，每 5 秒重试一次，不会因为「启动太频繁」停在 failed
+StartLimitIntervalSec=0
 [Service]
 Type=simple
 User=weir-center
@@ -155,7 +157,8 @@ Environment=WEIR_DSH_DIR=/var/lib/weir/dsh
 Environment=WEIR_DSH_AGENT=systemd
 $local_env
 ExecStart=/opt/weir/current/weir center --config /etc/weir/center/config.json --serve
-Restart=on-failure
+Restart=always
+RestartSec=5
 UMask=0077
 NoNewPrivileges=yes
 ProtectSystem=strict
@@ -171,6 +174,7 @@ UNIT
 Description=Weir dsh (DeepSeek Harness) agent
 After=network-online.target weir-center.service
 Wants=network-online.target
+StartLimitIntervalSec=0
 [Service]
 Type=simple
 User=weir-dsh
@@ -226,12 +230,14 @@ if [ "$has_gate" = true ]; then
 [Unit]
 Description=Weir bounded core helper
 After=network-online.target
+StartLimitIntervalSec=0
 [Service]
 Group=weir-gate
 RuntimeDirectory=weir
 RuntimeDirectoryMode=0750
 ExecStart=/opt/weir/current/weir gate helper
-Restart=on-failure
+Restart=always
+RestartSec=5
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
@@ -251,11 +257,13 @@ Description=Weir Gate agent
 After=network-online.target weir-helper.service
 Requires=weir-helper.service
 ConditionPathExists=/etc/weir/gate/agent.json
+StartLimitIntervalSec=0
 [Service]
 User=weir-gate
 Group=weir-gate
 ExecStart=/opt/weir/current/weir gate run --config /etc/weir/gate/agent.json
-Restart=on-failure
+Restart=always
+RestartSec=5
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
