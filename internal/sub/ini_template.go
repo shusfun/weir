@@ -247,7 +247,7 @@ func ParseIniTemplate(templateText any, options *js.Object) *js.Object {
 		extras.Set("chainProxy", chains)
 	}
 	return CreateUnifiedTemplateModel(js.Obj(
-		"meta", js.Obj("name", js.Or(opt("fileName"), "MiSub"), "source", "ini", "target", js.Or(opt("targetFormat"), "clash"),
+		"meta", js.Obj("name", js.Or(opt("fileName"), "Weir"), "source", "ini", "target", js.Or(opt("targetFormat"), "clash"),
 			"ruleLevel", js.Or(opt("ruleLevel"), "std"), "isMeta", js.Truthy(opt("isMeta"))),
 		"proxies", js.Or(opt("proxies"), js.Arr()),
 		"groups", groups,

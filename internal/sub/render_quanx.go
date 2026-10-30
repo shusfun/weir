@@ -187,7 +187,7 @@ func quanxProxyLine(proxy *js.Object) any {
 		}
 		return withExtras("http="+hp+", username="+s(js.Or(proxy.Get("username"), ""))+", password="+s(js.Or(proxy.Get("password"), "")), extras) + tag
 	case "hysteria2", "hy2":
-		// Quantumult X 不接受 MiSub 输出的 Hysteria2 语法，与上游一样直接省略
+		// Quantumult X 不接受这种 Hysteria2 语法，与原 JS 版一样直接省略
 		return nil
 	case "tuic":
 		var extras []string

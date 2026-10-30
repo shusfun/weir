@@ -113,9 +113,9 @@ func TestChainStepThreeSourceAndUserRestriction(t *testing.T) {
 	u := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "chain@example.test", "allow_chain": true}, 200)
 	password := u["password"].(string)
 	uid := int(u["id"].(float64))
-	mine := mustJSON(t, admin, "POST", "/api/v1/admin/misub/profiles", map[string]any{"name": "给小明", "source_ids": []int{src.ID}}, 200)
-	other := mustJSON(t, admin, "POST", "/api/v1/admin/misub/profiles", map[string]any{"name": "别人的", "source_ids": []int{src.ID}}, 200)
-	mustJSON(t, admin, "PUT", "/api/v1/admin/misub/profiles/"+itoa(int(mine["id"].(float64)))+"/grants", map[string]any{"user_ids": []int{uid}}, 200)
+	mine := mustJSON(t, admin, "POST", "/api/v1/admin/subscriptions/profiles", map[string]any{"name": "给小明", "source_ids": []int{src.ID}}, 200)
+	other := mustJSON(t, admin, "POST", "/api/v1/admin/subscriptions/profiles", map[string]any{"name": "别人的", "source_ids": []int{src.ID}}, 200)
+	mustJSON(t, admin, "PUT", "/api/v1/admin/subscriptions/profiles/"+itoa(int(mine["id"].(float64)))+"/grants", map[string]any{"user_ids": []int{uid}}, 200)
 	alice := login(t, s, "chain@example.test", password)
 	entry := int(n["id"].(float64))
 	body := func(exit map[string]any) map[string]any {

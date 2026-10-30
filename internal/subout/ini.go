@@ -12,7 +12,7 @@ import (
 	"github.com/shusfun/weir/internal/subscription"
 )
 
-// Ported from pinned MiSub's Surge/Loon/QuanX generators (MIT). Unsupported
+// Ported from the pinned JS reference Surge/Loon/QuanX generators (MIT). Unsupported
 // combinations fail, including fields that upstream would silently discard.
 var iniNameSpace = regexp.MustCompile(`\s+`)
 

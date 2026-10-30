@@ -11,8 +11,8 @@ import (
 func TestPublicPageCardsAndGuestbook(t *testing.T) {
 	s, admin := newInstalledServer(t)
 	anon := &testClient{t: t, router: admin.router}
-	mustJSON(t, admin, "POST", "/api/v1/admin/misub/nodes", map[string]any{"url": "trojan://p@198.51.100.1:443?sni=example.com#HK"}, 200)
-	p := mustJSON(t, admin, "POST", "/api/v1/admin/misub/profiles", map[string]any{"name": "公开组", "all_sources": true}, 200)
+	mustJSON(t, admin, "POST", "/api/v1/admin/subscriptions/nodes", map[string]any{"url": "trojan://p@198.51.100.1:443?sni=example.com#HK"}, 200)
+	p := mustJSON(t, admin, "POST", "/api/v1/admin/subscriptions/profiles", map[string]any{"name": "公开组", "all_sources": true}, 200)
 	pid := int(p["id"].(float64))
 
 	mustJSON(t, admin, "POST", "/api/v1/admin/public-pages", map[string]any{"slug": "Bad Slug", "data": map[string]any{"title": "x"}}, 400)
@@ -25,7 +25,7 @@ func TestPublicPageCardsAndGuestbook(t *testing.T) {
 	if len(view["subscriptions"].([]any)) != 0 || view["guestbook"] != nil {
 		t.Fatalf("unshared page = %v", view)
 	}
-	mustJSON(t, admin, "POST", fmt.Sprintf("/api/v1/admin/misub/profiles/%d/share", pid), map[string]any{"days": 3, "password": "Passw0rd"}, 200)
+	mustJSON(t, admin, "POST", fmt.Sprintf("/api/v1/admin/subscriptions/profiles/%d/share", pid), map[string]any{"days": 3, "password": "Passw0rd"}, 200)
 	w := anon.do("GET", "/api/v1/pages/home", nil, nil)
 	stored, _ := s.Store.Ent.SubProfile.Get(t.Context(), pid)
 	if !strings.Contains(w.Body.String(), "/cards/0") || strings.Contains(w.Body.String(), stored.ShareToken) {
@@ -34,7 +34,7 @@ func TestPublicPageCardsAndGuestbook(t *testing.T) {
 	if w = anon.do("GET", "/api/v1/pages/home/cards/0", nil, nil); w.Code != 200 || !strings.Contains(w.Body.String(), "proxies:") {
 		t.Fatalf("card download = %d %.120s", w.Code, w.Body.String())
 	}
-	mustJSON(t, admin, "DELETE", fmt.Sprintf("/api/v1/admin/misub/profiles/%d/share", pid), nil, 204)
+	mustJSON(t, admin, "DELETE", fmt.Sprintf("/api/v1/admin/subscriptions/profiles/%d/share", pid), nil, 204)
 	if w = anon.do("GET", "/api/v1/pages/home/cards/0", nil, nil); w.Code != 404 {
 		t.Fatalf("unshared card = %d", w.Code)
 	}

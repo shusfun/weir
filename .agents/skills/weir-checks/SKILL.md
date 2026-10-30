@@ -16,7 +16,7 @@ description: 改完 Weir 的代码或文档后，选出该跑的检查、启动�
 | 中心存储、迁移、锁或键值 | 再用 PG + Redis 跑一次：`docker compose -f deploy/test.compose.yml up -d` 后 `WEIR_CENTER_STORE=postgres go test ./internal/center/` |
 | 内核配置生成、版本档案、Gate 应用流程 | 包测试，再跑 `python deploy/e2e.py -run <相关用例>` |
 | 安装、升级、发版脚本 | 见 [deploy/AGENTS.md](../../../deploy/AGENTS.md) 的「验证」 |
-| MiSub 迁移的订阅逻辑 | 包测试；与上游原代码的对照测试用 Node v24 跑（会话默认的 Node 可能是 v22，要显式切换 PATH） |
+| 从原 JS 版迁移的订阅逻辑 | 包测试；与原 JS 代码（`third_party/subscription-reference`、`internal/sub/testdata/upstream`）的对照测试（`WEIR_UPSTREAM_TESTS=1`）用 Node v24 跑（会话默认的 Node 可能是 v22，要显式切换 PATH） |
 | 只改文档 | 浏览器打开改过的 HTML，确认排版正常；design.html 里验收清单的脚本要能运行 |
 
 ## 本地开发环境

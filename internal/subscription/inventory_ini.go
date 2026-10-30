@@ -1,6 +1,6 @@
 package subscription
 
-// Adapted from MiSub 4952c16 functions/modules/utils/node-parser.js (MIT).
+// Adapted from JS 参考实现 4952c16 functions/modules/utils/node-parser.js (MIT).
 // Unlike its permissive parser, unknown/ambiguous options reject the import.
 // Only local proxy sections are inventory; policy/rule sections are not applied.
 import (

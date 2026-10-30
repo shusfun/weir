@@ -1,6 +1,6 @@
 package subscription
 
-// Field mapping: pinned MiSub 4952c16 functions/utils/url-to-clash.js (MIT).
+// Field mapping: pinned JS 参考实现 4952c16 functions/utils/url-to-clash.js (MIT).
 // Reject ambiguous aliases and invalid keys instead of silently losing fields.
 import (
 	"encoding/base64"

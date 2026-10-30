@@ -26,7 +26,7 @@ func CreateUnifiedTemplateModel(inputVal any) *js.Object {
 	}
 	return js.Obj(
 		"meta", js.Obj(
-			"name", js.Or(objGet(meta, "name"), "MiSub"),
+			"name", js.Or(objGet(meta, "name"), "Weir"),
 			"source", js.Or(objGet(meta, "source"), "builtin"),
 			"target", js.Or(objGet(meta, "target"), "clash"),
 			"ruleLevel", js.Or(objGet(meta, "ruleLevel"), "std"),

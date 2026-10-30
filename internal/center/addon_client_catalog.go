@@ -1,6 +1,6 @@
 package center
 
-// UX/data mapping: fixed MiSub 4952c16 client-handler.js / ClientSettings.vue.
+// UX/data mapping: fixed JS 参考实现 4952c16 client-handler.js / ClientSettings.vue.
 // Catalog links are metadata only: never fetched by the center, no token URL templates.
 import (
 	"bytes"

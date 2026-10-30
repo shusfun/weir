@@ -216,8 +216,8 @@ func TestOpDraftDryRunsWriteNothing(t *testing.T) {
 	gid := itoa(int(g.id))
 	out := mustJSON(t, admin, "POST", "/api/v1/admin/gates/"+gid+"/outbounds", map[string]any{"tag": "home", "protocol": "socks", "address": "203.0.113.9", "port": 1080}, 200)
 	rt := mustJSON(t, admin, "POST", "/api/v1/admin/gates/"+gid+"/routes", map[string]any{"outbound_tag": "home", "domain": "domain:a.com"}, 200)
-	src := mustJSON(t, admin, "POST", "/api/v1/admin/misub/sources", map[string]any{"name": "A", "url": "https://sub.example.com/x"}, 200)
-	prof := mustJSON(t, admin, "POST", "/api/v1/admin/misub/profiles", map[string]any{"name": "P"}, 200)
+	src := mustJSON(t, admin, "POST", "/api/v1/admin/subscriptions/sources", map[string]any{"name": "A", "url": "https://sub.example.com/x"}, 200)
+	prof := mustJSON(t, admin, "POST", "/api/v1/admin/subscriptions/profiles", map[string]any{"name": "P"}, 200)
 	u := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "dry@example.test"}, 200)
 	yaml := "proxy-groups:\n  - name: P\n    type: select\n    proxies: [DIRECT]\nrules:\n  - MATCH,P\n"
 	snapshot := func() string {

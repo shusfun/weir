@@ -34,7 +34,7 @@ func runOracle(t *testing.T, cases []oracleCase) {
 	t.Helper()
 	node, err := exec.LookPath("node")
 	if err != nil {
-		t.Skip("未找到 node，跳过与上游 MiSub JS 的对照测试")
+		t.Skip("未找到 node，跳过与原 JS 版的对照测试")
 	}
 	if _, err := os.Stat(filepath.Join("testdata", "upstream", "node_modules", "js-yaml")); err != nil {
 		t.Skip("缺少对照依赖：在 internal/sub/testdata/upstream 执行 npm install --no-save js-yaml@4.1.1")
@@ -80,11 +80,24 @@ func runOracle(t *testing.T, cases []oracleCase) {
 			t.Errorf("[%s] Go 返回错误 %v，上游结果: %s", c.Name, gerr, want)
 			continue
 		}
+		want = weirNames.Replace(want)
 		if g := js.Describe(got); g != want {
 			t.Errorf("[%s] 与上游不一致\n%s", c.Name, diffSnippet(want, g))
 		}
 	}
 }
+
+// weirNames 把原 JS 版输出里的旧名字换成 Weir 改过的名字再比较（内置模板编号、模板显示名、默认文件名），
+// 只换带引号的整段，其余内容仍要逐字一致。
+var weirNames = strings.NewReplacer(
+	`"clash_misub_minimal"`, `"clash_weir_minimal"`,
+	`"clash_misub_media_ai"`, `"clash_weir_media_ai"`,
+	`"MiSub 极简默认分流"`, `"极简默认分流"`,
+	`"MiSub 流媒体与 AI 分流"`, `"流媒体与 AI 分流"`,
+	`"MiSub 深度 AI 开发者模板"`, `"深度 AI 开发者模板"`,
+	`"MiSub 游戏加速竞技模板"`, `"游戏加速竞技模板"`,
+	`"MiSub"`, `"Weir"`,
+)
 
 // diffSnippet 只展示第一处差异附近的内容，避免长配置淹没输出。
 func diffSnippet(want, got string) string {

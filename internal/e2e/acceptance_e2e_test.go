@@ -272,10 +272,10 @@ func TestSourceGroupFailoverInKernels(t *testing.T) {
 	e.startGate("grp")
 	e.s.Store.Ent.Gate.UpdateOneID(e.gateID).SetPublicHost("127.0.0.1").ExecX(e.ctx)
 	a, b := newMember(t), newMember(t)
-	src := e.post("/api/v1/admin/misub/sources", map[string]any{"name": "机场", "url": "https://example.invalid/sub"}, nil)
+	src := e.post("/api/v1/admin/subscriptions/sources", map[string]any{"name": "机场", "url": "https://example.invalid/sub"}, nil)
 	sid := int(src["id"].(float64))
 	links, _ := json.Marshal([]string{fmt.Sprintf("socks5://127.0.0.1:%d#HK-A", a.port), fmt.Sprintf("socks5://127.0.0.1:%d#HK-B", b.port)})
-	if err := e.s.Store.KV.Set(e.ctx, fmt.Sprintf("misub-source:%d", sid), string(links), 0); err != nil {
+	if err := e.s.Store.KV.Set(e.ctx, fmt.Sprintf("sub-source:%d", sid), string(links), 0); err != nil {
 		t.Fatal(err)
 	}
 	chainSpec := map[string]any{"kind": "source", "source_id": sid, "mode": "filter", "match": "^HK"}

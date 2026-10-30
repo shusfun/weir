@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Weir 是个人使用的代理管理面板：合并 [MiGate](https://github.com/imzyb/MiGate)（Gate 设备、Xray / sing-box 内核管理）与 [MiSub](https://github.com/imzyb/MiSub)（订阅管理）。[Sub2API](https://github.com/Wei-Shaw/sub2api) 只作后台布局、认证、安装方式的参考，不作功能来源。
+Weir 是个人使用的代理管理面板：合并 [MiGate](https://github.com/imzyb/MiGate)（Gate 设备、Xray / sing-box 内核管理）与原来的订阅管理（JS 版，已逐文件迁移到 Go）。[Sub2API](https://github.com/Wei-Shaw/sub2api) 只作后台布局、认证、安装方式的参考，不作功能来源。
 
 - 做什么、怎么交互、验收清单以 [docs/design.html](docs/design.html) 为准；标「目标」的还没实现，上游功能吸收哪些见第 07 节，表里没有的先问用户。
 - 阶段、状态和下一步见 [docs/implementation.html](docs/implementation.html)。
@@ -25,7 +25,7 @@ apps/weir/            weir 程序入口；static/ 是 pnpm build 的产物，嵌
 apps/console/         控制台（React + TypeScript + Vite，TanStack Query）
 packages/ui/          UIAble 组件源码
 packages/contracts/   中心与 Gate 的协议
-internal/center/      中心：HTTP 接口、能力目录、Gate 同步、dsh 网关、MiSub 附加功能
+internal/center/      中心：HTTP 接口、能力目录、Gate 同步、dsh 网关、订阅管理附加功能
 internal/gate/        Gate Agent：领取配置、应用与回滚、白名单动作
 internal/kernels/     内核拉取、校验、缓存与内置驱动（drivers/）
 internal/kernelconf/  驱动格式、模板引擎：按驱动把 GateConfig 生成为内核配置，生成后强制检查
@@ -33,8 +33,8 @@ internal/xray/        REALITY 密钥与统计接口客户端（Xray / sing-box �
 internal/fetch/       可续传、可取消的下载；internal/ghrelease/ 读 GitHub Release
 internal/selfupdate/  自更新的 root 一侧（weir self-update）
 internal/dsh/         dsh 管理进程（以 weir-dsh 运行）
-internal/misub/       订阅源编排（MiSub 迁移）
-internal/sub/         订阅格式生成器（Clash、Loon 等，MiSub 迁移）
+internal/subgroup/    订阅源编排：订阅源 + 手动节点 → 订阅组
+internal/sub/         订阅格式生成器（Clash、Loon 等，从原 JS 版迁移）
 internal/subout/      订阅输出格式
 internal/store/       ent 数据访问、键值与锁
 internal/e2e/         容器里跑真实内核的端到端测试

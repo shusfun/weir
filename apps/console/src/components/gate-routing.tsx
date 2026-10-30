@@ -10,7 +10,7 @@ import type { ExitProbe, Gate } from "../lib/core";
 import { parseExitText } from "../lib/exit-parse";
 import { probeText } from "./chain-exit";
 import { State } from "./feedback";
-import { useSources } from "./misub-sources";
+import { useSources } from "./subscription-sources";
 import { SourceSummary } from "./link-panel";
 import type { SourceResolved } from "../lib/core";
 import { field, useConsoleContext } from "../lib/console-context";
