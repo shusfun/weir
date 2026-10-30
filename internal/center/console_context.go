@@ -266,7 +266,7 @@ var consoleTools = []mcpTool{
 		"page":        map[string]any{"type": "string", "enum": []string{"gates", "users", "linkmap", "kernels", "subscriptions", "pages", "audit", "system"}, "description": "gates=VPS 与节点；users=用户；linkmap=链路（地图与实时流量）；kernels=内核；subscriptions=订阅管理；pages=公开页面；audit=操作审计；system=系统设置"},
 		"tab":         map[string]any{"type": "string", "description": "可选：页面里的标签。system：update=版本与更新、ai=AI 与 dsh、defense=安全防御、login=登录与令牌、notify=通知（含邮件 SMTP）、certs=节点证书、backup=备份迁移、distribution=分发；kernels：versions=版本、drivers=驱动、checks=订阅检查、dsh=dsh 版本；subscriptions：sources=订阅源、nodes=手动节点、profiles=订阅组、templates=规则模板、settings=默认设置"},
 		"object_type": map[string]any{"type": "string", "enum": objectTypes, "description": "可选：要打开的对象类型。gate=VPS、node=节点、user=用户、link=订阅链接、chain=链式代理、driver=内核驱动、kernel=内核版本、source=订阅源、profile=订阅组、page=公开页面、cert=证书、audit=审计记录"},
-		"object_id":   map[string]any{"type": "number", "description": "可选：数字编号的对象（VPS、节点、用户、链接、链式代理、订阅源、订阅组、证书、审计记录）"},
+		"object_id":   map[string]any{"type": "integer", "minimum": 1, "description": "可选：数字编号的对象（VPS、节点、用户、链接、链式代理、订阅源、订阅组、证书、审计记录）"},
 		"object_key":  map[string]any{"type": "string", "description": "可选：按名称的对象：驱动名（如 xray-26.3）、内核版本（如 xray@26.3.27）、公开页面的地址名"},
 	})},
 }

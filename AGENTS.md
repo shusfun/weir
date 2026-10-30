@@ -63,7 +63,7 @@ CGO_ENABLED=0 GOOS=linux go build -o dist/weir ./apps/weir
 
 ## 排查问题
 
-先看日志，再按对象追踪，最后才复现和修改；日志里找不到原因就先补日志，不靠猜。在哪里看、怎么追见 [weir-debug](.agents/skills/weir-debug/SKILL.md)。
+所有错误先查 trace：找到出错那次操作的完整记录与编号（请求编号、MCP 排查编号、dsh 会话里的工具调用、草稿编号、配置版本号）；再按泳道（浏览器、中心、dsh、Weir MCP、草稿、Gate、内核）把这次操作经过的每一段对齐，找出断在哪一段。trace 或某段泳道没有记录，就先补记录、重跑一次再查，不靠猜，也不先改代码。泳道与在哪里看见 [weir-debug](.agents/skills/weir-debug/SKILL.md)。
 
 ## 规则
 

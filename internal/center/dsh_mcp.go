@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -86,11 +88,14 @@ func paramSchema(pa Param) map[string]any {
 			desc += fmt.Sprintf("；%s=%s", o[0], o[1])
 		}
 		m["enum"] = vals
+	// 引用写明整数类型：只写描述时模型会把编号当字符串传（"1"），也会照描述去填 "$名字"。
+	// 这里只用于只读工具；草稿的参数在 submit_draft 的 args 里，"$名字" 的说明在 submit_draft 与 list_actions 里。
 	case "ref":
-		desc += "：" + objectNames[pa.Ref] + "编号，或前面步骤的 \"$名字\""
+		m["type"], m["minimum"] = "integer", 1
+		desc += "：" + objectNames[pa.Ref] + "编号（数字）" + listHint(pa.Ref)
 	case "refs":
-		m["type"] = "array"
-		desc += "：" + objectNames[pa.Ref] + "编号列表（可含 \"$名字\"）"
+		m["type"], m["items"] = "array", map[string]any{"type": "integer", "minimum": 1}
+		desc += "：" + objectNames[pa.Ref] + "编号列表（数字）" + listHint(pa.Ref)
 	case "object":
 		m["type"] = "object"
 	default:
@@ -205,9 +210,18 @@ func (s *Server) mcpHandler(m *mcpServer) http.Handler {
 		case "tools/list":
 			result = map[string]any{"tools": mcpToolsFor(source)}
 		case "tools/call":
-			ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
+			// 每次工具调用一个排查编号：失败时写进中心日志（泳道「Weir MCP」）并附在返回给 dsh 的文字里，
+			// 这样 dsh 会话里的那次调用能和中心日志、试运行里处理函数的 5xx 对上。
+			trace := requestID()
+			start := time.Now()
+			ctx, cancel := context.WithTimeout(withTrace(r.Context(), trace), 3*time.Minute)
 			text, isErr := s.callTool(ctx, source, req.Params.Name, req.Params.Arguments)
 			cancel()
+			if isErr {
+				slog.Warn("mcp tool failed", "trace", trace, "source", source, "tool", req.Params.Name, "args", argShape(req.Params.Arguments),
+					"ms", time.Since(start).Milliseconds(), "err", redact(text))
+				text += "\n（排查编号 " + trace + "）"
+			}
 			result = map[string]any{"content": []any{map[string]any{"type": "text", "text": text}}, "isError": isErr}
 		default:
 			rpcErr = map[string]any{"code": -32601, "message": "method not found"}
@@ -228,6 +242,60 @@ func jsonText(v any) string {
 	return string(b)
 }
 
+// argShape 是写进日志的参数概况：只记每个参数的类型（编号传成字符串这类问题一眼能看出来），
+// 草稿只记各步的能力名；不记参数值，避免把邮箱、名称或模型误填的机密写进日志。
+func argShape(raw json.RawMessage) string {
+	var args map[string]any
+	if json.Unmarshal(raw, &args) != nil {
+		return "(不是 JSON 对象)"
+	}
+	keys := make([]string, 0, len(args))
+	for k := range args {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		switch v := args[k].(type) {
+		case []any:
+			if k == "steps" {
+				var actions []string
+				for _, st := range v {
+					m, _ := st.(map[string]any)
+					a, _ := m["action"].(string)
+					actions = append(actions, a)
+				}
+				parts = append(parts, "steps:["+strings.Join(actions, ",")+"]")
+				continue
+			}
+			parts = append(parts, k+":array")
+		case float64:
+			parts = append(parts, k+":number")
+		case string:
+			parts = append(parts, k+":string")
+		case bool:
+			parts = append(parts, k+":bool")
+		case nil:
+			parts = append(parts, k+":null")
+		default:
+			parts = append(parts, k+":object")
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+type traceKey struct{}
+
+// withTrace 把排查编号放进上下文：试运行与只读工具在进程内调用处理函数时，处理函数的 5xx 用同一个编号记日志。
+func withTrace(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, traceKey{}, id)
+}
+
+func traceOf(ctx context.Context) string {
+	id, _ := ctx.Value(traceKey{}).(string)
+	return id
+}
+
 // callTool 执行一个工具，返回给模型的文本与是否出错。
 func (s *Server) callTool(ctx context.Context, source, name string, raw json.RawMessage) (string, bool) {
 	s.state.RLock()
@@ -239,6 +307,11 @@ func (s *Server) callTool(ctx context.Context, source, name string, raw json.Raw
 	args := map[string]any{}
 	if len(raw) > 0 && json.Unmarshal(raw, &args) != nil {
 		return "参数不是有效的 JSON 对象", true
+	}
+	if c, ok := findCap(source, name); ok && c.Kind == "read" {
+		if keys := pendingRefs(c.Params, args); len(keys) > 0 {
+			return fmt.Sprintf("参数 %s 要填编号（数字，如 1）；\"$名字\" 只能在 submit_draft 里引用前面步骤新建的对象", strings.Join(keys, "、")), true
+		}
 	}
 	switch name {
 	case "get_console_context", "navigate_console":

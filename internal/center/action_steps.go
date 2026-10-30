@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -51,6 +52,14 @@ func call(actor *gin.Context, handler gin.HandlerFunc, method string, params gin
 	c.Writer.WriteHeaderNow()
 	var out map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &out)
+	// 进程内调用不经过请求日志中间件：处理函数的 5xx 在这里记下真实原因，编号用外层请求或 MCP 调用的排查编号。
+	if w.Code >= 500 {
+		attrs := []any{"trace", firstNonEmpty(actor.GetString("request_id"), traceOf(actor.Request.Context())), "method", method, "status", w.Code, "dry_run", dry, "code", c.GetString("error_code")}
+		if len(c.Errors) > 0 {
+			attrs = append(attrs, "err", redact(strings.Join(c.Errors.Errors(), "; ")))
+		}
+		slog.Error("draft step handler failed", attrs...)
+	}
 	return w.Code, out
 }
 
