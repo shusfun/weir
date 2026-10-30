@@ -6,8 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
+	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -74,17 +77,66 @@ type Server struct {
 }
 
 func New(c Config, path string, assets fs.FS) (*Server, error) {
+	return NewWait(context.Background(), c, path, assets)
+}
+
+// NewWait 同 New；存储暂时连不上（开机时 1Panel 的 PostgreSQL / Redis 容器比中心晚起来）时一直等到 ctx 结束，
+// 期间每分钟记一次在等什么。配置与数据不匹配等其他错误照常立即返回。
+func NewWait(ctx context.Context, c Config, path string, assets fs.FS) (*Server, error) {
 	enc, err := secrets.NewAESEncryptor(c.EncryptionKey)
 	if err != nil {
 		return nil, err
 	}
 	s := &Server{Config: c, Path: path, Crypto: enc, Assets: assets}
 	if c.Installed {
-		if s.Store, err = openInstalled(context.Background(), c); err != nil {
+		if s.Store, err = waitStore(ctx, c); err != nil {
 			return nil, err
 		}
 	}
 	return s, nil
+}
+
+// storeRetry 是存储连不上时两次尝试的间隔（测试中调短）。
+var storeRetry = 5 * time.Second
+
+func waitStore(ctx context.Context, c Config) (*store.Store, error) {
+	var last time.Time
+	for {
+		st, err := openInstalled(ctx, c)
+		if err == nil {
+			if !last.IsZero() {
+				log.Printf("INFO store available, starting")
+			}
+			return st, nil
+		}
+		if !errors.Is(err, store.ErrPostgresUnavailable) && !errors.Is(err, store.ErrRedisUnavailable) {
+			return nil, err
+		}
+		if time.Since(last) >= time.Minute {
+			log.Printf("WARN waiting for store: %s", redact(err.Error()))
+			last = time.Now()
+		}
+		select {
+		case <-ctx.Done():
+			return nil, err
+		case <-time.After(storeRetry):
+		}
+	}
+}
+
+// recovery 接住处理函数的 panic，记下来并返回 500。http.ErrAbortHandler 原样再抛：这是反向代理在浏览器
+// 断开时（如关掉 dsh 窗口）用来中止响应的约定，net/http 会静默处理，不是错误，不进日志。
+func recovery(c *gin.Context) {
+	defer func() {
+		if err := recover(); err != nil {
+			if err == http.ErrAbortHandler {
+				panic(err)
+			}
+			log.Printf("ERROR panic method=%s route=%s err=%v\n%s", c.Request.Method, c.FullPath(), err, debug.Stack())
+			c.AbortWithStatus(http.StatusInternalServerError)
+		}
+	}()
+	c.Next()
 }
 
 // openInstalled 打开已初始化的存储，并确认管理员存在，避免配置与数据不匹配时静默启动。
@@ -204,7 +256,7 @@ func (s *Server) audit(c *gin.Context, action, target, result string) {
 func (s *Server) Router() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
-	r.Use(gin.Recovery())
+	r.Use(recovery)
 	_ = r.SetTrustedProxies([]string{"127.0.0.1", "::1"})
 	// dsh 子域名的请求最先分走：不经过 HTTPS 拦截页、来源封禁与错误页，避免暴露这台机器上跑着 Weir。
 	r.Use(s.dshGatewayMiddleware)

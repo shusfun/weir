@@ -96,13 +96,14 @@ func runCenter(args []string) int {
 		}
 	}
 	assets, _ := fs.Sub(embedded, "static")
-	server, err := center.New(cfg, *path, assets)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	// 开机时存储（1Panel 的 PostgreSQL / Redis 容器）可能比中心晚就绪：等它，停止服务时不再等
+	server, err := center.NewWait(ctx, cfg, *path, assets)
 	if err != nil {
 		return fatal(err)
 	}
 	defer server.Close()
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
 	server.StartBackground(ctx)
 	if *localGate != "" {
 		go runLocalGate(ctx, *localGate)
