@@ -41,6 +41,9 @@ type Agent struct {
 	liveUntil   time.Time
 	liveRunning bool
 	runCtx      context.Context
+	// updateErr 是最近一次自更新失败的原因，随心跳上报（由 updateMu 保护）。
+	updateMu  sync.Mutex
+	updateErr *contracts.SelfUpdateStatus
 }
 
 func NewAgent(p Paths) (*Agent, error) {
@@ -113,6 +116,9 @@ func (a *Agent) configLoop(ctx context.Context) {
 			sleep(ctx, time.Minute) // 辅助程序会重启本服务
 			continue
 		}
+		if cfg.Version == "" || cfg.Version == buildinfo.Version {
+			a.setUpdateErr(nil)
+		}
 		a.mu.Lock()
 		state, err := a.applyLocked(ctx, cfg)
 		a.mu.Unlock()
@@ -145,17 +151,31 @@ func sleep(ctx context.Context, d time.Duration) {
 }
 
 // selfUpdate 从中心下载同版本程序并交给辅助程序替换；中心不提供（平台不同）时返回 false。
+// 失败的原因记下来随心跳上报，中心在 VPS 卡片上显示，不只留在这台 VPS 的日志里。
 func (a *Agent) selfUpdate(ctx context.Context, version string) bool {
-	data, sum, err := a.center.download(ctx, "/agent/release/"+version, "X-Release-SHA256")
-	if err != nil || sumOf(data) != sum {
-		log.Printf("self update to %s unavailable: %v", version, err)
+	fail := func(msg string) bool {
+		log.Printf("self update to %s failed: %s", version, msg)
+		a.setUpdateErr(&contracts.SelfUpdateStatus{Version: version, Error: msg, At: time.Now().UTC()})
 		return false
+	}
+	data, sum, err := a.center.download(ctx, "/agent/release/"+version, "X-Release-SHA256")
+	switch {
+	case err != nil:
+		return fail("从中心下载程序失败：" + err.Error())
+	case sumOf(data) != sum:
+		return fail("下载的程序与中心给的摘要不一致")
 	}
 	if err = a.helper.Release(ctx, version, sum, data); err != nil {
-		log.Printf("self update to %s failed: %v", version, err)
-		return false
+		return fail("替换程序失败：" + err.Error())
 	}
+	a.setUpdateErr(nil)
 	return true
+}
+
+func (a *Agent) setUpdateErr(st *contracts.SelfUpdateStatus) {
+	a.updateMu.Lock()
+	defer a.updateMu.Unlock()
+	a.updateErr = st
 }
 
 // ensureKernels 下载并安装配置要求、本机还没有的内核版本（摘要必须与中心下发的一致）。
@@ -348,6 +368,9 @@ func (a *Agent) meter(ctx context.Context) error {
 
 func (a *Agent) heartbeat(ctx context.Context) error {
 	hb := contracts.Heartbeat{Version: buildinfo.Version, Arch: runtime.GOARCH, Kernels: map[string]string{}, Host: sampleHost()}
+	a.updateMu.Lock()
+	hb.SelfUpdate = a.updateErr
+	a.updateMu.Unlock()
 	hb.Hostname, _ = os.Hostname()
 	hb.Center = a.center.origin()
 	panelCerts := map[int64]string{}

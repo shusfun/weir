@@ -6,6 +6,7 @@ import { Badge, Button, Collapsible, Field, Form, FormGrid, Input, Notice, Passw
 import { RefreshCw } from "lucide-react";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
+import { ActionsWait, WaitText } from "./wait";
 import { date } from "../lib/models";
 import type { Cert, Gate } from "../lib/core";
 import { State } from "./feedback";
@@ -81,14 +82,15 @@ export function GateCerts({ gate }: { gate: Gate }) {
   const certs = useCerts();
   const client = useQueryClient();
   const mine = (certs.data ?? []).filter((c) => c.gate_id === gate.id);
-  const { run, isBusy } = useRowAction<number | string>({ refetch: certs.refetch });
+  const { run, isBusy, waitFor } = useRowAction<number | string>({ refetch: certs.refetch });
   const panel = gate.panel ?? {};
   const [port, setPort] = useState("");
   const [https, setHttps] = useState(false);
   const [key, setKey] = useState("");
   const [re, setRe] = useState(emptyReauth);
-  const save = useReauthAction(() => api(`/admin/gates/${gate.id}/panel`, "PUT", { port: Number(port), https, api_key: key, ...re }) as Promise<{ version?: string }>, {
+  const save = useReauthAction((track) => api(`/admin/gates/${gate.id}/panel`, "PUT", { port: Number(port), https, api_key: key, ...re }, track) as Promise<{ version?: string }>, {
     ok: "1Panel 已连接",
+    wait: { label: `正在让 ${gate.name} 连接本机 1Panel 并保存密钥`, max: 60 },
     fields: { invalid_port: "panel_port", invalid_api_key: "panel_key", panel_failed: "panel_key" },
     onSuccess: () => {
       setKey("");
@@ -110,9 +112,9 @@ export function GateCerts({ gate }: { gate: Gate }) {
                 <strong>{c.domain}</strong>
                 <Badge variant="soft" tone="neutral">{certSource[c.source] ?? c.source}</Badge>
                 <CertHealth cert={c} />
-                <small className="text-[var(--weir-ink-3)]">{c.not_after ? `有效期至 ${date(c.not_after)}` : "有效期未知"}</small>
+                <small className="text-[var(--weir-ink-3)]">{waitFor(c.id) ? <WaitText wait={waitFor(c.id)} /> : c.not_after ? `有效期至 ${date(c.not_after)}` : "有效期未知"}</small>
                 {c.source === "acme" && (
-                  <Button className="ml-auto" size="xs" variant="outline" disabled={isBusy(c.id)} onClick={() => void run(c.id, () => api(`/admin/certs/${c.id}/renew`, "POST"), "已续签")}><RefreshCw />立即续签</Button>
+                  <Button className="ml-auto" size="xs" variant="outline" disabled={isBusy()} busy={isBusy(c.id)} busyText="正在续签…" onClick={() => void run(c.id, (track) => api(`/admin/certs/${c.id}/renew`, "POST", undefined, track), "已续签", { wait: { label: `正在向证书机构签发证书（${c.domain}）`, max: 150 } })}><RefreshCw />立即续签</Button>
                 )}
               </div>
               {c.last_error && <small className="mt-1 block text-[var(--weir-bad-ink)]">{c.last_error}</small>}
@@ -137,9 +139,10 @@ export function GateCerts({ gate }: { gate: Gate }) {
           <Reauth value={re} onChange={setRe} />
           <div className="actions">
             {panel.configured && (
-              <Button type="button" variant="outline" disabled={isBusy("panel") || !gate.online} onClick={() => void run("panel", () => api(`/admin/gates/${gate.id}/panel`, "DELETE"), "已移除 1Panel 密钥")}>移除密钥</Button>
+              <Button type="button" variant="outline" disabled={isBusy("panel") || save.busy || !gate.online} busy={isBusy("panel")} busyText="正在移除…" onClick={() => void run("panel", () => api(`/admin/gates/${gate.id}/panel`, "DELETE"), "已移除 1Panel 密钥")}>移除密钥</Button>
             )}
             <Button type="submit" disabled={save.busy || !gate.online} busy={save.busy} busyText="正在测试连接…">测试并保存</Button>
+            <ActionsWait wait={save.wait} />
           </div>
           {save.error && <Notice tone="bad">{save.error}</Notice>}
           {!gate.online && <small className="text-[var(--weir-ink-3)]">VPS 离线时无法填写。</small>}

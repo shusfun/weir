@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Form, Notice, useToast } from "@weir/ui";
-import { api } from "../api";
+import { api, clause } from "../api";
 import { emptyReauth, Reauth, useReauthAction } from "./system-settings";
 import { field, useConsoleContext } from "../lib/console-context";
 
@@ -38,6 +38,7 @@ export function CenterOriginBanner() {
   const toast = useToast();
   const [confirm, setConfirm] = useState(false);
   const [hidden, setHidden] = useState(false);
+  const [recordError, setRecordError] = useState("");
   const recording = useRef(false);
   const v = q.data;
 
@@ -47,15 +48,26 @@ export function CenterOriginBanner() {
     recording.current = true;
     api("/admin/center-origin", "PUT", { origin: v.current }).then(
       () => {
+        setRecordError("");
         toast("已记录中心地址 " + v.current, { tone: "ok" });
         void client.invalidateQueries({ queryKey: ["center-origin"] });
       },
-      () => {
-        recording.current = false;
-      },
+      // 不再自动重试（每分钟一次会一直失败）：写明原因，由管理员点「重试」。SSH 安装等要用到这个地址
+      (e) => setRecordError(clause(e)),
     );
   }, [v, client, toast]);
 
+  if (v && !v.origin && recordError)
+    return (
+      <div className="origin-banner">
+        <Notice tone="bad" role="alert">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span className="min-w-0 flex-1">没能自动记录中心地址 <code>{v.current}</code>：{recordError}。SSH 安装 Gate、订阅地址都要用到它。</span>
+            <Button size="sm" variant="outline" onClick={() => { recording.current = false; setRecordError(""); void q.refetch(); }}>重试</Button>
+          </div>
+        </Notice>
+      </div>
+    );
   if (!v || !v.origin) return null;
   const differs = v.recordable && v.current !== v.origin;
   const pending = v.pending_gates.length;

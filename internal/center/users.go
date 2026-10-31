@@ -50,8 +50,8 @@ func (s *Server) userRoutes(auth, admin *gin.RouterGroup) {
 		g.r.DELETE(g.base+"/links/:lid", func(c *gin.Context) { s.deleteLink(c, admin) })
 		g.r.POST(g.base+"/links/:lid/rotate", func(c *gin.Context) { s.rotateLink(c, admin) })
 		g.r.GET(g.base+"/chains", func(c *gin.Context) { s.listChains(c, admin) })
-		g.r.POST(g.base+"/chains", func(c *gin.Context) { s.createChain(c, admin) })
-		g.r.PATCH(g.base+"/chains/:cid", func(c *gin.Context) { s.updateChain(c, admin) })
+		g.r.POST(g.base+"/chains", s.asJob("新建链式代理", "已取消，链式代理没有建出来", func(c *gin.Context) { s.createChain(c, admin) }))
+		g.r.PATCH(g.base+"/chains/:cid", s.asJob("修改链式代理", "已取消，链式代理保持原样", func(c *gin.Context) { s.updateChain(c, admin) }))
 		g.r.DELETE(g.base+"/chains/:cid", func(c *gin.Context) { s.deleteChain(c, admin) })
 	}
 	auth.GET("/me/nodes", s.myNodes)
@@ -972,11 +972,15 @@ func (s *Server) createChain(c *gin.Context, admin bool) {
 		failure(c, 400, "invalid_name")
 		return
 	}
+	jobTitle(ctx, "新建链式代理「"+name+"」")
 	entry, probe, err := s.checkUserChain(ctx, u, req, admin)
 	if err != nil {
 		// 校验或 Gate 实测失败也写审计：操作者、目标用户与失败结果。
 		s.audit(c, "chain.create", "user:"+itoa(u.ID), "failed")
 		failErr(c, 422, err)
+		return
+	}
+	if !jobCommit(c) {
 		return
 	}
 	create := s.Store.Ent.Chain.Create().SetUserID(u.ID).SetEntryNodeID(entry.ID).SetName(name)
@@ -1069,6 +1073,7 @@ func (s *Server) updateChain(c *gin.Context, admin bool) {
 		return
 	}
 	ctx := c.Request.Context()
+	jobTitle(ctx, "修改链式代理「"+ch.Name+"」")
 	upd := ch.Update()
 	if name := strings.TrimSpace(req.Name); name != "" {
 		if len(name) > 100 {
@@ -1107,6 +1112,9 @@ func (s *Server) updateChain(c *gin.Context, admin bool) {
 			return
 		}
 		// 入口变化后旧入口上的凭据由同步删除、新入口重新生成。
+	}
+	if !jobCommit(c) {
+		return
 	}
 	if _, err := upd.Save(ctx); err != nil {
 		failInternal(c, 500, "update_failed", err)

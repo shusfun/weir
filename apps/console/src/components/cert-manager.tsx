@@ -55,7 +55,9 @@ export function CertManager({ open, close }: { open: boolean; close: () => void 
                 <Button
                   size="sm"
                   variant="destructive"
-                  disabled={isBusy(c.id)}
+                  disabled={isBusy()}
+                  busy={isBusy(c.id)}
+                  busyText="正在删除…"
                   onClick={async () => (await confirm({ title: `删除证书「${c.domain}」？`, description: "仍被节点使用的证书不能删除。", confirmText: "删除", tone: "danger" })) && run(c.id, () => api("/admin/certs/" + c.id, "DELETE"), "证书已删除")}
                 >
                   删除

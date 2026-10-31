@@ -12,6 +12,7 @@ import {
 import { Plus, Route, Trash2 } from "lucide-react";
 import { api, ApiError } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
+import { WaitText } from "../components/wait";
 import { field, useConsoleContext } from "../lib/console-context";
 import type { ChainSpec, Health, NodeItem, ProxyType, ProxyView, UserItem } from "../lib/core";
 import { ChainExitFields, exitErrorFields, exitKindName } from "../components/chain-exit";
@@ -122,7 +123,7 @@ function TypesCard({ base, view, nodes, admin, onSaved }: { base: string; view: 
                   <span className="truncate">{t.label}</span>
                   <TypeCount type={t} />
                 </strong>
-                <Switch aria-label={`${t.label} 放进订阅`} checked={t.enabled} disabled={isBusy(t.key)} onCheckedChange={(on) => void toggle(t.key, on)} />
+                <Switch aria-label={`${t.label} 放进订阅`} checked={t.enabled} disabled={isBusy(t.key) || isBusy("exit:" + t.key)} onCheckedChange={(on) => void toggle(t.key, on)} />
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {/* 管理员点节点打开它的详情；普通用户只看状况 */}
@@ -146,8 +147,8 @@ function TypesCard({ base, view, nodes, admin, onSaved }: { base: string; view: 
                     </Button>
                   )}
                   {t.exit && (
-                    <Button size="icon-sm" variant="destructive" aria-label={`去掉 ${t.label} 的出口`} disabled={isBusy(t.key)}
-                      onClick={async () => (await confirm({ title: `去掉「${t.label}」的出口？`, description: "这类节点恢复直接从 VPS 出去。", confirmText: "去掉", tone: "danger" })) && run(t.key, () => api(`${base}/proxy/types/${encodeURIComponent(t.key)}/exit`, "DELETE"), "已去掉出口")}>
+                    <Button size="icon-sm" variant="destructive" aria-label={`去掉 ${t.label} 的出口`} disabled={isBusy()} busy={isBusy("exit:" + t.key)} busyText="正在去掉"
+                      onClick={async () => (await confirm({ title: `去掉「${t.label}」的出口？`, description: "这类节点恢复直接从 VPS 出去。", confirmText: "去掉", tone: "danger" })) && run("exit:" + t.key, () => api(`${base}/proxy/types/${encodeURIComponent(t.key)}/exit`, "DELETE"), "已去掉出口")}>
                       <Trash2 />
                     </Button>
                   )}
@@ -192,9 +193,10 @@ function TypeExitDialog({ base, type, nodes, admin, close, saved }: { base: stri
     e ? { kind: e.kind, address: e.address, port: e.port, username: e.username, password: e.password, link: e.link, node_id: e.node_id ?? undefined, ...(e.source ?? {}) } : { kind: "socks5" },
   );
   const [skip, setSkip] = useState(false);
-  const save = useFormAction(() => api(`${base}/proxy/types/${encodeURIComponent(type.key)}/exit`, "PUT", { exit, skip_probe: admin && skip }), {
+  const save = useFormAction((track) => api(`${base}/proxy/types/${encodeURIComponent(type.key)}/exit`, "PUT", { exit, skip_probe: admin && skip }, track), {
     fields: exitErrorFields(exit.kind),
     onSuccess: saved,
+    wait: { label: `正在逐个实测「${type.label}」的 ${type.nodes.length} 个节点`, max: 45 * type.nodes.length },
   });
   const failed = save.raw instanceof ApiError && save.raw.code === "type_exit_failed" ? (save.raw.extra.nodes as { name: string; code: string; detail?: string }[] | undefined) : undefined;
   useConsoleContext({
@@ -206,7 +208,7 @@ function TypeExitDialog({ base, type, nodes, admin, close, saved }: { base: stri
     ],
   });
   return (
-    <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
+    <Dialog open onOpenChange={(o) => { if (!o && (!save.busy || save.detachable)) { save.leave(); close(); } }}>
       <DialogContent size="md">
         <DialogTitle>{e ? "改" : "加"}出口：{type.label}</DialogTitle>
         <DialogDescription>这一类的 {type.nodes.length} 个节点都经这个出口出去；保存前由每个节点所在的 VPS 实测。</DialogDescription>
@@ -218,7 +220,7 @@ function TypeExitDialog({ base, type, nodes, admin, close, saved }: { base: stri
               {failed.map((f) => <li key={f.name}><strong>{f.name}</strong>：{f.detail || f.code}</li>)}
             </ul>
           )}
-          <DialogFooter error={failed ? undefined : save.error}>
+          <DialogFooter error={failed ? undefined : save.error} status={save.wait && <WaitText wait={save.wait} />}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
             <Button type="submit" ripple busy={save.busy} busyText="正在逐个实测…">保存</Button>
           </DialogFooter>

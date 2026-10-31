@@ -7,6 +7,7 @@ import { Badge, Button, CheckboxField, ChoiceCard, Collapsible, CopyField, Dialo
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "../api";
 import { useFormAction } from "../lib/action";
+import { WaitText } from "./wait";
 import { field, useConsoleContext } from "../lib/console-context";
 import type { ChainSpec, Gate, NodeItem, Preset, PresetField, UserItem } from "../lib/core";
 import { useCerts } from "./cert-manager";
@@ -59,13 +60,14 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
   const autoUser = (u: UserItem) => u.all_nodes && !wgBlocked(u);
   const userIds = allUsers.filter((u) => autoUser(u) || picked.includes(u.id)).map((u) => u.id);
   const save = useFormAction(
-    () =>
+    (track) =>
       api("/admin/nodes", "POST", {
         gate_id: gateId, preset, name: name.trim(), port: Number(port) || 0, cert_id: certId || 0,
         reality_target: target.trim(), chain: chain.kind === "none" ? { kind: "none" } : chain,
         settings: advanced, user_ids: userIds,
-      }) as Promise<NodeItem & { shares?: Share[] }>,
+      }, track) as Promise<NodeItem & { shares?: Share[] }>,
     {
+      wait: () => ({ label: `正在 ${gate?.name ?? "VPS"} 上新建 ${chosen?.name ?? ""} 节点并实测` }),
       fields: { port_in_use: "port", invalid_port: "port", no_free_port: "port", invalid_reality_target: "target", reality_probe_failed: "target", invalid_node_settings: "advanced", cert_unavailable: "cert",
         gate_no_public_host: "gate", ...exitErrorFields(chain.kind) },
       onSuccess: (n) => {
@@ -107,7 +109,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
         <DialogContent size="lg">
           <DialogTitle>节点已创建</DialogTitle>
           <DialogDescription>VPS 应用配置约需数秒。{shares.length > 0 ? "下面是勾选用户在这个节点上的节点链接；用户的订阅也已包含它。" : ""}</DialogDescription>
-          {created && <NodeAccess ports={created.ports} reach={created.reach} />}
+          {created && <CreatedAccess node={created} />}
           {created && created.chain.kind !== "none" && <small className="text-[var(--weir-ink-3)]">出口 {exitKindName[created.chain.kind]}：{probeText(created.chain.probe)}</small>}
           {shares.length > 0 && <ShareList shares={shares} leave={reset} />}
           <DialogFooter><Button onClick={reset}>完成</Button></DialogFooter>
@@ -118,7 +120,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
   // 每一步都是一张表单：“下一步”先按本步的必填项校验，未通过时错误标在字段下方
   const blocked = (step === 0 && !chosen) || (step === 1 && (active.length === 0 || !!gate && !gate.public_host)) || (step === 2 && chain.kind === "node" && exits.length === 0) || (step === 2 && chain.kind === "source" && (!chain.source_id || !chain.match));
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && !save.busy && reset()}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o && (!save.busy || save.detachable)) { save.leave(); reset(); } }}>
       <DialogContent size="lg">
         <DialogTitle>新建节点</DialogTitle>
         <DialogDescription>只需选协议和 VPS；伪装与传输使用内置的稳定方案，保存前由 VPS 实测。</DialogDescription>
@@ -219,7 +221,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
             </Field>
           </>
         )}
-        <DialogFooter error={save.error}>
+        <DialogFooter error={save.error} status={save.wait && <WaitText wait={save.wait} />}>
           <Button type="button" variant="outline" disabled={save.busy} onClick={() => (step === 0 ? reset() : setStep(step - 1))}>{step === 0 ? "取消" : "上一步"}</Button>
           <Button type="submit" disabled={blocked} busy={save.busy} busyText="正在实测并保存…">{step < 3 ? "下一步" : "创建节点"}</Button>
         </DialogFooter>
@@ -227,6 +229,23 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
       </DialogContent>
     </Dialog>
   );
+}
+
+// CreatedAccess：外部连接在中心后台检查（等 VPS 应用了新配置再连，最多约 1 分钟）：结果出来之前每 2 秒刷新，
+// 不停在创建那一刻的「还没有检查过」。超过 100 秒还没有结果时如实写明，不再刷新。
+function CreatedAccess({ node }: { node: NodeItem }) {
+  const [since] = useState(() => Date.now());
+  const checked = (n?: NodeItem) => !!n?.reach?.at && !n.reach.at.startsWith("0001");
+  const q = useQuery({
+    queryKey: ["node", node.id, "reach"],
+    queryFn: () => api("/admin/nodes/" + node.id) as Promise<NodeItem>,
+    initialData: node,
+    refetchInterval: (query) => (checked(query.state.data) || Date.now() - since > 100_000 ? false : 2000),
+  });
+  const n = q.data ?? node;
+  const done = checked(n);
+  const reach = done ? n.reach : { status: "unknown" as const, why: Date.now() - since > 100_000 ? "100 秒内没有得到检查结果，稍后在节点详情里查看" : "正在检查：等 VPS 应用新配置后从中心连接一次" };
+  return <NodeAccess ports={n.ports} reach={reach} />;
 }
 
 // AdvancedFields 按方案给出的字段说明渲染；只记改过的字段，留空即用默认值。

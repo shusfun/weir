@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button, PageState, useToast } from "@weir/ui";
 import { Workspace } from "./components/workspace";
 import { GlobalAnnouncement } from "./components/global-announcement";
-import { api } from "./api";
+import { api, ApiError } from "./api";
 import "./style.css";
 
 // 升级后旧标签页里的入口脚本还指向已删除的分块，按需加载会 404：整页重新加载一次换到新版本；
@@ -83,8 +83,10 @@ function Console() {
       try {
         setMe(await api("/me"));
         setStatus("ready");
-      } catch {
-        setStatus("login");
+      } catch (e) {
+        // 只有 401（没登录或会话过期）才去登录页；中心 5xx、网络断开时显示可重试的错误，不让人白白重新登录
+        if (e instanceof ApiError && e.status === 401) return setStatus("login");
+        throw e;
       }
     } catch (e) {
       setFailure(e instanceof Error ? e.message : String(e));

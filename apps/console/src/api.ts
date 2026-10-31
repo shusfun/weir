@@ -1,4 +1,5 @@
 import { reportError } from "./lib/console-context";
+import { awaitJob, type Job } from "./lib/jobs";
 
 const messages: Record<string, string> = {
  gate_offline:"这台 VPS 当前离线，无法实测；请确认 Gate 服务在运行后重试。",
@@ -12,6 +13,12 @@ const messages: Record<string, string> = {
  driver_not_builtin:"这不是内置驱动，没有可以恢复的内置版本。",
  revision_not_found:"没有这个历史版本。",
  job_not_running:"任务已经结束。",
+ job_not_found:"中心重启过，这次任务的记录已不在。",
+ job_committed:"已经开始写入，不能再取消，请等它结束。",
+ job_cancelled:"已取消。",
+ draft_applying:"这份草稿正在执行。",
+ internal_error:"中心内部错误，请查看中心日志。",
+ invalid_id:"编号无效。",
  self_update_unavailable:"不能在面板里更新",
  self_update_running:"已有一次更新正在进行。",
  self_update_rejected:"更新请求被拒绝",
@@ -414,12 +421,60 @@ export const reauthFields = {
   invalid_code: "code",
 } as const;
 
+// 没有中心错误码的 5xx：反代或开发代理那一层的错误，说清楚是哪一层、操作可能处在什么状态。
+function upstreamMessage(status: number) {
+  if (status === 504)
+    return "反代等中心的回应超时了（nginx 默认 60 秒），中心可能还在执行这次操作；请刷新后核对结果，不要直接重试。";
+  if (status === 502) return "反代连不上中心（HTTP 502）：中心可能正在重启，请稍后重试。";
+  return `服务暂时不可用（HTTP ${status}），请稍后重试。`;
+}
+
+// 本地文案与服务端说明合在一起；一方已经包含另一方时只保留较完整的那段，不拼成「A（A，……）」
+function joinMessage(base: string, detail: string) {
+  if (!detail) return base;
+  const core = base.replace(/[。.]$/, "");
+  if (detail.includes(core)) return detail;
+  if (base.includes(detail)) return base;
+  return `${core}：${detail}`;
+}
+
+// errorFrom 把中心的错误响应换成 ApiError（同步返回与后台任务的结果共用）。
+export function errorFrom(path: string, status: number, data: any): ApiError {
+  if (status >= 500 && !data?.error?.code) return new ApiError(upstreamMessage(status), "upstream_unavailable", status);
+  const code = String(data?.error?.code ?? "http_" + status);
+  const base = messages[code] ?? `操作失败（${code}），请检查输入与服务状态后重试。`;
+  const message = joinMessage(base, data?.error?.detail ? String(data.error.detail) : "");
+  // 页面感知：dsh 能看到最近一次失败提示（上报 / 轮询本身的失败不算）。
+  if (!path.startsWith("/admin/dsh/context") && !path.startsWith("/admin/dsh/navigation")) reportError(code, message);
+  const { code: _c, message: _m, detail: _d, ...extra } = (data?.error ?? {}) as Record<string, unknown>;
+  return new ApiError(message, code, status, extra);
+}
+
+// clause：把错误说明嵌进一句话时用（去掉末尾的句号，由外面的句子收尾）
+export const clause = (e: unknown) => (e instanceof Error ? e.message : String(e)).replace(/[。.！!]+$/, "");
+
+// ApiOptions：token 是初始化凭证；onJob 收到转成后台任务的操作（等待行据此显示步骤、日志与取消）。
+export type ApiOptions = { token?: string; onJob?: (j: Job) => void };
+
+// 可能超过反代时限的操作在中心转成后台任务（返回 202 和 kind 为 action 的任务）：这里等它结束，
+// 把任务的结果当作原本的响应返回或抛出，调用方与同步返回时一样处理。其他 202（下载、SSH 安装）原样返回。
+async function settle(path: string, first: Job, onJob?: (j: Job) => void) {
+  onJob?.(first);
+  const j = await awaitJob(first, onJob);
+  const res = (j.result ?? {}) as { status?: number; body?: any };
+  if (j.status === "cancelled") throw new ApiError(j.error || "已取消。", "job_cancelled", 409);
+  if (!res.status) throw new ApiError(j.error || "操作没有完成。", "internal_error", 500);
+  if (res.status >= 400) throw errorFrom(path, res.status, res.body);
+  return res.body ?? null;
+}
+
 export async function api(
   path: string,
   method = "GET",
   body?: unknown,
-  token?: string,
+  opts?: string | ApiOptions,
 ) {
+  const { token, onJob } = typeof opts === "string" ? { token: opts, onJob: undefined } : (opts ?? {});
   let res: Response;
   try {
     res = await fetch("/api/v1" + path, {
@@ -441,29 +496,11 @@ export async function api(
       data = JSON.parse(text);
     } catch {
       // 反代错误页等非 JSON 响应：不把 SyntaxError 暴露给用户
-      throw new ApiError(
-        res.ok
-          ? "服务返回了无法识别的内容，请刷新后重试。"
-          : `服务暂时不可用（HTTP ${res.status}），请稍后重试。`,
-        res.ok ? "invalid_response" : "upstream_unavailable",
-        res.status,
-      );
+      if (res.ok) throw new ApiError("服务返回了无法识别的内容，请刷新后重试。", "invalid_response", res.status);
+      throw new ApiError(upstreamMessage(res.status), "upstream_unavailable", res.status);
     }
   }
-  // 没有中心错误码的 5xx（反代 / 开发代理连不上中心时的空响应）：是服务不可用，不是输入有误。
-  if (!res.ok && res.status >= 500 && !data?.error?.code) {
-    throw new ApiError(`服务暂时不可用（HTTP ${res.status}），请稍后重试。`, "upstream_unavailable", res.status);
-  }
-  if (!res.ok) {
-    const code = String(data?.error?.code ?? "http_" + res.status);
-    const base = messages[code] ?? `操作失败（${code}），请检查输入与服务状态后重试。`;
-    const detail = data?.error?.detail ? String(data.error.detail) : "";
-    // 服务端的说明已经包含本地文案时只显示说明，不重复成「A（A，……）」
-    const message = !detail ? base : detail.startsWith(base) ? detail : `${base}（${detail}）`;
-    // 页面感知：dsh 能看到最近一次失败提示（上报 / 轮询本身的失败不算）。
-    if (!path.startsWith("/admin/dsh/context") && !path.startsWith("/admin/dsh/navigation")) reportError(code, message);
-    const { code: _c, message: _m, detail: _d, ...extra } = (data?.error ?? {}) as Record<string, unknown>;
-    throw new ApiError(message, code, res.status, extra);
-  }
+  if (!res.ok) throw errorFrom(path, res.status, data);
+  if (res.status === 202 && data?.job?.kind === "action") return settle(path, data.job as Job, onJob);
   return data;
 }

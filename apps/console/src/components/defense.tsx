@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Badge, Button, Field, Form, FormGrid, Input, Notice, SwitchField, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, PasswordInput } from "@weir/ui";
 import { api } from "../api";
 import { useRowAction } from "../lib/action";
+import { ActionsWait } from "./wait";
 import { date } from "../lib/models";
 import { State } from "./feedback";
 import { emptyReauth, Reauth, Section, useReauthAction } from "./system-settings";
@@ -34,12 +35,12 @@ export function LayaCard() {
       void q.refetch();
     },
   });
-  const { run, isBusy } = useRowAction();
+  const { run, isBusy, waitFor } = useRowAction();
   const test = () =>
     run("test", () => api("/admin/defense/laya/test", "POST"), (r) => {
       const { verdict } = r as Verdict;
       return `Laya 可用：合成事件判为「${verdicts[verdict.category] ?? verdict.category}」`;
-    }, { detail: (r) => `置信度 ${Math.round((r as Verdict).verdict.confidence * 100)}%`, fail: "Laya 测试未通过" });
+    }, { detail: (r) => `置信度 ${Math.round((r as Verdict).verdict.confidence * 100)}%`, fail: "Laya 测试未通过", wait: { label: "正在请 Laya 判断一条合成事件", max: 8 } });
   return (
     <Section title="Laya 安全观察" description="Laya 只判断安全事件是否可疑（原生 /v1/systemone 接口）。发给它的事件只有类型与次数，不含来源地址、账号和日志原文。Key 加密保存，不会再显示。">
       {q.isPending || q.error || !v ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : (
@@ -56,6 +57,7 @@ export function LayaCard() {
           <div className="actions">
             <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
             <Button type="button" variant="outline" disabled={isBusy() || !q.data?.enabled} onClick={() => void test()} busy={isBusy()} busyText="正在测试…">测试</Button>
+            <ActionsWait wait={waitFor("test")} />
           </div>
           {save.error && <Notice tone="bad">{save.error}</Notice>}
         </Form>
@@ -92,6 +94,7 @@ export function EventsCard({ dshReady }: { dshReady: boolean }) {
   const q = useQuery({ queryKey: ["defense-events"], queryFn: () => api("/admin/defense/events") as Promise<{ events: SecurityEvent[]; analyzing: string }>, refetchInterval: 5000 });
   const { run, isBusy } = useRowAction<number>({ refetch: q.refetch });
   const act = (id: number, path: string, ok: string) => run(id, () => api(path, "POST"), ok);
+  const [acting, setActing] = useState<"analyze" | "dismiss">("dismiss");
   return (
     <Section title="安全事件" description="规则发现的异常（连续登录失败、触发限流）。Laya 判为可疑后可以交给 dsh 分析；dsh 认为需要处置时，会弹窗请你确认封禁。">
       {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : q.data.events.length === 0 ? <State empty="还没有安全事件" /> : (
@@ -111,8 +114,8 @@ export function EventsCard({ dshReady }: { dshReady: boolean }) {
                     <TableCell>
                       {(e.status === "new" || e.status === "no_action") && (
                         <div className="flex flex-wrap gap-1">
-                          <Button size="xs" variant="outline" disabled={!dshReady || !!q.data.analyzing || isBusy(e.id)} title={dshReady ? undefined : "dsh 未运行"} onClick={() => void act(e.id, `/admin/defense/events/${e.id}/analyze`, "已交给 dsh 分析")}>让 dsh 分析</Button>
-                          <Button size="xs" variant="ghost" disabled={isBusy(e.id)} onClick={() => void act(e.id, `/admin/defense/events/${e.id}/dismiss`, "已忽略")}>忽略</Button>
+                          <Button size="xs" variant="outline" disabled={!dshReady || !!q.data.analyzing || isBusy()} busy={isBusy(e.id) && acting === "analyze"} busyText="正在交给 dsh…" title={dshReady ? undefined : "dsh 未运行"} onClick={() => { setActing("analyze"); void act(e.id, `/admin/defense/events/${e.id}/analyze`, "已交给 dsh 分析"); }}>让 dsh 分析</Button>
+                          <Button size="xs" variant="ghost" disabled={isBusy()} busy={isBusy(e.id) && acting === "dismiss"} busyText="正在忽略…" onClick={() => { setActing("dismiss"); void act(e.id, `/admin/defense/events/${e.id}/dismiss`, "已忽略"); }}>忽略</Button>
                         </div>
                       )}
                     </TableCell>
@@ -146,7 +149,7 @@ export function BlocksCard() {
           {q.data.map((b) => (
             <li key={b.key} className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-2">
               <span><code>{b.ip}</code><small className="ml-2 text-[var(--weir-ink-3)]">到 {date(b.until)} · 事件 #{b.event_id}</small><small className="block whitespace-pre-wrap break-words">{b.reason}</small></span>
-              <Button size="sm" variant="outline" disabled={isBusy(b.key)} onClick={() => void unblock(b)}>解封</Button>
+              <Button size="sm" variant="outline" disabled={isBusy()} busy={isBusy(b.key)} busyText="正在解封…" onClick={() => void unblock(b)}>解封</Button>
             </li>
           ))}
         </ul>

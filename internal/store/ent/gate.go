@@ -48,6 +48,8 @@ type Gate struct {
 	Panel map[string]interface{} `json:"panel,omitempty"`
 	// Firewall holds the value of the "firewall" field.
 	Firewall map[string]interface{} `json:"firewall,omitempty"`
+	// SelfUpdate holds the value of the "self_update" field.
+	SelfUpdate map[string]interface{} `json:"self_update,omitempty"`
 	// ConfigRevision holds the value of the "config_revision" field.
 	ConfigRevision int64 `json:"config_revision,omitempty"`
 	// AppliedRevision holds the value of the "applied_revision" field.
@@ -74,7 +76,7 @@ func (*Gate) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case gate.FieldListeningPorts, gate.FieldKernelsRunning, gate.FieldKernelPins, gate.FieldHost, gate.FieldPanel, gate.FieldFirewall:
+		case gate.FieldListeningPorts, gate.FieldKernelsRunning, gate.FieldKernelPins, gate.FieldHost, gate.FieldPanel, gate.FieldFirewall, gate.FieldSelfUpdate:
 			values[i] = new([]byte)
 		case gate.FieldID, gate.FieldConfigRevision, gate.FieldAppliedRevision, gate.FieldFailedRevision, gate.FieldXrayStatsPort, gate.FieldSingboxStatsPort, gate.FieldMeterSeq:
 			values[i] = new(sql.NullInt64)
@@ -204,6 +206,14 @@ func (_m *Gate) assignValues(columns []string, values []any) error {
 			} else if value != nil && len(*value) > 0 {
 				if err := json.Unmarshal(*value, &_m.Firewall); err != nil {
 					return fmt.Errorf("unmarshal field firewall: %w", err)
+				}
+			}
+		case gate.FieldSelfUpdate:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field self_update", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.SelfUpdate); err != nil {
+					return fmt.Errorf("unmarshal field self_update: %w", err)
 				}
 			}
 		case gate.FieldConfigRevision:
@@ -342,6 +352,9 @@ func (_m *Gate) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("firewall=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Firewall))
+	builder.WriteString(", ")
+	builder.WriteString("self_update=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SelfUpdate))
 	builder.WriteString(", ")
 	builder.WriteString("config_revision=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ConfigRevision))

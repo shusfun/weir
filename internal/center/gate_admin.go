@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/shusfun/weir/internal/buildinfo"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/gate"
 )
@@ -14,6 +15,7 @@ import (
 func (s *Server) gateAdminRoutes(admin *gin.RouterGroup) {
 	admin.GET("/gates", s.listGates)
 	admin.POST("/gates/invite", s.inviteGate)
+	admin.GET("/gates/pairing/:digest", s.pairingStatus)
 	admin.GET("/gates/:id", s.getGate)
 	admin.GET("/gates/:id/topology", s.gateTopology)
 	admin.PATCH("/gates/:id", s.updateGate)
@@ -41,6 +43,8 @@ func gateView(g *ent.Gate) gin.H {
 		"listening_ports": g.ListeningPorts, "host": g.Host, "created_at": g.CreatedAt,
 		"xray_stats_port": g.XrayStatsPort, "singbox_stats_port": g.SingboxStatsPort, "panel": g.Panel,
 		"firewall": g.Firewall, "public_host_hint": publicHostHint(g), "colocated": colocated(g),
+		// center_version：页面据此标出没跟上中心版本的 VPS；self_update 是它自更新失败的原因
+		"center_version": buildinfo.Version, "self_update": g.SelfUpdate,
 	}
 }
 
@@ -97,7 +101,46 @@ func (s *Server) inviteGate(c *gin.Context) {
 	}
 	s.audit(c, "gate.invite", name, "ok")
 	command := "curl -fsSL " + publicLink(c.Request, "/install/gate.sh") + " | sh -s -- --token " + token
-	c.JSON(201, gin.H{"token": token, "command": command, "expires_in": 3600})
+	// pairing 是凭证的摘要：页面用它查配对进度，凭证本身不出现在网址里
+	c.JSON(201, gin.H{"token": token, "command": command, "expires_in": 3600, "pairing": digest(token)})
+}
+
+// pairingStatus 按凭证摘要查「复制安装命令」的配对进度：waiting（命令还没执行）→ paired（已配对，等第一次心跳）
+// → online（已上线）；expired 是凭证已过期或已用掉但查不到配对结果（超过 1 小时）。
+func (s *Server) pairingStatus(c *gin.Context) {
+	sum := strings.ToLower(c.Param("digest"))
+	if len(sum) != 64 || strings.Trim(sum, "0123456789abcdef") != "" {
+		failure(c, 400, "invalid_id")
+		return
+	}
+	ctx := c.Request.Context()
+	if raw, ok, err := s.Store.KV.Get(ctx, "paired:"+sum); err != nil {
+		failInternal(c, 503, "query_failed", err)
+		return
+	} else if ok {
+		id, _ := strconv.Atoi(raw)
+		g, err := s.Store.Ent.Gate.Get(ctx, id)
+		if err != nil {
+			c.JSON(200, gin.H{"state": "removed", "gate_id": id})
+			return
+		}
+		state := "paired"
+		if g.LastSeenAt != nil {
+			state = "online"
+		}
+		c.JSON(200, gin.H{"state": state, "gate_id": g.ID, "name": g.Name, "paired_at": g.CreatedAt, "last_seen_at": g.LastSeenAt})
+		return
+	}
+	_, ok, err := s.Store.KV.Get(ctx, "pair:"+sum)
+	if err != nil {
+		failInternal(c, 503, "query_failed", err)
+		return
+	}
+	if ok {
+		c.JSON(200, gin.H{"state": "waiting"})
+		return
+	}
+	c.JSON(200, gin.H{"state": "expired"})
 }
 
 func (s *Server) updateGate(c *gin.Context) {

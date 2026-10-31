@@ -65,23 +65,6 @@ func logged(status int, code string) bool {
 	return false
 }
 
-// taskLog 记录周期任务的失败：同一项任务原因不变时只记第一次，原因变了或恢复了再记一次，每分钟运行也不刷屏。
-type taskLog map[string]string
-
-func (t taskLog) note(task string, err error) {
-	prev := t[task]
-	switch {
-	case err == nil && prev != "":
-		delete(t, task)
-		slog.Info("task recovered", "task", task)
-	case err != nil:
-		if msg := redact(err.Error()); msg != prev {
-			t[task] = msg
-			slog.Error("task failed", "task", task, "err", msg)
-		}
-	}
-}
-
 func requestID() string {
 	var b [6]byte
 	_, _ = rand.Read(b[:])

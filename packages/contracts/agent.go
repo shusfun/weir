@@ -27,6 +27,15 @@ type Heartbeat struct {
 	PanelCerts map[string]PanelCert `json:"panel_certs,omitempty"`
 	// Firewall 是本机防火墙的状态（读不到时为空，中心显示「未知」）。
 	Firewall *FirewallStatus `json:"firewall,omitempty"`
+	// SelfUpdate 是最近一次自更新失败的原因；更新成功（进程已换成新版本）或已与中心同版本时为空。
+	SelfUpdate *SelfUpdateStatus `json:"self_update,omitempty"`
+}
+
+// SelfUpdateStatus 是 Gate 自更新到中心版本失败的记录。
+type SelfUpdateStatus struct {
+	Version string    `json:"version"` // 要更新到的版本（中心的版本）
+	Error   string    `json:"error"`
+	At      time.Time `json:"at"`
 }
 
 // PanelStatus 是 Gate 本机 1Panel 的状态。API 密钥只存在 Gate 本机（root 可读），从不上报。

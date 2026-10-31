@@ -85,7 +85,7 @@ export function ProfilesPanel() {
                 <Button size="sm" variant="outline" onClick={() => setGrants(p)}><Users />用户</Button>
                 <Button size="sm" variant="outline" onClick={() => setShare(p)}><Share2 />分享</Button>
                 <Button size="sm" variant="outline" onClick={() => setEdit(p)}>编辑</Button>
-                <Button size="icon-sm" variant="destructive" aria-label={"删除 " + p.name} disabled={isBusy(p.id)} onClick={() => void remove(p)}><Trash2 /></Button>
+                <Button size="icon-sm" variant="destructive" aria-label={"删除 " + p.name} disabled={isBusy()} busy={isBusy(p.id)} busyText="正在删除" onClick={() => void remove(p)}><Trash2 /></Button>
               </span>
             </li>
           ))}
@@ -274,6 +274,8 @@ function ShareDialog({ profile, close, changed }: { profile: Profile; close: () 
                   type="button"
                   variant="destructive"
                   disabled={busy}
+                  busy={revoke.busy}
+                  busyText="正在撤下…"
                   onClick={async () => (await confirm({ title: "撤下分享？", description: "分享地址立即失效；已下载到客户端的节点无法收回。", confirmText: "撤下", tone: "danger" })) && void revoke.submit()}
                 >
                   撤下分享

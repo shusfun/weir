@@ -16,6 +16,8 @@ import { GateRouting } from "../components/gate-routing";
 import { GateDetail } from "../components/gate-detail";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
+import { WaitText } from "../components/wait";
+import { GateVersion, SelfUpdateError } from "../components/gate-version";
 import { State } from "../components/feedback";
 import { InviteGate } from "../components/invite-gate";
 import { CertManager } from "../components/cert-manager";
@@ -144,10 +146,11 @@ export function GatesPage() {
                     {g.name}
                     <span className={"text-[13px] font-medium " + (tone === "ok" ? "text-[var(--weir-ok-ink)]" : tone === "warn" ? "text-[var(--weir-warn-ink)]" : "text-[var(--weir-bad-ink)]")}>{label}</span>
                   </h2>
-                  <small className="text-[var(--weir-ink-3)]">
-                    {g.public_host || "等待上报地址"} · {list.length} 个协议{list.length ? `，${usable} 个可用` : ""} · 最近心跳 {date(g.last_seen_at)}
+                  <small className="flex flex-wrap items-center gap-x-1.5 text-[var(--weir-ink-3)]">
+                    {g.public_host || "等待上报地址"} · {list.length} 个协议{list.length ? `，${usable} 个可用` : ""} · 最近心跳 {date(g.last_seen_at)} <GateVersion gate={g} />
                   </small>
                   {g.state === "failed" && g.last_error && <p className="text-sm text-[var(--weir-bad-ink)]">{g.last_error}</p>}
+                  <SelfUpdateError gate={g} />
                   {!g.public_host && (
                     <p className="text-sm text-[var(--weir-warn-ink)]">
                       还没有公网地址，这台 VPS 上的节点生成不了节点链接。{g.colocated ? "中心与它在同一台机器上，记录不到来源地址；" : ""}请点「编辑」填写{g.public_host_hint ? `（本机网卡上的公网 IP 是 ${g.public_host_hint}）` : ""}。
@@ -192,7 +195,7 @@ export function GatesPage() {
 function NodeDetail({ node: n, gate: g, nodes, close, changed }: { node: NodeItem; gate?: Gate; nodes: NodeItem[]; close: () => void; changed: () => void }) {
   const confirm = useConfirm();
   const toast = useToast();
-  const { run, isBusy } = useRowAction<string>({ refetch: async () => changed() });
+  const { run, isBusy, waitFor } = useRowAction<string>({ refetch: async () => changed() });
   const [s, tone, why] = nodeStatus(n, g);
   useConsoleContext({ object: { type: "node", name: n.name, id: n.id }, dialog: { title: "节点详情" } });
   const exit =
@@ -222,13 +225,13 @@ function NodeDetail({ node: n, gate: g, nodes, close, changed }: { node: NodeIte
             onCheckedChange={(v) => void run("enable", () => api("/admin/nodes/" + n.id, "PATCH", { enabled: v }), v ? "节点已启用" : "节点已停用")} />
           {g && !g.online && <Notice tone="warn">这台 VPS 离线，实测要等它重新连上。</Notice>}
         </div>
-        <DialogFooter>
-          <Button variant="destructive" disabled={isBusy()} onClick={async () => (await confirm({ title: `删除节点「${n.name}」？`, description: "使用它的订阅会立即失效。", confirmText: "删除", tone: "danger" })) && (await run("delete", () => api("/admin/nodes/" + n.id, "DELETE"), "节点已删除")) && close()}>
+        <DialogFooter status={(waitFor("test") || waitFor("delete")) && <WaitText wait={waitFor("test") || waitFor("delete")} />}>
+          <Button variant="destructive" disabled={isBusy()} busy={isBusy("delete")} busyText="正在删除…" onClick={async () => (await confirm({ title: `删除节点「${n.name}」？`, description: "使用它的订阅会立即失效。", confirmText: "删除", tone: "danger" })) && (await run("delete", () => api("/admin/nodes/" + n.id, "DELETE"), "节点已删除")) && close()}>
             <Trash2 />删除
           </Button>
           <Button variant="outline" onClick={() => { close(); openDsh({ notice: `dsh 已知道你在看节点「${n.name}」，直接说要怎么调整即可。`, nodeId: n.id, nodeName: n.name }); }}><Sparkles />AI 调整</Button>
           <Button ripple disabled={isBusy() || !g?.online} busy={isBusy("test")} busyText="正在实测…"
-            onClick={() => void run("test", async () => { const r = await api(`/admin/nodes/${n.id}/test`, "POST", {}); toast(`实测通过：${r.latency_ms} ms`, { tone: "ok" }); })}>
+            onClick={() => void run("test", async () => { const r = await api(`/admin/nodes/${n.id}/test`, "POST", {}); toast(`实测通过：${r.latency_ms} ms`, { tone: "ok" }); }, undefined, { wait: { label: `正在让 ${g?.name ?? "VPS"} 用真实内核实测「${n.name}」`, max: 50 } })}>
             实测
           </Button>
         </DialogFooter>

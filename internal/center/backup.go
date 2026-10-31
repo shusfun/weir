@@ -35,7 +35,7 @@ func (s *Server) backupRoutes(admin *gin.RouterGroup) {
 	admin.POST("/backup/import", s.importBackup)
 	admin.GET("/backup/webdav", s.getWebdav)
 	admin.PUT("/backup/webdav", s.putWebdav)
-	admin.POST("/backup/webdav/run", s.runWebdav)
+	admin.POST("/backup/webdav/run", s.asJob("立即备份到 WebDAV", "已取消；WebDAV 上可能留下一个没传完的文件", s.runWebdav))
 	admin.GET("/backup/webdav/files", s.listWebdav)
 	admin.POST("/backup/webdav/restore", s.restoreWebdav)
 }
@@ -506,6 +506,7 @@ func (s *Server) RunWebdavBackup(ctx context.Context) (string, error) {
 	if err == nil {
 		name := "weir-subscriptions-" + time.Now().UTC().Format("20060102-150405") + ".json"
 		var resp *http.Response
+		jobStep(ctx, "正在上传备份 "+name, 30*time.Second)
 		if resp, err = s.webdavRequest(ctx, cfg, "PUT", name, data, map[string]string{"Content-Type": "application/json"}); err == nil {
 			resp.Body.Close()
 			if resp.StatusCode >= 300 {
@@ -513,6 +514,8 @@ func (s *Server) RunWebdavBackup(ctx context.Context) (string, error) {
 			}
 		}
 		if err == nil {
+			jobStep(ctx, fmt.Sprintf("正在清理旧备份（保留最近 %d 份）", cfg.Keep), 0)
+			ctx := context.WithoutCancel(ctx)
 			if files, lerr := s.WebdavFiles(ctx, cfg); lerr == nil {
 				for _, old := range files[min(len(files), cfg.Keep):] {
 					if r, derr := s.webdavRequest(ctx, cfg, "DELETE", old, nil, nil); derr == nil {
@@ -526,8 +529,12 @@ func (s *Server) RunWebdavBackup(ctx context.Context) (string, error) {
 			return name, nil
 		}
 	}
+	// 管理员取消的不是备份失败，不记成上次的错误
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return "", err
+	}
 	cfg.LastError = err.Error()
-	_ = s.saveWebdav(ctx, cfg)
+	_ = s.saveWebdav(context.WithoutCancel(ctx), cfg)
 	return "", err
 }
 

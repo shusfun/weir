@@ -45,6 +45,8 @@ export function ClientMirrorsEditor() {
   useConsoleContext({ dialog: confirm ? { title: "确认保存加速镜像" } : undefined, form: [field("mirrors", "加速镜像", draft.split("\n").filter(Boolean).length + " 条"), field("password", "当前密码", re.password, true)] });
   if (query.isPending) return <State loading />;
   if (query.error) return <State error={query.error} onRetry={() => query.refetch()} />;
+  // 读不到自己的账户就不知道要不要二次验证码：先说明原因，不让人到提交时才被拒
+  if (self.error) return <State error={self.error} onRetry={() => self.refetch()} />;
   const list = parse(draft);
   const dirty = list.join("\n") !== query.data.mirrors.join("\n");
   const conflict = isConflict(save.raw);

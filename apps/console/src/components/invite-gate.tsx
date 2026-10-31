@@ -1,17 +1,20 @@
 // 添加 VPS：两种方式。「SSH 一次装好」：填登录信息 → 核对主机指纹 → 中心登录上去执行安装命令，实时看日志，装完自动上线；
 // 「复制命令」：生成一次性配对命令（1 小时有效），自己在 VPS 上以 root 执行。登录密码与私钥只用于这一次安装，不保存。
 import { useId, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Button, CodeBlock, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, FilePicker, Form, Input, Notice, PasswordInput, Segmented,
   Tabs, TabsList, TabsPanel, TabsTab, Textarea,
 } from "@weir/ui";
 import { ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
-import { api } from "../api";
+import { api, clause } from "../api";
 import { useFormAction } from "../lib/action";
 import { field, useConsoleContext } from "../lib/console-context";
 import { objectHref } from "../lib/objects";
 import { JobByID, type Job } from "./job";
+import { useTick, WaitText } from "./wait";
+import { pollingNote, useLive } from "../lib/live";
 
 type Mode = "ssh" | "command";
 
@@ -72,6 +75,7 @@ function SSHInstall({ name, setName, close, done }: { name: string; setName: (v:
   const check = useFormAction(() => api("/admin/gates/ssh/probe", "POST", { host: host.trim(), port: Number(port) || 22, user: user.trim() }) as Promise<{ fingerprint: string; key_type: string }>, {
     fields: { invalid_ssh_host: "host", ssh_not_public: "host", ssh_unresolved: "host", invalid_ssh_port: "port", invalid_ssh_user: "user" },
     onSuccess: setProbe,
+    wait: () => ({ label: `正在从中心连接 ${host.trim()}:${Number(port) || 22} 并读取主机指纹`, max: 15 }),
   });
   const install = useFormAction(() => api("/admin/gates/ssh/install", "POST", { ...target(), name: name.trim(), fingerprint: probe?.fingerprint }) as Promise<{ job: Job }>, {
     fields: { invalid_ssh_key: "key", ssh_key_passphrase_required: "passphrase", ssh_auth_required: auth === "password" ? "password" : "key", invalid_name: "name" },
@@ -155,7 +159,7 @@ function SSHInstall({ name, setName, close, done }: { name: string; setName: (v:
         </>
       )}
       <small className="text-[var(--weir-ink-3)]">登录信息只用于这一次安装：不保存、不写日志，也不会交给 AI。中心只执行固定的安装命令，装完断开。</small>
-      <DialogFooter error={check.error}>
+      <DialogFooter error={check.error} status={check.wait && <WaitText wait={check.wait} />}>
         <Button type="button" variant="outline" disabled={check.busy} onClick={close}>取消</Button>
         <Button type="submit" form={formId} ripple disabled={!ready} busy={check.busy} busyText="正在连接…">连接并核对指纹</Button>
       </DialogFooter>
@@ -165,11 +169,13 @@ function SSHInstall({ name, setName, close, done }: { name: string; setName: (v:
 
 function CommandInstall({ name, setName, close, done }: { name: string; setName: (v: string) => void; close: () => void; done: () => void }) {
   const [command, setCommand] = useState("");
+  const [pairing, setPairing] = useState("");
   const [copyError, setCopyError] = useState("");
   const formId = useId();
-  const invite = useFormAction(() => api("/admin/gates/invite", "POST", { name: name.trim() }) as Promise<{ command: string }>, {
+  const invite = useFormAction(() => api("/admin/gates/invite", "POST", { name: name.trim() }) as Promise<{ command: string; pairing: string }>, {
     onSuccess: (res) => {
       setCommand(res.command);
+      setPairing(res.pairing);
       done();
     },
   });
@@ -178,9 +184,10 @@ function CommandInstall({ name, setName, close, done }: { name: string; setName:
     return (
       <div className="stack">
         <CodeBlock className="block whitespace-pre-wrap break-all">{command}</CodeBlock>
-        <Notice role="status">在 VPS 上以 root 执行。命令 1 小时内有效且只能使用一次；连接成功后这台 VPS 会出现在列表中。</Notice>
+        <small className="text-[var(--weir-ink-3)]">在 VPS 上以 root 执行。命令 1 小时内有效且只能使用一次。</small>
+        {pairing && <PairingProgress digest={pairing} command={command} close={close} done={done} />}
         <DialogFooter error={copyError}>
-          <Button variant="outline" onClick={() => { setCommand(""); invite.reset(); }}>重新生成</Button>
+          <Button variant="outline" onClick={() => { setCommand(""); setPairing(""); invite.reset(); }}>重新生成</Button>
           <CopyButton ripple value={command} onError={() => setCopyError("复制失败，请手动选择命令复制。")}>复制命令</CopyButton>
           <Button variant="outline" onClick={close}>完成</Button>
         </DialogFooter>
@@ -194,5 +201,44 @@ function CommandInstall({ name, setName, close, done }: { name: string; setName:
         <Button type="submit" form={formId} ripple disabled={!name.trim()} busy={invite.busy} busyText="正在生成…">生成安装命令</Button>
       </DialogFooter>
     </Form>
+  );
+}
+
+type Pairing = { state: "waiting" | "paired" | "online" | "expired" | "removed"; gate_id?: number; name?: string };
+
+// PairingProgress：复制安装命令之后的进度，固定占一行：等待执行 → 已配对，等第一次心跳 → 已上线。
+// 按凭证的摘要查询（凭证本身不出现在网址里）；事件流连着时配对与第一次心跳由中心提醒，断开时每 3 秒查一次。
+// 等了 2 分钟还没有配对，提示在 VPS 上确认它能用 HTTPS 连到中心：连不上中心时这里不会有任何变化。
+function PairingProgress({ digest, command, close, done }: { digest: string; command: string; close: () => void; done: () => void }) {
+  const live = useLive();
+  const [since] = useState(() => Date.now());
+  const q = useQuery({
+    queryKey: ["pairing", digest],
+    queryFn: () => api("/admin/gates/pairing/" + digest) as Promise<Pairing>,
+    refetchInterval: (query) => (["online", "expired", "removed"].includes(query.state.data?.state ?? "") ? false : live ? 30_000 : 3000),
+  });
+  const st = q.data?.state;
+  useTick(st !== "online" && st !== "expired" && st !== "removed");
+  const secs = Math.round((Date.now() - since) / 1000);
+  const origin = command.match(/https:\/\/[^/\s'"]+/)?.[0] ?? "";
+  const note = live ? "" : " · " + pollingNote.replace("每秒", "每 3 秒");
+  if (q.error) return <Notice tone="bad" role="alert">读取配对进度失败：{clause(q.error)}。<Button size="xs" variant="ghost" onClick={() => void q.refetch()}>重新读取</Button></Notice>;
+  if (st === "online")
+    return (
+      <Notice tone="ok" role="status">
+        「{q.data?.name}」已上线。<Link className="underline" to={objectHref({ type: "gate", id: q.data!.gate_id! })} onClick={() => { done(); close(); }}>打开这台 VPS</Link>，点「＋ 协议」建节点。
+      </Notice>
+    );
+  if (st === "expired") return <Notice tone="warn" role="status">这条命令已过期或已经用掉，没有配出 VPS。点「重新生成」换一条。</Notice>;
+  if (st === "removed") return <Notice tone="warn" role="status">配出的 VPS 已被删除。</Notice>;
+  const text = st === "paired" ? `已配对「${q.data?.name}」，等它第一次心跳 · 已等 ${secs} 秒${note}` : `等待在 VPS 上执行命令 · 已等 ${secs} 秒${note}`;
+  return (
+    <Notice role="status">
+      <span className="tabular-nums">{text}</span>
+      {st !== "paired" && secs >= 120 && origin && (
+        <small className="mt-1 block">还没有配对：在 VPS 上运行 <code>curl -sS {origin}/healthz</code>，确认它能用 HTTPS 连到中心（防火墙、DNS、证书）；连不上中心时这里不会有任何变化。</small>
+      )}
+      {st === "paired" && secs >= 150 && <small className="mt-1 block">已配对但还没有心跳：在 VPS 上运行 <code>systemctl status weir-gate</code> 查看 Gate 服务。</small>}
+    </Notice>
   );
 }

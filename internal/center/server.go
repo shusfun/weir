@@ -74,6 +74,10 @@ type Server struct {
 	GeoDB   geoLocator
 	// live 是链路页的实时数据（只在内存，见 live.go）。
 	live liveHub
+	// events 是控制台事件流的提醒与停止信号（见 events.go）。
+	events eventHub
+	// tasks 是周期任务正在失败的项（见 tasks.go），管理员通知据此提示。
+	tasks taskLog
 }
 
 func New(c Config, path string, assets fs.FS) (*Server, error) {
@@ -154,6 +158,9 @@ func openInstalled(ctx context.Context, c Config) (*store.Store, error) {
 }
 
 func (s *Server) Close() {
+	// 先结束长连接与还能取消的后台任务：它们不持有 state 锁之外的东西，但可能还在用存储
+	s.events.close()
+	s.jobs.Shutdown(5 * time.Second)
 	s.state.Lock()
 	defer s.state.Unlock()
 	if s.Store != nil {
@@ -175,7 +182,7 @@ func (s *Server) StartBackground(ctx context.Context) {
 func (s *Server) maintenance(ctx context.Context) {
 	tick := time.NewTicker(time.Minute)
 	defer tick.Stop()
-	report := taskLog{}
+	report := &s.tasks
 	for {
 		select {
 		case <-ctx.Done():
@@ -344,7 +351,8 @@ func (s *Server) Router() *gin.Engine {
 	s.pageRoutes(ready, admin)
 	s.opsRoutes(admin)
 	s.dshRoutes(admin)
-	s.jobRoutes(admin)
+	s.jobRoutes(auth, admin)
+	auth.GET("/me/events", s.consoleEvents)
 	s.selfUpdateRoutes(admin)
 	s.driverRoutes(admin)
 	s.noticeRoutes(admin)
@@ -443,7 +451,7 @@ func storeFailure(c *gin.Context, err error) {
 	case errors.Is(err, store.ErrRedisUnavailable):
 		failure(c, 400, "redis_connection_failed")
 	case errors.Is(err, errStoreSchema):
-		failure(c, 500, "store_schema_failed")
+		failInternal(c, 500, "store_schema_failed", err)
 	default:
 		failure(c, 400, "store_connection_failed")
 	}
@@ -488,8 +496,7 @@ func (s *Server) install(c *gin.Context) {
 		case errors.Is(err, errStoreOpen):
 			storeFailure(c, err)
 		default:
-			fmt.Fprintln(os.Stderr, "setup install:", err)
-			failure(c, 500, "install_failed")
+			failInternal(c, 500, "install_failed", err)
 		}
 		return
 	}

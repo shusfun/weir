@@ -299,11 +299,14 @@ function DialogFooter({
   className,
   showCloseButton = false,
   error,
+  status,
   children,
   ...props
 }: ComponentProps<"div"> & {
   showCloseButton?: boolean;
   error?: ReactNode;
+  // status：等待提示或结果（<WaitText>），与错误共用按钮左侧这一位；有错误时只显示错误
+  status?: ReactNode;
 }) {
   const slot = useContext(DialogSlotContext);
   const formId = slot?.formId ?? null;
@@ -327,11 +330,15 @@ function DialogFooter({
       {...props}
     >
       {actions}
-      {error && (
+      {error ? (
         <p role="alert" className="m-0 min-w-0 text-[13px] leading-[1.5] text-[var(--weir-bad-ink)] sm:order-first sm:mr-auto sm:self-center">
           {error}
         </p>
-      )}
+      ) : status ? (
+        <div role="status" className="m-0 min-w-0 text-[13px] leading-[1.5] text-[var(--weir-ink-2)] sm:order-first sm:mr-auto sm:self-center">
+          {status}
+        </div>
+      ) : null}
       {showCloseButton && (
         <DialogPrimitive.Close render={<Button variant="outline" />}>
           Close

@@ -155,6 +155,12 @@ func (s *Server) agentHeartbeat(c *gin.Context) {
 	if len(hb.Center) <= 255 {
 		upd.SetCenterURL(hb.Center)
 	}
+	// 自更新失败的原因：这次没有就清空（已更新成功或已与中心同版本）。
+	if su := hb.SelfUpdate; su != nil && len(su.Error) <= 2000 {
+		upd.SetSelfUpdate(map[string]any{"version": su.Version, "error": su.Error, "at": su.At})
+	} else {
+		upd.ClearSelfUpdate()
+	}
 	// 防火墙：这次没读到时清空（显示「未知」），不沿用旧的结果。
 	if fw := hb.Firewall; fw != nil && len(fw.Rules) <= 500 {
 		upd.SetFirewall(map[string]any{"tool": fw.Tool, "active": fw.Active, "rules": fw.Rules, "error": fw.Error, "at": time.Now().UTC()})
@@ -166,10 +172,15 @@ func (s *Server) agentHeartbeat(c *gin.Context) {
 			upd.SetPublicHost(ip)
 		}
 	}
+	first := g.LastSeenAt == nil
 	g, err := upd.Save(ctx)
 	if err != nil {
 		failInternal(c, 500, "save_failed", err)
 		return
+	}
+	if first {
+		// 第一次心跳：「复制安装命令」的配对进度据此显示「已上线」
+		s.notifyConsole("gate", itoa(g.ID))
 	}
 	s.absorbPanelReport(ctx, g, hb)
 	s.recordHost(ctx, g.ID, hb.Host, time.Now())

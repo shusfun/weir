@@ -22,6 +22,7 @@ import { Steps, Step, Field, Form, FormGrid, Notice, CheckMark, IconTile, prefer
 } from "@weir/ui";
 import { TextField } from "../components/form-field";
 import { api } from "../api";
+import { useTick } from "../components/wait";
 import { accountPasswordError } from "../password";
 
 type Driver = "sqlite" | "postgres";
@@ -95,6 +96,7 @@ export function SetupPage({ done }: { done: () => void }) {
   });
   const [detection, setDetection] = useState<Detection | null>(null),
     [detecting, setDetecting] = useState(false),
+    [detectSince, setDetectSince] = useState(0),
     [detectError, setDetectError] = useState("");
   const [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
@@ -178,6 +180,7 @@ export function SetupPage({ done }: { done: () => void }) {
   // 探测本机的 PostgreSQL / Redis 并填入表单；密码框留空即使用中心读到的密码。
   async function detect() {
     setDetecting(true);
+    setDetectSince(Date.now());
     setDetectError("");
     try {
       const found: Detection = await api("/setup/detect-store", "POST", {}, token);
@@ -351,7 +354,7 @@ export function SetupPage({ done }: { done: () => void }) {
                         <>
                           <div className="flex flex-col gap-2" aria-live="polite">
                             {detecting ? (
-                              <Notice role="status">正在探测服务器上的 PostgreSQL 与 Redis…</Notice>
+                              <Notice role="status"><DetectWait since={detectSince} /></Notice>
                             ) : detectError ? (
                               <Notice tone="warn">{detectError}</Notice>
                             ) : detection ? (
@@ -531,4 +534,10 @@ export function SetupPage({ done }: { done: () => void }) {
       </div>
     </main>
   );
+}
+
+// 探测最多 20 秒（读 1Panel 的应用配置并逐个连接）：写明等了多久
+function DetectWait({ since }: { since: number }) {
+  useTick(true);
+  return <span className="tabular-nums">正在探测服务器上的 PostgreSQL 与 Redis · 已等 {Math.max(0, Math.round((Date.now() - since) / 1000))} 秒，最多 20 秒</span>;
 }

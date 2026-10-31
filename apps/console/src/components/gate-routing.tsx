@@ -6,6 +6,7 @@ import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, 
 import { Plus, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
+import { WaitText } from "./wait";
 import type { ExitProbe, Gate } from "../lib/core";
 import { parseExitText } from "../lib/exit-parse";
 import { probeText } from "./chain-exit";
@@ -53,7 +54,7 @@ export function GateRouting({ gate, close }: { gate: Gate; close: () => void }) 
   const routes = useQuery({ queryKey: ["routes", gate.id], queryFn: async () => (await api(base + "/routes")).items as Route[] });
   const [editOut, setEditOut] = useState<Outbound | "new" | null>(null);
   const [editRoute, setEditRoute] = useState<Route | "new" | null>(null);
-  const { run, isBusy } = useRowAction<string>({ refetch: () => Promise.all([outs.refetch(), routes.refetch()]) });
+  const { run, isBusy, waitFor } = useRowAction<string>({ refetch: () => Promise.all([outs.refetch(), routes.refetch()]) });
   useConsoleContext({ object: { type: "gate", name: gate.name, id: gate.id }, dialog: { title: "出口与分流" }, notices: [`${outs.data?.length ?? "未知"} 个出口，${routes.data?.length ?? "未知"} 条分流规则`] });
   return (
     <Dialog open onOpenChange={(o) => !o && close()}>
@@ -71,12 +72,12 @@ export function GateRouting({ gate, close }: { gate: Gate; close: () => void }) 
               <li key={o.id} className="flex flex-wrap items-center justify-between gap-2">
                 <span className="min-w-0">
                   <code>{o.tag}</code> {o.name} <Badge variant="soft" tone="neutral">{protoNames[o.protocol] ?? o.protocol}</Badge>{o.address && <small className="ml-1">{o.address}:{o.port}</small>}{o.protocol === "source" && <small className="ml-1"><SourceSummary choice={o.settings} resolved={o.source} /></small>}{!o.enabled && <Badge variant="soft" tone="warn">停用</Badge>}
-                  {o.address && <small className="block text-[var(--weir-ink-3)]">{probeText(o.probe)}</small>}
+                  {o.address && <small className="block text-[var(--weir-ink-3)]">{waitFor("p" + o.id) ? <WaitText wait={waitFor("p" + o.id)} /> : probeText(o.probe)}</small>}
                 </span>
                 <span className="flex flex-nowrap gap-1.5">
-                  {o.address && <Button size="sm" variant="outline" disabled={isBusy("p" + o.id)} onClick={() => run("p" + o.id, () => api(`${base}/outbounds/${o.id}/probe`, "POST", {}), "实测可用", { detail: probed })}>实测</Button>}
+                  {o.address && <Button size="sm" variant="outline" disabled={isBusy()} busy={isBusy("p" + o.id)} busyText="正在实测…" onClick={() => run("p" + o.id, () => api(`${base}/outbounds/${o.id}/probe`, "POST", {}), "实测可用", { detail: probed, wait: { label: `正在经出口 ${o.tag} 实测`, max: 45 } })}>实测</Button>}
                   <Button size="sm" variant="outline" onClick={() => setEditOut(o)}>编辑</Button>
-                  <Button size="icon-sm" variant="destructive" aria-label={"删除出口 " + o.tag} disabled={isBusy("o" + o.id)} onClick={async () => (await confirm({ title: `删除出口 ${o.tag}？`, confirmText: "删除", tone: "danger" })) && run("o" + o.id, () => api(`${base}/outbounds/${o.id}`, "DELETE"), "已删除")}><Trash2 /></Button>
+                  <Button size="icon-sm" variant="destructive" aria-label={"删除出口 " + o.tag} disabled={isBusy()} busy={isBusy("o" + o.id)} busyText="正在删除" onClick={async () => (await confirm({ title: `删除出口 ${o.tag}？`, confirmText: "删除", tone: "danger" })) && run("o" + o.id, () => api(`${base}/outbounds/${o.id}`, "DELETE"), "已删除")}><Trash2 /></Button>
                 </span>
               </li>
             ))}
@@ -96,9 +97,9 @@ export function GateRouting({ gate, close }: { gate: Gate; close: () => void }) 
                   <small className="block max-w-xl truncate text-[var(--weir-ink-3)]">{[r.domain && "域名 " + r.domain, r.ip && "IP " + r.ip].filter(Boolean).join(" · ") || "全部流量"}</small>
                 </span>
                 <span className="flex flex-nowrap gap-1.5">
-                  <Switch aria-label="启用规则" checked={r.enabled} disabled={isBusy("r" + r.id)} onCheckedChange={(v) => run("r" + r.id, () => api(`${base}/routes/${r.id}`, "PATCH", { ...r, enabled: v }), v ? "已启用" : "已停用")} />
+                  <Switch aria-label="启用规则" checked={r.enabled} disabled={isBusy("r" + r.id) || isBusy("rd" + r.id)} onCheckedChange={(v) => run("r" + r.id, () => api(`${base}/routes/${r.id}`, "PATCH", { ...r, enabled: v }), v ? "已启用" : "已停用")} />
                   <Button size="sm" variant="outline" onClick={() => setEditRoute(r)}>编辑</Button>
-                  <Button size="icon-sm" variant="destructive" aria-label="删除规则" disabled={isBusy("r" + r.id)} onClick={async () => (await confirm({ title: "删除这条规则？", confirmText: "删除", tone: "danger" })) && run("r" + r.id, () => api(`${base}/routes/${r.id}`, "DELETE"), "已删除")}><Trash2 /></Button>
+                  <Button size="icon-sm" variant="destructive" aria-label="删除规则" disabled={isBusy()} busy={isBusy("rd" + r.id)} busyText="正在删除" onClick={async () => (await confirm({ title: "删除这条规则？", confirmText: "删除", tone: "danger" })) && run("rd" + r.id, () => api(`${base}/routes/${r.id}`, "DELETE"), "已删除")}><Trash2 /></Button>
                 </span>
               </li>
             ))}

@@ -724,6 +724,16 @@ func FirewallNotNil() predicate.Gate {
 	return predicate.Gate(sql.FieldNotNull(FieldFirewall))
 }
 
+// SelfUpdateIsNil applies the IsNil predicate on the "self_update" field.
+func SelfUpdateIsNil() predicate.Gate {
+	return predicate.Gate(sql.FieldIsNull(FieldSelfUpdate))
+}
+
+// SelfUpdateNotNil applies the NotNil predicate on the "self_update" field.
+func SelfUpdateNotNil() predicate.Gate {
+	return predicate.Gate(sql.FieldNotNull(FieldSelfUpdate))
+}
+
 // ConfigRevisionEQ applies the EQ predicate on the "config_revision" field.
 func ConfigRevisionEQ(v int64) predicate.Gate {
 	return predicate.Gate(sql.FieldEQ(FieldConfigRevision, v))

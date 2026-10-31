@@ -129,6 +129,36 @@ func loopbackURL(raw string) bool {
 	return host == "localhost" || ip != nil && ip.IsLoopback()
 }
 
+// checkAfterApplied 等这台 VPS 应用了包含新节点的配置（最多 60 秒）再检查外部连接：配置还没生效时端口没在监听，
+// 马上检查只会得到「连不上」。建节点向导在结果出来之前一直刷新。
+func (s *Server) checkAfterApplied(ctx context.Context, nodeID, gateID int) {
+	st, stop := s.Store, s.events.stopped()
+	if g, err := st.Ent.Gate.Get(ctx, gateID); err == nil {
+		want := g.ConfigRevision
+		for i := 0; i < 30 && g.AppliedRevision < want && g.FailedRevision < want; i++ {
+			select {
+			case <-stop:
+				return
+			case <-time.After(2 * time.Second):
+			}
+			if g, err = st.Ent.Gate.Get(ctx, gateID); err != nil {
+				break
+			}
+		}
+	}
+	// 持读锁：中心停止时等这次检查（最多 6 秒）结束再关闭存储
+	s.state.RLock()
+	defer s.state.RUnlock()
+	select {
+	case <-stop:
+		return
+	default:
+	}
+	if s.Store == st {
+		s.checkReachability(ctx, nodeID)
+	}
+}
+
 // checkReachability 从中心连接一次节点端口（TCP）并保存结果。
 func (s *Server) checkReachability(ctx context.Context, id int) {
 	n, err := s.Store.Ent.Node.Get(ctx, id)

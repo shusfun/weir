@@ -1,6 +1,7 @@
 // 来源 codedthemes/uiable button；本地改为新拟物键帽（.weir-key）：按下外阴影转内阴影并下沉 2px，松手弹簧回弹。
 import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { cva, type VariantProps } from "class-variance-authority";
+import { LoaderCircle } from "lucide-react";
 import { cn } from "cn";
 import { Ripple } from "./ripple";
 
@@ -33,7 +34,8 @@ const buttonVariants = cva(
 );
 
 // busy：请求进行中，按钮禁用并把文字换成 busyText（默认「正在处理…」）。两段文字叠在同一格里、
-// 宽度取较长的那段，切换时按钮和旁边的按钮都不移动。
+// 宽度取较长的那段，切换时按钮和旁边的按钮都不移动。只有图标的按钮（size 为 icon*）没有文字可换：
+// 图标原位换成转圈，busyText 作为读屏文字。
 function Button({
   className,
   variant = "default",
@@ -46,8 +48,14 @@ function Button({
   children,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants> & { ripple?: boolean; busy?: boolean; busyText?: string }) {
+  const iconOnly = typeof size === "string" && size.startsWith("icon");
   const label =
-    busy === undefined ? children : (
+    busy === undefined ? children : iconOnly ? (
+      <span className="grid place-items-center [&>*]:col-start-1 [&>*]:row-start-1">
+        <span className={cn("inline-flex", busy && "invisible")} aria-hidden={busy || undefined}>{children}</span>
+        {busy && <LoaderCircle className="animate-spin motion-reduce:animate-none" aria-label={busyText} />}
+      </span>
+    ) : (
       <span className="grid items-center justify-items-center [&>*]:col-start-1 [&>*]:row-start-1">
         <span className={cn("inline-flex items-center gap-[inherit]", busy && "invisible")} aria-hidden={busy || undefined}>{children}</span>
         <span className={cn(!busy && "invisible")} aria-hidden={!busy || undefined}>{busyText}</span>

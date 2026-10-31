@@ -22,11 +22,11 @@ export function NodesPanel() {
   const q = useManualNodes();
   const [edit, setEdit] = useState<ManualNode | "new" | null>(null);
   const [importing, setImporting] = useState(false);
-  const { run, isBusy } = useRowAction<number>({ refetch: q.refetch });
+  const { run, isBusy } = useRowAction<string>({ refetch: q.refetch });
   async function renameGroup(from: string) {
     const to = await prompt({ title: `重命名分组「${from || "未分组"}」`, description: "留空表示解散分组，节点保留。", label: "新分组名", defaultValue: from, confirmText: "保存" });
     if (to === null) return;
-    void run(-1, () => api("/admin/subscriptions/nodes/groups/rename", "POST", { from, to: to.trim() }), to.trim() ? "分组已重命名" : "分组已解散");
+    void run("rename", () => api("/admin/subscriptions/nodes/groups/rename", "POST", { from, to: to.trim() }), to.trim() ? "分组已重命名" : "分组已解散");
   }
   const groups = q.data ? Object.keys(q.data.groups).sort((a, b) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b, "zh-CN"))) : [];
   return (
@@ -49,7 +49,7 @@ export function NodesPanel() {
           <div key={g || "_"} className="stack rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3">
             <div className="flex items-center justify-between gap-2">
               <strong>{g || "未分组"} <small className="text-[var(--weir-ink-3)]">（{q.data.groups[g]}）</small></strong>
-              {g && <Button size="sm" variant="outline" disabled={isBusy(-1)} onClick={() => renameGroup(g)}>重命名 / 解散</Button>}
+              {g && <Button size="sm" variant="outline" disabled={isBusy()} busy={isBusy("rename")} busyText="正在处理…" onClick={() => renameGroup(g)}>重命名 / 解散</Button>}
             </div>
             <ul className="stack">
               {q.data.items.filter((n) => n.group === g).map((n) => (
@@ -59,9 +59,9 @@ export function NodesPanel() {
                     {!n.enabled && <Badge variant="soft" tone="warn">停用</Badge>}
                   </span>
                   <span className="flex flex-nowrap gap-1.5">
-                    <Switch aria-label={"启用 " + (n.name || n.id)} checked={n.enabled} disabled={isBusy(n.id)} onCheckedChange={(v) => run(n.id, () => api("/admin/subscriptions/nodes/" + n.id, "PATCH", { enabled: v }), v ? "已启用" : "已停用")} />
+                    <Switch aria-label={"启用 " + (n.name || n.id)} checked={n.enabled} disabled={isBusy("toggle:" + n.id) || isBusy("del:" + n.id)} onCheckedChange={(v) => run("toggle:" + n.id, () => api("/admin/subscriptions/nodes/" + n.id, "PATCH", { enabled: v }), v ? "已启用" : "已停用")} />
                     <Button size="sm" variant="outline" onClick={() => setEdit(n)}>编辑</Button>
-                    <Button size="icon-sm" variant="destructive" aria-label={"删除 " + (n.name || n.id)} disabled={isBusy(n.id)} onClick={async () => (await confirm({ title: "删除这个节点？", confirmText: "删除", tone: "danger" })) && run(n.id, () => api("/admin/subscriptions/nodes/" + n.id, "DELETE"), "已删除")}><Trash2 /></Button>
+                    <Button size="icon-sm" variant="destructive" aria-label={"删除 " + (n.name || n.id)} disabled={isBusy()} busy={isBusy("del:" + n.id)} busyText="正在删除" onClick={async () => (await confirm({ title: "删除这个节点？", confirmText: "删除", tone: "danger" })) && run("del:" + n.id, () => api("/admin/subscriptions/nodes/" + n.id, "DELETE"), "已删除")}><Trash2 /></Button>
                   </span>
                 </li>
               ))}

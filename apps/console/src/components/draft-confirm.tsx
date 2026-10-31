@@ -4,11 +4,13 @@
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge, Button, Collapsible, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Input, Notice, PasswordInput, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, useToast } from "@weir/ui";
-import { api } from "../api";
+import { api, clause } from "../api";
 import { useFormAction } from "../lib/action";
 import { emptyReauth, Reauth } from "./system-settings";
 import { DiffView, type DiffLine } from "./diff";
 import { field, useConsoleContext } from "../lib/console-context";
+import { useLive } from "../lib/live";
+import { WaitText } from "./wait";
 
 interface StepField {
   key: string;
@@ -120,21 +122,42 @@ function StepCard({ step, index, total, edits, setEdit }: { step: Step; index: n
   );
 }
 
+// 待确认的草稿：事件流连着时 dsh 一提交就收到提醒，不轮询；断开时只在页面可见时每 4 秒查一次。
+function useDrafts() {
+  const live = useLive();
+  return useQuery({ queryKey: ["ai-drafts"], queryFn: async () => (await api("/admin/ai/drafts")).drafts as Draft[], refetchInterval: live ? false : 4000, refetchIntervalInBackground: false });
+}
+
+// DraftReadFailure：读不到待确认的草稿时在顶部说明原因并给「重新加载」——dsh 说已经提交，这边不能什么也不显示。
+export function DraftReadFailure() {
+  const q = useDrafts();
+  if (!q.isError) return null;
+  return (
+    <div className="origin-banner">
+      <Notice tone="bad" role="alert">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span className="min-w-0 flex-1">读取 dsh 提交的待确认草稿失败：{clause(q.error)}。dsh 提交的草稿要在这里确认才会生效。</span>
+          <Button size="sm" variant="outline" disabled={q.isFetching} busy={q.isFetching} busyText="正在读取…" onClick={() => void q.refetch()}>重新加载</Button>
+        </div>
+      </Notice>
+    </div>
+  );
+}
+
 export function DraftConfirm() {
   const toast = useToast();
   const client = useQueryClient();
-  // 只在页面可见时每 4 秒查一次待确认的草稿。
-  const q = useQuery({ queryKey: ["ai-drafts"], queryFn: async () => (await api("/admin/ai/drafts")).drafts as Draft[], refetchInterval: 4000, refetchIntervalInBackground: false });
+  const q = useDrafts();
   const [later, setLater] = useState<string[]>([]);
   const [edits, setEdits] = useState<Edits>({});
   const [re, setRe] = useState(emptyReauth);
   const [outputs, setOutputs] = useState<{ step: string; email?: string; password?: string }[] | null>(null);
   // 本次要处理的草稿与决定：用 ref 传给请求，避免读到上一次渲染的值
   const target = useRef<{ draft: Draft; apply: boolean } | null>(null);
-  const decision = useFormAction(async () => {
+  const decision = useFormAction(async (track) => {
     const { draft, apply } = target.current!;
     if (apply) {
-      const r = (await api(`/admin/ai/drafts/${draft.id}/apply`, "POST", { edits, ...re })) as { outputs?: { step: string; email?: string; password?: string }[] };
+      const r = (await api(`/admin/ai/drafts/${draft.id}/apply`, "POST", { edits, ...re }, track)) as { outputs?: { step: string; email?: string; password?: string }[] };
       toast("草稿已生效", { tone: "ok" });
       const secrets = (r.outputs ?? []).filter((o) => o.password);
       if (secrets.length > 0) setOutputs(secrets);
@@ -145,6 +168,12 @@ export function DraftConfirm() {
     setEdits({});
     setRe(emptyReauth);
     await client.invalidateQueries();
+  }, {
+    wait: () => {
+      const t = target.current;
+      const n = t?.draft.steps?.length ?? 0;
+      return t?.apply ? { label: n > 1 ? `正在按顺序执行 ${n} 步` : "正在执行" } : { label: "正在放弃草稿" };
+    },
   });
   // 页面感知：正在确认哪份草稿、改过哪些字段（在提前返回之前声明，hook 次数不变）
   const open = (q.data ?? []).find((x) => !later.includes(x.id));
@@ -166,7 +195,8 @@ export function DraftConfirm() {
     );
   }
   const busy = decision.busy;
-  const d = (q.data ?? []).find((x) => !later.includes(x.id));
+  // 执行期间中心不再列出这份草稿：窗口留着它，直到结果出来
+  const d = (busy ? target.current?.draft : undefined) ?? (q.data ?? []).find((x) => !later.includes(x.id));
   if (!d) return null;
   function decide(apply: boolean) {
     target.current = { draft: d!, apply };
@@ -199,7 +229,7 @@ export function DraftConfirm() {
             </>
           )}
         </div>
-        <DialogFooter error={decision.error}>
+        <DialogFooter error={decision.error} status={decision.wait && <WaitText wait={decision.wait} />}>
           <Button type="button" variant="ghost" disabled={busy} onClick={() => setLater((l) => [...l, d.id])}>稍后</Button>
           <Button type="button" variant="outline" disabled={busy} onClick={() => decide(false)}>放弃</Button>
           <Button type="button" variant={d.danger ? "destructive" : "default"} disabled={busy || (d.danger && !re.password)} onClick={() => decide(true)} busy={busy} busyText="正在执行…">确认生效</Button>

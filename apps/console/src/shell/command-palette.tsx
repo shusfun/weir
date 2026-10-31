@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { PageState, Dialog, DialogContent, DialogTitle, Kbd } from "@weir/ui";
+import { PageState, Dialog, DialogContent, DialogTitle, Kbd, Button } from "@weir/ui";
 import { Search, Server, User, CornerDownLeft, type LucideIcon } from "lucide-react";
 import { api } from "../api";
 import { navigation, visibleFor } from "./navigation";
@@ -111,6 +111,16 @@ export function CommandPalette({ open, onOpenChange, admin }: { open: boolean; o
               );
             })}
           </ul>
+        ) : users.error || devices.error ? (
+          // 读不到 VPS 或用户列表时不能说「没有匹配项」
+          <PageState
+            size="sm"
+            className="justify-center px-4 py-6"
+            kind="error"
+            title="搜索失败"
+            detail={((users.error ?? devices.error) as Error).message}
+            action={<Button size="sm" variant="outline" onClick={() => { void users.refetch(); void devices.refetch(); }}>重新加载</Button>}
+          />
         ) : (
           <PageState
             size="sm"

@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Badge, Button, Card, CardContent, Meter, PageHeader, SectionHeader, Sheet, SheetContent, SkeletonTable, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, CopyButton, Notice, useToast, useConfirm } from "@weir/ui";
 import { Plus, RotateCcw, Trash2 } from "lucide-react";
-import { api } from "../api";
+import { api, clause } from "../api";
 import { useRowAction } from "../lib/action";
 import { State } from "../components/feedback";
 import { UserForm } from "../components/user-form";
@@ -22,7 +22,7 @@ export function UsersPage() {
   const nodes = useQuery({ queryKey: ["nodes"], queryFn: async () => (await api("/admin/nodes")).items as NodeItem[] });
   const [form, setForm] = useState<UserItem | "new" | null>(null);
   const [created, setCreated] = useState<UserItem | null>(null);
-  const { run: act, isBusy } = useRowAction<number>({ refetch: users.refetch });
+  const { run: act, isBusy } = useRowAction<string>({ refetch: users.refetch });
   // 地址栏：?user=编号 是这个用户的详情（对象链接、dsh 的界面导航）；?link= / ?chain= 只知道编号时，
   // 先向中心查它属于哪个用户，再打开那个用户并高亮这一项。
   const detailParam = useDialogParam("user", users.data, !users.isFetching);
@@ -92,8 +92,8 @@ export function UsersPage() {
                       <span className="flex flex-nowrap gap-1.5">
                         <Button size="sm" variant="outline" onClick={() => detailParam.open(u)}>详情</Button>
                         <Button size="sm" variant="outline" onClick={() => setForm(u)}>编辑</Button>
-                        <Button size="icon-sm" variant="outline" aria-label={"清零用量 " + u.email} disabled={isBusy(u.id)} onClick={async () => (await confirm({ title: `清零 ${u.email} 本周期用量？`, confirmText: "清零", tone: "danger" })) && act(u.id, () => api(`/admin/users/${u.id}/reset-usage`, "POST"), "用量已清零")}><RotateCcw /></Button>
-                        <Button size="icon-sm" variant="destructive" aria-label={"删除 " + u.email} disabled={isBusy(u.id)} onClick={async () => (await confirm({ title: `删除用户 ${u.email}？`, description: "其所有链接立即失效。", confirmText: "删除", tone: "danger" })) && act(u.id, () => api("/admin/users/" + u.id, "DELETE"), "用户已删除")}><Trash2 /></Button>
+                        <Button size="icon-sm" variant="outline" aria-label={"清零用量 " + u.email} disabled={isBusy()} busy={isBusy("reset:" + u.id)} busyText="正在清零" onClick={async () => (await confirm({ title: `清零 ${u.email} 本周期用量？`, confirmText: "清零", tone: "danger" })) && act("reset:" + u.id, () => api(`/admin/users/${u.id}/reset-usage`, "POST"), "用量已清零")}><RotateCcw /></Button>
+                        <Button size="icon-sm" variant="destructive" aria-label={"删除 " + u.email} disabled={isBusy()} busy={isBusy("del:" + u.id)} busyText="正在删除" onClick={async () => (await confirm({ title: `删除用户 ${u.email}？`, description: "其所有链接立即失效。", confirmText: "删除", tone: "danger" })) && act("del:" + u.id, () => api("/admin/users/" + u.id, "DELETE"), "用户已删除")}><Trash2 /></Button>
                       </span>
                     </TableCell>
                   </TableRow>
@@ -156,6 +156,8 @@ export function UsersPage() {
 // WithheldNotice：因额度没发给这个用户的节点（WireGuard 无法按用户计量，只发给不限额度的用户）。
 function WithheldNotice({ userId }: { userId: number }) {
   const q = useQuery({ queryKey: ["user", userId], queryFn: () => api(`/admin/users/${userId}`) as Promise<{ withheld?: Withheld[] }> });
+  // 读取失败不能当成「都发了」：说明原因并可重新读取
+  if (q.error) return <Notice tone="bad">读不到这个用户有哪些节点没有发给他：{clause(q.error)}。<Button size="xs" variant="ghost" disabled={q.isFetching} busy={q.isFetching} busyText="正在读取…" onClick={() => void q.refetch()}>重新加载</Button></Notice>;
   const list = q.data?.withheld ?? [];
   if (list.length === 0) return null;
   return <Notice tone="warn">这些节点没有发给该用户：{list.map((w) => w.name).join("、")}。{list[0].reason}。</Notice>;

@@ -7,6 +7,7 @@ import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDes
 import { Bot, Download, Maximize2, Minimize2, Minus, RotateCcw, Star, Trash2, X } from "lucide-react";
 import { api, ApiError } from "../api";
 import { useRowAction } from "../lib/action";
+import { ActionsWait } from "./wait";
 import { date } from "../lib/models";
 import { drawerId, field, useConsoleContext } from "../lib/console-context";
 import { DshContextReporter } from "./dsh-context";
@@ -554,7 +555,7 @@ export function DshVersions() {
   const q = useDsh();
   const jobs = useJobs("dsh");
   const [releases, setReleases] = useState(false);
-  const { run: act, isBusy } = useRowAction<string>({ refetch: q.refetch });
+  const { run: act, isBusy, waitFor } = useRowAction<string>({ refetch: q.refetch });
   const set = q.data?.settings;
   return (
     <Section title="dsh" description="DeepSeek Harness 官方 npm 包，与内核一样由中心下载：Node.js 运行环境按 nodejs.org 的官方摘要校验，dsh 按 npm 官方源的 sha512 摘要校验，镜像只用来加速。切换版本前会备份 dsh 的会话与设置。">
@@ -564,8 +565,9 @@ export function DshVersions() {
             <small className="text-[var(--weir-ink-3)]">{set?.version ? `当前版本 ${set.version}` : "尚未下载：第一次下载的版本会自动设为当前版本"}{set?.previous ? `，上一版本 ${set.previous}` : ""}</small>
             <Button size="sm" variant="outline" disabled={!!q.data.unsupported} onClick={() => setReleases(true)}><Download />拉取版本</Button>
             {set?.previous && q.data.installed.some((i) => i.version === set.previous) && (
-              <Button size="sm" variant="outline" disabled={isBusy()} onClick={() => void act("rollback", () => api("/admin/dsh/version", "PUT", { version: set.previous }), `已回退到 ${set.previous}`)}><RotateCcw />回退到 {set.previous}</Button>
+              <Button size="sm" variant="outline" disabled={isBusy()} busy={isBusy("rollback")} busyText="正在回退…" onClick={() => void act("rollback", () => api("/admin/dsh/version", "PUT", { version: set.previous }), `已回退到 ${set.previous}`, { wait: { label: `正在备份会话并回退到 ${set.previous}` } })}><RotateCcw />回退到 {set.previous}</Button>
             )}
+            <ActionsWait wait={waitFor("rollback") || q.data.installed.map((i) => waitFor("use:" + i.version)).find(Boolean) || null} />
           </div>
           {q.data.unsupported && <Notice tone="warn">{q.data.unsupported}。</Notice>}
           <JobLine job={latestJob(jobs.data, "dsh:")} idle="没有进行中的下载" onFinish={() => void q.refetch()} />
@@ -576,8 +578,8 @@ export function DshVersions() {
                   <code className="text-xs">{i.version}</code>
                   {set?.version === i.version ? <Badge variant="soft" tone="ok">当前</Badge> : (
                     <>
-                      <Button size="xs" variant="ghost" disabled={isBusy()} onClick={() => void act(i.version, () => api("/admin/dsh/version", "PUT", { version: i.version }), `已切换到 ${i.version}，dsh 正在重启`)}><Star />设为当前</Button>
-                      <Button size="xs" variant="ghost" aria-label={"删除 " + i.version} disabled={isBusy()} onClick={async () => (await confirm({ title: `删除 dsh ${i.version}？`, confirmText: "删除", tone: "danger" })) && void act(i.version, () => api("/admin/dsh/versions/" + encodeURIComponent(i.version), "DELETE"), "已删除")}><Trash2 /></Button>
+                      <Button size="xs" variant="ghost" disabled={isBusy()} busy={isBusy("use:" + i.version)} busyText="正在切换…" onClick={() => void act("use:" + i.version, () => api("/admin/dsh/version", "PUT", { version: i.version }), `已切换到 ${i.version}，dsh 正在重启`, { wait: { label: `正在备份会话并切换到 ${i.version}` } })}><Star />设为当前</Button>
+                      <Button size="xs" variant="ghost" aria-label={"删除 " + i.version} disabled={isBusy()} busy={isBusy("del:" + i.version)} busyText="正在删除" onClick={async () => (await confirm({ title: `删除 dsh ${i.version}？`, confirmText: "删除", tone: "danger" })) && void act("del:" + i.version, () => api("/admin/dsh/versions/" + encodeURIComponent(i.version), "DELETE"), "已删除")}><Trash2 /></Button>
                     </>
                   )}
                 </span>

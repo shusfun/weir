@@ -5,6 +5,7 @@ import { Button, Card, CardContent, CopyField, Field, FilePicker, Form, FormGrid
 import { Download, Trash2 } from "lucide-react";
 import { api, reauthFields } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
+import { ActionsWait } from "./wait";
 import { saveBlob } from "../lib/download";
 import { date } from "../lib/models";
 import { State } from "./feedback";
@@ -30,7 +31,7 @@ export function Reauth({ value, onChange, need = true, reason }: { value: Reauth
 }
 
 // 需要重新验证身份的保存：在 useFormAction 的基础上把密码 / 验证码错误对应到 Reauth 的字段
-export function useReauthAction<T>(fn: () => Promise<T>, opts: Parameters<typeof useFormAction<T>>[1] = {}) {
+export function useReauthAction<T>(fn: Parameters<typeof useFormAction<T>>[0], opts: Parameters<typeof useFormAction<T>>[1] = {}) {
   return useFormAction<T>(fn, { ...opts, fields: { ...reauthFields, ...opts.fields } });
 }
 
@@ -109,7 +110,7 @@ function SMTPForm({ value, saved }: { value: SMTPView; saved: () => void }) {
   const [re, setRe] = useState(emptyReauth);
   const set = (p: Partial<typeof f>) => setF({ ...f, ...p });
   const save = useReauthAction(() => api("/admin/settings/smtp", "PUT", { ...f, port: Number(f.port) || 0, account_password: re.password, code: re.code }), { ok: "已保存", onSuccess: saved });
-  const { run, isBusy } = useRowAction();
+  const { run, isBusy, waitFor } = useRowAction();
   return (
     <Section title="邮件服务" description={value.configured ? "已配置，可发送找回密码与注册验证邮件。" : "未配置：登录页不提供找回密码。"}>
       <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
@@ -126,10 +127,11 @@ function SMTPForm({ value, saved }: { value: SMTPView; saved: () => void }) {
         <div className="actions">
           <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           {value.configured && (
-            <Button type="button" variant="outline" disabled={isBusy()} onClick={() => void run("test", () => api("/admin/settings/smtp/test", "POST", {}), "测试邮件已发出")}>
+            <Button type="button" variant="outline" disabled={isBusy()} busy={isBusy("test")} busyText="正在发送…" onClick={() => void run("test", () => api("/admin/settings/smtp/test", "POST", {}), "测试邮件已发出", { wait: { label: `正在经 ${value.host || "SMTP 服务器"} 发送测试邮件`, max: 25 } })}>
               发送测试邮件
             </Button>
           )}
+          <ActionsWait wait={waitFor("test")} />
         </div>
         {save.error && <Notice tone="bad">{save.error}</Notice>}
       </Form>
@@ -155,7 +157,7 @@ function NotifyForm({ value, saved }: { value: NotifyView; saved: () => void }) 
   const [re, setRe] = useState(emptyReauth);
   const set = (p: Partial<typeof f>) => setF({ ...f, ...p });
   const save = useReauthAction(() => api("/admin/settings/notify", "PUT", { ...f, ...re }), { ok: "已保存", onSuccess: saved });
-  const { run, isBusy } = useRowAction();
+  const { run, isBusy, waitFor } = useRowAction();
   const num = (k: "user_quota_percent" | "user_expiry_days" | "source_expiry_days" | "source_refresh_hours", label: string, hint: string, max?: number) => (
     <Field label={label} hint={hint} customError={max !== undefined && f[k] > max ? `不能大于 ${max}` : ""}>
       <Input inputMode="numeric" value={String(f[k])} onChange={(e) => set({ [k]: Number(e.target.value.replace(/\D/g, "")) || 0 })} />
@@ -179,10 +181,11 @@ function NotifyForm({ value, saved }: { value: NotifyView; saved: () => void }) 
         <div className="actions">
           <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           {value.enabled && value.token_set && (
-            <Button type="button" variant="outline" disabled={isBusy()} onClick={() => void run("test", () => api("/admin/settings/notify/test", "POST", {}), "测试通知已发出")}>
+            <Button type="button" variant="outline" disabled={isBusy()} busy={isBusy("test")} busyText="正在发送…" onClick={() => void run("test", () => api("/admin/settings/notify/test", "POST", {}), "测试通知已发出", { wait: { label: "正在发送测试通知", max: 15 } })}>
               发送测试通知
             </Button>
           )}
+          <ActionsWait wait={waitFor("test")} />
         </div>
         {save.error && <Notice tone="bad">{save.error}</Notice>}
       </Form>
@@ -234,11 +237,11 @@ function ImportExport() {
     fields: { invalid_backup: "content", invalid_inventory: "content" },
     onSuccess: setStats,
   });
-  const { run, isBusy } = useRowAction();
+  const { run, isBusy, waitFor } = useRowAction();
   return (
     <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
       <div className="actions">
-        <Button type="button" variant="outline" disabled={isBusy()} onClick={() => void run("export", exportBackup, "已导出", { fail: "导出失败" })}>
+        <Button type="button" variant="outline" disabled={isBusy()} busy={isBusy("export")} busyText="正在导出…" onClick={() => void run("export", exportBackup, "已导出", { fail: "导出失败" })}>
           <Download />
           导出备份
         </Button>
@@ -278,7 +281,7 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
   const target = useRef("");
   const [restoring, setRestoring] = useState("");
   const restore = useReauthAction(() => api("/admin/backup/webdav/restore", "POST", { file: target.current, ...re }) as Promise<ImportStats>, { ok: "导入完成", onSuccess: setStats });
-  const { run, isBusy } = useRowAction();
+  const { run, isBusy, waitFor } = useRowAction();
   const busy = save.busy || restore.busy;
   return (
     <Form ref={form} busy={busy} errors={save.errors ?? restore.errors} onSubmit={() => void save.submit()}>
@@ -301,15 +304,16 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
       <div className="actions">
         <Button type="submit" disabled={busy} busy={save.busy} busyText="正在保存…">保存</Button>
         {value.url && (
-          <Button type="button" variant="outline" disabled={isBusy()} onClick={() => void run("run", () => api("/admin/backup/webdav/run", "POST", {}), "备份已上传").then((ok) => ok && saved())}>
+          <Button type="button" variant="outline" disabled={isBusy()} busy={isBusy("run")} busyText="正在备份…" onClick={() => void run("run", (track) => api("/admin/backup/webdav/run", "POST", {}, track), "备份已上传", { wait: { label: "正在上传备份到 WebDAV", max: 30 } }).then((ok) => ok && saved())}>
             立即备份
           </Button>
         )}
         {value.url && (
-          <Button type="button" variant="outline" disabled={isBusy()} onClick={() => void run("files", async () => setFiles((await api("/admin/backup/webdav/files")).files))}>
+          <Button type="button" variant="outline" disabled={isBusy()} busy={isBusy("files")} busyText="正在读取…" onClick={() => void run("files", async () => setFiles((await api("/admin/backup/webdav/files")).files), undefined, { wait: { label: "正在读取 WebDAV 目录", max: 30 } })}>
             查看备份
           </Button>
         )}
+        <ActionsWait wait={waitFor("run") || waitFor("files")} />
       </div>
       {files &&
         (files.length === 0 ? (
@@ -380,7 +384,9 @@ export function APITokensCard() {
                 size="icon-sm"
                 variant="destructive"
                 aria-label={"撤销 " + t.name}
-                disabled={isBusy(t.id)}
+                disabled={isBusy()}
+                busy={isBusy(t.id)}
+                busyText="正在撤销"
                 onClick={async () => (await confirm({ title: `撤销令牌「${t.name}」？`, description: "使用它的脚本会立即失效。", confirmText: "撤销", tone: "danger" })) && run(t.id, () => api("/admin/api-tokens/" + t.id, "DELETE"), "已撤销")}
               >
                 <Trash2 />
