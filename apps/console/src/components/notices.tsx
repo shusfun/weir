@@ -56,8 +56,8 @@ export function NoticesButton() {
                 {n.detail && <small className="text-[var(--weir-ink-2)]">{n.detail}</small>}
                 {n.extra?.reason && <small className="text-[var(--weir-ink-3)]">{n.extra.reason}</small>}
                 <div className="flex flex-wrap gap-2">
-                  {n.action && <Button size="xs" disabled={isBusy()} onClick={() => void act(n)}>{n.action.label}</Button>}
-                  <Button size="xs" variant="ghost" disabled={isBusy()} onClick={() => void run(n.id + ":dismiss", () => api(`/admin/notices/${encodeURIComponent(n.id)}/dismiss`, "POST"), "已忽略")}>忽略</Button>
+                  {n.action && <Button size="xs" disabled={isBusy()} busy={isBusy(n.id)} busyText="正在开始…" onClick={() => void act(n)}>{n.action.label}</Button>}
+                  <Button size="xs" variant="ghost" disabled={isBusy()} busy={isBusy(n.id + ":dismiss")} busyText="正在忽略…" onClick={() => void run(n.id + ":dismiss", () => api(`/admin/notices/${encodeURIComponent(n.id)}/dismiss`, "POST"), "已忽略")}>忽略</Button>
                 </div>
               </li>
             ))}

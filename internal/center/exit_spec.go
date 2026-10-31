@@ -272,6 +272,11 @@ func (s *Server) probeExit(ctx context.Context, entry *ent.Gate, ex resolvedExit
 		} else if ex.TCPOnly {
 			note = "另一台 VPS 的节点：只测了端口，这个节点本身已在建节点时实测"
 		}
+		if len(members) > 1 {
+			jobStep(ctx, fmt.Sprintf("正在经出口实测（第 %d/%d 个成员 %s）", i+1, min(len(members), 5), net.JoinHostPort(m.Address, strconv.Itoa(m.Port))), 45*time.Second)
+		} else {
+			jobStep(ctx, "正在经出口实测（"+net.JoinHostPort(m.Address, strconv.Itoa(m.Port))+"）", 45*time.Second)
+		}
 		res, err := s.gateProbe(ctx, entry, contracts.ActionChainProbe, payload, 45*time.Second)
 		if err != nil {
 			last = err

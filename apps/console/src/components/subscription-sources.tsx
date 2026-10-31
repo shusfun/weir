@@ -5,6 +5,7 @@ import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDes
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
+import { WaitText } from "./wait";
 import { bytes, date } from "../lib/models";
 import type { Source } from "../lib/subscriptions";
 import { OperatorEditor, type Operator } from "./operator-editor";
@@ -22,16 +23,16 @@ export function SourcesPanel() {
   const q = useSources();
   const [edit, setEdit] = useState<Source | "new" | null>(null);
   const [nodes, setNodes] = useState<{ name: string; list: string[]; error: string } | null>(null);
-  const { run, isBusy } = useRowAction<number>({ refetch: q.refetch });
+  const { run, isBusy, waitFor } = useRowAction<string>({ refetch: q.refetch });
   // 刷新成功后直接弹出本次拉取的节点列表，不再额外提示
   const refresh = (s: Source) =>
-    run(s.id, async () => {
+    run("refresh:" + s.id, async () => {
       const r = await api(`/admin/subscriptions/sources/${s.id}/refresh`, "POST", {});
       setNodes({ name: s.name || s.url, list: r.nodes, error: r.result?.error ?? "" });
-    });
+    }, undefined, { wait: { label: "正在拉取订阅源" } });
   async function remove(s: Source) {
     if (!(await confirm({ title: `删除订阅源「${s.name || s.url}」？`, description: "订阅组中的引用会一并移除。", confirmText: "删除", tone: "danger" }))) return;
-    await run(s.id, () => api("/admin/subscriptions/sources/" + s.id, "DELETE"), "订阅源已删除");
+    await run("del:" + s.id, () => api("/admin/subscriptions/sources/" + s.id, "DELETE"), "订阅源已删除");
   }
   useConsoleContext({ tab: "订阅源", list: { total: q.data?.items.length ?? 0, items: (q.data?.items ?? []).slice(0, 20).map((s) => ({ type: "source", name: s.name, id: s.id })) } });
   return (
@@ -72,7 +73,7 @@ export function SourcesPanel() {
                     <TableRow key={s.id} {...dataObject({ type: "source", id: s.id })}>
                       <TableCell>
                         <strong>{s.name || s.title || "未命名"}</strong> {!s.enabled && <Badge variant="soft" tone="warn">停用</Badge>}
-                        <small className="block max-w-72 truncate text-[var(--weir-ink-3)]" title={s.url}>{s.url}</small>
+                        <small className="block max-w-72 truncate text-[var(--weir-ink-3)]" title={s.url}>{waitFor("refresh:" + s.id) ? <WaitText wait={waitFor("refresh:" + s.id)} /> : s.url}</small>
                         {s.last_error && <small className="block text-[var(--weir-bad-ink)]">{s.last_error}</small>}
                       </TableCell>
                       <TableCell>{s.fetched_at ? s.node_count : "未知"}</TableCell>
@@ -80,9 +81,9 @@ export function SourcesPanel() {
                       <TableCell className="whitespace-nowrap">{date(s.fetched_at ?? undefined)}</TableCell>
                       <TableCell>
                         <span className="flex flex-nowrap gap-1.5">
-                          <Button size="sm" variant="outline" disabled={isBusy(s.id)} onClick={() => void refresh(s)}><RefreshCw />刷新</Button>
+                          <Button size="sm" variant="outline" disabled={isBusy()} busy={isBusy("refresh:" + s.id)} busyText="正在刷新…" onClick={() => void refresh(s)}><RefreshCw />刷新</Button>
                           <Button size="sm" variant="outline" onClick={() => setEdit(s)}>编辑</Button>
-                          <Button size="icon-sm" variant="destructive" aria-label={"删除 " + (s.name || s.url)} disabled={isBusy(s.id)} onClick={() => void remove(s)}><Trash2 /></Button>
+                          <Button size="icon-sm" variant="destructive" aria-label={"删除 " + (s.name || s.url)} disabled={isBusy()} busy={isBusy("del:" + s.id)} busyText="正在删除" onClick={() => void remove(s)}><Trash2 /></Button>
                         </span>
                       </TableCell>
                     </TableRow>

@@ -63,15 +63,10 @@ type dshHost struct {
 	jobRunner func(context.Context, dsh.JobRequest) (dsh.JobResult, error)
 }
 
-// dshLog 返回对账失败的记录器（加锁，测试会直接调用对账）。
+// dshLogger 记录对账失败（taskLog 自己加锁，测试会直接调用对账）。
 type dshLogger struct{ s *Server }
 
 func (l dshLogger) note(task string, err error) {
-	l.s.dsh.mu.Lock()
-	defer l.s.dsh.mu.Unlock()
-	if l.s.dsh.log == nil {
-		l.s.dsh.log = taskLog{}
-	}
 	l.s.dsh.log.note(task, err)
 }
 

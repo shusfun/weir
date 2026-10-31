@@ -174,6 +174,7 @@ var (
 		{Name: "host", Type: field.TypeJSON, Nullable: true},
 		{Name: "panel", Type: field.TypeJSON, Nullable: true},
 		{Name: "firewall", Type: field.TypeJSON, Nullable: true},
+		{Name: "self_update", Type: field.TypeJSON, Nullable: true},
 		{Name: "config_revision", Type: field.TypeInt64, Default: 1},
 		{Name: "applied_revision", Type: field.TypeInt64, Default: 0},
 		{Name: "failed_revision", Type: field.TypeInt64, Default: 0},

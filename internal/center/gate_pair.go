@@ -86,6 +86,7 @@ func (s *Server) agentPair(c *gin.Context) {
 	s.audit(c, "gate.pair", strconv.Itoa(g.ID), "ok")
 	// 记下凭证配出了哪台 Gate：SSH 安装任务据此等这台上线（凭证本身已销毁，这里只存摘要）
 	_ = s.Store.KV.Set(c.Request.Context(), "paired:"+digest(req.Token), strconv.Itoa(g.ID), time.Hour)
+	s.notifyConsole("pairing", digest(req.Token))
 	c.JSON(201, contracts.PairResult{GateID: int64(g.ID)})
 }
 

@@ -109,6 +109,8 @@ func runCenter(args []string) int {
 		go runLocalGate(ctx, *localGate)
 	}
 	httpServer := &http.Server{Addr: cfg.Listen, Handler: server.Router(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 3 * time.Minute, IdleTimeout: 65 * time.Second}
+	// 事件流等长连接不会自己结束：开始关闭时通知它们，Shutdown 才不必等到超时
+	httpServer.RegisterOnShutdown(server.StopStreams)
 	go func() {
 		<-ctx.Done()
 		shutdown, done := context.WithTimeout(context.Background(), 10*time.Second)

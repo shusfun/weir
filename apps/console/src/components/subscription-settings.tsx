@@ -46,7 +46,7 @@ export function TemplatesPanel() {
                   <span><strong>{c.name}</strong> <Badge variant="soft" tone="neutral">{c.format === "ini" ? "ini" : "Clash YAML"}</Badge></span>
                   <span className="flex flex-nowrap gap-1.5">
                     <Button size="sm" variant="outline" onClick={() => setEdit(c)}>编辑</Button>
-                    <Button size="icon-sm" variant="destructive" aria-label={"删除 " + c.name} disabled={isBusy(c.id)} onClick={() => void remove(c)}><Trash2 /></Button>
+                    <Button size="icon-sm" variant="destructive" aria-label={"删除 " + c.name} disabled={isBusy()} busy={isBusy(c.id)} busyText="正在删除" onClick={() => void remove(c)}><Trash2 /></Button>
                   </span>
                 </li>
               ))}

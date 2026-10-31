@@ -31,7 +31,7 @@ import (
 func (s *Server) nodeRoutes(admin *gin.RouterGroup) {
 	admin.GET("/presets", func(c *gin.Context) { c.JSON(200, gin.H{"items": s.presets(c.Request.Context())}) })
 	admin.GET("/nodes", s.listNodes)
-	admin.POST("/nodes", s.createNode)
+	admin.POST("/nodes", s.asJob("新建节点", "已取消，节点没有建出来", s.createNode))
 	admin.GET("/nodes/:id", s.getNode)
 	admin.PATCH("/nodes/:id", s.updateNode)
 	admin.DELETE("/nodes/:id", s.deleteNode)
@@ -462,6 +462,7 @@ func (s *Server) createNode(c *gin.Context) {
 		failure(c, 400, "unknown_preset")
 		return
 	}
+	jobTitle(ctx, "在 "+g.Name+" 上新建 "+p.Name+" 节点")
 	// 没有公网地址时生成不了节点链接：先在 VPS 详情里填好，不建一个用不了的节点。
 	if g.PublicHost == "" {
 		failDetail(c, 422, "gate_no_public_host", "这台 VPS 还没有公网地址，请先在 VPS 详情里填写（客户端用它连接节点）", gin.H{"hint": publicHostHint(g)})
@@ -495,6 +496,7 @@ func (s *Server) createNode(c *gin.Context) {
 		certID, st["tls_sni"] = &ct.ID, ct.Domain
 	case p.Cert == "required" || p.Cert == "self_signed_ok":
 		// 不选证书时由中心为这台 VPS 准备：自签共用一张；Trojan / WS + TLS 用这台 VPS 公网 IP 的证书。
+		jobStep(ctx, "正在准备证书（"+g.Name+"）", 0)
 		ct, sni, err := s.certForNode(ctx, g, p.Cert)
 		if err != nil {
 			var why errCertUnavailable
@@ -521,6 +523,7 @@ func (s *Server) createNode(c *gin.Context) {
 			for _, t := range realityTargets {
 				targets = append(targets, t)
 			}
+			jobStep(ctx, "正在让 "+g.Name+" 实测候选伪装站点", 50*time.Second)
 			res, err := s.gateProbe(ctx, g, contracts.ActionRealityProbe, map[string]any{"targets": targets}, 50*time.Second)
 			if realityCandidates = suitableTargets(res); err != nil || len(realityCandidates) == 0 {
 				failDetail(c, 422, "reality_probe_failed", fmt.Sprint(err), gin.H{"result": res})
@@ -571,9 +574,12 @@ func (s *Server) createNode(c *gin.Context) {
 		}
 		var res map[string]any
 		var failed []string
-		for _, t := range tries {
+		for i, t := range tries {
 			if t != "" {
 				st["reality_dest"], st["reality_server_names"] = t+":443", t
+				jobStep(ctx, fmt.Sprintf("正在用真实内核实测节点（伪装站点 %s，第 %d/%d 个）", t, i+1, len(tries)), 50*time.Second)
+			} else {
+				jobStep(ctx, "正在用真实内核实测节点（"+g.Name+"）", 50*time.Second)
 			}
 			if res, err = s.testNode(ctx, candidate, st); err == nil {
 				break
@@ -611,6 +617,10 @@ func (s *Server) createNode(c *gin.Context) {
 		dryRun(c, r)
 		return
 	}
+	if !jobCommit(c) {
+		return
+	}
+	jobStep(ctx, "正在保存并下发给 "+g.Name, 0)
 	create := s.Store.Ent.Node.Create().SetGateID(g.ID).SetName(name).SetPreset(p.ID).SetKernel(p.Kernel).
 		SetProtocol(p.Protocol).SetPort(req.Port).SetNetwork(p.Network).SetSecurity(p.Security).SetSettings(st).SetNillableCertID(certID)
 	if err = s.applyChain(create.Mutation(), req.Chain); err != nil {
@@ -636,7 +646,7 @@ func (s *Server) createNode(c *gin.Context) {
 	}
 	s.afterChainSource(ctx, n)
 	s.saveExitProbe(ctx, "node:"+itoa(n.ID), probe)
-	go s.checkReachability(context.WithoutCancel(ctx), n.ID)
+	go s.checkAfterApplied(context.WithoutCancel(ctx), n.ID, g.ID)
 	s.audit(c, "node.create", "node:"+itoa(n.ID), "ok")
 	view := s.nodeView(ctx, n)
 	view["tested"] = tested

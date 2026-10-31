@@ -29,13 +29,14 @@ import (
 const (
 	draftTTL       = time.Hour
 	draftPrefix    = "ai-draft:"
+	draftApplying  = "ai-draft-applying:"
 	maxDraftsLimit = 50
 )
 
 func (s *Server) aiRoutes(admin *gin.RouterGroup) {
 	admin.GET("/ai/drafts", s.listDrafts)
 	admin.GET("/ai/drafts/:id", s.getDraft)
-	admin.POST("/ai/drafts/:id/apply", s.applyDraft)
+	admin.POST("/ai/drafts/:id/apply", s.asJob("确认 dsh 草稿", "已取消，草稿没有执行", s.applyDraft))
 	admin.DELETE("/ai/drafts/:id", s.discardDraft)
 	admin.POST("/nodes/:id/test", s.testNodeHandler)
 }
@@ -161,7 +162,11 @@ func (s *Server) saveDraft(ctx context.Context, d *Draft) error {
 	if err != nil {
 		return err
 	}
-	return s.Store.KV.Set(ctx, draftPrefix+d.ID, string(b), draftTTL)
+	if err := s.Store.KV.Set(ctx, draftPrefix+d.ID, string(b), draftTTL); err != nil {
+		return err
+	}
+	s.notifyConsole("drafts", "")
+	return nil
 }
 
 func (s *Server) loadDraft(ctx context.Context, id string) (*Draft, error) {
@@ -187,7 +192,12 @@ func (s *Server) pendingDrafts(ctx context.Context) ([]*Draft, error) {
 	}
 	var out []*Draft
 	for _, k := range keys {
-		if d, err := s.loadDraft(ctx, strings.TrimPrefix(k, draftPrefix)); err == nil && d.Status == "passed" {
+		d, err := s.loadDraft(ctx, strings.TrimPrefix(k, draftPrefix))
+		if err != nil || d.Status != "passed" {
+			continue
+		}
+		// 正在执行的草稿不再弹确认窗
+		if _, applying, _ := s.Store.KV.Get(ctx, draftApplying+d.ID); !applying {
 			out = append(out, d)
 		}
 	}
@@ -227,6 +237,7 @@ func (s *Server) discardDraft(c *gin.Context) {
 		return
 	}
 	_ = s.Store.KV.Del(ctx, draftPrefix+d.ID)
+	s.notifyConsole("drafts", "")
 	for _, st := range d.Steps {
 		if st.Action == "defense.block" {
 			s.markEvent(ctx, intArg(st.Args, "event_id"), "dismissed", "")
@@ -247,6 +258,14 @@ func (s *Server) applyDraft(c *gin.Context) {
 		failure(c, 409, "draft_not_passed")
 		return
 	}
+	// 确认在后台任务里执行，可能要几分钟：期间同一份草稿不能再确认一次（如刷新页面后确认窗又弹出来）
+	key := draftApplying + d.ID
+	if ok, err := s.Store.KV.SetNX(c.Request.Context(), key, "1", 30*time.Minute); err != nil || !ok {
+		failDetail(c, 409, "draft_applying", "这份草稿正在执行，结束后会提示结果", nil)
+		return
+	}
+	defer s.Store.KV.Del(context.WithoutCancel(c.Request.Context()), key)
+	s.notifyConsole("drafts", "")
 	s.applyActionDraft(c, d)
 }
 

@@ -31,7 +31,8 @@ func call(actor *gin.Context, handler gin.HandlerFunc, method string, params gin
 	w := httptest.NewRecorder()
 	c, eng := gin.CreateTestContext(w)
 	_ = eng.SetTrustedProxies([]string{"127.0.0.1", "::1"})
-	req := httptest.NewRequest(method, "/internal?"+query.Encode(), strings.NewReader(string(b))).WithContext(actor.Request.Context())
+	// 在后台任务里（确认草稿）时，处理函数的步骤照常报给这个任务，标题与提交由外层决定
+	req := httptest.NewRequest(method, "/internal?"+query.Encode(), strings.NewReader(string(b))).WithContext(context.WithValue(actor.Request.Context(), nestedKey{}, true))
 	req.Header.Set("Content-Type", "application/json")
 	req.RemoteAddr = actor.Request.RemoteAddr
 	for _, h := range []string{"X-Forwarded-For", "X-Real-IP"} {

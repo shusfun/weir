@@ -7,10 +7,10 @@ import { ThemeControl } from "../theme";
 import { navigation, navGroups, currentNav, visibleFor } from "../shell/navigation";
 import { CommandPalette } from "../shell/command-palette";
 import { DshWindow } from "./dsh";
-import { DraftConfirm } from "./draft-confirm";
+import { DraftConfirm, DraftReadFailure } from "./draft-confirm";
 import { CenterOriginBanner } from "./center-origin";
 import { NoticesButton } from "./notices";
-import { JobWatcher } from "./job";
+import { ConsoleEvents, JobWatcher } from "./job";
 import { FocusFromURL } from "./object-link";
 
 const collapseKey = "weir-rail-collapsed";
@@ -137,6 +137,7 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
             </div>
           </header>
           {admin && <CenterOriginBanner />}
+          {admin && <DraftReadFailure />}
           {children}
         </div>
         <Sheet open={drawer} onOpenChange={setDrawer}>
@@ -164,6 +165,7 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
         {admin && <DshWindow />}
         {admin && <DraftConfirm />}
         {admin && <JobWatcher />}
+        <ConsoleEvents />
         <FocusFromURL />
       </div>
     </TooltipProvider>

@@ -3,6 +3,7 @@ package center
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -25,7 +26,7 @@ func (s *Server) proxyRoutes(auth, admin *gin.RouterGroup) {
 		admin := g.admin
 		g.r.GET(g.base+"/proxy", func(c *gin.Context) { s.getProxy(c, admin) })
 		g.r.PUT(g.base+"/proxy", func(c *gin.Context) { s.putProxy(c, admin) })
-		g.r.PUT(g.base+"/proxy/types/:type/exit", func(c *gin.Context) { s.putTypeExit(c, admin) })
+		g.r.PUT(g.base+"/proxy/types/:type/exit", s.asJob("给一类节点加出口", "已取消，出口保持原样", func(c *gin.Context) { s.putTypeExit(c, admin) }))
 		g.r.DELETE(g.base+"/proxy/types/:type/exit", func(c *gin.Context) { s.deleteTypeExit(c, admin) })
 	}
 }
@@ -324,11 +325,14 @@ func (s *Server) putTypeExit(c *gin.Context, admin bool) {
 	}
 	var ok2 []planned
 	var failed []gin.H
-	for _, n := range t.nodes {
+	jobTitle(ctx, "给「"+t.Label+"」加出口")
+	for i, n := range t.nodes {
 		if req.Exit.Kind == "node" && req.Exit.NodeID == n.ID {
 			continue
 		}
-		_, probe, err := s.checkUserChain(ctx, u, chainRequest{EntryNodeID: n.ID, Exit: req.Exit, SkipProbe: req.SkipProbe}, admin)
+		// 每个节点经出口的实测在 checkUserChain 里报步骤，这里给它加上是第几个节点
+		pctx := jobPrefix(ctx, fmt.Sprintf("第 %d/%d 个节点（%s）· ", i+1, len(t.nodes), n.Name))
+		_, probe, err := s.checkUserChain(pctx, u, chainRequest{EntryNodeID: n.ID, Exit: req.Exit, SkipProbe: req.SkipProbe}, admin)
 		if err != nil {
 			code, detail, _ := strings.Cut(err.Error(), ": ")
 			failed = append(failed, gin.H{"node_id": n.ID, "name": n.Name, "code": code, "detail": detail})
@@ -346,6 +350,9 @@ func (s *Server) putTypeExit(c *gin.Context, admin bool) {
 		return
 	}
 	if dryRun(c, dryResult{Preview: []string{t.Label + " 的 " + itoa(len(ok2)) + " 个节点改为经这个出口；订阅里这些节点换成经出口的版本"}}) {
+		return
+	}
+	if !jobCommit(c) {
 		return
 	}
 	existing, err := s.policyChains(ctx, u.ID, t.Key)

@@ -21,6 +21,9 @@ export interface Gate {
   colocated?: boolean;
   config_revision: number;
   applied_revision: number;
+  // center_version：中心的版本，Gate 与它不同时会自更新；self_update 是最近一次自更新失败的原因（成功或同版本时为空）
+  center_version?: string;
+  self_update?: { version: string; error: string; at: string } | null;
 }
 
 // ExitProbe 是入口 VPS 实测出口的结果：proxy 为按协议真连并拿到实际出口 IP，tcp 为只测了端口。

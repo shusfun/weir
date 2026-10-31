@@ -48,6 +48,7 @@ import { ChevronDown, CirclePause, CirclePlay, ExternalLink, History, Pencil, Pl
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
+import { WaitText } from "./wait";
 import { bytes, date } from "../lib/models";
 import { fromLocalInput, localInput, type ChainItem, type ChainSpec, type LinkItem, type LinkState, type LinkStats, type Pull, type SourceResolved } from "../lib/core";
 import { ChainExitFields, exitErrorFields, exitKindName, probeText } from "./chain-exit";
@@ -206,7 +207,7 @@ function LinkCard({ base, link: l, stats, showCredentials, inlineQr, onEdit, ref
           </small>
         </div>
         <Menu>
-          <MenuTrigger render={<Button size="sm" variant="outline" ripple disabled={busy} aria-label={`${l.name || "未命名"} 更多操作`} className="shrink-0 data-[popup-open]:[&_svg]:rotate-180 [&_svg]:transition-transform" />}>
+          <MenuTrigger render={<Button size="sm" variant="outline" ripple busy={busy} busyText="处理中" aria-label={`${l.name || "未命名"} 更多操作`} className="shrink-0 data-[popup-open]:[&_svg]:rotate-180 [&_svg]:transition-transform" />}>
             更多<ChevronDown />
           </MenuTrigger>
           <MenuContent align="end">
@@ -499,7 +500,7 @@ export function ChainPanel({ base, nodes, admin }: { base: string; nodes: NodeOp
                 <Switch
                   aria-label={"启用 " + c.name}
                   checked={c.enabled}
-                  disabled={isBusy(c.id)}
+                  disabled={isBusy(c.id) || isBusy(-c.id)}
                   onCheckedChange={(v) =>
                     act(c.id, () => api(`${base}/chains/${c.id}`, "PATCH", { enabled: v }), v ? "已启用" : "已停用")
                   }
@@ -508,10 +509,12 @@ export function ChainPanel({ base, nodes, admin }: { base: string; nodes: NodeOp
                   size="icon-sm"
                   variant="destructive"
                   aria-label={"删除 " + c.name}
-                  disabled={isBusy(c.id)}
+                  disabled={isBusy()}
+                  busy={isBusy(-c.id)}
+                  busyText="正在删除"
                   onClick={async () =>
                     (await confirm({ title: `删除链式代理「${c.name}」？`, confirmText: "删除", tone: "danger" })) &&
-                    act(c.id, () => api(`${base}/chains/${c.id}`, "DELETE"), "已删除")
+                    act(-c.id, () => api(`${base}/chains/${c.id}`, "DELETE"), "已删除")
                   }
                 >
                   <Trash2 />
@@ -556,11 +559,13 @@ function ChainForm({
   // 订阅组里的节点排第一个；分给用户的订阅组为空时默认填代理。
   const groups = useQuery({ queryKey: ["chain-sources", base], queryFn: async () => (await api(base === "/me" ? "/me/chain-sources" : `${base}/chain-sources`)).items as unknown[] });
   const [exit, setExit] = useState<ChainSpec | null>(null);
+  // 订阅组没读到时不按「有订阅组」默认：等读到再定，读失败时说明原因并可重新读取
   const current: ChainSpec = exit ?? (groups.data && groups.data.length === 0 ? { kind: "socks5" } : { kind: "source", mode: "filter" });
   const [skip, setSkip] = useState(false);
-  const save = useFormAction(() => api(base + "/chains", "POST", { name: name.trim(), entry_node_id: entry, exit: current, skip_probe: admin && skip }), {
+  const save = useFormAction((track) => api(base + "/chains", "POST", { name: name.trim(), entry_node_id: entry, exit: current, skip_probe: admin && skip }, track), {
     fields: { entry_not_allowed: "entry", ...exitErrorFields(current.kind) },
     onSuccess: saved,
+    wait: () => ({ label: `正在让入口 VPS 经出口实测（${nodes.find((n) => n.id === entry)?.name ?? "入口节点"}）`, max: 45 }),
   });
   useConsoleContext({
     dialog: { title: "新建链式代理" },
@@ -571,7 +576,7 @@ function ChainForm({
     ],
   });
   return (
-    <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
+    <Dialog open onOpenChange={(o) => { if (!o && (!save.busy || save.detachable)) { save.leave(); close(); } }}>
       <DialogContent size="md">
         <DialogTitle>新建链式代理</DialogTitle>
         <DialogDescription>会作为一个新节点出现在订阅里。保存前由入口 VPS 实测出口是否可用。</DialogDescription>
@@ -593,20 +598,24 @@ function ChainForm({
               </SelectContent>
             </Select>
           </Field>
-          <ChainExitFields
-            value={current}
-            onChange={setExit}
-            admin={false}
-            sourcePath={base === "/me" ? "/me/chain-sources" : `${base}/chain-sources`}
-            nodes={nodes.filter((n) => n.id !== entry)}
-            nodeHint="出口需要你可用的另一个节点。"
-          />
+          {groups.isPending || groups.error ? (
+            <State loading={groups.isPending} error={groups.error} onRetry={() => groups.refetch()} />
+          ) : (
+            <ChainExitFields
+              value={current}
+              onChange={setExit}
+              admin={false}
+              sourcePath={base === "/me" ? "/me/chain-sources" : `${base}/chain-sources`}
+              nodes={nodes.filter((n) => n.id !== entry)}
+              nodeHint="出口需要你可用的另一个节点。"
+            />
+          )}
           {admin && <CheckboxField label="跳过 VPS 实测（仅管理员）" checked={skip} onCheckedChange={setSkip} />}
-          <DialogFooter error={save.error}>
+          <DialogFooter error={save.error} status={save.wait && <WaitText wait={save.wait} />}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>
               取消
             </Button>
-            <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在实测并保存…">保存</Button>
+            <Button type="submit" disabled={save.busy || !groups.data} busy={save.busy} busyText="正在实测并保存…">保存</Button>
           </DialogFooter>
         </Form>
       </DialogContent>

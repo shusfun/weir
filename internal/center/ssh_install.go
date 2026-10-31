@@ -170,7 +170,8 @@ func sshReason(err error) string {
 	msg := err.Error()
 	switch {
 	case strings.Contains(msg, "i/o timeout") || strings.Contains(msg, "deadline exceeded"):
-		return "连接超时：中心连不上这台 VPS 的 SSH 端口（防火墙、安全组，或中心所在网络到 VPS 不通）"
+		// ping 走 ICMP，安全组与防火墙对它和 TCP 端口分开放行：ping 得通不说明 SSH 端口连得上
+		return "TCP 连接 15 秒没有建立：安全组、防火墙没有放行这个端口，或中心所在网络到这台 VPS 不通。ping 得通不代表 SSH 端口连得上"
 	case strings.Contains(msg, "connection refused"):
 		return "端口没有在监听：检查 SSH 端口是否正确"
 	case strings.Contains(msg, "unable to authenticate"):
@@ -227,7 +228,7 @@ func (s *Server) sshInstall(c *gin.Context) {
 	script := "curl -fsSL " + shellQuote(origin+"/install/gate.sh") + " | WEIR_NONINTERACTIVE=1 sh -s -- --token " + shellQuote(token)
 	host, port, user, password, keyed := t.Host, t.Port, t.User, t.Password, strings.TrimSpace(t.PrivateKey) != ""
 	expected := req.Fingerprint
-	job := s.jobs.Start("gate-ssh:"+randomHex(6), "gate-ssh", "安装 Gate「"+name+"」（"+host+"）", func(bg context.Context, run JobRun) (map[string]any, error) {
+	job := s.jobs.StartWith(jobSpec{ID: "gate-ssh:" + randomHex(6), Kind: "gate-ssh", Title: "安装 Gate「" + name + "」（" + host + "）", Trace: c.GetString("request_id"), CancelMsg: "已取消安装"}, func(bg context.Context, run JobRun) (map[string]any, error) {
 		ctx, cancel := context.WithTimeout(bg, sshInstallTimeout)
 		defer cancel()
 		mask := func(line string) string {

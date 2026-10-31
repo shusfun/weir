@@ -153,9 +153,9 @@ func (s *Server) agentPanelSecret(c *gin.Context) {
 func (s *Server) nodeCertRoutes(admin *gin.RouterGroup) {
 	admin.GET("/node-certs", s.getNodeCertSettings)
 	admin.PUT("/node-certs", s.putNodeCertSettings)
-	admin.PUT("/gates/:id/panel", s.putGatePanel)
+	admin.PUT("/gates/:id/panel", s.asJob("1Panel 测试并保存", "已取消，没有保存 1Panel 密钥", s.putGatePanel))
 	admin.DELETE("/gates/:id/panel", s.deleteGatePanel)
-	admin.POST("/certs/:id/renew", s.renewCertNow)
+	admin.POST("/certs/:id/renew", s.asJob("立即续签证书", "已取消续签，证书保持原样", s.renewCertNow))
 }
 
 func (s *Server) getNodeCertSettings(c *gin.Context) {
@@ -220,6 +220,12 @@ func (s *Server) putGatePanel(c *gin.Context) {
 		failure(c, 400, "invalid_api_key")
 		return
 	}
+	// Gate 收到后就会保存密钥：发出之后不再接受取消
+	if !jobCommit(c) {
+		return
+	}
+	jobTitle(c.Request.Context(), "1Panel 测试并保存（"+g.Name+"）")
+	jobStep(c.Request.Context(), "正在让 VPS 连接本机 1Panel 并保存密钥（"+g.Name+"）", 60*time.Second)
 	nonce := putPanelSecret(g.ID, strings.TrimSpace(req.APIKey))
 	res, err := s.gateProbe(c.Request.Context(), g, contracts.ActionPanelConfigure, map[string]any{"nonce": nonce, "port": req.Port, "https": req.HTTPS}, 60*time.Second)
 	takePanelSecret(g.ID, nonce)
@@ -477,6 +483,7 @@ func (s *Server) panelCert(ctx context.Context, g *ent.Gate, ip string) (*ent.Ce
 	if err != nil {
 		return nil, err
 	}
+	jobStep(ctx, "正在经 1Panel 申请 IP 证书（"+ip+"）", 170*time.Second)
 	res, err := s.gateProbe(ctx, g, contracts.ActionPanelCert, map[string]any{"cert_id": c.ID, "ip": ip}, 170*time.Second)
 	certPEM, _ := res["cert_pem"].(string)
 	sum, _ := res["sha256"].(string)
@@ -496,6 +503,7 @@ func (s *Server) issueIPCert(ctx context.Context, g *ent.Gate, ip string) (strin
 	if err != nil {
 		return "", "", err
 	}
+	jobStep(ctx, "正在向证书机构签发 IP 证书（"+ip+"）", 150*time.Second)
 	ctx, cancel := context.WithTimeout(ctx, 150*time.Second)
 	defer cancel()
 	return client.Issue(ctx, ip, acme.ProfileShortLived, func(ctx context.Context, ch acme.Challenge) error {
@@ -528,6 +536,7 @@ func (s *Server) issueEdgeCert(ctx context.Context, domain string) (string, stri
 	if err != nil {
 		return "", "", err
 	}
+	jobStep(ctx, "正在向证书机构签发证书（"+domain+"）", 150*time.Second)
 	ctx, cancel := context.WithTimeout(ctx, 150*time.Second)
 	defer cancel()
 	return client.Issue(ctx, domain, "", func(ctx context.Context, ch acme.Challenge) error {
@@ -634,6 +643,9 @@ func (s *Server) renewCert(ctx context.Context, c *ent.Certificate) error {
 		return nil
 	}
 	if err == nil {
+		// 证书已经签下来：保存与下发不再跟着取消，免得白签一张
+		jobCommitCtx(ctx)
+		ctx = context.WithoutCancel(ctx)
 		var x *x509.Certificate
 		var sealed string
 		if x, err = parseCertPair(certPEM, keyPEM); err == nil {
@@ -643,7 +655,13 @@ func (s *Server) renewCert(ctx context.Context, c *ent.Certificate) error {
 			}
 		}
 	}
+	// 管理员取消了这次续签：证书保持原样，不记失败、不推迟下次自动续签
+	if err != nil && errors.Is(ctx.Err(), context.Canceled) {
+		return err
+	}
 	if err != nil {
+		// 失败原因用不跟着取消的上下文写：调用方的时限到了也要记下来
+		ctx := context.WithoutCancel(ctx)
 		backoff := s.renewBackoff(ctx, c.ID)
 		_ = s.Store.KV.Set(ctx, fmt.Sprintf("cert-renew-wait:%d", c.ID), "1", backoff)
 		_ = c.Update().SetStatus(certificate.StatusFailed).SetLastError(trimErr(err)).Exec(ctx)
@@ -651,6 +669,7 @@ func (s *Server) renewCert(ctx context.Context, c *ent.Certificate) error {
 		return err
 	}
 	_ = s.Store.KV.Del(ctx, fmt.Sprintf("cert-renew-fail:%d", c.ID))
+	jobStep(ctx, "正在把新证书下发给用到它的 VPS", 0)
 	return s.bumpCertGates(ctx, c.ID)
 }
 
@@ -709,6 +728,7 @@ func (s *Server) renewCertNow(c *gin.Context) {
 	if dryRun(c, dryResult{Preview: []string{"立即续签证书 " + ct.Domain + "，用它的节点随后换上新证书"}}) {
 		return
 	}
+	jobTitle(ctx, "续签证书 "+ct.Domain)
 	_ = s.Store.KV.Del(ctx, fmt.Sprintf("cert-renew-wait:%d", id))
 	if err = s.renewCert(ctx, ct); err != nil {
 		failDetail(c, 422, "renew_failed", trimErr(err), nil)

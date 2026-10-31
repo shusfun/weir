@@ -5298,6 +5298,7 @@ type GateMutation struct {
 	host                  *map[string]interface{}
 	panel                 *map[string]interface{}
 	firewall              *map[string]interface{}
+	self_update           *map[string]interface{}
 	config_revision       *int64
 	addconfig_revision    *int64
 	applied_revision      *int64
@@ -6064,6 +6065,55 @@ func (m *GateMutation) ResetFirewall() {
 	delete(m.clearedFields, gate.FieldFirewall)
 }
 
+// SetSelfUpdate sets the "self_update" field.
+func (m *GateMutation) SetSelfUpdate(value map[string]interface{}) {
+	m.self_update = &value
+}
+
+// SelfUpdate returns the value of the "self_update" field in the mutation.
+func (m *GateMutation) SelfUpdate() (r map[string]interface{}, exists bool) {
+	v := m.self_update
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSelfUpdate returns the old "self_update" field's value of the Gate entity.
+// If the Gate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GateMutation) OldSelfUpdate(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSelfUpdate is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSelfUpdate requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSelfUpdate: %w", err)
+	}
+	return oldValue.SelfUpdate, nil
+}
+
+// ClearSelfUpdate clears the value of the "self_update" field.
+func (m *GateMutation) ClearSelfUpdate() {
+	m.self_update = nil
+	m.clearedFields[gate.FieldSelfUpdate] = struct{}{}
+}
+
+// SelfUpdateCleared returns if the "self_update" field was cleared in this mutation.
+func (m *GateMutation) SelfUpdateCleared() bool {
+	_, ok := m.clearedFields[gate.FieldSelfUpdate]
+	return ok
+}
+
+// ResetSelfUpdate resets all changes to the "self_update" field.
+func (m *GateMutation) ResetSelfUpdate() {
+	m.self_update = nil
+	delete(m.clearedFields, gate.FieldSelfUpdate)
+}
+
 // SetConfigRevision sets the "config_revision" field.
 func (m *GateMutation) SetConfigRevision(i int64) {
 	m.config_revision = &i
@@ -6542,7 +6592,7 @@ func (m *GateMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GateMutation) Fields() []string {
-	fields := make([]string, 0, 24)
+	fields := make([]string, 0, 25)
 	if m.name != nil {
 		fields = append(fields, gate.FieldName)
 	}
@@ -6587,6 +6637,9 @@ func (m *GateMutation) Fields() []string {
 	}
 	if m.firewall != nil {
 		fields = append(fields, gate.FieldFirewall)
+	}
+	if m.self_update != nil {
+		fields = append(fields, gate.FieldSelfUpdate)
 	}
 	if m.config_revision != nil {
 		fields = append(fields, gate.FieldConfigRevision)
@@ -6653,6 +6706,8 @@ func (m *GateMutation) Field(name string) (ent.Value, bool) {
 		return m.Panel()
 	case gate.FieldFirewall:
 		return m.Firewall()
+	case gate.FieldSelfUpdate:
+		return m.SelfUpdate()
 	case gate.FieldConfigRevision:
 		return m.ConfigRevision()
 	case gate.FieldAppliedRevision:
@@ -6710,6 +6765,8 @@ func (m *GateMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldPanel(ctx)
 	case gate.FieldFirewall:
 		return m.OldFirewall(ctx)
+	case gate.FieldSelfUpdate:
+		return m.OldSelfUpdate(ctx)
 	case gate.FieldConfigRevision:
 		return m.OldConfigRevision(ctx)
 	case gate.FieldAppliedRevision:
@@ -6841,6 +6898,13 @@ func (m *GateMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetFirewall(v)
+		return nil
+	case gate.FieldSelfUpdate:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSelfUpdate(v)
 		return nil
 	case gate.FieldConfigRevision:
 		v, ok := value.(int64)
@@ -7031,6 +7095,9 @@ func (m *GateMutation) ClearedFields() []string {
 	if m.FieldCleared(gate.FieldFirewall) {
 		fields = append(fields, gate.FieldFirewall)
 	}
+	if m.FieldCleared(gate.FieldSelfUpdate) {
+		fields = append(fields, gate.FieldSelfUpdate)
+	}
 	return fields
 }
 
@@ -7065,6 +7132,9 @@ func (m *GateMutation) ClearField(name string) error {
 		return nil
 	case gate.FieldFirewall:
 		m.ClearFirewall()
+		return nil
+	case gate.FieldSelfUpdate:
+		m.ClearSelfUpdate()
 		return nil
 	}
 	return fmt.Errorf("unknown Gate nullable field %s", name)
@@ -7118,6 +7188,9 @@ func (m *GateMutation) ResetField(name string) error {
 		return nil
 	case gate.FieldFirewall:
 		m.ResetFirewall()
+		return nil
+	case gate.FieldSelfUpdate:
+		m.ResetSelfUpdate()
 		return nil
 	case gate.FieldConfigRevision:
 		m.ResetConfigRevision()

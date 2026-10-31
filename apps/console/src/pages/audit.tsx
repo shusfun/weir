@@ -154,7 +154,7 @@ export function AuditPage() {
         <DialogContent>
           <DialogTitle>审计记录 #{detail?.id ?? detailId}</DialogTitle>
           <DialogDescription>此记录描述操作请求的结果；异步任务是否生效须查看执行回执。</DialogDescription>
-          {!detail && <State empty="没有这条记录" detail="编号不存在，或已超出保留期。" />}
+          {!detail && (one.error ? <State error={one.error} onRetry={() => one.refetch()} /> : <State empty="没有这条记录" detail="编号不存在，或已超出保留期。" />)}
           {detail && (
             <div className="stack">
               <div className="detail-grid">

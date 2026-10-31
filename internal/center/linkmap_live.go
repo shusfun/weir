@@ -147,6 +147,8 @@ func (s *Server) linkMapLive(c *gin.Context, admin bool) {
 			return
 		case <-end:
 			return
+		case <-s.events.stopped():
+			return
 		case <-ping.C:
 			if !send("ping", 0, gin.H{}) {
 				return

@@ -31,6 +31,12 @@ func pairFakeGate(t *testing.T, admin *testClient) *fakeGate {
 	if token == "" || !strings.Contains(inv["command"].(string), "/install/gate.sh") {
 		t.Fatalf("invite = %v", inv)
 	}
+	return pairWithToken(t, admin, token)
+}
+
+// pairWithToken 用已生成的一次性凭证配对一台假 Gate 并完成设备认证。
+func pairWithToken(t *testing.T, admin *testClient, token string) *fakeGate {
+	t.Helper()
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	g := &fakeGate{t: t, c: &testClient{t: t, router: admin.router}, priv: priv}
 	pair := contracts.PairRequest{Name: "ignored", PublicKey: base64.StdEncoding.EncodeToString(pub), Token: token}

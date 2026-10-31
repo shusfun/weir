@@ -31,6 +31,8 @@ func (Gate) Fields() []ent.Field {
 		field.JSON("panel", map[string]any{}).Optional(),
 		// firewall 是 Gate 上报的本机防火墙（ufw / firewalld / iptables 是否启用、放行了哪些端口）；读不到时为空，显示「未知」。
 		field.JSON("firewall", map[string]any{}).Optional(),
+		// self_update：最近一次自更新失败的原因（Gate 心跳上报；更新成功或已同版本时清空）。
+		field.JSON("self_update", map[string]any{}).Optional(),
 		field.Int64("config_revision").Default(1),
 		field.Int64("applied_revision").Default(0),
 		field.Int64("failed_revision").Default(0),

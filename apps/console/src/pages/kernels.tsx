@@ -79,13 +79,13 @@ function Versions() {
   const { run, isBusy } = useRowAction<string>({ refetch: q.refetch });
   const confirm = useConfirm();
   const setDefault = (kernel: string, version: string) =>
-    run(kernel + version, () => api("/admin/kernels/defaults", "PUT", { [kernel]: version }), `${kernelNames[kernel]} 默认版本：${version}`, {
+    run("default:" + kernel + version, () => api("/admin/kernels/defaults", "PUT", { [kernel]: version }), `${kernelNames[kernel]} 默认版本：${version}`, {
       detail: () => "未锁定版本的 VPS 会在数秒内切换。",
       fail: "设置失败",
     });
   const remove = async (kernel: string, version: string) =>
     (await confirm({ title: `删除 ${kernelNames[kernel]} ${version}？`, description: "只删除中心的缓存；以后需要时可以再下载。", confirmText: "删除", tone: "danger" })) &&
-    run(kernel + version, () => api(`/admin/kernels/${kernel}/versions/${encodeURIComponent(version)}`, "DELETE"), "已删除");
+    run("del:" + kernel + version, () => api(`/admin/kernels/${kernel}/versions/${encodeURIComponent(version)}`, "DELETE"), "已删除");
   if (q.isPending || q.error) return <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} skeleton={<SkeletonCards count={3} lines={3} />} />;
   return (
     <>
@@ -113,9 +113,9 @@ function Versions() {
                         {kernel !== "mihomo" && (v.driver ? <Badge variant="soft" tone="neutral">驱动 <ObjectLink to={{ type: "driver", key: v.driver, name: v.driver }} /></Badge> : <Badge variant="soft" tone="bad" title={v.driver_error}>没有驱动 · <ObjectLink to={{ type: "driver", key: "new", name: "新增驱动" }} /></Badge>)}
                         {users.length > 0 && <small className="text-[var(--weir-ink-3)]">{users.map((g, i) => <span key={g.how + g.id}>{i > 0 && "、"}<ObjectLink to={{ type: "gate", id: g.id, name: g.name }} />（{g.how}）</span>)}</small>}
                         <span className="ml-auto flex gap-1">
-                          {missing.length > 0 && <Button size="xs" variant="ghost" disabled={isBusy()} onClick={() => void run(kernel + v.version, async () => started((await api(`/admin/kernels/${kernel}/fetch`, "POST", { version: v.version })).job.id), `开始下载 ${missing.join("、")}`)}><Download />补下</Button>}
-                          {!v.default && <Button size="xs" variant="ghost" disabled={isBusy() || (kernel !== "mihomo" && !v.driver)} onClick={() => void setDefault(kernel, v.version)}><Star />设为默认</Button>}
-                          {!v.default && users.length === 0 && <Button size="xs" variant="ghost" aria-label={`删除 ${v.version}`} disabled={isBusy()} onClick={() => void remove(kernel, v.version)}><Trash2 /></Button>}
+                          {missing.length > 0 && <Button size="xs" variant="ghost" disabled={isBusy()} busy={isBusy("fetch:" + kernel + v.version)} busyText="正在开始…" onClick={() => void run("fetch:" + kernel + v.version, async () => started((await api(`/admin/kernels/${kernel}/fetch`, "POST", { version: v.version })).job.id), `开始下载 ${missing.join("、")}`)}><Download />补下</Button>}
+                          {!v.default && <Button size="xs" variant="ghost" disabled={isBusy() || (kernel !== "mihomo" && !v.driver)} busy={isBusy("default:" + kernel + v.version)} busyText="正在设置…" onClick={() => void setDefault(kernel, v.version)}><Star />设为默认</Button>}
+                          {!v.default && users.length === 0 && <Button size="xs" variant="ghost" aria-label={`删除 ${v.version}`} disabled={isBusy()} busy={isBusy("del:" + kernel + v.version)} busyText="正在删除" onClick={() => void remove(kernel, v.version)}><Trash2 /></Button>}
                         </span>
                       </li>
                     );

@@ -200,6 +200,7 @@ func (s *Server) notices(ctx context.Context) []Notice {
 	} else if err != nil && err != errChecking {
 		out = append(out, Notice{ID: "github-unreachable:" + time.Now().UTC().Format("2006-01-02"), Level: "warn", Title: "连不上 GitHub", Detail: "无法检查新版本，内核下载会依次尝试镜像。" + err.Error()})
 	}
+	out = append(out, s.tasks.notices()...)
 	if free, ok := diskFree(s.dataDir()); ok && free < 1<<30 {
 		out = append(out, Notice{ID: fmt.Sprintf("disk-low:%d", free>>28), Level: "warn", Title: "数据目录剩余空间不足 1 GB", Detail: fmt.Sprintf("%s 还剩 %.1f GB；内核缓存与备份需要空间。", s.dataDir(), float64(free)/(1<<30))})
 	}

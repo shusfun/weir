@@ -6,12 +6,21 @@ import { ChoiceCard, CodeBlock, Field, Notice,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SectionHeader, Radio, RadioGroup, FormGrid,
 } from "@weir/ui";
 import { Download, Gauge, RefreshCw } from "lucide-react";
-import { api } from "../api";
+import { api, clause } from "../api";
 import { State } from "./feedback";
 import type { CatalogClient } from "../lib/models";
 import { assetsFor, candidates, detectPlatform, downloadVerified, probe, rank, speed, type ProbeResult, type ReleaseAsset } from "../lib/download";
 
 interface Release { status: string; version?: string; url?: string; assets?: ReleaseAsset[] }
+
+// 中心读 GitHub Release 的结果（status 不是 current 时）
+const releaseReason: Record<string, string> = {
+  pending: "中心正在向 GitHub 查询，稍后再打开",
+  not_found: "GitHub 上没有这个仓库的正式发布",
+  rate_limited: "中心访问 GitHub 的次数超过限制，稍后再试",
+  not_configured: "这个客户端没有配置发布仓库",
+  unknown: "GitHub 没有返回可用的发布信息（中心连不上 GitHub，或返回内容无法解析）",
+};
 const platformNames: Record<string, string> = { windows: "Windows", macos: "macOS", linux: "Linux", android: "Android" };
 
 export function ClientDownload({ client, primary = false }: { client: CatalogClient; primary?: boolean }) {
@@ -83,7 +92,7 @@ function DownloadDialog({ client, close }: { client: CatalogClient; close: () =>
         <DialogDescription>在你的浏览器内测速，自动选择最快的可校验来源；下载后核对 GitHub 公布的 SHA-256。</DialogDescription>
         {mirrors.isError && <Notice tone="warn" role="status">加速镜像暂时不可用，本次只测速 GitHub 直连。</Notice>}
         {release.isPending || mirrors.isPending ? <State loading /> : release.data?.status !== "current" ? (
-          <Notice tone="bad">暂时无法读取正式发布信息，请改用发布页下载。</Notice>
+          <Notice tone="bad">暂时无法读取正式发布信息：{release.error ? clause(release.error) : releaseReason[release.data?.status ?? ""] ?? `中心返回的状态是「${release.data?.status}」`}。请改用发布页下载。</Notice>
         ) : (
           <div className="stack">
             <FormGrid>

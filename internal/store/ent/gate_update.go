@@ -239,6 +239,18 @@ func (_u *GateUpdate) ClearFirewall() *GateUpdate {
 	return _u
 }
 
+// SetSelfUpdate sets the "self_update" field.
+func (_u *GateUpdate) SetSelfUpdate(v map[string]interface{}) *GateUpdate {
+	_u.mutation.SetSelfUpdate(v)
+	return _u
+}
+
+// ClearSelfUpdate clears the value of the "self_update" field.
+func (_u *GateUpdate) ClearSelfUpdate() *GateUpdate {
+	_u.mutation.ClearSelfUpdate()
+	return _u
+}
+
 // SetConfigRevision sets the "config_revision" field.
 func (_u *GateUpdate) SetConfigRevision(v int64) *GateUpdate {
 	_u.mutation.ResetConfigRevision()
@@ -533,6 +545,12 @@ func (_u *GateUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.FirewallCleared() {
 		_spec.ClearField(gate.FieldFirewall, field.TypeJSON)
 	}
+	if value, ok := _u.mutation.SelfUpdate(); ok {
+		_spec.SetField(gate.FieldSelfUpdate, field.TypeJSON, value)
+	}
+	if _u.mutation.SelfUpdateCleared() {
+		_spec.ClearField(gate.FieldSelfUpdate, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.ConfigRevision(); ok {
 		_spec.SetField(gate.FieldConfigRevision, field.TypeInt64, value)
 	}
@@ -802,6 +820,18 @@ func (_u *GateUpdateOne) SetFirewall(v map[string]interface{}) *GateUpdateOne {
 // ClearFirewall clears the value of the "firewall" field.
 func (_u *GateUpdateOne) ClearFirewall() *GateUpdateOne {
 	_u.mutation.ClearFirewall()
+	return _u
+}
+
+// SetSelfUpdate sets the "self_update" field.
+func (_u *GateUpdateOne) SetSelfUpdate(v map[string]interface{}) *GateUpdateOne {
+	_u.mutation.SetSelfUpdate(v)
+	return _u
+}
+
+// ClearSelfUpdate clears the value of the "self_update" field.
+func (_u *GateUpdateOne) ClearSelfUpdate() *GateUpdateOne {
+	_u.mutation.ClearSelfUpdate()
 	return _u
 }
 
@@ -1128,6 +1158,12 @@ func (_u *GateUpdateOne) sqlSave(ctx context.Context) (_node *Gate, err error) {
 	}
 	if _u.mutation.FirewallCleared() {
 		_spec.ClearField(gate.FieldFirewall, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.SelfUpdate(); ok {
+		_spec.SetField(gate.FieldSelfUpdate, field.TypeJSON, value)
+	}
+	if _u.mutation.SelfUpdateCleared() {
+		_spec.ClearField(gate.FieldSelfUpdate, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.ConfigRevision(); ok {
 		_spec.SetField(gate.FieldConfigRevision, field.TypeInt64, value)

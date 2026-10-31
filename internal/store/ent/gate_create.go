@@ -168,6 +168,12 @@ func (_c *GateCreate) SetFirewall(v map[string]interface{}) *GateCreate {
 	return _c
 }
 
+// SetSelfUpdate sets the "self_update" field.
+func (_c *GateCreate) SetSelfUpdate(v map[string]interface{}) *GateCreate {
+	_c.mutation.SetSelfUpdate(v)
+	return _c
+}
+
 // SetConfigRevision sets the "config_revision" field.
 func (_c *GateCreate) SetConfigRevision(v int64) *GateCreate {
 	_c.mutation.SetConfigRevision(v)
@@ -551,6 +557,10 @@ func (_c *GateCreate) createSpec() (*Gate, *sqlgraph.CreateSpec) {
 		_spec.SetField(gate.FieldFirewall, field.TypeJSON, value)
 		_node.Firewall = value
 	}
+	if value, ok := _c.mutation.SelfUpdate(); ok {
+		_spec.SetField(gate.FieldSelfUpdate, field.TypeJSON, value)
+		_node.SelfUpdate = value
+	}
 	if value, ok := _c.mutation.ConfigRevision(); ok {
 		_spec.SetField(gate.FieldConfigRevision, field.TypeInt64, value)
 		_node.ConfigRevision = value
@@ -858,6 +868,24 @@ func (u *GateUpsert) UpdateFirewall() *GateUpsert {
 // ClearFirewall clears the value of the "firewall" field.
 func (u *GateUpsert) ClearFirewall() *GateUpsert {
 	u.SetNull(gate.FieldFirewall)
+	return u
+}
+
+// SetSelfUpdate sets the "self_update" field.
+func (u *GateUpsert) SetSelfUpdate(v map[string]interface{}) *GateUpsert {
+	u.Set(gate.FieldSelfUpdate, v)
+	return u
+}
+
+// UpdateSelfUpdate sets the "self_update" field to the value that was provided on create.
+func (u *GateUpsert) UpdateSelfUpdate() *GateUpsert {
+	u.SetExcluded(gate.FieldSelfUpdate)
+	return u
+}
+
+// ClearSelfUpdate clears the value of the "self_update" field.
+func (u *GateUpsert) ClearSelfUpdate() *GateUpsert {
+	u.SetNull(gate.FieldSelfUpdate)
 	return u
 }
 
@@ -1294,6 +1322,27 @@ func (u *GateUpsertOne) UpdateFirewall() *GateUpsertOne {
 func (u *GateUpsertOne) ClearFirewall() *GateUpsertOne {
 	return u.Update(func(s *GateUpsert) {
 		s.ClearFirewall()
+	})
+}
+
+// SetSelfUpdate sets the "self_update" field.
+func (u *GateUpsertOne) SetSelfUpdate(v map[string]interface{}) *GateUpsertOne {
+	return u.Update(func(s *GateUpsert) {
+		s.SetSelfUpdate(v)
+	})
+}
+
+// UpdateSelfUpdate sets the "self_update" field to the value that was provided on create.
+func (u *GateUpsertOne) UpdateSelfUpdate() *GateUpsertOne {
+	return u.Update(func(s *GateUpsert) {
+		s.UpdateSelfUpdate()
+	})
+}
+
+// ClearSelfUpdate clears the value of the "self_update" field.
+func (u *GateUpsertOne) ClearSelfUpdate() *GateUpsertOne {
+	return u.Update(func(s *GateUpsert) {
+		s.ClearSelfUpdate()
 	})
 }
 
@@ -1918,6 +1967,27 @@ func (u *GateUpsertBulk) UpdateFirewall() *GateUpsertBulk {
 func (u *GateUpsertBulk) ClearFirewall() *GateUpsertBulk {
 	return u.Update(func(s *GateUpsert) {
 		s.ClearFirewall()
+	})
+}
+
+// SetSelfUpdate sets the "self_update" field.
+func (u *GateUpsertBulk) SetSelfUpdate(v map[string]interface{}) *GateUpsertBulk {
+	return u.Update(func(s *GateUpsert) {
+		s.SetSelfUpdate(v)
+	})
+}
+
+// UpdateSelfUpdate sets the "self_update" field to the value that was provided on create.
+func (u *GateUpsertBulk) UpdateSelfUpdate() *GateUpsertBulk {
+	return u.Update(func(s *GateUpsert) {
+		s.UpdateSelfUpdate()
+	})
+}
+
+// ClearSelfUpdate clears the value of the "self_update" field.
+func (u *GateUpsertBulk) ClearSelfUpdate() *GateUpsertBulk {
+	return u.Update(func(s *GateUpsert) {
+		s.ClearSelfUpdate()
 	})
 }
 

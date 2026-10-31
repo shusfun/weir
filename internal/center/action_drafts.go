@@ -107,6 +107,7 @@ func (s *Server) applyActionDraft(c *gin.Context, d *Draft) {
 	_ = c.ShouldBindJSON(&req)
 	// 确认时的重新试运行与执行都带上这次请求的编号：处理函数的 5xx 与下面的失败记录用同一个编号。
 	ctx := withTrace(c.Request.Context(), c.GetString("request_id"))
+	jobTitle(ctx, fmt.Sprintf("确认 dsh 草稿（%d 步）", len(d.Steps)))
 	before := d.Versions
 	// 先只读一遍引用对象的版本：数据已被改动就直接拒绝，不在旧数据上再跑一次实测。
 	quick := newPlanCtx(d.Source)
@@ -152,6 +153,7 @@ func (s *Server) applyActionDraft(c *gin.Context, d *Draft) {
 			st.Edited = append(st.Edited, k)
 		}
 	}
+	jobStep(ctx, "正在按确认时的数据重新试运行", 0)
 	if err := s.planDraft(ctx, d, true); err != nil {
 		slog.Warn("draft rejected at confirm", "trace", c.GetString("request_id"), "draft", d.ID, "err", redact(err.Error()))
 		failDetail(c, 422, "draft_invalid", err.Error(), nil)
@@ -166,18 +168,30 @@ func (s *Server) applyActionDraft(c *gin.Context, d *Draft) {
 	if d.Danger && !s.reauth(c, req.Password, req.Code) {
 		return
 	}
+	// 开始执行后不再接受取消：做了一半的步骤要么做完，要么按失败撤回
+	if !jobCommit(c) {
+		return
+	}
 	x := &execCtx{actor: c, created: map[string]int{}}
 	var undo []func(context.Context) error
 	var kept []string // 已执行、没有撤回办法的步骤（如开始下载内核、重启内核）
 	for i := range d.Steps {
 		st := &d.Steps[i]
 		capb, _ := findCap(d.Source, st.Action)
-		u, err := capb.exec(ctx, s, x, st)
+		prefix := fmt.Sprintf("第 %d/%d 步（%s）· ", i+1, len(d.Steps), st.Title)
+		jobStep(ctx, prefix+"正在执行", 0)
+		// 步骤经确认者的请求调用处理函数（invoke）：它报告的步骤也带上是第几步
+		orig := c.Request
+		c.Request = orig.WithContext(jobPrefix(orig.Context(), prefix))
+		u, err := capb.exec(jobPrefix(ctx, prefix), s, x, st)
+		c.Request = orig
 		if err != nil {
 			var failed []string
+			// 撤回不跟着取消与时限：前面的步骤必须撤干净
+			bg := context.WithoutCancel(ctx)
 			for j := len(undo) - 1; j >= 0; j-- {
 				if undo[j] != nil {
-					if e := undo[j](ctx); e != nil {
+					if e := undo[j](bg); e != nil {
 						failed = append(failed, e.Error())
 					}
 				}
@@ -199,6 +213,7 @@ func (s *Server) applyActionDraft(c *gin.Context, d *Draft) {
 		undo = append(undo, u)
 	}
 	_ = s.Store.KV.Del(ctx, draftPrefix+d.ID)
+	s.notifyConsole("drafts", "")
 	steps := make([]map[string]any, 0, len(d.Steps))
 	for _, st := range d.Steps {
 		capb, _ := findCap(d.Source, st.Action)

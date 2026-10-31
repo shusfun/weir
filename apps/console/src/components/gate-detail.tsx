@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Badge, Button, Field, Notice, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Sheet, SheetContent, useConfirm } from "@weir/ui";
 import { api } from "../api";
 import { useRowAction } from "../lib/action";
+import { gateLags, SelfUpdateError } from "./gate-version";
+import { ActionsWait } from "./wait";
 import { State } from "./feedback";
 import { bytes, date } from "../lib/models";
 import type { Gate, NodeItem } from "../lib/core";
@@ -38,7 +40,7 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
   // 本项目自己的端口：节点端口与两个内核的统计端口（只监听回环）。
   const own = new Set([...nodes.filter((n) => n.gate_id === gate.id).map((n) => n.port), gate.xray_stats_port ?? 0, gate.singbox_stats_port ?? 0]);
   const foreign = (gate.listening_ports ?? []).filter((p) => !own.has(p.port));
-  const { run, isBusy } = useRowAction<string>();
+  const { run, isBusy, waitFor } = useRowAction<string>();
   const mine = nodes.filter((n) => n.gate_id === gate.id);
   const exitName = (n: NodeItem) => {
     if (n.chain.kind === "none") return "直连";
@@ -50,8 +52,9 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
   const fw = gate.firewall;
   return (
     <Sheet open onOpenChange={(o) => !o && close()}>
-      <SheetContent side="right" title={gate.name} description={`${gate.public_host || "等待上报地址"} · ${gate.arch} · 最近心跳 ${date(gate.last_seen_at)}`} className="w-full sm:max-w-[640px]">
+      <SheetContent side="right" title={gate.name} description={`${gate.public_host || "等待上报地址"} · ${gate.arch} · Gate ${gate.version || "版本未知"}${gateLags(gate) ? `（未跟上中心 ${gate.center_version}）` : ""} · 最近心跳 ${date(gate.last_seen_at)}`} className="w-full sm:max-w-[640px]">
         <div className="stack overflow-y-auto p-4">
+          <SelfUpdateError gate={gate} />
           <SectionHeader title="主机" description="由 VPS 读取本机 /proc 与磁盘信息上报；网卡总量可能包含虚拟网卡，不作为用户计费依据。" />
           <dl className="grid grid-cols-2 gap-2 text-sm">
             <dt>CPU</dt><dd>{pct(h.cpu_percent)}</dd>
@@ -88,14 +91,15 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
                   </Select>
                 </Field>
                 <div className="actions">
-                  <Button size="sm" variant="outline" disabled={isBusy() || !gate.online} onClick={() => void run("d" + k, async () => setDiag({ kernel: k, result: (await api(`/admin/gates/${gate.id}/kernels/${k}/diagnostics`, "POST", {})).result }), "已读取诊断")}>诊断</Button>
-                  <Button size="sm" variant="outline" disabled={isBusy() || !gate.online} onClick={async () => (await confirm({ title: `重启 ${gate.name} 上的 ${k}？`, description: "连接会短暂中断。", confirmText: "重启" })) && run("r" + k, () => api(`/admin/gates/${gate.id}/kernels/${k}/restart`, "POST", {}), "已重启")}>重启</Button>
+                  <Button size="sm" variant="outline" disabled={isBusy() || !gate.online} busy={isBusy("d" + k)} busyText="正在诊断…" onClick={() => void run("d" + k, async () => setDiag({ kernel: k, result: (await api(`/admin/gates/${gate.id}/kernels/${k}/diagnostics`, "POST", {})).result }), "已读取诊断", { wait: { label: `正在读取 ${gate.name} 上 ${k} 的诊断`, max: 30 } })}>诊断</Button>
+                  <Button size="sm" variant="outline" disabled={isBusy() || !gate.online} onClick={async () => (await confirm({ title: `重启 ${gate.name} 上的 ${k}？`, description: "连接会短暂中断。", confirmText: "重启" })) && run("r" + k, () => api(`/admin/gates/${gate.id}/kernels/${k}/restart`, "POST", {}), "已重启", { wait: { label: `正在重启 ${gate.name} 上的 ${k}`, max: 30 } })} busy={isBusy("r" + k)} busyText="正在重启…">重启</Button>
+                  <ActionsWait wait={waitFor("d" + k) || waitFor("r" + k)} />
                 </div>
                 {diag?.kernel === k && <KernelDiagnostics result={diag.result} />}
               </div>
             );
           })}
-          <div className="actions"><Button disabled={isBusy()} onClick={() => void run("pins", () => api("/admin/gates/" + gate.id, "PATCH", { kernel_pins: Object.fromEntries(Object.entries(pins).filter(([, v]) => v)) }), "版本设置已保存")}>保存版本设置</Button></div>
+          <div className="actions"><Button disabled={isBusy()} busy={isBusy("pins")} busyText="正在保存…" onClick={() => void run("pins", () => api("/admin/gates/" + gate.id, "PATCH", { kernel_pins: Object.fromEntries(Object.entries(pins).filter(([, v]) => v)) }), "版本设置已保存")}>保存版本设置</Button></div>
           {!gate.online && <Notice tone="warn">VPS 离线：诊断与重启不可用。</Notice>}
           <GateCerts gate={gate} />
           <SectionHeader title="关系图" description="用户 → 入口节点 → 路由（用户自建链式代理、分流规则）→ 出口（只读）；点击跳到对应用户、节点、VPS、订阅源或出口与分流。" />

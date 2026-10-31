@@ -77,7 +77,7 @@ export function PublicPagesPage() {
                     {p.data.enabled && <Button size="sm" variant="outline" render={<a href={"/p/" + p.slug} target="_blank" rel="noopener noreferrer" />}>打开<ArrowUpRight /></Button>}
                     <Button size="sm" variant="outline" onClick={() => setGuestbook(p)}><MessageSquare />留言板</Button>
                     <Button size="sm" variant="outline" onClick={() => setEdit(p)}>编辑</Button>
-                    <Button size="icon-sm" variant="destructive" aria-label={"删除 " + p.data.title} disabled={isBusy(p.id)} onClick={() => void remove(p)}><Trash2 /></Button>
+                    <Button size="icon-sm" variant="destructive" aria-label={"删除 " + p.data.title} disabled={isBusy()} busy={isBusy(p.id)} busyText="正在删除" onClick={() => void remove(p)}><Trash2 /></Button>
                   </span>
                 </li>
               ))}
@@ -157,7 +157,8 @@ function PageForm({ value, close, saved }: { value: PageItem | "new"; close: () 
               </div>
             ))}
             <div className="actions">
-              <Button type="button" size="sm" variant="outline" disabled={cards.length >= 24 || (profiles.data ?? []).length === 0} onClick={() => set({ cards: [...cards, { profile_id: (shared[0] ?? profiles.data?.[0])?.id ?? 0, target: "clash", title: "" }] })}><Plus />添加卡片</Button>
+              {profiles.error && <State error={profiles.error} onRetry={() => profiles.refetch()} />}
+              <Button type="button" size="sm" variant="outline" disabled={cards.length >= 24 || !profiles.data || profiles.data.length === 0} onClick={() => set({ cards: [...cards, { profile_id: (shared[0] ?? profiles.data?.[0])?.id ?? 0, target: "clash", title: "" }] })}><Plus />添加卡片</Button>
             </div>
             {(profiles.data ?? []).length > 0 && shared.length === 0 && <small className="text-[var(--weir-ink-3)]">当前没有已分享的订阅组；先分享订阅组，卡片才会显示：<Link className="text-[var(--weir-accent-text)] underline-offset-4 hover:underline" to="/subscriptions?tab=profiles" target="_blank">在新标签页打开「订阅源 → 订阅组」</Link>。</small>}
           </fieldset>
