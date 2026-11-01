@@ -101,8 +101,8 @@ func TestMultiStepDraftRefsEditsAndRollback(t *testing.T) {
 			del = x.(map[string]any)
 		}
 	}
-	mustJSON(t, admin, "POST", "/api/v1/admin/ai/drafts/"+del["id"].(string)+"/apply", map[string]any{}, 401)
-	mustJSON(t, admin, "POST", "/api/v1/admin/ai/drafts/"+del["id"].(string)+"/apply", map[string]any{"password": "Passw0rd"}, 200)
+	// 危险步骤只在确认窗里标出，确认时不再要求密码。
+	mustJSON(t, admin, "POST", "/api/v1/admin/ai/drafts/"+del["id"].(string)+"/apply", map[string]any{}, 200)
 	if n, _ := s.Store.Ent.User.Query().Where(user.EmailEQ("xm@example.test")).Count(ctx); n != 0 {
 		t.Fatal("user must be deleted")
 	}

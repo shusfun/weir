@@ -452,15 +452,12 @@ func TestGateFollowsCenterOrigin(t *testing.T) {
 	})
 	stopOffline()
 
-	// 管理员经新域名访问：只能改成当前正在访问的地址，且要重新验证身份。
+	// 管理员经新域名访问：只能改成当前正在访问的地址。
 	newAdmin := e.httpsAdmin(newOrigin, pool)
 	if code, _ := call(t, newAdmin, "PUT", newOrigin+"/api/v1/admin/center-origin", map[string]any{"origin": "https://evil.example.com"}); code != 400 {
 		t.Fatalf("arbitrary origin = %d", code)
 	}
-	if code, _ := call(t, newAdmin, "PUT", newOrigin+"/api/v1/admin/center-origin", map[string]any{"origin": newOrigin, "password": "wrong"}); code != 401 {
-		t.Fatalf("change without reauth = %d", code)
-	}
-	if code, out := call(t, newAdmin, "PUT", newOrigin+"/api/v1/admin/center-origin", map[string]any{"origin": newOrigin, "password": "E2eAdmin1"}); code != 200 {
+	if code, out := call(t, newAdmin, "PUT", newOrigin+"/api/v1/admin/center-origin", map[string]any{"origin": newOrigin}); code != 200 {
 		t.Fatalf("change origin = %d %v", code, out)
 	}
 	// 在线的 Gate：新地址认证成功后改写设备文件并切换。

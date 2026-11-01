@@ -117,8 +117,6 @@ func (s *Server) putAnnouncement(c *gin.Context) {
 	var req struct {
 		Announcement json.RawMessage `json:"announcement"`
 		Revision     string          `json:"revision"`
-		Password     string          `json:"password"`
-		Code         string          `json:"code"`
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 32<<10)
 	d := json.NewDecoder(c.Request.Body)
@@ -130,9 +128,6 @@ func (s *Server) putAnnouncement(c *gin.Context) {
 	a, e := decodeAnnouncement(req.Announcement)
 	if e != nil {
 		failure(c, 400, "invalid_announcement")
-		return
-	}
-	if !s.reauth(c, req.Password, req.Code) {
 		return
 	}
 	ctx := c.Request.Context()

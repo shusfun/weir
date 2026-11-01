@@ -33,13 +33,13 @@ func TestSlowActionContinuesAsJobAfterDisconnect(t *testing.T) {
 	})
 	path := "/api/v1/admin/gates/" + itoa(int(g.id)) + "/panel"
 	// 字段校验仍然同步返回
-	mustJSON(t, admin, "PUT", path, map[string]any{"port": 0, "api_key": "panel-api-key-123", "password": "Passw0rd"}, 400)
+	mustJSON(t, admin, "PUT", path, map[string]any{"port": 0, "api_key": "panel-api-key-123"}, 400)
 	if jobs := s.jobs.List("action"); len(jobs) != 0 {
 		t.Fatalf("a request answered inline must not leave a job: %v", jobs)
 	}
 	// Gate 开始执行后浏览器断开（反代超时也一样）：请求马上返回 202，操作照常进行
 	ctx, cancel := context.WithCancel(context.Background())
-	req := httptest.NewRequest("PUT", "https://example.com"+path, strings.NewReader(`{"port":10086,"api_key":"panel-api-key-123","password":"Passw0rd"}`)).WithContext(ctx)
+	req := httptest.NewRequest("PUT", "https://example.com"+path, strings.NewReader(`{"port":10086,"api_key":"panel-api-key-123"}`)).WithContext(ctx)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(admin.cookie)
 	go func() { <-started; cancel() }()

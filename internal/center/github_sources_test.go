@@ -98,8 +98,8 @@ func TestGitHubSourcesSettings(t *testing.T) {
 	}
 	rev := doc["revision"].(string)
 
-	put := func(sources []map[string]any, revision, password string) *httptest.ResponseRecorder {
-		return admin.do("PUT", "/api/v1/admin/github-sources", map[string]any{"sources": sources, "revision": revision, "password": password}, nil)
+	put := func(sources []map[string]any, revision string) *httptest.ResponseRecorder {
+		return admin.do("PUT", "/api/v1/admin/github-sources", map[string]any{"sources": sources, "revision": revision}, nil)
 	}
 	gid := g.id
 	for code, list := range map[string][]map[string]any{
@@ -109,26 +109,23 @@ func TestGitHubSourcesSettings(t *testing.T) {
 		"http_source_required": {{"kind": "gate", "gate_id": gid}},
 		"source_limit":         {},
 	} {
-		if w := put(list, rev, "Passw0rd"); w.Code != 400 || !strings.Contains(w.Body.String(), code) {
+		if w := put(list, rev); w.Code != 400 || !strings.Contains(w.Body.String(), code) {
 			t.Fatalf("%s: %d %s", code, w.Code, w.Body.String())
 		}
 	}
 	dup := []map[string]any{{"kind": "direct"}, {"kind": "mirror", "prefix": "https://m.example/"}, {"kind": "mirror", "prefix": "https://m.example/"}}
-	if w := put(dup, rev, "Passw0rd"); w.Code != 400 {
+	if w := put(dup, rev); w.Code != 400 {
 		t.Fatalf("duplicate mirror = %d", w.Code)
 	}
 	good := []map[string]any{{"kind": "gate", "gate_id": gid}, {"kind": "mirror", "prefix": "https://m.example/"}, {"kind": "mirror", "prefix": "https://p.example/path/"}, {"kind": "direct"}}
-	if w := put(good, rev, "wrong"); w.Code != 401 {
-		t.Fatalf("wrong password = %d", w.Code)
-	}
-	if w := put(good, "stale", "Passw0rd"); w.Code != 409 {
+	if w := put(good, "stale"); w.Code != 409 {
 		t.Fatalf("stale revision = %d", w.Code)
 	}
-	saved := mustJSON(t, admin, "PUT", "/api/v1/admin/github-sources", map[string]any{"sources": good, "revision": rev, "password": "Passw0rd"}, 200)
+	saved := mustJSON(t, admin, "PUT", "/api/v1/admin/github-sources", map[string]any{"sources": good, "revision": rev}, 200)
 	if saved["default"] != false || saved["sources"].([]any)[0].(map[string]any)["gate_name"] != "HK-1" {
 		t.Fatalf("saved = %v", saved)
 	}
-	if w := put(good, rev, "Passw0rd"); w.Code != 409 {
+	if w := put(good, rev); w.Code != 409 {
 		t.Fatalf("old revision after save = %d", w.Code)
 	}
 	if n, _ := s.Store.Ent.Audit.Query().Count(ctx); n == 0 {

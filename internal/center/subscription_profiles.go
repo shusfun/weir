@@ -428,11 +428,9 @@ func (s *Server) shareProfile(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Days     int    `json:"days"`
-		Password string `json:"password"`
-		Code     string `json:"code"`
+		Days int `json:"days"`
 	}
-	if !bind(c, &req) || !s.reauth(c, req.Password, req.Code) {
+	if !bind(c, &req) {
 		return
 	}
 	if req.Days < 1 || req.Days > 365 {

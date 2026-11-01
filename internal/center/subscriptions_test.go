@@ -90,9 +90,8 @@ func TestSubscriptionSourcesProfilesGrantsAndShare(t *testing.T) {
 		t.Fatalf("revoked grant = %d", w.Code)
 	}
 
-	// 匿名分享：需重新验证；令牌只显示一次、库里存摘要；撤下后拒绝。
-	mustJSON(t, admin, "POST", fmt.Sprintf("/api/v1/admin/subscriptions/profiles/%d/share", pid), map[string]any{"days": 7, "password": "wrong"}, 401)
-	sh := mustJSON(t, admin, "POST", fmt.Sprintf("/api/v1/admin/subscriptions/profiles/%d/share", pid), map[string]any{"days": 7, "password": "Passw0rd"}, 200)
+	// 匿名分享：令牌只显示一次、库里存摘要；撤下后拒绝。
+	sh := mustJSON(t, admin, "POST", fmt.Sprintf("/api/v1/admin/subscriptions/profiles/%d/share", pid), map[string]any{"days": 7}, 200)
 	spath := sh["url"].(string)[strings.Index(sh["url"].(string), "/sub/g/"):]
 	if w := admin.do("GET", spath, nil, map[string]string{"User-Agent": "clash.meta"}); w.Code != 200 {
 		t.Fatalf("share = %d", w.Code)

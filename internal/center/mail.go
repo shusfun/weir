@@ -110,10 +110,8 @@ func (s *Server) getSMTP(c *gin.Context) {
 func (s *Server) putSMTP(c *gin.Context) {
 	var req struct {
 		SMTPSettings
-		AccountPassword string `json:"account_password"`
-		Code            string `json:"code"`
 	}
-	if !bind(c, &req) || !s.reauth(c, req.AccountPassword, req.Code) {
+	if !bind(c, &req) {
 		return
 	}
 	cfg := req.SMTPSettings
@@ -161,10 +159,8 @@ func (s *Server) getSecurity(c *gin.Context) {
 func (s *Server) putSecurity(c *gin.Context) {
 	var req struct {
 		SecuritySettings
-		Password string `json:"password"`
-		Code     string `json:"code"`
 	}
-	if !bind(c, &req) || !s.reauth(c, req.Password, req.Code) {
+	if !bind(c, &req) {
 		return
 	}
 	if err := s.Store.Ent.Setting.Create().SetKey("security").SetValue(toMap(req.SecuritySettings)).OnConflictColumns(setting.FieldKey).UpdateNewValues().Exec(c.Request.Context()); err != nil {

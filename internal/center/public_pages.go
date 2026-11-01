@@ -117,7 +117,7 @@ func (s *Server) pageByID(c *gin.Context) (*ent.Resource, bool) {
 	return r, true
 }
 
-// savePage 保存页面内容；留言板设置单独保存（需要重新验证）。
+// savePage 保存页面内容；留言板设置单独保存。
 func (s *Server) savePage(c *gin.Context) {
 	var req struct {
 		Slug string         `json:"slug"`
@@ -403,7 +403,7 @@ func (s *Server) getGuestbookConfig(c *gin.Context) {
 	c.JSON(200, gin.H{"config": d.Guestbook, "revision": digest(string(mustJSONBytes(d.Guestbook)))})
 }
 
-// putGuestbookConfig 修改留言板设置需要重新验证并携带版本号。
+// putGuestbookConfig 修改留言板设置需携带版本号。
 func (s *Server) putGuestbookConfig(c *gin.Context) {
 	r, ok := s.pageByID(c)
 	if !ok {
@@ -412,11 +412,9 @@ func (s *Server) putGuestbookConfig(c *gin.Context) {
 	var req struct {
 		Config   guestbookConfig `json:"config"`
 		Revision string          `json:"revision"`
-		Password string          `json:"password"`
-		Code     string          `json:"code"`
 		Confirm  bool            `json:"confirm"`
 	}
-	if !bind(c, &req) || !s.reauth(c, req.Password, req.Code) {
+	if !bind(c, &req) {
 		return
 	}
 	err := s.updateResource(c.Request.Context(), kindPage, r.Key, func(cur map[string]any) (map[string]any, error) {

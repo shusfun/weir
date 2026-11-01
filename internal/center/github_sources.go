@@ -198,13 +198,11 @@ func (s *Server) getPublicSources(c *gin.Context) {
 	c.JSON(200, gin.H{"sources": out})
 }
 
-// putGitHubSources 保存来源顺序：要求当前密码与二次验证码，revision 与保存前读到的一致（防止覆盖别人的修改）。
+// putGitHubSources 保存来源顺序：revision 与保存前读到的一致（防止覆盖别人的修改）。
 func (s *Server) putGitHubSources(c *gin.Context) {
 	var req struct {
 		Sources  []ghrelease.Source `json:"sources"`
 		Revision string             `json:"revision"`
-		Password string             `json:"password"`
-		Code     string             `json:"code"`
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16*1024)
 	decoder := json.NewDecoder(c.Request.Body)
@@ -219,9 +217,6 @@ func (s *Server) putGitHubSources(c *gin.Context) {
 		return
 	} else if code != "" {
 		failure(c, 400, code)
-		return
-	}
-	if !s.reauth(c, req.Password, req.Code) {
 		return
 	}
 	err := s.updateResource(ctx, "settings", "github-sources", func(cur map[string]any) (map[string]any, error) {

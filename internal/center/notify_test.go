@@ -28,7 +28,7 @@ func TestNotifyAlertsOnceAndExternalAPI(t *testing.T) {
 	}))
 	defer tg.Close()
 
-	mustJSON(t, admin, "PUT", "/api/v1/admin/settings/notify", map[string]any{"enabled": true, "bot_token": "123:ABC", "chat_id": "42", "api_base": tg.URL, "user_quota_percent": 80, "user_expiry_days": 3, "password": "Passw0rd"}, 200)
+	mustJSON(t, admin, "PUT", "/api/v1/admin/settings/notify", map[string]any{"enabled": true, "bot_token": "123:ABC", "chat_id": "42", "api_base": tg.URL, "user_quota_percent": 80, "user_expiry_days": 3}, 200)
 	if v := mustJSON(t, admin, "GET", "/api/v1/admin/settings/notify", nil, 200); v["token_set"] != true || strings.Contains(mustString(v), "123:ABC") {
 		t.Fatalf("notify view leaks token: %v", v)
 	}

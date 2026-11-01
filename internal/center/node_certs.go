@@ -196,20 +196,18 @@ func (s *Server) putNodeCertSettings(c *gin.Context) {
 }
 
 // putGatePanel 把 1Panel API 密钥交给 Gate：中心只在内存里放 2 分钟，由 Gate 凭一次性编号取走；
-// Gate 测试连接通过才保存。需要重新验证身份（这个密钥等同那台机器的 root）。
+// Gate 测试连接通过才保存。
 func (s *Server) putGatePanel(c *gin.Context) {
 	g, ok := s.gateParam(c)
 	if !ok {
 		return
 	}
 	var req struct {
-		Port     int    `json:"port"`
-		HTTPS    bool   `json:"https"`
-		APIKey   string `json:"api_key"`
-		Password string `json:"password"`
-		Code     string `json:"code"`
+		Port   int    `json:"port"`
+		HTTPS  bool   `json:"https"`
+		APIKey string `json:"api_key"`
 	}
-	if !bind(c, &req) || !s.reauth(c, req.Password, req.Code) {
+	if !bind(c, &req) {
 		return
 	}
 	if req.Port <= 0 || req.Port > 65535 {

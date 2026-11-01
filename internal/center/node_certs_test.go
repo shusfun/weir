@@ -249,8 +249,7 @@ func TestPanelKeyHandoffAndPanelCert(t *testing.T) {
 			return contracts.ActionResult{OK: true, Result: map[string]any{"cert_pem": certPEM, "sha256": contracts.CertSum(certPEM, keyPEM)}}
 		},
 	})
-	mustJSON(t, admin, "PUT", "/api/v1/admin/gates/"+itoa(int(g.id))+"/panel", map[string]any{"port": 10086, "api_key": apiKey, "password": "wrong"}, 401)
-	v := mustJSON(t, admin, "PUT", "/api/v1/admin/gates/"+itoa(int(g.id))+"/panel", map[string]any{"port": 10086, "api_key": apiKey, "password": "Passw0rd"}, 200)
+	v := mustJSON(t, admin, "PUT", "/api/v1/admin/gates/"+itoa(int(g.id))+"/panel", map[string]any{"port": 10086, "api_key": apiKey}, 200)
 	mu.Lock()
 	if v["version"] != "v2.0.16" || len(fetched) != 2 || fetched[0] != 200 || fetched[1] != 404 {
 		t.Fatalf("handoff = %v fetched %v", v, fetched)

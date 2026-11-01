@@ -81,10 +81,8 @@ func (s *Server) getNotify(c *gin.Context) {
 func (s *Server) putNotify(c *gin.Context) {
 	var req struct {
 		NotifySettings
-		Password string `json:"password"`
-		Code     string `json:"code"`
 	}
-	if !bind(c, &req) || !s.reauth(c, req.Password, req.Code) {
+	if !bind(c, &req) {
 		return
 	}
 	cfg := req.NotifySettings

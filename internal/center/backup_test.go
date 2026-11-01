@@ -100,7 +100,7 @@ func TestSubscriptionBackupImportExportAndWebdav(t *testing.T) {
 		}
 	}))
 	defer dav.Close()
-	mustJSON(t, admin, "PUT", "/api/v1/admin/backup/webdav", map[string]any{"url": dav.URL + "/dav", "username": "bk", "password": "secret", "keep": 1, "hours": 24, "account_password": "Passw0rd"}, 200)
+	mustJSON(t, admin, "PUT", "/api/v1/admin/backup/webdav", map[string]any{"url": dav.URL + "/dav", "username": "bk", "password": "secret", "keep": 1, "hours": 24}, 200)
 	if v := mustJSON(t, admin, "GET", "/api/v1/admin/backup/webdav", nil, 200); v["password_set"] != true || strings.Contains(mustString(v), "secret") {
 		t.Fatalf("webdav view leaks password: %v", v)
 	}

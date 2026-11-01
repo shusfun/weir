@@ -93,17 +93,14 @@ func TestDSHGatewayOnlyOpensFromConsoleDrawer(t *testing.T) {
 	f := newFakeDSH(t)
 	s.dsh.endpoint = func() (string, string, bool) { return strings.TrimPrefix(f.srv.URL, "http://"), fakeLaunchToken, true }
 
-	// 子域名必须与控制台同站、不同源；修改要验证身份。
-	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": true, "domain": "dsh.example.com", "password": "wrong"}, 401)
-	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": true, "domain": "dsh.other.net", "password": "Passw0rd"}, 400)
-	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": true, "domain": "example.com", "password": "Passw0rd"}, 400)
-	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": true, "domain": "DSH.example.com", "password": "Passw0rd"}, 200)
-	// 只改后台分析开关不用密码；改地址、重新启用要密码；停用不用密码。
+	// 子域名必须与控制台同站、不同源；启用、改地址、停用都直接生效，不要求密码。
+	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": true, "domain": "dsh.other.net"}, 400)
+	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": true, "domain": "example.com"}, 400)
+	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": true, "domain": "DSH.example.com"}, 200)
 	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": true, "domain": "dsh.example.com", "auto_analyze": true}, 200)
-	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": true, "domain": "k3f9x2.example.com"}, 401)
+	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": true, "domain": "k3f9x2.example.com"}, 200)
 	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": false, "domain": "dsh.example.com"}, 200)
-	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": true, "domain": "dsh.example.com"}, 401)
-	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": true, "domain": "dsh.example.com", "password": "Passw0rd"}, 200)
+	mustJSON(t, admin, "PUT", "/api/v1/admin/dsh/settings", map[string]any{"enabled": true, "domain": "dsh.example.com"}, 200)
 	s.reconcileDSH(t.Context())
 	if s.dshDomain() != "dsh.example.com" {
 		t.Fatalf("domain = %q", s.dshDomain())
@@ -219,8 +216,8 @@ func TestDefenseLayaThenDraftThenConfirmedBlock(t *testing.T) {
 	}))
 	defer laya.Close()
 
-	mustJSON(t, admin, "PUT", "/api/v1/admin/defense/laya", map[string]any{"enabled": true, "url": "http://example.com", "model": "observer", "key": "laya-key", "password": "Passw0rd"}, 400)
-	view := mustJSON(t, admin, "PUT", "/api/v1/admin/defense/laya", map[string]any{"enabled": true, "url": laya.URL, "model": "observer", "key": "laya-key", "password": "Passw0rd"}, 200)
+	mustJSON(t, admin, "PUT", "/api/v1/admin/defense/laya", map[string]any{"enabled": true, "url": "http://example.com", "model": "observer", "key": "laya-key"}, 400)
+	view := mustJSON(t, admin, "PUT", "/api/v1/admin/defense/laya", map[string]any{"enabled": true, "url": laya.URL, "model": "observer", "key": "laya-key"}, 200)
 	if strings.Contains(mustString(view), "laya-key") || view["key_set"] != true {
 		t.Fatalf("laya view = %v", view)
 	}

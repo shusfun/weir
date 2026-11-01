@@ -148,7 +148,7 @@ type Draft struct {
 	CreatedAt time.Time         `json:"created_at"`
 	Steps     []DraftStep       `json:"steps"`
 	Versions  map[string]string `json:"versions,omitempty"` // 所依据的数据版本
-	Danger    bool              `json:"danger,omitempty"`   // 有危险步骤：确认要当前密码与二次验证码
+	Danger    bool              `json:"danger,omitempty"`   // 有危险步骤：确认窗里标出
 }
 
 func settingsHash(m map[string]any) string {

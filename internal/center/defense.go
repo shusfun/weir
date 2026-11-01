@@ -381,14 +381,12 @@ func (s *Server) getLaya(c *gin.Context) {
 
 func (s *Server) putLaya(c *gin.Context) {
 	var req struct {
-		Enabled  bool   `json:"enabled"`
-		URL      string `json:"url"`
-		Model    string `json:"model"`
-		Key      string `json:"key"`
-		Password string `json:"password"`
-		Code     string `json:"code"`
+		Enabled bool   `json:"enabled"`
+		URL     string `json:"url"`
+		Model   string `json:"model"`
+		Key     string `json:"key"`
 	}
-	if !bind(c, &req) || !s.reauth(c, req.Password, req.Code) {
+	if !bind(c, &req) {
 		return
 	}
 	ctx := c.Request.Context()

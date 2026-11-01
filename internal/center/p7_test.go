@@ -182,11 +182,8 @@ func TestSelfUpdateEndpointsInDevelopmentBuild(t *testing.T) {
 	if older := st["older"].([]any); len(older) != 0 {
 		t.Fatalf("older = %v", older)
 	}
-	// 要当前密码；开发构建拒绝写请求。
-	if w := admin.do("POST", "/api/v1/admin/system/update", map[string]any{"action": "update", "version": "0.1.20"}, nil); w.Code != 401 {
-		t.Fatalf("without password = %d", w.Code)
-	}
-	if w := admin.do("POST", "/api/v1/admin/system/update", map[string]any{"action": "update", "version": "0.1.20", "password": "Passw0rd"}, nil); w.Code != 409 {
+	// 不要求密码；开发构建拒绝写请求。
+	if w := admin.do("POST", "/api/v1/admin/system/update", map[string]any{"action": "update", "version": "0.1.20"}, nil); w.Code != 409 {
 		t.Fatalf("development build = %d %s", w.Code, w.Body.String())
 	}
 }

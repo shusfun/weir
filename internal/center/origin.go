@@ -14,7 +14,7 @@ import (
 )
 
 // 中心公共地址：安装时不填域名。管理员第一次经 HTTPS 域名打开控制台时由前端写入；
-// 之后访问地址与记录不同，由管理员重新验证身份后更新，已配对的 Gate 经心跳收到新地址后自行切换。
+// 之后访问地址与记录不同，由管理员确认后更新，已配对的 Gate 经心跳收到新地址后自行切换。
 // 订阅地址与「添加 Gate」命令都用这个地址，未记录时退回按请求推导。
 const originSettingKey = "center-origin"
 
@@ -112,12 +112,10 @@ func (s *Server) getCenterOrigin(c *gin.Context) {
 }
 
 // putCenterOrigin 只能记录管理员此刻正在访问的地址，不能填任意值。
-// 第一次记录不需要重新验证；更改已记录的地址会影响订阅地址和全部 Gate，需要重新验证身份。
+// 更改已记录的地址会影响订阅地址和全部 Gate，写审计。
 func (s *Server) putCenterOrigin(c *gin.Context) {
 	var req struct {
-		Origin   string `json:"origin"`
-		Password string `json:"password"`
-		Code     string `json:"code"`
+		Origin string `json:"origin"`
 	}
 	if !bind(c, &req) {
 		return
@@ -131,9 +129,6 @@ func (s *Server) putCenterOrigin(c *gin.Context) {
 	before := s.centerOrigin(ctx)
 	if before == current {
 		c.JSON(200, gin.H{"origin": current})
-		return
-	}
-	if before != "" && !s.reauth(c, req.Password, req.Code) {
 		return
 	}
 	err := s.Store.Ent.Setting.Create().SetKey(originSettingKey).SetValue(map[string]any{"origin": current}).

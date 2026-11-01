@@ -97,12 +97,10 @@ func (s *Server) planDraft(ctx context.Context, d *Draft, confirm bool) error {
 }
 
 // applyActionDraft 以点确认的管理员身份执行。管理员可以在确认窗里改字段（edits: 步骤序号 → 字段 → 新值），
-// 改过的字段做标记并重新试运行；相关数据自起草后被改动则拒绝；有危险步骤时要求当前密码与二次验证码。
+// 改过的字段做标记并重新试运行；相关数据自起草后被改动则拒绝。
 func (s *Server) applyActionDraft(c *gin.Context, d *Draft) {
 	var req struct {
-		Edits    map[string]map[string]any `json:"edits"`
-		Password string                    `json:"password"`
-		Code     string                    `json:"code"`
+		Edits map[string]map[string]any `json:"edits"`
 	}
 	_ = c.ShouldBindJSON(&req)
 	// 确认时的重新试运行与执行都带上这次请求的编号：处理函数的 5xx 与下面的失败记录用同一个编号。
@@ -164,9 +162,6 @@ func (s *Server) applyActionDraft(c *gin.Context, d *Draft) {
 			failDetail(c, 409, "draft_stale", "草稿依据的数据已被改动，请让 dsh 重新生成", nil)
 			return
 		}
-	}
-	if d.Danger && !s.reauth(c, req.Password, req.Code) {
-		return
 	}
 	// 开始执行后不再接受取消：做了一半的步骤要么做完，要么按失败撤回
 	if !jobCommit(c) {

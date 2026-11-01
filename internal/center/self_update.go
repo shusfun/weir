@@ -133,15 +133,12 @@ func (s *Server) getSelfUpdate(c *gin.Context) {
 }
 
 // postSelfUpdate 写入更新请求：更新到某个正式版本（含最近 3 个旧版本），或切回本机保留的上一版本。
-// 要求当前密码与二次验证码；root 一侧还会再校验一遍。
 func (s *Server) postSelfUpdate(c *gin.Context) {
 	var req struct {
-		Action   string `json:"action"`
-		Version  string `json:"version"`
-		Password string `json:"password"`
-		Code     string `json:"code"`
+		Action  string `json:"action"`
+		Version string `json:"version"`
 	}
-	if !bind(c, &req) || !s.reauth(c, req.Password, req.Code) {
+	if !bind(c, &req) {
 		return
 	}
 	if why := selfUpdateBlocker(); why != "" {

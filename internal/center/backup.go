@@ -404,10 +404,8 @@ func (s *Server) getWebdav(c *gin.Context) {
 func (s *Server) putWebdav(c *gin.Context) {
 	var req struct {
 		WebdavConfig
-		AccountPassword string `json:"account_password"`
-		Code            string `json:"code"`
 	}
-	if !bind(c, &req) || !s.reauth(c, req.AccountPassword, req.Code) {
+	if !bind(c, &req) {
 		return
 	}
 	u, err := url.Parse(strings.TrimSpace(req.URL))

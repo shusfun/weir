@@ -25,7 +25,7 @@ func TestPublicPageCardsAndGuestbook(t *testing.T) {
 	if len(view["subscriptions"].([]any)) != 0 || view["guestbook"] != nil {
 		t.Fatalf("unshared page = %v", view)
 	}
-	mustJSON(t, admin, "POST", fmt.Sprintf("/api/v1/admin/subscriptions/profiles/%d/share", pid), map[string]any{"days": 3, "password": "Passw0rd"}, 200)
+	mustJSON(t, admin, "POST", fmt.Sprintf("/api/v1/admin/subscriptions/profiles/%d/share", pid), map[string]any{"days": 3}, 200)
 	w := anon.do("GET", "/api/v1/pages/home", nil, nil)
 	stored, _ := s.Store.Ent.SubProfile.Get(t.Context(), pid)
 	if !strings.Contains(w.Body.String(), "/cards/0") || strings.Contains(w.Body.String(), stored.ShareToken) {
@@ -44,9 +44,8 @@ func TestPublicPageCardsAndGuestbook(t *testing.T) {
 	mustJSON(t, anon, "POST", "/api/v1/pages/home/guestbook", map[string]any{"nickname": "a", "content": "hi", "type": "general"}, 404)
 	cfg := mustJSON(t, admin, "GET", fmt.Sprintf("/api/v1/admin/public-pages/%d/guestbook/config", id), nil, 200)
 	conf := map[string]any{"enabled": true, "allow_anonymous": true, "require_audit": true}
-	mustJSON(t, admin, "PUT", fmt.Sprintf("/api/v1/admin/public-pages/%d/guestbook/config", id), map[string]any{"config": conf, "revision": cfg["revision"], "password": "wrong"}, 401)
-	mustJSON(t, admin, "PUT", fmt.Sprintf("/api/v1/admin/public-pages/%d/guestbook/config", id), map[string]any{"config": conf, "revision": "stale", "password": "Passw0rd"}, 409)
-	mustJSON(t, admin, "PUT", fmt.Sprintf("/api/v1/admin/public-pages/%d/guestbook/config", id), map[string]any{"config": conf, "revision": cfg["revision"], "password": "Passw0rd"}, 200)
+	mustJSON(t, admin, "PUT", fmt.Sprintf("/api/v1/admin/public-pages/%d/guestbook/config", id), map[string]any{"config": conf, "revision": "stale"}, 409)
+	mustJSON(t, admin, "PUT", fmt.Sprintf("/api/v1/admin/public-pages/%d/guestbook/config", id), map[string]any{"config": conf, "revision": cfg["revision"]}, 200)
 
 	mustJSON(t, anon, "POST", "/api/v1/pages/home/guestbook", map[string]any{"nickname": "访客", "content": "", "type": "general"}, 400)
 	mustJSON(t, anon, "POST", "/api/v1/pages/home/guestbook", map[string]any{"nickname": "访客", "content": "x", "type": "exec"}, 400)

@@ -174,8 +174,6 @@ func (s *Server) putClientCatalog(c *gin.Context) {
 	var req struct {
 		Clients  []catalogClient `json:"clients"`
 		Revision string          `json:"revision"`
-		Password string          `json:"password"`
-		Code     string          `json:"code"`
 		Reset    bool            `json:"reset"`
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1024*1024)
@@ -183,9 +181,6 @@ func (s *Server) putClientCatalog(c *gin.Context) {
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&req) != nil || decoder.Decode(new(any)) != io.EOF || (!req.Reset && req.Clients == nil) {
 		failure(c, 400, "invalid_request")
-		return
-	}
-	if !s.reauth(c, req.Password, req.Code) {
 		return
 	}
 	if req.Reset {

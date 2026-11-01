@@ -15,7 +15,7 @@ func TestAnnouncementAudiences(t *testing.T) {
 	doc := mustJSON(t, admin, "GET", "/api/v1/admin/announcement", nil, 200)
 	rev := doc["revision"].(string)
 	body := func(enabled, authed, public bool, rev string) map[string]any {
-		return map[string]any{"announcement": map[string]any{"enabled": enabled, "title": "维护通知", "content": "今晚维护", "type": "info", "authenticated": authed, "public": public, "dismissible": true}, "revision": rev, "password": "Passw0rd"}
+		return map[string]any{"announcement": map[string]any{"enabled": enabled, "title": "维护通知", "content": "今晚维护", "type": "info", "authenticated": authed, "public": public, "dismissible": true}, "revision": rev}
 	}
 	saved := mustJSON(t, admin, "PUT", "/api/v1/admin/announcement", body(true, true, false, rev), 200)
 	mustJSON(t, admin, "PUT", "/api/v1/admin/announcement", body(true, true, false, rev), 409)

@@ -43,7 +43,7 @@ func TestPasswordResetAndRegistration(t *testing.T) {
 
 	// 未配置邮件服务时明确返回不可用。
 	mustJSON(t, anon, "POST", "/api/v1/auth/email", map[string]any{"email": "frank@example.test", "purpose": "reset"}, 503)
-	mustJSON(t, admin, "PUT", "/api/v1/admin/settings/smtp", map[string]any{"host": "smtp.example.test", "port": 465, "username": "u", "password": "smtp-secret", "from": "noreply@example.test", "use_tls": true, "account_password": "Passw0rd"}, 200)
+	mustJSON(t, admin, "PUT", "/api/v1/admin/settings/smtp", map[string]any{"host": "smtp.example.test", "port": 465, "username": "u", "password": "smtp-secret", "from": "noreply@example.test", "use_tls": true}, 200)
 	if v := mustJSON(t, admin, "GET", "/api/v1/admin/settings/smtp", nil, 200); v["password_set"] != true || mustString(v) == "" || regexp.MustCompile("smtp-secret").MatchString(mustString(v)) {
 		t.Fatalf("smtp view = %v", v)
 	}
@@ -69,7 +69,7 @@ func TestPasswordResetAndRegistration(t *testing.T) {
 	if pub["registration_enabled"] != false || pub["password_reset"] != true {
 		t.Fatalf("public = %v", pub)
 	}
-	mustJSON(t, admin, "PUT", "/api/v1/admin/settings/security", map[string]any{"totp_enabled": true, "passkey_enabled": true, "registration_enabled": true, "email_verification": true, "password": "Passw0rd"}, 200)
+	mustJSON(t, admin, "PUT", "/api/v1/admin/settings/security", map[string]any{"totp_enabled": true, "passkey_enabled": true, "registration_enabled": true, "email_verification": true}, 200)
 	mustJSON(t, anon, "POST", "/api/v1/auth/register", map[string]any{"email": "gina@example.test", "password": "Passw0rd"}, 400)
 	mustJSON(t, anon, "POST", "/api/v1/auth/email", map[string]any{"email": "gina@example.test", "purpose": "register"}, 200)
 	mustJSON(t, anon, "POST", "/api/v1/auth/register", map[string]any{"email": "gina@example.test", "password": "Passw0rd", "code": mail.lastCode(t)}, 201)

@@ -528,24 +528,18 @@ func (s *Server) dshStatus(c *gin.Context) {
 	c.JSON(200, gin.H{"settings": set, "status": st, "waiting": waiting, "installed": installed, "unsupported": supported, "ready": running && s.dshDomain() != "", "plugin": plugin})
 }
 
-// putDSHSettings 保存 dsh 的启用状态、地址与后台分析开关。启用 dsh 等于让 AI 接入面板的工具，
-// 改地址决定中心把哪个地址转给 dsh：这两项要重新验证身份；只改后台分析开关、或停用 dsh 不需要。
+// putDSHSettings 保存 dsh 的启用状态、地址与后台分析开关。
 // 地址必须与当前控制台同站、不同源。
 func (s *Server) putDSHSettings(c *gin.Context) {
 	var req struct {
 		Enabled     bool   `json:"enabled"`
 		Domain      string `json:"domain"`
 		AutoAnalyze bool   `json:"auto_analyze"`
-		Password    string `json:"password"`
-		Code        string `json:"code"`
 	}
 	if !bind(c, &req) {
 		return
 	}
 	domain := strings.ToLower(strings.TrimSpace(req.Domain))
-	if cur := s.dshSettings(c.Request.Context()); ((req.Enabled && !cur.Enabled) || domain != cur.Domain) && !s.reauth(c, req.Password, req.Code) {
-		return
-	}
 	if domain != "" {
 		if err := checkDSHDomain(domain, requestHost(c.Request)); err != nil {
 			failDetail(c, 400, "invalid_dsh_domain", err.Error(), nil)
