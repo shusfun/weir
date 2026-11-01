@@ -144,7 +144,7 @@ function DialogOverlay({
       forceRender={depth > 0}
       className={cn(
         "fixed inset-0 isolate z-50 transition-opacity duration-[var(--weir-mid)] data-[starting-style]:opacity-0 data-[ending-style]:opacity-0",
-        depth > 0 ? "bg-[rgb(20_18_14/0.22)] dark:bg-[rgb(0_0_0/0.4)]" : "bg-[rgb(20_18_14/0.38)] dark:bg-[rgb(0_0_0/0.6)]",
+        depth > 0 ? "bg-[var(--weir-scrim-soft)]" : "bg-[var(--weir-scrim)]",
         className,
       )}
       {...props}
@@ -163,15 +163,15 @@ const dialogSizes = {
 
 // 弹窗靠上固定（参照 Element Plus 的 top: 15vh）：内容增减只改下沿，标题和已经看到的内容不跟着跳；
 // 超出视口在弹窗里滚动。二级弹窗按层级再往下错开一档，父弹窗留在原位。
-// 640px 以下改为底部抽屉：升到位后停顿一拍，内容再落稳（关键帧见 styles/motion.css），退场直接下沉。
+// 桌面：缩放 0.96→1 并淡入（缩放按轻快弹簧），退场淡出并缩回 0.96。
+// 640px 以下改为 iOS 底部抽屉（sheet）：圆角顶、顶部把手，按轻快弹簧从底部升起，退场加速下沉；不缩放、不淡入。
 // sm 档（确认框、简单提示）按内容高度；其余档固定从顶部 8dvh 铺到底，内容变化时上沿与按钮都不动。
 // 命令面板（placement=palette）固定在 14vh，窄屏也不变成抽屉。
 const sheetBase =
-  "max-sm:inset-x-0 max-sm:bottom-0 max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-b-none max-sm:border-b-0 max-sm:pb-[calc(20px+env(safe-area-inset-bottom,0px))] max-sm:transition-[translate] max-sm:duration-[260ms] max-sm:data-[open]:animate-[weir-sheet-rise_560ms_linear] max-sm:data-[starting-style]:scale-100 max-sm:data-[starting-style]:opacity-100 max-sm:data-[ending-style]:scale-100 max-sm:data-[ending-style]:opacity-100 max-sm:data-[ending-style]:translate-y-full";
+  "max-sm:inset-x-0 max-sm:bottom-0 max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:rounded-b-none max-sm:rounded-t-[var(--weir-radius-sheet)] max-sm:border-x-0 max-sm:border-b-0 max-sm:pt-2 max-sm:pb-[calc(var(--weir-space-5)+env(safe-area-inset-bottom,0px))] max-sm:[transition:translate_var(--weir-spring-dur)_var(--weir-spring)] max-sm:data-[starting-style]:translate-y-full max-sm:data-[starting-style]:scale-100 max-sm:data-[starting-style]:opacity-100 max-sm:data-[ending-style]:translate-y-full max-sm:data-[ending-style]:scale-100 max-sm:data-[ending-style]:opacity-100 max-sm:data-[ending-style]:[transition:translate_var(--weir-slow)_var(--weir-ease-in)]";
 const sheetFit = "max-sm:top-auto max-sm:max-h-[calc(100dvh-24px)]";
 const sheetFull = "max-sm:top-[calc(8dvh_+_var(--weir-dialog-depth)_*_16px)] max-sm:max-h-none";
 const anchored = "top-[calc(12vh_+_var(--weir-dialog-depth)_*_24px)] max-h-[calc(88vh_-_24px_-_var(--weir-dialog-depth)_*_24px)]";
-const bottomSheetContent = "max-sm:group-data-[open]/dialog:animate-[weir-sheet-content_560ms_linear]";
 
 type ContentProps = DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
@@ -222,13 +222,12 @@ function DialogLayer({
   const [popup, setPopup] = useState<HTMLElement | null>(null);
   const slots = useMemo(() => ({ host, formId }), [host, formId]);
   const sheet = placement === "top";
-  // 从点击的地方展开：挂载时（首帧绘制前）记下按压点作为缩放中心，起始缩放加大；关闭时沿用同一中心收回去。
+  // 从点击的地方展开：挂载时（首帧绘制前）把按压点设为缩放中心，0.96→1 的缩放朝按压点收拢；关闭时沿用同一中心收回去。
   // 窄屏是底部抽屉（不缩放），减少动态效果时只淡入。
   useLayoutEffect(() => {
     const p = pressOrigin();
     if (!popup || !p || prefersReducedMotion()) return;
     popup.style.transformOrigin = originFor(popup, p);
-    popup.style.setProperty("--weir-pop-from", "0.6");
   }, [popup]);
   return (
     <>
@@ -242,21 +241,23 @@ function DialogLayer({
         style={{ "--weir-dialog-depth": depth, ...(style as CSSProperties) } as CSSProperties}
         className={cn(
           layer === "top" ? "z-[57]" : "z-50",
-          "group/dialog fixed left-1/2 flex w-full max-w-[calc(100%-2rem)] -translate-x-1/2 flex-col gap-4 overflow-hidden rounded-[var(--weir-radius-lg)] border border-[var(--weir-line)] bg-[linear-gradient(180deg,var(--weir-panel-top),var(--weir-panel)_64px)] p-6 text-sm text-card-foreground shadow-[inset_0_1px_0_var(--weir-highlight),0_18px_40px_-12px_var(--weir-shade-strong)] outline-none transition-[opacity,scale] duration-[var(--weir-mid)] ease-[var(--weir-ease)] data-[starting-style]:scale-(--weir-pop-from,0.98) data-[starting-style]:opacity-0 data-[ending-style]:scale-(--weir-pop-from,0.98) data-[ending-style]:opacity-0 max-sm:p-5",
+          "group/dialog fixed left-1/2 flex w-full max-w-[calc(100%-2rem)] -translate-x-1/2 flex-col gap-4 overflow-hidden rounded-[var(--weir-radius-dialog)] border border-[var(--weir-line-soft)] bg-[var(--weir-raised)] p-6 text-body text-card-foreground shadow-[0_18px_48px_-12px_var(--weir-shade-strong)] outline-none [transition:opacity_var(--weir-mid)_var(--weir-ease),scale_var(--weir-spring-dur)_var(--weir-spring)] data-[starting-style]:scale-[0.96] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.96] data-[ending-style]:opacity-0 data-[ending-style]:[transition-duration:var(--weir-fast)] max-sm:p-5",
           placement === "palette" ? "top-[14vh] max-h-[calc(86dvh-16px)]" : cn(anchored, sheetBase, size === "sm" ? sheetFit : sheetFull),
           dialogSizes[size],
           className,
         )}
         {...props}
       >
+        {/* 底部抽屉的把手：只是提示可以下滑关闭的样子，关闭仍用右上角关闭键、Esc 与点遮罩 */}
+        {sheet && <div aria-hidden data-slot="dialog-handle" className="weir-sheet-handle mb-0 hidden max-sm:block" />}
         {header.length > 0 && (
-          <div data-slot="dialog-pinned-header" className={cn("flex shrink-0 flex-col gap-2", sheet && bottomSheetContent)}>
+          <div data-slot="dialog-pinned-header" className="flex shrink-0 flex-col gap-2">
             {header}
           </div>
         )}
         <ScrollArea
           data-slot="dialog-body"
-          className={cn("min-h-0 min-w-0 flex-auto", sheet && bottomSheetContent)}
+          className="min-h-0 min-w-0 flex-auto"
           viewportClassName="weir-focus-gutter"
           contentClassName="flex min-h-full min-w-0 flex-col [&>form]:flex [&>form]:min-w-0 [&>form]:flex-[1_0_auto] [&>form]:flex-col"
         >
@@ -269,7 +270,7 @@ function DialogLayer({
             render={
               <Button
                 variant="ghost"
-                className="absolute top-2 right-2"
+                className="absolute top-2 right-2 rounded-full"
                 size="icon-sm"
               />
             }
@@ -324,18 +325,18 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "-mx-6 -mb-6 flex shrink-0 flex-col-reverse gap-2 rounded-b-[var(--weir-radius-lg)] border-t border-[var(--weir-line-soft)] bg-[var(--weir-panel)] px-6 py-4 max-sm:-mx-5 max-sm:-mb-5 max-sm:px-5 max-sm:py-3 sm:flex-row sm:items-start sm:justify-end",
+        "-mx-6 -mb-6 flex shrink-0 flex-col-reverse gap-2 rounded-b-[var(--weir-radius-dialog)] border-t border-[var(--weir-line-soft)] bg-[var(--weir-raised)] px-6 py-4 max-sm:-mx-5 max-sm:-mb-5 max-sm:px-5 max-sm:py-3 sm:flex-row sm:items-start sm:justify-end",
         className,
       )}
       {...props}
     >
       {actions}
       {error ? (
-        <p role="alert" className="m-0 min-w-0 text-[13px] leading-[1.5] text-[var(--weir-bad-ink)] sm:order-first sm:mr-auto sm:self-center">
+        <p role="alert" className="m-0 min-w-0 text-body text-[var(--weir-bad-ink)] sm:order-first sm:mr-auto sm:self-center">
           {error}
         </p>
       ) : status ? (
-        <div role="status" className="m-0 min-w-0 text-[13px] leading-[1.5] text-[var(--weir-ink-2)] sm:order-first sm:mr-auto sm:self-center">
+        <div role="status" className="m-0 min-w-0 text-body text-[var(--weir-ink-2)] sm:order-first sm:mr-auto sm:self-center">
           {status}
         </div>
       ) : null}
@@ -355,7 +356,7 @@ function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("pr-8 text-[17px] font-semibold tracking-[-0.015em] text-[var(--weir-ink)]", className)}
+      className={cn("pr-8 text-dialog font-semibold tracking-[-0.015em] text-[var(--weir-ink)] touch:pr-11", className)}
       {...props}
     />
   );
@@ -369,7 +370,7 @@ function DialogDescription({
     <DialogPrimitive.Description
       data-slot="dialog-description"
       className={cn(
-        "text-[13px] leading-relaxed text-[var(--weir-ink-3)] *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground",
+        "text-body text-[var(--weir-ink-3)] *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground",
         className,
       )}
       {...props}

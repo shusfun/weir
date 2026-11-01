@@ -1,37 +1,38 @@
-// Weir 页内标签：刻线底边，选中项点亮下沿。只过渡颜色，不移动指示器。
+// Weir 页内标签：底部细分隔线，选中项下沿为主色。按下缩小并叠填充色（.weir-press），只过渡颜色与缩放，不移动指示器。
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
 import { cn } from "cn";
-import { Ripple } from "./ripple";
 
 function Tabs({ className, ...props }: TabsPrimitive.Root.Props) {
   return <TabsPrimitive.Root data-slot="tabs" className={cn("flex min-w-0 flex-col gap-4", className)} {...props} />;
 }
 
 // 标签条与标签项的样式同时导出：路由型标签（每项是一个链接）复用同一外观，不另写一套 CSS。
-// 底部刻线用内阴影绘制、标签不再用 -mb-px 压线：否则内容比容器高 1px，overflow 会冒出纵向滚动条。
-// 窄屏标签过多时仍可横向滑动，但不显示滚动条。
+// 底部分隔线用内阴影绘制、标签不再用 -mb-px 压线：否则内容比容器高 1px，overflow 会冒出纵向滚动条。
+// 窄屏标签过多时仍可横向滑动，但不显示滚动条。标签条横向可滚动，焦点环画在标签内侧，免得被裁。
 export const tabListClass =
-  "flex min-w-0 items-end gap-0.5 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_var(--weir-line),0_1px_0_var(--weir-highlight)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+  "flex min-w-0 items-end gap-1 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_var(--weir-line)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
 
 function TabsList({ className, ...props }: TabsPrimitive.List.Props) {
   return <TabsPrimitive.List data-slot="tabs-list" className={cn(tabListClass, className)} {...props} />;
 }
 
 export const tabTriggerClass =
-  "relative inline-flex h-10 shrink-0 items-center gap-2 border-b-2 border-transparent px-3 text-[13px] font-medium whitespace-nowrap text-[var(--weir-ink-3)] no-underline outline-none transition-colors duration-[var(--weir-fast)] hover:text-[var(--weir-ink)] focus-visible:rounded-t-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset aria-selected:border-[var(--weir-accent-text)] aria-selected:text-[var(--weir-ink)] aria-[current=page]:border-[var(--weir-accent-text)] aria-[current=page]:text-[var(--weir-ink)] [&_svg]:size-4";
+  "weir-press relative inline-flex h-9 shrink-0 items-center gap-2 rounded-t-[var(--weir-radius-sm)] border-b-2 border-transparent px-3 text-body font-medium whitespace-nowrap text-[var(--weir-ink-3)] no-underline touch:h-11 hover:text-[var(--weir-ink)] focus-visible:outline-offset-[-2px] aria-selected:border-[var(--weir-accent-text)] aria-selected:text-[var(--weir-ink)] aria-[current=page]:border-[var(--weir-accent-text)] aria-[current=page]:text-[var(--weir-ink)] [&_svg]:size-4";
 
-// 按下时水波从按压点散开（标签没有键帽，靠水波给反馈）
-function TabsTab({ className, children, ...props }: TabsPrimitive.Tab.Props) {
-  return (
-    <TabsPrimitive.Tab data-slot="tabs-tab" className={cn(tabTriggerClass, "overflow-hidden", className)} {...props}>
-      {children}
-      <Ripple />
-    </TabsPrimitive.Tab>
-  );
+function TabsTab({ className, ...props }: TabsPrimitive.Tab.Props) {
+  return <TabsPrimitive.Tab data-slot="tabs-tab" className={cn(tabTriggerClass, className)} {...props} />;
 }
 
+// 面板保留 Base UI 默认的 tabindex=0：面板里没有可聚焦元素时，键盘用户靠它进入内容、用方向键滚动。
+// 聚焦时画主色内描边（外描边会被页面或滚动区裁掉）。
 function TabsPanel({ className, ...props }: TabsPrimitive.Panel.Props) {
-  return <TabsPrimitive.Panel data-slot="tabs-panel" className={cn("min-w-0 outline-none", className)} {...props} />;
+  return (
+    <TabsPrimitive.Panel
+      data-slot="tabs-panel"
+      className={cn("min-w-0 rounded-[var(--weir-radius-sm)] focus-visible:outline-offset-[-2px]", className)}
+      {...props}
+    />
+  );
 }
 
 export { Tabs, TabsList, TabsTab, TabsPanel };

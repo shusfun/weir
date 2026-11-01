@@ -1,4 +1,4 @@
-// Weir 分段拨钮：单选筛选、指标切换。内凹底座内各项平放，当前项点亮为选中色（.is-pressed）。
+// Weir 分段控件（iOS UISegmentedControl）：单选筛选、指标切换。填充底座，当前项是白色滑块（.is-pressed）。
 // 所有“几个按钮里选一个”的场景都用它，不要用 Button + aria-pressed 手拼。
 import { ToggleGroup } from "@base-ui/react/toggle-group";
 import { Toggle } from "@base-ui/react/toggle";
@@ -42,8 +42,9 @@ function Segmented<T extends string>({
           value={key}
           className={(state) =>
             cn(
-              "weir-key inline-flex shrink-0 items-center justify-center gap-1.5 rounded-[var(--weir-radius-sm)] px-3 whitespace-nowrap text-[var(--weir-ink-3)] hover:text-[var(--weir-ink)] [&_svg]:size-3.5",
-              size === "sm" ? "h-7 text-xs" : "h-8 text-[12.5px]",
+              "weir-key inline-flex shrink-0 items-center justify-center gap-1.5 px-3 font-medium whitespace-nowrap text-[var(--weir-ink-2)] hover:text-[var(--weir-ink)] [&_svg]:size-3.5",
+              // 底座内边距 2px：桌面整体 28（sm 24）；触屏每项 44、整体 48
+              size === "sm" ? "h-5 text-meta touch:h-11" : "h-6 text-meta touch:h-11 touch:text-body",
               state.pressed && "is-pressed font-semibold text-[var(--weir-ink)]",
             )
           }

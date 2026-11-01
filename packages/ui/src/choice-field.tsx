@@ -22,16 +22,17 @@ function ChoiceRow({ id, label, description, disabled, className, placement = "s
       data-slot="choice-field"
       data-disabled={disabled || undefined}
       className={cn(
-        "flex min-w-0 cursor-pointer items-start gap-2.5 text-[13px] leading-[20px] text-[var(--weir-ink)] select-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-55",
-        placement === "end" && "flex-row-reverse items-center justify-between gap-6",
+        // 整行可点；placement=end 是设置行（iOS 设置里的开关行），行高不小于 44
+        "flex min-w-0 cursor-pointer items-start gap-3 text-body text-[var(--weir-ink)] select-none touch:min-h-11 touch:items-center data-[disabled]:cursor-not-allowed data-[disabled]:opacity-55",
+        placement === "end" && "min-h-11 flex-row-reverse items-center justify-between gap-6",
         className,
       )}
     >
-      <span className="flex h-5 shrink-0 items-center">{control}</span>
+      <span className="flex h-[var(--weir-leading-body)] shrink-0 items-center">{control}</span>
       <span className={cn("grid min-w-0", placement === "end" && "gap-0.5")}>
         <span id={id + "-label"} className={cn(placement === "end" && "font-[550]")}>{label}</span>
         {description && (
-          <small id={id + "-description"} className="text-[11.5px] leading-relaxed text-[var(--weir-ink-3)]">
+          <small id={id + "-description"} className="text-meta text-[var(--weir-ink-3)]">
             {description}
           </small>
         )}

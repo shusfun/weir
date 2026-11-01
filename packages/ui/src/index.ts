@@ -1,12 +1,12 @@
-// @weir/ui：基础控件来源 codedthemes/uiable（MIT，见 LICENSE），已移植到 Vite 并统一为 Weir 触感材质。
+// @weir/ui：基础控件来源 codedthemes/uiable（MIT，见 LICENSE），已移植到 Vite，外观与反馈向 iOS 对齐（规范见 docs/design.html#console-visual）。
 // 本地新增：lamp / readout / faceplate / segmented / tabs / overlay / page / toast / form / choice-field / collapsible / password-input / confirm / radio-group，基于 @base-ui/react 1.9。
 // 动效部件：check-mark（描绘对勾）/ skeleton / menu-toggle / drawer（底部抽屉）/ ripple / burst /
-// slider / flip-card / card-stack / carousel；动效令牌 --weir-bounce / --weir-decel / --weir-settle。
+// slider / flip-card / card-stack / carousel；动效变量 --weir-spring / --weir-bounce / --weir-ease / --weir-decel 与各档时长。
 // 点击处展开：press-origin 记下按压点，弹窗从那里展开、收回；chip（标签键）、split-button（分体按钮）、
-// file-picker（选择 / 拖入文件）按下有水波；copy-field（只读地址框，末尾复制图标）。
+// file-picker（选择 / 拖入文件）；copy-field（只读地址框，末尾复制图标）。按压反馈统一为缩小 + 填充色（theme.css）。
 // 任务与对象：job（任务位 JobLine / 任务详情 JobView）、object-link（对象链接、详情窗记在地址栏），只管显示，数据由调用方传入。
-// 样式入口：src/styles/tokens.css（令牌）、theme.css（Tailwind 映射与材质类）、instruments.css（仪表部件）、
-// controls.css（拟物控件）、motion.css（动效部件）。
+// 样式入口：src/styles/tokens.css（设计变量）、theme.css（Tailwind 映射、按压反馈、触屏命中区）、instruments.css（仪表部件）、
+// controls.css（开关、分段控件、滚动区）、motion.css（动效部件）。
 export * from "./button";
 export * from "./input";
 export * from "./input-group";

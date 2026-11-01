@@ -100,9 +100,9 @@ function JobView({
   // 已经开始写入的操作不能取消：键位保留（不跳动），只是不可点
   const cancellable = job.status === "running" && job.cancellable !== false;
   return (
-    <div className={cn("grid min-w-0 gap-[18px] rounded-[var(--weir-radius)] [&>*]:min-w-0 border border-[var(--weir-line)] p-3", className)} aria-live="polite">
+    <div className={cn("grid min-w-0 gap-4 rounded-[var(--weir-radius-card)] [&>*]:min-w-0 border border-[var(--weir-line-soft)] p-3", className)} aria-live="polite">
       <div className="flex min-h-6 items-center gap-2">
-        <strong className="shrink-0 text-[13px]">{job.title}</strong>
+        <strong className="shrink-0 text-body">{job.title}</strong>
         <Badge variant="soft" tone={jobTones[job.status]}>{jobLabels[job.status]}</Badge>
         <small className="min-w-0 flex-1 truncate text-[var(--weir-ink-3)]">{job.status === "running" ? job.step : ""}</small>
         {onCancel && (
@@ -126,7 +126,7 @@ function JobView({
         {line}
       </small>
       <Collapsible title={`日志（${job.logs?.length ?? 0} 行）`} defaultOpen={openLogs || job.status === "failed"}>
-        <CodeBlock className="block h-56 overflow-auto whitespace-pre-wrap text-xs">{jobLogText(job)}</CodeBlock>
+        <CodeBlock className="block h-56 overflow-auto overscroll-contain whitespace-pre-wrap">{jobLogText(job)}</CodeBlock>
       </Collapsible>
     </div>
   );
@@ -137,7 +137,7 @@ function JobPlaceholder({ text, tone, className }: { text: ReactNode; tone?: "ba
   return (
     <div
       className={cn(
-        "flex min-h-9 items-center gap-2 rounded-[var(--weir-radius)] border border-dashed border-[var(--weir-line)] px-3 text-[12.5px]",
+        "flex min-h-9 items-center gap-2 rounded-[var(--weir-radius)] border border-dashed border-[var(--weir-line)] px-3 text-meta",
         tone === "bad" ? "text-[var(--weir-bad-ink)]" : "text-[var(--weir-ink-3)]",
         className,
       )}
@@ -168,9 +168,9 @@ function JobLine({
   if (!job) return <JobPlaceholder text={idle} className={className} />;
   const line = jobStatusLine(job, note);
   return (
-    <div className={cn("flex min-h-9 min-w-0 items-center gap-2 rounded-[var(--weir-radius)] border border-[var(--weir-line)] px-3 py-1", className)} aria-live="polite">
+    <div className={cn("flex min-h-9 min-w-0 items-center gap-2 rounded-[var(--weir-radius)] border border-[var(--weir-line-soft)] px-3 py-1", className)} aria-live="polite">
       <Badge variant="soft" tone={jobTones[job.status]}>{jobLabels[job.status]}</Badge>
-      <strong className="shrink-0 text-[12.5px]">{job.title}</strong>
+      <strong className="shrink-0 text-meta">{job.title}</strong>
       <span className="hidden w-24 shrink-0 sm:block">
         <Progress value={jobPercent(job)} aria-label={job.title + " 进度"} />
       </span>

@@ -79,7 +79,7 @@ function ScrollArea({
   );
 }
 
-// 整页滚动区：铺满视口，代替 html / body 的滚动（全局样式让 html / body 不再滚动，因此不出现占位的系统滚动条）。
+// 整页滚动区（桌面）：铺满视口，代替 html / body 的滚动（全局样式让 html / body 不再滚动，因此不出现占位的系统滚动条）。
 // 页面里的 position: sticky、scrollIntoView 以这个视口为滚动容器照常工作。
 // 焦点停在 body 上时（刚加载、点了空白处），翻页键与方向键原本滚动文档，现在转给视口并把焦点移进去，
 // 之后的按键由视口原生处理。
@@ -92,10 +92,15 @@ const pageKeys: Record<string, (el: HTMLElement) => number> = {
   End: (el) => el.scrollHeight,
 };
 
+// 触屏设备（pointer: coarse）不套覆盖式滚动区，回到浏览器原生整页滚动：手机地址栏随滚动收起、有原生回弹。
+// 只在挂载时判定一次：中途切换会整棵重挂、丢掉页面状态，而混合设备换输入方式时两种滚动都能用。
+const coarsePointer = () => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+
 function PageScrollArea({ className, viewportRef, ...props }: ScrollAreaProps) {
+  const [native] = useState(coarsePointer);
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
-    if (!viewport) return;
+    if (!viewport || native) return;
     const onKey = (e: KeyboardEvent) => {
       const active = document.activeElement;
       if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
@@ -109,7 +114,7 @@ function PageScrollArea({ className, viewportRef, ...props }: ScrollAreaProps) {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [viewport]);
+  }, [viewport, native]);
   const refs = useCallback(
     (el: HTMLDivElement | null) => {
       setViewport(el);
@@ -118,6 +123,15 @@ function PageScrollArea({ className, viewportRef, ...props }: ScrollAreaProps) {
     },
     [viewportRef],
   );
+  if (native) {
+    const { children, viewportProps, style } = props;
+    // 原生滚动：文档自己滚，这里只是普通容器；viewportRef 指向它，调用方的 ref 不失效
+    return (
+      <div data-page-scroll="native" ref={refs} className={className} style={{ ...viewportProps?.style, ...style }}>
+        {children}
+      </div>
+    );
+  }
   return <ScrollArea data-page-scroll="" className={cn("weir-page-scroll", className)} viewportRef={refs} {...props} />;
 }
 

@@ -15,7 +15,8 @@ body {
   min-height: 100dvh;
   background: var(--weir-base);
   color: var(--weir-ink);
-  font: 14px/1.55 var(--weir-font);
+  /* 正文字号与行高来自字号层级（body 角色：桌面 13/18、触屏 15/20） */
+  font: var(--weir-text-body) / var(--weir-leading-body) var(--weir-font);
   font-synthesis: none;
   /* 数字等宽：进度、速度、计数、时间刷新时不左右抖动 */
   font-variant-numeric: tabular-nums;
@@ -60,7 +61,8 @@ p {
   margin: 6px 0 0;
 }
 small {
-  font-size: 12px;
+  font-size: var(--weir-text-meta);
+  line-height: var(--weir-leading-meta);
   color: var(--weir-ink-3);
 }
 code,
@@ -88,13 +90,9 @@ input:not([type="checkbox"], [type="radio"]) {
 svg {
   flex-shrink: 0;
 }
-:focus-visible {
-  outline: none;
-}
+/* 焦点环由组件库统一给出（theme.css：主色 2px 外描边），这里不再去掉 */
 a:focus-visible,
 summary:focus-visible {
-  outline: 2px solid var(--weir-accent-text);
-  outline-offset: 2px;
   border-radius: 4px;
 }
 details > summary {

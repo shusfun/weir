@@ -25,13 +25,13 @@ function CopyField({
 }) {
   const selectAll = (e: { currentTarget: HTMLInputElement }) => e.currentTarget.setSelectionRange(0, e.currentTarget.value.length);
   return (
-    <InputGroup data-slot="copy-field" className={cn("bg-[var(--weir-well-deep)]", className)}>
+    <InputGroup data-slot="copy-field" className={cn("bg-[var(--weir-fill-4)]", className)}>
       <InputGroupInput
         readOnly
         aria-label={label}
         value={value}
         spellCheck={false}
-        className={cn("font-mono text-xs read-only:bg-transparent", inputClassName)}
+        className={cn("font-mono text-meta read-only:bg-transparent", inputClassName)}
         onFocus={selectAll}
         onClick={selectAll}
       />

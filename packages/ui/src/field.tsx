@@ -170,12 +170,12 @@ function Field({
 
   const hintNode = hint ? (
     // block：与错误行同高（行内元素会被父级行高撑高，说明换成错误时布局会跳）
-    <small id={hintId} className="block text-[11.5px] leading-[18px] text-[var(--weir-ink-3)]">
+    <small id={hintId} className="block text-meta text-[var(--weir-ink-3)]">
       {hint}
     </small>
   ) : null;
   const errorNode = invalid ? (
-    <span id={errorId} role="alert" className="block text-xs leading-[18px] text-[var(--weir-bad-ink)] animate-[weir-field-error_160ms_ease-out]">
+    <span id={errorId} role="alert" className="block text-meta text-[var(--weir-bad-ink)] animate-[weir-field-error_var(--weir-mid)_var(--weir-ease)]">
       {shown}
     </span>
   ) : null;
@@ -185,7 +185,7 @@ function Field({
       ref={box}
       data-slot="field"
       data-invalid={invalid || undefined}
-      className={cn("grid min-w-0 content-start gap-1.5", className)}
+      className={cn("grid min-w-0 content-start gap-2", className)}
       onBlur={(e) => {
         onBlur?.(e);
         if (!dirty || e.currentTarget.contains(e.relatedTarget as Node | null)) return;
@@ -216,7 +216,7 @@ function Field({
       {content}
       {form ? (
         // 表单内：说明 / 错误共用一行并始终占位（错误优先），错误出现不推动下面的内容
-        <div data-slot="field-message" className="-mt-1 min-h-[18px]">
+        <div data-slot="field-message" className="-mt-1 min-h-[var(--weir-leading-meta)]">
           {errorNode ?? hintNode}
         </div>
       ) : (

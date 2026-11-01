@@ -60,7 +60,7 @@ function FilePicker({
         data-over={over || undefined}
         disabled={disabled}
         className={cn(
-          "weir-key weir-key-ghost relative flex min-h-11 w-full min-w-0 items-center gap-2 rounded-[var(--weir-radius)] border border-dashed border-[var(--weir-line)] px-3 text-left text-[12.5px] text-[var(--weir-ink-2)] disabled:pointer-events-none disabled:opacity-50 data-[over]:border-[var(--weir-accent-text)] data-[over]:bg-[var(--weir-accent-soft)] [&_svg]:size-4 [&_svg]:shrink-0",
+          "weir-key weir-key-ghost relative flex min-h-11 w-full min-w-0 items-center gap-2 rounded-[var(--weir-radius)] border border-dashed border-[var(--weir-line)] px-3 text-left text-body text-[var(--weir-ink-2)] disabled:pointer-events-none disabled:opacity-50 data-[over]:border-[var(--weir-accent-text)] data-[over]:bg-[var(--weir-accent-soft)] [&_svg]:size-4 [&_svg]:shrink-0",
           className,
         )}
         onClick={() => input.current?.click()}

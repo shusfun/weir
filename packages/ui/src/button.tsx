@@ -1,32 +1,35 @@
-// 来源 codedthemes/uiable button；本地改为新拟物键帽（.weir-key）：按下外阴影转内阴影并下沉 2px，松手弹簧回弹。
+// 来源 codedthemes/uiable button；本地改为 iOS 风格：实心蓝键、灰色填充键、透明键，按下缩到 0.97 并叠填充色（.weir-key），松手弹簧回弹。
 import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { cva, type VariantProps } from "class-variance-authority";
 import { LoaderCircle } from "lucide-react";
 import { cn } from "cn";
 import { Ripple } from "./ripple";
 
+// 尺寸：桌面紧凑（默认 32 高、sm 28），触屏（touch:）一律做到 44；xs / icon-xs 视觉保持小，触屏靠 .weir-hit 把命中区扩到 44。
 const buttonVariants = cva(
   "weir-key group/button inline-flex shrink-0 items-center justify-center gap-2 rounded-[var(--weir-radius)] font-medium whitespace-nowrap select-none disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default: "bg-[var(--weir-accent)] text-[var(--weir-accent-ink)] hover:bg-[var(--weir-accent-hi)]",
+        default: "weir-key-solid bg-[var(--weir-accent)] text-[var(--weir-accent-ink)] hover:bg-[var(--weir-accent-hi)]",
+        // 灰色填充键（iOS gray button）：页面里大多数次要操作
         outline: "text-[var(--weir-ink)]",
-        // 选中态：保持按下
-        secondary: "is-pressed text-[var(--weir-accent-soft-ink)]",
+        // 选中态：分段控件同款白色滑块
+        secondary: "is-pressed text-[var(--weir-ink)]",
         ghost: "weir-key-ghost text-[var(--weir-ink-2)] hover:text-[var(--weir-ink)]",
         destructive: "text-[var(--weir-bad-ink)]",
-        link: "!bg-transparent px-0 text-[var(--weir-accent-text)] underline-offset-4 before:hidden after:hidden hover:underline active:!translate-none active:!scale-none",
+        // 文字链接：按下变淡（iOS 的 plain 按钮），不缩放、不叠填充
+        link: "!bg-transparent px-0 text-[var(--weir-accent-text)] underline-offset-4 after:hidden hover:underline active:!scale-none active:opacity-60",
       },
       size: {
-        default: "min-h-9 px-3.5 py-1.5 text-[13px]",
-        xs: "min-h-6 gap-1 px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
-        sm: "min-h-8 px-3 py-1 text-[12.5px] [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "min-h-11 px-5 py-2 text-sm",
-        icon: "size-9 p-0",
-        "icon-xs": "size-6 p-0 [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm": "size-8 p-0",
-        "icon-lg": "size-10 p-0",
+        default: "min-h-8 px-3 py-1 text-body touch:min-h-11 touch:min-w-11 touch:px-4",
+        xs: "weir-hit min-h-7 gap-1 px-2 text-meta touch:min-h-8 [&_svg:not([class*='size-'])]:size-3.5",
+        sm: "min-h-7 px-3 py-1 text-body touch:min-h-11 touch:min-w-11 [&_svg:not([class*='size-'])]:size-4",
+        lg: "min-h-10 px-5 py-2 text-headline font-semibold touch:min-h-12 touch:min-w-12",
+        icon: "size-8 p-0 touch:size-11",
+        "icon-xs": "weir-hit size-7 p-0 touch:size-8 [&_svg:not([class*='size-'])]:size-3.5",
+        "icon-sm": "size-7 p-0 touch:size-11",
+        "icon-lg": "size-10 p-0 touch:size-11",
       },
     },
     defaultVariants: { variant: "default", size: "default" },
@@ -73,7 +76,7 @@ function Button({
       {...props}
     >
       {label}
-      {/* 水波默认关闭：小键帽上按压内凹已是反馈，大面积主操作键再开 */}
+      {/* 水波默认关闭：按压反馈是缩放 + 填充，只有个别大面积主操作键另开 */}
       {ripple && <Ripple />}
     </ButtonPrimitive>
   );

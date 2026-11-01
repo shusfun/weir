@@ -1,5 +1,5 @@
-// 底部抽屉：基于 Base UI Drawer，支持拖动把手下滑关闭。入场关键帧在升到位后停顿一拍，
-// 内容再落稳——状态靠停住被读出来；拖动时面板跟手（transform），入场只用 translate，两者互不干扰。
+// 底部抽屉：基于 Base UI Drawer（iOS sheet），支持拖动把手下滑关闭。入场按轻快弹簧从底部升起；
+// 拖动时面板跟手（transform），入场只用 translate，两者互不干扰。
 // 退场时长随下滑力度变化（--drawer-swipe-strength）。样式见 styles/motion.css 的 .weir-drawer-*。
 import { Drawer as DrawerPrimitive } from "@base-ui/react/drawer";
 import type { ReactNode } from "react";
@@ -34,9 +34,9 @@ function DrawerContent({
         <DrawerPrimitive.Popup data-slot="drawer-content" className={cn("weir-drawer-popup", className)}>
           <div className="weir-drawer-handle" aria-hidden />
           <DrawerPrimitive.Content className="weir-drawer-content">
-            <DrawerPrimitive.Title className="text-[17px] font-semibold tracking-[-0.015em] text-[var(--weir-ink)]">{title}</DrawerPrimitive.Title>
+            <DrawerPrimitive.Title className="text-dialog font-semibold tracking-[-0.015em] text-[var(--weir-ink)]">{title}</DrawerPrimitive.Title>
             {description && (
-              <DrawerPrimitive.Description className="mt-1 text-[13px] leading-relaxed text-[var(--weir-ink-3)]">{description}</DrawerPrimitive.Description>
+              <DrawerPrimitive.Description className="mt-1 text-body text-[var(--weir-ink-3)]">{description}</DrawerPrimitive.Description>
             )}
             {children && <ScrollArea className="weir-drawer-body">{children}</ScrollArea>}
             {footer && <div className="weir-drawer-footer">{footer}</div>}

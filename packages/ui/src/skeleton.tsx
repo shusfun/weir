@@ -31,7 +31,7 @@ function SkeletonText({
   return (
     <span aria-hidden className={cn("block min-w-0", className)}>
       {Array.from({ length: lines }, (_, i) => (
-        <SkeletonLine key={i} width={set[(seed + i) % set.length]} className={i > 0 ? "mt-[3px] text-[11.5px]" : undefined} />
+        <SkeletonLine key={i} width={set[(seed + i) % set.length]} className={i > 0 ? "mt-1 text-meta" : undefined} />
       ))}
     </span>
   );
@@ -105,8 +105,8 @@ function SkeletonList({
   return (
     <div aria-hidden className={className}>
       {Array.from({ length: rows }, (_, r) => (
-        <div key={r} className={cn(rowClassName ?? "flex items-center justify-between gap-3.5 border-b border-[var(--weir-line-soft)] py-[13px] last:border-b-0")}>
-          <SkeletonText lines={lines} seed={r} className="flex-1 text-[13px]" />
+        <div key={r} className={cn(rowClassName ?? "flex min-h-11 items-center justify-between gap-3 border-b border-[var(--weir-line-soft)] py-3 last:border-b-0")}>
+          <SkeletonText lines={lines} seed={r} className="flex-1 text-body" />
           {action && <span className="weir-skeleton block h-8 w-16 shrink-0" />}
         </div>
       ))}
@@ -121,8 +121,8 @@ function SkeletonCards({ count = 2, lines = 2, className }: { count?: number; li
       {Array.from({ length: count }, (_, i) => (
         <Card key={i}>
           <CardContent>
-            <SkeletonText lines={1} seed={i} className="text-base font-semibold" />
-            <SkeletonText lines={Math.max(0, lines - 1)} seed={i + 2} className="text-[11.5px] [&>*]:mt-[3px]" />
+            <SkeletonText lines={1} seed={i} className="text-heading font-semibold" />
+            <SkeletonText lines={Math.max(0, lines - 1)} seed={i + 2} className="text-meta [&>*]:mt-1" />
           </CardContent>
         </Card>
       ))}

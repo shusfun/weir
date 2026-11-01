@@ -15,7 +15,8 @@ function InputGroup({ className, ...props }: ComponentProps<"div">) {
       data-slot="input-group"
       role="group"
       className={cn(
-        "weir-well group/input-group relative flex h-9.5 w-full min-w-0 items-center transition-[border-color,box-shadow] outline-none has-[[data-slot=input-group-control]:focus-visible]:shadow-[inset_0_1px_2px_var(--weir-inset),0_0_0_3px_var(--weir-ring)] in-data-[slot=combobox-content]:focus-within:border-inherit in-data-[slot=combobox-content]:focus-within:ring-0 has-disabled:bg-input/50 has-disabled:opacity-50 has-[[data-slot=input-group-control]:focus-visible]:border-[var(--weir-accent-text)] has-[[data-slot=input-group-control]:focus-visible]:ring-0 has-[[data-slot=input-group-control]:focus-visible]:ring-[var(--weir-accent-text)] has-[[data-slot][aria-invalid=true]]:border-destructive has-[[data-slot][aria-invalid=true]]:ring-0 has-[[data-slot][aria-invalid=true]]:ring-destructive/20 has-[>[data-align=block-end]]:h-auto has-[>[data-align=block-end]]:flex-col has-[>[data-align=block-start]]:h-auto has-[>[data-align=block-start]]:flex-col has-[>textarea]:h-auto dark:bg-input/30 dark:has-disabled:bg-input/80 dark:has-[[data-slot][aria-invalid=true]]:ring-destructive/40 has-[>[data-align=block-end]]:[&>input]:pt-3 has-[>[data-align=block-start]]:[&>input]:pb-3 has-[>[data-align=inline-end]]:[&>input]:pr-1.5 has-[>[data-align=inline-start]]:[&>input]:pl-1.5",
+        // 外框画填充底与焦点描边，里面的输入框透明；焦点只认输入框本身（组里的按钮聚焦时画按钮自己的焦点环）
+        "weir-well group/input-group relative flex h-8 w-full min-w-0 items-center transition-colors touch:h-11 has-[[data-slot=input-group-control]:focus]:outline-2 has-[[data-slot=input-group-control]:focus]:outline-offset-0 has-[[data-slot=input-group-control]:focus]:outline-[var(--weir-focus)] has-disabled:opacity-50 has-[[data-slot][aria-invalid=true]]:border-destructive has-[>[data-align=block-end]]:h-auto has-[>[data-align=block-end]]:flex-col has-[>[data-align=block-start]]:h-auto has-[>[data-align=block-start]]:flex-col has-[>textarea]:h-auto has-[>[data-align=block-end]]:[&>input]:pt-3 has-[>[data-align=block-start]]:[&>input]:pb-3 has-[>[data-align=inline-end]]:[&>input]:pr-1 has-[>[data-align=inline-start]]:[&>input]:pl-1",
         className,
       )}
       {...props}
@@ -24,18 +25,18 @@ function InputGroup({ className, ...props }: ComponentProps<"div">) {
 }
 
 const inputGroupAddonVariants = cva(
-  "flex h-auto cursor-text items-center justify-center gap-2 py-1.5 text-sm font-medium text-muted-foreground select-none group-data-[disabled=true]/input-group:opacity-50 [&>kbd]:rounded-[calc(var(--radius)-5px)] [&>svg:not([class*='size-'])]:size-4",
+  "flex h-auto cursor-text items-center justify-center gap-2 text-body font-medium text-[var(--weir-ink-3)] select-none group-data-[disabled=true]/input-group:opacity-50 [&>svg:not([class*='size-'])]:size-4",
   {
     variants: {
       align: {
         "inline-start":
-          "order-first pl-3 has-[>button]:ml-[-0.3rem] has-[>kbd]:ml-[-0.15rem]",
+          "order-first pl-3 has-[>button]:pl-1",
         "inline-end":
-          "order-last pr-3 has-[>button]:mr-[-0.3rem] has-[>kbd]:mr-[-0.15rem]",
+          "order-last pr-3 has-[>button]:pr-0.5 touch:has-[>button]:pr-0",
         "block-start":
-          "order-first w-full justify-start px-2.5 pt-3 group-has-[>input]/input-group:pt-2 [.border-b]:pb-3",
+          "order-first w-full justify-start px-3 pt-3 group-has-[>input]/input-group:pt-2 [.border-b]:pb-3",
         "block-end":
-          "order-last w-full justify-start px-2.5 pb-3 group-has-[>input]/input-group:pb-2 [.border-t]:pt-3",
+          "order-last w-full justify-start px-3 pb-3 group-has-[>input]/input-group:pb-2 [.border-t]:pt-3",
       },
     },
     defaultVariants: {
@@ -66,18 +67,11 @@ function InputGroupAddon({
   );
 }
 
-const inputGroupButtonVariants = cva("flex items-center gap-2 text-sm shadow-none", {
-  variants: {
-    size: {
-      xs: "h-6 gap-1 rounded-[calc(var(--radius)-3px)] px-1.5 [&>svg:not([class*='size-'])]:size-3.5",
-      sm: "",
-      "icon-xs": "size-6 rounded-[calc(var(--radius)-3px)] p-0 has-[>svg]:p-0",
-      "icon-sm": "size-8 p-0 has-[>svg]:p-0",
-    },
-  },
-  defaultVariants: {
-    size: "xs",
-  },
+// 组内按钮的尺寸直接对应 Button 的尺寸：桌面比输入框（32）矮一档，触屏 icon-sm 与输入框同为 44
+const inputGroupButtonSize = { xs: "xs", sm: "sm", "icon-xs": "icon-xs", "icon-sm": "icon-sm" } as const;
+const inputGroupButtonVariants = cva("rounded-[var(--weir-radius-sm)] shadow-none", {
+  variants: { size: { xs: "", sm: "", "icon-xs": "", "icon-sm": "" } },
+  defaultVariants: { size: "xs" },
 });
 
 function InputGroupButton({
@@ -95,6 +89,7 @@ function InputGroupButton({
       type={type}
       data-size={size}
       variant={variant}
+      size={inputGroupButtonSize[size ?? "xs"]}
       className={cn(inputGroupButtonVariants({ size }), className)}
       {...props}
     />
@@ -105,7 +100,7 @@ function InputGroupText({ className, ...props }: ComponentProps<"span">) {
   return (
     <span
       className={cn(
-        "flex items-center gap-2 text-sm text-muted-foreground [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4",
+        "flex items-center gap-2 text-body text-[var(--weir-ink-3)] [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       {...props}
@@ -118,7 +113,8 @@ function InputGroupInput({ className, ...props }: ComponentProps<"input">) {
     <Input
       data-slot="input-group-control"
       className={cn(
-        "h-full flex-1 rounded-none border-0 bg-transparent py-0 shadow-none ring-0 focus-visible:ring-0 disabled:bg-transparent aria-invalid:ring-0 dark:bg-transparent dark:disabled:bg-transparent",
+        // 盖住外框上下各 1px 的透明边框：命中区与外框同高（触屏 44）
+        "-my-px h-[calc(100%+2px)] flex-1 rounded-none border-0 bg-transparent py-0 focus:outline-none read-only:bg-transparent disabled:bg-transparent touch:h-[calc(100%+2px)]",
         className,
       )}
       {...props}
@@ -131,7 +127,7 @@ function InputGroupTextarea({ className, ...props }: ComponentProps<"textarea">)
     <Textarea
       data-slot="input-group-control"
       className={cn(
-        "flex-1 resize-none rounded-none border-0 bg-transparent py-2 shadow-none ring-0 focus-visible:ring-0 disabled:bg-transparent aria-invalid:ring-0 dark:bg-transparent dark:disabled:bg-transparent",
+        "flex-1 resize-none rounded-none border-0 bg-transparent py-2 focus:outline-none read-only:bg-transparent disabled:bg-transparent",
         className,
       )}
       {...props}
@@ -144,7 +140,7 @@ function SearchInput({ className, ...props }: ComponentProps<"input">) {
   return (
     <InputGroup className={cn("w-[280px] max-w-full max-sm:w-full", className)}>
       <InputGroupAddon>
-        <SearchIcon className="text-[var(--weir-ink-engraved)]" />
+        <SearchIcon className="text-[var(--weir-ink-3)]" />
       </InputGroupAddon>
       <InputGroupInput {...props} />
     </InputGroup>

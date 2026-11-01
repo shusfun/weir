@@ -1,4 +1,5 @@
 // Weir 轻提示：操作结果的短暂反馈。错误与需要核对的结果仍在页面内常驻显示。
+// 抬高面板、圆角 12，从下方按轻快弹簧升起并淡入，退场只淡出。
 import { Toast } from "@base-ui/react/toast";
 import { XIcon } from "lucide-react";
 import { useCallback, type ReactNode } from "react";
@@ -14,7 +15,7 @@ function ToastViewport() {
           <Toast.Root
             key={toast.id}
             toast={toast}
-            className="weir-panel flex items-start gap-3 px-4 py-3 transition-[opacity,transform] duration-[var(--weir-mid)] data-[starting-style]:translate-y-2 data-[starting-style]:opacity-0 data-[ending-style]:opacity-0"
+            className="flex items-start gap-3 rounded-[var(--weir-radius-card)] border border-[var(--weir-line-soft)] bg-[var(--weir-raised)] py-3 pr-2 pl-4 shadow-[0_8px_28px_-8px_var(--weir-shade-strong)] [transition:opacity_var(--weir-mid)_var(--weir-ease),translate_var(--weir-spring-dur)_var(--weir-spring)] data-[starting-style]:translate-y-2 data-[starting-style]:opacity-0 data-[ending-style]:opacity-0"
           >
             {/* 成功提示：圈和对勾依次画出；其他语气仍用指示灯 */}
             {toast.type === "ok" ? (
@@ -23,11 +24,11 @@ function ToastViewport() {
               <StatusLamp tone={(toast.type as LampTone) || "info"} className="mt-1.5" />
             )}
             <div className="min-w-0 flex-1">
-              <Toast.Title className="text-[13px] font-semibold text-[var(--weir-ink)]" />
-              <Toast.Description className="mt-0.5 text-xs leading-relaxed text-[var(--weir-ink-3)]" />
+              <Toast.Title className="text-body font-semibold text-[var(--weir-ink)]" />
+              <Toast.Description className="mt-1 text-meta text-[var(--weir-ink-3)]" />
             </div>
-            <Toast.Close aria-label="关闭提示" className="rounded p-1 text-[var(--weir-ink-3)] hover:bg-[var(--weir-well)]">
-              <XIcon className="size-3.5" />
+            <Toast.Close aria-label="关闭提示" className="weir-key weir-key-ghost -my-1 grid size-7 shrink-0 place-items-center rounded-full text-[var(--weir-ink-3)] touch:size-11">
+              <XIcon className="size-4" />
             </Toast.Close>
           </Toast.Root>
         ))}

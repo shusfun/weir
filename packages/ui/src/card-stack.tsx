@@ -140,7 +140,7 @@ function CardStack<T>({
         <Button variant="outline" size="icon-sm" aria-label="上一张" disabled={!canPrev} onClick={back}>
           <ChevronLeft />
         </Button>
-        <span className="weir-digits text-xs text-[var(--weir-ink-3)]" aria-live="polite">
+        <span className="weir-digits text-meta text-[var(--weir-ink-3)]" aria-live="polite">
           {index + 1} / {count}
         </span>
         <Button variant="outline" size="icon-sm" aria-label="下一张" disabled={!canNext} onClick={() => dismiss(1)}>

@@ -1,5 +1,5 @@
 // 静态检查：设计变量、字号层级、动效、横向溢出、滚动条。只读计算样式，不操作页面。
-// iOS 文字层级（pt 当 px 用）：设计变量里没有字号变量时，按它判定「字号层级」
+// iOS 文字层级（pt 当 px 用）：设计变量里没有成对的字号 / 行高变量时，按它判定「字号层级」
 S.iosType = [
   ["Large Title", 34, 41], ["Title 1", 28, 34], ["Title 2", 22, 28], ["Title 3", 20, 25], ["Headline/Body", 17, 22],
   ["Callout", 16, 21], ["Subheadline", 15, 20], ["Footnote", 13, 18], ["Caption 1", 12, 16], ["Caption 2", 11, 13],
@@ -95,9 +95,26 @@ S.checkTokens = (scope, tok, col, stats) => {
   }
 };
 
-// 字号层级：统计出现过的 font-size/line-height 组合；有字号变量时按变量判定，没有时按 iOS 文字层级
+// 字号层级的取值：tokens.css 里成对的 --weir-text-<名> / --weir-leading-<名>（按当前视口与主题在运行时读取，
+// 触屏下角色变量取不同层级也随之变化）；同一组字号 / 行高只留一条。没有成对的字号变量时退回写死的 iOS 层级。
+S.typeTiers = (tok) => {
+  const px = new Map(tok.sizes.map((x) => [x.name, x.px]));
+  const seen = new Set();
+  const tiers = [];
+  for (const [name, size] of px) {
+    const m = name.match(/^--weir-text-(.+)$/);
+    const lh = m && px.get(`--weir-leading-${m[1]}`);
+    if (!lh || seen.has(`${size}/${lh}`)) continue;
+    seen.add(`${size}/${lh}`);
+    tiers.push([m[1], size, lh]);
+  }
+  return tiers.length ? tiers.sort((a, b) => b[1] - a[1]) : S.iosType;
+};
+
+// 字号层级：统计出现过的 font-size/line-height 组合，字号与行高都要落在同一个层级上（行高允许 1px 误差）
 S.checkType = (scope, tok, col, combos) => {
-  const tiers = tok.sizes.length ? null : S.iosType;
+  const tiers = S.typeTiers(tok);
+  const expected = (tiers === S.iosType ? "iOS 层级 " : "字号变量 ") + tiers.map(([, s, l]) => `${s}/${l}`).join("、");
   for (const el of S.elements(scope)) {
     if (!hasOwnText(el)) continue;
     const cs = getComputedStyle(el);
@@ -105,14 +122,7 @@ S.checkType = (scope, tok, col, combos) => {
     const lh = cs.lineHeight === "normal" ? "normal" : Math.round(parseFloat(cs.lineHeight) * 10) / 10;
     const key = `${fs}/${lh}`;
     combos[key] = (combos[key] || 0) + 1;
-    let ok, expected;
-    if (tiers) {
-      ok = tiers.some(([, s, l]) => Math.abs(s - fs) < 0.6 && (lh === "normal" ? false : Math.abs(l - lh) <= 1));
-      expected = "iOS 层级 " + tiers.map(([, s, l]) => `${s}/${l}`).join("、");
-    } else {
-      ok = tok.sizes.some((x) => Math.abs(x.px - fs) < 0.6);
-      expected = tok.sizes.map((x) => `${x.name}=${x.px}`).join("、");
-    }
+    const ok = tiers.some(([, s, l]) => Math.abs(s - fs) < 0.6 && lh !== "normal" && Math.abs(l - lh) <= 1);
     if (!ok) col.add("type", el, "font-size/line-height", key, expected);
   }
 };
@@ -129,6 +139,8 @@ S.checkMotion = (scope, tok, col) => {
     props.forEach((p, i) => {
       const d = durs[i % durs.length];
       if (!d || p === "none") return;
+      // 豁免：折叠区面板按 Base UI 的 --collapsible-panel-height 过渡 height，内容高度未知只能这样展开（design.html#console-visual）
+      if (p === "height" && el.matches("[data-slot=collapsible-panel]")) return;
       if (layoutProps.has(p)) col.add("motion", el, "transition-property", p, "只过渡 transform / opacity / 颜色");
       if (!durOk(d)) col.add("motion", el, "transition-duration", `${p} ${d}ms`, durList);
     });

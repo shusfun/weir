@@ -1,4 +1,4 @@
-/* 拟物控件：开关、分段键、计数器窗口、模块卡片。全部只动 transform / opacity。 */
+/* 控件：开关、分段控件、计数器、模块卡片、滚动区、拖拽排序。全部只动 transform / opacity / 颜色。 */
 @layer components {
   /* 滚动容器会裁剪子元素外扩的焦点环：四周留出焦点环宽度再用负外边距抵消，内容位置不变 */
   .weir-focus-gutter {
@@ -11,90 +11,90 @@
     top: var(--weir-focus-gutter);
   }
 
+  /*
+   * 开关：iOS UISwitch。关为灰色填充轨道，开为 systemGreen；白色圆形拨钮带投影。
+   * 尺寸桌面 40×24、触屏 51×31（iOS 原尺寸）；sm 再小一档。拨钮位移按 --weir-spring 落位，按住时向行进方向拉长。
+   * 命中区：触屏下由 .weir-hit 的 ::before 扩到 44×44。
+   */
   .weir-switch {
+    --sw-w: 40px;
+    --sw-h: 24px;
+    --sw-pad: 2px;
+    --sw-knob: calc(var(--sw-h) - var(--sw-pad) * 2);
     position: relative;
     display: inline-flex;
     flex-shrink: 0;
     align-items: center;
-    width: 44px;
-    height: 24px;
-    padding: 3px;
-    border-radius: 999px;
-    background: var(--weir-well);
-    box-shadow:
-      inset 2px 2px 4px var(--weir-neu-lo),
-      inset -2px -2px 4px var(--weir-neu-hi);
-    outline: none;
+    width: var(--sw-w);
+    height: var(--sw-h);
+    padding: var(--sw-pad);
+    border-radius: var(--weir-radius-full);
+    background: var(--weir-fill);
+    outline-offset: 2px;
     cursor: pointer;
+    transition: background-color var(--weir-mid) var(--weir-ease);
   }
-  .weir-switch::before {
-    content: "";
-    position: absolute;
-    inset: 3px;
-    border-radius: inherit;
-    background: var(--weir-indicator);
-    opacity: 0;
-    transition: opacity var(--weir-mid) ease;
+  .weir-switch[data-checked] { background: var(--weir-switch-on); }
+  .weir-switch[data-size="sm"] { --sw-w: 32px; --sw-h: 20px; }
+  @media (pointer: coarse), (max-width: 767.98px) {
+    .weir-switch { --sw-w: 51px; --sw-h: 31px; }
+    .weir-switch[data-size="sm"] { --sw-w: 40px; --sw-h: 24px; }
   }
-  .weir-switch[data-checked]::before { opacity: 0.88; }
-  .weir-switch[data-size="sm"] { width: 36px; height: 20px; }
-  .weir-switch:focus-visible { outline: 2px solid var(--weir-accent-text); outline-offset: 2px; }
   .weir-switch[data-disabled] { opacity: 0.5; cursor: not-allowed; }
   .weir-switch-thumb {
     position: relative;
     display: block;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: linear-gradient(145deg, #ffffff, #e6e6eb);
-    box-shadow:
-      1px 2px 3px rgb(0 0 0 / 0.22),
-      inset 0 1px 0 rgb(255 255 255 / 0.9);
+    width: var(--sw-knob);
+    height: var(--sw-knob);
+    border-radius: var(--weir-radius-full);
+    background: var(--weir-knob);
+    box-shadow: 0 0 0 0.5px var(--weir-shade), 0 3px 8px var(--weir-shade-strong);
     /* 位移与拉伸分开：translate 管位置，scale 管形变，互不覆盖 */
     transform-origin: left center;
     transition:
-      translate 260ms var(--weir-ease),
-      scale var(--weir-fast) ease-out;
+      translate var(--weir-spring-dur) var(--weir-spring),
+      scale var(--weir-spring-dur) var(--weir-spring);
   }
-  .dark .weir-switch-thumb { background: linear-gradient(145deg, #e5e5ea, #a1a1a6); }
-  .weir-switch[data-size="sm"] .weir-switch-thumb { width: 14px; height: 14px; }
-  .weir-switch-thumb[data-checked] { translate: 20px 0; transform-origin: right center; }
-  .weir-switch[data-size="sm"] .weir-switch-thumb[data-checked] { translate: 16px 0; }
-  /* 弹性开关：按住时拨钮向行进方向拉长；松手切换时中段保持拉长，落位压回原宽并带一次回弹 */
-  .weir-switch:not([data-disabled]):active .weir-switch-thumb { scale: 1.33 1; }
-  .weir-switch[data-moved] .weir-switch-thumb[data-checked] { animation: weir-switch-land-on 460ms linear; }
-  .weir-switch[data-moved] .weir-switch-thumb[data-unchecked] { animation: weir-switch-land-off 460ms linear; }
+  .weir-switch-thumb[data-checked] {
+    translate: calc(var(--sw-w) - var(--sw-knob) - var(--sw-pad) * 2) 0;
+    transform-origin: right center;
+  }
+  .weir-switch:not([data-disabled]):active .weir-switch-thumb {
+    scale: 1.2 1;
+    transition-duration: var(--weir-press);
+    transition-timing-function: var(--weir-ease);
+  }
 
-  /* 分段拨钮：内凹底座，各项平放不凸起，只有选中项点亮（.is-pressed），并排高度一致 */
+  /*
+   * 分段控件：iOS UISegmentedControl。填充底座，选中项是白色滑块（深色下为灰色）带投影；各项高度一致。
+   * 桌面 28 高（sm 24），触屏每项 44（底座内边距 2px，整体 48）。
+   */
   .weir-segmented {
     display: inline-flex;
     align-items: center;
     gap: 2px;
     max-width: 100%;
     min-width: 0;
-    padding: 3px;
+    padding: 2px;
     overflow-x: auto;
     scrollbar-width: none;
     border-radius: var(--weir-radius);
-    background: var(--weir-well);
-    box-shadow:
-      inset 1px 1px 3px var(--weir-neu-lo),
-      inset -1px -1px 3px var(--weir-neu-hi);
+    background: var(--weir-fill-3);
   }
   /* 不撑满时只占内容宽度：放在网格 / 纵向 flex 里也不会被拉成整行 */
   .weir-segmented:not([data-full-width]) { justify-self: start; align-self: flex-start; }
-  .weir-segmented > .weir-key { background: transparent; }
-  .weir-segmented > .weir-key::before { opacity: 0; }
-  /* 底座内边距 3px 且横向可滚动：焦点框收到 2px 线 + 1px 间距，正好落在内边距里不被裁 */
-  .weir-segmented > .weir-key:focus-visible { outline-offset: 1px; }
+  .weir-segmented > .weir-key { background: transparent; border-radius: calc(var(--weir-radius) - 2px); }
+  .weir-segmented > .weir-key.is-pressed { background: var(--weir-key-selected); }
+  /* 底座横向可滚动，外扩的焦点环会被裁：改为内描边 */
+  .weir-segmented > .weir-key:focus-visible { outline-offset: -2px; }
   .weir-segmented[data-full-width="always"] { display: flex; width: 100%; }
   .weir-segmented[data-full-width="always"] > .weir-key { flex: 1; }
-  @media (max-width: 700px) {
+  @media (max-width: 767.98px) {
     .weir-segmented[data-full-width="mobile"] { display: flex; width: 100%; }
     .weir-segmented[data-full-width="mobile"] > .weir-key { flex: 1; }
   }
 
-  /* 机械计数器：默认只有滚动数字，不加框；framed 时才嵌入内凹窗口（仅仪表盘关键读数） */
+  /* 机械计数器：默认只有滚动数字，不加框；framed 时才放进填充底的窗口（仅仪表盘关键读数） */
   .weir-counter {
     display: inline-flex;
     align-items: baseline;
@@ -115,36 +115,42 @@
   .weir-counter-strip > span { display: block; height: 1.2em; text-align: center; }
   .weir-counter-static { display: inline-block; }
   .weir-counter[data-framed="true"] {
-    padding: 2px 8px;
-    border-radius: 8px;
+    padding: var(--weir-space-1) var(--weir-space-2);
+    border-radius: var(--weir-radius-sm);
     background: var(--weir-well);
-    box-shadow:
-      inset 2px 2px 4px var(--weir-neu-lo),
-      inset -2px -2px 4px var(--weir-neu-hi);
   }
 
-  /* 模块卡片：右上角拟物开关，关闭后内容去色变暗 */
+  /* 模块卡片：右上角开关，关闭后内容去色变暗 */
   .weir-module-body {
     transition:
-      filter var(--weir-slow) ease,
-      opacity var(--weir-slow) ease;
+      filter var(--weir-slow) var(--weir-ease),
+      opacity var(--weir-slow) var(--weir-ease);
   }
   .weir-module-body[data-live="false"] {
     filter: grayscale(1);
     opacity: 0.55;
   }
-  .weir-module-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--weir-ink-3); }
-  .weir-module-paused { margin: 0 0 12px; font-size: 12px; color: var(--weir-ink-3); }
-  /* 下拉选择器展开时保持按下 */
-  .weir-key[data-popup-open] { translate: 0 1px; scale: none; }
-  .weir-key[data-popup-open]::before { opacity: 0; }
-  .weir-key[data-popup-open]::after { opacity: 1; }
+  .weir-module-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--weir-space-2);
+    font-size: var(--weir-text-meta);
+    line-height: var(--weir-leading-meta);
+    color: var(--weir-ink-3);
+  }
+  .weir-module-paused {
+    margin: 0 0 var(--weir-space-3);
+    font-size: var(--weir-text-meta);
+    line-height: var(--weir-leading-meta);
+    color: var(--weir-ink-3);
+  }
 
   /*
-   * 覆盖式滚动条（scroll-area.tsx）。根定尺寸，视口在根里伸缩：根给 max-h 时视口随内容长到上限再滚，
-   * 根给 h / flex-1 时视口撑满。滚动条绝对定位在根内、盖在内容上，不占宽度。
+   * 覆盖式滚动条（scroll-area.tsx），只在桌面（pointer: fine）显示。根定尺寸，视口在根里伸缩：
+   * 根给 max-h 时视口随内容长到上限再滚，根给 h / flex-1 时视口撑满。滚动条绝对定位在根内、盖在内容上，不占宽度。
    * 显示：滚动中（data-scrolling）、鼠标停在滚动条上（:hover）、拖动拇指（:active）；
    * 淡出前停留 --weir-scrollbar-linger，加上 Base UI 的 500 ms 判定，停止滚动约 600 ms 后开始淡出。
+   * 触屏：隐藏这条细条，恢复浏览器原生滚动条（手机上本来就是覆盖式、带回弹）。
    */
   .weir-scroll-root {
     position: relative;
@@ -164,7 +170,12 @@
   }
   /* 视口可用 Tab 聚焦后用方向键 / 翻页键滚动：聚焦时画一圈内描边，不占位、不被裁切 */
   .weir-scroll-viewport:focus-visible {
-    box-shadow: inset 0 0 0 2px var(--weir-ring);
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--weir-focus);
+  }
+  /* 弹层里的滚动滚到头不带动背后的页面 */
+  :is([role=dialog], [role=alertdialog], [role=menu], [role=listbox], [data-slot=popover-content], [data-slot=drawer-content]) .weir-scroll-viewport {
+    overscroll-behavior: contain;
   }
   .weir-scrollbar {
     z-index: 30;
@@ -192,7 +203,7 @@
     content: "";
     position: absolute;
     inset: calc((var(--weir-scrollbar-hit) - var(--weir-scrollbar-size)) / 2);
-    border-radius: 999px;
+    border-radius: var(--weir-radius-full);
     background: var(--weir-scroll-thumb);
   }
   .weir-scrollbar:hover .weir-scroll-thumb::before,
@@ -200,15 +211,21 @@
     background: var(--weir-scroll-thumb-active);
   }
   .weir-scroll-corner { background: transparent; }
-  /* 整页滚动区（PageScrollArea）：铺满视口；html / body 不再滚动 */
+  @media (pointer: coarse) {
+    .weir-scrollbar { display: none; }
+    /* Base UI 用 .base-ui-disable-scrollbar 隐藏原生滚动条，触屏上恢复 */
+    .weir-scroll-viewport.base-ui-disable-scrollbar { scrollbar-width: auto; }
+    .weir-scroll-viewport.base-ui-disable-scrollbar::-webkit-scrollbar { display: initial; }
+  }
+  /* 整页滚动区（PageScrollArea，只在桌面）：铺满视口；html / body 不再滚动 */
   .weir-page-scroll { height: 100dvh; }
 
   /*
    * 拖拽排序（sortable-list.tsx）。外层行的 transform 由 dnd-kit 写入（让位 / 跟手），
    * 抬起效果放在内层：放大 + 一层预先画好的阴影淡入，只动 transform / opacity。
    */
-  .weir-sortable-list { display: grid; gap: 18px; min-width: 0; }
-  .weir-sortable-item { position: relative; display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
+  .weir-sortable-list { display: grid; gap: var(--weir-space-4); min-width: 0; }
+  .weir-sortable-item { position: relative; display: flex; align-items: flex-start; gap: var(--weir-space-2); min-width: 0; }
   .weir-sortable-item[data-dragging] { z-index: 10; }
   .weir-sortable-handle {
     cursor: grab;
@@ -222,13 +239,13 @@
     position: relative;
     flex: 1;
     min-width: 0;
-    transition: scale var(--weir-bounce-dur) var(--weir-bounce);
+    transition: scale var(--weir-spring-dur) var(--weir-spring);
   }
   .weir-sortable-body::after {
     content: "";
     position: absolute;
     inset: 0;
-    border-radius: var(--weir-radius);
+    border-radius: var(--weir-radius-card);
     box-shadow: 0 14px 30px -12px var(--weir-shade-strong);
     opacity: 0;
     pointer-events: none;
@@ -250,23 +267,7 @@
   }
 }
 
-/* 开 / 关各一组相同的关键帧：名字不同，每次切换都会重新播放。0–50% 行进中保持拉长，65% 压过头，之后回弹到原宽 */
-@keyframes weir-switch-land-on {
-  0% { scale: 1.33 1; }
-  50% { scale: 1.26 1; }
-  66% { scale: 0.86 1.06; }
-  82% { scale: 1.05 0.98; }
-  100% { scale: 1 1; }
-}
-@keyframes weir-switch-land-off {
-  0% { scale: 1.33 1; }
-  50% { scale: 1.26 1; }
-  66% { scale: 0.86 1.06; }
-  82% { scale: 1.05 0.98; }
-  100% { scale: 1 1; }
-}
-
-/* 页面滚动交给 PageScrollArea：html / body 本身不滚动，不出现占位的系统滚动条。
+/* 页面滚动交给 PageScrollArea（桌面）：html / body 本身不滚动，不出现占位的系统滚动条。
    不放进 @layer：要压过浏览器默认的 overflow 与各页 body 上的 min-height */
 html:has(.weir-page-scroll),
 html:has(.weir-page-scroll) body {

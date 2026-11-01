@@ -24,7 +24,8 @@ function ObjectLink({
       {
         href,
         title: `打开${kind}「${name}」`,
-        className: cn("text-[var(--weir-accent-text)] underline-offset-4 hover:underline", className),
+        // 触屏下 .weir-hit 把命中区扩到 44（表格里单独一个链接时）；按下变淡，与 iOS 的文字按钮一致
+        className: cn("weir-hit relative text-[var(--weir-accent-text)] underline-offset-4 transition-opacity hover:underline active:opacity-60", className),
         children: children ?? name,
       },
       props,

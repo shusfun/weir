@@ -2,7 +2,7 @@
 import { ComponentProps } from "react";
 import { cn } from "cn";
 
-// active：选中 / 开启指示灯（#2f4bd0）
+// active：选中 / 开启指示灯（--weir-indicator，systemBlue）
 export type LampTone = "ok" | "warn" | "bad" | "info" | "active" | "off" | "unknown";
 
 const tones: Record<string, LampTone> = {

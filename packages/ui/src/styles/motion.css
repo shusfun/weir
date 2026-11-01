@@ -8,10 +8,10 @@
   .weir-check-mark[data-animate] :is(path, circle) {
     stroke-dasharray: 1;
     stroke-dashoffset: 1;
-    animation: weir-draw 340ms var(--weir-decel) forwards;
+    animation: weir-draw var(--weir-slow) var(--weir-decel) forwards;
   }
-  .weir-check-mark[data-animate][data-circle] .weir-check-mark-ring { animation-duration: 420ms; }
-  .weir-check-mark[data-animate][data-circle] .weir-check-mark-tick { animation-delay: 300ms; }
+  .weir-check-mark[data-animate][data-circle] .weir-check-mark-ring { animation-duration: var(--weir-spring-dur); }
+  .weir-check-mark[data-animate][data-circle] .weir-check-mark-tick { animation-delay: var(--weir-slow); }
 
   /* 复制图标：复制与对勾叠在同一格，复制成功时复制图标缩小淡出、对勾回弹放大并描绘；切回时反向 */
   .weir-copy-icon {
@@ -20,7 +20,7 @@
   }
   .weir-copy-icon > * {
     grid-area: 1 / 1;
-    transition: opacity var(--weir-fast) ease, transform var(--weir-bounce-dur) var(--weir-bounce);
+    transition: opacity var(--weir-fast) var(--weir-ease), transform var(--weir-bounce-dur) var(--weir-bounce);
   }
   .weir-copy-icon-check { opacity: 0; transform: scale(0.4); color: var(--weir-ok-ink); }
   .weir-copy-icon[data-copied] .weir-copy-icon-copy { opacity: 0; transform: scale(0.4) rotate(-30deg); }
@@ -40,7 +40,7 @@
     background: currentColor;
     opacity: 0;
     scale: 0;
-    animation: weir-ripple 560ms var(--weir-decel) forwards;
+    animation: weir-ripple var(--weir-settle) var(--weir-decel) forwards;
   }
 
   /* 爆散：粒子沿各自角度飞出、缩小、淡出；中心一圈冲击环 */
@@ -60,14 +60,14 @@
     margin: calc(var(--weir-burst-size, 6px) / -2) 0 0 calc(var(--weir-burst-size, 6px) / -2);
     border-radius: 50%;
     background: var(--weir-burst-color, var(--weir-accent));
-    animation: weir-burst-fly 680ms linear forwards;
+    animation: weir-burst-fly var(--weir-settle) linear forwards;
   }
   /* 条形粒子沿半径方向（旋转后 X 轴即飞行方向） */
   .weir-burst > span[data-shape="bar"] {
     width: 10px;
     height: 3px;
     margin: -1.5px 0 0 -5px;
-    border-radius: 2px;
+    border-radius: var(--weir-radius-full);
   }
   .weir-burst > .weir-burst-ring {
     width: 64px;
@@ -75,7 +75,7 @@
     margin: -32px 0 0 -32px;
     background: transparent;
     border: 2px solid var(--weir-accent);
-    animation: weir-burst-ring 560ms ease-out forwards;
+    animation: weir-burst-ring var(--weir-settle) var(--weir-ease) forwards;
   }
 
   /*
@@ -98,7 +98,6 @@
     translate: 0 -50%;
     border-radius: var(--weir-radius-sm);
     background: var(--weir-well);
-    box-shadow: inset 0 1px 1px var(--weir-inset);
   }
 
   /*
@@ -107,24 +106,24 @@
    */
   /* follow 模式下 --weir-menu-delay 让抽屉先滑到位再变形，变形发生在用户原来看的位置上 */
   .weir-menu-toggle { --weir-menu-delay: 0ms; }
-  .weir-menu-toggle[data-follow] { --weir-menu-delay: 180ms; }
+  .weir-menu-toggle[data-follow] { --weir-menu-delay: var(--weir-mid); }
   .weir-menu-toggle rect {
     transform-box: fill-box;
     transform-origin: center;
     transition:
-      translate 160ms var(--weir-ease) 160ms,
-      rotate 200ms var(--weir-ease) 0ms,
-      scale 160ms var(--weir-ease) 120ms,
-      opacity 120ms ease 120ms;
+      translate var(--weir-fast) var(--weir-ease) var(--weir-fast),
+      rotate var(--weir-mid) var(--weir-ease) 0ms,
+      scale var(--weir-fast) var(--weir-ease) var(--weir-press),
+      opacity var(--weir-press) var(--weir-ease) var(--weir-press);
   }
   .weir-menu-toggle[data-open] rect,
   [data-open]:not([data-starting-style]) .weir-menu-toggle[data-follow] rect {
     transition:
-      translate 160ms var(--weir-ease) var(--weir-menu-delay),
-      /* 旋转只要小幅过冲（约 12%），--weir-bounce 的 1.6 倍会把 45° 甩到 70° */
-      rotate 280ms cubic-bezier(0.34, 1.4, 0.64, 1) calc(var(--weir-menu-delay) + 150ms),
-      scale 140ms var(--weir-ease) var(--weir-menu-delay),
-      opacity 100ms ease var(--weir-menu-delay);
+      translate var(--weir-fast) var(--weir-ease) var(--weir-menu-delay),
+      /* 旋转落位带一点过冲（--weir-bounce 约 8%） */
+      rotate var(--weir-bounce-dur) var(--weir-bounce) calc(var(--weir-menu-delay) + var(--weir-fast)),
+      scale var(--weir-fast) var(--weir-ease) var(--weir-menu-delay),
+      opacity var(--weir-press) var(--weir-ease) var(--weir-menu-delay);
   }
   .weir-menu-toggle[data-open] .weir-menu-toggle-top,
   [data-open]:not([data-starting-style]) .weir-menu-toggle[data-follow] .weir-menu-toggle-top { translate: 0 6px; rotate: 45deg; }
@@ -134,23 +133,22 @@
   [data-open]:not([data-starting-style]) .weir-menu-toggle[data-follow] .weir-menu-toggle-bottom { translate: 0 -6px; rotate: -45deg; }
 
   /*
-   * 底部抽屉（Base UI Drawer）。--bleed：面板向下多画 3rem，往上拖过头时底部不露缝。
-   * 拖动跟手用 transform（Base UI 写入 --drawer-swipe-movement-y），入场停顿用 translate 关键帧。
+   * 底部抽屉（Base UI Drawer）：iOS sheet，圆角顶、顶部把手。--bleed：面板向下多画 3rem，往上拖过头时底部不露缝。
+   * 拖动跟手用 transform（Base UI 写入 --drawer-swipe-movement-y）；入场用 translate 关键帧按 --weir-spring 升起，两者互不干扰。
    */
   .weir-drawer-backdrop {
     position: fixed;
     inset: 0;
     z-index: 50;
     min-height: 100dvh;
-    background: rgb(20 18 14);
-    opacity: calc(0.38 * (1 - var(--drawer-swipe-progress, 0)));
-    transition: opacity 400ms var(--weir-decel);
+    background: var(--weir-scrim);
+    opacity: calc(1 - var(--drawer-swipe-progress, 0));
+    transition: opacity var(--weir-mid) var(--weir-ease);
   }
-  .dark .weir-drawer-backdrop { opacity: calc(0.6 * (1 - var(--drawer-swipe-progress, 0))); background: #000; }
   .weir-drawer-backdrop[data-starting-style],
   .weir-drawer-backdrop[data-ending-style] { opacity: 0; }
   .weir-drawer-backdrop[data-swiping] { transition-duration: 0ms; }
-  .weir-drawer-backdrop[data-ending-style] { transition-duration: calc(var(--drawer-swipe-strength, 1) * 400ms); }
+  .weir-drawer-backdrop[data-ending-style] { transition-duration: calc(var(--drawer-swipe-strength, 1) * var(--weir-slow)); }
   .weir-drawer-viewport {
     position: fixed;
     inset: 0;
@@ -168,51 +166,51 @@
     max-width: 640px;
     max-height: calc(88dvh + var(--bleed));
     margin-bottom: calc(-1 * var(--bleed));
-    padding: 8px 20px calc(20px + env(safe-area-inset-bottom, 0px) + var(--bleed));
-    border: 1px solid var(--weir-line);
-    border-bottom: 0;
-    border-radius: var(--weir-radius-lg) var(--weir-radius-lg) 0 0;
-    background: linear-gradient(180deg, var(--weir-panel-top), var(--weir-panel) 64px);
-    box-shadow: inset 0 1px 0 var(--weir-highlight), 0 -12px 32px -12px var(--weir-shade-strong);
+    padding: var(--weir-space-2) var(--weir-space-5) calc(var(--weir-space-5) + env(safe-area-inset-bottom, 0px) + var(--bleed));
+    border-radius: var(--weir-radius-sheet) var(--weir-radius-sheet) 0 0;
+    background: var(--weir-raised);
+    box-shadow: 0 -8px 32px -12px var(--weir-shade-strong);
     color: var(--weir-ink);
     outline: none;
     overflow: hidden;
     overscroll-behavior: contain;
     transform: translateY(var(--drawer-swipe-movement-y, 0px));
-    transition: transform 420ms var(--weir-decel);
+    transition: transform var(--weir-slow) var(--weir-decel);
   }
-  .weir-drawer-popup[data-open] { animation: weir-sheet-rise 560ms linear; }
+  .weir-drawer-popup[data-open] { animation: weir-sheet-rise var(--weir-spring-dur) var(--weir-spring); }
   .weir-drawer-popup[data-swiping] { transition-duration: 0ms; user-select: none; }
   .weir-drawer-popup[data-ending-style] {
     transform: translateY(calc(100% - var(--bleed) + 2px));
-    transition-duration: calc(var(--drawer-swipe-strength, 1) * 400ms);
+    transition-duration: calc(var(--drawer-swipe-strength, 1) * var(--weir-slow));
+    transition-timing-function: var(--weir-ease-in);
   }
-  .weir-drawer-handle {
+  /* 把手：iOS grabber 36×5，tertiaryLabel 色 */
+  .weir-drawer-handle,
+  .weir-sheet-handle {
     flex-shrink: 0;
-    width: 40px;
+    width: 36px;
     height: 5px;
-    margin: 0 auto 12px;
-    border-radius: 999px;
-    background: var(--weir-well-deep);
-    box-shadow: inset 0 1px 1px var(--weir-inset);
+    margin: 0 auto var(--weir-space-3);
+    border-radius: var(--weir-radius-full);
+    background: var(--weir-ink-4);
   }
   .weir-drawer-content {
     display: flex;
     min-height: 0;
     flex-direction: column;
   }
-  .weir-drawer-popup[data-open] .weir-drawer-content { animation: weir-sheet-content 560ms linear; }
   .weir-drawer-body {
     min-height: 0;
-    margin-top: 16px;
-    font-size: 13px;
+    margin-top: var(--weir-space-4);
+    font-size: var(--weir-text-body);
+    line-height: var(--weir-leading-body);
   }
   .weir-drawer-footer {
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
-    gap: 8px;
-    margin-top: 16px;
+    gap: var(--weir-space-2);
+    margin-top: var(--weir-space-4);
   }
 
   /*
@@ -234,7 +232,6 @@
     height: 6px;
     border-radius: 999px;
     background: var(--weir-well);
-    box-shadow: inset 1px 1px 2px var(--weir-neu-lo), inset -1px -1px 2px var(--weir-neu-hi);
   }
   /* 填充放在圆角裁剪层里，scaleX 时两端圆角不被压扁 */
   .weir-slider-fill-clip {
@@ -246,7 +243,7 @@
   .weir-slider-fill {
     position: absolute;
     inset: 0;
-    background: linear-gradient(90deg, var(--weir-accent-lo), var(--weir-accent));
+    background: var(--weir-blue);
     transform-origin: left center;
     scale: var(--weir-slider-p) 1;
     transition: scale var(--weir-settle) var(--weir-decel);
@@ -266,24 +263,24 @@
     position: absolute;
     inset: 0;
     border-radius: 50%;
-    background: linear-gradient(145deg, #ffffff, #e6e6eb);
-    box-shadow: 1px 2px 4px rgb(0 0 0 / 0.24), inset 0 1px 0 rgb(255 255 255 / 0.9);
-    transition: scale var(--weir-bounce-dur) var(--weir-bounce);
+    background: var(--weir-knob);
+    box-shadow: 0 0 0 0.5px var(--weir-shade), 0 3px 8px var(--weir-shade-strong);
+    transition: scale var(--weir-spring-dur) var(--weir-spring);
   }
-  .dark .weir-slider-knob { background: linear-gradient(145deg, #e5e5ea, #a1a1a6); }
   .weir-slider[data-dragging] .weir-slider-knob,
-  .weir-slider-thumb:active .weir-slider-knob { scale: 1.18; transition-duration: var(--weir-fast); transition-timing-function: ease-out; }
-  .weir-slider-thumb:has(:focus-visible) .weir-slider-knob { outline: 2px solid var(--weir-accent-text); outline-offset: 2px; }
+  .weir-slider-thumb:active .weir-slider-knob { scale: 1.18; transition-duration: var(--weir-press); transition-timing-function: var(--weir-ease); }
+  .weir-slider-thumb:has(:focus-visible) .weir-slider-knob { outline: 2px solid var(--weir-focus); outline-offset: 2px; }
   .weir-slider-bubble {
     position: absolute;
     bottom: calc(100% + 8px);
     left: 50%;
     min-width: 30px;
-    padding: 2px 7px;
-    border-radius: var(--weir-radius-sm);
+    padding: 0 var(--weir-space-2);
+    border-radius: var(--weir-radius-xs);
     background: var(--weir-ink);
     color: var(--weir-base);
-    font: 600 11.5px/1.4 var(--weir-mono);
+    font: var(--weir-weight-semibold) var(--weir-text-fine) / var(--weir-leading-fine) var(--weir-mono);
+    padding-block: 3px;
     text-align: center;
     white-space: nowrap;
     pointer-events: none;
@@ -291,10 +288,10 @@
     transform-origin: 50% 100%;
     opacity: 0;
     scale: 0.6;
-    /* 气泡从 0.6 弹出：位移量大，用小过冲曲线，避免冲到 1.2 倍 */
+    /* 气泡从 0.6 弹出：轻快弹簧几乎不过冲，不会冲到 1.2 倍 */
     transition:
-      opacity var(--weir-fast) ease,
-      scale 320ms cubic-bezier(0.34, 1.4, 0.64, 1);
+      opacity var(--weir-fast) var(--weir-ease),
+      scale var(--weir-spring-dur) var(--weir-spring);
   }
   .weir-slider:hover .weir-slider-bubble,
   .weir-slider[data-dragging] .weir-slider-bubble,
@@ -305,7 +302,7 @@
   .weir-flip-inner {
     display: grid;
     transform-style: preserve-3d;
-    transition: rotate 680ms cubic-bezier(0.3, 1.3, 0.5, 1);
+    transition: rotate var(--weir-bounce-dur) var(--weir-bounce);
   }
   .weir-flip-inner[data-flipped] { rotate: y 180deg; }
   .weir-flip-face {
@@ -317,55 +314,55 @@
   .weir-flip-back { rotate: y 180deg; }
 
   /* 卡片堆叠：--weir-stack-k 是卡在堆里的位置（0 为顶卡），越往后越小、越低、越淡，底边露出来 */
-  .weir-stack { display: grid; gap: 12px; }
+  .weir-stack { display: grid; gap: var(--weir-space-3); }
   .weir-stack-deck {
     display: grid;
-    padding-bottom: 26px;
-    border-radius: var(--weir-radius-lg);
+    padding-bottom: var(--weir-space-6);
+    border-radius: var(--weir-radius-card);
     outline: none;
     touch-action: pan-y;
   }
-  .weir-stack-deck:focus-visible { outline: 2px solid var(--weir-accent-text); outline-offset: 4px; }
+  .weir-stack-deck:focus-visible { outline: 2px solid var(--weir-focus); outline-offset: 4px; }
   .weir-stack-card {
     grid-area: 1 / 1;
     min-width: 0;
-    border: 1px solid var(--weir-line);
-    border-radius: var(--weir-radius-lg);
-    background: linear-gradient(180deg, var(--weir-panel-top), var(--weir-panel) 64px);
-    box-shadow: inset 0 1px 0 var(--weir-highlight), 0 10px 24px -14px var(--weir-shade-strong);
+    border: 1px solid var(--weir-line-soft);
+    border-radius: var(--weir-radius-card);
+    background: var(--weir-panel);
+    box-shadow: 0 10px 24px -14px var(--weir-shade-strong);
     transform-origin: 50% 100%;
     translate: 0 calc(var(--weir-stack-k) * 13px);
     scale: calc(1 - var(--weir-stack-k) * 0.06);
     opacity: calc(1 - var(--weir-stack-k) * 0.18);
     user-select: none;
     transition:
-      translate 420ms var(--weir-decel),
-      rotate 420ms var(--weir-decel),
-      scale 420ms var(--weir-decel),
-      opacity 420ms var(--weir-decel);
+      translate var(--weir-spring-dur) var(--weir-spring),
+      rotate var(--weir-spring-dur) var(--weir-spring),
+      scale var(--weir-spring-dur) var(--weir-spring),
+      opacity var(--weir-spring-dur) var(--weir-ease);
   }
   .weir-stack-card[data-top] { cursor: grab; }
   .weir-stack-card[data-dragging] { cursor: grabbing; transition: none; }
-  .weir-stack-card[data-leaving] { opacity: 0; transition-duration: 380ms; }
+  .weir-stack-card[data-leaving] { opacity: 0; transition-duration: var(--weir-slow); }
   .weir-stack-card[data-entering] { transition: none; }
   .weir-stack-controls,
   .weir-carousel-controls {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 12px;
+    gap: var(--weir-space-3);
   }
 
   /*
    * 轮播：--weir-carousel-pos 是连续位置（已注册为 <number>，可直接过渡）。
    * 轨道位移和每张图的 rotateY / 缩放都由它算出：d = 图序号 − 位置，离中心越远转得越多。
    */
-  .weir-carousel { display: grid; gap: 12px; }
+  .weir-carousel { display: grid; gap: var(--weir-space-3); }
   .weir-carousel-viewport {
     --weir-carousel-pos: 0;
     overflow: hidden;
-    padding-block: 6px;
-    border-radius: var(--weir-radius-lg);
+    padding-block: var(--weir-space-2);
+    border-radius: var(--weir-radius-card);
     outline: none;
     perspective: 1100px;
     touch-action: pan-y;
@@ -373,7 +370,7 @@
     cursor: grab;
     transition: --weir-carousel-pos var(--weir-settle) var(--weir-decel);
   }
-  .weir-carousel-viewport:focus-visible { outline: 2px solid var(--weir-accent-text); outline-offset: 2px; }
+  .weir-carousel-viewport:focus-visible { outline: 2px solid var(--weir-focus); outline-offset: 2px; }
   .weir-carousel-viewport[data-dragging] { cursor: grabbing; transition: none; }
   .weir-carousel-track {
     display: flex;
@@ -386,7 +383,7 @@
     flex: 0 0 var(--weir-carousel-slide);
     min-width: 0;
     overflow: hidden;
-    border-radius: var(--weir-radius-lg);
+    border-radius: var(--weir-radius-card);
     /* 以靠近中心的一侧为轴转：右边的图绕左边缘、左边的图绕右边缘，转起来时边缘仍露在两侧 */
     transform-origin: calc(50% - var(--weir-carousel-d) * 50%) 50%;
     rotate: y calc(var(--weir-carousel-d) * -34deg);
@@ -394,19 +391,34 @@
     opacity: calc(1 - 0.35 * max(var(--weir-carousel-d), -1 * var(--weir-carousel-d)));
   }
   .weir-carousel-slide :is(img, svg) { display: block; width: 100%; pointer-events: none; -webkit-user-drag: none; }
-  .weir-carousel-dots { display: flex; align-items: center; gap: 6px; }
+  /* 圆点：按钮本身是命中区（桌面 20、触屏 44），圆点画在 ::after 上；只动 scale 与颜色 */
+  .weir-carousel-dots { display: flex; align-items: center; gap: 0; }
   .weir-carousel-dot {
-    width: 8px;
-    height: 8px;
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
     padding: 0;
     border: 0;
-    border-radius: 999px;
-    background: var(--weir-line);
+    border-radius: var(--weir-radius-full);
+    background: transparent;
     cursor: pointer;
-    transition: scale var(--weir-mid) var(--weir-ease), background-color var(--weir-fast);
   }
-  .weir-carousel-dot[aria-current] { background: var(--weir-accent-text); scale: 1.35; }
-  .weir-carousel-dot:focus-visible { outline: 2px solid var(--weir-accent-text); outline-offset: 2px; }
+  @media (pointer: coarse), (max-width: 767.98px) {
+    .weir-carousel-dot { width: 44px; height: 44px; }
+  }
+  .weir-carousel-dot::after {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: var(--weir-radius-full);
+    background: var(--weir-ink-4);
+    transition: scale var(--weir-spring-dur) var(--weir-spring), background-color var(--weir-fast) var(--weir-ease);
+  }
+  .weir-carousel-dot[aria-current]::after { background: var(--weir-ink); scale: 1.25; }
+  .weir-carousel-dot:active::after { scale: 0.8; transition-duration: var(--weir-press); }
+  .weir-carousel-dot:focus-visible { outline: 2px solid var(--weir-focus); outline-offset: -2px; }
 }
 
 @property --weir-carousel-pos {
@@ -434,18 +446,10 @@
   0% { scale: 0.2; opacity: 0.8; }
   100% { scale: 1.6; opacity: 0; }
 }
-/*
- * 底部抽屉：0–56% 升到位（强减速），56–74% 静止不动——状态靠停住被读出来，之后内容再落稳。
- * 面板只动 translate，与 Base UI 抽屉拖动用的 transform 互不干扰。
- */
+/* 底部抽屉升起：只动 translate，曲线由使用处给（--weir-spring） */
 @keyframes weir-sheet-rise {
-  0% { translate: 0 100%; animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); }
-  56% { translate: 0 0; }
-  100% { translate: 0 0; }
-}
-@keyframes weir-sheet-content {
-  0%, 74% { opacity: 0.55; translate: 0 6px; animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); }
-  100% { opacity: 1; translate: 0 0; }
+  from { translate: 0 100%; }
+  to { translate: 0 0; }
 }
 
 /* 表单校验提示：从输入框下沿轻落出现（参照 Element Plus el-form-item__error） */
