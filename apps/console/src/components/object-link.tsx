@@ -1,20 +1,16 @@
 // 对象链接与地址参数：凡是显示对象名的地方都用 ObjectLink，点了去对象所在的页面，浏览器后退能回来。
-// 地址约定见 lib/objects.ts。FocusFromURL 常驻在控制台里，处理 ?focus=：等列表行出现后滚过去并高亮。
-import { useEffect, useRef, type ReactNode } from "react";
+// 地址约定见 lib/objects.ts；链接样式与地址栏详情窗的规则在 @weir/ui。FocusFromURL 常驻在控制台里，处理 ?focus=：等列表行出现后滚过去并高亮。
+import { useEffect, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useToast } from "@weir/ui";
+import { ObjectLink as UIObjectLink, useDialogParam as useUIDialogParam, useStringDialogParam as useUIStringDialogParam, useToast } from "@weir/ui";
 import { focusValue, objectHref, objectLabels, objectKey, type ObjectRef } from "../lib/objects";
 
 export function ObjectLink({ to, children, className }: { to: ObjectRef; children?: ReactNode; className?: string }) {
-  const label = children ?? to.name ?? `${objectLabels[to.type]} ${objectKey(to)}`;
+  const href = objectHref(to);
   return (
-    <Link
-      to={objectHref(to)}
-      title={`打开${objectLabels[to.type]}「${to.name ?? objectKey(to)}」`}
-      className={"text-[var(--weir-accent-text)] underline-offset-4 hover:underline " + (className ?? "")}
-    >
-      {label}
-    </Link>
+    <UIObjectLink href={href} kind={objectLabels[to.type]} name={to.name ?? objectKey(to)} className={className} render={<Link to={href} />}>
+      {children ?? to.name ?? `${objectLabels[to.type]} ${objectKey(to)}`}
+    </UIObjectLink>
   );
 }
 
@@ -56,51 +52,11 @@ export function FocusFromURL() {
   return null;
 }
 
-// useDialogParam：详情窗的开关记在地址栏（?gate=3）。打开时追加一条历史，关闭时替换掉参数；
-// 后退回到打开前的页面，刷新或从别处链过来也能直接打开。ready 后参数指向的对象不存在时提示并去掉参数。
+// 详情窗记在地址栏（?gate=3、?driver=xray-26.3）：规则在 @weir/ui，这里接上路由的地址参数。
 export function useDialogParam<T extends { id: number }>(name: string, items: T[] | undefined, ready: boolean) {
-  const [params, setParams] = useSearchParams();
-  const toast = useToast();
-  const raw = params.get(name);
-  const id = raw ? Number(raw) : null;
-  const current = id ? items?.find((x) => x.id === id) ?? null : null;
-  const reported = useRef<number | null>(null);
-  useEffect(() => {
-    if (id && ready && !current && reported.current !== id) {
-      reported.current = id;
-      toast("没有找到要打开的对象", { tone: "warn", description: "它可能已被删除。" });
-      setParams((p) => {
-        p.delete(name);
-        return p;
-      }, { replace: true });
-    }
-  }, [id, ready, current, name, setParams, toast]);
-  const open = (v: T | number) =>
-    setParams((p) => {
-      p.set(name, String(typeof v === "number" ? v : v.id));
-      return p;
-    });
-  const close = () =>
-    setParams((p) => {
-      p.delete(name);
-      return p;
-    }, { replace: true });
-  return { current, open, close };
+  return useUIDialogParam(useSearchParams(), name, items, ready);
 }
 
-// useStringDialogParam：按名称打开的详情窗（如 ?driver=xray-26.3），规则同 useDialogParam。
 export function useStringDialogParam(name: string) {
-  const [params, setParams] = useSearchParams();
-  const value = params.get(name);
-  const open = (v: string) =>
-    setParams((p) => {
-      p.set(name, v);
-      return p;
-    });
-  const close = () =>
-    setParams((p) => {
-      p.delete(name);
-      return p;
-    }, { replace: true });
-  return { value, open, close };
+  return useUIStringDialogParam(useSearchParams(), name);
 }

@@ -1,28 +1,13 @@
 // 后台任务的读取与等待：事件流连着时由它推送（events.ts 写进缓存），断开时每秒查一次。
 // 中心重启后任务的记录不在了（只在内存里）：查到 404 时说明这一点并停止轮询，不一直显示「进行中」。
 import { QueryObserver } from "@tanstack/react-query";
+import type { Job } from "@weir/ui";
 import { api, ApiError } from "../api";
 import { isLive } from "./live";
 import { queryClient } from "./query";
 
-export interface Job {
-  id: string;
-  kind: string;
-  title: string;
-  status: "running" | "done" | "failed" | "cancelled";
-  progress?: { done: number; total: number; speed: number; source: string };
-  step?: string;
-  step_at?: string;
-  step_max?: number;
-  cancellable?: boolean;
-  logs?: { at: string; text: string }[];
-  error?: string;
-  result?: Record<string, unknown>;
-  started_at: string;
-  finished_at?: string;
-  trace?: string;
-  owner?: number;
-}
+// 任务的数据形状与展示在 @weir/ui（job.tsx），这里只管读取与等待
+export type { Job };
 
 export const jobGoneText = "中心重启过，这次任务的记录已不在（任务只保存在中心内存里）；操作可能已经完成，请刷新后核对。";
 
