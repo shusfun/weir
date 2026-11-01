@@ -236,3 +236,16 @@ func TestNextReset(t *testing.T) {
 		}
 	}
 }
+
+// 中心还没下载内核时建节点：报内核拿不到的真实原因，不当作参数无效。
+func TestCreateNodeWithoutKernelReportsKernelUnavailable(t *testing.T) {
+	_, admin := newInstalledServer(t)
+	g := pairFakeGate(t, admin)
+	if code, _ := g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{Version: "test", Hostname: "hk", Arch: "amd64"}); code != 200 {
+		t.Fatalf("heartbeat = %d", code)
+	}
+	w := admin.do("POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "vless-reality", "skip_probe": true}, nil)
+	if w.Code != 409 || !strings.Contains(w.Body.String(), `"kernel_unavailable"`) || !strings.Contains(w.Body.String(), "xray") {
+		t.Fatalf("create without kernel = %d %s", w.Code, w.Body.String())
+	}
+}

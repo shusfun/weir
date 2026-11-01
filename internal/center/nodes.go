@@ -391,6 +391,22 @@ var lockedSettings = map[string]bool{"id": true, "uuid": true, "remark": true, "
 
 // checkSettings 拒绝未知或系统管理的字段，并用构建器实际生成一次，确保保存后的节点能下发。
 // 已下载该内核时按 Gate 实际使用的版本档案检查（协议 / 传输 / 安全层是否受支持）。
+// kernelUnavailableError：节点要用的内核在中心还拿不到（未下载、正在下载、没有驱动），与参数无关。
+type kernelUnavailableError struct{ err error }
+
+func (e kernelUnavailableError) Error() string { return e.err.Error() }
+func (e kernelUnavailableError) Unwrap() error { return e.err }
+
+// failSettings 按 checkSettings 的错误回应：内核拿不到返回 409 kernel_unavailable，其余是参数无效。
+func failSettings(c *gin.Context, err error) {
+	var ku kernelUnavailableError
+	if errors.As(err, &ku) {
+		failDetail(c, 409, "kernel_unavailable", ku.Error(), nil)
+		return
+	}
+	failDetail(c, 400, "invalid_node_settings", err.Error(), nil)
+}
+
 func (s *Server) checkSettings(ctx context.Context, g *ent.Gate, kernel, protocol, network, security string, port int, settings map[string]any) error {
 	for k := range settings {
 		if lockedSettings[k] {
@@ -410,9 +426,12 @@ func (s *Server) checkSettings(ctx context.Context, g *ent.Gate, kernel, protoco
 		Inbounds:    []contracts.Inbound{{ID: 1, Tag: "check", Kernel: kernel, Protocol: protocol, Port: port, Network: network, Security: security, Settings: settings}},
 		Credentials: []contracts.Credential{{ID: 1, InboundID: 1, StatsKey: "check", UserKey: "u0", UUID: id, Password: password}},
 	}
-	if _, profiles, err := s.gateKernels(ctx, g, map[string]bool{kernel: true}); err == nil {
-		cfg.Drivers = profiles
+	// 内核未下载或正在下载时没有驱动，配置必然生成失败；返回真实原因，不当作参数错误。
+	_, profiles, err := s.gateKernels(ctx, g, map[string]bool{kernel: true})
+	if err != nil {
+		return kernelUnavailableError{err}
 	}
+	cfg.Drivers = profiles
 	if security == "tls" {
 		cfg.Inbounds[0].CertID = 1
 	}
@@ -549,7 +568,7 @@ func (s *Server) createNode(c *gin.Context) {
 		return
 	}
 	if err = s.checkSettings(ctx, g, p.Kernel, p.Protocol, p.Network, p.Security, req.Port, st); err != nil {
-		failDetail(c, 400, "invalid_node_settings", err.Error(), nil)
+		failSettings(c, err)
 		return
 	}
 	probe, err := s.validateChain(ctx, g, 0, req.Chain, false, !req.SkipProbe, chainCtx{kernel: p.Kernel, admin: true})
@@ -796,7 +815,7 @@ func (s *Server) updateNode(c *gin.Context) {
 		}
 	}
 	if err = s.checkSettings(ctx, g, n.Kernel, n.Protocol, n.Network, n.Security, port, st); err != nil {
-		failDetail(c, 400, "invalid_node_settings", err.Error(), nil)
+		failSettings(c, err)
 		return
 	}
 	upd.SetSettings(st)

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge, Button, CheckboxField, ChoiceCard, Collapsible, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Step, Steps, Radio, RadioGroup, SwitchField } from "@weir/ui";
 import { QRCodeSVG } from "qrcode.react";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import { useFormAction } from "../lib/action";
 import { WaitText } from "./wait";
 import { field, useConsoleContext } from "../lib/console-context";
@@ -59,6 +59,11 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
   const wgBlocked = (u: UserItem) => chosen?.protocol === "wireguard" && u.quota > 0;
   const autoUser = (u: UserItem) => u.all_nodes && !wgBlocked(u);
   const userIds = allUsers.filter((u) => autoUser(u) || picked.includes(u.id)).map((u) => u.id);
+  const exitFields = exitErrorFields(chain.kind);
+  const errorFields: Record<string, string> = { port_in_use: "port", invalid_port: "port", no_free_port: "port", invalid_reality_target: "target", reality_probe_failed: "target", invalid_node_settings: "advanced", cert_unavailable: "cert",
+    gate_no_public_host: "gate", ...exitFields };
+  // 字段所在的步骤：服务端错误落在前面步骤的字段上时退回那一步显示，否则停在第 ④ 步看不到错误。
+  const fieldStep = (f: string) => (f === "advanced" ? 0 : f === "gate" || f === "cert" ? 1 : Object.values(exitFields).includes(f) ? 2 : 3);
   const save = useFormAction(
     (track) =>
       api("/admin/nodes", "POST", {
@@ -68,8 +73,11 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
       }, track) as Promise<NodeItem & { shares?: Share[] }>,
     {
       wait: () => ({ label: `正在 ${gate?.name ?? "VPS"} 上新建 ${chosen?.name ?? ""} 节点并实测` }),
-      fields: { port_in_use: "port", invalid_port: "port", no_free_port: "port", invalid_reality_target: "target", reality_probe_failed: "target", invalid_node_settings: "advanced", cert_unavailable: "cert",
-        gate_no_public_host: "gate", ...exitErrorFields(chain.kind) },
+      fields: errorFields,
+      onError: (e) => {
+        const f = e instanceof ApiError ? errorFields[e.code] : undefined;
+        if (f) setStep(fieldStep(f));
+      },
       onSuccess: (n) => {
         done();
         setCreated(n);
@@ -135,7 +143,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
             <PresetStep presets={presets} value={preset} onChange={(v) => { setPreset(v); setAdvanced({}); }} />
             {chosen?.note && <Notice tone="warn">{chosen.note}</Notice>}
             {chosen && chosen.fields.length > 0 && (
-              <Collapsible title="高级：修改这个方案的字段">
+              <Collapsible title="高级：修改这个方案的字段" defaultOpen={!!save.errors?.advanced}>
                 <Field name="advanced" hint="留空的字段使用方案的默认值；保存前由 VPS 用真实内核实测。">
                   <AdvancedFields fields={chosen.fields} value={advanced} onChange={setAdvanced} />
                 </Field>
@@ -166,7 +174,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
                     ? "证书由系统为这台 VPS 准备：有 1Panel 时经 1Panel 申请 IP 证书，否则 80 端口空闲时由中心申请；都不可用时用「系统设置 → 节点证书」里的节点证书域名。"
                     : "这台 VPS 的 Hysteria2 / TUIC 节点共用一张自签证书，订阅中固定指纹。"}
                 </Notice>
-                <Collapsible title="高级：手动选择证书">
+                <Collapsible title="高级：手动选择证书" defaultOpen={!!save.errors?.cert}>
                   <Field label="证书" name="cert" hint="一般不需要；选了就只用这张证书。">
                     <Select value={String(certId)} onValueChange={(v) => setCertId(Number(v))}>
                       <SelectTrigger><SelectValue>{certs.data?.find((c) => c.id === certId)?.domain ?? "由系统准备"}</SelectValue></SelectTrigger>

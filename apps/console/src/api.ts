@@ -5,6 +5,7 @@ const messages: Record<string, string> = {
  gate_offline:"这台 VPS 当前离线，无法实测；请确认 Gate 服务在运行后重试。",
  kernel_in_use:"这个内核版本仍在使用",
  kernel_not_cached:"这个版本还没下载齐",
+ kernel_unavailable:"这个节点要用的内核还不能用",
  driver_missing:"这个内核版本没有适用的驱动",
  driver_check_failed:"驱动检查未通过",
  driver_invalid:"驱动无效",
