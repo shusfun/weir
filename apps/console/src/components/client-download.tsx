@@ -1,4 +1,4 @@
-// 测速下载：浏览器对 GitHub 直连与镜像测速，自动选最快可校验来源，下载后核对 SHA-256。
+// 测速下载：浏览器按「GitHub 加速」的来源（直连与镜像）测速，自动选最快可校验来源，下载后核对 SHA-256。
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChoiceCard, CodeBlock, Field, Notice,
@@ -9,7 +9,7 @@ import { Download, Gauge, RefreshCw } from "lucide-react";
 import { api, clause } from "../api";
 import { State } from "./feedback";
 import type { CatalogClient } from "../lib/models";
-import { assetsFor, candidates, detectPlatform, downloadVerified, probe, rank, speed, type ProbeResult, type ReleaseAsset } from "../lib/download";
+import { assetsFor, candidates, detectPlatform, downloadVerified, probe, rank, speed, type BrowserSource, type ProbeResult, type ReleaseAsset } from "../lib/download";
 
 interface Release { status: string; version?: string; url?: string; assets?: ReleaseAsset[] }
 
@@ -38,7 +38,7 @@ export function ClientDownload({ client, primary = false }: { client: CatalogCli
 
 function DownloadDialog({ client, close }: { client: CatalogClient; close: () => void }) {
   const release = useQuery({ queryKey: ["client-release", client.id, client.repo], queryFn: () => api("/clients/" + encodeURIComponent(client.id) + "/release") as Promise<Release>, staleTime: 300000, retry: false });
-  const mirrors = useQuery({ queryKey: ["client-mirrors"], queryFn: () => api("/client-mirrors") as Promise<{ mirrors: string[] }>, staleTime: 300000 });
+  const sources = useQuery({ queryKey: ["github-sources"], queryFn: () => api("/github-sources") as Promise<{ sources: BrowserSource[] }>, staleTime: 300000 });
   const supported = client.platforms.filter((p) => platformNames[p]);
   const [platform, setPlatform] = useState(() => (supported.includes(detectPlatform()) ? detectPlatform() : supported[0] ?? ""));
   const assets = useMemo(() => assetsFor(release.data?.assets ?? [], platform), [release.data, platform]);
@@ -53,16 +53,17 @@ function DownloadDialog({ client, close }: { client: CatalogClient; close: () =>
     if (!asset) return;
     setResults(null);
     setMessage(null);
-    const list = await Promise.all(candidates(asset, mirrors.data?.mirrors ?? []).map((c) => probe(c.url, c.mirror)));
+    // 来源读取失败或列表里只有 VPS 中转（浏览器用不了）时只测 GitHub 直连
+    const list = await Promise.all(candidates(asset, sources.data?.sources.length ? sources.data.sources : [{ kind: "direct" }]).map((c) => probe(c.url, c.mirror)));
     const ranked = rank(list);
     setResults([...ranked, ...list.filter((r) => r.error)]);
     setChosen(ranked[0]?.url ?? "");
   }
-  // 打开或切换安装包后自动测速；镜像读取失败时只测 GitHub 直连
-  const mirrorsSettled = !mirrors.isPending;
+  // 打开或切换安装包后自动测速
+  const sourcesSettled = !sources.isPending;
   useEffect(() => {
-    if (asset && mirrorsSettled) void runProbe();
-  }, [asset?.url, mirrorsSettled]);
+    if (asset && sourcesSettled) void runProbe();
+  }, [asset?.url, sourcesSettled]);
 
   const pick = results?.find((r) => r.url === chosen);
   async function start() {
@@ -90,8 +91,8 @@ function DownloadDialog({ client, close }: { client: CatalogClient; close: () =>
       <DialogContent size="md">
         <DialogTitle>下载 {client.name}</DialogTitle>
         <DialogDescription>在你的浏览器内测速，自动选择最快的可校验来源；下载后核对 GitHub 公布的 SHA-256。</DialogDescription>
-        {mirrors.isError && <Notice tone="warn" role="status">加速镜像暂时不可用，本次只测速 GitHub 直连。</Notice>}
-        {release.isPending || mirrors.isPending ? <State loading /> : release.data?.status !== "current" ? (
+        {sources.isError && <Notice tone="warn" role="status">GitHub 加速来源暂时读不到，本次只测速 GitHub 直连。</Notice>}
+        {release.isPending || sources.isPending ? <State loading /> : release.data?.status !== "current" ? (
           <Notice tone="bad">暂时无法读取正式发布信息：{release.error ? clause(release.error) : releaseReason[release.data?.status ?? ""] ?? `中心返回的状态是「${release.data?.status}」`}。请改用发布页下载。</Notice>
         ) : (
           <div className="stack">

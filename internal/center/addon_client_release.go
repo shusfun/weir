@@ -2,10 +2,11 @@ package center
 
 // Adapted interaction from JS 参考实现 4952c16 github-proxy-handler.js (MIT).
 // Only catalog-owned repository metadata is fetched; never client URLs or tokens.
+// 发布信息经 ghrelease 读取；浏览器下载安装包时按 /api/v1/github-sources 的顺序取用直连与镜像。
 import (
 	"context"
 	"encoding/json"
-	"io"
+	"errors"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -13,6 +14,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/shusfun/weir/internal/ghrelease"
 )
 
 var releaseAPIPath = regexp.MustCompile(`^/(?:repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+|repositories/[0-9]{1,20})/releases/latest$`)
@@ -49,14 +52,7 @@ var sha256Hex = regexp.MustCompile(`^[0-9a-f]{64}$`)
 func releaseCacheKey(repo string) string { return "weir:client-release:v2:" + digest(repo) }
 
 // 只接受同一仓库正式发布的 github.com 下载地址；摘要仅在 GitHub 给出 sha256 时保留。
-type wireAsset struct {
-	Name   string `json:"name"`
-	Size   int64  `json:"size"`
-	URL    string `json:"browser_download_url"`
-	Digest string `json:"digest"`
-}
-
-func releaseAssets(raw []wireAsset, repo string) []releaseAsset {
+func releaseAssets(raw []ghrelease.Asset, repo string) []releaseAsset {
 	var out []releaseAsset
 	for _, a := range raw {
 		if len(out) >= 80 {
@@ -77,61 +73,36 @@ func releaseAssets(raw []wireAsset, repo string) []releaseAsset {
 	}
 	return out
 }
+
+// fetchClientRelease 经 ghrelease 读取仓库的最新正式发布。client 的 CheckRedirect 决定允许哪些跳转（见 releaseRedirect）。
 func fetchClientRelease(ctx context.Context, client *http.Client, repo string, now time.Time) clientRelease {
 	result := clientRelease{Status: "unknown", Source: "github-releases", ObservedAt: now.UTC().Format(time.RFC3339)}
 	if !catalogRepo.MatchString(repo) {
 		return result
 	}
-	req, e := http.NewRequestWithContext(ctx, "GET", "https://api.github.com/repos/"+repo+"/releases/latest", nil)
-	if e != nil {
-		return result
-	}
-	req.Header.Set("User-Agent", "Weir-client-metadata")
-	req.Header.Set("Accept", "application/vnd.github+json")
-	response, e := client.Do(req)
-	if e != nil {
-		return result
-	}
-	defer response.Body.Close()
-	if response.StatusCode == 404 {
+	gh := ghrelease.Client{HTTP: client, MaxBody: 512 * 1024}
+	rel, final, e := gh.Latest(ctx, repo)
+	switch {
+	case errors.Is(e, ghrelease.ErrNotFound):
 		result.Status = "not_found"
 		return result
-	}
-	if response.StatusCode == 403 || response.StatusCode == 429 {
+	case errors.Is(e, ghrelease.ErrRateLimited):
 		result.Status = "rate_limited"
 		return result
-	}
-	if response.StatusCode != 200 {
+	case e != nil:
 		return result
 	}
-	raw, e := io.ReadAll(io.LimitReader(response.Body, 512*1024+1))
-	if e != nil || len(raw) > 512*1024 {
+	if rel.Draft || rel.Prerelease || !catalogText(rel.Tag, 120, true) || rel.Published.IsZero() || rel.Published.After(now.Add(time.Minute)) {
 		return result
 	}
-	var wire struct {
-		Tag        string      `json:"tag_name"`
-		URL        string      `json:"html_url"`
-		Published  string      `json:"published_at"`
-		Draft      bool        `json:"draft"`
-		Prerelease bool        `json:"prerelease"`
-		Assets     []wireAsset `json:"assets"`
-	}
-	if json.Unmarshal(raw, &wire) != nil || wire.Draft || wire.Prerelease || !catalogText(wire.Tag, 120, true) {
-		return result
-	}
-	published, e := time.Parse(time.RFC3339, wire.Published)
-	if e != nil || published.After(now.Add(time.Minute)) {
-		return result
-	}
-	u, e := url.Parse(wire.URL)
+	u, e := url.Parse(rel.HTMLURL)
 	if e != nil || u == nil {
 		return result
 	}
 	// A canonical repository may differ after an official GitHub rename redirect.
 	// Without that validated redirect, retain exact original repository ownership.
 	canonicalRepo := repo
-	if response.Request != nil && response.Request.URL.String() != req.URL.String() {
-		final := response.Request.URL
+	if final != nil && final.String() != "https://api.github.com/repos/"+repo+"/releases/latest" {
 		if final.Scheme != "https" || final.Host != "api.github.com" || final.User != nil || final.RawQuery != "" || final.Fragment != "" || !releaseAPIPath.MatchString(final.EscapedPath()) {
 			return result
 		}
@@ -141,14 +112,14 @@ func fetchClientRelease(ctx context.Context, client *http.Client, repo string, n
 		}
 		canonicalRepo = parts[1] + "/" + parts[2]
 	}
-	if e != nil || u.Scheme != "https" || u.Host != "github.com" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || !strings.HasPrefix(u.EscapedPath(), "/"+canonicalRepo+"/releases/tag/") {
+	if u.Scheme != "https" || u.Host != "github.com" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || !strings.HasPrefix(u.EscapedPath(), "/"+canonicalRepo+"/releases/tag/") {
 		return result
 	}
 	result.Status = "current"
-	result.Version = wire.Tag
+	result.Version = rel.Tag
 	result.URL = u.String()
-	result.PublishedAt = published.UTC().Format(time.RFC3339)
-	result.Assets = releaseAssets(wire.Assets, canonicalRepo)
+	result.PublishedAt = rel.Published.UTC().Format(time.RFC3339)
+	result.Assets = releaseAssets(rel.Assets, canonicalRepo)
 	return result
 }
 func validCachedRelease(r clientRelease, now time.Time) bool {

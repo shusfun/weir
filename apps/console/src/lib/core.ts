@@ -21,9 +21,21 @@ export interface Gate {
   colocated?: boolean;
   config_revision: number;
   applied_revision: number;
-  // center_version：中心的版本，Gate 与它不同时会自更新；self_update 是最近一次自更新失败的原因（成功或同版本时为空）
+  // center_version：中心的版本，Gate 与它不同时会自更新；self_update 是 Gate 随心跳上报的自更新进度或失败原因（成功或同版本时为空）
   center_version?: string;
-  self_update?: { version: string; error: string; at: string } | null;
+  self_update?: GateSelfUpdate | null;
+}
+
+// GateSelfUpdate：state 为 downloading 时 done / total / source 是下载进度与当前来源；replacing 是正在替换程序；
+// failed（或只有 error）是失败原因，失败后 10 分钟内 Gate 不自动重试，手动更新不受限。
+export interface GateSelfUpdate {
+  version: string;
+  state?: "downloading" | "replacing" | "failed";
+  done?: number;
+  total?: number;
+  source?: string;
+  error?: string;
+  at: string;
 }
 
 // ExitProbe 是入口 VPS 实测出口的结果：proxy 为按协议真连并拿到实际出口 IP，tcp 为只测了端口。

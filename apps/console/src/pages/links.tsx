@@ -192,7 +192,7 @@ function GroupsCard() {
   );
 }
 
-// ClientsCard：管理员维护的客户端目录（只显示启用项）；下载经加速镜像测速后选择。
+// ClientsCard：管理员维护的客户端目录（只显示启用项）；下载按「GitHub 加速」的直连与镜像测速后选择。
 function ClientsCard() {
   const q = useQuery({ queryKey: ["client-catalog"], queryFn: () => client.catalog() });
   if (q.isPending) return null;

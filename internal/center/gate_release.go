@@ -1,10 +1,6 @@
 package center
 
 import (
-	"archive/tar"
-	"bufio"
-	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -30,12 +26,13 @@ func weirRepo() string {
 	return "shusfun/weir"
 }
 
-// weirGitHub 是读取 Weir 发布用的客户端（测试时用 Server.GitHub）。
+// weirGitHub 是读取 Weir 发布信息用的客户端（只访问 GitHub API；测试时用 Server.GitHub）。
+// 下载用 downloadGitHub：按「GitHub 加速」的来源顺序。
 func (s *Server) weirGitHub() ghrelease.Client {
 	if s.GitHub != nil {
 		return *s.GitHub
 	}
-	return ghrelease.Client{HTTP: githubHTTP(), Mirrors: ghrelease.Mirrors()}
+	return ghrelease.Client{HTTP: githubHTTP()}
 }
 
 // releaseAssetName 是某版本某架构的发布包文件名。
@@ -82,26 +79,9 @@ func (s *Server) gateProgram(ctx context.Context, arch string) (string, string, 
 
 // downloadRelease 下载并校验一个 Weir 发布包，把其中的 weir 与 install.sh 放进 dir。
 func (s *Server) downloadRelease(ctx context.Context, run JobRun, version, arch, dir string) error {
-	gh := s.weirGitHub()
-	rel, err := gh.Tag(ctx, weirRepo(), "v"+version)
-	if err != nil {
-		return err
-	}
 	name := releaseAssetName(version, arch)
-	asset, ok := rel.Asset(name)
-	if !ok {
-		return fmt.Errorf("v%s 没有 %s 的发布包", version, arch)
-	}
-	want := asset.SHA256()
-	if want == "" {
-		return fmt.Errorf("v%s 的发布包没有官方摘要，拒绝下载", version)
-	}
-	urls, err := gh.URLs(asset.URL)
-	if err != nil {
-		return err
-	}
 	archive := filepath.Join(s.dataDir(), "releases", ".downloads", name)
-	if err = run.Download(ctx, fetch.Request{URLs: urls, Dest: archive, SHA256: want, MaxSize: 256 << 20, HTTP: githubHTTP()}); err != nil {
+	if err := s.fetchWeirPackage(ctx, run, version, arch, archive); err != nil {
 		return err
 	}
 	data, err := os.ReadFile(archive)
@@ -132,48 +112,37 @@ func (s *Server) downloadRelease(ctx context.Context, run JobRun, version, arch,
 	return nil
 }
 
-// verifiedPackage 解开发布包，按包内 SHA256SUMS 校验每个文件，返回 weir 与 install.sh 的内容。
-func verifiedPackage(data []byte) (map[string][]byte, error) {
-	gz, err := gzip.NewReader(bytes.NewReader(data))
+// fetchWeirPackage 按「GitHub 加速」的来源顺序（含经 VPS 中转）下载 Weir 某版本某架构的发布包到 dest，
+// 按 GitHub 的官方摘要校验。Gate 安装包（其他架构）与中心自更新的预下载共用。
+func (s *Server) fetchWeirPackage(ctx context.Context, run JobRun, version, arch, dest string) error {
+	gh, sources, err := s.downloadGitHub(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	defer gz.Close()
-	files := map[string][]byte{}
-	tr := tar.NewReader(gz)
-	for {
-		h, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		name := strings.TrimPrefix(h.Name, "./")
-		if h.Typeflag != tar.TypeReg || strings.Contains(name, "..") || strings.Contains(name, "/") {
-			continue
-		}
-		if name == "weir" || name == "install.sh" || name == "SHA256SUMS" || name == "VERSION" {
-			if files[name], err = io.ReadAll(io.LimitReader(tr, 256<<20)); err != nil {
-				return nil, err
-			}
-		}
+	rel, err := gh.Tag(ctx, weirRepo(), "v"+version)
+	if err != nil {
+		return err
 	}
-	want := map[string]string{}
-	sc := bufio.NewScanner(bytes.NewReader(files["SHA256SUMS"]))
-	for sc.Scan() {
-		if f := strings.Fields(sc.Text()); len(f) == 2 {
-			want[f[1]] = f[0]
-		}
+	name := releaseAssetName(version, arch)
+	asset, ok := rel.Asset(name)
+	if !ok {
+		return fmt.Errorf("v%s 没有 %s 的发布包", version, arch)
 	}
-	for _, name := range []string{"weir", "install.sh"} {
-		got := sha256.Sum256(files[name])
-		if len(files[name]) == 0 || want[name] != hex.EncodeToString(got[:]) {
-			return nil, fmt.Errorf("发布包里的 %s 与 SHA256SUMS 不一致", name)
-		}
+	want := asset.SHA256()
+	if want == "" {
+		return fmt.Errorf("v%s 的发布包没有官方摘要，拒绝下载", version)
 	}
-	return files, nil
+	urls, err := gh.URLs(asset.URL)
+	if err != nil {
+		return err
+	}
+	const max = 256 << 20
+	relay := s.relaySources(gh, sources, asset.URL, want, asset.Size, max)
+	return run.Download(ctx, fetch.Request{URLs: urls, Sources: relay, Dest: dest, SHA256: want, MaxSize: max, HTTP: s.githubClientHTTP()})
 }
+
+// verifiedPackage 见 ghrelease.VerifiedPackage。
+func verifiedPackage(data []byte) (map[string][]byte, error) { return ghrelease.VerifiedPackage(data) }
 
 func fileSHA256(path string) (string, error) {
 	f, err := os.Open(path)

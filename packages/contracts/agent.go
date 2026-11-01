@@ -31,11 +31,26 @@ type Heartbeat struct {
 	SelfUpdate *SelfUpdateStatus `json:"self_update,omitempty"`
 }
 
-// SelfUpdateStatus 是 Gate 自更新到中心版本失败的记录。
+// SelfUpdateStatus 是 Gate 自更新到中心版本的进度或失败原因。State：downloading（Done / Total / Source 为进度）、
+// replacing（交给辅助程序替换）、failed（Error 为原因，失败后 10 分钟内不自动重试，手动更新不受限）。
 type SelfUpdateStatus struct {
 	Version string    `json:"version"` // 要更新到的版本（中心的版本）
-	Error   string    `json:"error"`
+	State   string    `json:"state,omitempty"`
+	Done    int64     `json:"done,omitempty"`
+	Total   int64     `json:"total,omitempty"`
+	Source  string    `json:"source,omitempty"`
+	Error   string    `json:"error,omitempty"`
 	At      time.Time `json:"at"`
+}
+
+// ReleaseTarget 是心跳回复里 Gate 要更新到的版本：Gate 版本与中心不同时才有。
+// URLs 是这台 Gate 架构的发布包（weir-<版本>-linux-<架构>.tar.gz）按「GitHub 加速」顺序的下载地址，
+// SHA256 是中心从 GitHub 读到的官方摘要；Gate 下载后按它校验，再按包内 SHA256SUMS 校验程序。
+// 都失败（或没有正式发布、URLs 为空）时从中心的 /agent/release/<版本> 下载。
+type ReleaseTarget struct {
+	Version string   `json:"version"`
+	SHA256  string   `json:"sha256,omitempty"`
+	URLs    []string `json:"urls,omitempty"`
 }
 
 // PanelStatus 是 Gate 本机 1Panel 的状态。API 密钥只存在 Gate 本机（root 可读），从不上报。
@@ -65,8 +80,9 @@ type FirewallStatus struct {
 // HeartbeatReply 是中心对心跳的回复。Center 为中心记录的公共地址；与 Gate 当前连接的不同时，
 // Gate 先用新地址完成设备认证，成功后改用新地址（单机角色经回环连接，不切换）。
 type HeartbeatReply struct {
-	ConfigRevision int64  `json:"config_revision"`
-	Center         string `json:"center,omitempty"`
+	ConfigRevision int64          `json:"config_revision"`
+	Center         string         `json:"center,omitempty"`
+	Release        *ReleaseTarget `json:"release,omitempty"`
 }
 
 type ListeningPort struct {
@@ -133,7 +149,44 @@ const (
 	ActionPanelRemove    = "panel.remove"
 	// ActionPanelCert 让 Gate 经本机 1Panel 申请（或找到已有的）本机 IP 证书。
 	ActionPanelCert = "panel.cert"
+	// ActionAssetFetch 让 Gate 替中心下载一个 GitHub 发布文件并分块上传给中心（见 AssetFetch）。
+	ActionAssetFetch = "asset.fetch"
+	// ActionSourceProbe 让 Gate 测一个下载来源的速度（见 SourceProbe），用于「GitHub 加速」的测速。
+	ActionSourceProbe = "source.probe"
 )
+
+// AssetFetch 是 asset.fetch 的参数。URLs 只能是 github.com 的 https 地址及其镜像地址（Gate 再按 ghrelease 规则检查）；
+// Gate 下载到本机临时文件、按 SHA256 校验通过后，用 PUT /agent/uploads/<UploadID>?offset=N 分块上传
+// （每块不超过 UploadChunk；中心回复已收到的字节数，断开后从那里续传），最后由中心再按 SHA256 校验。
+type AssetFetch struct {
+	UploadID string   `json:"upload_id"`
+	URLs     []string `json:"urls"`
+	SHA256   string   `json:"sha256"`
+	Size     int64    `json:"size"`
+	MaxSize  int64    `json:"max_size"`
+}
+
+// UploadChunk 是 Gate 上传的单块大小：低于反代常见的 1 MB 请求体限制。
+const UploadChunk = 512 << 10
+
+// UploadState 是中心对上传请求的回复：已收到并写入的字节数。
+type UploadState struct {
+	Received int64 `json:"received"`
+}
+
+// SourceProbe 是 source.probe 的参数：用 Range 取 URL 的前 Bytes 字节，返回 SourceProbeResult。
+type SourceProbe struct {
+	URL   string `json:"url"`
+	Bytes int64  `json:"bytes"`
+}
+
+// SourceProbeResult 是测速结果：TTFBMs 为首字节延迟，Speed 为字节 / 秒；失败时 Error 为原因。
+type SourceProbeResult struct {
+	TTFBMs int64  `json:"ttfb_ms"`
+	Bytes  int64  `json:"bytes"`
+	Speed  int64  `json:"speed"`
+	Error  string `json:"error,omitempty"`
+}
 
 type ActionResult struct {
 	ID     int64          `json:"id"`

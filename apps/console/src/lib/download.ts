@@ -1,4 +1,4 @@
-// 浏览器端测速与校验下载：对 GitHub 直连与管理员配置的镜像逐一测速，自动选最快且可校验的来源；
+// 浏览器端测速与校验下载：按「GitHub 加速」的来源顺序（直连与镜像；经 VPS 中转只给中心用）逐一测速，自动选最快且可校验的来源；
 // 下载完成后按 GitHub 公布的 SHA-256 校验，不一致拒绝保存。中心不参与下载。
 export interface ReleaseAsset {
   name: string;
@@ -48,8 +48,12 @@ export function assetsFor(assets: ReleaseAsset[], platform: string) {
   return assets.filter((a) => score(a.name) !== Infinity && !/\.(sha256|sig|blockmap)$/i.test(a.name)).sort((a, b) => score(a.name) - score(b.name));
 }
 
-export function candidates(asset: ReleaseAsset, mirrors: string[]) {
-  return [{ url: asset.url, mirror: false }, ...mirrors.map((m) => ({ url: m + asset.url, mirror: true }))];
+// BrowserSource 是 GET /github-sources 给浏览器的来源（只有直连与镜像，按优先级排好）
+export type BrowserSource = { kind: "direct" } | { kind: "mirror"; prefix: string };
+
+// 按来源顺序生成候选地址；列表里没有直连时不测直连
+export function candidates(asset: ReleaseAsset, sources: BrowserSource[]) {
+  return sources.map((s) => (s.kind === "mirror" ? { url: s.prefix + asset.url, mirror: true } : { url: asset.url, mirror: false }));
 }
 
 function timeout(ms: number) {

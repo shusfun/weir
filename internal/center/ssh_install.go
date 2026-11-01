@@ -225,7 +225,11 @@ func (s *Server) sshInstall(c *gin.Context) {
 	}
 	s.audit(c, "gate.ssh_install", name+" @ "+t.Host, "started")
 	// 安装命令与「复制命令」相同；凭证只作为参数传入。WEIR_NONINTERACTIVE 让安装脚本不提问。
-	script := "curl -fsSL " + shellQuote(origin+"/install/gate.sh") + " | WEIR_NONINTERACTIVE=1 sh -s -- --token " + shellQuote(token)
+	env := ""
+	if m := s.installMirrors(c.Request.Context()); m != "" {
+		env = "WEIR_GITHUB_MIRRORS=" + shellQuote(m) + " "
+	}
+	script := "curl -fsSL " + shellQuote(origin+"/install/gate.sh") + " | " + env + "WEIR_NONINTERACTIVE=1 sh -s -- --token " + shellQuote(token)
 	host, port, user, password, keyed := t.Host, t.Port, t.User, t.Password, strings.TrimSpace(t.PrivateKey) != ""
 	expected := req.Fingerprint
 	job := s.jobs.StartWith(jobSpec{ID: "gate-ssh:" + randomHex(6), Kind: "gate-ssh", Title: "安装 Gate「" + name + "」（" + host + "）", Trace: c.GetString("request_id"), CancelMsg: "已取消安装"}, func(bg context.Context, run JobRun) (map[string]any, error) {

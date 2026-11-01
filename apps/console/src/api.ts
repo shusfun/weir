@@ -2,7 +2,8 @@ import { reportError } from "./lib/console-context";
 import { awaitJob, type Job } from "./lib/jobs";
 
 const messages: Record<string, string> = {
- gate_offline:"这台 VPS 当前离线，无法实测；请确认 Gate 服务在运行后重试。",
+ gate_offline:"这台 VPS 当前离线，请确认 Gate 服务在运行后重试。",
+ gate_up_to_date:"这台 VPS 已经是中心的版本，不需要更新。",
  kernel_in_use:"这个内核版本仍在使用",
  kernel_not_cached:"这个版本还没下载齐",
  kernel_unavailable:"这个节点要用的内核还不能用",
@@ -252,11 +253,14 @@ subscription_naming_changed:"前缀与地区设置已被修改，请取消并重
  publication_stale_source: "订阅组包含回退旧缓存，请先成功刷新所有来源再分享。",
  profile_disabled: "请先启用订阅组，再明确发布分享。",
  share_not_found: "分享不存在、已撤下或已过期。",
-  mirror_limit: "加速镜像最多 8 个。",
   invalid_mirror: "镜像前缀须为 HTTPS 地址并以 / 结尾，不能包含账号、查询参数或重复项。",
-  mirror_save_failed: "镜像列表未保存，原配置保持；请重试。",
-  mirrors_changed: "镜像列表已被其他管理员修改，请重新读取后再保存。",
-  client_mirrors_unavailable: "加速镜像暂时不可用，下载将只测速 GitHub 直连。",
+  invalid_source: "GitHub 加速来源无效：每项须是 GitHub 直连、HTTPS 镜像前缀或一台 VPS，且不能重复。",
+  invalid_source_gate: "列表里有已撤销或不存在的 VPS，请删掉后再保存。",
+  source_limit: "GitHub 加速来源须有 1–12 个。",
+  http_source_required: "至少保留 GitHub 直连或一个镜像：经 VPS 中转时，VPS 也按它们去 GitHub 下载。",
+  sources_changed: "GitHub 加速来源已被其他管理员修改，请重新读取后再保存。",
+  github_sources_unavailable: "GitHub 加速来源暂时读不到，请重试。",
+  github_sources_save_failed: "GitHub 加速来源未保存，原配置保持；请重试。",
   catalog_size_limit: "目录总大小不能超过 768 KiB；请缩小图标后重试。",
   invalid_catalog_icon: "图标须为 PNG / JPEG，最多 200 KiB、边长最多 512 像素；不接受 SVG、动画或远程图标。",
   client_catalog_unavailable: "客户端目录暂时不可用，请重试；已有订阅仍可使用。",

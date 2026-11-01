@@ -3,7 +3,7 @@ import { Card, CardContent, PageHeader, Tabs, TabsList, TabsPanel, TabsTab } fro
 import { useSearchParams } from "react-router-dom";
 import { AnnouncementEditor } from "../components/global-announcement";
 import { ClientCatalogEditor } from "../components/client-catalog";
-import { ClientMirrorsEditor } from "../components/client-mirrors";
+import { GitHubSourcesCard } from "../components/github-sources";
 import { BlocksCard, EventsCard, LayaCard } from "../components/defense";
 import { DshSettingsCard, useDsh } from "../components/dsh";
 import { APITokensCard, BackupCard, NotifyCard, SecurityCard, SMTPCard } from "../components/system-settings";
@@ -24,7 +24,10 @@ export function SystemPage() {
         <TabsList aria-label="系统设置分区">
           {systemSections.map((s) => <TabsTab key={s.key} value={s.key}>{s.label}</TabsTab>)}
         </TabsList>
-        <TabsPanel value="update" className="stack"><UpdateCard /></TabsPanel>
+        <TabsPanel value="update" className="stack">
+          <UpdateCard />
+          <Card><CardContent><GitHubSourcesCard /></CardContent></Card>
+        </TabsPanel>
         <TabsPanel value="ai" className="stack"><DshSettingsCard /></TabsPanel>
         <TabsPanel value="defense" className="stack">
           <EventsCard dshReady={!!dsh.data?.ready} />
@@ -44,7 +47,6 @@ export function SystemPage() {
         <TabsPanel value="distribution" className="stack">
           <Card><CardContent><AnnouncementEditor /></CardContent></Card>
           <Card><CardContent><ClientCatalogEditor /></CardContent></Card>
-          <Card><CardContent><ClientMirrorsEditor /></CardContent></Card>
         </TabsPanel>
       </Tabs>
     </div>

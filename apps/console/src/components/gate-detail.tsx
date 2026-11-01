@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Badge, Button, Field, Notice, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Sheet, SheetContent, useConfirm } from "@weir/ui";
 import { api } from "../api";
 import { useRowAction } from "../lib/action";
-import { gateLags, SelfUpdateError } from "./gate-version";
+import { GateUpdateLine, gateLags } from "./gate-version";
 import { ActionsWait } from "./wait";
 import { State } from "./feedback";
 import { bytes, date } from "../lib/models";
@@ -54,7 +54,7 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
     <Sheet open onOpenChange={(o) => !o && close()}>
       <SheetContent side="right" title={gate.name} description={`${gate.public_host || "等待上报地址"} · ${gate.arch} · Gate ${gate.version || "版本未知"}${gateLags(gate) ? `（未跟上中心 ${gate.center_version}）` : ""} · 最近心跳 ${date(gate.last_seen_at)}`} className="w-full sm:max-w-[640px]">
         <div className="stack overflow-y-auto p-4">
-          <SelfUpdateError gate={gate} />
+          <GateUpdateLine gate={gate} />
           <SectionHeader title="主机" description="由 VPS 读取本机 /proc 与磁盘信息上报；网卡总量可能包含虚拟网卡，不作为用户计费依据。" />
           <dl className="grid grid-cols-2 gap-2 text-sm">
             <dt>CPU</dt><dd>{pct(h.cpu_percent)}</dd>

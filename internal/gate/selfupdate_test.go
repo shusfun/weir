@@ -82,14 +82,14 @@ func TestSelfUpdateFailureIsReportedInHeartbeat(t *testing.T) {
 	if hb := last(); hb.SelfUpdate != nil {
 		t.Fatalf("no update attempted yet: %+v", hb.SelfUpdate)
 	}
-	if a.selfUpdate(t.Context(), "9.9.9") {
+	if a.selfUpdate(t.Context(), contracts.ReleaseTarget{Version: "9.9.9"}) == nil {
 		t.Fatal("self update must fail when the center has no release")
 	}
 	hb := last()
 	if hb.SelfUpdate == nil || hb.SelfUpdate.Version != "9.9.9" || !strings.Contains(hb.SelfUpdate.Error, "下载") || hb.SelfUpdate.At.IsZero() {
 		t.Fatalf("self update failure not reported: %+v", hb.SelfUpdate)
 	}
-	a.setUpdateErr(nil)
+	a.setUpdateStatus(nil)
 	if hb := last(); hb.SelfUpdate != nil {
 		t.Fatalf("cleared failure still reported: %+v", hb.SelfUpdate)
 	}

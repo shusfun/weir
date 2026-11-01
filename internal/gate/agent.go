@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -41,9 +42,14 @@ type Agent struct {
 	liveUntil   time.Time
 	liveRunning bool
 	runCtx      context.Context
-	// updateErr 是最近一次自更新失败的原因，随心跳上报（由 updateMu 保护）。
-	updateMu  sync.Mutex
-	updateErr *contracts.SelfUpdateStatus
+	// up 是自更新的进度与失败冷却（selfupdate.go），随心跳上报。
+	up updater
+	// 测试替换：replaceFn 代替辅助程序替换程序；extHTTP 是访问 GitHub 的客户端；ghHost 是允许的 GitHub 主机；
+	// uploadBackoff 是上传重试的起始间隔。
+	replaceFn     func(ctx context.Context, version, sum string, data []byte) error
+	extHTTP       *http.Client
+	ghHost        string
+	uploadBackoff time.Duration
 }
 
 func NewAgent(p Paths) (*Agent, error) {
@@ -112,13 +118,7 @@ func (a *Agent) configLoop(ctx context.Context) {
 		case code == 204:
 			continue
 		}
-		if cfg.Version != "" && cfg.Version != buildinfo.Version && a.selfUpdate(ctx, cfg.Version) {
-			sleep(ctx, time.Minute) // 辅助程序会重启本服务
-			continue
-		}
-		if cfg.Version == "" || cfg.Version == buildinfo.Version {
-			a.setUpdateErr(nil)
-		}
+		// 跟随中心版本只看心跳回复（heartbeat → followCenter），这里不再检查 cfg.Version。
 		a.mu.Lock()
 		state, err := a.applyLocked(ctx, cfg)
 		a.mu.Unlock()
@@ -148,34 +148,6 @@ func sleep(ctx context.Context, d time.Duration) {
 	case <-ctx.Done():
 	case <-time.After(d):
 	}
-}
-
-// selfUpdate 从中心下载同版本程序并交给辅助程序替换；中心不提供（平台不同）时返回 false。
-// 失败的原因记下来随心跳上报，中心在 VPS 卡片上显示，不只留在这台 VPS 的日志里。
-func (a *Agent) selfUpdate(ctx context.Context, version string) bool {
-	fail := func(msg string) bool {
-		log.Printf("self update to %s failed: %s", version, msg)
-		a.setUpdateErr(&contracts.SelfUpdateStatus{Version: version, Error: msg, At: time.Now().UTC()})
-		return false
-	}
-	data, sum, err := a.center.download(ctx, "/agent/release/"+version, "X-Release-SHA256")
-	switch {
-	case err != nil:
-		return fail("从中心下载程序失败：" + err.Error())
-	case sumOf(data) != sum:
-		return fail("下载的程序与中心给的摘要不一致")
-	}
-	if err = a.helper.Release(ctx, version, sum, data); err != nil {
-		return fail("替换程序失败：" + err.Error())
-	}
-	a.setUpdateErr(nil)
-	return true
-}
-
-func (a *Agent) setUpdateErr(st *contracts.SelfUpdateStatus) {
-	a.updateMu.Lock()
-	defer a.updateMu.Unlock()
-	a.updateErr = st
 }
 
 // ensureKernels 下载并安装配置要求、本机还没有的内核版本（摘要必须与中心下发的一致）。
@@ -368,9 +340,7 @@ func (a *Agent) meter(ctx context.Context) error {
 
 func (a *Agent) heartbeat(ctx context.Context) error {
 	hb := contracts.Heartbeat{Version: buildinfo.Version, Arch: runtime.GOARCH, Kernels: map[string]string{}, Host: sampleHost()}
-	a.updateMu.Lock()
-	hb.SelfUpdate = a.updateErr
-	a.updateMu.Unlock()
+	hb.SelfUpdate = a.updateStatus()
 	hb.Hostname, _ = os.Hostname()
 	hb.Center = a.center.origin()
 	panelCerts := map[int64]string{}
@@ -396,6 +366,7 @@ func (a *Agent) heartbeat(ctx context.Context) error {
 	if _, err := a.center.call(ctx, "POST", "/agent/heartbeat", hb, &reply); err != nil {
 		return err
 	}
+	a.followCenter(ctx, reply.Release)
 	if want := strings.TrimRight(reply.Center, "/"); want != "" && want != hb.Center && !loopbackCenter(hb.Center) {
 		return a.switchCenter(ctx, want)
 	}
@@ -455,12 +426,23 @@ func (a *Agent) actionLoop(ctx context.Context) {
 			continue
 		}
 		for _, act := range actions {
-			res := a.runAction(ctx, act)
-			res.ID = act.ID
-			if _, err := a.center.call(ctx, "POST", "/agent/actions/"+strconv.FormatInt(act.ID, 10), res, nil); err != nil {
-				log.Printf("action %d result: %v", act.ID, err)
+			// 下载、上传、测速与自更新耗时长，各自在后台跑，不堵住后面的动作；其余动作按顺序执行。
+			if asyncActions[act.Kind] {
+				go a.finishAction(ctx, act)
+			} else {
+				a.finishAction(ctx, act)
 			}
 		}
+	}
+}
+
+var asyncActions = map[string]bool{contracts.ActionReleaseReplace: true, contracts.ActionAssetFetch: true, contracts.ActionSourceProbe: true}
+
+func (a *Agent) finishAction(ctx context.Context, act contracts.Action) {
+	res := a.runAction(ctx, act)
+	res.ID = act.ID
+	if _, err := a.center.call(ctx, "POST", "/agent/actions/"+strconv.FormatInt(act.ID, 10), res, nil); err != nil {
+		log.Printf("action %d result: %v", act.ID, err)
 	}
 }
 

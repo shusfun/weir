@@ -60,9 +60,15 @@ func (a *Agent) runAction(ctx context.Context, act contracts.Action) contracts.A
 	case contracts.ActionCoreRestart:
 		err = a.helper.Restart(ctx, str(p, "kernel"))
 	case contracts.ActionReleaseReplace:
-		if !a.selfUpdate(ctx, str(p, "version")) {
-			err = errors.New("self update failed")
+		// 旧中心只给 version：没有地址时直接从中心下载。
+		var rel contracts.ReleaseTarget
+		if err = convert(p, &rel); err == nil {
+			err = a.manualUpdate(ctx, rel)
 		}
+	case contracts.ActionAssetFetch:
+		out, err = a.assetFetch(ctx, p)
+	case contracts.ActionSourceProbe:
+		out, err = a.sourceProbe(ctx, p)
 	case contracts.ActionUninstall:
 		err = a.helper.Uninstall(ctx)
 	case contracts.ActionNodeTest:

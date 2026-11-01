@@ -78,6 +78,10 @@ type Server struct {
 	events eventHub
 	// tasks 是周期任务正在失败的项（见 tasks.go），管理员通知据此提示。
 	tasks taskLog
+	// relays 是经 VPS 中转下载时等待 Gate 上传的文件（见 gate_relay.go）。
+	relays relayHub
+	// weirRel 缓存与中心同版本的 Weir 发布信息（见 gate_follow.go）。
+	weirRel releaseCache
 }
 
 func New(c Config, path string, assets fs.FS) (*Server, error) {
@@ -348,6 +352,7 @@ func (s *Server) Router() *gin.Engine {
 	s.subRoutes(r, ready)
 	s.subscriptionRoutes(r, auth, admin)
 	s.addonRoutes(ready, auth, admin)
+	s.githubSourceRoutes(auth, admin)
 	s.pageRoutes(ready, admin)
 	s.opsRoutes(admin)
 	s.dshRoutes(admin)

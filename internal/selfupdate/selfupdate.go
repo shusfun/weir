@@ -1,8 +1,10 @@
 // Package selfupdate 是 Weir 从 GitHub Release 自更新的 root 一侧。
 //
 // 中心以普通用户运行、不能替换程序，只把请求写进 Dir/request.json；systemd 的 weir-update.path 发现后
-// 以 root 运行 `weir self-update --apply`：自己从 GitHub 取发布、按官方摘要校验、用包里的 install.sh 安装
-// （install.sh 失败时自动切回上一版本）。中心只能指定版本号，root 不使用中心下载的任何文件。
+// 以 root 运行 `weir self-update --apply`：自己从 GitHub API 取官方摘要、用包里的 install.sh 安装
+// （install.sh 失败时自动切回上一版本）。中心只能指定版本号与下载来源的顺序（直连与镜像）。
+// 中心可以先按「GitHub 加速」（含经 VPS 中转）把发布包预下载到 Dir：root 先把它复制到只有 root 能写的 WorkDir
+// 再按官方摘要校验（防止中心在校验后替换文件），一致就用，不一致或没有就按来源顺序自己下载。
 // 进度写进 Dir/status.json，中心读取后显示在页面上。
 package selfupdate
 
@@ -12,6 +14,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -46,7 +49,7 @@ var (
 	GitHub    = func() ghrelease.Client {
 		tr := http.DefaultTransport.(*http.Transport).Clone()
 		tr.ResponseHeaderTimeout = 30 * time.Second
-		return ghrelease.Client{HTTP: &http.Client{Transport: tr}, Mirrors: ghrelease.Mirrors()}
+		return ghrelease.Client{HTTP: &http.Client{Transport: tr}, Sources: ghrelease.DefaultSources()}
 	}
 	runInstaller = func(ctx context.Context, dir string, args []string, log func(string)) error {
 		cmd := exec.CommandContext(ctx, "sh", append([]string{filepath.Join(dir, "install.sh")}, args...)...)
@@ -58,10 +61,20 @@ var (
 var safeVersion = regexp.MustCompile(`^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,4}$`)
 
 // Request 是中心写入的请求：Action 为 update（到 Version）或 rollback（切回本机保留的上一版本）。
+// Sources 是下载来源的顺序（只有直连与镜像）；旧版中心不写时用 ghrelease.DefaultSources()。
 type Request struct {
-	ID      string `json:"id"`
-	Action  string `json:"action"`
-	Version string `json:"version,omitempty"`
+	ID      string             `json:"id"`
+	Action  string             `json:"action"`
+	Version string             `json:"version,omitempty"`
+	Sources []ghrelease.Source `json:"sources,omitempty"`
+}
+
+// maxSources 与中心「GitHub 加速」的上限一致。
+const maxSources = 12
+
+// PrefetchName 是中心预下载的发布包在 Dir 里的文件名。
+func PrefetchName(version, arch string) string {
+	return fmt.Sprintf("weir-%s-linux-%s.tar.gz", version, arch)
 }
 
 // Status 是 root 写回的进度。
@@ -92,11 +105,25 @@ func (r Request) Valid() error {
 			return fmt.Errorf("只能更新到 %s 及以后的版本", MinVersion)
 		}
 	case "rollback":
-		if r.Version != "" {
-			return errors.New("切回上一版本不带版本号")
+		if r.Version != "" || len(r.Sources) > 0 {
+			return errors.New("切回上一版本不带版本号与下载来源")
 		}
 	default:
 		return errors.New("未知动作")
+	}
+	if len(r.Sources) > maxSources {
+		return errors.New("下载来源过多")
+	}
+	direct, seen := false, map[string]bool{}
+	for _, src := range r.Sources {
+		switch {
+		case src.Kind == ghrelease.SourceDirect && !direct && src.Prefix == "" && src.GateID == 0:
+			direct = true
+		case src.Kind == ghrelease.SourceMirror && ghrelease.ValidPrefix(src.Prefix) && !seen[src.Prefix] && src.GateID == 0:
+			seen[src.Prefix] = true
+		default:
+			return errors.New("下载来源无效（只接受直连与 https 镜像前缀）")
+		}
 	}
 	return nil
 }
@@ -134,7 +161,7 @@ func Apply(ctx context.Context) error {
 	if err != nil {
 		return nil // 没有请求
 	}
-	if !st.Mode().IsRegular() || st.Size() > 4096 {
+	if !st.Mode().IsRegular() || st.Size() > 16<<10 {
 		_ = os.Remove(path)
 		return errors.New("请求文件无效")
 	}
@@ -159,7 +186,7 @@ func Apply(ctx context.Context) error {
 	}
 	switch req.Action {
 	case "update":
-		err = w.update(ctx, req.Version)
+		err = w.update(ctx, req.Version, req.Sources)
 	case "rollback":
 		err = w.rollback(ctx)
 	}
@@ -285,7 +312,7 @@ func installArgs() ([]string, error) {
 	return []string{r, cfg.Listen}, nil
 }
 
-func (w *writer) update(ctx context.Context, version string) error {
+func (w *writer) update(ctx context.Context, version string, sources []ghrelease.Source) error {
 	args, err := installArgs()
 	if err != nil {
 		return err
@@ -295,6 +322,10 @@ func (w *writer) update(ctx context.Context, version string) error {
 	}
 	arch := runtime.GOARCH
 	gh := GitHub()
+	// 旧版中心的请求没有来源：用 GitHub() 的（默认来源）
+	if len(sources) > 0 {
+		gh.Sources = sources
+	}
 	w.log("读取 GitHub 发布 v" + version)
 	rel, err := gh.Tag(ctx, Repo, "v"+version)
 	if err != nil {
@@ -320,12 +351,52 @@ func (w *writer) update(ctx context.Context, version string) error {
 		return err
 	}
 	archive := filepath.Join(WorkDir, name)
+	w.adopt(name, archive, want)
 	err = fetch.Download(ctx, fetch.Request{URLs: urls, Dest: archive, SHA256: want, MaxSize: 256 << 20, HTTP: gh.HTTP,
 		OnProgress: func(p fetch.Progress) { w.set(func(s *Status) { s.Progress = &p }) }, Log: w.log})
 	if err != nil {
 		return err
 	}
 	return w.install(ctx, archive, version, args)
+}
+
+// adopt 采用中心预下载的发布包：先复制到 WorkDir（只有 root 能写），再由 fetch.Download 按官方摘要校验，
+// 一致就直接用，不一致就丢弃、按来源顺序重新下载。中心放的文件只读不信：不跟随符号链接，限制大小。
+func (w *writer) adopt(name, archive, want string) {
+	src := filepath.Join(Dir, name)
+	defer os.Remove(src)
+	st, err := os.Lstat(src)
+	if err != nil {
+		return
+	}
+	if !st.Mode().IsRegular() || st.Size() > 256<<20 {
+		w.log("中心预下载的文件无效，改为自己下载")
+		return
+	}
+	if err = copyNoFollow(src, archive); err != nil {
+		_ = os.Remove(archive)
+		w.log("读取中心预下载的文件失败（" + err.Error() + "），改为自己下载")
+		return
+	}
+	if ok, _ := sameDigest(archive, want); !ok {
+		_ = os.Remove(archive)
+		w.log("中心预下载的文件与官方摘要不一致，已丢弃，改为自己下载")
+		return
+	}
+	w.log("使用中心预下载的发布包（已按官方摘要校验）")
+}
+
+func sameDigest(path, want string) (bool, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err = io.Copy(h, f); err != nil {
+		return false, err
+	}
+	return hex.EncodeToString(h.Sum(nil)) == strings.ToLower(want), nil
 }
 
 func (w *writer) install(ctx context.Context, archive, version string, args []string) error {
@@ -465,5 +536,22 @@ func runLogged(cmd *exec.Cmd, log func(string)) error {
 	err := cmd.Run()
 	_ = pw.Close()
 	<-done
+	return err
+}
+
+// copyTo 把已打开的普通文件复制到 dst（新建，只有 root 可读写）。
+func copyTo(in *os.File, dst string) error {
+	if st, err := in.Stat(); err != nil || !st.Mode().IsRegular() {
+		return os.ErrInvalid
+	}
+	_ = os.Remove(dst)
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(out, io.LimitReader(in, 256<<20))
+	if cerr := out.Close(); err == nil {
+		err = cerr
+	}
 	return err
 }

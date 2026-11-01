@@ -57,7 +57,7 @@ export function KernelsPage() {
   useConsoleContext({ page: "内核", tab: tabs.find((t) => t.key === tab)?.label });
   return (
     <div className="stack">
-      <PageHeader eyebrow="工作区" title="内核" description="内核只以独立程序运行，升级不需要更新 Weir。中心拉取后按官方摘要校验，再推送给 VPS；VPS 不访问 GitHub。每个版本怎么配置由内核驱动决定。" />
+      <PageHeader eyebrow="工作区" title="内核" description="内核只以独立程序运行，升级不需要更新 Weir。中心按 GitHub 加速的来源顺序拉取、按官方摘要校验，再推送给 VPS。每个版本怎么配置由内核驱动决定。" />
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: String(v) }, { replace: true })}>
         <TabsList aria-label="内核分区">
           {tabs.map((t) => <TabsTab key={t.key} value={t.key}>{t.label}</TabsTab>)}

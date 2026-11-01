@@ -58,21 +58,26 @@ var statsRepo = map[string]struct{ repo, asset string }{
 	"sing-box": {"SagerNet/sing-box", "sing-box-%s-linux-%s.tar.gz"},
 }
 
-// Fetcher 访问 GitHub API 列版本、下载并校验内核。Mirrors 为下载加速前缀（如 https://gh-proxy.com）；
-// 摘要始终取自 GitHub API，镜像返回的内容与摘要不一致即丢弃。下载经 internal/fetch：可续传、可取消。
+// Fetcher 访问 GitHub API 列版本、下载并校验内核。Sources 是「GitHub 加速」的来源顺序（为空时按 Mirrors：
+// 直连在前，再经各加速前缀）；摘要始终取自 GitHub API，镜像返回的内容与摘要不一致即丢弃。
+// 下载经 internal/fetch：可续传、可取消、低速换源。
 type Fetcher struct {
 	HTTP         *http.Client
 	API          string // 默认 https://api.github.com
 	DownloadHost string // 默认 github.com；只接受该主机的 https 下载地址
 	Mirrors      []string
-	Cache        Cache
+	Sources      []ghrelease.Source
+	// Relay 把 Sources 里的 gate 来源（经某台 VPS 中转）变成下载来源，排在 HTTP 地址之后；为空时不走中转。
+	// 参数是 GitHub 原地址、官方摘要、GitHub 给出的大小与上限。
+	Relay func(raw, sha256 string, size, maxSize int64) []fetch.Source
+	Cache Cache
 	// Progress / Log 接收下载进度与日志（可为空）。
 	Progress func(fetch.Progress)
 	Log      func(string)
 }
 
 func (f Fetcher) gh() ghrelease.Client {
-	return ghrelease.Client{HTTP: f.HTTP, API: f.API, Host: f.DownloadHost, Mirrors: f.Mirrors}
+	return ghrelease.Client{HTTP: f.HTTP, API: f.API, Host: f.DownloadHost, Mirrors: f.Mirrors, Sources: f.Sources}
 }
 
 func (f Fetcher) releases(ctx context.Context, kernel string) ([]ghrelease.Release, error) {
@@ -170,8 +175,12 @@ func (f Fetcher) Fetch(ctx context.Context, kernel, version, arch string) (strin
 	if err != nil {
 		return "", err
 	}
+	var relay []fetch.Source
+	if f.Relay != nil {
+		relay = f.Relay(asset.URL, want, asset.Size, maxDownload)
+	}
 	dest := filepath.Join(f.Cache.Dir, ".downloads", name)
-	err = fetch.Download(ctx, fetch.Request{URLs: urls, Dest: dest, SHA256: want, MaxSize: maxDownload, HTTP: f.HTTP, OnProgress: f.Progress, Log: f.Log})
+	err = fetch.Download(ctx, fetch.Request{URLs: urls, Sources: relay, Dest: dest, SHA256: want, MaxSize: maxDownload, HTTP: f.HTTP, OnProgress: f.Progress, Log: f.Log})
 	if err != nil {
 		return "", err
 	}

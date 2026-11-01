@@ -1,5 +1,9 @@
-// Gate 的程序版本：与中心不同时 Gate 会从中心自更新到同一版本；没跟上时标出来，并写出它上报的自更新失败原因。
-import { Badge } from "@weir/ui";
+// Gate 的程序版本：与中心不同时 Gate 自己按「GitHub 加速」的来源下载中心的版本（失败退回从中心下载），
+// 失败后 10 分钟内不自动重试；没跟上时标出来，显示它随心跳上报的进度或失败原因，并可手动「更新到 x」。
+import { Badge, Button, formatSize } from "@weir/ui";
+import { RefreshCw } from "lucide-react";
+import { api } from "../api";
+import { useRowAction } from "../lib/action";
 import type { Gate } from "../lib/core";
 import { date } from "../lib/models";
 
@@ -13,9 +17,41 @@ export function GateVersion({ gate: g }: { gate: Gate }) {
   return <Badge variant="soft" tone="warn" title={`中心是 ${g.center_version}，Gate 会自更新到同一版本`}>Gate {g.version} · 未跟上中心 {g.center_version}</Badge>;
 }
 
-// SelfUpdateError：Gate 自更新失败的原因（Gate 心跳上报；更新成功后消失）。
-export function SelfUpdateError({ gate: g }: { gate: Gate }) {
+// updateText：自更新这一行写什么。tone 决定颜色；进度百分比在总大小未知时改写已下载多少
+function updateText(g: Gate): [string, "bad" | "muted"] | null {
   const su = g.self_update;
-  if (!su?.error) return null;
-  return <p className="text-sm text-[var(--weir-bad-ink)]">自更新到 {su.version} 失败（{date(su.at)}）：{su.error}</p>;
+  if (su?.state === "downloading") {
+    const pct = su.total ? Math.floor(((su.done ?? 0) / su.total) * 100) + "%" : "已下载 " + formatSize(su.done ?? 0);
+    return [`正在下载 ${su.version} ${pct}${su.source ? " · " + su.source : ""}`, "muted"];
+  }
+  if (su?.state === "replacing") return [`正在替换为 ${su.version}`, "muted"];
+  if (su?.error) return [`自更新到 ${su.version} 失败（${date(su.at)}）：${su.error}`, "bad"];
+  if (gateLags(g)) return [g.online ? `会自动更新到中心的 ${g.center_version}` : `离线，上线后会自动更新到 ${g.center_version}`, "muted"];
+  return null;
+}
+
+// GateUpdateLine：VPS 卡片与详情里的自更新行。没跟上中心时右侧是「更新到 x」，失败后不必等 10 分钟。
+export function GateUpdateLine({ gate: g }: { gate: Gate }) {
+  const { run, isBusy } = useRowAction<string>({ invalidate: [["gates"]] });
+  const text = updateText(g);
+  if (!text) return null;
+  const working = g.self_update?.state === "downloading" || g.self_update?.state === "replacing";
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <p className={"min-w-0 grow basis-0 text-sm " + (text[1] === "bad" ? "text-[var(--weir-bad-ink)]" : "text-[var(--weir-ink-3)]")}>{text[0]}</p>
+      {gateLags(g) && (
+        <Button
+          size="xs"
+          variant="outline"
+          disabled={!g.online || working || isBusy()}
+          busy={isBusy("update")}
+          busyText="正在通知…"
+          title={g.online ? undefined : "VPS 离线，上线后会自动更新"}
+          onClick={() => void run("update", () => api(`/admin/gates/${g.id}/update`, "POST"), `已通知「${g.name}」更新到 ${g.center_version}`)}
+        >
+          <RefreshCw />更新到 {g.center_version}
+        </Button>
+      )}
+    </div>
+  );
 }

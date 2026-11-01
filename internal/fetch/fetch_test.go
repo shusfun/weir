@@ -129,3 +129,80 @@ func TestRequiresDigestAndSizeLimit(t *testing.T) {
 		t.Fatalf("size limit: %v", err)
 	}
 }
+
+// 持续低速的来源被放弃、已下载部分保留，下一个来源从断点续传；最后一个来源不按低速放弃。
+func TestSlowSourceSwitchesAndResumes(t *testing.T) {
+	body := bytes.Repeat([]byte("w"), 4000)
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+		for i := 0; i < len(body); i += 100 {
+			if _, err := w.Write(body[i : i+100]); err != nil {
+				return
+			}
+			w.(http.Flusher).Flush()
+			select {
+			case <-r.Context().Done():
+				return
+			case <-time.After(300 * time.Millisecond):
+			}
+		}
+	}))
+	t.Cleanup(slow.Close)
+	good, calls := serve(t, body, 0, true)
+	dest := filepath.Join(t.TempDir(), "k")
+	var logs []string
+	req := Request{URLs: []string{slow.URL, good.URL}, Dest: dest, SHA256: sum(body), MinSpeed: 1000, SlowFor: 2 * time.Second, Log: func(s string) { logs = append(logs, s) }}
+	if err := Download(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	all := strings.Join(logs, "\n")
+	if !strings.Contains(all, "下载过慢") || !strings.Contains(all, "续传") || *calls != 1 {
+		t.Fatalf("calls=%d logs: %v", *calls, logs)
+	}
+	// 只有一个来源时即使慢也下完。
+	req = Request{URLs: []string{slow.URL}, Dest: filepath.Join(t.TempDir(), "only"), SHA256: sum(body), MinSpeed: 1 << 20, SlowFor: time.Second}
+	start := time.Now()
+	if err := Download(context.Background(), req); err != nil || time.Since(start) < 5*time.Second {
+		t.Fatalf("last source must not be dropped for speed: %v after %s", err, time.Since(start))
+	}
+}
+
+// 非 HTTP 来源排在地址之后，内容同样按摘要校验。
+func TestSourceAfterURLs(t *testing.T) {
+	body := []byte("relayed kernel")
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(502) }))
+	t.Cleanup(down.Close)
+	relay := func(content []byte) Source {
+		return Source{Name: "经 VPS hk", Fetch: func(ctx context.Context, dest string, progress func(int64, int64)) error {
+			progress(int64(len(content)), int64(len(content)))
+			return os.WriteFile(dest, content, 0o644)
+		}}
+	}
+	dest := filepath.Join(t.TempDir(), "k")
+	if err := Download(context.Background(), Request{URLs: []string{down.URL}, Sources: []Source{relay(body)}, Dest: dest, SHA256: sum(body)}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(dest); !bytes.Equal(got, body) {
+		t.Fatalf("got %q", got)
+	}
+	err := Download(context.Background(), Request{Sources: []Source{relay([]byte("tampered"))}, Dest: filepath.Join(t.TempDir(), "x"), SHA256: sum(body)})
+	if !errors.Is(err, ErrDigest) {
+		t.Fatalf("want digest error, got %v", err)
+	}
+}
+
+// Before 把非 HTTP 来源插到指定的 HTTP 地址之前；为 0 或超出时排在最后。
+func TestStepsOrder(t *testing.T) {
+	r := Request{URLs: []string{"https://a", "https://b"}, Sources: []Source{{Name: "first", Before: 1}, {Name: "mid", Before: 2}, {Name: "tail"}, {Name: "far", Before: 9}}}
+	var got []string
+	for _, s := range r.steps() {
+		if s.src != nil {
+			got = append(got, s.src.Name)
+		} else {
+			got = append(got, s.url)
+		}
+	}
+	if strings.Join(got, ",") != "first,https://a,mid,https://b,tail,far" {
+		t.Fatalf("order = %v", got)
+	}
+}

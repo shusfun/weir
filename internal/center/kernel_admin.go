@@ -13,7 +13,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/shusfun/weir/internal/ghrelease"
 	"github.com/shusfun/weir/internal/kernels"
 	"github.com/shusfun/weir/internal/store/ent/setting"
 )
@@ -25,11 +24,12 @@ func githubHTTP() *http.Client {
 	return &http.Client{Transport: tr}
 }
 
+// fetcher 是列版本、读缓存用的 Fetcher（只访问 GitHub API）；下载用 kernelFetcher（按「GitHub 加速」的来源顺序）。
 func (s *Server) fetcher() kernels.Fetcher {
 	if g := s.GitHub; g != nil {
 		return kernels.Fetcher{HTTP: g.HTTP, API: g.API, DownloadHost: g.Host, Cache: s.kernelCache()}
 	}
-	return kernels.Fetcher{HTTP: githubHTTP(), Mirrors: ghrelease.Mirrors(), Cache: s.kernelCache()}
+	return kernels.Fetcher{HTTP: githubHTTP(), Cache: s.kernelCache()}
 }
 
 func validKernel(name string) bool {
@@ -200,10 +200,12 @@ func (s *Server) startKernelFetch(ctx context.Context, kernel, version string, a
 	arches := s.kernelArches(ctx, kernel)
 	title := kernelTitle(kernel) + " " + version
 	return s.jobs.Start(kernelJobID(kernel, version), "kernel", title, func(bg context.Context, run JobRun) (map[string]any, error) {
-		f := s.fetcher()
+		f, err := s.kernelFetcher(bg)
+		if err != nil {
+			return nil, err
+		}
 		f.Progress, f.Log = run.Progress, run.Log
 		sums := map[string]any{}
-		var err error
 		for _, arch := range arches {
 			if _, sum, e := f.Cache.Get(kernel, version, arch); e == nil {
 				run.Log(arch + " 已下载，跳过")

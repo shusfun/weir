@@ -17,7 +17,7 @@ import { GateDetail } from "../components/gate-detail";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
 import { WaitText } from "../components/wait";
-import { GateVersion, SelfUpdateError } from "../components/gate-version";
+import { GateUpdateLine, GateVersion } from "../components/gate-version";
 import { State } from "../components/feedback";
 import { InviteGate } from "../components/invite-gate";
 import { CertManager } from "../components/cert-manager";
@@ -150,7 +150,7 @@ export function GatesPage() {
                     {g.public_host || "等待上报地址"} · {list.length} 个协议{list.length ? `，${usable} 个可用` : ""} · 最近心跳 {date(g.last_seen_at)} <GateVersion gate={g} />
                   </small>
                   {g.state === "failed" && g.last_error && <p className="text-sm text-[var(--weir-bad-ink)]">{g.last_error}</p>}
-                  <SelfUpdateError gate={g} />
+                  <GateUpdateLine gate={g} />
                   {!g.public_host && (
                     <p className="text-sm text-[var(--weir-warn-ink)]">
                       还没有公网地址，这台 VPS 上的节点生成不了节点链接。{g.colocated ? "中心与它在同一台机器上，记录不到来源地址；" : ""}请点「编辑」填写{g.public_host_hint ? `（本机网卡上的公网 IP 是 ${g.public_host_hint}）` : ""}。

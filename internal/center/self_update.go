@@ -15,10 +15,11 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/shusfun/weir/internal/buildinfo"
+	"github.com/shusfun/weir/internal/ghrelease"
 	"github.com/shusfun/weir/internal/selfupdate"
 )
 
-// 自更新的中心一侧：查 GitHub 有没有新版本、写请求、读 root 写回的进度。真正的下载与安装在
+// 自更新的中心一侧：查 GitHub 有没有新版本、预下载发布包、写请求、读 root 写回的进度。真正的下载与安装在
 // internal/selfupdate（以 root 运行）。规则见 design.html「自更新」。
 
 // weirRelease 是可以更新或切回的一个 Weir 版本。
@@ -103,6 +104,11 @@ func (s *Server) getSelfUpdate(c *gin.Context) {
 	if st, ok := selfupdate.ReadStatus(); ok {
 		out["status"] = st
 	}
+	// prefetch：中心预下载发布包的任务（写请求之前），页面据此显示下载进度
+	if j, ok := s.jobs.Get(selfUpdateJob); ok {
+		j.Logs = nil
+		out["prefetch"] = j
+	}
 	list, err := s.weirReleases(c.Request.Context(), c.Query("force") == "1")
 	if err != nil {
 		out["check_error"] = err.Error()
@@ -146,6 +152,10 @@ func (s *Server) postSelfUpdate(c *gin.Context) {
 		failDetail(c, 409, "self_update_running", "已有一次更新正在进行", nil)
 		return
 	}
+	if j, ok := s.jobs.Get(selfUpdateJob); ok && j.Status == jobRunning {
+		failDetail(c, 409, "self_update_running", "正在预下载发布包", gin.H{"job": j})
+		return
+	}
 	version := strings.TrimPrefix(strings.TrimSpace(req.Version), "v")
 	switch req.Action {
 	case "update":
@@ -175,14 +185,53 @@ func (s *Server) postSelfUpdate(c *gin.Context) {
 	var rnd [8]byte
 	_, _ = rand.Read(rnd[:])
 	id := "web-" + hex.EncodeToString(rnd[:])
-	if err := selfupdate.WriteRequest(selfupdate.Request{ID: id, Action: req.Action, Version: version}); err != nil {
-		failDetail(c, 409, "self_update_rejected", err.Error(), nil)
-		return
-	}
 	target := version
 	if target == "" {
 		target = "上一版本 " + selfupdate.Previous()
 	}
-	s.audit(c, "system."+req.Action, buildinfo.Version+" → "+target, "ok")
-	c.JSON(202, gin.H{"id": id})
+	if req.Action == "rollback" {
+		if err := selfupdate.WriteRequest(selfupdate.Request{ID: id, Action: req.Action}); err != nil {
+			failDetail(c, 409, "self_update_rejected", err.Error(), nil)
+			return
+		}
+		s.audit(c, "system.rollback", buildinfo.Version+" → "+target, "ok")
+		c.JSON(202, gin.H{"id": id})
+		return
+	}
+	set, err := s.githubSources(c.Request.Context())
+	if err != nil {
+		failInternal(c, 503, "github_sources_unavailable", err)
+		return
+	}
+	sources := ghrelease.HTTPOnly(set.Sources)
+	if err := (selfupdate.Request{ID: id, Action: "update", Version: version, Sources: sources}).Valid(); err != nil {
+		failDetail(c, 409, "self_update_rejected", err.Error(), nil)
+		return
+	}
+	s.audit(c, "system.update", buildinfo.Version+" → "+target, "ok")
+	job := s.startSelfUpdate(id, version, sources)
+	c.JSON(202, gin.H{"id": id, "job": job})
+}
+
+// selfUpdateJob 是中心预下载发布包的任务；同一时间只有一个。
+const selfUpdateJob = "self-update"
+
+// startSelfUpdate 先按「GitHub 加速」的来源顺序（含经 VPS 中转）把发布包预下载到自更新目录（进度在任务里），
+// 再写请求交给 root。预下载失败不阻止更新：root 会按来源顺序自己下载，失败原因写进任务日志。
+func (s *Server) startSelfUpdate(id, version string, sources []ghrelease.Source) Job {
+	return s.jobs.Start(selfUpdateJob, "self-update", "更新 Weir 到 "+version, func(ctx context.Context, run JobRun) (map[string]any, error) {
+		run.Step("预下载发布包")
+		name := selfupdate.PrefetchName(version, centerArch())
+		if err := s.fetchWeirPackage(ctx, run, version, centerArch(), filepath.Join(selfupdate.Dir, name)); err != nil {
+			if ctx.Err() != nil {
+				return nil, err
+			}
+			run.Log("预下载失败，交给更新程序自己下载：" + err.Error())
+		}
+		run.Step("交给更新程序安装")
+		if err := selfupdate.WriteRequest(selfupdate.Request{ID: id, Action: "update", Version: version, Sources: sources}); err != nil {
+			return nil, err
+		}
+		return map[string]any{"id": id}, nil
+	})
 }

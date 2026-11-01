@@ -38,6 +38,8 @@ func (s *Server) gateRoutes(ready, admin *gin.RouterGroup) {
 	a.GET("/release/:version", s.agentRelease)
 	a.GET("/certs/:id", s.agentCert)
 	a.POST("/panel-secret", s.agentPanelSecret)
+	a.GET("/uploads/:id", s.agentUploadState)
+	a.PUT("/uploads/:id", s.agentUploadChunk)
 	s.gateAdminRoutes(admin)
 	s.certRoutes(admin)
 	s.nodeCertRoutes(admin)
@@ -155,9 +157,9 @@ func (s *Server) agentHeartbeat(c *gin.Context) {
 	if len(hb.Center) <= 255 {
 		upd.SetCenterURL(hb.Center)
 	}
-	// 自更新失败的原因：这次没有就清空（已更新成功或已与中心同版本）。
-	if su := hb.SelfUpdate; su != nil && len(su.Error) <= 2000 {
-		upd.SetSelfUpdate(map[string]any{"version": su.Version, "error": su.Error, "at": su.At})
+	// 自更新的进度或失败原因：这次没有就清空（已更新成功或已与中心同版本）。
+	if su := hb.SelfUpdate; su != nil && len(su.Error) <= 2000 && len(su.Source) <= 200 && len(su.Version) <= 40 && validUpdateState(su.State) {
+		upd.SetSelfUpdate(map[string]any{"version": su.Version, "state": su.State, "done": su.Done, "total": su.Total, "source": su.Source, "error": su.Error, "at": su.At})
 	} else {
 		upd.ClearSelfUpdate()
 	}
@@ -192,7 +194,12 @@ func (s *Server) agentHeartbeat(c *gin.Context) {
 	if g.ConfigRevision != before {
 		s.waiters.notify(g.ID)
 	}
-	c.JSON(200, contracts.HeartbeatReply{ConfigRevision: g.ConfigRevision, Center: s.centerOrigin(ctx)})
+	c.JSON(200, contracts.HeartbeatReply{ConfigRevision: g.ConfigRevision, Center: s.centerOrigin(ctx), Release: s.heartbeatRelease(ctx, g, hb.Version)})
+}
+
+// validUpdateState：旧版 Gate 不报 state（只报失败原因），按空值接受。
+func validUpdateState(v string) bool {
+	return v == "" || v == "downloading" || v == "replacing" || v == "failed"
 }
 
 // agentActions 长轮询待执行动作；过期的动作标记为已过期，不再下发。

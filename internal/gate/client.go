@@ -7,10 +7,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
+
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // centerClient 封装与中心的通信：用设备私钥签名一次性挑战换取 15 分钟访问令牌，过期或 401 时自动重新认证。
@@ -53,7 +57,10 @@ func (c *centerClient) setOrigin(center string) {
 
 func (c *centerClient) raw(ctx context.Context, client *http.Client, method, path string, body any, auth bool) (*http.Response, error) {
 	var rd io.Reader
-	if body != nil {
+	ctype := "application/json"
+	if rb, ok := body.(rawBody); ok {
+		rd, ctype = rb.r, rb.ctype
+	} else if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
 			return nil, err
@@ -64,7 +71,7 @@ func (c *centerClient) raw(ctx context.Context, client *http.Client, method, pat
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", ctype)
 	if auth {
 		token, err := c.bearer(ctx)
 		if err != nil {
@@ -96,21 +103,32 @@ func (c *centerClient) call(ctx context.Context, method, path string, body, out 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		var e struct {
-			Error struct {
-				Message string `json:"message"`
-			} `json:"error"`
-		}
-		_ = json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(&e)
-		if e.Error.Message != "" {
-			return resp.StatusCode, errors.New(e.Error.Message)
-		}
-		return resp.StatusCode, statusError{resp.StatusCode}
+		return resp.StatusCode, centerError(resp)
 	}
 	if out != nil && resp.StatusCode != 204 {
 		return resp.StatusCode, json.NewDecoder(io.LimitReader(resp.Body, 16<<20)).Decode(out)
 	}
 	return resp.StatusCode, nil
+}
+
+// rawBody 是不经 JSON 编码的请求体（如上传的数据块）。
+type rawBody struct {
+	r     io.Reader
+	ctype string
+}
+
+// centerError 取中心错误回复里的 message；没有时报 HTTP 状态码。
+func centerError(resp *http.Response) error {
+	var e struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	_ = json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(&e)
+	if e.Error.Message != "" {
+		return errors.New(e.Error.Message)
+	}
+	return statusError{resp.StatusCode}
 }
 
 // download 下载内核或程序，返回内容与中心给出的摘要头。大小上限 256 MiB。
@@ -128,6 +146,34 @@ func (c *centerClient) download(ctx context.Context, path, sumHeader string) ([]
 		return nil, "", errors.New("download too large or interrupted")
 	}
 	return data, resp.Header.Get(sumHeader), nil
+}
+
+// uploadState 读取中心已收到的上传字节数。
+func (c *centerClient) uploadState(ctx context.Context, id string) (contracts.UploadState, error) {
+	var st contracts.UploadState
+	_, err := c.call(ctx, "GET", "/agent/uploads/"+id, nil, &st)
+	return st, err
+}
+
+// uploadChunk 把一块数据写到 offset 处。中心在成功与 409（位置不符）时都回复 UploadState，
+// 409 时调用方按其中的 Received 续传。
+func (c *centerClient) uploadChunk(ctx context.Context, id string, offset int64, chunk []byte) (int, contracts.UploadState, error) {
+	var st contracts.UploadState
+	resp, err := c.raw(ctx, c.long, "PUT", "/agent/uploads/"+id+"?offset="+strconv.FormatInt(offset, 10), rawBody{bytes.NewReader(chunk), "application/octet-stream"}, true)
+	if err != nil {
+		return 0, st, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 200 || resp.StatusCode == 409 {
+		if err = json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(&st); err != nil {
+			return 0, st, fmt.Errorf("中心的上传回复无法解析（HTTP %d）：%w", resp.StatusCode, err)
+		}
+		if resp.StatusCode == 409 {
+			return 409, st, fmt.Errorf("中心已收到 %d 字节，与上传位置 %d 不符", st.Received, offset)
+		}
+		return 200, st, nil
+	}
+	return resp.StatusCode, st, centerError(resp)
 }
 
 func (c *centerClient) bearer(ctx context.Context) (string, error) {

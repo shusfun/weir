@@ -20,6 +20,7 @@ func (s *Server) gateAdminRoutes(admin *gin.RouterGroup) {
 	admin.GET("/gates/:id/topology", s.gateTopology)
 	admin.PATCH("/gates/:id", s.updateGate)
 	admin.POST("/gates/:id/revoke", s.revokeGate)
+	admin.POST("/gates/:id/update", s.updateGateRelease)
 	admin.GET("/gates/:id/config", s.previewGateConfig)
 }
 
@@ -43,7 +44,8 @@ func gateView(g *ent.Gate) gin.H {
 		"listening_ports": g.ListeningPorts, "host": g.Host, "created_at": g.CreatedAt,
 		"xray_stats_port": g.XrayStatsPort, "singbox_stats_port": g.SingboxStatsPort, "panel": g.Panel,
 		"firewall": g.Firewall, "public_host_hint": publicHostHint(g), "colocated": colocated(g),
-		// center_version：页面据此标出没跟上中心版本的 VPS；self_update 是它自更新失败的原因
+		// center_version：页面据此标出没跟上中心版本的 VPS；self_update 是它自更新的进度或失败原因
+		// （version / state / done / total / source / error / at，见 contracts.SelfUpdateStatus）
 		"center_version": buildinfo.Version, "self_update": g.SelfUpdate,
 	}
 }
@@ -100,7 +102,12 @@ func (s *Server) inviteGate(c *gin.Context) {
 		return
 	}
 	s.audit(c, "gate.invite", name, "ok")
-	command := "curl -fsSL " + publicLink(c.Request, "/install/gate.sh") + " | sh -s -- --token " + token
+	// WEIR_GITHUB_MIRRORS：「GitHub 加速」里主机名形式的镜像，gate.sh 从 GitHub 下载发布包时按顺序使用
+	env := ""
+	if m := s.installMirrors(c.Request.Context()); m != "" {
+		env = "WEIR_GITHUB_MIRRORS=" + m + " "
+	}
+	command := "curl -fsSL " + publicLink(c.Request, "/install/gate.sh") + " | " + env + "sh -s -- --token " + token
 	// pairing 是凭证的摘要：页面用它查配对进度，凭证本身不出现在网址里
 	c.JSON(201, gin.H{"token": token, "command": command, "expires_in": 3600, "pairing": digest(token)})
 }
