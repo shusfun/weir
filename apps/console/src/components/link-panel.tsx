@@ -125,7 +125,7 @@ export function LinkPanel({
         title={title}
         description={description}
         actions={
-          <Button size="sm" ripple disabled={(links.data?.length ?? 0) >= 10} onClick={() => setEdit("new")}>
+          <Button size="sm" disabled={(links.data?.length ?? 0) >= 10} onClick={() => setEdit("new")}>
             <Plus />
             新链接
           </Button>
@@ -207,7 +207,7 @@ function LinkCard({ base, link: l, stats, showCredentials, inlineQr, onEdit, ref
           </small>
         </div>
         <Menu>
-          <MenuTrigger render={<Button size="sm" variant="outline" ripple busy={busy} busyText="处理中" aria-label={`${l.name || "未命名"} 更多操作`} className="shrink-0 data-[popup-open]:[&_svg]:rotate-180 [&_svg]:transition-transform" />}>
+          <MenuTrigger render={<Button size="sm" variant="outline" busy={busy} busyText="处理中" aria-label={`${l.name || "未命名"} 更多操作`} className="shrink-0 data-[popup-open]:[&_svg]:rotate-180 [&_svg]:transition-transform" />}>
             更多<ChevronDown />
           </MenuTrigger>
           <MenuContent align="end">
@@ -385,7 +385,7 @@ function LinkForm({
           {!all && (
             <>
               <fieldset className="grid gap-2">
-                <legend className="mb-1 text-[12.5px] font-medium text-[var(--weir-ink-2)]">节点</legend>
+                <legend className="mb-1 text-meta font-medium text-[var(--weir-ink-2)]">节点</legend>
                 {nodes.map((n) => (
                   <CheckboxField
                     key={n.id}
@@ -397,7 +397,7 @@ function LinkForm({
               </fieldset>
               {chains.length > 0 && (
                 <fieldset className="grid gap-2">
-                  <legend className="mb-1 text-[12.5px] font-medium text-[var(--weir-ink-2)]">链式代理</legend>
+                  <legend className="mb-1 text-meta font-medium text-[var(--weir-ink-2)]">链式代理</legend>
                   {chains.map((c) => (
                     <CheckboxField key={c.id} label={c.name} checked={pickedChains.includes(c.id)} onCheckedChange={(v) => setPickedChains(toggle(pickedChains, c.id, v))} />
                   ))}

@@ -95,7 +95,7 @@ export function GatesPage() {
         <>
           <Button variant="outline" onClick={() => setCerts(true)}><FileBadge />证书</Button>
           <Button variant="outline" disabled={!gates.data?.some((g) => g.status === "active")} onClick={() => setWizard("any")}><Plus />新建节点</Button>
-          <Button ripple onClick={() => setInvite(true)}><Server />添加 VPS</Button>
+          <Button onClick={() => setInvite(true)}><Server />添加 VPS</Button>
         </>
       }
     />
@@ -144,7 +144,7 @@ export function GatesPage() {
                   <h2 className="flex flex-wrap items-center gap-2 text-base font-semibold">
                     <StatusLamp size="lg" tone={tone} label={label} />
                     {g.name}
-                    <span className={"text-[13px] font-medium " + (tone === "ok" ? "text-[var(--weir-ok-ink)]" : tone === "warn" ? "text-[var(--weir-warn-ink)]" : "text-[var(--weir-bad-ink)]")}>{label}</span>
+                    <span className={"text-body font-medium " + (tone === "ok" ? "text-[var(--weir-ok-ink)]" : tone === "warn" ? "text-[var(--weir-warn-ink)]" : "text-[var(--weir-bad-ink)]")}>{label}</span>
                   </h2>
                   <small className="flex flex-wrap items-center gap-x-1.5 text-[var(--weir-ink-3)]">
                     {g.public_host || "等待上报地址"} · {list.length} 个协议{list.length ? `，${usable} 个可用` : ""} · 最近心跳 {date(g.last_seen_at)} <GateVersion gate={g} />
@@ -158,9 +158,9 @@ export function GatesPage() {
                   )}
                 </div>
                 <span className="flex flex-nowrap gap-1.5">
-                  <Button size="sm" variant="outline" ripple onClick={() => detailParam.open(g)}>详情</Button>
+                  <Button size="sm" variant="outline" onClick={() => detailParam.open(g)}>详情</Button>
                   <Menu>
-                    <MenuTrigger render={<Button size="sm" variant="outline" ripple aria-label={`${g.name} 更多操作`} className="data-[popup-open]:[&_svg]:rotate-180 [&_svg]:transition-transform" />}>
+                    <MenuTrigger render={<Button size="sm" variant="outline" aria-label={`${g.name} 更多操作`} className="data-[popup-open]:[&_svg]:rotate-180 [&_svg]:transition-transform" />}>
                       更多<ChevronDown />
                     </MenuTrigger>
                     <MenuContent>
@@ -230,7 +230,7 @@ function NodeDetail({ node: n, gate: g, nodes, close, changed }: { node: NodeIte
             <Trash2 />删除
           </Button>
           <Button variant="outline" onClick={() => { close(); openDsh({ notice: `dsh 已知道你在看节点「${n.name}」，直接说要怎么调整即可。`, nodeId: n.id, nodeName: n.name }); }}><Sparkles />AI 调整</Button>
-          <Button ripple disabled={isBusy() || !g?.online} busy={isBusy("test")} busyText="正在实测…"
+          <Button disabled={isBusy() || !g?.online} busy={isBusy("test")} busyText="正在实测…"
             onClick={() => void run("test", async () => { const r = await api(`/admin/nodes/${n.id}/test`, "POST", {}); toast(`实测通过：${r.latency_ms} ms`, { tone: "ok" }); }, undefined, { wait: { label: `正在让 ${g?.name ?? "VPS"} 用真实内核实测「${n.name}」`, max: 50 } })}>
             实测
           </Button>

@@ -42,7 +42,6 @@ import {
   DrawerTrigger,
   FlipCard,
   FlipCardToggle,
-  Label,
   MenuToggle,
   OptionRow,
   PageHeader,
@@ -50,7 +49,6 @@ import {
   SectionHeader,
   SkeletonTable,
   Slider,
-  Switch,
   Table,
   TableBody,
   TableCell,
@@ -102,6 +100,8 @@ export function DevUiPage() {
   const toast = useToast();
   const burst = useBurst();
   const [checked, setChecked] = useState(true);
+  const [switchA, setSwitchA] = useState(true);
+  const [switchB, setSwitchB] = useState(false);
   const [choice, setChoice] = useState(0);
   const [replay, setReplay] = useState(0);
   const [originDemo, setOriginDemo] = useState(false);
@@ -125,16 +125,14 @@ export function DevUiPage() {
           </Demo>
 
           <Demo index={2} title="弹性开关" description="按住拨钮横向拉长；切换时行进中保持拉长，落位压回原宽。">
-            <div className="actions">
-              <Switch id="dev-switch" defaultChecked />
-              <Label htmlFor="dev-switch">默认尺寸</Label>
-              <Switch id="dev-switch-sm" size="sm" />
-              <Label htmlFor="dev-switch-sm">小尺寸</Label>
+            <div className="flex flex-wrap gap-x-6">
+              <SwitchField label="默认尺寸" checked={switchA} onCheckedChange={setSwitchA} />
+              <SwitchField label="小尺寸" size="sm" checked={switchB} onCheckedChange={setSwitchB} />
             </div>
           </Demo>
 
-          <Demo index={3} title="水波按钮" description="点在哪，波就从哪散开；键盘回车从中心散开。">
-            <Button size="lg" ripple className="w-full">
+          <Demo index={3} title="按压反馈" description="按下缩到 0.97 并叠一层填充色，松手按弹簧回弹；减少动态效果时只变颜色。">
+            <Button size="lg" className="w-full">
               大面积主操作
             </Button>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -149,7 +147,7 @@ export function DevUiPage() {
               <Checkbox defaultChecked />
               <span>
                 <strong>勾选行</strong>
-                <small className="text-[var(--weir-ink-3)]">整行可点，水波从按压点散开</small>
+                <small className="text-[var(--weir-ink-3)]">整行可点，按下叠填充色</small>
               </span>
             </OptionRow>
           </Demo>
@@ -166,8 +164,7 @@ export function DevUiPage() {
             <div className="actions">
               <CopyButton variant="outline" value="weir">复制示例文本</CopyButton>
               <CopyButton value="weir" aria-label="复制示例文本" />
-              <Checkbox id="dev-check" checked={checked} onCheckedChange={setChecked} />
-              <Label htmlFor="dev-check">复选框</Label>
+              <CheckboxField label="复选框" checked={checked} onCheckedChange={setChecked} />
               <Button variant="outline" onClick={() => toast("已保存", { description: "配置已下发到 3 台 VPS。" })}>成功提示</Button>
             </div>
             <div className="actions">
@@ -299,14 +296,14 @@ export function DevUiPage() {
             <Carousel slides={photos} label="示例照片" />
           </Demo>
 
-          <Demo index={14} title="从点击处展开" description="标签键、分体按钮按下有水波；点开的弹窗从按下的位置展开、收回到那里。">
+          <Demo index={14} title="从点击处展开" description="标签键、分体按钮按下缩放并叠填充；点开的弹窗从按下的位置展开、收回到那里。">
             <div className="flex flex-wrap gap-2">
               <Chip tone="ok" meta="在线" onClick={() => setOriginDemo(true)}>VLESS + REALITY</Chip>
               <Chip tone="bad" meta="连不上" onClick={() => setOriginDemo(true)}>Hysteria2</Chip>
               <Chip add onClick={() => setOriginDemo(true)}>＋ 协议</Chip>
             </div>
             <SplitButton
-              main={<CopyButton size="sm" variant="outline" ripple value="https://example.com/sub/demo">复制</CopyButton>}
+              main={<CopyButton size="sm" variant="outline" value="https://example.com/sub/demo">复制</CopyButton>}
               items={[{ label: "二维码", onSelect: () => setOriginDemo(true) }, "separator", { label: "删除", danger: true, onSelect: () => toast("已删除") }]}
             />
             <Dialog open={originDemo} onOpenChange={setOriginDemo}>
@@ -366,7 +363,7 @@ function FormDemo() {
         </FormGrid>
         <RadioGroup aria-label="套餐" className="flex flex-wrap gap-4" value={plan} onValueChange={(v) => setPlan(String(v))}>
           {[["basic", "基础"], ["pro", "专业"], ["team", "团队"]].map(([v, n]) => (
-            <label key={v} className="flex items-center gap-2 text-[13px]"><Radio value={v} />{n}</label>
+            <label key={v} className="weir-press-fill flex min-h-11 items-center gap-3 rounded-[var(--weir-radius-sm)] px-2 text-body"><Radio value={v} />{n}</label>
           ))}
         </RadioGroup>
         <SwitchField label="接收通知" description="开关与说明整行可点。" checked={notify} onCheckedChange={setNotify} />

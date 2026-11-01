@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Form, FormGrid, Input, Notice, SkeletonList, StatusLamp, SwitchField, useConfirm } from "@weir/ui";
+import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Form, FormGrid, Input, Notice, ScrollArea, SkeletonList, StatusLamp, SwitchField, useConfirm } from "@weir/ui";
 import { Bot, Download, Maximize2, Minimize2, Minus, RotateCcw, Star, Trash2, X } from "lucide-react";
 import { api, ApiError } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -197,7 +197,7 @@ export function DshWindow() {
       {mode !== "closed" && (
         <WindowFrame hidden={mode === "min"} minimize={() => setMode("min")} close={close} hint={hint} clearHint={() => setHint(null)} hintObject={hint?.nodeId ? { type: "node", name: hint.nodeName ?? "节点", id: hint.nodeId } : undefined}>
           {!ready ? (
-            <div className="min-h-0 flex-1 overflow-y-auto p-3"><DshSetup view={dsh.data} /></div>
+            <ScrollArea className="min-h-0 flex-1" viewportClassName="weir-focus-gutter p-3"><DshSetup view={dsh.data} /></ScrollArea>
           ) : error ? (
             <div className="stack p-3">
               <Notice tone="warn" role="status">{error}</Notice>
@@ -280,7 +280,7 @@ function WindowFrame({ hidden, minimize, close, hint, clearHint, hintObject, chi
         title={narrow ? undefined : "拖动移动；双击最大化 / 还原"}
       >
         <Bot className="size-4 shrink-0 text-[var(--weir-ink-3)]" />
-        <strong className="text-[13px]">dsh</strong>
+        <strong className="text-body">dsh</strong>
         <small className="min-w-0 flex-1 truncate text-[var(--weir-ink-3)]">草稿会由 Weir 弹窗请你确认</small>
         <Button size="icon-sm" variant="ghost" aria-label="缩小 dsh 窗口（dsh 继续在后台运行）" title="缩小：dsh 继续在后台运行，点右下角恢复" onClick={minimize}><Minus /></Button>
         {!narrow && (
@@ -289,7 +289,7 @@ function WindowFrame({ hidden, minimize, close, hint, clearHint, hintObject, chi
         <Button size="icon-sm" variant="ghost" aria-label="关闭 dsh 窗口" title="关闭：结束这次连接，再打开时重新连接" onClick={close}><X /></Button>
       </div>
       {hint && (
-        <div className="flex items-start gap-2 border-b border-[var(--weir-line-soft)] px-3 py-2 text-[12.5px] text-[var(--weir-ink-2)]" role="status">
+        <div className="flex items-start gap-2 border-b border-[var(--weir-line-soft)] px-3 py-2 text-meta text-[var(--weir-ink-2)]" role="status">
           <span className="min-w-0 flex-1">{hint.notice}</span>
           <Button size="icon-xs" variant="ghost" aria-label="收起这条提示" onClick={clearHint}><X /></Button>
         </div>
@@ -343,7 +343,7 @@ function KeyTip() {
   });
   if (!show) return null;
   return (
-    <div className="flex items-start gap-2 border-b border-[var(--weir-line-soft)] bg-[var(--weir-well)] px-3 py-2 text-[12.5px] text-[var(--weir-ink-2)]" role="note">
+    <div className="flex items-start gap-2 border-b border-[var(--weir-line-soft)] bg-[var(--weir-well)] px-3 py-2 text-meta text-[var(--weir-ink-2)]" role="note">
       <span className="min-w-0 flex-1">{keyHelp}</span>
       <Button size="xs" variant="ghost" onClick={() => {
         try {
@@ -371,7 +371,7 @@ export function DshSetup({ view }: { view?: DshView }) {
   ];
   return (
     <ol className="m-0 list-none space-y-3 p-0" aria-label="dsh 配置步骤">
-      <li className="text-[13px] text-[var(--weir-ink-2)]">dsh 是 Weir 的 AI 助手：在任何页面都知道你正在看什么，帮你建节点、开用户、配出口与分流、管订阅、写驱动、研判安全事件；它做的每件事都先交给你确认。用之前还差下面几步。</li>
+      <li className="text-body text-[var(--weir-ink-2)]">dsh 是 Weir 的 AI 助手：在任何页面都知道你正在看什么，帮你建节点、开用户、配出口与分流、管订阅、写驱动、研判安全事件；它做的每件事都先交给你确认。用之前还差下面几步。</li>
       {view.unsupported && <li><Notice tone="warn">{view.unsupported}。</Notice></li>}
       <SetupStep n={1} title={steps[0][0]} state={steps[0][1]} done={set.version ? `已下载 ${set.version}` : ""}>
         <DshFetchStep blocked={!!view.unsupported} />
@@ -394,7 +394,7 @@ function SetupStep({ n, title, state, done, children }: { n: number; title: stri
     <li className="stack rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3" aria-current={state === "current" ? "step" : undefined}>
       <div className="flex items-center gap-2">
         <Badge variant="soft" tone={state === "done" ? "ok" : state === "current" ? "info" : "neutral"}>{state === "done" ? "已完成" : state === "current" ? `第 ${n} 步` : "待完成"}</Badge>
-        <strong className="text-[13px]">{title}</strong>
+        <strong className="text-body">{title}</strong>
         {state === "done" && done && <small className="min-w-0 truncate text-[var(--weir-ink-3)]">{done}</small>}
       </div>
       {state === "current" && children}
@@ -422,7 +422,8 @@ function DshFetchStep({ blocked }: { blocked: boolean }) {
         </div>
       )}
       <JobLine id={job} job={latestJob(jobs.data, "dsh:")} idle="下载进度显示在这里" onFinish={() => void client.invalidateQueries({ queryKey: ["dsh"] })} />
-      <small className="text-[var(--weir-ink-3)]">想装别的版本：<Link className="text-[var(--weir-accent-text)] underline-offset-4 hover:underline" to="/kernels?tab=dsh">内核 → dsh</Link>。</small>
+      {/* 行内链接触屏下命中区扩到 44：上下各留 12，免得伸进上方的任务进度行 */}
+      <small className="py-3 text-[var(--weir-ink-3)]">想装别的版本：<Link className="weir-hit relative text-[var(--weir-accent-text)] underline-offset-4 transition-opacity hover:underline active:opacity-60" to="/kernels?tab=dsh">内核 → dsh</Link>。</small>
     </div>
   );
 }
@@ -473,10 +474,10 @@ function DshAddressForm({ view, turnOn }: { view: DshView; turnOn?: boolean }) {
         </div>
       </Field>
       <DshDomainGuide domain={v.domain} />
-      <FormGrid>
-        <SwitchField label="启用 dsh" checked={v.enabled} onCheckedChange={(on) => setDraft({ ...v, enabled: on })} />
-        <SwitchField label="Laya 判为可疑的事件自动交给 dsh 分析" checked={v.auto_analyze} onCheckedChange={(on) => setDraft({ ...v, auto_analyze: on })} />
-      </FormGrid>
+      <div className="settings-group">
+        <SwitchField placement="end" label="启用 dsh" checked={v.enabled} onCheckedChange={(on) => setDraft({ ...v, enabled: on })} />
+        <SwitchField placement="end" label="Laya 判为可疑的事件自动交给 dsh 分析" checked={v.auto_analyze} onCheckedChange={(on) => setDraft({ ...v, auto_analyze: on })} />
+      </div>
       <div className="actions"><Button type="submit" busy={save.busy} busyText="正在保存…">保存</Button></div>
       {save.error && <Notice tone="bad">{save.error}</Notice>}
     </Form>
@@ -525,7 +526,7 @@ server {
 }`;
   return (
     <Collapsible title="DNS、证书与反代（建议）">
-      <ul className="m-0 list-disc space-y-1 pl-5 text-[13px] text-[var(--weir-ink-2)]">
+      <ul className="m-0 list-disc space-y-1 pl-5 text-body text-[var(--weir-ink-2)]">
         <li>证书用泛域名证书（*.{site}），不要为这个子域名单独签证书：单独签发的名字会写进公开的证书透明日志。</li>
         <li>最好配泛解析（*.{site}），让 dsh 子域名和任意不存在的子域名解析结果一样。</li>
         <li>dsh 子域名只出现在管理员页面里；登录页、公开页、订阅与错误信息里都不会出现。</li>
@@ -619,9 +620,10 @@ function DshReleases({ close, fetched }: { close: () => void; fetched: () => voi
         <DialogDescription>来自 npm 官方源的 @deepseek-ai/dsh，任何版本都能装；超出 Weir 插件已验证范围的版本只启用基础预设、后台安全分析暂停。首次下载还会安装 Node.js 运行环境（可续传），需要几分钟；关掉窗口下载照常进行。</DialogDescription>
         <JobLine id={job} job={latestJob(jobs.data, "dsh:")} idle="点版本右侧的「下载」开始；进度显示在这里" onFinish={fetched} />
         {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} skeleton={<SkeletonList rows={5} lines={1} className="stack" rowClassName="flex items-center justify-between gap-2" />} /> : q.data.length === 0 ? <State empty="没有可用版本" /> : (
-          <ul className="stack weir-focus-gutter max-h-[50vh] overflow-y-auto">
+          // 版本列表在弹窗正文里，随弹窗正文一起滚动，不另设内层滚动区
+          <ul className="group-list">
             {q.data.map((r) => (
-              <li key={r.version} className="flex items-center justify-between gap-2">
+              <li key={r.version} className="group-row flex items-center justify-between gap-2">
                 <span className="flex flex-wrap items-center gap-2"><code>{r.version}</code>{(r.tags ?? []).map((t) => <Badge key={t} variant="soft" tone={t === "latest" ? "ok" : "neutral"}>{t}</Badge>)}{r.verified ? <Badge variant="soft" tone="ok">插件已验证</Badge> : <Badge variant="soft" tone="neutral" title="超出 Weir 插件已验证的范围：只启用基础预设，后台安全分析暂停">未验证</Badge>}<small className="text-[var(--weir-ink-3)]">{date(r.published_at)}</small></span>
                 <Button size="sm" variant="outline" disabled={isBusy()} onClick={() => void download(r.version)}>下载</Button>
               </li>

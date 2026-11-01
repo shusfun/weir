@@ -106,7 +106,7 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
     <TooltipProvider delay={300}>
       <div className="shell" data-collapsed={collapsed}>
         <aside className="rail">
-          <NavLink to={admin ? "/gates" : "/links"} className="rail-brand" aria-label="Weir 首页">
+          <NavLink to={admin ? "/gates" : "/links"} className="rail-brand weir-press" aria-label="Weir 首页">
             <span className="rail-mark"><Activity size={19} /></span>
             <strong>Weir</strong>
           </NavLink>

@@ -1,6 +1,6 @@
 // @weir/ui：基础控件来源 codedthemes/uiable（MIT，见 LICENSE），已移植到 Vite，外观与反馈向 iOS 对齐（规范见 docs/design.html#console-visual）。
 // 本地新增：lamp / readout / faceplate / segmented / tabs / overlay / page / toast / form / choice-field / collapsible / password-input / confirm / radio-group，基于 @base-ui/react 1.9。
-// 动效部件：check-mark（描绘对勾）/ skeleton / menu-toggle / drawer（底部抽屉）/ ripple / burst /
+// 动效部件：check-mark（描绘对勾）/ skeleton / menu-toggle / drawer（底部抽屉）/ burst /
 // slider / flip-card / card-stack / carousel；动效变量 --weir-spring / --weir-bounce / --weir-ease / --weir-decel 与各档时长。
 // 点击处展开：press-origin 记下按压点，弹窗从那里展开、收回；chip（标签键）、split-button（分体按钮）、
 // file-picker（选择 / 拖入文件）；copy-field（只读地址框，末尾复制图标）。按压反馈统一为缩小 + 填充色（theme.css）。
@@ -50,7 +50,7 @@ export * from "./check-mark";
 export * from "./skeleton";
 export * from "./menu-toggle";
 export * from "./drawer";
-export * from "./ripple";
+
 export * from "./burst";
 export * from "./slider";
 export * from "./flip-card";

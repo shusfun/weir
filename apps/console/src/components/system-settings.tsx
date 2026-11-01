@@ -73,11 +73,11 @@ export function SecurityCard() {
         <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} />
       ) : (
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
-          <FormGrid>
+          <div className="settings-group">
             {securityFlags.map(([k, label, description]) => (
-              <SwitchField key={k} label={label} description={description || undefined} checked={!!v[k]} onCheckedChange={(on) => setDraft({ ...v, [k]: on })} />
+              <SwitchField placement="end" key={k} label={label} description={description || undefined} checked={!!v[k]} onCheckedChange={(on) => setDraft({ ...v, [k]: on })} />
             ))}
-          </FormGrid>
+          </div>
           <div className="actions">
             <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           </div>
@@ -117,7 +117,9 @@ function SMTPForm({ value, saved }: { value: SMTPView; saved: () => void }) {
           <Field label="发件地址"><Input type="email" value={f.from} onChange={(e) => set({ from: e.target.value })} /></Field>
           <Field label="发件人名称"><Input value={f.from_name} onChange={(e) => set({ from_name: e.target.value })} /></Field>
         </FormGrid>
-        <SwitchField label="使用 TLS" description="465 端口直接 TLS，其他端口 STARTTLS。" checked={f.use_tls} onCheckedChange={(use_tls) => set({ use_tls })} />
+        <div className="settings-group">
+          <SwitchField placement="end" label="使用 TLS" description="465 端口直接 TLS，其他端口 STARTTLS。" checked={f.use_tls} onCheckedChange={(use_tls) => set({ use_tls })} />
+        </div>
         <div className="actions">
           <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           {value.configured && (
@@ -159,7 +161,9 @@ function NotifyForm({ value, saved }: { value: NotifyView; saved: () => void }) 
   return (
     <Section title="通知与定时任务" description="提醒只包含名称与数值，不含订阅地址或凭据；同一事件 24 小时内只提醒一次。">
       <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
-        <SwitchField label="开启 Telegram 通知" checked={f.enabled} onCheckedChange={(enabled) => set({ enabled })} />
+        <div className="settings-group">
+          <SwitchField placement="end" label="开启 Telegram 通知" checked={f.enabled} onCheckedChange={(enabled) => set({ enabled })} />
+        </div>
         <FormGrid>
           <Field label="Bot Token" hint={value.token_set ? "已保存；留空则沿用。" : undefined}><PasswordInput autoComplete="off" value={f.bot_token} onChange={(e) => set({ bot_token: e.target.value })} /></Field>
           <Field label="Chat ID"><Input value={f.chat_id} onChange={(e) => set({ chat_id: e.target.value })} /></Field>
@@ -169,7 +173,9 @@ function NotifyForm({ value, saved }: { value: NotifyView; saved: () => void }) 
           {num("source_expiry_days", "订阅源到期前提醒（天）", "按机场报告的到期时间。")}
           {num("source_refresh_hours", "订阅源定时刷新（小时）", "0 表示只在访问订阅组时按缓存刷新。")}
         </FormGrid>
-        <SwitchField label="VPS 离线超过 5 分钟时提醒" checked={f.gate_offline} onCheckedChange={(gate_offline) => set({ gate_offline })} />
+        <div className="settings-group">
+          <SwitchField placement="end" label="VPS 离线超过 5 分钟时提醒" checked={f.gate_offline} onCheckedChange={(gate_offline) => set({ gate_offline })} />
+        </div>
         <div className="actions">
           <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           {value.enabled && value.token_set && (
@@ -291,7 +297,9 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
           <Field label="保留份数" customError={rangeError(f.keep, 1, 100, "份")}><Input inputMode="numeric" value={f.keep} onChange={(e) => set({ keep: e.target.value.replace(/\D/g, "") })} /></Field>
           <Field label="自动备份间隔（小时）" customError={rangeError(f.hours, 1, 720, "小时")}><Input inputMode="numeric" value={f.hours} onChange={(e) => set({ hours: e.target.value.replace(/\D/g, "") })} /></Field>
         </FormGrid>
-        <SwitchField label="自动备份" checked={f.auto} onCheckedChange={(auto) => set({ auto })} />
+        <div className="settings-group">
+          <SwitchField placement="end" label="自动备份" checked={f.auto} onCheckedChange={(auto) => set({ auto })} />
+        </div>
         {save.error && <Notice tone="bad">{save.error}</Notice>}
         <div className="actions">
           <Button type="submit" disabled={busy} busy={save.busy} busyText="正在保存…">保存</Button>

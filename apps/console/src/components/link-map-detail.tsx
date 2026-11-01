@@ -68,7 +68,7 @@ function GateDetail({ m, g, store }: { m: LinkMap; g: MapGate; store: LiveStore 
         {m.admin ? <ObjectLink to={{ type: "gate", id: g.id, name: g.name }} /> : g.name}
         <Badge variant="soft" tone={g.online ? "ok" : "neutral"}>{g.online ? "在线" : "离线"}</Badge>
       </h3>
-      <dl className="grid grid-cols-[5.5rem_1fr] gap-x-2 gap-y-1 text-[12.5px]">
+      <dl className="grid grid-cols-[5.5rem_1fr] gap-x-2 gap-y-1 text-meta">
         <Row k="位置">{placeText(g.place)}</Row>
         {g.place.org && <Row k="运营商">{g.place.org}{g.place.asn ? ` · AS${g.place.asn}` : ""}</Row>}
         {g.place.ip && <Row k="地址">{g.place.ip}</Row>}
@@ -92,7 +92,7 @@ function GateDetail({ m, g, store }: { m: LinkMap; g: MapGate; store: LiveStore 
             return (
               <li key={n.id} className="stack gap-1 rounded-[var(--weir-radius-sm)] border border-[var(--weir-line)] p-2">
                 <span className="flex flex-wrap items-center justify-between gap-2">
-                  <strong className="text-[12.5px]">{m.admin ? <ObjectLink to={{ type: "node", id: n.id, name: n.name }} /> : n.name}</strong>
+                  <strong className="text-meta">{m.admin ? <ObjectLink to={{ type: "node", id: n.id, name: n.name }} /> : n.name}</strong>
                   <small className="tabular-nums">{store.stale(g.id) ? unknown : rateText(r)}</small>
                 </span>
                 <small className="text-[var(--weir-ink-3)]">{n.protocol} · {n.network}{n.security !== "none" ? " · " + n.security : ""} · 端口 {n.port}{n.kernel ? ` · ${n.kernel}` : ""}{n.users !== undefined ? ` · ${n.users} 个用户` : ""}{!n.enabled ? " · 已停用" : ""}</small>
@@ -112,7 +112,7 @@ function ExitDetail({ m, x, store }: { m: LinkMap; x: MapExit; store: LiveStore 
   return (
     <div className="stack gap-2">
       <h3 className="font-semibold">{x.label}</h3>
-      <dl className="grid grid-cols-[5.5rem_1fr] gap-x-2 gap-y-1 text-[12.5px]">
+      <dl className="grid grid-cols-[5.5rem_1fr] gap-x-2 gap-y-1 text-meta">
         <Row k="类型">{exitKindName[x.kind] ?? x.kind}{x.owner === "self" ? "（自建）" : m.admin ? "" : "（管理员配置）"}</Row>
         <Row k="入口">{from?.name ?? unknown}</Row>
         {x.sub && <Row k="说明">{x.sub}</Row>}
@@ -144,7 +144,7 @@ function PathDetail({ m, p, store }: { m: LinkMap; p: MapPath; store: LiveStore 
   return (
     <div className="stack gap-2">
       <h3 className="font-semibold">{m.admin ? <ObjectLink to={{ type: "user", id: p.user_id, name: p.user }} /> : p.user} → {p.node}</h3>
-      <dl className="grid grid-cols-[5.5rem_1fr] gap-x-2 gap-y-1 text-[12.5px]">
+      <dl className="grid grid-cols-[5.5rem_1fr] gap-x-2 gap-y-1 text-meta">
         <Row k="入口">{m.gates.find((g) => g.id === p.gate_id)?.name ?? unknown} · {p.node}</Row>
         <Row k="路由">{route}</Row>
         <Row k="出口">{x?.label ?? unknown}</Row>
@@ -175,7 +175,7 @@ export function LinkMapDetail({ m, store, selected }: { m: LinkMap; store: LiveS
     return v === null ? sum : (sum ?? 0) + v;
   }, null);
   return (
-    <div className="stack gap-2 text-[12.5px]">
+    <div className="stack gap-2 text-meta">
       <h3 className="font-semibold">总览</h3>
       <dl className="grid grid-cols-[5.5rem_1fr] gap-x-2 gap-y-1">
         <Row k="VPS">{m.gates.length}（在线 {m.gates.filter((g) => g.online).length}）</Row>

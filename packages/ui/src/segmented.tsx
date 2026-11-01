@@ -43,8 +43,8 @@ function Segmented<T extends string>({
           className={(state) =>
             cn(
               "weir-key inline-flex shrink-0 items-center justify-center gap-1.5 px-3 font-medium whitespace-nowrap text-[var(--weir-ink-2)] hover:text-[var(--weir-ink)] [&_svg]:size-3.5",
-              // 底座内边距 2px：桌面整体 28（sm 24）；触屏每项 44、整体 48
-              size === "sm" ? "h-5 text-meta touch:h-11" : "h-6 text-meta touch:h-11 touch:text-body",
+              // 底座内边距 2px：桌面整体 28（sm 24）；触屏每项至少 44×44（「开 / 关」这类单字项也不窄于 44）、整体 48
+              size === "sm" ? "h-5 text-meta touch:h-11 touch:min-w-11" : "h-6 text-meta touch:h-11 touch:min-w-11 touch:text-body",
               state.pressed && "is-pressed font-semibold text-[var(--weir-ink)]",
             )
           }

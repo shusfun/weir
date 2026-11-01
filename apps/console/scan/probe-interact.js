@@ -69,8 +69,9 @@ S.pressCandidates = ({ popupOnly, seen, max = 20 }) => {
     if (out.length >= max) break;
     if (!S.visible(el) || el.disabled || el.getAttribute("aria-disabled") === "true" || el.closest("[data-weir-scan]") || opensFile(el)) continue;
     if (danger.test(labelOf(el).slice(0, 40))) continue;
-    // 行与卡片只有挂了点击处理才算可按
-    if (el.matches("tr, li, [data-slot=card]") && !el.matches("[data-object]")) {
+    // 行、卡片与 data-object 元素只有挂了点击处理才算可按：dataObject(...) 只用于跳转定位与高亮，
+    // 带它的行本身不可点（行里的按钮、链接另外按各自的元素检查）
+    if (el.matches("tr, li, [data-slot=card], [data-object]") && !el.matches("button, a[href], [role=button], [role=link], [role=option], [role=menuitem], [role=tab]")) {
       const p = reactProps(el);
       if (!p || !(p.onClick || p.onPointerDown || p.onMouseDown)) continue;
     }

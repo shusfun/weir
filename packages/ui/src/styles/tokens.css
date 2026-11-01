@@ -107,6 +107,20 @@
   --weir-scroll-thumb: rgb(0 0 0 / 0.28);
   --weir-scroll-thumb-active: rgb(0 0 0 / 0.46);
 
+  /*
+   * 公开页（/p/<名称>）的可选主题色：管理员给公开页选「紫 / 海蓝 / 森林」，只在公开页内使用。
+   * -ink 是文字、图标、边框色，-fill 是白字按钮底色，-soft 是浅底；三种主题的文字与白字底都 ≥ 4.5。
+   */
+  --weir-public-violet-ink: #7154d8; /* 白底 5.4，白字 5.4 */
+  --weir-public-violet-fill: #7154d8;
+  --weir-public-violet-soft: #f0ebff;
+  --weir-public-ocean-ink: #187598; /* 白底 5.2 */
+  --weir-public-ocean-fill: #187598;
+  --weir-public-ocean-soft: #e7f5fa;
+  --weir-public-forest-ink: #277559; /* 白底 5.6 */
+  --weir-public-forest-fill: #277559;
+  --weir-public-forest-soft: #e8f4ee;
+
   /* ---- 字体 ---- */
   --weir-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang SC", "Helvetica Neue", "Segoe UI", "Microsoft YaHei", sans-serif;
   --weir-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -299,6 +313,13 @@
   --weir-minimap-mask: rgb(0 0 0 / 0.5);
   --weir-scroll-thumb: rgb(255 255 255 / 0.3);
   --weir-scroll-thumb-active: rgb(255 255 255 / 0.5);
+  /* 公开页主题色（深色）：文字色提亮到 4.5 以上；按钮底色保持浅色主题的原色以维持白字对比 */
+  --weir-public-violet-ink: #ab9cff;
+  --weir-public-violet-soft: #27213f;
+  --weir-public-ocean-ink: #5ec2e6;
+  --weir-public-ocean-soft: #132e39;
+  --weir-public-forest-ink: #63cf9e;
+  --weir-public-forest-soft: #142e25;
   color-scheme: dark;
 }
 

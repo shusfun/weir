@@ -1,10 +1,9 @@
-// 选择文件：点按（键帽，按下有水波）或把文件拖进来。文件只在浏览器里交给调用方（读成文本或按原样上传由调用方决定），
+// 选择文件：点按（键帽，按下缩放并叠填充）或把文件拖进来。文件只在浏览器里交给调用方（读成文本或按原样上传由调用方决定），
 // 不自动上传。accept 与 maxBytes 不符时调 onError，不调 onFile；错误交给外层 Field 显示在下方。
 // 放在 Field 里时，Field 给的 id 落在按钮上：点标签聚焦按钮，读屏能读到标签与说明。
 import { useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { FileUp } from "lucide-react";
 import { cn } from "cn";
-import { Ripple } from "./ripple";
 
 function matches(file: File, accept?: string) {
   if (!accept) return true;
@@ -79,7 +78,6 @@ function FilePicker({
         <FileUp />
         <span className="min-w-0 flex-1 truncate">{children}</span>
         {picked && <small className="max-w-[45%] shrink-0 truncate text-[var(--weir-ink-3)]" title={picked}>{picked}</small>}
-        <Ripple />
       </button>
       <input
         ref={input}

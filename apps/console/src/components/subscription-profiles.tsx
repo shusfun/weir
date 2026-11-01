@@ -139,7 +139,7 @@ function ProfileForm({ value, close, saved }: { value: Profile | "new"; close: (
           {!all && (
             <FormGrid>
               <fieldset className="grid min-w-0 content-start gap-2">
-                <legend className="mb-1 text-[12.5px] font-medium text-[var(--weir-ink-2)]">订阅源</legend>
+                <legend className="mb-1 text-meta font-medium text-[var(--weir-ink-2)]">订阅源</legend>
                 <ScrollArea className="max-h-56" viewportClassName="weir-focus-gutter" contentClassName="grid content-start gap-2">
                   {(sources.data?.items ?? []).map((s) => (
                     <CheckboxField key={s.id} label={s.name || s.url} checked={sourceIds.includes(s.id)} onCheckedChange={(v) => setSourceIds(toggle(sourceIds, s.id, v))} />
@@ -148,7 +148,7 @@ function ProfileForm({ value, close, saved }: { value: Profile | "new"; close: (
                 </ScrollArea>
               </fieldset>
               <fieldset className="grid min-w-0 content-start gap-2">
-                <legend className="mb-1 text-[12.5px] font-medium text-[var(--weir-ink-2)]">手动节点</legend>
+                <legend className="mb-1 text-meta font-medium text-[var(--weir-ink-2)]">手动节点</legend>
                 <ScrollArea className="max-h-56" viewportClassName="weir-focus-gutter" contentClassName="grid content-start gap-2">
                   {(nodes.data?.items ?? []).map((n) => (
                     <CheckboxField

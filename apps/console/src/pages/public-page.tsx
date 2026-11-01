@@ -75,7 +75,7 @@ export function PublicPage() {
   return (
     <main className="published-page" data-theme={page?.theme || "violet"}>
       <header className="published-top">
-        <a className="published-brand" href={pageURL}>
+        <a className="published-brand weir-press weir-hit relative" href={pageURL}>
           <Globe2 size={21} />
           <span>公开目录</span>
         </a>

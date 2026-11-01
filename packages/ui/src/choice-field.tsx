@@ -45,8 +45,9 @@ function SwitchField({
   checked,
   onCheckedChange,
   id,
+  size,
   ...rest
-}: Common & { checked: boolean; onCheckedChange: (checked: boolean) => void }) {
+}: Common & { checked: boolean; onCheckedChange: (checked: boolean) => void; size?: "sm" | "default" }) {
   const auto = useId();
   const controlId = id ?? auto;
   return (
@@ -56,6 +57,7 @@ function SwitchField({
       control={
         <Switch
           id={controlId}
+          size={size}
           checked={checked}
           disabled={rest.disabled}
           aria-labelledby={controlId + "-label"}

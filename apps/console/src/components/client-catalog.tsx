@@ -1,8 +1,8 @@
 // 客户端目录：下载入口、平台、格式与显示顺序。编辑只改本地草稿，点保存一次发布。
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  ReorderButtons,
+  SortableList,
   CheckboxField,
   Field,
   Form,
@@ -99,13 +99,39 @@ export function ClientCatalogEditor() {
     void save.submit();
   };
   const dirty = !!q.data && JSON.stringify(items) !== JSON.stringify(q.data.clients);
-  function move(index: number, delta: number) {
-    const next = [...items];
-    [next[index], next[index + delta]] = [next[index + delta], next[index]];
-    setItems(next);
-    setNotice("");
-  }
-  const visible = items.map((v, index) => ({ v, index })).filter(({ v }) => matches(v, search));
+  const visible = items.filter((v) => matches(v, search));
+  // 一行目录项；reorder 是排序按钮（搜索时不排序，传 null）
+  const row = (v: (typeof items)[number], reorder: ReactNode) => (
+    <article className="list-row catalog-row">
+      <div className="catalog-identity">
+        <ClientIcon icon={v.icon} data={v.icon_data} />
+        <div>
+          <strong>{v.name}</strong>
+          <small>
+            {v.platforms.map((p) => platformNames[p] ?? p).join(" / ")} · {formats.find(([f]) => f === v.format)?.[1] ?? v.format} · {v.enabled ? "已启用" : "已停用"}
+          </small>
+          <small>{v.description}</small>
+        </div>
+      </div>
+      <div className="actions">
+        {reorder}
+        <Button variant="outline" size="sm" onClick={() => setEditor({ ...v, platforms: [...v.platforms] })}>
+          编辑
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={async () => {
+            if (!(await confirmRemove({ title: `移除「${v.name}」？`, description: "仅从目录移除，不删除用户授权或订阅。保存目录后生效。", confirmText: "移除", tone: "danger" }))) return;
+            setItems(items.filter((x) => x.id !== v.id));
+            setNotice("");
+          }}
+        >
+          删除
+        </Button>
+      </div>
+    </article>
+  );
   useConsoleContext({ dialog: editor ? { title: "编辑客户端" } : undefined, list: { total: items.length }, form: [field("search", "搜索", search)] });
   return (
     <Card>
@@ -128,37 +154,24 @@ export function ClientCatalogEditor() {
           <>
             <SearchInput aria-label="搜索客户端目录" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜索名称、平台或说明" />
             {!items.length && <p>目录为空；用户仍可复制已有格式订阅。</p>}
-            {visible.map(({ v, index }) => (
-              <article key={v.id} className="list-row catalog-row">
-                <div className="catalog-identity">
-                  <ClientIcon icon={v.icon} data={v.icon_data} />
-                  <div>
-                    <strong>{v.name}</strong>
-                    <small>
-                      {v.platforms.map((p) => platformNames[p] ?? p).join(" / ")} · {formats.find(([f]) => f === v.format)?.[1] ?? v.format} · {v.enabled ? "已启用" : "已停用"}
-                    </small>
-                    <small>{v.description}</small>
-                  </div>
-                </div>
-                <div className="actions">
-                  <ReorderButtons label={v.name} onUp={() => move(index, -1)} onDown={() => move(index, 1)} upDisabled={index === 0} downDisabled={index === items.length - 1} />
-                  <Button variant="outline" size="sm" onClick={() => setEditor({ ...v, platforms: [...v.platforms] })}>
-                    编辑
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={async () => {
-                      if (!(await confirmRemove({ title: `移除「${v.name}」？`, description: "仅从目录移除，不删除用户授权或订阅。保存目录后生效。", confirmText: "移除", tone: "danger" }))) return;
-                      setItems(items.filter((x) => x.id !== v.id));
-                      setNotice("");
-                    }}
-                  >
-                    删除
-                  </Button>
-                </div>
-              </article>
-            ))}
+            {/* 排序只在完整列表上进行：搜索时只显示匹配项，不能拖动 */}
+            {search ? (
+              visible.map((v) => <div key={v.id}>{row(v, null)}</div>)
+            ) : (
+              <SortableList
+                label="客户端目录（按显示顺序）"
+                items={items}
+                getId={(v) => v.id}
+                onReorder={(next) => {
+                  setItems(next);
+                  setNotice("");
+                }}
+                itemLabel={(v) => v.name}
+                className="gap-0"
+                itemClassName="items-center border-b border-[var(--weir-line-soft)] last:border-b-0"
+                renderItem={(v, { reorder }) => row(v, reorder)}
+              />
+            )}
             {!!search && visible.length === 0 && <p role="status">没有匹配的客户端。</p>}
             <div className="actions">
               <Button variant="outline" disabled={save.busy} busy={save.busy && reset.current} busyText="正在恢复…" onClick={() => void submit(true)}>

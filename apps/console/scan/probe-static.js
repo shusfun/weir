@@ -11,6 +11,15 @@ const hasOwnText = (el) => {
   return false;
 };
 S.hasOwnText = hasOwnText;
+const autofilled = (el) => {
+  if (el.tagName !== "INPUT") return false;
+  for (const sel of [":autofill", ":-webkit-autofill"]) {
+    try {
+      if (el.matches(sel)) return true;
+    } catch {}
+  }
+  return false;
+};
 // 收集范围内的可见元素；SVG 内部的图形元素跳过（颜色随 currentColor）
 S.elements = (scope) => [...scope.querySelectorAll("*")].filter((el) => !(el.closest("svg") && el.tagName.toLowerCase() !== "svg") && !el.closest("[data-weir-scan]") && S.visible(el));
 
@@ -64,7 +73,8 @@ S.checkTokens = (scope, tok, col, stats) => {
     }
     if (cs.backgroundImage !== "none" && /gradient/.test(cs.backgroundImage)) stats.gradients++;
     const bg = S.rgba(cs.backgroundColor);
-    if (bg && bg[3] > 0.004 && !S.colorToken(tok, bg)) col.add("tokens", el, "background-color", S.colorText(bg), "--weir-* 颜色");
+    // 浏览器自动填充的输入框：背景色由浏览器的 UA 样式（!important）给出，页面改不了，不算违规
+    if (bg && bg[3] > 0.004 && !S.colorToken(tok, bg) && !autofilled(el)) col.add("tokens", el, "background-color", S.colorText(bg), "--weir-* 颜色");
     for (const side of ["Top", "Right", "Bottom", "Left"]) {
       if (parseFloat(cs[`border${side}Width`]) <= 0 || cs[`border${side}Style`] === "none" || cs[`border${side}Style`] === "hidden") continue;
       const bc = S.rgba(cs[`border${side}Color`]);

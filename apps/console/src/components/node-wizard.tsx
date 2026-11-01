@@ -311,7 +311,7 @@ function ShareList({ shares, leave }: { shares: Share[]; leave: () => void }) {
     <ul className="stack">
       {shares.map((s) => (
         <li key={s.user_id} className="rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3">
-          <Link to={objectHref({ type: "user", id: s.user_id })} onClick={leave} className="text-sm font-semibold text-[var(--weir-accent-text)] underline-offset-4 hover:underline">{s.name ? `${s.name}（${s.email}）` : s.email}</Link>
+          <Link to={objectHref({ type: "user", id: s.user_id })} onClick={leave} className="text-sm font-semibold weir-hit relative text-[var(--weir-accent-text)] underline-offset-4 transition-opacity hover:underline active:opacity-60">{s.name ? `${s.name}（${s.email}）` : s.email}</Link>
           {s.error ? (
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <small className="text-[var(--weir-warn-ink)]">{s.error}</small>

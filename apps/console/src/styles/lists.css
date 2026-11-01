@@ -1,43 +1,39 @@
-/* 列表、表格工具栏、指标与状态：面板只给外框材质，行保持平面。 */
+/*
+ * 列表（iOS inset grouped）：卡片就是分组，行之间是细分隔线，行高不小于 44。
+ * 卡片内容区已有左右内边距，所以分隔线天然从文字起点开始、不贯穿卡片（等同 iOS 的缩进分隔线）。
+ */
 .table-card { overflow: hidden; }
-.table-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 18px; border-bottom: 1px solid var(--weir-line-soft); box-shadow: 0 1px 0 var(--weir-highlight); }
+.table-toolbar { display: flex; align-items: center; gap: var(--weir-space-3); flex-wrap: wrap; padding: var(--weir-space-3) var(--weir-space-4); border-bottom: 1px solid var(--weir-line-soft); }
 .table-toolbar > input { flex: 1; min-width: 160px; width: auto; }
-.result-count { margin-left: auto; font-size: 11.5px; color: var(--weir-ink-3); font-variant-numeric: tabular-nums; }
 
-.list-rows { display: grid; }
-.list-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px 0; border-bottom: 1px solid var(--weir-line-soft); min-width: 0; }
+.list-row { display: flex; align-items: center; justify-content: space-between; gap: var(--weir-space-3); min-height: var(--weir-tap-touch); padding: var(--weir-space-3) 0; border-bottom: 1px solid var(--weir-line-soft); min-width: 0; }
 .list-row:last-child { border-bottom: 0; }
 .list-row > div { min-width: 0; }
-.list-row strong { font-size: 13px; font-weight: 550; overflow-wrap: anywhere; }
-.list-row small { display: block; margin-top: 3px; font-size: 11.5px; overflow-wrap: anywhere; }
-.grant-row { flex-wrap: wrap; }
+.list-row strong { font-size: var(--weir-text-body); line-height: var(--weir-leading-body); font-weight: var(--weir-weight-medium); overflow-wrap: anywhere; }
+/* 行内次要文字：secondaryLabel */
+.list-row small { display: block; margin-top: var(--weir-space-1); font-size: var(--weir-text-meta); line-height: var(--weir-leading-meta); color: var(--weir-ink-3); overflow-wrap: anywhere; }
 
-.table-identity { display: flex; align-items: center; gap: 10px; min-width: 200px; }
-.table-identity > div { min-width: 0; }
-.table-identity small { display: block; margin-top: 2px; font-size: 11px; }
-.usage-cell { min-width: 150px; max-width: 220px; }
-.usage-cell strong { font-size: 12px; font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; }
-
-/* 状态徽标：灯 + 文字，徽标本身保持中性 */
-/* 行内开关：开关 + 当前状态文字 */
-.inline-switch { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--weir-ink-3); white-space: nowrap; }
-.inline-switch[data-pending="true"] { opacity: 0.7; }
-
-.metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-.metric-grid > .weir-readout { min-height: 92px; align-content: start; }
-
-.mobile-user-list { display: none; }
-@media (max-width: 900px) {
-  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .metric-grid > :last-child:nth-child(odd) { grid-column: 1 / -1; }
-}
 @media (max-width: 700px) {
-  .desktop-user-table { display: none; }
-  .mobile-user-list { display: block; }
-  .mobile-user { padding: 16px 18px; border-bottom: 1px solid var(--weir-line-soft); }
-  .mobile-user strong { overflow-wrap: anywhere; font-size: 13px; }
-  .mobile-user p { font-size: 12px; margin-bottom: 8px; }
-  .table-toolbar { padding: 12px 14px; }
-  .result-count { display: none; }
+  .table-toolbar { padding: var(--weir-space-3) var(--weir-space-4); }
   .list-row { flex-wrap: wrap; }
 }
+
+/*
+ * 分组列表（规范第 8 条）：没有外层卡片内边距的列表（卡片里的一组可点行）自己画成一块圆角 12 的分组，
+ * 行间分隔线从左侧内边距处开始（缩进）、不贯穿；行高不小于 44。行里可点的整行用 .group-row-button。
+ */
+.group-list { margin: 0; padding: 0; list-style: none; overflow: hidden; border-radius: var(--weir-radius-card); background: var(--weir-well); }
+.group-list > li { position: relative; min-height: var(--weir-tap-touch); }
+.group-list > li + li::before { content: ""; position: absolute; top: 0; right: 0; left: var(--weir-space-3); height: 1px; background: var(--weir-line-soft); pointer-events: none; z-index: 1; }
+.group-list > li.group-row { padding: var(--weir-space-3); }
+.group-row-button { display: flex; align-items: center; gap: var(--weir-space-3); width: 100%; min-height: var(--weir-tap-touch); padding: var(--weir-space-2) var(--weir-space-3); text-align: left; }
+/* 行尾：次要文字 secondaryLabel，箭头 tertiaryLabel */
+.group-row-button > .group-row-chevron { flex-shrink: 0; width: 16px; height: 16px; color: var(--weir-ink-4); }
+
+/*
+ * 设置分组（iOS 设置的开关行）：一组 SwitchField / CheckboxField（placement="end"）放进 .settings-group，
+ * 画成圆角 12 的分组，行高 44，行间缩进的细分隔线，文字在左、控件靠右。
+ */
+.settings-group { display: grid; overflow: hidden; border-radius: var(--weir-radius-card); background: var(--weir-well); }
+.settings-group > [data-slot=choice-field] { position: relative; min-height: var(--weir-tap-touch); padding: var(--weir-space-2) var(--weir-space-3); }
+.settings-group > [data-slot=choice-field] + [data-slot=choice-field]::before { content: ""; position: absolute; top: 0; right: 0; left: var(--weir-space-3); height: 1px; background: var(--weir-line-soft); pointer-events: none; }

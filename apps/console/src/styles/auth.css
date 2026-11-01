@@ -1,44 +1,46 @@
-/* 登录与初始化：居中一块铭牌面板，背景为纯色底板，不使用大面积渐变光斑。 */
-.auth { max-width: 500px; margin: 10vh auto; padding: 0 20px; display: grid; gap: 14px; justify-items: center; color: var(--weir-ink-2); }
-.auth-screen { min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 40px 20px; background: linear-gradient(180deg, var(--weir-base), var(--weir-base-deep)); }
+/* 登录与初始化：居中一块面板，底色为分组背景。 */
+.auth { max-width: 500px; margin: 10vh auto; padding: 0 var(--weir-space-5); display: grid; gap: var(--weir-space-3); justify-items: center; color: var(--weir-ink-2); }
+.auth-screen { min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 40px var(--weir-space-5); background: var(--weir-base); }
 .auth-container { width: 100%; max-width: 430px; min-width: 0; }
-.auth-brand { display: flex; align-items: center; justify-content: center; gap: 12px; font-size: 22px; font-weight: 650; letter-spacing: -0.02em; text-decoration: none; color: var(--weir-ink); }
-.auth-brand > span { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 11px; color: var(--weir-accent-ink); background: linear-gradient(180deg, var(--weir-accent-hi), var(--weir-accent-lo)); border: 1px solid var(--weir-accent-lo); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.3), 0 2px 4px var(--weir-shade-strong); }
-.auth-subtitle { margin: 12px 0 24px; text-align: center; font-size: 13px; color: var(--weir-ink-3); }
-.auth-heading { text-align: center; margin-bottom: 22px; }
-.auth-heading h1 { font-size: 20px; margin: 0 0 8px; }
-.auth-heading p { margin: 0; font-size: 12.5px; }
-.auth-form input, .auth-form [data-slot=input-group] { height: 42px; }
+.auth-brand { display: flex; align-items: center; justify-content: center; gap: var(--weir-space-3); font-size: var(--weir-text-display); line-height: var(--weir-leading-display); font-weight: var(--weir-weight-bold); letter-spacing: -0.02em; text-decoration: none; color: var(--weir-ink); }
+/* 应用图标：iOS 图标的圆角约为边长的 22%，44 × 0.22 ≈ 10 */
+.auth-brand > span { display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--weir-radius); color: var(--weir-accent-ink); background: var(--weir-accent); }
+.auth-subtitle { margin: var(--weir-space-3) 0 var(--weir-space-6); text-align: center; font-size: var(--weir-text-body); line-height: var(--weir-leading-body); color: var(--weir-ink-3); }
+.auth-heading { text-align: center; margin-bottom: var(--weir-space-5); }
+.auth-heading h1 { margin: 0 0 var(--weir-space-2); }
+.auth-heading p { margin: 0; font-size: var(--weir-text-meta); line-height: var(--weir-leading-meta); }
+/* 登录与初始化的输入框、主按钮都是 44 高（iOS 表单行高） */
+.auth-form input, .auth-form [data-slot=input-group] { height: var(--weir-tap-touch); }
 .auth-form [data-slot=input-group] input { height: 100%; }
-.auth-form > button { min-height: 42px; }
-.auth-divider { display: flex; align-items: center; gap: 12px; font-size: 11.5px; color: var(--weir-ink-engraved); }
-.auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 2px; background: linear-gradient(180deg, var(--weir-inset), var(--weir-highlight)); opacity: 0.6; }
-.auth-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin-top: 18px; }
-.auth-hint { margin-bottom: 14px; font-size: 12.5px; color: var(--weir-ink-3); }
-.auth-footer { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 22px 0 0; font-size: 11.5px; color: var(--weir-ink-3); }
+.auth-form > button { min-height: var(--weir-tap-touch); }
+.auth-divider { display: flex; align-items: center; gap: var(--weir-space-3); font-size: var(--weir-text-meta); line-height: var(--weir-leading-meta); color: var(--weir-ink-3); }
+.auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--weir-line); }
+.auth-links { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--weir-space-1); margin-top: var(--weir-space-4); }
+.auth-hint { margin-bottom: var(--weir-space-3); font-size: var(--weir-text-meta); line-height: var(--weir-leading-meta); color: var(--weir-ink-3); }
+.auth-footer { display: flex; align-items: center; justify-content: center; gap: var(--weir-space-2); margin: var(--weir-space-6) 0 0; font-size: var(--weir-text-meta); line-height: var(--weir-leading-meta); color: var(--weir-ink-3); }
 
 .setup-container { width: 100%; max-width: 920px; min-width: 0; }
-.setup-heading { text-align: center; margin-bottom: 24px; }
-.setup-heading h1 { font-size: 24px; margin: 22px 0 10px; }
-.setup-heading > p { font-size: 13px; }
-.setup-workspace { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 28px; }
-.setup-progress { padding-top: 10px; }
-.setup-progress > p { max-width: 205px; margin: 26px 0 0; font-size: 11.5px; line-height: 1.8; }
-.setup-section-heading { margin-bottom: 22px; }
-.setup-section-heading > small { font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--weir-ink-engraved); }
-.setup-section-heading h2 { font-size: 18px; margin: 8px 0 8px; }
-.setup-section-heading p { font-size: 12.5px; }
-.setup-fields input, .setup-fields [data-slot=input-group] { height: 42px; }
+.setup-heading { text-align: center; margin-bottom: var(--weir-space-6); }
+.setup-heading h1 { font-size: var(--weir-text-display); line-height: var(--weir-leading-display); margin: var(--weir-space-5) 0 var(--weir-space-2); }
+.setup-heading > p { font-size: var(--weir-text-body); line-height: var(--weir-leading-body); }
+.setup-workspace { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: var(--weir-space-8); }
+.setup-progress { padding-top: var(--weir-space-3); }
+.setup-progress > p { max-width: 205px; margin: var(--weir-space-6) 0 0; font-size: var(--weir-text-meta); line-height: var(--weir-leading-meta); }
+.setup-section-heading { margin-bottom: var(--weir-space-5); }
+.setup-section-heading > small { color: var(--weir-ink-3); }
+.setup-section-heading h2 { font-size: var(--weir-text-title); line-height: var(--weir-leading-title); margin: var(--weir-space-2) 0; }
+.setup-section-heading p { font-size: var(--weir-text-meta); line-height: var(--weir-leading-meta); }
+.setup-fields input, .setup-fields [data-slot=input-group] { height: var(--weir-tap-touch); }
 .setup-fields [data-slot=input-group] input { height: 100%; }
-.setup-info { margin: 0; padding: 12px 14px; font-size: 12.5px; line-height: 1.8; color: var(--weir-ink-2); border-radius: var(--weir-radius); background: var(--weir-well); border: 1px solid var(--weir-line); box-shadow: inset 0 1px 2px var(--weir-inset); }
-.setup-info code { font-size: 11.5px; overflow-wrap: anywhere; }
-.setup-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+.setup-info { margin: 0; padding: var(--weir-space-3) var(--weir-space-4); font-size: var(--weir-text-meta); line-height: var(--weir-leading-meta); color: var(--weir-ink-2); border-radius: var(--weir-radius-card); background: var(--weir-well); }
+.setup-info code { overflow-wrap: anywhere; }
+.setup-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--weir-space-3); margin-top: var(--weir-space-1); }
 
 @media (max-width: 760px) {
-  .setup-workspace { grid-template-columns: 1fr; gap: 20px; }
+  .setup-workspace { grid-template-columns: 1fr; gap: var(--weir-space-5); }
   .setup-progress { padding: 0; }
   .setup-progress > p { display: none; }
 }
 @media (max-width: 480px) {
-  .auth-screen { padding: 24px 16px; align-items: flex-start; }
+  .auth-screen { padding: var(--weir-space-6) var(--weir-space-4); align-items: flex-start; }
 }

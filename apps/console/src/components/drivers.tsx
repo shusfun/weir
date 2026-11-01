@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge, Button, Card, CardContent, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, Notice, SectionHeader, SkeletonList, Textarea, useConfirm, ScrollArea } from "@weir/ui";
-import { Bot, Plus, RotateCcw } from "lucide-react";
+import { Bot, ChevronRight, Plus, RotateCcw } from "lucide-react";
 import { api, ApiError } from "../api";
 import { useRowAction } from "../lib/action";
 import { ActionsWait, WaitText } from "./wait";
@@ -71,16 +71,19 @@ export function DriversPanel() {
           }
         />
         {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} skeleton={<SkeletonList rows={4} lines={1} />} /> : (
-          <ul className="m-0 list-none space-y-2 p-0">
+          <ul className="group-list">
             {q.data.map((d) => (
               <li key={d.name} {...dataObject({ type: "driver", key: d.name })}>
-                <button type="button" className="flex w-full flex-wrap items-center gap-2 rounded-[var(--weir-radius)] border border-[var(--weir-line)] px-3 py-2 text-left hover:bg-[var(--weir-well)]" onClick={() => param.open(d.name)}>
-                  <code className="text-xs">{d.name}</code>
-                  <Badge variant="soft" tone={sourceLabel[d.source][1]}>{sourceLabel[d.source][0]}</Badge>
-                  {d.disabled && <Badge variant="soft" tone="bad">已停用</Badge>}
-                  {d.error && <Badge variant="soft" tone="bad">无法展开</Badge>}
-                  <small className="text-[var(--weir-ink-3)]">{d.kernel} {d.min_version} – {d.max_version || "最新"}{d.extends ? ` · 继承 ${d.extends}` : ""}</small>
-                  <small className="ml-auto text-[var(--weir-ink-3)]">{d.versions.length > 0 ? `已下载 ${d.versions.join("、")}` : "没有已下载的版本"}{d.gates.length > 0 ? ` · ${d.gates.length} 台 VPS 在用` : ""}</small>
+                <button type="button" className="group-row-button weir-press-fill" onClick={() => param.open(d.name)}>
+                  <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                    <code className="text-meta">{d.name}</code>
+                    <Badge variant="soft" tone={sourceLabel[d.source][1]}>{sourceLabel[d.source][0]}</Badge>
+                    {d.disabled && <Badge variant="soft" tone="bad">已停用</Badge>}
+                    {d.error && <Badge variant="soft" tone="bad">无法展开</Badge>}
+                    <small className="basis-full text-[var(--weir-ink-3)]">{d.kernel} {d.min_version} – {d.max_version || "最新"}{d.extends ? ` · 继承 ${d.extends}` : ""}</small>
+                  </span>
+                  <small className="shrink-0 text-right text-[var(--weir-ink-3)] max-sm:hidden">{d.versions.length > 0 ? `已下载 ${d.versions.join("、")}` : "没有已下载的版本"}{d.gates.length > 0 ? ` · ${d.gates.length} 台 VPS 在用` : ""}</small>
+                  <ChevronRight className="group-row-chevron" aria-hidden />
                 </button>
               </li>
             ))}

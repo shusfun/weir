@@ -154,9 +154,12 @@ S.settle = (timeout = 6000) =>
     let last = performance.now();
     const mo = new MutationObserver(() => (last = performance.now()));
     mo.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
+    // 正在进行的 CSS 过渡（弹窗打开时 0.96→1 的缩放等）也要等完：过渡中量到的尺寸是缩小后的，点击区域会误报。
+    // 只等过渡，不等关键帧动画（动效检查要看正在运行的动画）
+    const transitioning = () => document.getAnimations().some((a) => a instanceof CSSTransition && a.playState === "running");
     const tick = () => {
       const busy = document.querySelector('[aria-busy=true], [data-slot=skeleton], .weir-skeleton, [role=status][data-kind=loading]');
-      if ((!busy && performance.now() - last > 200) || performance.now() - start > timeout) {
+      if ((!busy && !transitioning() && performance.now() - last > 200) || performance.now() - start > timeout) {
         mo.disconnect();
         resolve({ waited: Math.round(performance.now() - start), busy: !!busy });
       } else setTimeout(tick, 60);

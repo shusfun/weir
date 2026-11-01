@@ -1,5 +1,5 @@
 /*
- * 动效组件：勾选描绘、水波、爆散、骨架行、汉堡变叉、底部抽屉、液态滑块、翻面卡片、卡片堆叠、轮播。
+ * 动效组件：勾选描绘、爆散、骨架行、汉堡变叉、底部抽屉、液态滑块、翻面卡片、卡片堆叠、轮播。
  * 除对勾描绘（16px 内的小 SVG 描边，一次性）外只动 transform / opacity；不做常驻循环动画。
  * 减少动态效果由 theme.css 的全局规则统一压到 1ms，JS 动效另行读取 prefersReducedMotion()。
  */
@@ -26,22 +26,6 @@
   .weir-copy-icon[data-copied] .weir-copy-icon-copy { opacity: 0; transform: scale(0.4) rotate(-30deg); }
   .weir-copy-icon[data-copied] .weir-copy-icon-check { opacity: 1; transform: scale(1); }
 
-  /* 水波：宿主内的裁剪层，不裁掉键帽外阴影；圆从按压点放大并淡出 */
-  .weir-ripple-host {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
-    border-radius: inherit;
-    pointer-events: none;
-  }
-  .weir-ripple {
-    position: absolute;
-    border-radius: 50%;
-    background: currentColor;
-    opacity: 0;
-    scale: 0;
-    animation: weir-ripple var(--weir-settle) var(--weir-decel) forwards;
-  }
 
   /* 爆散：粒子沿各自角度飞出、缩小、淡出；中心一圈冲击环 */
   .weir-burst {
@@ -430,11 +414,7 @@
 @keyframes weir-draw {
   to { stroke-dashoffset: 0; }
 }
-@keyframes weir-ripple {
-  0% { scale: 0; opacity: 0.2; }
-  60% { opacity: 0.12; }
-  100% { scale: 1; opacity: 0; }
-}
+
 /* 前 30% 冲出四分之三距离并略放大，之后慢慢飘到终点、缩小淡出——爆发有冲劲，收尾不突兀 */
 @keyframes weir-burst-fly {
   0% { transform: rotate(var(--weir-burst-angle)) translateX(0) scale(0.4); opacity: 1; animation-timing-function: cubic-bezier(0.2, 0.8, 0.4, 1); }

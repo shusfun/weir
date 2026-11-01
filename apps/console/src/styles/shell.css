@@ -1,4 +1,4 @@
-/* 外壳：左侧控制条 + 顶栏 + 主区。控制条为一整块面板，当前项点亮 LED。 */
+/* 外壳：左侧导航栏 + 顶栏 + 主区。导航栏是一整块面板（iPad 侧边栏），当前项为白色滑块并点亮指示灯。 */
 .shell {
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
@@ -13,18 +13,19 @@
   height: 100dvh;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 18px 12px 14px;
-  /* 新拟物底座：与键帽同色、纯平 */
-  background: var(--weir-key);
+  gap: var(--weir-space-1);
+  padding: var(--weir-space-4) var(--weir-space-3) var(--weir-space-3);
+  /* 不透明面板底：半透明填充叠在灰底上，次要文字对比度不到 4.5 */
+  background: var(--weir-panel);
   border-right: 1px solid var(--weir-line-soft);
   z-index: 20;
 }
 .rail-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 4px 8px 18px;
+  gap: var(--weir-space-3);
+  padding: var(--weir-space-1) var(--weir-space-2) var(--weir-space-4);
+  border-radius: var(--weir-radius);
   text-decoration: none;
   color: var(--weir-ink);
 }
@@ -33,17 +34,15 @@
   place-items: center;
   width: 34px;
   height: 34px;
-  border-radius: 9px;
+  border-radius: var(--weir-radius);
   color: var(--weir-accent-ink);
-  background: linear-gradient(180deg, var(--weir-accent-hi), var(--weir-accent-lo));
-  border: 1px solid var(--weir-accent-lo);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.3),
-    0 1px 2px var(--weir-shade-strong);
+  background: var(--weir-accent);
 }
 .rail-brand strong {
   display: block;
-  font-size: 16px;
+  font-size: var(--weir-text-heading);
+  line-height: var(--weir-leading-heading);
+  font-weight: var(--weir-weight-semibold);
   letter-spacing: -0.02em;
 }
 /* 导航滚动区（ScrollArea）：根占满剩余高度，视口里留出键帽外阴影的空间，避免被滚动容器裁切 */
@@ -52,27 +51,34 @@
   min-height: 0;
 }
 .rail-nav-viewport {
-  padding: 4px 8px 4px 6px;
+  padding: var(--weir-space-1) var(--weir-space-2) var(--weir-space-1) var(--weir-space-1);
 }
 .rail-group {
   display: grid;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: var(--weir-space-1);
+  margin-bottom: var(--weir-space-4);
 }
 .rail-group-label {
-  padding: 6px 10px 4px;
+  padding: var(--weir-space-2) var(--weir-space-3) var(--weir-space-1);
 }
 .rail-item {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 38px;
-  padding: 0 10px;
+  gap: var(--weir-space-3);
+  /* 桌面 36，触屏（含窄屏导航抽屉）44 */
+  min-height: 36px;
+  padding: 0 var(--weir-space-3);
   border-radius: var(--weir-radius);
   color: var(--weir-ink-2);
-  font-size: 13px;
+  font-size: var(--weir-text-body);
+  line-height: var(--weir-leading-body);
   text-decoration: none;
+}
+@media (pointer: coarse), (max-width: 767.98px) {
+  .rail-item {
+    min-height: var(--weir-tap-touch);
+  }
 }
 .rail-item > .rail-label {
   min-width: 0;
@@ -103,18 +109,19 @@
 }
 .rail-foot {
   display: grid;
-  gap: 8px;
-  padding-top: 10px;
+  gap: var(--weir-space-2);
+  padding-top: var(--weir-space-3);
   border-top: 1px solid var(--weir-line-soft);
 }
 /* 左下角个人中心：凸起铭牌，点开向上弹出菜单 */
 .rail-account {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--weir-space-3);
   width: 100%;
   min-width: 0;
-  padding: 7px 8px;
+  min-height: var(--weir-tap-touch);
+  padding: var(--weir-space-1) var(--weir-space-2);
   border-radius: var(--weir-radius);
   color: var(--weir-ink);
   text-align: left;
@@ -125,14 +132,16 @@
   display: grid;
 }
 .rail-account-text strong {
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: var(--weir-text-body);
+  line-height: var(--weir-leading-body);
+  font-weight: var(--weir-weight-semibold);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .rail-account-text small {
-  font-size: 11px;
+  font-size: var(--weir-text-meta);
+  line-height: var(--weir-leading-meta);
 }
 .rail-account > svg {
   width: 15px;
@@ -167,9 +176,9 @@
   z-index: 15;
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 60px;
-  padding: 0 28px;
+  gap: var(--weir-space-3);
+  min-height: 56px;
+  padding: 0 var(--weir-space-6);
   background: color-mix(in srgb, var(--weir-base) 94%, var(--weir-panel));
   border-bottom: 1px solid var(--weir-line);
   box-shadow: 0 1px 0 var(--weir-highlight);
@@ -179,7 +188,9 @@
   flex: 1;
 }
 .topbar-title h1 {
-  font-size: 16px;
+  /* 顶栏标题：iOS 导航栏标题（headline） */
+  font-size: var(--weir-text-headline);
+  line-height: var(--weir-leading-headline);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -188,39 +199,29 @@
 .topbar-tools {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--weir-space-2);
 }
 .command-trigger .weir-kbd {
   margin-left: auto;
 }
-.tray-count {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 9px;
-  font: 600 10.5px/18px var(--weir-mono);
-  text-align: center;
-  color: var(--weir-accent-ink);
-  background: var(--weir-accent);
-}
 .origin-banner {
   display: grid;
-  gap: 8px;
+  gap: var(--weir-space-2);
   width: 100%;
   max-width: 1480px;
   margin: 0 auto;
-  padding: 16px 28px 0;
+  padding: var(--weir-space-4) var(--weir-space-6) 0;
 }
 @media (max-width: 900px) {
   .origin-banner {
-    padding: 12px 16px 0;
+    padding: var(--weir-space-3) var(--weir-space-4) 0;
   }
 }
 .shell-main {
   width: 100%;
   max-width: 1480px;
   margin: 0 auto;
-  padding: 24px 28px 40px;
+  padding: var(--weir-space-6) var(--weir-space-6) 40px;
   flex: 1;
   min-width: 0;
   position: relative;
@@ -268,9 +269,10 @@
   left: 50%;
   z-index: 5;
   translate: -50% 0;
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 12px;
+  padding: 2px var(--weir-space-3);
+  border-radius: var(--weir-radius-full);
+  font-size: var(--weir-text-meta);
+  line-height: var(--weir-leading-meta);
   color: var(--weir-ink-3);
   background: var(--weir-panel);
   border: 1px solid var(--weir-line-soft);
@@ -295,12 +297,13 @@
   .rail {
     display: none;
   }
+  /* 窄屏：左右留白 16（iOS 的系统边距） */
   .topbar {
-    padding: 0 14px;
-    min-height: 56px;
+    padding: 0 var(--weir-space-2) 0 var(--weir-space-2);
+    min-height: 52px;
   }
   .shell-main {
-    padding: 18px 16px 32px;
+    padding: var(--weir-space-4) var(--weir-space-4) var(--weir-space-8);
   }
 
   .command-trigger .weir-kbd {
@@ -317,7 +320,7 @@
   right: 24px;
   bottom: calc(24px + env(safe-area-inset-bottom));
   z-index: 55;
-  border-radius: 999px;
+  border-radius: var(--weir-radius-full);
   box-shadow: 0 6px 18px -6px var(--weir-shade-strong);
 }
 @media (max-width: 900px) {
@@ -347,9 +350,9 @@
 .dsh-window-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--weir-space-2);
   flex-shrink: 0;
-  padding: 6px 6px 6px 12px;
+  padding: var(--weir-space-1) var(--weir-space-1) var(--weir-space-1) var(--weir-space-3);
   border-bottom: 1px solid var(--weir-line-soft);
   user-select: none;
   touch-action: none;

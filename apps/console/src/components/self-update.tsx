@@ -79,7 +79,7 @@ export function UpdateCard() {
 // UpdateStatus：最近一次更新或切回。与下载任务一样是固定行数（状态、进度条、一行说明、日志），
 // 下载、安装、完成、失败之间只换文字；还没有更新过时显示占位行，开始更新后下面的内容不被顶开。
 function UpdateStatus({ st }: { st?: Status }) {
-  if (!st) return <div className="flex min-h-9 items-center rounded-[var(--weir-radius)] border border-dashed border-[var(--weir-line)] px-3 text-[12.5px] text-[var(--weir-ink-3)]">还没有在这里更新过；更新的进度与日志会显示在这里。</div>;
+  if (!st) return <div className="flex min-h-9 items-center rounded-[var(--weir-radius)] border border-dashed border-[var(--weir-line)] px-3 text-meta text-[var(--weir-ink-3)]">还没有在这里更新过；更新的进度与日志会显示在这里。</div>;
   const p = st.progress;
   const pct = st.state === "done" ? 100 : p && p.total > 0 ? Math.round((p.done / p.total) * 100) : null;
   const label = { downloading: "正在下载", installing: "正在安装", done: "完成", failed: "失败" }[st.state];
@@ -92,7 +92,7 @@ function UpdateStatus({ st }: { st?: Status }) {
   return (
     <div className="stack rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3" aria-live="polite">
       <div className="flex min-h-6 flex-wrap items-center gap-2">
-        <strong className="text-[13px]">{st.action === "rollback" ? "切回" : "更新"} {st.from} → {st.version || "上一版本"}</strong>
+        <strong className="text-body">{st.action === "rollback" ? "切回" : "更新"} {st.from} → {st.version || "上一版本"}</strong>
         <Badge variant="soft" tone={st.state === "done" ? "ok" : st.state === "failed" ? "bad" : "neutral"}>{label}</Badge>
         <small className="ml-auto text-[var(--weir-ink-3)]">{date(st.started_at)}</small>
       </div>

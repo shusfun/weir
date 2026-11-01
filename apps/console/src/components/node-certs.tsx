@@ -65,7 +65,9 @@ export function NodeCertCard() {
               <Input type="email" value={v.email} onChange={(e) => setDraft({ ...v, email: e.target.value })} />
             </Field>
           </FormGrid>
-          <SwitchField label="使用 Let's Encrypt 测试环境（签出的证书客户端不信任，只用于排查）" checked={v.staging} onCheckedChange={(on) => setDraft({ ...v, staging: on })} />
+          <div className="settings-group">
+            <SwitchField placement="end" label="使用 Let's Encrypt 测试环境（签出的证书客户端不信任，只用于排查）" checked={v.staging} onCheckedChange={(on) => setDraft({ ...v, staging: on })} />
+          </div>
           <Notice tone="warn">
             节点证书域名是兜底方案：同一把私钥会分发到所有用到它的 VPS，其中一台泄露会影响全部；这个域名指向中心，会暴露节点与中心之间的关联。节点连接地址仍是各 VPS 的 IP，这个域名只作 SNI。
           </Notice>
@@ -133,7 +135,9 @@ export function GateCerts({ gate }: { gate: Gate }) {
               <PasswordInput autoComplete="off" required value={key} onChange={(e) => setKey(e.target.value)} />
             </Field>
           </FormGrid>
-          <SwitchField label="1Panel 使用 HTTPS" checked={https} onCheckedChange={setHttps} />
+          <div className="settings-group">
+            <SwitchField placement="end" label="1Panel 使用 HTTPS" checked={https} onCheckedChange={setHttps} />
+          </div>
           <div className="actions">
             {panel.configured && (
               <Button type="button" variant="outline" disabled={isBusy("panel") || save.busy || !gate.online} busy={isBusy("panel")} busyText="正在移除…" onClick={() => void run("panel", () => api(`/admin/gates/${gate.id}/panel`, "DELETE"), "已移除 1Panel 密钥")}>移除密钥</Button>

@@ -5,8 +5,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Badge, Button, Field, Form, Input, Notice, ReorderButtons, SectionHeader,
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue, StatusLamp,
+  Badge, Button, Field, Form, Input, Notice, SectionHeader,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SortableList, StatusLamp,
 } from "@weir/ui";
 import { Gauge, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { api, isConflict } from "../api";
@@ -106,11 +106,7 @@ export function GitHubSourcesCard() {
     next.current = list;
     void save.submit();
   };
-  const move = (i: number, d: number) => {
-    const list = [...draft];
-    [list[i], list[i + d]] = [list[i + d], list[i]];
-    edit(list);
-  };
+
   const activeGates = (gates.data ?? []).filter((g) => g.status === "active");
   const addable = activeGates.filter((g) => !draft.some((s) => s.kind === "gate" && s.gate_id === g.id));
   const resultOf = (s: GitHubSource) => results?.find((r) => keyOf(r) === keyOf(s));
@@ -136,23 +132,32 @@ export function GitHubSourcesCard() {
         description="内核、Gate 安装包、中心与 Gate 自更新、客户端安装包和添加 VPS 的安装命令都按这个顺序从 GitHub 下载：排在前面的先用，连续 15 秒低于 100 KiB/s 就换下一个（最后一个不限）。内容一律按 GitHub 官方摘要校验，不一致即丢弃。镜像是「前缀 + GitHub 地址」的写法，兼容 gh-proxy，可以自建。"
         actions={query.data.default && same(draft, query.data.sources) ? <Badge variant="soft" tone="neutral">默认来源</Badge> : undefined}
       />
-      <ol className="stack" aria-label="GitHub 加速来源（按优先级）">
-        {draft.map((s, i) => {
+      {/* 拖动行首把手或用上移 / 下移调整顺序；放下即保存 */}
+      <SortableList
+        label="GitHub 加速来源（按优先级）"
+        items={draft}
+        getId={keyOf}
+        disabled={busy}
+        onReorder={(next) => edit(next)}
+        itemLabel={(s, i) => `第 ${i + 1} 位 ${label(s)}`}
+        className="gap-0"
+        itemClassName="items-center border-b border-[var(--weir-line-soft)] last:border-b-0"
+        renderItem={(s, { index: i, reorder }) => {
           const p = probeText(resultOf(s));
           return (
-            <li key={keyOf(s)} className="list-row" {...(s.kind === "gate" && s.gate_id ? dataObject({ type: "gate", id: s.gate_id }) : {})}>
+            <div className="list-row" {...(s.kind === "gate" && s.gate_id ? dataObject({ type: "gate", id: s.gate_id }) : {})}>
               <div className="min-w-0">
                 <strong className="block"><span className="text-[var(--weir-ink-3)]">{i + 1}. </span><SourceName s={s} gates={gates.data} /></strong>
                 <small className="flex items-center gap-1.5 text-[var(--weir-ink-3)]"><StatusLamp tone={p.tone} label={p.text} />{p.text}</small>
               </div>
               <div className="actions">
-                <ReorderButtons label={label(s)} onUp={() => move(i, -1)} onDown={() => move(i, 1)} upDisabled={busy || i === 0} downDisabled={busy || i === draft.length - 1} />
+                {reorder}
                 <Button variant="ghost" size="icon-sm" aria-label={"删除 " + label(s)} disabled={busy || (isHTTP(s) && httpCount === 1)} onClick={() => edit(draft.filter((_, j) => j !== i))}><Trash2 /></Button>
               </div>
-            </li>
+            </div>
           );
-        })}
-      </ol>
+        }}
+      />
       <ConflictNotice error={save.raw} onReload={() => void query.refetch()} />
       {save.error && !isConflict(save.raw) && <Notice tone="bad">没有保存，已退回保存前的列表：{save.error}</Notice>}
       <Form

@@ -89,7 +89,7 @@ function StepCard({ step, index, total, edits, setEdit }: { step: Step; index: n
         )}
       </div>
       {step.fields.length > 0 && (
-        <dl className="grid grid-cols-[minmax(7rem,auto)_1fr] gap-x-3 gap-y-1.5 text-[13px]">
+        <dl className="grid grid-cols-[minmax(7rem,auto)_1fr] gap-x-3 gap-y-1.5 text-body">
           {step.fields.map((f) => {
             const edited = f.key in edits;
             return (
@@ -115,7 +115,7 @@ function StepCard({ step, index, total, edits, setEdit }: { step: Step; index: n
       {step.result && typeof step.result.latency_ms === "number" && <Notice tone="ok">实测通过（{step.result.stage ?? "连接"}，{step.result.latency_ms} ms）。</Notice>}
       {step.diff && <DiffView lines={step.diff} />}
       {(step.preview ?? []).length > 0 && (
-        <ul className="m-0 list-disc space-y-0.5 pl-5 text-[13px] text-[var(--weir-ink-2)]">{step.preview!.map((p) => <li key={p}>{p}</li>)}</ul>
+        <ul className="m-0 list-disc space-y-0.5 pl-5 text-body text-[var(--weir-ink-2)]">{step.preview!.map((p) => <li key={p}>{p}</li>)}</ul>
       )}
     </section>
   );
@@ -211,7 +211,8 @@ export function DraftConfirm() {
           {pending > 1 && <Badge variant="soft" tone="warn">还有 {pending - 1} 份待确认</Badge>}
         </DialogTitle>
         <DialogDescription>草稿由 dsh 提交，已用手动操作的同一套校验试运行（要你填写的机密、引用前面新建对象的步骤，在确认时再试运行）。确认之前不会生效；多步草稿按顺序执行，任一步失败，能撤回的步骤全部撤回。dsh 无法替你确认。</DialogDescription>
-        <div className="stack max-h-[62vh] overflow-y-auto">
+        {/* 弹窗正文自己会滚动，这里不另设内层滚动区 */}
+        <div className="stack">
           {d.explain && (
             <div className="stack">
               <small className="text-[var(--weir-ink-3)]">dsh 的说明</small>

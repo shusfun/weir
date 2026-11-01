@@ -3,7 +3,6 @@ import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { cva, type VariantProps } from "class-variance-authority";
 import { LoaderCircle } from "lucide-react";
 import { cn } from "cn";
-import { Ripple } from "./ripple";
 
 // 尺寸：桌面紧凑（默认 32 高、sm 28），触屏（touch:）一律做到 44；xs / icon-xs 视觉保持小，触屏靠 .weir-hit 把命中区扩到 44。
 const buttonVariants = cva(
@@ -44,13 +43,12 @@ function Button({
   variant = "default",
   size = "default",
   nativeButton,
-  ripple = false,
   busy,
   busyText = "正在处理…",
   disabled,
   children,
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants> & { ripple?: boolean; busy?: boolean; busyText?: string }) {
+}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants> & { busy?: boolean; busyText?: string }) {
   const iconOnly = typeof size === "string" && size.startsWith("icon");
   const label =
     busy === undefined ? children : iconOnly ? (
@@ -76,8 +74,6 @@ function Button({
       {...props}
     >
       {label}
-      {/* 水波默认关闭：按压反馈是缩放 + 填充，只有个别大面积主操作键另开 */}
-      {ripple && <Ripple />}
     </ButtonPrimitive>
   );
 }

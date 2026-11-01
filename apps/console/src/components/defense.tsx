@@ -43,7 +43,9 @@ export function LayaCard() {
     <Section title="Laya 安全观察" description="Laya 只判断安全事件是否可疑（原生 /v1/systemone 接口）。发给它的事件只有类型与次数，不含来源地址、账号和日志原文。Key 加密保存，不会再显示。">
       {q.isPending || q.error || !v ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : (
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
-          <SwitchField label="启用 Laya 判断" checked={v.enabled} onCheckedChange={(on) => setDraft({ ...v, enabled: on })} />
+          <div className="settings-group">
+            <SwitchField placement="end" label="启用 Laya 判断" checked={v.enabled} onCheckedChange={(on) => setDraft({ ...v, enabled: on })} />
+          </div>
           <FormGrid>
             <Field label="Laya 地址" name="url" hint="HTTPS；会自动补上 /v1/systemone。"><Input type="url" placeholder="https://laya.example.com" value={v.url} onChange={(e) => setDraft({ ...v, url: e.target.value })} /></Field>
             <Field label="模型"><Input placeholder="observer" value={v.model} onChange={(e) => setDraft({ ...v, model: e.target.value })} /></Field>
@@ -95,7 +97,7 @@ export function EventsCard({ dshReady }: { dshReady: boolean }) {
   return (
     <Section title="安全事件" description="规则发现的异常（连续登录失败、触发限流）。Laya 判为可疑后可以交给 dsh 分析；dsh 认为需要处置时，会弹窗请你确认封禁。">
       {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : q.data.events.length === 0 ? <State empty="还没有安全事件" /> : (
-        <div className="overflow-x-auto">
+        // Table 自带横向覆盖式滚动区
           <Table>
             <TableHeader><TableRow><TableHead>时间</TableHead><TableHead>事件</TableHead><TableHead>来源</TableHead><TableHead>Laya</TableHead><TableHead>状态</TableHead><TableHead>操作</TableHead></TableRow></TableHeader>
             <TableBody>
@@ -121,7 +123,6 @@ export function EventsCard({ dshReady }: { dshReady: boolean }) {
               })}
             </TableBody>
           </Table>
-        </div>
       )}
     </Section>
   );

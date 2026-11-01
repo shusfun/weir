@@ -48,7 +48,7 @@ export function GateTopology({ gateId, openRouting }: { gateId: number; openRout
     });
     // 列标题不是图上的对象：隐藏连接点（见 .topo-heading 样式）。
     const labels: Node[] = headings.map((h, i) => ({ id: "label-" + i, type: "output", position: { x: i * colWidth, y: 0 }, data: { label: h }, draggable: false, selectable: false, connectable: false,
-      targetPosition: Position.Left, className: "topo-heading", style: { width: nodeWidth, border: "none", background: "transparent", boxShadow: "none", fontSize: 11, color: "var(--weir-ink-3)", padding: 0 } }));
+      targetPosition: Position.Left, className: "topo-heading", style: { width: nodeWidth, border: "none", background: "transparent", boxShadow: "none", fontSize: "var(--weir-text-meta)", lineHeight: "var(--weir-leading-meta)", color: "var(--weir-ink-3)", padding: 0 } }));
     const edges: Edge[] = (q.data?.edges ?? []).map((e, i) => ({ id: "e" + i, source: e.from, target: e.to }));
     return { nodes: [...labels, ...nodes], edges, height: Math.max(...rows, 1) * 64 + 56 };
   }, [q.data]);

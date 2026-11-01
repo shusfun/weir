@@ -1,5 +1,5 @@
 // 分体按钮：左边是最常用的操作（如复制订阅地址，可以直接放 CopyButton，保留它的「已复制」反馈），
-// 右边的三角展开更多操作。两半拼成一块、各自按下有水波，菜单从三角处弹出。参照 Element Plus 的 Dropdown split-button。
+// 右边的三角展开更多操作。两半拼成一块、各自按下缩放并叠填充，菜单从三角处弹出。参照 Element Plus 的 Dropdown split-button。
 import type { ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "cn";

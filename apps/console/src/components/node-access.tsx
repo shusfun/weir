@@ -10,7 +10,7 @@ export function NodeAccess({ ports, reach, compact }: { ports?: PortNeed[]; reac
   if (!ports?.length) return null;
   const blocked = ports.some((p) => p.firewall === "blocked") || reach?.status === "failed";
   return (
-    <div className="stack gap-1 text-[12.5px]">
+    <div className="stack gap-1 text-meta">
       <div className="flex flex-wrap items-center gap-1.5">
         {!compact && <span className="text-[var(--weir-ink-3)]">需放行</span>}
         {ports.map((p) => (

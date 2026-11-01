@@ -3,12 +3,18 @@
 const compositeSel = "[role=tablist], [role=radiogroup], [role=menu], [role=menubar], [role=listbox], [role=grid], [role=tree], [role=toolbar], [data-slot=segmented]";
 S.compositeSel = compositeSel;
 
-// 视觉上被隐藏的原生勾选 / 单选：命中区域按它的 label 或包裹元素算
+// 视觉上被隐藏的原生勾选 / 单选：命中区域按它的 label 或包裹元素算。
+// 包在 <label> 里的勾选、单选、开关（CheckboxField / SwitchField / OptionRow 整行可点）：点到 label 任何位置都会切换，
+// 命中区域按整个 label 算，不只看控件本身
 const realTarget = (el) => {
   const r = el.getBoundingClientRect();
   const cs = getComputedStyle(el);
   if (el.matches("input[type=checkbox], input[type=radio]") && (r.width < 2 || r.height < 2 || parseFloat(cs.opacity) < 0.05)) {
     return (el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`)) || el.closest("label") || el.parentElement;
+  }
+  if (el.matches("[role=checkbox], [role=radio], [role=switch]")) {
+    const label = el.closest("label");
+    if (label && !label.querySelector("button, a[href], input:not([type=checkbox]):not([type=radio]):not([type=hidden])")) return label;
   }
   return el;
 };
@@ -32,7 +38,14 @@ const hitExtent = (el, r) => {
   return { w: span(-1, 0) + span(1, 0) + 1, h: span(0, -1) + span(0, 1) + 1 };
 };
 
+// 视口外的元素无法用 elementFromPoint 探测，只看几何尺寸会把靠伪元素扩到 44 的控件（开关、勾选、ObjectLink）误报；
+// 先滚到视口中央再探测，全部判完后恢复各滚动容器原来的位置
+const inViewport = (r) => r.top >= 0 && r.left >= 0 && r.bottom <= innerHeight && r.right <= innerWidth;
+const scrollState = () => [...document.querySelectorAll("*")].filter((n) => n.scrollTop || n.scrollLeft).map((n) => [n, n.scrollTop, n.scrollLeft]);
+
 S.checkTap = (scope, col, stats) => {
+  const saved = { x: scrollX, y: scrollY, inner: scrollState() };
+  let scrolled = false;
   for (const el0 of scope.querySelectorAll(S.interactiveSel)) {
     if (el0.closest("[data-weir-scan]")) continue;
     const el = realTarget(el0);
@@ -42,11 +55,19 @@ S.checkTap = (scope, col, stats) => {
       continue;
     }
     stats.tapTargets++;
-    const r = el.getBoundingClientRect();
-    if (r.width >= 44 && r.height >= 44) continue;
+    let r = el.getBoundingClientRect();
+    // 尺寸取布局尺寸（offset*，不受 transform 影响）与外框的较大者：弹窗打开的 0.96→1 缩放在浏览器窗口
+    // 被遮挡或最小化时会停在半途（过渡被限流），只看外框会把 44 量成 42
+    const lw = el.offsetWidth ?? 0, lh = el.offsetHeight ?? 0;
+    if (Math.max(r.width, lw) >= 44 && Math.max(r.height, lh) >= 44) continue;
+    if (!inViewport(r)) {
+      el.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
+      scrolled = true;
+      r = el.getBoundingClientRect();
+    }
     let w = r.width, h = r.height, how = "几何尺寸";
-    const inView = r.top >= 0 && r.left >= 0 && r.bottom <= innerHeight && r.right <= innerWidth;
-    if (inView) {
+    // 滚动后仍在视口外（被裁剪的滚动区、固定定位层后面）才退回只看几何尺寸
+    if (inViewport(r)) {
       const ext = hitExtent(el, r);
       if (ext === null) {
         stats.occluded++;
@@ -57,6 +78,14 @@ S.checkTap = (scope, col, stats) => {
       h = Math.max(h, ext.h);
     }
     if (w < 44 || h < 44) col.add("tap", el, "命中区域", `${Math.round(w)}×${Math.round(h)}（${how}）`, "≥ 44×44");
+  }
+  if (scrolled) {
+    for (const n of document.querySelectorAll("*")) if (n.scrollTop || n.scrollLeft) n.scrollTop = n.scrollLeft = 0;
+    for (const [n, t, l] of saved.inner) {
+      n.scrollTop = t;
+      n.scrollLeft = l;
+    }
+    scrollTo({ left: saved.x, top: saved.y, behavior: "instant" });
   }
 };
 

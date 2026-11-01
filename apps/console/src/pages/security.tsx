@@ -254,7 +254,7 @@ export function SecurityPage({ loginRequired }: { loginRequired: () => void }) {
             <div className="stack">
               <div className="recovery-codes">
                 {enrollment.recovery.map((value) => (
-                  <CodeBlock key={value} className="text-center text-[12.5px]">
+                  <CodeBlock key={value} className="text-center text-meta">
                     {value}
                   </CodeBlock>
                 ))}

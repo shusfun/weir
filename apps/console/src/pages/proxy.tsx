@@ -136,13 +136,13 @@ function TypesCard({ base, view, nodes, admin, onSaved }: { base: string; view: 
                   );
                 })}
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2 text-[12.5px]">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-meta">
                 <span className="min-w-0 text-[var(--weir-ink-2)]">
                   出口：{t.exit ? <ExitSummary exit={t.exit} /> : "直接从 VPS 出去"}
                 </span>
                 <span className="flex gap-1.5">
                   {view.allow_chain && (
-                    <Button size="sm" variant="outline" ripple onClick={() => setExitFor(t)}>
+                    <Button size="sm" variant="outline" onClick={() => setExitFor(t)}>
                       {t.exit ? "改出口" : <><Plus />加出口</>}
                     </Button>
                   )}
@@ -216,13 +216,13 @@ function TypeExitDialog({ base, type, nodes, admin, close, saved }: { base: stri
           <ChainExitFields value={exit} onChange={setExit} admin={false} sourcePath={base === "/me" ? "/me/chain-sources" : `${base}/chain-sources`} nodes={nodes} nodeHint="出口需要你可用的另一个节点；这个节点自己作入口时直接出去。" />
           {admin && <CheckboxField label="跳过 VPS 实测（仅管理员）" checked={skip} onCheckedChange={setSkip} />}
           {failed && (
-            <ul className="stack gap-1 text-[12.5px] text-[var(--weir-bad-ink)]">
+            <ul className="stack gap-1 text-meta text-[var(--weir-bad-ink)]">
               {failed.map((f) => <li key={f.name}><strong>{f.name}</strong>：{f.detail || f.code}</li>)}
             </ul>
           )}
           <DialogFooter error={failed ? undefined : save.error} status={save.wait && <WaitText wait={save.wait} />}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
-            <Button type="submit" ripple busy={save.busy} busyText="正在逐个实测…">保存</Button>
+            <Button type="submit" busy={save.busy} busyText="正在逐个实测…">保存</Button>
           </DialogFooter>
         </Form>
       </DialogContent>
@@ -301,7 +301,7 @@ function PolicyCard({ base, view, onSaved }: { base: string; view: ProxyView; on
             </Field>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Button type="submit" ripple disabled={!dirty || !!refreshError || !!topError} busy={save.busy} busyText="正在保存…"><Route />保存分流与自动选择</Button>
+            <Button type="submit" disabled={!dirty || !!refreshError || !!topError} busy={save.busy} busyText="正在保存…"><Route />保存分流与自动选择</Button>
             {save.error && <small className="text-[var(--weir-bad-ink)]">{save.error}</small>}
           </div>
         </Form>

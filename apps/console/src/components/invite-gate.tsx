@@ -111,7 +111,7 @@ function SSHInstall({ name, setName, close, done }: { name: string; setName: (v:
         </Notice>
         <DialogFooter error={install.error}>
           <Button type="button" variant="outline" disabled={install.busy} onClick={() => setProbe(null)}>上一步</Button>
-          <Button type="submit" form={formId} ripple busy={install.busy} busyText="正在启动…">指纹无误，开始安装</Button>
+          <Button type="submit" form={formId} busy={install.busy} busyText="正在启动…">指纹无误，开始安装</Button>
         </DialogFooter>
       </Form>
     );
@@ -161,7 +161,7 @@ function SSHInstall({ name, setName, close, done }: { name: string; setName: (v:
       <small className="text-[var(--weir-ink-3)]">登录信息只用于这一次安装：不保存、不写日志，也不会交给 AI。中心只执行固定的安装命令，装完断开。</small>
       <DialogFooter error={check.error} status={check.wait && <WaitText wait={check.wait} />}>
         <Button type="button" variant="outline" disabled={check.busy} onClick={close}>取消</Button>
-        <Button type="submit" form={formId} ripple disabled={!ready} busy={check.busy} busyText="正在连接…">连接并核对指纹</Button>
+        <Button type="submit" form={formId} disabled={!ready} busy={check.busy} busyText="正在连接…">连接并核对指纹</Button>
       </DialogFooter>
     </Form>
   );
@@ -188,7 +188,7 @@ function CommandInstall({ name, setName, close, done }: { name: string; setName:
         {pairing && <PairingProgress digest={pairing} command={command} close={close} done={done} />}
         <DialogFooter error={copyError}>
           <Button variant="outline" onClick={() => { setCommand(""); setPairing(""); invite.reset(); }}>重新生成</Button>
-          <CopyButton ripple value={command} onError={() => setCopyError("复制失败，请手动选择命令复制。")}>复制命令</CopyButton>
+          <CopyButton value={command} onError={() => setCopyError("复制失败，请手动选择命令复制。")}>复制命令</CopyButton>
           <Button variant="outline" onClick={close}>完成</Button>
         </DialogFooter>
       </div>
@@ -198,7 +198,7 @@ function CommandInstall({ name, setName, close, done }: { name: string; setName:
       <NameField name={name} setName={setName} />
       <DialogFooter error={invite.error}>
         <Button type="button" variant="outline" disabled={invite.busy} onClick={close}>取消</Button>
-        <Button type="submit" form={formId} ripple disabled={!name.trim()} busy={invite.busy} busyText="正在生成…">生成安装命令</Button>
+        <Button type="submit" form={formId} disabled={!name.trim()} busy={invite.busy} busyText="正在生成…">生成安装命令</Button>
       </DialogFooter>
     </Form>
   );

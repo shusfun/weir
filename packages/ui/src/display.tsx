@@ -5,7 +5,6 @@ import { useRender } from "@base-ui/react/use-render";
 import { mergeProps } from "@base-ui/react/merge-props";
 import { Check } from "lucide-react";
 import { cn } from "cn";
-import { Ripple } from "./ripple";
 
 // ---- 图标方块 / 头像 ----
 const tileSizes = {
@@ -54,29 +53,22 @@ function CodeBlock({ className, ...props }: ComponentProps<"code">) {
 }
 
 // ---- 可选卡片：几张卡片里选一张（客户端、下载来源） ----
-// 可点的卡片（render 成按钮 / 链接，或带 onClick）按下缩小并叠填充色；ripple 另加水波（默认关）
+// 可点的卡片（render 成按钮 / 链接，或带 onClick）按下缩小并叠填充色
 function ChoiceCard({
   selected = false,
   featured = false,
-  ripple,
   render,
   className,
   children,
   ...props
-}: useRender.ComponentProps<"div"> & { selected?: boolean; featured?: boolean; ripple?: boolean }) {
+}: useRender.ComponentProps<"div"> & { selected?: boolean; featured?: boolean }) {
   const pressable = !!render || !!props.onClick;
-  const wave = ripple ?? false;
   return useRender({
     defaultTagName: "div",
     render,
     props: mergeProps<"div">(
       {
-        children: (
-          <>
-            {children}
-            {wave && <Ripple />}
-          </>
-        ),
+        children,
         className: cn(
           "relative flex min-w-0 flex-col gap-2 rounded-[var(--weir-radius-card)] border border-[var(--weir-line-soft)] bg-[var(--weir-panel)] p-4",
           pressable && "weir-press cursor-pointer",
@@ -95,16 +87,15 @@ function ChoiceCard({
 function OptionRow({
   inset = false,
   compact = false,
-  ripple = false,
   className,
   children,
   ...props
-}: ComponentProps<"label"> & { inset?: boolean; compact?: boolean; ripple?: boolean }) {
+}: ComponentProps<"label"> & { inset?: boolean; compact?: boolean }) {
   return (
     <label
       data-slot="option-row"
       className={cn(
-        // 文字列只匹配不带 data-slot 的 span：复选框（Base UI 渲染为 span）和水波层不能被撑开
+        // 文字列只匹配不带 data-slot 的 span：复选框（Base UI 渲染为 span）不能被撑开
         "weir-press-fill relative flex min-w-0 cursor-pointer items-start gap-3 text-body wrap-anywhere [&>span:not([data-slot])]:grid [&>span:not([data-slot])]:min-w-0 [&>span:not([data-slot])]:flex-1 [&>span:not([data-slot])]:gap-1 [&>[data-slot=checkbox]]:mt-px [&_small]:block",
         compact ? "min-h-8 items-center touch:min-h-11" : "min-h-11 border-b border-[var(--weir-line-soft)] py-3",
         inset && "px-4",
@@ -113,7 +104,6 @@ function OptionRow({
       {...props}
     >
       {children}
-      {ripple && <Ripple />}
     </label>
   );
 }

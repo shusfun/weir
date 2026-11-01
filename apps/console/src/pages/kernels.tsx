@@ -140,17 +140,17 @@ function SubChecks() {
         <SectionHeader title="订阅检查" description="客户端拉取 Clash / sing-box 订阅后，中心在后台用 mihomo -t 与 sing-box check 检查生成的内容（同一内容 24 小时内只检查一次）。检查不影响订阅输出；内核尚未下载或中心不是 Linux 时显示「未知」。" />
         {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} skeleton={<SkeletonList rows={2} />} /> : (
           <div className="stack">
-            <div className="flex flex-wrap gap-3 text-[13px]">
+            <div className="flex flex-wrap gap-3 text-body">
               {Object.entries(q.data.kernels).map(([k, v]) => (
                 <span key={k}>{k}：{v.available ? <code>{v.version}</code> : <span className="text-[var(--weir-ink-3)]">不可用（{v.error}）</span>}</span>
               ))}
             </div>
             {q.data.items.length === 0 ? <small className="text-[var(--weir-ink-3)]">还没有检查记录：客户端拉取 Clash / sing-box 订阅后会出现在这里。</small> : (
-              <ul className="m-0 list-none space-y-2 p-0">
+              <ul className="group-list">
                 {q.data.items.map((c) => (
-                  <li key={c.ref + c.target} className="rounded-[var(--weir-radius)] border border-[var(--weir-line)] px-3 py-2">
+                  <li key={c.ref + c.target} className="group-row">
                     <div className="flex flex-wrap items-center gap-2">
-                      <strong className="text-[13px]">{c.name}</strong>
+                      <strong className="text-body">{c.name}</strong>
                       <SubCheckBadge check={c} />
                       {c.version && <code className="text-xs">{c.version}</code>}
                       <small className="ml-auto text-[var(--weir-ink-3)]">{date(c.at)}</small>

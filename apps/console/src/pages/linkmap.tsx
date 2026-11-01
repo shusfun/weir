@@ -81,7 +81,7 @@ export function LinkMapPage({ admin }: { admin: boolean }) {
             {m.geo.ready ? " IP 定位数据来自 DB-IP（CC BY 4.0）。" : ` IP 定位：${m.geo.error ?? "未就绪"}。`}
           </small>
           {unknownPlaces.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 text-[12.5px]">
+            <div className="flex flex-wrap items-center gap-1.5 text-meta">
               <span className="text-[var(--weir-ink-3)]">位置未知：</span>
               {unknownPlaces.map((u) => (
                 <button key={u.id} type="button" className="rounded-[var(--weir-radius-sm)] border border-[var(--weir-line)] px-1.5 py-0.5 hover:bg-[var(--weir-well)]" title={u.why} onClick={() => set({ sel: u.id })}>{u.name}</button>
