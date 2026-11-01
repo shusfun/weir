@@ -206,3 +206,56 @@ func TestStepsOrder(t *testing.T) {
 		t.Fatalf("order = %v", got)
 	}
 }
+
+// trickle 每 delay 给 100 字节，支持 Range 续传。
+func trickle(t *testing.T, body []byte, delay time.Duration) (*httptest.Server, *int32) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		start := 0
+		if rg := r.Header.Get("Range"); rg != "" {
+			start, _ = strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(rg, "bytes="), "-"))
+			w.Header().Set("Content-Range", "bytes "+strconv.Itoa(start)+"-"+strconv.Itoa(len(body)-1)+"/"+strconv.Itoa(len(body)))
+			w.Header().Set("Content-Length", strconv.Itoa(len(body)-start))
+			w.WriteHeader(http.StatusPartialContent)
+		} else {
+			w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+		}
+		for i := start; i < len(body); i += 100 {
+			end := min(i+100, len(body))
+			if _, err := w.Write(body[i:end]); err != nil {
+				return
+			}
+			w.(http.Flusher).Flush()
+			select {
+			case <-r.Context().Done():
+				return
+			case <-time.After(delay):
+			}
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &calls
+}
+
+// 全部来源都慢、最后一个连不上：回到最快的那个，不限速从断点下完（线上 Xray 下载失败的情形）。
+func TestAllSlowFallsBackToFastest(t *testing.T) {
+	body := bytes.Repeat([]byte("x"), 3000)
+	slower, _ := trickle(t, body, 400*time.Millisecond)
+	faster, fasterCalls := trickle(t, body, 150*time.Millisecond)
+	dead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(502) }))
+	t.Cleanup(dead.Close)
+	dest := filepath.Join(t.TempDir(), "k")
+	var logs []string
+	req := Request{URLs: []string{slower.URL, faster.URL, dead.URL}, Dest: dest, SHA256: sum(body), MinSpeed: 10000, SlowFor: 2 * time.Second, Log: func(s string) { logs = append(logs, s) }}
+	if err := Download(context.Background(), req); err != nil {
+		t.Fatalf("%v; logs: %v", err, logs)
+	}
+	all := strings.Join(logs, "\n")
+	if !strings.Contains(all, "回到最快的 "+Host(faster.URL)) || *fasterCalls != 2 {
+		t.Fatalf("calls=%d logs: %v", *fasterCalls, logs)
+	}
+	if got, _ := os.ReadFile(dest); !bytes.Equal(got, body) {
+		t.Fatal("content mismatch")
+	}
+}

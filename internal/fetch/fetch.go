@@ -24,7 +24,8 @@ import (
 const DefaultIdle = 60 * time.Second
 
 // 低速换源：连续 DefaultSlowFor 低于 DefaultMinSpeed 就放弃当前来源、换下一个（与 install-online.sh 的
-// curl --speed-limit 102400 --speed-time 15 一致）。最后一个来源不受限制，否则全部来源都慢时会一个也下不完。
+// curl --speed-limit 102400 --speed-time 15 一致）。全部来源都试过后，回到只因为慢被放弃的来源里最快的那个，
+// 不再限速、从断点下完，否则全部来源都慢（或最后一个连不上）时会一个也下不完。
 const (
 	DefaultMinSpeed = 100 << 10
 	DefaultSlowFor  = 15 * time.Second
@@ -128,10 +129,22 @@ func Download(ctx context.Context, r Request) error {
 		return errors.New("没有可用的下载地址")
 	}
 	last := errors.New("没有可用的下载地址")
-	for i, st := range steps {
+	// 只因为慢被放弃的来源里最快的一个：全部来源都试过后回到它，不再限速，从断点下完。
+	// 不能只给最后一个来源免限速：最后一个连不上时，前面那些慢但一直在下的来源就全白放弃了。
+	best, bestSpeed := -1, int64(-1)
+	for i := 0; i <= n; i++ {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		retry := i == n
+		if retry && best < 0 {
+			break
+		}
+		idx := i
+		if retry {
+			idx = best
+		}
+		st := steps[idx]
 		var host string
 		var err error
 		if st.src == nil {
@@ -139,15 +152,30 @@ func Download(ctx context.Context, r Request) error {
 		} else {
 			host = st.src.Name
 		}
-		if i > 0 {
+		switch {
+		case retry:
+			r.Log("其他来源都不可用，回到最快的 " + host + "，不再限速")
+		case i > 0:
 			r.Log("改用 " + host)
 		}
-		// 最后一个来源不按低速放弃。
-		limit := r.MinSpeed > 0 && i < n-1
+		// 只有一个来源时没有可换的，不按低速放弃。
+		limit := r.MinSpeed > 0 && n > 1 && !retry
+		started := time.Now()
+		var before int64
 		if st.src == nil {
+			before = partSize(r.Dest)
 			err = r.once(ctx, st.url, host, limit)
 		} else {
 			err = r.source(ctx, *st.src, limit && !st.src.Unmetered)
+		}
+		if errors.Is(err, ErrSlow) && !retry {
+			got := partSize(r.Dest) - before
+			if st.src != nil {
+				got = partSize(r.Dest) // 非 HTTP 来源从头写
+			}
+			if sp := int64(float64(got) / time.Since(started).Seconds()); sp > bestSpeed {
+				best, bestSpeed = idx, sp
+			}
 		}
 		if err == nil {
 			ok, sumErr := matches(r.Dest+".part", r.SHA256)
@@ -200,6 +228,13 @@ func (r Request) watchSlow(ctx context.Context, cancel context.CancelFunc, got *
 		}
 	}()
 	return slow.Load
+}
+
+func partSize(dest string) int64 {
+	if st, err := os.Stat(dest + ".part"); err == nil {
+		return st.Size()
+	}
+	return 0
 }
 
 func (r Request) slowErr(host string, done int64) error {
