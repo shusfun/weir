@@ -12,3 +12,4 @@ coverage/
 __pycache__/
 *.pyc
 docs/evidence/
+apps/console/scan/out/
