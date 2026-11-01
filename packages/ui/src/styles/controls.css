@@ -139,6 +139,115 @@
   .weir-key[data-popup-open] { translate: 0 1px; scale: none; }
   .weir-key[data-popup-open]::before { opacity: 0; }
   .weir-key[data-popup-open]::after { opacity: 1; }
+
+  /*
+   * 覆盖式滚动条（scroll-area.tsx）。根定尺寸，视口在根里伸缩：根给 max-h 时视口随内容长到上限再滚，
+   * 根给 h / flex-1 时视口撑满。滚动条绝对定位在根内、盖在内容上，不占宽度。
+   * 显示：滚动中（data-scrolling）、鼠标停在滚动条上（:hover）、拖动拇指（:active）；
+   * 淡出前停留 --weir-scrollbar-linger，加上 Base UI 的 500 ms 判定，停止滚动约 600 ms 后开始淡出。
+   */
+  .weir-scroll-root {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+  }
+  /* 视口是绝对定位子元素（sr-only、角标）的包含块：否则它们相对外层定位，越出裁切把页面撑宽 */
+  .weir-scroll-viewport {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    max-height: 100%;
+    outline: none;
+  }
+  /* 视口可用 Tab 聚焦后用方向键 / 翻页键滚动：聚焦时画一圈内描边，不占位、不被裁切 */
+  .weir-scroll-viewport:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--weir-ring);
+  }
+  .weir-scrollbar {
+    z-index: 30;
+    display: flex;
+    opacity: 0;
+    transition: opacity var(--weir-mid) var(--weir-ease) var(--weir-scrollbar-linger);
+  }
+  .weir-scrollbar[data-orientation="vertical"] { width: var(--weir-scrollbar-hit); }
+  .weir-scrollbar[data-orientation="horizontal"] { height: var(--weir-scrollbar-hit); }
+  .weir-scrollbar[data-scrolling],
+  .weir-scrollbar:hover,
+  .weir-scrollbar:active {
+    opacity: 1;
+    transition-delay: 0ms;
+    transition-duration: var(--weir-fast);
+  }
+  .weir-scroll-thumb {
+    position: relative;
+    flex-shrink: 0;
+  }
+  .weir-scrollbar[data-orientation="vertical"] .weir-scroll-thumb { width: 100%; }
+  .weir-scrollbar[data-orientation="horizontal"] .weir-scroll-thumb { height: 100%; }
+  /* 可点区比画出来的拇指宽：拇指居中，四周留出 (hit - size) / 2 */
+  .weir-scroll-thumb::before {
+    content: "";
+    position: absolute;
+    inset: calc((var(--weir-scrollbar-hit) - var(--weir-scrollbar-size)) / 2);
+    border-radius: 999px;
+    background: var(--weir-scroll-thumb);
+  }
+  .weir-scrollbar:hover .weir-scroll-thumb::before,
+  .weir-scroll-thumb:active::before {
+    background: var(--weir-scroll-thumb-active);
+  }
+  .weir-scroll-corner { background: transparent; }
+  /* 整页滚动区（PageScrollArea）：铺满视口；html / body 不再滚动 */
+  .weir-page-scroll { height: 100dvh; }
+
+  /*
+   * 拖拽排序（sortable-list.tsx）。外层行的 transform 由 dnd-kit 写入（让位 / 跟手），
+   * 抬起效果放在内层：放大 + 一层预先画好的阴影淡入，只动 transform / opacity。
+   */
+  .weir-sortable-list { display: grid; gap: 18px; min-width: 0; }
+  .weir-sortable-item { position: relative; display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
+  .weir-sortable-item[data-dragging] { z-index: 10; }
+  .weir-sortable-handle {
+    cursor: grab;
+    /* 长按拿起时不触发文字选择与系统菜单；纵向滑动仍交给页面滚动 */
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+  .weir-sortable-item[data-dragging] .weir-sortable-handle { cursor: grabbing; }
+  .weir-sortable-body {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    transition: scale var(--weir-bounce-dur) var(--weir-bounce);
+  }
+  .weir-sortable-body::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: var(--weir-radius);
+    box-shadow: 0 14px 30px -12px var(--weir-shade-strong);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--weir-mid) var(--weir-ease);
+  }
+  .weir-sortable-item[data-dragging] .weir-sortable-body {
+    scale: var(--weir-drag-scale);
+    transition-duration: var(--weir-mid);
+    transition-timing-function: var(--weir-ease);
+  }
+  .weir-sortable-item[data-dragging] .weir-sortable-body::after { opacity: 1; }
+}
+/* 减少动态效果：显隐立即切换（全局规则只压缩时长，不处理延迟） */
+@media (prefers-reduced-motion: reduce) {
+  .weir-scrollbar,
+  .weir-scrollbar[data-scrolling],
+  .weir-scrollbar:hover {
+    transition: none !important;
+  }
 }
 
 /* 开 / 关各一组相同的关键帧：名字不同，每次切换都会重新播放。0–50% 行进中保持拉长，65% 压过头，之后回弹到原宽 */
@@ -155,4 +264,12 @@
   66% { scale: 0.86 1.06; }
   82% { scale: 1.05 0.98; }
   100% { scale: 1 1; }
+}
+
+/* 页面滚动交给 PageScrollArea：html / body 本身不滚动，不出现占位的系统滚动条。
+   不放进 @layer：要压过浏览器默认的 overflow 与各页 body 上的 min-height */
+html:has(.weir-page-scroll),
+html:has(.weir-page-scroll) body {
+  height: 100%;
+  overflow: hidden;
 }

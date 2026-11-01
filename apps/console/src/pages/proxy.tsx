@@ -325,7 +325,7 @@ function RankingCard({ view }: { view: ProxyView }) {
         {view.ranking.length === 0 ? (
           <State empty="订阅里没有节点" detail="类型都关掉了，或节点都不可用。" />
         ) : (
-          <div className="overflow-x-auto">
+          <div>
             <Table>
               <TableHeader>
                 <TableRow>

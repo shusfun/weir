@@ -1,4 +1,4 @@
-// 客户端目录：下载入口、平台、格式与显示顺序。编辑只改本地草稿，核对后验证管理员身份一次发布。
+// 客户端目录：下载入口、平台、格式与显示顺序。编辑只改本地草稿，点保存一次发布。
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -26,14 +26,13 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-  PasswordInput,
   useConfirm,
   FilePicker,
 } from "@weir/ui";
 import { Plus } from "lucide-react";
 import { ClientIcon } from "./client-icon";
 import { ConflictNotice, State } from "./feedback";
-import { emptyReauth, useReauthAction } from "./system-settings";
+import { useFormAction } from "../lib/action";
 import { client } from "../lib/client";
 import { api, isConflict } from "../api";
 import type { CatalogClient } from "../lib/models";
@@ -84,32 +83,20 @@ export function ClientCatalogEditor() {
   const [search, setSearch] = useState("");
   const [items, setItems] = useState<CatalogClient[]>([]);
   const [editor, setEditor] = useState<CatalogClient | null>(null);
-  const [confirm, setConfirm] = useState(false);
-  const [reset, setReset] = useState(false);
-  const [re, setRe] = useState(emptyReauth);
+  // 这次保存是否恢复默认目录：用 ref 传给请求，点按钮后立即提交时读不到还没生效的 state
+  const reset = useRef(false);
   const [notice, setNotice] = useState("");
   useEffect(() => {
     if (q.data) setItems(q.data.clients);
   }, [q.data?.revision]);
-  const save = useReauthAction(() => api("/admin/clients", "PUT", { clients: items, revision: q.data!.revision, ...re, reset }), {
+  const save = useFormAction(() => api("/admin/clients", "PUT", { clients: items, revision: q.data!.revision, reset: reset.current }), {
     invalidate: [["client-catalog-admin"], ["client-catalog"]],
-    onSuccess: () => {
-      setConfirm(false);
-      setReset(false);
-      setRe(emptyReauth);
-      setNotice("客户端目录已保存；用户仅显示启用项。");
-    },
-    onError: () => setRe((v) => ({ ...v, code: "" })),
+    onSuccess: () => setNotice(reset.current ? "已恢复默认客户端目录。" : "客户端目录已保存；用户仅显示启用项。"),
   });
-  const openConfirm = (resetting: boolean) => {
-    setReset(resetting);
-    save.reset();
-    setConfirm(true);
-  };
-  const closeConfirm = () => {
-    if (save.busy) return;
-    setConfirm(false);
-    setRe(emptyReauth);
+  const submit = async (resetting: boolean) => {
+    if (resetting && !(await confirmRemove({ title: "恢复默认客户端目录？", description: "覆盖当前目录及顺序，用户授权保持。", confirmText: "恢复默认" }))) return;
+    reset.current = resetting;
+    void save.submit();
   };
   const dirty = !!q.data && JSON.stringify(items) !== JSON.stringify(q.data.clients);
   function move(index: number, delta: number) {
@@ -119,14 +106,14 @@ export function ClientCatalogEditor() {
     setNotice("");
   }
   const visible = items.map((v, index) => ({ v, index })).filter(({ v }) => matches(v, search));
-  useConsoleContext({ dialog: editor ? { title: "编辑客户端" } : confirm ? { title: reset ? "恢复默认客户端目录" : "确认保存客户端目录" } : undefined, list: { total: items.length }, form: [field("search", "搜索", search), field("password", "当前密码", re.password, true)] });
+  useConsoleContext({ dialog: editor ? { title: "编辑客户端" } : undefined, list: { total: items.length }, form: [field("search", "搜索", search)] });
   return (
     <Card>
       <CardContent className="stack client-catalog-editor">
         <SectionHeader
           level="h3"
           title="客户端目录"
-          description="下载入口、平台、格式与显示顺序。变更核对后验证管理员身份保存。"
+          description="下载入口、平台、格式与显示顺序。改完点保存目录后生效。"
           actions={
             <Button onClick={() => setEditor(blank())}>
               <Plus size={15} />
@@ -174,14 +161,16 @@ export function ClientCatalogEditor() {
             ))}
             {!!search && visible.length === 0 && <p role="status">没有匹配的客户端。</p>}
             <div className="actions">
-              <Button variant="outline" onClick={() => openConfirm(true)}>
+              <Button variant="outline" disabled={save.busy} busy={save.busy && reset.current} busyText="正在恢复…" onClick={() => void submit(true)}>
                 恢复默认目录
               </Button>
-              <Button disabled={!dirty} onClick={() => openConfirm(false)}>
-                核对并保存目录
+              <Button disabled={!dirty || save.busy} busy={save.busy && !reset.current} busyText="正在保存…" onClick={() => void submit(false)}>
+                保存目录
               </Button>
               {dirty && <small>有未保存更改，顺序尚未应用</small>}
             </div>
+            <ConflictNotice error={save.raw} onReload={() => void q.refetch()} />
+            {save.error && !isConflict(save.raw) && <Notice tone="bad">{save.error}</Notice>}
           </>
         )}
         <Dialog open={!!editor} onOpenChange={(v) => !v && setEditor(null)}>
@@ -200,39 +189,6 @@ export function ClientCatalogEditor() {
                 }}
               />
             )}
-          </DialogContent>
-        </Dialog>
-        <Dialog open={confirm} onOpenChange={(v) => !v && closeConfirm()}>
-          <DialogContent>
-            <DialogTitle>{reset ? "恢复默认客户端目录" : "确认保存客户端目录"}</DialogTitle>
-            <DialogDescription>
-              {reset ? "覆盖当前目录及顺序，用户授权保持。" : "将发布 " + items.length + " 项客户端及当前顺序。"}
-              下载入口不接收订阅令牌。
-            </DialogDescription>
-            <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
-              <Field label="管理员密码" name="password">
-                <PasswordInput value={re.password} onChange={(e) => setRe({ ...re, password: e.target.value })} required autoComplete="current-password" />
-              </Field>
-              <Field label="二次验证码（已绑定时必填）" name="code">
-                <Input value={re.code} inputMode="numeric" onChange={(e) => setRe({ ...re, code: e.target.value })} autoComplete="one-time-code" />
-              </Field>
-              <ConflictNotice
-                error={save.raw}
-                onReload={() => {
-                  setConfirm(false);
-                  void q.refetch();
-                }}
-              />
-              {save.error && !isConflict(save.raw) && <Notice tone="bad">{save.error}</Notice>}
-              <DialogFooter>
-                <Button type="button" variant="outline" disabled={save.busy} onClick={closeConfirm}>
-                  取消
-                </Button>
-                <Button type="submit" disabled={save.busy}>
-                  {save.busy ? "保存中…" : "确认发布目录"}
-                </Button>
-              </DialogFooter>
-            </Form>
           </DialogContent>
         </Dialog>
       </CardContent>

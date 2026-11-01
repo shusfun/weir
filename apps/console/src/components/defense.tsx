@@ -4,11 +4,11 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge, Button, Field, Form, FormGrid, Input, Notice, SwitchField, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, PasswordInput } from "@weir/ui";
 import { api } from "../api";
-import { useRowAction } from "../lib/action";
+import { useFormAction, useRowAction } from "../lib/action";
 import { ActionsWait } from "./wait";
 import { date } from "../lib/models";
 import { State } from "./feedback";
-import { emptyReauth, Reauth, Section, useReauthAction } from "./system-settings";
+import { Section } from "./system-settings";
 
 interface LayaView {
   enabled: boolean;
@@ -23,15 +23,13 @@ export function LayaCard() {
   const q = useQuery({ queryKey: ["laya"], queryFn: () => api("/admin/defense/laya") as Promise<LayaView> });
   const [draft, setDraft] = useState<LayaView | null>(null);
   const [key, setKey] = useState("");
-  const [re, setRe] = useState(emptyReauth);
   const v = draft ?? q.data;
-  const save = useReauthAction(() => api("/admin/defense/laya", "PUT", { ...v, key, ...re }), {
+  const save = useFormAction(() => api("/admin/defense/laya", "PUT", { ...v, key }), {
     ok: "已保存",
     fields: { invalid_laya_url: "url" },
     onSuccess: () => {
       setDraft(null);
       setKey("");
-      setRe(emptyReauth);
       void q.refetch();
     },
   });
@@ -53,7 +51,6 @@ export function LayaCard() {
           <Field label="API Key" hint={v.key_set ? "已保存；留空则沿用。" : "加密保存，不会再显示。"}>
             <PasswordInput autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} />
           </Field>
-          <Reauth value={re} onChange={setRe} />
           <div className="actions">
             <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
             <Button type="button" variant="outline" disabled={isBusy() || !q.data?.enabled} onClick={() => void test()} busy={isBusy()} busyText="正在测试…">测试</Button>

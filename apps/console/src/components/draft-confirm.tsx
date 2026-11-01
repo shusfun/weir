@@ -1,12 +1,11 @@
 // 通用确认窗：dsh（窗口里的对话或后台分析）提交、系统试运行通过的草稿，在任何页面都由 Weir 自己弹出。
 // 内容从 Weir 接口读取，不接收 dsh 页面发来的任何消息；按参数说明生成字段：中文名与单位、引用显示名称、改前 / 改后。
-// 管理员可以直接改字段再确认（改过的字段做标记）；危险操作要求当前密码与二次验证码。dsh 无法确认。
+// 管理员可以直接改字段再确认（改过的字段做标记）；危险操作单独标出。dsh 无法确认。
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge, Button, Collapsible, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Input, Notice, PasswordInput, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, useToast } from "@weir/ui";
 import { api, clause } from "../api";
 import { useFormAction } from "../lib/action";
-import { emptyReauth, Reauth } from "./system-settings";
 import { DiffView, type DiffLine } from "./diff";
 import { field, useConsoleContext } from "../lib/console-context";
 import { useLive } from "../lib/live";
@@ -150,14 +149,13 @@ export function DraftConfirm() {
   const q = useDrafts();
   const [later, setLater] = useState<string[]>([]);
   const [edits, setEdits] = useState<Edits>({});
-  const [re, setRe] = useState(emptyReauth);
   const [outputs, setOutputs] = useState<{ step: string; email?: string; password?: string }[] | null>(null);
   // 本次要处理的草稿与决定：用 ref 传给请求，避免读到上一次渲染的值
   const target = useRef<{ draft: Draft; apply: boolean } | null>(null);
   const decision = useFormAction(async (track) => {
     const { draft, apply } = target.current!;
     if (apply) {
-      const r = (await api(`/admin/ai/drafts/${draft.id}/apply`, "POST", { edits, ...re }, track)) as { outputs?: { step: string; email?: string; password?: string }[] };
+      const r = (await api(`/admin/ai/drafts/${draft.id}/apply`, "POST", { edits }, track)) as { outputs?: { step: string; email?: string; password?: string }[] };
       toast("草稿已生效", { tone: "ok" });
       const secrets = (r.outputs ?? []).filter((o) => o.password);
       if (secrets.length > 0) setOutputs(secrets);
@@ -166,7 +164,6 @@ export function DraftConfirm() {
       toast("已放弃草稿", { tone: "info" });
     }
     setEdits({});
-    setRe(emptyReauth);
     await client.invalidateQueries();
   }, {
     wait: () => {
@@ -222,17 +219,12 @@ export function DraftConfirm() {
             </div>
           )}
           {steps.map((st, i) => <StepCard key={i} step={st} index={i} total={steps.length} edits={edits[i] ?? {}} setEdit={setEdit(i)} />)}
-          {d.danger && (
-            <>
-              <Notice tone="bad">这份草稿里有不能撤回的危险操作，请输入当前密码（与二次验证码）确认。</Notice>
-              <Reauth value={re} onChange={setRe} />
-            </>
-          )}
+          {d.danger && <Notice tone="bad">这份草稿里有不能撤回的危险操作，请核对后再确认。</Notice>}
         </div>
         <DialogFooter error={decision.error} status={decision.wait && <WaitText wait={decision.wait} />}>
           <Button type="button" variant="ghost" disabled={busy} onClick={() => setLater((l) => [...l, d.id])}>稍后</Button>
           <Button type="button" variant="outline" disabled={busy} onClick={() => decide(false)}>放弃</Button>
-          <Button type="button" variant={d.danger ? "destructive" : "default"} disabled={busy || (d.danger && !re.password)} onClick={() => decide(true)} busy={busy} busyText="正在执行…">确认生效</Button>
+          <Button type="button" variant={d.danger ? "destructive" : "default"} disabled={busy} onClick={() => decide(true)} busy={busy} busyText="正在执行…">确认生效</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

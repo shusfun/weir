@@ -6,14 +6,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Form, FormGrid, Input, Notice, SkeletonList, StatusLamp, SwitchField, useConfirm } from "@weir/ui";
 import { Bot, Download, Maximize2, Minimize2, Minus, RotateCcw, Star, Trash2, X } from "lucide-react";
 import { api, ApiError } from "../api";
-import { useRowAction } from "../lib/action";
+import { useFormAction, useRowAction } from "../lib/action";
 import { ActionsWait } from "./wait";
 import { date } from "../lib/models";
 import { drawerId, field, useConsoleContext } from "../lib/console-context";
 import { DshContextReporter } from "./dsh-context";
 import { State } from "./feedback";
 import { JobLine, latestJob, useJobs, useStartedJob } from "./job";
-import { emptyReauth, Reauth, Section, useReauthAction } from "./system-settings";
+import { Section } from "./system-settings";
 
 export interface DshSettings {
   enabled: boolean;
@@ -449,25 +449,21 @@ function DshStartStep({ view }: { view: DshView }) {
   );
 }
 
-// DshAddressForm：dsh 地址、启用、后台分析。启用 dsh 与改地址要验证身份（让 AI 接入面板的工具、决定中心把哪个地址转给 dsh），
-// 只改后台分析开关、停用不用。turnOn：配置清单里默认勾上「启用」，填好地址一次保存。
+// DshAddressForm：dsh 地址、启用、后台分析，保存直接生效。turnOn：配置清单里默认勾上「启用」，填好地址一次保存。
 function DshAddressForm({ view, turnOn }: { view: DshView; turnOn?: boolean }) {
   const client = useQueryClient();
   const saved = view.settings;
   const [draft, setDraft] = useState<DshSettings | null>(null);
   const v = draft ?? (turnOn ? { ...saved, enabled: true } : saved);
-  const [re, setRe] = useState(emptyReauth);
-  const needReauth = (v.enabled && !saved.enabled) || v.domain.trim().toLowerCase() !== saved.domain;
-  const save = useReauthAction(() => api("/admin/dsh/settings", "PUT", { ...v, domain: v.domain.trim(), ...(needReauth ? re : {}) }), {
+  const save = useFormAction(() => api("/admin/dsh/settings", "PUT", { ...v, domain: v.domain.trim() }), {
     ok: "已保存",
     fields: { invalid_dsh_domain: "domain" },
     onSuccess: () => {
       setDraft(null);
-      setRe(emptyReauth);
       void client.invalidateQueries({ queryKey: ["dsh"] });
     },
   });
-  useConsoleContext({ form: [field("dsh_domain", "dsh 地址", v.domain), field("dsh_enabled", "启用 dsh", v.enabled ? "是" : "否"), field("auto_analyze", "可疑事件自动分析", v.auto_analyze ? "是" : "否"), field("password", "当前密码", re.password, true)] });
+  useConsoleContext({ form: [field("dsh_domain", "dsh 地址", v.domain), field("dsh_enabled", "启用 dsh", v.enabled ? "是" : "否"), field("auto_analyze", "可疑事件自动分析", v.auto_analyze ? "是" : "否")] });
   return (
     <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
       <Field label="dsh 地址" name="domain" required={v.enabled} hint="与控制台同一个站点、不同的地址：子域名（如 dsh.你的域名）或带端口的地址（如 你的域名:61873）。在反代里把它也转发到中心（与控制台相同的上游），中心按地址分流。">
@@ -481,7 +477,6 @@ function DshAddressForm({ view, turnOn }: { view: DshView; turnOn?: boolean }) {
         <SwitchField label="启用 dsh" checked={v.enabled} onCheckedChange={(on) => setDraft({ ...v, enabled: on })} />
         <SwitchField label="Laya 判为可疑的事件自动交给 dsh 分析" checked={v.auto_analyze} onCheckedChange={(on) => setDraft({ ...v, auto_analyze: on })} />
       </FormGrid>
-      <Reauth value={re} onChange={setRe} need={needReauth} reason="启用 dsh 会让 AI 接入面板的工具，改地址决定中心把哪个地址转给 dsh：请确认是你本人。" />
       <div className="actions"><Button type="submit" busy={save.busy} busyText="正在保存…">保存</Button></div>
       {save.error && <Notice tone="bad">{save.error}</Notice>}
     </Form>

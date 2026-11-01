@@ -3,7 +3,7 @@
 // 每个方案的样例配置用对应版本内核检查 → 改的是在用驱动时在一台 VPS 上实测。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Card, CardContent, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, Notice, SectionHeader, SkeletonList, Textarea, useConfirm } from "@weir/ui";
+import { Badge, Button, Card, CardContent, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, Notice, SectionHeader, SkeletonList, Textarea, useConfirm, ScrollArea } from "@weir/ui";
 import { Bot, Plus, RotateCcw } from "lucide-react";
 import { api, ApiError } from "../api";
 import { useRowAction } from "../lib/action";
@@ -151,7 +151,7 @@ function DriverDialog({ name, close, changed }: { name: string; close: () => voi
           {q.data ? <>{q.data.driver.kernel} {q.data.driver.min_version} – {q.data.driver.max_version || "最新"}；{(q.data.usage.versions ?? []).length > 0 ? <>已下载版本 {q.data.usage.versions!.map((v, i) => <span key={v}>{i > 0 && "、"}<ObjectLink to={{ type: "kernel", key: `${q.data!.driver.kernel}@${v}`, name: v }} /></span>)}</> : "没有已下载的版本"}{(q.data.usage.gate_refs ?? []).length > 0 && <>；在用：{q.data.usage.gate_refs!.map((g, i) => <span key={g.id}>{i > 0 && "、"}<ObjectLink to={{ type: "gate", id: g.id, name: g.name }} /></span>)}</>}。</> : "正在读取…"}
         </DialogDescription>
         {q.isPending || q.error || !q.data ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : (
-          <div className="stack max-h-[70vh] overflow-y-auto">
+          <ScrollArea className="max-h-[70vh]" viewportClassName="weir-focus-gutter" contentClassName="stack">
             {q.data.resolve_error && <Notice tone="bad">无法展开：{q.data.resolve_error}</Notice>}
             <Form onSubmit={() => void save()}>
               <Field label="原文（YAML）" hint="只写与继承的驱动不同的部分；在 {…} 里写可省略的键要加引号，如 &quot;host?&quot;:。">
@@ -183,7 +183,7 @@ function DriverDialog({ name, close, changed }: { name: string; close: () => voi
                 </div>
               </Collapsible>
             ))}
-          </div>
+          </ScrollArea>
         )}
       </DialogContent>
     </Dialog>
@@ -225,9 +225,9 @@ function NewDriverDialog({ close, created }: { close: () => void; created: (name
             )}
           </Field>
           {/* 检查结果区固定高度、内部滚动：结果出现时下面的按钮不被顶走 */}
-          <div className="h-32 overflow-y-auto rounded-[var(--weir-radius)] border border-dashed border-[var(--weir-line)] p-2">
+          <ScrollArea className="h-32 rounded-[var(--weir-radius)] border border-dashed border-[var(--weir-line)]" viewportClassName="p-2">
             {check ? <CheckView c={check} /> : <small className="text-[var(--weir-ink-3)]">点「检查并新增」后，每个方案的样例配置检查结果显示在这里。</small>}
-          </div>
+          </ScrollArea>
           <DialogFooter status={waitFor("create") && <WaitText wait={waitFor("create")} />}>
             <Button type="button" variant="ghost" onClick={close}>取消</Button>
             <Button type="submit" disabled={!f.name || !f.min || !parent || isBusy()} busy={isBusy()} busyText="正在检查…">检查并新增</Button>

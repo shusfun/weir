@@ -1,7 +1,7 @@
 // 链路页：平铺世界地图上的 VPS 与出口，连线是「入口 VPS → 出口」，粗细与流动随实时速率；右侧（窄屏在下方）是详情，
 // 下面是全部路径的列表（键盘与读屏用它）。管理员看全部，可按用户、VPS 筛选；普通用户只看自己的。
 import { useSearchParams } from "react-router-dom";
-import { Badge, Card, CardContent, PageHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@weir/ui";
+import { Badge, Card, CardContent, PageHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, ScrollArea } from "@weir/ui";
 import { State } from "../components/feedback";
 import { LinkMapCanvas } from "../components/link-map-canvas";
 import { LinkMapDetail } from "../components/link-map-detail";
@@ -89,7 +89,7 @@ export function LinkMapPage({ admin }: { admin: boolean }) {
             </div>
           )}
         </div>
-        <Card className="lg:overflow-y-auto lg:[contain:size]" data-linkmap-detail><CardContent><LinkMapDetail m={m} store={store} selected={selected} /></CardContent></Card>
+        <Card className="flex flex-col lg:[contain:size]" data-linkmap-detail><ScrollArea className="min-h-0 flex-1"><CardContent><LinkMapDetail m={m} store={store} selected={selected} /></CardContent></ScrollArea></Card>
       </div>
       <Card>
         <CardContent className="stack gap-2">
@@ -97,7 +97,7 @@ export function LinkMapPage({ admin }: { admin: boolean }) {
           {visible.length === 0 ? (
             <State empty={admin ? "还没有用户在用节点" : "你的链接里还没有节点"} detail={admin ? "给用户分配节点后，这里列出每个用户经哪个入口、从哪个出口出去。" : "管理员给你分配节点后会出现在这里。"} />
           ) : (
-            <div className="overflow-x-auto">
+            <div>
               <Table>
                 <TableHeader>
                   <TableRow>

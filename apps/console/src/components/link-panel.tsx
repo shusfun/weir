@@ -283,7 +283,7 @@ function PullsDialog({ base, link: l, close }: { base: string; link: LinkItem; c
         ) : q.data.length === 0 ? (
           <State empty="还没有拉取记录" detail="把订阅地址导入客户端并更新一次后，这里会出现记录。" />
         ) : (
-          <div className="overflow-x-auto">
+          <div>
             <Table>
               <TableHeader>
                 <TableRow>

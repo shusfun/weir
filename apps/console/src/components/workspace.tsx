@@ -1,7 +1,7 @@
 // 控制台外壳：左侧控制条（导航 + 左下角个人中心）、顶栏（标题 / 快速跳转 / 任务托盘 / 主题）、移动端侧边面板。
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { IconTile, Button, Kbd, Menu, MenuTrigger, MenuContent, MenuItem, MenuSeparator, MenuToggle, Sheet, SheetClose, SheetContent, StatusLamp, Tooltip, TooltipProvider } from "@weir/ui";
+import { IconTile, Button, ScrollArea, Kbd, Menu, MenuTrigger, MenuContent, MenuItem, MenuSeparator, MenuToggle, Sheet, SheetClose, SheetContent, StatusLamp, Tooltip, TooltipProvider } from "@weir/ui";
 import { PanelLeftClose, PanelLeftOpen, LogOut, ShieldCheck, Link2, Search, Activity, ChevronsUpDown } from "lucide-react";
 import { ThemeControl } from "../theme";
 import { navigation, navGroups, currentNav, visibleFor } from "../shell/navigation";
@@ -110,7 +110,9 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
             <span className="rail-mark"><Activity size={19} /></span>
             <strong>Weir</strong>
           </NavLink>
-          <nav className="rail-nav" aria-label="主导航">{nav(collapsed)}</nav>
+          <ScrollArea className="rail-nav" viewportClassName="rail-nav-viewport">
+            <nav aria-label="主导航">{nav(collapsed)}</nav>
+          </ScrollArea>
           <div className="rail-foot">
             <Button className="rail-collapse justify-start in-data-[collapsed=true]:justify-center in-data-[collapsed=true]:px-0" variant="ghost" size="sm" aria-label={collapsed ? "展开导航" : "收起导航"} onClick={() => setCollapsed((v) => !v)}>
               {collapsed ? <PanelLeftOpen /> : <><PanelLeftClose /><span>收起导航</span></>}
@@ -154,7 +156,9 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
             }
           >
             <div className="flex h-full flex-col">
-              <nav className="rail-nav" aria-label="移动导航">{nav(false)}</nav>
+              <ScrollArea className="rail-nav" viewportClassName="rail-nav-viewport">
+                <nav aria-label="移动导航">{nav(false)}</nav>
+              </ScrollArea>
               <div className="rail-foot">
                 <AccountMenu admin={admin} email={email} onLogout={onLogout} />
               </div>

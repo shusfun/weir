@@ -30,6 +30,7 @@ import { cn } from "cn";
 import { XIcon } from "lucide-react";
 import { originFor, pressOrigin } from "./press-origin";
 import { prefersReducedMotion } from "./motion";
+import { ScrollArea } from "./scroll-area";
 
 type DialogSlots = { host: HTMLElement | null; formId: string | null };
 const DialogSlotContext = createContext<DialogSlots | null>(null);
@@ -253,15 +254,14 @@ function DialogLayer({
             {header}
           </div>
         )}
-        <div
+        <ScrollArea
           data-slot="dialog-body"
-          className={cn(
-            "weir-focus-gutter flex min-h-0 min-w-0 flex-auto flex-col overflow-x-hidden overflow-y-auto [&>form]:flex [&>form]:min-h-full [&>form]:min-w-0 [&>form]:flex-[1_0_auto] [&>form]:flex-col",
-            sheet && bottomSheetContent,
-          )}
+          className={cn("min-h-0 min-w-0 flex-auto", sheet && bottomSheetContent)}
+          viewportClassName="weir-focus-gutter"
+          contentClassName="flex min-h-full min-w-0 flex-col [&>form]:flex [&>form]:min-w-0 [&>form]:flex-[1_0_auto] [&>form]:flex-col"
         >
           {body}
-        </div>
+        </ScrollArea>
         <div ref={setHost} data-slot="dialog-footer-host" className="shrink-0 empty:hidden" />
         {showCloseButton && (
           <DialogPrimitive.Close

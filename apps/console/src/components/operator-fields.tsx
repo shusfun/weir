@@ -1,6 +1,6 @@
 // 处理链步骤的子表单：协议 / 地区勾选、正则规则列表、排序字段。参数结构与服务端 internal/sub 的处理链一致。
 import { useState } from "react";
-import { ReorderButtons, SearchInput, Button, CheckboxField, Field, Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SwitchField, Textarea } from "@weir/ui";
+import { SortableList, SearchInput, Button, CheckboxField, Field, Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SwitchField, Textarea, ScrollArea } from "@weir/ui";
 import { Plus, Trash2 } from "lucide-react";
 import { regionOptions } from "../lib/region-options";
 
@@ -44,7 +44,7 @@ export function OperatorChoices({
       <legend>{label}</legend>
       <SwitchField label={"启用" + label} checked={value.enabled === true} onCheckedChange={(enabled) => save({ ...value, enabled })} />
       <SearchInput className="w-full" aria-label={"搜索" + label} placeholder="搜索选项…" value={search} onChange={(e) => setSearch(e.target.value)} />
-      <div className="operator-choice-grid">
+      <ScrollArea className="max-h-[220px]" viewportClassName="weir-focus-gutter" contentClassName="operator-choice-grid">
         {options
           .filter(([key, name]) => (key + name).toLowerCase().includes(search.toLowerCase()))
           .map(([key, name]) => (
@@ -55,7 +55,7 @@ export function OperatorChoices({
               onCheckedChange={(checked) => save({ ...value, values: checked ? [...values, key] : values.filter((v) => v !== key) })}
             />
           ))}
-      </div>
+      </ScrollArea>
       <small>已选 {values.length} 项。启用但未勾选时不保留任何节点。</small>
     </fieldset>
   );
@@ -120,16 +120,16 @@ const sortFields = [
 export function SortFields({ value, save }: { value: SortParams; save: (v: SortParams) => void }) {
   const keys = value.keys ?? [];
   const change = (index: number, patch: Partial<SortKey>) => save({ ...value, keys: keys.map((k, i) => (i === index ? { ...k, ...patch } : k)) });
-  const move = (i: number, offset: number) => {
-    const next = [...keys];
-    [next[i], next[i + offset]] = [next[i + offset], next[i]];
-    save({ ...value, keys: next });
-  };
   return (
     <div className="stack">
       <SwitchField label="名称排序忽略国旗" checked={value.nameIgnoreEmoji !== false} onCheckedChange={(nameIgnoreEmoji) => save({ ...value, nameIgnoreEmoji })} />
-      {keys.map((key, i) => (
-        <fieldset className="resource-selector grid gap-3" key={i}>
+      <SortableList
+        label="排序优先级"
+        items={keys}
+        onReorder={(next) => save({ ...value, keys: next })}
+        itemLabel={(_, i) => `排序字段 ${i + 1}`}
+        renderItem={(key, { index: i, reorder }) => (
+        <fieldset className="resource-selector grid gap-3">
           <legend>排序优先级 {i + 1}</legend>
           <div className="actions">
             <Select value={key.key} onValueChange={(v) => change(i, { key: String(v) })}>
@@ -153,7 +153,7 @@ export function SortFields({ value, save }: { value: SortParams; save: (v: SortP
                 <SelectItem value="desc">降序</SelectItem>
               </SelectContent>
             </Select>
-            <ReorderButtons label={`排序字段 ${i + 1}`} onUp={() => move(i, -1)} onDown={() => move(i, 1)} upDisabled={i === 0} downDisabled={i === keys.length - 1} />
+            {reorder}
             <Button type="button" variant="ghost" size="icon-sm" aria-label={`删除排序字段 ${i + 1}`} onClick={() => save({ ...value, keys: keys.filter((_, n) => n !== i) })}>
               <Trash2 size={14} />
             </Button>
@@ -162,7 +162,8 @@ export function SortFields({ value, save }: { value: SortParams; save: (v: SortP
             <Textarea rows={3} value={(key.customOrder ?? []).join("\n")} onChange={(e) => change(i, { customOrder: e.target.value.split(/\r?\n/).filter(Boolean) })} />
           </Field>
         </fieldset>
-      ))}
+        )}
+      />
       <Button type="button" variant="outline" disabled={keys.length >= 32} onClick={() => save({ ...value, keys: [...keys, { key: "name", order: "asc" }] })}>
         <Plus size={14} />
         添加排序字段

@@ -26,7 +26,6 @@ import {
 import { api, isConflict } from "../api";
 import { useFormAction } from "../lib/action";
 import { ConflictNotice, State } from "./feedback";
-import { emptyReauth, Reauth, useReauthAction } from "./system-settings";
 import { field, useConsoleContext } from "../lib/console-context";
 
 interface Config {
@@ -157,7 +156,7 @@ export function PublicGuestbook({ slug }: { slug: string }) {
   );
 }
 
-type Mode = "" | "approve" | "hide" | "reply" | "delete" | "pending" | "approved" | "config";
+type Mode = "" | "approve" | "hide" | "reply" | "delete" | "pending" | "approved";
 const modeNames: Record<Exclude<Mode, "">, string> = {
   approve: "公开此留言",
   hide: "隐藏此留言",
@@ -165,7 +164,6 @@ const modeNames: Record<Exclude<Mode, "">, string> = {
   delete: "永久删除留言",
   pending: "改为待审核",
   approved: "标记已审核",
-  config: "保存留言设置",
 };
 
 export function GuestbookManager({ page: resource, close }: { page: { id: number; data: Record<string, unknown> }; close: () => void }) {
@@ -177,7 +175,6 @@ export function GuestbookManager({ page: resource, close }: { page: { id: number
   const [mode, setMode] = useState<Mode>("");
   const [selected, setSelected] = useState<Message | null>(null);
   const [reply, setReply] = useState("");
-  const [re, setRe] = useState(emptyReauth);
   const [notice, setNotice] = useState("");
   const cfg = useQuery({
     queryKey: ["guestbook-config", resource.id],
@@ -195,7 +192,6 @@ export function GuestbookManager({ page: resource, close }: { page: { id: number
     setMode("");
     setSelected(null);
     setReply("");
-    setRe(emptyReauth);
   }
   function begin(action: Mode, item: Message) {
     save.reset();
@@ -208,15 +204,14 @@ export function GuestbookManager({ page: resource, close }: { page: { id: number
     setNotice("留言操作已确认。");
     cancel();
   };
-  // 留言设置需要验证身份；单条留言的审核 / 回复 / 删除不需要
-  const saveConfig = useReauthAction(() => api(base + "/config", "PUT", { config: value, revision: cfg.data?.revision, ...re, confirm: true }), {
+  // 留言设置点保存直接生效
+  const saveConfig = useFormAction(() => api(base + "/config", "PUT", { config: value, revision: cfg.data?.revision, confirm: true }), {
     invalidate: [["guestbook-manage", resource.id]],
     onSuccess: async () => {
       setDraft(null);
       await cfg.refetch();
-      done();
+      setNotice("留言设置已保存。");
     },
-    onError: () => setRe((v) => ({ ...v, code: "" })),
   });
   const saveMessage = useFormAction(
     () => {
@@ -231,17 +226,18 @@ export function GuestbookManager({ page: resource, close }: { page: { id: number
     },
     { fields: { invalid_guestbook: "reply" }, invalidate: [["guestbook-manage", resource.id]], onSuccess: done },
   );
-  const save = mode === "config" ? saveConfig : saveMessage;
+  const save = saveMessage;
+  const busy = saveMessage.busy || saveConfig.busy;
   useConsoleContext({ dialog: { title: "留言管理" }, list: { filters: { 状态: status || "全部", 搜索: search } } });
   return (
-    <Dialog open onOpenChange={(v) => !v && !save.busy && close()}>
+    <Dialog open onOpenChange={(v) => !v && !busy && close()}>
       <DialogContent size="xl" className="guestbook-manager">
         <DialogTitle>留言管理 · {String(resource.data.title ?? resource.data.name ?? "")}</DialogTitle>
         <DialogDescription>仅本公开页。发布或回复后向所有访客显示；纯文本，不含用户账号或节点信息。页面撤下即停止匿名读取与投稿。</DialogDescription>
         {mode ? (
           <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
             <h3>{modeNames[mode]}</h3>
-            {selected && mode !== "config" && <Entry item={selected} />}
+            {selected && <Entry item={selected} />}
             {mode === "reply" && (
               <Field label="管理员回复正文" name="reply" customError={reply && !reply.trim() ? "请输入回复正文" : ""}>
                 <Textarea rows={5} maxLength={1000} required value={reply} onChange={(e) => setReply(e.target.value)} />
@@ -250,14 +246,6 @@ export function GuestbookManager({ page: resource, close }: { page: { id: number
             {mode === "delete" && <Notice tone="warn">删除无法撤销。仅删除此留言，不影响用户、授权或订阅。</Notice>}
             {mode === "pending" && <p>同时隐藏公开内容，待审核后可再次发布。</p>}
             {mode === "approved" && <p>只更新审核状态，保留当前可见性。公开请使用“公开此留言”。</p>}
-            {mode === "config" && (
-              <>
-                <p>
-                  启用：{value?.enabled ? "是" : "否"} · 匿名：{value?.allow_anonymous ? "允许" : "需登录"} · 新投稿：{value?.require_audit ? "需审核" : "直接公开"}
-                </p>
-                <Reauth value={re} onChange={setRe} />
-              </>
-            )}
             <ConflictNotice
               error={save.raw}
               onReload={() => {
@@ -297,16 +285,18 @@ export function GuestbookManager({ page: resource, close }: { page: { id: number
                     />
                   ))}
                   <div className="actions">
-                    <Button
-                      disabled={!draft}
-                      onClick={() => {
-                        saveConfig.reset();
-                        setMode("config");
-                      }}
-                    >
-                      核对并保存留言设置
+                    <Button disabled={!draft || saveConfig.busy} busy={saveConfig.busy} busyText="正在保存…" onClick={() => void saveConfig.submit()}>
+                      保存留言设置
                     </Button>
                   </div>
+                  <ConflictNotice
+                    error={saveConfig.raw}
+                    onReload={() => {
+                      setDraft(null);
+                      void cfg.refetch();
+                    }}
+                  />
+                  {saveConfig.error && !isConflict(saveConfig.raw) && <Notice tone="bad">{saveConfig.error}</Notice>}
                 </section>
               )
             )}
@@ -383,7 +373,7 @@ export function GuestbookManager({ page: resource, close }: { page: { id: number
           </div>
         )}
         <DialogFooter>
-          <Button variant="outline" disabled={save.busy} onClick={close}>
+          <Button variant="outline" disabled={busy} onClick={close}>
             关闭留言管理
           </Button>
         </DialogFooter>

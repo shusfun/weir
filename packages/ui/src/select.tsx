@@ -5,6 +5,7 @@ import { ComponentProps } from "react";
 // third-party
 import { Select as SelectPrimitive } from "@base-ui/react/select";
 import { cn } from "cn";
+import { ScrollArea } from "./scroll-area";
 
 // assets
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
@@ -88,13 +89,16 @@ function SelectContent({
           data-slot="select-content"
           data-align-trigger={alignItemWithTrigger}
           className={cn(
-            "relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-36 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-[var(--weir-radius)] border border-[var(--weir-line)] bg-popover p-1 text-popover-foreground shadow-[inset_0_1px_0_var(--weir-highlight),0_8px_20px_-6px_var(--weir-shade-strong)] transition-[opacity,transform] duration-[var(--weir-fast)] data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0 data-[ending-style]:opacity-0",
+            "relative isolate z-50 flex max-h-(--available-height) w-(--anchor-width) min-w-36 origin-(--transform-origin) flex-col overflow-hidden rounded-[var(--weir-radius)] border border-[var(--weir-line)] bg-popover p-1 text-popover-foreground shadow-[inset_0_1px_0_var(--weir-highlight),0_8px_20px_-6px_var(--weir-shade-strong)] transition-[opacity,transform] duration-[var(--weir-fast)] data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0 data-[ending-style]:opacity-0",
             className,
           )}
           {...props}
         >
           <SelectScrollUpButton />
-          <SelectPrimitive.List>{children}</SelectPrimitive.List>
+          {/* 列表本身就是滚动元素（Base UI 据它对齐选中项、显示滚动箭头），外面套覆盖式滚动条 */}
+          <ScrollArea className="min-h-0 flex-auto" viewportRender={<SelectPrimitive.List />} contentRender={false}>
+            {children}
+          </ScrollArea>
           <SelectScrollDownButton />
         </SelectPrimitive.Popup>
       </SelectPrimitive.Positioner>

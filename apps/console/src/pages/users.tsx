@@ -61,7 +61,7 @@ export function UsersPage() {
         <State empty="还没有用户" />
       ) : (
         <Card>
-          <CardContent className="overflow-x-auto">
+          <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -129,7 +129,7 @@ export function UsersPage() {
       >
         {detail && (
           <SheetContent side="right" title={detail.name || detail.email} description={`${detail.email} · ${bytes(detail.used)} / ${detail.quota ? bytes(detail.quota) : "不限"}`} className="w-full sm:max-w-[640px]">
-            <div className="stack overflow-y-auto p-4">
+            <div className="stack p-4">
               {created?.id === detail.id && (
                 <Notice role="status" tone="ok">
                   已创建 {created.email}，默认链接已生成，导入下面的地址或扫描二维码即可使用。

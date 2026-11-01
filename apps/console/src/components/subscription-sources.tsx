@@ -55,7 +55,7 @@ export function SourcesPanel() {
               <Meter label="上游流量合计" value={q.data.traffic.used} max={q.data.traffic.total} />
             </div>
           )}
-          <div className="overflow-x-auto">
+          <div>
             <Table>
               <TableHeader>
                 <TableRow>

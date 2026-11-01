@@ -75,6 +75,9 @@
   --weir-edge-bad: #dc2626;
   --weir-minimap-node: #b4bdf0;
   --weir-minimap-mask: rgb(226 232 240 / 0.55);
+  /* 覆盖式滚动条（ScrollArea）：拇指颜色、悬停 / 拖动时的颜色 */
+  --weir-scroll-thumb: rgb(0 0 0 / 0.28);
+  --weir-scroll-thumb-active: rgb(0 0 0 / 0.46);
 
   --weir-radius-sm: 7px;
   --weir-radius: 10px;
@@ -94,6 +97,12 @@
   --weir-bounce-dur: 460ms;
   --weir-decel: cubic-bezier(0.16, 1, 0.3, 1);
   --weir-settle: 600ms;
+  /* 滚动条：可点区宽度、拇指粗细（贴边留出的空隙 = 两者之差的一半）、停止滚动后再停留多久开始淡出 */
+  --weir-scrollbar-hit: 10px;
+  --weir-scrollbar-size: 6px;
+  --weir-scrollbar-linger: 100ms;
+  /* 拖拽排序：拖动中的行放大多少（阴影复用 --weir-shade-strong） */
+  --weir-drag-scale: 1.015;
   --weir-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
   --weir-mono: "SF Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
   color-scheme: light;
@@ -162,5 +171,7 @@
   --weir-edge-bad: #ff6b61;
   --weir-minimap-node: #4a5590;
   --weir-minimap-mask: rgb(0 0 0 / 0.5);
+  --weir-scroll-thumb: rgb(255 255 255 / 0.3);
+  --weir-scroll-thumb-active: rgb(255 255 255 / 0.5);
   color-scheme: dark;
 }

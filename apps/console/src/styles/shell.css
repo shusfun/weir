@@ -46,13 +46,12 @@
   font-size: 16px;
   letter-spacing: -0.02em;
 }
+/* 导航滚动区（ScrollArea）：根占满剩余高度，视口里留出键帽外阴影的空间，避免被滚动容器裁切 */
 .rail-nav {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  /* 给键帽外阴影留出空间，避免被滚动容器裁切 */
+}
+.rail-nav-viewport {
   padding: 4px 8px 4px 6px;
 }
 .rail-group {
@@ -224,7 +223,63 @@
   padding: 24px 28px 40px;
   flex: 1;
   min-width: 0;
+  position: relative;
 }
+/*
+ * 页面切换（shell/page-switch.tsx）：视图过渡只作用于内容区，侧边导航、顶栏属于根快照、直接切换。
+ * 根快照不做交叉淡化；内容区旧画面淡出，新画面淡入并上移 6px。高度不同的两页不做尺寸动画。
+ * 减少动态效果时脚本不启动视图过渡。
+ */
+.page-content {
+  view-transition-name: weir-page;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+::view-transition-group(weir-page) {
+  animation: none;
+}
+::view-transition-image-pair(weir-page) {
+  isolation: auto;
+}
+::view-transition-old(weir-page) {
+  animation: weir-page-out var(--weir-fast) var(--weir-ease) both;
+  height: 100%;
+  object-fit: none;
+  object-position: top;
+}
+::view-transition-new(weir-page) {
+  animation: weir-page-in var(--weir-mid) var(--weir-decel) both;
+  height: 100%;
+  object-fit: none;
+  object-position: top;
+}
+@keyframes weir-page-out {
+  to { opacity: 0; }
+}
+@keyframes weir-page-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+/* 切换超过 300 ms 才出现的提示：浮在内容区顶部，不占位 */
+.page-switch-hint {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  z-index: 5;
+  translate: -50% 0;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--weir-ink-3);
+  background: var(--weir-panel);
+  border: 1px solid var(--weir-line-soft);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--weir-mid) var(--weir-ease);
+}
+.page-switch-hint[data-show] { opacity: 1; }
+.page-switch-hint:empty { border-color: transparent; background: transparent; }
 
 
 @media (max-width: 1100px) {

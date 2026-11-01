@@ -10,7 +10,7 @@ import { ActionsWait, WaitText } from "./wait";
 import { date } from "../lib/models";
 import type { Cert, Gate } from "../lib/core";
 import { State } from "./feedback";
-import { emptyReauth, Reauth, Section, useReauthAction } from "./system-settings";
+import { Section } from "./system-settings";
 import { useCerts } from "./cert-manager";
 import { dataObject } from "./object-link";
 
@@ -87,14 +87,12 @@ export function GateCerts({ gate }: { gate: Gate }) {
   const [port, setPort] = useState("");
   const [https, setHttps] = useState(false);
   const [key, setKey] = useState("");
-  const [re, setRe] = useState(emptyReauth);
-  const save = useReauthAction((track) => api(`/admin/gates/${gate.id}/panel`, "PUT", { port: Number(port), https, api_key: key, ...re }, track) as Promise<{ version?: string }>, {
+  const save = useFormAction((track) => api(`/admin/gates/${gate.id}/panel`, "PUT", { port: Number(port), https, api_key: key }, track) as Promise<{ version?: string }>, {
     ok: "1Panel 已连接",
     wait: { label: `正在让 ${gate.name} 连接本机 1Panel 并保存密钥`, max: 60 },
     fields: { invalid_port: "panel_port", invalid_api_key: "panel_key", panel_failed: "panel_key" },
     onSuccess: () => {
       setKey("");
-      setRe(emptyReauth);
       void client.invalidateQueries({ queryKey: ["gates"] });
     },
   });
@@ -136,7 +134,6 @@ export function GateCerts({ gate }: { gate: Gate }) {
             </Field>
           </FormGrid>
           <SwitchField label="1Panel 使用 HTTPS" checked={https} onCheckedChange={setHttps} />
-          <Reauth value={re} onChange={setRe} />
           <div className="actions">
             {panel.configured && (
               <Button type="button" variant="outline" disabled={isBusy("panel") || save.busy || !gate.online} busy={isBusy("panel")} busyText="正在移除…" onClick={() => void run("panel", () => api(`/admin/gates/${gate.id}/panel`, "DELETE"), "已移除 1Panel 密钥")}>移除密钥</Button>

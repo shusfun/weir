@@ -204,7 +204,7 @@ export function DevUiPage() {
               <SkeletonTable columns={["节点", "协议", "用量"]} rows={3} />
             ) : (
               <Card>
-                <CardContent className="overflow-x-auto">
+                <CardContent>
                   <Table>
                     <TableHeader>
                       <TableRow>

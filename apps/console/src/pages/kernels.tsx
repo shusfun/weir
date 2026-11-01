@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { Badge, Button, Card, CardContent, CodeBlock, Dialog, DialogContent, DialogDescription, DialogTitle, Notice, PageHeader, SectionHeader, SkeletonCards, SkeletonList, Tabs, TabsList, TabsPanel, TabsTab, useConfirm } from "@weir/ui";
+import { Badge, Button, Card, CardContent, CodeBlock, Dialog, DialogContent, DialogDescription, DialogTitle, Notice, PageHeader, SectionHeader, SkeletonCards, SkeletonList, Tabs, TabsList, TabsPanel, TabsTab, useConfirm, ScrollArea } from "@weir/ui";
 import { Download, Star, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { useRowAction } from "../lib/action";
@@ -184,7 +184,8 @@ function ReleasesDialog({ kernel, arches, jobs, close, fetched }: { kernel: stri
         </DialogDescription>
         <JobLine id={job} job={latestJob(jobs, `kernel:${kernel}:`)} idle="点版本右侧的「下载」开始；进度显示在这里" onFinish={fetched} />
         {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} skeleton={<SkeletonList rows={5} lines={1} className="stack" rowClassName="flex items-center justify-between gap-2" />} /> : q.data.releases.length === 0 ? <State empty="没有可用版本" /> : (
-          <ul className="stack weir-focus-gutter max-h-[50vh] overflow-y-auto">
+          <ScrollArea className="max-h-[50vh]" viewportClassName="weir-focus-gutter">
+          <ul className="stack">
             {q.data.releases.map((r) => (
               <li key={r.version} className="flex flex-wrap items-center justify-between gap-2">
                 <span className="flex flex-wrap items-center gap-2">
@@ -200,6 +201,7 @@ function ReleasesDialog({ kernel, arches, jobs, close, fetched }: { kernel: stri
               </li>
             ))}
           </ul>
+          </ScrollArea>
         )}
       </DialogContent>
     </Dialog>

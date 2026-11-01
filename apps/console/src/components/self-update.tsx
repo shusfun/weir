@@ -7,8 +7,9 @@ import { api } from "../api";
 import { clock, date } from "../lib/models";
 import { State } from "./feedback";
 import { size } from "./job";
-import { emptyReauth, Reauth, Section, useReauthAction } from "./system-settings";
-import { field, useConsoleContext } from "../lib/console-context";
+import { Section } from "./system-settings";
+import { useFormAction } from "../lib/action";
+import { useConsoleContext } from "../lib/console-context";
 
 interface Release { version: string; published_at: string; notes: string; url: string }
 interface Status {
@@ -105,10 +106,9 @@ function UpdateStatus({ st }: { st?: Status }) {
 }
 
 function ConfirmUpdate({ target, current, previous, close, started }: { target: { action: "update" | "rollback"; version?: string }; current: string; previous: string; close: () => void; started: () => void }) {
-  const [re, setRe] = useState(emptyReauth);
   const to = target.action === "rollback" ? previous : target.version!;
-  const go = useReauthAction(() => api("/admin/system/update", "POST", { ...target, ...re }), { ok: "已提交，更新服务正在执行", onSuccess: started });
-  useConsoleContext({ dialog: { title: target.action === "rollback" ? "切回 " + to : "更新到 " + to }, form: [field("password", "当前密码", re.password, true)] });
+  const go = useFormAction(() => api("/admin/system/update", "POST", target), { ok: "已提交，更新服务正在执行", onSuccess: started });
+  useConsoleContext({ dialog: { title: target.action === "rollback" ? "切回 " + to : "更新到 " + to } });
   return (
     <Dialog open onOpenChange={(o) => !o && !go.busy && close()}>
       <DialogContent>
@@ -117,7 +117,6 @@ function ConfirmUpdate({ target, current, previous, close, started }: { target: 
           当前 {current}。安装时服务会重启，控制台短暂不可用；新版本启动失败会自动切回 {current}。Gate 之后从中心自更新到同一版本。
         </DialogDescription>
         <Form busy={go.busy} errors={go.errors} onSubmit={() => void go.submit()}>
-          <Reauth value={re} onChange={setRe} />
           <DialogFooter error={go.error}>
             <Button type="button" variant="ghost" disabled={go.busy} onClick={close}>取消</Button>
             <Button type="submit" disabled={go.busy} busy={go.busy} busyText="正在提交…">{target.action === "rollback" ? "切回" : "更新"}</Button>

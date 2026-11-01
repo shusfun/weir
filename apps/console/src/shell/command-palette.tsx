@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { PageState, Dialog, DialogContent, DialogTitle, Kbd, Button } from "@weir/ui";
+import { PageState, ScrollArea, Dialog, DialogContent, DialogTitle, Kbd, Button } from "@weir/ui";
 import { Search, Server, User, CornerDownLeft, type LucideIcon } from "lucide-react";
 import { api } from "../api";
 import { navigation, visibleFor } from "./navigation";
@@ -87,6 +87,7 @@ export function CommandPalette({ open, onOpenChange, admin }: { open: boolean; o
           <Kbd>Esc</Kbd>
         </div>
         {entries.length ? (
+          <ScrollArea className="command-list-scroll">
           <ul className="command-list" id="command-list" role="listbox" aria-label="跳转结果">
             {entries.map((entry, index) => {
               const heading = entry.group !== lastGroup;
@@ -111,6 +112,7 @@ export function CommandPalette({ open, onOpenChange, admin }: { open: boolean; o
               );
             })}
           </ul>
+          </ScrollArea>
         ) : users.error || devices.error ? (
           // 读不到 VPS 或用户列表时不能说「没有匹配项」
           <PageState

@@ -1,9 +1,9 @@
 // 订阅组：选订阅源与手动节点（或全部），配处理链与规则模板；预览、分配给用户、匿名分享。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, CheckboxField, CodeBlock, Collapsible, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, SectionHeader, Segmented, SkeletonList, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField, Textarea, useToast, useConfirm, PasswordInput } from "@weir/ui";
+import { Badge, Button, CheckboxField, CodeBlock, Collapsible, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, SectionHeader, Segmented, SkeletonList, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField, Textarea, useToast, useConfirm, ScrollArea } from "@weir/ui";
 import { Eye, Plus, Share2, Trash2, Users } from "lucide-react";
-import { api, reauthFields } from "../api";
+import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
 import { date } from "../lib/models";
 import { fromLocalInput, localInput, type UserItem } from "../lib/core";
@@ -138,24 +138,28 @@ function ProfileForm({ value, close, saved }: { value: Profile | "new"; close: (
           <SwitchField label="包含全部已启用的订阅源与手动节点" checked={all} onCheckedChange={setAll} />
           {!all && (
             <FormGrid>
-              <fieldset className="weir-focus-gutter grid max-h-56 content-start gap-2 overflow-y-auto">
+              <fieldset className="grid min-w-0 content-start gap-2">
                 <legend className="mb-1 text-[12.5px] font-medium text-[var(--weir-ink-2)]">订阅源</legend>
-                {(sources.data?.items ?? []).map((s) => (
-                  <CheckboxField key={s.id} label={s.name || s.url} checked={sourceIds.includes(s.id)} onCheckedChange={(v) => setSourceIds(toggle(sourceIds, s.id, v))} />
-                ))}
-                {sources.data?.items.length === 0 && <small>还没有订阅源。</small>}
+                <ScrollArea className="max-h-56" viewportClassName="weir-focus-gutter" contentClassName="grid content-start gap-2">
+                  {(sources.data?.items ?? []).map((s) => (
+                    <CheckboxField key={s.id} label={s.name || s.url} checked={sourceIds.includes(s.id)} onCheckedChange={(v) => setSourceIds(toggle(sourceIds, s.id, v))} />
+                  ))}
+                  {sources.data?.items.length === 0 && <small>还没有订阅源。</small>}
+                </ScrollArea>
               </fieldset>
-              <fieldset className="weir-focus-gutter grid max-h-56 content-start gap-2 overflow-y-auto">
+              <fieldset className="grid min-w-0 content-start gap-2">
                 <legend className="mb-1 text-[12.5px] font-medium text-[var(--weir-ink-2)]">手动节点</legend>
-                {(nodes.data?.items ?? []).map((n) => (
-                  <CheckboxField
-                    key={n.id}
-                    label={<>{n.name || decodeURIComponent(n.url.split("#")[1] ?? "") || n.id}{n.group && <small className="text-[var(--weir-ink-3)]">（{n.group}）</small>}</>}
-                    checked={nodeIds.includes(n.id)}
-                    onCheckedChange={(v) => setNodeIds(toggle(nodeIds, n.id, v))}
-                  />
-                ))}
-                {nodes.data?.items.length === 0 && <small>还没有手动节点。</small>}
+                <ScrollArea className="max-h-56" viewportClassName="weir-focus-gutter" contentClassName="grid content-start gap-2">
+                  {(nodes.data?.items ?? []).map((n) => (
+                    <CheckboxField
+                      key={n.id}
+                      label={<>{n.name || decodeURIComponent(n.url.split("#")[1] ?? "") || n.id}{n.group && <small className="text-[var(--weir-ink-3)]">（{n.group}）</small>}</>}
+                      checked={nodeIds.includes(n.id)}
+                      onCheckedChange={(v) => setNodeIds(toggle(nodeIds, n.id, v))}
+                    />
+                  ))}
+                  {nodes.data?.items.length === 0 && <small>还没有手动节点。</small>}
+                </ScrollArea>
               </fieldset>
             </FormGrid>
           )}
@@ -227,11 +231,9 @@ function ProfilePreview({ profile, close }: { profile: Profile; close: () => voi
 function ShareDialog({ profile, close, changed }: { profile: Profile; close: () => void; changed: () => void }) {
   const confirm = useConfirm();
   const [days, setDays] = useState("7");
-  const [password, setPassword] = useState("");
-  const [code, setCode] = useState("");
   const [url, setUrl] = useState("");
-  const share = useFormAction(() => api(`/admin/subscriptions/profiles/${profile.id}/share`, "POST", { days: Number(days), password, code }) as Promise<{ url: string }>, {
-    fields: { ...reauthFields, invalid_share_days: "days" },
+  const share = useFormAction(() => api(`/admin/subscriptions/profiles/${profile.id}/share`, "POST", { days: Number(days) }) as Promise<{ url: string }>, {
+    fields: { invalid_share_days: "days" },
     onSuccess: (r) => {
       setUrl(r.url);
       changed();
@@ -245,7 +247,7 @@ function ShareDialog({ profile, close, changed }: { profile: Profile; close: () 
     },
   });
   const busy = share.busy || revoke.busy;
-  useConsoleContext({ object: { type: "profile", name: profile.name, id: profile.id }, dialog: { title: "匿名分享" }, form: [field("days", "有效天数", days), field("password", "当前密码", password, true), field("code", "二次验证码", code, true)] });
+  useConsoleContext({ object: { type: "profile", name: profile.name, id: profile.id }, dialog: { title: "匿名分享" }, form: [field("days", "有效天数", days)] });
   return (
     <Dialog open onOpenChange={(o) => !o && !busy && close()}>
       <DialogContent size="md">
@@ -260,13 +262,9 @@ function ShareDialog({ profile, close, changed }: { profile: Profile; close: () 
         ) : (
           <Form busy={busy} errors={share.errors} onSubmit={() => void share.submit()}>
             {profile.shared && <Notice tone="warn">当前已分享，{profile.share_expires_at ? `到期 ${date(profile.share_expires_at)}` : ""}。重新生成会替换旧地址。</Notice>}
-            <FormGrid cols={3}>
-              <Field label="有效天数" name="days" customError={days && (Number(days) < 1 || Number(days) > 365) ? "有效期须为 1–365 天" : ""}>
-                <Input inputMode="numeric" required value={days} onChange={(e) => setDays(e.target.value.replace(/\D/g, ""))} />
-              </Field>
-              <Field label="当前密码" name="password"><PasswordInput autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
-              <Field label="二次验证码" name="code"><Input inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} /></Field>
-            </FormGrid>
+            <Field label="有效天数" name="days" customError={days && (Number(days) < 1 || Number(days) > 365) ? "有效期须为 1–365 天" : ""}>
+              <Input inputMode="numeric" required value={days} onChange={(e) => setDays(e.target.value.replace(/\D/g, ""))} />
+            </Field>
             {(share.error || revoke.error) && <Notice tone="bad">{share.error || revoke.error}</Notice>}
             <DialogFooter>
               {profile.shared && (
@@ -307,17 +305,19 @@ function GrantDialog({ profile, close, saved }: { profile: Profile; close: () =>
           ) : users.data.length === 0 ? (
             <State empty="还没有用户" />
           ) : (
-            <fieldset className="weir-focus-gutter grid max-h-80 content-start gap-2 overflow-y-auto">
+            <fieldset className="grid min-w-0 content-start gap-2">
               <legend className="sr-only">用户</legend>
-              {users.data.map((u) => (
-                <CheckboxField
-                  key={u.id}
-                  label={u.name || u.email}
-                  description={u.name ? u.email : undefined}
-                  checked={picked.includes(u.id)}
-                  onCheckedChange={(v) => setPicked(v ? [...picked, u.id] : picked.filter((x) => x !== u.id))}
-                />
-              ))}
+              <ScrollArea className="max-h-80" viewportClassName="weir-focus-gutter" contentClassName="grid content-start gap-2">
+                {users.data.map((u) => (
+                  <CheckboxField
+                    key={u.id}
+                    label={u.name || u.email}
+                    description={u.name ? u.email : undefined}
+                    checked={picked.includes(u.id)}
+                    onCheckedChange={(v) => setPicked(v ? [...picked, u.id] : picked.filter((x) => x !== u.id))}
+                  />
+                ))}
+              </ScrollArea>
             </fieldset>
           )}
           <DialogFooter error={save.error}>

@@ -1,4 +1,4 @@
-// 全局公告：登录用户与匿名公开页分别选择受众；编辑区校验后弹窗验证管理员身份再发布。
+// 全局公告：登录用户与匿名公开页分别选择受众；编辑区校验通过后直接保存。
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -17,16 +17,10 @@ import {
   SelectContent,
   SelectItem,
   SwitchField,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  PasswordInput,
 } from "@weir/ui";
 import { api, isConflict } from "../api";
 import { ConflictNotice, State } from "./feedback";
-import { emptyReauth, useReauthAction } from "./system-settings";
+import { useFormAction } from "../lib/action";
 import { PublishedAnnouncement, type NoticeNode, type PublishedNotice } from "./published-announcement";
 import { field, useConsoleContext } from "../lib/console-context";
 
@@ -88,8 +82,6 @@ export function GlobalAnnouncement({ audience }: { audience: "authenticated" | "
 export function AnnouncementEditor() {
   const q = useQuery({ queryKey: ["announcement-admin"], queryFn: () => api("/admin/announcement") as Promise<Document>, refetchOnWindowFocus: false });
   const [draft, setDraft] = useState(initial);
-  const [confirm, setConfirm] = useState(false);
-  const [re, setRe] = useState(emptyReauth);
   const [notice, setNotice] = useState("");
   useEffect(() => {
     if (q.data) setDraft(q.data.announcement);
@@ -102,30 +94,20 @@ export function AnnouncementEditor() {
     retry: false,
     refetchOnWindowFocus: false,
   });
-  const save = useReauthAction(() => api("/admin/announcement", "PUT", { announcement: draft, revision: q.data!.revision, ...re }), {
+  const save = useFormAction(() => api("/admin/announcement", "PUT", { announcement: draft, revision: q.data!.revision }), {
     invalidate: [["announcement-admin"], ["global-announcement"]],
-    onSuccess: () => {
-      setConfirm(false);
-      setRe(emptyReauth);
-      setNotice(draft.enabled ? "公告已发布，仅向选定受众显示。" : "公告已撤下，草稿已保留。");
-    },
-    onError: () => setRe((v) => ({ ...v, code: "" })),
+    onSuccess: () => setNotice(draft.enabled ? "公告已发布，仅向选定受众显示。" : "公告已撤下，草稿已保留。"),
   });
   const dirty = !!q.data && JSON.stringify(draft) !== JSON.stringify(q.data.announcement);
   const change = (p: Partial<Announcement>) => {
     setDraft((v) => ({ ...v, ...p }));
     setNotice("");
   };
-  const closeConfirm = () => {
-    if (save.busy) return;
-    setConfirm(false);
-    setRe(emptyReauth);
-  };
   // 发布前的规则：正文必填、至少一个受众、富文本须通过服务端白名单
   const contentError = draft.enabled && !draft.content.trim() ? "发布公告需要填写正文" : html && preview.isError ? "富文本包含不支持的标签、属性或链接，请修正后再发布" : "";
   const audienceError = draft.enabled && !draft.authenticated && !draft.public ? "发布公告需要至少选择一个受众" : "";
   const previewReady = !html || (!!preview.data && !preview.isError);
-  useConsoleContext({ tab: "分发", dialog: confirm ? { title: "确认全局公告变更" } : undefined, form: [field("announcement_enabled", "启用全局公告", draft.enabled ? "是" : "否"), field("password", "当前密码", re.password, true)] });
+  useConsoleContext({ tab: "分发", form: [field("announcement_enabled", "启用全局公告", draft.enabled ? "是" : "否")] });
   return (
     <Card>
       <CardContent className="stack announcement-editor">
@@ -137,12 +119,7 @@ export function AnnouncementEditor() {
         {q.isPending || q.isError ? (
           <State loading={q.isPending} error={q.error} onRetry={() => void q.refetch()} />
         ) : (
-          <Form
-            onSubmit={() => {
-              save.reset();
-              setConfirm(true);
-            }}
-          >
+          <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
             <SwitchField label="发布全局公告" checked={draft.enabled} onCheckedChange={(enabled) => change({ enabled })} />
             <FormGrid>
               <Field label="全局公告标题">
@@ -211,44 +188,15 @@ export function AnnouncementEditor() {
               <p className="muted">填写正文后在此预览。</p>
             )}
             <div className="actions">
-              <Button type="submit" disabled={!dirty || (html && !!draft.content && preview.isFetching)}>
-                核对并保存公告
+              <Button type="submit" disabled={save.busy || !dirty || (html && !!draft.content && preview.isFetching)} busy={save.busy} busyText="正在保存…">
+                保存公告
               </Button>
               {dirty && <small>有未保存更改</small>}
             </div>
+            <ConflictNotice error={save.raw} onReload={() => void q.refetch()} />
+            {save.error && !isConflict(save.raw) && <Notice tone="bad">{save.error}</Notice>}
           </Form>
         )}
-        <Dialog open={confirm} onOpenChange={(v) => !v && closeConfirm()}>
-          <DialogContent>
-            <DialogTitle>确认全局公告变更</DialogTitle>
-            <DialogDescription>{draft.enabled ? "公告将向以下受众显示，请核对内容后验证管理员身份。" : "公告将撤下，正文作为草稿保留。"}</DialogDescription>
-            <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
-              <p>
-                {draft.enabled ? [draft.authenticated && "登录用户", draft.public && "匿名公开页（任何人可见）"].filter(Boolean).join(" / ") : "不向任何受众发布"}
-              </p>
-              <Field label="管理员当前密码" name="password">
-                <PasswordInput autoComplete="current-password" required value={re.password} onChange={(e) => setRe({ ...re, password: e.target.value })} />
-              </Field>
-              <Field label="二次验证码或恢复码" name="code">
-                <Input autoComplete="one-time-code" value={re.code} onChange={(e) => setRe({ ...re, code: e.target.value })} />
-              </Field>
-              <ConflictNotice
-                error={save.raw}
-                onReload={() => {
-                  setConfirm(false);
-                  void q.refetch();
-                }}
-              />
-              {save.error && !isConflict(save.raw) && <Notice tone="bad">{save.error}</Notice>}
-              <DialogFooter>
-                <Button type="button" variant="outline" disabled={save.busy} onClick={closeConfirm}>
-                  取消
-                </Button>
-                <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">确认保存公告</Button>
-              </DialogFooter>
-            </Form>
-          </DialogContent>
-        </Dialog>
       </CardContent>
     </Card>
   );

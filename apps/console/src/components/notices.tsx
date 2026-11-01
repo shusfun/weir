@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Badge, Button, Popover, PopoverContent, PopoverTrigger } from "@weir/ui";
+import { Badge, Button, Popover, PopoverContent, PopoverTrigger, ScrollArea } from "@weir/ui";
 import { Bell } from "lucide-react";
 import { api } from "../api";
 import { useRowAction } from "../lib/action";
@@ -46,7 +46,8 @@ export function NoticesButton() {
       <PopoverContent className="w-[min(92vw,380px)] p-0">
         <div className="border-b border-[var(--weir-line)] px-3 py-2 text-[13px] font-medium">待处理{q.data?.dismissed ? <small className="ml-2 font-normal text-[var(--weir-ink-3)]">另有 {q.data.dismissed} 条已忽略</small> : null}</div>
         {q.error ? <p className="p-3 text-[13px] text-[var(--weir-bad-ink)]">通知读取失败，稍后重试。</p> : list.length === 0 ? <p className="p-3 text-[13px] text-[var(--weir-ink-3)]">{q.isPending ? "正在读取…" : "没有待处理的问题。"}</p> : (
-          <ul className="m-0 max-h-[60vh] list-none overflow-y-auto p-0">
+          <ScrollArea className="max-h-[60vh]">
+          <ul className="m-0 list-none p-0">
             {list.map((n) => (
               <li key={n.id} className="stack border-b border-[var(--weir-line)] px-3 py-2 last:border-0">
                 <div className="flex items-start gap-2">
@@ -62,6 +63,7 @@ export function NoticesButton() {
               </li>
             ))}
           </ul>
+          </ScrollArea>
         )}
       </PopoverContent>
     </Popover>

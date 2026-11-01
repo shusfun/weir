@@ -14,6 +14,8 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": "http://127.0.0.1:19810",
+      // 安装完成后安装页按 /healthz 判断中心是否已切到正常服务
+      "/healthz": "http://127.0.0.1:19810",
       // 带尾斜杠：避免把前端路由 /subscriptions/* 也代理到中心
       "/sub/": "http://127.0.0.1:19810",
     },

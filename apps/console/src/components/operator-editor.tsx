@@ -1,6 +1,6 @@
 // 处理链编辑器：筛选 / 重命名 / 排序 / 去重 / 受限脚本，按顺序执行；可在后台预览处理前后的节点。
 import { useState, useRef, useEffect } from "react";
-import { ReorderButtons, Collapsible, Field, Notice, SectionHeader, Button, Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Switch, SwitchField, Textarea } from "@weir/ui";
+import { SortableList, Collapsible, Field, Notice, SectionHeader, Button, Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Switch, SwitchField, Textarea } from "@weir/ui";
 import { Plus, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { useFormAction } from "../lib/action";
@@ -60,11 +60,6 @@ export function OperatorEditor({ value, change }: { value: Operator[]; change: (
   function setParam<K extends keyof OperatorParams>(i: number, op: Operator, key: K, next: OperatorParams[K]) {
     set(i, { params: { ...op.params, [key]: next } });
   }
-  function move(i: number, n: number) {
-    const a = [...value];
-    [a[i], a[i + n]] = [a[i + n], a[i]];
-    change(a);
-  }
   return (
     <div className="stack">
       <div className="actions">
@@ -85,11 +80,16 @@ export function OperatorEditor({ value, change }: { value: Operator[]; change: (
           添加步骤
         </Button>
       </div>
-      {value.map((op, i) => {
+      <SortableList
+        label="处理步骤"
+        items={value}
+        onReorder={(next) => change(next)}
+        itemLabel={(op, i) => "步骤 " + (i + 1) + " " + (names[op.type] ?? op.type)}
+        renderItem={(op, { index: i, reorder }) => {
         const tpl = op.params.template ?? {};
         const scope = tpl.indexScope ?? tpl.scope ?? "region";
         return (
-          <section className="operator-step" key={i}>
+          <section className="operator-step">
             <SectionHeader
               size="sm"
               flush
@@ -98,7 +98,7 @@ export function OperatorEditor({ value, change }: { value: Operator[]; change: (
                 <div className="actions">
                   {/* 列表行内的独立开关，名称由 aria-label 给出 */}
                   <Switch aria-label={"启用步骤 " + (i + 1)} checked={op.enabled !== false} onCheckedChange={(v) => set(i, { enabled: v })} />
-                  <ReorderButtons label={"步骤 " + (i + 1)} onUp={() => move(i, -1)} onDown={() => move(i, 1)} upDisabled={i === 0} downDisabled={i === value.length - 1} />
+                  {reorder}
                   <Button type="button" variant="ghost" size="icon-sm" aria-label={"删除步骤 " + (i + 1)} onClick={() => change(value.filter((_, n) => n !== i))}>
                     <Trash2 size={14} />
                   </Button>
@@ -164,7 +164,8 @@ export function OperatorEditor({ value, change }: { value: Operator[]; change: (
             </Collapsible>
           </section>
         );
-      })}
+        }}
+      />
       <Collapsible title="处理前后对照" className="pipeline-preview">
         <div className="stack">
           <p>仅在后台转换，不运行 JavaScript。结果包含节点凭据，勿公开截图。</p>

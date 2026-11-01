@@ -1,10 +1,10 @@
 // 中心公共地址：管理员第一次经 HTTPS 域名打开控制台时自动记录；之后访问地址与记录不同，
-// 顶部常驻提示，可以重新验证身份后改为当前地址（已配对的 Gate 经心跳跟随切换）。
+// 顶部常驻提示，确认后改为当前地址（已配对的 Gate 经心跳跟随切换）。
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Form, Notice, useToast } from "@weir/ui";
 import { api, clause } from "../api";
-import { emptyReauth, Reauth, useReauthAction } from "./system-settings";
+import { useFormAction } from "../lib/action";
 import { field, useConsoleContext } from "../lib/console-context";
 
 interface PendingGate {
@@ -110,8 +110,7 @@ export function CenterOriginBanner() {
 
 function ChangeOrigin({ value, close }: { value: CenterOrigin; close: () => void }) {
   const client = useQueryClient();
-  const [re, setRe] = useState(emptyReauth);
-  const save = useReauthAction(() => api("/admin/center-origin", "PUT", { origin: value.current, ...re }), {
+  const save = useFormAction(() => api("/admin/center-origin", "PUT", { origin: value.current }), {
     ok: "已改为 " + value.current,
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ["center-origin"] });
@@ -119,7 +118,7 @@ function ChangeOrigin({ value, close }: { value: CenterOrigin; close: () => void
     },
   });
   const gates = value.pending_gates;
-  useConsoleContext({ dialog: { title: "改为当前地址" }, form: [field("from", "记录的中心地址", value.origin), field("to", "当前访问地址", value.current), field("password", "当前密码", re.password, true)] });
+  useConsoleContext({ dialog: { title: "改为当前地址" }, form: [field("from", "记录的中心地址", value.origin), field("to", "当前访问地址", value.current)] });
   return (
     <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
       <DialogContent size="lg">
@@ -142,7 +141,6 @@ function ChangeOrigin({ value, close }: { value: CenterOrigin; close: () => void
           ) : (
             <Notice tone="ok">目前没有仍连接其他地址的 Gate。</Notice>
           )}
-          <Reauth value={re} onChange={setRe} />
           <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
             <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在更改…">确认更改</Button>

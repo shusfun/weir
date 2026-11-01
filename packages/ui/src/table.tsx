@@ -1,12 +1,13 @@
 // 来源 codedthemes/uiable table；本地改为面板内平面表格：表头刻字、行仅细线分隔，不给单元格加材质。
 import { ComponentProps } from "react";
 import { cn } from "cn";
+import { ScrollArea } from "./scroll-area";
 
 function Table({ className, ...props }: ComponentProps<"table">) {
   return (
-    <div data-slot="table-container" className="relative w-full overflow-x-auto">
+    <ScrollArea data-slot="table-container" orientation="horizontal" className="w-full" contentRender={false}>
       <table data-slot="table" className={cn("w-full caption-bottom border-collapse text-[13px]", className)} {...props} />
-    </div>
+    </ScrollArea>
   );
 }
 

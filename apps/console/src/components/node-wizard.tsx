@@ -3,7 +3,7 @@
 // 保存后显示要放行的端口（对照本机防火墙）与出口实测结果，勾选了用户时再给出他们的链接与二维码。
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, CheckboxField, ChoiceCard, Collapsible, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Step, Steps, Radio, RadioGroup, SwitchField } from "@weir/ui";
+import { Badge, Button, CheckboxField, ChoiceCard, Collapsible, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Step, Steps, Radio, RadioGroup, SwitchField, ScrollArea } from "@weir/ui";
 import { QRCodeSVG } from "qrcode.react";
 import { api, ApiError } from "../api";
 import { useFormAction } from "../lib/action";
@@ -213,7 +213,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
             )}
             <Field label="给哪些用户" hint="「全部节点」的用户会自动拿到新节点；其他用户勾上后把这个节点加给他们。保存后直接显示他们的链接与二维码。">
               {users.isPending || users.error ? <State loading={users.isPending} error={users.error} onRetry={() => users.refetch()} /> : allUsers.length === 0 ? <small>还没有用户。</small> : (
-                <div className="grid max-h-56 gap-1.5 overflow-y-auto sm:grid-cols-2">
+                <ScrollArea className="max-h-56" viewportClassName="weir-focus-gutter" contentClassName="grid gap-1.5 sm:grid-cols-2">
                   {allUsers.map((u) => (
                     <CheckboxField
                       key={u.id}
@@ -224,7 +224,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
                       onCheckedChange={(on) => setPicked(on ? [...picked, u.id] : picked.filter((id) => id !== u.id))}
                     />
                   ))}
-                </div>
+                </ScrollArea>
               )}
             </Field>
           </>
@@ -307,7 +307,8 @@ function AdvancedFields({ fields, value, onChange }: { fields: PresetField[]; va
 function ShareList({ shares, leave }: { shares: Share[]; leave: () => void }) {
   const [qr, setQr] = useState("");
   return (
-    <ul className="stack max-h-[60vh] overflow-y-auto">
+    <ScrollArea className="max-h-[60vh]">
+    <ul className="stack">
       {shares.map((s) => (
         <li key={s.user_id} className="rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3">
           <Link to={objectHref({ type: "user", id: s.user_id })} onClick={leave} className="text-sm font-semibold text-[var(--weir-accent-text)] underline-offset-4 hover:underline">{s.name ? `${s.name}（${s.email}）` : s.email}</Link>
@@ -331,6 +332,7 @@ function ShareList({ shares, leave }: { shares: Share[]; leave: () => void }) {
         </li>
       ))}
     </ul>
+    </ScrollArea>
   );
 }
 

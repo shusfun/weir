@@ -15,7 +15,7 @@
 
 .operator-step, .core-version-card, .acme-workspace { display: grid; gap: 14px; padding: 16px; border-radius: var(--weir-radius); border: 1px solid var(--weir-line); background: color-mix(in srgb, var(--weir-panel) 70%, var(--weir-well)); }
 .operator-step strong { font-size: 13px; }
-.operator-choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; max-height: 220px; overflow: auto; padding: 10px 0; }
+.operator-choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; padding: 10px 0; }
 .import-preview { max-height: 380px; overflow: auto; }
 .import-file-panel { display: flex; align-items: center; gap: 14px; min-width: 0; padding: 14px; border-radius: var(--weir-radius); border: 1px dashed color-mix(in srgb, var(--weir-line) 60%, var(--weir-ink-3)); background: var(--weir-well); }
 .import-file-panel p { margin: 0; font-size: 12.5px; overflow-wrap: anywhere; min-width: 0; }

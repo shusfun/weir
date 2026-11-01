@@ -1,4 +1,5 @@
-// 系统设置卡片：安全策略、邮件服务、通知、WebDAV 备份、订阅备份导入导出、API 令牌。修改都需要重新输入密码。
+// 系统设置卡片：安全策略、邮件服务、通知、WebDAV 备份、订阅备份导入导出、API 令牌。
+// 设置保存直接生效；导入或恢复备份、创建 API 令牌要重新输入密码。
 import { useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button, Card, CardContent, CopyField, Field, FilePicker, Form, FormGrid, Input, Notice, PasswordInput, SectionHeader, SwitchField, Textarea, useConfirm } from "@weir/ui";
@@ -14,17 +15,15 @@ export type ReauthValue = { password: string; code: string };
 export const emptyReauth: ReauthValue = { password: "", code: "" };
 
 // Reauth 是各卡片共用的「当前密码 + 二次验证码」输入；放在 <Form> 里，服务端的验证错误标在对应字段下方。
-// reason：为什么要验证（显示在字段下方）。need=false 时这次改动不需要验证：字段保留占位但禁用，
-// 改动在要 / 不要之间切换时表单高度不变。
-export function Reauth({ value, onChange, need = true, reason }: { value: ReauthValue; onChange: (v: ReauthValue) => void; need?: boolean; reason?: string }) {
-  const hint = need ? reason : "这次改动不需要验证身份。";
+// 只用于导入或恢复备份、创建 API 令牌；reason：为什么要验证（显示在字段下方）。
+export function Reauth({ value, onChange, reason }: { value: ReauthValue; onChange: (v: ReauthValue) => void; reason?: string }) {
   return (
     <FormGrid>
-      <Field label="当前密码" name="password" hint={hint}>
-        <PasswordInput autoComplete="current-password" required={need} disabled={!need} value={need ? value.password : ""} onChange={(e) => onChange({ ...value, password: e.target.value })} />
+      <Field label="当前密码" name="password" hint={reason}>
+        <PasswordInput autoComplete="current-password" required value={value.password} onChange={(e) => onChange({ ...value, password: e.target.value })} />
       </Field>
       <Field label="二次验证码（如已开启）" name="code">
-        <Input inputMode="numeric" autoComplete="one-time-code" disabled={!need} value={need ? value.code : ""} onChange={(e) => onChange({ ...value, code: e.target.value })} />
+        <Input inputMode="numeric" autoComplete="one-time-code" value={value.code} onChange={(e) => onChange({ ...value, code: e.target.value })} />
       </Field>
     </FormGrid>
   );
@@ -60,13 +59,11 @@ const securityFlags = [
 export function SecurityCard() {
   const q = useQuery({ queryKey: ["security-settings"], queryFn: () => api("/admin/settings/security") as Promise<Record<string, boolean>> });
   const [draft, setDraft] = useState<Record<string, boolean> | null>(null);
-  const [re, setRe] = useState(emptyReauth);
   const v = draft ?? q.data;
-  const save = useReauthAction(() => api("/admin/settings/security", "PUT", { ...v, ...re }), {
+  const save = useFormAction(() => api("/admin/settings/security", "PUT", v), {
     ok: "已保存",
     onSuccess: () => {
       setDraft(null);
-      setRe(emptyReauth);
       void q.refetch();
     },
   });
@@ -81,7 +78,6 @@ export function SecurityCard() {
               <SwitchField key={k} label={label} description={description || undefined} checked={!!v[k]} onCheckedChange={(on) => setDraft({ ...v, [k]: on })} />
             ))}
           </FormGrid>
-          <Reauth value={re} onChange={setRe} />
           <div className="actions">
             <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           </div>
@@ -107,9 +103,8 @@ export function SMTPCard() {
 
 function SMTPForm({ value, saved }: { value: SMTPView; saved: () => void }) {
   const [f, setF] = useState({ host: value.host, port: String(value.port || 465), username: value.username, password: "", from: value.from, from_name: value.from_name, use_tls: value.use_tls || !value.host });
-  const [re, setRe] = useState(emptyReauth);
   const set = (p: Partial<typeof f>) => setF({ ...f, ...p });
-  const save = useReauthAction(() => api("/admin/settings/smtp", "PUT", { ...f, port: Number(f.port) || 0, account_password: re.password, code: re.code }), { ok: "已保存", onSuccess: saved });
+  const save = useFormAction(() => api("/admin/settings/smtp", "PUT", { ...f, port: Number(f.port) || 0 }), { ok: "已保存", onSuccess: saved });
   const { run, isBusy, waitFor } = useRowAction();
   return (
     <Section title="邮件服务" description={value.configured ? "已配置，可发送找回密码与注册验证邮件。" : "未配置：登录页不提供找回密码。"}>
@@ -123,7 +118,6 @@ function SMTPForm({ value, saved }: { value: SMTPView; saved: () => void }) {
           <Field label="发件人名称"><Input value={f.from_name} onChange={(e) => set({ from_name: e.target.value })} /></Field>
         </FormGrid>
         <SwitchField label="使用 TLS" description="465 端口直接 TLS，其他端口 STARTTLS。" checked={f.use_tls} onCheckedChange={(use_tls) => set({ use_tls })} />
-        <Reauth value={re} onChange={setRe} />
         <div className="actions">
           <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           {value.configured && (
@@ -154,9 +148,8 @@ export function NotifyCard() {
 
 function NotifyForm({ value, saved }: { value: NotifyView; saved: () => void }) {
   const [f, setF] = useState({ ...value, bot_token: "" });
-  const [re, setRe] = useState(emptyReauth);
   const set = (p: Partial<typeof f>) => setF({ ...f, ...p });
-  const save = useReauthAction(() => api("/admin/settings/notify", "PUT", { ...f, ...re }), { ok: "已保存", onSuccess: saved });
+  const save = useFormAction(() => api("/admin/settings/notify", "PUT", f), { ok: "已保存", onSuccess: saved });
   const { run, isBusy, waitFor } = useRowAction();
   const num = (k: "user_quota_percent" | "user_expiry_days" | "source_expiry_days" | "source_refresh_hours", label: string, hint: string, max?: number) => (
     <Field label={label} hint={hint} customError={max !== undefined && f[k] > max ? `不能大于 ${max}` : ""}>
@@ -177,7 +170,6 @@ function NotifyForm({ value, saved }: { value: NotifyView; saved: () => void }) 
           {num("source_refresh_hours", "订阅源定时刷新（小时）", "0 表示只在访问订阅组时按缓存刷新。")}
         </FormGrid>
         <SwitchField label="VPS 离线超过 5 分钟时提醒" checked={f.gate_offline} onCheckedChange={(gate_offline) => set({ gate_offline })} />
-        <Reauth value={re} onChange={setRe} />
         <div className="actions">
           <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           {value.enabled && value.token_set && (
@@ -266,13 +258,14 @@ function ImportExport() {
 
 function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) {
   const confirm = useConfirm();
-  const form = useRef<HTMLFormElement>(null);
+  // 从 WebDAV 导入备份单独一个表单，要求当前密码；保存设置不需要
+  const restoreForm = useRef<HTMLFormElement>(null);
   const [f, setF] = useState({ url: value.url, username: value.username, password: "", keep: String(value.keep), auto: value.auto, hours: String(value.hours) });
   const [re, setRe] = useState(emptyReauth);
   const [files, setFiles] = useState<string[] | null>(null);
   const [stats, setStats] = useState<ImportStats | null>(null);
   const set = (p: Partial<typeof f>) => setF({ ...f, ...p });
-  const save = useReauthAction(() => api("/admin/backup/webdav", "PUT", { ...f, keep: Number(f.keep) || 10, hours: Number(f.hours) || 24, account_password: re.password, code: re.code }), {
+  const save = useFormAction(() => api("/admin/backup/webdav", "PUT", { ...f, keep: Number(f.keep) || 10, hours: Number(f.hours) || 24 }), {
     ok: "已保存",
     fields: { invalid_webdav_url: "url" },
     onSuccess: saved,
@@ -284,68 +277,73 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
   const { run, isBusy, waitFor } = useRowAction();
   const busy = save.busy || restore.busy;
   return (
-    <Form ref={form} busy={busy} errors={save.errors ?? restore.errors} onSubmit={() => void save.submit()}>
-      <h3 className="text-sm font-semibold">WebDAV 备份</h3>
-      <small className="text-[var(--weir-ink-3)]">
-        最近一次：{date(value.last_run_at ?? undefined)}
-        {value.last_error ? ` · 失败：${value.last_error}` : ""}
-      </small>
-      <FormGrid>
-        <Field label="目录地址" name="url" hint="例如 https://dav.example.com/backup"><Input type="url" value={f.url} onChange={(e) => set({ url: e.target.value })} /></Field>
-        <Field label="用户名"><Input autoComplete="off" value={f.username} onChange={(e) => set({ username: e.target.value })} /></Field>
-        <Field label="密码" hint={value.password_set ? "已保存；留空则沿用。" : undefined}><PasswordInput autoComplete="new-password" value={f.password} onChange={(e) => set({ password: e.target.value })} /></Field>
-        <Field label="保留份数" customError={rangeError(f.keep, 1, 100, "份")}><Input inputMode="numeric" value={f.keep} onChange={(e) => set({ keep: e.target.value.replace(/\D/g, "") })} /></Field>
-        <Field label="自动备份间隔（小时）" customError={rangeError(f.hours, 1, 720, "小时")}><Input inputMode="numeric" value={f.hours} onChange={(e) => set({ hours: e.target.value.replace(/\D/g, "") })} /></Field>
-      </FormGrid>
-      <SwitchField label="自动备份" checked={f.auto} onCheckedChange={(auto) => set({ auto })} />
-      <Reauth value={re} onChange={setRe} />
-      {(save.error || restore.error) && <Notice tone="bad">{save.error || restore.error}</Notice>}
-      {stats && <StatsNotice s={stats} />}
-      <div className="actions">
-        <Button type="submit" disabled={busy} busy={save.busy} busyText="正在保存…">保存</Button>
-        {value.url && (
-          <Button type="button" variant="outline" disabled={isBusy()} busy={isBusy("run")} busyText="正在备份…" onClick={() => void run("run", (track) => api("/admin/backup/webdav/run", "POST", {}, track), "备份已上传", { wait: { label: "正在上传备份到 WebDAV", max: 30 } }).then((ok) => ok && saved())}>
-            立即备份
-          </Button>
-        )}
-        {value.url && (
-          <Button type="button" variant="outline" disabled={isBusy()} busy={isBusy("files")} busyText="正在读取…" onClick={() => void run("files", async () => setFiles((await api("/admin/backup/webdav/files")).files), undefined, { wait: { label: "正在读取 WebDAV 目录", max: 30 } })}>
-            查看备份
-          </Button>
-        )}
-        <ActionsWait wait={waitFor("run") || waitFor("files")} />
-      </div>
+    <>
+      <Form busy={busy} errors={save.errors} onSubmit={() => void save.submit()}>
+        <h3 className="text-sm font-semibold">WebDAV 备份</h3>
+        <small className="text-[var(--weir-ink-3)]">
+          最近一次：{date(value.last_run_at ?? undefined)}
+          {value.last_error ? ` · 失败：${value.last_error}` : ""}
+        </small>
+        <FormGrid>
+          <Field label="目录地址" name="url" hint="例如 https://dav.example.com/backup"><Input type="url" value={f.url} onChange={(e) => set({ url: e.target.value })} /></Field>
+          <Field label="用户名"><Input autoComplete="off" value={f.username} onChange={(e) => set({ username: e.target.value })} /></Field>
+          <Field label="密码" hint={value.password_set ? "已保存；留空则沿用。" : undefined}><PasswordInput autoComplete="new-password" value={f.password} onChange={(e) => set({ password: e.target.value })} /></Field>
+          <Field label="保留份数" customError={rangeError(f.keep, 1, 100, "份")}><Input inputMode="numeric" value={f.keep} onChange={(e) => set({ keep: e.target.value.replace(/\D/g, "") })} /></Field>
+          <Field label="自动备份间隔（小时）" customError={rangeError(f.hours, 1, 720, "小时")}><Input inputMode="numeric" value={f.hours} onChange={(e) => set({ hours: e.target.value.replace(/\D/g, "") })} /></Field>
+        </FormGrid>
+        <SwitchField label="自动备份" checked={f.auto} onCheckedChange={(auto) => set({ auto })} />
+        {save.error && <Notice tone="bad">{save.error}</Notice>}
+        <div className="actions">
+          <Button type="submit" disabled={busy} busy={save.busy} busyText="正在保存…">保存</Button>
+          {value.url && (
+            <Button type="button" variant="outline" disabled={isBusy()} busy={isBusy("run")} busyText="正在备份…" onClick={() => void run("run", (track) => api("/admin/backup/webdav/run", "POST", {}, track), "备份已上传", { wait: { label: "正在上传备份到 WebDAV", max: 30 } }).then((ok) => ok && saved())}>
+              立即备份
+            </Button>
+          )}
+          {value.url && (
+            <Button type="button" variant="outline" disabled={isBusy()} busy={isBusy("files")} busyText="正在读取…" onClick={() => void run("files", async () => setFiles((await api("/admin/backup/webdav/files")).files), undefined, { wait: { label: "正在读取 WebDAV 目录", max: 30 } })}>
+              查看备份
+            </Button>
+          )}
+          <ActionsWait wait={waitFor("run") || waitFor("files")} />
+        </div>
+      </Form>
       {files &&
         (files.length === 0 ? (
           <State empty="目录里还没有备份" />
         ) : (
-          <ul className="stack">
-            {files.map((name) => (
-              <li key={name} className="flex items-center justify-between gap-2">
-                <code className="text-xs">{name}</code>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={async () => {
-                    // 导入需要当前密码：未填写时在密码栏下提示，不弹确认框
-                    if (!form.current?.reportValidity()) return;
-                    if (!(await confirm({ title: `从 ${name} 导入？`, description: "只新增，不删除现有数据。", confirmText: "导入" }))) return;
-                    target.current = name;
-                    setRestoring(name);
-                    void restore.submit();
-                  }}
-                  busy={restore.busy && restoring === name}
-                  busyText="正在导入…"
-                >
-                  导入这份
-                </Button>
-              </li>
-            ))}
-          </ul>
+          <Form ref={restoreForm} busy={restore.busy} errors={restore.errors} onSubmit={() => undefined}>
+            <Reauth value={re} onChange={setRe} reason="从备份导入要验证管理员身份。" />
+            <ul className="stack">
+              {files.map((name) => (
+                <li key={name} className="flex items-center justify-between gap-2">
+                  <code className="text-xs">{name}</code>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={async () => {
+                      // 导入需要当前密码：未填写时在密码栏下提示，不弹确认框
+                      if (!restoreForm.current?.reportValidity()) return;
+                      if (!(await confirm({ title: `从 ${name} 导入？`, description: "只新增，不删除现有数据。", confirmText: "导入" }))) return;
+                      target.current = name;
+                      setRestoring(name);
+                      void restore.submit();
+                    }}
+                    busy={restore.busy && restoring === name}
+                    busyText="正在导入…"
+                  >
+                    导入这份
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            {restore.error && <Notice tone="bad">{restore.error}</Notice>}
+            {stats && <StatsNotice s={stats} />}
+          </Form>
         ))}
-    </Form>
+    </>
   );
 }
 

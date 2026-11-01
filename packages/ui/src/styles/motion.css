@@ -205,7 +205,6 @@
   .weir-drawer-body {
     min-height: 0;
     margin-top: 16px;
-    overflow-y: auto;
     font-size: 13px;
   }
   .weir-drawer-footer {

@@ -42,6 +42,8 @@ export * from "./radio-group";
 export * from "./copy-button";
 export * from "./copy-field";
 export * from "./reorder-buttons";
+export * from "./scroll-area";
+export * from "./sortable-list";
 export * from "./display";
 export * from "./motion";
 export * from "./check-mark";

@@ -5,6 +5,7 @@ import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { cn } from "cn";
 import { XIcon } from "lucide-react";
+import { ScrollArea } from "./scroll-area";
 import type { ReactNode } from "react";
 
 const floating =
@@ -146,7 +147,7 @@ function SheetContent({
             </DialogPrimitive.Close>
           )}
         </div>
-        <div className="weir-focus-gutter min-h-0 flex-1 overflow-y-auto">{children}</div>
+        <ScrollArea className="min-h-0 flex-1" viewportClassName="weir-focus-gutter">{children}</ScrollArea>
       </DialogPrimitive.Popup>
     </DialogPrimitive.Portal>
   );
