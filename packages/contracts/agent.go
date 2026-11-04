@@ -15,14 +15,15 @@ type PairResult struct {
 
 // Heartbeat 每 30 秒上报一次；ListeningPorts 为本机实际在监听的端口（含其他程序）。
 type Heartbeat struct {
-	Version        string            `json:"version"`
-	Hostname       string            `json:"hostname"`
-	Arch           string            `json:"arch"`
-	ListeningPorts []ListeningPort   `json:"listening_ports"`
-	Kernels        map[string]string `json:"kernels"` // 实际运行的内核版本；缺失表示未运行
-	Host           *HostSample       `json:"host,omitempty"`
-	Center         string            `json:"center,omitempty"` // Gate 正在连接的中心地址
-	Panel          *PanelStatus      `json:"panel,omitempty"`
+	NodeTestVersion int               `json:"node_test_version,omitempty"`
+	Version         string            `json:"version"`
+	Hostname        string            `json:"hostname"`
+	Arch            string            `json:"arch"`
+	ListeningPorts  []ListeningPort   `json:"listening_ports"`
+	Kernels         map[string]string `json:"kernels"` // 实际运行的内核版本；缺失表示未运行
+	Host            *HostSample       `json:"host,omitempty"`
+	Center          string            `json:"center,omitempty"` // Gate 正在连接的中心地址
+	Panel           *PanelStatus      `json:"panel,omitempty"`
 	// PanelCerts 是本机 1Panel 证书的当前状态（证书 ID → 摘要与到期），1Panel 续签后中心据此更新。
 	PanelCerts map[string]PanelCert `json:"panel_certs,omitempty"`
 	// Firewall 是本机防火墙的状态（读不到时为空，中心显示「未知」）。
@@ -55,6 +56,7 @@ type ReleaseTarget struct {
 
 // PanelStatus 是 Gate 本机 1Panel 的状态。API 密钥只存在 Gate 本机（root 可读），从不上报。
 type PanelStatus struct {
+	Kind       string `json:"kind,omitempty"`
 	Detected   bool   `json:"detected"`
 	Configured bool   `json:"configured"`
 	Version    string `json:"version,omitempty"`
@@ -141,7 +143,8 @@ const (
 	ActionCoreRestart   = "core.restart"
 	ActionUninstall     = "gate.uninstall"
 	// ActionNodeTest 在 Gate 本机回环上实测一份候选入站：起服务端内核与 sing-box 客户端，经代理真实下载。
-	ActionNodeTest = "node.test"
+	ActionNodeTest      = "node.test"
+	ActionPanelDiscover = "panel.discover"
 	// ActionACMEHTTP01 让 Gate 临时在 80 端口应答一次 ACME HTTP-01 验证（只回应验证路径，用完即关）。
 	ActionACMEHTTP01 = "acme.http01"
 	// ActionPanelConfigure 把管理员填写的 1Panel API 密钥交给 Gate（经一次性编号取回，中心不落库）。

@@ -201,7 +201,7 @@ func TestWizardSubscriptionRealClients(t *testing.T) {
 
 	seen := map[string]bool{}
 	for _, ob := range doc.Outbounds {
-		if ob["type"] == "selector" {
+		if ob["type"] == "selector" || ob["type"] == "urltest" || ob["type"] == "direct" || ob["type"] == "block" {
 			continue
 		}
 		tag := ob["tag"].(string)

@@ -65,15 +65,16 @@ func (t *tailBuffer) String() string {
 // nodeTest 是 AI 草稿与节点修改的实测：在本机回环端口上用候选配置起服务端内核，再用 sing-box 客户端
 // 按订阅里的出站连接它，经代理下载 256 KiB 并核对长度。不改动正在运行的内核与配置。
 // payload.config 是只含一个入站与一份测试凭据的 GateConfig（端口为 0，由这里分配）；
-// payload.client 是 sing-box 客户端出站（server_port 为 0，由这里填入）。
+// payload.client 保留订阅客户端的完整依赖图与目标标签，由这里改成临时本机端点。
 func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any, error) {
 	var cfg contracts.GateConfig
 	raw, _ := json.Marshal(p["config"])
 	if err := json.Unmarshal(raw, &cfg); err != nil || len(cfg.Inbounds) != 1 {
 		return nil, errors.New("invalid test config")
 	}
-	client, _ := p["client"].(map[string]any)
-	if client == nil {
+	var client contracts.NodeTestClient
+	raw, _ = json.Marshal(p["client"])
+	if err := json.Unmarshal(raw, &client); err != nil || client.Target == "" {
 		return nil, errors.New("invalid test client")
 	}
 	if _, ok := cfg.Kernels["sing-box"]; !ok {
@@ -140,20 +141,26 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 	if err != nil {
 		return nil, err
 	}
-	client["server"], client["server_port"], client["tag"] = "127.0.0.1", port, "test"
+	if err := client.Loopback(port); err != nil {
+		return map[string]any{"stage": "client_build"}, err
+	}
 	cc, _ := json.Marshal(map[string]any{
 		"log":       map[string]any{"level": "warn"},
 		"inbounds":  []any{map[string]any{"type": "mixed", "listen": "127.0.0.1", "listen_port": socks}},
-		"outbounds": []any{client},
-		"route":     map[string]any{"final": "test"},
+		"outbounds": client.Outbounds,
+		"endpoints": client.Endpoints,
+		"route":     map[string]any{"final": client.Target},
 	})
 	clientPath := filepath.Join(dir, "client.json")
 	if err = os.WriteFile(clientPath, cc, 0600); err != nil {
 		return nil, err
 	}
 	// 客户端：sing-box 的驱动参数（这次配置没有 sing-box 入站时用默认参数）。
-	if run, _, err = kernelArgs("sing-box", out.Args["sing-box"], clientPath); err != nil {
+	if run, test, err = kernelArgs("sing-box", out.Args["sing-box"], clientPath); err != nil {
 		return nil, err
+	}
+	if b, err := exec.CommandContext(runCtx, bin("sing-box"), test...).CombinedOutput(); err != nil {
+		return map[string]any{"stage": "client_check", "log": lastLines(string(b), 20)}, errors.New("客户端内核自检未通过")
 	}
 	cp := exec.CommandContext(runCtx, bin("sing-box"), run...)
 	cp.Stdout, cp.Stderr = clientLog, clientLog
@@ -163,16 +170,31 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 	defer func() { _ = cp.Process.Kill(); _ = cp.Wait() }()
 
 	blob := bytes.Repeat([]byte("m"), 256<<10)
-	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(blob) }))
+	target := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(blob) }))
+	if cfg.Inbounds[0].Protocol == "wireguard" {
+		// WireGuard 的用户态网络栈拒绝目标为 loopback 的报文；在本机网卡上放置临时测试目标。
+		addr, err := nodeTestTargetAddress()
+		if err != nil {
+			return map[string]any{"stage": "target"}, err
+		}
+		_ = target.Listener.Close()
+		target.Listener, err = net.Listen("tcp", net.JoinHostPort(addr, "0"))
+		if err != nil {
+			return map[string]any{"stage": "target"}, err
+		}
+	}
+	target.Start()
 	defer target.Close()
 	proxy, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", socks))
 	hc := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{Proxy: http.ProxyURL(proxy), DisableKeepAlives: true}}
 	start := time.Now()
 	var last error
+	stage := "connect"
 	for time.Since(start) < 25*time.Second {
 		begin := time.Now()
 		resp, err := hc.Get(target.URL)
 		if err == nil {
+			stage = "download"
 			n, cerr := io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
 			if cerr == nil && n == int64(len(blob)) {
@@ -183,7 +205,24 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 		last = err
 		time.Sleep(500 * time.Millisecond)
 	}
-	return map[string]any{"stage": "connect", "server_log": lastLines(serverLog.String(), 20), "client_log": lastLines(clientLog.String(), 20)}, fmt.Errorf("经候选配置连接失败：%v", last)
+	if strings.Contains(clientLog.String(), "FATAL") || strings.Contains(serverLog.String(), "FATAL") {
+		stage = "start"
+	}
+	return map[string]any{"stage": stage, "server_log": lastLines(serverLog.String(), 20), "client_log": lastLines(clientLog.String(), 20)}, fmt.Errorf("经候选配置连接失败：%v", last)
+}
+
+func nodeTestTargetAddress() (string, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return "", err
+	}
+	for _, addr := range addrs {
+		ip, _, err := net.ParseCIDR(addr.String())
+		if err == nil && ip.To4() != nil && !ip.IsLoopback() && !ip.IsLinkLocalUnicast() {
+			return ip.String(), nil
+		}
+	}
+	return "", errors.New("WireGuard 实测需要本机非回环 IPv4 地址")
 }
 
 func lastLines(s string, n int) string {

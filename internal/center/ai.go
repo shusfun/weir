@@ -72,6 +72,9 @@ func (s *Server) testNodeWith(ctx context.Context, n *ent.Node, settings map[str
 	if err != nil {
 		return nil, err
 	}
+	if fmt.Sprint(g.Host["node_test_version"]) != "2" {
+		return nil, errors.New("这台 VPS 尚不支持完整客户端实测，请先升级 Gate 并等待心跳")
+	}
 	kernels, profiles, err := s.gateKernels(ctx, g, map[string]bool{n.Kernel: true, "sing-box": true})
 	if err != nil {
 		return nil, err
@@ -90,12 +93,15 @@ func (s *Server) testNodeWith(ctx context.Context, n *ent.Node, settings map[str
 		}
 		cfg.Inbounds[0].CertID = int64(cert.ID)
 		cfg.Certs = []contracts.CertRef{{ID: int64(cert.ID), SHA256: cert.Sha256}}
+		if cert.Source == "panel" {
+			cfg.Certs[0].SHA256, cfg.Certs[0].Panel = "", cert.Domain
+		}
 		// 节点可能尚未保存（建节点前实测）：短时允许该 Gate 下载这张证书。
 		_ = s.Store.KV.Set(ctx, fmt.Sprintf("cert-grant:%d:%d", g.ID, cert.ID), "1", 2*time.Minute)
 	}
 	probe := *n
 	probe.Settings, probe.Port = settings, 1
-	link, err := shareLink(&probe, "127.0.0.1", &ent.Credential{UUID: id, Password: password}, "test", cert)
+	link, err := shareLink(&probe, "127.0.0.1", &ent.Credential{ID: 1, UUID: id, Password: password}, "test", cert)
 	if err != nil {
 		return nil, err
 	}
@@ -103,23 +109,30 @@ func (s *Server) testNodeWith(ctx context.Context, n *ent.Node, settings map[str
 	if err != nil {
 		return nil, fmt.Errorf("客户端配置无法生成：%w", err)
 	}
-	var doc struct {
-		Outbounds []map[string]any `json:"outbounds"`
-	}
+	var doc contracts.NodeTestClient
 	if err = json.Unmarshal(body, &doc); err != nil {
 		return nil, err
 	}
-	var client map[string]any
+	// Render 的 selector/urltest 不是被测节点；端点和 detour 必须一起传给 Gate。
+	var outbounds []map[string]any
 	for _, o := range doc.Outbounds {
-		if o["type"] != "selector" {
-			client = o
+		if o["type"] == "selector" || o["type"] == "urltest" || o["type"] == "direct" || o["type"] == "block" {
+			continue
+		}
+		outbounds = append(outbounds, o)
+		if o["type"] != "shadowtls" {
+			doc.Target, _ = o["tag"].(string)
 		}
 	}
-	if client == nil {
+	doc.Outbounds = outbounds
+	for _, ep := range doc.Endpoints {
+		doc.Target, _ = ep["tag"].(string)
+	}
+	if doc.Target == "" {
 		return nil, errors.New("客户端配置为空")
 	}
 	var payload map[string]any
-	raw, _ := json.Marshal(map[string]any{"config": cfg, "client": client})
+	raw, _ := json.Marshal(map[string]any{"config": cfg, "client": doc})
 	_ = json.Unmarshal(raw, &payload)
 	return s.gateProbe(ctx, g, contracts.ActionNodeTest, payload, 50*time.Second)
 }

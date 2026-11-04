@@ -23,7 +23,7 @@ func setupGate(t *testing.T) (*Server, *testClient, *fakeGate) {
 		}
 	}
 	g := pairFakeGate(t, admin)
-	if code, _ := g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{Version: "test", Hostname: "hk", Arch: "amd64"}); code != 200 {
+	if code, _ := g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 2, Version: "test", Hostname: "hk", Arch: "amd64"}); code != 200 {
 		t.Fatalf("heartbeat = %d", code)
 	}
 	return s, admin, g

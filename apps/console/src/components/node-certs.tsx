@@ -100,7 +100,7 @@ export function GateCerts({ gate }: { gate: Gate }) {
   });
   const panelState = panel.configured
     ? panel.error ? <Badge variant="soft" tone="bad">连接失败</Badge> : <Badge variant="soft" tone="ok">已连接{panel.version ? ` ${panel.version}` : ""}</Badge>
-    : panel.detected ? <Badge variant="soft" tone="warn">已检测到，未填密钥</Badge> : <Badge variant="soft" tone="neutral">{gate.panel ? "未检测到" : "未知"}</Badge>;
+    : panel.detected ? <Badge variant="soft" tone="warn">等待本机授权</Badge> : <Badge variant="soft" tone="neutral">{gate.panel ? "未检测到" : "未知"}</Badge>;
   return (
     <>
       <SectionHeader title="证书" description="这台 VPS 上节点使用的证书。IP 证书约 6 天有效，剩余三分之一时自动续签；已过期或状态未知的节点不会写进订阅。" />
@@ -122,9 +122,10 @@ export function GateCerts({ gate }: { gate: Gate }) {
           ))}
         </ul>
       )}
-      <SectionHeader title="1Panel" description="VPS 上装有 1Panel（v2.0.16 及以上）时，Gate 只经 127.0.0.1 调用它申请本机 IP 证书，由 1Panel 应答验证并自动续签。Gate 只调用证书接口，不改 1Panel 的网站配置。" actions={panelState} />
+      <SectionHeader title="本机面板证书" description="Gate 首次上线自动接入本机已有的 Weir 专用授权。1Panel v2.3.2 可在面板中创建名为 Weir certificate manager、仅允许 127.0.0.1 的 API Key，无需复制密钥。其他版本可手动授权；不改网站配置。" actions={panelState} />
+      <Button variant="outline" disabled={!gate.online || isBusy("discover")} busy={isBusy("discover")} busyText="正在检测…" onClick={() => void run("discover", () => api(`/admin/gates/${gate.id}/panel/discover`, "POST"), "本机证书授权已接入").then(() => client.invalidateQueries({ queryKey:["gates"] }))}>检测并接入本机授权</Button>
       {panel.error && <Notice tone="bad">{String(panel.error)}</Notice>}
-      <Collapsible title={panel.configured ? "更换 1Panel API 密钥" : "填写 1Panel API 密钥"}>
+      <Collapsible title={panel.configured ? "更换 1Panel API 密钥" : "手动提供 1Panel API 密钥"}>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
           <Notice tone="warn">1Panel 的 API 密钥不能限定权限，等同这台机器的 root。它只交给这台 VPS 保存（只有 root 可读），中心只转发一次，不落库、不写日志、不进审计详情。请在 1Panel 的 API 接口白名单里加入 127.0.0.1。</Notice>
           <FormGrid>

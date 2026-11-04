@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"reflect"
 	"strconv"
 	"sync"
 	"time"
@@ -116,6 +117,7 @@ func (s *Server) agentState(c *gin.Context) {
 		s.waiters.notify(g.ID)
 	}
 	if advanced {
+		s.refreshGateReachability(g.ID)
 		users, _ := s.confirmBudgets(ctx, g.ID, st.AppliedRevision)
 		for _, uid := range users {
 			_, _ = s.rebalanceUser(ctx, uid)
@@ -143,17 +145,22 @@ func (s *Server) agentHeartbeat(c *gin.Context) {
 	for _, p := range hb.ListeningPorts {
 		ports = append(ports, map[string]any{"port": p.Port, "proto": p.Proto, "process": p.Process})
 	}
+	observationsChanged := !reflect.DeepEqual(g.ListeningPorts, ports) || !reflect.DeepEqual(g.KernelsRunning, hb.Kernels)
 	arch := hb.Arch
 	if arch != "amd64" && arch != "arm64" {
 		arch = g.Arch
 	}
 	upd := g.Update().SetVersion(hb.Version).SetHostname(hb.Hostname).SetArch(arch).SetListeningPorts(ports).SetKernelsRunning(hb.Kernels).SetLastSeenAt(time.Now())
-	if hb.Host != nil {
-		var host map[string]any
-		if b, err := json.Marshal(hb.Host); err == nil && json.Unmarshal(b, &host) == nil {
-			upd.SetHost(host)
-		}
+	host := g.Host
+	if host == nil {
+		host = map[string]any{}
 	}
+	if hb.Host != nil {
+		b, _ := json.Marshal(hb.Host)
+		_ = json.Unmarshal(b, &host)
+	}
+	host["node_test_version"] = hb.NodeTestVersion
+	upd.SetHost(host)
 	if len(hb.Center) <= 255 {
 		upd.SetCenterURL(hb.Center)
 	}
@@ -185,6 +192,9 @@ func (s *Server) agentHeartbeat(c *gin.Context) {
 		s.notifyConsole("gate", itoa(g.ID))
 	}
 	s.absorbPanelReport(ctx, g, hb)
+	if observationsChanged && g.AppliedRevision >= g.ConfigRevision {
+		s.refreshGateReachability(g.ID)
+	}
 	s.recordHost(ctx, g.ID, hb.Host, time.Now())
 	before := g.ConfigRevision
 	if g, err = s.ensureStatsPorts(ctx, g); err != nil {

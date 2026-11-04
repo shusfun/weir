@@ -61,11 +61,12 @@ type Helper struct {
 	Sup      *Supervisor
 	mu       sync.Mutex
 	// 1Panel 连接测试与证书刷新的缓存（见 panel.go）。
-	panelMu        sync.Mutex
-	panelChecked   time.Time
-	panelRefreshed time.Time
-	panelVersion   string
-	panelError     string
+	panelMu         sync.Mutex
+	panelChecked    time.Time
+	panelRefreshed  time.Time
+	panelVersion    string
+	panelError      string
+	panelRenewError string
 	// 本机防火墙状态的缓存（见 firewall.go）。
 	fwMu sync.Mutex
 	fw   *contracts.FirewallStatus
@@ -108,6 +109,20 @@ func (h *Helper) Handler() http.Handler {
 	mux.HandleFunc("POST /release", h.release)
 	mux.HandleFunc("POST /uninstall", h.uninstall)
 	mux.HandleFunc("POST /panel", h.setPanel)
+	mux.HandleFunc("POST /panel/discover", func(w http.ResponseWriter, r *http.Request) {
+		if err := os.Remove(h.panelPath() + ".disabled"); err != nil && !os.IsNotExist(err) {
+			writeJSON(w, 500, ApplyResult{Error: err.Error()})
+			return
+		}
+		if err := h.discoverPanel(r.Context()); err != nil {
+			writeJSON(w, 422, ApplyResult{Error: err.Error()})
+			return
+		}
+		h.panelMu.Lock()
+		h.panelChecked = time.Time{}
+		h.panelMu.Unlock()
+		writeJSON(w, 200, h.panelStatus(r.Context()))
+	})
 	mux.HandleFunc("DELETE /panel", h.removePanel)
 	mux.HandleFunc("POST /panel/cert", h.panelCert)
 	mux.HandleFunc("POST /panel/report", h.panelCertsReport)

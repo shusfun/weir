@@ -77,6 +77,10 @@ func (a *Agent) runAction(ctx context.Context, act contracts.Action) contracts.A
 		err = a.helper.ACMEHTTP01(ctx, str(p, "token"), str(p, "key_auth"), num(p, "seconds"))
 	case contracts.ActionPanelConfigure:
 		out, err = a.configurePanel(ctx, p)
+	case contracts.ActionPanelDiscover:
+		var st contracts.PanelStatus
+		st, err = a.helper.DiscoverPanel(ctx)
+		out = map[string]any{"kind": st.Kind, "detected": st.Detected, "configured": st.Configured, "version": st.Version, "error": st.Error}
 	case contracts.ActionPanelRemove:
 		err = a.helper.RemovePanel(ctx)
 	case contracts.ActionPanelCert:

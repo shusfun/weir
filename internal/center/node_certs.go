@@ -154,6 +154,7 @@ func (s *Server) nodeCertRoutes(admin *gin.RouterGroup) {
 	admin.GET("/node-certs", s.getNodeCertSettings)
 	admin.PUT("/node-certs", s.putNodeCertSettings)
 	admin.PUT("/gates/:id/panel", s.asJob("1Panel 测试并保存", "已取消，没有保存 1Panel 密钥", s.putGatePanel))
+	admin.POST("/gates/:id/panel/discover", s.asJob("自动接入本机证书授权", "已取消本机证书授权检测", s.discoverGatePanel))
 	admin.DELETE("/gates/:id/panel", s.deleteGatePanel)
 	admin.POST("/certs/:id/renew", s.asJob("立即续签证书", "已取消续签，证书保持原样", s.renewCertNow))
 }
@@ -161,6 +162,29 @@ func (s *Server) nodeCertRoutes(admin *gin.RouterGroup) {
 func (s *Server) getNodeCertSettings(c *gin.Context) {
 	v := s.nodeCertSettings(c.Request.Context())
 	c.JSON(200, gin.H{"edge_domain": v.EdgeDomain, "email": v.Email, "staging": v.Staging, "center_origin": s.centerOrigin(c.Request.Context())})
+}
+
+func (s *Server) discoverGatePanel(c *gin.Context) {
+	g, ok := s.gateParam(c)
+	if !ok {
+		return
+	}
+	if fmt.Sprint(g.Host["node_test_version"]) != "2" {
+		failDetail(c, 409, "agent_upgrade_required", "请先升级 Gate 并等待心跳", nil)
+		return
+	}
+	res, err := s.gateProbe(c.Request.Context(), g, contracts.ActionPanelDiscover, nil, 30*time.Second)
+	if err != nil {
+		failDetail(c, 422, "panel_failed", err.Error(), nil)
+		return
+	}
+	if err = g.Update().SetPanel(res).Exec(c.Request.Context()); err != nil {
+		failInternal(c, 500, "save_failed", err)
+		return
+	}
+	s.audit(c, "gate.panel.discover", "gate:"+itoa(g.ID), "ok")
+	s.notifyConsole("gate", itoa(g.ID))
+	c.JSON(200, res)
 }
 
 func (s *Server) putNodeCertSettings(c *gin.Context) {
@@ -251,10 +275,13 @@ func (s *Server) deleteGatePanel(c *gin.Context) {
 // absorbPanelReport 记下心跳里的 1Panel 状态；1Panel 续签了证书时更新中心记录的证书与到期。
 func (s *Server) absorbPanelReport(ctx context.Context, g *ent.Gate, hb contracts.Heartbeat) {
 	if hb.Panel != nil {
-		v := map[string]any{"detected": hb.Panel.Detected, "configured": hb.Panel.Configured, "version": hb.Panel.Version, "error": hb.Panel.Error, "at": time.Now().UTC()}
+		v := map[string]any{"kind": hb.Panel.Kind, "detected": hb.Panel.Detected, "configured": hb.Panel.Configured, "version": hb.Panel.Version, "error": hb.Panel.Error, "at": time.Now().UTC()}
 		_ = g.Update().SetPanel(v).Exec(ctx)
 	}
 	for id, pc := range hb.PanelCerts {
+		if pc.NotAfter.IsZero() || !time.Now().Before(pc.NotAfter) || !strings.Contains(pc.CertPEM, "BEGIN CERTIFICATE") {
+			continue
+		}
 		ct, err := s.Store.Ent.Certificate.Query().Where(certificate.IDEQ(atoiOr(id)), certificate.GateIDEQ(g.ID), certificate.SourceEQ(certificate.SourcePanel)).Only(ctx)
 		if err != nil || ct.Sha256 == pc.SHA256 {
 			continue
@@ -424,6 +451,9 @@ func (s *Server) port80Free(ctx context.Context, g *ent.Gate) bool {
 }
 
 func panelReady(g *ent.Gate) (bool, string) {
+	if g.Panel != nil && g.Panel["kind"] == "baota" {
+		return false, fmt.Sprint(g.Panel["error"])
+	}
 	switch {
 	case g.Panel == nil:
 		return false, "没有检测到 1Panel"

@@ -75,7 +75,8 @@ type Server struct {
 	// live 是链路页的实时数据（只在内存，见 live.go）。
 	live liveHub
 	// events 是控制台事件流的提醒与停止信号（见 events.go）。
-	events eventHub
+	events      eventHub
+	reachChecks nodeReachChecks
 	// tasks 是周期任务正在失败的项（见 tasks.go），管理员通知据此提示。
 	tasks taskLog
 	// relays 是经 VPS 中转下载时等待 Gate 上传的文件（见 gate_relay.go）。

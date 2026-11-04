@@ -242,7 +242,11 @@ func singboxNodes(links []string, usedNames map[string]bool) ([]map[string]any, 
 			p["tls"] = tls
 		}
 		if settings.Network == "ws" {
-			p["transport"] = map[string]any{"type": "ws", "path": settings.Path, "headers": map[string]string{"Host": settings.Host}}
+			transport := map[string]any{"type": "ws", "path": settings.Path}
+			if settings.Host != "" {
+				transport["headers"] = map[string]string{"Host": settings.Host}
+			}
+			p["transport"] = transport
 		}
 		out = append(out, p)
 		if settings.Network == "grpc" {

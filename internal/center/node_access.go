@@ -12,6 +12,7 @@ import (
 
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/node"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // 节点能不能从外面连上：需要放行的端口（协议决定 TCP / UDP）、Gate 本机防火墙有没有放行、
@@ -94,6 +95,9 @@ func ruleCovers(rule string, port int, proto string) bool {
 // reachResult 是中心从外部连接节点端口的结果；保存在 reach:node:<id>。
 // LatencyMS 是从中心所在位置建立 TCP 连接用的时间，只在节点状况里显示；代理页排序看节点自己统计的速率，不看它。
 type reachResult struct {
+	Revision  int64     `json:"revision"`
+	Host      string    `json:"host"`
+	Port      int       `json:"port"`
 	Status    string    `json:"status"` // ok / failed / unknown
 	Why       string    `json:"why,omitempty"`
 	LatencyMS int       `json:"latency_ms,omitempty"`
@@ -108,7 +112,117 @@ func (s *Server) loadReach(ctx context.Context, id int) (reachResult, bool) {
 	if !ok || json.Unmarshal([]byte(raw), &r) != nil {
 		return reachResult{}, false
 	}
+	n, err := s.Store.Ent.Node.Get(ctx, id)
+	if err != nil {
+		return reachResult{}, false
+	}
+	g, err := s.Store.Ent.Gate.Get(ctx, n.GateID)
+	if err != nil || r.Revision != g.ConfigRevision || r.Host != g.PublicHost || r.Port != n.Port {
+		return reachResult{}, false
+	}
 	return r, true
+}
+
+// nodeReadiness 使用与下发相同的凭据与额度规则，避免把未启用入站误判为网络故障。
+func (s *Server) nodeReadiness(ctx context.Context, n *ent.Node, g *ent.Gate) (string, string) {
+	if g == nil {
+		return "unknown", "VPS 状态未知"
+	}
+	cfg := contracts.GateConfig{Budgets: map[string]contracts.GateBudget{}}
+	_, err := s.addCredentials(ctx, g, &cfg, []int{n.ID})
+	if err != nil {
+		return "unknown", "无法读取节点配置状态"
+	}
+	now := time.Now()
+	active := false
+	for _, c := range cfg.Credentials {
+		if c.InboundID != int64(n.ID) || !c.InWindow(now) {
+			continue
+		}
+		b := cfg.Budgets[c.UserKey]
+		if c.Internal || b.Unlimited || b.Allocated > b.Used {
+			active = true
+			break
+		}
+	}
+	if !active {
+		return "credentials", "没有有效使用凭据，请分配用户并创建可用订阅；同时检查到期时间和额度"
+	}
+	if g.AppliedRevision < g.ConfigRevision {
+		return "pending", "等待 VPS 应用配置"
+	}
+	if g.KernelsRunning == nil {
+		return "unknown", "尚未收到内核运行状态"
+	}
+	if g.KernelsRunning[n.Kernel] == "" {
+		return "kernel", "节点内核未运行，请查看内核诊断"
+	}
+	for _, p := range g.ListeningPorts {
+		if fmt.Sprint(p["port"]) == strconv.Itoa(n.Port) {
+			return "ready", ""
+		}
+	}
+	return "listener", "内核没有监听节点端口，请查看内核诊断"
+}
+
+type nodeReachChecks struct {
+	sync.Mutex
+	pending map[int]bool
+}
+
+func (s *Server) refreshGateReachability(gid int) {
+	s.reachChecks.Lock()
+	if s.reachChecks.pending == nil {
+		s.reachChecks.pending = map[int]bool{}
+	}
+	if _, exists := s.reachChecks.pending[gid]; exists {
+		s.reachChecks.pending[gid] = true
+		s.reachChecks.Unlock()
+		return
+	}
+	s.reachChecks.pending[gid] = false
+	s.reachChecks.Unlock()
+	go func() {
+		s.state.RLock()
+		defer s.state.RUnlock()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		select {
+		case <-s.events.stopped():
+			cancel()
+		default:
+		}
+		go func() {
+			select {
+			case <-s.events.stopped():
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+		for {
+			if ctx.Err() == nil {
+				ids, err := s.Store.Ent.Node.Query().Where(node.GateIDEQ(gid), node.EnabledEQ(true)).IDs(ctx)
+				if err == nil {
+					for _, id := range ids {
+						if ctx.Err() != nil {
+							break
+						}
+						s.checkReachability(ctx, id)
+					}
+				}
+				s.notifyConsole("gate", itoa(gid))
+			}
+			s.reachChecks.Lock()
+			if ctx.Err() == nil && s.reachChecks.pending[gid] {
+				s.reachChecks.pending[gid] = false
+				s.reachChecks.Unlock()
+				continue
+			}
+			delete(s.reachChecks.pending, gid)
+			s.reachChecks.Unlock()
+			return
+		}
+	}()
 }
 
 // colocated：Gate 经本机回环连接中心（单机），从中心测不出外部能不能连上。
@@ -169,8 +283,11 @@ func (s *Server) checkReachability(ctx context.Context, id int) {
 	if err != nil {
 		return
 	}
-	r := reachResult{Status: "unknown", At: time.Now().UTC()}
+	r := reachResult{Status: "unknown", At: time.Now().UTC(), Revision: g.ConfigRevision, Host: g.PublicHost, Port: n.Port}
+	ready, why := s.nodeReadiness(ctx, n, g)
 	switch {
+	case ready != "ready":
+		r.Why = why
 	case g.PublicHost == "":
 		r.Why = "VPS 没有公网地址"
 	case colocated(g):
@@ -186,6 +303,12 @@ func (s *Server) checkReachability(ctx context.Context, id int) {
 			conn.Close()
 			r.Status, r.LatencyMS = "ok", max(1, int(time.Since(begin).Milliseconds()))
 		}
+	}
+	// 连接过程中可能已收到下一版配置；旧结果不能覆盖新版本。
+	latest, err := s.Store.Ent.Gate.Get(ctx, g.ID)
+	current, nerr := s.Store.Ent.Node.Get(ctx, n.ID)
+	if err != nil || nerr != nil || latest.ConfigRevision != r.Revision || latest.PublicHost != r.Host || current.Port != r.Port {
+		return
 	}
 	b, _ := json.Marshal(r)
 	_ = s.Store.KV.Set(ctx, reachKey(id), string(b), 24*time.Hour)

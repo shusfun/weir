@@ -138,6 +138,8 @@ func (s *Server) nodeView(ctx context.Context, n *ent.Node) gin.H {
 		"chain": s.chainView(ctx, n),
 	}
 	if g != nil {
+		state, why := s.nodeReadiness(ctx, n, g)
+		view["readiness"] = gin.H{"state": state, "why": why}
 		view["gate_name"], view["host"] = g.Name, g.PublicHost
 		view["ports"] = nodePorts(n, g)
 	}
@@ -510,6 +512,10 @@ func (s *Server) createNode(c *gin.Context) {
 		ct, err := s.Store.Ent.Certificate.Get(ctx, req.CertID)
 		if err != nil {
 			failure(c, 404, "cert_not_found")
+			return
+		}
+		if p.Cert == "required" && ct.Source == "self_signed" {
+			failDetail(c, 422, "cert_untrusted", "这个协议的通用订阅需要可信证书，不能使用自签证书；请选择面板托管或上传的可信证书", nil)
 			return
 		}
 		certID, st["tls_sni"] = &ct.ID, ct.Domain

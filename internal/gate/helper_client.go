@@ -143,6 +143,12 @@ func (h *helperClient) RemovePanel(ctx context.Context) error {
 	return h.call(ctx, "DELETE", "/panel", nil, nil)
 }
 
+func (h *helperClient) DiscoverPanel(ctx context.Context) (contracts.PanelStatus, error) {
+	var st contracts.PanelStatus
+	err := h.call(ctx, "POST", "/panel/discover", nil, &st)
+	return st, err
+}
+
 // PanelCert 经本机 1Panel 取得 IP 证书并安装为证书 id。
 func (h *helperClient) PanelCert(ctx context.Context, id int64, ip string) (contracts.PanelCert, error) {
 	var out contracts.PanelCert

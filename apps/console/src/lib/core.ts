@@ -13,7 +13,7 @@ export interface Gate {
   last_seen_at?: string;
   kernels_running?: Record<string, string>;
   // Gate 上报的 1Panel 状态；缺失表示还没有上报（未知）。
-  panel?: { detected?: boolean; configured?: boolean; version?: string; error?: string } | null;
+  panel?: { kind?: string; detected?: boolean; configured?: boolean; version?: string; error?: string } | null;
   // 本机防火墙（ufw / firewalld / iptables / none）；缺失表示这次没读到（未知）。
   firewall?: { tool: string; active: boolean; rules?: string[]; error?: string } | null;
   // 单机安装时建议的公网地址（本机网卡上的公网 IP）；colocated：中心与这台 VPS 在同一台机器上。
@@ -132,6 +132,7 @@ export interface NodeItem {
   security: string;
   enabled: boolean;
   credentials: number;
+  readiness?: { state: "ready" | "credentials" | "pending" | "kernel" | "listener" | "unknown"; why: string };
   cert_id?: number | null;
   settings?: Record<string, unknown>;
   chain: { kind: ExitKind; address?: string; port?: number; username?: string; password?: string; link?: string; node_id?: number | null; source?: SourceResolved; probe?: ExitProbe };

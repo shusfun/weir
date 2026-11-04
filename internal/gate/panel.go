@@ -150,7 +150,7 @@ func (p *panelClient) sslDetail(ctx context.Context, id int) (*panelSSL, error) 
 	return &v, nil
 }
 
-// acmeAccount 返回 1Panel 里的第一个 ACME 账户；没有时创建一个（Let's Encrypt，邮箱可为空）。
+// acmeAccount 复用面板已有的 ACME 账户，不伪造用户的联系邮箱。
 func (p *panelClient) acmeAccount(ctx context.Context) (int, error) {
 	var page struct {
 		Items []struct {
@@ -163,13 +163,7 @@ func (p *panelClient) acmeAccount(ctx context.Context) (int, error) {
 	if len(page.Items) > 0 {
 		return page.Items[0].ID, nil
 	}
-	var created struct {
-		ID int `json:"id"`
-	}
-	if err := p.do(ctx, "POST", "/api/v2/websites/acme", map[string]any{"type": "letsencrypt", "keyType": "P256"}, &created); err != nil {
-		return 0, err
-	}
-	return created.ID, nil
+	return 0, errors.New("1Panel 没有 ACME 账户，请先在面板配置有效的证书联系邮箱")
 }
 
 // ensureIPCert 找到或申请本机 IP 证书，等到签发完成（最多约 2 分钟），返回证书与私钥。
@@ -183,7 +177,7 @@ func (p *panelClient) ensureIPCert(ctx context.Context, ip string) (string, stri
 		if err != nil {
 			return "", "", err
 		}
-		req := map[string]any{"primaryDomain": ip, "otherDomains": "", "provider": "http", "acmeAccountId": acct, "autoRenew": true, "keyType": "P256",
+		req := map[string]any{"primaryDomain": ip, "isIp": true, "otherDomains": "", "provider": "http", "acmeAccountId": acct, "autoRenew": true, "keyType": "EC256",
 			"description": "Weir 节点证书（由 Weir 申请，请勿删除）", "apply": true}
 		if err = p.do(ctx, "POST", "/api/v2/websites/ssl", req, nil); err != nil {
 			return "", "", err
@@ -227,8 +221,29 @@ func (h *Helper) loadPanel() (PanelConfig, bool) {
 
 // panelStatus 返回 1Panel 状态；已配置时顺便测一次连接（结果缓存 10 分钟）。
 func (h *Helper) panelStatus(ctx context.Context) contracts.PanelStatus {
-	st := contracts.PanelStatus{Detected: panelDetected()}
+	st := contracts.PanelStatus{Detected: panelDetected(), Kind: "1panel"}
+	if _, err := os.Stat("/www/server/panel"); err == nil && !st.Detected {
+		return contracts.PanelStatus{Detected: true, Kind: "baota", Error: "检测到宝塔，尚未验证该版本的 IP 证书管理接口；请提供可信证书或使用 80 空闲时的直接签发"}
+	}
 	cfg, ok := h.loadPanel()
+	if !ok && st.Detected {
+		if _, err := os.Stat(h.panelPath() + ".disabled"); err == nil {
+			return st
+		}
+		h.panelMu.Lock()
+		if time.Since(h.panelChecked) > time.Minute {
+			h.panelChecked = time.Now()
+			if err := h.discoverPanel(ctx); err != nil {
+				h.panelError = err.Error()
+			} else {
+				h.panelError = ""
+				h.panelChecked = time.Time{}
+			}
+		}
+		st.Error = h.panelError
+		h.panelMu.Unlock()
+		cfg, ok = h.loadPanel()
+	}
 	st.Configured = ok
 	if !ok {
 		return st
@@ -237,6 +252,9 @@ func (h *Helper) panelStatus(ctx context.Context) contracts.PanelStatus {
 	defer h.panelMu.Unlock()
 	if time.Since(h.panelChecked) < 10*time.Minute {
 		st.Version, st.Error = h.panelVersion, h.panelError
+		if st.Error == "" {
+			st.Error = h.panelRenewError
+		}
 		return st
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -247,6 +265,9 @@ func (h *Helper) panelStatus(ctx context.Context) contracts.PanelStatus {
 		h.panelError = err.Error()
 	}
 	st.Version, st.Error = h.panelVersion, h.panelError
+	if st.Error == "" {
+		st.Error = h.panelRenewError
+	}
 	return st
 }
 
@@ -273,6 +294,7 @@ func (h *Helper) setPanel(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 500, ApplyResult{Error: err.Error()})
 		return
 	}
+	_ = os.Remove(h.panelPath() + ".disabled")
 	h.panelMu.Lock()
 	h.panelChecked, h.panelVersion, h.panelError = time.Now(), v, ""
 	h.panelMu.Unlock()
@@ -280,6 +302,10 @@ func (h *Helper) setPanel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Helper) removePanel(w http.ResponseWriter, _ *http.Request) {
+	if err := os.WriteFile(h.panelPath()+".disabled", []byte("manual disconnect\n"), 0600); err != nil {
+		writeJSON(w, 500, ApplyResult{Error: err.Error()})
+		return
+	}
 	if err := os.Remove(h.panelPath()); err != nil && !os.IsNotExist(err) {
 		writeJSON(w, 500, ApplyResult{Error: err.Error()})
 		return
@@ -334,18 +360,29 @@ func (h *Helper) refreshPanelCerts(ctx context.Context, certs map[int]string) {
 		return
 	}
 	pc := newPanelClient(cfg)
+	var refreshErr error
 	for id, ip := range certs {
 		ssl, err := pc.findSSL(ctx, ip)
 		if err != nil || ssl == nil {
+			refreshErr = errors.New("面板证书刷新失败：未取得已托管的证书，保留旧证书")
 			continue
 		}
 		d, err := pc.sslDetail(ctx, ssl.ID)
 		if err != nil || !strings.Contains(d.Pem, "BEGIN CERTIFICATE") {
+			refreshErr = errors.New("面板证书刷新失败：证书内容不可用，保留旧证书")
 			continue
 		}
 		if h.certs()[strconv.Itoa(id)] != contracts.CertSum(d.Pem, d.PrivateKey) {
-			_ = h.installCertFiles(id, d.Pem, d.PrivateKey)
+			if err := h.installCertFiles(id, d.Pem, d.PrivateKey); err != nil {
+				refreshErr = fmt.Errorf("面板证书刷新失败，保留旧证书：%w", err)
+			}
 		}
+	}
+	h.panelMu.Lock()
+	defer h.panelMu.Unlock()
+	h.panelRenewError = ""
+	if refreshErr != nil {
+		h.panelRenewError = refreshErr.Error()
 	}
 }
 
@@ -373,7 +410,6 @@ func (h *Helper) panelCertsReport(w http.ResponseWriter, r *http.Request) {
 		key, err2 := os.ReadFile(path + ".key")
 		if err1 == nil && err2 == nil {
 			pc := panelCertOf(string(cert), string(key))
-			pc.CertPEM = ""
 			out[strconv.Itoa(id)] = pc
 		}
 	}
@@ -437,6 +473,14 @@ func (h *Helper) acmeHTTP01(w http.ResponseWriter, r *http.Request) {
 
 // installCertFiles 原子写入 <id>.crt / <id>.key，属组设为内核运行账号。
 func (h *Helper) installCertFiles(id int, certPEM, keyPEM string) error {
+	pair, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))
+	if err != nil {
+		return errors.New("证书与私钥不匹配")
+	}
+	cert, err := x509.ParseCertificate(pair.Certificate[0])
+	if err != nil || time.Now().Before(cert.NotBefore) || !time.Now().Before(cert.NotAfter) {
+		return errors.New("证书不在有效期内")
+	}
 	if err := os.MkdirAll(h.P.CertsDir, 0750); err != nil {
 		return err
 	}

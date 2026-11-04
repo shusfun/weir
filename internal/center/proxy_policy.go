@@ -150,6 +150,10 @@ func (s *Server) healthOf(ctx context.Context, n *ent.Node, g *ent.Gate) nodeHea
 		return nodeHealth{Status: "down", Why: "节点已停用"}
 	}
 	h := nodeHealth{Status: "unknown", CPU: hostCPU(g)}
+	if state, why := s.nodeReadiness(ctx, n, g); state != "ready" {
+		h.Why = why
+		return h
+	}
 	r, ok := s.loadReach(ctx, n.ID)
 	switch {
 	case !ok:

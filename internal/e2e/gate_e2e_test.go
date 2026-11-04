@@ -64,6 +64,31 @@ func (e *env) post(path string, body any, header map[string]string) map[string]a
 	defer resp.Body.Close()
 	var out map[string]any
 	json.NewDecoder(resp.Body).Decode(&out)
+	if resp.StatusCode == http.StatusAccepted {
+		job, ok := out["job"].(map[string]any)
+		if !ok {
+			e.t.Fatal("202 response missing job")
+		}
+		deadline := time.Now().Add(4 * time.Minute)
+		for time.Now().Before(deadline) {
+			id, _ := job["id"].(string)
+			b, _ := e.get("/api/v1/admin/jobs/"+url.PathEscape(id), nil)
+			var state map[string]any
+			if err := json.Unmarshal(b, &state); err != nil {
+				e.t.Fatal(err)
+			}
+			job = state["job"].(map[string]any)
+			if job["status"] != "running" {
+				result, ok := job["result"].(map[string]any)
+				if !ok || result["status"].(float64) >= 300 {
+					e.t.Fatalf("%s job failed: %v result=%v", path, job["error"], result)
+				}
+				return result["body"].(map[string]any)
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+		e.t.Fatal("action job timed out")
+	}
 	if resp.StatusCode >= 300 {
 		e.t.Fatalf("%s = %d %v", path, resp.StatusCode, out)
 	}

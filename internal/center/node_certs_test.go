@@ -85,6 +85,7 @@ func useFakeCA(t *testing.T) *acmetest.CA {
 func heartbeat(t *testing.T, g *fakeGate, hb contracts.Heartbeat) {
 	t.Helper()
 	hb.Version, hb.Arch = "test", "amd64"
+	hb.NodeTestVersion = 2
 	if code, body := g.call("POST", "/api/v1/agent/heartbeat", hb); code != 200 {
 		t.Fatalf("heartbeat = %d %s", code, body)
 	}
