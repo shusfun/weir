@@ -32,6 +32,31 @@ func setupGate(t *testing.T) (*Server, *testClient, *fakeGate) {
 func mustJSON(t *testing.T, tc *testClient, method, path string, body any, want int) map[string]any {
 	t.Helper()
 	w := tc.do(method, path, body, nil)
+	if w.Code == 202 && want == 200 {
+		initial := decode(t, w)
+		job, ok := initial["job"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s missing action job", path)
+		}
+		deadline := time.Now().Add(30 * time.Second)
+		for time.Now().Before(deadline) {
+			j := tc.do("GET", "/api/v1/admin/jobs/"+job["id"].(string), nil, nil)
+			if j.Code != 200 {
+				t.Fatalf("job lookup=%d", j.Code)
+			}
+			job = decode(t, j)["job"].(map[string]any)
+			if job["status"] != "running" {
+				result, ok := job["result"].(map[string]any)
+				if !ok || result["status"] != float64(want) {
+					t.Fatalf("%s job failed: %v", path, job["error"])
+				}
+				out, _ := result["body"].(map[string]any)
+				return out
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		t.Fatalf("%s action job did not finish", path)
+	}
 	if w.Code != want {
 		t.Fatalf("%s %s = %d %s", method, path, w.Code, w.Body.String())
 	}
