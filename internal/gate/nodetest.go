@@ -23,13 +23,26 @@ import (
 )
 
 // freeLoopbackPort 返回一个 TCP 与 UDP 都空闲的回环端口（QUIC 协议监听 UDP）。
-func freeLoopbackPort() (int, error) {
+var listenLoopback = net.Listen
+
+func freeLoopbackPort(excluded ...int) (int, error) {
 	for i := 0; i < 20; i++ {
-		l, err := net.Listen("tcp", "127.0.0.1:0")
+		l, err := listenLoopback("tcp", "127.0.0.1:0")
 		if err != nil {
 			return 0, err
 		}
 		port := l.Addr().(*net.TCPAddr).Port
+		skip := false
+		for _, p := range excluded {
+			if p == port {
+				skip = true
+				break
+			}
+		}
+		if skip {
+			_ = l.Close()
+			continue
+		}
 		u, err := net.ListenPacket("udp", fmt.Sprintf("127.0.0.1:%d", port))
 		l.Close()
 		if err == nil {
@@ -91,10 +104,10 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 		return nil, err
 	}
 	cfg.Inbounds[0].Port = port
-	if cfg.Ports.XrayStats, err = freeLoopbackPort(); err != nil {
+	if cfg.Ports.XrayStats, err = freeLoopbackPort(port); err != nil {
 		return nil, err
 	}
-	if cfg.Ports.SingboxStats, err = freeLoopbackPort(); err != nil {
+	if cfg.Ports.SingboxStats, err = freeLoopbackPort(port, cfg.Ports.XrayStats); err != nil {
 		return nil, err
 	}
 	out, err := kernelconf.Build(cfg, kernelconf.Options{CertDir: a.P.CertsDir, Now: time.Now()})
@@ -137,7 +150,7 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 	}
 	defer func() { _ = sp.Process.Kill(); _ = sp.Wait() }()
 
-	socks, err := freeLoopbackPort()
+	socks, err := freeLoopbackPort(port, cfg.Ports.XrayStats, cfg.Ports.SingboxStats)
 	if err != nil {
 		return nil, err
 	}
