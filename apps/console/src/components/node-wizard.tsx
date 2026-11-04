@@ -108,7 +108,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
       ...(["socks5", "http", "https"].includes(chain.kind) ? [field("chain_address", "代理地址", chain.address), field("chain_port", "代理端口", chain.port), field("chain_password", "代理密码", chain.password, true)] : []),
       ...(chain.kind === "link" ? [field("chain_link", "节点链接", chain.link, true)] : []),
       field("name", "节点名称", name), field("port", "端口", port), field("target", "伪装目标", target),
-      ...Object.entries(advanced).map(([k, v]) => field("set." + k, chosen?.fields.find((f) => f.key === k)?.label ?? k, v)),
+      ...Object.entries(advanced).map(([k, v]) => field("set." + k, chosen?.fields?.find((f) => f.key === k)?.label ?? k, v)),
     ],
   } : null);
   if (shares) {
@@ -142,7 +142,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
           <>
             <PresetStep presets={presets} value={preset} onChange={(v) => { setPreset(v); setAdvanced({}); }} />
             {chosen?.note && <Notice tone="warn">{chosen.note}</Notice>}
-            {chosen && chosen.fields.length > 0 && (
+            {chosen && !!chosen.fields?.length && (
               <Collapsible title="高级：修改这个方案的字段" defaultOpen={!!save.errors?.advanced}>
                 <Field name="advanced" hint="留空的字段使用方案的默认值；保存前由 VPS 用真实内核实测。">
                   <AdvancedFields fields={chosen.fields} value={advanced} onChange={setAdvanced} />

@@ -49,6 +49,9 @@ func (s *Server) presets(ctx context.Context) []Preset {
 			continue
 		}
 		for _, p := range d.SortedPresets() {
+			if p.Fields == nil {
+				p.Fields = []kernelconf.PresetField{}
+			}
 			out = append(out, Preset{Preset: p, Kernel: kernel})
 		}
 	}

@@ -80,7 +80,7 @@ export interface Preset {
   protocol: string;
   cert: "none" | "required" | "self_signed_ok";
   chain_exit: boolean;
-  fields: PresetField[];
+  fields: PresetField[] | null;
   note?: string;
 }
 
