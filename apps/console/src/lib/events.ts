@@ -20,6 +20,9 @@ let orphan: OrphanHandler | null = null;
 const seenRunning = new Set<string>();
 
 function refreshAll() {
+  void queryClient.invalidateQueries({ queryKey: ["gates"] });
+  void queryClient.invalidateQueries({ queryKey: ["nodes"] });
+  void queryClient.invalidateQueries({ queryKey: ["node"] });
   void queryClient.invalidateQueries({ queryKey: ["job"] });
   void queryClient.invalidateQueries({ queryKey: ["jobs"] });
   void queryClient.invalidateQueries({ queryKey: ["ai-drafts"] });
@@ -70,6 +73,8 @@ function connect() {
     if (n.kind === "pairing" || n.kind === "gate") {
       void queryClient.invalidateQueries({ queryKey: ["pairing"] });
       void queryClient.invalidateQueries({ queryKey: ["gates"] });
+      void queryClient.invalidateQueries({ queryKey: ["nodes"] });
+      void queryClient.invalidateQueries({ queryKey: ["node"] });
     }
   });
   es.addEventListener("ping", () => (heardAt = Date.now()));

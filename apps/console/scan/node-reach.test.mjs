@@ -1,0 +1,14 @@
+import fs from 'node:fs/promises';
+import {createRequire} from 'node:module';
+import assert from 'node:assert/strict';
+const require=createRequire(new URL('../package.json',import.meta.url));
+const ts=require('typescript');
+const source=await fs.readFile(new URL('../src/lib/core.ts',import.meta.url),'utf8');
+const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+const {nodeReachSettled}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
+const reach={status:'unknown',at:'2026-11-04T13:31:19Z',why:'等待 VPS 应用配置'};
+for(const state of ['pending','kernel','listener','unknown'])assert.equal(nodeReachSettled({readiness:{state},reach}),false,`must keep checking ${state}`);
+assert.equal(nodeReachSettled({readiness:{state:'ready'},reach:{...reach,status:'ok'}}),true);
+assert.equal(nodeReachSettled({readiness:{state:'credentials'},reach}),true);
+assert.equal(nodeReachSettled({readiness:{state:'ready'},reach:{status:'unknown',at:'0001-01-01T00:00:00Z'}}),false);
+console.log('node reach polling regression: 7 scenarios passed');

@@ -156,6 +156,11 @@ export interface Cert {
   renewed_at?: string;
 }
 
+// 带时间戳的待生效结果仍需刷新，直到凭据状态明确或实际监听与探测均已就绪。
+export function nodeReachSettled(n?: NodeItem): boolean {
+  return n?.readiness?.state === "credentials" || (!!n?.reach?.at && !n.reach.at.startsWith("0001") && (!n.readiness || n.readiness.state === "ready"));
+}
+
 export interface Entry {
   name: string;
   node_id: number;

@@ -10,6 +10,7 @@ import { useFormAction } from "../lib/action";
 import { WaitText } from "./wait";
 import { field, useConsoleContext } from "../lib/console-context";
 import type { ChainSpec, Gate, NodeItem, Preset, PresetField, UserItem } from "../lib/core";
+import { nodeReachSettled } from "../lib/core";
 import { useCerts } from "./cert-manager";
 import { State } from "./feedback";
 import { ChainExitFields, exitErrorFields, exitKindName, probeText } from "./chain-exit";
@@ -243,7 +244,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
 // 不停在创建那一刻的「还没有检查过」。超过 100 秒还没有结果时如实写明，不再刷新。
 function CreatedAccess({ node }: { node: NodeItem }) {
   const [since] = useState(() => Date.now());
-  const checked = (n?: NodeItem) => !!n?.reach?.at && !n.reach.at.startsWith("0001");
+  const checked = nodeReachSettled;
   const q = useQuery({
     queryKey: ["node", node.id, "reach"],
     queryFn: () => api("/admin/nodes/" + node.id) as Promise<NodeItem>,
@@ -252,7 +253,7 @@ function CreatedAccess({ node }: { node: NodeItem }) {
   });
   const n = q.data ?? node;
   const done = checked(n);
-  const reach = done ? n.reach : { status: "unknown" as const, why: Date.now() - since > 100_000 ? "100 秒内没有得到检查结果，稍后在节点详情里查看" : "正在检查：等 VPS 应用新配置后从中心连接一次" };
+  const reach = n.readiness?.state === "credentials" ? { status: "unknown" as const, why: n.readiness.why } : done ? n.reach : { status: "unknown" as const, why: Date.now() - since > 100_000 ? n.readiness?.why || "100 秒内没有得到检查结果，稍后在节点详情里查看" : "正在检查：等 VPS 应用新配置后从中心连接一次" };
   return <NodeAccess ports={n.ports} reach={reach} />;
 }
 
