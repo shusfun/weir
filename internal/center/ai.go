@@ -61,6 +61,9 @@ func editable(field string) bool {
 	return i < len(editableFields) && editableFields[i] == field
 }
 
+// 首次接入时需要先下载两个内核；连接实测本身仍由 Gate 限时执行。
+const nodeTestTimeout = 5 * time.Minute
+
 // testNode 让节点所在 Gate 用给定参数实测：内核自检 + 本机回环真实连接下载。
 func (s *Server) testNode(ctx context.Context, n *ent.Node, settings map[string]any) (map[string]any, error) {
 	return s.testNodeWith(ctx, n, settings, nil)
@@ -97,7 +100,7 @@ func (s *Server) testNodeWith(ctx context.Context, n *ent.Node, settings map[str
 			cfg.Certs[0].SHA256, cfg.Certs[0].Panel = "", cert.Domain
 		}
 		// 节点可能尚未保存（建节点前实测）：短时允许该 Gate 下载这张证书。
-		_ = s.Store.KV.Set(ctx, fmt.Sprintf("cert-grant:%d:%d", g.ID, cert.ID), "1", 2*time.Minute)
+		_ = s.Store.KV.Set(ctx, fmt.Sprintf("cert-grant:%d:%d", g.ID, cert.ID), "1", nodeTestTimeout+time.Minute)
 	}
 	probe := *n
 	probe.Settings, probe.Port = settings, 1
@@ -134,7 +137,7 @@ func (s *Server) testNodeWith(ctx context.Context, n *ent.Node, settings map[str
 	var payload map[string]any
 	raw, _ := json.Marshal(map[string]any{"config": cfg, "client": doc})
 	_ = json.Unmarshal(raw, &payload)
-	return s.gateProbe(ctx, g, contracts.ActionNodeTest, payload, 50*time.Second)
+	return s.gateProbe(ctx, g, contracts.ActionNodeTest, payload, nodeTestTimeout)
 }
 
 func (s *Server) testNodeHandler(c *gin.Context) {

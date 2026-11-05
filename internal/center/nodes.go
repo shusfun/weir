@@ -602,9 +602,9 @@ func (s *Server) createNode(c *gin.Context) {
 		for i, t := range tries {
 			if t != "" {
 				st["reality_dest"], st["reality_server_names"] = t+":443", t
-				jobStep(ctx, fmt.Sprintf("正在用真实内核实测节点（伪装站点 %s，第 %d/%d 个）", t, i+1, len(tries)), 50*time.Second)
+				jobStep(ctx, fmt.Sprintf("正在准备内核并实测节点（伪装站点 %s，第 %d/%d 个）", t, i+1, len(tries)), nodeTestTimeout)
 			} else {
-				jobStep(ctx, "正在用真实内核实测节点（"+g.Name+"）", 50*time.Second)
+				jobStep(ctx, "正在准备内核并实测节点（"+g.Name+"）", nodeTestTimeout)
 			}
 			if res, err = s.testNode(ctx, candidate, st); err == nil {
 				break

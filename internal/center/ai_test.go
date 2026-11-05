@@ -31,6 +31,9 @@ func (g *fakeGate) serveNodeTests(t *testing.T, fail int, seen *[]map[string]any
 			for _, a := range acts {
 				res := contracts.ActionResult{OK: true, Result: map[string]any{"stage": "connect", "latency_ms": 3}}
 				if a.Kind == contracts.ActionNodeTest {
+					if time.Until(a.ExpiresAt) < 4*time.Minute {
+						t.Error("node test expires before cold kernel preparation can finish")
+					}
 					*seen = append(*seen, a.Payload)
 					if count < fail {
 						res = contracts.ActionResult{Error: "经候选配置连接失败：EOF", Result: map[string]any{"stage": "connect"}}
