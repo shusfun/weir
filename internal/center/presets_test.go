@@ -105,7 +105,8 @@ func TestNewPresetsAdvancedFieldsAndChosenUsers(t *testing.T) {
 			}
 		}
 	}
-	if peers != 1 {
+	// 不限额度的用户 + 同样不限额度的管理员
+	if peers != 2 {
 		t.Fatalf("wireguard peers = %d", peers)
 	}
 	for _, in := range cfg.Inbounds {

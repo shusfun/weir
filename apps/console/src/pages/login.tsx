@@ -2,7 +2,6 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Activity,
   ArrowLeft,
   ArrowRight,
   Fingerprint,
@@ -10,6 +9,7 @@ import {
 } from "lucide-react";
 import { IconTile, Field, Form, Notice, Button, Card, CardContent, Input, PasswordInput } from "@weir/ui";
 import { api, fieldErrors, formError, type FormError } from "../api";
+import { BrandMark } from "../components/brand-mark";
 import { accountPasswordError } from "../password";
 import { passkey } from "../lib/passkey";
 
@@ -179,7 +179,7 @@ export function LoginPage({ done }: { done: () => void }) {
       <div className="auth-container">
         <a href="/" className="auth-brand" aria-label="Weir 首页">
           <span>
-            <Activity size={26} />
+            <BrandMark />
           </span>
           <strong>Weir</strong>
         </a>

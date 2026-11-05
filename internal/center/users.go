@@ -165,6 +165,32 @@ func (s *Server) applyPlan(ctx context.Context, m *ent.UserMutation, p planReque
 	return nil
 }
 
+// keepsAllNodes 判断请求有没有缩小节点范围：管理员固定包含全部节点，新节点直接进他的订阅。
+// narrowedByDefault：没传 all_nodes 时算不算缩小（建用户时只传 node_ids 表示手动挑选）。
+func (p planRequest) keepsAllNodes(narrowedByDefault bool) bool {
+	if p.AllNodes == nil {
+		return !narrowedByDefault
+	}
+	return *p.AllNodes
+}
+
+// EnsureAdminsAllNodes 把旧数据里没有「全部节点」的管理员改回来并补凭据；每轮维护执行一次，没有要改的就不写。
+func (s *Server) EnsureAdminsAllNodes(ctx context.Context) error {
+	items, err := s.Store.Ent.User.Query().Where(user.RoleEQ(user.RoleAdmin), user.AllNodes(false)).All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, u := range items {
+		if err = u.Update().SetAllNodes(true).Exec(ctx); err != nil {
+			return err
+		}
+		if err = s.SyncUser(ctx, u.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func dedupe(ids []int) []int {
 	seen, out := map[int]bool{}, []int{}
 	for _, id := range ids {
@@ -211,6 +237,10 @@ func (s *Server) createUser(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+	if role == user.RoleAdmin && !req.keepsAllNodes(req.NodeIDs != nil) {
+		failure(c, 400, "admin_all_nodes")
+		return
+	}
 	create := s.Store.Ent.User.Create().SetEmail(email).SetPasswordHash(string(hash)).SetRole(role)
 	if req.AllNodes == nil {
 		create.SetAllNodes(req.NodeIDs == nil)
@@ -303,6 +333,10 @@ func (s *Server) updateUser(c *gin.Context) {
 	me := c.GetInt("user_id")
 	if u.ID == me && req.Enabled != nil && !*req.Enabled {
 		failure(c, 400, "cannot_disable_self")
+		return
+	}
+	if u.Role == user.RoleAdmin && !req.keepsAllNodes(false) {
+		failure(c, 400, "admin_all_nodes")
 		return
 	}
 	upd := u.Update()

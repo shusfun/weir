@@ -106,6 +106,7 @@ const messages: Record<string, string> = {
  invalid_quota:"额度不能为负数。",
  invalid_expires_at:"到期时间无效。",
  unknown_node:"所选节点不存在。",
+ admin_all_nodes:"管理员固定包含全部节点，不能只选部分节点。",
  cannot_disable_self:"不能停用自己的账户。",
  cannot_delete_self:"不能删除自己的账户。",
  user_not_found:"用户不存在。",

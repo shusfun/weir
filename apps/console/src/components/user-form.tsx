@@ -30,7 +30,7 @@ function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new
     () => {
       const plan = {
         name: name.trim(), quota: fromUnits(quota, unit), expires_at: fromLocalInput(expiry), monthly_reset: monthly,
-        all_nodes: all, node_ids: all ? [] : picked, allow_chain: chain, enabled,
+        all_nodes: all || u?.role === "admin", node_ids: all || u?.role === "admin" ? [] : picked, allow_chain: chain, enabled,
       };
       return (isNew
         ? api("/admin/users", "POST", { ...plan, email: email.trim(), password })
@@ -84,8 +84,12 @@ function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new
             </Field>
           </FormGrid>
           <SwitchField label="每月重置用量" description="以本周期开始日为准。" checked={monthly} onCheckedChange={setMonthly} />
-          <SwitchField label="全部节点" description="以后新建的节点自动加入。" checked={all} onCheckedChange={setAll} />
-          {!all && (
+          {u?.role === "admin" ? (
+            <small className="text-[var(--weir-ink-3)]">管理员固定包含全部节点，新节点自动进入订阅。</small>
+          ) : (
+            <SwitchField label="全部节点" description="以后新建的节点自动加入；关闭后单个勾选。" checked={all} onCheckedChange={setAll} />
+          )}
+          {!all && u?.role !== "admin" && (
             <fieldset className="grid gap-2">
               <legend className="mb-1 text-meta font-medium text-[var(--weir-ink-2)]">可用节点</legend>
               {nodes.length === 0 ? <small>还没有节点。</small> : nodes.map((n) => (

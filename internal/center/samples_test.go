@@ -11,7 +11,12 @@ func TestHistoryRecordsKnownZeroAndLeavesGapsUnknown(t *testing.T) {
 	mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "ss2022", "skip_probe": true}, 200)
 	u := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "h@example.test"}, 200)
 	uid := int(u["id"].(float64))
-	key := g.config(0).Credentials[0].StatsKey
+	key := ""
+	for _, cred := range g.config(0).Credentials {
+		if cred.UserKey == userKey(uid) {
+			key = cred.StatsKey
+		}
+	}
 
 	// 还没有任何上报：全部是未知（null），不是 0。
 	points := mustJSON(t, admin, "GET", "/api/v1/admin/users/"+itoa(uid)+"/history?hours=1", nil, 200)["points"].([]any)

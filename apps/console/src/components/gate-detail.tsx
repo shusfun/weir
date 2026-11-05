@@ -1,7 +1,7 @@
 // VPS 详情：主机观测（缺失显示「未知」）、本机其他程序占用的端口、内核版本锁定、内核诊断 / 重启、节点出口关系。
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Field, Notice, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Sheet, SheetContent, useConfirm } from "@weir/ui";
+import { Badge, Button, Field, Notice, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Sheet, SheetContent, Tabs, TabsList, TabsPanel, TabsTab, useConfirm } from "@weir/ui";
 import { api } from "../api";
 import { useRowAction } from "../lib/action";
 import { GateUpdateLine, gateLags } from "./gate-version";
@@ -18,7 +18,6 @@ import { ObjectLink } from "./object-link";
 import { exitKindName, probeText } from "./chain-exit";
 import { NodeAccess } from "./node-access";
 
-type Host = Record<string, number | string | undefined>;
 interface Port {
   port: number;
   proto: string;
@@ -26,11 +25,11 @@ interface Port {
 }
 
 const unknown = "未知";
-const pct = (v: unknown) => (typeof v === "number" ? v.toFixed(1) + "%" : unknown);
-const size = (v: unknown) => (typeof v === "number" ? bytes(v) : unknown);
+export const pct = (v: unknown) => (typeof v === "number" ? v.toFixed(1) + "%" : unknown);
+export const size = (v: unknown) => (typeof v === "number" ? bytes(v) : unknown);
 const uptime = (v: unknown) => (typeof v === "number" ? `${Math.floor(v / 86400)} 天 ${Math.floor((v % 86400) / 3600)} 小时` : unknown);
 
-export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host; listening_ports?: Port[]; kernel_pins?: Record<string, string>; xray_stats_port?: number; singbox_stats_port?: number }; nodes: NodeItem[]; close: () => void }) {
+export function GateDetail({ gate, nodes, close }: { gate: Gate & { listening_ports?: Port[]; kernel_pins?: Record<string, string>; xray_stats_port?: number; singbox_stats_port?: number }; nodes: NodeItem[]; close: () => void }) {
   const confirm = useConfirm();
   const kernels = useQuery({ queryKey: ["kernels"], queryFn: async () => (await api("/admin/kernels")).kernels as Record<string, KernelInfo> });
   const [pins, setPins] = useState<Record<string, string>>(gate.kernel_pins ?? {});
@@ -55,6 +54,15 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
       <SheetContent side="right" title={gate.name} description={`${gate.public_host || "等待上报地址"} · ${gate.arch} · Gate ${gate.version || "版本未知"}${gateLags(gate) ? `（未跟上中心 ${gate.center_version}）` : ""} · 最近心跳 ${date(gate.last_seen_at)}`} className="w-full sm:max-w-[640px]">
         <div className="stack p-4">
           <GateUpdateLine gate={gate} />
+          {routing && <GateRouting gate={gate} close={() => setRouting(false)} />}
+          <Tabs defaultValue="overview">
+            <TabsList aria-label="VPS 详情">
+              <TabsTab value="overview">概览</TabsTab>
+              <TabsTab value="nodes">节点与出口</TabsTab>
+              <TabsTab value="kernels">内核</TabsTab>
+              <TabsTab value="certs">证书</TabsTab>
+            </TabsList>
+            <TabsPanel value="overview" className="stack">
           <SectionHeader title="主机" description="由 VPS 读取本机 /proc 与磁盘信息上报；网卡总量可能包含虚拟网卡，不作为用户计费依据。" />
           <dl className="grid grid-cols-2 gap-2 text-body">
             <dt>CPU</dt><dd>{pct(h.cpu_percent)}</dd>
@@ -74,6 +82,8 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
           {foreign.length === 0 ? <small>{gate.listening_ports ? "没有" : unknown}</small> : (
             <div className="flex flex-wrap gap-1.5">{foreign.map((p) => <Badge key={p.proto + p.port} variant="soft" tone="neutral">{p.port}/{p.proto}{p.process ? ` ${p.process}` : ""}</Badge>)}</div>
           )}
+            </TabsPanel>
+            <TabsPanel value="kernels" className="stack">
           <SectionHeader title="内核" description="可为这台 VPS 锁定版本；不锁定时使用默认版本。" />
           {kernels.isPending || kernels.error ? <State loading={kernels.isPending} error={kernels.error} onRetry={() => void kernels.refetch()} /> : (["xray", "sing-box"] as const).map((k) => {
             const cached = (kernels.data[k]?.versions ?? []).filter((v) => v.arches[gate.arch] && v.driver).map((v) => v.version);
@@ -101,10 +111,11 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
           })}
           <div className="actions"><Button disabled={isBusy()} busy={isBusy("pins")} busyText="正在保存…" onClick={() => void run("pins", () => api("/admin/gates/" + gate.id, "PATCH", { kernel_pins: Object.fromEntries(Object.entries(pins).filter(([, v]) => v)) }), "版本设置已保存")}>保存版本设置</Button></div>
           {!gate.online && <Notice tone="warn">VPS 离线：诊断与重启不可用。</Notice>}
+            </TabsPanel>
+            <TabsPanel value="certs" className="stack">
           <GateCerts gate={gate} />
-          <SectionHeader title="关系图" description="用户 → 入口节点 → 路由（用户自建链式代理、分流规则）→ 出口（只读）；点击跳到对应用户、节点、VPS、订阅源或出口与分流。" />
-          <GateTopology gateId={gate.id} openRouting={() => setRouting(true)} />
-          {routing && <GateRouting gate={gate} close={() => setRouting(false)} />}
+            </TabsPanel>
+            <TabsPanel value="nodes" className="stack">
           <SectionHeader title="节点与出口" description="入口节点 → 出口。" actions={<Button size="sm" variant="outline" onClick={() => setRouting(true)}>出口与分流</Button>} />
           {mine.length === 0 ? <small>这台 VPS 还没有节点。</small> : (
             <ul className="stack">{mine.map((n) => (
@@ -115,6 +126,10 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
               </li>
             ))}</ul>
           )}
+          <SectionHeader title="关系图" description="用户 → 入口节点 → 路由（用户自建链式代理、分流规则）→ 出口（只读）；点击跳到对应用户、节点、VPS、订阅源或出口与分流。" />
+          <GateTopology gateId={gate.id} openRouting={() => setRouting(true)} />
+            </TabsPanel>
+          </Tabs>
         </div>
       </SheetContent>
     </Sheet>

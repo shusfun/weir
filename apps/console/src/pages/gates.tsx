@@ -1,19 +1,19 @@
-// VPS 与节点：每台 VPS 一张卡片，最上面是在不在线；它上面的每个节点是一个协议标签，点开看细节；
+// VPS 与节点：每台 VPS 一张卡片，最上面是在不在线，直接显示主机观测；它上面的每个节点一行，点开看细节；
 // 「＋ 协议」直接在这台 VPS 上建节点。VPS 用 SSH 一次装好，或复制安装命令自己执行。
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Badge, Button, Card, CardContent, Chip, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, Menu, MenuContent, MenuItem, MenuTrigger,
+  Badge, Button, Card, CardContent, Chip, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input,
   Notice, PageHeader, Readout, SkeletonCards, StatusLamp, SwitchField, useToast, useConfirm, type LampTone,
 } from "@weir/ui";
-import { ChevronDown, Pencil, Plus, Route, Server, Sparkles, Trash2 } from "lucide-react";
+import { Pencil, Plus, Route, Server, Sparkles, Trash2 } from "lucide-react";
 import { openDsh } from "../components/dsh";
 import { ObjectLink, dataObject, useDialogParam } from "../components/object-link";
 import { exitKindName, probeText } from "../components/chain-exit";
 import { NodeAccess } from "../components/node-access";
 import { GateRouting } from "../components/gate-routing";
-import { GateDetail } from "../components/gate-detail";
+import { GateDetail, pct, size } from "../components/gate-detail";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
 import { WaitText } from "../components/wait";
@@ -46,6 +46,13 @@ function gateStatus(g: Gate): [string, LampTone] {
 
 function protocolLabel(n: NodeItem) {
   return (protocolNames[n.protocol] ?? n.protocol) + (n.security === "reality" ? " + REALITY" : n.network === "ws" ? " + WS" : "");
+}
+
+function exitLabel(n: NodeItem, nodes: NodeItem[]) {
+  if (n.chain.kind === "none") return "直连";
+  if (n.chain.kind === "source") return "订阅源节点";
+  if (n.chain.kind === "node") return "经 " + (nodes.find((x) => x.id === n.chain.node_id)?.name ?? "节点");
+  return exitKindName[n.chain.kind];
 }
 
 export function GatesPage() {
@@ -124,11 +131,13 @@ export function GatesPage() {
         const [stateLabel, stateTone] = stateText[g.state];
         const list = nodes.data.filter((n) => n.gate_id === g.id);
         const usable = list.filter((n) => nodeStatus(n, g)[1] === "ok").length;
+        // 离线时不把上一次的主机数据当成现在的
+        const host = g.online ? g.host ?? {} : {};
         return (
           <Card key={g.id} {...dataObject({ type: "gate", id: g.id })}>
             <CardContent className="stack">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
+              <div className="flex items-start justify-between gap-3 max-sm:flex-wrap">
+                <div className="min-w-0 max-sm:basis-full">
                   <h2 className="flex flex-wrap items-center gap-2 text-base font-semibold">
                     <StatusLamp size="lg" tone={tone} label={label} />
                     {g.name}
@@ -145,29 +154,37 @@ export function GatesPage() {
                     </p>
                   )}
                 </div>
-                <span className="flex flex-nowrap gap-1.5">
-                  <Button className="max-sm:hidden" size="sm" variant="outline" onClick={() => detailParam.open(g)}>详情</Button>
-                  <Menu>
-                    <MenuTrigger render={<Button size="sm" variant="outline" aria-label={`${g.name} 更多操作`} className="data-[popup-open]:[&_svg]:rotate-180 [&_svg]:transition-transform" />}>
-                      更多<ChevronDown />
-                    </MenuTrigger>
-                    <MenuContent>
-                      <MenuItem className="sm:hidden" onClick={() => detailParam.open(g)}><Server />详情</MenuItem>
-                      <MenuItem onClick={() => setRouting(g)}><Route />出口与分流</MenuItem>
-                      <MenuItem onClick={() => setEdit(g)}><Pencil />编辑名称与地址</MenuItem>
-                    </MenuContent>
-                  </Menu>
+                <span className="flex flex-wrap gap-1.5">
+                  <Button size="sm" variant="outline" onClick={() => detailParam.open(g)}>详情</Button>
+                  <Button size="sm" variant="outline" onClick={() => setRouting(g)}><Route />出口与分流</Button>
+                  <Button size="sm" variant="outline" onClick={() => setEdit(g)}><Pencil />编辑</Button>
                 </span>
               </div>
-              <div className="flex flex-wrap items-center gap-2" aria-label={`${g.name} 上的节点`}>
-                {list.map((n) => {
-                  const [s, t, why] = nodeStatus(n, g);
-                  return (
-                    <Chip key={n.id} {...dataObject({ type: "node", id: n.id })} tone={t} meta={s} title={`${protocolLabel(n)}：${why}`} onClick={() => nodeParam.open(n)}>
-                      {n.name}
-                    </Chip>
-                  );
-                })}
+              <dl className="m-0 grid grid-cols-[auto_1fr_1fr] gap-x-4 gap-y-0.5 text-sm tabular-nums sm:flex sm:flex-wrap sm:gap-x-6">
+                {[["CPU", pct(host.cpu_percent)], ["内存", `${size(host.mem_used)} / ${size(host.mem_total)}`], ["磁盘", `${size(host.disk_used)} / ${size(host.disk_total)}`]].map(([k, v]) => (
+                  <div key={k} className="min-w-0">
+                    <dt className="text-meta text-[var(--weir-ink-3)]">{k}</dt>
+                    <dd className="m-0 font-medium">{v}</dd>
+                  </div>
+                ))}
+              </dl>
+              {list.length > 0 && (
+                <ul className="group-list" aria-label={`${g.name} 上的节点`}>
+                  {list.map((n) => {
+                    const [s, t, why] = nodeStatus(n, g);
+                    return (
+                      <li key={n.id} {...dataObject({ type: "node", id: n.id })}>
+                        <button type="button" onClick={() => nodeParam.open(n)} className="weir-press flex min-h-[var(--weir-tap-touch)] w-full flex-wrap items-center gap-x-3 gap-y-0.5 py-1.5 text-left text-sm">
+                          <span className="flex min-w-0 items-center gap-2 font-medium"><StatusLamp tone={t} label={s} />{n.name}</span>
+                          <small className="tabular-nums text-[var(--weir-ink-3)]">{n.name.includes(protocolLabel(n)) ? "" : protocolLabel(n) + " "}:{n.port} · {s} · 出口 {exitLabel(n, nodes.data)} · {n.rate?.minutes ? rateText(n.rate.p90_bps) : "速率未知"}</small>
+                          {t !== "ok" && <small className={"basis-full " + (t === "bad" ? "text-[var(--weir-bad-ink)]" : t === "warn" ? "text-[var(--weir-warn-ink)]" : "text-[var(--weir-ink-3)]")}>{why}</small>}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
                 <Chip add disabled={g.status !== "active"} onClick={() => setWizard(g.id)}><Plus />节点</Chip>
               </div>
               {g.status === "active" && g.state !== "applied" && <small className="text-[var(--weir-ink-3)]">配置：<Badge variant="soft" tone={stateTone === "off" ? "neutral" : stateTone}>{stateLabel}</Badge></small>}

@@ -4,7 +4,7 @@
 .auth-container { width: 100%; max-width: 430px; min-width: 0; }
 .auth-brand { display: flex; align-items: center; justify-content: center; gap: var(--weir-space-3); font-size: var(--weir-text-display); line-height: var(--weir-leading-display); font-weight: var(--weir-weight-bold); letter-spacing: -0.02em; text-decoration: none; color: var(--weir-ink); }
 /* 应用图标：iOS 图标的圆角约为边长的 22%，44 × 0.22 ≈ 10 */
-.auth-brand > span { display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--weir-radius); color: var(--weir-accent-ink); background: var(--weir-accent); }
+.auth-brand > span { display: grid; place-items: center; width: 44px; height: 44px; overflow: hidden; border-radius: var(--weir-radius); }
 .auth-subtitle { margin: var(--weir-space-3) 0 var(--weir-space-6); text-align: center; font-size: var(--weir-text-body); line-height: var(--weir-leading-body); color: var(--weir-ink-3); }
 .auth-heading { text-align: center; margin-bottom: var(--weir-space-5); }
 .auth-heading h1 { margin: 0 0 var(--weir-space-2); }

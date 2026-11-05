@@ -34,9 +34,8 @@
   place-items: center;
   width: 34px;
   height: 34px;
+  overflow: hidden;
   border-radius: var(--weir-radius);
-  color: var(--weir-accent-ink);
-  background: var(--weir-accent);
 }
 .rail-brand strong {
   display: block;

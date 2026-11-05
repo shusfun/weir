@@ -1,5 +1,5 @@
 // 订阅链接与自建链式代理：管理员（按用户）与用户本人共用。base 为 "/admin/users/<id>" 或 "/me"。
-// 每条链接一行：地址框末尾是复制图标，右上角「更多」里是其余操作；生效时间（开始、结束都可不填）与拉取记录都在这里。
+// 每条链接一行：地址框末尾是复制图标，常用操作平铺在下面；换地址、换凭据、删除在编辑弹窗底部。
 import { useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { field, useConsoleContext } from "../lib/console-context";
@@ -29,11 +29,6 @@ import {
   SelectTrigger,
   SelectValue,
   SkeletonList,
-  Menu,
-  MenuContent,
-  MenuItem,
-  MenuSeparator,
-  MenuTrigger,
   Switch,
   SwitchField,
   Table,
@@ -46,7 +41,7 @@ import {
   useConfirm,
   SecretText,
 } from "@weir/ui";
-import { ChevronDown, CirclePause, CirclePlay, ExternalLink, History, Pencil, Plus, QrCode, RefreshCw, KeyRound, Trash2 } from "lucide-react";
+import { CirclePause, CirclePlay, ExternalLink, History, Pencil, Plus, QrCode, RefreshCw, KeyRound, Trash2 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -141,7 +136,7 @@ export function LinkPanel({
           skeleton={<SkeletonList rows={2} lines={2} className="stack" />}
         />
       ) : links.data.length === 0 ? (
-        <State empty="还没有链接" detail="订阅链接导入客户端后才能上网。点上方「新链接」生成一条。" />
+        <State empty="还没有链接" detail="订阅链接导入客户端后才能上网。点上方「新链接」生成一条；默认包含全部节点，以后新增的自动加入。" />
       ) : (
         <InsetRows>
           {links.data.map((l) => (
@@ -157,6 +152,10 @@ export function LinkPanel({
           chains={chains.data?.items ?? []}
           planEnds={planEnds}
           close={() => setEdit(null)}
+          changed={() => {
+            setEdit(null);
+            refetch();
+          }}
           saved={() => {
             setEdit(null);
             toast("链接已保存", { tone: "ok" });
@@ -168,7 +167,7 @@ export function LinkPanel({
   );
 }
 
-// LinkRow：一条链接。复制在地址框末尾（最常用），其余操作在右上角「更多」里；危险操作都要再确认。
+// LinkRow：一条链接。复制在地址框末尾（最常用），其余常用操作平铺在地址下面。
 function LinkRow({ base, link: l, stats, showCredentials, inlineQr, onEdit, refetch }: {
   base: string;
   link: LinkItem;
@@ -178,24 +177,14 @@ function LinkRow({ base, link: l, stats, showCredentials, inlineQr, onEdit, refe
   onEdit: () => void;
   refetch: () => void;
 }) {
-  const confirm = useConfirm();
   const toast = useToast();
   const [qr, setQr] = useState(false);
   const [pulls, setPulls] = useState(false);
   const { run: act, isBusy } = useRowAction<number>({ refetch: async () => refetch() });
-  const busy = isBusy(l.id);
   const [stateLabel, stateTone] = stateText[l.state ?? "active"];
-  const rotate = async (credentials: boolean) => {
-    const ok = await confirm(
-      credentials
-        ? { title: "更换该链接在所有节点上的凭据？", description: "已导入的客户端需要重新更新订阅。", confirmText: "更换", tone: "danger" }
-        : { title: "更换订阅地址？", description: "旧地址立即失效，已导入的客户端节点仍可用。", confirmText: "更换", tone: "danger" },
-    );
-    if (ok) act(l.id, () => api(`${base}/links/${l.id}/rotate`, "POST", credentials ? { credentials: true } : {}), credentials ? "凭据已更换" : "订阅地址已更换");
-  };
   return (
     <InsetRow {...dataObject({ type: "link", id: l.id })} className="stack">
-      <div className="flex items-start justify-between gap-2">
+      <div>
         <div className="min-w-0">
           <strong className="flex flex-wrap items-center gap-1.5">
             {l.name || "未命名"}
@@ -210,26 +199,17 @@ function LinkRow({ base, link: l, stats, showCredentials, inlineQr, onEdit, refe
               : <>最近获取 {date(l.last_used_at)}</>}
           </small>
         </div>
-        <Menu>
-          <MenuTrigger render={<Button size="sm" variant="outline" busy={busy} busyText="处理中" aria-label={`${l.name || "未命名"} 更多操作`} className="shrink-0 data-[popup-open]:[&_svg]:rotate-180 [&_svg]:transition-transform" />}>
-            更多<ChevronDown />
-          </MenuTrigger>
-          <MenuContent align="end">
-            <MenuItem onClick={() => setQr(true)}><QrCode />二维码</MenuItem>
-            <MenuItem onClick={() => window.open(l.url, "_blank", "noopener,noreferrer")}><ExternalLink />一键导入页</MenuItem>
-            <MenuItem onClick={onEdit}><Pencil />编辑与生效时间</MenuItem>
-            <MenuItem onClick={() => setPulls(true)}><History />拉取记录</MenuItem>
-            <MenuSeparator />
-            {l.enabled
-              ? <MenuItem onClick={() => act(l.id, () => api(`${base}/links/${l.id}`, "PATCH", { enabled: false }), "链接已停用")}><CirclePause />停用</MenuItem>
-              : <MenuItem onClick={() => act(l.id, () => api(`${base}/links/${l.id}`, "PATCH", { enabled: true }), "链接已启用")}><CirclePlay />启用</MenuItem>}
-            <MenuItem onClick={() => void rotate(false)}><RefreshCw />换地址</MenuItem>
-            <MenuItem onClick={() => void rotate(true)}><KeyRound />换凭据</MenuItem>
-            <MenuItem className="text-[var(--weir-bad-ink)] [&_svg]:!text-[var(--weir-bad-ink)]" onClick={async () => (await confirm({ title: `删除链接「${l.name || "未命名"}」？`, confirmText: "删除", tone: "danger" })) && act(l.id, () => api(`${base}/links/${l.id}`, "DELETE"), "链接已删除")}><Trash2 />删除</MenuItem>
-          </MenuContent>
-        </Menu>
       </div>
       <CopyField label="订阅地址" value={l.url} onError={() => toast("复制失败", { description: "浏览器未允许复制，请在地址框里手动复制。", tone: "warn" })} />
+      <div className="flex flex-wrap gap-1.5">
+        <Button size="sm" variant="outline" onClick={() => setQr(true)}><QrCode />二维码</Button>
+        <Button size="sm" variant="outline" onClick={() => window.open(l.url, "_blank", "noopener,noreferrer")}><ExternalLink />导入页</Button>
+        <Button size="sm" variant="outline" onClick={() => setPulls(true)}><History />拉取记录</Button>
+        <Button size="sm" variant="outline" onClick={onEdit}><Pencil />编辑</Button>
+        <Button size="sm" variant="outline" disabled={isBusy(l.id)} busy={isBusy(l.id)} busyText="处理中" onClick={() => act(l.id, () => api(`${base}/links/${l.id}`, "PATCH", { enabled: !l.enabled }), l.enabled ? "链接已停用" : "链接已启用")}>
+          {l.enabled ? <><CirclePause />停用</> : <><CirclePlay />启用</>}
+        </Button>
+      </div>
       {inlineQr && l.enabled && (
         <div className="qr-code mx-auto">
           <QRCodeSVG value={l.url} size={180} title={(l.name || "订阅链接") + " 二维码"} />
@@ -330,6 +310,7 @@ function LinkForm({
   chains,
   planEnds,
   close,
+  changed,
   saved,
 }: {
   base: string;
@@ -338,9 +319,21 @@ function LinkForm({
   chains: ChainItem[];
   planEnds?: string | null;
   close: () => void;
+  // changed：换地址、换凭据、删除完成后关掉弹窗并刷新列表
+  changed: () => void;
   saved: () => void;
 }) {
   const l = value === "new" ? undefined : value;
+  const confirm = useConfirm();
+  const { run, isBusy } = useRowAction<string>({ refetch: async () => changed() });
+  const rotate = async (credentials: boolean) => {
+    const ok = await confirm(
+      credentials
+        ? { title: "更换该链接在所有节点上的凭据？", description: "已导入的客户端需要重新更新订阅。", confirmText: "更换", tone: "danger" }
+        : { title: "更换订阅地址？", description: "旧地址立即失效，已导入的客户端节点仍可用。", confirmText: "更换", tone: "danger" },
+    );
+    if (ok) void run(credentials ? "credentials" : "address", () => api(`${base}/links/${l!.id}/rotate`, "POST", credentials ? { credentials: true } : {}), credentials ? "凭据已更换" : "订阅地址已更换");
+  };
   const [name, setName] = useState(l?.name ?? "");
   const [all, setAll] = useState(l?.all_nodes ?? true);
   const [picked, setPicked] = useState<number[]>(l?.node_ids ?? []);
@@ -410,6 +403,16 @@ function LinkForm({
             </>
           )}
           {l && <SwitchField label="启用" checked={enabled} onCheckedChange={setEnabled} />}
+          {l && (
+            <div className="stack border-t border-[var(--weir-line)] pt-3">
+              <small className="text-[var(--weir-ink-3)]">地址或凭据泄露时使用；这几项立即生效，不用点保存。</small>
+              <div className="flex flex-wrap gap-1.5">
+                <Button type="button" size="sm" variant="outline" disabled={isBusy() || save.busy} busy={isBusy("address")} busyText="正在更换…" onClick={() => void rotate(false)}><RefreshCw />换地址</Button>
+                <Button type="button" size="sm" variant="outline" disabled={isBusy() || save.busy} busy={isBusy("credentials")} busyText="正在更换…" onClick={() => void rotate(true)}><KeyRound />换凭据</Button>
+                <Button type="button" size="sm" variant="destructive" disabled={isBusy() || save.busy} busy={isBusy("delete")} busyText="正在删除…" onClick={async () => { if (await confirm({ title: `删除链接「${l.name || "未命名"}」？`, confirmText: "删除", tone: "danger" })) void run("delete", () => api(`${base}/links/${l.id}`, "DELETE"), "链接已删除"); }}><Trash2 />删除</Button>
+              </div>
+            </div>
+          )}
           <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
             <Button type="submit" disabled={save.busy || !!order || !!overPlan} busy={save.busy} busyText="正在保存…">保存</Button>

@@ -1,5 +1,5 @@
-// 订阅链接：管理员与普通用户共用一页。普通用户看自己的额度、订阅链接与拉取统计；管理员看全部用户，可按用户筛选。
-// 每条链接右上角「复制」，三角里是二维码、编辑与生效时间、拉取记录等；最近 30 天的拉取按客户端、来源汇总。
+// 订阅链接：管理员与普通用户共用一页。默认看自己的额度、订阅链接与拉取统计；管理员可切到某个用户（?user=编号）或全部用户（?user=all）。
+// 操作平铺在每条链接卡片上；换地址、换凭据、删除在编辑弹窗里；最近 30 天的拉取按客户端、来源汇总。
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -33,20 +33,22 @@ function useStats(admin: boolean, user: number | null) {
 
 export function LinksPage({ admin }: { admin: boolean }) {
   const [params, setParams] = useSearchParams();
-  const userParam = Number(params.get("user")) || null;
-  const stats = useStats(admin, userParam);
+  // 没有 user 参数就是本人的订阅（管理员也一样）；all 是全部用户，数字是某个用户
+  const scope = admin ? params.get("user") : null;
+  const userParam = Number(scope) || null;
+  const stats = useStats(!!scope, userParam);
   const byLink = useMemo(() => new Map((stats.data ?? []).map((s) => [s.id, s])), [stats.data]);
   const header = (
     <PageHeader
       title="订阅链接"
-      description={admin ? "全部用户的订阅链接与拉取统计；可按用户筛选。每条链接可单独设置生效时间。" : "每条链接凭据独立、共享同一份额度；可以给不同设备分别生成，并设置什么时候开始、什么时候结束。"}
-      actions={admin ? <UserFilter value={userParam} onChange={(id) => setParams((p) => { if (id) p.set("user", String(id)); else p.delete("user"); p.delete("focus"); return p; }, { replace: true })} /> : undefined}
+      description={scope ? "查看其他用户的订阅链接与拉取统计。每条链接可单独设置生效时间。" : "每条链接凭据独立、共享同一份额度；可以给不同设备分别生成，并设置什么时候开始、什么时候结束。"}
+      actions={admin ? <UserFilter value={scope} onChange={(v) => setParams((p) => { if (v) p.set("user", v); else p.delete("user"); p.delete("focus"); return p; }, { replace: true })} /> : undefined}
     />
   );
   useConsoleContext({
     page: "订阅链接",
     list: {
-      filters: admin ? { 用户: userParam ? String(userParam) : "全部" } : undefined,
+      filters: admin ? { 用户: scope === "all" ? "全部" : scope ?? "我自己" } : undefined,
       total: stats.data?.length ?? 0,
       items: (stats.data ?? []).slice(0, 20).map((s) => ({ type: "link" as const, name: s.name || "未命名", id: s.id })),
     },
@@ -54,21 +56,22 @@ export function LinksPage({ admin }: { admin: boolean }) {
   return (
     <div className="stack">
       {header}
-      <StatsOverview stats={stats} scope={admin ? (userParam ? "这个用户" : "全部用户") : undefined} />
-      {admin ? <AdminLinks user={userParam} stats={byLink} /> : <MyLinks stats={byLink} />}
+      <StatsOverview stats={stats} scope={scope ? (userParam ? "这个用户" : "全部用户") : undefined} />
+      {scope ? <AdminLinks user={userParam} stats={byLink} /> : <MyLinks admin={admin} stats={byLink} />}
     </div>
   );
 }
 
-function UserFilter({ value, onChange }: { value: number | null; onChange: (id: number | null) => void }) {
+function UserFilter({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
   const users = useQuery({ queryKey: ["users"], queryFn: async () => (await api("/admin/users")).items as UserItem[] });
-  const current = users.data?.find((u) => u.id === value);
+  const current = users.data?.find((u) => String(u.id) === value);
   return (
-    <Select value={value ? String(value) : "all"} onValueChange={(v) => onChange(v === "all" ? null : Number(v))}>
-      <SelectTrigger aria-label="按用户筛选" className="min-w-44">
-        <SelectValue>{current ? current.name || current.email : "全部用户"}</SelectValue>
+    <Select value={value ?? "me"} onValueChange={(v) => onChange(v === "me" ? null : String(v))}>
+      <SelectTrigger aria-label="查看谁的订阅" className="min-w-44">
+        <SelectValue>{current ? current.name || current.email : value === "all" ? "全部用户" : "我自己"}</SelectValue>
       </SelectTrigger>
       <SelectContent>
+        <SelectItem value="me">我自己</SelectItem>
         <SelectItem value="all">全部用户</SelectItem>
         {(users.data ?? []).map((u) => <SelectItem key={u.id} value={String(u.id)}>{u.name ? `${u.name}（${u.email}）` : u.email}</SelectItem>)}
       </SelectContent>
@@ -97,7 +100,7 @@ function StatsOverview({ stats, scope }: { stats: ReturnType<typeof useStats>; s
   );
 }
 
-function MyLinks({ stats }: { stats: Map<number, LinkStats> }) {
+function MyLinks({ admin, stats }: { admin: boolean; stats: Map<number, LinkStats> }) {
   const summary = useQuery({ queryKey: ["me-subscription"], queryFn: () => api("/me/subscription") as Promise<Summary>, refetchInterval: 30_000 });
   const nodes = useQuery({ queryKey: ["me-nodes"], queryFn: async () => (await api("/me/nodes")).items as NodeOption[] });
   if (summary.isPending || nodes.isPending || summary.error || nodes.error)
@@ -119,7 +122,7 @@ function MyLinks({ stats }: { stats: Map<number, LinkStats> }) {
         </Notice>
       )}
       {nodes.data.length === 0 ? (
-        <State empty="暂无可用节点" detail="请联系管理员分配节点。" />
+        <State empty="暂无可用节点" detail={admin ? "到「VPS 与节点」建好节点后，会自动进入你的订阅。" : "请联系管理员分配节点。"} />
       ) : (
         <Card><CardContent><LinkPanel base="/me" nodes={nodes.data} planEnds={s.expires_at} stats={stats} /></CardContent></Card>
       )}

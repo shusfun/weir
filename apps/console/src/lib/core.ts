@@ -26,7 +26,11 @@ export interface Gate {
   // center_version：中心的版本，Gate 与它不同时会自更新；self_update 是 Gate 随心跳上报的自更新进度或失败原因（成功或同版本时为空）
   center_version?: string;
   self_update?: GateSelfUpdate | null;
+  // Gate 最近一次上报的主机观测；字段缺失表示没读到（未知）。
+  host?: GateHost | null;
 }
+
+export type GateHost = Record<string, number | string | undefined>;
 
 // GateSelfUpdate：state 为 downloading 时 done / total / source 是下载进度与当前来源；replacing 是正在替换程序；
 // failed（或只有 error）是失败原因，失败后 10 分钟内 Gate 不自动重试，手动更新不受限。
@@ -368,7 +372,7 @@ export function nodeStatus(n: NodeItem, g?: Gate): [string, LampTone, string] {
     return [label, n.readiness.state === "credentials" || n.readiness.state === "pending" ? "warn" : "unknown", n.readiness.why];
   }
   if ((n.ports ?? []).some((p) => p.firewall === "blocked")) return ["未放行", "bad", (n.ports ?? []).find((p) => p.firewall === "blocked")?.why ?? "本机防火墙没有放行端口"];
-  if (n.reach?.status === "failed") return ["连不上", "bad", n.reach.why ?? "中心从外部连不上"];
+  if (n.reach?.status === "failed") return ["连不上", "bad", (n.reach.why ?? "中心从外部连不上") + "。这是中心的连接结果，节点是否真的不可用以客户端实测为准"];
   if (n.reach?.status === "ok") return ["端口可达", "ok", n.reach.latency_ms ? `中心 TCP 连接用了 ${n.reach.latency_ms} ms；协议连接以客户端实测为准` : "中心 TCP 端口可达；协议连接以客户端实测为准"];
   return ["未知", "unknown", n.reach?.why ?? "还没有外部连接结果"];
 }

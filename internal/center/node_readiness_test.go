@@ -12,6 +12,10 @@ import (
 func TestNodeReadinessAndRevisionScopedReach(t *testing.T) {
 	s, admin, g := setupGate(t)
 	ctx := t.Context()
+	// 新安装的管理员有默认链接，新节点马上有凭据；这里按删掉了链接的管理员测「没有任何凭据」。
+	for _, l := range mustJSON(t, admin, "GET", "/api/v1/me/links", nil, 200)["items"].([]any) {
+		mustJSON(t, admin, "DELETE", "/api/v1/me/links/"+itoa(int(l.(map[string]any)["id"].(float64))), nil, 204)
+	}
 	created := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": g.id, "preset": "ss2022", "skip_probe": true}, 200)
 	nid := int(created["id"].(float64))
 	n := s.Store.Ent.Node.GetX(ctx, nid)

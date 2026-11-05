@@ -19,7 +19,8 @@ func TestGateTopologyUsersNodesRoutesExits(t *testing.T) {
 			links[m["id"].(string)] = l
 		}
 	}
-	if kinds["user"] != 1 || kinds["node"] != 1 || kinds["route"] != 1 || kinds["exit"] != 2 {
+	// 用户 + 有默认链接的管理员
+	if kinds["user"] != 2 || kinds["node"] != 1 || kinds["route"] != 1 || kinds["exit"] != 2 {
 		t.Fatalf("topology nodes = %v", v["nodes"])
 	}
 	uid, nid := itoa(int(u["id"].(float64))), itoa(int(n["id"].(float64)))

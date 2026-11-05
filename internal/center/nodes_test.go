@@ -155,9 +155,9 @@ func TestNodeWizardUsersLinksChainsAndSubscription(t *testing.T) {
 		t.Fatalf("sub info = %v", info)
 	}
 
-	// Gate 下发：每条链接 × 节点一份凭据，按用户共享额度。
+	// Gate 下发：每条链接 × 节点一份凭据（这个用户 3 份，管理员的默认链接 3 份），按用户共享额度。
 	cfg := g.config(0)
-	if len(cfg.Inbounds) != 3 || len(cfg.Credentials) != 3 || cfg.Budgets[userKey(uid)].Allocated != 20<<30 {
+	if len(cfg.Inbounds) != 3 || len(cfg.Credentials) != 6 || cfg.Budgets[userKey(uid)].Allocated != 20<<30 {
 		t.Fatalf("gate config inbounds=%d creds=%d budgets=%v meta=%v", len(cfg.Inbounds), len(cfg.Credentials), cfg.Budgets, cfg.Meta)
 	}
 

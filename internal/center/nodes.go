@@ -694,7 +694,7 @@ func (s *Server) createNode(c *gin.Context) {
 		failure(c, 409, "node_conflict")
 		return
 	}
-	// 建节点时勾选的用户：没有「全部节点」的用户把这个节点加进可用节点（「全部节点」的用户本来就有）。
+	// 请求里指定的用户：没有「全部节点」的用户把这个节点加进可用节点（「全部节点」的用户本来就有）。
 	for _, uid := range dedupe(req.UserIDs) {
 		u, err := s.Store.Ent.User.Get(ctx, uid)
 		if err != nil || u.AllNodes || contains(u.NodeIds, n.ID) {
@@ -716,7 +716,7 @@ func (s *Server) createNode(c *gin.Context) {
 	c.JSON(200, view)
 }
 
-// nodeShares 是勾选用户在这个节点上的节点链接（每条包含该节点的链接一条）；拿不到时说明原因。
+// nodeShares 是指定用户在这个节点上的节点链接（每条包含该节点的链接一条）；拿不到时说明原因。
 func (s *Server) nodeShares(ctx context.Context, n *ent.Node, uids []int) []gin.H {
 	out := []gin.H{}
 	for _, uid := range dedupe(uids) {

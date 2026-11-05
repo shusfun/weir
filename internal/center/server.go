@@ -204,6 +204,7 @@ func (s *Server) maintenance(ctx context.Context) {
 						s.ensureKernelDefault(ctx, kernel)
 					}
 					// 各任务互不影响：一项失败不阻止其他项。
+					report.note("admin-all-nodes", s.EnsureAdminsAllNodes(ctx))
 					report.note("reset-usage", s.ResetDueUsage(ctx, now))
 					report.note("refresh-sources", s.RefreshSources(ctx, now))
 					s.RefreshSourceExits(ctx)
@@ -564,6 +565,7 @@ func completeInstall(ctx context.Context, path string, cfg Config, email, passwo
 }
 
 // createFirstAdmin 在同名锁下检查「尚无管理员」再创建，已有数据时拒绝覆盖。
+// 同时建一条默认链接，这样新节点一建好就在管理员的订阅里；链接建不成就撤掉管理员，免得卡在「已有安装」。
 func createFirstAdmin(ctx context.Context, st *store.Store, email, password string) (*entUser, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -579,7 +581,13 @@ func createFirstAdmin(ctx context.Context, st *store.Store, email, password stri
 			return errors.New("existing_installation_restore_config")
 		}
 		admin, err = st.Ent.User.Create().SetEmail(strings.ToLower(email)).SetName("管理员").SetPasswordHash(string(hash)).SetRole(user.RoleAdmin).SetAllNodes(true).Save(ctx)
-		return err
+		if err != nil {
+			return err
+		}
+		if _, err = st.Ent.Link.Create().SetUserID(admin.ID).SetName("默认").SetToken(linkToken()).Save(ctx); err != nil {
+			return errors.Join(err, st.Ent.User.DeleteOne(admin).Exec(ctx))
+		}
+		return nil
 	})
 	return admin, err
 }

@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { BrandMark } from "../components/brand-mark";
 import {
-  Activity,
   ArrowLeft,
   ArrowRight,
   Database,
@@ -276,7 +276,7 @@ export function SetupPage({ done }: { done: () => void }) {
         <header className="setup-heading">
           <div className="auth-brand">
             <span>
-              <Activity size={26} />
+              <BrandMark />
             </span>
             <strong>Weir</strong>
           </div>

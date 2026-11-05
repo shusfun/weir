@@ -1,15 +1,15 @@
 // 建节点：一页选 VPS、协议、出口就能创建。伪装、传输参数由内置方案给出，名称、端口、证书与方案字段都在「高级」里；
 // REALITY 目标由 VPS 实测选择；证书由系统按 VPS 准备；这台 VPS 现在用不了的方案标出原因。
-// 保存后显示要放行的端口（对照本机防火墙）与出口实测结果，勾选了用户时再给出他们的链接与二维码。
+// 保存后显示要放行的端口（对照本机防火墙）与出口实测结果，再给出管理员本人的链接与二维码；谁能用节点在用户页分配。
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, CheckboxField, ChoiceCard, Collapsible, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Radio, RadioGroup, SwitchField, ScrollArea } from "@weir/ui";
+import { Badge, Button, ChoiceCard, Collapsible, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Radio, RadioGroup, SwitchField, ScrollArea } from "@weir/ui";
 import { QRCodeSVG } from "qrcode.react";
 import { api, ApiError } from "../api";
 import { useFormAction } from "../lib/action";
 import { WaitText } from "./wait";
 import { field, useConsoleContext } from "../lib/console-context";
-import type { ChainSpec, Gate, NodeItem, Preset, PresetField, UserItem } from "../lib/core";
+import type { ChainSpec, Gate, NodeItem, Preset, PresetField } from "../lib/core";
 import { nodeReachSettled } from "../lib/core";
 import { useCerts } from "./cert-manager";
 import { State } from "./feedback";
@@ -34,7 +34,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
   const [gateId, setGateId] = useState<number | null>(initialGate ?? null);
   // 选了 VPS 后带上 gate_id，方案会标明这台 VPS 现在能不能用
   const presets = useQuery({ queryKey: ["presets", gateId ?? 0], queryFn: async () => (await api("/admin/presets" + (gateId ? "?gate_id=" + gateId : ""))).items as Preset[], enabled: open, placeholderData: (prev) => prev });
-  const users = useQuery({ queryKey: ["users"], queryFn: async () => (await api("/admin/users")).items as UserItem[], enabled: open });
+  const me = useQuery({ queryKey: ["me-account"], queryFn: () => api("/me") as Promise<{ id: number }>, enabled: open });
   const certs = useCerts();
   const [preset, setPreset] = useState("vless-reality");
   // 每次打开时用这一次的 VPS（关闭后状态保留在组件里）；只有一台时直接选好
@@ -48,9 +48,8 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
   const [name, setName] = useState("");
   const [port, setPort] = useState("");
   const [target, setTarget] = useState("");
-  // 高级字段（只放改过的）与勾选的用户；保存成功后显示各用户的链接。
+  // 高级字段（只放改过的）；保存成功后显示管理员本人的链接。
   const [advanced, setAdvanced] = useState<Record<string, string | number | boolean>>({});
-  const [picked, setPicked] = useState<number[]>([]);
   const [shares, setShares] = useState<Share[] | null>(null);
   const [created, setCreated] = useState<NodeItem | null>(null);
   const active = gates.filter((g) => g.status === "active");
@@ -58,11 +57,6 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
   const gate = active.find((g) => g.id === gateId);
   const chainExit = new Set((presets.data ?? []).filter((p) => p.chain_exit).map((p) => p.id));
   const exits = nodes.filter((n) => n.enabled && n.gate_id !== gateId && chainExit.has(n.preset));
-  const allUsers = (users.data ?? []).filter((u) => u.enabled);
-  // 「全部节点」的用户本来就会拿到新节点，默认勾上且不能取消；WireGuard 只给不限额度的用户。
-  const wgBlocked = (u: UserItem) => chosen?.protocol === "wireguard" && u.quota > 0;
-  const autoUser = (u: UserItem) => u.all_nodes && !wgBlocked(u);
-  const userIds = allUsers.filter((u) => autoUser(u) || picked.includes(u.id)).map((u) => u.id);
   const exitFields = exitErrorFields(chain.kind);
   const errorFields: Record<string, string> = { port_in_use: "port", invalid_port: "port", no_free_port: "port", invalid_reality_target: "target", reality_probe_failed: "target", invalid_node_settings: "advanced", cert_unavailable: "cert",
     gate_no_public_host: "gate", ...exitFields };
@@ -73,7 +67,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
       api("/admin/nodes", "POST", {
         gate_id: gateId, preset, name: name.trim(), port: Number(port) || 0, cert_id: certId || 0,
         reality_target: target.trim(), chain: chain.kind === "none" ? { kind: "none" } : chain,
-        settings: advanced, user_ids: userIds,
+        settings: advanced, user_ids: me.data ? [me.data.id] : [],
       }, track) as Promise<NodeItem & { shares?: Share[] }>,
     {
       wait: () => ({ label: `正在 ${gate?.name ?? "VPS"} 上新建 ${chosen?.name ?? ""} 节点并实测` }),
@@ -97,7 +91,6 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
     setTarget("");
     setCertId(0);
     setAdvanced({});
-    setPicked([]);
     setShares(null);
     setCreated(null);
     save.reset();
@@ -120,7 +113,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
       <Dialog open={open} onOpenChange={(o) => !o && reset()}>
         <DialogContent size="lg">
           <DialogTitle>节点已创建</DialogTitle>
-          <DialogDescription>VPS 应用配置约需数秒。{shares.length > 0 ? "下面是勾选用户在这个节点上的节点链接；用户的订阅也已包含它。" : ""}</DialogDescription>
+          <DialogDescription>VPS 应用配置约需数秒。已进入你和「全部节点」用户的订阅；其他用户到 <Link className="underline" to="/users" onClick={reset}>用户</Link> 里分配。</DialogDescription>
           {created && <CreatedAccess node={created} />}
           {created && created.chain.kind !== "none" && <small className="text-[var(--weir-ink-3)]">出口 {exitKindName[created.chain.kind]}：{probeText(created.chain.probe)}</small>}
           {shares.length > 0 && <ShareList shares={shares} leave={reset} />}
@@ -162,7 +155,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
           {chosen?.note && <Notice tone="warn">{chosen.note}</Notice>}
           <ChainExitFields value={chain} onChange={setChain} admin sourcePath="/admin/chain-sources" nodes={exits} nodeHint="出口需要另一台 VPS 上能作出口的节点（VLESS / VMess / Trojan 方案）。" />
           <small className="text-[var(--weir-ink-3)]">这里的出口管这个节点的全部流量。按网站分流在 VPS 的「出口与分流」，按协议类型统一加出口在 <Link className="underline" to="/proxy" onClick={reset}>代理</Link>。</small>
-          <Collapsible key={more ? "more" : "less"} title="高级：名称、端口、证书、给哪些用户" defaultOpen={more}>
+          <Collapsible key={more ? "more" : "less"} title="高级：名称、端口、证书" defaultOpen={more}>
             <div className="stack">
               <Field label="节点名称" hint="留空时自动命名。">
                 <Input maxLength={100} value={name} placeholder={gate && chosen ? `${gate.name} ${chosen.name}` : ""} onChange={(e) => setName(e.target.value)} />
@@ -193,22 +186,6 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
                   <AdvancedFields fields={chosen.fields} value={advanced} onChange={setAdvanced} />
                 </Field>
               )}
-              <Field label="给哪些用户" hint="「全部节点」的用户会自动拿到新节点；其他用户勾上后把这个节点加给他们。保存后直接显示他们的链接与二维码。">
-                {users.isPending || users.error ? <State loading={users.isPending} error={users.error} onRetry={() => users.refetch()} /> : allUsers.length === 0 ? <small>还没有用户。</small> : (
-                  <ScrollArea className="max-h-56" viewportClassName="weir-focus-gutter" contentClassName="grid gap-1.5 sm:grid-cols-2">
-                    {allUsers.map((u) => (
-                      <CheckboxField
-                        key={u.id}
-                        label={u.name ? `${u.name}（${u.email}）` : u.email}
-                        description={wgBlocked(u) ? "有流量额度：WireGuard 没有按用户的流量统计，只对不限额度的用户生效，不会下发" : u.all_nodes ? "全部节点：自动包含" : undefined}
-                        disabled={autoUser(u) || wgBlocked(u)}
-                        checked={!wgBlocked(u) && (autoUser(u) || picked.includes(u.id))}
-                        onCheckedChange={(on) => setPicked(on ? [...picked, u.id] : picked.filter((id) => id !== u.id))}
-                      />
-                    ))}
-                  </ScrollArea>
-                )}
-              </Field>
             </div>
           </Collapsible>
           <DialogFooter error={save.error} status={save.wait && <WaitText wait={save.wait} />}>
@@ -284,8 +261,7 @@ function AdvancedFields({ fields, value, onChange }: { fields: PresetField[]; va
   );
 }
 
-// ShareList：每个勾选用户在新节点上的链接；点「二维码」展开。拿不到链接时说明原因。
-// ShareList：每个用户可点到用户详情；链接没包含新节点时直接给「去加上」，点了关掉这个窗口再跳过去。
+// ShareList：新节点上的链接；点「二维码」展开，拿不到链接时说明原因。链接没包含新节点时给「去加上」，点了关掉这个窗口再跳过去。
 function ShareList({ shares, leave }: { shares: Share[]; leave: () => void }) {
   const [qr, setQr] = useState("");
   return (

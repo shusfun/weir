@@ -2,7 +2,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { IconTile, Button, ScrollArea, Kbd, Menu, MenuTrigger, MenuContent, MenuItem, MenuSeparator, MenuToggle, Sheet, SheetClose, SheetContent, Tooltip, TooltipProvider } from "@weir/ui";
-import { PanelLeftClose, PanelLeftOpen, LogOut, ShieldCheck, Link2, Search, Activity, ChevronsUpDown } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, LogOut, ShieldCheck, Link2, Search, ChevronsUpDown } from "lucide-react";
+import { BrandMark } from "./brand-mark";
 import { ThemeControl } from "../theme";
 import { navigation, navGroups, currentNav, visibleFor } from "../shell/navigation";
 import { CommandPalette } from "../shell/command-palette";
@@ -103,7 +104,7 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
       <div className="shell" data-collapsed={collapsed}>
         <aside className="rail">
           <NavLink to={admin ? "/gates" : "/links"} className="rail-brand weir-press" aria-label="Weir 首页">
-            <span className="rail-mark"><Activity size={19} /></span>
+            <span className="rail-mark"><BrandMark /></span>
             <strong>Weir</strong>
           </NavLink>
           <ScrollArea className="rail-nav" viewportClassName="rail-nav-viewport">

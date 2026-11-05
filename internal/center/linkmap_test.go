@@ -36,7 +36,8 @@ func TestLinkMapScopesAndLiveRates(t *testing.T) {
 	alice := login(t, s, "a@example.test", a["password"].(string))
 
 	full := mustJSON(t, admin, "GET", "/api/v1/admin/linkmap", nil, 200)
-	if len(full["paths"].([]any)) != 2 || len(full["users"].([]any)) != 2 {
+	// 两个用户 + 安装时就有默认链接的管理员
+	if len(full["paths"].([]any)) != 3 || len(full["users"].([]any)) != 3 {
 		t.Fatalf("admin map = %v", full)
 	}
 	mine := mustJSON(t, alice, "GET", "/api/v1/me/linkmap", nil, 200)
