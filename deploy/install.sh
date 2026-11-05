@@ -226,6 +226,13 @@ if [ "$has_gate" = true ]; then
  else
   install -d -m 0700 -o weir-gate -g weir-gate "$lib/gate"
  fi
+ # 宝塔默认站点只允许写 ACME 验证文件，不开放网站根目录或 nginx 配置。
+ if [ -d /www/server/panel ] && [ -d /www/server/nginx/html ] && [ "$(readlink -f /www/server/nginx/html)" = /www/server/nginx/html ]; then
+  if [ ! -L /www/server/nginx/html/.well-known ] && [ ! -L /www/server/nginx/html/.well-known/acme-challenge ]; then
+   [ -d /www/server/nginx/html/.well-known ] || mkdir -m 0755 /www/server/nginx/html/.well-known
+   [ -d /www/server/nginx/html/.well-known/acme-challenge ] || mkdir -m 0755 /www/server/nginx/html/.well-known/acme-challenge
+  fi
+ fi
  cat > "$units_dir/weir-helper.service" <<'UNIT'
 [Unit]
 Description=Weir bounded core helper
@@ -243,6 +250,7 @@ ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
 ReadWritePaths=/run/weir /etc/weir/gate /opt/weir/cores /opt/weir
+ReadWritePaths=-/www/server/nginx/html/.well-known/acme-challenge
 [Install]
 WantedBy=multi-user.target
 UNIT
