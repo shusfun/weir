@@ -8,7 +8,7 @@ import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
 import { WaitText } from "./wait";
 import type { ExitProbe, Gate } from "../lib/core";
-import { parseExitText } from "../lib/exit-parse";
+import { ProxyPaste } from "./proxy-paste";
 import { probeText } from "./chain-exit";
 import { State } from "./feedback";
 import { useSources } from "./subscription-sources";
@@ -119,17 +119,6 @@ function OutboundForm({ base, value, close, saved }: { base: string; value: Outb
     source_id: o?.settings?.source_id ?? 0, mode: (o?.settings?.mode ?? "filter") as "node" | "filter", match: o?.settings?.match ?? "", link: o?.link ?? "" });
   const set = (p: Partial<typeof f>) => setF({ ...f, ...p });
   const remote = f.protocol === "socks" || f.protocol === "http" || f.protocol === "https";
-  const [paste, setPaste] = useState("");
-  const parsed = paste.trim() ? parseExitText(paste) : null;
-  const pasteError = parsed?.type === "subscription" ? "这是订阅地址，不能作出口" : parsed?.type === "link" ? "这是节点链接，请改选「节点链接」" : parsed?.type === "error" ? parsed.message : "";
-  const applyPaste = (text: string) => {
-    setPaste(text);
-    const r = text.trim() ? parseExitText(text) : null;
-    if (r?.type === "proxy") {
-      const protocol = r.proxy.kind === "socks5" ? "socks" : r.proxy.kind ?? f.protocol;
-      set({ protocol: protocol as typeof f.protocol, address: r.proxy.address, port: String(r.proxy.port), username: r.proxy.username ?? "", password: r.proxy.password ?? "" });
-    }
-  };
   const save = useFormAction(
     () => {
       const body = { ...f, port: Number(f.port) || 0 };
@@ -146,11 +135,7 @@ function OutboundForm({ base, value, close, saved }: { base: string; value: Outb
         <DialogDescription>标签只能用小写字母、数字、- 和 _；不能使用 direct、chain-、node- 等系统保留名称。</DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
           <Segmented aria-label="出口类型" value={f.protocol} onValueChange={(protocol) => set({ protocol })} options={[["socks", "SOCKS5"], ["http", "HTTP"], ["https", "HTTPS"], ["link", "节点链接"], ["source", "订阅源节点"], ["freedom", "直连"], ["blackhole", "拦截"]] as const} />
-          {remote && (
-            <Field label="粘贴识别（可选）" customError={pasteError} hint="支持 host:port、host:port:用户名:密码、用户名:密码@host:port、socks5:// 与 http(s):// 地址。">
-              <Input autoComplete="off" spellCheck={false} value={paste} placeholder="1.2.3.4:1080:user:pass" onChange={(e) => applyPaste(e.target.value)} />
-            </Field>
-          )}
+          {remote && <ProxyPaste onApply={p => set({ protocol: p.kind === "socks5" ? "socks" : p.kind, address: p.address, port: String(p.port), username: p.username ?? "", password: p.password ?? "" })} />}
           {f.protocol === "link" && (
             <Field label="节点链接" name="link" required hint="一个节点的链接（vless / vmess / trojan / ss / hysteria2 / tuic / anytls）；订阅地址不能作出口。这台 VPS 上的每个内核都要能连接它。">
               <Textarea required rows={3} spellCheck={false} className="font-mono text-xs" value={f.link} onChange={(e) => set({ link: e.target.value.trim() })} />

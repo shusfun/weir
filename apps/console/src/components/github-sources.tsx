@@ -10,7 +10,8 @@ import {
 } from "@weir/ui";
 import { Gauge, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { api, isConflict } from "../api";
-import { useFormAction } from "../lib/action";
+import { useFormAction, type WaitSpec } from "../lib/action";
+import type { Job } from "../lib/jobs";
 import { speed } from "../lib/download";
 import type { Gate } from "../lib/core";
 import { ConflictNotice, State } from "./feedback";
@@ -63,12 +64,21 @@ function SourceName({ s, gates }: { s: GitHubSource; gates?: Gate[] }) {
   return <>经 VPS <ObjectLink to={{ type: "gate", id: s.gate_id, name }} /></>;
 }
 
-// 测速结果的一行：没有测过时写「未测速」，测过后同一位置换成结果，不增减行
-function probeText(r?: ProbeResult) {
+const sourceLabel = (s: GitHubSource) => (s.kind === "mirror" ? "镜像 " + s.prefix : s.kind === "gate" ? "VPS " + (s.gate_name || s.gate_id) : "GitHub 直连");
+
+// 测速结果的一行：没有测过时写「未测速」，正在测时写「正在测速」，测过后同一位置换成结果，不增减行
+function probeText(r: ProbeResult | undefined, active: boolean) {
+  if (active) return { tone: "info" as const, text: "正在测速" };
   if (!r) return { tone: "unknown" as const, text: "未测速" };
   if (r.error) return { tone: "bad" as const, text: r.error };
   const ttfb = typeof r.ttfb_ms === "number" ? `首字节 ${r.ttfb_ms} ms` : "首字节未知";
   return { tone: "ok" as const, text: `${ttfb} · ${speed(r.speed)}` };
+}
+
+function mergeResults(prev: ProbeResult[] | null, incoming: ProbeResult[]) {
+  const map = new Map((prev ?? []).map((r) => [keyOf(r), r]));
+  for (const r of incoming) map.set(keyOf(r), r);
+  return [...map.values()];
 }
 
 export function GitHubSourcesCard() {
@@ -79,6 +89,8 @@ export function GitHubSourcesCard() {
   const [gatePick, setGatePick] = useState("");
   const [notice, setNotice] = useState("");
   const [results, setResults] = useState<ProbeResult[] | null>(null);
+  // 正在测的那一项：全部测速时由任务推来，单测时点下去就标上
+  const [current, setCurrent] = useState<GitHubSource | null>(null);
   useEffect(() => {
     if (query.data) setDraft(query.data.sources);
   }, [query.data?.revision]);
@@ -94,11 +106,38 @@ export function GitHubSourcesCard() {
       onError: () => setDraft(query.data?.sources ?? []),
     },
   );
-  // 中心按已保存的列表测速，在线但没加入的 VPS 排在最后一并测出来；编辑中还没保存的来源显示「未测速」
-  const test = useFormAction((track) => api("/admin/github-sources/test", "POST", {}, track) as Promise<{ results: ProbeResult[] }>, {
-    wait: { label: "正在测速各个来源", max: 60 },
-    onSuccess: (r) => setResults(r.results),
+  // 要测的一项：空表示测全部。用 ref 传给请求，点下去就能读到
+  const one = useRef<GitHubSource | null>(null);
+  const waitSpec = useRef<WaitSpec>({ label: "正在测速各个来源", max: 60 });
+  const applyOutput = (j: Job) => {
+    const out = j.output as { results?: ProbeResult[]; current?: GitHubSource } | undefined;
+    if (!out) return;
+    if (out.results) setResults((prev) => (one.current ? mergeResults(prev, out.results!) : out.results!));
+    setCurrent(out.current ?? null);
+  };
+  // 中心按已保存的列表测速，在线但没加入的 VPS 排在最后一并测出来；编辑中还没保存的来源显示「未测速」。
+  // 每测完一个来源，任务的 output 就推来，对应行马上换成结果。
+  const test = useFormAction((track) => api("/admin/github-sources/test", "POST", one.current ? { source: plain([one.current])[0] } : {}, track) as Promise<{ results: ProbeResult[] }>, {
+    wait: () => waitSpec.current,
+    onJob: applyOutput,
+    onSuccess: (r) => {
+      setResults((prev) => (one.current ? mergeResults(prev, r.results) : r.results));
+      setCurrent(null);
+    },
+    onError: () => setCurrent(null),
   });
+  const startTest = (source: GitHubSource | null) => {
+    one.current = source;
+    waitSpec.current = source
+      ? { label: `正在测速（${sourceLabel(source)}）`, max: 30 }
+      : { label: "正在测速各个来源", max: 60 };
+    if (source) setCurrent(source);
+    else {
+      setResults([]);
+      setCurrent(null);
+    }
+    void test.submit();
+  };
 
   const edit = (list: GitHubSource[]) => {
     setDraft(list);
@@ -112,7 +151,8 @@ export function GitHubSourcesCard() {
   const resultOf = (s: GitHubSource) => results?.find((r) => keyOf(r) === keyOf(s));
   const extra = (results ?? []).filter((r) => !r.configured && !draft.some((s) => keyOf(s) === keyOf(r)));
   const pError = prefixError(prefix.trim(), draft);
-  const label = (s: GitHubSource) => (s.kind === "mirror" ? "镜像 " + s.prefix : s.kind === "gate" ? "VPS " + (s.gate_name || s.gate_id) : "GitHub 直连");
+  const label = sourceLabel;
+  const active = (s: GitHubSource) => !!current && keyOf(current) === keyOf(s);
 
   useConsoleContext({
     form: [field("sources", "GitHub 加速来源", draft.map(label).join(" → ")), field("prefix", "加镜像前缀", prefix)],
@@ -143,7 +183,7 @@ export function GitHubSourcesCard() {
         className="gap-0"
         itemClassName="items-center border-b border-[var(--weir-line-soft)] last:border-b-0"
         renderItem={(s, { index: i, reorder }) => {
-          const p = probeText(resultOf(s));
+          const p = probeText(resultOf(s), active(s));
           return (
             <div className="list-row" {...(s.kind === "gate" && s.gate_id ? dataObject({ type: "gate", id: s.gate_id }) : {})}>
               <div className="min-w-0">
@@ -152,7 +192,8 @@ export function GitHubSourcesCard() {
               </div>
               <div className="actions">
                 {reorder}
-                <Button variant="ghost" size="icon-sm" aria-label={"删除 " + label(s)} disabled={busy || (isHTTP(s) && httpCount === 1)} onClick={() => edit(draft.filter((_, j) => j !== i))}><Trash2 /></Button>
+                <Button variant="ghost" size="icon-sm" aria-label={"测速 " + label(s)} disabled={busy || test.busy} busy={test.busy && active(s)} busyText="正在测速" onClick={() => startTest(s)}><Gauge /></Button>
+                <Button variant="ghost" size="icon-sm" aria-label={"删除 " + label(s)} disabled={busy || test.busy || (isHTTP(s) && httpCount === 1)} onClick={() => edit(draft.filter((_, j) => j !== i))}><Trash2 /></Button>
               </div>
             </div>
           );
@@ -197,25 +238,36 @@ export function GitHubSourcesCard() {
         </Button>
       </div>
       <div className="actions">
-        <Button variant="outline" disabled={test.busy || !draft.length} busy={test.busy} busyText="正在测速…" onClick={() => void test.submit()}><Gauge />测速</Button>
+        <Button variant="outline" disabled={test.busy || !draft.length} busy={test.busy && !one.current} busyText="正在测速…" onClick={() => startTest(null)}><Gauge />测速</Button>
         <Button variant="outline" disabled={busy || same(draft, defaults)} onClick={() => edit(defaults)}><RotateCcw />恢复默认</Button>
         <ActionsWait wait={test.wait || save.wait} />
       </div>
-      <small className="text-[var(--weir-ink-3)]">{busy ? "正在保存…" : "调整顺序、增删来源后立即保存。测速取 1 MiB，逐个进行。"}</small>
+      <small className="text-[var(--weir-ink-3)]">{busy ? "正在保存…" : "拖动行首把手或用上移 / 下移调整顺序，增删后立即保存。测速取 1 MiB，完成一个就显示一个，也可以只测某一行。"}</small>
       {test.error && <Notice tone="bad">测速没有完成：{test.error}</Notice>}
       {notice && <Notice role="status">{notice}</Notice>}
-      {extra.length > 0 && (
+      {(extra.length > 0 || (current?.kind === "gate" && !draft.some((s) => keyOf(s) === keyOf(current)) && !extra.some((r) => keyOf(r) === keyOf(current)))) && (
         <div className="stack">
           <small className="text-[var(--weir-ink-3)]">这些在线的 VPS 还没加入列表：</small>
+          {current?.kind === "gate" && !draft.some((s) => keyOf(s) === keyOf(current)) && !extra.some((r) => keyOf(r) === keyOf(current)) && (
+            <div className="list-row">
+              <div className="min-w-0">
+                <strong className="block"><SourceName s={current} gates={gates.data} /></strong>
+                <small className="flex items-center gap-1.5 text-[var(--weir-ink-3)]"><StatusLamp tone="info" label="正在测速" />正在测速</small>
+              </div>
+            </div>
+          )}
           {extra.map((r) => {
-            const p = probeText(r);
+            const p = probeText(r, active(r));
             return (
               <div key={keyOf(r)} className="list-row">
                 <div className="min-w-0">
                   <strong className="block"><SourceName s={r} gates={gates.data} /></strong>
                   <small className="flex items-center gap-1.5 text-[var(--weir-ink-3)]"><StatusLamp tone={p.tone} label={p.text} />{p.text}</small>
                 </div>
-                <Button size="sm" variant="outline" disabled={busy} onClick={() => edit([...draft, { kind: "gate", gate_id: r.gate_id, gate_name: r.gate_name }])}><Plus />加入</Button>
+                <div className="actions">
+                  <Button variant="ghost" size="icon-sm" aria-label={"测速 " + label(r)} disabled={busy || test.busy} busy={test.busy && active(r)} busyText="正在测速" onClick={() => startTest(r)}><Gauge /></Button>
+                  <Button size="sm" variant="outline" disabled={busy || test.busy} onClick={() => edit([...draft, { kind: "gate", gate_id: r.gate_id, gate_name: r.gate_name }])}><Plus />加入</Button>
+                </div>
               </div>
             );
           })}

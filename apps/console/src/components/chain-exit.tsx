@@ -1,10 +1,10 @@
 // 链式代理出口的填写：建节点第 ③ 步（管理员）与用户自建链式代理共用。
 // 代理支持 SOCKS5 / HTTP / HTTPS，可以直接粘贴商家给的文本自动拆开；节点链接只接受单个节点，订阅地址会被拒绝。
-import { useState } from "react";
 import { Field, FormGrid, Input, Notice, PasswordInput, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea } from "@weir/ui";
 import type { ChainSpec, ExitKind, ExitProbe } from "../lib/core";
 import { parseExitText, type ProxyKind } from "../lib/exit-parse";
 import { State } from "./feedback";
+import { ProxyPaste } from "./proxy-paste";
 import { SourcePicker } from "./source-picker";
 
 type Top = "none" | "source" | "proxy" | "link" | "node";
@@ -82,28 +82,9 @@ export function ChainExitFields({ value, onChange, admin, sourcePath, nodes, nod
 }
 
 function ProxyFields({ value, set }: { value: ChainSpec; set: (p: Partial<ChainSpec>) => void }) {
-  const [paste, setPaste] = useState("");
-  const [pasteError, setPasteError] = useState("");
-  const apply = (text: string) => {
-    setPaste(text);
-    if (!text.trim()) return setPasteError("");
-    const r = parseExitText(text);
-    if (r.type === "proxy") {
-      setPasteError("");
-      set({ kind: r.proxy.kind ?? (value.kind as ProxyKind), address: r.proxy.address, port: r.proxy.port, username: r.proxy.username ?? "", password: r.proxy.password ?? "" });
-    } else if (r.type === "link") {
-      setPasteError("这是一条节点链接，请改选「节点链接」");
-    } else if (r.type === "subscription") {
-      setPasteError("这是订阅地址，不能作出口");
-    } else {
-      setPasteError(r.message);
-    }
-  };
   return (
     <>
-      <Field label="粘贴识别（可选）" customError={pasteError} hint="支持 host:port、host:port:用户名:密码、用户名:密码@host:port、socks5:// 与 http(s):// 地址；识别后填到下面。">
-        <Input autoComplete="off" spellCheck={false} value={paste} placeholder="1.2.3.4:1080:user:pass" onChange={(e) => apply(e.target.value)} />
-      </Field>
+      <ProxyPaste onApply={p => set({ kind: p.kind, address: p.address, port: p.port, username: p.username ?? "", password: p.password ?? "" })} />
       <Segmented aria-label="代理协议" size="sm" value={value.kind as ProxyKind} onValueChange={(kind) => set({ kind })} options={proxyKinds} />
       <FormGrid>
         <Field label="地址" name="address" required hint={value.kind === "https" ? "按这个地址校验证书" : "只能是公网地址"}>

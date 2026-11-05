@@ -37,6 +37,13 @@ func jobOf(ctx context.Context) *JobRun {
 // nested：在进程内调用（草稿的步骤、试运行）里，标题与提交由外层操作决定。
 func nested(ctx context.Context) bool { return ctx.Value(nestedKey{}) != nil }
 
+// jobOutput 写下进行中的结构化结果（如已测完的来源），事件流会把它推给正在等的页面。
+func jobOutput(ctx context.Context, output map[string]any) {
+	if r := jobOf(ctx); r != nil {
+		r.SetOutput(output)
+	}
+}
+
 // jobStep 报告当前步骤与最多等多久，页面写「正在<步骤> · 已等 N 秒，最多 M 秒」。
 func jobStep(ctx context.Context, step string, max time.Duration) {
 	if r := jobOf(ctx); r != nil {

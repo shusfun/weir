@@ -105,6 +105,8 @@ export function useFormAction<T = unknown, F extends string = string>(
     onSuccess?: (r: T) => unknown;
     // 失败后的清理（如清空已用过的验证码）；错误本身由返回的 errors / error 显示
     onError?: (e: unknown) => void;
+    // 后台任务每次变化都调用（含 2 秒等待行出现之前），用来逐条显示进行中的结果
+    onJob?: (j: Job) => void;
     // 等待提示；按提交时的输入生成时传函数
     wait?: WaitSpec | (() => WaitSpec);
   } = {},
@@ -116,6 +118,8 @@ export function useFormAction<T = unknown, F extends string = string>(
   const last = useRef<Pending | null>(null);
   // left：人在请求进行中关掉了窗口（操作在中心后台继续）。结果改用提示告诉他，不再写回已经关掉的窗口
   const left = useRef(false);
+  const onJob = useRef(opts.onJob);
+  onJob.current = opts.onJob;
   const away = () => !mounted.current || left.current;
   const track = (p: Pending | null) => {
     last.current = p;
@@ -126,7 +130,12 @@ export function useFormAction<T = unknown, F extends string = string>(
       const spec = typeof opts.wait === "function" ? opts.wait() : opts.wait;
       left.current = false;
       track({ label: spec?.label ?? "", max: spec?.max, since: Date.now() });
-      return fn({ onJob: (j) => last.current && track({ ...last.current, job: j }) });
+      return fn({
+        onJob: (j) => {
+          if (last.current) track({ ...last.current, job: j });
+          onJob.current?.(j);
+        },
+      });
     },
     onSuccess: async (r) => {
       // 窗口已经关掉（操作在后台做完）：没有地方显示结果，用提示告诉人

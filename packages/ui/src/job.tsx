@@ -29,6 +29,8 @@ interface Job {
   logs?: { at: string; text: string }[];
   error?: string;
   result?: Record<string, unknown>;
+  // 进行中的结构化结果（如测速已完成的来源）；结束时仍保留
+  output?: Record<string, unknown>;
   started_at: string;
   finished_at?: string;
   trace?: string;

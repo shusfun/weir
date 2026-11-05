@@ -40,8 +40,10 @@ type Job struct {
 	Logs        []JobLog       `json:"logs"`
 	Error       string         `json:"error,omitempty"`
 	Result      map[string]any `json:"result,omitempty"`
-	Started     time.Time      `json:"started_at"`
-	Finished    *time.Time     `json:"finished_at,omitempty"`
+	// Output 是进行中的结构化结果（如测速已完成的来源）。结束时不抹掉，页面在任务完成前就能逐条显示。
+	Output   map[string]any `json:"output,omitempty"`
+	Started  time.Time      `json:"started_at"`
+	Finished *time.Time     `json:"finished_at,omitempty"`
 	// Trace 是发起任务的那次请求的编号，与请求日志、审计对得上。
 	Trace string `json:"trace,omitempty"`
 	// Owner 是发起任务的用户（0 是系统任务）：页面据此只提示自己发起、又没在等的任务的结果。
@@ -128,6 +130,15 @@ func (r JobRun) StepFor(step string, max time.Duration) {
 }
 
 func (r JobRun) SetTitle(title string) { r.update(func(j *Job) { j.Title = title }) }
+
+// SetOutput 写下进行中的结构化结果并唤醒事件流。调用方传入的 map 会被复制；里面的切片若之后还要追加，应先自己复制一份。
+func (r JobRun) SetOutput(output map[string]any) {
+	cp := make(map[string]any, len(output))
+	for k, v := range output {
+		cp[k] = v
+	}
+	r.update(func(j *Job) { j.Output = cp })
+}
 
 // Commit 在第一次写入之前调用：之后不再接受取消（取消会留下写了一半的数据）。
 // 已经被取消时返回 false，调用方应停下、不再写入。

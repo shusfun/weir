@@ -81,8 +81,17 @@ func TestComposedDraftCreatesNodeUserLinkAndRollsBack(t *testing.T) {
 	}
 	list := mustJSON(t, admin, "GET", "/api/v1/admin/ai/drafts", nil, 200)["drafts"].([]any)
 	w := admin.do("POST", "/api/v1/admin/ai/drafts/"+list[len(list)-1].(map[string]any)["id"].(string)+"/apply", nil, nil)
-	if w.Code != 422 || !strings.Contains(w.Body.String(), "已撤回") {
-		t.Fatalf("failing draft = %d %s", w.Code, w.Body.String())
+	code, detail := w.Code, w.Body.String()
+	if code == 202 {
+		initial := decode(t, w)
+		job := waitJob(t, admin, initial["job"].(map[string]any)["id"].(string))
+		if job["status"] != "failed" || job["result"].(map[string]any)["status"] != float64(422) {
+			t.Fatalf("failing draft job = %v", job)
+		}
+		code, detail = 422, job["error"].(string)
+	}
+	if code != 422 || !strings.Contains(detail, "已撤回") {
+		t.Fatalf("failing draft = %d %s", code, detail)
 	}
 	if c, _ := s.Store.Ent.Node.Query().Count(ctx); c != 1 {
 		t.Fatalf("nodes after rollback = %d", c)

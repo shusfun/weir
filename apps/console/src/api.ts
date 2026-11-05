@@ -255,6 +255,7 @@ subscription_naming_changed:"前缀与地区设置已被修改，请取消并重
  share_not_found: "分享不存在、已撤下或已过期。",
   invalid_mirror: "镜像前缀须为 HTTPS 地址并以 / 结尾，不能包含账号、查询参数或重复项。",
   invalid_source: "GitHub 加速来源无效：每项须是 GitHub 直连、HTTPS 镜像前缀或一台 VPS，且不能重复。",
+  probe_source_invalid: "只能测已保存的来源，或一台在线且未撤销的 VPS。",
   invalid_source_gate: "列表里有已撤销或不存在的 VPS，请删掉后再保存。",
   source_limit: "GitHub 加速来源须有 1–12 个。",
   http_source_required: "至少保留 GitHub 直连或一个镜像：经 VPS 中转时，VPS 也按它们去 GitHub 下载。",

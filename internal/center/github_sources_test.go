@@ -373,3 +373,73 @@ func TestGitHubSourcesProbe(t *testing.T) {
 		t.Fatalf("gate = %v", last)
 	}
 }
+
+// 只测一个来源：已保存的直连只返回这一项；不在列表里的镜像拒绝；在线但未加入的 VPS 可以单测。
+func TestGitHubSourceProbeOne(t *testing.T) {
+	t.Setenv("WEIR_GITHUB_MIRRORS", "off")
+	actionInline = 10 * time.Second
+	t.Cleanup(func() { actionInline = 2 * time.Second })
+	s, admin, g := setupGate(t)
+	fakeWeirRelease(t, s, "0.1.20", true)
+	res := mustJSON(t, admin, "POST", "/api/v1/admin/github-sources/test", map[string]any{"source": map[string]any{"kind": "direct"}}, 200)
+	items, _ := res["results"].([]any)
+	if len(items) != 1 || items[0].(map[string]any)["kind"] != "direct" || items[0].(map[string]any)["configured"] != true {
+		t.Fatalf("one = %v", res)
+	}
+	if w := admin.do("POST", "/api/v1/admin/github-sources/test", map[string]any{"source": map[string]any{"kind": "mirror", "prefix": "https://no.example/"}}, nil); w.Code != 400 || !strings.Contains(w.Body.String(), "probe_source_invalid") {
+		t.Fatalf("unknown mirror = %d %s", w.Code, w.Body.String())
+	}
+	go func() {
+		a := g.nextAction(contracts.ActionSourceProbe)
+		g.finish(a, true, "", map[string]any{"ttfb_ms": 8, "bytes": 1000, "speed": 4000})
+	}()
+	res = mustJSON(t, admin, "POST", "/api/v1/admin/github-sources/test", map[string]any{"source": map[string]any{"kind": "gate", "gate_id": g.id}}, 200)
+	items, _ = res["results"].([]any)
+	if len(items) != 1 || items[0].(map[string]any)["kind"] != "gate" || items[0].(map[string]any)["configured"] != false || items[0].(map[string]any)["speed"] != float64(4000) {
+		t.Fatalf("one gate = %v", res)
+	}
+}
+
+// 全部测速转成任务后，直连的结果在 VPS 回复之前就已经写进任务。
+func TestGitHubSourcesProbeStreams(t *testing.T) {
+	t.Setenv("WEIR_GITHUB_MIRRORS", "off")
+	actionInline = 40 * time.Millisecond
+	t.Cleanup(func() { actionInline = 2 * time.Second })
+	s, admin, g := setupGate(t)
+	fakeWeirRelease(t, s, "0.1.20", true)
+	release := make(chan struct{})
+	go func() {
+		a := g.nextAction(contracts.ActionSourceProbe)
+		<-release
+		g.finish(a, true, "", map[string]any{"ttfb_ms": 12, "bytes": 1000, "speed": 5000})
+	}()
+	res := mustJSON(t, admin, "POST", "/api/v1/admin/github-sources/test", map[string]any{}, 202)
+	id, _ := res["job"].(map[string]any)["id"].(string)
+	if id == "" {
+		t.Fatalf("job = %v", res["job"])
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	var partial map[string]any
+	for time.Now().Before(deadline) {
+		j := mustJSON(t, admin, "GET", "/api/v1/admin/jobs/"+url.PathEscape(id), nil, 200)["job"].(map[string]any)
+		if j["status"] != "running" {
+			t.Fatalf("job ended before the gate probe: %v", j)
+		}
+		out, _ := j["output"].(map[string]any)
+		items, _ := out["results"].([]any)
+		if len(items) >= 1 && items[0].(map[string]any)["kind"] == "direct" && items[0].(map[string]any)["bytes"].(float64) > 0 {
+			partial = j
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if partial == nil {
+		t.Fatal("direct result was not published while the gate probe was still running")
+	}
+	close(release)
+	done := waitJob(t, admin, id)
+	items, _ := done["output"].(map[string]any)["results"].([]any)
+	if done["status"] != "done" || len(items) < 2 || items[len(items)-1].(map[string]any)["kind"] != "gate" {
+		t.Fatalf("done = %v", done)
+	}
+}

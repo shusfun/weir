@@ -306,8 +306,18 @@ type probeItem struct {
 
 // testGitHubSources 逐个测速（串行，避免互相抢带宽）：直连与镜像由中心测；VPS 测它自己直连 GitHub 的速度，
 // 即经它中转时的下载速度。已配置的按列表顺序，在线但未加入的 VPS 排在最后，供管理员挑选。
+// 请求体可带 source，只测那一项（已保存的来源，或一台在线且未撤销的 VPS）。每测完一个来源就把已完成的结果写进任务，页面逐行更新。
 func (s *Server) testGitHubSources(c *gin.Context) {
 	ctx := c.Request.Context()
+	var req struct {
+		Source *ghrelease.Source `json:"source"`
+	}
+	decoder := json.NewDecoder(c.Request.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		failure(c, 400, "invalid_request")
+		return
+	}
 	set, err := s.githubSources(ctx)
 	if err != nil {
 		failInternal(c, 503, "github_sources_unavailable", err)
@@ -328,18 +338,10 @@ func (s *Server) testGitHubSources(c *gin.Context) {
 	for _, g := range gates {
 		byID[int64(g.ID)] = g
 	}
-	list := append([]ghrelease.Source(nil), set.Sources...)
-	configured := len(list)
-	inList := map[int64]bool{}
-	for _, src := range list {
-		if src.Kind == ghrelease.SourceGate {
-			inList[src.GateID] = true
-		}
-	}
-	for _, g := range gates {
-		if !inList[int64(g.ID)] && gateOnline(g) {
-			list = append(list, ghrelease.Source{Kind: ghrelease.SourceGate, GateID: int64(g.ID)})
-		}
+	list, configured, ok := probeTargets(set.Sources, gates, req.Source)
+	if !ok {
+		failure(c, 400, "probe_source_invalid")
+		return
 	}
 	results := make([]probeItem, 0, len(list))
 	for i, src := range list {
@@ -350,7 +352,12 @@ func (s *Server) testGitHubSources(c *gin.Context) {
 				item.GateName, label = g.Name, "VPS "+g.Name
 			}
 		}
-		jobStep(jobPrefix(ctx, fmt.Sprintf("第 %d/%d 个（%s）· ", i+1, len(list), label)), "测速", probeTimeout+30*time.Second)
+		prefix := ""
+		if len(list) > 1 {
+			prefix = fmt.Sprintf("第 %d/%d 个（%s）· ", i+1, len(list), label)
+		}
+		jobStep(jobPrefix(ctx, prefix), "测速 "+label, probeTimeout+30*time.Second)
+		publishProbe(ctx, results, &item)
 		var res contracts.SourceProbeResult
 		if src.Kind == ghrelease.SourceGate {
 			res = s.probeViaGate(ctx, byID[src.GateID], raw)
@@ -367,8 +374,67 @@ func (s *Server) testGitHubSources(c *gin.Context) {
 		}
 		item.TTFBMs, item.Bytes, item.Speed, item.Error = res.TTFBMs, res.Bytes, res.Speed, res.Error
 		results = append(results, item)
+		publishProbe(ctx, results, nil)
 	}
 	c.JSON(200, gin.H{"results": results, "asset": name})
+}
+
+// probeTargets 决定要测哪些来源。only 为空时测已保存的列表，再附上在线但未加入的 VPS；
+// configured 是其中已保存的个数。only 有值时只测那一项，不在允许范围内时 ok 为假。
+func probeTargets(saved []ghrelease.Source, gates []*ent.Gate, only *ghrelease.Source) (list []ghrelease.Source, configured int, ok bool) {
+	if only == nil {
+		list = append([]ghrelease.Source(nil), saved...)
+		configured = len(list)
+		inList := map[int64]bool{}
+		for _, src := range list {
+			if src.Kind == ghrelease.SourceGate {
+				inList[src.GateID] = true
+			}
+		}
+		for _, g := range gates {
+			if !inList[int64(g.ID)] && gateOnline(g) {
+				list = append(list, ghrelease.Source{Kind: ghrelease.SourceGate, GateID: int64(g.ID)})
+			}
+		}
+		return list, configured, true
+	}
+	for _, src := range saved {
+		if sameProbeSource(src, *only) {
+			return []ghrelease.Source{src}, 1, true
+		}
+	}
+	if only.Kind == ghrelease.SourceGate && only.Prefix == "" && only.GateID > 0 {
+		for _, g := range gates {
+			if int64(g.ID) == only.GateID && gateOnline(g) {
+				return []ghrelease.Source{{Kind: ghrelease.SourceGate, GateID: only.GateID}}, 0, true
+			}
+		}
+	}
+	return nil, 0, false
+}
+
+func sameProbeSource(a, b ghrelease.Source) bool {
+	if a.Kind != b.Kind {
+		return false
+	}
+	switch a.Kind {
+	case ghrelease.SourceDirect:
+		return b.Prefix == "" && b.GateID == 0
+	case ghrelease.SourceMirror:
+		return a.Prefix == b.Prefix && b.GateID == 0
+	case ghrelease.SourceGate:
+		return a.GateID == b.GateID && b.Prefix == ""
+	}
+	return false
+}
+
+// publishProbe 把已完成的结果和当前正在测的来源写进任务。current 在测完后清空。
+func publishProbe(ctx context.Context, done []probeItem, current *probeItem) {
+	out := map[string]any{"results": append([]probeItem(nil), done...)}
+	if current != nil {
+		out["current"] = *current
+	}
+	jobOutput(ctx, out)
 }
 
 // probeViaGate 让 VPS 直连 GitHub 测速；VPS 离线、已删除或没有按时回复都如实写进 Error。
