@@ -138,7 +138,7 @@ function OutboundForm({ base, value, close, saved }: { base: string; value: Outb
           {remote && <ProxyPaste onApply={p => set({ protocol: p.kind === "socks5" ? "socks" : p.kind, address: p.address, port: String(p.port), username: p.username ?? "", password: p.password ?? "" })} />}
           {f.protocol === "link" && (
             <Field label="节点链接" name="link" required hint="一个节点的链接（vless / vmess / trojan / ss / hysteria2 / tuic / anytls）；订阅地址不能作出口。这台 VPS 上的每个内核都要能连接它。">
-              <Textarea required rows={3} spellCheck={false} className="font-mono text-xs" value={f.link} onChange={(e) => set({ link: e.target.value.trim() })} />
+              <Textarea required rows={3} spellCheck={false} className="font-mono text-meta" value={f.link} onChange={(e) => set({ link: e.target.value.trim() })} />
             </Field>
           )}
           {f.protocol === "source" && <Notice role="status">用订阅源里的节点作出口：一组的全部成员都下发，由内核按延迟自动选、出故障自动切换（最多 50 个）；订阅源刷新后随之更新，刷新失败或暂时没有匹配时保留上一次可用的；从没解析成功时流量被丢弃，不会改成直连。</Notice>}
@@ -209,8 +209,8 @@ function RouteForm({ base, value, outbounds, close, saved }: { base: string; val
             </Field>
             <Field label="优先级" hint="数字越小越先匹配。"><Input inputMode="numeric" value={priority} onChange={(e) => setPriority(e.target.value.replace(/\D/g, ""))} /></Field>
           </FormGrid>
-          <Field label="域名"><Textarea rows={4} className="font-mono text-xs" value={domain} onChange={(e) => setDomain(e.target.value)} /></Field>
-          <Field label="IP"><Textarea rows={2} className="font-mono text-xs" value={ip} onChange={(e) => setIp(e.target.value)} /></Field>
+          <Field label="域名"><Textarea rows={4} className="font-mono text-meta" value={domain} onChange={(e) => setDomain(e.target.value)} /></Field>
+          <Field label="IP"><Textarea rows={2} className="font-mono text-meta" value={ip} onChange={(e) => setIp(e.target.value)} /></Field>
           <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
             <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Badge, Button, Card, CardContent, CheckboxField, Chip, ChipLabel, ChoiceCard, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, Notice,
+  Badge, Button, Card, CardContent, CheckboxField, Chip, ChipLabel, ChoiceCard, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, InsetGroup, InsetRow, InsetRows, Notice,
   PageHeader, Radio, RadioGroup, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SkeletonCards, Switch,
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useConfirm, type LampTone,
 } from "@weir/ui";
@@ -43,7 +43,6 @@ export function ProxyPage({ admin }: { admin: boolean }) {
   });
   const header = (
     <PageHeader
-      eyebrow="代理与订阅"
       title="代理"
       description="按类型管理已授权的节点：选哪些放进订阅、给类型加出口、按网站分流、自动选择。客户端下次更新订阅时生效。"
       actions={admin ? <UserPick value={uid} onChange={(id) => setParams((p) => { if (id) p.set("user", String(id)); else p.delete("user"); return p; }, { replace: true })} /> : undefined}
@@ -112,12 +111,10 @@ function TypesCard({ base, view, nodes, admin, onSaved }: { base: string; view: 
     return run(key, () => api(base + "/proxy", "PUT", { ...view.policy, disabled: next }), on ? "已放进订阅" : "已从订阅里拿掉");
   };
   return (
-    <Card>
-      <CardContent className="stack">
-        <SectionHeader title="节点类型" description="同一种协议方案的节点归为一类。关掉的类型不放进订阅；加了出口的类型，订阅里换成经出口的版本。" />
-        <div className={"grid gap-3 " + (view.types.length > 1 ? "lg:grid-cols-2" : "")}>
+    <InsetGroup title="节点类型" description="同一种协议方案的节点归为一类。关掉的类型不放进订阅；加了出口的类型，订阅里换成经出口的版本。">
+        <InsetRows>
           {view.types.map((t) => (
-            <div key={t.key} className="stack rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3" data-disabled={!t.enabled || undefined}>
+            <InsetRow key={t.key} className="stack" data-disabled={!t.enabled || undefined}>
               <div className="flex items-center justify-between gap-2">
                 <strong className="flex min-w-0 items-center gap-2">
                   <span className="truncate">{t.label}</span>
@@ -157,13 +154,12 @@ function TypesCard({ base, view, nodes, admin, onSaved }: { base: string; view: 
               {(t.missing_exit ?? []).length > 0 && (
                 <Notice tone="warn">新加的节点还没有经出口：{t.missing_exit!.join("、")}。点「改出口」再保存一次即可。</Notice>
               )}
-            </div>
+            </InsetRow>
           ))}
-        </div>
+        </InsetRows>
         {!view.allow_chain && <Notice role="status">{admin ? "这个用户没有开放链式代理，不能给类型加出口；可在用户详情里打开。" : "管理员没有开放链式代理，不能给类型加出口。"}</Notice>}
         {exitFor && <TypeExitDialog base={base} type={exitFor} nodes={nodes} admin={admin && base !== "/me"} close={() => setExitFor(null)} saved={() => { setExitFor(null); onSaved(); }} />}
-      </CardContent>
-    </Card>
+    </InsetGroup>
   );
 }
 
@@ -314,14 +310,12 @@ function PolicyCard({ base, view, onSaved }: { base: string; view: ProxyView; on
 function RankingCard({ view }: { view: ProxyView }) {
   const ranked = view.policy.auto.mode === "ranked";
   return (
-    <Card>
-      <CardContent className="stack">
-        <SectionHeader
-          title="节点状况与速率"
-          description={ranked
-            ? `按下载速率排：近 24 小时有流量的分钟取第 90 百分位，你自己没用过的节点用全部用户的速率补上。放 ${view.policy.auto.top} 个进「自动选择」${view.policy.auto.top > 1 ? "，其中 1 个轮流给还没有速率数据的节点" : ""}。`
-            : "全部可用的节点都在「自动选择」里，由客户端测延迟。速率来自各节点自己统计的流量，只作参考。"}
-        />
+    <InsetGroup
+      title="节点状况与速率"
+      description={ranked
+        ? `按下载速率排：近 24 小时有流量的分钟取第 90 百分位，你自己没用过的节点用全部用户的速率补上。放 ${view.policy.auto.top} 个进「自动选择」${view.policy.auto.top > 1 ? "，其中 1 个轮流给还没有速率数据的节点" : ""}。`
+        : "全部可用的节点都在「自动选择」里，由客户端测延迟。速率来自各节点自己统计的流量，只作参考。"}
+    >
         {view.ranking.length === 0 ? (
           <State empty="订阅里没有节点" detail="类型都关掉了，或节点都不可用。" />
         ) : (
@@ -360,8 +354,7 @@ function RankingCard({ view }: { view: ProxyView }) {
             </Table>
           </div>
         )}
-      </CardContent>
-    </Card>
+    </InsetGroup>
   );
 }
 

@@ -4,29 +4,28 @@ import { cn } from "cn";
 import { AlertCircle, Inbox, LoaderCircle, Lock, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "./button";
 
+// 页头：标题、一句说明、右侧操作。高度全站一致：没有说明的页头也占标题加一行说明的高度，操作靠顶对齐。
+// 控制台窄屏下标题由顶栏显示，这里只留给读屏（shell.css）。
 function PageHeader({
-  eyebrow,
   title,
   description,
   actions,
   className,
 }: {
-  eyebrow?: ReactNode;
   title: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
   className?: string;
 }) {
   return (
-    <header data-slot="page-header" className={cn("flex flex-wrap items-end justify-between gap-x-6 gap-y-3", className)}>
+    <header data-slot="page-header" className={cn("flex min-h-[calc(var(--weir-leading-title)+var(--weir-space-1)+var(--weir-leading-body))] flex-wrap items-start justify-between gap-x-6 gap-y-3", className)}>
       {/* 标题区至少留 16em（容器更窄时取满宽）：放不下操作区时操作区整体换到下一行，标题不会被挤成一字一行 */}
       <div className="min-w-[min(100%,16em)] flex-1">
-        {eyebrow && <div className="weir-engraved mb-1">{eyebrow}</div>}
-        <h2 className="m-0 text-title font-semibold tracking-[-0.02em] text-[var(--weir-ink)]">{title}</h2>
-        {/* ch 按西文字符计宽，中文约两倍；用 em 控制约 46 个汉字一行 */}
-        {description && <p className="mt-1 mb-0 max-w-[46em] text-body text-[var(--weir-ink-3)]">{description}</p>}
+        <h1 data-slot="page-title" className="m-0 text-title font-semibold tracking-[-0.02em] text-[var(--weir-ink)]">{title}</h1>
+        {/* 限宽约 80 个汉字：一般一行放下，超宽屏上也不至于一行太长读不下来 */}
+        {description && <p className="mt-1 mb-0 max-w-[80em] text-body text-[var(--weir-ink-3)]">{description}</p>}
       </div>
-      {actions && <div className="flex max-w-full flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div data-slot="page-actions" className="flex max-w-full flex-wrap items-center gap-2">{actions}</div>}
     </header>
   );
 }

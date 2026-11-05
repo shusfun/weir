@@ -428,7 +428,7 @@ function DshStartStep({ view }: { view: DshView }) {
       </div>
       {view.waiting && !st.error && <small className="text-[var(--weir-ink-3)]">{view.waiting}</small>}
       <Collapsible title={`运行日志（最近 ${st.logs.length} 行，令牌已隐藏）`} defaultOpen={st.state === "failed"}>
-        <CodeBlock className="block h-48 overflow-auto whitespace-pre text-xs">{st.logs.join("\n") || "（还没有日志）"}</CodeBlock>
+        <CodeBlock className="block h-48 overflow-auto whitespace-pre text-meta">{st.logs.join("\n") || "（还没有日志）"}</CodeBlock>
       </Collapsible>
     </div>
   );
@@ -517,7 +517,7 @@ server {
         <li>dsh 子域名只出现在管理员页面里；登录页、公开页、订阅与错误信息里都不会出现。</li>
         <li>可选：想让浏览器直接显示原生的连接错误，在反代的 dsh 站点里加入下面的配置（OpenResty / Nginx）。</li>
       </ul>
-      <CodeBlock className="block overflow-auto whitespace-pre text-xs">{snippet}</CodeBlock>
+      <CodeBlock className="block overflow-auto whitespace-pre text-meta">{snippet}</CodeBlock>
     </Collapsible>
   );
 }
@@ -556,7 +556,7 @@ export function DshVersions() {
             <div className="flex flex-wrap gap-2">
               {q.data.installed.map((i) => (
                 <span key={i.version} className="flex items-center gap-1 rounded-[var(--weir-radius)] border border-[var(--weir-line)] px-2 py-1" title={`${i.integrity.slice(0, 24)}… · 来自 ${i.registry} · ${date(i.installed_at)}`}>
-                  <code className="text-xs">{i.version}</code>
+                  <code className="text-meta">{i.version}</code>
                   {set?.version === i.version ? <Badge variant="soft" tone="ok">当前</Badge> : (
                     <>
                       <Button size="xs" variant="ghost" disabled={isBusy()} busy={isBusy("use:" + i.version)} busyText="正在切换…" onClick={() => void act("use:" + i.version, () => api("/admin/dsh/version", "PUT", { version: i.version }), `已切换到 ${i.version}，dsh 正在重启`, { wait: { label: `正在备份会话并切换到 ${i.version}` } })}><Star />设为当前</Button>

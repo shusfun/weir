@@ -17,7 +17,7 @@ description: 管理员要开用户、分节点、建订阅链接与设生效时�
 
 - **开用户并分节点**：`user.create`（node_ids、额度、有效期）→ 需要更多链接时再加 `link.create`。改已有用户用 `user.update`，改链接用 `link.update`。
 - **链接的生效时间**：`link.create` / `link.update` 的 `starts_at` / `ends_at`（RFC 3339，都可不填；结束不能晚于用户到期）。`get_user` 里每条链接的 `state` 是 active / not_started / expired。不在时段里拉不到节点，VPS 也停用这条链接的凭据。
-- **订阅有没有人在用**：`get_link_stats`（可按用户）看近 24 小时 / 30 天拉取次数、被拒次数、用的什么客户端、最近一次拉取。它不给来源 IP，管理员要看来源时让他打开「订阅管理」里那条链接的「拉取记录」。
+- **订阅有没有人在用**：`get_link_stats`（可按用户）看近 24 小时 / 30 天拉取次数、被拒次数、用的什么客户端、最近一次拉取。它不给来源 IP，管理员要看来源时让他打开「订阅链接」里那条链接的「拉取记录」。
 - **代理页**（按用户，对他的全部链接生效，客户端下次更新订阅时生效）：先 `get_proxy` 看类型、分流、自动选择与此刻的排序。
   - 某类节点不放进订阅：`proxy.update` 的 `disabled`（类型 key，逗号分隔；给的是完整名单）。
   - 网站走哪一组：`proxy.update` 的 `rule_ai` / `rule_streaming` / `rule_google` / `rule_telegram` / `rule_cn` / `rule_final`，值为 auto / select / direct / reject 或一个类型 key（`rule_final` 不能 reject）。这是写进订阅、由客户端执行的分流；要在 VPS 上把某些网站从别的出口送出去，用下面的「流媒体走家宽」。

@@ -105,9 +105,9 @@ export function EventsCard({ dshReady }: { dshReady: boolean }) {
                 const [label, tone] = statuses[e.status] ?? [e.status, "neutral"];
                 return (
                   <TableRow key={e.id}>
-                    <TableCell className="whitespace-nowrap text-xs">{date(e.created_at)}</TableCell>
+                    <TableCell className="whitespace-nowrap text-meta">{date(e.created_at)}</TableCell>
                     <TableCell>{kinds[e.kind] ?? e.kind}<small className="block text-[var(--weir-ink-3)]">10 分钟内失败登录 {e.failed_logins_10m} 次</small></TableCell>
-                    <TableCell><code className="text-xs">{e.source_ip || "未知"}</code></TableCell>
+                    <TableCell><code className="text-meta">{e.source_ip || "未知"}</code></TableCell>
                     <TableCell>{e.laya ? <Badge variant="soft" tone={e.laya.category === "suspicious" ? "bad" : e.laya.category === "normal" ? "ok" : "neutral"}>{verdicts[e.laya.category]} {Math.round(e.laya.confidence * 100)}%</Badge> : <small className="text-[var(--weir-ink-3)]" title={e.laya_error}>未知</small>}</TableCell>
                     <TableCell><Badge variant="soft" tone={tone}>{label}</Badge>{e.analysis && <small className="mt-1 block max-w-[28ch] whitespace-pre-wrap break-words">{e.analysis}</small>}</TableCell>
                     <TableCell>

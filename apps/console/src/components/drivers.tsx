@@ -110,7 +110,7 @@ function CheckView({ c }: { c: DriverCheck }) {
           {c.samples.map((s) => <Badge key={s.preset} variant="soft" tone={s.state === "passed" ? "ok" : s.state === "failed" ? "bad" : "neutral"} title={s.log}>{s.preset}：{s.state === "passed" ? "通过" : s.state === "failed" ? "未通过" : "未知"}</Badge>)}
         </div>
       )}
-      {c.samples.filter((s) => s.log).map((s) => <pre key={s.preset} className="max-h-40 overflow-auto rounded-[var(--weir-radius)] bg-[var(--weir-well)] p-2 text-xs">{s.preset}：{s.log}</pre>)}
+      {c.samples.filter((s) => s.log).map((s) => <pre key={s.preset} className="max-h-40 overflow-auto rounded-[var(--weir-radius)] bg-[var(--weir-well)] p-2 text-meta">{s.preset}：{s.log}</pre>)}
     </div>
   );
 }
@@ -158,7 +158,7 @@ function DriverDialog({ name, close, changed }: { name: string; close: () => voi
             {q.data.resolve_error && <Notice tone="bad">无法展开：{q.data.resolve_error}</Notice>}
             <Form onSubmit={() => void save()}>
               <Field label="原文（YAML）" hint="只写与继承的驱动不同的部分；在 {…} 里写可省略的键要加引号，如 &quot;host?&quot;:。">
-                <Textarea className="min-h-[18rem] font-mono text-xs" spellCheck={false} value={value} onChange={(e) => { setText(e.target.value); setCheck(null); }} />
+                <Textarea className="min-h-[18rem] font-mono text-meta" spellCheck={false} value={value} onChange={(e) => { setText(e.target.value); setCheck(null); }} />
               </Field>
               <Field label="说明" hint="这次改了什么、依据哪段更新说明（记在历史里）。"><Input value={note} onChange={(e) => setNote(e.target.value)} /></Field>
               <div className="actions">
@@ -175,7 +175,7 @@ function DriverDialog({ name, close, changed }: { name: string; close: () => voi
               {check && <CheckView c={check} />}
             </Form>
             <Collapsible title="展开 extends 后的全文">
-              <pre className="max-h-80 overflow-auto rounded-[var(--weir-radius)] bg-[var(--weir-well)] p-2 text-xs">{q.data.resolved || "（无法展开）"}</pre>
+              <pre className="max-h-80 overflow-auto rounded-[var(--weir-radius)] bg-[var(--weir-well)] p-2 text-meta">{q.data.resolved || "（无法展开）"}</pre>
             </Collapsible>
             <SectionHeader title="历史" description={q.data.history.length === 0 ? "还没有保存过，当前是内置版本。" : "每次保存都是新版本；退回也会先检查。"} />
             {q.data.history.map((h) => (

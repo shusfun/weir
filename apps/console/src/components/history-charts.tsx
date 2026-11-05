@@ -35,7 +35,7 @@ function Chart({ data, series, unit }: { data: Record<string, unknown>[]; series
         <ChartTooltip
           content={({ active, payload, label }) =>
             active && payload ? (
-              <div className="rounded-[var(--weir-radius)] border border-[var(--weir-line)] bg-[var(--weir-panel)] px-2.5 py-1.5 text-xs shadow">
+              <div className="rounded-[var(--weir-radius)] border border-[var(--weir-line)] bg-[var(--weir-panel)] px-2.5 py-1.5 text-meta shadow">
                 <div className="mb-1 text-[var(--weir-ink-3)]">{time(String(label))}</div>
                 {series.map((s) => {
                   const v = (payload[0]?.payload as Record<string, unknown>)[s.key];

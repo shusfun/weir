@@ -56,7 +56,7 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
         <div className="stack p-4">
           <GateUpdateLine gate={gate} />
           <SectionHeader title="主机" description="由 VPS 读取本机 /proc 与磁盘信息上报；网卡总量可能包含虚拟网卡，不作为用户计费依据。" />
-          <dl className="grid grid-cols-2 gap-2 text-sm">
+          <dl className="grid grid-cols-2 gap-2 text-body">
             <dt>CPU</dt><dd>{pct(h.cpu_percent)}</dd>
             <dt>负载</dt><dd>{typeof h.load1 === "number" ? h.load1.toFixed(2) : unknown}</dd>
             <dt>内存</dt><dd>{size(h.mem_used)} / {size(h.mem_total)}</dd>
@@ -108,7 +108,7 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { host?: Host;
           <SectionHeader title="节点与出口" description="入口节点 → 出口。" actions={<Button size="sm" variant="outline" onClick={() => setRouting(true)}>出口与分流</Button>} />
           {mine.length === 0 ? <small>这台 VPS 还没有节点。</small> : (
             <ul className="stack">{mine.map((n) => (
-              <li key={n.id} className="stack gap-1 text-sm">
+              <li key={n.id} className="stack gap-1 text-body">
                 <span><ObjectLink to={{ type: "node", id: n.id, name: n.name }} className="font-semibold" /> :{n.port} → {exitName(n)}{!n.enabled && <Badge variant="soft" tone="warn">停用</Badge>}</span>
                 {n.chain.kind !== "none" && <small className="text-[var(--weir-ink-3)]">{probeText(n.chain.probe)}</small>}
                 <NodeAccess ports={n.ports} reach={n.reach} />

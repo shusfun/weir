@@ -82,7 +82,7 @@ function TemplateForm({ value, close, saved }: { value: CustomTemplate | "new"; 
             <Field label="名称"><Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} /></Field>
             <Field label="格式"><Segmented aria-label="模板格式" value={format} onValueChange={setFormat} options={[["ini", "ini"], ["yaml", "Clash YAML"]] as const} /></Field>
           </FormGrid>
-          <Field label="内容" name="content"><Textarea required rows={16} className="font-mono text-xs" value={content} onChange={(e) => setContent(e.target.value)} /></Field>
+          <Field label="内容" name="content"><Textarea required rows={16} className="font-mono text-meta" value={content} onChange={(e) => setContent(e.target.value)} /></Field>
           <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
             <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>

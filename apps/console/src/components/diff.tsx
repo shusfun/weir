@@ -14,7 +14,7 @@ const lineClass: Record<string, string> = {
 export function DiffView({ lines, empty = "没有改动。" }: { lines: DiffLine[] | null | undefined; empty?: string }) {
   if (!lines || !lines.some((l) => l.op === "+" || l.op === "-")) return <small className="text-[var(--weir-ink-3)]">{empty}</small>;
   return (
-    <pre className="max-h-80 overflow-auto rounded-[var(--weir-radius)] border border-[var(--weir-line)] bg-[var(--weir-well)] p-2 text-xs leading-5" aria-label="改动">
+    <pre className="max-h-80 overflow-auto rounded-[var(--weir-radius)] border border-[var(--weir-line)] bg-[var(--weir-well)] p-2 text-meta leading-5" aria-label="改动">
       {lines.map((l, i) => <div key={i} className={lineClass[l.op] ?? ""}>{(l.op === "…" ? "  " : l.op + " ") + l.text}</div>)}
     </pre>
   );

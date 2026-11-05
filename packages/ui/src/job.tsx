@@ -134,12 +134,12 @@ function JobView({
   );
 }
 
-// JobPlaceholder：任务位上还没有任务、正在读取或任务已不在时的一行说明，高度与 JobLine 相同。
+// JobPlaceholder：任务位上还没有任务、正在读取或任务已不在时的一行浅色文字，不画框，高度与 JobLine 相同。
 function JobPlaceholder({ text, tone, className }: { text: ReactNode; tone?: "bad"; className?: string }) {
   return (
     <div
       className={cn(
-        "flex min-h-9 items-center gap-2 rounded-[var(--weir-radius)] border border-dashed border-[var(--weir-line)] px-3 text-meta",
+        "flex min-h-9 items-center gap-2 text-meta touch:min-h-10",
         tone === "bad" ? "text-[var(--weir-bad-ink)]" : "text-[var(--weir-ink-3)]",
         className,
       )}
@@ -170,7 +170,7 @@ function JobLine({
   if (!job) return <JobPlaceholder text={idle} className={className} />;
   const line = jobStatusLine(job, note);
   return (
-    <div className={cn("flex min-h-9 min-w-0 items-center gap-2 rounded-[var(--weir-radius)] border border-[var(--weir-line-soft)] px-3 py-1", className)} aria-live="polite">
+    <div className={cn("flex min-h-9 min-w-0 items-center gap-2 py-1 touch:min-h-10", className)} aria-live="polite">
       <Badge variant="soft" tone={jobTones[job.status]}>{jobLabels[job.status]}</Badge>
       <strong className="shrink-0 text-meta">{job.title}</strong>
       <span className="hidden w-24 shrink-0 sm:block">

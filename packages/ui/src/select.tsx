@@ -46,8 +46,8 @@ function SelectTrigger({
       data-size={size}
       className={cn(
         // 在 Field 内默认撑满一行；工具栏等独立场景保持内容宽度
-        // 与输入框同高（桌面 32、触屏 44），灰色填充键；按下与展开中都叠一层填充（.weir-key）
-        "weir-key flex h-8 w-fit min-w-0 items-center justify-between gap-2 rounded-[var(--weir-radius)] px-3 text-control whitespace-nowrap text-[var(--weir-ink)] select-none touch:h-11 in-data-[slot=field]:w-full disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive data-placeholder:text-[var(--weir-ink-3)] data-[size=sm]:h-7 touch:data-[size=sm]:h-11 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        // 与输入框同高（桌面 32、触屏 44）、同样白底细边框；按下与展开中都叠一层填充（.weir-key）
+        "weir-key weir-input flex h-8 w-fit min-w-0 items-center justify-between gap-2 rounded-[var(--weir-radius)] px-3 text-control whitespace-nowrap text-[var(--weir-ink)] select-none touch:h-11 in-data-[slot=field]:w-full disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive data-placeholder:text-[var(--weir-ink-3)] data-[size=sm]:h-7 touch:data-[size=sm]:h-11 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       {...props}

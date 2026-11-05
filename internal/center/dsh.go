@@ -437,7 +437,7 @@ func basePatch(url, token string) string {
 // 工具说明在 MCP 工具描述里，做事流程在 Weir 生成的 skill 里（skill 目录见 writeDSHSkills），这里不重复。
 const dshInstructions = `# Weir
 
-这个 dsh 由 Weir 托管，帮管理员管理代理：VPS（即 Gate，Weir 的执行端）、节点（VPS 上的一个入站）、出口与分流规则、用户与订阅链接（「订阅管理」页：链接、生效时间、拉取统计）、代理页（按类型开关、类型出口、分流、自动选择）、订阅源（订阅源、订阅组、规则模板、手动节点）、内核（Xray、sing-box）与内核驱动、证书，并研判安全事件。
+这个 dsh 由 Weir 托管，帮管理员管理代理：VPS（即 Gate，Weir 的执行端）、节点（VPS 上的一个入站）、出口与分流规则、用户与订阅链接（「订阅链接」页：链接、生效时间、拉取统计）、代理页（按类型开关、类型出口、分流、自动选择）、订阅源（订阅源、订阅组、规则模板、手动节点）、内核（Xray、sing-box）与内核驱动、证书，并研判安全事件。
 
 ## 每次都要做
 

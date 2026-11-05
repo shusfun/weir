@@ -203,7 +203,7 @@ export interface LinkItem {
 
 export type LinkState = "active" | "not_started" | "expired";
 
-// LinkStats 是「订阅管理」里一条链接的拉取统计（最近 30 天）。
+// LinkStats 是「订阅链接」里一条链接的拉取统计（最近 30 天）。
 export interface LinkStats {
   id: number;
   name: string;

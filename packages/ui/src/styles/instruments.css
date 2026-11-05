@@ -18,7 +18,7 @@
     width: 10px;
     height: 10px;
   }
-  /* 导航指示灯等紧凑场景 */
+  /* 标签键里的状态灯等紧凑场景 */
   .weir-lamp[data-size="sm"] {
     width: 6px;
     height: 6px;
@@ -36,12 +36,20 @@
 
   .weir-readout {
     display: grid;
+    align-content: start; /* 同排读数有的没有说明：数值都靠顶对齐 */
     gap: var(--weir-space-1);
     min-width: 0;
     padding: var(--weir-space-3) var(--weir-space-4);
     border-radius: var(--weir-radius-card);
     background: var(--weir-panel);
     border: 1px solid var(--weir-line-soft);
+  }
+  /* 卡片里的读数不再自带外框：外层只留一张卡片 */
+  [data-slot="card"] .weir-readout:not([data-variant="lcd"]) {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
   }
   .weir-readout[data-variant="lcd"] {
     background: var(--weir-lcd);

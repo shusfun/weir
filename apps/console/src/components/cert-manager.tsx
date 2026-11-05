@@ -74,11 +74,11 @@ export function CertManager({ open, close }: { open: boolean; close: () => void 
           {mode === "upload" && (
             <>
               <Field label="证书（PEM，含中间证书）" name="cert">
-                <Textarea required rows={4} className="font-mono text-xs" value={certPem} onChange={(e) => setCertPem(e.target.value)} />
+                <Textarea required rows={4} className="font-mono text-meta" value={certPem} onChange={(e) => setCertPem(e.target.value)} />
               </Field>
               {/* 私钥是粘贴的多行 PEM，需要核对粘贴内容，因此不做遮罩；保存后服务端加密，不再返回 */}
               <Field label="私钥（PEM）" hint="加密保存，不会再显示。">
-                <Textarea required rows={4} spellCheck={false} autoComplete="off" className="font-mono text-xs" value={keyPem} onChange={(e) => setKeyPem(e.target.value)} />
+                <Textarea required rows={4} spellCheck={false} autoComplete="off" className="font-mono text-meta" value={keyPem} onChange={(e) => setKeyPem(e.target.value)} />
               </Field>
             </>
           )}

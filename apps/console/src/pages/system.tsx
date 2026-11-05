@@ -19,7 +19,7 @@ export function SystemPage() {
   useConsoleContext({ page: "系统设置", tab: systemSections.find((s) => s.key === tab)?.label });
   return (
     <div className="stack">
-      <PageHeader eyebrow="系统" title="系统设置" />
+      <PageHeader title="系统设置" description="版本更新、AI 与 dsh、安全、登录、通知、证书、备份与分发。" />
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: String(v) }, { replace: true })}>
         <TabsList aria-label="系统设置分区">
           {systemSections.map((s) => <TabsTab key={s.key} value={s.key}>{s.label}</TabsTab>)}

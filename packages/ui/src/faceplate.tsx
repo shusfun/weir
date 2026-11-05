@@ -11,19 +11,16 @@ function Faceplate({
 }
 
 function FaceplateTitle({
-  eyebrow,
   title,
   meta,
   className,
 }: {
-  eyebrow?: ReactNode;
   title: ReactNode;
   meta?: ReactNode;
   className?: string;
 }) {
   return (
     <div className={cn("min-w-0 flex-1", className)}>
-      {eyebrow && <div className="weir-engraved mb-1">{eyebrow}</div>}
       <div className="truncate text-headline font-semibold tracking-[-0.015em] text-[var(--weir-ink)]">{title}</div>
       {meta && <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-[var(--weir-ink-3)]">{meta}</div>}
     </div>

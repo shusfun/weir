@@ -53,7 +53,7 @@ export function PublicPagesPage() {
   useConsoleContext({ page: "公开页面", list: { total: q.data?.length ?? 0, items: (q.data ?? []).slice(0, 20).map((p) => ({ type: "page", name: p.data.title, key: p.slug })) } });
   return (
     <div className="stack">
-      <PageHeader eyebrow="订阅与分发" title="公开页面" description="匿名可访问的介绍页，可展示已分享的订阅组与留言板。" actions={<Button onClick={() => setEdit("new")}><Plus />新建页面</Button>} />
+      <PageHeader title="公开页面" description="匿名可访问的介绍页，可展示已分享的订阅组与留言板。" actions={<Button onClick={() => setEdit("new")}><Plus />新建页面</Button>} />
       {q.isPending || q.error ? (
         <State
           loading={q.isPending}

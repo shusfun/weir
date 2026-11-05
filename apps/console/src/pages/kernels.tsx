@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { Badge, Button, Card, CardContent, CodeBlock, Dialog, DialogContent, DialogDescription, DialogTitle, Notice, PageHeader, SectionHeader, SkeletonCards, SkeletonList, Tabs, TabsList, TabsPanel, TabsTab, useConfirm, ScrollArea } from "@weir/ui";
+import { Badge, Button, CodeBlock, Dialog, DialogContent, DialogDescription, DialogTitle, InsetGroup, InsetRow, InsetRows, PageHeader, SkeletonCards, SkeletonList, Tabs, TabsList, TabsPanel, TabsTab, useConfirm, ScrollArea } from "@weir/ui";
 import { Download, Star, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { useRowAction } from "../lib/action";
@@ -57,7 +57,7 @@ export function KernelsPage() {
   useConsoleContext({ page: "内核", tab: tabs.find((t) => t.key === tab)?.label });
   return (
     <div className="stack">
-      <PageHeader eyebrow="工作区" title="内核" description="内核只以独立程序运行，升级不需要更新 Weir。中心按 GitHub 加速的来源顺序拉取、按官方摘要校验，再推送给 VPS。每个版本怎么配置由内核驱动决定。" />
+      <PageHeader title="内核" description="内核独立运行，升级不需要更新 Weir。中心按 GitHub 加速的来源拉取、校验官方摘要后推送给 VPS；每个版本怎么配置由内核驱动决定。" />
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: String(v) }, { replace: true })}>
         <TabsList aria-label="内核分区">
           {tabs.map((t) => <TabsTab key={t.key} value={t.key}>{t.label}</TabsTab>)}
@@ -92,22 +92,22 @@ function Versions() {
       {Object.entries(q.data).sort(([a], [b]) => order.indexOf(a) - order.indexOf(b)).map(([kernel, k]) => {
         const job = latestJob(jobs.data, `kernel:${kernel}:`);
         return (
-          <Card key={kernel} {...dataObject({ type: "kernel", key: kernel })}>
-            <CardContent className="stack">
-              <SectionHeader
-                title={kernelNames[kernel] ?? kernel}
-                description={`${k.default ? `默认版本 ${k.default}。` : "未设置默认版本：VPS 保持正在运行的版本，新部署的 VPS 使用已下载的最新版本。下载新版本不会自动替换。"} 需要的架构：${k.arches.join("、")}（按中心与已接入的 VPS 自动决定）。`}
-                actions={<Button size="sm" variant="outline" onClick={() => setReleases(kernel)}><Download />拉取版本</Button>}
-              />
+          <InsetGroup
+            key={kernel}
+            {...dataObject({ type: "kernel", key: kernel })}
+            title={kernelNames[kernel] ?? kernel}
+            description={`${k.default ? `默认版本 ${k.default}。` : "未设置默认版本：VPS 保持正在运行的版本，新部署的 VPS 使用已下载的最新版本。下载新版本不会自动替换。"} 需要的架构：${k.arches.join("、")}（按中心与已接入的 VPS 自动决定）。`}
+            actions={<Button size="sm" variant="outline" onClick={() => setReleases(kernel)}><Download />拉取版本</Button>}
+          >
               <JobLine job={job} idle="没有进行中的下载" onFinish={() => void q.refetch()} />
               {k.versions.length === 0 ? <small>尚未下载</small> : (
-                <ul className="m-0 list-none space-y-2 p-0">
+                <InsetRows as="ul">
                   {k.versions.map((v) => {
                     const users = [...(v.pinned_refs ?? []).map((g) => ({ ...g, how: "锁定" })), ...(v.running_refs ?? []).map((g) => ({ ...g, how: "运行中" }))];
                     const missing = k.arches.filter((a) => !v.arches[a]);
                     return (
-                      <li key={v.version} {...dataObject({ type: "kernel", key: `${kernel}@${v.version}` })} className="flex flex-wrap items-center gap-2 rounded-[var(--weir-radius)] border border-[var(--weir-line)] px-3 py-2">
-                        <code className="text-xs">{v.version}</code>
+                      <InsetRow as="li" key={v.version} {...dataObject({ type: "kernel", key: `${kernel}@${v.version}` })} className="flex flex-wrap items-center gap-2">
+                        <code className="text-meta">{v.version}</code>
                         {v.default && <Badge variant="soft" tone="ok">默认</Badge>}
                         {missing.length > 0 && <Badge variant="soft" tone="warn">缺 {missing.join("、")}</Badge>}
                         {kernel !== "mihomo" && (v.driver ? <Badge variant="soft" tone="neutral">驱动 <ObjectLink to={{ type: "driver", key: v.driver, name: v.driver }} /></Badge> : <Badge variant="soft" tone="bad" title={v.driver_error}>没有驱动 · <ObjectLink to={{ type: "driver", key: "new", name: "新增驱动" }} /></Badge>)}
@@ -117,13 +117,12 @@ function Versions() {
                           {!v.default && <Button size="xs" variant="ghost" disabled={isBusy() || (kernel !== "mihomo" && !v.driver)} busy={isBusy("default:" + kernel + v.version)} busyText="正在设置…" onClick={() => void setDefault(kernel, v.version)}><Star />设为默认</Button>}
                           {!v.default && users.length === 0 && <Button size="xs" variant="ghost" aria-label={`删除 ${v.version}`} disabled={isBusy()} busy={isBusy("del:" + kernel + v.version)} busyText="正在删除" onClick={() => void remove(kernel, v.version)}><Trash2 /></Button>}
                         </span>
-                      </li>
+                      </InsetRow>
                     );
                   })}
-                </ul>
+                </InsetRows>
               )}
-            </CardContent>
-          </Card>
+          </InsetGroup>
         );
       })}
       {releases && <ReleasesDialog kernel={releases} arches={q.data[releases]?.arches ?? []} jobs={jobs.data} close={() => setReleases(null)} fetched={() => void q.refetch()} />}
@@ -135,9 +134,7 @@ function Versions() {
 function SubChecks() {
   const q = useQuery({ queryKey: ["sub-checks"], queryFn: () => api("/admin/sub-checks") as Promise<{ kernels: Record<string, { available: boolean; version?: string; error?: string }>; items: SubCheck[] }>, refetchInterval: 60000 });
   return (
-    <Card>
-      <CardContent className="stack">
-        <SectionHeader title="订阅检查" description="客户端拉取 Clash / sing-box 订阅后，中心在后台用 mihomo -t 与 sing-box check 检查生成的内容（同一内容 24 小时内只检查一次）。检查不影响订阅输出；内核尚未下载或中心不是 Linux 时显示「未知」。" />
+    <InsetGroup title="订阅检查" description="客户端拉取 Clash / sing-box 订阅后，中心在后台用 mihomo -t 与 sing-box check 检查生成的内容（同一内容 24 小时内只检查一次）。检查不影响订阅输出；内核尚未下载或中心不是 Linux 时显示「未知」。">
         {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} skeleton={<SkeletonList rows={2} />} /> : (
           <div className="stack">
             <div className="flex flex-wrap gap-3 text-body">
@@ -152,18 +149,17 @@ function SubChecks() {
                     <div className="flex flex-wrap items-center gap-2">
                       <strong className="text-body">{c.name}</strong>
                       <SubCheckBadge check={c} />
-                      {c.version && <code className="text-xs">{c.version}</code>}
+                      {c.version && <code className="text-meta">{c.version}</code>}
                       <small className="ml-auto text-[var(--weir-ink-3)]">{date(c.at)}</small>
                     </div>
-                    {c.error && <CodeBlock className="mt-2 block max-h-40 overflow-auto whitespace-pre-wrap text-xs">{c.error}</CodeBlock>}
+                    {c.error && <CodeBlock className="mt-2 block max-h-40 overflow-auto whitespace-pre-wrap text-meta">{c.error}</CodeBlock>}
                   </li>
                 ))}
               </ul>
             )}
           </div>
         )}
-      </CardContent>
-    </Card>
+    </InsetGroup>
   );
 }
 
@@ -213,7 +209,7 @@ export function KernelDiagnostics({ result }: { result: { running?: boolean; ver
   return (
     <div className="stack">
       <small>{result.running ? "运行中" : "未运行"}{result.version ? ` · ${result.version}` : ""}{result.counts ? " · " + Object.entries(result.counts).map(([k, v]) => `${k} ${v}`).join("，") : ""}</small>
-      <CodeBlock className="block max-h-64 overflow-auto whitespace-pre text-xs">{(result.tail ?? []).join("\n") || "（没有日志）"}</CodeBlock>
+      <CodeBlock className="block max-h-64 overflow-auto whitespace-pre text-meta">{(result.tail ?? []).join("\n") || "（没有日志）"}</CodeBlock>
       {result.truncated && <small className="text-[var(--weir-ink-3)]">只显示最近 50 行。</small>}
     </div>
   );

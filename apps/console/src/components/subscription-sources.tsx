@@ -99,7 +99,7 @@ export function SourcesPanel() {
         <DialogContent size="lg">
           <DialogTitle>{nodes?.name} · {nodes?.list.length ?? 0} 个节点</DialogTitle>
           <DialogDescription>{nodes?.error ? `本次拉取：${nodes.error}（已按保护性缓存处理）` : "本次拉取并处理后的节点。"}</DialogDescription>
-          <CodeBlock className="block max-h-96 overflow-auto whitespace-pre text-xs">{nodes?.list.join("\n") || "（空）"}</CodeBlock>
+          <CodeBlock className="block max-h-96 overflow-auto whitespace-pre text-meta">{nodes?.list.join("\n") || "（空）"}</CodeBlock>
         </DialogContent>
       </Dialog>
     </section>

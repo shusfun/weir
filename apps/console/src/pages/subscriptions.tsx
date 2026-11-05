@@ -15,7 +15,7 @@ export function SubscriptionsPage() {
   useConsoleContext({ page: "订阅源", tab: tabs.find(([k]) => k === tab)?.[1] });
   return (
     <div className="stack">
-      <PageHeader eyebrow="订阅与分发" title="订阅源" description="汇集机场订阅与手动节点，按订阅组处理后分配给用户或分享。" />
+      <PageHeader title="订阅源" description="汇集机场订阅与手动节点，按订阅组处理后分配给用户或分享。" />
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: String(v) }, { replace: true })}>
         <TabsList aria-label="订阅源">
           {tabs.map(([k, label]) => <TabsTab key={k} value={k}>{label}</TabsTab>)}

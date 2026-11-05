@@ -1,4 +1,4 @@
-/* 外壳：左侧导航栏 + 顶栏 + 主区。导航栏是一整块面板（iPad 侧边栏），当前项为白色滑块并点亮指示灯。 */
+/* 外壳：左侧导航栏 + 顶栏 + 主区。导航栏是一整块面板（iPad 侧边栏），未选中项只有图标和文字，当前项是浅蓝底。 */
 .shell {
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
@@ -45,7 +45,7 @@
   font-weight: var(--weir-weight-semibold);
   letter-spacing: -0.02em;
 }
-/* 导航滚动区（ScrollArea）：根占满剩余高度，视口里留出键帽外阴影的空间，避免被滚动容器裁切 */
+/* 导航滚动区（ScrollArea）：根占满剩余高度，视口里留出焦点环的空间，避免被滚动容器裁切 */
 .rail-nav {
   flex: 1;
   min-height: 0;
@@ -95,17 +95,14 @@
 .rail-item:hover {
   color: var(--weir-ink);
 }
-/* 当前项：保持按下（.weir-key.active）+ 蓝色指示灯点亮 */
+/* 当前项：浅蓝底（深色下是深蓝底，不发灰） */
 .rail-item.active {
-  color: var(--weir-ink);
-  font-weight: 600;
+  background: var(--weir-accent-soft);
+  color: var(--weir-accent-soft-ink);
+  font-weight: var(--weir-weight-semibold);
 }
 .rail-item.active svg {
-  color: var(--weir-accent-text);
-}
-/* 导航指示灯使用 StatusLamp（size=sm，当前项 tone=active）；这里只处理未选中时的淡化 */
-.rail-item:not(.active) .rail-led {
-  opacity: 0.6;
+  color: var(--weir-accent-soft-ink);
 }
 .rail-foot {
   display: grid;
@@ -113,7 +110,7 @@
   padding-top: var(--weir-space-3);
   border-top: 1px solid var(--weir-line-soft);
 }
-/* 左下角个人中心：凸起铭牌，点开向上弹出菜单 */
+/* 左下角个人中心：点开向上弹出菜单 */
 .rail-account {
   display: flex;
   align-items: center;
@@ -154,7 +151,6 @@
 .shell[data-collapsed="true"] .rail-brand > strong,
 .shell[data-collapsed="true"] .rail-group-label,
 .shell[data-collapsed="true"] .rail-item > .rail-label,
-.shell[data-collapsed="true"] .rail-led,
 .shell[data-collapsed="true"] .rail-account-text,
 .shell[data-collapsed="true"] .rail-account > svg {
   display: none;
@@ -187,10 +183,12 @@
   min-width: 0;
   flex: 1;
 }
-.topbar-title h1 {
-  /* 顶栏标题：iOS 导航栏标题（headline） */
+.topbar-title > span {
+  /* 顶栏标题：iOS 导航栏标题（headline）。桌面端页面标题在 PageHeader，这里只在窄屏显示 */
+  display: none;
   font-size: var(--weir-text-headline);
   line-height: var(--weir-leading-headline);
+  font-weight: var(--weir-weight-semibold);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -304,6 +302,24 @@
   }
   .shell-main {
     padding: var(--weir-space-4) var(--weir-space-4) var(--weir-space-8);
+  }
+  /* 窄屏标题在顶栏：页头不再重复，h1 留给读屏 */
+  .topbar-title > span {
+    display: block;
+  }
+  .shell-main [data-slot="page-header"] {
+    min-height: 0;
+  }
+  .shell-main [data-slot="page-title"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .shell-main [data-slot="page-header"] p {
+    margin-top: 0;
   }
 
   .command-trigger .weir-kbd {

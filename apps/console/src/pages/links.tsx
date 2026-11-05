@@ -1,9 +1,9 @@
-// 订阅管理：管理员与普通用户共用一页。普通用户看自己的额度、订阅链接与拉取统计；管理员看全部用户，可按用户筛选。
+// 订阅链接：管理员与普通用户共用一页。普通用户看自己的额度、订阅链接与拉取统计；管理员看全部用户，可按用户筛选。
 // 每条链接右上角「复制」，三角里是二维码、编辑与生效时间、拉取记录等；最近 30 天的拉取按客户端、来源汇总。
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CopyField, Meter, Notice, PageHeader, Readout, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SkeletonCards } from "@weir/ui";
+import { Card, CardContent, CopyField, InsetGroup, InsetRow, InsetRows, Meter, Notice, PageHeader, Readout, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SkeletonCards } from "@weir/ui";
 import { api } from "../api";
 import { client } from "../lib/client";
 import { ClientDownload } from "../components/client-download";
@@ -38,14 +38,13 @@ export function LinksPage({ admin }: { admin: boolean }) {
   const byLink = useMemo(() => new Map((stats.data ?? []).map((s) => [s.id, s])), [stats.data]);
   const header = (
     <PageHeader
-      eyebrow="代理与订阅"
-      title="订阅管理"
+      title="订阅链接"
       description={admin ? "全部用户的订阅链接与拉取统计；可按用户筛选。每条链接可单独设置生效时间。" : "每条链接凭据独立、共享同一份额度；可以给不同设备分别生成，并设置什么时候开始、什么时候结束。"}
       actions={admin ? <UserFilter value={userParam} onChange={(id) => setParams((p) => { if (id) p.set("user", String(id)); else p.delete("user"); p.delete("focus"); return p; }, { replace: true })} /> : undefined}
     />
   );
   useConsoleContext({
-    page: "订阅管理",
+    page: "订阅链接",
     list: {
       filters: admin ? { 用户: userParam ? String(userParam) : "全部" } : undefined,
       total: stats.data?.length ?? 0,
@@ -174,21 +173,20 @@ function GroupsCard() {
   const q = useQuery({ queryKey: ["me-groups"], queryFn: async () => (await api("/me/groups")).items as Group[] });
   if (q.isPending || (q.data && q.data.length === 0)) return null;
   return (
-    <Card>
-      <CardContent className="stack">
-        <SectionHeader title="订阅组" description="管理员分配给你的订阅组，地址各自独立，可直接导入客户端。" />
-        {q.error ? (
-          <State error={q.error} onRetry={() => q.refetch()} />
-        ) : (
-          q.data!.map((g) => (
-            <div key={g.id} className="stack">
+    <InsetGroup title="订阅组" description="管理员分配给你的订阅组，地址各自独立，可直接导入客户端。">
+      {q.error ? (
+        <State error={q.error} onRetry={() => q.refetch()} />
+      ) : (
+        <InsetRows>
+          {q.data!.map((g) => (
+            <InsetRow key={g.id} className="stack">
               <strong>{g.name}{g.expires_at ? <small className="ml-2 text-[var(--weir-ink-3)]">到期 {date(g.expires_at)}</small> : null}</strong>
               <CopyField label={g.name + " 订阅地址"} value={g.url} />
-            </div>
-          ))
-        )}
-      </CardContent>
-    </Card>
+            </InsetRow>
+          ))}
+        </InsetRows>
+      )}
+    </InsetGroup>
   );
 }
 
@@ -198,27 +196,24 @@ function ClientsCard() {
   if (q.isPending) return null;
   const items = (q.data?.clients ?? []).filter((c) => c.enabled);
   return (
-    <Card>
-      <CardContent className="stack">
-        <SectionHeader title="客户端下载" description="下载入口由管理员维护；导入时在链接的「一键导入页」选择对应客户端。" />
-        {q.error ? (
-          <State error={q.error} onRetry={() => q.refetch()} />
-        ) : items.length === 0 ? (
-          <State empty="管理员尚未提供客户端下载" />
-        ) : (
-          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {items.map((c) => (
-              <li key={c.id} className="flex min-w-0 items-center justify-between gap-2 rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3">
-                <span className="flex min-w-0 items-center gap-2">
-                  <ClientIcon icon={c.icon} data={c.icon_data} />
-                  <span className="min-w-0"><strong>{c.name}</strong><small className="block truncate text-[var(--weir-ink-3)]">{c.description}</small></span>
-                </span>
-                <ClientDownload client={c} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardContent>
-    </Card>
+    <InsetGroup title="客户端下载" description="下载入口由管理员维护；导入时在链接的「一键导入页」选择对应客户端。">
+      {q.error ? (
+        <State error={q.error} onRetry={() => q.refetch()} />
+      ) : items.length === 0 ? (
+        <State empty="管理员尚未提供客户端下载" />
+      ) : (
+        <InsetRows as="ul">
+          {items.map((c) => (
+            <InsetRow as="li" key={c.id} className="flex items-center justify-between gap-2">
+              <span className="flex min-w-0 items-center gap-2">
+                <ClientIcon icon={c.icon} data={c.icon_data} />
+                <span className="min-w-0"><strong>{c.name}</strong><small className="block truncate text-[var(--weir-ink-3)]">{c.description}</small></span>
+              </span>
+              <ClientDownload client={c} />
+            </InsetRow>
+          ))}
+        </InsetRows>
+      )}
+    </InsetGroup>
   );
 }

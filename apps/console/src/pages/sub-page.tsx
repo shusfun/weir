@@ -57,7 +57,7 @@ export function SubPage() {
   const title = "Weir" + (d.name ? " · " + d.name : "");
   return (
     <main className="mx-auto grid w-full max-w-[960px] gap-4 p-4">
-      <PageHeader eyebrow="订阅" title={title} description="在下方选择你使用的客户端一键导入；电脑上的客户端也可复制地址手动添加。" />
+      <PageHeader title={title} description="在下方选择你使用的客户端一键导入；电脑上的客户端也可复制地址手动添加。" />
       <Card>
         <CardContent className="grid gap-4 sm:grid-cols-[1fr_auto]">
           <div className="stack">

@@ -12,7 +12,7 @@ export function GettingStarted({ gates, nodes, addGate, addNode }: { gates: Gate
   const steps: { label: string; detail: string; done: boolean; action?: ReactNode }[] = [
     { label: "添加 VPS", detail: "填 SSH 登录信息一次装好，或复制安装命令。", done: gates.some((g) => g.status === "active"), action: <Button size="sm" onClick={addGate}>添加 VPS</Button> },
     { label: "建一个节点", detail: "选协议就行，保存前由 VPS 实测。", done: nodes.length > 0, action: <Button size="sm" onClick={addNode}>新建节点</Button> },
-    { label: "拿到订阅链接", detail: "在订阅管理里新建；每个用户可以有多条。", done: links.length > 0, action: <Button size="sm" render={<Link to="/links" />}>打开订阅管理</Button> },
+    { label: "拿到订阅链接", detail: "在订阅链接页新建；每个用户可以有多条。", done: links.length > 0, action: <Button size="sm" render={<Link to="/links" />}>打开订阅链接</Button> },
     { label: "导入客户端", detail: "复制订阅地址导入客户端并更新一次。", done: links.some((l) => l.pulls_30d > 0), action: <Button size="sm" variant="outline" render={<Link to="/links" />}>查看订阅地址</Button> },
   ];
   // 统计还没读到时不显示：不能把「未知」当成没做。

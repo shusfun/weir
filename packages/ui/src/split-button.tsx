@@ -39,7 +39,7 @@ function SplitButton({
               variant={variant}
               disabled={disabled}
               aria-label={menuLabel}
-              className="-ml-px w-7 rounded-l-none touch:w-11 [&_svg]:transition-transform [&_svg]:duration-[var(--weir-spring-dur)] [&_svg]:ease-[var(--weir-spring)] data-[popup-open]:[&_svg]:rotate-180"
+              className="-ml-px w-7 rounded-l-none border-l-[var(--weir-line-soft)] touch:w-11 [&_svg]:transition-transform [&_svg]:duration-[var(--weir-spring-dur)] [&_svg]:ease-[var(--weir-spring)] data-[popup-open]:[&_svg]:rotate-180"
             />
           }
         >

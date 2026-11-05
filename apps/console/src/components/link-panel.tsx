@@ -1,5 +1,5 @@
 // 订阅链接与自建链式代理：管理员（按用户）与用户本人共用。base 为 "/admin/users/<id>" 或 "/me"。
-// 每条链接一张卡片：地址框末尾是复制图标，右上角「更多」里是其余操作；生效时间（开始、结束都可不填）与拉取记录都在这里。
+// 每条链接一行：地址框末尾是复制图标，右上角「更多」里是其余操作；生效时间（开始、结束都可不填）与拉取记录都在这里。
 import { useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { field, useConsoleContext } from "../lib/console-context";
@@ -19,6 +19,8 @@ import {
   Field,
   Form,
   Input,
+  InsetRow,
+  InsetRows,
   Notice,
   SectionHeader,
   Select,
@@ -104,7 +106,7 @@ export function LinkPanel({
   inlineQr?: boolean;
   // planEnds：用户的到期时间，链接的结束时间不能晚于它
   planEnds?: string | null;
-  // stats：订阅管理页传入的拉取统计（按链接编号）
+  // stats：订阅链接页传入的拉取统计（按链接编号）
   stats?: Map<number, LinkStats>;
   title?: ReactNode;
   description?: ReactNode;
@@ -114,7 +116,7 @@ export function LinkPanel({
   const links = useLinks(base);
   const chains = useChains(base);
   const [edit, setEdit] = useState<LinkItem | "new" | null>(null);
-  // 链接变了，订阅管理页上方的统计（生效中的链接数等）跟着刷新
+  // 链接变了，订阅链接页上方的统计（生效中的链接数等）跟着刷新
   const refetch = () => {
     void links.refetch();
     void client.invalidateQueries({ queryKey: ["link-stats"] });
@@ -136,14 +138,16 @@ export function LinkPanel({
           loading={links.isPending}
           error={links.error}
           onRetry={() => links.refetch()}
-          skeleton={<SkeletonList rows={2} lines={2} className="stack" rowClassName="rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3" />}
+          skeleton={<SkeletonList rows={2} lines={2} className="stack" />}
         />
       ) : links.data.length === 0 ? (
         <State empty="还没有链接" detail="订阅链接导入客户端后才能上网。点上方「新链接」生成一条。" />
       ) : (
-        links.data.map((l) => (
-          <LinkCard key={l.id} base={base} link={l} stats={stats?.get(l.id)} showCredentials={showCredentials} inlineQr={inlineQr} onEdit={() => setEdit(l)} refetch={refetch} />
-        ))
+        <InsetRows>
+          {links.data.map((l) => (
+            <LinkRow key={l.id} base={base} link={l} stats={stats?.get(l.id)} showCredentials={showCredentials} inlineQr={inlineQr} onEdit={() => setEdit(l)} refetch={refetch} />
+          ))}
+        </InsetRows>
       )}
       {edit && (
         <LinkForm
@@ -164,8 +168,8 @@ export function LinkPanel({
   );
 }
 
-// LinkCard：一条链接。复制在地址框末尾（最常用），其余操作在右上角「更多」里；危险操作都要再确认。
-function LinkCard({ base, link: l, stats, showCredentials, inlineQr, onEdit, refetch }: {
+// LinkRow：一条链接。复制在地址框末尾（最常用），其余操作在右上角「更多」里；危险操作都要再确认。
+function LinkRow({ base, link: l, stats, showCredentials, inlineQr, onEdit, refetch }: {
   base: string;
   link: LinkItem;
   stats?: LinkStats;
@@ -190,7 +194,7 @@ function LinkCard({ base, link: l, stats, showCredentials, inlineQr, onEdit, ref
     if (ok) act(l.id, () => api(`${base}/links/${l.id}/rotate`, "POST", credentials ? { credentials: true } : {}), credentials ? "凭据已更换" : "订阅地址已更换");
   };
   return (
-    <div {...dataObject({ type: "link", id: l.id })} className="stack rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3">
+    <InsetRow {...dataObject({ type: "link", id: l.id })} className="stack">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <strong className="flex flex-wrap items-center gap-1.5">
@@ -242,7 +246,7 @@ function LinkCard({ base, link: l, stats, showCredentials, inlineQr, onEdit, ref
                   {e.uuid ? ` · UUID ${e.uuid}` : ""}
                   {e.password && <> · 密码 <SecretText value={e.password} /></>}
                 </small>
-                {e.uri ? <CodeBlock className="block break-all text-xs">{e.uri}</CodeBlock> : <small className="text-[var(--weir-bad-ink)]">{e.error}</small>}
+                {e.uri ? <CodeBlock className="block break-all text-meta">{e.uri}</CodeBlock> : <small className="text-[var(--weir-bad-ink)]">{e.error}</small>}
               </li>
             ))}
           </ul>
@@ -258,7 +262,7 @@ function LinkCard({ base, link: l, stats, showCredentials, inlineQr, onEdit, ref
         </DialogContent>
       </Dialog>
       {pulls && <PullsDialog base={base} link={l} close={() => setPulls(false)} />}
-    </div>
+    </InsetRow>
   );
 }
 
@@ -303,7 +307,7 @@ function PullsDialog({ base, link: l, close }: { base: string; link: LinkItem; c
                       <TableCell title={p.user_agent}>{p.client || <span className="text-[var(--weir-ink-3)]">未识别</span>}</TableCell>
                       <TableCell>{p.target}</TableCell>
                       <TableCell>
-                        <span className="font-mono text-xs">{p.ip}</span>
+                        <span className="font-mono text-meta">{p.ip}</span>
                         <small className="block text-[var(--weir-ink-3)]">{p.place ? `${p.place}${p.org ? " · " + p.org : ""}` : "位置未知"}</small>
                       </TableCell>
                       <TableCell><Badge variant="soft" tone={tone}>{text}</Badge></TableCell>

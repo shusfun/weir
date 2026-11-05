@@ -282,7 +282,7 @@ func execUserDelete(ctx context.Context, s *Server, x *execCtx, st *DraftStep) (
 func planLinkCreate(ctx context.Context, s *Server, p *planCtx, st *DraftStep) error {
 	name, _ := s.refName(ctx, p, "user", st.Args["user_id"])
 	st.Title = "为 " + name + " 新建订阅链接"
-	st.Preview = []string{"生成一个新的订阅令牌；订阅地址确认后在「订阅管理」里查看"}
+	st.Preview = []string{"生成一个新的订阅令牌；订阅地址确认后在「订阅链接」里查看"}
 	// 生效时间在提交草稿时就校验（与手动新建的规则相同），不等到确认时才报错
 	start, _, err := optionalTime(rawArg(st.Args["starts_at"]))
 	if err != nil {

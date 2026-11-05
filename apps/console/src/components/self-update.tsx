@@ -2,7 +2,7 @@
 // 用包里的安装脚本安装，失败自动切回；可切回本机保留的上一版本，或重装最近 3 个正式版本之一。
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Form, Notice, Progress, useToast } from "@weir/ui";
+import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Form, InsetRow, InsetRows, JobPlaceholder, Notice, Progress, useToast } from "@weir/ui";
 import { api } from "../api";
 import { clock, date } from "../lib/models";
 import { State } from "./feedback";
@@ -50,26 +50,30 @@ export function UpdateCard() {
   return (
     <Section title="版本与更新" description="从 GitHub Release 更新：由 root 运行的更新服务自己下载、按官方摘要校验、安装，启动失败自动切回上一版本。Gate 随后从中心自更新到同一版本。">
       {q.isPending || q.error || !q.data ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : (
-        <div className="stack">
+        <InsetRows>
+          <InsetRow className="stack">
           <div className="flex flex-wrap items-center gap-2">
             <span>当前版本 <code>{q.data.current}</code></span>
             {q.data.latest && (q.data.has_update ? <Badge variant="soft" tone="warn">有新版本 {q.data.latest.version}</Badge> : <Badge variant="soft" tone="ok">已是最新</Badge>)}
-            <Button className="ml-auto" size="sm" variant="ghost" onClick={() => setForce(Date.now())}>重新检查</Button>
+            <Button className="ml-auto" size="sm" variant="outline" onClick={() => setForce(Date.now())}>重新检查</Button>
           </div>
           {q.data.check_error && <Notice tone="warn">无法读取 GitHub 发布：{q.data.check_error}</Notice>}
           {q.data.blocker && <Notice tone="info">{q.data.blocker}。</Notice>}
-          <UpdateStatus st={st} />
+          </InsetRow>
+          <InsetRow><UpdateStatus st={st} /></InsetRow>
           {q.data.latest && q.data.has_update && (
-            <Collapsible variant="card" defaultOpen title={<span>{q.data.latest.version} 更新说明 <small className="text-[var(--weir-ink-3)]">{date(q.data.latest.published_at)}</small></span>}>
-              <CodeBlock className="block max-h-64 overflow-auto whitespace-pre-wrap text-xs">{q.data.latest.notes || "（没有说明）"}</CodeBlock>
-            </Collapsible>
+            <InsetRow>
+              <Collapsible defaultOpen title={<span>{q.data.latest.version} 更新说明 <small className="text-[var(--weir-ink-3)]">{date(q.data.latest.published_at)}</small></span>}>
+                <CodeBlock className="block max-h-64 overflow-auto whitespace-pre-wrap text-meta">{q.data.latest.notes || "（没有说明）"}</CodeBlock>
+              </Collapsible>
+            </InsetRow>
           )}
-          <div className="actions">
+          {((q.data.latest && q.data.has_update) || q.data.previous || (q.data.older ?? []).some((r) => r.version !== q.data!.previous)) && <InsetRow className="actions">
             {q.data.latest && q.data.has_update && <Button disabled={!!q.data.blocker || (!!st && !st.finished_at)} onClick={() => setTarget({ action: "update", version: q.data.latest!.version })}>更新到 {q.data.latest.version}</Button>}
             {q.data.previous && <Button variant="outline" disabled={!!q.data.blocker || (!!st && !st.finished_at)} onClick={() => setTarget({ action: "rollback" })}>切回上一版本 {q.data.previous}</Button>}
-            {(q.data.older ?? []).map((r) => r.version !== q.data!.previous && <Button key={r.version} variant="ghost" disabled={!!q.data!.blocker || (!!st && !st.finished_at)} onClick={() => setTarget({ action: "update", version: r.version })}>重装 {r.version}</Button>)}
-          </div>
-        </div>
+            {(q.data.older ?? []).map((r) => r.version !== q.data!.previous && <Button key={r.version} variant="outline" disabled={!!q.data!.blocker || (!!st && !st.finished_at)} onClick={() => setTarget({ action: "update", version: r.version })}>重装 {r.version}</Button>)}
+          </InsetRow>}
+        </InsetRows>
       )}
       {target && q.data && <ConfirmUpdate target={target} current={q.data.current} previous={q.data.previous} close={() => setTarget(null)} started={() => { setStartedFrom(q.data!.current); setTarget(null); void q.refetch(); }} />}
     </Section>
@@ -79,7 +83,7 @@ export function UpdateCard() {
 // UpdateStatus：最近一次更新或切回。与下载任务一样是固定行数（状态、进度条、一行说明、日志），
 // 下载、安装、完成、失败之间只换文字；还没有更新过时显示占位行，开始更新后下面的内容不被顶开。
 function UpdateStatus({ st }: { st?: Status }) {
-  if (!st) return <div className="flex min-h-9 items-center rounded-[var(--weir-radius)] border border-dashed border-[var(--weir-line)] px-3 text-meta text-[var(--weir-ink-3)]">还没有在这里更新过；更新的进度与日志会显示在这里。</div>;
+  if (!st) return <JobPlaceholder text="还没有在这里更新过；更新的进度与日志会显示在这里。" />;
   const p = st.progress;
   const pct = st.state === "done" ? 100 : p && p.total > 0 ? Math.round((p.done / p.total) * 100) : null;
   const label = { downloading: "正在下载", installing: "正在安装", done: "完成", failed: "失败" }[st.state];
@@ -90,7 +94,7 @@ function UpdateStatus({ st }: { st?: Status }) {
     p ? `${pct !== null ? `${pct}% · ${size(p.done)} / ${size(p.total)}` : `已下载 ${size(p.done)}`}${p.speed > 0 ? ` · ${size(p.speed)}/s` : ""}${p.source ? ` · ${p.source}` : ""}` : "正在准备…";
   const logs = st.logs.map((l) => { const m = /^(\d{4}-\d\d-\d\dT\S+Z) (.*)$/s.exec(l); return m ? `${clock(m[1])} ${m[2]}` : l; });
   return (
-    <div className="stack rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3" aria-live="polite">
+    <div className="stack" aria-live="polite">
       <div className="flex min-h-6 flex-wrap items-center gap-2">
         <strong className="text-body">{st.action === "rollback" ? "切回" : "更新"} {st.from} → {st.version || "上一版本"}</strong>
         <Badge variant="soft" tone={st.state === "done" ? "ok" : st.state === "failed" ? "bad" : "neutral"}>{label}</Badge>
@@ -99,7 +103,7 @@ function UpdateStatus({ st }: { st?: Status }) {
       <Progress value={pct} aria-label="更新进度" />
       <small className={"block truncate " + (st.state === "failed" ? "text-[var(--weir-bad-ink)]" : "text-[var(--weir-ink-3)]")} title={line}>{line}</small>
       <Collapsible title={`日志（${st.logs.length} 行）`} defaultOpen={st.state === "failed"}>
-        <CodeBlock className="block h-56 overflow-auto whitespace-pre-wrap text-xs">{logs.join("\n") || "（还没有日志）"}</CodeBlock>
+        <CodeBlock className="block h-56 overflow-auto whitespace-pre-wrap text-meta">{logs.join("\n") || "（还没有日志）"}</CodeBlock>
       </Collapsible>
     </div>
   );

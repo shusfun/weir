@@ -77,7 +77,7 @@ export function AuditPage() {
   return (
     <div className="stack audit-directory">
       <PageHeader
-        title="操作记录"
+        title="操作审计"
         description="追踪账户、节点、订阅与设置的变更；节点是否生效以 VPS 回报的配置版本为准。"
         actions={
           <Button variant="outline" disabled={query.isFetching} onClick={() => query.refetch()}>

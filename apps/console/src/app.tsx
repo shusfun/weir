@@ -166,7 +166,7 @@ function Console() {
               <Route path="/linkmap" element={guard(<LinkMapPage admin />)} />
               <Route path="/links" element={<LinksPage admin={admin} />} />
               <Route path="/proxy" element={<ProxyPage admin={admin} />} />
-              {/* 旧地址：「我的订阅」并进了订阅管理 */}
+              {/* 旧地址：「我的订阅」并进了订阅链接 */}
               <Route path="/subscription" element={<Navigate to="/links" replace />} />
               <Route path="/my/linkmap" element={<LinkMapPage admin={false} />} />
               <Route path="/security" element={<SecurityPage loginRequired={loginRequired} />} />

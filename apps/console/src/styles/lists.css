@@ -19,21 +19,21 @@
 }
 
 /*
- * 分组列表（规范第 8 条）：没有外层卡片内边距的列表（卡片里的一组可点行）自己画成一块圆角 12 的分组，
- * 行间分隔线从左侧内边距处开始（缩进）、不贯穿；行高不小于 44。行里可点的整行用 .group-row-button。
+ * 分组列表（规范第 8 条）：卡片里的一组行。外层卡片已是一组，这里不再画灰块，只有行间分隔线；
+ * 行高不小于 44。行里可点的整行用 .group-row-button。
  */
-.group-list { margin: 0; padding: 0; list-style: none; overflow: hidden; border-radius: var(--weir-radius-card); background: var(--weir-well); }
+.group-list { margin: 0; padding: 0; list-style: none; }
 .group-list > li { position: relative; min-height: var(--weir-tap-touch); }
-.group-list > li + li::before { content: ""; position: absolute; top: 0; right: 0; left: var(--weir-space-3); height: 1px; background: var(--weir-line-soft); pointer-events: none; z-index: 1; }
-.group-list > li.group-row { padding: var(--weir-space-3); }
-.group-row-button { display: flex; align-items: center; gap: var(--weir-space-3); width: 100%; min-height: var(--weir-tap-touch); padding: var(--weir-space-2) var(--weir-space-3); text-align: left; }
+.group-list > li + li::before { content: ""; position: absolute; top: 0; right: 0; left: 0; height: 1px; background: var(--weir-line-soft); pointer-events: none; z-index: 1; }
+.group-list > li.group-row { padding-block: var(--weir-space-3); }
+.group-row-button { display: flex; align-items: center; gap: var(--weir-space-3); width: 100%; min-height: var(--weir-tap-touch); padding-block: var(--weir-space-2); text-align: left; }
 /* 行尾：次要文字 secondaryLabel，箭头 tertiaryLabel */
 .group-row-button > .group-row-chevron { flex-shrink: 0; width: 16px; height: 16px; color: var(--weir-ink-4); }
 
 /*
  * 设置分组（iOS 设置的开关行）：一组 SwitchField / CheckboxField（placement="end"）放进 .settings-group，
- * 画成圆角 12 的分组，行高 44，行间缩进的细分隔线，文字在左、控件靠右。
+ * 行高 44，行间细分隔线，文字在左、控件靠右。外层卡片已是一组，不再画灰块。
  */
-.settings-group { display: grid; overflow: hidden; border-radius: var(--weir-radius-card); background: var(--weir-well); }
-.settings-group > [data-slot=choice-field] { position: relative; min-height: var(--weir-tap-touch); padding: var(--weir-space-2) var(--weir-space-3); }
-.settings-group > [data-slot=choice-field] + [data-slot=choice-field]::before { content: ""; position: absolute; top: 0; right: 0; left: var(--weir-space-3); height: 1px; background: var(--weir-line-soft); pointer-events: none; }
+.settings-group { display: grid; }
+.settings-group > [data-slot=choice-field] { position: relative; min-height: var(--weir-tap-touch); padding-block: var(--weir-space-2); }
+.settings-group > [data-slot=choice-field] + [data-slot=choice-field]::before { content: ""; position: absolute; top: 0; right: 0; left: 0; height: 1px; background: var(--weir-line-soft); pointer-events: none; }

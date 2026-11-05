@@ -1,6 +1,6 @@
 // 标签键：一个可点的胶囊，带状态灯、名称与一段说明（如节点的「协议 · 端口」）。按下缩小并叠填充色，
 // 点开的弹窗从按下的位置展开。add 变体是虚线框的「＋ 新增」，与同一行的标签等高。桌面 32 高、触屏 44。
-// ChipLabel 是同样外观的只读标签（平放、不凸起），用在不能点的地方，不做成灰掉的按钮。
+// ChipLabel 是只读标签（浅灰底、无边框），用在不能点的地方，不做成灰掉的按钮。
 import type { ComponentProps, ReactNode } from "react";
 import { cn } from "cn";
 import { StatusLamp, type LampTone } from "./lamp";
@@ -20,9 +20,9 @@ function Chip({
       data-slot="chip"
       data-add={add || undefined}
       className={cn(
-        "weir-key relative inline-flex min-h-8 max-w-full min-w-0 items-center gap-2 rounded-full px-3 py-1 text-body font-medium select-none touch:min-h-11 touch:px-4 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-3.5 [&_svg]:shrink-0",
-        add && "weir-key-ghost border border-dashed border-[var(--weir-line)] text-[var(--weir-ink-2)] hover:text-[var(--weir-ink)]",
-        selected && "is-pressed",
+        "weir-key weir-input relative inline-flex min-h-8 max-w-full min-w-0 items-center gap-2 rounded-full px-3 py-1 text-body font-medium select-none touch:min-h-11 touch:px-4 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-3.5 [&_svg]:shrink-0",
+        add && "weir-key-ghost border-dashed border-[var(--weir-line)] bg-transparent text-[var(--weir-ink-2)] hover:text-[var(--weir-ink)]",
+        selected && "border-transparent bg-[var(--weir-accent-soft)] text-[var(--weir-accent-soft-ink)]",
         className,
       )}
       {...props}
@@ -39,7 +39,7 @@ function ChipLabel({ tone, meta, className, children, ...props }: ComponentProps
   return (
     <span
       data-slot="chip-label"
-      className={cn("inline-flex min-h-8 max-w-full min-w-0 items-center gap-2 rounded-full border border-transparent bg-[var(--weir-well)] px-3 py-1 text-body font-medium", className)}
+      className={cn("inline-flex min-h-8 max-w-full min-w-0 items-center gap-2 rounded-full border border-transparent bg-[var(--weir-fill-4)] px-3 py-1 text-body", className)}
       {...props}
     >
       {tone && <StatusLamp size="sm" tone={tone} />}

@@ -15,8 +15,8 @@ function InputGroup({ className, ...props }: ComponentProps<"div">) {
       data-slot="input-group"
       role="group"
       className={cn(
-        // 外框画填充底与焦点描边，里面的输入框透明；焦点只认输入框本身（组里的按钮聚焦时画按钮自己的焦点环）
-        "weir-well group/input-group relative flex h-8 w-full min-w-0 items-center transition-colors touch:h-11 has-[[data-slot=input-group-control]:focus]:outline-2 has-[[data-slot=input-group-control]:focus]:outline-offset-0 has-[[data-slot=input-group-control]:focus]:outline-[var(--weir-focus)] has-disabled:opacity-50 has-[[data-slot][aria-invalid=true]]:border-destructive has-[>[data-align=block-end]]:h-auto has-[>[data-align=block-end]]:flex-col has-[>[data-align=block-start]]:h-auto has-[>[data-align=block-start]]:flex-col has-[>textarea]:h-auto has-[>[data-align=block-end]]:[&>input]:pt-3 has-[>[data-align=block-start]]:[&>input]:pb-3 has-[>[data-align=inline-end]]:[&>input]:pr-1 has-[>[data-align=inline-start]]:[&>input]:pl-1",
+        // 外框画底色、细边框与焦点描边，里面的输入框透明；焦点只认输入框本身（组里的按钮聚焦时画按钮自己的焦点环）
+        "weir-input group/input-group relative flex h-8 w-full min-w-0 items-center transition-colors touch:h-11 has-[[data-slot=input-group-control]:focus]:outline-2 has-[[data-slot=input-group-control]:focus]:outline-offset-0 has-[[data-slot=input-group-control]:focus]:outline-[var(--weir-focus)] has-disabled:opacity-50 has-[[data-slot][aria-invalid=true]]:border-destructive has-[>[data-align=block-end]]:h-auto has-[>[data-align=block-end]]:flex-col has-[>[data-align=block-start]]:h-auto has-[>[data-align=block-start]]:flex-col has-[>textarea]:h-auto has-[>[data-align=block-end]]:[&>input]:pt-3 has-[>[data-align=block-start]]:[&>input]:pb-3 has-[>[data-align=inline-end]]:[&>input]:pr-1 has-[>[data-align=inline-start]]:[&>input]:pl-1",
         className,
       )}
       {...props}

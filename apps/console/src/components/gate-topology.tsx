@@ -40,7 +40,7 @@ export function GateTopology({ gateId, openRouting }: { gateId: number; openRout
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
         position: { x: col * colWidth, y },
-        data: { label: <span className="block text-left text-xs leading-tight"><strong className="block truncate">{n.label}</strong>{n.sub && <small className="block truncate text-[var(--weir-ink-3)]">{n.sub}</small>}</span>, link: n.link },
+        data: { label: <span className="block text-left text-meta leading-tight"><strong className="block truncate">{n.label}</strong>{n.sub && <small className="block truncate text-[var(--weir-ink-3)]">{n.sub}</small>}</span>, link: n.link },
         draggable: false,
         connectable: false,
         style: { width: nodeWidth, padding: "6px 8px", borderRadius: 8, borderColor: tone[n.kind], background: "var(--weir-panel)", color: "var(--weir-ink)", cursor: n.link ? "pointer" : "default" },

@@ -25,22 +25,22 @@ export interface NavItem {
   roles: "admin" | "user" | "all";
 }
 
-export const navGroups = ["工作区", "代理与订阅", "订阅与分发", "运维", "系统", "个人", "开发"] as const;
+export const navGroups = ["节点", "用户", "订阅源", "系统", "个人", "开发"] as const;
 
 export function visibleFor(item: NavItem, admin: boolean) {
   return item.roles === "all" || (item.roles === "admin") === admin;
 }
 
 export const navigation: NavItem[] = [
-  { key: "gates", path: "/gates", label: "VPS 与节点", icon: Server, group: "工作区", roles: "admin" },
-  { key: "kernels", path: "/kernels", label: "内核", icon: Cpu, group: "工作区", roles: "admin" },
-  { key: "users", path: "/users", label: "用户", icon: Users, group: "工作区", roles: "admin" },
-  { key: "linkmap", path: "/linkmap", label: "链路", icon: Globe2, group: "工作区", roles: "admin" },
-  { key: "proxy", path: "/proxy", label: "代理", icon: Route, group: "代理与订阅", roles: "all" },
-  { key: "links", path: "/links", label: "订阅管理", icon: Link2, group: "代理与订阅", roles: "all" },
-  { key: "subscriptions", path: "/subscriptions", label: "订阅源", icon: Rss, group: "订阅与分发", roles: "admin" },
-  { key: "pages", path: "/pages", label: "公开页面", icon: Megaphone, group: "订阅与分发", roles: "admin" },
-  { key: "audit", path: "/ops/audit", label: "操作审计", icon: ScrollText, group: "运维", roles: "admin" },
+  { key: "gates", path: "/gates", label: "VPS 与节点", icon: Server, group: "节点", roles: "admin" },
+  { key: "kernels", path: "/kernels", label: "内核", icon: Cpu, group: "节点", roles: "admin" },
+  { key: "linkmap", path: "/linkmap", label: "链路", icon: Globe2, group: "节点", roles: "admin" },
+  { key: "users", path: "/users", label: "用户", icon: Users, group: "用户", roles: "admin" },
+  { key: "proxy", path: "/proxy", label: "代理", icon: Route, group: "用户", roles: "all" },
+  { key: "links", path: "/links", label: "订阅链接", icon: Link2, group: "用户", roles: "all" },
+  { key: "subscriptions", path: "/subscriptions", label: "订阅源", icon: Rss, group: "订阅源", roles: "admin" },
+  { key: "pages", path: "/pages", label: "公开页面", icon: Megaphone, group: "订阅源", roles: "admin" },
+  { key: "audit", path: "/ops/audit", label: "操作审计", icon: ScrollText, group: "系统", roles: "admin" },
   { key: "system", path: "/system", label: "系统设置", icon: Settings2, group: "系统", roles: "admin" },
   { key: "my-linkmap", path: "/my/linkmap", label: "我的链路", icon: Globe2, group: "个人", roles: "user" },
   { key: "security", path: "/security", label: "账户安全", icon: ShieldCheck, group: "个人", roles: "user" },

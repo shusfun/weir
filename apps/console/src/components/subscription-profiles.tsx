@@ -220,7 +220,7 @@ function ProfilePreview({ profile, close }: { profile: Profile; close: () => voi
                 {q.data.check.error && <small className={q.data.check.status === "failed" ? "text-[var(--weir-bad-ink)]" : "text-[var(--weir-ink-3)]"}>{q.data.check.error}</small>}
               </div>
             )}
-            {q.data.output_error ? <Notice tone="bad">{q.data.output_error}</Notice> : <CodeBlock className="block max-h-[55vh] overflow-auto whitespace-pre text-xs">{q.data.output}</CodeBlock>}
+            {q.data.output_error ? <Notice tone="bad">{q.data.output_error}</Notice> : <CodeBlock className="block max-h-[55vh] overflow-auto whitespace-pre text-meta">{q.data.output}</CodeBlock>}
           </div>
         )}
       </DialogContent>
