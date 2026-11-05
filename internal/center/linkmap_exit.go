@@ -78,9 +78,13 @@ func (s *Server) chainExit(ctx context.Context, ch *ent.Chain, entryGate int, ga
 	return e
 }
 
-// nodeChainExit 是节点自己的出口：直接出去，或管理员在建节点第 ③ 步配的链式代理。
+// nodeChainExit 是节点自己的出口：直接出去，或管理员在建节点的出口配的链式代理。
 func (s *Server) nodeChainExit(ctx context.Context, n *ent.Node, gates map[int]*mapGate, nodes map[int]*ent.Node) *mapExit {
 	if n.ChainKind == node.ChainKindNone {
+		// 只对这个节点、不限域名的分流规则等于整个节点走那个出口。
+		if o := s.nodeWholeRoute(ctx, n); o != nil {
+			return s.outExit(ctx, o, gates)
+		}
 		e := &mapExit{ID: "direct:" + itoa(n.GateID), Kind: "direct", FromGate: n.GateID, Owner: "admin", Sub: "从这台 VPS 直接访问目标", tag: "direct"}
 		e.Label = exitLabels["direct"]
 		if g := gates[n.GateID]; g != nil {

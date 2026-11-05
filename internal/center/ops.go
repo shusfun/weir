@@ -9,6 +9,7 @@ import (
 
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/audit"
+	"github.com/shusfun/weir/internal/store/ent/predicate"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -34,10 +35,16 @@ func (s *Server) listAudit(c *gin.Context) {
 			failure(c, 400, "invalid_query")
 			return
 		}
-		q = q.Where(audit.Or(audit.ActionContains(v), audit.TargetContains(v)))
+		// 页面显示中文操作名，按中文搜也要能找到。
+		cond := []predicate.Audit{audit.ActionContains(v), audit.TargetContains(v)}
+		if codes := auditActionsMatching(v); len(codes) > 0 {
+			cond = append(cond, audit.ActionIn(codes...))
+		}
+		q = q.Where(audit.Or(cond...))
 	}
 	if v := c.Query("result"); v != "" {
-		q = q.Where(audit.ResultEQ(v))
+		// 结果可能带附加信息（如「ok chains=0」）：按第一个词筛选。
+		q = q.Where(audit.Or(audit.ResultEQ(v), audit.ResultHasPrefix(v+" ")))
 	}
 	// id：只取这一条（对象链接打开某条审计时用）
 	if v, err := strconv.Atoi(c.Query("id")); err == nil && v > 0 {
@@ -54,9 +61,10 @@ func (s *Server) listAudit(c *gin.Context) {
 		failInternal(c, 503, "query_failed", err)
 		return
 	}
+	actors := map[int]string{}
 	out := make([]gin.H, 0, len(items))
 	for _, a := range items {
-		out = append(out, gin.H{"id": a.ID, "actor": a.Actor, "action": a.Action, "target": a.Target, "result": a.Result, "ip": a.IP, "created_at": a.CreatedAt})
+		out = append(out, gin.H{"action_label": auditActionLabel(a.Action), "actor_name": s.auditActorName(ctx, a.Actor, actors), "target_name": s.auditTargetName(ctx, a.Target), "id": a.ID, "actor": a.Actor, "action": a.Action, "target": a.Target, "result": a.Result, "ip": a.IP, "created_at": a.CreatedAt})
 	}
 	c.JSON(200, gin.H{"items": out, "total": total, "page": page, "page_size": size})
 }

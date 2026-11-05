@@ -87,7 +87,7 @@ export function GateRouting({ gate, close }: { gate: Gate; close: () => void }) 
         {routes.isPending || routes.error ? (
           <State loading={routes.isPending} error={routes.error} onRetry={() => routes.refetch()} />
         ) : routes.data.length === 0 ? (
-          <State empty="还没有分流规则" />
+          <State empty="还没有分流规则" detail="要让某些网站从指定出口出去时加一条，例如流媒体走家宽。" />
         ) : (
           <ul className="stack">
             {routes.data.map((r) => (

@@ -38,7 +38,7 @@ export function TemplatesPanel() {
             ))}
           </ul>
           {t.data.custom.length === 0 ? (
-            <State empty="还没有自定义模板" />
+            <State empty="还没有自定义模板" detail="内置模板够用时不需要；要自定义策略组和规则时再加。" />
           ) : (
             <ul className="stack">
               {t.data.custom.map((c) => (

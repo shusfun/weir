@@ -13,11 +13,14 @@ description: 管理员要新建节点、推荐协议、节点连不上或速度�
 
 ## 新建节点
 
+0. 建议先 `list_presets`（带 `gate_id`）：`available: false` 的方案这台 VPS 现在用不了，`why` 是原因，不要提交去试。
 1. 按场景选方案：需要抗探测、不确定网络时用 REALITY 类方案；UDP 受限时避开 Hysteria2 / TUIC；只需要轻量中转时用 Shadowsocks 2022。说明理由与代价。
 2. 端口：不指定时系统自动分配（REALITY 优先 443）。管理员想要某个端口时先 `check_port`。
 3. REALITY 伪装目标：不填时由 VPS 实测内置候选站点、取最快的；管理员想先看候选站点时调用 `probe_reality`。
-4. 提交 `node.create` 草稿。可以把后续步骤拼进同一份草稿：`node.create`（as: n）→ `user.create` 或 `user.update`（node_ids 含 "$n"）→ `link.create`。
-5. 试运行会在 VPS 上用真实内核实测；不通过时按返回的原因改（换伪装目标、换端口、换方案）后重新提交。
+4. 节点的全部流量要从别处出去（链式）：直接用 `node.create` 的 `chain_kind`（socks5 / http / https / link / node / source），代理填 `chain_address`、`chain_port`、`chain_username`，`chain_password` / `chain_link` 留给管理员在确认窗里填；不要绕道建出口加分流规则，那样节点会显示成「直接出去」。确认时 VPS 会真连一次出口与节点，不通就不生效。
+5. 提交 `node.create` 草稿。可以把后续步骤拼进同一份草稿：`node.create`（as: n）→ `user.create` 或 `user.update`（node_ids 含 "$n"）→ `link.create`。
+6. 一次要建几个节点时放进同一份草稿，不要拆开。
+7. 试运行会在 VPS 上用真实内核实测；不通过时按返回的原因改（换伪装目标、换端口、换方案）后重新提交。
 
 ## 调整与排查
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -42,6 +43,8 @@ type opSpec struct {
 	probe bool
 	// needs 返回这次必须由管理员在确认窗里填的机密参数（按协议等条件才需要的）。
 	needs func(args map[string]any) []string
+	// secrets 返回这次用得上的机密参数：其余的不在确认窗里出现（如直连节点不问代理密码）。不给时全部出现。
+	secrets func(args map[string]any) []string
 	// noUndo 表示这项修改没有可靠的撤回办法（如重新分配会换新的订阅地址）。
 	noUndo bool
 	title  func(ctx context.Context, s *Server, p *planCtx, args map[string]any) string
@@ -82,6 +85,10 @@ func pendingRefs(params []Param, args map[string]any) []string {
 			if isRef(v) {
 				out = append(out, pa.Key)
 			}
+		case "string":
+			if pa.TagRef && isRef(v) {
+				out = append(out, pa.Key)
+			}
 		case "refs":
 			list, _ := v.([]any)
 			for _, item := range list {
@@ -113,6 +120,12 @@ func resolveRefs(x *execCtx, params []Param, args map[string]any) map[string]any
 		switch v := out[pa.Key]; pa.Kind {
 		case "ref":
 			out[pa.Key] = sub(v)
+		case "string":
+			if str, ok := v.(string); ok && pa.TagRef && strings.HasPrefix(str, "$") {
+				if tag, ok := x.tags[str[1:]]; ok {
+					out[pa.Key] = tag
+				}
+			}
 		case "refs":
 			if list, ok := v.([]any); ok {
 				ids := make([]any, len(list))
@@ -153,6 +166,25 @@ func missingSecrets(c Capability, args map[string]any) []string {
 				out = append(out, pa.Label)
 			}
 		}
+	}
+	return out
+}
+
+// relevantSecrets 去掉这次用不上的机密字段，并把必须填的标为必填（确认窗据此提示）。
+func relevantSecrets(c Capability, args map[string]any, missing []string, fields []StepField) []StepField {
+	var keep []string
+	if c.op.secrets != nil {
+		keep = c.op.secrets(args)
+	}
+	out := fields[:0]
+	for _, f := range fields {
+		if f.Secret && c.op.secrets != nil && !containsStr(keep, f.Key) {
+			continue
+		}
+		if f.Secret && containsStr(missing, f.Label) {
+			f.Required = true
+		}
+		out = append(out, f)
 	}
 	return out
 }
@@ -244,6 +276,7 @@ func planOp(c Capability) func(ctx context.Context, s *Server, p *planCtx, st *D
 			eff = merged(before, st.Args)
 		}
 		missing := missingSecrets(c, eff)
+		st.Fields = relevantSecrets(c, eff, missing, st.Fields)
 		if len(pending) > 0 || len(missing) > 0 {
 			st.Tested, st.Checked, st.Result = "", nil, nil
 			if len(missing) > 0 {
@@ -294,10 +327,10 @@ func planOp(c Capability) func(ctx context.Context, s *Server, p *planCtx, st *D
 				}
 			}
 			if pinned {
-				st.Fields = s.fields(ctx, p, c.Params, st.Args)
 				if eff = st.Args; o.full && before != nil {
 					eff = merged(before, st.Args)
 				}
+				st.Fields = relevantSecrets(c, eff, missing, s.fields(ctx, p, c.Params, st.Args))
 				if _, _, _, h, err = request(eff); err != nil {
 					return err
 				}
@@ -337,12 +370,18 @@ func execOp(c Capability) func(ctx context.Context, s *Server, x *execCtx, st *D
 		if o.query != nil {
 			q = o.query(eff)
 		}
-		if code, out := call(x.actor, o.handler(s), o.method, params, q, body, false); code >= 300 {
+		code, out := call(x.actor, o.handler(s), o.method, params, q, body, false)
+		if code >= 300 {
 			return nil, handlerError(code, out)
-		} else if o.kind == "create" {
+		}
+		x.touched(c, args, params, numberOf(out["id"]))
+		if o.kind == "create" {
 			id := numberOf(out["id"])
 			if st.As != "" {
 				x.created[st.As] = id
+				if tag, _ := args["tag"].(string); tag != "" {
+					x.tags[st.As] = tag
+				}
 			}
 			del, ok := findOpCap(o.undo)
 			if !ok || id == 0 {
@@ -380,6 +419,32 @@ func execOp(c Capability) func(ctx context.Context, s *Server, x *execCtx, st *D
 			return nil
 		}, nil
 	}
+}
+
+// touched 记下这一步改动的节点与 VPS，确认后据此显示它们实际跑起来没有。
+func (x *execCtx) touched(c Capability, args map[string]any, params gin.Params, id int) {
+	switch {
+	case c.Object == "node" && c.op != nil && c.op.kind == "create":
+		x.nodes = append(x.nodes, id)
+	case c.Object == "node" && numberOf(args["node_id"]) > 0 && c.op != nil && c.op.kind != "delete":
+		x.nodes = append(x.nodes, numberOf(args["node_id"]))
+	}
+	gate := numberOf(args["gate_id"])
+	if v, err := strconv.Atoi(params.ByName("id")); err == nil && (c.Object == "outbound" || c.Object == "route") {
+		gate = v
+	}
+	if gate > 0 && !containsInt(x.gates, gate) {
+		x.gates = append(x.gates, gate)
+	}
+}
+
+func containsInt(list []int, v int) bool {
+	for _, x := range list {
+		if x == v {
+			return true
+		}
+	}
+	return false
 }
 
 func findOpCap(name string) (Capability, bool) {

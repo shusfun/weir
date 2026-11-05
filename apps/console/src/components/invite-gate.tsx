@@ -116,7 +116,6 @@ function SSHInstall({ name, setName, close, done }: { name: string; setName: (v:
       </Form>
     );
   }
-  const ready = name.trim() && host.trim() && user.trim() && (auth === "password" ? password : key.trim() && !keyProblem(key));
   return (
     <Form id={formId} busy={check.busy} errors={check.errors} onSubmit={() => void check.submit()}>
       <NameField name={name} setName={setName} />
@@ -161,7 +160,7 @@ function SSHInstall({ name, setName, close, done }: { name: string; setName: (v:
       <small className="text-[var(--weir-ink-3)]">登录信息只用于这一次安装：不保存、不写日志，也不会交给 AI。中心只执行固定的安装命令，装完断开。</small>
       <DialogFooter error={check.error} status={check.wait && <WaitText wait={check.wait} />}>
         <Button type="button" variant="outline" disabled={check.busy} onClick={close}>取消</Button>
-        <Button type="submit" form={formId} disabled={!ready} busy={check.busy} busyText="正在连接…">连接并核对指纹</Button>
+        <Button type="submit" form={formId} busy={check.busy} busyText="正在连接…">连接并核对指纹</Button>
       </DialogFooter>
     </Form>
   );
@@ -198,7 +197,7 @@ function CommandInstall({ name, setName, close, done }: { name: string; setName:
       <NameField name={name} setName={setName} />
       <DialogFooter error={invite.error}>
         <Button type="button" variant="outline" disabled={invite.busy} onClick={close}>取消</Button>
-        <Button type="submit" form={formId} disabled={!name.trim()} busy={invite.busy} busyText="正在生成…">生成安装命令</Button>
+        <Button type="submit" form={formId} busy={invite.busy} busyText="正在生成…">生成安装命令</Button>
       </DialogFooter>
     </Form>
   );

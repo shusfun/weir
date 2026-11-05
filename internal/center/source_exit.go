@@ -23,7 +23,7 @@ import (
 	"github.com/shusfun/weir/packages/contracts"
 )
 
-// 订阅源里的节点作出口（分流规则的出口、链式代理第 ③ 步、用户自建链式代理共用）：
+// 订阅源里的节点作出口（分流规则的出口、建节点的出口、用户自建链式代理共用）：
 //   - 单个节点：名称完全一致；
 //   - 一组：名称正则筛选，全部成员都下发给 Gate，由内核按延迟自动选、出故障自动切换（中心不替内核挑节点），最多 50 个；
 //     内核版本不支持时保存报错，不悄悄退回单个节点。
@@ -342,7 +342,7 @@ func (s *Server) RefreshSourceExits(ctx context.Context) {
 }
 
 // chainSources 列出链式代理出口可以选的订阅节点：
-//   - 管理员（/admin/chain-sources，建节点第 ③ 步与分流规则）：全部订阅源及其节点名；
+//   - 管理员（/admin/chain-sources，建节点的出口与分流规则）：全部订阅源及其节点名；
 //   - 用户自建（/me/chain-sources，或管理员代建 /admin/users/:uid/chain-sources）：只有分配给该用户的订阅组及组里的节点名。
 func (s *Server) chainSources(c *gin.Context, admin bool) {
 	ctx := c.Request.Context()

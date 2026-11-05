@@ -42,7 +42,7 @@ export function CertManager({ open, close }: { open: boolean; close: () => void 
         {certs.isPending || certs.error ? (
           <State loading={certs.isPending} error={certs.error} onRetry={() => certs.refetch()} />
         ) : certs.data.length === 0 ? (
-          <State empty="还没有证书" />
+          <State empty="还没有证书" detail="建节点时系统会自动准备证书。只有想用自己的证书时才需要在这里添加。" />
         ) : (
           <ul className="stack" aria-label="证书列表">
             {certs.data.map((c) => (

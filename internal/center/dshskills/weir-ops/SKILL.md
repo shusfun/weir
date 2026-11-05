@@ -7,7 +7,7 @@ description: 管理员要开用户、分节点、建订阅链接与设生效时�
 
 ## 拼一份草稿
 
-- 一件事拆成几步放进同一份草稿：新建对象的步骤用 `as` 起名，后面的步骤用 `"$名字"` 引用。确认时按顺序执行，任一步失败，能撤回的全部撤回。
+- 一件事拆成几步放进同一份草稿，不要提交几份让管理员按顺序点：新建对象的步骤用 `as` 起名，后面的步骤用 `"$名字"` 引用（包括 `route.create` 的 `outbound_tag`）。确认时按顺序执行，任一步失败，能撤回的全部撤回。
 - 先用只读工具查清楚现状和编号，再拼参数；`list_actions` 里有每项能力的参数说明。
 - 标了「机密」的参数（订阅地址、代理密码、节点链接）不要填，管理员在对话里贴了也不要填：留空提交，告诉管理员在确认窗里粘贴。
 - 删除类和不能撤回的能力只能是最后一步；删除类确认时要当前密码与二次验证码。先说明影响。
@@ -24,7 +24,7 @@ description: 管理员要开用户、分节点、建订阅链接与设生效时�
   - 自动选择：`proxy.update` 的 `auto_mode`（latency 客户端测延迟 / ranked 按速率排序）、`auto_top`、`refresh_minutes`（最短 30）。
   - 速率来自各节点自己统计的下载流量（近 24 小时有流量的分钟的第 90 百分位）；`rate.minutes` 为 0 是没有数据，说「未知」，不要说成 0 或慢。
   - 给一类节点统一加出口：`proxy.type_exit`（代理密码、节点链接留给管理员填；会逐个节点实测，有一个不通就不保存）；去掉用 `proxy.type_exit_delete`。两者都不能撤回，只能是最后一步。
-- **流媒体走家宽（VPS 上分流）**：`list_outbounds` 看已有出口；没有就 `outbound.create`（SOCKS5 / HTTP 代理，密码留给管理员填）→ `route.create`（domain 如 `geosite:netflix`，outbound_tag 填出口标签）。先 `probe_outbound` 实测出口能不能连上。
+- **流媒体走家宽（VPS 上分流）**：`list_outbounds` 看已有出口；没有就 `outbound.create`（as: home；SOCKS5 / HTTP 代理，密码留给管理员填）→ `route.create`（domain 如 `geosite:netflix`，outbound_tag 填 `"$home"`）。确认时 VPS 会真连一次新出口，不通就不生效；已有出口用 `probe_outbound` 实测。一个节点的全部流量都走某个代理时不用这个办法，用 weir-node 里的 `chain_kind`。
 - **订阅源**：`list_sources` / `list_profiles` / `list_templates` 看现状；`source.create`（订阅地址留给管理员填）→ `source.refresh` → `profile.create`（source_ids 含 "$名字"）→ `profile.grant`（完整的用户名单）。
 - **内核**：`list_kernels` 看已下载的版本，`list_kernel_releases` 看可下载的版本，`kernel.fetch` 下载；内核卡住时 `kernel.restart`（节点会断开几秒）。新版本需要新驱动时用 weir-driver。
 - **证书**：`list_certs` 看到期与续签错误，`cert.renew` 立即续签中心签发的证书。

@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/shusfun/weir/internal/kernelconf"
+	"github.com/shusfun/weir/internal/store/ent"
 )
 
 // Preset 是建节点方案：来自内核驱动（kernelconf.Preset），加上它属于哪个内核。
@@ -194,4 +195,34 @@ func realityKeyPair() (string, string, error) {
 	}
 	enc := base64.RawURLEncoding
 	return enc.EncodeToString(key.Bytes()), enc.EncodeToString(key.PublicKey().Bytes()), nil
+}
+
+// GatePreset 是一个协议方案在某台 VPS 上现在能不能用。
+type GatePreset struct {
+	Preset
+	Available bool   `json:"available"`
+	Why       string `json:"why,omitempty"`
+}
+
+// presetsForGate 不做任何写入与申请，只按已有状态判断；REALITY 能否握手要实测，这里不算不可用。
+func (s *Server) presetsForGate(ctx context.Context, g *ent.Gate) []GatePreset {
+	base := s.presets(ctx)
+	out := make([]GatePreset, 0, len(base))
+	certWhy, certKnown := "", false
+	for _, p := range base {
+		item := GatePreset{Preset: p, Available: true}
+		switch {
+		case g.PublicHost == "":
+			item.Available, item.Why = false, "这台 VPS 还没有公网地址，先在 VPS 详情里填写"
+		case p.Cert == "required":
+			if !certKnown {
+				certWhy, certKnown = s.certBlocker(ctx, g), true
+			}
+			if certWhy != "" {
+				item.Available, item.Why = false, certWhy
+			}
+		}
+		out = append(out, item)
+	}
+	return out
 }

@@ -43,7 +43,7 @@ export function NodesPanel() {
           skeleton={<SkeletonList rows={3} lines={2} className="stack rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3" rowClassName="flex items-center justify-between gap-2" />}
         />
       ) : q.data.items.length === 0 ? (
-        <State empty="还没有手动节点" />
+        <State empty="还没有手动节点" detail="手动节点是不来自订阅的单条节点，可以和订阅源一起放进订阅组。" />
       ) : (
         groups.map((g) => (
           <div key={g || "_"} className="stack rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3">

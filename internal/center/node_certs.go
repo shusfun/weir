@@ -504,6 +504,26 @@ func (s *Server) ipCertFor(ctx context.Context, g *ent.Gate) (*ent.Certificate, 
 	return c, nil
 }
 
+// certBlocker 是这台 VPS 拿不到可信证书的原因（与 ipCertFor、edgeCert 同一套条件，但不申请）；能拿到时为空。
+func (s *Server) certBlocker(ctx context.Context, g *ent.Gate) string {
+	for _, src := range []certificate.Source{certificate.SourcePanel, certificate.SourceAcme} {
+		if s.gateCert(ctx, g.ID, src) != nil {
+			return ""
+		}
+	}
+	if s.nodeCertSettings(ctx).EdgeDomain != "" {
+		return ""
+	}
+	if net.ParseIP(g.PublicHost) == nil {
+		return "公网地址不是 IP，也没有设置节点证书域名"
+	}
+	ok, reason := panelReady(g)
+	if ok || s.port80Free(ctx, g) || g.Panel["kind"] == "baota" && g.Panel["http01_webroot"] == true {
+		return ""
+	}
+	return reason + "；80 端口被其他程序占用（或 VPS 还没有上报端口），也没有设置节点证书域名"
+}
+
 // panelCert 让 Gate 经本机 1Panel 申请 IP 证书；私钥留在 Gate，中心只记证书与指纹。
 func (s *Server) panelCert(ctx context.Context, g *ent.Gate, ip string) (*ent.Certificate, error) {
 	c, err := s.Store.Ent.Certificate.Create().SetName(g.Name + " 1Panel 证书").SetDomain(ip).SetSource(certificate.SourcePanel).SetGateID(g.ID).

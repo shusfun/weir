@@ -134,7 +134,7 @@ func mcpToolsFor(source string) []mcpTool {
 	tools = append(tools,
 		mcpTool{"list_actions", "列出可以提交草稿的能力：名称、用途、风险、参数说明（中文名、单位、可选值、引用类型）。拼草稿前先读。", obj(map[string]any{})},
 		mcpTool{"submit_draft", "提交草稿。Weir 用手动操作的同一套校验试运行：不通过会返回原因（可以修改后重新提交）；通过后弹出 Weir 的确认窗，管理员确认才生效，你无法确认。" +
-			fmt.Sprintf("一份草稿可以有 1 到 %d 步，把多项能力拼成一件事（如建节点 → 建用户分配这个节点 → 建链接）：新建对象的步骤用 as 起名，后面的步骤用 \"$名字\" 引用；任一步失败，能撤回的全部撤回。", maxDraftSteps) +
+			fmt.Sprintf("一份草稿可以有 1 到 %d 步，把多项能力拼成一件事（如建节点 → 建用户分配这个节点 → 建链接）：新建对象的步骤用 as 起名，后面的步骤用 \"$名字\" 引用；任一步失败，能撤回的全部撤回。一件事只提交一份草稿，不要拆成几份让管理员按顺序点。", maxDraftSteps) +
 			"标了机密（secret）的参数不要填，留空提交，由管理员在确认窗里直接填。可提交的能力：" + strings.Join(actions, "、"),
 			obj(map[string]any{
 				"explain": map[string]any{"type": "string", "description": "一句中文说明：为什么这样做。"},
@@ -314,12 +314,19 @@ func (s *Server) callTool(ctx context.Context, source, name string, raw json.Raw
 		}
 	}
 	switch name {
-	case "get_console_context", "navigate_console":
+	case "get_console_context", "navigate_console", "withdraw_draft":
 		if source != "dsh" {
 			return "后台分析不能使用这个工具", true
 		}
 		if name == "get_console_context" {
 			return jsonText(s.consoleContextForModel(ctx)), false
+		}
+		if name == "withdraw_draft" {
+			id, _ := args["draft"].(string)
+			if err := s.withdrawDraft(ctx, id); err != nil {
+				return "不能撤回：" + err.Error(), true
+			}
+			return "已撤回，管理员不会再看到这份草稿。", false
 		}
 		if err := s.queueNavigation(ctx, args); err != nil {
 			return "不能跳转：" + err.Error(), true
@@ -358,7 +365,7 @@ func (s *Server) callTool(ctx context.Context, source, name string, raw json.Raw
 		for _, st := range d.Steps {
 			titles = append(titles, st.Title)
 		}
-		return fmt.Sprintf("试运行通过，已弹窗请管理员确认（草稿 %s）：%s。在管理员确认前不会生效。", d.ID, strings.Join(titles, "；")), false
+		return fmt.Sprintf("试运行通过，已弹窗请管理员确认（草稿编号 %s，只用于 withdraw_draft；对管理员用标题称呼它，不要报编号）：%s。在管理员确认前不会生效；结果下一轮从 get_console_context 的 drafts 读取。", d.ID, strings.Join(titles, "；")), false
 	}
 	c, ok := findCap(source, name)
 	if !ok || c.Kind != "read" {

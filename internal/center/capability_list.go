@@ -74,8 +74,14 @@ var nodeCreateParams = []Param{
 	{Key: "reality_target", Label: "伪装目标", Kind: "string", Hint: "只用于 REALITY 方案，如 www.microsoft.com；不填时由 VPS 实测内置候选站点，取最快且连得通的"},
 	{Key: "cert_id", Label: "证书", Kind: "ref", Ref: "cert", Hint: "只用于需要证书的方案；不填时由中心为这台 VPS 准备"},
 	{Key: "settings", Label: "高级参数", Kind: "object", Hint: "只能改方案 fields 里列出的字段"},
-	{Key: "chain_kind", Label: "出口", Kind: "enum", Options: [][2]string{{"none", "直接出去"}, {"node", "经另一台 VPS 上的节点"}, {"source", "经订阅源里的节点"}},
-		Hint: "SOCKS5 / HTTP 代理或节点链接出口带密码，请改用 outbound.create 建出口再加分流规则"},
+	{Key: "chain_kind", Label: "出口", Kind: "enum", Options: [][2]string{{"none", "直接出去"}, {"node", "经另一台 VPS 上的节点"}, {"source", "经订阅源里的节点"},
+		{"socks5", "经 SOCKS5 代理"}, {"http", "经 HTTP 代理"}, {"https", "经 HTTPS 代理"}, {"link", "经节点链接"}},
+		Hint: "这个节点的全部流量从这里出去；要按网站分流才用 outbound.create 加 route.create"},
+	{Key: "chain_address", Label: "代理地址", Kind: "string", Hint: "代理类出口填写，只能是公网地址"},
+	{Key: "chain_port", Label: "代理端口", Kind: "int", Min: num(1), Max: num(65535)},
+	{Key: "chain_username", Label: "代理用户名", Kind: "string"},
+	{Key: "chain_password", Label: "代理密码", Kind: "string", Secret: true, Hint: "由管理员在确认窗里填，草稿里留空"},
+	{Key: "chain_link", Label: "出口节点链接", Kind: "string", Secret: true, Hint: "由管理员在确认窗里粘贴，草稿里留空"},
 	{Key: "chain_node_id", Label: "出口节点", Kind: "ref", Ref: "node"},
 	{Key: "chain_source_id", Label: "出口订阅源", Kind: "ref", Ref: "source"},
 	{Key: "chain_mode", Label: "选择方式", Kind: "enum", Options: [][2]string{{"node", "指定一个节点"}, {"filter", "按名称筛选一组，由内核自动选择"}}},
@@ -89,8 +95,45 @@ func nodeCreateBody(args map[string]any) map[string]any {
 		body["chain"] = map[string]any{"kind": "node", "node_id": args["chain_node_id"]}
 	case "source":
 		body["chain"] = map[string]any{"kind": "source", "source_id": args["chain_source_id"], "mode": args["chain_mode"], "match": args["chain_match"]}
+	case "socks5", "http", "https":
+		body["chain"] = map[string]any{"kind": kind, "address": args["chain_address"], "port": args["chain_port"], "username": args["chain_username"], "password": args["chain_password"]}
+	case "link":
+		body["chain"] = map[string]any{"kind": kind, "link": args["chain_link"]}
 	}
 	return body
+}
+
+func nodeCreateSecrets(args map[string]any) []string {
+	switch args["chain_kind"] {
+	case "socks5", "http", "https":
+		return []string{"chain_password"}
+	case "link":
+		return []string{"chain_link"}
+	}
+	return nil
+}
+
+func outboundSecrets(args map[string]any) []string {
+	switch args["protocol"] {
+	case "socks", "http", "https":
+		return []string{"password"}
+	case "link":
+		return []string{"link"}
+	}
+	return nil
+}
+
+// nodeCreateNeeds：代理出口有用户名就必须有密码，节点链接必填；没填的出口实测不了，保存下来也连不上。
+func nodeCreateNeeds(args map[string]any) []string {
+	switch args["chain_kind"] {
+	case "socks5", "http", "https":
+		if user, _ := args["chain_username"].(string); strings.TrimSpace(user) != "" {
+			return []string{"chain_password"}
+		}
+	case "link":
+		return []string{"chain_link"}
+	}
+	return nil
 }
 
 func nodeCreateTitle(ctx context.Context, s *Server, p *planCtx, args map[string]any) string {
@@ -147,8 +190,14 @@ func outboundParams(update bool) []Param {
 }
 
 func outboundNeeds(args map[string]any) []string {
-	if args["protocol"] == "link" {
+	switch args["protocol"] {
+	case "link":
 		return []string{"link"}
+	case "socks", "http", "https":
+		// 有用户名就必须有密码：缺了能保存，但出口实际连不上。
+		if user, _ := args["username"].(string); strings.TrimSpace(user) != "" {
+			return []string{"password"}
+		}
 	}
 	return nil
 }
@@ -190,7 +239,7 @@ func routeParams(update bool) []Param {
 		first = Param{Key: "route_id", Label: "分流规则", Kind: "ref", Ref: "route", Required: true}
 	}
 	ps := []Param{first,
-		{Key: "outbound_tag", Label: "出口", Kind: "string", Required: !update, Hint: "出口标签，见 list_outbounds；direct 为直连"},
+		{Key: "outbound_tag", Label: "出口", Kind: "string", TagRef: true, Required: !update, Hint: "出口标签，见 list_outbounds；direct 为直连；同一份草稿里新建的出口写 \"$名字\""},
 		{Key: "domain", Label: "域名", Kind: "string", Hint: "每行或逗号一条：domain:netflix.com、geosite:disney、full:api.example.com"},
 		{Key: "ip", Label: "IP", Kind: "string", Hint: "每行或逗号一条：1.1.1.1/32、geoip:jp"},
 		{Key: "node_id", Label: "只对这个节点", Kind: "ref", Ref: "node"},
@@ -373,7 +422,7 @@ var opDraftCaps = []Capability{
 	{Name: "node.create", Title: "新建节点", Purpose: "在一台 VPS 上按协议方案新建节点，与手动「新建节点」同一流程：分配端口、准备证书、REALITY 由 VPS 实测伪装目标，保存前在这台 VPS 上用真实内核实测连接；试运行通过才弹窗，确认后按试运行定下的端口与伪装目标保存。",
 		Kind: "draft", Risk: "normal", Object: "node", Creates: true, Params: nodeCreateParams,
 		op: &opSpec{kind: "create", method: "POST", handler: h(func(s *Server) gin.HandlerFunc { return s.createNode }), path: noPath, body: nodeCreateBody,
-			probe: true, undo: "node.delete", idKey: "node_id", title: nodeCreateTitle}},
+			probe: true, undo: "node.delete", idKey: "node_id", title: nodeCreateTitle, needs: nodeCreateNeeds, secrets: nodeCreateSecrets}},
 	{Name: "node.delete", Title: "删除节点", Purpose: "删除节点及其用户凭据与分流规则；已导入客户端的这个节点随即失效。被其他节点当作出口时拒绝；被用户自建链式代理当作出口时要 force 才一并删除。不能撤回，只能是最后一步。",
 		Kind: "draft", Risk: "danger", Object: "node", Last: true,
 		Params: []Param{{Key: "node_id", Label: "节点", Kind: "ref", Ref: "node", Required: true}, {Key: "force", Label: "一并删除依赖它的用户链式代理", Kind: "bool"}},
@@ -388,11 +437,11 @@ var opDraftCaps = []Capability{
 	{Name: "outbound.create", Title: "新建出口", Purpose: "在一台 VPS 上新建出口（SOCKS5 / HTTP / HTTPS 代理、节点链接、订阅源里的节点、直连、丢弃）；出口要由分流规则引用才有流量。保存前确认这台 VPS 上用到的每个内核都能连接它。",
 		Kind: "draft", Risk: "normal", Object: "outbound", Creates: true, Params: outboundParams(false),
 		op: &opSpec{kind: "create", method: "POST", handler: h(func(s *Server) gin.HandlerFunc { return s.saveOutbound }), path: keys("gate_id", "id"), pathKeys: []string{"gate_id"},
-			needs: outboundNeeds, undo: "outbound.delete", idKey: "outbound_id"}},
+			needs: outboundNeeds, secrets: outboundSecrets, undo: "outbound.delete", idKey: "outbound_id"}},
 	{Name: "outbound.update", Title: "修改出口", Purpose: "修改出口；没给的字段保持原样（密码、节点链接不给就不改）。仍被启用的分流规则引用时不能改标签或停用。",
 		Kind: "draft", Risk: "normal", Object: "outbound", Params: outboundParams(true),
 		op: &opSpec{kind: "update", method: "PATCH", handler: h(func(s *Server) gin.HandlerFunc { return s.saveOutbound }), path: outboundPath, pathKeys: []string{"outbound_id"},
-			self: "outbound_id", load: loadOutbound, full: true, needs: outboundNeeds}},
+			self: "outbound_id", load: loadOutbound, full: true, needs: outboundNeeds, secrets: outboundSecrets}},
 	{Name: "outbound.delete", Title: "删除出口", Purpose: "删除出口；还有分流规则引用它时拒绝（先改规则）。不能撤回，只能是最后一步。",
 		Kind: "draft", Risk: "danger", Object: "outbound", Last: true, Params: []Param{{Key: "outbound_id", Label: "出口", Kind: "ref", Ref: "outbound", Required: true}},
 		op: &opSpec{kind: "delete", method: "DELETE", handler: h(func(s *Server) gin.HandlerFunc { return s.deleteOutbound }), path: outboundPath, pathKeys: []string{"outbound_id"}, self: "outbound_id"}},
@@ -516,8 +565,16 @@ func listOf[T any](items []T, view func(T) any) []any {
 }
 
 var opReadCaps = []Capability{
-	{Name: "list_presets", Title: "协议方案", Purpose: "列出建节点可选的协议方案（就是「新建节点」第 1 步的选项）：编号、名称、说明、内核、协议、传输、安全（reality / tls / none）、是否需要证书、能否作出口，以及「高级」里可以改的字段。推荐协议前先读，不要凭印象。", Kind: "read",
-		read: func(ctx context.Context, s *Server, _ map[string]any) (any, error) {
+	{Name: "list_presets", Title: "协议方案", Purpose: "列出建节点可选的协议方案（就是「新建节点」第 1 步的选项）：编号、名称、说明、内核、协议、传输、安全（reality / tls / none）、是否需要证书、能否作出口，以及「高级」里可以改的字段。给 gate_id 时还返回这台 VPS 现在能不能用（available）及原因（why），先看这个再选方案，不要逐个提交草稿试错。推荐协议前先读，不要凭印象。", Kind: "read",
+		Params: []Param{{Key: "gate_id", Label: "VPS", Kind: "ref", Ref: "gate"}},
+		read: func(ctx context.Context, s *Server, args map[string]any) (any, error) {
+			if id := numberOf(args["gate_id"]); id > 0 {
+				g, err := s.Store.Ent.Gate.Get(ctx, id)
+				if err != nil {
+					return nil, errors.New("VPS 不存在")
+				}
+				return toModel(s.presetsForGate(ctx, g)), nil
+			}
 			return toModel(s.presets(ctx)), nil
 		}},
 	{Name: "get_gate", Title: "VPS 详情", Purpose: "读取一台 VPS 的详情：在线、配置是否生效、程序版本、系统与架构、公网地址、运行中的内核、内核版本锁定、正在监听的端口（VPS 上报的）、防火墙、1Panel，以及这台 VPS 上的节点、出口、分流规则数量。", Kind: "read",

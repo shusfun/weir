@@ -73,7 +73,7 @@ export function LinkMapPage({ admin }: { admin: boolean }) {
         </div>
       ) : null}
       {/* 宽屏：详情不参与行高（contain:size），高度跟左边的地图一列一样、内部滚动；选中别的对象时地图与下面的列表不移动 */}
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="stack gap-2 min-w-0">
           <LinkMapCanvas map={m} store={store} focus={{ user, gate }} selected={selected} onSelect={(id) => set({ sel: id ?? undefined })} tooltip={tooltip} />
           <small className="text-[var(--weir-ink-3)]">

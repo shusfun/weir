@@ -96,7 +96,7 @@ function Versions() {
             <CardContent className="stack">
               <SectionHeader
                 title={kernelNames[kernel] ?? kernel}
-                description={`${k.default ? `默认版本 ${k.default}` : "未设置默认版本：VPS 保持正在运行的版本，新部署的 VPS 使用已下载的最新版本。下载新版本不会自动替换。"}需要的架构：${k.arches.join("、")}（按中心与已接入的 VPS 自动决定）。`}
+                description={`${k.default ? `默认版本 ${k.default}。` : "未设置默认版本：VPS 保持正在运行的版本，新部署的 VPS 使用已下载的最新版本。下载新版本不会自动替换。"} 需要的架构：${k.arches.join("、")}（按中心与已接入的 VPS 自动决定）。`}
                 actions={<Button size="sm" variant="outline" onClick={() => setReleases(kernel)}><Download />拉取版本</Button>}
               />
               <JobLine job={job} idle="没有进行中的下载" onFinish={() => void q.refetch()} />

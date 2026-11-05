@@ -114,10 +114,10 @@ func (s *Server) buildLinkMap(ctx context.Context, viewer int) (*linkMap, error)
 				p.ChainID, p.Chain, p.Route = ch.ID, ch.Name, "chain"
 				e = addExit(s.chainExit(ctx, ch, n.GateID, gates, nodes))
 			} else {
-				if n.ChainKind != "none" {
+				e = addExit(s.nodeChainExit(ctx, n, gates, nodes))
+				if e.Kind != "direct" {
 					p.Route = "nodechain"
 				}
-				e = addExit(s.nodeChainExit(ctx, n, gates, nodes))
 			}
 			p.ExitID = e.ID
 			paths[pid] = p

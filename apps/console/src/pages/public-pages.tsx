@@ -62,7 +62,7 @@ export function PublicPagesPage() {
           skeleton={<Card><CardContent><SkeletonList rows={3} lines={2} className="stack" rowClassName="flex items-center justify-between gap-2" /></CardContent></Card>}
         />
       ) : q.data.length === 0 ? (
-        <State empty="还没有公开页面" />
+        <State empty="还没有公开页面" detail="公开页面是不用登录就能看的介绍页，可以展示分享的订阅组和留言板。点上方「新建页面」开始。" />
       ) : (
         <Card>
           <CardContent>

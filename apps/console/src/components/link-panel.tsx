@@ -139,7 +139,7 @@ export function LinkPanel({
           skeleton={<SkeletonList rows={2} lines={2} className="stack" rowClassName="rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3" />}
         />
       ) : links.data.length === 0 ? (
-        <State empty="还没有链接" />
+        <State empty="还没有链接" detail="订阅链接导入客户端后才能上网。点上方「新链接」生成一条。" />
       ) : (
         links.data.map((l) => (
           <LinkCard key={l.id} base={base} link={l} stats={stats?.get(l.id)} showCredentials={showCredentials} inlineQr={inlineQr} onEdit={() => setEdit(l)} refetch={refetch} />
@@ -460,7 +460,7 @@ export function ChainPanel({ base, nodes, admin }: { base: string; nodes: NodeOp
         <Notice role="status">{admin ? "该用户未开放链式代理，可在编辑用户中打开。" : "管理员未开放链式代理。"}</Notice>
       )}
       {chains.data.items.length === 0 ? (
-        <State empty="还没有链式代理" />
+        <State empty="还没有链式代理" detail="想让流量经另一个代理再出去时才需要。" />
       ) : (
         <ul className="stack">
           {chains.data.items.map((c) => (

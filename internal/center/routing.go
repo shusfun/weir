@@ -194,6 +194,9 @@ func (s *Server) saveOutbound(c *gin.Context) {
 			failure(c, 409, "tag_conflict")
 			return
 		}
+		if !s.dryProbeOutbound(c, g, req.Protocol, ChainSpec{Kind: outboundKind[req.Protocol], Address: req.Address, Port: req.Port, Username: req.Username, Password: req.Password, Link: req.Link}) {
+			return
+		}
 		if dryRun(c, dryResult{Preview: []string{"在 " + g.Name + " 上新建出口 " + req.Tag + "；分流规则引用它后才会有流量经过"}}) {
 			return
 		}
@@ -218,6 +221,12 @@ func (s *Server) saveOutbound(c *gin.Context) {
 			SetPort(req.Port).SetUsername(req.Username).SetPassword(sealed).SetSettings(settings)
 		if req.Enabled != nil {
 			upd.SetEnabled(*req.Enabled)
+		}
+		// 只改名称、开关时连接参数没变，不必再让 VPS 实测。
+		oldSecret, _ := s.reveal(old.Password)
+		connChanged := old.Protocol != req.Protocol || old.Address != strings.TrimSpace(req.Address) || old.Port != req.Port || old.Username != req.Username || oldSecret != req.Password
+		if connChanged && !s.dryProbeOutbound(c, g, req.Protocol, ChainSpec{Kind: outboundKind[req.Protocol], Address: req.Address, Port: req.Port, Username: req.Username, Password: req.Password, Link: req.Link}) {
+			return
 		}
 		if dryRun(c, dryResult{Preview: []string{"保存后 " + g.Name + " 重新生成配置"}}) {
 			return
@@ -298,6 +307,27 @@ func (s *Server) checkGateKernels(ctx context.Context, g *ent.Gate, spec ChainSp
 		}
 	}
 	return nil
+}
+
+// dryProbeOutbound 只在草稿试运行时让 VPS 真连一次出口：确认后不能留下一个连不上的出口。
+// 不通时写好错误响应并返回 false。手动保存另有「实测」按钮，不走这里。
+func (s *Server) dryProbeOutbound(c *gin.Context, g *ent.Gate, protocol string, spec ChainSpec) bool {
+	if !c.GetBool(dryRunKey) || outboundKind[protocol] == "" {
+		return true
+	}
+	ctx := c.Request.Context()
+	if spec.Kind == "link" {
+		spec.Password = ""
+	}
+	ex, err := s.resolveChain(ctx, 0, spec, false, chainCtx{admin: true, gate: g})
+	if err == nil {
+		_, err = s.probeExit(ctx, g, ex, false)
+	}
+	if err != nil {
+		failErr(c, 422, err)
+		return false
+	}
+	return true
 }
 
 // probeOutbound 由该 Gate 实测出口：代理与节点链接按协议真连一次，经它访问中心拿到实际出口 IP。

@@ -88,7 +88,7 @@ export function readColors() {
   const cs = getComputedStyle(document.documentElement);
   const v = (name: string, fallback: string) => cs.getPropertyValue(name).trim() || fallback;
   return {
-    sea: v("--weir-well-deep", "#e9e9ef"),
+    sea: v("--weir-well", "#f2f2f7"),
     land: v("--weir-panel", "#ffffff"),
     border: v("--weir-line", "#d6d6de"),
     ink: v("--weir-ink", "#111"),

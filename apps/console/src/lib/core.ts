@@ -1,4 +1,6 @@
 // 新中心接口的类型与通用换算（Gate、节点、用户、链接、链式代理、订阅）。
+import type { LampTone } from "@weir/ui";
+
 export interface Gate {
   id: number;
   name: string;
@@ -73,6 +75,9 @@ export interface PresetField {
 }
 
 export interface Preset {
+  // 带 gate_id 读取时：这台 VPS 现在能不能用及原因
+  available?: boolean;
+  why?: string;
   id: string;
   name: string;
   summary: string;
@@ -132,6 +137,8 @@ export interface NodeItem {
   security: string;
   enabled: boolean;
   credentials: number;
+  // 整个节点实际走的 VPS 出口（只对这个节点、不限域名的分流规则）
+  route_exit?: { tag: string; name: string; protocol: string; address: string; port: number };
   readiness?: { state: "ready" | "credentials" | "pending" | "kernel" | "listener" | "unknown"; why: string };
   cert_id?: number | null;
   settings?: Record<string, unknown>;
@@ -348,3 +355,30 @@ export const protocolNames: Record<string, string> = {
   hysteria2: "Hysteria2",
   tuic: "TUIC",
 };
+
+export function nodeStatus(n: NodeItem, g?: Gate): [string, LampTone, string] {
+  if (!n.enabled) return ["已停用", "off", "节点已停用，不在订阅里"];
+  if (!g || g.status === "revoked") return ["不可用", "bad", "VPS 已撤销"];
+  if (!g.online) return ["离线", "bad", "VPS 离线"];
+  if (g.state === "failed") return ["不可用", "bad", "VPS 配置应用失败：" + g.last_error];
+  if (g.state === "pending") return ["待生效", "warn", "配置正在下发到 VPS"];
+  if (n.readiness && n.readiness.state !== "ready") {
+    const label = ({ credentials: "待分配", pending: "待生效", kernel: "内核未运行", listener: "未监听", unknown: "未知" } as Record<string, string>)[n.readiness.state] ?? "未知";
+    return [label, n.readiness.state === "credentials" || n.readiness.state === "pending" ? "warn" : "unknown", n.readiness.why];
+  }
+  if ((n.ports ?? []).some((p) => p.firewall === "blocked")) return ["未放行", "bad", (n.ports ?? []).find((p) => p.firewall === "blocked")?.why ?? "本机防火墙没有放行端口"];
+  if (n.reach?.status === "failed") return ["连不上", "bad", n.reach.why ?? "中心从外部连不上"];
+  if (n.reach?.status === "ok") return ["端口可达", "ok", n.reach.latency_ms ? `中心 TCP 连接用了 ${n.reach.latency_ms} ms；协议连接以客户端实测为准` : "中心 TCP 端口可达；协议连接以客户端实测为准"];
+  return ["未知", "unknown", n.reach?.why ?? "还没有外部连接结果"];
+}
+
+// relativeTime：「30 秒前」「5 分钟前」；没有时间时为「未知时间」，不当成刚刚。
+export function relativeTime(value?: string | null) {
+  const t = value ? new Date(value).getTime() : NaN;
+  if (!Number.isFinite(t) || t <= 0) return "未知时间";
+  const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (s < 60) return `${s} 秒前`;
+  if (s < 3600) return `${Math.floor(s / 60)} 分钟前`;
+  if (s < 86400) return `${Math.floor(s / 3600)} 小时前`;
+  return `${Math.floor(s / 86400)} 天前`;
+}

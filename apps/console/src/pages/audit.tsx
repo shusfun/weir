@@ -32,7 +32,10 @@ type Audit = {
   id: number;
   actor: number;
   action: string;
+  action_label: string;
+  actor_name: string;
   target: string;
+  target_name: string;
   result: string;
   ip: string;
   created_at: string;
@@ -123,19 +126,17 @@ export function AuditPage() {
             query.data.items.map((item) => (
               <div className="list-row audit-row" key={item.id} {...dataObject({ type: "audit", id: item.id })}>
                 <div>
-                  <strong>{item.action}</strong>
+                  <strong>{item.action_label}</strong>
                   <small>
-                    {date(item.created_at)} · {item.actor ? <ObjectLink to={{ type: "user", id: item.actor, name: `账户 #${item.actor}` }} /> : "系统 / 未登录"}
+                    {date(item.created_at)} · {item.actor ? <ObjectLink to={{ type: "user", id: item.actor, name: item.actor_name }} /> : "系统 / 未登录"}
+                    {parseTarget(item.target) ? <> · <AuditTarget item={item} /></> : null}
                   </small>
-                  <small>目标：<AuditTarget target={item.target} /></small>
                 </div>
                 <div className="actions">
-                  <Badge variant="soft" tone={resultTones[item.result] ?? "neutral"}>
-                    {resultLabels[item.result] ?? item.result}
+                  <Badge variant="soft" tone={resultTones[resultCode(item.result)] ?? "neutral"}>
+                    {resultLabels[resultCode(item.result)] ?? item.result}
                   </Badge>
-                  <Button size="sm" variant="outline" onClick={() => openDetail(item)}>
-                    查看记录 #{item.id}
-                  </Button>
+                  <Button size="sm" variant="ghost" aria-label={`查看记录 #${item.id}`} onClick={() => openDetail(item)}>详情</Button>
                 </div>
               </div>
             ))
@@ -160,15 +161,15 @@ export function AuditPage() {
               <div className="detail-grid">
                 <div>
                   <span>操作</span>
-                  <strong>{detail.action}</strong>
+                  <strong>{detail.action_label} <code className="font-normal">{detail.action}</code></strong>
                 </div>
                 <div>
                   <span>结果</span>
-                  <strong>{resultLabels[detail.result] ?? detail.result}</strong>
+                  <strong>{resultLabels[resultCode(detail.result)] ?? detail.result}{resultCode(detail.result) !== detail.result ? <code className="ml-1 font-normal">{detail.result}</code> : null}</strong>
                 </div>
                 <div>
                   <span>操作者</span>
-                  <strong>{detail.actor ? <ObjectLink to={{ type: "user", id: detail.actor, name: `账户 #${detail.actor}` }} /> : "系统 / 未登录"}</strong>
+                  <strong>{detail.actor ? <ObjectLink to={{ type: "user", id: detail.actor, name: detail.actor_name }} /> : "系统 / 未登录"}</strong>
                 </div>
                 <div>
                   <span>来源 IP</span>
@@ -176,7 +177,7 @@ export function AuditPage() {
                 </div>
                 <div>
                   <span>目标</span>
-                  <strong className="break-all"><AuditTarget target={detail.target} /></strong>
+                  <strong className="break-all">{detail.target ? <><AuditTarget item={detail} />{detail.target_name !== detail.target ? <code className="ml-1 font-normal">{detail.target}</code> : null}</> : "未指定"}</strong>
                 </div>
                 <div>
                   <span>时间</span>
@@ -191,9 +192,13 @@ export function AuditPage() {
   );
 }
 
-// AuditTarget：目标是「类型:编号」时可以点过去；对象已删除时打开后会如实提示。
-function AuditTarget({ target }: { target: string }) {
-  if (!target) return <>未指定</>;
-  const ref = parseTarget(target);
-  return ref ? <ObjectLink to={ref}>{target}</ObjectLink> : <>{target}</>;
+// AuditTarget：显示对象名称；目标是「类型:编号」时可以点过去，对象已删除时打开后会如实提示。
+function AuditTarget({ item }: { item: Audit }) {
+  const ref = parseTarget(item.target);
+  return ref ? <ObjectLink to={ref}>{item.target_name}</ObjectLink> : <>{item.target_name}</>;
+}
+
+// 结果可能带附加信息（如「ok chains=0」）：标签看第一个词，完整内容在详情里。
+function resultCode(result: string) {
+  return result.split(" ")[0];
 }

@@ -48,7 +48,7 @@ func (g *fakeGate) serveChainProbes(unreachable string, stop chan struct{}) {
 				return
 			default:
 			}
-			_, _ = g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{Version: "test", Hostname: "hk", Arch: "amd64"})
+			_, _ = g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 2, Version: "test", Hostname: "hk", Arch: "amd64"})
 			code, body := g.call("GET", "/api/v1/agent/actions", nil)
 			if code != 200 {
 				time.Sleep(50 * time.Millisecond)

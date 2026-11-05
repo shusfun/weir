@@ -90,8 +90,8 @@ function StatsOverview({ stats, scope }: { stats: ReturnType<typeof useStats>; s
     <Card>
       <CardContent className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
         <Readout label="生效中的链接" value={`${active} / ${items.length}`} caption={scope} />
-        <Readout label="近 24 小时拉取" value={String(sum((s) => s.pulls_24h))} caption="次" />
-        <Readout label="近 30 天拉取" value={String(sum((s) => s.pulls_30d))} caption={sum((s) => s.refused_30d) > 0 ? `其中 ${sum((s) => s.refused_30d)} 次不在生效时间内` : "次"} />
+        <Readout label="近 24 小时拉取" value={`${sum((s) => s.pulls_24h)} 次`} />
+        <Readout label="近 30 天拉取" value={`${sum((s) => s.pulls_30d)} 次`} caption={sum((s) => s.refused_30d) > 0 ? `其中 ${sum((s) => s.refused_30d)} 次不在生效时间内` : undefined} />
         <Readout label="常用客户端" value={top.length ? top[0][0] : "—"} caption={top.length ? top.slice(1).map(([n, c]) => `${n} ${c}`).join(" · ") || `${top[0][1]} 次` : "还没有拉取记录"} />
       </CardContent>
     </Card>

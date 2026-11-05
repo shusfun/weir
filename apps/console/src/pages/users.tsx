@@ -58,7 +58,7 @@ export function UsersPage() {
           skeleton={<SkeletonTable columns={["用户", "用量", "到期", "节点", "链接 / 链式", <span className="sr-only">操作</span>]} lines={2} />}
         />
       ) : users.data.length === 0 ? (
-        <State empty="还没有用户" />
+        <State empty="还没有用户" detail="给朋友开账号时在这里建：一次设好额度、到期和节点，保存后自动生成订阅链接。" />
       ) : (
         <Card>
           <CardContent>

@@ -7,7 +7,7 @@ import {
   Badge, Button, Card, CardContent, Chip, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, Menu, MenuContent, MenuItem, MenuTrigger,
   Notice, PageHeader, Readout, SkeletonCards, StatusLamp, SwitchField, useToast, useConfirm, type LampTone,
 } from "@weir/ui";
-import { ChevronDown, FileBadge, Pencil, Plus, Route, Server, Sparkles, Trash2 } from "lucide-react";
+import { ChevronDown, Pencil, Plus, Route, Server, Sparkles, Trash2 } from "lucide-react";
 import { openDsh } from "../components/dsh";
 import { ObjectLink, dataObject, useDialogParam } from "../components/object-link";
 import { exitKindName, probeText } from "../components/chain-exit";
@@ -25,7 +25,8 @@ import { NodeWizard } from "../components/node-wizard";
 import { date } from "../lib/models";
 import { rateText } from "../lib/linkmap";
 import { field, useConsoleContext } from "../lib/console-context";
-import { protocolNames, type Gate, type NodeItem } from "../lib/core";
+import { nodeStatus, protocolNames, relativeTime, type Gate, type NodeItem } from "../lib/core";
+import { GettingStarted } from "../components/getting-started";
 
 const stateText: Record<Gate["state"], [string, "ok" | "warn" | "bad" | "off"]> = {
   applied: ["已生效", "ok"],
@@ -41,23 +42,6 @@ function gateStatus(g: Gate): [string, LampTone] {
   if (g.state === "failed") return ["在线 · 配置应用失败", "bad"];
   if (g.state === "pending") return ["在线 · 配置待生效", "warn"];
   return ["在线", "ok"];
-}
-
-// nodeStatus：节点能不能用。VPS 在线且配置已生效、节点启用、外部连得上才算可用；外部连接测不出（UDP、同一台机器）时为未知。
-export function nodeStatus(n: NodeItem, g?: Gate): [string, LampTone, string] {
-  if (!n.enabled) return ["已停用", "off", "节点已停用，不在订阅里"];
-  if (!g || g.status === "revoked") return ["不可用", "bad", "VPS 已撤销"];
-  if (!g.online) return ["离线", "bad", "VPS 离线"];
-  if (g.state === "failed") return ["不可用", "bad", "VPS 配置应用失败：" + g.last_error];
-  if (g.state === "pending") return ["待生效", "warn", "配置正在下发到 VPS"];
-  if (n.readiness && n.readiness.state !== "ready") {
-    const label = ({ credentials: "待分配", pending: "待生效", kernel: "内核未运行", listener: "未监听", unknown: "未知" } as Record<string, string>)[n.readiness.state] ?? "未知";
-    return [label, n.readiness.state === "credentials" || n.readiness.state === "pending" ? "warn" : "unknown", n.readiness.why];
-  }
-  if ((n.ports ?? []).some((p) => p.firewall === "blocked")) return ["未放行", "bad", (n.ports ?? []).find((p) => p.firewall === "blocked")?.why ?? "本机防火墙没有放行端口"];
-  if (n.reach?.status === "failed") return ["连不上", "bad", n.reach.why ?? "中心从外部连不上"];
-  if (n.reach?.status === "ok") return ["端口可达", "ok", n.reach.latency_ms ? `中心 TCP 连接用了 ${n.reach.latency_ms} ms；协议连接以客户端实测为准` : "中心 TCP 端口可达；协议连接以客户端实测为准"];
-  return ["未知", "unknown", n.reach?.why ?? "还没有外部连接结果"];
 }
 
 function protocolLabel(n: NodeItem) {
@@ -94,10 +78,9 @@ export function GatesPage() {
     <PageHeader
       eyebrow="工作区"
       title="VPS 与节点"
-      description="每台 VPS 上的一个协议就是订阅里的一个节点。VPS 用 SSH 一次装好，之后建节点、改配置都在这里完成。"
+      description="每个节点都会进入用户的订阅。VPS 用 SSH 一次装好，之后建节点、改配置都在这里完成。"
       actions={
         <>
-          <Button variant="outline" onClick={() => setCerts(true)}><FileBadge />证书</Button>
           <Button variant="outline" disabled={!gates.data?.some((g) => g.status === "active")} onClick={() => setWizard("any")}><Plus />新建节点</Button>
           <Button onClick={() => setInvite(true)}><Server />添加 VPS</Button>
         </>
@@ -134,7 +117,7 @@ export function GatesPage() {
   return (
     <div className="stack">
       {header}
-      {gates.data.length === 0 && <State empty="还没有 VPS" detail="点「添加 VPS」：填 SSH 登录信息由中心一次装好，或复制安装命令到 VPS 上执行。" />}
+      <GettingStarted gates={gates.data} nodes={nodes.data} addGate={() => setInvite(true)} addNode={() => setWizard("any")} />
       {gates.data.map((g) => {
         const [label, tone] = gateStatus(g);
         const [stateLabel, stateTone] = stateText[g.state];
@@ -143,7 +126,7 @@ export function GatesPage() {
         return (
           <Card key={g.id} {...dataObject({ type: "gate", id: g.id })}>
             <CardContent className="stack">
-              <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="flex flex-wrap items-center gap-2 text-base font-semibold">
                     <StatusLamp size="lg" tone={tone} label={label} />
@@ -151,7 +134,7 @@ export function GatesPage() {
                     <span className={"text-body font-medium " + (tone === "ok" ? "text-[var(--weir-ok-ink)]" : tone === "warn" ? "text-[var(--weir-warn-ink)]" : "text-[var(--weir-bad-ink)]")}>{label}</span>
                   </h2>
                   <small className="flex flex-wrap items-center gap-x-1.5 text-[var(--weir-ink-3)]">
-                    {g.public_host || "等待上报地址"} · {list.length} 个协议{list.length ? `，${usable} 个可用` : ""} · 最近心跳 {date(g.last_seen_at)} <GateVersion gate={g} />
+                    {g.public_host && g.public_host !== g.name ? g.public_host + " · " : !g.public_host ? "等待上报地址 · " : ""}{list.length} 个节点{list.length ? `，${usable} 个可用` : ""} · <span title={date(g.last_seen_at)}>{relativeTime(g.last_seen_at)}心跳</span> <GateVersion gate={g} />
                   </small>
                   {g.state === "failed" && g.last_error && <p className="text-sm text-[var(--weir-bad-ink)]">{g.last_error}</p>}
                   <GateUpdateLine gate={g} />
@@ -162,28 +145,29 @@ export function GatesPage() {
                   )}
                 </div>
                 <span className="flex flex-nowrap gap-1.5">
-                  <Button size="sm" variant="outline" onClick={() => detailParam.open(g)}>详情</Button>
+                  <Button className="max-sm:hidden" size="sm" variant="outline" onClick={() => detailParam.open(g)}>详情</Button>
                   <Menu>
                     <MenuTrigger render={<Button size="sm" variant="outline" aria-label={`${g.name} 更多操作`} className="data-[popup-open]:[&_svg]:rotate-180 [&_svg]:transition-transform" />}>
                       更多<ChevronDown />
                     </MenuTrigger>
                     <MenuContent>
+                      <MenuItem className="sm:hidden" onClick={() => detailParam.open(g)}><Server />详情</MenuItem>
                       <MenuItem onClick={() => setRouting(g)}><Route />出口与分流</MenuItem>
                       <MenuItem onClick={() => setEdit(g)}><Pencil />编辑名称与地址</MenuItem>
                     </MenuContent>
                   </Menu>
                 </span>
               </div>
-              <div className="flex flex-wrap items-center gap-2" aria-label={`${g.name} 上的协议`}>
+              <div className="flex flex-wrap items-center gap-2" aria-label={`${g.name} 上的节点`}>
                 {list.map((n) => {
                   const [s, t, why] = nodeStatus(n, g);
                   return (
-                    <Chip key={n.id} {...dataObject({ type: "node", id: n.id })} tone={t} meta={s} title={`${n.name}：${why}`} onClick={() => nodeParam.open(n)}>
-                      {protocolLabel(n)}
+                    <Chip key={n.id} {...dataObject({ type: "node", id: n.id })} tone={t} meta={s} title={`${protocolLabel(n)}：${why}`} onClick={() => nodeParam.open(n)}>
+                      {n.name}
                     </Chip>
                   );
                 })}
-                <Chip add disabled={g.status !== "active"} onClick={() => setWizard(g.id)}><Plus />协议</Chip>
+                <Chip add disabled={g.status !== "active"} onClick={() => setWizard(g.id)}><Plus />节点</Chip>
               </div>
               {g.status === "active" && g.state !== "applied" && <small className="text-[var(--weir-ink-3)]">配置：<Badge variant="soft" tone={stateTone === "off" ? "neutral" : stateTone}>{stateLabel}</Badge></small>}
             </CardContent>
@@ -203,7 +187,7 @@ function NodeDetail({ node: n, gate: g, nodes, close, changed }: { node: NodeIte
   const [s, tone, why] = nodeStatus(n, g);
   useConsoleContext({ object: { type: "node", name: n.name, id: n.id }, dialog: { title: "节点详情" } });
   const exit =
-    n.chain.kind === "none" ? "直接从 VPS 出去"
+    n.chain.kind === "none" ? (n.route_exit ? `经 VPS 出口 ${n.route_exit.name || n.route_exit.tag}${n.route_exit.address ? `（${n.route_exit.address}:${n.route_exit.port}）` : ""}` : "直接从 VPS 出去")
     : n.chain.kind === "node" ? <>经 <ObjectLink to={{ type: "node", id: n.chain.node_id ?? undefined, name: nodes.find((x) => x.id === n.chain.node_id)?.name ?? "节点" }} /></>
     : n.chain.kind === "source" ? "订阅源节点"
     : `${exitKindName[n.chain.kind]} ${n.chain.address ?? ""}${n.chain.port ? ":" + n.chain.port : ""}`;

@@ -377,7 +377,7 @@ export function APITokensCard() {
       {q.isPending || q.error ? (
         <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} />
       ) : q.data.length === 0 ? (
-        <State empty="还没有 API 令牌" />
+        <State empty="还没有 API 令牌" detail="给脚本或其他程序调用 Weir 接口时才需要。" />
       ) : (
         <ul className="stack">
           {q.data.map((t) => (

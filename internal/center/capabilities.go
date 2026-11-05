@@ -41,6 +41,8 @@ type Param struct {
 	Secret   bool        `json:"secret,omitempty"` // 密码、密钥类：不进上下文、不发给模型，只标已填 / 未填
 	Min      *float64    `json:"min,omitempty"`
 	Max      *float64    `json:"max,omitempty"`
+	// TagRef：值是出口标签，也可以写 "$名字" 引用同一份草稿里新建的出口。
+	TagRef bool `json:"tag_ref,omitempty"`
 }
 
 // Capability 是目录里的一项能力。
@@ -118,7 +120,10 @@ func newPlanCtx(source string) *planCtx {
 type execCtx struct {
 	actor   *gin.Context
 	created map[string]int
-	outputs []map[string]any // 每步处理函数的返回（如新用户的初始密码，只给确认者看）
+	tags    map[string]string // 占位名 → 新建出口的标签
+	nodes   []int             // 这份草稿新建或修改的节点
+	gates   []int             // 这份草稿直接改动配置的 VPS
+	outputs []map[string]any  // 每步处理函数的返回（如新用户的初始密码，只给确认者看）
 }
 
 // version 是对象与草稿相关字段的摘要；确认时相关数据已被改动就拒绝，不在旧数据上强行套用。
@@ -170,6 +175,9 @@ func (s *Server) checkValue(ctx context.Context, p *planCtx, pa Param, v any) er
 		str, ok := v.(string)
 		if !ok || len(str) > 2000 {
 			return errors.New("必须是不超过 2000 字的文本")
+		}
+		if name, isRef := strings.CutPrefix(str, "$"); isRef && pa.TagRef && p.refs[name] != "outbound" {
+			return fmt.Errorf("引用的 %s 不是前面步骤新建的出口", str)
 		}
 	case "text":
 		str, ok := v.(string)
@@ -378,6 +386,9 @@ func (s *Server) display(ctx context.Context, p *planCtx, pa Param, v any) strin
 			return "已填"
 		}
 		return "未填"
+	}
+	if str, _ := v.(string); pa.TagRef && strings.HasPrefix(str, "$") {
+		return firstNonEmpty(p.names[str[1:]], str)
 	}
 	switch pa.Kind {
 	case "text":

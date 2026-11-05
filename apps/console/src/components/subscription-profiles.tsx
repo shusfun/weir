@@ -69,7 +69,7 @@ export function ProfilesPanel() {
           skeleton={<SkeletonList rows={3} lines={2} className="stack" rowClassName="flex items-center justify-between gap-2 rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3" />}
         />
       ) : q.data.length === 0 ? (
-        <State empty="还没有订阅组" />
+        <State empty="还没有订阅组" detail="订阅组把订阅源和手动节点组合、筛选后分给用户或公开分享。" />
       ) : (
         <ul className="stack">
           {q.data.map((p) => (

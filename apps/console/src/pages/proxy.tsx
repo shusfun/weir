@@ -115,7 +115,7 @@ function TypesCard({ base, view, nodes, admin, onSaved }: { base: string; view: 
     <Card>
       <CardContent className="stack">
         <SectionHeader title="节点类型" description="同一种协议方案的节点归为一类。关掉的类型不放进订阅；加了出口的类型，订阅里换成经出口的版本。" />
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className={"grid gap-3 " + (view.types.length > 1 ? "lg:grid-cols-2" : "")}>
           {view.types.map((t) => (
             <div key={t.key} className="stack rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3" data-disabled={!t.enabled || undefined}>
               <div className="flex items-center justify-between gap-2">

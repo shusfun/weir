@@ -165,6 +165,8 @@ type Draft struct {
 	Steps     []DraftStep       `json:"steps"`
 	Versions  map[string]string `json:"versions,omitempty"` // 所依据的数据版本
 	Danger    bool              `json:"danger,omitempty"`   // 有危险步骤：确认窗里标出
+	// Drawer 是提交时的 dsh 会话（浏览器标签）：只有同一个会话能撤回。
+	Drawer string `json:"drawer,omitempty"`
 }
 
 func settingsHash(m map[string]any) string {
@@ -260,6 +262,7 @@ func (s *Server) discardDraft(c *gin.Context) {
 		}
 	}
 	s.audit(c, "ai.discard", d.Kind+":"+d.ID, "ok")
+	s.recordDraft(ctx, d, draftDiscarded, "", nil, nil)
 	c.Status(204)
 }
 

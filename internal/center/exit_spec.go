@@ -19,7 +19,7 @@ import (
 	"github.com/shusfun/weir/packages/contracts"
 )
 
-// 出口的统一表示：链式代理（管理员第 ③ 步、用户自建）与分流出口都先解析成 resolvedExit，
+// 出口的统一表示：链式代理（管理员建节点的出口、用户自建）与分流出口都先解析成 resolvedExit，
 // 再按入口内核检查能不能连、由入口 Gate 实测、编译进 Gate 配置。
 // 每个成员同时保留一条节点链接，实测时据此生成 sing-box 客户端。
 

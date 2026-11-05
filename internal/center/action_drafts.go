@@ -29,6 +29,9 @@ func (s *Server) submitActionDraft(ctx context.Context, source, explain string, 
 		return nil, fmt.Errorf("一份草稿要有 1 到 %d 步", maxDraftSteps)
 	}
 	d := &Draft{ID: randomToken(12), Kind: "actions", Source: source, Explain: explain, CreatedAt: time.Now().UTC(), Steps: steps}
+	if source == "dsh" {
+		_, d.Drawer, _ = s.activeContext(ctx)
+	}
 	if err := s.planDraft(ctx, d, false); err != nil {
 		return nil, err
 	}
@@ -42,6 +45,7 @@ func (s *Server) submitActionDraft(ctx context.Context, source, explain string, 
 		}
 	}
 	_, _ = s.Store.Ent.Audit.Create().SetAction("ai.draft").SetTarget(source + " " + d.ID).SetResult("passed").Save(ctx)
+	s.recordDraft(ctx, d, draftPending, "", nil, nil)
 	return d, nil
 }
 
@@ -88,7 +92,8 @@ func (s *Server) planDraft(ctx context.Context, d *Draft, confirm bool) error {
 			p.refs[st.As] = c.Object
 			email, _ := st.Args["email"].(string)
 			name, _ := st.Args["name"].(string)
-			p.names[st.As] = firstNonEmpty(email, name, c.Title)
+			tag, _ := st.Args["tag"].(string)
+			p.names[st.As] = firstNonEmpty(email, name, tag, c.Title)
 		}
 		d.Danger = d.Danger || c.Risk == "danger"
 	}
@@ -126,6 +131,7 @@ func (s *Server) applyActionDraft(c *gin.Context, d *Draft) {
 	}
 	for k, v := range before {
 		if quick.versions[k] != v {
+			s.recordDraft(ctx, d, draftFailed, "草稿依据的数据已被改动，要重新生成", nil, nil)
 			failDetail(c, 409, "draft_stale", "草稿依据的数据已被改动，请让 dsh 重新生成", nil)
 			return
 		}
@@ -154,11 +160,13 @@ func (s *Server) applyActionDraft(c *gin.Context, d *Draft) {
 	jobStep(ctx, "正在按确认时的数据重新试运行", 0)
 	if err := s.planDraft(ctx, d, true); err != nil {
 		slog.Warn("draft rejected at confirm", "trace", c.GetString("request_id"), "draft", d.ID, "err", redact(err.Error()))
+		s.recordDraft(ctx, d, draftFailed, err.Error(), nil, nil)
 		failDetail(c, 422, "draft_invalid", err.Error(), nil)
 		return
 	}
 	for k, v := range before {
 		if d.Versions[k] != v {
+			s.recordDraft(ctx, d, draftFailed, "草稿依据的数据已被改动，要重新生成", nil, nil)
 			failDetail(c, 409, "draft_stale", "草稿依据的数据已被改动，请让 dsh 重新生成", nil)
 			return
 		}
@@ -167,7 +175,7 @@ func (s *Server) applyActionDraft(c *gin.Context, d *Draft) {
 	if !jobCommit(c) {
 		return
 	}
-	x := &execCtx{actor: c, created: map[string]int{}}
+	x := &execCtx{actor: c, created: map[string]int{}, tags: map[string]string{}}
 	var undo []func(context.Context) error
 	var kept []string // 已执行、没有撤回办法的步骤（如开始下载内核、重启内核）
 	for i := range d.Steps {
@@ -199,6 +207,7 @@ func (s *Server) applyActionDraft(c *gin.Context, d *Draft) {
 				msg += "撤回时出错：" + strings.Join(failed, "；")
 			}
 			slog.Warn("draft failed", "trace", c.GetString("request_id"), "draft", d.ID, "step", i+1, "action", st.Action, "err", redact(msg))
+			s.recordDraft(context.WithoutCancel(ctx), d, draftFailed, msg, nil, nil)
 			failDetail(c, 422, "draft_failed", msg, nil)
 			return
 		}
@@ -216,5 +225,6 @@ func (s *Server) applyActionDraft(c *gin.Context, d *Draft) {
 	}
 	_, _ = s.Store.Ent.Audit.Create().SetActor(c.GetInt("user_id")).SetAction("ai.apply").SetTarget("dsh 草稿 · 管理员确认 " + d.ID).SetResult("ok").SetIP(c.ClientIP()).
 		SetDetail(map[string]any{"source": d.Source, "explain": d.Explain, "steps": steps}).Save(ctx)
-	c.JSON(200, gin.H{"applied": len(d.Steps), "outputs": x.outputs})
+	s.recordDraft(ctx, d, draftApplied, "", x.nodes, x.gates)
+	c.JSON(200, gin.H{"applied": len(d.Steps), "outputs": x.outputs, "node_ids": x.nodes, "gate_ids": x.gates})
 }

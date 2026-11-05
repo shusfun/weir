@@ -24,12 +24,25 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/gateaction"
 	"github.com/shusfun/weir/internal/store/ent/link"
 	"github.com/shusfun/weir/internal/store/ent/node"
+	"github.com/shusfun/weir/internal/store/ent/outbound"
 	"github.com/shusfun/weir/internal/store/ent/route"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
 func (s *Server) nodeRoutes(admin *gin.RouterGroup) {
-	admin.GET("/presets", func(c *gin.Context) { c.JSON(200, gin.H{"items": s.presets(c.Request.Context())}) })
+	admin.GET("/presets", func(c *gin.Context) {
+		ctx := c.Request.Context()
+		if id, err := strconv.Atoi(c.Query("gate_id")); err == nil && id > 0 {
+			g, err := s.Store.Ent.Gate.Get(ctx, id)
+			if err != nil {
+				failure(c, 404, "gate_not_found")
+				return
+			}
+			c.JSON(200, gin.H{"items": s.presetsForGate(ctx, g)})
+			return
+		}
+		c.JSON(200, gin.H{"items": s.presets(ctx)})
+	})
 	admin.GET("/nodes", s.listNodes)
 	admin.POST("/nodes", s.asJob("新建节点", "已取消，节点没有建出来", s.createNode))
 	admin.GET("/nodes/:id", s.getNode)
@@ -128,6 +141,27 @@ func (s *Server) chainView(ctx context.Context, n *ent.Node) gin.H {
 	return v
 }
 
+// nodeWholeRoute 是整个节点实际走的 VPS 出口：一条只对这个节点、不限用户与域名的启用规则。
+// 节点自身的链式代理优先；没有这样的规则时为空。
+func (s *Server) nodeWholeRoute(ctx context.Context, n *ent.Node) *ent.Outbound {
+	if n.ChainKind != node.ChainKindNone {
+		return nil
+	}
+	rules, err := s.Store.Ent.Route.Query().Where(route.GateIDEQ(n.GateID), route.NodeIDEQ(n.ID), route.EnabledEQ(true)).All(ctx)
+	if err != nil {
+		return nil
+	}
+	for _, r := range rules {
+		if r.UserID == nil && r.Domain == "" && r.IP == "" {
+			o, err := s.Store.Ent.Outbound.Query().Where(outbound.GateIDEQ(n.GateID), outbound.TagEQ(r.OutboundTag)).Only(ctx)
+			if err == nil {
+				return o
+			}
+		}
+	}
+	return nil
+}
+
 func (s *Server) nodeView(ctx context.Context, n *ent.Node) gin.H {
 	g, _ := s.Store.Ent.Gate.Get(ctx, n.GateID)
 	creds, _ := s.Store.Ent.Credential.Query().Where(credential.NodeIDEQ(n.ID), credential.InternalEQ(false)).Count(ctx)
@@ -136,6 +170,9 @@ func (s *Server) nodeView(ctx context.Context, n *ent.Node) gin.H {
 		"port": n.Port, "network": n.Network, "security": n.Security, "settings": n.Settings, "cert_id": n.CertID,
 		"enabled": n.Enabled, "credentials": creds, "created_at": n.CreatedAt,
 		"chain": s.chainView(ctx, n),
+	}
+	if o := s.nodeWholeRoute(ctx, n); o != nil {
+		view["route_exit"] = gin.H{"tag": o.Tag, "name": o.Name, "protocol": o.Protocol, "address": o.Address, "port": o.Port}
 	}
 	if g != nil {
 		state, why := s.nodeReadiness(ctx, n, g)
@@ -454,7 +491,7 @@ func (s *Server) checkSettings(ctx context.Context, g *ent.Gate, kernel, protoco
 	return nil
 }
 
-// createNode 是四步建节点：协议（预设）→ VPS → 链式代理 → 完成。伪装参数由预设与 Gate 实测决定。
+// createNode 建节点：协议（预设）、VPS、出口。伪装参数由预设与 Gate 实测决定。
 func (s *Server) createNode(c *gin.Context) {
 	var req struct {
 		GateID        int            `json:"gate_id"`
@@ -466,7 +503,7 @@ func (s *Server) createNode(c *gin.Context) {
 		Chain         ChainSpec      `json:"chain"`
 		Settings      map[string]any `json:"settings"` // 高级：只能改预设列出的字段
 		SkipProbe     bool           `json:"skip_probe"`
-		// UserIDs 是第 ④ 步勾选的用户：把这个节点分给他们，保存后返回他们的节点链接。
+		// UserIDs 是建节点时勾选的用户：把这个节点分给他们，保存后返回他们的节点链接。
 		UserIDs []int `json:"user_ids"`
 	}
 	if !bind(c, &req) {
@@ -657,7 +694,7 @@ func (s *Server) createNode(c *gin.Context) {
 		failure(c, 409, "node_conflict")
 		return
 	}
-	// 第 ④ 步勾选的用户：没有「全部节点」的用户把这个节点加进可用节点（「全部节点」的用户本来就有）。
+	// 建节点时勾选的用户：没有「全部节点」的用户把这个节点加进可用节点（「全部节点」的用户本来就有）。
 	for _, uid := range dedupe(req.UserIDs) {
 		u, err := s.Store.Ent.User.Get(ctx, uid)
 		if err != nil || u.AllNodes || contains(u.NodeIds, n.ID) {

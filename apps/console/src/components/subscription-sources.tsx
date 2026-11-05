@@ -46,7 +46,7 @@ export function SourcesPanel() {
           skeleton={<SkeletonTable card={false} columns={["名称", "节点", "用量", "最近拉取", ""]} rows={4} lines={2} />}
         />
       ) : q.data.items.length === 0 ? (
-        <State empty="还没有订阅源" />
+        <State empty="还没有订阅源" detail="想把机场订阅合并进来时才需要。填上订阅地址后，可在订阅组里处理并分给用户。" />
       ) : (
         <>
           {q.data.traffic.sources > 0 && (

@@ -114,7 +114,7 @@ export function draw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: n
   for (const p of s.points) {
     if (p.hidden) continue;
     const color = { ok: c.ok, off: c.off, warn: c.warn, accent: c.accent, info: c.info }[p.tone];
-    const r = px(p.kind === "gate" ? 6 : 5);
+    const r = px(p.kind === "gate" ? 8 : 7);
     ctx.globalAlpha = p.dim ? 0.25 : 1;
     if (p.kind === "gate") {
       const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 3);
