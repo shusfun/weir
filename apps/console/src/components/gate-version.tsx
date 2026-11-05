@@ -38,7 +38,7 @@ export function GateUpdateLine({ gate: g }: { gate: Gate }) {
   const working = g.self_update?.state === "downloading" || g.self_update?.state === "replacing";
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <p className={"min-w-0 grow basis-0 text-sm " + (text[1] === "bad" ? "text-[var(--weir-bad-ink)]" : "text-[var(--weir-ink-3)]")}>{text[0]}</p>
+      <p className={"min-w-0 grow basis-0 text-body " + (text[1] === "bad" ? "text-[var(--weir-bad-ink)]" : "text-[var(--weir-ink-3)]")}>{text[0]}</p>
       {gateLags(g) && (
         <Button
           size="xs"

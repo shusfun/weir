@@ -95,7 +95,7 @@ function NodeForm({ value, close, saved }: { value: ManualNode | "new"; close: (
         <DialogTitle>{n ? "编辑节点" : "添加节点"}</DialogTitle>
         <DialogDescription>粘贴一条节点链接（vless://、trojan://、ss:// 等）；订阅地址请添加为订阅源。</DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
-          <Field label="节点链接" name="url"><Textarea required rows={3} className="font-mono text-xs" value={url} onChange={(e) => setUrl(e.target.value)} /></Field>
+          <Field label="节点链接" name="url"><Textarea required rows={3} className="font-mono text-meta" value={url} onChange={(e) => setUrl(e.target.value)} /></Field>
           <FormGrid>
             <Field label="显示名称（可选）" hint="留空使用链接里的名称。"><Input value={name} onChange={(e) => setName(e.target.value)} /></Field>
             <Field label="分组（可选）" name="group"><Input value={group} onChange={(e) => setGroup(e.target.value)} /></Field>
@@ -126,7 +126,7 @@ function ImportForm({ close, saved }: { close: () => void; saved: (n: number) =>
         <DialogDescription>支持多行节点链接、Base64 订阅内容、Clash YAML 与 sing-box JSON；一次最多 2000 个。</DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
           <Field label="内容" name="content" customError={content && !content.trim() ? "请输入内容" : ""}>
-            <Textarea required rows={10} className="font-mono text-xs" value={content} onChange={(e) => setContent(e.target.value)} />
+            <Textarea required rows={10} className="font-mono text-meta" value={content} onChange={(e) => setContent(e.target.value)} />
           </Field>
           <Field label="放入分组（可选）" name="group"><Input value={group} onChange={(e) => setGroup(e.target.value)} /></Field>
           <DialogFooter error={save.error}>

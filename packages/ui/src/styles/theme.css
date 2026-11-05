@@ -131,7 +131,7 @@
     border-radius: var(--weir-radius-card);
   }
   .dark .weir-panel { border-color: transparent; }
-  /* 填充底：输入框、代码块、计数窗（iOS 的 tertiarySystemFill） */
+  /* 填充底：代码块、计数窗（iOS 的 tertiarySystemFill） */
   .weir-well {
     background: var(--weir-well);
     border: 1px solid transparent;
@@ -205,6 +205,15 @@
   .weir-key[aria-disabled="true"] {
     scale: none;
   }
+  /* 输入框、下拉、可点标签：白底细边框。放在 .weir-key 之后，下拉触发键同时带这两个类时用这里的底色与边框 */
+  .weir-input {
+    background: var(--weir-input);
+    border: 1px solid var(--weir-input-line);
+    border-radius: var(--weir-radius);
+  }
+  @media (hover: hover) {
+    .weir-input:hover:not(:disabled, [data-disabled], :focus) { border-color: var(--weir-input-line-hi); }
+  }
   @media (forced-colors: active) {
     .weir-key { border-color: ButtonText; }
     .weir-key.is-pressed { border-width: 2px; }
@@ -251,7 +260,7 @@
     }
   }
 
-  /* 标注：表头、分组标题、页头上方的小字（iOS 分组标题用次要文字，不加粗、不全大写） */
+  /* 标注：表头、分组标题的小字（iOS 分组标题用次要文字，不加粗、不全大写） */
   .weir-engraved {
     color: var(--weir-ink-engraved);
     font-size: var(--weir-text-meta);

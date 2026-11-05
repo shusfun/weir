@@ -1,7 +1,7 @@
 // 控制台外壳：左侧控制条（导航 + 左下角个人中心）、顶栏（标题 / 快速跳转 / 任务托盘 / 主题）、移动端侧边面板。
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { IconTile, Button, ScrollArea, Kbd, Menu, MenuTrigger, MenuContent, MenuItem, MenuSeparator, MenuToggle, Sheet, SheetClose, SheetContent, StatusLamp, Tooltip, TooltipProvider } from "@weir/ui";
+import { IconTile, Button, ScrollArea, Kbd, Menu, MenuTrigger, MenuContent, MenuItem, MenuSeparator, MenuToggle, Sheet, SheetClose, SheetContent, Tooltip, TooltipProvider } from "@weir/ui";
 import { PanelLeftClose, PanelLeftOpen, LogOut, ShieldCheck, Link2, Search, Activity, ChevronsUpDown } from "lucide-react";
 import { ThemeControl } from "../theme";
 import { navigation, navGroups, currentNav, visibleFor } from "../shell/navigation";
@@ -22,14 +22,14 @@ function readCollapsed() {
   }
 }
 
-// 左下角个人中心：头像 + 账户，点开为订阅管理 / 账户安全 / 退出
+// 左下角个人中心：头像 + 账户，点开为订阅链接 / 账户安全 / 退出
 function AccountMenu({ admin, email, onLogout }: { admin: boolean; email: string; onLogout: () => void }) {
   const navigate = useNavigate();
   return (
     <Menu>
       <MenuTrigger
         render={
-          <button type="button" className="weir-key rail-account" aria-label={"个人中心：" + email}>
+          <button type="button" className="weir-key weir-key-ghost rail-account" aria-label={"个人中心：" + email}>
             <IconTile size="sm" tone="neutral">{email.slice(0, 1).toUpperCase() || "?"}</IconTile>
             <span className="rail-account-text">
               <strong>{email}</strong>
@@ -40,7 +40,7 @@ function AccountMenu({ admin, email, onLogout }: { admin: boolean; email: string
         }
       />
       <MenuContent side="top" align="start">
-        <MenuItem onClick={() => navigate("/links")}><Link2 />订阅管理</MenuItem>
+        <MenuItem onClick={() => navigate("/links")}><Link2 />订阅链接</MenuItem>
         <MenuItem onClick={() => navigate("/security")}><ShieldCheck />账户安全</MenuItem>
         <MenuSeparator />
         <MenuItem onClick={onLogout}><LogOut />退出登录</MenuItem>
@@ -76,7 +76,7 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // 管理员的个人页面收进左下角个人中心；代理与订阅管理是共用页面，两种账户都在导航里
+  // 管理员的个人页面收进左下角个人中心；代理与订阅链接是共用页面，两种账户都在导航里
   const nav = (compact: boolean) =>
     navGroups.map((group) => {
       const items = navigation.filter((item) => item.group === group && visibleFor(item, admin));
@@ -86,14 +86,9 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
           <span className="rail-group-label weir-engraved">{group}</span>
           {items.map(({ key, path, label, icon: Icon }) => {
             const link = (
-              <NavLink key={key} to={path} className={({ isActive }) => "weir-key rail-item" + (isActive ? " active is-pressed" : "")}>
-                {({ isActive }) => (
-                  <>
-                    <Icon />
-                    <span className="rail-label">{label}</span>
-                    <StatusLamp className="rail-led" size="sm" tone={isActive ? "active" : "off"} />
-                  </>
-                )}
+              <NavLink key={key} to={path} className={({ isActive }) => "weir-key weir-key-ghost rail-item" + (isActive ? " active" : "")}>
+                <Icon />
+                <span className="rail-label">{label}</span>
               </NavLink>
             );
             return compact ? <Tooltip key={key} content={label}>{link}</Tooltip> : link;
@@ -125,11 +120,12 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
             <Button ref={drawerTrigger} className="hidden max-[900px]:inline-flex" variant="ghost" size="icon-sm" aria-label="打开导航" aria-expanded={drawer} onClick={() => setDrawer(true)}>
               <MenuToggle open={drawer} />
             </Button>
-            <div className="topbar-title">
-              <h1>{current?.label ?? "Weir"}</h1>
+            {/* 窄屏才显示；页面标题（h1）在 PageHeader，窄屏下留给读屏，所以这里对读屏隐藏 */}
+            <div className="topbar-title" aria-hidden="true">
+              <span>{current?.label ?? "Weir"}</span>
             </div>
             <div className="topbar-tools">
-              <Button className="command-trigger min-w-[220px] justify-start text-[var(--weir-ink-3)] max-[1100px]:min-w-0" variant="outline" size="sm" onClick={() => setPalette(true)} aria-label="快速跳转">
+              <Button className="command-trigger weir-input min-w-[220px] justify-start text-[var(--weir-ink-3)] max-[1100px]:min-w-0" variant="ghost" size="sm" onClick={() => setPalette(true)} aria-label="快速跳转">
                 <Search />
                 <span>快速跳转…</span>
                 <Kbd>Ctrl K</Kbd>

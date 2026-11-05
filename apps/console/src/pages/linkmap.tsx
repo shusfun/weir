@@ -30,7 +30,6 @@ export function LinkMapPage({ admin }: { admin: boolean }) {
   });
   const header = (
     <PageHeader
-      eyebrow={admin ? "工作区" : "个人"}
       title={admin ? "链路" : "我的链路"}
       description={admin ? "全部 VPS、节点与出口在地图上的位置与实时流量。速率每 2 秒更新一次，只在有人打开这个页面时采集。" : "你的节点与链式代理在地图上的位置与实时流量；只显示你自己的。"}
     />

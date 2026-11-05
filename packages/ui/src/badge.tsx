@@ -1,11 +1,11 @@
-// 来源 codedthemes/uiable badge；本地改为 iOS 风格：无边框的浅色填充标签，状态色文字取达标的 -ink 变体。
+// 来源 codedthemes/uiable badge；本地改为 iOS 风格：无边框的浅色小胶囊（和圆角矩形的按钮、输入框区分），状态色文字取达标的 -ink 变体。
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 
 const badgeVariants = cva(
-  "group/badge inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-[var(--weir-radius-sm)] border border-transparent px-2 py-0.5 text-fine font-medium whitespace-nowrap [&>svg]:pointer-events-none [&>svg]:size-3!",
+  "group/badge inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-fine font-medium whitespace-nowrap [&>svg]:pointer-events-none [&>svg]:size-3!",
   {
     variants: {
       variant: {
@@ -29,7 +29,7 @@ const badgeVariants = cva(
       },
     },
     compoundVariants: [
-      { variant: "soft", tone: "neutral", className: "bg-[var(--weir-fill-3)] text-[var(--weir-ink-2)]" },
+      { variant: "soft", tone: "neutral", className: "bg-[var(--weir-fill-4)] text-[var(--weir-ink-2)]" },
       { variant: "soft", tone: "ok", className: "bg-[var(--weir-ok-soft)] text-[var(--weir-ok-ink)]" },
       { variant: "soft", tone: "warn", className: "bg-[var(--weir-warn-soft)] text-[var(--weir-warn-ink)]" },
       { variant: "soft", tone: "bad", className: "bg-[var(--weir-bad-soft)] text-[var(--weir-bad-ink)]" },

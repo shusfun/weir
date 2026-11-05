@@ -161,7 +161,7 @@ export function SecurityPage({ loginRequired }: { loginRequired: () => void }) {
   useConsoleContext({ page: "账户安全", dialog: action ? { title: titles[action] } : undefined, form: action ? [field("password", "当前密码", password, true), field("code", "验证码", code, true), field("next", "新密码", next, true)] : undefined });
   return (
     <div className="stack security-page">
-      <PageHeader title="保护你的账户" description="管理登录方式与有效会话。设备配对身份与账户二次验证分别管理。" />
+      <PageHeader title="账户安全" description="管理登录方式与有效会话。设备配对身份与账户二次验证分别管理。" />
       {notice && <Notice role="status">{notice}</Notice>}
       {account.isPending ? (
         <State loading />

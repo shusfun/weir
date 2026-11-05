@@ -92,7 +92,6 @@ export function GatesPage() {
   useConsoleContext(detail ? { object: { type: "gate", name: detail.name, id: detail.id }, dialog: { title: "VPS 详情" } } : null);
   const header = (
     <PageHeader
-      eyebrow="工作区"
       title="VPS 与节点"
       description="每台 VPS 上的一个协议就是订阅里的一个节点。VPS 用 SSH 一次装好，之后建节点、改配置都在这里完成。"
       actions={
@@ -153,10 +152,10 @@ export function GatesPage() {
                   <small className="flex flex-wrap items-center gap-x-1.5 text-[var(--weir-ink-3)]">
                     {g.public_host || "等待上报地址"} · {list.length} 个协议{list.length ? `，${usable} 个可用` : ""} · 最近心跳 {date(g.last_seen_at)} <GateVersion gate={g} />
                   </small>
-                  {g.state === "failed" && g.last_error && <p className="text-sm text-[var(--weir-bad-ink)]">{g.last_error}</p>}
+                  {g.state === "failed" && g.last_error && <p className="text-body text-[var(--weir-bad-ink)]">{g.last_error}</p>}
                   <GateUpdateLine gate={g} />
                   {!g.public_host && (
-                    <p className="text-sm text-[var(--weir-warn-ink)]">
+                    <p className="text-body text-[var(--weir-warn-ink)]">
                       还没有公网地址，这台 VPS 上的节点生成不了节点链接。{g.colocated ? "中心与它在同一台机器上，记录不到来源地址；" : ""}请点「编辑」填写{g.public_host_hint ? `（本机网卡上的公网 IP 是 ${g.public_host_hint}）` : ""}。
                     </p>
                   )}
@@ -213,7 +212,7 @@ function NodeDetail({ node: n, gate: g, nodes, close, changed }: { node: NodeIte
         <DialogTitle>{n.name}</DialogTitle>
         <DialogDescription>{protocolLabel(n)} · {g ? <ObjectLink to={{ type: "gate", id: g.id, name: g.name }} /> : "VPS 已不存在"}</DialogDescription>
         <div className="stack">
-          <p className="flex items-center gap-2 text-sm"><StatusLamp tone={tone} label={s} /><strong>{s}</strong><span className="text-[var(--weir-ink-3)]">{why}</span></p>
+          <p className="flex items-center gap-2 text-body"><StatusLamp tone={tone} label={s} /><strong>{s}</strong><span className="text-[var(--weir-ink-3)]">{why}</span></p>
           {n.readiness?.state === "credentials" && <Notice tone="warn">请到 <Link to="/users" onClick={close}>用户</Link> 分配这个节点并创建可用订阅；节点会在凭据生效后启动。</Notice>}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Readout label="端口" value={String(n.port)} />
@@ -222,7 +221,7 @@ function NodeDetail({ node: n, gate: g, nodes, close, changed }: { node: NodeIte
             <Readout label="下载速率" value={n.rate?.minutes ? rateText(n.rate.p90_bps) : "未知"} caption={n.rate?.minutes ? `近 24 小时 ${n.rate.minutes} 分钟有流量` : "近 24 小时没有流量"} />
           </div>
           <NodeAccess ports={n.ports} reach={n.reach} />
-          <div className="text-sm">
+          <div className="text-body">
             <span className="text-[var(--weir-ink-3)]">出口：</span>{exit}
             {n.chain.kind !== "none" && <small className="block text-[var(--weir-ink-3)]">{probeText(n.chain.probe)}</small>}
           </div>

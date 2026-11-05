@@ -20,6 +20,10 @@
   --weir-well: var(--weir-fill-3);
   --weir-well-deep: var(--weir-fill-2);
   --weir-key: var(--weir-fill-3);
+  /* 输入框与下拉：白底细边框，和按钮、标签一眼可分；悬停时边框加深 */
+  --weir-input: #ffffff;
+  --weir-input-line: #c7c7cc; /* systemGray4 */
+  --weir-input-line-hi: #8e8e93;
   /* 选中项（分段控件的当前项、导航当前项）：iOS 分段控件的白色滑块 */
   --weir-key-selected: #ffffff;
   --weir-key-selected-ring: rgb(0 0 0 / 0.04);
@@ -59,6 +63,7 @@
   --weir-accent-text: #0066cc;
   --weir-accent-soft: #e0efff; /* systemBlue 12% 叠白 */
   --weir-accent-soft-ink: #0058b0; /* 浅蓝底上 6.0 */
+  --weir-accent-soft-hi: #d1e6ff; /* 浅蓝底悬停 */
   --weir-focus: #007aff;
   --weir-ring: rgb(0 122 255 / 0.35);
 
@@ -72,6 +77,7 @@
   --weir-bad: #ff3b30; /* systemRed */
   --weir-bad-soft: #ffe7e6;
   --weir-bad-ink: #c4281f; /* systemRed 在白底只有 3.6，加深到 5.7 */
+  --weir-bad-soft-hi: #ffdad8; /* 浅红底悬停 */
   --weir-info: #007aff;
   --weir-info-soft: #e0efff;
   --weir-info-ink: #0058b0;
@@ -246,6 +252,10 @@
   --weir-fill-2: rgb(120 120 128 / 0.32);
   --weir-fill-3: rgb(118 118 128 / 0.24);
   --weir-fill-4: rgb(118 118 128 / 0.18);
+  /* 深色输入框：比面板更深一档的凹面，叠在面板与弹窗上都成立 */
+  --weir-input: rgb(0 0 0 / 0.24);
+  --weir-input-line: rgb(120 120 128 / 0.5);
+  --weir-input-line-hi: rgb(174 174 178 / 0.8);
   --weir-key-selected: #636366; /* 深色分段控件的选中滑块 */
   --weir-key-selected-ring: transparent;
   --weir-key-selected-glow: rgb(0 0 0 / 0.3);
@@ -275,6 +285,7 @@
   --weir-accent-text: #7cb7ff;
   --weir-accent-soft: #183350; /* systemBlue 22% 叠 #1C1C1E */
   --weir-accent-soft-ink: #7cb7ff;
+  --weir-accent-soft-hi: #1f4064;
   --weir-focus: #0a84ff;
   --weir-ring: rgb(10 132 255 / 0.45);
 
@@ -288,6 +299,7 @@
   --weir-bad-soft: #3d1a18;
   /* systemRed 在 #2C2C2E 上只有 4.1，提亮到 #FF7A70（5.5） */
   --weir-bad-ink: #ff7a70;
+  --weir-bad-soft-hi: #4d2220;
   --weir-info: #0a84ff;
   --weir-info-soft: #183350;
   --weir-info-ink: #7cb7ff;

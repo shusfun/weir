@@ -151,7 +151,7 @@ function SSHInstall({ name, setName, close, done }: { name: string; setName: (v:
             </FilePicker>
           </Field>
           <Field label="私钥" name="key" required customError={keyProblem(key)} hint="也可以直接粘贴私钥全文（-----BEGIN … PRIVATE KEY-----）。支持 OpenSSH、RSA、EC、PKCS#8；不支持 PuTTY 的 .ppk。">
-            <Textarea rows={5} className="font-mono text-xs" value={key} onChange={(e) => setKey(e.target.value)} spellCheck={false} />
+            <Textarea rows={5} className="font-mono text-meta" value={key} onChange={(e) => setKey(e.target.value)} spellCheck={false} />
           </Field>
           <Field label="私钥密码" name="passphrase" hint="私钥没有设密码就留空。">
             <PasswordInput value={passphrase} onChange={(e) => setPassphrase(e.target.value)} autoComplete="off" />

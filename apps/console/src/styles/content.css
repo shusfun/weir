@@ -1,7 +1,7 @@
 /* 公告、富文本、留言、命令面板与任务托盘。 */
 .global-announcement { margin-bottom: var(--weir-space-1); }
 /* --notice-accent 只画色条；文字与链接用 --notice-ink，避免浅底上的亮绿 / 橙字对比不足 */
-.published-announcement { --notice-accent: var(--public-accent, var(--weir-info)); --notice-ink: var(--public-accent, var(--weir-info-ink)); --notice-soft: var(--public-soft, var(--weir-info-soft)); border-left: 3px solid var(--notice-accent); background: var(--notice-soft); }
+.published-announcement { --notice-accent: var(--public-accent, var(--weir-info)); --notice-ink: var(--public-accent, var(--weir-ink)); --notice-soft: var(--public-soft, var(--weir-panel)); border-left: 3px solid var(--notice-accent); background: var(--notice-soft); }
 .published-announcement .published-section-title { display: flex; align-items: center; gap: var(--weir-space-2); color: var(--notice-ink); }
 .published-announcement h2 { font-size: var(--weir-text-heading); line-height: var(--weir-leading-heading); margin: 0; }
 .published-announcement[data-notice-type="success"] { --notice-accent: var(--weir-ok); --notice-ink: var(--weir-ok-ink); --notice-soft: var(--weir-ok-soft); }

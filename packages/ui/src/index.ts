@@ -11,6 +11,7 @@ export * from "./button";
 export * from "./input";
 export * from "./input-group";
 export * from "./card";
+export * from "./inset-group";
 export * from "./table";
 export * from "./badge";
 export * from "./label";

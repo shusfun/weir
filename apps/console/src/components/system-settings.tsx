@@ -2,7 +2,7 @@
 // 设置保存直接生效；导入或恢复备份、创建 API 令牌要重新输入密码。
 import { useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Button, Card, CardContent, CopyField, Field, FilePicker, Form, FormGrid, Input, Notice, PasswordInput, SectionHeader, SwitchField, Textarea, useConfirm } from "@weir/ui";
+import { Button, CopyField, Field, FilePicker, Form, FormGrid, Input, Notice, PasswordInput, SwitchField, Textarea, useConfirm, InsetGroup } from "@weir/ui";
 import { Download, Trash2 } from "lucide-react";
 import { api, reauthFields } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -36,12 +36,9 @@ export function useReauthAction<T>(fn: Parameters<typeof useFormAction<T>>[0], o
 
 export function Section({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
-    <Card>
-      <CardContent className="stack">
-        <SectionHeader title={title} description={description} />
-        {children}
-      </CardContent>
-    </Card>
+    <InsetGroup title={title} description={description}>
+      {children}
+    </InsetGroup>
   );
 }
 
@@ -245,7 +242,7 @@ function ImportExport() {
         </Button>
       </div>
       <Field label="导入备份" name="content" hint="粘贴备份文件内容，或在下方选择文件。" customError={content && !content.trim() ? "请输入备份内容" : ""}>
-        <Textarea required rows={4} className="font-mono text-xs" value={content} onChange={(e) => setContent(e.target.value)} />
+        <Textarea required rows={4} className="font-mono text-meta" value={content} onChange={(e) => setContent(e.target.value)} />
       </Field>
       <Field label="选择备份文件" error={fileError}>
         <FilePicker accept="application/json,.json" onError={setFileError} onFile={async (file) => { setFileError(""); setContent(await file.text()); }}>
@@ -285,7 +282,7 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
   return (
     <>
       <Form busy={busy} errors={save.errors} onSubmit={() => void save.submit()}>
-        <h3 className="text-sm font-semibold">WebDAV 备份</h3>
+        <h3 className="text-body font-semibold">WebDAV 备份</h3>
         <small className="text-[var(--weir-ink-3)]">
           最近一次：{date(value.last_run_at ?? undefined)}
           {value.last_error ? ` · 失败：${value.last_error}` : ""}
@@ -325,7 +322,7 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
             <ul className="stack">
               {files.map((name) => (
                 <li key={name} className="flex items-center justify-between gap-2">
-                  <code className="text-xs">{name}</code>
+                  <code className="text-meta">{name}</code>
                   <Button
                     type="button"
                     size="sm"

@@ -109,7 +109,7 @@ function LinkField({ value, onChange }: { value: string; onChange: (v: string) =
   const hint = r?.type === "subscription" ? "这是订阅地址，不能作出口；请粘贴其中一个节点的链接" : r?.type === "proxy" ? "这是代理地址，请改选「代理」" : r?.type === "error" && r.message !== "内容为空" ? r.message : "";
   return (
     <Field label="节点链接" name="link" required customError={hint} hint="一个节点的链接：vless:// vmess:// trojan:// ss:// hysteria2:// tuic:// anytls://。跳过证书校验或只用证书指纹的节点不能作出口。">
-      <Textarea required rows={3} spellCheck={false} className="font-mono text-xs" value={value} onChange={(e) => onChange(e.target.value.trim())} />
+      <Textarea required rows={3} spellCheck={false} className="font-mono text-meta" value={value} onChange={(e) => onChange(e.target.value.trim())} />
     </Field>
   );
 }

@@ -113,7 +113,7 @@ export function DevUiPage() {
 
   return (
     <div className="stack">
-        <PageHeader eyebrow="开发" title="动效样例" description="@weir/ui 的交互反馈。窄屏、暗色、键盘操作和系统“减少动态效果”下都应可用。" />
+        <PageHeader title="动效样例" description="@weir/ui 的交互反馈。窄屏、暗色、键盘操作和系统“减少动态效果”下都应可用。" />
         <div className="grid gap-4 lg:grid-cols-2">
           <Demo index={1} title="按压回弹" description="按下下沉并缩小，松手冲过原位再落回。">
             <div className="actions">

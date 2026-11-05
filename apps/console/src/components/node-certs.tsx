@@ -107,7 +107,7 @@ export function GateCerts({ gate }: { gate: Gate }) {
       {certs.isPending || certs.error ? <State loading={certs.isPending} error={certs.error} onRetry={() => certs.refetch()} /> : mine.length === 0 ? <small>还没有证书：建 Trojan、WebSocket + TLS 或 QUIC 节点时自动准备。</small> : (
         <ul className="stack">
           {mine.map((c) => (
-            <li key={c.id} {...dataObject({ type: "cert", id: c.id })} className="rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3 text-sm">
+            <li key={c.id} {...dataObject({ type: "cert", id: c.id })} className="rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3 text-body">
               <div className="flex flex-wrap items-center gap-2">
                 <strong>{c.domain}</strong>
                 <Badge variant="soft" tone="neutral">{certSource[c.source] ?? c.source}</Badge>
