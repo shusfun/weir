@@ -84,6 +84,19 @@ func proxyBody(args map[string]any) map[string]any {
 		"auto": map[string]any{"mode": args["auto_mode"], "top": numberOf(args["auto_top"]), "refresh_minutes": numberOf(args["refresh_minutes"])}}
 }
 
+func loadCustomRules(ctx context.Context, s *Server, args map[string]any) (map[string]any, error) {
+	u, err := s.Store.Ent.User.Get(ctx, numberOf(args["user_id"]))
+	if err != nil {
+		return nil, errors.New("用户不存在")
+	}
+	c := loadPolicy(u).Custom
+	return map[string]any{"mode": firstNonEmpty(c.SourceMode, c.Mode, "off"), "source": c.Source}, nil
+}
+
+func customRulesBody(args map[string]any) map[string]any {
+	return map[string]any{"mode": args["mode"], "source": args["source"]}
+}
+
 func typeExitParams() []Param {
 	return []Param{
 		{Key: "user_id", Label: "用户", Kind: "ref", Ref: "user", Required: true},
@@ -117,6 +130,14 @@ var proxyDraftCaps = []Capability{
 		Kind: "draft", Risk: "normal", Object: "user", Params: proxyParams(),
 		op: &opSpec{kind: "update", method: "PUT", handler: func(s *Server) gin.HandlerFunc { return func(c *gin.Context) { s.putProxy(c, true) } }, path: userPath, pathKeys: []string{"user_id"},
 			self: "user_id", load: loadProxy, full: true, body: proxyBody}},
+	{Name: "proxy.custom_rules", Title: "修改自定义清单", Purpose: "修改一个用户代理页的自定义清单：粘贴的内容不限写法，由 Weir 整理、去重、精简，表达不了的行不算失败。不经过代理（bypass）是清单内直连、其余按分流设置；只经过代理（only）是清单内走节点选择、其余全部直连。保存前用真实内核检查，没通过时不生效并返回报错。规则由客户端执行，Clash 系约 5 分钟内更新清单内容，其他客户端下次更新订阅时生效。改前先读 get_proxy。",
+		Kind: "draft", Risk: "normal", Object: "user", Params: []Param{
+			{Key: "user_id", Label: "用户", Kind: "ref", Ref: "user", Required: true},
+			{Key: "mode", Label: "方式", Kind: "enum", Options: [][2]string{{"off", "不使用"}, {contracts.CustomBypass, "不经过代理"}, {contracts.CustomOnly, "只经过代理"}}},
+			{Key: "source", Label: "清单", Kind: "string", Hint: "域名、网址、IP、IP 段或客户端规则，每行一条"},
+		},
+		op: &opSpec{kind: "update", method: "PUT", handler: func(s *Server) gin.HandlerFunc { return func(c *gin.Context) { s.putCustomRules(c, true) } }, path: userPath, pathKeys: []string{"user_id"},
+			self: "user_id", load: loadCustomRules, full: true, body: customRulesBody}},
 	{Name: "proxy.type_exit", Title: "给类型加出口", Purpose: "给一个用户某个类型的全部节点统一加同一个出口：每个节点生成一条链式代理，由入口 VPS 逐个实测，有一个不通就整体不保存。已有出口时换成新的。需要这个用户开放了链式代理。不能撤回（要去掉用 proxy.type_exit_delete），只能是最后一步。",
 		Kind: "draft", Risk: "normal", Object: "user", Last: true, Params: typeExitParams(),
 		op: &opSpec{kind: "action", method: "PUT", handler: func(s *Server) gin.HandlerFunc { return func(c *gin.Context) { s.putTypeExit(c, true) } }, path: typeExitPath, pathKeys: []string{"user_id", "type_key"},
@@ -133,7 +154,7 @@ var proxyDraftCaps = []Capability{
 }
 
 var proxyReadCaps = []Capability{
-	{Name: "get_proxy", Title: "代理设置与速率", Purpose: "读取一个用户代理页的内容：节点按类型（协议方案）归类，每类是否放进订阅、可用节点数、统一出口（密码与节点链接不给）、还没加出口的节点；分流规则（每个类别现在走哪一组）；自动选择设置；此刻的排序——每个节点的状况、下载速率（rate.p90_bps 是近 24 小时有流量的分钟的第 90 百分位，字节/秒；minutes 为 0 是没有数据，不是 0；from 是 self 自己的或 all 全部用户的）、是否在自动选择里、是不是轮换位。",
+	{Name: "get_proxy", Title: "代理设置与速率", Purpose: "读取一个用户代理页的内容：节点按类型（协议方案）归类，每类是否放进订阅、可用节点数、统一出口（密码与节点链接不给）、还没加出口的节点；分流规则（每个类别现在走哪一组）；自定义清单（custom：提交的原文与方式、订阅实际用的方式、优化后的规则、没用上的行、内核检查结果）；自动选择设置；此刻的排序——每个节点的状况、下载速率（rate.p90_bps 是近 24 小时有流量的分钟的第 90 百分位，字节/秒；minutes 为 0 是没有数据，不是 0；from 是 self 自己的或 all 全部用户的）、是否在自动选择里、是不是轮换位。",
 		Kind: "read", Params: []Param{{Key: "user_id", Label: "用户", Kind: "ref", Ref: "user", Required: true}},
 		read: func(ctx context.Context, s *Server, args map[string]any) (any, error) {
 			u, err := s.Store.Ent.User.Get(ctx, intArg(args, "user_id"))

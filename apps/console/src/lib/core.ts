@@ -276,8 +276,39 @@ export interface ProxyPolicy {
   auto: { mode: "latency" | "ranked"; top: number; refresh_minutes: number };
 }
 
+export type CustomMode = "off" | "bypass" | "only";
+export type CustomRuleKind = "domain" | "domain_suffix" | "domain_keyword" | "ip_cidr";
+
+export interface CustomResult {
+  rules: { kind: CustomRuleKind; value: string }[];
+  counts: Partial<Record<CustomRuleKind, number>>;
+  total: number;
+  reduced: number;
+  unused: { line: number; text: string; reason: string }[];
+  warnings: string[];
+}
+
+export interface CustomView {
+  mode: CustomMode;
+  active_mode: CustomMode;
+  active_count: number;
+  source: string;
+  check?: { status: "passed" | "failed" | "unknown"; detail?: string; at: string } | null;
+  result: CustomResult;
+  refresh_seconds: number;
+}
+
+export interface CustomMatch {
+  label: string;
+  kind: string;
+  value?: string;
+  policy: string;
+  maybe?: { label: string; kind: string; policy: string }[];
+}
+
 export interface ProxyView {
   policy: ProxyPolicy;
+  custom: CustomView;
   types: ProxyType[];
   categories: { key: string; label: string; hint?: string; default: string; target: string }[];
   ranking: { node_id: number; name: string; type: string; health: Health; why?: string; rate: RateStat; rank: number; auto: boolean; exploring: boolean }[];

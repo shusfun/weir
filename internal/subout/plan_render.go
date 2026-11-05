@@ -85,8 +85,12 @@ var privateCIDRs = []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "12
 
 func clashRule(kind, value, policy string) string {
 	switch kind {
+	case "domain":
+		return "DOMAIN," + value + "," + policy
 	case "domain_suffix":
 		return "DOMAIN-SUFFIX," + value + "," + policy
+	case "domain_keyword":
+		return "DOMAIN-KEYWORD," + value + "," + policy
 	case "ip_cidr":
 		return "IP-CIDR," + value + "," + policy + ",no-resolve"
 	case "geoip":
@@ -144,6 +148,11 @@ func clashPlan(items []Item, plan *Plan) ([]byte, error) {
 	for _, c := range privateCIDRs {
 		rules = append(rules, clashRule("ip_cidr", c, "DIRECT"))
 	}
+	if plan.RuleSet != nil {
+		// 清单为空也引用：以后第一次添加同样不必更新整份配置
+		cfg["rule-providers"] = map[string]any{CustomRuleSetName: map[string]any{"type": "http", "behavior": "classical", "format": "text", "url": plan.RuleSet(), "interval": CustomRuleSetSec}}
+		rules = append(rules, "RULE-SET,"+CustomRuleSetName+","+lay.CustomPolicy)
+	}
 	for _, r := range lay.Rules {
 		for _, v := range r.Values {
 			if line := clashRule(r.Kind, v, r.Policy); line != "" {
@@ -197,8 +206,12 @@ func singboxPlan(items []Item, plan *Plan) ([]byte, error) {
 	for _, r := range lay.Rules {
 		var rule map[string]any
 		switch r.Kind {
+		case "domain":
+			rule = map[string]any{"domain": r.Values}
 		case "domain_suffix":
 			rule = map[string]any{"domain_suffix": r.Values}
+		case "domain_keyword":
+			rule = map[string]any{"domain_keyword": r.Values}
 		case "ip_cidr":
 			rule = map[string]any{"ip_cidr": r.Values}
 		default:
@@ -252,10 +265,18 @@ func iniPlan(items []Item, target string, plan *Plan) ([]byte, error) {
 	for _, r := range lay.Rules {
 		for _, v := range r.Values {
 			switch r.Kind {
+			case "domain":
+				fmt.Fprintf(&b, "DOMAIN, %s, %s\n", v, r.Policy)
 			case "domain_suffix":
 				fmt.Fprintf(&b, "DOMAIN-SUFFIX, %s, %s\n", v, r.Policy)
+			case "domain_keyword":
+				fmt.Fprintf(&b, "DOMAIN-KEYWORD, %s, %s\n", v, r.Policy)
 			case "ip_cidr":
-				fmt.Fprintf(&b, "IP-CIDR, %s, %s, no-resolve\n", v, r.Policy)
+				kw := "IP-CIDR"
+				if strings.Contains(v, ":") {
+					kw = "IP-CIDR6"
+				}
+				fmt.Fprintf(&b, "%s, %s, %s, no-resolve\n", kw, v, r.Policy)
 			case "geoip":
 				fmt.Fprintf(&b, "GEOIP, %s, %s\n", strings.ToUpper(v), r.Policy)
 			}
@@ -295,10 +316,18 @@ func quanxPlan(lines []string, lay layout, plan *Plan) []byte {
 	for _, r := range lay.Rules {
 		for _, v := range r.Values {
 			switch r.Kind {
+			case "domain":
+				fmt.Fprintf(&b, "host, %s, %s\n", v, policy(r.Policy))
 			case "domain_suffix":
 				fmt.Fprintf(&b, "host-suffix, %s, %s\n", v, policy(r.Policy))
+			case "domain_keyword":
+				fmt.Fprintf(&b, "host-keyword, %s, %s\n", v, policy(r.Policy))
 			case "ip_cidr":
-				fmt.Fprintf(&b, "ip-cidr, %s, %s\n", v, policy(r.Policy))
+				kw := "ip-cidr"
+				if strings.Contains(v, ":") {
+					kw = "ip6-cidr"
+				}
+				fmt.Fprintf(&b, "%s, %s, %s\n", kw, v, policy(r.Policy))
 			case "geoip":
 				fmt.Fprintf(&b, "geoip, %s, %s\n", strings.ToLower(v), policy(r.Policy))
 			}
@@ -331,6 +360,10 @@ func egernPlan(items []Item, plan *Plan) ([]byte, error) {
 	for _, r := range lay.Rules {
 		for _, v := range r.Values {
 			switch r.Kind {
+			case "domain":
+				rules = append(rules, map[string]any{"domain": map[string]any{"match": v, "policy": r.Policy}})
+			case "domain_keyword":
+				rules = append(rules, map[string]any{"domain_keyword": map[string]any{"match": v, "policy": r.Policy}})
 			case "domain_suffix":
 				rules = append(rules, map[string]any{"domain_suffix": map[string]any{"match": v, "policy": r.Policy}})
 			case "ip_cidr":

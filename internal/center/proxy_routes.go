@@ -26,6 +26,8 @@ func (s *Server) proxyRoutes(auth, admin *gin.RouterGroup) {
 		admin := g.admin
 		g.r.GET(g.base+"/proxy", func(c *gin.Context) { s.getProxy(c, admin) })
 		g.r.PUT(g.base+"/proxy", func(c *gin.Context) { s.putProxy(c, admin) })
+		g.r.PUT(g.base+"/proxy/custom", s.asJob("保存自定义清单", "已取消，清单保持原样", func(c *gin.Context) { s.putCustomRules(c, admin) }))
+		g.r.POST(g.base+"/proxy/custom/test", func(c *gin.Context) { s.testCustomRules(c, admin) })
 		g.r.PUT(g.base+"/proxy/types/:type/exit", s.asJob("给一类节点加出口", "已取消，出口保持原样", func(c *gin.Context) { s.putTypeExit(c, admin) }))
 		g.r.DELETE(g.base+"/proxy/types/:type/exit", func(c *gin.Context) { s.deleteTypeExit(c, admin) })
 	}
@@ -168,7 +170,10 @@ func (s *Server) proxyView(ctx context.Context, u *ent.User) (gin.H, error) {
 	for _, rc := range ruleCategories {
 		cats = append(cats, gin.H{"key": rc.Key, "label": rc.Label, "hint": rc.Hint, "default": rc.Default, "target": firstNonEmpty(pol.Rules[rc.Key], rc.Default)})
 	}
-	return gin.H{"policy": pol, "types": items, "categories": cats, "ranking": ranking, "allow_chain": u.AllowChain,
+	// 清单单独给：policy 会被页面原样提交回来，不必带上整份原文
+	custom := customView(pol.Custom)
+	pol.Custom = contracts.CustomRules{}
+	return gin.H{"policy": pol, "custom": custom, "types": items, "categories": cats, "ranking": ranking, "allow_chain": u.AllowChain,
 		"min_refresh": contracts.MinRefreshMinutes}, nil
 }
 
@@ -239,7 +244,7 @@ func (s *Server) putProxy(c *gin.Context, admin bool) {
 		return
 	}
 	// 已不存在的类型从关闭列表里去掉；规则里写默认值的不存（以后默认值变了跟着变）
-	pol := contracts.ProxyPolicy{Auto: req.Auto, Rules: map[string]string{}}
+	pol := contracts.ProxyPolicy{Auto: req.Auto, Rules: map[string]string{}, Custom: loadPolicy(u).Custom}
 	for _, t := range dedupeStr(req.Disabled) {
 		if known[t] {
 			pol.Disabled = append(pol.Disabled, t)

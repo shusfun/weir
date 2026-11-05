@@ -26,6 +26,7 @@ import (
 func (s *Server) subRoutes(r *gin.Engine, ready *gin.RouterGroup) {
 	r.GET("/sub/:token", s.serveSub)
 	r.GET("/sub/:token/provider/:key", s.serveProvider)
+	r.GET("/sub/:token/rules", s.serveCustomRules)
 	ready.GET("/sub-info/:token", s.subInfo)
 }
 
@@ -336,6 +337,7 @@ func (s *Server) serveSub(c *gin.Context) {
 		switch target {
 		case "clash", "mihomo":
 			plan.Providers = func(key string) string { return origin + "/sub/" + l.Token + "/provider/" + url.PathEscape(key) }
+			plan.RuleSet = func() string { return origin + "/sub/" + l.Token + "/rules" }
 		case "surge":
 			plan.ManagedURL = origin + "/sub/" + l.Token + "?target=surge"
 		}
@@ -400,6 +402,24 @@ func (s *Server) serveProvider(c *gin.Context) {
 		return
 	}
 	c.Data(200, "application/yaml; charset=utf-8", body)
+}
+
+// serveCustomRules 是 Clash rule-providers 拉取的自定义清单；与 serveProvider 一样不计拉取次数。
+func (s *Server) serveCustomRules(c *gin.Context) {
+	if !s.Config.Installed || s.Store == nil {
+		failure(c, 503, "setup_required")
+		return
+	}
+	l, u, ok := s.linkByToken(c.Request.Context(), c.Param("token"))
+	if !ok {
+		failure(c, 404, "subscription_not_found")
+		return
+	}
+	if state := windowState(u, l, time.Now()); state != "active" {
+		failure(c, 403, "subscription_"+state)
+		return
+	}
+	c.Data(200, "text/plain; charset=utf-8", []byte(customRuleFile(loadPolicy(u).Custom)))
 }
 
 // weirSubscription 是 target=weir 的内容：节点仍是节点链接，带名次、状况与分组、规则。

@@ -47,6 +47,33 @@ func decode(t *testing.T, b []byte) map[string]any {
 	return doc
 }
 
+func TestSingboxRouteUsesInboundUserName(t *testing.T) {
+	cfg := sampleConfig(t)
+	cfg.Inbounds = []contracts.Inbound{{ID: 1, Tag: "hk-reality", Kernel: "sing-box", Protocol: "shadowsocks", Port: 24443}}
+	cfg.Credentials = cfg.Credentials[:2]
+	result, err := Build(cfg, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := decode(t, result.Singbox)
+	users := map[string]bool{}
+	for _, in := range doc["inbounds"].([]any) {
+		for _, u := range in.(map[string]any)["users"].([]any) {
+			users[u.(map[string]any)["name"].(string)] = true
+		}
+	}
+	for _, r := range doc["route"].(map[string]any)["rules"].([]any) {
+		if names, ok := r.(map[string]any)["auth_user"].([]any); ok {
+			for _, n := range names {
+				name := n.(string)
+				if !users[name] {
+					t.Fatalf("route user %q has no inbound user; inbound users=%v", name, users)
+				}
+			}
+		}
+	}
+}
+
 func TestBuildXrayFiltersCredentialsAndRoutes(t *testing.T) {
 	cfg := sampleConfig(t)
 	out, err := Build(cfg, Options{CertDir: t.TempDir(), Exhausted: map[string]bool{"u2": true}})

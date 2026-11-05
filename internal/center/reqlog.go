@@ -1,6 +1,7 @@
 package center
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"log/slog"
@@ -23,19 +24,25 @@ func failInternal(c *gin.Context, status int, code string, err error) {
 // 页面需要排查的 4xx 只记错误码。路径记路由模板而不是原始地址，订阅令牌与查询参数不进日志。
 func requestLog(c *gin.Context) {
 	id := requestID()
+	trace := newHTTPTrace(c.GetHeader("traceparent"))
 	c.Set("request_id", id)
+	c.Set("trace_id", trace.ID)
+	c.Set("span_id", trace.Span)
+	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), httpTraceKey{}, trace))
 	c.Header("X-Request-Id", id)
+	c.Header("X-Trace-Id", trace.ID)
+	c.Header("traceparent", trace.parent())
 	start := time.Now()
 	c.Next()
 	status, code := c.Writer.Status(), c.GetString("error_code")
-	if !logged(status, code) {
+	if !logged(status, code) && !customTraceRoute(c.FullPath()) {
 		return
 	}
 	route := c.FullPath()
 	if route == "" {
 		route = "(未匹配)"
 	}
-	attrs := []any{"id", id, "method", c.Request.Method, "route", route, "status", status, "ms", time.Since(start).Milliseconds()}
+	attrs := []any{"id", id, "trace", trace.ID, "span", trace.Span, "method", c.Request.Method, "route", route, "status", status, "ms", time.Since(start).Milliseconds()}
 	if code != "" {
 		attrs = append(attrs, "code", code)
 	}
@@ -49,7 +56,46 @@ func requestLog(c *gin.Context) {
 		slog.Error("request", attrs...)
 		return
 	}
-	slog.Warn("request", attrs...)
+	if status >= 400 {
+		slog.Warn("request", attrs...)
+	} else {
+		slog.Info("request", attrs...)
+	}
+}
+
+type httpTraceKey struct{}
+type httpTrace struct{ ID, Span, Flags string }
+
+func (t httpTrace) parent() string { return "00-" + t.ID + "-" + t.Span + "-" + t.Flags }
+
+// Only version 00 is accepted here; malformed or zero identifiers start a new trace.
+func newHTTPTrace(parent string) httpTrace {
+	t := httpTrace{ID: randomHex(16), Span: randomHex(8), Flags: "01"}
+	p := strings.Split(parent, "-")
+	if len(p) == 4 && p[0] == "00" && validTraceHex(p[1], 32) && validTraceHex(p[2], 16) && len(p[3]) == 2 {
+		if _, err := hex.DecodeString(p[3]); err == nil && strings.ToLower(parent) == parent && validHTTPTraceFlags(p[3]) {
+			t.ID, t.Flags = p[1], p[3]
+		}
+	}
+	return t
+}
+
+func validHTTPTraceFlags(s string) bool {
+	b, _ := hex.DecodeString(s)
+	return len(b) == 1 && b[0]&0xfe == 0
+}
+
+func validTraceHex(s string, n int) bool {
+	if len(s) != n || s == strings.Repeat("0", n) {
+		return false
+	}
+	_, err := hex.DecodeString(s)
+	return err == nil
+}
+
+// Successful records are limited to this batch's operations; routes never contain tokens.
+func customTraceRoute(route string) bool {
+	return strings.Contains(route, "/proxy/custom") || route == "/sub/:token/rules" || route == "/sub/:token"
 }
 
 // logged 排除正常流程里大量出现的状态：未登录（401）、找不到（404）、被封禁来源的重复访问、未初始化。

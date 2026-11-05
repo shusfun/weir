@@ -268,7 +268,11 @@ func (s *Server) audit(c *gin.Context, action, target, result string) {
 	if s.Store == nil {
 		return
 	}
-	_, _ = s.Store.Ent.Audit.Create().SetActor(c.GetInt("user_id")).SetAction(action).SetTarget(target).SetResult(result).SetIP(c.ClientIP()).Save(c.Request.Context())
+	q := s.Store.Ent.Audit.Create().SetActor(c.GetInt("user_id")).SetAction(action).SetTarget(target).SetResult(result).SetIP(c.ClientIP())
+	if id := c.GetString("trace_id"); id != "" {
+		q.SetDetail(map[string]any{"trace_id": id, "span_id": c.GetString("span_id"), "request_id": c.GetString("request_id")})
+	}
+	_, _ = q.Save(c.Request.Context())
 }
 
 func (s *Server) Router() *gin.Engine {

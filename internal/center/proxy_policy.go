@@ -201,6 +201,15 @@ func (s *Server) subPlan(ctx context.Context, p planned) (*subout.Plan, []subout
 		used[label] = true
 		plan.Types = append(plan.Types, subout.TypeGroup{Key: t.Key, Label: label})
 	}
+	custom := p.Policy.Custom
+	plan.CustomTarget = "direct"
+	if custom.Mode != "" {
+		plan.Custom = customPlanRules(custom.Lines)
+	}
+	if custom.Mode == contracts.CustomOnly {
+		plan.CustomTarget, plan.Final = "select", "direct"
+		return plan, items
+	}
 	for _, c := range ruleCategories {
 		target := firstNonEmpty(p.Policy.Rules[c.Key], c.Default)
 		if c.Key == "final" {
@@ -208,13 +217,13 @@ func (s *Server) subPlan(ctx context.Context, p planned) (*subout.Plan, []subout
 			continue
 		}
 		if len(c.Domains) > 0 {
-			plan.Rules = append(plan.Rules, subout.Rule{Kind: "domain_suffix", Values: c.Domains, Target: target})
+			plan.Rules = append(plan.Rules, subout.Rule{Kind: "domain_suffix", Values: c.Domains, Target: target, Label: c.Label})
 		}
 		if len(c.CIDRs) > 0 {
-			plan.Rules = append(plan.Rules, subout.Rule{Kind: "ip_cidr", Values: c.CIDRs, Target: target})
+			plan.Rules = append(plan.Rules, subout.Rule{Kind: "ip_cidr", Values: c.CIDRs, Target: target, Label: c.Label})
 		}
 		for _, g := range c.GeoIP {
-			plan.Rules = append(plan.Rules, subout.Rule{Kind: "geoip", Values: []string{g}, Target: target})
+			plan.Rules = append(plan.Rules, subout.Rule{Kind: "geoip", Values: []string{g}, Target: target, Label: c.Label})
 		}
 	}
 	return plan, items

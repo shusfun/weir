@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -164,11 +165,35 @@ func golden(t *testing.T, name, kernel string, got []byte, dir string) {
 	}
 	var x, y any
 	_ = json.Unmarshal(want, &x)
-	_ = json.Unmarshal([]byte(strings.ReplaceAll(string(got), dir, "/weir-test-certs")), &y)
+	_ = json.Unmarshal(got, &y)
+	if c, ok := y.(map[string]any); ok {
+		normalizeGoldenPaths(c, dir)
+	}
 	if !reflect.DeepEqual(x, y) {
 		out := filepath.Join(os.TempDir(), "weir-"+name+"-"+kernel+".json")
 		_ = os.WriteFile(out, got, 0o644)
 		t.Fatalf("%s/%s differs from %s; got %s", name, kernel, path, out)
+	}
+}
+
+func normalizeGoldenPaths(v any, certDir string) {
+	switch x := v.(type) {
+	case map[string]any:
+		for k, child := range x {
+			lowerKey := strings.ToLower(k)
+			if p, ok := child.(string); ok && (strings.HasSuffix(lowerKey, "file") || strings.HasSuffix(lowerKey, "path")) {
+				rel, err := filepath.Rel(certDir, p)
+				if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+					x[k] = path.Join("/weir-test-certs", filepath.ToSlash(rel))
+				}
+				continue
+			}
+			normalizeGoldenPaths(child, certDir)
+		}
+	case []any:
+		for _, child := range x {
+			normalizeGoldenPaths(child, certDir)
+		}
 	}
 }
 

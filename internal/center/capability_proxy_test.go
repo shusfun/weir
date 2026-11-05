@@ -14,6 +14,15 @@ import (
 // dsh 的代理页与订阅管理能力：读代理设置与速率、读拉取统计（不含来源 IP）；草稿改代理设置（没给的保持原样、可撤回）、
 // 给类型加出口（代理密码只在确认窗里填）、去掉类型出口；新建链接带生效时间，提交时就校验。
 func TestProxyCapabilities(t *testing.T) {
+	oldBinary, oldRun := subCheckBinary, subCheckRun
+	subCheckBinary = func(*Server, context.Context, string) (string, string, error) {
+		return "checker", "test", nil
+	}
+	subCheckRun = func(context.Context, string, string, string, []byte) ([]byte, error) {
+		return nil, nil
+	}
+	t.Cleanup(func() { subCheckBinary, subCheckRun = oldBinary, oldRun })
+
 	s, admin, g := setupGate(t)
 	ctx := t.Context()
 	stop := make(chan struct{})
@@ -74,6 +83,24 @@ func TestProxyCapabilities(t *testing.T) {
 	}
 	if code, uris := subLinks(t, dave, tok); code != 200 || len(uris) != 1 {
 		t.Fatalf("sub after proxy.update = %d %v", code, uris)
+	}
+
+	// proxy.custom_rules：试运行给出优化统计、不写；确认后与手动保存相同；get_proxy 能读到结果
+	if text, isErr := submit(map[string]any{"action": "proxy.custom_rules", "args": map[string]any{"user_id": uid, "mode": "nope", "source": "a.example"}}); !isErr {
+		t.Fatalf("unknown mode must be refused at submit: %q", text)
+	}
+	if text, isErr := submit(map[string]any{"action": "proxy.custom_rules", "args": map[string]any{"user_id": uid, "mode": "bypass", "source": "netflix.com\nwww.netflix.com\nGEOSITE,x"}}); isErr {
+		t.Fatal(text)
+	}
+	if c := loadPolicy(s.Store.Ent.User.GetX(ctx, uid)).Custom; c.Source != "" || c.Mode != "" {
+		t.Fatalf("dry run wrote custom rules: %+v", c)
+	}
+	mustJSON(t, admin, "POST", "/api/v1/admin/ai/drafts/"+latest()["id"].(string)+"/apply", nil, 200)
+	if c := loadPolicy(s.Store.Ent.User.GetX(ctx, uid)).Custom; c.Mode != "bypass" || len(c.Lines) != 1 || c.Lines[0] != "DOMAIN-SUFFIX,netflix.com" {
+		t.Fatalf("custom rules after apply = %+v", c)
+	}
+	if text, isErr := toolText(t, h, m.webToken, "get_proxy", map[string]any{"user_id": uid}); isErr || !strings.Contains(text, "GEOSITE") || !strings.Contains(text, `"active_mode"`) {
+		t.Fatalf("get_proxy custom = %s", text)
 	}
 
 	// proxy.type_exit：代理密码不能由 dsh 填；管理员在确认窗里填后保存，订阅换成经出口的版本

@@ -110,6 +110,112 @@ func TestRenderPlanFormats(t *testing.T) {
 	}
 }
 
+func customPlanForTest() (*Plan, []Item) {
+	plan, items := testPlan()
+	plan.CustomTarget = "direct"
+	plan.Custom = []Rule{
+		{Kind: "domain", Values: []string{"exact.example"}},
+		{Kind: "domain_suffix", Values: []string{"custom.example"}},
+		{Kind: "domain_keyword", Values: []string{"customword"}},
+		{Kind: "ip_cidr", Values: []string{"198.51.100.0/24", "2001:db8::/32"}},
+	}
+	return plan, items
+}
+
+// 自定义清单在每种格式里都排在类别之前，四种规则都有对应写法；KERNEL_CHECK_DIR 设置时写出来给真实内核检查。
+func TestRenderCustomRules(t *testing.T) {
+	plan, items := customPlanForTest()
+	dir := os.Getenv("KERNEL_CHECK_DIR")
+	for target, want := range map[string][]string{
+		"clash":   {"DOMAIN,exact.example,DIRECT", "DOMAIN-SUFFIX,custom.example,DIRECT", "DOMAIN-KEYWORD,customword,DIRECT", "IP-CIDR,198.51.100.0/24,DIRECT,no-resolve", "IP-CIDR,2001:db8::/32,DIRECT,no-resolve"},
+		"singbox": {`"domain": [`, `"custom.example"`, `"domain_keyword": [`, `"198.51.100.0/24"`},
+		"loon":    {"DOMAIN, exact.example, DIRECT", "DOMAIN-SUFFIX, custom.example, DIRECT", "DOMAIN-KEYWORD, customword, DIRECT", "IP-CIDR, 198.51.100.0/24, DIRECT, no-resolve", "IP-CIDR6, 2001:db8::/32, DIRECT, no-resolve"},
+		"quanx":   {"host, exact.example, direct", "host-suffix, custom.example, direct", "host-keyword, customword, direct", "ip-cidr, 198.51.100.0/24, direct", "ip6-cidr, 2001:db8::/32, direct"},
+		"egern":   {"domain:", "domain_suffix:", "domain_keyword:", "198.51.100.0/24"},
+	} {
+		use := items
+		if target == "quanx" || target == "egern" {
+			use = items[1:]
+		}
+		body, _, err := RenderPlan(use, target, plan)
+		if err != nil {
+			t.Fatalf("%s: %v", target, err)
+		}
+		text := string(body)
+		for _, w := range want {
+			if !strings.Contains(text, w) {
+				t.Fatalf("%s missing %q:\n%s", target, w, text)
+			}
+		}
+		if i, j := strings.Index(text, "custom.example"), strings.Index(text, "openai.com"); i < 0 || j < 0 || i > j {
+			t.Fatalf("%s: custom rules must come first:\n%s", target, text)
+		}
+		if dir != "" && (target == "clash" || target == "singbox") {
+			ext := map[string]string{"clash": "yaml", "singbox": "json"}[target]
+			if err := os.WriteFile(filepath.Join(dir, "plan-custom."+ext), body, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
+// Clash 设了 RuleSet：清单不内联，只引用 rule-providers，紧跟内网规则；走向由 CustomTarget 决定。
+func TestClashCustomRuleSet(t *testing.T) {
+	plan, items := customPlanForTest()
+	plan.CustomTarget = "select"
+	plan.RuleSet = func() string { return "https://center.example/sub/tok/rules" }
+	body, _, err := RenderPlan(items, "clash", plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg struct {
+		Rules     []string       `yaml:"rules"`
+		Providers map[string]any `yaml:"rule-providers"`
+	}
+	if err := yaml.Unmarshal(body, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	p, _ := cfg.Providers[CustomRuleSetName].(map[string]any)
+	if p["url"] != "https://center.example/sub/tok/rules" || p["behavior"] != "classical" || p["format"] != "text" || p["interval"] != CustomRuleSetSec {
+		t.Fatalf("provider = %v", cfg.Providers)
+	}
+	if cfg.Rules[len(privateCIDRs)] != "RULE-SET,"+CustomRuleSetName+",节点选择" || strings.Contains(string(body), "custom.example") {
+		t.Fatalf("rules:\n%s", body)
+	}
+}
+
+// Match 的顺序与渲染一致：内网 → 清单 → 类别 → 其余流量；域名不解析，排在命中之前的 IP 规则列为可能先命中。
+func TestPlanMatch(t *testing.T) {
+	plan, items := customPlanForTest()
+	names := []string{"HK REALITY", "JP Trojan", "US Trojan"}
+	for _, c := range []struct{ target, label, kind, value, policy string }{
+		{"10.1.2.3", "内网地址", "ip_cidr", "10.0.0.0/8", "DIRECT"},
+		{"exact.example", CustomLabel, "domain", "exact.example", "DIRECT"},
+		{"sub.exact.example", "其余流量", "final", "", GroupSelect},
+		{"a.custom.example", CustomLabel, "domain_suffix", "custom.example", "DIRECT"},
+		{"notcustom.example", "其余流量", "final", "", GroupSelect},
+		{"www.customword.net", CustomLabel, "domain_keyword", "customword", "DIRECT"},
+		{"198.51.100.7", CustomLabel, "ip_cidr", "198.51.100.0/24", "DIRECT"},
+		{"2001:db8::1", CustomLabel, "ip_cidr", "2001:db8::/32", "DIRECT"},
+		{"chat.openai.com", "", "domain_suffix", "openai.com", GroupAuto},
+	} {
+		m := plan.Match(c.target, names, items)
+		if m.Label != c.label || m.Kind != c.kind || m.Value != c.value || m.Policy != c.policy {
+			t.Fatalf("%s = %+v", c.target, m)
+		}
+	}
+	// 清单排在前面：域名先命中清单时，后面类别里的 GeoIP 不算；没命中时列出来
+	if m := plan.Match("a.custom.example", names, items); len(m.Maybe) != 0 {
+		t.Fatalf("maybe = %+v", m.Maybe)
+	}
+	if m := plan.Match("chat.openai.com", names, items); len(m.Maybe) != 1 || m.Maybe[0].Kind != "ip_cidr" {
+		t.Fatalf("maybe = %+v", m.Maybe)
+	}
+	if m := plan.Match("unmatched.example", names, items); len(m.Maybe) != 2 || m.Maybe[1].Kind != "geoip" {
+		t.Fatalf("maybe = %+v", m.Maybe)
+	}
+}
+
 func TestClashProviders(t *testing.T) {
 	plan, items := testPlan()
 	plan.Providers = func(key string) string { return "https://center.example/sub/tok/provider/" + key }

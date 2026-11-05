@@ -284,7 +284,11 @@ func routeViews(kernel string, inbounds []db.Inbound, outbounds []db.Outbound, r
 			alias[r] = tag
 		}
 		for _, c := range enabled(in.Clients) {
-			clientUser[c.ID] = routeUser(in.Protocol, c)
+			if kernel == db.CoreSingbox {
+				clientUser[c.ID] = statsName(c)
+			} else {
+				clientUser[c.ID] = routeUser(in.Protocol, c)
+			}
 		}
 	}
 	var out []map[string]any
@@ -312,15 +316,11 @@ func routeViews(kernel string, inbounds []db.Inbound, outbounds []db.Outbound, r
 			return nil, fmt.Errorf("unsupported route action")
 		}
 		if rule.ClientID > 0 {
-			if kernel == db.CoreSingbox {
-				r["user"] = fmt.Sprintf("grant-%d", rule.ClientID)
-			} else {
-				u, ok := clientUser[rule.ClientID]
-				if !ok || strings.TrimSpace(u) == "" {
-					continue
-				}
-				r["user"] = u
+			u, ok := clientUser[rule.ClientID]
+			if !ok || strings.TrimSpace(u) == "" {
+				continue
 			}
+			r["user"] = u
 		}
 		if rule.InboundID > 0 {
 			tag, ok := byID[rule.InboundID]

@@ -881,6 +881,65 @@ func TestCenterChecksSubscriptionsWithRealKernels(t *testing.T) {
 	}
 }
 
+// This check deliberately requires both real checkers. Unlike the general subscription smoke test above,
+// a missing kernel is a failed acceptance precondition, not a skipped test.
+func TestCustomRulesRealKernelChecksAndProvider(t *testing.T) {
+	mh, sb := os.Getenv("WEIR_E2E_MIHOMO"), os.Getenv("WEIR_E2E_SINGBOX")
+	if mh == "" || sb == "" {
+		t.Fatal("WEIR_E2E_MIHOMO and WEIR_E2E_SINGBOX are required for custom rule acceptance")
+	}
+	e := setup(t)
+	e.seedSingbox()
+	data, err := os.ReadFile(mh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = (kernels.Cache{Dir: filepath.Join(e.dir, "center-data", "kernels")}).Put("mihomo", "1.19.33", "amd64", data); err != nil {
+		t.Fatal(err)
+	}
+	e.startGate("rules")
+	e.s.Store.Ent.Gate.UpdateOneID(e.gateID).SetPublicHost("203.0.113.20").ExecX(e.ctx)
+	e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "vless-reality", "name": "R", "skip_probe": true,
+		"settings": map[string]any{"reality_dest": localDest(t), "reality_server_names": "e2e.test"}}, nil)
+	u := e.post("/api/v1/admin/users", map[string]any{"email": "custom@e2e.test", "password": "E2eUser1"}, nil)
+	uid := int(u["id"].(float64))
+	var detail map[string]any
+	b, _ := e.get("/api/v1/admin/users/"+strconv.Itoa(uid), nil)
+	if err = json.Unmarshal(b, &detail); err != nil {
+		t.Fatal(err)
+	}
+	token := detail["link_items"].([]any)[0].(map[string]any)["token"].(string)
+	body, _ := json.Marshal(map[string]any{"mode": "bypass", "source": "netflix.com\nDOMAIN-KEYWORD,openai\nGEOSITE,private\n2001:db8::/32"})
+	req, _ := http.NewRequest("PUT", e.url+"/api/v1/admin/users/"+strconv.Itoa(uid)+"/proxy/custom", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := e.admin.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved map[string]any
+	err = json.NewDecoder(resp.Body).Decode(&saved)
+	resp.Body.Close()
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("save custom rules = %d %v err=%v", resp.StatusCode, saved, err)
+	}
+	check := saved["custom"].(map[string]any)["check"].(map[string]any)
+	if check["status"] != "passed" {
+		t.Fatalf("real kernel checks = %v", check)
+	}
+	clash, _ := e.get("/sub/"+token, map[string]string{"User-Agent": "clash.meta/1.19"})
+	if !strings.Contains(string(clash), "RULE-SET,weir-custom,DIRECT") || !strings.Contains(string(clash), "/sub/"+token+"/rules") {
+		t.Fatalf("Clash custom rule provider missing:\n%s", clash)
+	}
+	rules, _ := e.get("/sub/"+token+"/rules", nil)
+	if string(rules) != "DOMAIN-SUFFIX,netflix.com\nDOMAIN-KEYWORD,openai\nIP-CIDR,2001:db8::/32,no-resolve\n" {
+		t.Fatalf("provider rules = %q", rules)
+	}
+	singbox, _ := e.get("/sub/"+token, map[string]string{"User-Agent": "SFA/1.14"})
+	if !strings.Contains(string(singbox), `"domain_suffix"`) || !strings.Contains(string(singbox), `"domain_keyword"`) {
+		t.Fatalf("sing-box custom rules missing:\n%s", singbox)
+	}
+}
+
 // liveRatesFromKernels：经一组出口下载时，链路页的实时数据来自真实内核的计数——
 // 路径（凭据）与出口（一组）都有速率，且标出这一刻流量最大的成员（驱动打开了按出口计量，Gate 把内核标签换回了配置标签）。
 func liveRatesFromKernels(t *testing.T, e *env, port int, url string, size int) {

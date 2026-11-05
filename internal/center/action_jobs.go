@@ -93,22 +93,37 @@ func (s *Server) asJob(title, cancelMsg string, h gin.HandlerFunc) gin.HandlerFu
 			return
 		}
 		inner, w := detached(c, body)
-		route, trace := c.FullPath(), c.GetString("request_id")
+		route, request := c.FullPath(), c.GetString("request_id")
+		trace := c.GetString("trace_id")
+		if trace == "" {
+			trace = request
+		}
+		httpTraceValue := c.Request.Context().Value(httpTraceKey{})
 		id := "action:" + randomHex(8)
 		job := s.jobs.StartWith(jobSpec{ID: id, Kind: "action", Title: title, Owner: c.GetInt("user_id"), Trace: trace, Hidden: true, CancelMsg: cancelMsg},
 			func(ctx context.Context, run JobRun) (map[string]any, error) {
-				inner.Request = inner.Request.WithContext(context.WithValue(withTrace(ctx, trace), jobCtxKey{}, &run))
+				ctx = context.WithValue(withTrace(ctx, request), jobCtxKey{}, &run)
+				if httpTraceValue != nil {
+					ctx = context.WithValue(ctx, httpTraceKey{}, httpTraceValue)
+				}
+				inner.Request = inner.Request.WithContext(ctx)
 				h(inner)
 				inner.Writer.WriteHeaderNow()
 				var out map[string]any
 				_ = json.Unmarshal(w.Body.Bytes(), &out)
 				res := map[string]any{"status": w.Code, "body": out}
-				if w.Code >= 500 {
-					attrs := []any{"id", trace, "job", id, "route", route, "status", w.Code, "code", inner.GetString("error_code")}
+				if w.Code >= 500 || customTraceRoute(route) {
+					attrs := []any{"id", request, "trace", trace, "span", inner.GetString("span_id"), "user", inner.GetInt("user_id"), "job", id, "route", route, "status", w.Code, "code", inner.GetString("error_code")}
 					if len(inner.Errors) > 0 {
 						attrs = append(attrs, "err", redact(strings.Join(inner.Errors.Errors(), "; ")))
 					}
-					slog.Error("job", attrs...)
+					if w.Code >= 500 {
+						slog.Error("job", attrs...)
+					} else if w.Code >= 400 {
+						slog.Warn("job", attrs...)
+					} else {
+						slog.Info("job", attrs...)
+					}
 				}
 				if w.Code >= 400 {
 					return res, handlerError(w.Code, out)

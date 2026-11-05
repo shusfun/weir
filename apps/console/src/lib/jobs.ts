@@ -16,7 +16,8 @@ export const isJobGone = (e: unknown) => e instanceof ApiError && e.code === "jo
 export const jobKey = (id: string | null) => ["job", id] as const;
 
 export async function fetchJob(id: string) {
-  return (await api("/me/jobs/" + encodeURIComponent(id))).job as Job;
+  const previous = queryClient.getQueryData<Job>(jobKey(id));
+  return (await api("/me/jobs/" + encodeURIComponent(id), "GET", undefined, { traceId: previous?.trace })).job as Job;
 }
 
 // jobRefetch：连着事件流时不轮询（推送会写进缓存），否则运行中每秒一次；任务已不在时停止。

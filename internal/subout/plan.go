@@ -19,7 +19,22 @@ type Plan struct {
 	// ManagedURL 不为空时 Surge 配置首行写 #!MANAGED-CONFIG，按 UpdateSec 自动更新整份配置。
 	ManagedURL string
 	UpdateSec  int
+	// Custom 是用户的自定义清单，排在 Rules 之前，都走 CustomTarget。
+	Custom       []Rule
+	CustomTarget string
+	// RuleSet 不为空时 Clash 把清单放进 rule-providers，客户端单独按 CustomRuleSetSec 刷新，不必更新整份配置；
+	// 其他情况清单内联在规则里。
+	RuleSet func() string
 }
+
+// CustomRuleSetSec 是 Clash 刷新自定义清单的间隔；内容很小，比节点列表刷新得勤。
+const CustomRuleSetSec = 300
+
+// CustomRuleSetName 是自定义清单在 Clash rule-providers 里的名称。
+const CustomRuleSetName = "weir-custom"
+
+// CustomLabel 是自定义清单在规则来源里的名称。
+const CustomLabel = "自定义清单"
 
 type TypeGroup struct{ Key, Label string }
 
@@ -30,11 +45,12 @@ type Item struct {
 	Auto bool
 }
 
-// Rule：Kind 是 domain_suffix / ip_cidr / geoip；Target 同 Plan.Final。
+// Rule：Kind 是 domain / domain_suffix / domain_keyword / ip_cidr / geoip；Target 同 Plan.Final；Label 是规则来源（如分流类别）。
 type Rule struct {
 	Kind   string
 	Values []string
 	Target string
+	Label  string
 }
 
 const (
@@ -84,12 +100,15 @@ type layoutRule struct {
 	Kind   string
 	Values []string
 	Policy string // 组名，或 DIRECT / REJECT
+	Label  string
 }
 
 type layout struct {
 	Groups []group
 	Rules  []layoutRule
 	Final  string
+	// CustomPolicy 是自定义清单走的组；清单在 rule-providers 里时规则行按它写。
+	CustomPolicy string
 }
 
 // reserved 是不能被节点名占用的名称：组名与内置策略。
@@ -153,11 +172,19 @@ func (p *Plan) layout(names []string, items []Item) layout {
 		}
 		return GroupSelect
 	}
+	out.CustomPolicy = policy(p.CustomTarget)
+	if p.RuleSet == nil {
+		for _, r := range p.Custom {
+			if len(r.Values) > 0 {
+				out.Rules = append(out.Rules, layoutRule{Kind: r.Kind, Values: r.Values, Policy: out.CustomPolicy, Label: CustomLabel})
+			}
+		}
+	}
 	for _, r := range p.Rules {
 		if len(r.Values) == 0 {
 			continue
 		}
-		out.Rules = append(out.Rules, layoutRule{Kind: r.Kind, Values: r.Values, Policy: policy(r.Target)})
+		out.Rules = append(out.Rules, layoutRule{Kind: r.Kind, Values: r.Values, Policy: policy(r.Target), Label: r.Label})
 	}
 	out.Final = policy(p.Final)
 	return out

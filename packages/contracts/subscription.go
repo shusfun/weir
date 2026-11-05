@@ -11,6 +11,32 @@ type ProxyPolicy struct {
 	// reject（拒绝），或一个类型的 key（走这一类节点）。没写的类别用默认目标。
 	Rules map[string]string `json:"rules,omitempty"`
 	Auto  AutoPolicy        `json:"auto"`
+	// Custom 是用户粘贴的自定义清单，同样写进订阅由客户端执行。
+	Custom CustomRules `json:"custom,omitzero"`
+}
+
+const (
+	// CustomBypass：清单内直连，其余按分流设置。
+	CustomBypass = "bypass"
+	// CustomOnly：清单内走节点选择，其余全部直连，分流类别不起作用。
+	CustomOnly = "only"
+)
+
+// CustomRules：Mode 与 Lines 是订阅实际使用的（规范写法，如 DOMAIN-SUFFIX,netflix.com）；Source 与 SourceMode
+// 是用户最后一次提交的原文与方式。内核检查没通过时只更新后两者，客户端继续用上一次的规则。
+type CustomRules struct {
+	Mode       string       `json:"mode,omitempty"`
+	Lines      []string     `json:"lines,omitempty"`
+	Source     string       `json:"source,omitempty"`
+	SourceMode string       `json:"source_mode,omitempty"`
+	Check      *CustomCheck `json:"check,omitempty"`
+}
+
+// CustomCheck 是最后一次提交的内核检查结果：passed / failed / unknown。
+type CustomCheck struct {
+	Status string    `json:"status"`
+	Detail string    `json:"detail,omitempty"`
+	At     time.Time `json:"at"`
 }
 
 // AutoPolicy：latency 由客户端按延迟测速自动选；ranked 由中心按各节点自己统计的下载速率（最近 24 小时有流量的
@@ -105,7 +131,7 @@ type WeirGroup struct {
 	Members []string `json:"members"`
 }
 
-// WeirRule：Kind 是 domain_suffix / ip_cidr / geoip / final；Values 为空时只有 final。
+// WeirRule：Kind 是 domain / domain_suffix / domain_keyword / ip_cidr / geoip / final；Values 为空时只有 final。
 type WeirRule struct {
 	Kind   string   `json:"kind"`
 	Values []string `json:"values,omitempty"`

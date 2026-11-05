@@ -58,6 +58,9 @@ func defaultSubCheckBinary(s *Server, ctx context.Context, kernel string) (strin
 	return bin, v, err
 }
 
+// subCheckRun 运行检查内核。测试中替换。
+var subCheckRun = runSubCheck
+
 // subCheckSem 限制同时运行的检查数。
 var subCheckSem = make(chan struct{}, 2)
 
@@ -87,7 +90,7 @@ func (s *Server) checkSubscription(ctx context.Context, target string, body []by
 		res.Error = "检查被取消"
 		return res
 	}
-	out, err := runSubCheck(ctx, s.dataDir(), kernel, bin, body)
+	out, err := subCheckRun(ctx, s.dataDir(), kernel, bin, body)
 	res.At = time.Now().UTC()
 	switch {
 	case err == nil:

@@ -461,7 +461,9 @@ export function errorFrom(path: string, status: number, data: any): ApiError {
 export const clause = (e: unknown) => (e instanceof Error ? e.message : String(e)).replace(/[。.！!]+$/, "");
 
 // ApiOptions：token 是初始化凭证；onJob 收到转成后台任务的操作（等待行据此显示步骤、日志与取消）。
-export type ApiOptions = { token?: string; onJob?: (j: Job) => void };
+export type ApiOptions = { token?: string; onJob?: (j: Job) => void; traceId?: string };
+
+const traceHex = (bytes: number) => Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (v) => v.toString(16).padStart(2, "0")).join("");
 
 // 可能超过反代时限的操作在中心转成后台任务（返回 202 和 kind 为 action 的任务）：这里等它结束，
 // 把任务的结果当作原本的响应返回或抛出，调用方与同步返回时一样处理。其他 202（下载、SSH 安装）原样返回。
@@ -481,7 +483,7 @@ export async function api(
   body?: unknown,
   opts?: string | ApiOptions,
 ) {
-  const { token, onJob } = typeof opts === "string" ? { token: opts, onJob: undefined } : (opts ?? {});
+  const { token, onJob, traceId } = typeof opts === "string" ? { token: opts } : (opts ?? {});
   let res: Response;
   try {
     res = await fetch("/api/v1" + path, {
@@ -489,6 +491,7 @@ export async function api(
       credentials: "same-origin",
       headers: {
         "Content-Type": "application/json",
+        traceparent: `00-${traceId ?? traceHex(16)}-${traceHex(8)}-01`,
         ...(token ? { Authorization: "Bearer " + token } : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
