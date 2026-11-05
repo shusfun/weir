@@ -223,7 +223,13 @@ func (h *Helper) loadPanel() (PanelConfig, bool) {
 func (h *Helper) panelStatus(ctx context.Context) contracts.PanelStatus {
 	st := contracts.PanelStatus{Detected: panelDetected(), Kind: "1panel"}
 	if _, err := os.Stat("/www/server/panel"); err == nil && !st.Detected {
-		return contracts.PanelStatus{Detected: true, Kind: "baota", Error: "检测到宝塔，尚未验证该版本的 IP 证书管理接口；请提供可信证书或使用 80 空闲时的直接签发"}
+		status := contracts.PanelStatus{Detected: true, Kind: "baota"}
+		if err := baotaHTTPRoot(baotaDefaultConfig, baotaDefaultRoot); err != nil {
+			status.Error = err.Error()
+		} else {
+			status.HTTP01Webroot = true
+		}
+		return status
 	}
 	cfg, ok := h.loadPanel()
 	if !ok && st.Detected {
@@ -441,6 +447,7 @@ func (h *Helper) acmeHTTP01(w http.ResponseWriter, r *http.Request) {
 		Token   string `json:"token"`
 		KeyAuth string `json:"key_auth"`
 		Seconds int    `json:"seconds"`
+		Host    string `json:"host"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil || !acmeToken(req.Token) || !strings.HasPrefix(req.KeyAuth, req.Token+".") || len(req.KeyAuth) > 256 {
 		writeJSON(w, 400, ApplyResult{Error: "invalid challenge"})
@@ -451,6 +458,14 @@ func (h *Helper) acmeHTTP01(w http.ResponseWriter, r *http.Request) {
 	}
 	ln, err := net.Listen("tcp", ":"+strconv.Itoa(acmePort))
 	if err != nil {
+		if validPanelIP(req.Host) && baotaHTTPRoot(baotaDefaultConfig, baotaDefaultRoot) == nil {
+			if err := serveBaotaChallenge(baotaDefaultRoot, req.Token, req.KeyAuth, req.Host, req.Seconds); err != nil {
+				writeJSON(w, 409, ApplyResult{Error: err.Error()})
+				return
+			}
+			writeJSON(w, 200, ApplyResult{OK: true})
+			return
+		}
 		writeJSON(w, 409, ApplyResult{Error: "80 端口被其他程序占用，无法应答验证"})
 		return
 	}

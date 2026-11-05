@@ -56,11 +56,12 @@ type ReleaseTarget struct {
 
 // PanelStatus 是 Gate 本机 1Panel 的状态。API 密钥只存在 Gate 本机（root 可读），从不上报。
 type PanelStatus struct {
-	Kind       string `json:"kind,omitempty"`
-	Detected   bool   `json:"detected"`
-	Configured bool   `json:"configured"`
-	Version    string `json:"version,omitempty"`
-	Error      string `json:"error,omitempty"`
+	HTTP01Webroot bool   `json:"http01_webroot,omitempty"`
+	Kind          string `json:"kind,omitempty"`
+	Detected      bool   `json:"detected"`
+	Configured    bool   `json:"configured"`
+	Version       string `json:"version,omitempty"`
+	Error         string `json:"error,omitempty"`
 }
 
 // PanelCert 是 1Panel 管理的一张证书：证书正文（公开）、证书与私钥一起的摘要、到期时间。

@@ -117,7 +117,7 @@ func (h *Helper) discoverPanel(ctx context.Context) error {
 		return nil
 	}
 	if _, err := os.Stat("/www/server/panel"); err == nil {
-		return errors.New("检测到宝塔；当前未验证其 IP 证书管理接口，不会修改面板或网站配置")
+		return baotaHTTPRoot(baotaDefaultConfig, baotaDefaultRoot)
 	}
 	path := "/opt/1panel/db/core.db"
 	if _, err := os.Stat(path); err != nil {

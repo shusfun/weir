@@ -98,7 +98,7 @@ export function GateCerts({ gate }: { gate: Gate }) {
       void client.invalidateQueries({ queryKey: ["gates"] });
     },
   });
-  const panelState = panel.configured
+  const panelState = panel.http01_webroot ? <Badge variant="soft" tone="ok">宝塔 HTTP 验证可用</Badge> : panel.configured
     ? panel.error ? <Badge variant="soft" tone="bad">连接失败</Badge> : <Badge variant="soft" tone="ok">已连接{panel.version ? ` ${panel.version}` : ""}</Badge>
     : panel.detected ? <Badge variant="soft" tone="warn">等待本机授权</Badge> : <Badge variant="soft" tone="neutral">{gate.panel ? "未检测到" : "未知"}</Badge>;
   return (
@@ -123,6 +123,7 @@ export function GateCerts({ gate }: { gate: Gate }) {
         </ul>
       )}
       <SectionHeader title="本机面板证书" description="Gate 首次上线自动接入本机已有的 Weir 专用授权。1Panel v2.3.2 可在面板中创建名为 Weir certificate manager、仅允许 127.0.0.1 的 API Key，无需复制密钥。其他版本可手动授权；不改网站配置。" actions={panelState} />
+      {panel.kind === "baota" && <Notice tone="info">宝塔标准默认站点可用于临时 HTTP 文件验证，证书由中心签发和续签。不需要宝塔 API 密钥，不修改 nginx 或已有网站配置；自定义默认站点无法确认时会明确报错。</Notice>}
       <Button variant="outline" disabled={!gate.online || isBusy("discover")} busy={isBusy("discover")} busyText="正在检测…" onClick={() => void run("discover", () => api(`/admin/gates/${gate.id}/panel/discover`, "POST"), "本机证书授权已接入").then(() => client.invalidateQueries({ queryKey:["gates"] }))}>检测并接入本机授权</Button>
       {panel.error && <Notice tone="bad">{String(panel.error)}</Notice>}
       <Collapsible title={panel.configured ? "更换 1Panel API 密钥" : "手动提供 1Panel API 密钥"}>

@@ -275,7 +275,7 @@ func (s *Server) deleteGatePanel(c *gin.Context) {
 // absorbPanelReport 记下心跳里的 1Panel 状态；1Panel 续签了证书时更新中心记录的证书与到期。
 func (s *Server) absorbPanelReport(ctx context.Context, g *ent.Gate, hb contracts.Heartbeat) {
 	if hb.Panel != nil {
-		v := map[string]any{"kind": hb.Panel.Kind, "detected": hb.Panel.Detected, "configured": hb.Panel.Configured, "version": hb.Panel.Version, "error": hb.Panel.Error, "at": time.Now().UTC()}
+		v := map[string]any{"http01_webroot": hb.Panel.HTTP01Webroot, "kind": hb.Panel.Kind, "detected": hb.Panel.Detected, "configured": hb.Panel.Configured, "version": hb.Panel.Version, "error": hb.Panel.Error, "at": time.Now().UTC()}
 		_ = g.Update().SetPanel(v).Exec(ctx)
 	}
 	for id, pc := range hb.PanelCerts {
@@ -489,7 +489,7 @@ func (s *Server) ipCertFor(ctx context.Context, g *ent.Gate) (*ent.Certificate, 
 	} else {
 		why = append(why, reason)
 	}
-	if !s.port80Free(ctx, g) {
+	if !s.port80Free(ctx, g) && !(g.Panel["kind"] == "baota" && g.Panel["http01_webroot"] == true) {
 		why = append(why, "80 端口被其他程序占用（或 VPS 还没有上报端口），无法直接验证 IP")
 		return nil, why
 	}
@@ -535,7 +535,7 @@ func (s *Server) issueIPCert(ctx context.Context, g *ent.Gate, ip string) (strin
 	ctx, cancel := context.WithTimeout(ctx, 150*time.Second)
 	defer cancel()
 	return client.Issue(ctx, ip, acme.ProfileShortLived, func(ctx context.Context, ch acme.Challenge) error {
-		_, err := s.gateProbe(ctx, g, contracts.ActionACMEHTTP01, map[string]any{"token": ch.Token, "key_auth": ch.KeyAuth, "seconds": 150}, 30*time.Second)
+		_, err := s.gateProbe(ctx, g, contracts.ActionACMEHTTP01, map[string]any{"token": ch.Token, "key_auth": ch.KeyAuth, "seconds": 150, "host": ip}, 30*time.Second)
 		return err
 	})
 }

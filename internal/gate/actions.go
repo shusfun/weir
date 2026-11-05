@@ -74,13 +74,13 @@ func (a *Agent) runAction(ctx context.Context, act contracts.Action) contracts.A
 	case contracts.ActionNodeTest:
 		out, err = a.nodeTest(ctx, p)
 	case contracts.ActionACMEHTTP01:
-		err = a.helper.ACMEHTTP01(ctx, str(p, "token"), str(p, "key_auth"), num(p, "seconds"))
+		err = a.helper.ACMEHTTP01(ctx, str(p, "token"), str(p, "key_auth"), num(p, "seconds"), str(p, "host"))
 	case contracts.ActionPanelConfigure:
 		out, err = a.configurePanel(ctx, p)
 	case contracts.ActionPanelDiscover:
 		var st contracts.PanelStatus
 		st, err = a.helper.DiscoverPanel(ctx)
-		out = map[string]any{"kind": st.Kind, "detected": st.Detected, "configured": st.Configured, "version": st.Version, "error": st.Error}
+		out = map[string]any{"http01_webroot": st.HTTP01Webroot, "kind": st.Kind, "detected": st.Detected, "configured": st.Configured, "version": st.Version, "error": st.Error}
 	case contracts.ActionPanelRemove:
 		err = a.helper.RemovePanel(ctx)
 	case contracts.ActionPanelCert:

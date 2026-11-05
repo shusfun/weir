@@ -166,8 +166,8 @@ func (h *helperClient) PanelReport(ctx context.Context, certs map[int64]string) 
 }
 
 // ACMEHTTP01 让辅助程序在 80 端口临时应答一次 HTTP-01 验证。
-func (h *helperClient) ACMEHTTP01(ctx context.Context, token, keyAuth string, seconds int) error {
-	return h.call(ctx, "POST", "/acme/http01", map[string]any{"token": token, "key_auth": keyAuth, "seconds": seconds}, nil)
+func (h *helperClient) ACMEHTTP01(ctx context.Context, token, keyAuth string, seconds int, host string) error {
+	return h.call(ctx, "POST", "/acme/http01", map[string]any{"token": token, "key_auth": keyAuth, "seconds": seconds, "host": host}, nil)
 }
 
 // HelperHealth 供安装器确认辅助程序已在本机套接字上应答。
