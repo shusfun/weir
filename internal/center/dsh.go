@@ -657,7 +657,7 @@ func (s *Server) fetchDSH(c *gin.Context) {
 	actor, ip := c.GetInt("user_id"), c.ClientIP()
 	job := s.jobs.Start("dsh:"+req.Version, "dsh", "dsh "+req.Version, func(bg context.Context, run JobRun) (map[string]any, error) {
 		in := s.dshInstaller()
-		in.Progress, in.Log = run.Progress, run.Log
+		in.Progress, in.Step, in.Log = run.Progress, run.Stage, run.Log
 		meta, err := in.Install(bg, req.Version)
 		res := "ok"
 		if err != nil {

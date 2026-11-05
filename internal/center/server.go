@@ -79,6 +79,8 @@ type Server struct {
 	reachChecks nodeReachChecks
 	// tasks 是周期任务正在失败的项（见 tasks.go），管理员通知据此提示。
 	tasks taskLog
+	// kernelDefaultAfter：下载任务编号 → 下载成功后设为默认（内核页「下载并设为默认」）。
+	kernelDefaultAfter sync.Map
 	// relays 是经 VPS 中转下载时等待 Gate 上传的文件（见 gate_relay.go）。
 	relays relayHub
 	// weirRel 缓存与中心同版本的 Weir 发布信息（见 gate_follow.go）。
@@ -198,6 +200,9 @@ func (s *Server) maintenance(ctx context.Context) {
 			if ready {
 				err := s.Store.Lock.Do(ctx, "maintenance", func(ctx context.Context) error {
 					now := time.Now()
+					for _, kernel := range kernels.Names {
+						s.ensureKernelDefault(ctx, kernel)
+					}
 					// 各任务互不影响：一项失败不阻止其他项。
 					report.note("reset-usage", s.ResetDueUsage(ctx, now))
 					report.note("refresh-sources", s.RefreshSources(ctx, now))

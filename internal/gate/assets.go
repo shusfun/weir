@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/shusfun/weir/internal/fetch"
@@ -92,7 +93,12 @@ func (a *Agent) assetFetch(ctx context.Context, p map[string]any) (map[string]an
 	dest := filepath.Join(dir, req.UploadID)
 	defer os.Remove(dest)
 	defer os.Remove(dest + ".part")
+	report := a.uploadProgressReporter(ctx, req.UploadID)
+	report(contracts.UploadProgress{Total: req.Size}, true)
 	err = fetch.Download(ctx, fetch.Request{URLs: urls, Dest: dest, SHA256: req.SHA256, MaxSize: limit, HTTP: a.externalHTTP(),
+		OnProgress: func(p fetch.Progress) {
+			report(contracts.UploadProgress{Done: p.Done, Total: p.Total, Speed: p.Speed, Source: p.Source}, false)
+		},
 		Log: func(s string) { log.Printf("asset %s: %s", req.UploadID, s) }})
 	if err != nil {
 		return nil, fmt.Errorf("下载失败：%w", err)
@@ -107,6 +113,27 @@ func (a *Agent) assetFetch(ctx context.Context, p map[string]any) (map[string]an
 		return nil, fmt.Errorf("上传到中心失败：%w", err)
 	}
 	return map[string]any{"size": n}, nil
+}
+
+// uploadProgressEvery 是 Gate 上报下载进度的最短间隔。
+const uploadProgressEvery = 2 * time.Second
+
+// uploadProgressReporter 返回上报下载进度的函数：只用于页面显示，后台发送、失败忽略，上一次没发完时跳过，不拖慢下载。
+func (a *Agent) uploadProgressReporter(ctx context.Context, id string) func(contracts.UploadProgress, bool) {
+	var last time.Time
+	var sending atomic.Bool
+	return func(p contracts.UploadProgress, force bool) {
+		if (!force && time.Since(last) < uploadProgressEvery) || !sending.CompareAndSwap(false, true) {
+			return
+		}
+		last = time.Now()
+		go func() {
+			defer sending.Store(false)
+			rctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			_, _ = a.center.call(rctx, "POST", "/agent/uploads/"+id+"/progress", p, nil)
+		}()
+	}
 }
 
 // uploadFile 从中心已收到的位置开始分块上传；中心回 409 时按它报的位置续传，其他失败退避重试。

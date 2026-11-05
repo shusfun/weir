@@ -4,16 +4,20 @@
 import { Progress as ProgressPrimitive } from "@base-ui/react/progress";
 import { cn } from "cn";
 
+// value 为 null：进度未知，显示流动动画（不是静止的空条，否则看起来像卡死）。结束后没有进度的任务传 0。
+// tone="bad"：失败。
 function Progress({
   className,
   children,
   value,
+  tone,
   ...props
-}: ProgressPrimitive.Root.Props) {
+}: ProgressPrimitive.Root.Props & { tone?: "bad" }) {
   return (
     <ProgressPrimitive.Root
       value={value}
       data-slot="progress"
+      data-tone={tone}
       className={cn("flex flex-wrap gap-3", className)}
       {...props}
     >
@@ -45,7 +49,7 @@ function ProgressIndicator({
   return (
     <ProgressPrimitive.Indicator
       data-slot="progress-indicator"
-      className={cn("h-full rounded-full bg-[var(--weir-blue)] transition-[width] duration-[var(--weir-mid)] ease-[var(--weir-ease)]", className)}
+      className={cn("weir-progress-indicator h-full rounded-full bg-[var(--weir-blue)] transition-[width] duration-[var(--weir-mid)] ease-[var(--weir-ease)]", className)}
       {...props}
     />
   );

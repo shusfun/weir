@@ -119,6 +119,7 @@ func (s *Server) fetchWeirPackage(ctx context.Context, run JobRun, version, arch
 	if err != nil {
 		return err
 	}
+	run.Stage("读取 GitHub 发布 v" + version)
 	rel, err := gh.Tag(ctx, weirRepo(), "v"+version)
 	if err != nil {
 		return err

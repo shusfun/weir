@@ -1,6 +1,6 @@
 // Gate 的程序版本：与中心不同时 Gate 自己按「GitHub 加速」的来源下载中心的版本（失败退回从中心下载），
 // 失败后 10 分钟内不自动重试；没跟上时标出来，显示它随心跳上报的进度或失败原因，并可手动「更新到 x」。
-import { Badge, Button, formatSize } from "@weir/ui";
+import { Badge, Button, Progress, transferText } from "@weir/ui";
 import { RefreshCw } from "lucide-react";
 import { api } from "../api";
 import { useRowAction } from "../lib/action";
@@ -21,8 +21,7 @@ export function GateVersion({ gate: g }: { gate: Gate }) {
 function updateText(g: Gate): [string, "bad" | "muted"] | null {
   const su = g.self_update;
   if (su?.state === "downloading") {
-    const pct = su.total ? Math.floor(((su.done ?? 0) / su.total) * 100) + "%" : "已下载 " + formatSize(su.done ?? 0);
-    return [`正在下载 ${su.version} ${pct}${su.source ? " · " + su.source : ""}`, "muted"];
+    return [`正在下载 ${su.version} · ${transferText({ done: su.done ?? 0, total: su.total, speed: su.speed, source: su.source })}`, "muted"];
   }
   if (su?.state === "replacing") return [`正在替换为 ${su.version}`, "muted"];
   if (su?.error) return [`自更新到 ${su.version} 失败（${date(su.at)}）：${su.error}`, "bad"];
@@ -38,6 +37,7 @@ export function GateUpdateLine({ gate: g }: { gate: Gate }) {
   const working = g.self_update?.state === "downloading" || g.self_update?.state === "replacing";
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      {working && <span className="w-24 shrink-0"><Progress value={g.self_update?.state === "downloading" && g.self_update.total ? Math.round(((g.self_update.done ?? 0) / g.self_update.total) * 100) : null} aria-label="VPS 自更新进度" /></span>}
       <p className={"min-w-0 grow basis-0 text-body " + (text[1] === "bad" ? "text-[var(--weir-bad-ink)]" : "text-[var(--weir-ink-3)]")}>{text[0]}</p>
       {gateLags(g) && (
         <Button

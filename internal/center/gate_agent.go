@@ -41,6 +41,8 @@ func (s *Server) gateRoutes(ready, admin *gin.RouterGroup) {
 	a.POST("/panel-secret", s.agentPanelSecret)
 	a.GET("/uploads/:id", s.agentUploadState)
 	a.PUT("/uploads/:id", s.agentUploadChunk)
+	a.POST("/uploads/:id/progress", s.agentUploadProgress)
+	a.POST("/self-update", s.agentSelfUpdate)
 	s.gateAdminRoutes(admin)
 	s.certRoutes(admin)
 	s.nodeCertRoutes(admin)
@@ -135,6 +137,31 @@ func publicAddress(ip string) string {
 }
 
 // agentHeartbeat 记录版本、实际监听端口、运行中的内核与主机观测；统计端口被其他程序占用时换端口。
+func validSelfUpdate(su *contracts.SelfUpdateStatus) bool {
+	return su != nil && len(su.Error) <= 2000 && len(su.Source) <= 200 && len(su.Version) <= 40 && validUpdateState(su.State)
+}
+
+func selfUpdateFields(su *contracts.SelfUpdateStatus) map[string]any {
+	return map[string]any{"version": su.Version, "state": su.State, "done": su.Done, "total": su.Total, "speed": su.Speed, "source": su.Source, "error": su.Error, "at": su.At}
+}
+
+// agentSelfUpdate 接收 Gate 自更新的进度：心跳 30 秒一次太慢，下载期间单独上报，只写这一个字段。
+func (s *Server) agentSelfUpdate(c *gin.Context) {
+	var su contracts.SelfUpdateStatus
+	if !bind(c, &su) {
+		return
+	}
+	if !validSelfUpdate(&su) {
+		failure(c, 400, "invalid_request")
+		return
+	}
+	if err := s.Store.Ent.Gate.UpdateOneID(gateFrom(c).ID).SetSelfUpdate(selfUpdateFields(&su)).Exec(c.Request.Context()); err != nil {
+		failInternal(c, 500, "save_failed", err)
+		return
+	}
+	c.JSON(200, gin.H{"ok": true})
+}
+
 func (s *Server) agentHeartbeat(c *gin.Context) {
 	var hb contracts.Heartbeat
 	if !bind(c, &hb) {
@@ -165,8 +192,8 @@ func (s *Server) agentHeartbeat(c *gin.Context) {
 		upd.SetCenterURL(hb.Center)
 	}
 	// 自更新的进度或失败原因：这次没有就清空（已更新成功或已与中心同版本）。
-	if su := hb.SelfUpdate; su != nil && len(su.Error) <= 2000 && len(su.Source) <= 200 && len(su.Version) <= 40 && validUpdateState(su.State) {
-		upd.SetSelfUpdate(map[string]any{"version": su.Version, "state": su.State, "done": su.Done, "total": su.Total, "source": su.Source, "error": su.Error, "at": su.At})
+	if su := hb.SelfUpdate; validSelfUpdate(su) {
+		upd.SetSelfUpdate(selfUpdateFields(su))
 	} else {
 		upd.ClearSelfUpdate()
 	}

@@ -1,117 +1,90 @@
-// 版本与更新：从 GitHub Release 自更新。中心只写请求，root 的 weir-update 自己下载、按官方摘要校验、
-// 用包里的安装脚本安装，失败自动切回；可切回本机保留的上一版本，或重装最近 3 个正式版本之一。
-import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Form, InsetRow, InsetRows, JobPlaceholder, Notice, Progress, useToast } from "@weir/ui";
+// 版本与更新：从 GitHub Release 自更新。中心先按「GitHub 加速」（含经 VPS 中转）预下载发布包，再交给 root 的更新服务：
+// 按官方摘要校验、用包里的安装脚本安装，失败自动切回。可切回本机保留的上一版本，或重装最近 3 个正式版本之一。
+// 整个过程在这里合成一条记录（useUpdateStatus），和其他后台任务同样显示；版本变了由 UpdateWatcher 刷新页面。
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Form, InsetRow, InsetRows, JobPlaceholder, JobView, Notice } from "@weir/ui";
 import { api } from "../api";
-import { clock, date } from "../lib/models";
+import { date } from "../lib/models";
 import { State } from "./feedback";
-import { size } from "./job";
 import { Section } from "./system-settings";
-import { useFormAction } from "../lib/action";
+import { useFormAction, useRowAction } from "../lib/action";
 import { useConsoleContext } from "../lib/console-context";
+import { updateStatusKey, useUpdateStatus, type UpdateRun } from "./update-watcher";
 
 interface Release { version: string; published_at: string; notes: string; url: string }
-interface Status {
-  id: string;
-  action: "update" | "rollback";
-  from: string;
-  version: string;
-  state: "downloading" | "installing" | "done" | "failed";
-  progress?: { done: number; total: number; speed: number; source: string };
-  logs: string[];
-  error?: string;
-  started_at: string;
-  finished_at?: string;
-}
-interface View { current: string; blocker: string; previous: string; latest?: Release; has_update?: boolean; older?: Release[]; status?: Status; check_error?: string }
+interface Releases { latest?: Release; has_update?: boolean; older?: Release[]; check_error?: string }
+
+const phaseText: Record<UpdateRun["phase"], string> = { prefetch: "预下载", waiting: "等更新服务接手", downloading: "下载", installing: "安装", done: "完成", failed: "失败", cancelled: "已取消" };
+
+const releasesKey = ["self-update-releases"];
 
 export function UpdateCard() {
-  const [force, setForce] = useState(0);
-  const q = useQuery({
-    queryKey: ["self-update", force],
-    queryFn: () => api("/admin/system/update" + (force ? "?force=1" : "")) as Promise<View>,
-    refetchInterval: (query) => (query.state.data?.status && !query.state.data.status.finished_at ? 1500 : false),
-    retry: 30,
-    retryDelay: 2000,
-  });
+  const client = useQueryClient();
+  const status = useUpdateStatus();
+  // 版本列表单独读：GitHub 慢或连不上时，进度照常显示
+  const releases = useQuery({ queryKey: releasesKey, queryFn: () => api("/admin/system/update") as Promise<Releases>, retry: 1 });
+  const { run: act, isBusy } = useRowAction<string>();
   const [target, setTarget] = useState<{ action: "update" | "rollback"; version?: string } | null>(null);
-  const toast = useToast();
-  const st = q.data?.status;
-  // 安装时服务会重启：重启回来后版本变了就提示刷新页面换到新控制台。
-  const [startedFrom, setStartedFrom] = useState("");
-  useEffect(() => {
-    if (startedFrom && q.data && q.data.current !== startedFrom && st?.state === "done") {
-      toast(`已更新到 ${q.data.current}`, { tone: "ok", description: "页面将重新加载以使用新版本的控制台。" });
-      setTimeout(() => window.location.reload(), 1500);
-    }
-  }, [q.data?.current, st?.state, startedFrom]);
-  useConsoleContext({ notices: [q.data ? `当前版本 ${q.data.current}${q.data.has_update && q.data.latest ? `，可更新到 ${q.data.latest.version}` : ""}` : "版本未知", ...(st && !st.finished_at ? [`正在${st.action === "rollback" ? "切回" : "更新"}：${st.state}`] : []), ...(q.data?.check_error ? ["无法读取 GitHub 发布：" + q.data.check_error] : [])] });
+  const view = status.data;
+  const run = view?.run;
+  const running = run?.status === "running";
+  const rel = releases.data;
+  // 中心重启期间状态接口读不到：保留最后的进度，只说明在等
+  const waitingCenter = running && !!status.error;
+  useConsoleContext({ notices: [view ? `当前版本 ${view.current}${rel?.has_update && rel.latest ? `，可更新到 ${rel.latest.version}` : ""}` : "版本未知", ...(running && run ? [`正在${run.action === "rollback" ? "切回" : "更新"}：${phaseText[run.phase]}`] : []), ...(rel?.check_error ? ["无法读取 GitHub 发布：" + rel.check_error] : [])] });
+  const recheck = () => act("check", async () => { client.setQueryData(releasesKey, await api("/admin/system/update?force=1")); }, undefined, { fail: "检查失败" });
+  const started = () => { setTarget(null); void client.invalidateQueries({ queryKey: updateStatusKey }); };
+  const blocked = !!view?.blocker || running;
+  const older = (rel?.older ?? []).filter((r) => r.version !== view?.previous);
   return (
-    <Section title="版本与更新" description="从 GitHub Release 更新：由 root 运行的更新服务自己下载、按官方摘要校验、安装，启动失败自动切回上一版本。Gate 随后从中心自更新到同一版本。">
-      {q.isPending || q.error || !q.data ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : (
+    <Section title="版本与更新" description="中心先按下方「GitHub 加速」的顺序下载发布包（含经 VPS 中转），root 的更新服务按官方摘要校验后安装，启动失败自动切回上一版本。Gate 随后跟着更新到同一版本。">
+      {status.isPending || (!view && status.error) || !view ? <State loading={status.isPending} error={status.error} onRetry={() => status.refetch()} /> : (
         <InsetRows>
           <InsetRow className="stack">
-          <div className="flex flex-wrap items-center gap-2">
-            <span>当前版本 <code>{q.data.current}</code></span>
-            {q.data.latest && (q.data.has_update ? <Badge variant="soft" tone="warn">有新版本 {q.data.latest.version}</Badge> : <Badge variant="soft" tone="ok">已是最新</Badge>)}
-            <Button className="ml-auto" size="sm" variant="outline" onClick={() => setForce(Date.now())}>重新检查</Button>
-          </div>
-          {q.data.check_error && <Notice tone="warn">无法读取 GitHub 发布：{q.data.check_error}</Notice>}
-          {q.data.blocker && <Notice tone="info">{q.data.blocker}。</Notice>}
+            <div className="flex flex-wrap items-center gap-2">
+              <span>当前版本 <code>{view.current}</code></span>
+              {rel?.latest && (rel.has_update ? <Badge variant="soft" tone="warn">有新版本 {rel.latest.version}</Badge> : <Badge variant="soft" tone="ok">已是最新</Badge>)}
+              {releases.isPending && <small className="text-[var(--weir-ink-3)]">正在读取 GitHub 发布…</small>}
+              <Button className="ml-auto" size="sm" variant="outline" disabled={isBusy()} busy={isBusy("check")} busyText="正在检查…" onClick={() => void recheck()}>重新检查</Button>
+            </div>
+            {(rel?.check_error || releases.error) && <Notice tone="warn">无法读取 GitHub 发布：{rel?.check_error ?? (releases.error as Error).message}</Notice>}
+            {view.blocker && <Notice tone="info">{view.blocker}。</Notice>}
           </InsetRow>
-          <InsetRow><UpdateStatus st={st} /></InsetRow>
-          {q.data.latest && q.data.has_update && (
+          <InsetRow>
+            {run ? (
+              <JobView
+                job={run}
+                className="border-0 p-0"
+                note={waitingCenter ? "中心正在重启，正在等它恢复" : undefined}
+                disabled={isBusy() || !run.cancellable}
+                cancelBusy={isBusy("cancel")}
+                onCancel={() => void act("cancel", () => api("/me/jobs/" + encodeURIComponent(run.id) + "/cancel", "POST"), "已请求取消", { fail: "取消失败" })}
+              />
+            ) : <JobPlaceholder text="还没有在这里更新过；更新的进度与日志会显示在这里。" />}
+          </InsetRow>
+          {rel?.latest && rel.has_update && (
             <InsetRow>
-              <Collapsible defaultOpen title={<span>{q.data.latest.version} 更新说明 <small className="text-[var(--weir-ink-3)]">{date(q.data.latest.published_at)}</small></span>}>
-                <CodeBlock className="block max-h-64 overflow-auto whitespace-pre-wrap text-meta">{q.data.latest.notes || "（没有说明）"}</CodeBlock>
+              <Collapsible defaultOpen title={<span>{rel.latest.version} 更新说明 <small className="text-[var(--weir-ink-3)]">{date(rel.latest.published_at)}</small></span>}>
+                <CodeBlock className="block max-h-64 overflow-auto whitespace-pre-wrap text-meta">{rel.latest.notes || "（没有说明）"}</CodeBlock>
               </Collapsible>
             </InsetRow>
           )}
-          {((q.data.latest && q.data.has_update) || q.data.previous || (q.data.older ?? []).some((r) => r.version !== q.data!.previous)) && <InsetRow className="actions">
-            {q.data.latest && q.data.has_update && <Button disabled={!!q.data.blocker || (!!st && !st.finished_at)} onClick={() => setTarget({ action: "update", version: q.data.latest!.version })}>更新到 {q.data.latest.version}</Button>}
-            {q.data.previous && <Button variant="outline" disabled={!!q.data.blocker || (!!st && !st.finished_at)} onClick={() => setTarget({ action: "rollback" })}>切回上一版本 {q.data.previous}</Button>}
-            {(q.data.older ?? []).map((r) => r.version !== q.data!.previous && <Button key={r.version} variant="outline" disabled={!!q.data!.blocker || (!!st && !st.finished_at)} onClick={() => setTarget({ action: "update", version: r.version })}>重装 {r.version}</Button>)}
+          {((rel?.latest && rel.has_update) || view.previous || older.length > 0) && <InsetRow className="actions">
+            {rel?.latest && rel.has_update && <Button disabled={blocked} onClick={() => setTarget({ action: "update", version: rel.latest!.version })}>更新到 {rel.latest.version}</Button>}
+            {view.previous && <Button variant="outline" disabled={blocked} onClick={() => setTarget({ action: "rollback" })}>切回上一版本 {view.previous}</Button>}
+            {older.map((r) => <Button key={r.version} variant="outline" disabled={blocked} onClick={() => setTarget({ action: "update", version: r.version })}>重装 {r.version}</Button>)}
           </InsetRow>}
         </InsetRows>
       )}
-      {target && q.data && <ConfirmUpdate target={target} current={q.data.current} previous={q.data.previous} close={() => setTarget(null)} started={() => { setStartedFrom(q.data!.current); setTarget(null); void q.refetch(); }} />}
+      {target && view && <ConfirmUpdate target={target} current={view.current} previous={view.previous} close={() => setTarget(null)} started={started} />}
     </Section>
-  );
-}
-
-// UpdateStatus：最近一次更新或切回。与下载任务一样是固定行数（状态、进度条、一行说明、日志），
-// 下载、安装、完成、失败之间只换文字；还没有更新过时显示占位行，开始更新后下面的内容不被顶开。
-function UpdateStatus({ st }: { st?: Status }) {
-  if (!st) return <JobPlaceholder text="还没有在这里更新过；更新的进度与日志会显示在这里。" />;
-  const p = st.progress;
-  const pct = st.state === "done" ? 100 : p && p.total > 0 ? Math.round((p.done / p.total) * 100) : null;
-  const label = { downloading: "正在下载", installing: "正在安装", done: "完成", failed: "失败" }[st.state];
-  const line =
-    st.state === "failed" ? st.error ?? "失败" :
-    st.state === "installing" ? "服务会重启，控制台可能短暂断开，恢复后会自动刷新" :
-    st.state === "done" ? `${st.finished_at ? clock(st.finished_at) + " " : ""}完成` :
-    p ? `${pct !== null ? `${pct}% · ${size(p.done)} / ${size(p.total)}` : `已下载 ${size(p.done)}`}${p.speed > 0 ? ` · ${size(p.speed)}/s` : ""}${p.source ? ` · ${p.source}` : ""}` : "正在准备…";
-  const logs = st.logs.map((l) => { const m = /^(\d{4}-\d\d-\d\dT\S+Z) (.*)$/s.exec(l); return m ? `${clock(m[1])} ${m[2]}` : l; });
-  return (
-    <div className="stack" aria-live="polite">
-      <div className="flex min-h-6 flex-wrap items-center gap-2">
-        <strong className="text-body">{st.action === "rollback" ? "切回" : "更新"} {st.from} → {st.version || "上一版本"}</strong>
-        <Badge variant="soft" tone={st.state === "done" ? "ok" : st.state === "failed" ? "bad" : "neutral"}>{label}</Badge>
-        <small className="ml-auto text-[var(--weir-ink-3)]">{date(st.started_at)}</small>
-      </div>
-      <Progress value={pct} aria-label="更新进度" />
-      <small className={"block truncate " + (st.state === "failed" ? "text-[var(--weir-bad-ink)]" : "text-[var(--weir-ink-3)]")} title={line}>{line}</small>
-      <Collapsible title={`日志（${st.logs.length} 行）`} defaultOpen={st.state === "failed"}>
-        <CodeBlock className="block h-56 overflow-auto whitespace-pre-wrap text-meta">{logs.join("\n") || "（还没有日志）"}</CodeBlock>
-      </Collapsible>
-    </div>
   );
 }
 
 function ConfirmUpdate({ target, current, previous, close, started }: { target: { action: "update" | "rollback"; version?: string }; current: string; previous: string; close: () => void; started: () => void }) {
   const to = target.action === "rollback" ? previous : target.version!;
-  const go = useFormAction(() => api("/admin/system/update", "POST", target), { ok: "已提交，更新服务正在执行", onSuccess: started });
+  const go = useFormAction(() => api("/admin/system/update", "POST", target), { ok: "已开始，进度显示在下方", onSuccess: started });
   useConsoleContext({ dialog: { title: target.action === "rollback" ? "切回 " + to : "更新到 " + to } });
   return (
     <Dialog open onOpenChange={(o) => !o && !go.busy && close()}>

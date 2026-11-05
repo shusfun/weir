@@ -30,7 +30,7 @@ export function useJobs(kind: string) {
 
 // 任务结束后要刷新的数据（按任务类型）。
 const refreshAfter: Record<string, string[][]> = {
-  kernel: [["kernels"], ["notices"], ["drivers"], ["kernel-releases"]],
+  kernel: [["kernels"], ["notices"], ["drivers"], ["kernel-releases"], ["kernel-recommended"]],
   "gate-release": [["gates"]],
   "gate-ssh": [["gates"], ["nodes"]],
   dsh: [["dsh"], ["notices"]],

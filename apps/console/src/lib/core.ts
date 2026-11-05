@@ -35,6 +35,7 @@ export interface GateSelfUpdate {
   state?: "downloading" | "replacing" | "failed";
   done?: number;
   total?: number;
+  speed?: number;
   source?: string;
   error?: string;
   at: string;

@@ -31,14 +31,18 @@ var (
 )
 
 type relayUpload struct {
-	gateID   int
-	path     string
-	size     int64 // GitHub 给出的大小；0 表示未知
-	maxSize  int64
-	received int64
-	closed   bool
-	progress func(done, total int64)
-	changed  chan struct{}
+	gateID    int
+	path      string
+	size      int64 // GitHub 给出的大小；0 表示未知
+	maxSize   int64
+	received  int64
+	closed    bool
+	report    fetch.Reporter
+	name      string
+	uploading bool
+	reported  bool
+	stage     string
+	changed   chan struct{}
 }
 
 type relayHub struct {
@@ -129,16 +133,16 @@ func (s *Server) relaySources(gh ghrelease.Client, sources []ghrelease.Source, r
 		if g, err := s.Store.Ent.Gate.Get(context.Background(), gid); err == nil {
 			name = "VPS " + g.Name
 		}
-		out = append(out, fetch.Source{Name: name, Unmetered: true, Before: before, Fetch: func(ctx context.Context, dest string, progress func(int64, int64)) error {
-			return s.relayFetch(ctx, gid, contracts.AssetFetch{URLs: urls, SHA256: sha, Size: size, MaxSize: max}, dest, progress)
+		out = append(out, fetch.Source{Name: name, Unmetered: true, Before: before, Fetch: func(ctx context.Context, dest string, rep fetch.Reporter) error {
+			return s.relayFetch(ctx, gid, contracts.AssetFetch{URLs: urls, SHA256: sha, Size: size, MaxSize: max}, dest, rep)
 		}})
 	}
 	return out
 }
 
 // relayFetch 让 Gate gid 下载 req.URLs 并上传到 dest。Gate 离线、没有领取、报告失败时立即返回其原因；
-// 上传的进度经 progress 报给下载任务。
-func (s *Server) relayFetch(ctx context.Context, gid int, req contracts.AssetFetch, dest string, progress func(int64, int64)) error {
+// VPS 下载与传回中心两段的进度都经 rep 报给下载任务。
+func (s *Server) relayFetch(ctx context.Context, gid int, req contracts.AssetFetch, dest string, rep fetch.Reporter) error {
 	g, err := s.Store.Ent.Gate.Get(ctx, gid)
 	if err != nil {
 		return errors.New("这台 VPS 已删除")
@@ -155,7 +159,8 @@ func (s *Server) relayFetch(ctx context.Context, gid int, req contracts.AssetFet
 	if req.MaxSize <= 0 {
 		req.MaxSize = 256 << 20
 	}
-	up := &relayUpload{gateID: gid, path: dest, size: req.Size, maxSize: req.MaxSize, progress: progress, changed: make(chan struct{}, 1)}
+	name := "VPS " + g.Name
+	up := &relayUpload{gateID: gid, path: dest, size: req.Size, maxSize: req.MaxSize, report: rep, name: name, changed: make(chan struct{}, 1)}
 	s.relays.add(req.UploadID, up)
 	defer s.relays.remove(req.UploadID)
 	payload := map[string]any{"upload_id": req.UploadID, "urls": req.URLs, "sha256": req.SHA256, "size": req.Size, "max_size": req.MaxSize}
@@ -163,13 +168,27 @@ func (s *Server) relayFetch(ctx context.Context, gid int, req contracts.AssetFet
 	if err != nil {
 		return fmt.Errorf("下发中转任务失败：%w", err)
 	}
+	rep.Stage("等 " + name + " 领取任务")
 	tick := time.NewTicker(relayCheck)
 	defer tick.Stop()
+	started := time.Time{}
 	for {
 		done := s.actionDone.wait(a.ID)
 		cur, err := s.Store.Ent.GateAction.Get(ctx, a.ID)
 		if err != nil {
 			return err
+		}
+		s.relays.mu.Lock()
+		silent := !up.reported && !up.uploading
+		s.relays.mu.Unlock()
+		// 新版 Gate 一领取就上报；领取后迟迟没有上报的是不报进度的旧版 Gate，如实写明，不让进度条像卡死
+		if cur.Status == gateaction.StatusRunning && silent {
+			if started.IsZero() {
+				started = time.Now()
+				rep.Stage(name + " 下载中")
+			} else if time.Since(started) >= relayCheck {
+				rep.Stage(name + " 下载中（这台 VPS 不报进度）")
+			}
 		}
 		switch cur.Status {
 		case gateaction.StatusFailed:
@@ -226,6 +245,35 @@ func (s *Server) agentUploadState(c *gin.Context) {
 	c.JSON(200, contracts.UploadState{Received: u.received})
 }
 
+// agentUploadProgress 接收 Gate 下载阶段的进度（Gate 下载完才开始上传，这段中心自己看不到）。只用于显示，
+// 不影响下载；开始上传后到达的旧进度丢弃，避免进度条往回跳。
+func (s *Server) agentUploadProgress(c *gin.Context) {
+	var p contracts.UploadProgress
+	if !bind(c, &p) {
+		return
+	}
+	s.relays.mu.Lock()
+	defer s.relays.mu.Unlock()
+	u := s.relayUploadFor(c)
+	if u == nil {
+		failure(c, 404, "upload_not_found")
+		return
+	}
+	if !u.uploading {
+		stage := u.name + " 下载中"
+		if p.Source != "" {
+			stage += "（" + p.Source + "）"
+		}
+		if stage != u.stage {
+			u.stage = stage
+			u.report.Stage(stage)
+		}
+		u.reported = true
+		u.report.Report(p.Done, p.Total, p.Speed)
+	}
+	c.JSON(200, gin.H{"ok": true})
+}
+
 // agentUploadChunk 写入一块：offset 必须等于已收到的字节数（否则 409 并回已收到的字节数），
 // 单块不超过 UploadChunk，总量不超过 MaxSize。
 func (s *Server) agentUploadChunk(c *gin.Context) {
@@ -271,9 +319,11 @@ func (s *Server) agentUploadChunk(c *gin.Context) {
 		return
 	}
 	u.received = end
-	if u.progress != nil {
-		u.progress(end, u.size)
+	if !u.uploading {
+		u.uploading = true
+		u.report.Stage(u.name + " 传回中心")
 	}
+	u.report.Report(end, u.size, 0)
 	select {
 	case u.changed <- struct{}{}:
 	default:

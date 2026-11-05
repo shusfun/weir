@@ -25,6 +25,7 @@ const releaseMaxSize = 256 << 20
 
 // updater 保证同一时间只跑一个自更新；状态随每次心跳上报。
 type updater struct {
+	pushed   time.Time // 最近一次单独上报进度的时间
 	mu       sync.Mutex
 	status   *contracts.SelfUpdateStatus
 	run      *updateRun
@@ -48,10 +49,26 @@ func (a *Agent) updateStatus() *contracts.SelfUpdateStatus {
 	return &st
 }
 
+// updatePushEvery 是下载期间单独上报进度的最短间隔（心跳 30 秒一次，页面看到的进度会一跳一跳）。
+const updatePushEvery = 3 * time.Second
+
 func (a *Agent) setUpdateStatus(st *contracts.SelfUpdateStatus) {
 	a.up.mu.Lock()
 	a.up.status = st
+	push := st != nil && a.center != nil && (st.State != "downloading" || time.Since(a.up.pushed) >= updatePushEvery)
+	if push {
+		a.up.pushed = time.Now()
+	}
 	a.up.mu.Unlock()
+	if push {
+		// 只用于页面显示：后台发送、失败忽略（下一次心跳还会带上）
+		cp := *st
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_, _ = a.center.call(ctx, "POST", "/agent/self-update", cp, nil)
+		}()
+	}
 }
 
 // followCenter 处理心跳回复里的目标版本：与本机不同就在后台更新，不阻塞心跳；没有目标版本表示已与中心同版本，清掉旧状态。
@@ -177,7 +194,7 @@ func (a *Agent) releaseFromGitHub(ctx context.Context, rel contracts.ReleaseTarg
 	dest := filepath.Join(dir, name)
 	err = fetch.Download(ctx, fetch.Request{URLs: urls, Dest: dest, SHA256: rel.SHA256, MaxSize: releaseMaxSize, HTTP: a.externalHTTP(),
 		OnProgress: func(p fetch.Progress) {
-			a.setUpdateStatus(&contracts.SelfUpdateStatus{Version: rel.Version, State: "downloading", Done: p.Done, Total: p.Total, Source: p.Source, At: time.Now().UTC()})
+			a.setUpdateStatus(&contracts.SelfUpdateStatus{Version: rel.Version, State: "downloading", Done: p.Done, Total: p.Total, Speed: p.Speed, Source: p.Source, At: time.Now().UTC()})
 		},
 		Log: func(s string) { log.Printf("self update %s: %s", rel.Version, s) }})
 	if err != nil {

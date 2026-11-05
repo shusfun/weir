@@ -259,7 +259,7 @@ function DialogLayer({
           data-slot="dialog-body"
           className="min-h-0 min-w-0 flex-auto"
           viewportClassName="weir-focus-gutter"
-          contentClassName="flex min-h-full min-w-0 flex-col [&>form]:flex [&>form]:min-w-0 [&>form]:flex-[1_0_auto] [&>form]:flex-col"
+          contentClassName="flex min-h-full min-w-0 flex-col gap-4 [&>*]:min-w-0 [&>*]:shrink-0 [&>form]:flex [&>form]:min-w-0 [&>form]:flex-[1_0_auto] [&>form]:flex-col"
         >
           {body}
         </ScrollArea>

@@ -173,8 +173,8 @@ func TestSourceAfterURLs(t *testing.T) {
 	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(502) }))
 	t.Cleanup(down.Close)
 	relay := func(content []byte) Source {
-		return Source{Name: "经 VPS hk", Fetch: func(ctx context.Context, dest string, progress func(int64, int64)) error {
-			progress(int64(len(content)), int64(len(content)))
+		return Source{Name: "经 VPS hk", Fetch: func(ctx context.Context, dest string, rep Reporter) error {
+			rep.Report(int64(len(content)), int64(len(content)), 0)
 			return os.WriteFile(dest, content, 0o644)
 		}}
 	}
@@ -257,5 +257,48 @@ func TestAllSlowFallsBackToFastest(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(dest); !bytes.Equal(got, body) {
 		t.Fatal("content mismatch")
+	}
+}
+
+// 阶段：先连接，换来源写明，完成后校验摘要；来源顺序写进日志。
+func TestStepsAndSourceOrder(t *testing.T) {
+	body := []byte("payload")
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(502) }))
+	t.Cleanup(bad.Close)
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(body) }))
+	t.Cleanup(good.Close)
+	var steps, logs []string
+	err := Download(context.Background(), Request{URLs: []string{bad.URL, good.URL}, Dest: filepath.Join(t.TempDir(), "x"), SHA256: sum(body),
+		OnStep: func(s string) { steps = append(steps, s) }, Log: func(s string) { logs = append(logs, s) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != 4 || !strings.HasPrefix(steps[0], "连接 ") || !strings.HasPrefix(steps[1], "改用 ") || steps[2] != "" || steps[3] != "校验摘要" {
+		t.Fatalf("steps = %v", steps)
+	}
+	if !strings.HasPrefix(logs[0], "来源顺序：") || !strings.Contains(logs[0], " → ") {
+		t.Fatalf("logs = %v", logs)
+	}
+}
+
+// 速度平滑：不足 1 秒沿用上次；骤变时只移动一部分；字节数变小（换阶段）从头算。
+func TestSpeedMeter(t *testing.T) {
+	var m speedMeter
+	t0 := time.Now()
+	if v := m.sample(0, t0); v != 0 {
+		t.Fatalf("first = %d", v)
+	}
+	if v := m.sample(1000, t0.Add(time.Second)); v != 1000 {
+		t.Fatalf("second = %d", v)
+	}
+	if v := m.sample(1500, t0.Add(1500*time.Millisecond)); v != 1000 {
+		t.Fatalf("under a second = %d", v)
+	}
+	v := m.sample(11000, t0.Add(2*time.Second+500*time.Millisecond))
+	if v <= 1000 || v >= 10000 {
+		t.Fatalf("smoothed = %d", v)
+	}
+	if v := m.sample(5, t0.Add(4*time.Second)); v != 0 {
+		t.Fatalf("restart = %d", v)
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/shusfun/weir/internal/buildinfo"
+	"github.com/shusfun/weir/internal/fetch"
 	"github.com/shusfun/weir/internal/ghrelease"
 	"github.com/shusfun/weir/internal/store/ent/resource"
 	"github.com/shusfun/weir/packages/contracts"
@@ -164,7 +165,7 @@ func TestRelayUploadOwnershipAndResume(t *testing.T) {
 	var progress atomic.Int64
 	done := make(chan error, 1)
 	go func() {
-		done <- s.relayFetch(context.Background(), int(g.id), contracts.AssetFetch{URLs: []string{"https://github.com/a/b/releases/download/v1/x"}, SHA256: hex.EncodeToString(sum[:]), Size: int64(len(content)), MaxSize: 1 << 20}, dest, func(d, _ int64) { progress.Store(d) })
+		done <- s.relayFetch(context.Background(), int(g.id), contracts.AssetFetch{URLs: []string{"https://github.com/a/b/releases/download/v1/x"}, SHA256: hex.EncodeToString(sum[:]), Size: int64(len(content)), MaxSize: 1 << 20}, dest, fetch.Reporter{Progress: func(d, _, _ int64) { progress.Store(d) }})
 	}()
 	a := g.nextAction(contracts.ActionAssetFetch)
 	id, _ := a.Payload["upload_id"].(string)
@@ -213,7 +214,7 @@ func TestRelayUploadOwnershipAndResume(t *testing.T) {
 
 	// Gate 报失败：立刻返回它的原因
 	go func() {
-		done <- s.relayFetch(context.Background(), int(g.id), contracts.AssetFetch{URLs: []string{"https://github.com/a/b/x"}, SHA256: hex.EncodeToString(sum[:])}, dest, nil)
+		done <- s.relayFetch(context.Background(), int(g.id), contracts.AssetFetch{URLs: []string{"https://github.com/a/b/x"}, SHA256: hex.EncodeToString(sum[:])}, dest, fetch.Reporter{})
 	}()
 	g.finish(g.nextAction(contracts.ActionAssetFetch), false, "下载失败：github.com 返回 HTTP 403", nil)
 	if err := <-done; err == nil || !strings.Contains(err.Error(), "HTTP 403") {
@@ -222,7 +223,7 @@ func TestRelayUploadOwnershipAndResume(t *testing.T) {
 	// Gate 离线：不下发，直接报错
 	old := time.Now().Add(-time.Hour)
 	_ = s.Store.Ent.Gate.UpdateOneID(int(g.id)).SetLastSeenAt(old).Exec(context.Background())
-	if err := s.relayFetch(context.Background(), int(g.id), contracts.AssetFetch{SHA256: hex.EncodeToString(sum[:])}, dest, nil); err == nil || !strings.Contains(err.Error(), "离线") {
+	if err := s.relayFetch(context.Background(), int(g.id), contracts.AssetFetch{SHA256: hex.EncodeToString(sum[:])}, dest, fetch.Reporter{}); err == nil || !strings.Contains(err.Error(), "离线") {
 		t.Fatalf("offline = %v", err)
 	}
 }

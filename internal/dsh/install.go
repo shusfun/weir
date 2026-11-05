@@ -74,8 +74,9 @@ type Installer struct {
 	NodeMirrors  []string
 	// Registries 的第一个是官方源（摘要以它为准），其余是安装时的回退源。
 	Registries []string
-	// Progress / Log 接收下载进度与日志（可为空）。
+	// Progress / Step / Log 接收下载进度、当前阶段与日志（可为空）。
 	Progress func(fetch.Progress)
+	Step     func(string)
 	Log      func(string)
 }
 
@@ -280,7 +281,7 @@ func (in Installer) EnsureNode(ctx context.Context) (string, error) {
 	}
 	in.log("下载 Node.js " + version)
 	part := filepath.Join(in.Dir, ".downloads", name)
-	if err = fetch.Download(ctx, fetch.Request{URLs: urls, Dest: part, SHA256: want, MaxSize: 200 << 20, HTTP: downloadClient(), OnProgress: in.Progress, Log: in.Log}); err != nil {
+	if err = fetch.Download(ctx, fetch.Request{URLs: urls, Dest: part, SHA256: want, MaxSize: 200 << 20, HTTP: downloadClient(), OnProgress: in.Progress, OnStep: in.Step, Log: in.Log}); err != nil {
 		return "", err
 	}
 	archive, err := os.ReadFile(part)

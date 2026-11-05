@@ -71,9 +71,16 @@ type Fetcher struct {
 	// 参数是 GitHub 原地址、官方摘要、GitHub 给出的大小与上限。
 	Relay func(raw, sha256 string, size, maxSize int64) []fetch.Source
 	Cache Cache
-	// Progress / Log 接收下载进度与日志（可为空）。
+	// Progress / Step / Log 接收下载进度、当前阶段与日志（可为空）。
 	Progress func(fetch.Progress)
+	Step     func(string)
 	Log      func(string)
+}
+
+func (f Fetcher) step(s string) {
+	if f.Step != nil {
+		f.Step(s)
+	}
 }
 
 func (f Fetcher) gh() ghrelease.Client {
@@ -151,6 +158,7 @@ func (f Fetcher) Fetch(ctx context.Context, kernel, version, arch string) (strin
 	if !safeVersion.MatchString(version) || !safeArch.MatchString(arch) {
 		return "", fmt.Errorf("invalid kernel reference %s %s %s", kernel, version, arch)
 	}
+	f.step("读取发布信息")
 	rs, err := f.releases(ctx, kernel)
 	if err != nil {
 		return "", err
@@ -180,10 +188,11 @@ func (f Fetcher) Fetch(ctx context.Context, kernel, version, arch string) (strin
 		relay = f.Relay(asset.URL, want, asset.Size, maxDownload)
 	}
 	dest := filepath.Join(f.Cache.Dir, ".downloads", name)
-	err = fetch.Download(ctx, fetch.Request{URLs: urls, Sources: relay, Dest: dest, SHA256: want, MaxSize: maxDownload, HTTP: f.HTTP, OnProgress: f.Progress, Log: f.Log})
+	err = fetch.Download(ctx, fetch.Request{URLs: urls, Sources: relay, Dest: dest, SHA256: want, MaxSize: maxDownload, HTTP: f.HTTP, OnProgress: f.Progress, OnStep: f.Step, Log: f.Log})
 	if err != nil {
 		return "", err
 	}
+	f.step("解压并写入缓存")
 	archive, err := os.ReadFile(dest)
 	if err != nil {
 		return "", err

@@ -32,6 +32,8 @@ type Job struct {
 	Status   string          `json:"status"`
 	Progress *fetch.Progress `json:"progress,omitempty"`
 	Step     string          `json:"step,omitempty"` // 当前步骤，如「下载 arm64」
+	// Source 是最近实际提供内容的来源（如「VPS 东京」）。任务结束后保留，页面写「来自 ……」，能看出加速有没有用上。
+	Source string `json:"source,omitempty"`
 	// StepAt / StepMax：当前步骤开始的时间与最多等多久（秒，0 表示说不准），页面据此写「已等 N 秒，最多 M 秒」。
 	StepAt  *time.Time `json:"step_at,omitempty"`
 	StepMax int        `json:"step_max,omitempty"`
@@ -70,6 +72,8 @@ type jobEntry struct {
 	// hidden：同步返回了结果的操作（action_jobs.go）在等待期内不进列表与事件流。
 	hidden    bool
 	cancelled bool
+	// base 是 Step 设下的步骤名，Stage 的子阶段接在它后面。
+	base      string
 	cancelMsg string
 	rev       uint64
 	cancel    context.CancelFunc
@@ -115,7 +119,26 @@ func (r JobRun) Log(text string) {
 }
 
 func (r JobRun) Progress(p fetch.Progress) {
-	r.update(func(j *Job) { j.Progress = &p })
+	r.update(func(j *Job) {
+		j.Progress = &p
+		if p.Source != "" {
+			j.Source = p.Source
+		}
+	})
+}
+
+// Stage 报告当前步骤里的子阶段（如「下载 amd64 · 校验摘要」），不写日志：旧进度作废，不会停在 100%。
+func (r JobRun) Stage(stage string) {
+	now := time.Now().UTC()
+	r.update(func(j *Job) {
+		j.Step, j.Progress, j.StepAt, j.StepMax = stage, nil, &now, 0
+		switch {
+		case stage == "":
+			j.Step = r.e.base
+		case r.e.base != "":
+			j.Step = r.e.base + " · " + stage
+		}
+	})
 }
 
 func (r JobRun) Step(step string) { r.StepFor(step, 0) }
@@ -125,6 +148,7 @@ func (r JobRun) StepFor(step string, max time.Duration) {
 	now := time.Now().UTC()
 	r.update(func(j *Job) {
 		j.Step, j.Progress, j.StepAt, j.StepMax = step, nil, &now, int(max/time.Second)
+		r.e.base = step
 	})
 	r.Log(step)
 }
@@ -157,7 +181,7 @@ func (r JobRun) Commit() bool {
 
 // Download 用任务的进度与日志执行一次下载。
 func (r JobRun) Download(ctx context.Context, req fetch.Request) error {
-	req.OnProgress, req.Log = r.Progress, r.Log
+	req.OnProgress, req.OnStep, req.Log = r.Progress, r.Stage, r.Log
 	return fetch.Download(ctx, req)
 }
 

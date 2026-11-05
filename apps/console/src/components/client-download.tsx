@@ -1,8 +1,8 @@
 // 测速下载：浏览器按「GitHub 加速」的来源（直连与镜像）测速，自动选最快可校验来源，下载后核对 SHA-256。
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChoiceCard, CodeBlock, Field, Notice,
-  Button, Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter, Progress, StatusLamp,
+  Button, Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter, Progress, StatusLamp, transferText,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SectionHeader, Radio, RadioGroup, FormGrid,
 } from "@weir/ui";
 import { Download, Gauge, RefreshCw } from "lucide-react";
@@ -46,7 +46,9 @@ function DownloadDialog({ client, close }: { client: CatalogClient; close: () =>
   const asset = assets.find((a) => a.name === assetName) ?? assets[0];
   const [results, setResults] = useState<ProbeResult[] | null>(null);
   const [chosen, setChosen] = useState("");
-  const [progress, setProgress] = useState<number | null>(null);
+  // 下载进度：done 为 null 时还没开始或已结束；speed 按字节增量平滑
+  const [transfer, setTransfer] = useState<{ done: number; total: number; speed: number; source: string } | null>(null);
+  const meter = useRef({ at: 0, done: 0, speed: 0 });
   const [message, setMessage] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
 
   async function runProbe() {
@@ -75,17 +77,26 @@ function DownloadDialog({ client, close }: { client: CatalogClient; close: () =>
       return;
     }
     try {
-      setProgress(0);
-      const r = await downloadVerified(pick.url, asset, setProgress);
+      const source = pick.mirror ? "镜像 " + pick.host : "GitHub 直连";
+      setTransfer({ done: 0, total: asset.size, speed: 0, source });
+      meter.current = { at: performance.now(), done: 0, speed: 0 };
+      const r = await downloadVerified(pick.url, asset, (done, total) => {
+        const m = meter.current;
+        const el = (performance.now() - m.at) / 1000;
+        if (el < 0.5 && done < total) return;
+        const cur = (done - m.done) / Math.max(el, 0.001);
+        meter.current = { at: performance.now(), done, speed: m.speed ? m.speed + (el / (3 + el)) * (cur - m.speed) : cur };
+        setTransfer({ done, total, speed: meter.current.speed, source });
+      });
       setMessage({ tone: "ok", text: r.verified ? "下载完成，SHA-256 校验一致。" : "下载完成。GitHub 未公布 SHA-256，未能校验。" });
     } catch (e) {
       setMessage({ tone: "bad", text: e instanceof Error ? e.message : "下载失败，请重试。" });
     } finally {
-      setProgress(null);
+      setTransfer(null);
     }
   }
 
-  const busy = progress !== null;
+  const busy = transfer !== null;
   return (
     <Dialog open onOpenChange={(v) => !v && !busy && close()}>
       <DialogContent size="md">
@@ -126,13 +137,19 @@ function DownloadDialog({ client, close }: { client: CatalogClient; close: () =>
               </RadioGroup>
             )}
             {asset?.sha256 && <CodeBlock aria-label="SHA-256">SHA-256 {asset.sha256}</CodeBlock>}
-            {busy && <Progress value={Math.round(progress * 100)} aria-label="下载进度" />}
+            {/* 固定一行：开始、结束下载时下面的内容不被顶开 */}
+            <div className="flex min-h-9 min-w-0 items-center gap-2" aria-live="polite">
+              {transfer ? <>
+                <span className="w-24 shrink-0"><Progress value={transfer.done >= transfer.total ? null : Math.round((transfer.done / transfer.total) * 100)} aria-label="下载进度" /></span>
+                <small className="min-w-0 flex-1 truncate tabular-nums text-[var(--weir-ink-3)]">{transfer.done >= transfer.total ? "校验 SHA-256" : transferText(transfer)}</small>
+              </> : <small className="text-[var(--weir-ink-3)]">{asset ? "进度显示在这里" : ""}</small>}
+            </div>
             {message && <Notice tone={message.tone === "bad" ? "bad" : "info"} role={message.tone === "bad" ? "alert" : "status"}>{message.text}</Notice>}
           </div>
         )}
         <DialogFooter>
           <Button variant="outline" disabled={busy} onClick={() => window.open(release.data?.url ?? client.url, "_blank", "noopener,noreferrer")}>打开发布页</Button>
-          <Button disabled={!pick || busy} onClick={start}><Download />{busy ? `下载中 ${Math.round((progress ?? 0) * 100)}%` : "下载"}</Button>
+          <Button disabled={!pick || busy} busy={busy} busyText="正在下载…" onClick={start}><Download />下载</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

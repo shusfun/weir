@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -34,11 +35,32 @@ const (
 // ErrSlow 表示来源持续低于最低速度而被放弃；已下载的部分保留，下一个来源从断点续传。
 var ErrSlow = errors.New("下载过慢")
 
+// Reporter 是非 HTTP 来源报告进度用的：Report 的 speed 为 0 时由 Download 按字节增量计算；
+// Stage 报告当前阶段（如「VPS 下载中」「传回中心」），阶段切换时旧进度作废。两个字段都可以为空。
+type Reporter struct {
+	Progress func(done, total, speed int64)
+	Step     func(string)
+}
+
+// Report 报告进度。
+func (r Reporter) Report(done, total, speed int64) {
+	if r.Progress != nil {
+		r.Progress(done, total, speed)
+	}
+}
+
+// Stage 报告当前阶段。
+func (r Reporter) Stage(s string) {
+	if r.Step != nil {
+		r.Step(s)
+	}
+}
+
 // Source 是一个不经 HTTP 地址的来源（如经某台 VPS 中转）：Fetch 把完整内容写到 dest，按摘要校验由 Download 负责。
 // 已下载的 .part 不能续传给这类来源，Fetch 从头写。
 type Source struct {
 	Name  string
-	Fetch func(ctx context.Context, dest string, progress func(done, total int64)) error
+	Fetch func(ctx context.Context, dest string, rep Reporter) error
 	// Unmetered：来源有一段时间报不出进度（如 VPS 先自己下载、校验，再上传），不按低速换源规则放弃；
 	// 卡住与超时由 Fetch 自己判断并返回原因。
 	Unmetered bool
@@ -50,6 +72,13 @@ type Source struct {
 type step struct {
 	url string
 	src *Source
+}
+
+func (s step) name() string {
+	if s.src != nil {
+		return s.src.Name
+	}
+	return Host(s.url)
 }
 
 // steps 按 Source.Before 把 Sources 插进 URLs，顺序即尝试顺序。
@@ -73,7 +102,7 @@ func (r Request) steps() []step {
 type Progress struct {
 	Done   int64  `json:"done"`
 	Total  int64  `json:"total"`
-	Speed  int64  `json:"speed"` // 字节 / 秒，最近一秒
+	Speed  int64  `json:"speed"` // 字节 / 秒，平滑过的（见 speedMeter）
 	Source string `json:"source"`
 }
 
@@ -90,7 +119,45 @@ type Request struct {
 	SlowFor    time.Duration
 	HTTP       *http.Client // 不要设置整体 Timeout；超时由 Idle 控制
 	OnProgress func(Progress)
-	Log        func(string)
+	// OnStep 报告当前阶段（连接某来源、换来源、校验摘要；空字符串表示连上了、开始传输）；旧进度在阶段切换后不再有效。
+	OnStep func(string)
+	Log    func(string)
+}
+
+func (r Request) step(s string) {
+	if r.OnStep != nil {
+		r.OnStep(s)
+	}
+}
+
+// speedMeter 算平滑过的速度：只看最近一秒的数字会乱跳，这里按约 3 秒的时间常数做指数平滑。
+type speedMeter struct {
+	last  int64
+	at    time.Time
+	value float64
+}
+
+const speedSmooth = 3.0 // 秒
+
+// sample 记下当前已传的字节数，返回速度；距上次不足 1 秒时返回之前的值，done 变小时（换阶段）重新开始。
+func (m *speedMeter) sample(done int64, now time.Time) int64 {
+	if m.at.IsZero() || done < m.last {
+		m.last, m.at, m.value = done, now, 0
+		return 0
+	}
+	el := now.Sub(m.at).Seconds()
+	if el < 1 {
+		return int64(m.value)
+	}
+	cur := float64(done-m.last) / el
+	if m.value == 0 {
+		m.value = cur
+	} else {
+		a := el / (speedSmooth + el)
+		m.value += a * (cur - m.value)
+	}
+	m.last, m.at = done, now
+	return int64(m.value)
 }
 
 // ErrDigest 表示下载内容与摘要不一致。
@@ -128,6 +195,13 @@ func Download(ctx context.Context, r Request) error {
 	if n == 0 {
 		return errors.New("没有可用的下载地址")
 	}
+	if n > 1 {
+		names := make([]string, 0, n)
+		for _, st := range steps {
+			names = append(names, st.name())
+		}
+		r.Log("来源顺序：" + strings.Join(names, " → "))
+	}
 	last := errors.New("没有可用的下载地址")
 	// 只因为慢被放弃的来源里最快的一个：全部来源都试过后回到它，不再限速，从断点下完。
 	// 不能只给最后一个来源免限速：最后一个连不上时，前面那些慢但一直在下的来源就全白放弃了。
@@ -145,18 +219,17 @@ func Download(ctx context.Context, r Request) error {
 			idx = best
 		}
 		st := steps[idx]
-		var host string
+		host := st.name()
 		var err error
-		if st.src == nil {
-			host = Host(st.url)
-		} else {
-			host = st.src.Name
-		}
 		switch {
 		case retry:
 			r.Log("其他来源都不可用，回到最快的 " + host + "，不再限速")
+			r.step("其他来源都不可用，回到最快的 " + host)
 		case i > 0:
 			r.Log("改用 " + host)
+			r.step("改用 " + host)
+		default:
+			r.step("连接 " + host)
 		}
 		// 只有一个来源时没有可换的，不按低速放弃。
 		limit := r.MinSpeed > 0 && n > 1 && !retry
@@ -178,6 +251,7 @@ func Download(ctx context.Context, r Request) error {
 			}
 		}
 		if err == nil {
+			r.step("校验摘要")
 			ok, sumErr := matches(r.Dest+".part", r.SHA256)
 			if sumErr == nil && ok {
 				if err = os.Rename(r.Dest+".part", r.Dest); err != nil {
@@ -253,11 +327,26 @@ func (r Request) source(ctx context.Context, s Source, limit bool) error {
 		slow = r.watchSlow(ictx, cancel, &got)
 	}
 	r.Log("从 " + s.Name + " 下载")
-	err := s.Fetch(ictx, part, func(done, total int64) {
-		got.Store(done)
-		if r.OnProgress != nil {
-			r.OnProgress(Progress{Done: done, Total: total, Source: s.Name})
-		}
+	var meter speedMeter
+	var mu sync.Mutex
+	err := s.Fetch(ictx, part, Reporter{
+		Progress: func(done, total, speed int64) {
+			got.Store(done)
+			mu.Lock()
+			if v := meter.sample(done, time.Now()); speed == 0 {
+				speed = v
+			}
+			mu.Unlock()
+			if r.OnProgress != nil {
+				r.OnProgress(Progress{Done: done, Total: total, Speed: speed, Source: s.Name})
+			}
+		},
+		Step: func(step string) {
+			mu.Lock()
+			meter = speedMeter{}
+			mu.Unlock()
+			r.step(step)
+		},
 	})
 	switch {
 	case err == nil:
@@ -339,19 +428,18 @@ func (r Request) once(ctx context.Context, u, host string, limit bool) error {
 	if r.MaxSize > 0 && total > r.MaxSize {
 		return fmt.Errorf("%s 的文件过大（%s）", host, Size(total))
 	}
+	// 连上了：不再写「连接 ……」，来源在进度里
+	r.step("")
 	buf := make([]byte, 64<<10)
-	done, window, windowStart := have, int64(0), time.Now()
+	done, lastReport := have, time.Now()
+	meter := speedMeter{last: have, at: lastReport}
 	report := func(force bool) {
 		if r.OnProgress == nil {
 			return
 		}
-		if el := time.Since(windowStart); el >= time.Second || force {
-			speed := int64(0)
-			if el > 0 {
-				speed = int64(float64(window) / el.Seconds())
-			}
-			r.OnProgress(Progress{Done: done, Total: total, Speed: speed, Source: host})
-			window, windowStart = 0, time.Now()
+		if now := time.Now(); now.Sub(lastReport) >= time.Second || force {
+			r.OnProgress(Progress{Done: done, Total: total, Speed: meter.sample(done, now), Source: host})
+			lastReport = now
 		}
 	}
 	report(true)
@@ -363,7 +451,6 @@ func (r Request) once(ctx context.Context, u, host string, limit bool) error {
 				return werr
 			}
 			done += int64(n)
-			window += int64(n)
 			got.Add(int64(n))
 			if r.MaxSize > 0 && done > r.MaxSize {
 				_ = f.Close()

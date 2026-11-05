@@ -196,6 +196,7 @@ func (s *Server) kernelReleases(c *gin.Context) {
 func kernelJobID(kernel, version string) string { return "kernel:" + kernel + ":" + version }
 
 // startKernelFetch 在后台下载一个版本需要的全部架构（已缓存的跳过），完成后让 Gate 重新编译配置。
+// 下载成功后：管理员要求「下载并设为默认」的设为默认；否则这个内核只有这一个版本且没有默认时自动设为默认。
 func (s *Server) startKernelFetch(ctx context.Context, kernel, version string, actor int, ip string) Job {
 	arches := s.kernelArches(ctx, kernel)
 	title := kernelTitle(kernel) + " " + version
@@ -204,15 +205,19 @@ func (s *Server) startKernelFetch(ctx context.Context, kernel, version string, a
 		if err != nil {
 			return nil, err
 		}
-		f.Progress, f.Log = run.Progress, run.Log
+		f.Progress, f.Step, f.Log = run.Progress, run.Stage, run.Log
 		sums := map[string]any{}
-		for _, arch := range arches {
+		for i, arch := range arches {
 			if _, sum, e := f.Cache.Get(kernel, version, arch); e == nil {
 				run.Log(arch + " 已下载，跳过")
 				sums[arch] = sum
 				continue
 			}
-			run.Step("下载 " + arch)
+			if len(arches) > 1 {
+				run.Step(fmt.Sprintf("下载 %s（%d/%d）", arch, i+1, len(arches)))
+			} else {
+				run.Step("下载 " + arch)
+			}
 			var sum string
 			if sum, err = f.Fetch(bg, kernel, version, arch); err != nil {
 				break
@@ -224,11 +229,21 @@ func (s *Server) startKernelFetch(ctx context.Context, kernel, version string, a
 		if err != nil {
 			res = "failed"
 		}
+		_, wantDefault := s.kernelDefaultAfter.LoadAndDelete(kernelJobID(kernel, version))
 		if s.Store != nil {
 			_, _ = s.Store.Ent.Audit.Create().SetActor(actor).SetAction("kernel.fetch").SetTarget(kernel + " " + version + " " + strings.Join(arches, ",")).SetResult(res).SetIP(ip).Save(context.Background())
 			if err == nil {
 				if ids, e := s.Store.Ent.Gate.Query().IDs(context.Background()); e == nil {
 					_ = s.bumpGates(context.Background(), ids)
+				}
+				if wantDefault {
+					if e := s.saveKernelDefault(context.Background(), kernel, version, actor, ip, "下载完成，按管理员要求设为默认"); e != nil {
+						run.Log("没能设为默认：" + e.Error())
+					} else {
+						run.Log("已设为默认版本")
+					}
+				} else if s.ensureKernelDefault(context.Background(), kernel) {
+					run.Log("这是唯一的版本，已自动设为默认")
 				}
 			}
 		}
@@ -261,6 +276,8 @@ func (s *Server) fetchKernel(c *gin.Context) {
 	name := c.Param("kernel")
 	var req struct {
 		Version string `json:"version"`
+		// SetDefault：下载成功后设为默认（内核页的更新建议用）；已下载的版本不用走这里。
+		SetDefault bool `json:"set_default"`
 	}
 	if !validKernel(name) || !bind(c, &req) {
 		if !c.IsAborted() {
@@ -275,6 +292,15 @@ func (s *Server) fetchKernel(c *gin.Context) {
 	}
 	if dryRun(c, dryResult{Preview: []string{"开始下载 " + name + " " + version + "（按官方摘要校验）；进度在「内核 → 版本」里看"}}) {
 		return
+	}
+	if req.SetDefault {
+		if name != "mihomo" {
+			if _, _, err := s.drivers(c.Request.Context()).Select(name, version); err != nil {
+				c.AbortWithStatusJSON(409, gin.H{"error": gin.H{"code": "driver_missing", "message": err.Error()}})
+				return
+			}
+		}
+		s.kernelDefaultAfter.Store(kernelJobID(name, version), true)
 	}
 	job := s.startKernelFetch(c.Request.Context(), name, version, c.GetInt("user_id"), c.ClientIP())
 	c.JSON(202, gin.H{"job": job})
@@ -301,7 +327,58 @@ func (s *Server) removeKernelVersion(c *gin.Context) {
 		return
 	}
 	s.audit(c, "kernel.remove", name+" "+version, "ok")
+	s.ensureKernelDefault(ctx, name)
 	c.JSON(200, gin.H{"ok": true})
+}
+
+// saveKernelDefault 把一个已下载的版本设为默认并让 Gate 重新生成配置（未锁定版本的 VPS 随之切换）。
+func (s *Server) saveKernelDefault(ctx context.Context, kernel, version string, actor int, ip, why string) error {
+	if kernel != "mihomo" {
+		if _, _, err := s.drivers(ctx).Select(kernel, version); err != nil {
+			return err
+		}
+	}
+	for _, arch := range s.kernelArches(ctx, kernel) {
+		if _, _, err := s.kernelCache().Get(kernel, version, arch); err != nil {
+			return fmt.Errorf("还缺 %s", arch)
+		}
+	}
+	value := map[string]any{}
+	for k, v := range s.kernelDefaults(ctx) {
+		value[k] = v
+	}
+	value[kernel] = version
+	if err := s.Store.Ent.Setting.Create().SetKey("kernel-defaults").SetValue(value).OnConflictColumns(setting.FieldKey).UpdateNewValues().Exec(ctx); err != nil {
+		return err
+	}
+	ids, err := s.Store.Ent.Gate.Query().IDs(ctx)
+	if err == nil {
+		err = s.bumpGates(ctx, ids)
+	}
+	_, _ = s.Store.Ent.Audit.Create().SetActor(actor).SetAction("kernel.defaults").SetTarget(kernel + " " + version + "：" + why).SetResult("ok").SetIP(ip).Save(ctx)
+	return err
+}
+
+// ensureKernelDefault：内核没有默认版本、缓存里只有一个版本、架构齐全且有驱动时，自动把它设为默认，返回是否设了。
+// 有多个版本时由管理员选；已有默认绝不改动。
+func (s *Server) ensureKernelDefault(ctx context.Context, kernel string) bool {
+	if s.explicitDefault(ctx, kernel) != "" {
+		return false
+	}
+	versions := map[string]bool{}
+	for _, arch := range []string{"amd64", "arm64"} {
+		for _, v := range s.kernelCache().Versions(kernel, arch) {
+			versions[v] = true
+		}
+	}
+	if len(versions) != 1 {
+		return false
+	}
+	var only string
+	for v := range versions {
+		only = v
+	}
+	return s.saveKernelDefault(ctx, kernel, only, 0, "", "唯一的版本，自动设为默认") == nil
 }
 
 // setKernelDefaults 设置各内核的默认版本：没有单独锁定版本的 Gate 会按新版本重新下发配置。

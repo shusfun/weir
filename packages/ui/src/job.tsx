@@ -1,7 +1,7 @@
 // 后台任务的展示：任务位（JobLine，固定占一行）与任务详情（JobView：状态、进度、一行说明、日志、取消）。
 // 只管显示：任务数据、轮询或推送、取消请求都由调用方经 props 传入，组件库不依赖数据层与路由。
 // 显示是固定行数：进度、结果与失败原因只换文字不增减行，任务从开始到结束，下面的内容不会被顶开。
-import { useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "cn";
 import { Badge } from "./badge";
@@ -22,6 +22,8 @@ interface Job {
   progress?: { done: number; total: number; speed: number; source: string };
   // 计数类任务的进度（如批量导入第 3 / 10 个）；与 progress 二选一
   count?: { done: number; total: number };
+  // 最近实际提供内容的来源；结束后保留，完成行写「来自 ……」
+  source?: string;
   step?: string;
   step_at?: string;
   step_max?: number;
@@ -52,24 +54,45 @@ function clockOf(value: string) {
   return Number.isNaN(+d) ? value : d.toLocaleTimeString("zh-CN", { hour12: false });
 }
 
+// jobPercent：null 表示进行中但进度未知（进度条流动）；已结束的任务不算未知。
 function jobPercent(job: Job) {
   if (job.status === "done") return 100;
   const p = job.count ?? job.progress;
-  return p && p.total > 0 ? Math.min(100, Math.round((p.done / p.total) * 100)) : null;
+  if (p && p.total > 0) return Math.min(100, Math.round((p.done / p.total) * 100));
+  return job.status === "running" ? null : 0;
 }
 
-// note：进行中时写在说明末尾的补充（如「实时推送不可用，每秒刷新」）
-function jobStatusLine(job: Job, note?: string) {
+function formatRemain(seconds: number) {
+  if (seconds < 60) return `${Math.max(1, Math.ceil(seconds))} 秒`;
+  if (seconds < 3600) return `${Math.ceil(seconds / 60)} 分钟`;
+  return `${(seconds / 3600).toFixed(1)} 小时`;
+}
+
+// transferText：下载进度的统一写法「45% · 12 MB / 27 MB · 3 MB/s · 剩余约 5 秒 · 来源」。
+// 任务行、任务详情、自更新、VPS 自更新、客户端下载共用；总大小未知时写已下载多少。
+function transferText(p: { done: number; total?: number; speed?: number; source?: string }) {
+  const total = p.total ?? 0;
+  const speed = p.speed ?? 0;
+  const parts = [total > 0 ? `${Math.min(100, Math.floor((p.done / total) * 100))}% · ${formatSize(p.done)} / ${formatSize(total)}` : `已下载 ${formatSize(p.done)}`];
+  if (speed > 0) parts.push(`${formatSize(speed)}/s`);
+  if (speed > 0 && total > p.done) parts.push(`剩余约 ${formatRemain((total - p.done) / speed)}`);
+  if (p.source) parts.push(p.source);
+  return parts.join(" · ");
+}
+
+// note：进行中时写在说明末尾的补充（如「实时推送不可用，每秒刷新」）。
+// withStep：进度前带上当前步骤（任务行只有这一行文字；详情的标题行已经写了步骤，不重复）。
+function jobStatusLine(job: Job, note?: string, withStep = false) {
   if (job.status === "running") {
     const tail = note ? " · " + note : "";
     if (job.count) return `${job.step ? job.step + " · " : ""}${job.count.done} / ${job.count.total}${tail}`;
     const p = job.progress;
     if (!p) return (job.step || "正在准备…") + tail;
-    const pct = jobPercent(job);
-    return `${pct !== null ? `${pct}% · ${formatSize(p.done)} / ${formatSize(p.total)}` : `已下载 ${formatSize(p.done)}`}${p.speed > 0 ? ` · ${formatSize(p.speed)}/s` : ""}${p.source ? ` · ${p.source}` : ""}${tail}`;
+    return `${withStep && job.step ? job.step + " · " : ""}${transferText(p)}${tail}`;
   }
   if (job.error) return job.error;
-  return job.finished_at ? `${clockOf(job.finished_at)} 完成` : "完成";
+  const from = job.source ? ` · 来自 ${job.source}` : "";
+  return `${job.finished_at ? clockOf(job.finished_at) + " " : ""}完成${from}`;
 }
 
 function jobLogText(job: Job) {
@@ -77,6 +100,28 @@ function jobLogText(job: Job) {
   if (job.error && job.status !== "running")
     lines.push(`${job.finished_at ? clockOf(job.finished_at) : ""} ${job.status === "cancelled" ? "已取消" : "失败"}：${job.error}`.trim());
   return lines.join("\n") || "（还没有日志）";
+}
+
+// LogBox：任务日志。新内容到来时滚到底；用户往上翻看时不抢滚动，翻回底部后继续跟随。
+function LogBox({ text }: { text: string }) {
+  const ref = useRef<HTMLElement>(null);
+  const follow = useRef(true);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el && follow.current) el.scrollTop = el.scrollHeight;
+  }, [text]);
+  return (
+    <CodeBlock
+      ref={ref}
+      className="block h-56 overflow-auto overscroll-contain whitespace-pre-wrap"
+      onScroll={(e) => {
+        const el = e.currentTarget;
+        follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+      }}
+    >
+      {text}
+    </CodeBlock>
+  );
 }
 
 // JobView 显示一个任务。onCancel 不传时不显示取消键；cancelBusy / disabled 由调用方的请求状态给出。
@@ -99,6 +144,7 @@ function JobView({
   className?: string;
 }) {
   const line = jobStatusLine(job, note);
+  const [logsOpen, setLogsOpen] = useState<boolean | null>(null);
   // 已经开始写入的操作不能取消：键位保留（不跳动），只是不可点
   const cancellable = job.status === "running" && job.cancellable !== false;
   return (
@@ -106,7 +152,8 @@ function JobView({
       <div className="flex min-h-6 items-center gap-2">
         <strong className="shrink-0 text-body">{job.title}</strong>
         <Badge variant="soft" tone={jobTones[job.status]}>{jobLabels[job.status]}</Badge>
-        <small className="min-w-0 flex-1 truncate text-[var(--weir-ink-3)]">{job.status === "running" ? job.step : ""}</small>
+        {/* 没有进度时步骤就写在下面那一行，这里不重复 */}
+        <small className="min-w-0 flex-1 truncate text-[var(--weir-ink-3)]" title={job.step}>{job.status === "running" && job.progress ? job.step : ""}</small>
         {onCancel && (
           <Button
             className={job.status === "running" ? undefined : "invisible"}
@@ -123,12 +170,13 @@ function JobView({
           </Button>
         )}
       </div>
-      <Progress value={jobPercent(job)} aria-label={job.title + " 进度"} />
+      <Progress value={jobPercent(job)} tone={job.status === "failed" ? "bad" : undefined} aria-label={job.title + " 进度"} />
       <small className={cn("block truncate tabular-nums", job.status === "failed" ? "text-[var(--weir-bad-ink)]" : "text-[var(--weir-ink-3)]")} title={line}>
         {line}
       </small>
-      <Collapsible title={`日志（${job.logs?.length ?? 0} 行）`} defaultOpen={openLogs || job.status === "failed"}>
-        <CodeBlock className="block h-56 overflow-auto overscroll-contain whitespace-pre-wrap">{jobLogText(job)}</CodeBlock>
+      {/* 进行中与失败时默认展开：日志正是这时要看的；用户手动收起后不再自动展开 */}
+      <Collapsible title={`日志（${job.logs?.length ?? 0} 行）`} open={logsOpen ?? (openLogs || job.status === "running" || job.status === "failed")} onOpenChange={setLogsOpen}>
+        <LogBox text={jobLogText(job)} />
       </Collapsible>
     </div>
   );
@@ -168,13 +216,13 @@ function JobLine({
 }) {
   const [open, setOpen] = useState(false);
   if (!job) return <JobPlaceholder text={idle} className={className} />;
-  const line = jobStatusLine(job, note);
+  const line = jobStatusLine(job, note, true);
   return (
     <div className={cn("flex min-h-9 min-w-0 items-center gap-2 py-1 touch:min-h-10", className)} aria-live="polite">
       <Badge variant="soft" tone={jobTones[job.status]}>{jobLabels[job.status]}</Badge>
       <strong className="shrink-0 text-meta">{job.title}</strong>
       <span className="hidden w-24 shrink-0 sm:block">
-        <Progress value={jobPercent(job)} aria-label={job.title + " 进度"} />
+        <Progress value={jobPercent(job)} tone={job.status === "failed" ? "bad" : undefined} aria-label={job.title + " 进度"} />
       </span>
       <small className={cn("min-w-0 flex-1 truncate tabular-nums", job.status === "failed" ? "text-[var(--weir-bad-ink)]" : "text-[var(--weir-ink-3)]")} title={line}>
         {line}
@@ -193,5 +241,5 @@ function JobLine({
   );
 }
 
-export { JobView, JobLine, JobPlaceholder, formatSize, jobPercent, jobStatusLine, jobLogText, jobTones, jobLabels };
+export { JobView, JobLine, JobPlaceholder, LogBox, formatSize, transferText, jobPercent, jobStatusLine, jobLogText, jobTones, jobLabels };
 export type { Job, JobStatus };

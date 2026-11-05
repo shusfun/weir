@@ -112,7 +112,7 @@ async function sha256Hex(data: ArrayBuffer) {
 }
 
 // 完整下载并校验；通过后交给浏览器保存
-export async function downloadVerified(url: string, asset: ReleaseAsset, onProgress: (ratio: number) => void, signal?: AbortSignal) {
+export async function downloadVerified(url: string, asset: ReleaseAsset, onProgress: (done: number, total: number) => void, signal?: AbortSignal) {
   const res = await fetch(url, { signal, cache: "no-store" });
   if (!res.ok || !res.body) throw Error("下载失败（HTTP " + res.status + "）");
   const reader = res.body.getReader();
@@ -124,7 +124,7 @@ export async function downloadVerified(url: string, asset: ReleaseAsset, onProgr
     chunks.push(value);
     read += value.byteLength;
     if (read > asset.size) throw Error("下载内容大于公布的文件大小，已停止");
-    onProgress(read / asset.size);
+    onProgress(read, asset.size);
   }
   if (read !== asset.size) throw Error("下载不完整，请重试");
   const blob = new Blob(chunks as BlobPart[]);

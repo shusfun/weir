@@ -50,7 +50,9 @@ function protocolLabel(n: NodeItem) {
 
 export function GatesPage() {
   const toast = useToast();
-  const gates = useQuery({ queryKey: ["gates"], queryFn: async () => (await api("/admin/gates")).items as Gate[], refetchInterval: 10_000 });
+  const gates = useQuery({ queryKey: ["gates"], queryFn: async () => (await api("/admin/gates")).items as Gate[],
+    // 有 VPS 在自更新时刷新快一些，进度才连得上
+    refetchInterval: (q) => ((q.state.data ?? []).some((g) => g.self_update?.state === "downloading" || g.self_update?.state === "replacing") ? 2000 : 10_000) });
   const nodes = useQuery({ queryKey: ["nodes"], queryFn: async () => (await api("/admin/nodes")).items as NodeItem[], refetchInterval: 10_000 });
   const [invite, setInvite] = useState(false);
   // wizard：建节点向导；数字是从某台 VPS 的「＋ 协议」打开的（这台 VPS 已选好）

@@ -11,6 +11,7 @@ import { DraftConfirm, DraftReadFailure } from "./draft-confirm";
 import { CenterOriginBanner } from "./center-origin";
 import { NoticesButton } from "./notices";
 import { ConsoleEvents, JobWatcher } from "./job";
+import { UpdateWatcher } from "./update-watcher";
 import { FocusFromURL } from "./object-link";
 
 const collapseKey = "weir-rail-collapsed";
@@ -165,6 +166,7 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
         {admin && <DshWindow />}
         {admin && <DraftConfirm />}
         {admin && <JobWatcher />}
+        {admin && <UpdateWatcher />}
         <ConsoleEvents />
         <FocusFromURL />
       </div>

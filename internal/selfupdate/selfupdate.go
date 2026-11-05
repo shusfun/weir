@@ -5,7 +5,8 @@
 // （install.sh 失败时自动切回上一版本）。中心只能指定版本号与下载来源的顺序（直连与镜像）。
 // 中心可以先按「GitHub 加速」（含经 VPS 中转）把发布包预下载到 Dir：root 先把它复制到只有 root 能写的 WorkDir
 // 再按官方摘要校验（防止中心在校验后替换文件），一致就用，不一致或没有就按来源顺序自己下载。
-// 进度写进 Dir/status.json，中心读取后显示在页面上。
+// 进度写进 Dir/status.json，中心读取后显示在页面上。中心写请求前把预下载的记录写进 Dir/prefetch.json，
+// 中心重启后页面还能看到这段；root 不读这个文件。
 package selfupdate
 
 import (
@@ -283,6 +284,75 @@ func WriteRequest(r Request) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// Handoff 是中心交给 root 之前留下的记录：哪次更新、预下载的日志与实际来源。只有中心读写。
+type Handoff struct {
+	ID      string       `json:"id"`
+	Action  string       `json:"action"`
+	From    string       `json:"from"`
+	Version string       `json:"version,omitempty"`
+	Source  string       `json:"source,omitempty"`
+	Logs    []HandoffLog `json:"logs,omitempty"`
+	Started time.Time    `json:"started_at"`
+	At      time.Time    `json:"at"`
+}
+
+// HandoffLog 是预下载的一行日志。
+type HandoffLog struct {
+	At   time.Time `json:"at"`
+	Text string    `json:"text"`
+}
+
+const handoffFile = "prefetch.json"
+
+// WriteHandoff 写入交接记录（中心调用）。
+func WriteHandoff(h Handoff) error {
+	b, err := json.Marshal(h)
+	if err != nil {
+		return err
+	}
+	tmp := filepath.Join(Dir, handoffFile+".new")
+	_ = os.Remove(tmp)
+	if err = os.WriteFile(tmp, b, 0o640); err != nil {
+		return err
+	}
+	return os.Rename(tmp, filepath.Join(Dir, handoffFile))
+}
+
+// ReadHandoff 读取交接记录（中心调用）。
+func ReadHandoff() (Handoff, bool) {
+	var h Handoff
+	b, err := os.ReadFile(filepath.Join(Dir, handoffFile))
+	if err != nil || json.Unmarshal(b, &h) != nil || h.ID == "" {
+		return Handoff{}, false
+	}
+	return h, true
+}
+
+// RequestPending 报告请求文件还在（root 还没接手）。
+func RequestPending() bool {
+	_, err := os.Lstat(filepath.Join(Dir, "request.json"))
+	return err == nil
+}
+
+// ClearRequest 删除还没被接手的请求（更新服务一直没接手时，让管理员能重新发起）。
+func ClearRequest() error {
+	err := os.Remove(filepath.Join(Dir, "request.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
+// CleanPrefetch 删除别的版本预下载留下的包与 .part；keep 这个文件名（及其 .part）保留，空表示全删。
+func CleanPrefetch(keep string) {
+	list, _ := filepath.Glob(filepath.Join(Dir, "weir-*-linux-*.tar.gz*"))
+	for _, f := range list {
+		if b := filepath.Base(f); keep == "" || b != keep && b != keep+".part" {
+			_ = os.Remove(f)
+		}
+	}
 }
 
 func role() (string, error) {

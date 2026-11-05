@@ -39,6 +39,7 @@ type SelfUpdateStatus struct {
 	State   string    `json:"state,omitempty"`
 	Done    int64     `json:"done,omitempty"`
 	Total   int64     `json:"total,omitempty"`
+	Speed   int64     `json:"speed,omitempty"`
 	Source  string    `json:"source,omitempty"`
 	Error   string    `json:"error,omitempty"`
 	At      time.Time `json:"at"`
@@ -176,6 +177,14 @@ const UploadChunk = 512 << 10
 // UploadState 是中心对上传请求的回复：已收到并写入的字节数。
 type UploadState struct {
 	Received int64 `json:"received"`
+}
+
+// UploadProgress 是 Gate 替中心下载时上报的进度（POST /agent/uploads/<UploadID>/progress），只用于显示。
+type UploadProgress struct {
+	Done   int64  `json:"done"`
+	Total  int64  `json:"total"`
+	Speed  int64  `json:"speed"`
+	Source string `json:"source,omitempty"`
 }
 
 // SourceProbe 是 source.probe 的参数：用 Range 取 URL 的前 Bytes 字节，返回 SourceProbeResult。

@@ -1,6 +1,6 @@
 // GitHub 加速：全项目共用一份按优先级排好的下载来源（直连 GitHub、加速镜像、经某台 VPS 中转）。
 // 内核、Gate 安装包、中心与 Gate 自更新、客户端安装包、添加 VPS 的安装命令都按这个顺序取用；
-// 连续 15 秒低于 100 KiB/s 换下一个（最后一个不限）。内容一律按 GitHub 官方摘要校验，摘要只由中心从 GitHub API 取。
+// 连续 15 秒低于 100 KiB/s 换下一个；都试过后回到其中最快的，不再限速。内容一律按 GitHub 官方摘要校验，摘要只由中心从 GitHub API 取。
 // 调整顺序、增删来源后立即保存；保存失败退回保存前的列表。
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -169,10 +169,10 @@ export function GitHubSourcesCard() {
         flush
         level="h3"
         title="GitHub 加速"
-        description="内核、Gate 安装包、中心与 Gate 自更新、客户端安装包和添加 VPS 的安装命令都按这个顺序从 GitHub 下载：排在前面的先用，连续 15 秒低于 100 KiB/s 就换下一个（最后一个不限）。内容一律按 GitHub 官方摘要校验，不一致即丢弃。镜像是「前缀 + GitHub 地址」的写法，兼容 gh-proxy，可以自建。"
+        description="内核、Gate 安装包、中心与 Gate 自更新、客户端安装包和添加 VPS 的安装命令都按这个顺序从 GitHub 下载：排在前面的先用，连续 15 秒低于 100 KiB/s 就换下一个；全部试过后回到其中最快的那个，不再限速。内容一律按 GitHub 官方摘要校验，不一致即丢弃。镜像是「前缀 + GitHub 地址」的写法，兼容 gh-proxy，可以自建。"
         actions={query.data.default && same(draft, query.data.sources) ? <Badge variant="soft" tone="neutral">默认来源</Badge> : undefined}
       />
-      <Collapsible title={`来源顺序（${draft.length} 个）`}>
+      <Collapsible title={<>来源顺序：{draft.slice(0, 2).map((s) => s.kind === "gate" ? `VPS ${s.gate_name || gates.data?.find((g) => g.id === s.gate_id)?.name || s.gate_id}` : s.kind === "direct" ? "直连" : new URL(s.prefix ?? "https://镜像/").host).join(" → ")}{draft.length > 2 ? ` → 另外 ${draft.length - 2} 个` : ""}</>}>
       <div className="stack">
       {/* 拖动行首把手或用上移 / 下移调整顺序；放下即保存 */}
       <SortableList

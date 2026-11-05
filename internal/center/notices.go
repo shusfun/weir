@@ -169,6 +169,19 @@ func (s *Server) notices(ctx context.Context) []Notice {
 			}
 			out = append(out, n)
 		}
+		// 有默认版本、推荐版本更新时提示一条（升级会切换 VPS 上的内核，只建议、不自动做）
+		if cur := s.explicitDefault(ctx, kernel); cur != "" {
+			var rec Recommendation
+			err := s.githubOnce(ctx, "recommend:"+kernel, func(bg context.Context) error {
+				var e error
+				rec, e = s.recommended(bg, kernel)
+				return e
+			})
+			if err == nil && rec.Version != "" && kernels.CompareVersions(rec.Version, cur) > 0 {
+				out = append(out, Notice{ID: "kernel-update:" + kernel + ":" + rec.Version, Level: "info", Title: fmt.Sprintf("%s 建议更新到 %s", kernelTitle(kernel), rec.Version),
+					Detail: "当前默认 " + cur + "。" + rec.Reason + "。", Action: &NoticeAction{Kind: "open", Label: "去内核页", To: "/kernels"}})
+			}
+		}
 		if kernel == "mihomo" {
 			continue
 		}
@@ -336,5 +349,17 @@ func (s *Server) recommendedHandler(c *gin.Context) {
 		failDetail(c, 502, "upstream_unavailable", "无法读取上游版本："+err.Error(), nil)
 		return
 	}
-	c.JSON(200, gin.H{"recommended": rec, "arch": runtime.GOARCH})
+	ctx := c.Request.Context()
+	base := s.explicitDefault(ctx, kernel)
+	if base == "" {
+		base = s.newestAnyArch(kernel)
+	}
+	cached := rec.Version != ""
+	for _, arch := range s.kernelArches(ctx, kernel) {
+		if _, _, err := s.kernelCache().Get(kernel, rec.Version, arch); err != nil {
+			cached = false
+		}
+	}
+	c.JSON(200, gin.H{"recommended": rec, "arch": runtime.GOARCH, "current": base, "cached": cached,
+		"update": base != "" && rec.Version != "" && kernels.CompareVersions(rec.Version, base) > 0})
 }

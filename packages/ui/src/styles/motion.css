@@ -27,6 +27,20 @@
   .weir-copy-icon[data-copied] .weir-copy-icon-check { opacity: 1; transform: scale(1); }
 
 
+  /* 进度未知：一小段来回流动；减少动态时只显示一条静止的浅色 */
+  .weir-progress-indicator[data-indeterminate] {
+    width: 35%;
+    animation: weir-progress-slide 1.4s var(--weir-ease) infinite alternate;
+  }
+  [data-slot="progress"][data-tone="bad"] .weir-progress-indicator { background: var(--weir-bad-ink); }
+  @keyframes weir-progress-slide {
+    from { transform: translateX(0); }
+    to { transform: translateX(186%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .weir-progress-indicator[data-indeterminate] { width: 100%; opacity: 0.35; animation: none; }
+  }
+
   /* 爆散：粒子沿各自角度飞出、缩小、淡出；中心一圈冲击环 */
   .weir-burst {
     position: fixed;
