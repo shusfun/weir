@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -72,10 +73,12 @@ func (t *tail) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+var terminalEscape = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
+
 func (t *tail) String() string {
 	t.Lock()
 	defer t.Unlock()
-	return string(t.b)
+	return terminalEscape.ReplaceAllString(string(t.b), "")
 }
 
 func args(template []string, path string) []string {
@@ -203,6 +206,15 @@ wait:
 	}
 	step("正在经节点完成 TCP 认证并校验下载")
 	r.TCP = download(ctx, addr, o)
+	if r.TCP.Status == "failed" {
+		detail := strings.ToLower(log.String())
+		switch {
+		case strings.Contains(detail, "authentication"), strings.Contains(detail, "unauthorized"), strings.Contains(detail, "invalid user"):
+			r.TCP.Why = "节点认证失败：" + r.TCP.Why
+		case strings.Contains(detail, "x509:"), strings.Contains(detail, "certificate"):
+			r.TCP.Why = "证书验证失败：" + r.TCP.Why
+		}
+	}
 	if o.UDP {
 		step("正在经节点验证 UDP 往返")
 		r.UDP = Check{Status: "failed"}

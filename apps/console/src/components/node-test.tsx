@@ -54,12 +54,13 @@ export function NodeTestControl({ node, gate, detail = false }: { node: NodeItem
   const tone = t.error || r?.status === "failed" ? "text-[var(--weir-bad-ink)]" : r?.status === "passed" ? "text-[var(--weir-ok-ink)]" : "text-[var(--weir-ink-3)]";
   return (
     <div className={"flex min-w-0 items-start gap-2 " + (detail ? "w-full" : "")}>
-      <Button size="icon-sm" variant="ghost" busy={t.busy} busyText={`正在测试 ${node.name}`} disabled={!!disabledReason}
+      <Button className="order-last" size="icon-sm" variant="ghost" busy={t.busy} busyText={`正在测试 ${node.name}`} disabled={!!disabledReason}
         title={disabledReason || "实测节点"} aria-label={`实测节点 ${node.name}`} onClick={() => void t.run()}><FlaskConical /></Button>
-      <div className={"grid h-12 min-w-0 flex-1 content-center text-meta " + tone} role="status" aria-live="polite" aria-atomic="true" title={title}>
+      <div className={"grid h-16 min-w-0 flex-1 content-center text-meta " + tone} role="status" aria-live="polite" aria-atomic="true" title={title}>
         <span className="block truncate">{t.error ? "实测未完成" : t.busy ? "正在实测…" : !r ? "尚未实测" : r.status === "passed" ? "实测通过" : r.status === "failed" ? "实测失败" : "实测未知"}
           {!t.busy && r && ` · TCP ${checkText(r.tcp)} · UDP ${checkText(r.udp)}`}</span>
-        <span className="block truncate text-[var(--weir-ink-3)]">{t.busy ? t.step || "正在提交，等候中心任务" : t.error || (r ? `${r.location === "colocated" ? "同机实测，外部可达性未知 · " : ""}${date(r.at)}${r.why ? " · " + r.why : ""}` : "点击图标测试真实连接")}</span>
+        <span className="block truncate text-[var(--weir-ink-3)]">{t.busy ? t.step || "正在提交，等候中心任务" : r ? `${date(r.at)}${r.location === "colocated" ? " · 同机实测，外部可达性未知" : ""}` : "点击图标测试真实连接"}</span>
+        <span className="block truncate text-[var(--weir-ink-3)]">{t.busy ? "\u00a0" : t.error || r?.why || disabledReason || "\u00a0"}</span>
       </div>
     </div>
   );

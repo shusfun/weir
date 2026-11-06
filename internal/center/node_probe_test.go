@@ -152,6 +152,16 @@ func TestWireGuardProbeCredentialLifecycle(t *testing.T) {
 	if view["credentials"] != 1 {
 		t.Fatalf("probe counted as user access: %v", view["credentials"])
 	}
+	s.Store.Ent.Link.UpdateOne(l).SetEndsAt(time.Now().Add(-time.Minute)).ExecX(ctx)
+	if err := s.SyncUser(ctx, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if s.Store.Ent.Credential.Query().Where(credential.IDEQ(probe.ID)).ExistX(ctx) {
+		t.Fatal("expired link kept probe")
+	}
+	s.Store.Ent.Link.UpdateOne(l).ClearEndsAt().ExecX(ctx)
+	probe, err = s.wireGuardProbeCredential(ctx, parent)
+	if err != nil { t.Fatal(err) }
 	s.Store.Ent.Link.UpdateOne(l).SetEnabled(false).ExecX(ctx)
 	if err := s.SyncUser(ctx, u.ID); err != nil {
 		t.Fatal(err)

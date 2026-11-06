@@ -452,7 +452,13 @@ func (s *Server) runDeployedNodeTest(ctx context.Context, id, actor int, job Job
 	switch {
 	case r.TCP.Status == "failed" || r.UDP.Status == "failed":
 		r.Status = "failed"
-		r.Why = strings.TrimSpace(strings.Join([]string{r.TCP.Why, r.UDP.Why}, " "))
+		var reasons []string
+		for _, check := range []nodeprobe.Check{r.TCP, r.UDP} {
+			if check.Status == "failed" && check.Why != "" {
+				reasons = append(reasons, check.Why)
+			}
+		}
+		r.Why = strings.Join(reasons, "；")
 		if probeErr != nil && clean(probeErr.Error()) != "" {
 			r.Why += "；" + clean(probeErr.Error())
 		}
