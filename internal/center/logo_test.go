@@ -43,7 +43,7 @@ func TestLogoSettings(t *testing.T) {
 	mustJSON(t, user, "PUT", "/api/v1/admin/settings/logo", map[string]string{"data": ""}, 403)
 	mustJSON(t, admin, "PUT", "/api/v1/admin/settings/logo", map[string]string{"data": "data:image/png;base64,AAAA"}, 400)
 	mustJSON(t, admin, "PUT", "/api/v1/admin/settings/logo", map[string]string{"data": "data:image/png;base64," + strings.Repeat("A", maxLogoBytes*2)}, 400)
-	mustJSON(t, admin, "PUT", "/api/v1/admin/settings/logo", map[string]string{"data": ""}, 200)
+	mustJSON(t, admin, "DELETE", "/api/v1/admin/settings/logo", nil, 200)
 	if got := mustJSON(t, anon, "GET", "/api/v1/logo", nil, 200); got["data"] != "" {
 		t.Fatalf("deleted logo: %v", got)
 	}
