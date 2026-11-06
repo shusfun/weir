@@ -165,7 +165,7 @@ func (e *env) startGate(name string) {
 	if e.gateCenter != "" {
 		center = e.gateCenter
 	}
-	if err := gate.Pair(e.ctx, p, center, inv["token"].(string), name, ""); err != nil {
+	if err := gate.Pair(e.ctx, p, center, inv["token"].(string), name, "", false); err != nil {
 		e.t.Fatal(err)
 	}
 	e.paths = p
@@ -188,8 +188,46 @@ func (e *env) runAgent() {
 	}
 	a.MeterEvery, a.HeartbeatEvery, a.ReportEvery = time.Second, time.Second, 1
 	ctx, cancel := context.WithCancel(e.ctx)
-	e.stopAgent = cancel
-	go a.Run(ctx)
+	done := make(chan struct{})
+	e.stopAgent = func() { cancel(); <-done }
+	go func() { defer close(done); a.Run(ctx) }()
+}
+
+func TestGateRePairAfterCenterReset(t *testing.T) {
+	old := setup(t)
+	old.startGate("old-center")
+	old.applied("old center configuration")
+	old.stopAgent()
+
+	// Fresh centers reuse resource IDs and revision 1; old local state must not suppress their first configuration.
+	e := setup(t)
+	sb := e.seedSingbox()
+	e.paths = old.paths
+	invite := e.post("/api/v1/admin/gates/invite", map[string]string{"name": "reconnected"}, nil)
+	if err := gate.Pair(e.ctx, e.paths, e.url, invite["token"].(string), "reconnected", "", true); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := gate.LoadConfig(e.paths.Config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.gateID = int(cfg.GateID)
+	e.runAgent()
+	e.applied("fresh center configuration after re-pair")
+	e.s.Store.Ent.Gate.UpdateOneID(e.gateID).SetPublicHost("127.0.0.1").ExecX(e.ctx)
+	node := e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "ss2022", "skip_probe": true}, nil)
+	user := e.post("/api/v1/admin/users", map[string]any{"email": "repaired@e2e.test", "password": "E2eUser1"}, nil)
+	e.applied("node from fresh center")
+	port := e.runSingboxClient(sb, e.subOutbound(int(user["id"].(float64)), int(node["id"].(float64))))
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("repaired")) }))
+	t.Cleanup(target.Close)
+	eventually(t, 15*time.Second, "traffic after re-pair", func() bool {
+		err := fetchVia(port, target.URL, len("repaired"))
+		if err != nil {
+			t.Logf("re-paired client: %v", err)
+		}
+		return err == nil
+	})
 }
 
 // applied 等待 Gate 应用到中心最新的配置版本。

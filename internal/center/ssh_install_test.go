@@ -200,6 +200,45 @@ func TestSSHInstallGate(t *testing.T) {
 	}
 }
 
+func TestSSHInstallWaitsForHeartbeat(t *testing.T) {
+	s, admin := newInstalledServer(t)
+	paired := make(chan *fakeGate, 1)
+	f := newFakeSSH(t, "test-password", func(cmd string, out ssh.Channel) int {
+		m := tokenArg.FindStringSubmatch(cmd)
+		if m == nil {
+			return 2
+		}
+		paired <- pairWithToken(t, admin, m[1])
+		return 0
+	})
+	s.origin.Lock()
+	s.origin.value, s.origin.loaded = "https://center.example.test", true
+	s.origin.Unlock()
+	res := mustJSON(t, admin, "POST", "/api/v1/admin/gates/ssh/install", map[string]any{
+		"name": "re-added", "host": "203.0.113.20", "port": 22, "user": "root", "password": "test-password", "fingerprint": fingerprint(f.signer.PublicKey()),
+	}, 202)
+	id := res["job"].(map[string]any)["id"].(string)
+	var g *fakeGate
+	select {
+	case g = <-paired:
+	case <-time.After(5 * time.Second):
+		t.Fatal("installation did not pair")
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	j, _ := s.jobs.Wait(ctx, id)
+	if j.Status != jobRunning {
+		t.Fatalf("installation finished before first heartbeat: %s", j.Status)
+	}
+	heartbeat(t, g, contracts.Heartbeat{})
+	ctx, cancel = context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	j, ok := s.jobs.Wait(ctx, id)
+	if !ok || j.Status != jobDone || j.Result["gate_id"] != int(g.id) {
+		t.Fatalf("installation did not finish after heartbeat: job=%+v found=%v", j, ok)
+	}
+}
+
 // 私钥：OpenSSH、RSA（PKCS#1）、EC、PKCS#8 都能用；带密码的要填密码；PuTTY .ppk 与超长内容拒绝。
 func TestSSHKeyFormats(t *testing.T) {
 	rsaKey, _ := rsa.GenerateKey(rand.Reader, 2048)

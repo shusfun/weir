@@ -9,9 +9,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -70,6 +73,11 @@ func validCenter(raw string) error {
 }
 
 func LoadConfig(path string) (Config, error) {
+	if _, err := os.Stat(path + ".pairing"); err == nil {
+		return Config{}, errors.New("device pairing is incomplete; retry pairing before starting the agent")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return Config{}, err
+	}
 	var c Config
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -127,13 +135,20 @@ func httpClient(c Config, timeout time.Duration) (*http.Client, error) {
 	return &http.Client{Transport: tr, Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, nil
 }
 
-// Pair 用一次性凭证向中心配对，保存设备身份。已存在设备配置时直接返回（重复执行无副作用）。
-func Pair(ctx context.Context, p Paths, center, token, name, caFile string) error {
+// Pair 默认保留已有身份；显式重新接入时，只有中心接受新凭证后才替换身份并清除旧中心的配置与计量状态。
+// 调用方替换身份前必须停止 Agent，成功后重新启动，避免旧进程写回旧状态。
+func Pair(ctx context.Context, p Paths, center, token, name, caFile string, replace bool) error {
 	center = strings.TrimRight(center, "/")
 	if err := validCenter(center); err != nil {
 		return err
 	}
-	if _, err := os.Stat(p.Config); err == nil {
+	marker := p.Config + ".pairing"
+	if _, err := os.Stat(marker); err == nil && !replace {
+		return errors.New("device pairing is incomplete; retry pairing before starting the agent")
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if _, err := os.Stat(p.Config); err == nil && !replace {
 		return nil
 	}
 	if name == "" {
@@ -154,20 +169,55 @@ func Pair(ctx context.Context, p Paths, center, token, name, caFile string) erro
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	var trace [24]byte
+	if _, err = rand.Read(trace[:]); err != nil {
+		return err
+	}
+	req.Header.Set("traceparent", "00-"+hex.EncodeToString(trace[:16])+"-"+hex.EncodeToString(trace[16:])+"-01")
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
+	log.Printf("pair response: status=%d request=%q trace=%q", resp.StatusCode, resp.Header.Get("X-Request-Id"), resp.Header.Get("X-Trace-Id"))
 	if resp.StatusCode != 201 {
-		return statusError{resp.StatusCode}
+		var problem struct {
+			Error struct{ Code string } `json:"error"`
+		}
+		_ = json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&problem)
+		code := problem.Error.Code
+		// Only fixed error codes are safe to echo into the installer log, never raw response text.
+		if len(code) > 80 || strings.IndexFunc(code, func(r rune) bool { return r != '_' && (r < 'a' || r > 'z') && (r < '0' || r > '9') }) >= 0 {
+			code = ""
+		}
+		return fmt.Errorf("pair rejected: %w code=%q request=%q trace=%q", statusError{resp.StatusCode}, code, resp.Header.Get("X-Request-Id"), resp.Header.Get("X-Trace-Id"))
 	}
 	var res contracts.PairResult
 	if err = json.NewDecoder(resp.Body).Decode(&res); err != nil || res.GateID <= 0 {
 		return errors.New("invalid pair response")
 	}
 	cfg.GateID = res.GateID
-	return saveConfig(p.Config, cfg, p.RunAs)
+	if replace {
+		if err := os.MkdirAll(filepath.Dir(p.Config), 0750); err != nil {
+			return fmt.Errorf("cannot prepare device identity replacement: %w", err)
+		}
+		// A crash or local error between the two writes must never start a new identity with old state.
+		if err := os.WriteFile(marker, nil, 0600); err != nil {
+			return fmt.Errorf("cannot protect device identity replacement: %w", err)
+		}
+	}
+	if err := saveConfig(p.Config, cfg, p.RunAs); err != nil {
+		return err
+	}
+	if replace {
+		if err := os.Remove(filepath.Join(p.Data, "state.json")); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("new identity saved but old agent state could not be cleared: %w", err)
+		}
+		if err := os.Remove(marker); err != nil {
+			return fmt.Errorf("new identity saved but replacement barrier could not be cleared: %w", err)
+		}
+	}
+	return nil
 }
 
 // LocalPair 是单机角色：等本机中心初始化完成后用安装器写入的一次性凭证配对，成功后删除凭证文件。
@@ -181,7 +231,7 @@ func LocalPair(ctx context.Context, p Paths, center, tokenFile string) error {
 	}
 	token := strings.TrimSpace(string(raw))
 	for {
-		err = Pair(ctx, p, center, token, "", "")
+		err = Pair(ctx, p, center, token, "", "", false)
 		if err == nil {
 			_ = os.Remove(tokenFile)
 			return nil

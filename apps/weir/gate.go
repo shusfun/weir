@@ -28,6 +28,7 @@ func runGate(args []string) int {
 	tokenFile := f.String("token-file", "/etc/weir/gate/local-pair.token", "local-pair: one-time token written by the installer")
 	name := f.String("name", "", "device name (default: hostname)")
 	caFile := f.String("ca-file", "", "optional CA certificate for a center with a private certificate")
+	replace := f.Bool("replace", false, "pair: replace existing identity and reset agent state; stop the agent first")
 	f.Parse(args)
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -44,7 +45,7 @@ func runGate(args []string) int {
 	case "helper":
 		err = gate.ServeHelper(ctx, gate.NewHelper(p))
 	case "pair":
-		err = gate.Pair(ctx, p, *center, *token, *name, *caFile)
+		err = gate.Pair(ctx, p, *center, *token, *name, *caFile, *replace)
 	case "local-pair":
 		err = gate.LocalPair(ctx, p, *center, *tokenFile)
 	case "helper-health":

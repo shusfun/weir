@@ -70,9 +70,18 @@ else
  curl -fsSL "%[1]s/install/gate.tar.gz?arch=$arch" -o "$work/gate.tar.gz"
  tar -xzf "$work/gate.tar.gz" -C "$work"
 fi
-sh "$work/install.sh" gate
-/opt/weir/current/weir gate pair --center '%[1]s' --token "$token" --config /etc/weir/gate/agent.json
-systemctl enable --now weir-gate.service
+WEIR_GATE_PAIRING=1 sh "$work/install.sh" gate
+systemctl stop weir-gate.service
+if ! /opt/weir/current/weir gate pair --replace --center '%[1]s' --token "$token" --config /etc/weir/gate/agent.json; then
+ if [ -e /etc/weir/gate/agent.json.pairing ]; then
+  echo 'Device identity replacement is incomplete; Gate remains stopped. Fix the reported local error and retry adding this VPS.' >&2
+ elif [ -f /etc/weir/gate/agent.json ]; then
+  systemctl restart weir-gate.service || { echo 'Failed to restore the previous Gate service.' >&2; exit 1; }
+ fi
+ exit 1
+fi
+systemctl enable weir-gate.service
+systemctl restart weir-gate.service
 echo 'Gate paired; it will appear online in the center within a minute.'
 `
 

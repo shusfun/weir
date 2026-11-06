@@ -332,7 +332,8 @@ if [ "$has_gate" = true ]; then
   sleep 1
  done
  [ "$ready" = true ] || rollback
- if [ "$role" = gate ] && [ -f "$etc/gate/agent.json" ]; then systemctl enable --now weir-gate.service >/dev/null; fi
+ # 添加 VPS 的安装器还要替换身份，不能在它配对前启动旧 Agent；普通升级仍沿用原身份启动。
+ if [ "$role" = gate ] && [ -f "$etc/gate/agent.json" ] && [ "${WEIR_GATE_PAIRING:-0}" != 1 ]; then systemctl enable --now weir-gate.service >/dev/null; fi
  if [ -f "$units_dir/weir-local-pair.service" ] && [ ! -f "$etc/gate/agent.json" ]; then
   systemctl enable weir-local-pair.service >/dev/null
   systemctl start --no-block weir-local-pair.service

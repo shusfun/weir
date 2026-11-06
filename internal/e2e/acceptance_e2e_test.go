@@ -409,7 +409,7 @@ func (e *env) pairHTTPS(name, center, caFile string) (string, func()) {
 	ctx, cancel := context.WithCancel(e.ctx)
 	go gate.ServeHelper(ctx, gate.NewHelper(p))
 	eventually(t, 5*time.Second, name+" helper socket", func() bool { _, err := os.Stat(p.Socket); return err == nil })
-	if err := gate.Pair(ctx, p, center, inv["token"].(string), name, caFile); err != nil {
+	if err := gate.Pair(ctx, p, center, inv["token"].(string), name, caFile, false); err != nil {
 		t.Fatal(err)
 	}
 	a, err := gate.NewAgent(p)
