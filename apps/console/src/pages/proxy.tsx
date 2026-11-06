@@ -1,20 +1,23 @@
+import { CustomRulesCard } from "../components/custom-rules";
+import { NodeSummary, ExitSummary } from "../components/node-summary";
 // 代理：管理员与普通用户共用一页。把已授权的节点按类型（协议方案）归类：选哪些类型放进订阅、给某个类型统一加出口；
 // 按网站类别分流到某一组；自动选择由客户端测延迟，或由中心按各 VPS 的情况排序后只给排在前面的几个。
 // 这些都写进订阅、由客户端执行（代理流量不经过中心），客户端下次更新订阅时生效。管理员可以选用户查看、修改他的设置。
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "../lib/query";
+import { useNodeChoices } from "../lib/node-choices";
 import {
   Badge, Button, Card, CardContent, CheckboxField, Chip, ChipLabel, ChoiceCard, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, InsetGroup, InsetRow, InsetRows, Notice,
   PageHeader, Radio, RadioGroup, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SkeletonCards, Switch,
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, useConfirm, type LampTone,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useConfirm, type LampTone,
 } from "@weir/ui";
-import { ListChecks, Plus, Route, Search, Trash2 } from "lucide-react";
+import { Plus, Route, Trash2 } from "lucide-react";
 import { api, ApiError } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
 import { WaitText } from "../components/wait";
 import { field, useConsoleContext } from "../lib/console-context";
-import type { ExitSpec, CustomMatch, CustomMode, CustomRuleKind, Health, NodeItem, ProxyType, ProxyView, UserItem } from "../lib/core";
+import type { ExitSpec, Health, NodeItem, ProxyType, ProxyView, UserItem } from "../lib/core";
 import { ExitFields, exitErrorFields, exitKindName } from "../components/chain-exit";
 import { ChainPanel, SourceSummary, type NodeOption } from "../components/link-panel";
 import { State } from "../components/feedback";
@@ -64,24 +67,18 @@ export function ProxyPage({ admin }: { admin: boolean }) {
       ) : (
         <>
           <TypesCard base={base} view={v} nodes={nodes} admin={admin} onSaved={() => void view.refetch()} />
-          <CustomRulesCard key={base} base={base} view={v} onSaved={() => void view.refetch()} />
+          <CustomRulesCard key={base} base={base} view={v} onSaved={() => view.refetch({ throwOnError: true })} />
           <PolicyCard base={base} view={v} onSaved={() => void view.refetch()} />
-          <RankingCard view={v} />
-          <Card><CardContent><ChainPanel base={base} nodes={nodes} admin={!!uid} /></CardContent></Card>
+          <RankingCard view={v} admin={admin} />
+          <Card><CardContent><ChainPanel base={base} admin={!!uid} /></CardContent></Card>
         </>
       )}
     </div>
   );
 }
 
-function useNodeOptions(admin: boolean, uid: number | null): NodeOption[] {
-  const mine = useQuery({ queryKey: ["me-nodes"], queryFn: async () => (await api("/me/nodes")).items as NodeOption[], enabled: !uid });
-  const users = useQuery({ queryKey: ["users"], queryFn: async () => (await api("/admin/users")).items as UserItem[], enabled: admin && !!uid });
-  const all = useQuery({ queryKey: ["nodes"], queryFn: async () => (await api("/admin/nodes")).items as NodeItem[], enabled: admin && !!uid });
-  if (!uid) return mine.data ?? [];
-  const u = users.data?.find((x) => x.id === uid);
-  if (!u) return [];
-  return (all.data ?? []).filter((n) => n.enabled && (u.all_nodes || (u.node_ids ?? []).includes(n.id))).map((n) => ({ id: n.id, name: n.name, gate_id: n.gate_id, gate_name: n.gate_name }));
+function useNodeOptions(_admin: boolean, uid: number | null): NodeOption[] {
+  return useNodeChoices(uid ? `/admin/users/${uid}` : "/me").data ?? [];
 }
 
 function UserPick({ value, onChange }: { value: number | null; onChange: (id: number | null) => void }) {
@@ -128,9 +125,9 @@ function TypesCard({ base, view, nodes, admin, onSaved }: { base: string; view: 
                 {t.nodes.map((n) => {
                   const meta = n.health === "down" ? healthText.down : n.rate.minutes ? rateText(n.rate.p90_bps) : healthText[n.health];
                   return admin ? (
-                    <Chip key={n.id} tone={healthTone[n.health]} meta={meta} title={n.why} onClick={() => navigate(objectHref({ type: "node", id: n.id }))}>{n.name}</Chip>
+                    <Chip key={n.id} tone={healthTone[n.health]} meta={meta} title={n.why} onClick={() => navigate(objectHref({ type: "node", id: n.id }))}><NodeSummary node={n} compact /></Chip>
                   ) : (
-                    <ChipLabel key={n.id} tone={healthTone[n.health]} meta={meta} title={n.why}>{n.name}</ChipLabel>
+                    <ChipLabel key={n.id} tone={healthTone[n.health]} meta={meta} title={n.why}><NodeSummary node={n} compact /></ChipLabel>
                   );
                 })}
               </div>
@@ -174,13 +171,6 @@ function TypeCount({ type: t }: { type: ProxyType }) {
       {ok} / {t.nodes.length} 可用{unknown > 0 ? ` · ${unknown} 未知` : ""}
     </Badge>
   );
-}
-
-function ExitSummary({ exit }: { exit: NonNullable<ProxyType["exit"]> }) {
-  if (exit.kind === "source") return <SourceSummary choice={exit.source} />;
-  if (exit.kind === "node") return <>经节点 {exit.node_id ? <ObjectLink to={{ type: "node", id: exit.node_id }} /> : ""}</>;
-  if (exit.kind === "link") return <>节点链接 {exit.address}:{exit.port}</>;
-  return <>{exitKindName[exit.kind]} {exit.address}:{exit.port}</>;
 }
 
 // TypeExitDialog：给一个类型的全部节点加同一个出口；有一个节点连不通就整体不保存，逐个列出原因。
@@ -227,139 +217,6 @@ function TypeExitDialog({ base, type, nodes, admin, close, saved }: { base: stri
   );
 }
 
-const customModes: [CustomMode, string, string][] = [
-  ["off", "不使用", "清单不生效，全部按下面的分流设置。"],
-  ["bypass", "不经过代理", "清单里的直连，其余按下面的分流设置。"],
-  ["only", "只经过代理", "清单里的走节点选择，其余全部直连。"],
-];
-const customKindText: Record<CustomRuleKind, string> = { domain: "完整域名", domain_suffix: "域名后缀", domain_keyword: "域名关键词", ip_cidr: "IP 段" };
-const matchKindText: Record<string, string> = { ...customKindText, geoip: "国内 IP", final: "其余流量" };
-const policyText = (p: string) => (p === "DIRECT" ? "直连" : p === "REJECT" ? "拒绝" : `走「${p}」`);
-const checkText = { passed: "内核检查通过", failed: "内核检查没通过，这次提交没有生效", unknown: "内核检查结果未知" };
-const checkTone = { passed: "ok", failed: "bad", unknown: "neutral" } as const;
-
-// CustomRulesCard：粘贴一份清单、选一种方式。什么内容都收，中心整理后用真实内核检查，结果显示在按钮下方。
-function CustomRulesCard({ base, view, onSaved }: { base: string; view: ProxyView; onSaved: () => void }) {
-  const c = view.custom;
-  const [mode, setMode] = useState<CustomMode>(c.mode);
-  const [source, setSource] = useState(c.source);
-  const [target, setTarget] = useState("");
-  const dirty = mode !== c.mode || source !== c.source;
-  // 其他地方改过（管理员切换用户、别的窗口保存）：没有改动时跟着更新
-  useEffect(() => {
-    if (dirty) return;
-    setMode(c.mode);
-    setSource(c.source);
-  }, [c.mode, c.source]); // eslint-disable-line react-hooks/exhaustive-deps
-  const save = useFormAction((track) => api(base + "/proxy/custom", "PUT", { mode, source }, track), {
-    ok: "已保存。Clash 系客户端约 5 分钟内更新清单，切换方式和其他客户端要等下次更新订阅",
-    fields: { custom_rules_too_large: "source" },
-    onSuccess: onSaved,
-    onError: onSaved,
-    wait: { label: "正在优化清单并用内核检查", max: 60 },
-  });
-  const [tested, setTested] = useState<{ target: string; match: CustomMatch } | null>(null);
-  const test = useFormAction(() => api(base + "/proxy/custom/test", "POST", { target, mode, source }) as Promise<{ target: string; match: CustomMatch }>, {
-    fields: { invalid_test_target: "target" },
-    onSuccess: setTested,
-  });
-  useConsoleContext({
-    form: [field("custom.mode", "自定义清单方式", customModes.find(([k]) => k === mode)?.[1]), field("custom.source", "自定义清单", source), field("custom.test", "测试目标", target)],
-  });
-  const r = c.result;
-  const kinds = (Object.keys(customKindText) as CustomRuleKind[]).filter((k) => r.counts[k]);
-  return (
-    <Card>
-      <CardContent>
-        <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
-          <SectionHeader title="自定义清单" description="把网站清单粘贴到这里，写法不限，中心会自动整理和精简。规则写进订阅由客户端执行；只给节点列表的客户端（v2rayN 等）用不上。" />
-          <RadioGroup value={mode} onValueChange={(v) => setMode(v as CustomMode)} aria-label="自定义清单方式" className="grid gap-2 sm:grid-cols-3">
-            {customModes.map(([v, label, hint]) => (
-              <ChoiceCard key={v} selected={mode === v} render={<label />} className="cursor-pointer">
-                <span className="flex items-center gap-2"><Radio value={v} /><strong>{label}</strong></span>
-                <small className="text-[var(--weir-ink-3)]">{hint}</small>
-              </ChoiceCard>
-            ))}
-          </RadioGroup>
-          <Field label="清单" name="source" hint="域名、网址、IP、IP 段或客户端规则都可以，每行一条。">
-            <Textarea mono rows={6} className="max-h-80" value={source} onChange={(e) => setSource(e.target.value)} placeholder={"netflix.com\nhttps://www.youtube.com/\nDOMAIN-KEYWORD,openai\n1.2.3.0/24"} />
-          </Field>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button type="submit" disabled={!dirty} busy={save.busy} busyText="正在优化并检查…"><ListChecks />保存清单</Button>
-            {save.wait && <WaitText wait={save.wait} />}
-            {save.error && <small className="min-w-0 break-words text-[var(--weir-bad-ink)]">{save.error}</small>}
-          </div>
-          {c.check && (
-            <Notice tone={c.check.status === "failed" ? "bad" : c.check.status === "unknown" ? "warn" : "ok"} role="status">
-              <Badge variant="soft" tone={checkTone[c.check.status]}>{checkText[c.check.status]}</Badge>
-              {c.check.status === "passed" ? " 只说明客户端能加载，是否命中可以用下面的测试查。" : c.check.detail ? ` ${c.check.detail}` : ""}
-            </Notice>
-          )}
-          {c.source !== "" && (
-            <div className="stack gap-2">
-              <p className="text-meta text-[var(--weir-ink-2)]">
-                上次提交共 {r.total} 行，生效 {r.rules.length} 条，精简掉 {r.reduced} 条，没用上 {r.unused.length} 条
-                {kinds.length > 0 && <>（{kinds.map((k) => `${customKindText[k]} ${r.counts[k]}`).join("、")}）</>}。
-                {c.active_mode !== c.mode && " 订阅现在用的还是上一次通过检查的设置。"}
-              </p>
-              {c.mode === "only" && r.rules.length === 0 && <Notice tone="warn">清单里没有一条生效的规则，所有流量都会直连。</Notice>}
-              {r.warnings.map((w) => <Notice key={w} tone="warn">{w}</Notice>)}
-              {r.rules.length > 0 && (
-                <Collapsible title={`查看优化后的 ${r.rules.length} 条规则`}>
-                  <div className="max-h-64 overflow-auto">
-                    <Table>
-                      <TableHeader><TableRow><TableHead className="w-28">类型</TableHead><TableHead>规则</TableHead></TableRow></TableHeader>
-                      <TableBody>
-                        {r.rules.map((x) => <TableRow key={x.kind + x.value}><TableCell>{customKindText[x.kind]}</TableCell><TableCell className="break-all font-mono text-meta">{x.value}</TableCell></TableRow>)}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </Collapsible>
-              )}
-              {r.unused.length > 0 && (
-                <Collapsible title={`查看没用上的 ${r.unused.length} 行`}>
-                  <ul className="stack max-h-64 gap-1 overflow-auto text-meta">
-                    {r.unused.map((u) => <li key={u.line} className="break-all"><span className="text-[var(--weir-ink-3)]">第 {u.line} 行</span> <code>{u.text}</code>：{u.reason}</li>)}
-                  </ul>
-                </Collapsible>
-              )}
-            </div>
-          )}
-        </Form>
-        <Form className="mt-4" busy={test.busy} errors={test.errors} onSubmit={() => { setTested(null); void test.submit(); }}>
-          <SectionHeader title="测试清单" description="填网址、域名或 IP，按粘贴框当前的内容算出走向，不用先保存。只按规则计算，不发起连接。" />
-          <div className="flex flex-wrap items-start gap-2">
-            <Field label="测试目标" name="target" required className="min-w-0 flex-1 basis-56">
-              <Input value={target} onChange={(e) => setTarget(e.target.value)} placeholder="www.netflix.com" />
-            </Field>
-            <Button type="submit" variant="outline" className="sm:mt-7" disabled={!target.trim()} busy={test.busy} busyText="正在计算…"><Search />测试</Button>
-          </div>
-          {test.error && <small className="text-[var(--weir-bad-ink)]">{test.error}</small>}
-          <CustomTestResult result={tested} />
-        </Form>
-      </CardContent>
-    </Card>
-  );
-}
-
-function CustomTestResult({ result }: { result: { target: string; match: CustomMatch } | null }) {
-  if (!result) return null;
-  const m = result.match;
-  return (
-    <div className="stack gap-1 text-meta" role="status">
-      <p><strong>{result.target}</strong>：{policyText(m.policy)}</p>
-      <p className="text-[var(--weir-ink-2)]">
-        命中「{m.label}」{m.kind !== "final" && <>，类型 {matchKindText[m.kind] ?? m.kind}</>}{m.value && <>，规则 <code>{m.value}</code></>}
-      </p>
-      {(m.maybe ?? []).length > 0 && (
-        <p className="text-[var(--weir-ink-3)]">
-          客户端解析后可能先命中：{m.maybe!.map((x) => `${x.label}（${matchKindText[x.kind] ?? x.kind}，${policyText(x.policy)}）`).join("、")}
-        </p>
-      )}
-    </div>
-  );
-}
-
 const targetBase: [string, string][] = [["auto", "自动选择"], ["select", "节点选择（手动）"], ["direct", "直连"], ["reject", "拒绝"]];
 
 // PolicyCard：分流与自动选择。改完点保存，一次提交。
@@ -394,7 +251,6 @@ function PolicyCard({ base, view, onSaved }: { base: string; view: ProxyView; on
       <CardContent>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
           <SectionHeader title="分流" description="按网站类别走哪一组。规则写进订阅，由客户端执行；只给节点列表的客户端（v2rayN 等）用不上分流。" />
-          {view.custom.active_mode === "only" && <Notice tone="warn" role="status">自定义清单现在是「只经过代理」，下面的类别设置暂不生效。</Notice>}
           <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2" data-field="rules">
             {view.categories.map((c) => (
               <Field key={c.key} label={c.label} hint={c.hint}>
@@ -442,7 +298,7 @@ function PolicyCard({ base, view, onSaved }: { base: string; view: ProxyView; on
 }
 
 // RankingCard：此刻的排序（与客户端下次拉取时一致）。速率来自各节点自己统计的流量，没有数据写「未知」。
-function RankingCard({ view }: { view: ProxyView }) {
+function RankingCard({ view, admin }: { view: ProxyView; admin: boolean }) {
   const ranked = view.policy.auto.mode === "ranked";
   return (
     <InsetGroup
@@ -471,7 +327,7 @@ function RankingCard({ view }: { view: ProxyView }) {
                 {view.ranking.map((r) => (
                   <TableRow key={`${r.node_id}-${r.type}`}>
                     <TableCell className="tabular-nums">{r.rank || "—"}</TableCell>
-                    <TableCell><ObjectLink to={{ type: "node", id: r.node_id, name: r.name }} /></TableCell>
+                    <TableCell>{admin ? <ObjectLink to={{ type: "node", id: r.node_id, name: r.name }} /> : r.name}</TableCell>
                     <TableCell>{r.type}</TableCell>
                     <TableCell>
                       <Badge variant="soft" tone={r.health === "ok" ? "ok" : r.health === "down" ? "bad" : "neutral"}>{healthText[r.health]}</Badge>

@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/shusfun/weir/internal/store/ent/sample"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // Sample is the model entity for the Sample schema.
@@ -35,6 +37,12 @@ type Sample struct {
 	DiskUsed *int64 `json:"disk_used,omitempty"`
 	// DiskTotal holds the value of the "disk_total" field.
 	DiskTotal *int64 `json:"disk_total,omitempty"`
+	// Processes holds the value of the "processes" field.
+	Processes map[string]contracts.ProcessSample `json:"processes,omitempty"`
+	// ObservationID holds the value of the "observation_id" field.
+	ObservationID string `json:"observation_id,omitempty"`
+	// TraceID holds the value of the "trace_id" field.
+	TraceID string `json:"trace_id,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt    time.Time `json:"created_at,omitempty"`
 	selectValues sql.SelectValues
@@ -45,11 +53,13 @@ func (*Sample) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case sample.FieldProcesses:
+			values[i] = new([]byte)
 		case sample.FieldCPU:
 			values[i] = new(sql.NullFloat64)
 		case sample.FieldID, sample.FieldSubjectID, sample.FieldTraffic, sample.FieldMemUsed, sample.FieldMemTotal, sample.FieldDiskUsed, sample.FieldDiskTotal:
 			values[i] = new(sql.NullInt64)
-		case sample.FieldScope:
+		case sample.FieldScope, sample.FieldObservationID, sample.FieldTraceID:
 			values[i] = new(sql.NullString)
 		case sample.FieldAt, sample.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -133,6 +143,26 @@ func (_m *Sample) assignValues(columns []string, values []any) error {
 				_m.DiskTotal = new(int64)
 				*_m.DiskTotal = value.Int64
 			}
+		case sample.FieldProcesses:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field processes", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Processes); err != nil {
+					return fmt.Errorf("unmarshal field processes: %w", err)
+				}
+			}
+		case sample.FieldObservationID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field observation_id", values[i])
+			} else if value.Valid {
+				_m.ObservationID = value.String
+			}
+		case sample.FieldTraceID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field trace_id", values[i])
+			} else if value.Valid {
+				_m.TraceID = value.String
+			}
 		case sample.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field created_at", values[i])
@@ -211,6 +241,15 @@ func (_m *Sample) String() string {
 		builder.WriteString("disk_total=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("processes=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Processes))
+	builder.WriteString(", ")
+	builder.WriteString("observation_id=")
+	builder.WriteString(_m.ObservationID)
+	builder.WriteString(", ")
+	builder.WriteString("trace_id=")
+	builder.WriteString(_m.TraceID)
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

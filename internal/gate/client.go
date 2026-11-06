@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -61,6 +63,16 @@ func (c *centerClient) raw(ctx context.Context, client *http.Client, method, pat
 	if rb, ok := body.(rawBody); ok {
 		rd, ctype = rb.r, rb.ctype
 	} else if body != nil {
+		if hb, ok := body.(contracts.Heartbeat); ok && hb.Host != nil {
+			copyHost := *hb.Host
+			var id [16]byte
+			if _, err := rand.Read(id[:]); err != nil {
+				return nil, err
+			}
+			copyHost.ObservationID = hex.EncodeToString(id[:])
+			hb.Host = &copyHost
+			body = hb
+		}
 		b, err := json.Marshal(body)
 		if err != nil {
 			return nil, err
@@ -72,6 +84,15 @@ func (c *centerClient) raw(ctx context.Context, client *http.Client, method, pat
 		return nil, err
 	}
 	req.Header.Set("Content-Type", ctype)
+	var traceBytes [24]byte
+	if _, err := rand.Read(traceBytes[:]); err != nil {
+		return nil, err
+	}
+	traceID := hex.EncodeToString(traceBytes[:16])
+	if hb, ok := body.(contracts.Heartbeat); ok && hb.Host != nil {
+		traceID = hb.Host.ObservationID
+	}
+	req.Header.Set("traceparent", "00-"+traceID+"-"+hex.EncodeToString(traceBytes[16:])+"-01")
 	if auth {
 		token, err := c.bearer(ctx)
 		if err != nil {

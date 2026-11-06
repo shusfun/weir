@@ -3,7 +3,6 @@ package center
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -21,7 +20,7 @@ var countryShortNames = map[string]string{
 
 func subscriptionPlace(p geoPlace) string {
 	if !p.Known || p.Country == "" {
-		return "位置未知"
+		return "地区未知"
 	}
 	code := strings.ToUpper(p.Country)
 	if code == "US" {
@@ -38,17 +37,6 @@ func subscriptionPlace(p geoPlace) string {
 		return name
 	}
 	return code
-}
-
-func safeDisplayCandidate(raw string) string {
-	v := strings.TrimSpace(raw)
-	if v == "" || net.ParseIP(strings.Trim(v, "[]")) != nil {
-		return ""
-	}
-	if _, _, err := net.SplitHostPort(v); err == nil {
-		return ""
-	}
-	return v
 }
 
 type subscriptionEntry struct {
@@ -123,44 +111,11 @@ func (s *Server) nameSubscriptionEntries(ctx context.Context, es []subscriptionE
 	counts := map[string]int{}
 	for i := range es {
 		e := &es[i]
-		label := ""
-		host := e.gate.PublicHost
 		prefix := "[直连] "
 		if e.Chained {
 			prefix = "[链式] "
-			ex := e.exit
-			label = safeDisplayCandidate(ex.Remark)
-			if label == "" && ex.Kind == "source" {
-				if v, ok := s.loadExit(ctx, exitOwner(ex.ID)); ok && len(v.Names) == 1 {
-					label = safeDisplayCandidate(v.Names[0])
-				}
-			}
-			if label == "" && e.chain != nil && ex.PolicyType == "" {
-				label = safeDisplayCandidate(e.chain.Name)
-			}
-			host = ex.Address
-			if ex.Kind == "source" {
-				if v, ok := s.loadExit(ctx, exitOwner(ex.ID)); ok {
-					host = v.Outbound.Address
-					if len(v.Outbound.Members) > 0 {
-						host = v.Outbound.Members[0].Address
-					}
-				}
-			}
-			if ex.ExitNodeID != nil {
-				if n, err := s.Store.Ent.Node.Get(ctx, *ex.ExitNodeID); err == nil {
-					if g, err := s.Store.Ent.Gate.Get(ctx, n.GateID); err == nil {
-						host = g.PublicHost
-					}
-				}
-			}
-			if p, ok := s.loadExitProbe(ctx, exitOwner(ex.ID)); ok && p.ExitIP != "" {
-				host = p.ExitIP
-			}
 		}
-		if label == "" {
-			label = subscriptionPlace(s.locate(ctx, host))
-		}
+		label := s.nodeDisplayName(ctx, e.node, e.gate, e.exit, e.chain)
 		e.Name = prefix + label
 		counts[e.Name]++
 	}

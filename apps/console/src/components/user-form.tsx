@@ -1,3 +1,4 @@
+import { NodeSummary, nodeTitle } from "./node-summary";
 // 一个窗口建 / 改用户：账号、额度、周期、按月重置、节点范围、是否允许自建链式代理。
 import { useState } from "react";
 import { Button, CheckboxField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, PasswordInput, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField } from "@weir/ui";
@@ -48,7 +49,7 @@ function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new
     form: [
       field("email", "邮箱", email), field("name", "备注名", name), field("password", "密码", password, true),
       field("quota", "额度", quota ? `${quota} ${unit}` : "不限"), field("expires_at", "到期", expiry || "长期"), field("monthly_reset", "按月重置", monthly ? "是" : "否"),
-      field("all_nodes", "全部节点", all ? "是" : "否"), field("node_ids", "选中的节点", nodes.filter((n) => picked.includes(n.id)).map((n) => n.name).join("、")),
+      field("all_nodes", "全部节点", all ? "是" : "否"), field("node_ids", "选中的节点", nodes.filter((n) => picked.includes(n.id)).map(nodeTitle).join("、")),
       field("allow_chain", "允许自建链式代理", chain ? "是" : "否"), field("enabled", "启用", enabled ? "是" : "否"),
     ],
   });
@@ -95,7 +96,7 @@ function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new
               {nodes.length === 0 ? <small>还没有节点。</small> : nodes.map((n) => (
                 <CheckboxField
                   key={n.id}
-                  label={<>{n.name}<small className="text-[var(--weir-ink-3)]">（{n.gate_name}）</small></>}
+                  label={<NodeSummary node={n} />}
                   checked={picked.includes(n.id)}
                   onCheckedChange={(v) => setPicked(v ? [...picked, n.id] : picked.filter((x) => x !== n.id))}
                 />

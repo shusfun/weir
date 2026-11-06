@@ -19,7 +19,7 @@ type Plan struct {
 	// ManagedURL 不为空时 Surge 配置首行写 #!MANAGED-CONFIG，按 UpdateSec 自动更新整份配置。
 	ManagedURL string
 	UpdateSec  int
-	// Custom 是用户的自定义清单，排在 Rules 之前，都走 CustomTarget。
+	// Custom 是用户的有序清单，排在 Rules 之前，逐条使用 Target；旧条目回退到 CustomTarget。
 	Custom       []Rule
 	CustomTarget string
 	// RuleSet 不为空时 Clash 把清单放进 rule-providers，客户端单独按 CustomRuleSetSec 刷新，不必更新整份配置；
@@ -47,6 +47,7 @@ type Item struct {
 
 // Rule：Kind 是 domain / domain_suffix / domain_keyword / ip_cidr / geoip；Target 同 Plan.Final；Label 是规则来源（如分流类别）。
 type Rule struct {
+	ID     string
 	Kind   string
 	Values []string
 	Target string
@@ -97,6 +98,7 @@ type group struct {
 }
 
 type layoutRule struct {
+	ID     string
 	Kind   string
 	Values []string
 	Policy string // 组名，或 DIRECT / REJECT
@@ -176,7 +178,11 @@ func (p *Plan) layout(names []string, items []Item) layout {
 	if p.RuleSet == nil {
 		for _, r := range p.Custom {
 			if len(r.Values) > 0 {
-				out.Rules = append(out.Rules, layoutRule{Kind: r.Kind, Values: r.Values, Policy: out.CustomPolicy, Label: CustomLabel})
+				target := out.CustomPolicy
+				if r.Target != "" {
+					target = policy(r.Target)
+				}
+				out.Rules = append(out.Rules, layoutRule{ID: r.ID, Kind: r.Kind, Values: r.Values, Policy: target, Label: CustomLabel})
 			}
 		}
 	}

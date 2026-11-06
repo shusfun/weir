@@ -6,6 +6,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // Sample 是按分钟记录的观测：VPS 的流量与主机（CPU、内存、磁盘），用户的流量。保留 25 小时，供 1 / 6 / 24 小时图表。
@@ -14,7 +15,7 @@ type Sample struct{ ent.Schema }
 
 func (Sample) Fields() []ent.Field {
 	return []ent.Field{
-		field.Enum("scope").Values("gate", "user"),
+		field.Enum("scope").Values("gate", "user", "center"),
 		field.Int("subject_id"),
 		field.Time("at"), // 分钟起点（UTC）
 		field.Int64("traffic").Default(0),
@@ -23,6 +24,9 @@ func (Sample) Fields() []ent.Field {
 		field.Int64("mem_total").Optional().Nillable(),
 		field.Int64("disk_used").Optional().Nillable(),
 		field.Int64("disk_total").Optional().Nillable(),
+		field.JSON("processes", map[string]contracts.ProcessSample{}).Optional(),
+		field.String("observation_id").Default(""),
+		field.String("trace_id").Default(""),
 		field.Time("created_at").Default(time.Now).Immutable(),
 	}
 }

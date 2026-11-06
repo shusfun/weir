@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/shusfun/weir/internal/store/ent/predicate"
 	"github.com/shusfun/weir/internal/store/ent/sample"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // SampleUpdate is the builder for updating Sample entities.
@@ -233,6 +234,46 @@ func (_u *SampleUpdate) ClearDiskTotal() *SampleUpdate {
 	return _u
 }
 
+// SetProcesses sets the "processes" field.
+func (_u *SampleUpdate) SetProcesses(v map[string]contracts.ProcessSample) *SampleUpdate {
+	_u.mutation.SetProcesses(v)
+	return _u
+}
+
+// ClearProcesses clears the value of the "processes" field.
+func (_u *SampleUpdate) ClearProcesses() *SampleUpdate {
+	_u.mutation.ClearProcesses()
+	return _u
+}
+
+// SetObservationID sets the "observation_id" field.
+func (_u *SampleUpdate) SetObservationID(v string) *SampleUpdate {
+	_u.mutation.SetObservationID(v)
+	return _u
+}
+
+// SetNillableObservationID sets the "observation_id" field if the given value is not nil.
+func (_u *SampleUpdate) SetNillableObservationID(v *string) *SampleUpdate {
+	if v != nil {
+		_u.SetObservationID(*v)
+	}
+	return _u
+}
+
+// SetTraceID sets the "trace_id" field.
+func (_u *SampleUpdate) SetTraceID(v string) *SampleUpdate {
+	_u.mutation.SetTraceID(v)
+	return _u
+}
+
+// SetNillableTraceID sets the "trace_id" field if the given value is not nil.
+func (_u *SampleUpdate) SetNillableTraceID(v *string) *SampleUpdate {
+	if v != nil {
+		_u.SetTraceID(*v)
+	}
+	return _u
+}
+
 // Mutation returns the SampleMutation object of the builder.
 func (_u *SampleUpdate) Mutation() *SampleMutation {
 	return _u.mutation
@@ -349,6 +390,18 @@ func (_u *SampleUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.DiskTotalCleared() {
 		_spec.ClearField(sample.FieldDiskTotal, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.Processes(); ok {
+		_spec.SetField(sample.FieldProcesses, field.TypeJSON, value)
+	}
+	if _u.mutation.ProcessesCleared() {
+		_spec.ClearField(sample.FieldProcesses, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.ObservationID(); ok {
+		_spec.SetField(sample.FieldObservationID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.TraceID(); ok {
+		_spec.SetField(sample.FieldTraceID, field.TypeString, value)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -575,6 +628,46 @@ func (_u *SampleUpdateOne) ClearDiskTotal() *SampleUpdateOne {
 	return _u
 }
 
+// SetProcesses sets the "processes" field.
+func (_u *SampleUpdateOne) SetProcesses(v map[string]contracts.ProcessSample) *SampleUpdateOne {
+	_u.mutation.SetProcesses(v)
+	return _u
+}
+
+// ClearProcesses clears the value of the "processes" field.
+func (_u *SampleUpdateOne) ClearProcesses() *SampleUpdateOne {
+	_u.mutation.ClearProcesses()
+	return _u
+}
+
+// SetObservationID sets the "observation_id" field.
+func (_u *SampleUpdateOne) SetObservationID(v string) *SampleUpdateOne {
+	_u.mutation.SetObservationID(v)
+	return _u
+}
+
+// SetNillableObservationID sets the "observation_id" field if the given value is not nil.
+func (_u *SampleUpdateOne) SetNillableObservationID(v *string) *SampleUpdateOne {
+	if v != nil {
+		_u.SetObservationID(*v)
+	}
+	return _u
+}
+
+// SetTraceID sets the "trace_id" field.
+func (_u *SampleUpdateOne) SetTraceID(v string) *SampleUpdateOne {
+	_u.mutation.SetTraceID(v)
+	return _u
+}
+
+// SetNillableTraceID sets the "trace_id" field if the given value is not nil.
+func (_u *SampleUpdateOne) SetNillableTraceID(v *string) *SampleUpdateOne {
+	if v != nil {
+		_u.SetTraceID(*v)
+	}
+	return _u
+}
+
 // Mutation returns the SampleMutation object of the builder.
 func (_u *SampleUpdateOne) Mutation() *SampleMutation {
 	return _u.mutation
@@ -721,6 +814,18 @@ func (_u *SampleUpdateOne) sqlSave(ctx context.Context) (_node *Sample, err erro
 	}
 	if _u.mutation.DiskTotalCleared() {
 		_spec.ClearField(sample.FieldDiskTotal, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.Processes(); ok {
+		_spec.SetField(sample.FieldProcesses, field.TypeJSON, value)
+	}
+	if _u.mutation.ProcessesCleared() {
+		_spec.ClearField(sample.FieldProcesses, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.ObservationID(); ok {
+		_spec.SetField(sample.FieldObservationID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.TraceID(); ok {
+		_spec.SetField(sample.FieldTraceID, field.TypeString, value)
 	}
 	_node = &Sample{config: _u.config}
 	_spec.Assign = _node.assignValues

@@ -179,11 +179,9 @@ func (s *Server) agentHeartbeat(c *gin.Context) {
 		arch = g.Arch
 	}
 	upd := g.Update().SetVersion(hb.Version).SetHostname(hb.Hostname).SetArch(arch).SetListeningPorts(ports).SetKernelsRunning(hb.Kernels).SetLastSeenAt(time.Now())
-	host := g.Host
-	if host == nil {
-		host = map[string]any{}
-	}
+	host := map[string]any{}
 	if hb.Host != nil {
+		c.Set("observation_id", hb.Host.ObservationID)
 		b, _ := json.Marshal(hb.Host)
 		_ = json.Unmarshal(b, &host)
 	}

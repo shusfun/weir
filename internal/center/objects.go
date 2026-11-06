@@ -17,7 +17,7 @@ import (
 // 地址由控制台按类型生成。
 
 // objectTypes 与控制台 lib/objects.ts 的 ObjectType 一一对应。
-var objectTypes = []string{"gate", "node", "user", "link", "chain", "exit", "route", "driver", "kernel", "source", "profile", "page", "cert", "audit"}
+var objectTypes = []string{"center", "gate", "node", "user", "link", "chain", "exit", "route", "driver", "kernel", "source", "profile", "page", "cert", "audit"}
 
 var (
 	objectKey = regexp.MustCompile(`^[A-Za-z0-9._@:-]{1,80}$`)
@@ -57,6 +57,11 @@ func (s *Server) resolveObject(ctx context.Context, typ, key string) (objectRef,
 	id, _ := strconv.Atoi(key)
 	db := s.Store.Ent
 	switch typ {
+	case "center":
+		if key != "1" {
+			return ref, false
+		}
+		ref.ID, ref.Name = 1, "中心"
 	case "gate":
 		g, err := db.Gate.Get(ctx, id)
 		if err != nil {

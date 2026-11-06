@@ -22,6 +22,7 @@ type taskFailure struct {
 
 // taskLabels 是要进通知的周期任务（没有别的地方显示它们的结果）。
 var taskLabels = map[string]string{
+	"resource-samples": "保存资源观测",
 	"reset-usage":      "按月清零用量",
 	"check-alerts":     "离线与额度提醒",
 	"observe-security": "整理安全事件",

@@ -104,6 +104,20 @@ func (_c *SubPullCreate) SetNillableIP(v *string) *SubPullCreate {
 	return _c
 }
 
+// SetTraceID sets the "trace_id" field.
+func (_c *SubPullCreate) SetTraceID(v string) *SubPullCreate {
+	_c.mutation.SetTraceID(v)
+	return _c
+}
+
+// SetNillableTraceID sets the "trace_id" field if the given value is not nil.
+func (_c *SubPullCreate) SetNillableTraceID(v *string) *SubPullCreate {
+	if v != nil {
+		_c.SetTraceID(*v)
+	}
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *SubPullCreate) SetStatus(v string) *SubPullCreate {
 	_c.mutation.SetStatus(v)
@@ -173,6 +187,10 @@ func (_c *SubPullCreate) defaults() {
 		v := subpull.DefaultIP
 		_c.mutation.SetIP(v)
 	}
+	if _, ok := _c.mutation.TraceID(); !ok {
+		v := subpull.DefaultTraceID
+		_c.mutation.SetTraceID(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := subpull.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -220,6 +238,14 @@ func (_c *SubPullCreate) check() error {
 	if v, ok := _c.mutation.IP(); ok {
 		if err := subpull.IPValidator(v); err != nil {
 			return &ValidationError{Name: "ip", err: fmt.Errorf(`ent: validator failed for field "SubPull.ip": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.TraceID(); !ok {
+		return &ValidationError{Name: "trace_id", err: errors.New(`ent: missing required field "SubPull.trace_id"`)}
+	}
+	if v, ok := _c.mutation.TraceID(); ok {
+		if err := subpull.TraceIDValidator(v); err != nil {
+			return &ValidationError{Name: "trace_id", err: fmt.Errorf(`ent: validator failed for field "SubPull.trace_id": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
@@ -284,6 +310,10 @@ func (_c *SubPullCreate) createSpec() (*SubPull, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.IP(); ok {
 		_spec.SetField(subpull.FieldIP, field.TypeString, value)
 		_node.IP = value
+	}
+	if value, ok := _c.mutation.TraceID(); ok {
+		_spec.SetField(subpull.FieldTraceID, field.TypeString, value)
+		_node.TraceID = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(subpull.FieldStatus, field.TypeString, value)
@@ -434,6 +464,18 @@ func (u *SubPullUpsert) SetIP(v string) *SubPullUpsert {
 // UpdateIP sets the "ip" field to the value that was provided on create.
 func (u *SubPullUpsert) UpdateIP() *SubPullUpsert {
 	u.SetExcluded(subpull.FieldIP)
+	return u
+}
+
+// SetTraceID sets the "trace_id" field.
+func (u *SubPullUpsert) SetTraceID(v string) *SubPullUpsert {
+	u.Set(subpull.FieldTraceID, v)
+	return u
+}
+
+// UpdateTraceID sets the "trace_id" field to the value that was provided on create.
+func (u *SubPullUpsert) UpdateTraceID() *SubPullUpsert {
+	u.SetExcluded(subpull.FieldTraceID)
 	return u
 }
 
@@ -598,6 +640,20 @@ func (u *SubPullUpsertOne) SetIP(v string) *SubPullUpsertOne {
 func (u *SubPullUpsertOne) UpdateIP() *SubPullUpsertOne {
 	return u.Update(func(s *SubPullUpsert) {
 		s.UpdateIP()
+	})
+}
+
+// SetTraceID sets the "trace_id" field.
+func (u *SubPullUpsertOne) SetTraceID(v string) *SubPullUpsertOne {
+	return u.Update(func(s *SubPullUpsert) {
+		s.SetTraceID(v)
+	})
+}
+
+// UpdateTraceID sets the "trace_id" field to the value that was provided on create.
+func (u *SubPullUpsertOne) UpdateTraceID() *SubPullUpsertOne {
+	return u.Update(func(s *SubPullUpsert) {
+		s.UpdateTraceID()
 	})
 }
 
@@ -928,6 +984,20 @@ func (u *SubPullUpsertBulk) SetIP(v string) *SubPullUpsertBulk {
 func (u *SubPullUpsertBulk) UpdateIP() *SubPullUpsertBulk {
 	return u.Update(func(s *SubPullUpsert) {
 		s.UpdateIP()
+	})
+}
+
+// SetTraceID sets the "trace_id" field.
+func (u *SubPullUpsertBulk) SetTraceID(v string) *SubPullUpsertBulk {
+	return u.Update(func(s *SubPullUpsert) {
+		s.SetTraceID(v)
+	})
+}
+
+// UpdateTraceID sets the "trace_id" field to the value that was provided on create.
+func (u *SubPullUpsertBulk) UpdateTraceID() *SubPullUpsertBulk {
+	return u.Update(func(s *SubPullUpsert) {
+		s.UpdateTraceID()
 	})
 }
 

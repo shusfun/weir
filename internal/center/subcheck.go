@@ -6,9 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -27,9 +29,11 @@ type SubCheck struct {
 	Error   string    `json:"error,omitempty"`
 	At      time.Time `json:"at"`
 	// 以下由记录时填写：哪个订阅、哪种格式。
-	Ref    string `json:"ref,omitempty"`
-	Name   string `json:"name,omitempty"`
-	Target string `json:"target,omitempty"`
+	Ref       string `json:"ref,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Target    string `json:"target,omitempty"`
+	TraceID   string `json:"trace_id,omitempty"`
+	RequestID string `json:"request_id,omitempty"`
 }
 
 // checkKernel 返回某个订阅格式由哪个内核检查；其他格式不检查。
@@ -64,10 +68,24 @@ var subCheckRun = runSubCheck
 // subCheckSem 限制同时运行的检查数。
 var subCheckSem = make(chan struct{}, 2)
 
+type freshSubCheckKey struct{}
+
+var checkSecret = regexp.MustCompile(`(?i)(password|private[_-]?key|token|uuid|client[_-]?id)(["']?\s*[:=]\s*)("[^"\r\n]*"|'[^'\r\n]*'|[^\s,}]+)`)
+var checkUUID = regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`)
+
+func safeCheckOutput(s string) string {
+	return checkUUID.ReplaceAllString(checkSecret.ReplaceAllString(redact(s), "$1$2[redacted]"), "[redacted]")
+}
+
 // checkSubscription 检查一份生成的订阅；同一内容与内核版本 24 小时内只检查一次。
 func (s *Server) checkSubscription(ctx context.Context, target string, body []byte) SubCheck {
 	kernel := checkKernel(target)
 	res := SubCheck{Status: "unknown", Kernel: kernel, At: time.Now().UTC()}
+	started := time.Now()
+	defer func() {
+		trace, _ := ctx.Value(httpTraceKey{}).(httpTrace)
+		slog.Info("subscription kernel check", "trace", trace.ID, "request", traceOf(ctx), "kernel", kernel, "version", res.Version, "status", res.Status, "ms", time.Since(started).Milliseconds(), "detail", safeCheckOutput(res.Error))
+	}()
 	if kernel == "" {
 		res.Error = "这种格式不做内核检查"
 		return res
@@ -80,8 +98,12 @@ func (s *Server) checkSubscription(ctx context.Context, target string, body []by
 	res.Version = version
 	sum := sha256.Sum256(body)
 	key := "subcheck:" + kernel + ":" + version + ":" + hex.EncodeToString(sum[:])
-	if raw, ok, _ := s.Store.KV.Get(ctx, key); ok && json.Unmarshal([]byte(raw), &res) == nil {
-		return res
+	if raw, ok, _ := s.Store.KV.Get(ctx, key); ok {
+		var cached SubCheck
+		if json.Unmarshal([]byte(raw), &cached) == nil && (cached.Status == "passed" || ctx.Value(freshSubCheckKey{}) != true) {
+			res = cached
+			return res
+		}
 	}
 	select {
 	case subCheckSem <- struct{}{}:
@@ -95,12 +117,17 @@ func (s *Server) checkSubscription(ctx context.Context, target string, body []by
 	switch {
 	case err == nil:
 		res.Status = "passed"
-	case errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled):
+	case errors.Is(err, context.DeadlineExceeded):
 		res.Error = "检查超时"
+		if detail := tail(out, 2000); detail != "" {
+			res.Error += "：" + safeCheckOutput(detail)
+		}
+	case errors.Is(err, context.Canceled):
+		res.Error = "检查被取消"
 	default:
-		res.Status, res.Error = "failed", tail(out, 2000)
+		res.Status, res.Error = "failed", safeCheckOutput(tail(out, 2000))
 		if res.Error == "" {
-			res.Error = err.Error()
+			res.Error = safeCheckOutput(err.Error())
 		}
 	}
 	if res.Status != "unknown" {
@@ -157,13 +184,13 @@ func tail(b []byte, n int) string {
 }
 
 // recordSubCheck 在后台检查一份已输出的订阅，并记下这个订阅最近一次的结果（保留 30 天）。
-func (s *Server) recordSubCheck(ref, name, target string, body []byte) {
+func (s *Server) recordSubCheck(parent context.Context, ref, name, target string, body []byte) {
 	if checkKernel(target) == "" {
 		return
 	}
 	st := s.Store
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), time.Minute)
 		defer cancel()
 		s.state.RLock()
 		ready := s.Store == st && st != nil
@@ -173,6 +200,8 @@ func (s *Server) recordSubCheck(ref, name, target string, body []byte) {
 		}
 		res := s.checkSubscription(ctx, target, body)
 		res.Ref, res.Name, res.Target = ref, name, checkKernel(target)
+		trace, _ := ctx.Value(httpTraceKey{}).(httpTrace)
+		res.TraceID, res.RequestID = trace.ID, traceOf(ctx)
 		if b, err := json.Marshal(res); err == nil {
 			_ = st.KV.Set(ctx, "subcheck-last:"+ref+":"+res.Target, string(b), 30*24*time.Hour)
 		}

@@ -55,7 +55,7 @@ func truncate(s string, n int) string {
 func (s *Server) recordPull(c *gin.Context, l *ent.Link, target, status string) {
 	ua := c.GetHeader("User-Agent")
 	_ = s.Store.Ent.SubPull.Create().SetLinkID(l.ID).SetUserID(l.UserID).SetAt(time.Now().UTC()).SetTarget(truncate(target, 16)).
-		SetClient(clientName(ua)).SetUserAgent(truncate(ua, 256)).SetIP(truncate(c.ClientIP(), 64)).SetStatus(status).Exec(context.WithoutCancel(c.Request.Context()))
+		SetClient(clientName(ua)).SetUserAgent(truncate(ua, 256)).SetIP(truncate(c.ClientIP(), 64)).SetTraceID(c.GetString("trace_id")).SetStatus(status).Exec(context.WithoutCancel(c.Request.Context()))
 }
 
 func (s *Server) prunePulls(ctx context.Context, now time.Time) error {
@@ -157,7 +157,7 @@ func (s *Server) collectLinkStats(ctx context.Context, uid int, withSource bool)
 }
 
 func (s *Server) pullView(ctx context.Context, p *ent.SubPull) gin.H {
-	v := gin.H{"at": p.At, "target": p.Target, "client": p.Client, "user_agent": p.UserAgent, "ip": p.IP, "status": p.Status}
+	v := gin.H{"at": p.At, "target": p.Target, "client": p.Client, "user_agent": p.UserAgent, "ip": p.IP, "status": p.Status, "trace_id": p.TraceID}
 	if p.IP != "" {
 		if place := s.locate(ctx, p.IP); place.Known {
 			v["place"] = strings.Join(nonEmpty(place.Country, place.Region, place.City), " · ")

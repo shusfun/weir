@@ -13,6 +13,8 @@ import { ObjectLink, dataObject, useDialogParam } from "./object-link";
 import { exitKindName, probeText } from "./chain-exit";
 import { NodeAccess } from "./node-access";
 
+import { ProcessUsage, freshHost } from "./resource-usage";
+import { NodeSummary } from "./node-summary";
 import { GateDetail, pct, size } from "./gate-detail";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -67,7 +69,7 @@ const navigate=useNavigate();
         const list = nodes;
         const usable = list.filter((n) => nodeStatus(n, g)[1] === "ok").length;
         // 离线时不把上一次的主机数据当成现在的
-        const host = g.online ? g.host ?? {} : {};
+        const host = freshHost(g.host,g.online) ?? {};
         return (
           <Card key={g.id} {...dataObject({ type: "gate", id: g.id })}>
             <CardContent className="stack">
@@ -103,6 +105,7 @@ const navigate=useNavigate();
                   </div>
                 ))}
               </dl>
+              <ProcessUsage host={g.host} online={g.online} names={["xray", "sing-box"]} />
               {list.length > 0 && (
                 <ul className="group-list" aria-label={`${g.name} 上的节点`}>
                   {list.map((n) => {
@@ -110,8 +113,8 @@ const navigate=useNavigate();
                     return (
                       <li key={n.id} {...dataObject({ type: "node", id: n.id })}>
                         <button type="button" onClick={() => onNode(n)} className="weir-press flex min-h-[var(--weir-tap-touch)] w-full flex-wrap items-center gap-x-3 gap-y-0.5 py-1.5 text-left text-sm">
-                          <span className="flex min-w-0 items-center gap-2 font-medium"><StatusLamp tone={t} label={s} />{n.name}</span>
-                          <small className="tabular-nums text-[var(--weir-ink-3)]">{n.name.includes(protocolLabel(n)) ? "" : protocolLabel(n) + " "}:{n.port} · {s} · 出口 {exitLabel(n, nodes)} · {n.rate?.minutes ? rateText(n.rate.p90_bps) : "速率未知"}</small>
+                          <span className="flex min-w-0 items-start gap-2"><StatusLamp tone={t} label={s} /><NodeSummary node={n} /></span>
+                          <small className="text-[var(--weir-ink-3)]">{s} · {n.rate?.minutes ? rateText(n.rate.p90_bps) : "速率未知"}</small>
                           {t !== "ok" && <small className={"basis-full " + (t === "bad" ? "text-[var(--weir-bad-ink)]" : t === "warn" ? "text-[var(--weir-warn-ink)]" : "text-[var(--weir-ink-3)]")}>{why}</small>}
                         </button>
                       </li>

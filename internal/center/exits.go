@@ -194,10 +194,18 @@ func (s *Server) validateExitSelection(ctx context.Context, g *ent.Gate, self in
 }
 
 func (s *Server) refreshExit(ctx context.Context, e *ent.Exit, p *exitProbe) error {
-	s.saveExitProbe(ctx, exitOwner(e.ID), p)
-	if e.Kind == entexit.KindSource {
-		return s.refreshSourceExit(ctx, exitOwner(e.ID), e.GateID, specOf(e.Source), e.OwnerUserID != nil)
+	if err := s.invalidateExitDependents(ctx, e.ID); err != nil {
+		return err
 	}
+	if e.Kind == entexit.KindSource {
+		if err := s.refreshSourceExit(ctx, exitOwner(e.ID), e.GateID, specOf(e.Source), e.OwnerUserID != nil); err != nil {
+			return err
+		}
+	}
+	if p == nil {
+		return s.Store.KV.Del(ctx, exitProbeKey(exitOwner(e.ID)))
+	}
+	s.saveExitProbe(ctx, exitOwner(e.ID), p)
 	return nil
 }
 
@@ -262,36 +270,15 @@ func (s *Server) exitResourceView(ctx context.Context, e *ent.Exit) (gin.H, erro
 	if err != nil {
 		return nil, err
 	}
-	host := e.Address
-	if e.Kind == entexit.KindFreedom {
-		if g, err := s.Store.Ent.Gate.Get(ctx, e.GateID); err == nil {
-			host = g.PublicHost
-		}
-	}
-	if e.ExitNodeID != nil {
-		if n, err := s.Store.Ent.Node.Get(ctx, *e.ExitNodeID); err == nil {
-			if g, err := s.Store.Ent.Gate.Get(ctx, n.GateID); err == nil {
-				host = g.PublicHost
-			}
-		}
-	}
-	if e.Kind == entexit.KindSource {
+	if e.Kind == "source" {
 		v["source"] = e.Source
 		v["resolved"] = s.exitView(ctx, exitOwner(e.ID))
-		if stored, ok := s.loadExit(ctx, exitOwner(e.ID)); ok {
-			host = stored.Outbound.Address
-			if len(stored.Outbound.Members) > 0 {
-				host = stored.Outbound.Members[0].Address
-			}
-		}
 	}
 	if p, ok := s.loadExitProbe(ctx, exitOwner(e.ID)); ok {
 		v["probe"] = p
-		if p.ExitIP != "" {
-			host = p.ExitIP
-		}
 	}
-	v["place"] = s.locate(ctx, host)
+	v["place"] = s.exitPlace(ctx, e)
+	v["summary"] = s.exitSummary(ctx, e, "")
 	return v, nil
 }
 

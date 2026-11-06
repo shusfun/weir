@@ -111,9 +111,13 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
             <nav aria-label="主导航">{nav(collapsed)}</nav>
           </ScrollArea>
           <div className="rail-foot">
-            <Button className="rail-collapse justify-start in-data-[collapsed=true]:justify-center in-data-[collapsed=true]:px-0" variant="ghost" size="sm" aria-label={collapsed ? "展开导航" : "收起导航"} onClick={() => setCollapsed((v) => !v)}>
-              {collapsed ? <PanelLeftOpen /> : <><PanelLeftClose /><span>收起导航</span></>}
-            </Button>
+            {collapsed ? (
+              <Tooltip content="展开导航">
+                <Button className="rail-collapse justify-center px-0" variant="ghost" size="sm" aria-label="展开导航" onClick={() => setCollapsed(false)}><PanelLeftOpen /></Button>
+              </Tooltip>
+            ) : (
+              <Button className="rail-collapse justify-start" variant="ghost" size="sm" onClick={() => setCollapsed(true)}><PanelLeftClose /><span>收起导航</span></Button>
+            )}
             <AccountMenu admin={admin} email={email} onLogout={onLogout} />
           </div>
         </aside>

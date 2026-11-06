@@ -124,7 +124,7 @@ function MyLinks({ admin, stats }: { admin: boolean; stats: Map<number, LinkStat
       {nodes.data.length === 0 ? (
         <State empty="暂无可用节点" detail={admin ? "到「VPS 与节点」建好节点后，会自动进入你的订阅。" : "请联系管理员分配节点。"} />
       ) : (
-        <Card><CardContent><LinkPanel base="/me" nodes={nodes.data} planEnds={s.expires_at} stats={stats} /></CardContent></Card>
+        <Card><CardContent><LinkPanel base="/me" planEnds={s.expires_at} stats={stats} /></CardContent></Card>
       )}
       <GroupsCard />
       <ClientsCard />
@@ -139,7 +139,7 @@ function AdminLinks({ user, stats }: { user: number | null; stats: Map<number, L
   if (users.isPending || nodes.isPending || users.error || nodes.error)
     return <State loading={users.isPending || nodes.isPending} error={users.error ?? nodes.error} onRetry={() => { void users.refetch(); void nodes.refetch(); }} skeleton={<SkeletonCards count={2} lines={2} />} />;
   const optionsFor = (u: UserItem): NodeOption[] =>
-    nodes.data.filter((n) => n.enabled && (u.all_nodes || (u.node_ids ?? []).includes(n.id))).map((n) => ({ id: n.id, name: n.name, gate_id: n.gate_id, gate_name: n.gate_name }));
+    nodes.data.filter((n) => n.enabled && (u.all_nodes || (u.node_ids ?? []).includes(n.id)));
   const list = user ? users.data.filter((u) => u.id === user) : users.data;
   if (list.length === 0) return <State empty={user ? "这个用户已不存在" : "还没有用户"} />;
   return (
@@ -149,7 +149,6 @@ function AdminLinks({ user, stats }: { user: number | null; stats: Map<number, L
           <CardContent>
             <LinkPanel
               base={`/admin/users/${u.id}`}
-              nodes={optionsFor(u)}
               planEnds={u.expires_at}
               stats={stats}
               showCredentials={!!user}

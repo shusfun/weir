@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/shusfun/weir/internal/store/ent/sample"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // SampleCreate is the builder for creating a Sample entity.
@@ -124,6 +125,40 @@ func (_c *SampleCreate) SetNillableDiskTotal(v *int64) *SampleCreate {
 	return _c
 }
 
+// SetProcesses sets the "processes" field.
+func (_c *SampleCreate) SetProcesses(v map[string]contracts.ProcessSample) *SampleCreate {
+	_c.mutation.SetProcesses(v)
+	return _c
+}
+
+// SetObservationID sets the "observation_id" field.
+func (_c *SampleCreate) SetObservationID(v string) *SampleCreate {
+	_c.mutation.SetObservationID(v)
+	return _c
+}
+
+// SetNillableObservationID sets the "observation_id" field if the given value is not nil.
+func (_c *SampleCreate) SetNillableObservationID(v *string) *SampleCreate {
+	if v != nil {
+		_c.SetObservationID(*v)
+	}
+	return _c
+}
+
+// SetTraceID sets the "trace_id" field.
+func (_c *SampleCreate) SetTraceID(v string) *SampleCreate {
+	_c.mutation.SetTraceID(v)
+	return _c
+}
+
+// SetNillableTraceID sets the "trace_id" field if the given value is not nil.
+func (_c *SampleCreate) SetNillableTraceID(v *string) *SampleCreate {
+	if v != nil {
+		_c.SetTraceID(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *SampleCreate) SetCreatedAt(v time.Time) *SampleCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -177,6 +212,14 @@ func (_c *SampleCreate) defaults() {
 		v := sample.DefaultTraffic
 		_c.mutation.SetTraffic(v)
 	}
+	if _, ok := _c.mutation.ObservationID(); !ok {
+		v := sample.DefaultObservationID
+		_c.mutation.SetObservationID(v)
+	}
+	if _, ok := _c.mutation.TraceID(); !ok {
+		v := sample.DefaultTraceID
+		_c.mutation.SetTraceID(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := sample.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -201,6 +244,12 @@ func (_c *SampleCreate) check() error {
 	}
 	if _, ok := _c.mutation.Traffic(); !ok {
 		return &ValidationError{Name: "traffic", err: errors.New(`ent: missing required field "Sample.traffic"`)}
+	}
+	if _, ok := _c.mutation.ObservationID(); !ok {
+		return &ValidationError{Name: "observation_id", err: errors.New(`ent: missing required field "Sample.observation_id"`)}
+	}
+	if _, ok := _c.mutation.TraceID(); !ok {
+		return &ValidationError{Name: "trace_id", err: errors.New(`ent: missing required field "Sample.trace_id"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Sample.created_at"`)}
@@ -267,6 +316,18 @@ func (_c *SampleCreate) createSpec() (*Sample, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.DiskTotal(); ok {
 		_spec.SetField(sample.FieldDiskTotal, field.TypeInt64, value)
 		_node.DiskTotal = &value
+	}
+	if value, ok := _c.mutation.Processes(); ok {
+		_spec.SetField(sample.FieldProcesses, field.TypeJSON, value)
+		_node.Processes = value
+	}
+	if value, ok := _c.mutation.ObservationID(); ok {
+		_spec.SetField(sample.FieldObservationID, field.TypeString, value)
+		_node.ObservationID = value
+	}
+	if value, ok := _c.mutation.TraceID(); ok {
+		_spec.SetField(sample.FieldTraceID, field.TypeString, value)
+		_node.TraceID = value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(sample.FieldCreatedAt, field.TypeTime, value)
@@ -501,6 +562,48 @@ func (u *SampleUpsert) AddDiskTotal(v int64) *SampleUpsert {
 // ClearDiskTotal clears the value of the "disk_total" field.
 func (u *SampleUpsert) ClearDiskTotal() *SampleUpsert {
 	u.SetNull(sample.FieldDiskTotal)
+	return u
+}
+
+// SetProcesses sets the "processes" field.
+func (u *SampleUpsert) SetProcesses(v map[string]contracts.ProcessSample) *SampleUpsert {
+	u.Set(sample.FieldProcesses, v)
+	return u
+}
+
+// UpdateProcesses sets the "processes" field to the value that was provided on create.
+func (u *SampleUpsert) UpdateProcesses() *SampleUpsert {
+	u.SetExcluded(sample.FieldProcesses)
+	return u
+}
+
+// ClearProcesses clears the value of the "processes" field.
+func (u *SampleUpsert) ClearProcesses() *SampleUpsert {
+	u.SetNull(sample.FieldProcesses)
+	return u
+}
+
+// SetObservationID sets the "observation_id" field.
+func (u *SampleUpsert) SetObservationID(v string) *SampleUpsert {
+	u.Set(sample.FieldObservationID, v)
+	return u
+}
+
+// UpdateObservationID sets the "observation_id" field to the value that was provided on create.
+func (u *SampleUpsert) UpdateObservationID() *SampleUpsert {
+	u.SetExcluded(sample.FieldObservationID)
+	return u
+}
+
+// SetTraceID sets the "trace_id" field.
+func (u *SampleUpsert) SetTraceID(v string) *SampleUpsert {
+	u.Set(sample.FieldTraceID, v)
+	return u
+}
+
+// UpdateTraceID sets the "trace_id" field to the value that was provided on create.
+func (u *SampleUpsert) UpdateTraceID() *SampleUpsert {
+	u.SetExcluded(sample.FieldTraceID)
 	return u
 }
 
@@ -756,6 +859,55 @@ func (u *SampleUpsertOne) UpdateDiskTotal() *SampleUpsertOne {
 func (u *SampleUpsertOne) ClearDiskTotal() *SampleUpsertOne {
 	return u.Update(func(s *SampleUpsert) {
 		s.ClearDiskTotal()
+	})
+}
+
+// SetProcesses sets the "processes" field.
+func (u *SampleUpsertOne) SetProcesses(v map[string]contracts.ProcessSample) *SampleUpsertOne {
+	return u.Update(func(s *SampleUpsert) {
+		s.SetProcesses(v)
+	})
+}
+
+// UpdateProcesses sets the "processes" field to the value that was provided on create.
+func (u *SampleUpsertOne) UpdateProcesses() *SampleUpsertOne {
+	return u.Update(func(s *SampleUpsert) {
+		s.UpdateProcesses()
+	})
+}
+
+// ClearProcesses clears the value of the "processes" field.
+func (u *SampleUpsertOne) ClearProcesses() *SampleUpsertOne {
+	return u.Update(func(s *SampleUpsert) {
+		s.ClearProcesses()
+	})
+}
+
+// SetObservationID sets the "observation_id" field.
+func (u *SampleUpsertOne) SetObservationID(v string) *SampleUpsertOne {
+	return u.Update(func(s *SampleUpsert) {
+		s.SetObservationID(v)
+	})
+}
+
+// UpdateObservationID sets the "observation_id" field to the value that was provided on create.
+func (u *SampleUpsertOne) UpdateObservationID() *SampleUpsertOne {
+	return u.Update(func(s *SampleUpsert) {
+		s.UpdateObservationID()
+	})
+}
+
+// SetTraceID sets the "trace_id" field.
+func (u *SampleUpsertOne) SetTraceID(v string) *SampleUpsertOne {
+	return u.Update(func(s *SampleUpsert) {
+		s.SetTraceID(v)
+	})
+}
+
+// UpdateTraceID sets the "trace_id" field to the value that was provided on create.
+func (u *SampleUpsertOne) UpdateTraceID() *SampleUpsertOne {
+	return u.Update(func(s *SampleUpsert) {
+		s.UpdateTraceID()
 	})
 }
 
@@ -1177,6 +1329,55 @@ func (u *SampleUpsertBulk) UpdateDiskTotal() *SampleUpsertBulk {
 func (u *SampleUpsertBulk) ClearDiskTotal() *SampleUpsertBulk {
 	return u.Update(func(s *SampleUpsert) {
 		s.ClearDiskTotal()
+	})
+}
+
+// SetProcesses sets the "processes" field.
+func (u *SampleUpsertBulk) SetProcesses(v map[string]contracts.ProcessSample) *SampleUpsertBulk {
+	return u.Update(func(s *SampleUpsert) {
+		s.SetProcesses(v)
+	})
+}
+
+// UpdateProcesses sets the "processes" field to the value that was provided on create.
+func (u *SampleUpsertBulk) UpdateProcesses() *SampleUpsertBulk {
+	return u.Update(func(s *SampleUpsert) {
+		s.UpdateProcesses()
+	})
+}
+
+// ClearProcesses clears the value of the "processes" field.
+func (u *SampleUpsertBulk) ClearProcesses() *SampleUpsertBulk {
+	return u.Update(func(s *SampleUpsert) {
+		s.ClearProcesses()
+	})
+}
+
+// SetObservationID sets the "observation_id" field.
+func (u *SampleUpsertBulk) SetObservationID(v string) *SampleUpsertBulk {
+	return u.Update(func(s *SampleUpsert) {
+		s.SetObservationID(v)
+	})
+}
+
+// UpdateObservationID sets the "observation_id" field to the value that was provided on create.
+func (u *SampleUpsertBulk) UpdateObservationID() *SampleUpsertBulk {
+	return u.Update(func(s *SampleUpsert) {
+		s.UpdateObservationID()
+	})
+}
+
+// SetTraceID sets the "trace_id" field.
+func (u *SampleUpsertBulk) SetTraceID(v string) *SampleUpsertBulk {
+	return u.Update(func(s *SampleUpsert) {
+		s.SetTraceID(v)
+	})
+}
+
+// UpdateTraceID sets the "trace_id" field to the value that was provided on create.
+func (u *SampleUpsertBulk) UpdateTraceID() *SampleUpsertBulk {
+	return u.Update(func(s *SampleUpsert) {
+		s.UpdateTraceID()
 	})
 }
 

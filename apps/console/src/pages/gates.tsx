@@ -12,6 +12,7 @@ import { openDsh } from "../components/dsh";
 import { ObjectLink, dataObject, useDialogParam } from "../components/object-link";
 import { exitKindName, probeText } from "../components/chain-exit";
 import { NodeAccess } from "../components/node-access";
+import { CenterResources } from "../components/resource-usage";
 import { GateCard } from "../components/gate-card";
 import { NodeDetail } from "../components/node-detail";
 import { GateEdit } from "../components/gate-edit";
@@ -104,6 +105,7 @@ export function GatesPage() {
     return (
       <div className="stack">
         {header}
+        <CenterResources />
         <State loading={gates.isPending || nodes.isPending} error={gates.error ?? nodes.error} onRetry={refresh} skeleton={<SkeletonCards count={2} lines={2} />} />
         {dialogs}
       </div>
@@ -111,6 +113,7 @@ export function GatesPage() {
   return (
     <div className="stack">
       {header}
+      <CenterResources />
       <GettingStarted gates={gates.data} nodes={nodes.data} addGate={() => setInvite(true)} addNode={() => setWizard("any")} />
       {gates.data.map(g=><GateCard key={g.id} gate={g} nodes={grouped.get(g.id)??emptyNodes} onDetail={openGate} onEdit={setEdit} onNode={openNode} onAdd={setWizard}/>)}
       {dialogs}

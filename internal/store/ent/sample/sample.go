@@ -32,6 +32,12 @@ const (
 	FieldDiskUsed = "disk_used"
 	// FieldDiskTotal holds the string denoting the disk_total field in the database.
 	FieldDiskTotal = "disk_total"
+	// FieldProcesses holds the string denoting the processes field in the database.
+	FieldProcesses = "processes"
+	// FieldObservationID holds the string denoting the observation_id field in the database.
+	FieldObservationID = "observation_id"
+	// FieldTraceID holds the string denoting the trace_id field in the database.
+	FieldTraceID = "trace_id"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// Table holds the table name of the sample in the database.
@@ -50,6 +56,9 @@ var Columns = []string{
 	FieldMemTotal,
 	FieldDiskUsed,
 	FieldDiskTotal,
+	FieldProcesses,
+	FieldObservationID,
+	FieldTraceID,
 	FieldCreatedAt,
 }
 
@@ -66,6 +75,10 @@ func ValidColumn(column string) bool {
 var (
 	// DefaultTraffic holds the default value on creation for the "traffic" field.
 	DefaultTraffic int64
+	// DefaultObservationID holds the default value on creation for the "observation_id" field.
+	DefaultObservationID string
+	// DefaultTraceID holds the default value on creation for the "trace_id" field.
+	DefaultTraceID string
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 )
@@ -75,8 +88,9 @@ type Scope string
 
 // Scope values.
 const (
-	ScopeGate Scope = "gate"
-	ScopeUser Scope = "user"
+	ScopeGate   Scope = "gate"
+	ScopeUser   Scope = "user"
+	ScopeCenter Scope = "center"
 )
 
 func (s Scope) String() string {
@@ -86,7 +100,7 @@ func (s Scope) String() string {
 // ScopeValidator is a validator for the "scope" field enum values. It is called by the builders before save.
 func ScopeValidator(s Scope) error {
 	switch s {
-	case ScopeGate, ScopeUser:
+	case ScopeGate, ScopeUser, ScopeCenter:
 		return nil
 	default:
 		return fmt.Errorf("sample: invalid enum value for scope field: %q", s)
@@ -144,6 +158,16 @@ func ByDiskUsed(opts ...sql.OrderTermOption) OrderOption {
 // ByDiskTotal orders the results by the disk_total field.
 func ByDiskTotal(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldDiskTotal, opts...).ToFunc()
+}
+
+// ByObservationID orders the results by the observation_id field.
+func ByObservationID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldObservationID, opts...).ToFunc()
+}
+
+// ByTraceID orders the results by the trace_id field.
+func ByTraceID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTraceID, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

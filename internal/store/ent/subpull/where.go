@@ -89,6 +89,11 @@ func IP(v string) predicate.SubPull {
 	return predicate.SubPull(sql.FieldEQ(FieldIP, v))
 }
 
+// TraceID applies equality check predicate on the "trace_id" field. It's identical to TraceIDEQ.
+func TraceID(v string) predicate.SubPull {
+	return predicate.SubPull(sql.FieldEQ(FieldTraceID, v))
+}
+
 // Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
 func Status(v string) predicate.SubPull {
 	return predicate.SubPull(sql.FieldEQ(FieldStatus, v))
@@ -472,6 +477,71 @@ func IPEqualFold(v string) predicate.SubPull {
 // IPContainsFold applies the ContainsFold predicate on the "ip" field.
 func IPContainsFold(v string) predicate.SubPull {
 	return predicate.SubPull(sql.FieldContainsFold(FieldIP, v))
+}
+
+// TraceIDEQ applies the EQ predicate on the "trace_id" field.
+func TraceIDEQ(v string) predicate.SubPull {
+	return predicate.SubPull(sql.FieldEQ(FieldTraceID, v))
+}
+
+// TraceIDNEQ applies the NEQ predicate on the "trace_id" field.
+func TraceIDNEQ(v string) predicate.SubPull {
+	return predicate.SubPull(sql.FieldNEQ(FieldTraceID, v))
+}
+
+// TraceIDIn applies the In predicate on the "trace_id" field.
+func TraceIDIn(vs ...string) predicate.SubPull {
+	return predicate.SubPull(sql.FieldIn(FieldTraceID, vs...))
+}
+
+// TraceIDNotIn applies the NotIn predicate on the "trace_id" field.
+func TraceIDNotIn(vs ...string) predicate.SubPull {
+	return predicate.SubPull(sql.FieldNotIn(FieldTraceID, vs...))
+}
+
+// TraceIDGT applies the GT predicate on the "trace_id" field.
+func TraceIDGT(v string) predicate.SubPull {
+	return predicate.SubPull(sql.FieldGT(FieldTraceID, v))
+}
+
+// TraceIDGTE applies the GTE predicate on the "trace_id" field.
+func TraceIDGTE(v string) predicate.SubPull {
+	return predicate.SubPull(sql.FieldGTE(FieldTraceID, v))
+}
+
+// TraceIDLT applies the LT predicate on the "trace_id" field.
+func TraceIDLT(v string) predicate.SubPull {
+	return predicate.SubPull(sql.FieldLT(FieldTraceID, v))
+}
+
+// TraceIDLTE applies the LTE predicate on the "trace_id" field.
+func TraceIDLTE(v string) predicate.SubPull {
+	return predicate.SubPull(sql.FieldLTE(FieldTraceID, v))
+}
+
+// TraceIDContains applies the Contains predicate on the "trace_id" field.
+func TraceIDContains(v string) predicate.SubPull {
+	return predicate.SubPull(sql.FieldContains(FieldTraceID, v))
+}
+
+// TraceIDHasPrefix applies the HasPrefix predicate on the "trace_id" field.
+func TraceIDHasPrefix(v string) predicate.SubPull {
+	return predicate.SubPull(sql.FieldHasPrefix(FieldTraceID, v))
+}
+
+// TraceIDHasSuffix applies the HasSuffix predicate on the "trace_id" field.
+func TraceIDHasSuffix(v string) predicate.SubPull {
+	return predicate.SubPull(sql.FieldHasSuffix(FieldTraceID, v))
+}
+
+// TraceIDEqualFold applies the EqualFold predicate on the "trace_id" field.
+func TraceIDEqualFold(v string) predicate.SubPull {
+	return predicate.SubPull(sql.FieldEqualFold(FieldTraceID, v))
+}
+
+// TraceIDContainsFold applies the ContainsFold predicate on the "trace_id" field.
+func TraceIDContainsFold(v string) predicate.SubPull {
+	return predicate.SubPull(sql.FieldContainsFold(FieldTraceID, v))
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.

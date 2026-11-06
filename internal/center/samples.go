@@ -25,18 +25,29 @@ func (s *Server) recordTraffic(ctx context.Context, scope sample.Scope, id int, 
 
 // recordHost 记下 VPS 这一分钟的主机观测；读取失败的字段保持为空（未知）。
 func (s *Server) recordHost(ctx context.Context, gid int, h *contracts.HostSample, now time.Time) {
-	if h == nil {
-		return
+	s.tasks.note("resource-samples", s.recordResourceHost(ctx, sample.ScopeGate, gid, h, now))
+}
+
+func (s *Server) recordResourceHost(ctx context.Context, scope sample.Scope, id int, h *contracts.HostSample, now time.Time) error {
+	if h == nil || (!h.ObservedAt.IsZero() && (now.Sub(h.ObservedAt) > 90*time.Second || h.ObservedAt.After(now.Add(time.Minute)))) {
+		return nil
 	}
-	c := s.Store.Ent.Sample.Create().SetScope(sample.ScopeGate).SetSubjectID(gid).SetAt(minuteOf(now)).SetNillableCPU(h.CPUPercent)
+	trace, _ := ctx.Value(httpTraceKey{}).(httpTrace)
+	processes := map[string]contracts.ProcessSample{}
+	for name, p := range h.Processes {
+		if p.ObservedAt.IsZero() || now.Sub(p.ObservedAt) > 90*time.Second || p.ObservedAt.After(now.Add(time.Minute)) {
+			p.State, p.CPUPercent, p.MemoryRSS, p.Error = "unknown", nil, nil, "观测已过期"
+		}
+		processes[name] = p
+	}
+	c := s.Store.Ent.Sample.Create().SetScope(scope).SetSubjectID(id).SetAt(minuteOf(now)).SetNillableCPU(h.CPUPercent).SetProcesses(processes).SetObservationID(h.ObservationID).SetTraceID(trace.ID)
 	if h.MemUsed != nil && h.MemTotal != nil {
 		c.SetMemUsed(int64(*h.MemUsed)).SetMemTotal(int64(*h.MemTotal))
 	}
 	if h.DiskUsed != nil && h.DiskTotal != nil {
 		c.SetDiskUsed(int64(*h.DiskUsed)).SetDiskTotal(int64(*h.DiskTotal))
 	}
-	_ = c.OnConflictColumns(sample.FieldScope, sample.FieldSubjectID, sample.FieldAt).
-		UpdateCPU().UpdateMemUsed().UpdateMemTotal().UpdateDiskUsed().UpdateDiskTotal().Exec(ctx)
+	return c.OnConflictColumns(sample.FieldScope, sample.FieldSubjectID, sample.FieldAt).UpdateCPU().UpdateMemUsed().UpdateMemTotal().UpdateDiskUsed().UpdateDiskTotal().UpdateProcesses().UpdateObservationID().UpdateTraceID().Exec(ctx)
 }
 
 // PruneSamples 删除超过保留期的记录（每 10 分钟一次）。
@@ -58,13 +69,14 @@ func (s *Server) PruneSamples(ctx context.Context, now time.Time) error {
 
 // Point 是图表上的一个点；指针为空表示这段时间没有数据（未知）。
 type Point struct {
-	At       time.Time `json:"at"`
-	Traffic  *int64    `json:"traffic"`
-	CPU      *float64  `json:"cpu,omitempty"`
-	MemUsed  *int64    `json:"mem_used,omitempty"`
-	MemTotal *int64    `json:"mem_total,omitempty"`
-	Disk     *int64    `json:"disk_used,omitempty"`
-	DiskMax  *int64    `json:"disk_total,omitempty"`
+	Processes map[string]contracts.ProcessSample `json:"processes,omitempty"`
+	At        time.Time                          `json:"at"`
+	Traffic   *int64                             `json:"traffic"`
+	CPU       *float64                           `json:"cpu,omitempty"`
+	MemUsed   *int64                             `json:"mem_used,omitempty"`
+	MemTotal  *int64                             `json:"mem_total,omitempty"`
+	Disk      *int64                             `json:"disk_used,omitempty"`
+	DiskMax   *int64                             `json:"disk_total,omitempty"`
 }
 
 // history 按时间段分桶：1 小时 1 分钟一格、6 小时 5 分钟、24 小时 15 分钟。流量求和，CPU 取平均，内存与磁盘取最后一次。
@@ -82,6 +94,7 @@ func (s *Server) history(ctx context.Context, scope sample.Scope, id int, hours 
 	n := int(end.Sub(start) / step)
 	out := make([]Point, n)
 	cpuN := make([]int, n)
+	procN := make([]map[string]int, n)
 	for i := range out {
 		out[i].At = start.Add(time.Duration(i) * step)
 	}
@@ -91,11 +104,33 @@ func (s *Server) history(ctx context.Context, scope sample.Scope, id int, hours 
 			continue
 		}
 		p := &out[i]
-		t := r.Traffic
-		if p.Traffic != nil {
-			t += *p.Traffic
+		if scope != sample.ScopeCenter {
+			t := r.Traffic
+			if p.Traffic != nil {
+				t += *p.Traffic
+			}
+			p.Traffic = &t
 		}
-		p.Traffic = &t
+		if len(r.Processes) > 0 {
+			if p.Processes == nil {
+				p.Processes = map[string]contracts.ProcessSample{}
+				procN[i] = map[string]int{}
+			}
+			for name, cur := range r.Processes {
+				prev := p.Processes[name]
+				if cur.CPUPercent != nil {
+					v := *cur.CPUPercent
+					if prev.CPUPercent != nil {
+						v += *prev.CPUPercent
+					}
+					cur.CPUPercent = &v
+					procN[i][name]++
+				} else {
+					cur.CPUPercent = prev.CPUPercent
+				}
+				p.Processes[name] = cur
+			}
+		}
 		if r.CPU != nil {
 			c := *r.CPU
 			if p.CPU != nil {
@@ -104,14 +139,17 @@ func (s *Server) history(ctx context.Context, scope sample.Scope, id int, hours 
 			p.CPU = &c
 			cpuN[i]++
 		}
-		if r.MemUsed != nil {
-			p.MemUsed, p.MemTotal = r.MemUsed, r.MemTotal
-		}
-		if r.DiskUsed != nil {
-			p.Disk, p.DiskMax = r.DiskUsed, r.DiskTotal
-		}
+		p.MemUsed, p.MemTotal = r.MemUsed, r.MemTotal
+		p.Disk, p.DiskMax = r.DiskUsed, r.DiskTotal
 	}
 	for i := range out {
+		for name, p := range out[i].Processes {
+			if count := procN[i][name]; count > 1 && p.CPUPercent != nil {
+				v := *p.CPUPercent / float64(count)
+				p.CPUPercent = &v
+				out[i].Processes[name] = p
+			}
+		}
 		if cpuN[i] > 1 {
 			avg := *out[i].CPU / float64(cpuN[i])
 			out[i].CPU = &avg
@@ -138,6 +176,8 @@ func (s *Server) historyHandler(scope sample.Scope, param string) gin.HandlerFun
 }
 
 func (s *Server) sampleRoutes(admin *gin.RouterGroup) {
+	admin.GET("/center/resources", s.centerResources)
+	admin.GET("/center/resources/history", s.centerHistory)
 	admin.GET("/gates/:id/history", s.historyHandler(sample.ScopeGate, "id"))
 	admin.GET("/users/:uid/history", s.historyHandler(sample.ScopeUser, "uid"))
 }

@@ -10,7 +10,7 @@ export function useExitCatalog(admin: boolean, gateId?: number) {
     return data;
   }});
 }
-export function exitTitle(e: ExitItem) { return e.remark || e.label || e.tag; }
+export function exitTitle(e: ExitItem) { return e.summary?.name || e.remark || "地区未知"; }
 export function exitInput(e: ExitItem): ExitSpec {
   return { kind:e.kind, remark:e.remark, address:e.address, port:e.port, username:e.username, password:e.password, link:e.link, node_id:e.node_id, ...e.source };
 }

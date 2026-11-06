@@ -30,11 +30,12 @@ import (
 
 // Server 持有中心的配置与存储。初始化完成前 Store 为空，只开放初始化接口。
 type Server struct {
-	Config Config
-	Path   string
-	Store  *store.Store
-	Crypto *secrets.AESEncryptor
-	Assets fs.FS
+	resources resourceState
+	Config    Config
+	Path      string
+	Store     *store.Store
+	Crypto    *secrets.AESEncryptor
+	Assets    fs.FS
 
 	// state 保护 Config / Store 的切换：普通请求持读锁，安装完成的切换持写锁。
 	state     sync.RWMutex
@@ -178,6 +179,7 @@ func (s *Server) Close() {
 
 // StartBackground 未初始化时监视磁盘配置：终端完成初始化后，运行中的服务自动切换为已安装。
 func (s *Server) StartBackground(ctx context.Context) {
+	go s.observeResources(ctx)
 	if !s.Config.Installed {
 		go s.watchInstallation(ctx)
 	}

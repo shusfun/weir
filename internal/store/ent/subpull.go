@@ -31,6 +31,8 @@ type SubPull struct {
 	UserAgent string `json:"user_agent,omitempty"`
 	// IP holds the value of the "ip" field.
 	IP string `json:"ip,omitempty"`
+	// TraceID holds the value of the "trace_id" field.
+	TraceID string `json:"trace_id,omitempty"`
 	// Status holds the value of the "status" field.
 	Status       string `json:"status,omitempty"`
 	selectValues sql.SelectValues
@@ -43,7 +45,7 @@ func (*SubPull) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case subpull.FieldID, subpull.FieldLinkID, subpull.FieldUserID:
 			values[i] = new(sql.NullInt64)
-		case subpull.FieldTarget, subpull.FieldClient, subpull.FieldUserAgent, subpull.FieldIP, subpull.FieldStatus:
+		case subpull.FieldTarget, subpull.FieldClient, subpull.FieldUserAgent, subpull.FieldIP, subpull.FieldTraceID, subpull.FieldStatus:
 			values[i] = new(sql.NullString)
 		case subpull.FieldAt:
 			values[i] = new(sql.NullTime)
@@ -110,6 +112,12 @@ func (_m *SubPull) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.IP = value.String
 			}
+		case subpull.FieldTraceID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field trace_id", values[i])
+			} else if value.Valid {
+				_m.TraceID = value.String
+			}
 		case subpull.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
@@ -172,6 +180,9 @@ func (_m *SubPull) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("ip=")
 	builder.WriteString(_m.IP)
+	builder.WriteString(", ")
+	builder.WriteString("trace_id=")
+	builder.WriteString(_m.TraceID)
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)

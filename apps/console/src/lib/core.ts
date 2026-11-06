@@ -30,7 +30,10 @@ export interface Gate {
   host?: GateHost | null;
 }
 
-export type GateHost = Record<string, number | string | undefined>;
+export interface ProcessSample { observed_at: string; state: "running" | "stopped" | "unknown"; cpu_percent?: number; memory_rss?: number; error?: string }
+export interface GateHost { observed_at?: string; observation_id?: string; cpu_percent?: number; load1?: number; mem_used?: number; mem_total?: number; disk_used?: number; disk_total?: number; net_rx_bytes?: number; net_tx_bytes?: number; uptime_secs?: number; processes?: Record<string, ProcessSample> }
+export interface DisplaySummary { name: string; kind: string; region: string }
+export interface NodeChoice { id: number; name: string; display_name?: string; protocol?: string; network?: string; security?: string; gate_id?: number; gate_name?: string; host?: string; port?: number; exit_summary?: DisplaySummary }
 
 // GateSelfUpdate：state 为 downloading 时 done / total / source 是下载进度与当前来源；replacing 是正在替换程序；
 // failed（或只有 error）是失败原因，失败后 10 分钟内 Gate 不自动重试，手动更新不受限。
@@ -129,7 +132,7 @@ export interface Withheld {
   reason: string;
 }
 
-export interface NodeItem {
+export interface NodeItem extends NodeChoice {
   id: number;
   gate_id: number;
   gate_name?: string;
@@ -250,7 +253,7 @@ export interface RateStat {
   from: "self" | "all" | "";
 }
 
-export interface ProxyNode {
+export interface ProxyNode extends NodeChoice {
   id: number;
   name: string;
   gate_id?: number;
@@ -289,6 +292,12 @@ export interface CustomResult {
 }
 
 export interface CustomView {
+	version: number;
+	revision: number;
+	entries: CustomEntry[];
+	pending?: { entries: CustomEntry[]; source?: string } | null;
+	legacy_only?: boolean;
+	migration?: string;
   mode: CustomMode;
   active_mode: CustomMode;
   active_count: number;
@@ -298,7 +307,17 @@ export interface CustomView {
   refresh_seconds: number;
 }
 
+export interface CustomEntry {
+  id: string;
+  kind: CustomRuleKind;
+  value: string;
+  target: string;
+  enabled: boolean;
+  last_proxy_target?: string;
+}
+
 export interface CustomMatch {
+  entry_id?: string;
   label: string;
   kind: string;
   value?: string;
@@ -317,6 +336,7 @@ export interface ProxyView {
 }
 
 export interface ChainItem {
+ display_name?: string;
   id: number;
   name: string;
   entry_node_id: number;
@@ -413,6 +433,7 @@ export function relativeTime(value?: string | null) {
 
 export interface ExitReference { type: "node" | "chain" | "route"; id: number; name: string; owner?: number; enabled: boolean }
 export interface ExitItem extends ExitSpec {
+ summary?: DisplaySummary;
  id: number; gate_id: number; owner_user_id: number | null; tag: string; label: string; enabled: boolean; policy_type: string;
  references: ExitReference[]; probe?: ExitProbe;
  source?: {source_id?:number;profile_id?:number;mode?:"node"|"filter";match?:string};

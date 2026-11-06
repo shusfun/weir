@@ -1,3 +1,4 @@
+import { NodeSummary, ExitSummary, nodeTitle } from "./node-summary";
 // VPS 与节点：每台 VPS 一张卡片，最上面是在不在线，直接显示主机观测；它上面的每个节点一行，点开看细节；
 // 「＋ 协议」直接在这台 VPS 上建节点。VPS 用 SSH 一次装好，或复制安装命令自己执行。
 import { useState } from "react";
@@ -49,8 +50,8 @@ export function NodeDetail({ node: n, gate: g, nodes, close, changed }: { node: 
     {editing && <NodeEdit node={n} nodes={nodes} close={()=>setEditing(false)}/>}
     <Dialog open onOpenChange={(o) => !o && close()}>
       <DialogContent size="md">
-        <DialogTitle>{n.name}</DialogTitle>
-        <DialogDescription>{protocolLabel(n)} · {g ? <ObjectLink to={{ type: "gate", id: g.id, name: g.name }} /> : "VPS 已不存在"}</DialogDescription>
+        <DialogTitle>{nodeTitle(n)}</DialogTitle>
+        <DialogDescription><NodeSummary node={n} /></DialogDescription>
         <div className="stack">
           <p className="flex items-center gap-2 text-body"><StatusLamp tone={tone} label={s} /><strong>{s}</strong><span className="text-[var(--weir-ink-3)]">{why}</span></p>
           {n.readiness?.state === "credentials" && <Notice tone="warn">请到 <Link to="/users" onClick={close}>用户</Link> 分配这个节点并创建可用订阅；节点会在凭据生效后启动。</Notice>}
@@ -62,7 +63,7 @@ export function NodeDetail({ node: n, gate: g, nodes, close, changed }: { node: 
           </div>
           <NodeAccess ports={n.ports} reach={n.reach} />
           <div className="text-body">
-            <span className="text-[var(--weir-ink-3)]">出口：</span>{exit}
+            <span className="text-[var(--weir-ink-3)]">出口：</span><ExitSummary exit={n.exit} expanded />
             {n.exit.kind !== "freedom" && <small className="block text-[var(--weir-ink-3)]">{probeText(n.exit.probe)}</small>}
           </div>
           <SwitchField label="启用" description="停用后这个节点不在任何订阅里，VPS 上也不再监听。" checked={n.enabled} disabled={isBusy("enable")}

@@ -84,7 +84,7 @@ func TestProxyPolicyWindowsAndPulls(t *testing.T) {
 	}
 	json.Unmarshal(bob.do("GET", "/sub/"+tok+"?target=weir", nil, nil).Body.Bytes(), &ws)
 	auto, exploring := countAuto(ws)
-	if auto != 2 || !strings.Contains(ws.Nodes[0].URI, ":"+itoa(nodes[1].Port)+"?") || ws.Nodes[0].RateFrom != "self" || exploring != "[直连] 位置未知 03" {
+	if auto != 2 || !strings.Contains(ws.Nodes[0].URI, ":"+itoa(nodes[1].Port)+"?") || ws.Nodes[0].RateFrom != "self" || exploring != "[直连] "+nodes[2].Name {
 		t.Fatalf("ranked by rate = %+v", ws.Nodes)
 	}
 	if w.Header().Get("Profile-Update-Interval") != "1" {

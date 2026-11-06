@@ -87,20 +87,20 @@ func TestProxyCapabilities(t *testing.T) {
 	}
 
 	// proxy.custom_rules：试运行给出优化统计、不写；确认后与手动保存相同；get_proxy 能读到结果
-	if text, isErr := submit(map[string]any{"action": "proxy.custom_rules", "args": map[string]any{"user_id": uid, "mode": "nope", "source": "a.example"}}); !isErr {
+	if text, isErr := submit(map[string]any{"action": "proxy.custom_rules", "args": map[string]any{"user_id": uid, "list": map[string]any{"revision": 0, "entries": []map[string]any{{"kind": "domain_suffix", "value": "a.example", "target": "nope", "enabled": true}}}}}); !isErr {
 		t.Fatalf("unknown mode must be refused at submit: %q", text)
 	}
-	if text, isErr := submit(map[string]any{"action": "proxy.custom_rules", "args": map[string]any{"user_id": uid, "mode": "bypass", "source": "netflix.com\nwww.netflix.com\nGEOSITE,x"}}); isErr {
+	if text, isErr := submit(map[string]any{"action": "proxy.custom_rules", "args": map[string]any{"user_id": uid, "list": map[string]any{"revision": 0, "entries": []map[string]any{{"kind": "domain_suffix", "value": "netflix.com", "target": "direct", "enabled": true}}}}}); isErr {
 		t.Fatal(text)
 	}
 	if c := loadPolicy(s.Store.Ent.User.GetX(ctx, uid)).Custom; c.Source != "" || c.Mode != "" {
 		t.Fatalf("dry run wrote custom rules: %+v", c)
 	}
 	mustJSON(t, admin, "POST", "/api/v1/admin/ai/drafts/"+latest()["id"].(string)+"/apply", nil, 200)
-	if c := loadPolicy(s.Store.Ent.User.GetX(ctx, uid)).Custom; c.Mode != "bypass" || len(c.Lines) != 1 || c.Lines[0] != "DOMAIN-SUFFIX,netflix.com" {
+	if c := loadPolicy(s.Store.Ent.User.GetX(ctx, uid)).Custom; len(c.Entries) != 1 || c.Entries[0].Value != "netflix.com" || c.Entries[0].Target != "direct" {
 		t.Fatalf("custom rules after apply = %+v", c)
 	}
-	if text, isErr := toolText(t, h, m.webToken, "get_proxy", map[string]any{"user_id": uid}); isErr || !strings.Contains(text, "GEOSITE") || !strings.Contains(text, `"active_mode"`) {
+	if text, isErr := toolText(t, h, m.webToken, "get_proxy", map[string]any{"user_id": uid}); isErr || !strings.Contains(text, "netflix.com") || !strings.Contains(text, `"entries"`) {
 		t.Fatalf("get_proxy custom = %s", text)
 	}
 

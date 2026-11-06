@@ -2,7 +2,6 @@ package center
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/netip"
 	"regexp"
@@ -20,7 +19,7 @@ import (
 	"github.com/shusfun/weir/packages/contracts"
 )
 
-// 自定义清单：用户把一份清单粘贴到代理页，选「不经过代理」或「只经过代理」。粘贴什么都收，这里整理成规范规则，
+// 自定义清单解析与旧格式兼容：批量粘贴整理为规范规则，逐条有序设置见 custom_entries.go。
 // 表达不了的行列出原因、不算失败；规则写进订阅，由客户端执行。只有内容过大才拒绝。
 
 const (
@@ -329,6 +328,9 @@ func customPlanRules(lines []string) []subout.Rule {
 
 // customRuleFile 是 Clash rule-providers 拉取的内容。不使用或清单为空时给一条不会命中的占位。
 func customRuleFile(c contracts.CustomRules) string {
+	if c.Version >= 2 && c.Legacy != nil {
+		return c.Legacy.RulesFile
+	}
 	if c.Mode == "" || len(c.Lines) == 0 {
 		return customEmptyRule + "\n"
 	}
@@ -345,13 +347,39 @@ func customRuleFile(c contracts.CustomRules) string {
 
 // customView 是代理页显示的内容：mode 是用户最后一次提交的方式，active_mode 是订阅实际用的方式。
 func customView(c contracts.CustomRules) gin.H {
-	return gin.H{"mode": firstNonEmpty(c.SourceMode, c.Mode, "off"), "active_mode": firstNonEmpty(c.Mode, "off"), "active_count": len(c.Lines),
+	entries := c.Entries
+	if entries == nil {
+		entries = []contracts.CustomEntry{}
+	}
+	active := 0
+	for _, e := range entries {
+		if e.Enabled {
+			active++
+		}
+	}
+	migration := ""
+	if c.Legacy != nil && (c.Legacy.Source != "" || len(c.Legacy.Lines) > 0 || c.Legacy.Mode != "") {
+		switch c.Legacy.Mode {
+		case contracts.CustomOnly:
+			migration = "旧“只经过代理”已转换：清单内走节点选择，分类和其余流量直连；可分别调整。"
+		case contracts.CustomBypass:
+			migration = "旧“不经过代理”已转换为逐条直连规则，可随时调整走向和启停。"
+		default:
+			migration = "旧“不使用”已转换为停用条目，需要时可逐条启用。"
+		}
+		migration += " 迁移前设置与旧规则文件快照已保留。"
+	}
+	return gin.H{"version": c.Version, "revision": c.Revision, "entries": entries, "pending": c.Pending, "legacy_only": c.Legacy != nil && c.Legacy.Mode == contracts.CustomOnly,
+		"migration": migration,
+		"mode":      firstNonEmpty(c.SourceMode, c.Mode, "off"), "active_mode": firstNonEmpty(c.Mode, "off"), "active_count": active,
 		"source": c.Source, "check": c.Check, "result": optimizeCustomRules(c.Source), "refresh_seconds": subout.CustomRuleSetSec}
 }
 
 type customRequest struct {
-	Mode   string `json:"mode"`
-	Source string `json:"source"`
+	Revision *int                     `json:"revision"`
+	Entries  *[]contracts.CustomEntry `json:"entries"`
+	Mode     string                   `json:"mode"`
+	Source   string                   `json:"source"`
 }
 
 // candidate 校验请求并算出候选设置；失败时已写好响应。
@@ -401,6 +429,8 @@ func (s *Server) customPlanned(ctx context.Context, u *ent.User, pol contracts.P
 
 // checkCustomRules 用真实内核加载候选设置生成的 Clash 与 sing-box 配置（清单内联）。只证明客户端能加载，不证明网站命中。
 func (s *Server) checkCustomRules(ctx context.Context, u *ent.User, pol contracts.ProxyPolicy) contracts.CustomCheck {
+	// 主动保存/重试不能被上次环境故障留下的失败缓存挡住。
+	ctx = context.WithValue(ctx, freshSubCheckKey{}, true)
 	res := contracts.CustomCheck{Status: "unknown", At: time.Now().UTC()}
 	p, err := s.customPlanned(ctx, u, pol)
 	if err != nil {
@@ -416,10 +446,11 @@ func (s *Server) checkCustomRules(ctx context.Context, u *ent.User, pol contract
 	passed := 0
 	for _, target := range []string{"clash", "singbox"} {
 		kernel := checkKernel(target)
+		jobStep(ctx, "用 "+kernel+" 检查候选订阅", 30*time.Second)
 		body, _, err := subout.RenderPlan(items, target, plan)
 		if err != nil {
-			unknown = append(unknown, kernel+"：生成配置失败："+err.Error())
-			continue
+			res.Status, res.Detail = "failed", kernel+"：生成配置失败："+err.Error()
+			return res
 		}
 		switch r := s.checkSubscription(ctx, target, body); r.Status {
 		case "passed":
@@ -439,7 +470,7 @@ func (s *Server) checkCustomRules(ctx context.Context, u *ent.User, pol contract
 	return res
 }
 
-// putCustomRules 保存清单。检查没通过时只记下原文，客户端继续用上一次的规则，并返回内核的真实报错。
+// 整份替换与单条修改使用相同的版本校验、内核检查与提交逻辑。
 func (s *Server) putCustomRules(c *gin.Context, admin bool) {
 	u, ok := s.subject(c, admin)
 	if !ok {
@@ -449,57 +480,12 @@ func (s *Server) putCustomRules(c *gin.Context, admin bool) {
 	if !bind(c, &req) {
 		return
 	}
-	mode, res, ok := req.candidate(c)
-	if !ok {
+	if req.Entries != nil {
+		s.writeCustomEntries(c, u, req.Revision, *req.Entries, req.Source, nil)
 		return
 	}
-	preview := fmt.Sprintf("共 %d 行，生效 %d 条，精简掉 %d 条，没用上 %d 条", res.Total, len(res.Rules), res.Reduced, len(res.Unused))
-	if dryRun(c, dryResult{Preview: []string{preview, "保存前用真实内核检查；Clash 系客户端约 5 分钟内更新清单内容，其他客户端下次更新订阅时生效"}}) {
-		return
-	}
-	ctx := c.Request.Context()
-	cand := contracts.CustomRules{Mode: mode, Lines: customLines(res.Rules), Source: req.Source, SourceMode: firstNonEmpty(mode, "off")}
-	pol := loadPolicy(u)
-	pol.Custom = cand
-	if mode != "" {
-		check := s.checkCustomRules(ctx, u, pol)
-		if errors.Is(ctx.Err(), context.Canceled) {
-			failDetail(c, 409, "job_cancelled", "已取消，没有保存任何改动", nil)
-			return
-		}
-		cand.Check = &check
-	}
-	if !jobCommit(c) {
-		return
-	}
-	// 检查可能跑很久：写入前重新读一次，不盖掉这期间保存的其他设置
-	u, err := s.Store.Ent.User.Get(ctx, u.ID)
-	if err != nil {
-		failInternal(c, 503, "query_failed", err)
-		return
-	}
-	pol = loadPolicy(u)
-	failed := cand.Check != nil && cand.Check.Status == "failed"
-	if failed {
-		cand.Mode, cand.Lines = pol.Custom.Mode, pol.Custom.Lines
-	}
-	pol.Custom = cand
-	if u, err = u.Update().SetProxyPolicy(policyMap(pol)).Save(ctx); err != nil {
-		failInternal(c, 500, "update_failed", err)
-		return
-	}
-	if failed {
-		s.audit(c, "proxy.custom_rules", "user:"+itoa(u.ID), "failed")
-		failDetail(c, 422, "custom_check_failed", cand.Check.Detail, nil)
-		return
-	}
-	s.audit(c, "proxy.custom_rules", "user:"+itoa(u.ID), "ok")
-	v, err := s.proxyView(ctx, u)
-	if err != nil {
-		failInternal(c, 503, "query_failed", err)
-		return
-	}
-	c.JSON(200, v)
+	// 旧客户端的整份替换没有版本，不能覆盖新版的逐条修改。
+	failure(c, 400, "invalid_custom_entry")
 }
 
 // customTestTarget 把测试输入整理成小写域名或 IP；单段的名称（如 cn）不算域名。
@@ -527,6 +513,21 @@ func (s *Server) testCustomRules(c *gin.Context, admin bool) {
 	target := customTestTarget(req.Target)
 	if target == "" {
 		failure(c, 400, "invalid_test_target")
+		return
+	}
+	if req.Revision != nil || req.Entries != nil || req.Mode == "" && req.Source == "" {
+		pol := loadPolicy(u)
+		if req.Revision != nil && *req.Revision != pol.Custom.Revision {
+			failure(c, 409, "custom_revision_conflict")
+			return
+		}
+		if req.Entries != nil {
+			pol.Custom.Entries = slices.Clone(*req.Entries)
+			if !s.validateCustomEntries(c, u, loadPolicy(u), pol.Custom.Entries) {
+				return
+			}
+		}
+		s.respondCustomMatch(c, u, pol, target, gin.H{"revision": pol.Custom.Revision})
 		return
 	}
 	mode, res, ok := req.candidate(c)

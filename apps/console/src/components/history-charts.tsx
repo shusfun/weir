@@ -1,4 +1,5 @@
 // 流量与主机历史图表：1 / 6 / 24 小时。数据缺失显示「未知」，不补零，缺口不连线。
+import type { ProcessSample } from "../lib/core";
 import { useState } from "react";
 import { useQuery } from "../lib/query";
 import { Segmented } from "@weir/ui";
@@ -9,6 +10,7 @@ import { bytes } from "../lib/models";
 import { State } from "./feedback";
 
 interface Point {
+  processes?: Record<string, ProcessSample>;
   at: string;
   traffic: number | null;
   cpu?: number | null;
@@ -27,7 +29,7 @@ type Series = { key: string; label: string; color: string; format: (v: number) =
 function Chart({ data, series, unit }: { data: Record<string, unknown>[]; series: Series[]; unit?: "%" }) {
   const config = Object.fromEntries(series.map((s) => [s.key, { label: s.label, color: s.color }])) as ChartConfig;
   return (
-    <ChartContainer config={config} className="h-40 w-full">
+    <ChartContainer config={config} className="h-40 w-full [&_.recharts-surface:focus-visible]:outline-2 [&_.recharts-surface:focus-visible]:outline-solid [&_.recharts-surface:focus-visible]:outline-[var(--weir-focus)] [&_.recharts-surface:focus-visible]:outline-offset-2">
       <LineChart data={data} margin={{ left: 4, right: 8, top: 8 }}>
         <CartesianGrid vertical={false} strokeDasharray="3 3" />
         <XAxis dataKey="at" tickFormatter={time} minTickGap={36} tickLine={false} axisLine={false} fontSize={11} />
@@ -38,38 +40,42 @@ function Chart({ data, series, unit }: { data: Record<string, unknown>[]; series
               <div className="rounded-[var(--weir-radius)] border border-[var(--weir-line)] bg-[var(--weir-panel)] px-2.5 py-1.5 text-meta shadow">
                 <div className="mb-1 text-[var(--weir-ink-3)]">{time(String(label))}</div>
                 {series.map((s) => {
-                  const v = (payload[0]?.payload as Record<string, unknown>)[s.key];
+                  const v = (payload[0]?.payload as Record<string, unknown> | undefined)?.[s.key];
                   return <div key={s.key}>{s.label}：{typeof v === "number" ? s.format(v) : "未知"}</div>;
                 })}
               </div>
             ) : null
           }
         />
-        {series.map((s) => <Line key={s.key} dataKey={s.key} stroke={s.color} strokeWidth={1.75} dot={false} connectNulls={false} isAnimationActive={false} />)}
+        {series.map((s) => <Line key={s.key} dataKey={s.key} stroke={s.color} strokeWidth={1.75} dot={data.filter((p) => typeof p[s.key] === "number").length === 1 ? { r: 2 } : false} connectNulls={false} isAnimationActive={false} />)}
       </LineChart>
     </ChartContainer>
   );
 }
 
 // HistoryCharts：VPS 详情显示流量、CPU、内存、磁盘；用户详情只显示流量。
-export function HistoryCharts({ path, host }: { path: string; host?: boolean }) {
+export function HistoryCharts({ path, host, traffic = true, processes = [] }: { path: string; host?: boolean; traffic?: boolean; processes?: readonly string[] }) {
   const [hours, setHours] = useState<(typeof ranges)[number][0]>("1");
   const q = useQuery({ queryKey: ["history", path, hours], queryFn: async () => (await api(`${path}?hours=${hours}`)).points as Point[], refetchInterval: 60000 });
-  const data = (q.data ?? []).map((p) => ({ at: p.at, traffic: p.traffic, cpu: p.cpu ?? null, mem: pct(p.mem_used, p.mem_total), disk: pct(p.disk_used, p.disk_total) }));
-  const known = data.some((p) => p.traffic !== null || p.cpu !== null);
+  const data: Record<string, string | number | null>[] = (q.data ?? []).map((p) => ({ at: p.at, traffic: p.traffic, cpu: p.cpu ?? null, mem: pct(p.mem_used, p.mem_total), disk: pct(p.disk_used, p.disk_total), ...Object.fromEntries(processes.flatMap((name,i) => [[`proc${i}cpu`,p.processes?.[name]?.cpu_percent ?? null],[`proc${i}mem`,p.processes?.[name]?.memory_rss ?? null]])) }));
+  const known = data.some((p) => (traffic && p.traffic != null) || (host && [p.cpu, p.mem, p.disk].some(v => v != null)) || processes.some((_, i) => p[`proc${i}cpu`] != null || p[`proc${i}mem`] != null));
   return (
     <div className="stack">
       <Segmented aria-label="时间范围" value={hours} onValueChange={setHours} options={ranges} />
       {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : !known ? (
-        <small className="text-[var(--weir-ink-3)]">这段时间没有数据（未知）：VPS 离线或尚未上报。</small>
+        <small className="text-[var(--weir-ink-3)]">这段时间没有数据（未知）：尚未采样、离线或采集失败。</small>
       ) : (
         <>
-          <Chart data={data} series={[{ key: "traffic", label: "流量", color: "var(--weir-accent)", format: (v) => bytes(v) }]} />
+          {traffic && <Chart data={data} series={[{ key: "traffic", label: "流量", color: "var(--weir-accent)", format: (v) => bytes(v) }]} />}
           {host && <Chart unit="%" data={data} series={[
             { key: "cpu", label: "CPU", color: "var(--weir-info)", format: (v) => v.toFixed(1) + "%" },
             { key: "mem", label: "内存", color: "var(--weir-warn)", format: (v) => v.toFixed(1) + "%" },
             { key: "disk", label: "磁盘", color: "var(--weir-ok)", format: (v) => v.toFixed(1) + "%" },
           ]} />}
+          {processes.map((name,i) => <section key={name} className="stack"><small>{name === "weir-center" ? "Weir 中心进程" : name}</small>
+            <Chart unit="%" data={data} series={[{key:`proc${i}cpu`,label:"CPU",color:"var(--weir-info)",format:v=>v.toFixed(1)+"%"}]} />
+            <Chart data={data} series={[{key:`proc${i}mem`,label:"内存 RSS",color:"var(--weir-warn)",format:bytes}]} />
+          </section>)}
         </>
       )}
     </div>

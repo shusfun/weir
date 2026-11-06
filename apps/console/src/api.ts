@@ -2,6 +2,14 @@ import { reportError } from "./lib/console-context";
 import { awaitJob, type Job } from "./lib/jobs";
 
 const messages: Record<string, string> = {
+ custom_revision_conflict:"清单或分流设置已被其他操作更新，请核对最新列表后重试。",
+ custom_entry_not_found:"这条规则已不存在，请刷新清单。",
+ invalid_custom_entry:"规则格式无效，请检查类型和内容。",
+ duplicate_custom_entry:"清单里已经有相同规则，请直接修改已有条目。",
+ invalid_custom_position:"规则顺序无效，请刷新清单后重试。",
+ custom_rules_too_large:"清单内容最多 256 KB、最多 5000 条规则。",
+ custom_check_failed:"内核配置检查未通过，仍使用上一份有效清单。",
+ invalid_test_target:"请输入有效的网址、域名或 IP。",
  source_in_use:"这个来源仍被出口使用，请先切换或删除引用它的出口。",
  gate_offline:"这台 VPS 当前离线，请确认 Gate 服务在运行后重试。",
  gate_up_to_date:"这台 VPS 已经是中心的版本，不需要更新。",

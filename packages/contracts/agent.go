@@ -97,16 +97,28 @@ type ListeningPort struct {
 
 // HostSample 只读主机观测；读取失败的字段保持为空，中心显示为「未知」。
 type HostSample struct {
+	Processes     map[string]ProcessSample `json:"processes,omitempty"`
+	ObservationID string                   `json:"observation_id,omitempty"`
+	ObservedAt    time.Time                `json:"observed_at"`
+	CPUPercent    *float64                 `json:"cpu_percent,omitempty"`
+	Load1         *float64                 `json:"load1,omitempty"`
+	MemTotal      *uint64                  `json:"mem_total,omitempty"`
+	MemUsed       *uint64                  `json:"mem_used,omitempty"`
+	DiskTotal     *uint64                  `json:"disk_total,omitempty"`
+	DiskUsed      *uint64                  `json:"disk_used,omitempty"`
+	NetRxBytes    *uint64                  `json:"net_rx_bytes,omitempty"`
+	NetTxBytes    *uint64                  `json:"net_tx_bytes,omitempty"`
+	UptimeSecs    *uint64                  `json:"uptime_secs,omitempty"`
+}
+
+// ProcessSample distinguishes a confirmed stop from an unreadable observation.
+// CPU is a percentage of the host's total capacity; MemoryRSS is in bytes.
+type ProcessSample struct {
 	ObservedAt time.Time `json:"observed_at"`
+	State      string    `json:"state"`
 	CPUPercent *float64  `json:"cpu_percent,omitempty"`
-	Load1      *float64  `json:"load1,omitempty"`
-	MemTotal   *uint64   `json:"mem_total,omitempty"`
-	MemUsed    *uint64   `json:"mem_used,omitempty"`
-	DiskTotal  *uint64   `json:"disk_total,omitempty"`
-	DiskUsed   *uint64   `json:"disk_used,omitempty"`
-	NetRxBytes *uint64   `json:"net_rx_bytes,omitempty"`
-	NetTxBytes *uint64   `json:"net_tx_bytes,omitempty"`
-	UptimeSecs *uint64   `json:"uptime_secs,omitempty"`
+	MemoryRSS  *uint64   `json:"memory_rss,omitempty"`
+	Error      string    `json:"error,omitempty"`
 }
 
 // MeterReport 上报每个凭据自开机以来的累计字节数（单调递增，带纪元以识别内核重启）。

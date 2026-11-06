@@ -32,6 +32,10 @@ func TestLinkMapScopesAndLiveRates(t *testing.T) {
 		"exit": map[string]any{"kind": "socks5", "address": "198.51.100.5", "port": 1080}}, 200)
 	nid := int(n["id"].(float64))
 	exitID := int(n["exit_id"].(float64))
+	if v := s.exitPlace(t.Context(), s.Store.Ent.Exit.GetX(t.Context(), exitID)); v.Known {
+		t.Fatal("unmeasured proxy address must not supply chain location")
+	}
+	s.saveExitProbe(t.Context(), exitOwner(exitID), &exitProbe{OK: true, Mode: "proxy", ExitIP: "198.51.100.5", At: time.Now()})
 	a := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "a@example.test", "all_nodes": true}, 200)
 	mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "b@example.test", "all_nodes": true}, 200)
 	alice := login(t, s, "a@example.test", a["password"].(string))

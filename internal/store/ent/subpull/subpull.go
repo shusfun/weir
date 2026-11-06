@@ -27,6 +27,8 @@ const (
 	FieldUserAgent = "user_agent"
 	// FieldIP holds the string denoting the ip field in the database.
 	FieldIP = "ip"
+	// FieldTraceID holds the string denoting the trace_id field in the database.
+	FieldTraceID = "trace_id"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// Table holds the table name of the subpull in the database.
@@ -43,6 +45,7 @@ var Columns = []string{
 	FieldClient,
 	FieldUserAgent,
 	FieldIP,
+	FieldTraceID,
 	FieldStatus,
 }
 
@@ -75,6 +78,10 @@ var (
 	DefaultIP string
 	// IPValidator is a validator for the "ip" field. It is called by the builders before save.
 	IPValidator func(string) error
+	// DefaultTraceID holds the default value on creation for the "trace_id" field.
+	DefaultTraceID string
+	// TraceIDValidator is a validator for the "trace_id" field. It is called by the builders before save.
+	TraceIDValidator func(string) error
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
@@ -122,6 +129,11 @@ func ByUserAgent(opts ...sql.OrderTermOption) OrderOption {
 // ByIP orders the results by the ip field.
 func ByIP(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldIP, opts...).ToFunc()
+}
+
+// ByTraceID orders the results by the trace_id field.
+func ByTraceID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTraceID, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.

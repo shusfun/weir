@@ -21,6 +21,7 @@ func (SubPull) Fields() []ent.Field {
 		field.String("client").MaxLen(64).Default(""), // 按 User-Agent 认出的客户端名称；认不出为空
 		field.String("user_agent").MaxLen(256).Default(""),
 		field.String("ip").MaxLen(64).Default(""),
+		field.String("trace_id").MaxLen(32).Default(""),
 		// status：ok 正常返回；not_started / expired 不在生效时间内；failed 生成失败
 		field.String("status").MaxLen(16).Default("ok"),
 	}

@@ -1,3 +1,6 @@
+import { NodeSummary, ExitSummary, nodeTitle } from "./node-summary";
+import type { NodeChoice } from "../lib/core";
+import { useNodeChoices } from "../lib/node-choices";
 // 订阅链接与自建链式代理：管理员（按用户）与用户本人共用。base 为 "/admin/users/<id>" 或 "/me"。
 // 每条链接一行：地址框末尾是复制图标，常用操作平铺在下面；换地址、换凭据、删除在编辑弹窗底部。
 import { useState, type ReactNode } from "react";
@@ -53,12 +56,7 @@ import { ExitFields, exitErrorFields, exitKindName, probeText } from "./chain-ex
 import { ExitSelector } from "./exit-selector";
 import { State } from "./feedback";
 
-export interface NodeOption {
-  id: number;
-  name: string;
-  gate_id: number;
-  gate_name?: string;
-}
+export interface NodeOption extends NodeChoice { gate_id: number }
 
 export function useLinks(base: string) {
   return useQuery({ queryKey: ["links", base], queryFn: async () => (await api(base + "/links")).items as LinkItem[] });
@@ -89,7 +87,6 @@ export function windowText(l: Pick<LinkItem, "starts_at" | "ends_at" | "effectiv
 
 export function LinkPanel({
   base,
-  nodes,
   showCredentials,
   inlineQr,
   planEnds,
@@ -98,7 +95,6 @@ export function LinkPanel({
   description = "每条链接凭据独立、共用同一份额度；最多 10 条。",
 }: {
   base: string;
-  nodes: NodeOption[];
   showCredentials?: boolean;
   // inlineQr：刚建好的用户直接在链接下显示二维码，不用再点开。
   inlineQr?: boolean;
@@ -113,6 +109,8 @@ export function LinkPanel({
   const client = useQueryClient();
   const links = useLinks(base);
   const chains = useChains(base);
+  const choices = useNodeChoices(base);
+  const nodes = choices.data ?? [];
   const [edit, setEdit] = useState<LinkItem | "new" | null>(null);
   // 链接变了，订阅链接页上方的统计（生效中的链接数等）跟着刷新
   const refetch = () => {
@@ -147,7 +145,7 @@ export function LinkPanel({
           ))}
         </InsetRows>
       )}
-      {edit && (
+      {edit && (choices.isPending || choices.error ? <State loading={choices.isPending} error={choices.error} onRetry={() => choices.refetch()} /> : (
         <LinkForm
           base={base}
           value={edit}
@@ -165,7 +163,7 @@ export function LinkPanel({
             refetch();
           }}
         />
-      )}
+      ))}
     </section>
   );
 }
@@ -358,8 +356,8 @@ function LinkForm({
     dialog: { title: l ? "编辑链接" : "新链接" },
     object: l ? { type: "link", name: l.name || "未命名", id: l.id } : undefined,
     form: [
-      field("name", "名称", name), field("all_nodes", "全部节点", all ? "是" : "否"), field("node_ids", "选中的节点", nodes.filter((n) => picked.includes(n.id)).map((n) => n.name).join("、")),
-      field("chain_ids", "选中的链式代理", chains.filter((c) => pickedChains.includes(c.id)).map((c) => c.name).join("、")), field("enabled", "启用", enabled ? "是" : "否"),
+      field("name", "名称", name), field("all_nodes", "全部节点", all ? "是" : "否"), field("node_ids", "选中的节点", nodes.filter((n) => picked.includes(n.id)).map(nodeTitle).join("、")),
+      field("chain_ids", "选中的链式代理", chains.filter((c) => pickedChains.includes(c.id)).map((c) => c.display_name || c.name).join("、")), field("enabled", "启用", enabled ? "是" : "否"),
       field("starts_at", "开始时间", start || "不限"), field("ends_at", "结束时间", end || "不限"),
     ],
   });
@@ -389,7 +387,7 @@ function LinkForm({
                 {nodes.map((n) => (
                   <CheckboxField
                     key={n.id}
-                    label={<>{n.name}{n.gate_name && <small className="text-[var(--weir-ink-3)]">（{n.gate_name}）</small>}</>}
+                    label={<NodeSummary node={n} />}
                     checked={picked.includes(n.id)}
                     onCheckedChange={(v) => setPicked(toggle(picked, n.id, v))}
                   />
@@ -399,7 +397,7 @@ function LinkForm({
                 <fieldset className="grid gap-2">
                   <legend className="mb-1 text-meta font-medium text-[var(--weir-ink-2)]">链式代理</legend>
                   {chains.map((c) => (
-                    <CheckboxField key={c.id} label={c.name} checked={pickedChains.includes(c.id)} onCheckedChange={(v) => setPickedChains(toggle(pickedChains, c.id, v))} />
+                    <CheckboxField key={c.id} label={<ExitSummary exit={c.exit} expanded />} checked={pickedChains.includes(c.id)} onCheckedChange={(v) => setPickedChains(toggle(pickedChains, c.id, v))} />
                   ))}
                 </fieldset>
               )}
@@ -439,15 +437,17 @@ export function SourceSummary({ choice, resolved }: { choice?: { mode?: string; 
   );
 }
 
-export function ChainPanel({ base, nodes, admin }: { base: string; nodes: NodeOption[]; admin?: boolean }) {
+export function ChainPanel({ base, admin }: { base: string; admin?: boolean }) {
   const confirm = useConfirm();
   const toast = useToast();
   const chains = useChains(base);
+  const choices = useNodeChoices(base);
+  const nodes = choices.data ?? [];
   const [open, setOpen] = useState(false);
   const { run: act, isBusy } = useRowAction<number>({ refetch: chains.refetch });
-  if (chains.isPending || chains.error)
-    return <State loading={chains.isPending} error={chains.error} onRetry={() => chains.refetch()} />;
-  const name = (id?: number | null) => nodes.find((n) => n.id === id)?.name ?? "节点";
+  if (chains.isPending || choices.isPending || chains.error || choices.error)
+    return <State loading={chains.isPending || choices.isPending} error={chains.error ?? choices.error} onRetry={() => { void chains.refetch(); void choices.refetch(); }} />;
+  const name = (id?: number | null) => { const n = nodes.find((n) => n.id === id); return n ? nodeTitle(n) : "节点"; };
   return (
     <section className="stack">
       <SectionHeader
@@ -476,7 +476,7 @@ export function ChainPanel({ base, nodes, admin }: { base: string; nodes: NodeOp
           {chains.data.items.map((c) => (
             <li key={c.id} {...dataObject({ type: "chain", id: c.id })} className="flex flex-wrap items-center justify-between gap-2">
               <span className="min-w-0">
-                <strong>{c.name}</strong>{" "}
+                <ExitSummary exit={c.exit} expanded />{" "}
                 {!c.enabled && (
                   <Badge variant="soft" tone="warn">
                     已停用
@@ -598,12 +598,12 @@ function ChainForm({
           <Field label="入口节点" name="entry" required>
             <Select required value={entry ? String(entry) : ""} onValueChange={(v) => {setEntry(Number(v));setExitId(undefined);}}>
               <SelectTrigger>
-                <SelectValue>{nodes.find((n) => n.id === entry)?.name ?? "请选择"}</SelectValue>
+                <SelectValue>{nodes.find(n => n.id === entry) ? <NodeSummary node={nodes.find(n => n.id === entry)!} compact /> : "请选择"}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {nodes.map((n) => (
                   <SelectItem key={n.id} value={String(n.id)}>
-                    {n.name}
+                    <NodeSummary node={n} />
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -61,5 +61,6 @@ export * from "./chip";
 export * from "./split-button";
 export * from "./file-picker";
 export * from "./press-origin";
+export * from "./action-button";
 export * from "./job";
 export * from "./object-link";

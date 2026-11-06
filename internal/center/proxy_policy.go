@@ -69,7 +69,7 @@ func loadPolicy(u *ent.User) contracts.ProxyPolicy {
 		b, _ := json.Marshal(u.ProxyPolicy)
 		_ = json.Unmarshal(b, &p)
 	}
-	return p.Normalized()
+	return migrateCustomPolicy(p.Normalized())
 }
 
 func policyMap(p contracts.ProxyPolicy) map[string]any {
@@ -170,6 +170,7 @@ func (s *Server) healthOf(ctx context.Context, n *ent.Node, g *ent.Gate) nodeHea
 
 // subPlan 把代理设置转成订阅的输出计划。
 func (s *Server) subPlan(ctx context.Context, p planned) (*subout.Plan, []subout.Item) {
+	p.Policy = migrateCustomPolicy(p.Policy)
 	ti := s.typeIndex(ctx)
 	seen := map[string]nodeType{}
 	items := make([]subout.Item, len(p.Entries))
@@ -202,13 +203,10 @@ func (s *Server) subPlan(ctx context.Context, p planned) (*subout.Plan, []subout
 		plan.Types = append(plan.Types, subout.TypeGroup{Key: t.Key, Label: label})
 	}
 	custom := p.Policy.Custom
-	plan.CustomTarget = "direct"
-	if custom.Mode != "" {
-		plan.Custom = customPlanRules(custom.Lines)
-	}
-	if custom.Mode == contracts.CustomOnly {
-		plan.CustomTarget, plan.Final = "select", "direct"
-		return plan, items
+	for _, e := range custom.Entries {
+		if e.Enabled {
+			plan.Custom = append(plan.Custom, subout.Rule{ID: e.ID, Kind: e.Kind, Values: []string{e.Value}, Target: e.Target})
+		}
 	}
 	for _, c := range ruleCategories {
 		target := firstNonEmpty(p.Policy.Rules[c.Key], c.Default)

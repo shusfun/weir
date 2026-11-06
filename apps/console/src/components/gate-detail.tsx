@@ -12,6 +12,8 @@ import { bytes, date } from "../lib/models";
 import type { Gate, NodeItem } from "../lib/core";
 import { KernelDiagnostics, type KernelInfo } from "../pages/kernels";
 import { GateCerts } from "./node-certs";
+import { ProcessUsage, freshHost } from "./resource-usage";
+import { NodeSummary } from "./node-summary";
 import { HistoryCharts } from "./history-charts";
 import { GateTopology } from "./gate-topology";
 
@@ -36,7 +38,7 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { listening_po
   const [pins, setPins] = useState<Record<string, string>>(gate.kernel_pins ?? {});
   const navigate = useNavigate();
   const [diag, setDiag] = useState<{ kernel: string; result: Record<string, unknown> } | null>(null);
-  const h = gate.host ?? {};
+  const h = freshHost(gate.host,gate.online) ?? {};
   // 本项目自己的端口：节点端口与两个内核的统计端口（只监听回环）。
   const own = new Set([...nodes.filter((n) => n.gate_id === gate.id).map((n) => n.port), gate.xray_stats_port ?? 0, gate.singbox_stats_port ?? 0]);
   const foreign = (gate.listening_ports ?? []).filter((p) => !own.has(p.port));
@@ -92,6 +94,8 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { listening_po
               <div key={k} className="stack rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3">
                 <strong>{k} <small className="font-normal text-[var(--weir-ink-3)]">运行中 {gate.kernels_running?.[k] ? <ObjectLink to={{ type: "kernel", key: `${k}@${gate.kernels_running[k]}`, name: gate.kernels_running[k] }} /> : "无"}</small></strong>
                 {cached.length === 0 && <small className="text-[var(--weir-ink-3)]">中心还没有适用 {gate.arch} 且有驱动的 {k} 版本，<ObjectLink to={{ type: "kernel", key: k, name: "去内核页下载" }} />。</small>}
+                <ProcessUsage host={gate.host} online={gate.online} names={[k]} />
+                <HistoryCharts path={`/admin/gates/${gate.id}/history`} traffic={false} processes={[k]} />
                 <Field label={k + " 版本"}>
                   <Select value={pins[k] ?? ""} onValueChange={(v) => setPins({ ...pins, [k]: String(v) })}>
                     <SelectTrigger><SelectValue>{pins[k] || `跟随默认（${kernels.data[k]?.default || "保持当前运行版本"}）`}</SelectValue></SelectTrigger>
@@ -121,7 +125,7 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { listening_po
           {mine.length === 0 ? <small>这台 VPS 还没有节点。</small> : (
             <ul className="stack">{mine.map((n) => (
               <li key={n.id} className="stack gap-1 text-body">
-                <span><ObjectLink to={{ type: "node", id: n.id, name: n.name }} className="font-semibold" /> :{n.port} → {exitName(n)}{!n.enabled && <Badge variant="soft" tone="warn">停用</Badge>}</span>
+                <span><NodeSummary node={n} />{!n.enabled && <Badge variant="soft" tone="warn">停用</Badge>}</span>
                 {n.exit.kind !== "freedom" && <small className="text-[var(--weir-ink-3)]">{probeText(n.exit.probe)}</small>}
                 <NodeAccess ports={n.ports} reach={n.reach} />
               </li>

@@ -46,7 +46,7 @@ export function UsersPage() {
   useConsoleContext(detail ? { object: { type: "user", name: detail.name || detail.email, id: detail.id }, dialog: { title: "用户详情" } } : null);
   const header = <PageHeader title="用户" description="建用户时一次设好额度、周期与节点；用户可自行生成多条链接与链式代理。" actions={<Button onClick={() => setForm("new")}><Plus />创建用户</Button>} />;
   const optionsFor = (u: UserItem): NodeOption[] =>
-    (nodes.data ?? []).filter((n) => n.enabled && (u.all_nodes || (u.node_ids ?? []).includes(n.id))).map((n) => ({ id: n.id, name: n.name, gate_id: n.gate_id, gate_name: n.gate_name }));
+    (nodes.data ?? []).filter((n) => n.enabled && (u.all_nodes || (u.node_ids ?? []).includes(n.id)));
   return (
     <div className="stack">
       {header}
@@ -143,8 +143,8 @@ export function UsersPage() {
               <WithheldNotice userId={detail.id} />
               <SectionHeader title="流量" description="最近 1 / 6 / 24 小时，按 VPS 上报的计数；缺失的时段显示为未知。" />
               <HistoryCharts path={`/admin/users/${detail.id}/history`} />
-              <LinkPanel base={`/admin/users/${detail.id}`} nodes={optionsFor(detail)} planEnds={detail.expires_at} showCredentials inlineQr={created?.id === detail.id} />
-              <ChainPanel base={`/admin/users/${detail.id}`} nodes={optionsFor(detail)} admin />
+              <LinkPanel base={`/admin/users/${detail.id}`} planEnds={detail.expires_at} showCredentials inlineQr={created?.id === detail.id} />
+              <ChainPanel base={`/admin/users/${detail.id}`} admin />
             </div>
           </SheetContent>
         )}

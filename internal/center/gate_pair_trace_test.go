@@ -50,8 +50,24 @@ func TestGatePairInvalidAndExpiredInvites(t *testing.T) {
 			s, admin := newInstalledServer(t)
 			token := strings.Repeat("a", 64)
 			if kind == "expired" {
-				if err := s.Store.KV.Set(t.Context(), "pair:"+digest(token), `{"name":"expired"}`, time.Nanosecond); err != nil {
+				key := "pair:" + digest(token)
+				if err := s.Store.KV.Set(t.Context(), key, `{"name":"expired"}`, time.Millisecond); err != nil {
 					t.Fatal(err)
+				}
+				// Redis expiry has millisecond precision; observe expiry before pairing.
+				deadline := time.Now().Add(time.Second)
+				for {
+					_, exists, err := s.Store.KV.Get(t.Context(), key)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !exists {
+						break
+					}
+					if time.Now().After(deadline) {
+						t.Fatal("invitation did not expire")
+					}
+					time.Sleep(time.Millisecond)
 				}
 			}
 			pub, _, err := ed25519.GenerateKey(rand.Reader)

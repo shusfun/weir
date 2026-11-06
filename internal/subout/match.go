@@ -8,17 +8,19 @@ import (
 // Match 是一个目标按订阅规则算出的走向。Maybe 是排在命中规则之前、中心判断不了的规则：
 // 目标是域名时 IP 规则要看客户端解析的结果，GeoIP 要看客户端的数据库。
 type Match struct {
-	Label  string      `json:"label"`
-	Kind   string      `json:"kind"`
-	Value  string      `json:"value,omitempty"`
-	Policy string      `json:"policy"`
-	Maybe  []MaybeRule `json:"maybe,omitempty"`
+	EntryID string      `json:"entry_id,omitempty"`
+	Label   string      `json:"label"`
+	Kind    string      `json:"kind"`
+	Value   string      `json:"value,omitempty"`
+	Policy  string      `json:"policy"`
+	Maybe   []MaybeRule `json:"maybe,omitempty"`
 }
 
 type MaybeRule struct {
-	Label  string `json:"label"`
-	Kind   string `json:"kind"`
-	Policy string `json:"policy"`
+	EntryID string `json:"entry_id,omitempty"`
+	Label   string `json:"label"`
+	Kind    string `json:"kind"`
+	Policy  string `json:"policy"`
 }
 
 // Match 按与渲染相同的顺序计算 target（已规范的小写域名或 IP）的走向：内网 → 规则 → 其余流量。names 与 items 一一对应。
@@ -38,10 +40,10 @@ func (p *Plan) Match(target string, names []string, items []Item) Match {
 	for _, r := range lay.Rules {
 		switch {
 		case r.Kind == "geoip" || r.Kind == "ip_cidr" && !isIP:
-			maybe = append(maybe, MaybeRule{Label: r.Label, Kind: r.Kind, Policy: r.Policy})
+			maybe = append(maybe, MaybeRule{EntryID: r.ID, Label: r.Label, Kind: r.Kind, Policy: r.Policy})
 		default:
 			if v, ok := matchRule(r, target, addr, isIP); ok {
-				return Match{Label: r.Label, Kind: r.Kind, Value: v, Policy: r.Policy, Maybe: maybe}
+				return Match{EntryID: r.ID, Label: r.Label, Kind: r.Kind, Value: v, Policy: r.Policy, Maybe: maybe}
 			}
 		}
 	}

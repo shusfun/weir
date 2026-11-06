@@ -23,6 +23,7 @@ import (
 
 	"github.com/shusfun/weir/packages/contracts"
 
+	"github.com/shusfun/weir/internal/hoststats"
 	"github.com/shusfun/weir/internal/kernelconf"
 )
 
@@ -46,6 +47,7 @@ type ApplyResult struct {
 }
 
 type HelperStatus struct {
+	Host      *contracts.HostSample     `json:"host,omitempty"`
 	Installed map[string][]string       `json:"installed"`
 	Active    map[string]string         `json:"active"`
 	Running   map[string]int            `json:"running"`
@@ -56,10 +58,12 @@ type HelperStatus struct {
 
 // Helper 是以 root 运行的辅助程序。只提供白名单接口，不执行任意命令或任意路径。
 type Helper struct {
-	P        Paths
-	ProcRoot string
-	Sup      *Supervisor
-	mu       sync.Mutex
+	resourceMu   sync.RWMutex
+	resourceHost *contracts.HostSample
+	P            Paths
+	ProcRoot     string
+	Sup          *Supervisor
+	mu           sync.Mutex
 	// 1Panel 连接测试与证书刷新的缓存（见 panel.go）。
 	panelMu         sync.Mutex
 	panelChecked    time.Time
@@ -199,6 +203,9 @@ func (h *Helper) installed() map[string][]string {
 }
 
 func (h *Helper) status(w http.ResponseWriter, _ *http.Request) {
+	h.resourceMu.RLock()
+	host := h.resourceHost
+	h.resourceMu.RUnlock()
 	ports, _ := listening(h.ProcRoot)
 	active := map[string]string{}
 	for _, name := range helperKernels {
@@ -206,7 +213,7 @@ func (h *Helper) status(w http.ResponseWriter, _ *http.Request) {
 			active[name] = v
 		}
 	}
-	writeJSON(w, 200, HelperStatus{Installed: h.installed(), Active: active, Running: h.Sup.Running(), Listening: ports, Certs: h.certs(), Firewall: h.firewall()})
+	writeJSON(w, 200, HelperStatus{Host: host, Installed: h.installed(), Active: active, Running: h.Sup.Running(), Listening: ports, Certs: h.certs(), Firewall: h.firewall()})
 }
 
 // certs 返回已安装证书的摘要，Agent 据此决定是否需要重新下载。
@@ -497,6 +504,20 @@ func ServeHelper(ctx context.Context, h *Helper) error {
 	_ = os.Chmod(h.P.Socket, 0660)
 	h.shareWithAgent(h.P.Socket)
 	h.Boot()
+	resourceCtx, stopResources := context.WithCancel(ctx)
+	defer stopResources()
+	go func() {
+		sampler := hoststats.Sampler{ProcRoot: h.ProcRoot}
+		sampler.Run(resourceCtx, "/", func() map[string]int {
+			pids := h.Sup.Running()
+			for _, name := range helperKernels {
+				if _, ok := pids[name]; !ok {
+					pids[name] = 0
+				}
+			}
+			return pids
+		}, func(host *contracts.HostSample) { h.resourceMu.Lock(); h.resourceHost = host; h.resourceMu.Unlock() })
+	}()
 	srv := &http.Server{Handler: h.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		<-ctx.Done()

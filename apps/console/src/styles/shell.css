@@ -149,10 +149,26 @@
 }
 .shell[data-collapsed="true"] .rail-brand > strong,
 .shell[data-collapsed="true"] .rail-group-label,
-.shell[data-collapsed="true"] .rail-item > .rail-label,
 .shell[data-collapsed="true"] .rail-account-text,
 .shell[data-collapsed="true"] .rail-account > svg {
   display: none;
+}
+/* 收起后文字只对读屏保留：链接的可访问名称来自这段文字，display: none 会让它变成无名链接 */
+.shell[data-collapsed="true"] .rail-item > .rail-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+/* 收起后没有分组标题，用细线分开各组 */
+.shell[data-collapsed="true"] .rail-group {
+  margin-bottom: var(--weir-space-3);
+}
+.shell[data-collapsed="true"] .rail-group + .rail-group {
+  padding-top: var(--weir-space-3);
+  border-top: 1px solid var(--weir-line-soft);
 }
 .shell[data-collapsed="true"] .rail-brand,
 .shell[data-collapsed="true"] .rail-item,
@@ -324,9 +340,6 @@
   .command-trigger .weir-kbd {
     display: none;
   }
-}
-.shell[data-collapsed="true"] .rail-collapse > span {
-  display: none;
 }
 /* dsh 入口：右下角浮动按钮，避开移动端底部安全区；缩小时变成「dsh · 已缩小」条。
    宽屏在页面弹窗之上（开着弹窗也能打开 dsh），窄屏在弹窗之下（不挡底部抽屉的按钮） */

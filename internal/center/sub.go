@@ -276,14 +276,15 @@ func (s *Server) serveSub(c *gin.Context) {
 		plan, items := s.subPlan(ctx, p)
 		if target == "base64" {
 			info := []subout.Item{}
-			for _, link := range subscriptionInfoLinks(u, l) { info = append(info, subout.Item{Link: link}) }
+			for _, link := range subscriptionInfoLinks(u, l) {
+				info = append(info, subout.Item{Link: link})
+			}
 			items = append(info, items...)
 		}
 		origin := s.siteOrigin(c)
 		switch target {
 		case "clash", "mihomo":
 			plan.Providers = func(key string) string { return origin + "/sub/" + l.Token + "/provider/" + url.PathEscape(key) }
-			plan.RuleSet = func() string { return origin + "/sub/" + l.Token + "/rules" }
 		case "surge":
 			plan.ManagedURL = origin + "/sub/" + l.Token + "?target=surge"
 		}
@@ -305,7 +306,7 @@ func (s *Server) serveSub(c *gin.Context) {
 	c.Header("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape("Weir-"+firstNonEmpty(l.Name, "订阅")))
 	_ = l.Update().SetLastUsedAt(time.Now()).Exec(ctx)
 	s.recordPull(c, l, target, "ok")
-	s.recordSubCheck("link-"+itoa(l.ID), firstNonEmpty(l.Name, "订阅")+" · "+u.Email, target, body)
+	s.recordSubCheck(withTrace(ctx, c.GetString("request_id")), "link-"+itoa(l.ID), firstNonEmpty(l.Name, "订阅")+" · "+u.Email, target, body)
 	c.Data(200, contentType, body)
 }
 

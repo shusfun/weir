@@ -1,3 +1,5 @@
+import { NodeSummary } from "./node-summary";
+import type { NodeChoice } from "../lib/core";
 // 链式代理出口的填写：建节点第 ③ 步（管理员）与用户自建链式代理共用。
 // 代理文本由用户点击解析；节点链接只接受单个节点，订阅地址会被拒绝。
 import { Field, FormGrid, Input, Notice, PasswordInput, ChoiceCard, Radio, RadioGroup, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea } from "@weir/ui";
@@ -44,7 +46,7 @@ export function ExitFields({ value, onChange, admin, sourcePath, nodes, nodeHint
   onChange: (v: ExitSpec) => void;
   admin: boolean;
   sourcePath: string;
-  nodes: { id: number; name: string; gate_name?: string }[];
+  nodes: NodeChoice[];
   nodeHint: string;
 }) {
   const top = topOf(value.kind);
@@ -70,10 +72,10 @@ export function ExitFields({ value, onChange, admin, sourcePath, nodes, nodeHint
         ) : (
           <Field label="出口节点" name="exitNode" required>
             <Select required value={value.node_id ? String(value.node_id) : ""} onValueChange={(v) => set({ node_id: Number(v) })}>
-              <SelectTrigger><SelectValue>{nodes.find((n) => n.id === value.node_id)?.name ?? "请选择"}</SelectValue></SelectTrigger>
+              <SelectTrigger><SelectValue>{nodes.find(n => n.id === value.node_id) ? <NodeSummary node={nodes.find(n => n.id === value.node_id)!} compact /> : "请选择"}</SelectValue></SelectTrigger>
               <SelectContent>
                 {nodes.map((n) => (
-                  <SelectItem key={n.id} value={String(n.id)}>{n.gate_name ? `${n.name}（${n.gate_name}）` : n.name}</SelectItem>
+                  <SelectItem key={n.id} value={String(n.id)}><NodeSummary node={n} /></SelectItem>
                 ))}
               </SelectContent>
             </Select>

@@ -221,6 +221,13 @@ func (s *Server) refreshSourceExit(ctx context.Context, owner string, gid int, s
 	if string(a) == string(b) && len(ex.Skipped) == len(prev.Skipped) {
 		return nil
 	}
+	// A changed member set invalidates the previously observed egress IP.
+	if err := s.Store.KV.Del(ctx, exitProbeKey(owner)); err != nil {
+		return err
+	}
+	if err := s.invalidateExitDependents(ctx, atoiOr(strings.TrimPrefix(owner, "exit:"))); err != nil {
+		return err
+	}
 	raw, _ := json.Marshal(storedExit{Outbound: ex.Outbound, Names: ex.Names, Skipped: ex.Skipped, At: time.Now().UTC()})
 	if err = s.Store.KV.Set(ctx, sourceExitKey(owner), string(raw), 0); err != nil {
 		return err

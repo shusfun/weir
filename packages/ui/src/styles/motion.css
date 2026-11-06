@@ -4,6 +4,21 @@
  * 减少动态效果由 theme.css 的全局规则统一压到 1ms，JS 动效另行读取 prefersReducedMotion()。
  */
 @layer components {
+  .weir-action-content { display: inline-grid; align-items: center; justify-items: center; gap: inherit; }
+  .weir-action-content > span { grid-area: 1 / 1; display: inline-flex; align-items: center; justify-content: center; gap: inherit; opacity: 0; transform: scale(.65); pointer-events: none; transition: opacity var(--weir-fast) var(--weir-ease), transform var(--weir-mid) var(--weir-spring); }
+  .weir-action-content[data-state="idle"] > .weir-action-rest,
+  .weir-action-content[data-state="busy"] > .weir-action-busy,
+  .weir-action-content[data-state="ok"] > .weir-action-ok,
+  .weir-action-content[data-state="warn"] > .weir-action-warn,
+  .weir-action-content[data-state="error"] > .weir-action-error { opacity: 1; transform: scale(1); }
+  .weir-action-ok { color: var(--weir-ok-ink); }
+  .weir-action-warn { color: var(--weir-warn-ink); }
+  .weir-action-error { color: var(--weir-bad-ink); }
+  .weir-rule-row { transition: opacity var(--weir-mid) var(--weir-ease), transform var(--weir-mid) var(--weir-ease); }
+  .weir-rule-row[data-removing] { opacity: 0; transform: translateX(12px); pointer-events: none; }
+  .weir-rule-row[data-disabled] { background: var(--weir-fill-1); }
+  .weir-rule-test { animation: weir-rule-enter var(--weir-mid) var(--weir-ease); }
+  @keyframes weir-rule-enter { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
   /* 成功勾选：pathLength=1，dasharray/offset 从 1 走到 0 即一笔画完；有外圈时先画圈再画勾 */
   .weir-check-mark[data-animate] :is(path, circle) {
     stroke-dasharray: 1;

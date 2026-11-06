@@ -12,6 +12,7 @@ import {
   Globe2,
   Route,
   Rss,
+  Waypoints,
   type LucideIcon,
 } from "lucide-react";
 
@@ -37,7 +38,7 @@ export const navigation: NavItem[] = [
   { key: "kernels", path: "/kernels", label: "内核", icon: Cpu, group: "节点", roles: "admin" },
   { key: "linkmap", path: "/linkmap", label: "链路", icon: Globe2, group: "节点", roles: "admin" },
   { key: "users", path: "/users", label: "用户", icon: Users, group: "用户", roles: "admin" },
-  { key: "proxy", path: "/proxy", label: "代理", icon: Route, group: "用户", roles: "all" },
+  { key: "proxy", path: "/proxy", label: "代理", icon: Waypoints, group: "用户", roles: "all" },
   { key: "links", path: "/links", label: "订阅链接", icon: Link2, group: "用户", roles: "all" },
   { key: "subscriptions", path: "/subscriptions", label: "订阅源", icon: Rss, group: "订阅源", roles: "admin" },
   { key: "pages", path: "/pages", label: "公开页面", icon: Megaphone, group: "订阅源", roles: "admin" },

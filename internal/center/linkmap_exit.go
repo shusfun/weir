@@ -53,7 +53,11 @@ func redactExit(e *mapExit) {
 }
 
 func (s *Server) chainExit(ctx context.Context, ch *ent.Chain, entryGate int, gates map[int]*mapGate, nodes map[int]*ent.Node) *mapExit {
-	return s.mapStoredExit(ctx, ch.ExitID, entryGate, gates, nodes)
+	out := s.mapStoredExit(ctx, ch.ExitID, entryGate, gates, nodes)
+	if e, err := s.Store.Ent.Exit.Get(ctx, ch.ExitID); err == nil && e.PolicyType == "" {
+		out.Label = s.exitSummary(ctx, e, ch.Name).Name
+	}
+	return out
 }
 func (s *Server) nodeChainExit(ctx context.Context, n *ent.Node, gates map[int]*mapGate, nodes map[int]*ent.Node) *mapExit {
 	return s.mapStoredExit(ctx, n.ExitID, n.GateID, gates, nodes)
@@ -64,7 +68,7 @@ func (s *Server) mapStoredExit(ctx context.Context, id, gid int, gates map[int]*
 	if err != nil {
 		return &mapExit{ID: exitOwner(id), Kind: "unknown", Label: "出口未知", FromGate: gid, Place: geoPlace{Why: "出口不可用"}}
 	}
-	out := &mapExit{ID: exitOwner(id), Kind: string(e.Kind), Label: firstNonEmpty(e.Remark, exitKindLabel(string(e.Kind))), FromGate: gid, Owner: "admin", Link: "/exits?gate=" + itoa(gid) + "&focus=exit:" + itoa(id), tag: e.Tag}
+	out := &mapExit{ID: exitOwner(id), Kind: string(e.Kind), Label: s.exitSummary(ctx, e, "").Name, FromGate: gid, Owner: "admin", Link: "/exits?gate=" + itoa(gid) + "&focus=exit:" + itoa(id), tag: e.Tag}
 	if e.OwnerUserID != nil {
 		out.Owner = "self"
 	}
@@ -81,7 +85,9 @@ func (s *Server) mapStoredExit(ctx context.Context, id, gid int, gates map[int]*
 		return out
 	case "node":
 		if e.ExitNodeID != nil && nodes[*e.ExitNodeID] == nil {
-			if n, err := s.Store.Ent.Node.Get(ctx, *e.ExitNodeID); err == nil { nodes[n.ID] = n }
+			if n, err := s.Store.Ent.Node.Get(ctx, *e.ExitNodeID); err == nil {
+				nodes[n.ID] = n
+			}
 		}
 		if e.ExitNodeID == nil || nodes[*e.ExitNodeID] == nil {
 			out.Sub = "出口节点已不存在"
@@ -91,8 +97,9 @@ func (s *Server) mapStoredExit(ctx context.Context, id, gid int, gates map[int]*
 		n := nodes[*e.ExitNodeID]
 		out.ToGate, out.Sub = n.GateID, n.Name
 		if g := gates[n.GateID]; g != nil {
-			out.Place, out.Address = g.Place, g.Place.IP
+			out.Place, out.Address = s.exitPlace(ctx, e), g.Place.IP
 		}
+		out.Place = s.exitPlace(ctx, e)
 		return out
 	case "source":
 		s.fillExit(ctx, out, "", exitOwner(id), exitOwner(id))
@@ -100,5 +107,6 @@ func (s *Server) mapStoredExit(ctx context.Context, id, gid int, gates map[int]*
 		s.fillExit(ctx, out, e.Address, exitOwner(id), "")
 		out.Sub = e.Address + ":" + strconv.Itoa(e.Port)
 	}
+	out.Place = s.exitPlace(ctx, e)
 	return out
 }

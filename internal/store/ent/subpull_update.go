@@ -140,6 +140,20 @@ func (_u *SubPullUpdate) SetNillableIP(v *string) *SubPullUpdate {
 	return _u
 }
 
+// SetTraceID sets the "trace_id" field.
+func (_u *SubPullUpdate) SetTraceID(v string) *SubPullUpdate {
+	_u.mutation.SetTraceID(v)
+	return _u
+}
+
+// SetNillableTraceID sets the "trace_id" field if the given value is not nil.
+func (_u *SubPullUpdate) SetNillableTraceID(v *string) *SubPullUpdate {
+	if v != nil {
+		_u.SetTraceID(*v)
+	}
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *SubPullUpdate) SetStatus(v string) *SubPullUpdate {
 	_u.mutation.SetStatus(v)
@@ -208,6 +222,11 @@ func (_u *SubPullUpdate) check() error {
 			return &ValidationError{Name: "ip", err: fmt.Errorf(`ent: validator failed for field "SubPull.ip": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.TraceID(); ok {
+		if err := subpull.TraceIDValidator(v); err != nil {
+			return &ValidationError{Name: "trace_id", err: fmt.Errorf(`ent: validator failed for field "SubPull.trace_id": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := subpull.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "SubPull.status": %w`, err)}
@@ -254,6 +273,9 @@ func (_u *SubPullUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.IP(); ok {
 		_spec.SetField(subpull.FieldIP, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.TraceID(); ok {
+		_spec.SetField(subpull.FieldTraceID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(subpull.FieldStatus, field.TypeString, value)
@@ -390,6 +412,20 @@ func (_u *SubPullUpdateOne) SetNillableIP(v *string) *SubPullUpdateOne {
 	return _u
 }
 
+// SetTraceID sets the "trace_id" field.
+func (_u *SubPullUpdateOne) SetTraceID(v string) *SubPullUpdateOne {
+	_u.mutation.SetTraceID(v)
+	return _u
+}
+
+// SetNillableTraceID sets the "trace_id" field if the given value is not nil.
+func (_u *SubPullUpdateOne) SetNillableTraceID(v *string) *SubPullUpdateOne {
+	if v != nil {
+		_u.SetTraceID(*v)
+	}
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *SubPullUpdateOne) SetStatus(v string) *SubPullUpdateOne {
 	_u.mutation.SetStatus(v)
@@ -471,6 +507,11 @@ func (_u *SubPullUpdateOne) check() error {
 			return &ValidationError{Name: "ip", err: fmt.Errorf(`ent: validator failed for field "SubPull.ip": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.TraceID(); ok {
+		if err := subpull.TraceIDValidator(v); err != nil {
+			return &ValidationError{Name: "trace_id", err: fmt.Errorf(`ent: validator failed for field "SubPull.trace_id": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := subpull.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "SubPull.status": %w`, err)}
@@ -534,6 +575,9 @@ func (_u *SubPullUpdateOne) sqlSave(ctx context.Context) (_node *SubPull, err er
 	}
 	if value, ok := _u.mutation.IP(); ok {
 		_spec.SetField(subpull.FieldIP, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.TraceID(); ok {
+		_spec.SetField(subpull.FieldTraceID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(subpull.FieldStatus, field.TypeString, value)

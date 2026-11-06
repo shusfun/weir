@@ -28,6 +28,11 @@ func (s *Server) proxyRoutes(auth, admin *gin.RouterGroup) {
 		g.r.GET(g.base+"/proxy", func(c *gin.Context) { s.getProxy(c, admin) })
 		g.r.PUT(g.base+"/proxy", func(c *gin.Context) { s.putProxy(c, admin) })
 		g.r.PUT(g.base+"/proxy/custom", s.asJob("保存自定义清单", "已取消，清单保持原样", func(c *gin.Context) { s.putCustomRules(c, admin) }))
+		g.r.POST(g.base+"/proxy/custom/parse", func(c *gin.Context) { s.parseCustomList(c, admin) })
+		g.r.POST(g.base+"/proxy/custom/append", s.asJob("添加清单规则", "已取消，清单保持原样", func(c *gin.Context) { s.appendCustomEntries(c, admin) }))
+		g.r.PATCH(g.base+"/proxy/custom/entries/:entry", s.asJob("更新清单规则", "已取消，清单保持原样", func(c *gin.Context) { s.changeCustomEntry(c, admin) }))
+		g.r.DELETE(g.base+"/proxy/custom/entries/:entry", s.asJob("删除清单规则", "已取消，清单保持原样", func(c *gin.Context) { s.changeCustomEntry(c, admin) }))
+		g.r.POST(g.base+"/proxy/custom/entries/:entry/test", func(c *gin.Context) { s.testCustomEntry(c, admin) })
 		g.r.POST(g.base+"/proxy/custom/test", func(c *gin.Context) { s.testCustomRules(c, admin) })
 		g.r.PUT(g.base+"/proxy/types/:type/exit", s.asJob("给一类节点加出口", "已取消，出口保持原样", func(c *gin.Context) { s.putTypeExit(c, admin) }))
 		g.r.DELETE(g.base+"/proxy/types/:type/exit", func(c *gin.Context) { s.deleteTypeExit(c, admin) })
@@ -136,7 +141,8 @@ func (s *Server) proxyView(ctx context.Context, u *ent.User) (gin.H, error) {
 				online++
 			}
 			rate := pathRate(own, all, n.ID, chainID)
-			item := gin.H{"id": n.ID, "name": n.Name, "health": h.Status, "why": h.Why, "rate": rate}
+			item := s.nodeChoice(ctx, n, g, byEntry[n.ID])
+			item["health"], item["why"], item["rate"] = h.Status, h.Why, rate
 			if g != nil {
 				item["gate_id"], item["gate_name"] = g.ID, g.Name
 			}
@@ -144,7 +150,7 @@ func (s *Server) proxyView(ctx context.Context, u *ent.User) (gin.H, error) {
 			if !disabled[t.Key] {
 				in.keys = append(in.keys, pathKey(n.ID, chainID))
 				in.health, in.rates = append(in.health, h), append(in.rates, rate)
-				refs = append(refs, gin.H{"node_id": n.ID, "name": n.Name, "type": t.Label, "health": h.Status, "why": h.Why, "rate": rate})
+				refs = append(refs, gin.H{"node_id": n.ID, "name": item["display_name"], "type": t.Label, "health": h.Status, "why": h.Why, "rate": rate})
 			}
 		}
 		v := gin.H{"key": t.Key, "label": t.Label, "enabled": !disabled[t.Key], "nodes": nodes, "online": online, "missing_exit": missing}
@@ -258,7 +264,16 @@ func (s *Server) putProxy(c *gin.Context, admin bool) {
 	if dryRun(c, dryResult{Preview: []string{"客户端下次更新订阅时按新的分组与分流生效；订阅地址不变"}}) {
 		return
 	}
-	if u, err = u.Update().SetProxyPolicy(policyMap(pol)).Save(ctx); err != nil {
+	err = s.Store.Lock.Do(ctx, "proxy-policy:"+itoa(u.ID), func(ctx context.Context) error {
+		latest, err := s.Store.Ent.User.Get(ctx, u.ID)
+		if err != nil {
+			return err
+		}
+		pol.Custom = loadPolicy(latest).Custom
+		u, err = latest.Update().SetProxyPolicy(policyMap(pol)).Save(ctx)
+		return err
+	})
+	if err != nil {
 		failInternal(c, 500, "update_failed", err)
 		return
 	}

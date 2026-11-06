@@ -25,11 +25,41 @@ const (
 // CustomRules：Mode 与 Lines 是订阅实际使用的（规范写法，如 DOMAIN-SUFFIX,netflix.com）；Source 与 SourceMode
 // 是用户最后一次提交的原文与方式。内核检查没通过时只更新后两者，客户端继续用上一次的规则。
 type CustomRules struct {
-	Mode       string       `json:"mode,omitempty"`
-	Lines      []string     `json:"lines,omitempty"`
-	Source     string       `json:"source,omitempty"`
-	SourceMode string       `json:"source_mode,omitempty"`
-	Check      *CustomCheck `json:"check,omitempty"`
+	Version    int              `json:"version,omitempty"`
+	Revision   int              `json:"revision,omitempty"`
+	Entries    []CustomEntry    `json:"entries,omitempty"`
+	Pending    *CustomCandidate `json:"pending,omitempty"`
+	Legacy     *CustomLegacy    `json:"legacy,omitempty"`
+	Mode       string           `json:"mode,omitempty"`
+	Lines      []string         `json:"lines,omitempty"`
+	Source     string           `json:"source,omitempty"`
+	SourceMode string           `json:"source_mode,omitempty"`
+	Check      *CustomCheck     `json:"check,omitempty"`
+}
+
+// CustomEntry 的顺序就是优先级。LastProxyTarget 让直连与代理之间切换时不丢失选过的组。
+type CustomEntry struct {
+	ID              string `json:"id"`
+	Kind            string `json:"kind"`
+	Value           string `json:"value"`
+	Target          string `json:"target"`
+	Enabled         bool   `json:"enabled"`
+	LastProxyTarget string `json:"last_proxy_target,omitempty"`
+}
+
+type CustomCandidate struct {
+	Entries []CustomEntry `json:"entries"`
+	Source  string        `json:"source,omitempty"`
+}
+
+// Legacy 保留升级前的输入与分流设置；RulesFile 专供尚未更新整份配置的旧客户端。
+type CustomLegacy struct {
+	Mode       string            `json:"mode"`
+	SourceMode string            `json:"source_mode"`
+	Source     string            `json:"source"`
+	Lines      []string          `json:"lines"`
+	Rules      map[string]string `json:"rules"`
+	RulesFile  string            `json:"rules_file"`
 }
 
 // CustomCheck 是最后一次提交的内核检查结果：passed / failed / unknown。

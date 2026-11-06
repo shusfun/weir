@@ -622,7 +622,7 @@ func (s *Server) writeGroup(c *gin.Context, p *ent.SubProfile, forced string) {
 		return
 	}
 	_ = p.Update().AddDownloads(1).Exec(ctx)
-	s.recordSubCheck("profile-"+itoa(p.ID), "订阅组 · "+p.Name, target, body)
+	s.recordSubCheck(withTrace(ctx, c.GetString("request_id")), "profile-"+itoa(p.ID), "订阅组 · "+p.Name, target, body)
 	c.Header("Profile-Update-Interval", itoa(g.UpdateInterval))
 	c.Header("Content-Disposition", "attachment; filename*=UTF-8''"+urlPathEscape(p.Name))
 	c.Data(200, ct, body)

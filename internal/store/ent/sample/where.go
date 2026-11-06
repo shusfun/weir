@@ -94,6 +94,16 @@ func DiskTotal(v int64) predicate.Sample {
 	return predicate.Sample(sql.FieldEQ(FieldDiskTotal, v))
 }
 
+// ObservationID applies equality check predicate on the "observation_id" field. It's identical to ObservationIDEQ.
+func ObservationID(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldEQ(FieldObservationID, v))
+}
+
+// TraceID applies equality check predicate on the "trace_id" field. It's identical to TraceIDEQ.
+func TraceID(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldEQ(FieldTraceID, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.Sample {
 	return predicate.Sample(sql.FieldEQ(FieldCreatedAt, v))
@@ -487,6 +497,146 @@ func DiskTotalIsNil() predicate.Sample {
 // DiskTotalNotNil applies the NotNil predicate on the "disk_total" field.
 func DiskTotalNotNil() predicate.Sample {
 	return predicate.Sample(sql.FieldNotNull(FieldDiskTotal))
+}
+
+// ProcessesIsNil applies the IsNil predicate on the "processes" field.
+func ProcessesIsNil() predicate.Sample {
+	return predicate.Sample(sql.FieldIsNull(FieldProcesses))
+}
+
+// ProcessesNotNil applies the NotNil predicate on the "processes" field.
+func ProcessesNotNil() predicate.Sample {
+	return predicate.Sample(sql.FieldNotNull(FieldProcesses))
+}
+
+// ObservationIDEQ applies the EQ predicate on the "observation_id" field.
+func ObservationIDEQ(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldEQ(FieldObservationID, v))
+}
+
+// ObservationIDNEQ applies the NEQ predicate on the "observation_id" field.
+func ObservationIDNEQ(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldNEQ(FieldObservationID, v))
+}
+
+// ObservationIDIn applies the In predicate on the "observation_id" field.
+func ObservationIDIn(vs ...string) predicate.Sample {
+	return predicate.Sample(sql.FieldIn(FieldObservationID, vs...))
+}
+
+// ObservationIDNotIn applies the NotIn predicate on the "observation_id" field.
+func ObservationIDNotIn(vs ...string) predicate.Sample {
+	return predicate.Sample(sql.FieldNotIn(FieldObservationID, vs...))
+}
+
+// ObservationIDGT applies the GT predicate on the "observation_id" field.
+func ObservationIDGT(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldGT(FieldObservationID, v))
+}
+
+// ObservationIDGTE applies the GTE predicate on the "observation_id" field.
+func ObservationIDGTE(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldGTE(FieldObservationID, v))
+}
+
+// ObservationIDLT applies the LT predicate on the "observation_id" field.
+func ObservationIDLT(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldLT(FieldObservationID, v))
+}
+
+// ObservationIDLTE applies the LTE predicate on the "observation_id" field.
+func ObservationIDLTE(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldLTE(FieldObservationID, v))
+}
+
+// ObservationIDContains applies the Contains predicate on the "observation_id" field.
+func ObservationIDContains(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldContains(FieldObservationID, v))
+}
+
+// ObservationIDHasPrefix applies the HasPrefix predicate on the "observation_id" field.
+func ObservationIDHasPrefix(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldHasPrefix(FieldObservationID, v))
+}
+
+// ObservationIDHasSuffix applies the HasSuffix predicate on the "observation_id" field.
+func ObservationIDHasSuffix(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldHasSuffix(FieldObservationID, v))
+}
+
+// ObservationIDEqualFold applies the EqualFold predicate on the "observation_id" field.
+func ObservationIDEqualFold(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldEqualFold(FieldObservationID, v))
+}
+
+// ObservationIDContainsFold applies the ContainsFold predicate on the "observation_id" field.
+func ObservationIDContainsFold(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldContainsFold(FieldObservationID, v))
+}
+
+// TraceIDEQ applies the EQ predicate on the "trace_id" field.
+func TraceIDEQ(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldEQ(FieldTraceID, v))
+}
+
+// TraceIDNEQ applies the NEQ predicate on the "trace_id" field.
+func TraceIDNEQ(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldNEQ(FieldTraceID, v))
+}
+
+// TraceIDIn applies the In predicate on the "trace_id" field.
+func TraceIDIn(vs ...string) predicate.Sample {
+	return predicate.Sample(sql.FieldIn(FieldTraceID, vs...))
+}
+
+// TraceIDNotIn applies the NotIn predicate on the "trace_id" field.
+func TraceIDNotIn(vs ...string) predicate.Sample {
+	return predicate.Sample(sql.FieldNotIn(FieldTraceID, vs...))
+}
+
+// TraceIDGT applies the GT predicate on the "trace_id" field.
+func TraceIDGT(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldGT(FieldTraceID, v))
+}
+
+// TraceIDGTE applies the GTE predicate on the "trace_id" field.
+func TraceIDGTE(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldGTE(FieldTraceID, v))
+}
+
+// TraceIDLT applies the LT predicate on the "trace_id" field.
+func TraceIDLT(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldLT(FieldTraceID, v))
+}
+
+// TraceIDLTE applies the LTE predicate on the "trace_id" field.
+func TraceIDLTE(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldLTE(FieldTraceID, v))
+}
+
+// TraceIDContains applies the Contains predicate on the "trace_id" field.
+func TraceIDContains(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldContains(FieldTraceID, v))
+}
+
+// TraceIDHasPrefix applies the HasPrefix predicate on the "trace_id" field.
+func TraceIDHasPrefix(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldHasPrefix(FieldTraceID, v))
+}
+
+// TraceIDHasSuffix applies the HasSuffix predicate on the "trace_id" field.
+func TraceIDHasSuffix(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldHasSuffix(FieldTraceID, v))
+}
+
+// TraceIDEqualFold applies the EqualFold predicate on the "trace_id" field.
+func TraceIDEqualFold(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldEqualFold(FieldTraceID, v))
+}
+
+// TraceIDContainsFold applies the ContainsFold predicate on the "trace_id" field.
+func TraceIDContainsFold(v string) predicate.Sample {
+	return predicate.Sample(sql.FieldContainsFold(FieldTraceID, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

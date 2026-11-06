@@ -1,7 +1,8 @@
 // 链路图画布：平铺世界地图，可拖动、滚轮或双指缩放（不旋转）；悬停显示摘要，点击选中（同一位置的多个点先放大）。
 // 画布只是展示，键盘与读屏用旁边的路径列表；系统设置了「减少动态效果」时连线不流动、不出脉冲。
+// 有流动动画才逐帧重画；减少动态效果时每秒刷新一次（过期状态随时间变化），交互时立即重画；离屏或页面隐藏时停止。
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button } from "@weir/ui";
+import { Button, usePrefersReducedMotion } from "@weir/ui";
 import { Maximize2, Minus, Plus } from "lucide-react";
 import { useIsDark } from "../theme";
 import type { LinkMap, LiveStore } from "../lib/linkmap";
@@ -11,17 +12,6 @@ import { buildScene, hitTest, type Focus } from "./link-map-scene";
 
 const minK = 1;
 const maxK = 12;
-
-function useReducedMotion() {
-  const [reduced, setReduced] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const on = () => setReduced(mq.matches);
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, []);
-  return reduced;
-}
 
 export function LinkMapCanvas({ map, store, focus, selected, onSelect, tooltip }: {
   map: LinkMap;
@@ -39,7 +29,8 @@ export function LinkMapCanvas({ map, store, focus, selected, onSelect, tooltip }
   const hover = useRef<string | null>(null);
   const scene = useRef<Scene | null>(null);
   const dark = useIsDark();
-  const reduced = useReducedMotion();
+  const reduced = usePrefersReducedMotion();
+  const redraw = useRef<() => void>(() => {});
   const colors = useMemo(() => readColors(), [dark]);
   const lon = useMemo(() => centerLon([...map.gates.map((g) => g.place), ...map.exits.map((x) => x.place)]), [map.version]);
   const world = useMemo<World | null>(() => (size.w > 0 ? buildWorld(size.w, size.h, lon) : null), [size.w, size.h, lon]);
@@ -66,16 +57,48 @@ export function LinkMapCanvas({ map, store, focus, selected, onSelect, tooltip }
     const ctx = cv.getContext("2d");
     if (!ctx) return;
     let raf = 0;
+    let timer = 0;
+    let onScreen = true;
+    const active = () => onScreen && !document.hidden;
     const frame = (now: number) => {
+      raf = 0;
       const { map: m, focus: f, selected: sel } = live.current;
       const s = buildScene(m, store, world, colors, view.current, f, sel, hover.current, !reduced, now);
       scene.current = s;
       draw(ctx, size.w, size.h, dpr, view.current, s, now);
+      if (!active()) return;
+      if (reduced) timer = window.setTimeout(() => { timer = 0; raf = requestAnimationFrame(frame); }, 1000);
+      else raf = requestAnimationFrame(frame);
+    };
+    const stop = () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+      raf = timer = 0;
+    };
+    // 动画和时间都只取当前时刻，暂停后恢复不需要补帧。
+    redraw.current = () => {
+      if (raf || !active()) return;
+      clearTimeout(timer);
+      timer = 0;
       raf = requestAnimationFrame(frame);
     };
-    raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
+    const io = new IntersectionObserver(([e]) => {
+      onScreen = e.isIntersecting;
+      if (onScreen) redraw.current();
+      else stop();
+    });
+    io.observe(cv);
+    const onVisible = () => (document.hidden ? stop() : redraw.current());
+    document.addEventListener("visibilitychange", onVisible);
+    redraw.current();
+    return () => {
+      stop();
+      io.disconnect();
+      document.removeEventListener("visibilitychange", onVisible);
+      redraw.current = () => {};
+    };
   }, [world, colors, reduced, store, size.w, size.h]);
+  useEffect(() => redraw.current(), [map, focus, selected]);
   // 平移限制在地图范围内；缩放以指针位置为中心。
   const clamp = (v: View): View => {
     const k = Math.min(maxK, Math.max(minK, v.k));
@@ -85,6 +108,7 @@ export function LinkMapCanvas({ map, store, focus, selected, onSelect, tooltip }
     const v = view.current;
     const k = Math.min(maxK, Math.max(minK, v.k * factor));
     view.current = clamp({ k, x: cx - ((cx - v.x) * k) / v.k, y: cy - ((cy - v.y) * k) / v.k });
+    redraw.current();
   };
   useEffect(() => {
     const cv = canvas.current;
@@ -139,6 +163,7 @@ export function LinkMapCanvas({ map, store, focus, selected, onSelect, tooltip }
       }
     }
     if (canvas.current) canvas.current.style.cursor = id ? "pointer" : d?.moved ? "grabbing" : "grab";
+    redraw.current();
   };
   const onUp = (e: React.PointerEvent) => {
     const d = drag.current;
@@ -155,7 +180,10 @@ export function LinkMapCanvas({ map, store, focus, selected, onSelect, tooltip }
     }
     live.current.onSelect(id);
   };
-  const reset = () => (view.current = { k: 1, x: 0, y: 0 });
+  const reset = () => {
+    view.current = { k: 1, x: 0, y: 0 };
+    redraw.current();
+  };
   const center = (f: number) => zoomAt(f, size.w / 2, size.h / 2);
   return (
     <div ref={wrap} className="relative w-full overflow-hidden rounded-[var(--weir-radius)] border border-[var(--weir-line)] bg-[var(--weir-well-deep)]" style={{ height: size.h || 240 }}>
@@ -172,6 +200,7 @@ export function LinkMapCanvas({ map, store, focus, selected, onSelect, tooltip }
         onPointerLeave={() => {
           hover.current = null;
           if (tip.current) tip.current.hidden = true;
+          redraw.current();
         }}
       />
       <div ref={tip} hidden className="pointer-events-none absolute left-0 top-0 max-w-[220px] whitespace-pre-line rounded-[var(--weir-radius-sm)] border border-[var(--weir-line)] bg-[var(--weir-panel)] px-2 py-1 text-meta text-[var(--weir-ink)] shadow" />

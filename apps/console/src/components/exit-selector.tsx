@@ -1,3 +1,4 @@
+import { ExitSummary } from "./node-summary";
 import { useState } from "react";
 import { ChoiceCard, Field, Radio, RadioGroup, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@weir/ui";
 import type { ExitSpec } from "../lib/core";
@@ -14,7 +15,7 @@ export function ExitSelector(props: Parameters<typeof ExitFields>[0] & {gateId:n
     <RadioGroup aria-label="出口选择" value={mode} onValueChange={v=>{setMode(String(v));onExitId(undefined);fields.onChange({kind:v==="direct"?"freedom":"socks5"});}} className="grid gap-2 sm:grid-cols-3">
       {(fields.admin ? [["direct","直接出去"],["existing","已有出口"],["new","新建出口"]] : [["existing","已有出口"],["new","新建出口"]]).map(([v,label])=><ChoiceCard key={v} selected={mode===v}><Radio value={v}/>{label}</ChoiceCard>)}
     </RadioGroup>
-    {mode==="existing" && <><Field label="出口" name="exit_id" required><Select required value={exitId?String(exitId):""} onValueChange={v=>onExitId(Number(v))}><SelectTrigger><SelectValue>{items.find(e=>e.id===exitId) ? exitTitle(items.find(e=>e.id===exitId)!) : "请选择出口"}</SelectValue></SelectTrigger><SelectContent>{items.map(e=><SelectItem key={e.id} value={String(e.id)}>{exitTitle(e)} · {e.tag}</SelectItem>)}</SelectContent></Select></Field>{!exits.data && <State loading={exits.isPending} error={exits.error} onRetry={()=>exits.refetch()}/>}</>}
+    {mode==="existing" && <><Field label="出口" name="exit_id" required><Select required value={exitId?String(exitId):""} onValueChange={v=>onExitId(Number(v))}><SelectTrigger><SelectValue>{items.find(e=>e.id===exitId) ? <ExitSummary exit={items.find(e=>e.id===exitId)!} /> : "请选择出口"}</SelectValue></SelectTrigger><SelectContent>{items.map(e=><SelectItem key={e.id} value={String(e.id)}><ExitSummary exit={e} expanded /></SelectItem>)}</SelectContent></Select></Field>{!exits.data && <State loading={exits.isPending} error={exits.error} onRetry={()=>exits.refetch()}/>}</>}
     {mode==="new" && <ExitFields {...fields}/>}
   </div>;
 }

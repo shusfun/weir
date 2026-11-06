@@ -37,6 +37,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/subpull"
 	"github.com/shusfun/weir/internal/store/ent/subsource"
 	"github.com/shusfun/weir/internal/store/ent/user"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 const (
@@ -16374,30 +16375,33 @@ func (m *RuleTemplateMutation) ResetEdge(name string) error {
 // SampleMutation represents an operation that mutates the Sample nodes in the graph.
 type SampleMutation struct {
 	config
-	op            Op
-	typ           string
-	id            *int
-	scope         *sample.Scope
-	subject_id    *int
-	addsubject_id *int
-	at            *time.Time
-	traffic       *int64
-	addtraffic    *int64
-	cpu           *float64
-	addcpu        *float64
-	mem_used      *int64
-	addmem_used   *int64
-	mem_total     *int64
-	addmem_total  *int64
-	disk_used     *int64
-	adddisk_used  *int64
-	disk_total    *int64
-	adddisk_total *int64
-	created_at    *time.Time
-	clearedFields map[string]struct{}
-	done          bool
-	oldValue      func(context.Context) (*Sample, error)
-	predicates    []predicate.Sample
+	op             Op
+	typ            string
+	id             *int
+	scope          *sample.Scope
+	subject_id     *int
+	addsubject_id  *int
+	at             *time.Time
+	traffic        *int64
+	addtraffic     *int64
+	cpu            *float64
+	addcpu         *float64
+	mem_used       *int64
+	addmem_used    *int64
+	mem_total      *int64
+	addmem_total   *int64
+	disk_used      *int64
+	adddisk_used   *int64
+	disk_total     *int64
+	adddisk_total  *int64
+	processes      *map[string]contracts.ProcessSample
+	observation_id *string
+	trace_id       *string
+	created_at     *time.Time
+	clearedFields  map[string]struct{}
+	done           bool
+	oldValue       func(context.Context) (*Sample, error)
+	predicates     []predicate.Sample
 }
 
 var _ ent.Mutation = (*SampleMutation)(nil)
@@ -17032,6 +17036,127 @@ func (m *SampleMutation) ResetDiskTotal() {
 	delete(m.clearedFields, sample.FieldDiskTotal)
 }
 
+// SetProcesses sets the "processes" field.
+func (m *SampleMutation) SetProcesses(ms map[string]contracts.ProcessSample) {
+	m.processes = &ms
+}
+
+// Processes returns the value of the "processes" field in the mutation.
+func (m *SampleMutation) Processes() (r map[string]contracts.ProcessSample, exists bool) {
+	v := m.processes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProcesses returns the old "processes" field's value of the Sample entity.
+// If the Sample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SampleMutation) OldProcesses(ctx context.Context) (v map[string]contracts.ProcessSample, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProcesses is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProcesses requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProcesses: %w", err)
+	}
+	return oldValue.Processes, nil
+}
+
+// ClearProcesses clears the value of the "processes" field.
+func (m *SampleMutation) ClearProcesses() {
+	m.processes = nil
+	m.clearedFields[sample.FieldProcesses] = struct{}{}
+}
+
+// ProcessesCleared returns if the "processes" field was cleared in this mutation.
+func (m *SampleMutation) ProcessesCleared() bool {
+	_, ok := m.clearedFields[sample.FieldProcesses]
+	return ok
+}
+
+// ResetProcesses resets all changes to the "processes" field.
+func (m *SampleMutation) ResetProcesses() {
+	m.processes = nil
+	delete(m.clearedFields, sample.FieldProcesses)
+}
+
+// SetObservationID sets the "observation_id" field.
+func (m *SampleMutation) SetObservationID(s string) {
+	m.observation_id = &s
+}
+
+// ObservationID returns the value of the "observation_id" field in the mutation.
+func (m *SampleMutation) ObservationID() (r string, exists bool) {
+	v := m.observation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldObservationID returns the old "observation_id" field's value of the Sample entity.
+// If the Sample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SampleMutation) OldObservationID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldObservationID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldObservationID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldObservationID: %w", err)
+	}
+	return oldValue.ObservationID, nil
+}
+
+// ResetObservationID resets all changes to the "observation_id" field.
+func (m *SampleMutation) ResetObservationID() {
+	m.observation_id = nil
+}
+
+// SetTraceID sets the "trace_id" field.
+func (m *SampleMutation) SetTraceID(s string) {
+	m.trace_id = &s
+}
+
+// TraceID returns the value of the "trace_id" field in the mutation.
+func (m *SampleMutation) TraceID() (r string, exists bool) {
+	v := m.trace_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTraceID returns the old "trace_id" field's value of the Sample entity.
+// If the Sample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SampleMutation) OldTraceID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTraceID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTraceID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTraceID: %w", err)
+	}
+	return oldValue.TraceID, nil
+}
+
+// ResetTraceID resets all changes to the "trace_id" field.
+func (m *SampleMutation) ResetTraceID() {
+	m.trace_id = nil
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *SampleMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -17102,7 +17227,7 @@ func (m *SampleMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SampleMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 13)
 	if m.scope != nil {
 		fields = append(fields, sample.FieldScope)
 	}
@@ -17129,6 +17254,15 @@ func (m *SampleMutation) Fields() []string {
 	}
 	if m.disk_total != nil {
 		fields = append(fields, sample.FieldDiskTotal)
+	}
+	if m.processes != nil {
+		fields = append(fields, sample.FieldProcesses)
+	}
+	if m.observation_id != nil {
+		fields = append(fields, sample.FieldObservationID)
+	}
+	if m.trace_id != nil {
+		fields = append(fields, sample.FieldTraceID)
 	}
 	if m.created_at != nil {
 		fields = append(fields, sample.FieldCreatedAt)
@@ -17159,6 +17293,12 @@ func (m *SampleMutation) Field(name string) (ent.Value, bool) {
 		return m.DiskUsed()
 	case sample.FieldDiskTotal:
 		return m.DiskTotal()
+	case sample.FieldProcesses:
+		return m.Processes()
+	case sample.FieldObservationID:
+		return m.ObservationID()
+	case sample.FieldTraceID:
+		return m.TraceID()
 	case sample.FieldCreatedAt:
 		return m.CreatedAt()
 	}
@@ -17188,6 +17328,12 @@ func (m *SampleMutation) OldField(ctx context.Context, name string) (ent.Value, 
 		return m.OldDiskUsed(ctx)
 	case sample.FieldDiskTotal:
 		return m.OldDiskTotal(ctx)
+	case sample.FieldProcesses:
+		return m.OldProcesses(ctx)
+	case sample.FieldObservationID:
+		return m.OldObservationID(ctx)
+	case sample.FieldTraceID:
+		return m.OldTraceID(ctx)
 	case sample.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	}
@@ -17261,6 +17407,27 @@ func (m *SampleMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetDiskTotal(v)
+		return nil
+	case sample.FieldProcesses:
+		v, ok := value.(map[string]contracts.ProcessSample)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProcesses(v)
+		return nil
+	case sample.FieldObservationID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetObservationID(v)
+		return nil
+	case sample.FieldTraceID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTraceID(v)
 		return nil
 	case sample.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -17401,6 +17568,9 @@ func (m *SampleMutation) ClearedFields() []string {
 	if m.FieldCleared(sample.FieldDiskTotal) {
 		fields = append(fields, sample.FieldDiskTotal)
 	}
+	if m.FieldCleared(sample.FieldProcesses) {
+		fields = append(fields, sample.FieldProcesses)
+	}
 	return fields
 }
 
@@ -17429,6 +17599,9 @@ func (m *SampleMutation) ClearField(name string) error {
 		return nil
 	case sample.FieldDiskTotal:
 		m.ClearDiskTotal()
+		return nil
+	case sample.FieldProcesses:
+		m.ClearProcesses()
 		return nil
 	}
 	return fmt.Errorf("unknown Sample nullable field %s", name)
@@ -17464,6 +17637,15 @@ func (m *SampleMutation) ResetField(name string) error {
 		return nil
 	case sample.FieldDiskTotal:
 		m.ResetDiskTotal()
+		return nil
+	case sample.FieldProcesses:
+		m.ResetProcesses()
+		return nil
+	case sample.FieldObservationID:
+		m.ResetObservationID()
+		return nil
+	case sample.FieldTraceID:
+		m.ResetTraceID()
 		return nil
 	case sample.FieldCreatedAt:
 		m.ResetCreatedAt()
@@ -20790,6 +20972,7 @@ type SubPullMutation struct {
 	client        *string
 	user_agent    *string
 	ip            *string
+	trace_id      *string
 	status        *string
 	clearedFields map[string]struct{}
 	done          bool
@@ -21187,6 +21370,42 @@ func (m *SubPullMutation) ResetIP() {
 	m.ip = nil
 }
 
+// SetTraceID sets the "trace_id" field.
+func (m *SubPullMutation) SetTraceID(s string) {
+	m.trace_id = &s
+}
+
+// TraceID returns the value of the "trace_id" field in the mutation.
+func (m *SubPullMutation) TraceID() (r string, exists bool) {
+	v := m.trace_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTraceID returns the old "trace_id" field's value of the SubPull entity.
+// If the SubPull object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubPullMutation) OldTraceID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTraceID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTraceID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTraceID: %w", err)
+	}
+	return oldValue.TraceID, nil
+}
+
+// ResetTraceID resets all changes to the "trace_id" field.
+func (m *SubPullMutation) ResetTraceID() {
+	m.trace_id = nil
+}
+
 // SetStatus sets the "status" field.
 func (m *SubPullMutation) SetStatus(s string) {
 	m.status = &s
@@ -21257,7 +21476,7 @@ func (m *SubPullMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SubPullMutation) Fields() []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 9)
 	if m.link_id != nil {
 		fields = append(fields, subpull.FieldLinkID)
 	}
@@ -21278,6 +21497,9 @@ func (m *SubPullMutation) Fields() []string {
 	}
 	if m.ip != nil {
 		fields = append(fields, subpull.FieldIP)
+	}
+	if m.trace_id != nil {
+		fields = append(fields, subpull.FieldTraceID)
 	}
 	if m.status != nil {
 		fields = append(fields, subpull.FieldStatus)
@@ -21304,6 +21526,8 @@ func (m *SubPullMutation) Field(name string) (ent.Value, bool) {
 		return m.UserAgent()
 	case subpull.FieldIP:
 		return m.IP()
+	case subpull.FieldTraceID:
+		return m.TraceID()
 	case subpull.FieldStatus:
 		return m.Status()
 	}
@@ -21329,6 +21553,8 @@ func (m *SubPullMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldUserAgent(ctx)
 	case subpull.FieldIP:
 		return m.OldIP(ctx)
+	case subpull.FieldTraceID:
+		return m.OldTraceID(ctx)
 	case subpull.FieldStatus:
 		return m.OldStatus(ctx)
 	}
@@ -21388,6 +21614,13 @@ func (m *SubPullMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetIP(v)
+		return nil
+	case subpull.FieldTraceID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTraceID(v)
 		return nil
 	case subpull.FieldStatus:
 		v, ok := value.(string)
@@ -21492,6 +21725,9 @@ func (m *SubPullMutation) ResetField(name string) error {
 		return nil
 	case subpull.FieldIP:
 		m.ResetIP()
+		return nil
+	case subpull.FieldTraceID:
+		m.ResetTraceID()
 		return nil
 	case subpull.FieldStatus:
 		m.ResetStatus()

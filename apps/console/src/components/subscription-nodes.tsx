@@ -15,6 +15,17 @@ export function useManualNodes() {
 
 const protocolOf = (url: string) => url.split("://")[0]?.toLowerCase() || "?";
 
+// 没填名称时取链接 # 后的备注；备注里有不合法的 % 转义时原样显示，不让整个列表报错。
+function nodeName(n: ManualNode) {
+  if (n.name) return n.name;
+  const tag = n.url.split("#")[1] ?? "";
+  try {
+    return decodeURIComponent(tag) || "未命名";
+  } catch {
+    return tag;
+  }
+}
+
 export function NodesPanel() {
   const confirm = useConfirm();
   const prompt = usePrompt();
@@ -54,8 +65,9 @@ export function NodesPanel() {
             <ul className="stack">
               {q.data.items.filter((n) => n.group === g).map((n) => (
                 <li key={n.id} className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="min-w-0">
-                    <Badge variant="soft" tone="neutral">{protocolOf(n.url)}</Badge> {n.name || decodeURIComponent(n.url.split("#")[1] ?? "") || "未命名"}
+                  <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                    <Badge variant="soft" tone="neutral">{protocolOf(n.url)}</Badge>
+                    <span className="min-w-0 truncate" title={nodeName(n)}>{nodeName(n)}</span>
                     {!n.enabled && <Badge variant="soft" tone="warn">停用</Badge>}
                   </span>
                   <span className="flex flex-nowrap gap-1.5">

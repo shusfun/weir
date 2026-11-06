@@ -1,1 +1,0 @@
-import{j as s,n as t}from"./index-Bh2YtAv4.js";const a={passed:["通过","ok"],failed:["未通过","bad"],unknown:["未知","neutral"]};function i({check:n}){const[o,e]=a[n.status];return s.jsxs(t,{variant:"soft",tone:e,children:[n.kernel==="mihomo"?"mihomo -t":"sing-box check"," · ",o]})}export{i as S};

@@ -43,6 +43,9 @@ func requestLog(c *gin.Context) {
 		route = "(未匹配)"
 	}
 	attrs := []any{"id", id, "trace", trace.ID, "span", trace.Span, "method", c.Request.Method, "route", route, "status", status, "ms", time.Since(start).Milliseconds()}
+	if observation := c.GetString("observation_id"); observation != "" {
+		attrs = append(attrs, "observation", observation)
+	}
 	if code != "" {
 		attrs = append(attrs, "code", code)
 	}
@@ -95,7 +98,7 @@ func validTraceHex(s string, n int) bool {
 
 // Successful records are limited to this batch's operations; routes never contain tokens.
 func customTraceRoute(route string) bool {
-	return strings.Contains(route, "/proxy/") || strings.Contains(route, "/exits") || strings.Contains(route, "/nodes") || strings.Contains(route, "/chains") || strings.Contains(route, "/routes") || route == "/sub/:token/rules" || route == "/sub/:token" || route == "/api/v1/agent/pair"
+	return strings.Contains(route, "/center/resources") || route == "/api/v1/agent/heartbeat" || strings.Contains(route, "/proxy/") || strings.Contains(route, "/exits") || strings.Contains(route, "/nodes") || strings.Contains(route, "/chains") || strings.Contains(route, "/routes") || route == "/sub/:token/rules" || route == "/sub/:token" || route == "/api/v1/agent/pair"
 }
 
 // logged 排除正常流程里大量出现的状态：未登录（401）、找不到（404）、被封禁来源的重复访问、未初始化。

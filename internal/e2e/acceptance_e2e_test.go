@@ -913,29 +913,17 @@ func TestCustomRulesRealKernelChecksAndProvider(t *testing.T) {
 		t.Fatal(err)
 	}
 	token := detail["link_items"].([]any)[0].(map[string]any)["token"].(string)
-	body, _ := json.Marshal(map[string]any{"mode": "bypass", "source": "netflix.com\nDOMAIN-KEYWORD,openai\nGEOSITE,private\n2001:db8::/32"})
-	req, _ := http.NewRequest("PUT", e.url+"/api/v1/admin/users/"+strconv.Itoa(uid)+"/proxy/custom", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := e.admin.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var saved map[string]any
-	err = json.NewDecoder(resp.Body).Decode(&saved)
-	resp.Body.Close()
-	if err != nil || resp.StatusCode != http.StatusOK {
-		t.Fatalf("save custom rules = %d %v err=%v", resp.StatusCode, saved, err)
-	}
+	saved := e.post("/api/v1/admin/users/"+strconv.Itoa(uid)+"/proxy/custom/append", map[string]any{"revision": 0, "target": "direct", "source": "netflix.com\nDOMAIN-KEYWORD,openai\nGEOSITE,private\n2001:db8::/32"}, nil)
 	check := saved["custom"].(map[string]any)["check"].(map[string]any)
 	if check["status"] != "passed" {
 		t.Fatalf("real kernel checks = %v", check)
 	}
 	clash, _ := e.get("/sub/"+token, map[string]string{"User-Agent": "clash.meta/1.19"})
-	if !strings.Contains(string(clash), "RULE-SET,weir-custom,DIRECT") || !strings.Contains(string(clash), "/sub/"+token+"/rules") {
+	if strings.Contains(string(clash), "RULE-SET,weir-custom") || !strings.Contains(string(clash), "DOMAIN-SUFFIX,netflix.com,DIRECT") {
 		t.Fatalf("Clash custom rule provider missing:\n%s", clash)
 	}
 	rules, _ := e.get("/sub/"+token+"/rules", nil)
-	if string(rules) != "DOMAIN-SUFFIX,netflix.com\nDOMAIN-KEYWORD,openai\nIP-CIDR,2001:db8::/32,no-resolve\n" {
+	if string(rules) != "DOMAIN,empty.weir.invalid\n" {
 		t.Fatalf("provider rules = %q", rules)
 	}
 	singbox, _ := e.get("/sub/"+token, map[string]string{"User-Agent": "SFA/1.14"})

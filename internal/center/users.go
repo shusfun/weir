@@ -45,6 +45,7 @@ func (s *Server) userRoutes(auth, admin *gin.RouterGroup) {
 		admin bool
 	}{{admin, "/users/:uid", true}, {auth, "/me", false}} {
 		admin := g.admin
+		g.r.GET(g.base+"/nodes", func(c *gin.Context) { s.subjectNodes(c, admin) })
 		g.r.GET(g.base+"/links", func(c *gin.Context) { s.listLinks(c, admin) })
 		g.r.POST(g.base+"/links", func(c *gin.Context) { s.createLink(c, admin) })
 		g.r.PATCH(g.base+"/links/:lid", func(c *gin.Context) { s.updateLink(c, admin) })
@@ -55,7 +56,6 @@ func (s *Server) userRoutes(auth, admin *gin.RouterGroup) {
 		g.r.PATCH(g.base+"/chains/:cid", s.asJob("修改链式代理", "已取消，链式代理保持原样", func(c *gin.Context) { s.updateChain(c, admin) }))
 		g.r.DELETE(g.base+"/chains/:cid", func(c *gin.Context) { s.deleteChain(c, admin) })
 	}
-	auth.GET("/me/nodes", s.myNodes)
 	auth.GET("/me/chain-sources", func(c *gin.Context) { s.chainSources(c, false) })
 	admin.GET("/users/:uid/chain-sources", func(c *gin.Context) { s.chainSources(c, true) })
 	admin.GET("/chain-sources", func(c *gin.Context) { s.chainSources(c, true) })
@@ -484,9 +484,12 @@ func (s *Server) ResetDueUsage(ctx context.Context, now time.Time) error {
 	return nil
 }
 
-// myNodes 返回当前用户可用的节点（只含名称、协议与所在 VPS，不含其他用户信息）。
-func (s *Server) myNodes(c *gin.Context) {
-	u := c.MustGet("account").(*ent.User)
+// subjectNodes returns safe choices using the subject user's effective exits.
+func (s *Server) subjectNodes(c *gin.Context, admin bool) {
+	u, ok := s.subject(c, admin)
+	if !ok {
+		return
+	}
 	ctx := c.Request.Context()
 	nodes, err := s.userNodeIDs(ctx, u)
 	if err != nil {
@@ -494,12 +497,23 @@ func (s *Server) myNodes(c *gin.Context) {
 		return
 	}
 	out := []gin.H{}
+	effective := map[int]*ent.Chain{}
+	if u.AllowChain {
+		chains, err := s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(u.ID), chain.EnabledEQ(true), chain.HasExitWith(entexit.PolicyTypeNEQ(""))).All(ctx)
+		if err != nil {
+			failInternal(c, 503, "query_failed", err)
+			return
+		}
+		for _, ch := range chains {
+			effective[ch.EntryNodeID] = ch
+		}
+	}
 	for _, n := range sortedNodes(nodes) {
 		if !n.Enabled {
 			continue
 		}
 		g, _ := s.Store.Ent.Gate.Get(ctx, n.GateID)
-		item := gin.H{"id": n.ID, "name": n.Name, "protocol": n.Protocol, "preset": n.Preset, "gate_id": n.GateID}
+		item := s.nodeChoice(ctx, n, g, effective[n.ID])
 		if g != nil {
 			item["gate_name"] = g.Name
 		}
@@ -842,7 +856,8 @@ func (s *Server) chainViews(ctx context.Context, u *ent.User) ([]gin.H, error) {
 		if err != nil {
 			return nil, err
 		}
-		v := gin.H{"id": ch.ID, "name": ch.Name, "entry_node_id": ch.EntryNodeID, "exit_id": ch.ExitID, "exit": ev, "enabled": ch.Enabled, "created_at": ch.CreatedAt}
+		ev["summary"] = s.exitSummary(ctx, e, ch.Name)
+		v := gin.H{"display_name": s.exitSummary(ctx, e, ch.Name).Name, "id": ch.ID, "name": ch.Name, "entry_node_id": ch.EntryNodeID, "exit_id": ch.ExitID, "exit": ev, "enabled": ch.Enabled, "created_at": ch.CreatedAt}
 		out = append(out, v)
 	}
 	return out, nil

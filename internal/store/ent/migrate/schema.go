@@ -498,7 +498,7 @@ var (
 	// SamplesColumns holds the columns for the "samples" table.
 	SamplesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "scope", Type: field.TypeEnum, Enums: []string{"gate", "user"}},
+		{Name: "scope", Type: field.TypeEnum, Enums: []string{"gate", "user", "center"}},
 		{Name: "subject_id", Type: field.TypeInt},
 		{Name: "at", Type: field.TypeTime},
 		{Name: "traffic", Type: field.TypeInt64, Default: 0},
@@ -507,6 +507,9 @@ var (
 		{Name: "mem_total", Type: field.TypeInt64, Nullable: true},
 		{Name: "disk_used", Type: field.TypeInt64, Nullable: true},
 		{Name: "disk_total", Type: field.TypeInt64, Nullable: true},
+		{Name: "processes", Type: field.TypeJSON, Nullable: true},
+		{Name: "observation_id", Type: field.TypeString, Default: ""},
+		{Name: "trace_id", Type: field.TypeString, Default: ""},
 		{Name: "created_at", Type: field.TypeTime},
 	}
 	// SamplesTable holds the schema information for the "samples" table.
@@ -628,6 +631,7 @@ var (
 		{Name: "client", Type: field.TypeString, Size: 64, Default: ""},
 		{Name: "user_agent", Type: field.TypeString, Size: 256, Default: ""},
 		{Name: "ip", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "trace_id", Type: field.TypeString, Size: 32, Default: ""},
 		{Name: "status", Type: field.TypeString, Size: 16, Default: "ok"},
 	}
 	// SubPullsTable holds the schema information for the "sub_pulls" table.

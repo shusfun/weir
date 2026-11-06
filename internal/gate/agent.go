@@ -357,6 +357,10 @@ func (a *Agent) heartbeat(ctx context.Context) error {
 		hb.Panel, hb.PanelCerts = &st, certs
 	}
 	if st, err := a.helper.Status(ctx); err == nil {
+		if st.Host != nil {
+			copied := *st.Host
+			hb.Host = &copied
+		}
 		hb.ListeningPorts, hb.Firewall = st.Listening, st.Firewall
 		for name := range st.Running {
 			hb.Kernels[name] = st.Active[name]

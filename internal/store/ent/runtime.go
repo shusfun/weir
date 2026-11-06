@@ -489,8 +489,16 @@ func init() {
 	sampleDescTraffic := sampleFields[3].Descriptor()
 	// sample.DefaultTraffic holds the default value on creation for the traffic field.
 	sample.DefaultTraffic = sampleDescTraffic.Default.(int64)
+	// sampleDescObservationID is the schema descriptor for observation_id field.
+	sampleDescObservationID := sampleFields[10].Descriptor()
+	// sample.DefaultObservationID holds the default value on creation for the observation_id field.
+	sample.DefaultObservationID = sampleDescObservationID.Default.(string)
+	// sampleDescTraceID is the schema descriptor for trace_id field.
+	sampleDescTraceID := sampleFields[11].Descriptor()
+	// sample.DefaultTraceID holds the default value on creation for the trace_id field.
+	sample.DefaultTraceID = sampleDescTraceID.Default.(string)
 	// sampleDescCreatedAt is the schema descriptor for created_at field.
-	sampleDescCreatedAt := sampleFields[9].Descriptor()
+	sampleDescCreatedAt := sampleFields[12].Descriptor()
 	// sample.DefaultCreatedAt holds the default value on creation for the created_at field.
 	sample.DefaultCreatedAt = sampleDescCreatedAt.Default.(func() time.Time)
 	settingFields := schema.Setting{}.Fields()
@@ -613,8 +621,14 @@ func init() {
 	subpull.DefaultIP = subpullDescIP.Default.(string)
 	// subpull.IPValidator is a validator for the "ip" field. It is called by the builders before save.
 	subpull.IPValidator = subpullDescIP.Validators[0].(func(string) error)
+	// subpullDescTraceID is the schema descriptor for trace_id field.
+	subpullDescTraceID := subpullFields[7].Descriptor()
+	// subpull.DefaultTraceID holds the default value on creation for the trace_id field.
+	subpull.DefaultTraceID = subpullDescTraceID.Default.(string)
+	// subpull.TraceIDValidator is a validator for the "trace_id" field. It is called by the builders before save.
+	subpull.TraceIDValidator = subpullDescTraceID.Validators[0].(func(string) error)
 	// subpullDescStatus is the schema descriptor for status field.
-	subpullDescStatus := subpullFields[7].Descriptor()
+	subpullDescStatus := subpullFields[8].Descriptor()
 	// subpull.DefaultStatus holds the default value on creation for the status field.
 	subpull.DefaultStatus = subpullDescStatus.Default.(string)
 	// subpull.StatusValidator is a validator for the "status" field. It is called by the builders before save.

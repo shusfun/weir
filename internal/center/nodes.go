@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -128,6 +129,7 @@ func (s *Server) probeReality(c *gin.Context) {
 
 func (s *Server) nodeView(ctx context.Context, n *ent.Node) gin.H {
 	g, _ := s.Store.Ent.Gate.Get(ctx, n.GateID)
+	choice := s.nodeChoice(ctx, n, g, nil)
 	creds, _ := s.Store.Ent.Credential.Query().Where(credential.NodeIDEQ(n.ID), credential.InternalEQ(false)).Count(ctx)
 	view := gin.H{
 		"id": n.ID, "gate_id": n.GateID, "name": n.Name, "preset": n.Preset, "kernel": n.Kernel, "protocol": n.Protocol,
@@ -135,6 +137,7 @@ func (s *Server) nodeView(ctx context.Context, n *ent.Node) gin.H {
 		"enabled": n.Enabled, "credentials": creds, "created_at": n.CreatedAt,
 		"exit_id": n.ExitID,
 	}
+	view["display_name"], view["exit_summary"] = choice["display_name"], choice["exit_summary"]
 	if e, err := s.Store.Ent.Exit.Get(ctx, n.ExitID); err == nil {
 		view["exit"], _ = s.exitResourceView(ctx, e)
 	}
@@ -618,6 +621,7 @@ func (s *Server) createNode(c *gin.Context) {
 		return
 	}
 	defer tx.Rollback()
+	newExit := selected == nil
 	if selected == nil {
 		selected, err = s.persistExit(ctx, tx.Client(), g.ID, nil, "", spec, nil)
 	}
@@ -633,9 +637,11 @@ func (s *Server) createNode(c *gin.Context) {
 		failInternal(c, 409, "node_conflict", err)
 		return
 	}
-	if err = s.refreshExit(ctx, selected, probe); err != nil {
-		failInternal(c, 500, "source_exit_failed", err)
-		return
+	if newExit || probe != nil {
+		if err = s.refreshExit(ctx, selected, probe); err != nil {
+			failInternal(c, 500, "source_exit_failed", err)
+			return
+		}
 	}
 
 	// 请求里指定的用户：没有「全部节点」的用户把这个节点加进可用节点（「全部节点」的用户本来就有）。
@@ -718,6 +724,50 @@ func (s *Server) afterNodeChange(ctx context.Context, n *ent.Node) error {
 	return s.bumpGates(ctx, gates)
 }
 
+// An exit-IP observation belongs to the tested path, including downstream nodes.
+// A changed downstream configuration invalidates observations of every path that uses it.
+func (s *Server) invalidateExitDependents(ctx context.Context, exitID int) error {
+	ns, err := s.Store.Ent.Node.Query().Where(node.ExitIDEQ(exitID)).All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range ns {
+		if err := s.invalidateDependentExitProbes(ctx, n.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Server) invalidateDependentExitProbes(ctx context.Context, nodeID int) error {
+	queue, seen := []int{nodeID}, map[int]bool{}
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		deps, err := s.Store.Ent.Exit.Query().Where(entexit.ExitNodeIDEQ(id)).All(ctx)
+		if err != nil {
+			return err
+		}
+		for _, e := range deps {
+			if err := s.Store.KV.Del(ctx, exitProbeKey(exitOwner(e.ID))); err != nil {
+				return err
+			}
+			ns, err := s.Store.Ent.Node.Query().Where(node.ExitIDEQ(e.ID)).All(ctx)
+			if err != nil {
+				return err
+			}
+			for _, n := range ns {
+				queue = append(queue, n.ID)
+			}
+		}
+	}
+	return nil
+}
+
 func (s *Server) updateNode(c *gin.Context) {
 	n, ok := s.nodeParam(c)
 	if !ok {
@@ -742,6 +792,7 @@ func (s *Server) updateNode(c *gin.Context) {
 		failure(c, 404, "gate_not_found")
 		return
 	}
+	previous := n
 	upd := n.Update()
 	if req.Name != nil {
 		name := strings.TrimSpace(*req.Name)
@@ -835,6 +886,7 @@ func (s *Server) updateNode(c *gin.Context) {
 			return
 		}
 		defer tx.Rollback()
+		newExit := selected == nil
 		if selected == nil {
 			selected, err = s.persistExit(ctx, tx.Client(), g.ID, nil, "", spec, nil)
 		}
@@ -863,13 +915,21 @@ func (s *Server) updateNode(c *gin.Context) {
 			failInternal(c, 500, "save_failed", err)
 			return
 		}
-		if err = s.refreshExit(ctx, selected, probe); err != nil {
-			failInternal(c, 500, "source_exit_failed", err)
-			return
+		if newExit || probe != nil {
+			if err = s.refreshExit(ctx, selected, probe); err != nil {
+				failInternal(c, 500, "source_exit_failed", err)
+				return
+			}
 		}
 	} else if n, err = upd.Save(ctx); err != nil {
 		failure(c, 409, "node_conflict")
 		return
+	}
+	if n.Port != previous.Port || n.ExitID != previous.ExitID || n.Enabled != previous.Enabled || !reflect.DeepEqual(n.Settings, previous.Settings) || !reflect.DeepEqual(n.CertID, previous.CertID) {
+		if err = s.invalidateDependentExitProbes(ctx, n.ID); err != nil {
+			failInternal(c, 500, "save_failed", err)
+			return
+		}
 	}
 	if err = s.afterNodeChange(ctx, n); err != nil {
 		failInternal(c, 500, "sync_failed", err)

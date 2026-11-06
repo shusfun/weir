@@ -18,19 +18,11 @@ func TestSubscriptionPlacesAndCandidateNames(t *testing.T) {
 		want    string
 	}{
 		{"US", -104.01, true, "美西"}, {"US", -104, true, "美中"}, {"US", -87, true, "美中"}, {"US", -86.99, true, "美东"},
-		{"hk", 0, true, "香港"}, {"ZZ", 0, true, "ZZ"}, {"JP", 0, false, "位置未知"}, {"", 0, true, "位置未知"},
+		{"hk", 0, true, "香港"}, {"ZZ", 0, true, "ZZ"}, {"JP", 0, false, "地区未知"}, {"", 0, true, "地区未知"},
 	} {
 		if got := subscriptionPlace(geoPlace{Known: tc.known, Location: geoip.Location{Country: tc.country, Lon: tc.lon}}); got != tc.want {
 			t.Errorf("%+v: %q", tc, got)
 		}
-	}
-	for _, name := range []string{"203.0.113.1", "2001:db8::1", "[2001:db8::1]", "proxy.example:1080", "[2001:db8::1]:1080", ""} {
-		if got := safeDisplayCandidate(name); got != "" {
-			t.Errorf("unsafe candidate %q = %q", name, got)
-		}
-	}
-	if got := safeDisplayCandidate(" 家宽 "); got != "家宽" {
-		t.Fatal(got)
 	}
 }
 
@@ -47,7 +39,7 @@ func TestSubscriptionNameFallbacksAndOrder(t *testing.T) {
 		{Entry: Entry{Chained: true}, gate: gate, exit: &ent.Exit{Kind: "socks5", Address: "203.0.113.3", PolicyType: "vless"}, chain: &ent.Chain{Name: "不应使用"}},
 	}
 	s.nameSubscriptionEntries(t.Context(), es)
-	want := []string{"[直连] 美西 01", "[直连] 美西 02", "[链式] 备注", "[链式] 手动名", "[链式] 日本", "[链式] 位置未知"}
+	want := []string{"[直连] 美西 01", "[直连] 美西 02", "[链式] 备注", "[链式] 203.0.113.1", "[链式] proxy.example:1080", "[链式] 地区未知"}
 	for i, e := range es {
 		if e.Name != want[i] {
 			t.Errorf("entry %d = %q want %q", i, e.Name, want[i])
