@@ -36,8 +36,8 @@ import (
 	"github.com/shusfun/weir/internal/ghrelease"
 )
 
-// MinVersion 是能自更新到的最低版本：更早的版本还叫 migate，目录与服务名都不同。
-const MinVersion = "0.1.13"
+// MinVersion 是能自更新到的最低版本。Weir 已从 0.1.1 重新开始发版；更早的历史版本不是 Weir 安装包。
+const MinVersion = "0.1.1"
 
 // 固定位置。测试可替换。
 var (

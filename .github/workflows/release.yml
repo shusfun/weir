@@ -121,11 +121,17 @@ jobs:
           test -s "dist/weir-${VERSION}-linux-amd64.tar.gz"
           test -s "dist/weir-${VERSION}-linux-arm64.tar.gz"
           test -s dist/checksums.txt
-          # 更新说明：上一个版本标签以来的提交（面板「版本与更新」里显示），不含机器人推进版本号的提交
-          prev="$(git tag --list 'v*' --sort=-v:refname | grep -vx "$tag" | head -n1 || true)"
-          git log --no-merges --format='- %s' ${prev:+"$prev.."}"$tag" | grep -v '\[skip ci\]' > dist/notes.md || true
-          test -s dist/notes.md || echo "- 无代码变更" > dist/notes.md
-          gh release create "$tag" "dist/weir-${VERSION}-linux-amd64.tar.gz" "dist/weir-${VERSION}-linux-arm64.tar.gz" dist/checksums.txt --title "$tag" --notes-file dist/notes.md --verify-tag
+          notes=".github/release-notes/${tag}.md"
+          test -s "$notes"
+          for heading in '## 概览' '## 主要变化' '## 修复' '## 升级与兼容' '## 验证'; do
+            grep -Fqx "$heading" "$notes"
+          done
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --title "$tag" --notes-file "$notes"
+            gh release upload "$tag" "dist/weir-${VERSION}-linux-amd64.tar.gz" "dist/weir-${VERSION}-linux-arm64.tar.gz" dist/checksums.txt --clobber
+          else
+            gh release create "$tag" "dist/weir-${VERSION}-linux-amd64.tar.gz" "dist/weir-${VERSION}-linux-arm64.tar.gz" dist/checksums.txt --title "$tag" --notes-file "$notes" --verify-tag
+          fi
       - name: Advance patch version
         if: needs.build.outputs.dry_run != 'true'
         env:

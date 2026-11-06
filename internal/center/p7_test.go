@@ -67,7 +67,7 @@ func fakeReleases(t *testing.T, s *Server) *int32 {
 			}
 			http.NotFound(w, r)
 		case r.URL.Path == "/repos/shusfun/weir/releases":
-			_ = json.NewEncoder(w).Encode([]map[string]any{{"tag_name": "v0.1.20", "published_at": time.Now().Format(time.RFC3339), "body": "notes"}, {"tag_name": "v0.1.12"}})
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"tag_name": "v0.1.20", "published_at": time.Now().Format(time.RFC3339), "body": "notes"}, {"tag_name": "v0.1.0"}})
 		default:
 			_ = json.NewEncoder(w).Encode([]any{})
 		}
@@ -178,7 +178,7 @@ func TestSelfUpdateEndpointsInDevelopmentBuild(t *testing.T) {
 	if st["blocker"] != "开发构建，不支持自更新" || st["latest"].(map[string]any)["version"] != "0.1.20" {
 		t.Fatalf("status = %v", st)
 	}
-	// 改名之前的 0.1.12 不在可选版本里。
+	// Weir 重新发版前的 0.1.0 不在可选版本里。
 	if older := st["older"].([]any); len(older) != 0 {
 		t.Fatalf("older = %v", older)
 	}

@@ -129,7 +129,7 @@ func TestDigestMismatchNeverInstalls(t *testing.T) {
 func TestRejectsBadRequests(t *testing.T) {
 	e := setup(t, "standalone", false)
 	for _, r := range []Request{
-		{ID: "req-00000003", Action: "update", Version: "0.1.12"},        // 改名前的版本
+		{ID: "req-00000003", Action: "update", Version: "0.1.0"},         // 改名前的版本
 		{ID: "req-00000004", Action: "update", Version: "1.0.0; rm -rf"}, // 不是版本号
 		{ID: "req-00000005", Action: "shell"},
 		{ID: "x", Action: "rollback"},
