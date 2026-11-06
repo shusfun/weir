@@ -2,18 +2,19 @@
 // REALITY 目标由 VPS 实测选择；证书由系统按 VPS 准备；这台 VPS 现在用不了的方案标出原因。
 // 保存后显示要放行的端口（对照本机防火墙）与出口实测结果，再给出管理员本人的链接与二维码；谁能用节点在用户页分配。
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { Badge, Button, ChoiceCard, Collapsible, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Radio, RadioGroup, SwitchField, ScrollArea } from "@weir/ui";
 import { QRCodeSVG } from "qrcode.react";
+import { ExitSelector } from "./exit-selector";
 import { api, ApiError } from "../api";
 import { useFormAction } from "../lib/action";
 import { WaitText } from "./wait";
 import { field, useConsoleContext } from "../lib/console-context";
-import type { ChainSpec, Gate, NodeItem, Preset, PresetField } from "../lib/core";
+import type { ExitSpec, Gate, NodeItem, Preset, PresetField } from "../lib/core";
 import { nodeReachSettled } from "../lib/core";
 import { useCerts } from "./cert-manager";
 import { State } from "./feedback";
-import { ChainExitFields, exitErrorFields, exitKindName, probeText } from "./chain-exit";
+import { exitErrorFields, exitKindName, probeText } from "./chain-exit";
 import { NodeAccess } from "./node-access";
 import { Link } from "react-router-dom";
 import { objectHref } from "../lib/objects";
@@ -44,7 +45,8 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
     setGateId(initialGate ?? (ready.length === 1 ? ready[0].id : null));
   }, [open, initialGate]);
   const [certId, setCertId] = useState(0);
-  const [chain, setChain] = useState<ChainSpec>({ kind: "none" });
+  const [exitId,setExitId]=useState(0);
+  const [chain, setChain] = useState<ExitSpec>({ kind: "freedom" });
   const [name, setName] = useState("");
   const [port, setPort] = useState("");
   const [target, setTarget] = useState("");
@@ -66,7 +68,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
     (track) =>
       api("/admin/nodes", "POST", {
         gate_id: gateId, preset, name: name.trim(), port: Number(port) || 0, cert_id: certId || 0,
-        reality_target: target.trim(), chain: chain.kind === "none" ? { kind: "none" } : chain,
+        reality_target: target.trim(), ...(exitId ? {exit_id:exitId}:{exit:chain}),
         settings: advanced, user_ids: me.data ? [me.data.id] : [],
       }, track) as Promise<NodeItem & { shares?: Share[] }>,
     {
@@ -85,7 +87,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
   );
   const reset = () => {
     setMore(false);
-    setChain({ kind: "none" });
+    setChain({ kind: "freedom" });setExitId(0);
     setName("");
     setPort("");
     setTarget("");
@@ -115,7 +117,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
           <DialogTitle>节点已创建</DialogTitle>
           <DialogDescription>VPS 应用配置约需数秒。已进入你和「全部节点」用户的订阅；其他用户到 <Link className="underline" to="/users" onClick={reset}>用户</Link> 里分配。</DialogDescription>
           {created && <CreatedAccess node={created} />}
-          {created && created.chain.kind !== "none" && <small className="text-[var(--weir-ink-3)]">出口 {exitKindName[created.chain.kind]}：{probeText(created.chain.probe)}</small>}
+          {created && created.exit.kind !== "freedom" && <small className="text-[var(--weir-ink-3)]">出口 {exitKindName[created.exit.kind]}：{probeText(created.exit.probe)}</small>}
           {shares.length > 0 && <ShareList shares={shares} leave={reset} />}
           <DialogFooter><Button onClick={reset}>完成</Button></DialogFooter>
         </DialogContent>
@@ -153,7 +155,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
             <PresetChoice presets={presets} value={preset} onChange={(v) => { setPreset(v); setAdvanced({}); }} />
           </Field>
           {chosen?.note && <Notice tone="warn">{chosen.note}</Notice>}
-          <ChainExitFields value={chain} onChange={setChain} admin sourcePath="/admin/chain-sources" nodes={exits} nodeHint="出口需要另一台 VPS 上能作出口的节点（VLESS / VMess / Trojan 方案）。" />
+          <ExitSelector gateId={gateId ?? 0} exitId={exitId} onExitId={id=>setExitId(id??0)} value={chain} onChange={setChain} admin sourcePath="/admin/chain-sources" nodes={exits} nodeHint="出口需要另一台 VPS 上能作出口的节点（VLESS / VMess / Trojan 方案）。" />
           <small className="text-[var(--weir-ink-3)]">这里的出口管这个节点的全部流量。按网站分流在 VPS 的「出口与分流」，按协议类型统一加出口在 <Link className="underline" to="/proxy" onClick={reset}>代理</Link>。</small>
           <Collapsible key={more ? "more" : "less"} title="高级：名称、端口、证书" defaultOpen={more}>
             <div className="stack">

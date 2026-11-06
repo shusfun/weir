@@ -2,7 +2,7 @@
 // 可新增、编辑、停用、恢复内置；每次保存留历史版本，可看差异、可退回。保存前检查：严格解析与展开 →
 // 每个方案的样例配置用对应版本内核检查 → 改的是在用驱动时在一台 VPS 上实测。
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { Badge, Button, Card, CardContent, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, Notice, SectionHeader, SkeletonList, Textarea, useConfirm, ScrollArea } from "@weir/ui";
 import { Bot, ChevronRight, Plus, RotateCcw } from "lucide-react";
 import { api, ApiError } from "../api";

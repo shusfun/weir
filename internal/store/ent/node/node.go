@@ -3,10 +3,10 @@
 package node
 
 import (
-	"fmt"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 )
 
 const (
@@ -36,26 +36,21 @@ const (
 	FieldCertID = "cert_id"
 	// FieldEnabled holds the string denoting the enabled field in the database.
 	FieldEnabled = "enabled"
-	// FieldChainKind holds the string denoting the chain_kind field in the database.
-	FieldChainKind = "chain_kind"
-	// FieldChainSource holds the string denoting the chain_source field in the database.
-	FieldChainSource = "chain_source"
-	// FieldChainAddress holds the string denoting the chain_address field in the database.
-	FieldChainAddress = "chain_address"
-	// FieldChainPort holds the string denoting the chain_port field in the database.
-	FieldChainPort = "chain_port"
-	// FieldChainUsername holds the string denoting the chain_username field in the database.
-	FieldChainUsername = "chain_username"
-	// FieldChainPassword holds the string denoting the chain_password field in the database.
-	FieldChainPassword = "chain_password"
-	// FieldChainNodeID holds the string denoting the chain_node_id field in the database.
-	FieldChainNodeID = "chain_node_id"
-	// FieldChainLink holds the string denoting the chain_link field in the database.
-	FieldChainLink = "chain_link"
+	// FieldExitID holds the string denoting the exit_id field in the database.
+	FieldExitID = "exit_id"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
+	// EdgeExit holds the string denoting the exit edge name in mutations.
+	EdgeExit = "exit"
 	// Table holds the table name of the node in the database.
 	Table = "nodes"
+	// ExitTable is the table that holds the exit relation/edge.
+	ExitTable = "nodes"
+	// ExitInverseTable is the table name for the Exit entity.
+	// It exists in this package in order to avoid circular dependency with the "exit" package.
+	ExitInverseTable = "exits"
+	// ExitColumn is the table column denoting the exit relation/edge.
+	ExitColumn = "exit_id"
 )
 
 // Columns holds all SQL columns for node fields.
@@ -72,14 +67,7 @@ var Columns = []string{
 	FieldSettings,
 	FieldCertID,
 	FieldEnabled,
-	FieldChainKind,
-	FieldChainSource,
-	FieldChainAddress,
-	FieldChainPort,
-	FieldChainUsername,
-	FieldChainPassword,
-	FieldChainNodeID,
-	FieldChainLink,
+	FieldExitID,
 	FieldCreatedAt,
 }
 
@@ -114,54 +102,9 @@ var (
 	SecurityValidator func(string) error
 	// DefaultEnabled holds the default value on creation for the "enabled" field.
 	DefaultEnabled bool
-	// DefaultChainAddress holds the default value on creation for the "chain_address" field.
-	DefaultChainAddress string
-	// ChainAddressValidator is a validator for the "chain_address" field. It is called by the builders before save.
-	ChainAddressValidator func(string) error
-	// DefaultChainPort holds the default value on creation for the "chain_port" field.
-	DefaultChainPort int
-	// DefaultChainUsername holds the default value on creation for the "chain_username" field.
-	DefaultChainUsername string
-	// ChainUsernameValidator is a validator for the "chain_username" field. It is called by the builders before save.
-	ChainUsernameValidator func(string) error
-	// DefaultChainPassword holds the default value on creation for the "chain_password" field.
-	DefaultChainPassword string
-	// DefaultChainLink holds the default value on creation for the "chain_link" field.
-	DefaultChainLink string
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 )
-
-// ChainKind defines the type for the "chain_kind" enum field.
-type ChainKind string
-
-// ChainKindNone is the default value of the ChainKind enum.
-const DefaultChainKind = ChainKindNone
-
-// ChainKind values.
-const (
-	ChainKindNone   ChainKind = "none"
-	ChainKindSocks5 ChainKind = "socks5"
-	ChainKindHTTP   ChainKind = "http"
-	ChainKindHTTPS  ChainKind = "https"
-	ChainKindLink   ChainKind = "link"
-	ChainKindNode   ChainKind = "node"
-	ChainKindSource ChainKind = "source"
-)
-
-func (ck ChainKind) String() string {
-	return string(ck)
-}
-
-// ChainKindValidator is a validator for the "chain_kind" field enum values. It is called by the builders before save.
-func ChainKindValidator(ck ChainKind) error {
-	switch ck {
-	case ChainKindNone, ChainKindSocks5, ChainKindHTTP, ChainKindHTTPS, ChainKindLink, ChainKindNode, ChainKindSource:
-		return nil
-	default:
-		return fmt.Errorf("node: invalid enum value for chain_kind field: %q", ck)
-	}
-}
 
 // OrderOption defines the ordering options for the Node queries.
 type OrderOption func(*sql.Selector)
@@ -221,42 +164,26 @@ func ByEnabled(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEnabled, opts...).ToFunc()
 }
 
-// ByChainKind orders the results by the chain_kind field.
-func ByChainKind(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldChainKind, opts...).ToFunc()
-}
-
-// ByChainAddress orders the results by the chain_address field.
-func ByChainAddress(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldChainAddress, opts...).ToFunc()
-}
-
-// ByChainPort orders the results by the chain_port field.
-func ByChainPort(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldChainPort, opts...).ToFunc()
-}
-
-// ByChainUsername orders the results by the chain_username field.
-func ByChainUsername(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldChainUsername, opts...).ToFunc()
-}
-
-// ByChainPassword orders the results by the chain_password field.
-func ByChainPassword(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldChainPassword, opts...).ToFunc()
-}
-
-// ByChainNodeID orders the results by the chain_node_id field.
-func ByChainNodeID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldChainNodeID, opts...).ToFunc()
-}
-
-// ByChainLink orders the results by the chain_link field.
-func ByChainLink(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldChainLink, opts...).ToFunc()
+// ByExitID orders the results by the exit_id field.
+func ByExitID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldExitID, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.
 func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCreatedAt, opts...).ToFunc()
+}
+
+// ByExitField orders the results by exit field.
+func ByExitField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newExitStep(), sql.OrderByField(field, opts...))
+	}
+}
+func newExitStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(ExitInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, ExitTable, ExitColumn),
+	)
 }

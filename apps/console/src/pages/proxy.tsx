@@ -3,7 +3,7 @@
 // 这些都写进订阅、由客户端执行（代理流量不经过中心），客户端下次更新订阅时生效。管理员可以选用户查看、修改他的设置。
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import {
   Badge, Button, Card, CardContent, CheckboxField, Chip, ChipLabel, ChoiceCard, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, InsetGroup, InsetRow, InsetRows, Notice,
   PageHeader, Radio, RadioGroup, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SkeletonCards, Switch,
@@ -14,8 +14,8 @@ import { api, ApiError } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
 import { WaitText } from "../components/wait";
 import { field, useConsoleContext } from "../lib/console-context";
-import type { ChainSpec, CustomMatch, CustomMode, CustomRuleKind, Health, NodeItem, ProxyType, ProxyView, UserItem } from "../lib/core";
-import { ChainExitFields, exitErrorFields, exitKindName } from "../components/chain-exit";
+import type { ExitSpec, CustomMatch, CustomMode, CustomRuleKind, Health, NodeItem, ProxyType, ProxyView, UserItem } from "../lib/core";
+import { ExitFields, exitErrorFields, exitKindName } from "../components/chain-exit";
 import { ChainPanel, SourceSummary, type NodeOption } from "../components/link-panel";
 import { State } from "../components/feedback";
 import { ObjectLink } from "../components/object-link";
@@ -81,7 +81,7 @@ function useNodeOptions(admin: boolean, uid: number | null): NodeOption[] {
   if (!uid) return mine.data ?? [];
   const u = users.data?.find((x) => x.id === uid);
   if (!u) return [];
-  return (all.data ?? []).filter((n) => n.enabled && (u.all_nodes || (u.node_ids ?? []).includes(n.id))).map((n) => ({ id: n.id, name: n.name, gate_name: n.gate_name }));
+  return (all.data ?? []).filter((n) => n.enabled && (u.all_nodes || (u.node_ids ?? []).includes(n.id))).map((n) => ({ id: n.id, name: n.name, gate_id: n.gate_id, gate_name: n.gate_name }));
 }
 
 function UserPick({ value, onChange }: { value: number | null; onChange: (id: number | null) => void }) {
@@ -186,8 +186,8 @@ function ExitSummary({ exit }: { exit: NonNullable<ProxyType["exit"]> }) {
 // TypeExitDialog：给一个类型的全部节点加同一个出口；有一个节点连不通就整体不保存，逐个列出原因。
 function TypeExitDialog({ base, type, nodes, admin, close, saved }: { base: string; type: ProxyType; nodes: NodeOption[]; admin: boolean; close: () => void; saved: () => void }) {
   const e = type.exit;
-  const [exit, setExit] = useState<ChainSpec>(
-    e ? { kind: e.kind, address: e.address, port: e.port, username: e.username, password: e.password, link: e.link, node_id: e.node_id ?? undefined, ...(e.source ?? {}) } : { kind: "socks5" },
+  const [exit, setExit] = useState<ExitSpec>(
+    e ? { remark:e.remark, kind: e.kind, address: e.address, port: e.port, username: e.username, password: e.password, link: e.link, node_id: e.node_id ?? undefined, ...(e.source ?? {}) } : { kind: "socks5" },
   );
   const [skip, setSkip] = useState(false);
   const save = useFormAction((track) => api(`${base}/proxy/types/${encodeURIComponent(type.key)}/exit`, "PUT", { exit, skip_probe: admin && skip }, track), {
@@ -210,7 +210,7 @@ function TypeExitDialog({ base, type, nodes, admin, close, saved }: { base: stri
         <DialogTitle>{e ? "改" : "加"}出口：{type.label}</DialogTitle>
         <DialogDescription>这一类的 {type.nodes.length} 个节点都经这个出口出去；保存前由每个节点所在的 VPS 实测。</DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
-          <ChainExitFields value={exit} onChange={setExit} admin={false} sourcePath={base === "/me" ? "/me/chain-sources" : `${base}/chain-sources`} nodes={nodes} nodeHint="出口需要你可用的另一个节点；这个节点自己作入口时直接出去。" />
+          <ExitFields value={exit} onChange={setExit} admin={false} sourcePath={base === "/me" ? "/me/chain-sources" : `${base}/chain-sources`} nodes={nodes} nodeHint="出口需要你可用的另一个节点；这个节点自己作入口时直接出去。" />
           {admin && <CheckboxField label="跳过 VPS 实测（仅管理员）" checked={skip} onCheckedChange={setSkip} />}
           {failed && (
             <ul className="stack gap-1 text-meta text-[var(--weir-bad-ink)]">

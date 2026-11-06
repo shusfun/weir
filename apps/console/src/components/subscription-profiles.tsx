@@ -1,6 +1,6 @@
 // 订阅组：选订阅源与手动节点（或全部），配处理链与规则模板；预览、分配给用户、匿名分享。
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { Badge, Button, CheckboxField, CodeBlock, Collapsible, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, SectionHeader, Segmented, SkeletonList, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField, Textarea, useToast, useConfirm, ScrollArea } from "@weir/ui";
 import { Eye, Plus, Share2, Trash2, Users } from "lucide-react";
 import { api } from "../api";

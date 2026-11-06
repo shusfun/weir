@@ -21,6 +21,9 @@ type Chain func(*sql.Selector)
 // Credential is the predicate function for credential builders.
 type Credential func(*sql.Selector)
 
+// Exit is the predicate function for exit builders.
+type Exit func(*sql.Selector)
+
 // Gate is the predicate function for gate builders.
 type Gate func(*sql.Selector)
 
@@ -35,9 +38,6 @@ type Link func(*sql.Selector)
 
 // Node is the predicate function for node builders.
 type Node func(*sql.Selector)
-
-// Outbound is the predicate function for outbound builders.
-type Outbound func(*sql.Selector)
 
 // Passkey is the predicate function for passkey builders.
 type Passkey func(*sql.Selector)

@@ -379,8 +379,8 @@ func execOp(c Capability) func(ctx context.Context, s *Server, x *execCtx, st *D
 			id := numberOf(out["id"])
 			if st.As != "" {
 				x.created[st.As] = id
-				if tag, _ := args["tag"].(string); tag != "" {
-					x.tags[st.As] = tag
+				if o.idKey == "exit_id" {
+					x.tags[st.As] = "exit-" + itoa(id)
 				}
 			}
 			del, ok := findOpCap(o.undo)
@@ -430,7 +430,7 @@ func (x *execCtx) touched(c Capability, args map[string]any, params gin.Params, 
 		x.nodes = append(x.nodes, numberOf(args["node_id"]))
 	}
 	gate := numberOf(args["gate_id"])
-	if v, err := strconv.Atoi(params.ByName("id")); err == nil && (c.Object == "outbound" || c.Object == "route") {
+	if v, err := strconv.Atoi(params.ByName("id")); err == nil && (c.Object == "exit" || c.Object == "route") {
 		gate = v
 	}
 	if gate > 0 && !containsInt(x.gates, gate) {

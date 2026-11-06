@@ -1,6 +1,6 @@
 // 订阅源：机场订阅地址。中心拉取时只连公网地址；保护性缓存在上游失败或节点骤减时保留上次结果。
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Meter, Notice, SectionHeader, SkeletonTable, SwitchField, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, useToast, useConfirm } from "@weir/ui";
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { api } from "../api";

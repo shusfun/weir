@@ -1,7 +1,8 @@
 // 内核：中心从上游拉取 Xray / sing-box / mihomo 并按官方摘要校验，再推送给 VPS；配置按内核驱动生成。
 // 架构不用选：按中心本机与已接入 VPS 的架构一起下载。分区记在地址栏 ?tab=（版本 / 驱动 / 订阅检查 / dsh）。
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { useSearchParams } from "react-router-dom";
 import { Badge, Button, CodeBlock, Dialog, DialogContent, DialogDescription, DialogTitle, InsetGroup, InsetRow, InsetRows, JobPlaceholder, PageHeader, SkeletonCards, SkeletonList, Tabs, TabsList, TabsPanel, TabsTab, useConfirm, ScrollArea } from "@weir/ui";
 import { Download, Star, Trash2 } from "lucide-react";

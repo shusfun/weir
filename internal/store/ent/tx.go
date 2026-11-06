@@ -22,6 +22,8 @@ type Tx struct {
 	Chain *ChainClient
 	// Credential is the client for interacting with the Credential builders.
 	Credential *CredentialClient
+	// Exit is the client for interacting with the Exit builders.
+	Exit *ExitClient
 	// Gate is the client for interacting with the Gate builders.
 	Gate *GateClient
 	// GateAction is the client for interacting with the GateAction builders.
@@ -32,8 +34,6 @@ type Tx struct {
 	Link *LinkClient
 	// Node is the client for interacting with the Node builders.
 	Node *NodeClient
-	// Outbound is the client for interacting with the Outbound builders.
-	Outbound *OutboundClient
 	// Passkey is the client for interacting with the Passkey builders.
 	Passkey *PasskeyClient
 	// RateSample is the client for interacting with the RateSample builders.
@@ -198,12 +198,12 @@ func (tx *Tx) init() {
 	tx.Certificate = NewCertificateClient(tx.config)
 	tx.Chain = NewChainClient(tx.config)
 	tx.Credential = NewCredentialClient(tx.config)
+	tx.Exit = NewExitClient(tx.config)
 	tx.Gate = NewGateClient(tx.config)
 	tx.GateAction = NewGateActionClient(tx.config)
 	tx.KernelDriver = NewKernelDriverClient(tx.config)
 	tx.Link = NewLinkClient(tx.config)
 	tx.Node = NewNodeClient(tx.config)
-	tx.Outbound = NewOutboundClient(tx.config)
 	tx.Passkey = NewPasskeyClient(tx.config)
 	tx.RateSample = NewRateSampleClient(tx.config)
 	tx.RecoveryCode = NewRecoveryCodeClient(tx.config)

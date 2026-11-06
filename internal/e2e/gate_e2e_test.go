@@ -27,6 +27,7 @@ import (
 	"github.com/shusfun/weir/internal/gate"
 	"github.com/shusfun/weir/internal/kernels"
 	"github.com/shusfun/weir/internal/store/ent"
+	entexit "github.com/shusfun/weir/internal/store/ent/exit"
 	entgate "github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/xray"
 )
@@ -222,7 +223,8 @@ func TestGateRealTrafficQuotaAndExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	n := e.s.Store.Ent.Node.Create().SetGateID(g.ID).SetName("香港").SetKernel("xray").SetProtocol("vless").SetPort(port).SetNetwork("tcp").SetSecurity("reality").
+	direct := e.s.Store.Ent.Exit.Query().Where(entexit.GateIDEQ(g.ID), entexit.TagEQ("direct")).OnlyX(ctx)
+	n := e.s.Store.Ent.Node.Create().SetGateID(g.ID).SetExitID(direct.ID).SetName("香港").SetKernel("xray").SetProtocol("vless").SetPort(port).SetNetwork("tcp").SetSecurity("reality").
 		SetSettings(map[string]any{"reality_dest": dest.Listener.Addr().String(), "reality_server_names": "e2e.test", "reality_private_key": priv, "reality_public_key": pub, "reality_short_id": "a1b2c3d4"}).SaveX(ctx)
 	u := e.s.Store.Ent.User.Create().SetEmail("u@e2e.test").SetPasswordHash("x").SaveX(ctx)
 	link := e.s.Store.Ent.Link.Create().SetUserID(u.ID).SetToken("e2e-link").SaveX(ctx)

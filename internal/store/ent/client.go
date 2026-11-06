@@ -14,17 +14,18 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/shusfun/weir/internal/store/ent/audit"
 	"github.com/shusfun/weir/internal/store/ent/budget"
 	"github.com/shusfun/weir/internal/store/ent/certificate"
 	"github.com/shusfun/weir/internal/store/ent/chain"
 	"github.com/shusfun/weir/internal/store/ent/credential"
+	"github.com/shusfun/weir/internal/store/ent/exit"
 	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/gateaction"
 	"github.com/shusfun/weir/internal/store/ent/kerneldriver"
 	"github.com/shusfun/weir/internal/store/ent/link"
 	"github.com/shusfun/weir/internal/store/ent/node"
-	"github.com/shusfun/weir/internal/store/ent/outbound"
 	"github.com/shusfun/weir/internal/store/ent/passkey"
 	"github.com/shusfun/weir/internal/store/ent/ratesample"
 	"github.com/shusfun/weir/internal/store/ent/recoverycode"
@@ -56,6 +57,8 @@ type Client struct {
 	Chain *ChainClient
 	// Credential is the client for interacting with the Credential builders.
 	Credential *CredentialClient
+	// Exit is the client for interacting with the Exit builders.
+	Exit *ExitClient
 	// Gate is the client for interacting with the Gate builders.
 	Gate *GateClient
 	// GateAction is the client for interacting with the GateAction builders.
@@ -66,8 +69,6 @@ type Client struct {
 	Link *LinkClient
 	// Node is the client for interacting with the Node builders.
 	Node *NodeClient
-	// Outbound is the client for interacting with the Outbound builders.
-	Outbound *OutboundClient
 	// Passkey is the client for interacting with the Passkey builders.
 	Passkey *PasskeyClient
 	// RateSample is the client for interacting with the RateSample builders.
@@ -112,12 +113,12 @@ func (c *Client) init() {
 	c.Certificate = NewCertificateClient(c.config)
 	c.Chain = NewChainClient(c.config)
 	c.Credential = NewCredentialClient(c.config)
+	c.Exit = NewExitClient(c.config)
 	c.Gate = NewGateClient(c.config)
 	c.GateAction = NewGateActionClient(c.config)
 	c.KernelDriver = NewKernelDriverClient(c.config)
 	c.Link = NewLinkClient(c.config)
 	c.Node = NewNodeClient(c.config)
-	c.Outbound = NewOutboundClient(c.config)
 	c.Passkey = NewPasskeyClient(c.config)
 	c.RateSample = NewRateSampleClient(c.config)
 	c.RecoveryCode = NewRecoveryCodeClient(c.config)
@@ -229,12 +230,12 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Certificate:  NewCertificateClient(cfg),
 		Chain:        NewChainClient(cfg),
 		Credential:   NewCredentialClient(cfg),
+		Exit:         NewExitClient(cfg),
 		Gate:         NewGateClient(cfg),
 		GateAction:   NewGateActionClient(cfg),
 		KernelDriver: NewKernelDriverClient(cfg),
 		Link:         NewLinkClient(cfg),
 		Node:         NewNodeClient(cfg),
-		Outbound:     NewOutboundClient(cfg),
 		Passkey:      NewPasskeyClient(cfg),
 		RateSample:   NewRateSampleClient(cfg),
 		RecoveryCode: NewRecoveryCodeClient(cfg),
@@ -273,12 +274,12 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		Certificate:  NewCertificateClient(cfg),
 		Chain:        NewChainClient(cfg),
 		Credential:   NewCredentialClient(cfg),
+		Exit:         NewExitClient(cfg),
 		Gate:         NewGateClient(cfg),
 		GateAction:   NewGateActionClient(cfg),
 		KernelDriver: NewKernelDriverClient(cfg),
 		Link:         NewLinkClient(cfg),
 		Node:         NewNodeClient(cfg),
-		Outbound:     NewOutboundClient(cfg),
 		Passkey:      NewPasskeyClient(cfg),
 		RateSample:   NewRateSampleClient(cfg),
 		RecoveryCode: NewRecoveryCodeClient(cfg),
@@ -322,8 +323,8 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.Audit, c.Budget, c.Certificate, c.Chain, c.Credential, c.Gate, c.GateAction,
-		c.KernelDriver, c.Link, c.Node, c.Outbound, c.Passkey, c.RateSample,
+		c.Audit, c.Budget, c.Certificate, c.Chain, c.Credential, c.Exit, c.Gate,
+		c.GateAction, c.KernelDriver, c.Link, c.Node, c.Passkey, c.RateSample,
 		c.RecoveryCode, c.Resource, c.Route, c.RuleTemplate, c.Sample, c.Setting,
 		c.SubGrant, c.SubNode, c.SubProfile, c.SubPull, c.SubSource, c.User,
 	} {
@@ -335,8 +336,8 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.Audit, c.Budget, c.Certificate, c.Chain, c.Credential, c.Gate, c.GateAction,
-		c.KernelDriver, c.Link, c.Node, c.Outbound, c.Passkey, c.RateSample,
+		c.Audit, c.Budget, c.Certificate, c.Chain, c.Credential, c.Exit, c.Gate,
+		c.GateAction, c.KernelDriver, c.Link, c.Node, c.Passkey, c.RateSample,
 		c.RecoveryCode, c.Resource, c.Route, c.RuleTemplate, c.Sample, c.Setting,
 		c.SubGrant, c.SubNode, c.SubProfile, c.SubPull, c.SubSource, c.User,
 	} {
@@ -357,6 +358,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Chain.mutate(ctx, m)
 	case *CredentialMutation:
 		return c.Credential.mutate(ctx, m)
+	case *ExitMutation:
+		return c.Exit.mutate(ctx, m)
 	case *GateMutation:
 		return c.Gate.mutate(ctx, m)
 	case *GateActionMutation:
@@ -367,8 +370,6 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Link.mutate(ctx, m)
 	case *NodeMutation:
 		return c.Node.mutate(ctx, m)
-	case *OutboundMutation:
-		return c.Outbound.mutate(ctx, m)
 	case *PasskeyMutation:
 		return c.Passkey.mutate(ctx, m)
 	case *RateSampleMutation:
@@ -909,6 +910,22 @@ func (c *ChainClient) GetX(ctx context.Context, id int) *Chain {
 	return obj
 }
 
+// QueryExit queries the exit edge of a Chain.
+func (c *ChainClient) QueryExit(_m *Chain) *ExitQuery {
+	query := (&ExitClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(chain.Table, chain.FieldID, id),
+			sqlgraph.To(exit.Table, exit.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, chain.ExitTable, chain.ExitColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *ChainClient) Hooks() []Hook {
 	return c.hooks.Chain
@@ -1064,6 +1081,187 @@ func (c *CredentialClient) mutate(ctx context.Context, m *CredentialMutation) (V
 		return (&CredentialDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown Credential mutation op: %q", m.Op())
+	}
+}
+
+// ExitClient is a client for the Exit schema.
+type ExitClient struct {
+	config
+}
+
+// NewExitClient returns a client for the Exit from the given config.
+func NewExitClient(c config) *ExitClient {
+	return &ExitClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `exit.Hooks(f(g(h())))`.
+func (c *ExitClient) Use(hooks ...Hook) {
+	c.hooks.Exit = append(c.hooks.Exit, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `exit.Intercept(f(g(h())))`.
+func (c *ExitClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Exit = append(c.inters.Exit, interceptors...)
+}
+
+// Create returns a builder for creating a Exit entity.
+func (c *ExitClient) Create() *ExitCreate {
+	mutation := newExitMutation(c.config, OpCreate)
+	return &ExitCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Exit entities.
+func (c *ExitClient) CreateBulk(builders ...*ExitCreate) *ExitCreateBulk {
+	return &ExitCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ExitClient) MapCreateBulk(slice any, setFunc func(*ExitCreate, int)) *ExitCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ExitCreateBulk{err: fmt.Errorf("calling to ExitClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ExitCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ExitCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Exit.
+func (c *ExitClient) Update() *ExitUpdate {
+	mutation := newExitMutation(c.config, OpUpdate)
+	return &ExitUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ExitClient) UpdateOne(_m *Exit) *ExitUpdateOne {
+	mutation := newExitMutation(c.config, OpUpdateOne, withExit(_m))
+	return &ExitUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ExitClient) UpdateOneID(id int) *ExitUpdateOne {
+	mutation := newExitMutation(c.config, OpUpdateOne, withExitID(id))
+	return &ExitUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Exit.
+func (c *ExitClient) Delete() *ExitDelete {
+	mutation := newExitMutation(c.config, OpDelete)
+	return &ExitDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ExitClient) DeleteOne(_m *Exit) *ExitDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ExitClient) DeleteOneID(id int) *ExitDeleteOne {
+	builder := c.Delete().Where(exit.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ExitDeleteOne{builder}
+}
+
+// Query returns a query builder for Exit.
+func (c *ExitClient) Query() *ExitQuery {
+	return &ExitQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeExit},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Exit entity by its id.
+func (c *ExitClient) Get(ctx context.Context, id int) (*Exit, error) {
+	return c.Query().Where(exit.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ExitClient) GetX(ctx context.Context, id int) *Exit {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryNodes queries the nodes edge of a Exit.
+func (c *ExitClient) QueryNodes(_m *Exit) *NodeQuery {
+	query := (&NodeClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(exit.Table, exit.FieldID, id),
+			sqlgraph.To(node.Table, node.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, exit.NodesTable, exit.NodesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryChains queries the chains edge of a Exit.
+func (c *ExitClient) QueryChains(_m *Exit) *ChainQuery {
+	query := (&ChainClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(exit.Table, exit.FieldID, id),
+			sqlgraph.To(chain.Table, chain.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, exit.ChainsTable, exit.ChainsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryRoutes queries the routes edge of a Exit.
+func (c *ExitClient) QueryRoutes(_m *Exit) *RouteQuery {
+	query := (&RouteClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(exit.Table, exit.FieldID, id),
+			sqlgraph.To(route.Table, route.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, exit.RoutesTable, exit.RoutesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *ExitClient) Hooks() []Hook {
+	return c.hooks.Exit
+}
+
+// Interceptors returns the client interceptors.
+func (c *ExitClient) Interceptors() []Interceptor {
+	return c.inters.Exit
+}
+
+func (c *ExitClient) mutate(ctx context.Context, m *ExitMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ExitCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ExitUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ExitUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ExitDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Exit mutation op: %q", m.Op())
 	}
 }
 
@@ -1707,6 +1905,22 @@ func (c *NodeClient) GetX(ctx context.Context, id int) *Node {
 	return obj
 }
 
+// QueryExit queries the exit edge of a Node.
+func (c *NodeClient) QueryExit(_m *Node) *ExitQuery {
+	query := (&ExitClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(node.Table, node.FieldID, id),
+			sqlgraph.To(exit.Table, exit.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, node.ExitTable, node.ExitColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *NodeClient) Hooks() []Hook {
 	return c.hooks.Node
@@ -1729,139 +1943,6 @@ func (c *NodeClient) mutate(ctx context.Context, m *NodeMutation) (Value, error)
 		return (&NodeDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown Node mutation op: %q", m.Op())
-	}
-}
-
-// OutboundClient is a client for the Outbound schema.
-type OutboundClient struct {
-	config
-}
-
-// NewOutboundClient returns a client for the Outbound from the given config.
-func NewOutboundClient(c config) *OutboundClient {
-	return &OutboundClient{config: c}
-}
-
-// Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `outbound.Hooks(f(g(h())))`.
-func (c *OutboundClient) Use(hooks ...Hook) {
-	c.hooks.Outbound = append(c.hooks.Outbound, hooks...)
-}
-
-// Intercept adds a list of query interceptors to the interceptors stack.
-// A call to `Intercept(f, g, h)` equals to `outbound.Intercept(f(g(h())))`.
-func (c *OutboundClient) Intercept(interceptors ...Interceptor) {
-	c.inters.Outbound = append(c.inters.Outbound, interceptors...)
-}
-
-// Create returns a builder for creating a Outbound entity.
-func (c *OutboundClient) Create() *OutboundCreate {
-	mutation := newOutboundMutation(c.config, OpCreate)
-	return &OutboundCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// CreateBulk returns a builder for creating a bulk of Outbound entities.
-func (c *OutboundClient) CreateBulk(builders ...*OutboundCreate) *OutboundCreateBulk {
-	return &OutboundCreateBulk{config: c.config, builders: builders}
-}
-
-// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
-// a builder and applies setFunc on it.
-func (c *OutboundClient) MapCreateBulk(slice any, setFunc func(*OutboundCreate, int)) *OutboundCreateBulk {
-	rv := reflect.ValueOf(slice)
-	if rv.Kind() != reflect.Slice {
-		return &OutboundCreateBulk{err: fmt.Errorf("calling to OutboundClient.MapCreateBulk with wrong type %T, need slice", slice)}
-	}
-	builders := make([]*OutboundCreate, rv.Len())
-	for i := 0; i < rv.Len(); i++ {
-		builders[i] = c.Create()
-		setFunc(builders[i], i)
-	}
-	return &OutboundCreateBulk{config: c.config, builders: builders}
-}
-
-// Update returns an update builder for Outbound.
-func (c *OutboundClient) Update() *OutboundUpdate {
-	mutation := newOutboundMutation(c.config, OpUpdate)
-	return &OutboundUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOne returns an update builder for the given entity.
-func (c *OutboundClient) UpdateOne(_m *Outbound) *OutboundUpdateOne {
-	mutation := newOutboundMutation(c.config, OpUpdateOne, withOutbound(_m))
-	return &OutboundUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOneID returns an update builder for the given id.
-func (c *OutboundClient) UpdateOneID(id int) *OutboundUpdateOne {
-	mutation := newOutboundMutation(c.config, OpUpdateOne, withOutboundID(id))
-	return &OutboundUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// Delete returns a delete builder for Outbound.
-func (c *OutboundClient) Delete() *OutboundDelete {
-	mutation := newOutboundMutation(c.config, OpDelete)
-	return &OutboundDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// DeleteOne returns a builder for deleting the given entity.
-func (c *OutboundClient) DeleteOne(_m *Outbound) *OutboundDeleteOne {
-	return c.DeleteOneID(_m.ID)
-}
-
-// DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *OutboundClient) DeleteOneID(id int) *OutboundDeleteOne {
-	builder := c.Delete().Where(outbound.ID(id))
-	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
-	return &OutboundDeleteOne{builder}
-}
-
-// Query returns a query builder for Outbound.
-func (c *OutboundClient) Query() *OutboundQuery {
-	return &OutboundQuery{
-		config: c.config,
-		ctx:    &QueryContext{Type: TypeOutbound},
-		inters: c.Interceptors(),
-	}
-}
-
-// Get returns a Outbound entity by its id.
-func (c *OutboundClient) Get(ctx context.Context, id int) (*Outbound, error) {
-	return c.Query().Where(outbound.ID(id)).Only(ctx)
-}
-
-// GetX is like Get, but panics if an error occurs.
-func (c *OutboundClient) GetX(ctx context.Context, id int) *Outbound {
-	obj, err := c.Get(ctx, id)
-	if err != nil {
-		panic(err)
-	}
-	return obj
-}
-
-// Hooks returns the client hooks.
-func (c *OutboundClient) Hooks() []Hook {
-	return c.hooks.Outbound
-}
-
-// Interceptors returns the client interceptors.
-func (c *OutboundClient) Interceptors() []Interceptor {
-	return c.inters.Outbound
-}
-
-func (c *OutboundClient) mutate(ctx context.Context, m *OutboundMutation) (Value, error) {
-	switch m.Op() {
-	case OpCreate:
-		return (&OutboundCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdate:
-		return (&OutboundUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdateOne:
-		return (&OutboundUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpDelete, OpDeleteOne:
-		return (&OutboundDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
-	default:
-		return nil, fmt.Errorf("ent: unknown Outbound mutation op: %q", m.Op())
 	}
 }
 
@@ -2503,6 +2584,22 @@ func (c *RouteClient) GetX(ctx context.Context, id int) *Route {
 		panic(err)
 	}
 	return obj
+}
+
+// QueryExit queries the exit edge of a Route.
+func (c *RouteClient) QueryExit(_m *Route) *ExitQuery {
+	query := (&ExitClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(route.Table, route.FieldID, id),
+			sqlgraph.To(exit.Table, exit.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, route.ExitTable, route.ExitColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
 }
 
 // Hooks returns the client hooks.
@@ -3730,14 +3827,14 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		Audit, Budget, Certificate, Chain, Credential, Gate, GateAction, KernelDriver,
-		Link, Node, Outbound, Passkey, RateSample, RecoveryCode, Resource, Route,
+		Audit, Budget, Certificate, Chain, Credential, Exit, Gate, GateAction,
+		KernelDriver, Link, Node, Passkey, RateSample, RecoveryCode, Resource, Route,
 		RuleTemplate, Sample, Setting, SubGrant, SubNode, SubProfile, SubPull,
 		SubSource, User []ent.Hook
 	}
 	inters struct {
-		Audit, Budget, Certificate, Chain, Credential, Gate, GateAction, KernelDriver,
-		Link, Node, Outbound, Passkey, RateSample, RecoveryCode, Resource, Route,
+		Audit, Budget, Certificate, Chain, Credential, Exit, Gate, GateAction,
+		KernelDriver, Link, Node, Passkey, RateSample, RecoveryCode, Resource, Route,
 		RuleTemplate, Sample, Setting, SubGrant, SubNode, SubProfile, SubPull,
 		SubSource, User []ent.Interceptor
 	}

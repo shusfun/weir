@@ -17,7 +17,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/shusfun/weir/internal/store/ent"
-	"github.com/shusfun/weir/internal/store/ent/credential"
 	"github.com/shusfun/weir/internal/store/ent/link"
 	"github.com/shusfun/weir/internal/subout"
 	"github.com/shusfun/weir/packages/contracts"
@@ -35,6 +34,7 @@ type Entry struct {
 	Name     string `json:"name"`
 	NodeID   int    `json:"node_id"`
 	ChainID  int    `json:"chain_id,omitempty"`
+	Chained  bool   `json:"chained"`
 	Protocol string `json:"protocol"`
 	Type     string `json:"type"` // 代理页的类型（协议方案）
 	Host     string `json:"host"`
@@ -186,71 +186,12 @@ func firstNonEmpty(v ...string) string {
 // linkEntries 列出某条链接在订阅里输出的节点（停用的节点、链式代理不输出）。
 // 代理页的设置在这里生效：关掉的类型不输出；类型加了出口时，同一入口只输出经出口的那条，不再输出直连。
 func (s *Server) linkEntries(ctx context.Context, u *ent.User, l *ent.Link) ([]Entry, error) {
-	creds, err := s.Store.Ent.Credential.Query().Where(credential.LinkIDEQ(l.ID), credential.InternalEQ(false)).Order(ent.Asc(credential.FieldNodeID), ent.Asc(credential.FieldID)).All(ctx)
+	es, err := s.selectSubscriptionEntries(ctx, u, l)
 	if err != nil {
 		return nil, err
 	}
-	pol := loadPolicy(u)
-	disabled := map[string]bool{}
-	for _, t := range pol.Disabled {
-		disabled[t] = true
-	}
-	ti := s.typeIndex(ctx)
-	viaExit := map[int]bool{} // 入口节点 → 有类型出口
-	if u.AllowChain {
-		for _, c := range creds {
-			if c.ChainID == nil {
-				continue
-			}
-			if ch, err := s.Store.Ent.Chain.Get(ctx, *c.ChainID); err == nil && ch.Enabled && ch.PolicyType != "" {
-				viaExit[c.NodeID] = true
-			}
-		}
-	}
-	out := make([]Entry, 0, len(creds))
-	for _, c := range creds {
-		n, err := s.Store.Ent.Node.Get(ctx, c.NodeID)
-		if err != nil || !n.Enabled {
-			continue
-		}
-		typ := ti.of(n).Key
-		if disabled[typ] || c.ChainID == nil && viaExit[c.NodeID] {
-			continue
-		}
-		g, err := s.Store.Ent.Gate.Get(ctx, n.GateID)
-		if err != nil || g.Status != "active" {
-			continue
-		}
-		name := n.Name
-		e := Entry{NodeID: n.ID, Protocol: n.Protocol, Type: typ, Host: g.PublicHost, Port: n.Port, UUID: c.UUID, Password: c.Password}
-		if c.ChainID != nil {
-			ch, err := s.Store.Ent.Chain.Get(ctx, *c.ChainID)
-			if err != nil || !ch.Enabled || !u.AllowChain {
-				continue
-			}
-			e.ChainID, name = ch.ID, ch.Name
-		}
-		var cert *ent.Certificate
-		e.Name = name
-		if n.CertID != nil {
-			// 证书已过期或状态不明的节点不写进订阅（连接会失败，也不能显示为正常）。
-			if cert, err = s.Store.Ent.Certificate.Get(ctx, *n.CertID); err != nil {
-				e.Error = "证书状态未知"
-				out = append(out, e)
-				continue
-			}
-			if ok, why := certUsable(cert, time.Now()); !ok {
-				e.Error = why
-				out = append(out, e)
-				continue
-			}
-		}
-		if e.URI, err = shareLink(n, g.PublicHost, c, name, cert); err != nil {
-			e.Error = err.Error()
-		}
-		out = append(out, e)
-	}
-	return out, nil
+	s.nameSubscriptionEntries(ctx, es)
+	return s.renderSubscriptionEntries(ctx, es), nil
 }
 
 func (s *Server) linkByToken(ctx context.Context, token string) (*ent.Link, *ent.User, bool) {
@@ -333,6 +274,11 @@ func (s *Server) serveSub(c *gin.Context) {
 		body, err = json.Marshal(s.weirSubscription(ctx, u, l, p))
 	} else {
 		plan, items := s.subPlan(ctx, p)
+		if target == "base64" {
+			info := []subout.Item{}
+			for _, link := range subscriptionInfoLinks(u, l) { info = append(info, subout.Item{Link: link}) }
+			items = append(info, items...)
+		}
 		origin := s.siteOrigin(c)
 		switch target {
 		case "clash", "mihomo":
@@ -473,7 +419,7 @@ func (s *Server) subInfo(c *gin.Context) {
 	}
 	nodes := make([]gin.H, 0, len(entries))
 	for _, e := range entries {
-		nodes = append(nodes, gin.H{"name": e.Name, "protocol": e.Protocol, "chain": e.ChainID != 0, "available": e.URI != ""})
+		nodes = append(nodes, gin.H{"name": e.Name, "protocol": e.Protocol, "chain": e.Chained, "available": e.URI != ""})
 	}
 	start, end := linkWindow(u, l)
 	c.JSON(200, gin.H{"name": l.Name, "quota": u.Quota, "used": u.Used, "expires_at": end, "starts_at": start, "state": windowState(u, l, time.Now()), "next_reset": resetHint(u),

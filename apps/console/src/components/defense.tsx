@@ -1,7 +1,7 @@
 // 安全防御：Laya 判断安全事件 → 可疑事件交给 dsh 分析 → dsh 只能提交防御草稿，由 Weir 弹窗确认后封禁。
 // 规则防线（限流、失败登录计数）不依赖任何模型；Laya 或 dsh 不可用时事件照常记录，判断显示为「未知」。
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { Badge, Button, Field, Form, FormGrid, Input, Notice, SwitchField, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, PasswordInput } from "@weir/ui";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";

@@ -1,6 +1,6 @@
 // 证书：全部证书一览与手动上传（高级选项）。节点证书通常由系统按 VPS 自动准备（见 node-certs.tsx）。私钥只进不出。
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, Notice, Segmented, Textarea, useConfirm } from "@weir/ui";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";

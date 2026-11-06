@@ -10,6 +10,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/shusfun/weir/internal/store/ent/exit"
 	"github.com/shusfun/weir/internal/store/ent/predicate"
 	"github.com/shusfun/weir/internal/store/ent/route"
 )
@@ -102,16 +103,16 @@ func (_u *RouteUpdate) ClearUserID() *RouteUpdate {
 	return _u
 }
 
-// SetOutboundTag sets the "outbound_tag" field.
-func (_u *RouteUpdate) SetOutboundTag(v string) *RouteUpdate {
-	_u.mutation.SetOutboundTag(v)
+// SetExitID sets the "exit_id" field.
+func (_u *RouteUpdate) SetExitID(v int) *RouteUpdate {
+	_u.mutation.SetExitID(v)
 	return _u
 }
 
-// SetNillableOutboundTag sets the "outbound_tag" field if the given value is not nil.
-func (_u *RouteUpdate) SetNillableOutboundTag(v *string) *RouteUpdate {
+// SetNillableExitID sets the "exit_id" field if the given value is not nil.
+func (_u *RouteUpdate) SetNillableExitID(v *int) *RouteUpdate {
 	if v != nil {
-		_u.SetOutboundTag(*v)
+		_u.SetExitID(*v)
 	}
 	return _u
 }
@@ -179,9 +180,20 @@ func (_u *RouteUpdate) AddPriority(v int) *RouteUpdate {
 	return _u
 }
 
+// SetExit sets the "exit" edge to the Exit entity.
+func (_u *RouteUpdate) SetExit(v *Exit) *RouteUpdate {
+	return _u.SetExitID(v.ID)
+}
+
 // Mutation returns the RouteMutation object of the builder.
 func (_u *RouteUpdate) Mutation() *RouteMutation {
 	return _u.mutation
+}
+
+// ClearExit clears the "exit" edge to the Exit entity.
+func (_u *RouteUpdate) ClearExit() *RouteUpdate {
+	_u.mutation.ClearExit()
+	return _u
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -213,10 +225,8 @@ func (_u *RouteUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *RouteUpdate) check() error {
-	if v, ok := _u.mutation.OutboundTag(); ok {
-		if err := route.OutboundTagValidator(v); err != nil {
-			return &ValidationError{Name: "outbound_tag", err: fmt.Errorf(`ent: validator failed for field "Route.outbound_tag": %w`, err)}
-		}
+	if _u.mutation.ExitCleared() && len(_u.mutation.ExitIDs()) > 0 {
+		return errors.New(`ent: clearing a required unique edge "Route.exit"`)
 	}
 	return nil
 }
@@ -257,9 +267,6 @@ func (_u *RouteUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.UserIDCleared() {
 		_spec.ClearField(route.FieldUserID, field.TypeInt)
 	}
-	if value, ok := _u.mutation.OutboundTag(); ok {
-		_spec.SetField(route.FieldOutboundTag, field.TypeString, value)
-	}
 	if value, ok := _u.mutation.Domain(); ok {
 		_spec.SetField(route.FieldDomain, field.TypeString, value)
 	}
@@ -274,6 +281,35 @@ func (_u *RouteUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedPriority(); ok {
 		_spec.AddField(route.FieldPriority, field.TypeInt, value)
+	}
+	if _u.mutation.ExitCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   route.ExitTable,
+			Columns: []string{route.ExitColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(exit.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ExitIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   route.ExitTable,
+			Columns: []string{route.ExitColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(exit.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -370,16 +406,16 @@ func (_u *RouteUpdateOne) ClearUserID() *RouteUpdateOne {
 	return _u
 }
 
-// SetOutboundTag sets the "outbound_tag" field.
-func (_u *RouteUpdateOne) SetOutboundTag(v string) *RouteUpdateOne {
-	_u.mutation.SetOutboundTag(v)
+// SetExitID sets the "exit_id" field.
+func (_u *RouteUpdateOne) SetExitID(v int) *RouteUpdateOne {
+	_u.mutation.SetExitID(v)
 	return _u
 }
 
-// SetNillableOutboundTag sets the "outbound_tag" field if the given value is not nil.
-func (_u *RouteUpdateOne) SetNillableOutboundTag(v *string) *RouteUpdateOne {
+// SetNillableExitID sets the "exit_id" field if the given value is not nil.
+func (_u *RouteUpdateOne) SetNillableExitID(v *int) *RouteUpdateOne {
 	if v != nil {
-		_u.SetOutboundTag(*v)
+		_u.SetExitID(*v)
 	}
 	return _u
 }
@@ -447,9 +483,20 @@ func (_u *RouteUpdateOne) AddPriority(v int) *RouteUpdateOne {
 	return _u
 }
 
+// SetExit sets the "exit" edge to the Exit entity.
+func (_u *RouteUpdateOne) SetExit(v *Exit) *RouteUpdateOne {
+	return _u.SetExitID(v.ID)
+}
+
 // Mutation returns the RouteMutation object of the builder.
 func (_u *RouteUpdateOne) Mutation() *RouteMutation {
 	return _u.mutation
+}
+
+// ClearExit clears the "exit" edge to the Exit entity.
+func (_u *RouteUpdateOne) ClearExit() *RouteUpdateOne {
+	_u.mutation.ClearExit()
+	return _u
 }
 
 // Where appends a list predicates to the RouteUpdate builder.
@@ -494,10 +541,8 @@ func (_u *RouteUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *RouteUpdateOne) check() error {
-	if v, ok := _u.mutation.OutboundTag(); ok {
-		if err := route.OutboundTagValidator(v); err != nil {
-			return &ValidationError{Name: "outbound_tag", err: fmt.Errorf(`ent: validator failed for field "Route.outbound_tag": %w`, err)}
-		}
+	if _u.mutation.ExitCleared() && len(_u.mutation.ExitIDs()) > 0 {
+		return errors.New(`ent: clearing a required unique edge "Route.exit"`)
 	}
 	return nil
 }
@@ -555,9 +600,6 @@ func (_u *RouteUpdateOne) sqlSave(ctx context.Context) (_node *Route, err error)
 	if _u.mutation.UserIDCleared() {
 		_spec.ClearField(route.FieldUserID, field.TypeInt)
 	}
-	if value, ok := _u.mutation.OutboundTag(); ok {
-		_spec.SetField(route.FieldOutboundTag, field.TypeString, value)
-	}
 	if value, ok := _u.mutation.Domain(); ok {
 		_spec.SetField(route.FieldDomain, field.TypeString, value)
 	}
@@ -572,6 +614,35 @@ func (_u *RouteUpdateOne) sqlSave(ctx context.Context) (_node *Route, err error)
 	}
 	if value, ok := _u.mutation.AddedPriority(); ok {
 		_spec.AddField(route.FieldPriority, field.TypeInt, value)
+	}
+	if _u.mutation.ExitCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   route.ExitTable,
+			Columns: []string{route.ExitColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(exit.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ExitIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   route.ExitTable,
+			Columns: []string{route.ExitColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(exit.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	_node = &Route{config: _u.config}
 	_spec.Assign = _node.assignValues

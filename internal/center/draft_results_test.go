@@ -5,8 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shusfun/weir/internal/store/ent/node"
-	"github.com/shusfun/weir/internal/store/ent/route"
+	entexit "github.com/shusfun/weir/internal/store/ent/exit"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -87,10 +86,11 @@ func TestNodeChainProxyDraft(t *testing.T) {
 	d = latestDraft(t, admin)
 	out := mustJSON(t, admin, "POST", "/api/v1/admin/ai/drafts/"+d["id"].(string)+"/apply", map[string]any{"edits": map[string]any{"0": map[string]any{"chain_password": "PROXY-SECRET"}}}, 200)
 	n := s.Store.Ent.Node.Query().OnlyX(ctx)
-	if n.ChainKind != node.ChainKindHTTP || n.ChainAddress != "203.0.113.5" || n.ChainUsername != "u" {
+	ex := s.Store.Ent.Exit.GetX(ctx, n.ExitID)
+	if ex.Kind != entexit.KindHTTP || ex.Address != "203.0.113.5" || ex.Username != "u" {
 		t.Fatalf("node chain = %+v", n)
 	}
-	if pw, _ := s.reveal(n.ChainPassword); pw != "PROXY-SECRET" {
+	if pw, _ := s.reveal(ex.Password); pw != "PROXY-SECRET" {
 		t.Fatalf("chain password = %q", pw)
 	}
 	if ids, _ := out["node_ids"].([]any); len(ids) != 1 || int(ids[0].(float64)) != n.ID {
@@ -114,12 +114,12 @@ func TestOutboundAndRouteInOneDraft(t *testing.T) {
 
 	steps := func(addr string) map[string]any {
 		return map[string]any{"explain": "流媒体走家宽", "steps": []any{
-			map[string]any{"action": "outbound.create", "as": "home", "args": map[string]any{"gate_id": g.id, "tag": "home", "protocol": "http", "address": addr, "port": 8080, "username": "u"}},
-			map[string]any{"action": "route.create", "args": map[string]any{"gate_id": g.id, "outbound_tag": "$home", "domain": "geosite:netflix"}},
+			map[string]any{"action": "exit.create", "as": "home", "args": map[string]any{"gate_id": g.id, "remark": "家宽", "kind": "http", "address": addr, "port": 8080, "username": "u"}},
+			map[string]any{"action": "route.create", "args": map[string]any{"gate_id": g.id, "exit_id": "$home", "domain": "geosite:netflix"}},
 		}}
 	}
 	if text, isErr := toolText(t, h, m.webToken, "submit_draft", map[string]any{"explain": "x", "steps": []any{
-		map[string]any{"action": "route.create", "args": map[string]any{"gate_id": g.id, "outbound_tag": "$nope", "domain": "geosite:netflix"}},
+		map[string]any{"action": "route.create", "args": map[string]any{"gate_id": g.id, "exit_id": "$nope", "domain": "geosite:netflix"}},
 	}}); !isErr || !strings.Contains(text, "$nope") {
 		t.Fatalf("unknown tag ref = %q", text)
 	}
@@ -135,7 +135,7 @@ func TestOutboundAndRouteInOneDraft(t *testing.T) {
 	if w := admin.do("POST", apply, edits, nil); w.Code != 422 {
 		t.Fatalf("apply unreachable = %d %s", w.Code, w.Body.String())
 	}
-	if n := s.Store.Ent.Outbound.Query().CountX(ctx); n != 0 {
+	if n := s.Store.Ent.Exit.Query().Where(entexit.TagNEQ("direct")).CountX(ctx); n != 0 {
 		t.Fatalf("unreachable exit saved: %d", n)
 	}
 	mustJSON(t, admin, "DELETE", "/api/v1/admin/ai/drafts/"+d["id"].(string), nil, 204)
@@ -145,7 +145,7 @@ func TestOutboundAndRouteInOneDraft(t *testing.T) {
 	}
 	d = latestDraft(t, admin)
 	mustJSON(t, admin, "POST", "/api/v1/admin/ai/drafts/"+d["id"].(string)+"/apply", edits, 200)
-	r := s.Store.Ent.Route.Query().Where(route.OutboundTagEQ("home")).OnlyX(ctx)
+	r := s.Store.Ent.Route.Query().OnlyX(ctx)
 	if r.GateID != int(g.id) {
 		t.Fatalf("route = %+v", r)
 	}

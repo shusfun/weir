@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/shusfun/weir/internal/store/ent"
+	entexit "github.com/shusfun/weir/internal/store/ent/exit"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -99,7 +100,7 @@ func TestGatePairConfigMeterAndRevoke(t *testing.T) {
 	if err != nil || port == 54321 || port < portMin || port > portMax {
 		t.Fatalf("node port = %d %v", port, err)
 	}
-	n := s.Store.Ent.Node.Create().SetGateID(gate.ID).SetName("香港").SetKernel("xray").SetProtocol("vless").SetPort(port).SetNetwork("tcp").SetSecurity("reality").
+	n := s.Store.Ent.Node.Create().SetGateID(gate.ID).SetExitID(s.Store.Ent.Exit.Query().Where(entexit.GateIDEQ(gate.ID), entexit.TagEQ("direct")).OnlyX(t.Context()).ID).SetName("香港").SetKernel("xray").SetProtocol("vless").SetPort(port).SetNetwork("tcp").SetSecurity("reality").
 		SetSettings(map[string]any{"reality_dest": "www.microsoft.com:443", "reality_server_names": "www.microsoft.com", "reality_private_key": "kKB1Vv7m0wN3hOq1oQv0b9nN5mF3V6Q2l1c8pZ0yGXE", "reality_short_id": "a1b2c3d4"}).SaveX(ctx)
 	u := s.Store.Ent.User.Create().SetEmail("u1@example.test").SetPasswordHash("x").SetQuota(10 << 30).SaveX(ctx)
 	off := s.Store.Ent.User.Create().SetEmail("off@example.test").SetPasswordHash("x").SetEnabled(false).SaveX(ctx)

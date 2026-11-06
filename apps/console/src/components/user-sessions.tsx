@@ -1,6 +1,7 @@
 // 登录会话：本人或管理员查看有效会话并撤销；撤销当前会话后需要重新登录。
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { PageState, Field, Notice, Pager, SectionHeader, Badge, Button, Card, CardContent, Input, Segmented, useConfirm } from "@weir/ui";
 import { api } from "../api";
 import { useRowAction } from "../lib/action";
@@ -22,7 +23,7 @@ interface Directory {
   all_total: number;
   page_size: number;
 }
-export function UserSessions({ userId, onCurrentRevoked }: { userId?: number; onCurrentRevoked?: () => void }) {
+export function UserSessions({ userId, onCurrentRevoked }: { userId?: number; onCurrentRevoked: () => void }) {
   const cache = useQueryClient();
   const confirm = useConfirm();
   const self = userId === undefined;
@@ -58,8 +59,7 @@ export function UserSessions({ userId, onCurrentRevoked }: { userId?: number; on
       setNotice(others ? `已撤销 ${result.revoked} 个其他会话；当前登录保持有效。` : "已撤销此会话，原登录将立即失效。");
       if (current) {
         cache.clear();
-        if (onCurrentRevoked) onCurrentRevoked();
-        else window.location.reload();
+        onCurrentRevoked();
         return;
       }
       setPage(1);

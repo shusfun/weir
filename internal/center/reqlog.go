@@ -95,7 +95,7 @@ func validTraceHex(s string, n int) bool {
 
 // Successful records are limited to this batch's operations; routes never contain tokens.
 func customTraceRoute(route string) bool {
-	return strings.Contains(route, "/proxy/custom") || route == "/sub/:token/rules" || route == "/sub/:token"
+	return strings.Contains(route, "/proxy/") || strings.Contains(route, "/exits") || strings.Contains(route, "/nodes") || strings.Contains(route, "/chains") || strings.Contains(route, "/routes") || route == "/sub/:token/rules" || route == "/sub/:token"
 }
 
 // logged 排除正常流程里大量出现的状态：未登录（401）、找不到（404）、被封禁来源的重复访问、未初始化。

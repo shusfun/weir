@@ -2,6 +2,7 @@ package center
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -13,8 +14,8 @@ import (
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/audit"
 	"github.com/shusfun/weir/internal/store/ent/certificate"
+	entexit "github.com/shusfun/weir/internal/store/ent/exit"
 	entnode "github.com/shusfun/weir/internal/store/ent/node"
-	"github.com/shusfun/weir/internal/store/ent/outbound"
 	"github.com/shusfun/weir/internal/store/ent/route"
 	"github.com/shusfun/weir/internal/store/ent/ruletemplate"
 	"github.com/shusfun/weir/internal/store/ent/subgrant"
@@ -76,7 +77,9 @@ var nodeCreateParams = []Param{
 	{Key: "settings", Label: "高级参数", Kind: "object", Hint: "只能改方案 fields 里列出的字段"},
 	{Key: "chain_kind", Label: "出口", Kind: "enum", Options: [][2]string{{"none", "直接出去"}, {"node", "经另一台 VPS 上的节点"}, {"source", "经订阅源里的节点"},
 		{"socks5", "经 SOCKS5 代理"}, {"http", "经 HTTP 代理"}, {"https", "经 HTTPS 代理"}, {"link", "经节点链接"}},
-		Hint: "这个节点的全部流量从这里出去；要按网站分流才用 outbound.create 加 route.create"},
+		Hint: "这个节点的全部流量从这里出去；要按网站分流才用 exit.create 加 route.create"},
+	{Key: "chain_remark", Label: "出口备注", Kind: "string", Hint: "会显示在订阅节点名里"},
+	{Key: "exit_id", Label: "已有出口", Kind: "ref", Ref: "exit"},
 	{Key: "chain_address", Label: "代理地址", Kind: "string", Hint: "代理类出口填写，只能是公网地址"},
 	{Key: "chain_port", Label: "代理端口", Kind: "int", Min: num(1), Max: num(65535)},
 	{Key: "chain_username", Label: "代理用户名", Kind: "string"},
@@ -89,16 +92,19 @@ var nodeCreateParams = []Param{
 }
 
 func nodeCreateBody(args map[string]any) map[string]any {
-	body := pick(args, "gate_id", "preset", "name", "port", "reality_target", "cert_id", "settings")
+	body := pick(args, "gate_id", "preset", "name", "port", "reality_target", "cert_id", "settings", "exit_id")
 	switch kind, _ := args["chain_kind"].(string); kind {
 	case "node":
-		body["chain"] = map[string]any{"kind": "node", "node_id": args["chain_node_id"]}
+		body["exit"] = map[string]any{"kind": "node", "node_id": args["chain_node_id"]}
 	case "source":
-		body["chain"] = map[string]any{"kind": "source", "source_id": args["chain_source_id"], "mode": args["chain_mode"], "match": args["chain_match"]}
+		body["exit"] = map[string]any{"kind": "source", "source_id": args["chain_source_id"], "mode": args["chain_mode"], "match": args["chain_match"]}
 	case "socks5", "http", "https":
-		body["chain"] = map[string]any{"kind": kind, "address": args["chain_address"], "port": args["chain_port"], "username": args["chain_username"], "password": args["chain_password"]}
+		body["exit"] = map[string]any{"kind": kind, "address": args["chain_address"], "port": args["chain_port"], "username": args["chain_username"], "password": args["chain_password"]}
 	case "link":
-		body["chain"] = map[string]any{"kind": kind, "link": args["chain_link"]}
+		body["exit"] = map[string]any{"kind": kind, "link": args["chain_link"]}
+	}
+	if v, ok := body["exit"].(map[string]any); ok {
+		v["remark"] = args["chain_remark"]
 	}
 	return body
 }
@@ -113,9 +119,9 @@ func nodeCreateSecrets(args map[string]any) []string {
 	return nil
 }
 
-func outboundSecrets(args map[string]any) []string {
-	switch args["protocol"] {
-	case "socks", "http", "https":
+func exitSecrets(args map[string]any) []string {
+	switch args["kind"] {
+	case "socks5", "http", "https":
 		return []string{"password"}
 	case "link":
 		return []string{"link"}
@@ -164,16 +170,14 @@ func loadGate(ctx context.Context, s *Server, args map[string]any) (map[string]a
 
 // —— 出口与分流规则 ——
 
-func outboundParams(update bool) []Param {
+func exitParams(update bool) []Param {
 	first := Param{Key: "gate_id", Label: "VPS", Kind: "ref", Ref: "gate", Required: true}
 	if update {
-		first = Param{Key: "outbound_id", Label: "出口", Kind: "ref", Ref: "outbound", Required: true}
+		first = Param{Key: "exit_id", Label: "出口", Kind: "ref", Ref: "exit", Required: true}
 	}
 	ps := []Param{first,
-		{Key: "tag", Label: "标签", Kind: "string", Required: !update, Hint: "小写字母、数字、- 与 _，分流规则用它引用这个出口"},
-		{Key: "name", Label: "名称", Kind: "string"},
-		{Key: "protocol", Label: "类型", Kind: "enum", Required: !update, Options: [][2]string{{"socks", "SOCKS5 代理"}, {"http", "HTTP 代理"}, {"https", "HTTPS 代理"},
-			{"link", "节点链接"}, {"source", "订阅源里的节点"}, {"freedom", "直连"}, {"blackhole", "丢弃"}}},
+		{Key: "remark", Label: "备注", Kind: "string"},
+		{Key: "kind", Label: "类型", Kind: "enum", Required: !update, Options: exitKindOptions()},
 		{Key: "address", Label: "地址", Kind: "string", Hint: "代理类填写"},
 		{Key: "port", Label: "端口", Kind: "int", Min: num(1), Max: num(65535)},
 		{Key: "username", Label: "用户名", Kind: "string"},
@@ -189,11 +193,11 @@ func outboundParams(update bool) []Param {
 	return ps
 }
 
-func outboundNeeds(args map[string]any) []string {
-	switch args["protocol"] {
+func exitNeeds(args map[string]any) []string {
+	switch args["kind"] {
 	case "link":
 		return []string{"link"}
-	case "socks", "http", "https":
+	case "socks5", "http", "https":
 		// 有用户名就必须有密码：缺了能保存，但出口实际连不上。
 		if user, _ := args["username"].(string); strings.TrimSpace(user) != "" {
 			return []string{"password"}
@@ -202,34 +206,28 @@ func outboundNeeds(args map[string]any) []string {
 	return nil
 }
 
-func outboundPath(ctx context.Context, s *Server, args map[string]any) (gin.Params, error) {
-	o, err := s.Store.Ent.Outbound.Get(ctx, numberOf(args["outbound_id"]))
+func exitPath(ctx context.Context, s *Server, args map[string]any) (gin.Params, error) {
+	o, err := s.Store.Ent.Exit.Get(ctx, numberOf(args["exit_id"]))
 	if err != nil {
 		return nil, errors.New("出口不存在")
 	}
-	return pathOf("id", itoa(o.GateID), "oid", itoa(o.ID)), nil
+	return pathOf("eid", itoa(o.ID)), nil
 }
 
-// loadOutbound 读出口的现值；密码与节点链接只在中心内部用于整体覆盖，给人看时只标已填 / 未填。
-func loadOutbound(ctx context.Context, s *Server, args map[string]any) (map[string]any, error) {
-	o, err := s.Store.Ent.Outbound.Get(ctx, numberOf(args["outbound_id"]))
+// loadExit 读出口的现值；密码与节点链接只在中心内部用于整体覆盖，给人看时只标已填 / 未填。
+func loadExit(ctx context.Context, s *Server, args map[string]any) (map[string]any, error) {
+	o, err := s.Store.Ent.Exit.Get(ctx, numberOf(args["exit_id"]))
 	if err != nil {
 		return nil, errors.New("出口不存在")
 	}
-	v := map[string]any{"tag": o.Tag, "name": o.Name, "protocol": o.Protocol, "address": o.Address, "port": float64(o.Port), "username": o.Username,
-		"enabled": o.Enabled, "password": "", "link": ""}
-	if pw, err := s.reveal(o.Password); err == nil && pw != "" {
-		if o.Protocol == "link" {
-			v["link"] = pw
-		} else {
-			v["password"] = pw
-		}
+	spec, err := s.exitSpec(o)
+	if err != nil {
+		return nil, err
 	}
-	for _, k := range []string{"source_id", "mode", "match"} {
-		if x, ok := o.Settings[k]; ok {
-			v[k] = x
-		}
-	}
+	raw, _ := json.Marshal(spec)
+	v := map[string]any{}
+	_ = json.Unmarshal(raw, &v)
+	v["enabled"] = o.Enabled
 	return v, nil
 }
 
@@ -239,7 +237,7 @@ func routeParams(update bool) []Param {
 		first = Param{Key: "route_id", Label: "分流规则", Kind: "ref", Ref: "route", Required: true}
 	}
 	ps := []Param{first,
-		{Key: "outbound_tag", Label: "出口", Kind: "string", TagRef: true, Required: !update, Hint: "出口标签，见 list_outbounds；direct 为直连；同一份草稿里新建的出口写 \"$名字\""},
+		{Key: "exit_id", Label: "出口", Kind: "ref", Ref: "exit", Required: !update},
 		{Key: "domain", Label: "域名", Kind: "string", Hint: "每行或逗号一条：domain:netflix.com、geosite:disney、full:api.example.com"},
 		{Key: "ip", Label: "IP", Kind: "string", Hint: "每行或逗号一条：1.1.1.1/32、geoip:jp"},
 		{Key: "node_id", Label: "只对这个节点", Kind: "ref", Ref: "node"},
@@ -265,7 +263,7 @@ func loadRoute(ctx context.Context, s *Server, args map[string]any) (map[string]
 	if err != nil {
 		return nil, errors.New("分流规则不存在")
 	}
-	return map[string]any{"outbound_tag": r.OutboundTag, "domain": r.Domain, "ip": r.IP, "node_id": refOrNil(r.NodeID), "user_id": refOrNil(r.UserID),
+	return map[string]any{"exit_id": float64(r.ExitID), "domain": r.Domain, "ip": r.IP, "node_id": refOrNil(r.NodeID), "user_id": refOrNil(r.UserID),
 		"priority": float64(r.Priority), "enabled": r.Enabled}, nil
 }
 
@@ -434,17 +432,17 @@ var opDraftCaps = []Capability{
 			{Key: "kernel_pins", Label: "内核版本锁定", Kind: "object", Hint: "如 {\"xray\": \"26.3.27\"}；不写某个内核表示跟随默认版本"}},
 		op: &opSpec{kind: "update", method: "PATCH", handler: h(func(s *Server) gin.HandlerFunc { return s.updateGate }), path: keys("gate_id", "id"), pathKeys: []string{"gate_id"}, self: "gate_id", load: loadGate}},
 
-	{Name: "outbound.create", Title: "新建出口", Purpose: "在一台 VPS 上新建出口（SOCKS5 / HTTP / HTTPS 代理、节点链接、订阅源里的节点、直连、丢弃）；出口要由分流规则引用才有流量。保存前确认这台 VPS 上用到的每个内核都能连接它。",
-		Kind: "draft", Risk: "normal", Object: "outbound", Creates: true, Params: outboundParams(false),
-		op: &opSpec{kind: "create", method: "POST", handler: h(func(s *Server) gin.HandlerFunc { return s.saveOutbound }), path: keys("gate_id", "id"), pathKeys: []string{"gate_id"},
-			needs: outboundNeeds, secrets: outboundSecrets, undo: "outbound.delete", idKey: "outbound_id"}},
-	{Name: "outbound.update", Title: "修改出口", Purpose: "修改出口；没给的字段保持原样（密码、节点链接不给就不改）。仍被启用的分流规则引用时不能改标签或停用。",
-		Kind: "draft", Risk: "normal", Object: "outbound", Params: outboundParams(true),
-		op: &opSpec{kind: "update", method: "PATCH", handler: h(func(s *Server) gin.HandlerFunc { return s.saveOutbound }), path: outboundPath, pathKeys: []string{"outbound_id"},
-			self: "outbound_id", load: loadOutbound, full: true, needs: outboundNeeds, secrets: outboundSecrets}},
-	{Name: "outbound.delete", Title: "删除出口", Purpose: "删除出口；还有分流规则引用它时拒绝（先改规则）。不能撤回，只能是最后一步。",
-		Kind: "draft", Risk: "danger", Object: "outbound", Last: true, Params: []Param{{Key: "outbound_id", Label: "出口", Kind: "ref", Ref: "outbound", Required: true}},
-		op: &opSpec{kind: "delete", method: "DELETE", handler: h(func(s *Server) gin.HandlerFunc { return s.deleteOutbound }), path: outboundPath, pathKeys: []string{"outbound_id"}, self: "outbound_id"}},
+	{Name: "exit.create", Title: "新建出口", Purpose: "在入口 VPS 上新建公共出口，供节点与分流规则共用。类型包括代理、节点链接、订阅源、另一台 VPS 和拦截；直连由系统创建。保存前实测并检查全部入口内核。",
+		Kind: "draft", Risk: "normal", Object: "exit", Creates: true, Params: exitParams(false),
+		op: &opSpec{kind: "create", method: "POST", handler: h(func(s *Server) gin.HandlerFunc { return func(c *gin.Context) { s.saveExit(c, true) } }), path: noPath, body: exitBody,
+		needs: exitNeeds, secrets: exitSecrets, undo: "exit.delete", idKey: "exit_id"}},
+	{Name: "exit.update", Title: "修改出口", Purpose: "修改共享出口会影响全部引用者；没给的字段保持原样。标签固定；仍被启用对象引用时不能停用。只改备注不实测，连接配置变化才实测。",
+		Kind: "draft", Risk: "normal", Object: "exit", Params: exitParams(true),
+		op: &opSpec{kind: "update", method: "PATCH", handler: h(func(s *Server) gin.HandlerFunc { return func(c *gin.Context) { s.saveExit(c, true) } }), path: exitPath, body: exitBody, pathKeys: []string{"exit_id"},
+		self: "exit_id", load: loadExit, full: true, needs: exitNeeds, secrets: exitSecrets}},
+	{Name: "exit.delete", Title: "删除出口", Purpose: "删除出口；仍被节点、用户链路或分流引用时返回占用对象。系统直连不能删除。不能撤回，只能是最后一步。",
+		Kind: "draft", Risk: "danger", Object: "exit", Last: true, Params: []Param{{Key: "exit_id", Label: "出口", Kind: "ref", Ref: "exit", Required: true}},
+		op: &opSpec{kind: "delete", method: "DELETE", handler: h(func(s *Server) gin.HandlerFunc { return func(c *gin.Context) { s.deleteExit(c, true) } }), path: exitPath, pathKeys: []string{"exit_id"}, self: "exit_id"}},
 	{Name: "route.create", Title: "新建分流规则", Purpose: "在一台 VPS 上新建分流规则：匹配域名或 IP 的流量走指定出口；可以只对某个节点或某个用户生效。",
 		Kind: "draft", Risk: "normal", Object: "route", Creates: true, Params: routeParams(false),
 		op: &opSpec{kind: "create", method: "POST", handler: h(func(s *Server) gin.HandlerFunc { return s.saveRoute }), path: keys("gate_id", "id"), pathKeys: []string{"gate_id"},
@@ -586,7 +584,7 @@ var opReadCaps = []Capability{
 			}
 			v, _ := toModel(gateView(g)).(map[string]any)
 			v["nodes"], _ = s.Store.Ent.Node.Query().Where(entnode.GateIDEQ(g.ID)).Count(ctx)
-			v["outbounds"], _ = s.Store.Ent.Outbound.Query().Where(outbound.GateIDEQ(g.ID)).Count(ctx)
+			v["outbounds"], _ = s.Store.Ent.Exit.Query().Where(entexit.GateIDEQ(g.ID)).Count(ctx)
 			v["routes"], _ = s.Store.Ent.Route.Query().Where(route.GateIDEQ(g.ID)).Count(ctx)
 			return v, nil
 		}},
@@ -631,14 +629,14 @@ var opReadCaps = []Capability{
 		read: func(ctx context.Context, s *Server, args map[string]any) (any, error) {
 			return s.readVia(ctx, s.testNodeHandler, "POST", pathOf("id", itoa(intArg(args, "node_id"))), nil, nil)
 		}},
-	{Name: "probe_outbound", Title: "出口实测", Purpose: "让出口所在 VPS 经这个出口真连一次，返回实际出口 IP 与延迟（代理与节点链接类出口）。会让 VPS 实际发起连接，记审计。", Kind: "read", Probe: true,
-		Params: []Param{{Key: "outbound_id", Label: "出口", Kind: "ref", Ref: "outbound", Required: true}},
+	{Name: "probe_exit", Title: "出口实测", Purpose: "让出口所在 VPS 经这个出口真连一次，返回实际出口 IP 与延迟（代理与节点链接类出口）。会让 VPS 实际发起连接，记审计。", Kind: "read", Probe: true,
+		Params: []Param{{Key: "exit_id", Label: "出口", Kind: "ref", Ref: "exit", Required: true}},
 		read: func(ctx context.Context, s *Server, args map[string]any) (any, error) {
-			p, err := outboundPath(ctx, s, args)
+			p, err := exitPath(ctx, s, args)
 			if err != nil {
 				return nil, err
 			}
-			return s.readVia(ctx, s.probeOutbound, "POST", p, nil, nil)
+			return s.readVia(ctx, func(c *gin.Context) { s.probeSavedExit(c, true) }, "POST", p, nil, nil)
 		}},
 	{Name: "get_kernel_diagnostics", Title: "内核诊断", Purpose: "读取 VPS 上一个内核的诊断：错误分类计数与最近的日志（来源 IP 已遮盖）。排查连不上、断流时先读。会让 VPS 执行一次读取，记审计。", Kind: "read", Probe: true,
 		Params: []Param{{Key: "gate_id", Label: "VPS", Kind: "ref", Ref: "gate", Required: true}, {Key: "kernel", Label: "内核", Kind: "enum", Required: true, Options: [][2]string{{"xray", "Xray"}, {"sing-box", "sing-box"}}}},
@@ -656,12 +654,15 @@ var opReadCaps = []Capability{
 			k, _ := args["kernel"].(string)
 			return s.readVia(ctx, s.kernelReleases, "GET", pathOf("kernel", k), nil, nil)
 		}},
-	{Name: "list_outbounds", Title: "出口", Purpose: "列出一台 VPS 上的出口：编号、标签、名称、类型、地址与端口、用户名、是否有密码、是否启用、订阅源出口当前用的节点、最近一次实测（出口 IP、延迟）。", Kind: "read",
+	{Name: "list_exits", Title: "出口", Purpose: "列出一台 VPS 上的出口：编号、标签、备注、类型、地址与端口、用户名、是否有密码、是否启用、订阅源出口当前用的节点、最近一次实测（出口 IP、延迟）。", Kind: "read",
 		Params: []Param{{Key: "gate_id", Label: "VPS", Kind: "ref", Ref: "gate", Required: true}},
 		read: func(ctx context.Context, s *Server, args map[string]any) (any, error) {
-			items, err := s.Store.Ent.Outbound.Query().Where(outbound.GateIDEQ(intArg(args, "gate_id"))).Order(ent.Asc(outbound.FieldPosition), ent.Asc(outbound.FieldID)).All(ctx)
-			return listOf(items, func(o *ent.Outbound) any {
-				v := s.outboundView(o)
+			items, err := s.Store.Ent.Exit.Query().Where(entexit.GateIDEQ(intArg(args, "gate_id"))).Order(ent.Asc(entexit.FieldID)).All(ctx)
+			return listOf(items, func(o *ent.Exit) any {
+				v, err := s.exitResourceView(ctx, o)
+				if err != nil {
+					return map[string]any{"id": o.ID, "error": "出口状态未知"}
+				}
 				v["has_password"] = v["password"] != nil && v["password"] != ""
 				delete(v, "password")
 				delete(v, "link")

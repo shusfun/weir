@@ -5,6 +5,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/schema/field"
+ "entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/index"
 )
 
@@ -18,21 +19,8 @@ func (Chain) Fields() []ent.Field {
 		field.Int("user_id"),
 		field.Int("entry_node_id"),
 		field.String("name").MaxLen(100),
-		field.Enum("exit_kind").Values("socks5", "http", "https", "link", "node", "source"),
-		// exit_source：exit_kind 为 source 时的订阅源出口。用户自建只能用 profile_id（分配给他的订阅组），
-		// 管理员代建可以用 source_id；mode 为 node（单个节点）或 filter（一组），match 为名称或正则。
-		field.JSON("exit_source", map[string]any{}).Optional(),
-		field.String("exit_address").MaxLen(255).Default(""),
-		field.Int("exit_port").Default(0),
-		field.String("exit_username").MaxLen(255).Default(""),
-		field.String("exit_password").Sensitive().Default(""),
-		field.Int("exit_node_id").Optional().Nillable(),
-		// exit_link：exit_kind 为 link 时的节点链接（含凭据，加密存储）。
-		field.String("exit_link").Sensitive().Default(""),
+		field.Int("exit_id"),
 		field.Bool("enabled").Default(true),
-		// policy_type 非空：代理页「给这个类型加出口」生成的链（每个该类型节点一条），随类型出口一起改、删，
-		// 不在链式代理列表里单独显示，不占每人 10 条的上限。订阅里用它替换同一入口的直连节点。
-		field.String("policy_type").MaxLen(64).Default(""),
 		field.Time("created_at").Default(time.Now).Immutable(),
 	}
 }
@@ -40,3 +28,5 @@ func (Chain) Fields() []ent.Field {
 func (Chain) Indexes() []ent.Index {
 	return []ent.Index{index.Fields("user_id")}
 }
+
+func (Chain) Edges() []ent.Edge { return []ent.Edge{edge.From("exit", Exit.Type).Ref("chains").Field("exit_id").Unique().Required()} }

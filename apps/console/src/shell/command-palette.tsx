@@ -1,7 +1,7 @@
 // 快速跳转（Ctrl/⌘ + K）：页面、设备、用户、订阅组按名称直达。只在打开时读取列表。
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { PageState, ScrollArea, Dialog, DialogContent, DialogTitle, Kbd, Button } from "@weir/ui";
 import { Search, Server, User, CornerDownLeft, type LucideIcon } from "lucide-react";
 import { api } from "../api";

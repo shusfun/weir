@@ -1,7 +1,7 @@
 // 添加 VPS：两种方式。「SSH 一次装好」：填登录信息 → 核对主机指纹 → 中心登录上去执行安装命令，实时看日志，装完自动上线；
 // 「复制命令」：生成一次性配对命令（1 小时有效），自己在 VPS 上以 root 执行。登录密码与私钥只用于这一次安装，不保存。
 import { useId, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import {
   Button, CodeBlock, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, FilePicker, Form, Input, Notice, PasswordInput, Segmented,
   Tabs, TabsList, TabsPanel, TabsTab, Textarea,

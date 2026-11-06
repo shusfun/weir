@@ -2,7 +2,8 @@
 // 都不可用时用全项目共用的「节点证书域名」兜底；Hysteria2 / TUIC 每台 VPS 共用一张 10 年自签。
 import { Link } from "react-router-dom";
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { Badge, Button, Collapsible, Field, Form, FormGrid, Input, Notice, PasswordInput, SectionHeader, SwitchField } from "@weir/ui";
 import { RefreshCw } from "lucide-react";
 import { api } from "../api";

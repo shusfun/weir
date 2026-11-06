@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
+	"github.com/shusfun/weir/internal/store/ent/exit"
 	"github.com/shusfun/weir/internal/store/ent/node"
 )
 
@@ -40,25 +41,34 @@ type Node struct {
 	CertID *int `json:"cert_id,omitempty"`
 	// Enabled holds the value of the "enabled" field.
 	Enabled bool `json:"enabled,omitempty"`
-	// ChainKind holds the value of the "chain_kind" field.
-	ChainKind node.ChainKind `json:"chain_kind,omitempty"`
-	// ChainSource holds the value of the "chain_source" field.
-	ChainSource map[string]interface{} `json:"chain_source,omitempty"`
-	// ChainAddress holds the value of the "chain_address" field.
-	ChainAddress string `json:"chain_address,omitempty"`
-	// ChainPort holds the value of the "chain_port" field.
-	ChainPort int `json:"chain_port,omitempty"`
-	// ChainUsername holds the value of the "chain_username" field.
-	ChainUsername string `json:"chain_username,omitempty"`
-	// ChainPassword holds the value of the "chain_password" field.
-	ChainPassword string `json:"-"`
-	// ChainNodeID holds the value of the "chain_node_id" field.
-	ChainNodeID *int `json:"chain_node_id,omitempty"`
-	// ChainLink holds the value of the "chain_link" field.
-	ChainLink string `json:"-"`
+	// ExitID holds the value of the "exit_id" field.
+	ExitID int `json:"exit_id,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
-	CreatedAt    time.Time `json:"created_at,omitempty"`
+	CreatedAt time.Time `json:"created_at,omitempty"`
+	// Edges holds the relations/edges for other nodes in the graph.
+	// The values are being populated by the NodeQuery when eager-loading is set.
+	Edges        NodeEdges `json:"edges"`
 	selectValues sql.SelectValues
+}
+
+// NodeEdges holds the relations/edges for other nodes in the graph.
+type NodeEdges struct {
+	// Exit holds the value of the exit edge.
+	Exit *Exit `json:"exit,omitempty"`
+	// loadedTypes holds the information for reporting if a
+	// type was loaded (or requested) in eager-loading or not.
+	loadedTypes [1]bool
+}
+
+// ExitOrErr returns the Exit value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e NodeEdges) ExitOrErr() (*Exit, error) {
+	if e.Exit != nil {
+		return e.Exit, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: exit.Label}
+	}
+	return nil, &NotLoadedError{edge: "exit"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -66,13 +76,13 @@ func (*Node) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case node.FieldSettings, node.FieldChainSource:
+		case node.FieldSettings:
 			values[i] = new([]byte)
 		case node.FieldEnabled:
 			values[i] = new(sql.NullBool)
-		case node.FieldID, node.FieldGateID, node.FieldPort, node.FieldCertID, node.FieldChainPort, node.FieldChainNodeID:
+		case node.FieldID, node.FieldGateID, node.FieldPort, node.FieldCertID, node.FieldExitID:
 			values[i] = new(sql.NullInt64)
-		case node.FieldName, node.FieldPreset, node.FieldKernel, node.FieldProtocol, node.FieldNetwork, node.FieldSecurity, node.FieldChainKind, node.FieldChainAddress, node.FieldChainUsername, node.FieldChainPassword, node.FieldChainLink:
+		case node.FieldName, node.FieldPreset, node.FieldKernel, node.FieldProtocol, node.FieldNetwork, node.FieldSecurity:
 			values[i] = new(sql.NullString)
 		case node.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -166,56 +176,11 @@ func (_m *Node) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Enabled = value.Bool
 			}
-		case node.FieldChainKind:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field chain_kind", values[i])
-			} else if value.Valid {
-				_m.ChainKind = node.ChainKind(value.String)
-			}
-		case node.FieldChainSource:
-			if value, ok := values[i].(*[]byte); !ok {
-				return fmt.Errorf("unexpected type %T for field chain_source", values[i])
-			} else if value != nil && len(*value) > 0 {
-				if err := json.Unmarshal(*value, &_m.ChainSource); err != nil {
-					return fmt.Errorf("unmarshal field chain_source: %w", err)
-				}
-			}
-		case node.FieldChainAddress:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field chain_address", values[i])
-			} else if value.Valid {
-				_m.ChainAddress = value.String
-			}
-		case node.FieldChainPort:
+		case node.FieldExitID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field chain_port", values[i])
+				return fmt.Errorf("unexpected type %T for field exit_id", values[i])
 			} else if value.Valid {
-				_m.ChainPort = int(value.Int64)
-			}
-		case node.FieldChainUsername:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field chain_username", values[i])
-			} else if value.Valid {
-				_m.ChainUsername = value.String
-			}
-		case node.FieldChainPassword:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field chain_password", values[i])
-			} else if value.Valid {
-				_m.ChainPassword = value.String
-			}
-		case node.FieldChainNodeID:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field chain_node_id", values[i])
-			} else if value.Valid {
-				_m.ChainNodeID = new(int)
-				*_m.ChainNodeID = int(value.Int64)
-			}
-		case node.FieldChainLink:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field chain_link", values[i])
-			} else if value.Valid {
-				_m.ChainLink = value.String
+				_m.ExitID = int(value.Int64)
 			}
 		case node.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -234,6 +199,11 @@ func (_m *Node) assignValues(columns []string, values []any) error {
 // This includes values selected through modifiers, order, etc.
 func (_m *Node) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
+}
+
+// QueryExit queries the "exit" edge of the Node entity.
+func (_m *Node) QueryExit() *ExitQuery {
+	return NewNodeClient(_m.config).QueryExit(_m)
 }
 
 // Update returns a builder for updating this Node.
@@ -294,29 +264,8 @@ func (_m *Node) String() string {
 	builder.WriteString("enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Enabled))
 	builder.WriteString(", ")
-	builder.WriteString("chain_kind=")
-	builder.WriteString(fmt.Sprintf("%v", _m.ChainKind))
-	builder.WriteString(", ")
-	builder.WriteString("chain_source=")
-	builder.WriteString(fmt.Sprintf("%v", _m.ChainSource))
-	builder.WriteString(", ")
-	builder.WriteString("chain_address=")
-	builder.WriteString(_m.ChainAddress)
-	builder.WriteString(", ")
-	builder.WriteString("chain_port=")
-	builder.WriteString(fmt.Sprintf("%v", _m.ChainPort))
-	builder.WriteString(", ")
-	builder.WriteString("chain_username=")
-	builder.WriteString(_m.ChainUsername)
-	builder.WriteString(", ")
-	builder.WriteString("chain_password=<sensitive>")
-	builder.WriteString(", ")
-	if v := _m.ChainNodeID; v != nil {
-		builder.WriteString("chain_node_id=")
-		builder.WriteString(fmt.Sprintf("%v", *v))
-	}
-	builder.WriteString(", ")
-	builder.WriteString("chain_link=<sensitive>")
+	builder.WriteString("exit_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ExitID))
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

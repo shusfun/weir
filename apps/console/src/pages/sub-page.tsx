@@ -1,5 +1,5 @@
 // 浏览器打开订阅地址时的一键导入页：不需要登录，只显示本链接的用量、到期与节点名称（不含凭据）。
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { useParams } from "react-router-dom";
 import { Badge, Button, Card, CardContent, CopyField, Meter, PageHeader, Readout } from "@weir/ui";
 import { ArrowUpRight } from "lucide-react";

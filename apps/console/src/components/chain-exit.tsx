@@ -1,19 +1,18 @@
 // 链式代理出口的填写：建节点第 ③ 步（管理员）与用户自建链式代理共用。
-// 代理支持 SOCKS5 / HTTP / HTTPS，可以直接粘贴商家给的文本自动拆开；节点链接只接受单个节点，订阅地址会被拒绝。
-import { Field, FormGrid, Input, Notice, PasswordInput, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea } from "@weir/ui";
-import type { ChainSpec, ExitKind, ExitProbe } from "../lib/core";
+// 代理文本由用户点击解析；节点链接只接受单个节点，订阅地址会被拒绝。
+import { Field, FormGrid, Input, Notice, PasswordInput, ChoiceCard, Radio, RadioGroup, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea } from "@weir/ui";
+import type { ExitSpec, ExitKind, ExitProbe } from "../lib/core";
 import { parseExitText, type ProxyKind } from "../lib/exit-parse";
+import { useExitCatalog } from "../lib/exits";
 import { State } from "./feedback";
 import { ProxyPaste } from "./proxy-paste";
 import { SourcePicker } from "./source-picker";
 
-type Top = "none" | "source" | "proxy" | "link" | "node";
+type Top = "freedom" | "blackhole" | "source" | "proxy" | "link" | "node";
 const topOf = (k: ExitKind): Top => (k === "socks5" || k === "http" || k === "https" ? "proxy" : k);
-const proxyKinds = [["socks5", "SOCKS5"], ["http", "HTTP"], ["https", "HTTPS"]] as const;
 
-export const exitKindName: Record<string, string> = {
-  none: "直接出去", socks5: "SOCKS5 代理", http: "HTTP 代理", https: "HTTPS 代理", link: "节点链接", node: "另一台 VPS", source: "订阅源节点",
-};
+
+export { exitKindName } from "../lib/exits";
 
 // exitErrorFields 把出口相关的错误码标到实际显示的字段上（按当前出口类型）。
 export function exitErrorFields(kind: ExitKind): Record<string, string> {
@@ -40,24 +39,28 @@ export function probeText(p?: ExitProbe | null) {
   return parts.join(" · ");
 }
 
-export function ChainExitFields({ value, onChange, admin, sourcePath, nodes, nodeHint }: {
-  value: ChainSpec;
-  onChange: (v: ChainSpec) => void;
+export function ExitFields({ value, onChange, admin, sourcePath, nodes, nodeHint }: {
+  value: ExitSpec;
+  onChange: (v: ExitSpec) => void;
   admin: boolean;
   sourcePath: string;
   nodes: { id: number; name: string; gate_name?: string }[];
   nodeHint: string;
 }) {
   const top = topOf(value.kind);
-  const set = (patch: Partial<ChainSpec>) => onChange({ ...value, ...patch });
-  const options: (readonly [Top, string])[] = admin
-    ? [["none", "直接出去"], ["source", "订阅源节点"], ["proxy", "代理"], ["node", "另一台 VPS"], ["link", "节点链接"]]
-    : [["source", "订阅组里的节点"], ["proxy", "代理"], ["node", "另一节点"], ["link", "节点链接"]];
-  const pick = (t: Top) => onChange(t === "proxy" ? { kind: "socks5" } : t === "source" ? { kind: "source", mode: "filter" } : { kind: t });
+  const set = (patch: Partial<ExitSpec>) => onChange({ ...value, ...patch });
+  const catalog = useExitCatalog(admin);
+  const options = (catalog.data?.kinds ?? []).filter((v,i,a) => v.kind !== "freedom" && a.findIndex(x=>x.group===v.group)===i);
+
+  const pick = (t: Top) => onChange(t === "proxy" ? { kind: "socks5",remark:value.remark } : t === "source" ? { kind: "source", mode: "filter",remark:value.remark } : { kind: t,remark:value.remark });
   return (
     <>
-      <Segmented aria-label="出口类型" value={top} onValueChange={pick} options={options} />
-      {top === "none" && <p className="text-[var(--weir-ink-3)]">流量从这台 VPS 直接访问目标网站。</p>}
+      <RadioGroup aria-label="出口类型" value={top} onValueChange={v=>pick(String(v) as Top)} className="grid gap-2 sm:grid-cols-2">
+        {options.map(k=><ChoiceCard key={k.group} selected={top===k.group} className="min-w-0"><Radio value={k.group}/><span className="min-w-0"><strong className="block">{k.group==="proxy"?"代理":k.label}</strong><small>{k.description}</small></span></ChoiceCard>)}
+      </RadioGroup>
+      {!catalog.data && <State loading={catalog.isPending} error={catalog.error} onRetry={()=>catalog.refetch()}/>}
+      {top !== "freedom" && <Field label="备注（可选）" name="remark" hint="会显示在订阅的节点名里"><Input maxLength={100} value={value.remark ?? ""} onChange={e=>set({remark:e.target.value})}/></Field>}
+      {top === "freedom" && <p className="text-[var(--weir-ink-3)]">流量从这台 VPS 直接访问目标网站。</p>}
       {top === "source" && <SourcePicker path={sourcePath} value={value} onChange={(v) => onChange({ ...value, ...v, kind: "source" })} />}
       {top === "proxy" && <ProxyFields value={value} set={set} />}
       {top === "link" && <LinkField value={value.link ?? ""} onChange={(link) => set({ link })} />}
@@ -76,27 +79,27 @@ export function ChainExitFields({ value, onChange, admin, sourcePath, nodes, nod
             </Select>
           </Field>
         ))}
-      {top !== "none" && <Notice role="status">保存前由入口 VPS 实测：代理、节点链接与订阅节点按协议真连一次并记下实际出口 IP；流量只在入口计量一次。</Notice>}
+      {top !== "freedom" && top !== "blackhole" && <Notice role="status">保存前由入口 VPS 实测：代理、节点链接与订阅节点按协议真连一次并记下实际出口 IP；流量只在入口计量一次。</Notice>}
     </>
   );
 }
 
-function ProxyFields({ value, set }: { value: ChainSpec; set: (p: Partial<ChainSpec>) => void }) {
+function ProxyFields({ value, set }: { value: ExitSpec; set: (p: Partial<ExitSpec>) => void }) {
   return (
     <>
       <ProxyPaste onApply={p => set({ kind: p.kind, address: p.address, port: p.port, username: p.username ?? "", password: p.password ?? "" })} />
-      <Segmented aria-label="代理协议" size="sm" value={value.kind as ProxyKind} onValueChange={(kind) => set({ kind })} options={proxyKinds} />
+      <Segmented aria-label="代理协议" size="sm" value={value.kind as ProxyKind} onValueChange={(kind) => set({ kind })} options={(["socks5","http","https"] as const).map(k=>[k,k.toUpperCase()] as const)} />
       <FormGrid>
         <Field label="地址" name="address" required hint={value.kind === "https" ? "按这个地址校验证书" : "只能是公网地址"}>
           <Input required autoComplete="off" value={value.address ?? ""} onChange={(e) => set({ address: e.target.value.trim() })} />
         </Field>
-        <Field label="端口" required customError={value.port && value.port > 65535 ? "端口须在 1–65535 之间" : ""}>
+        <Field label="端口" name="port" required customError={value.port && value.port > 65535 ? "端口须在 1–65535 之间" : ""}>
           <Input inputMode="numeric" required value={value.port ? String(value.port) : ""} onChange={(e) => set({ port: Number(e.target.value.replace(/\D/g, "")) || undefined })} />
         </Field>
         <Field label="用户名（可选）" name="username">
           <Input autoComplete="off" value={value.username ?? ""} onChange={(e) => set({ username: e.target.value })} />
         </Field>
-        <Field label="密码（可选）">
+        <Field label="密码（可选）" name="password">
           <PasswordInput autoComplete="new-password" value={value.password ?? ""} onChange={(e) => set({ password: e.target.value })} />
         </Field>
       </FormGrid>

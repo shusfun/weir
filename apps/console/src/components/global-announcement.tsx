@@ -1,6 +1,6 @@
 // 全局公告：登录用户与匿名公开页分别选择受众；编辑区校验通过后直接保存。
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import {
   Field,
   Form,
@@ -67,7 +67,7 @@ export function GlobalAnnouncement({ audience }: { audience: "authenticated" | "
   if (q.isError)
     return (
       <Notice tone="warn" role="alert">
-        服务公告暂不可用。
+        服务公告暂不可用：{String(q.error)}
         <Button variant="ghost" size="sm" onClick={() => void q.refetch()}>
           重试公告
         </Button>

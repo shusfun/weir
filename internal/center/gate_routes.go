@@ -5,17 +5,14 @@ import (
 	"fmt"
 
 	"github.com/shusfun/weir/internal/store/ent"
-	"github.com/shusfun/weir/internal/store/ent/chain"
 	"github.com/shusfun/weir/internal/store/ent/credential"
-	"github.com/shusfun/weir/internal/store/ent/outbound"
+	entexit "github.com/shusfun/weir/internal/store/ent/exit"
 	"github.com/shusfun/weir/internal/store/ent/route"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
 // 生成出口的 ID 区间，避免与管理员出口（数据库 ID）冲突。
 const (
-	nodeChainBase  = 1_000_000_000
-	userChainBase  = 1_500_000_000
 	adminRouteBase = 1000
 	nodeRouteBase  = 1_000_000
 )
@@ -57,136 +54,94 @@ func (s *Server) fixedExit(kind, address string, port int, username, sealedPassw
 	return proxyExit(kind, address, port, username, password), nil
 }
 
-// compileRoutes 生成出口与路由。优先级：用户自建链式代理（用户明确选择的出口）→ 管理员规则 → 节点链式代理（兜底）。
-// 某条链式代理出口暂不可用时，只撤下该链的凭据并记入 Meta 提示，其余配置照常下发。
+// compileRoutes 的优先级是用户链路、管理员选择性分流、节点默认出口。
 func (s *Server) compileRoutes(ctx context.Context, g *ent.Gate, cfg *contracts.GateConfig, nodes []*ent.Node, chainKeys map[int][]string) error {
-	routeID := int64(1)
-	addRoute := func(r contracts.Route) {
-		r.ID = routeID
-		routeID++
-		cfg.Routes = append(cfg.Routes, r)
-	}
-	outs, err := s.Store.Ent.Outbound.Query().Where(outbound.GateIDEQ(g.ID), outbound.EnabledEQ(true)).Order(ent.Asc(outbound.FieldPosition), ent.Asc(outbound.FieldID)).All(ctx)
+	es, err := s.Store.Ent.Exit.Query().Where(entexit.GateIDEQ(g.ID), entexit.EnabledEQ(true)).Order(ent.Asc(entexit.FieldID)).All(ctx)
 	if err != nil {
 		return err
 	}
-	for _, o := range outs {
-		if o.Protocol == "source" {
-			ob, warn := s.exitFromStore(ctx, "out:"+itoa(o.ID), o.Tag, int64(o.ID))
-			if warn != "" {
-				cfg.Meta[o.Tag] = warn
-			}
-			cfg.Outbounds = append(cfg.Outbounds, ob)
+	byID := map[int]*ent.Exit{}
+	broken := map[int]error{}
+	for _, e := range es {
+		byID[e.ID] = e
+		if e.Tag == "direct" {
 			continue
 		}
-		if o.Protocol == "link" || o.Protocol == "https" {
-			ob, err := s.fixedExit(o.Protocol, o.Address, o.Port, o.Username, o.Password, o.Password)
-			if err != nil {
-				cfg.Meta[o.Tag] = err.Error()
-				ob = contracts.Outbound{Protocol: "blackhole"}
-			}
-			ob.ID, ob.Tag = int64(o.ID), o.Tag
-			cfg.Outbounds = append(cfg.Outbounds, ob)
-			continue
-		}
-		password, err := s.reveal(o.Password)
+		ob, err := s.compileExit(ctx, e)
 		if err != nil {
-			return err
+			broken[e.ID] = err
+			cfg.Meta[e.Tag] = err.Error()
+			ob = contracts.Outbound{ID: int64(e.ID), Tag: e.Tag, Protocol: "blackhole"}
 		}
-		cfg.Outbounds = append(cfg.Outbounds, contracts.Outbound{ID: int64(o.ID), Tag: o.Tag, Protocol: o.Protocol, Address: o.Address, Port: o.Port, Username: o.Username, Password: password, Settings: o.Settings})
+		cfg.Outbounds = append(cfg.Outbounds, ob)
+		if e.Kind == entexit.KindSource {
+			if _, ok := s.loadExit(ctx, exitOwner(e.ID)); !ok {
+				cfg.Meta[e.Tag] = "订阅源节点出口还没有解析成功，暂时丢弃经这个出口的流量"
+			}
+		}
 	}
+	add := func(r contracts.Route) { r.ID = int64(len(cfg.Routes) + 1); cfg.Routes = append(cfg.Routes, r) }
 	drop := map[string]bool{}
-	for chainID, keys := range chainKeys {
-		ch, err := s.Store.Ent.Chain.Query().Where(chain.IDEQ(chainID)).Only(ctx)
+	for _, id := range sortedKeys(chainKeys) {
+		keys := chainKeys[id]
+		ch, err := s.Store.Ent.Chain.Get(ctx, id)
 		if err != nil {
 			return err
 		}
-		tag := fmt.Sprintf("chain-%d", ch.ID)
-		var ob contracts.Outbound
-		switch {
-		case ch.ExitKind == chain.ExitKindSource:
-			var warn string
-			if ob, warn = s.exitFromStore(ctx, "chain:"+itoa(ch.ID), tag, 0); warn != "" {
-				cfg.Meta[tag] = warn
-			}
-		case ch.ExitNodeID != nil:
-			ob, err = s.exitFor(ctx, tag, *ch.ExitNodeID, chainExitKey(ch.ID))
-		case ch.ExitKind == chain.ExitKindNode:
-			err = fmt.Errorf("链式代理 %d 没有出口", ch.ID)
-		default:
-			ob, err = s.fixedExit(string(ch.ExitKind), ch.ExitAddress, ch.ExitPort, ch.ExitUsername, ch.ExitPassword, ch.ExitLink)
-			ob.Tag = tag
-		}
-		if err != nil {
-			cfg.Meta[tag] = err.Error()
+		e := byID[ch.ExitID]
+		if e == nil || broken[ch.ExitID] != nil {
+			cfg.Meta["chain-"+itoa(ch.ID)] = "用户链路出口不可用"
 			for _, k := range keys {
 				drop[k] = true
 			}
 			continue
 		}
-		ob.ID = int64(userChainBase + ch.ID)
-		cfg.Outbounds = append(cfg.Outbounds, ob)
 		for _, k := range keys {
-			addRoute(contracts.Route{StatsKey: k, OutboundTag: tag, Priority: 0})
+			add(contracts.Route{StatsKey: k, OutboundTag: e.Tag, Priority: 0})
 		}
 	}
 	if len(drop) > 0 {
-		kept := cfg.Credentials[:0]
+		keep := cfg.Credentials[:0]
 		for _, c := range cfg.Credentials {
 			if !drop[c.StatsKey] {
-				kept = append(kept, c)
+				keep = append(keep, c)
 			}
 		}
-		cfg.Credentials = kept
+		cfg.Credentials = keep
 	}
-	rules, err := s.Store.Ent.Route.Query().Where(route.GateIDEQ(g.ID), route.EnabledEQ(true)).All(ctx)
+	rules, err := s.Store.Ent.Route.Query().Where(route.GateIDEQ(g.ID), route.EnabledEQ(true)).Order(ent.Asc(route.FieldPriority), ent.Asc(route.FieldID)).All(ctx)
 	if err != nil {
 		return err
 	}
 	for _, r := range rules {
-		base := contracts.Route{OutboundTag: r.OutboundTag, Domain: r.Domain, IP: r.IP, Priority: adminRouteBase + r.Priority}
+		e := byID[r.ExitID]
+		if e == nil {
+			return fmt.Errorf("分流规则 %d 的出口不可用", r.ID)
+		}
+		base := contracts.Route{OutboundTag: e.Tag, Domain: r.Domain, IP: r.IP, Priority: adminRouteBase + r.Priority}
 		if r.NodeID != nil {
 			base.InboundTag = nodeTag(*r.NodeID)
 		}
 		if r.UserID == nil {
-			addRoute(base)
+			add(base)
 			continue
 		}
 		for _, c := range cfg.Credentials {
 			if c.UserKey == userKey(*r.UserID) && (base.InboundTag == "" || c.InboundID == int64(*r.NodeID)) {
 				rr := base
 				rr.StatsKey = c.StatsKey
-				addRoute(rr)
+				add(rr)
 			}
 		}
 	}
 	for _, n := range nodes {
-		if n.ChainKind == "none" {
-			continue
+		e := byID[n.ExitID]
+		if e == nil {
+			return fmt.Errorf("节点 %d 的出口不可用", n.ID)
 		}
-		tag := fmt.Sprintf("nodechain-%d", n.ID)
-		var ob contracts.Outbound
-		switch {
-		case n.ChainKind == "source":
-			var warn string
-			if ob, warn = s.exitFromStore(ctx, "node:"+itoa(n.ID), tag, 0); warn != "" {
-				cfg.Meta[tag] = warn
-			}
-		case n.ChainNodeID != nil:
-			ob, err = s.exitFor(ctx, tag, *n.ChainNodeID, nodeExitKey(n.ID))
-		case n.ChainKind == "node":
-			err = fmt.Errorf("节点 %d 的链式代理没有出口", n.ID)
-		default:
-			ob, err = s.fixedExit(string(n.ChainKind), n.ChainAddress, n.ChainPort, n.ChainUsername, n.ChainPassword, n.ChainLink)
-			ob.Tag = tag
+		if e.Tag != "direct" {
+			add(contracts.Route{InboundTag: nodeTag(n.ID), OutboundTag: e.Tag, Priority: nodeRouteBase})
 		}
-		if err != nil {
-			cfg.Meta[tag] = err.Error()
-			continue
-		}
-		ob.ID = int64(nodeChainBase + n.ID)
-		cfg.Outbounds = append(cfg.Outbounds, ob)
-		addRoute(contracts.Route{InboundTag: nodeTag(n.ID), OutboundTag: tag, Priority: nodeRouteBase})
 	}
 	return nil
 }

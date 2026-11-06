@@ -10,6 +10,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/shusfun/weir/internal/store/ent/exit"
 	"github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/predicate"
 )
@@ -206,139 +207,34 @@ func (_u *NodeUpdate) SetNillableEnabled(v *bool) *NodeUpdate {
 	return _u
 }
 
-// SetChainKind sets the "chain_kind" field.
-func (_u *NodeUpdate) SetChainKind(v node.ChainKind) *NodeUpdate {
-	_u.mutation.SetChainKind(v)
+// SetExitID sets the "exit_id" field.
+func (_u *NodeUpdate) SetExitID(v int) *NodeUpdate {
+	_u.mutation.SetExitID(v)
 	return _u
 }
 
-// SetNillableChainKind sets the "chain_kind" field if the given value is not nil.
-func (_u *NodeUpdate) SetNillableChainKind(v *node.ChainKind) *NodeUpdate {
+// SetNillableExitID sets the "exit_id" field if the given value is not nil.
+func (_u *NodeUpdate) SetNillableExitID(v *int) *NodeUpdate {
 	if v != nil {
-		_u.SetChainKind(*v)
+		_u.SetExitID(*v)
 	}
 	return _u
 }
 
-// SetChainSource sets the "chain_source" field.
-func (_u *NodeUpdate) SetChainSource(v map[string]interface{}) *NodeUpdate {
-	_u.mutation.SetChainSource(v)
-	return _u
-}
-
-// ClearChainSource clears the value of the "chain_source" field.
-func (_u *NodeUpdate) ClearChainSource() *NodeUpdate {
-	_u.mutation.ClearChainSource()
-	return _u
-}
-
-// SetChainAddress sets the "chain_address" field.
-func (_u *NodeUpdate) SetChainAddress(v string) *NodeUpdate {
-	_u.mutation.SetChainAddress(v)
-	return _u
-}
-
-// SetNillableChainAddress sets the "chain_address" field if the given value is not nil.
-func (_u *NodeUpdate) SetNillableChainAddress(v *string) *NodeUpdate {
-	if v != nil {
-		_u.SetChainAddress(*v)
-	}
-	return _u
-}
-
-// SetChainPort sets the "chain_port" field.
-func (_u *NodeUpdate) SetChainPort(v int) *NodeUpdate {
-	_u.mutation.ResetChainPort()
-	_u.mutation.SetChainPort(v)
-	return _u
-}
-
-// SetNillableChainPort sets the "chain_port" field if the given value is not nil.
-func (_u *NodeUpdate) SetNillableChainPort(v *int) *NodeUpdate {
-	if v != nil {
-		_u.SetChainPort(*v)
-	}
-	return _u
-}
-
-// AddChainPort adds value to the "chain_port" field.
-func (_u *NodeUpdate) AddChainPort(v int) *NodeUpdate {
-	_u.mutation.AddChainPort(v)
-	return _u
-}
-
-// SetChainUsername sets the "chain_username" field.
-func (_u *NodeUpdate) SetChainUsername(v string) *NodeUpdate {
-	_u.mutation.SetChainUsername(v)
-	return _u
-}
-
-// SetNillableChainUsername sets the "chain_username" field if the given value is not nil.
-func (_u *NodeUpdate) SetNillableChainUsername(v *string) *NodeUpdate {
-	if v != nil {
-		_u.SetChainUsername(*v)
-	}
-	return _u
-}
-
-// SetChainPassword sets the "chain_password" field.
-func (_u *NodeUpdate) SetChainPassword(v string) *NodeUpdate {
-	_u.mutation.SetChainPassword(v)
-	return _u
-}
-
-// SetNillableChainPassword sets the "chain_password" field if the given value is not nil.
-func (_u *NodeUpdate) SetNillableChainPassword(v *string) *NodeUpdate {
-	if v != nil {
-		_u.SetChainPassword(*v)
-	}
-	return _u
-}
-
-// SetChainNodeID sets the "chain_node_id" field.
-func (_u *NodeUpdate) SetChainNodeID(v int) *NodeUpdate {
-	_u.mutation.ResetChainNodeID()
-	_u.mutation.SetChainNodeID(v)
-	return _u
-}
-
-// SetNillableChainNodeID sets the "chain_node_id" field if the given value is not nil.
-func (_u *NodeUpdate) SetNillableChainNodeID(v *int) *NodeUpdate {
-	if v != nil {
-		_u.SetChainNodeID(*v)
-	}
-	return _u
-}
-
-// AddChainNodeID adds value to the "chain_node_id" field.
-func (_u *NodeUpdate) AddChainNodeID(v int) *NodeUpdate {
-	_u.mutation.AddChainNodeID(v)
-	return _u
-}
-
-// ClearChainNodeID clears the value of the "chain_node_id" field.
-func (_u *NodeUpdate) ClearChainNodeID() *NodeUpdate {
-	_u.mutation.ClearChainNodeID()
-	return _u
-}
-
-// SetChainLink sets the "chain_link" field.
-func (_u *NodeUpdate) SetChainLink(v string) *NodeUpdate {
-	_u.mutation.SetChainLink(v)
-	return _u
-}
-
-// SetNillableChainLink sets the "chain_link" field if the given value is not nil.
-func (_u *NodeUpdate) SetNillableChainLink(v *string) *NodeUpdate {
-	if v != nil {
-		_u.SetChainLink(*v)
-	}
-	return _u
+// SetExit sets the "exit" edge to the Exit entity.
+func (_u *NodeUpdate) SetExit(v *Exit) *NodeUpdate {
+	return _u.SetExitID(v.ID)
 }
 
 // Mutation returns the NodeMutation object of the builder.
 func (_u *NodeUpdate) Mutation() *NodeMutation {
 	return _u.mutation
+}
+
+// ClearExit clears the "exit" edge to the Exit entity.
+func (_u *NodeUpdate) ClearExit() *NodeUpdate {
+	_u.mutation.ClearExit()
+	return _u
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -400,20 +296,8 @@ func (_u *NodeUpdate) check() error {
 			return &ValidationError{Name: "security", err: fmt.Errorf(`ent: validator failed for field "Node.security": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.ChainKind(); ok {
-		if err := node.ChainKindValidator(v); err != nil {
-			return &ValidationError{Name: "chain_kind", err: fmt.Errorf(`ent: validator failed for field "Node.chain_kind": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.ChainAddress(); ok {
-		if err := node.ChainAddressValidator(v); err != nil {
-			return &ValidationError{Name: "chain_address", err: fmt.Errorf(`ent: validator failed for field "Node.chain_address": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.ChainUsername(); ok {
-		if err := node.ChainUsernameValidator(v); err != nil {
-			return &ValidationError{Name: "chain_username", err: fmt.Errorf(`ent: validator failed for field "Node.chain_username": %w`, err)}
-		}
+	if _u.mutation.ExitCleared() && len(_u.mutation.ExitIDs()) > 0 {
+		return errors.New(`ent: clearing a required unique edge "Node.exit"`)
 	}
 	return nil
 }
@@ -478,41 +362,34 @@ func (_u *NodeUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Enabled(); ok {
 		_spec.SetField(node.FieldEnabled, field.TypeBool, value)
 	}
-	if value, ok := _u.mutation.ChainKind(); ok {
-		_spec.SetField(node.FieldChainKind, field.TypeEnum, value)
+	if _u.mutation.ExitCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   node.ExitTable,
+			Columns: []string{node.ExitColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(exit.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if value, ok := _u.mutation.ChainSource(); ok {
-		_spec.SetField(node.FieldChainSource, field.TypeJSON, value)
-	}
-	if _u.mutation.ChainSourceCleared() {
-		_spec.ClearField(node.FieldChainSource, field.TypeJSON)
-	}
-	if value, ok := _u.mutation.ChainAddress(); ok {
-		_spec.SetField(node.FieldChainAddress, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.ChainPort(); ok {
-		_spec.SetField(node.FieldChainPort, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedChainPort(); ok {
-		_spec.AddField(node.FieldChainPort, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.ChainUsername(); ok {
-		_spec.SetField(node.FieldChainUsername, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.ChainPassword(); ok {
-		_spec.SetField(node.FieldChainPassword, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.ChainNodeID(); ok {
-		_spec.SetField(node.FieldChainNodeID, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedChainNodeID(); ok {
-		_spec.AddField(node.FieldChainNodeID, field.TypeInt, value)
-	}
-	if _u.mutation.ChainNodeIDCleared() {
-		_spec.ClearField(node.FieldChainNodeID, field.TypeInt)
-	}
-	if value, ok := _u.mutation.ChainLink(); ok {
-		_spec.SetField(node.FieldChainLink, field.TypeString, value)
+	if nodes := _u.mutation.ExitIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   node.ExitTable,
+			Columns: []string{node.ExitColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(exit.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -713,139 +590,34 @@ func (_u *NodeUpdateOne) SetNillableEnabled(v *bool) *NodeUpdateOne {
 	return _u
 }
 
-// SetChainKind sets the "chain_kind" field.
-func (_u *NodeUpdateOne) SetChainKind(v node.ChainKind) *NodeUpdateOne {
-	_u.mutation.SetChainKind(v)
+// SetExitID sets the "exit_id" field.
+func (_u *NodeUpdateOne) SetExitID(v int) *NodeUpdateOne {
+	_u.mutation.SetExitID(v)
 	return _u
 }
 
-// SetNillableChainKind sets the "chain_kind" field if the given value is not nil.
-func (_u *NodeUpdateOne) SetNillableChainKind(v *node.ChainKind) *NodeUpdateOne {
+// SetNillableExitID sets the "exit_id" field if the given value is not nil.
+func (_u *NodeUpdateOne) SetNillableExitID(v *int) *NodeUpdateOne {
 	if v != nil {
-		_u.SetChainKind(*v)
+		_u.SetExitID(*v)
 	}
 	return _u
 }
 
-// SetChainSource sets the "chain_source" field.
-func (_u *NodeUpdateOne) SetChainSource(v map[string]interface{}) *NodeUpdateOne {
-	_u.mutation.SetChainSource(v)
-	return _u
-}
-
-// ClearChainSource clears the value of the "chain_source" field.
-func (_u *NodeUpdateOne) ClearChainSource() *NodeUpdateOne {
-	_u.mutation.ClearChainSource()
-	return _u
-}
-
-// SetChainAddress sets the "chain_address" field.
-func (_u *NodeUpdateOne) SetChainAddress(v string) *NodeUpdateOne {
-	_u.mutation.SetChainAddress(v)
-	return _u
-}
-
-// SetNillableChainAddress sets the "chain_address" field if the given value is not nil.
-func (_u *NodeUpdateOne) SetNillableChainAddress(v *string) *NodeUpdateOne {
-	if v != nil {
-		_u.SetChainAddress(*v)
-	}
-	return _u
-}
-
-// SetChainPort sets the "chain_port" field.
-func (_u *NodeUpdateOne) SetChainPort(v int) *NodeUpdateOne {
-	_u.mutation.ResetChainPort()
-	_u.mutation.SetChainPort(v)
-	return _u
-}
-
-// SetNillableChainPort sets the "chain_port" field if the given value is not nil.
-func (_u *NodeUpdateOne) SetNillableChainPort(v *int) *NodeUpdateOne {
-	if v != nil {
-		_u.SetChainPort(*v)
-	}
-	return _u
-}
-
-// AddChainPort adds value to the "chain_port" field.
-func (_u *NodeUpdateOne) AddChainPort(v int) *NodeUpdateOne {
-	_u.mutation.AddChainPort(v)
-	return _u
-}
-
-// SetChainUsername sets the "chain_username" field.
-func (_u *NodeUpdateOne) SetChainUsername(v string) *NodeUpdateOne {
-	_u.mutation.SetChainUsername(v)
-	return _u
-}
-
-// SetNillableChainUsername sets the "chain_username" field if the given value is not nil.
-func (_u *NodeUpdateOne) SetNillableChainUsername(v *string) *NodeUpdateOne {
-	if v != nil {
-		_u.SetChainUsername(*v)
-	}
-	return _u
-}
-
-// SetChainPassword sets the "chain_password" field.
-func (_u *NodeUpdateOne) SetChainPassword(v string) *NodeUpdateOne {
-	_u.mutation.SetChainPassword(v)
-	return _u
-}
-
-// SetNillableChainPassword sets the "chain_password" field if the given value is not nil.
-func (_u *NodeUpdateOne) SetNillableChainPassword(v *string) *NodeUpdateOne {
-	if v != nil {
-		_u.SetChainPassword(*v)
-	}
-	return _u
-}
-
-// SetChainNodeID sets the "chain_node_id" field.
-func (_u *NodeUpdateOne) SetChainNodeID(v int) *NodeUpdateOne {
-	_u.mutation.ResetChainNodeID()
-	_u.mutation.SetChainNodeID(v)
-	return _u
-}
-
-// SetNillableChainNodeID sets the "chain_node_id" field if the given value is not nil.
-func (_u *NodeUpdateOne) SetNillableChainNodeID(v *int) *NodeUpdateOne {
-	if v != nil {
-		_u.SetChainNodeID(*v)
-	}
-	return _u
-}
-
-// AddChainNodeID adds value to the "chain_node_id" field.
-func (_u *NodeUpdateOne) AddChainNodeID(v int) *NodeUpdateOne {
-	_u.mutation.AddChainNodeID(v)
-	return _u
-}
-
-// ClearChainNodeID clears the value of the "chain_node_id" field.
-func (_u *NodeUpdateOne) ClearChainNodeID() *NodeUpdateOne {
-	_u.mutation.ClearChainNodeID()
-	return _u
-}
-
-// SetChainLink sets the "chain_link" field.
-func (_u *NodeUpdateOne) SetChainLink(v string) *NodeUpdateOne {
-	_u.mutation.SetChainLink(v)
-	return _u
-}
-
-// SetNillableChainLink sets the "chain_link" field if the given value is not nil.
-func (_u *NodeUpdateOne) SetNillableChainLink(v *string) *NodeUpdateOne {
-	if v != nil {
-		_u.SetChainLink(*v)
-	}
-	return _u
+// SetExit sets the "exit" edge to the Exit entity.
+func (_u *NodeUpdateOne) SetExit(v *Exit) *NodeUpdateOne {
+	return _u.SetExitID(v.ID)
 }
 
 // Mutation returns the NodeMutation object of the builder.
 func (_u *NodeUpdateOne) Mutation() *NodeMutation {
 	return _u.mutation
+}
+
+// ClearExit clears the "exit" edge to the Exit entity.
+func (_u *NodeUpdateOne) ClearExit() *NodeUpdateOne {
+	_u.mutation.ClearExit()
+	return _u
 }
 
 // Where appends a list predicates to the NodeUpdate builder.
@@ -920,20 +692,8 @@ func (_u *NodeUpdateOne) check() error {
 			return &ValidationError{Name: "security", err: fmt.Errorf(`ent: validator failed for field "Node.security": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.ChainKind(); ok {
-		if err := node.ChainKindValidator(v); err != nil {
-			return &ValidationError{Name: "chain_kind", err: fmt.Errorf(`ent: validator failed for field "Node.chain_kind": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.ChainAddress(); ok {
-		if err := node.ChainAddressValidator(v); err != nil {
-			return &ValidationError{Name: "chain_address", err: fmt.Errorf(`ent: validator failed for field "Node.chain_address": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.ChainUsername(); ok {
-		if err := node.ChainUsernameValidator(v); err != nil {
-			return &ValidationError{Name: "chain_username", err: fmt.Errorf(`ent: validator failed for field "Node.chain_username": %w`, err)}
-		}
+	if _u.mutation.ExitCleared() && len(_u.mutation.ExitIDs()) > 0 {
+		return errors.New(`ent: clearing a required unique edge "Node.exit"`)
 	}
 	return nil
 }
@@ -1015,41 +775,34 @@ func (_u *NodeUpdateOne) sqlSave(ctx context.Context) (_node *Node, err error) {
 	if value, ok := _u.mutation.Enabled(); ok {
 		_spec.SetField(node.FieldEnabled, field.TypeBool, value)
 	}
-	if value, ok := _u.mutation.ChainKind(); ok {
-		_spec.SetField(node.FieldChainKind, field.TypeEnum, value)
+	if _u.mutation.ExitCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   node.ExitTable,
+			Columns: []string{node.ExitColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(exit.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if value, ok := _u.mutation.ChainSource(); ok {
-		_spec.SetField(node.FieldChainSource, field.TypeJSON, value)
-	}
-	if _u.mutation.ChainSourceCleared() {
-		_spec.ClearField(node.FieldChainSource, field.TypeJSON)
-	}
-	if value, ok := _u.mutation.ChainAddress(); ok {
-		_spec.SetField(node.FieldChainAddress, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.ChainPort(); ok {
-		_spec.SetField(node.FieldChainPort, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedChainPort(); ok {
-		_spec.AddField(node.FieldChainPort, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.ChainUsername(); ok {
-		_spec.SetField(node.FieldChainUsername, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.ChainPassword(); ok {
-		_spec.SetField(node.FieldChainPassword, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.ChainNodeID(); ok {
-		_spec.SetField(node.FieldChainNodeID, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedChainNodeID(); ok {
-		_spec.AddField(node.FieldChainNodeID, field.TypeInt, value)
-	}
-	if _u.mutation.ChainNodeIDCleared() {
-		_spec.ClearField(node.FieldChainNodeID, field.TypeInt)
-	}
-	if value, ok := _u.mutation.ChainLink(); ok {
-		_spec.SetField(node.FieldChainLink, field.TypeString, value)
+	if nodes := _u.mutation.ExitIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   node.ExitTable,
+			Columns: []string{node.ExitColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(exit.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	_node = &Node{config: _u.config}
 	_spec.Assign = _node.assignValues

@@ -153,6 +153,7 @@ func TestRealityPrefers443WithDroppedPrivileges(t *testing.T) {
 		t.Fatalf("REALITY on a free 443 = %v", r["port"])
 	}
 	u := e.post("/api/v1/admin/users", map[string]any{"email": "p443@e2e.test", "password": "E2eUser1"}, nil)
+	wantTag := e.subName(int(u["id"].(float64)), int(r["id"].(float64)), 0)
 	e.applied("REALITY on 443")
 	pid := helperRunning(t, filepath.Join("/tmp", "weir-p443.sock"))["xray"]
 	acct, _ := user.Lookup("weir-e2e")
@@ -178,7 +179,7 @@ func TestRealityPrefers443WithDroppedPrivileges(t *testing.T) {
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte(blob)) }))
 	t.Cleanup(target.Close)
 	for _, ob := range doc.Outbounds {
-		if ob["tag"] == "R443" {
+		if ob["tag"] == wantTag {
 			if ob["server_port"].(float64) != 443 {
 				t.Fatalf("subscription port = %v", ob["server_port"])
 			}
@@ -280,10 +281,12 @@ func TestSourceGroupFailoverInKernels(t *testing.T) {
 	}
 	chainSpec := map[string]any{"kind": "source", "source_id": sid, "mode": "filter", "match": "^HK"}
 	dest := localDest(t)
-	e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "vless-reality", "name": "X-POOL", "skip_probe": true, "chain": chainSpec,
+	xNode := e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "vless-reality", "name": "X-POOL", "skip_probe": true, "exit": chainSpec,
 		"settings": map[string]any{"reality_dest": dest, "reality_server_names": "e2e.test"}}, nil)
-	e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "ss2022", "name": "S-POOL", "skip_probe": true, "chain": chainSpec}, nil)
+	sNode := e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "ss2022", "name": "S-POOL", "skip_probe": true, "exit": chainSpec}, nil)
 	u := e.post("/api/v1/admin/users", map[string]any{"email": "grp@e2e.test", "password": "E2eUser1"}, nil)
+	uid := int(u["id"].(float64))
+	tags := map[string]string{e.subName(uid, int(xNode["id"].(float64)), 0): "X-POOL", e.subName(uid, int(sNode["id"].(float64)), 0): "S-POOL"}
 	e.applied("source group exits")
 
 	var detail map[string]any
@@ -300,8 +303,8 @@ func TestSourceGroupFailoverInKernels(t *testing.T) {
 	t.Cleanup(target.Close)
 	clients := map[string]int{}
 	for _, ob := range doc.Outbounds {
-		if tag, _ := ob["tag"].(string); tag == "X-POOL" || tag == "S-POOL" {
-			clients[tag] = e.runSingboxClient(sb, ob)
+		if tag, _ := ob["tag"].(string); tags[tag] != "" {
+			clients[tags[tag]] = e.runSingboxClient(sb, ob)
 		}
 	}
 	if len(clients) != 2 {
@@ -315,7 +318,8 @@ func TestSourceGroupFailoverInKernels(t *testing.T) {
 			t.Fatalf("%s traffic did not leave through a group member", tag)
 		}
 	}
-	liveRatesFromKernels(t, e, clients["X-POOL"], target.URL, len(blob))
+	groupID := fmt.Sprintf("exit:%d", int(xNode["exit_id"].(float64)))
+	liveRatesFromKernels(t, e, clients["X-POOL"], groupID, target.URL, len(blob))
 	// 断开一个成员：内核探测到后自动切到另一个，流量照常。
 	used, other := a, b
 	if b.hits.Load() > a.hits.Load() {
@@ -942,7 +946,7 @@ func TestCustomRulesRealKernelChecksAndProvider(t *testing.T) {
 
 // liveRatesFromKernels：经一组出口下载时，链路页的实时数据来自真实内核的计数——
 // 路径（凭据）与出口（一组）都有速率，且标出这一刻流量最大的成员（驱动打开了按出口计量，Gate 把内核标签换回了配置标签）。
-func liveRatesFromKernels(t *testing.T, e *env, port int, url string, size int) {
+func liveRatesFromKernels(t *testing.T, e *env, port int, exitID, url string, size int) {
 	t.Helper()
 	stop := make(chan struct{})
 	defer close(stop)
@@ -970,17 +974,10 @@ func liveRatesFromKernels(t *testing.T, e *env, port int, url string, size int) 
 		for _, r := range ev.Paths {
 			moving += r.Down + r.Up
 		}
-		exit := 0.0
-		for id, r := range ev.Exits {
-			if strings.HasPrefix(id, "nodechain:") {
-				exit += r.Down + r.Up
-			}
-		}
-		active := false
-		for _, i := range ev.Active {
-			active = active || i >= 0
-		}
-		t.Logf("live frame: paths %.0f B/s, group exits %.0f B/s, active %v", moving, exit, ev.Active)
-		return moving > 0 && exit > 0 && active
+		exit := ev.Exits[exitID]
+		active, ok := ev.Active[exitID]
+		rate := exit.Down + exit.Up
+		t.Logf("live frame: paths %.0f B/s, group exit %s %.0f B/s, active member %d", moving, exitID, rate, active)
+		return moving > 0 && rate > 0 && ok && active >= 0
 	})
 }

@@ -29,8 +29,9 @@ func TestLinkMapScopesAndLiveRates(t *testing.T) {
 	}
 	mustJSON(t, admin, "PATCH", "/api/v1/admin/gates/"+itoa(gid), map[string]any{"public_host": "203.0.113.50"}, 200)
 	n := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": gid, "preset": "vless-reality", "skip_probe": true,
-		"chain": map[string]any{"kind": "socks5", "address": "198.51.100.5", "port": 1080}}, 200)
+		"exit": map[string]any{"kind": "socks5", "address": "198.51.100.5", "port": 1080}}, 200)
 	nid := int(n["id"].(float64))
+	exitID := int(n["exit_id"].(float64))
 	a := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "a@example.test", "all_nodes": true}, 200)
 	mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "b@example.test", "all_nodes": true}, 200)
 	alice := login(t, s, "a@example.test", a["password"].(string))
@@ -64,9 +65,9 @@ func TestLinkMapScopesAndLiveRates(t *testing.T) {
 		}
 	}
 	t0 := time.Now().UTC()
-	s.live.ingest(gid, contracts.LiveReport{At: t0, NetRx: u64p(0), NetTx: u64p(0), Users: []contracts.MeterSample{{StatsKey: keys[0]}, {StatsKey: keys[1]}}, Outbounds: []contracts.MeterSample{{StatsKey: "nodechain-" + itoa(nid)}}})
+	s.live.ingest(gid, contracts.LiveReport{At: t0, NetRx: u64p(0), NetTx: u64p(0), Users: []contracts.MeterSample{{StatsKey: keys[0]}, {StatsKey: keys[1]}}, Outbounds: []contracts.MeterSample{{StatsKey: "exit-" + itoa(exitID)}}})
 	s.live.ingest(gid, contracts.LiveReport{At: t0.Add(2 * time.Second), NetRx: u64p(20000), NetTx: u64p(10000),
-		Users: []contracts.MeterSample{{StatsKey: keys[0], Down: 2000}, {StatsKey: keys[1], Down: 4000}}, Outbounds: []contracts.MeterSample{{StatsKey: "nodechain-" + itoa(nid), Down: 6000}}})
+		Users: []contracts.MeterSample{{StatsKey: keys[0], Down: 2000}, {StatsKey: keys[1], Down: 4000}}, Outbounds: []contracts.MeterSample{{StatsKey: "exit-" + itoa(exitID), Down: 6000}}})
 	ctx := context.Background()
 	am, _ := s.buildLinkMap(ctx, 0)
 	um, _ := s.buildLinkMap(ctx, int(a["id"].(float64)))
@@ -75,7 +76,7 @@ func TestLinkMapScopesAndLiveRates(t *testing.T) {
 		t.Fatalf("frames = %d", len(frames))
 	}
 	ae, ue := am.eventFor(gid, frames[0]), um.eventFor(gid, frames[0])
-	eid := "nodechain:" + itoa(nid)
+	eid := exitOwner(exitID)
 	if ae.Exits[eid].Down != 3000 || ae.Net == nil || ae.Net.Down != 10000 || len(ae.Paths) != 2 {
 		t.Fatalf("admin event = %+v", ae)
 	}

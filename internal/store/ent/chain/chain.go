@@ -3,10 +3,10 @@
 package chain
 
 import (
-	"fmt"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 )
 
 const (
@@ -20,30 +20,23 @@ const (
 	FieldEntryNodeID = "entry_node_id"
 	// FieldName holds the string denoting the name field in the database.
 	FieldName = "name"
-	// FieldExitKind holds the string denoting the exit_kind field in the database.
-	FieldExitKind = "exit_kind"
-	// FieldExitSource holds the string denoting the exit_source field in the database.
-	FieldExitSource = "exit_source"
-	// FieldExitAddress holds the string denoting the exit_address field in the database.
-	FieldExitAddress = "exit_address"
-	// FieldExitPort holds the string denoting the exit_port field in the database.
-	FieldExitPort = "exit_port"
-	// FieldExitUsername holds the string denoting the exit_username field in the database.
-	FieldExitUsername = "exit_username"
-	// FieldExitPassword holds the string denoting the exit_password field in the database.
-	FieldExitPassword = "exit_password"
-	// FieldExitNodeID holds the string denoting the exit_node_id field in the database.
-	FieldExitNodeID = "exit_node_id"
-	// FieldExitLink holds the string denoting the exit_link field in the database.
-	FieldExitLink = "exit_link"
+	// FieldExitID holds the string denoting the exit_id field in the database.
+	FieldExitID = "exit_id"
 	// FieldEnabled holds the string denoting the enabled field in the database.
 	FieldEnabled = "enabled"
-	// FieldPolicyType holds the string denoting the policy_type field in the database.
-	FieldPolicyType = "policy_type"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
+	// EdgeExit holds the string denoting the exit edge name in mutations.
+	EdgeExit = "exit"
 	// Table holds the table name of the chain in the database.
 	Table = "chains"
+	// ExitTable is the table that holds the exit relation/edge.
+	ExitTable = "chains"
+	// ExitInverseTable is the table name for the Exit entity.
+	// It exists in this package in order to avoid circular dependency with the "exit" package.
+	ExitInverseTable = "exits"
+	// ExitColumn is the table column denoting the exit relation/edge.
+	ExitColumn = "exit_id"
 )
 
 // Columns holds all SQL columns for chain fields.
@@ -52,16 +45,8 @@ var Columns = []string{
 	FieldUserID,
 	FieldEntryNodeID,
 	FieldName,
-	FieldExitKind,
-	FieldExitSource,
-	FieldExitAddress,
-	FieldExitPort,
-	FieldExitUsername,
-	FieldExitPassword,
-	FieldExitNodeID,
-	FieldExitLink,
+	FieldExitID,
 	FieldEnabled,
-	FieldPolicyType,
 	FieldCreatedAt,
 }
 
@@ -78,56 +63,11 @@ func ValidColumn(column string) bool {
 var (
 	// NameValidator is a validator for the "name" field. It is called by the builders before save.
 	NameValidator func(string) error
-	// DefaultExitAddress holds the default value on creation for the "exit_address" field.
-	DefaultExitAddress string
-	// ExitAddressValidator is a validator for the "exit_address" field. It is called by the builders before save.
-	ExitAddressValidator func(string) error
-	// DefaultExitPort holds the default value on creation for the "exit_port" field.
-	DefaultExitPort int
-	// DefaultExitUsername holds the default value on creation for the "exit_username" field.
-	DefaultExitUsername string
-	// ExitUsernameValidator is a validator for the "exit_username" field. It is called by the builders before save.
-	ExitUsernameValidator func(string) error
-	// DefaultExitPassword holds the default value on creation for the "exit_password" field.
-	DefaultExitPassword string
-	// DefaultExitLink holds the default value on creation for the "exit_link" field.
-	DefaultExitLink string
 	// DefaultEnabled holds the default value on creation for the "enabled" field.
 	DefaultEnabled bool
-	// DefaultPolicyType holds the default value on creation for the "policy_type" field.
-	DefaultPolicyType string
-	// PolicyTypeValidator is a validator for the "policy_type" field. It is called by the builders before save.
-	PolicyTypeValidator func(string) error
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 )
-
-// ExitKind defines the type for the "exit_kind" enum field.
-type ExitKind string
-
-// ExitKind values.
-const (
-	ExitKindSocks5 ExitKind = "socks5"
-	ExitKindHTTP   ExitKind = "http"
-	ExitKindHTTPS  ExitKind = "https"
-	ExitKindLink   ExitKind = "link"
-	ExitKindNode   ExitKind = "node"
-	ExitKindSource ExitKind = "source"
-)
-
-func (ek ExitKind) String() string {
-	return string(ek)
-}
-
-// ExitKindValidator is a validator for the "exit_kind" field enum values. It is called by the builders before save.
-func ExitKindValidator(ek ExitKind) error {
-	switch ek {
-	case ExitKindSocks5, ExitKindHTTP, ExitKindHTTPS, ExitKindLink, ExitKindNode, ExitKindSource:
-		return nil
-	default:
-		return fmt.Errorf("chain: invalid enum value for exit_kind field: %q", ek)
-	}
-}
 
 // OrderOption defines the ordering options for the Chain queries.
 type OrderOption func(*sql.Selector)
@@ -152,39 +92,9 @@ func ByName(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldName, opts...).ToFunc()
 }
 
-// ByExitKind orders the results by the exit_kind field.
-func ByExitKind(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldExitKind, opts...).ToFunc()
-}
-
-// ByExitAddress orders the results by the exit_address field.
-func ByExitAddress(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldExitAddress, opts...).ToFunc()
-}
-
-// ByExitPort orders the results by the exit_port field.
-func ByExitPort(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldExitPort, opts...).ToFunc()
-}
-
-// ByExitUsername orders the results by the exit_username field.
-func ByExitUsername(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldExitUsername, opts...).ToFunc()
-}
-
-// ByExitPassword orders the results by the exit_password field.
-func ByExitPassword(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldExitPassword, opts...).ToFunc()
-}
-
-// ByExitNodeID orders the results by the exit_node_id field.
-func ByExitNodeID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldExitNodeID, opts...).ToFunc()
-}
-
-// ByExitLink orders the results by the exit_link field.
-func ByExitLink(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldExitLink, opts...).ToFunc()
+// ByExitID orders the results by the exit_id field.
+func ByExitID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldExitID, opts...).ToFunc()
 }
 
 // ByEnabled orders the results by the enabled field.
@@ -192,12 +102,21 @@ func ByEnabled(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEnabled, opts...).ToFunc()
 }
 
-// ByPolicyType orders the results by the policy_type field.
-func ByPolicyType(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldPolicyType, opts...).ToFunc()
-}
-
 // ByCreatedAt orders the results by the created_at field.
 func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCreatedAt, opts...).ToFunc()
+}
+
+// ByExitField orders the results by exit field.
+func ByExitField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newExitStep(), sql.OrderByField(field, opts...))
+	}
+}
+func newExitStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(ExitInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, ExitTable, ExitColumn),
+	)
 }

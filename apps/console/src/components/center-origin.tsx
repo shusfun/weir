@@ -1,7 +1,8 @@
 // 中心公共地址：管理员第一次经 HTTPS 域名打开控制台时自动记录；之后访问地址与记录不同，
 // 顶部常驻提示，确认后改为当前地址（已配对的 Gate 经心跳跟随切换）。
 import { useEffect, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Form, Notice, useToast } from "@weir/ui";
 import { api, clause } from "../api";
 import { useFormAction } from "../lib/action";

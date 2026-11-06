@@ -1,6 +1,6 @@
 // 手动节点：按分组展示；可批量导入（链接 / Base64 / Clash YAML / sing-box JSON），分组可重命名或解散（节点保留）。
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, SectionHeader, SkeletonList, Switch, SwitchField, Textarea, useToast, useConfirm, usePrompt } from "@weir/ui";
 import { Plus, Trash2, Upload } from "lucide-react";
 import { api } from "../api";

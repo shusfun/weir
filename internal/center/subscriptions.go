@@ -352,6 +352,9 @@ func (s *Server) deleteSource(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+	if !s.checkExitSourceDeletion(c, id, 0) {
+		return
+	}
 	if c.GetBool(dryRunKey) {
 		src, err := s.Store.Ent.SubSource.Get(ctx, id)
 		if err != nil {

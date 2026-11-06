@@ -69,6 +69,18 @@ func (f CredentialFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, 
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.CredentialMutation", m)
 }
 
+// The ExitFunc type is an adapter to allow the use of ordinary
+// function as Exit mutator.
+type ExitFunc func(context.Context, *ent.ExitMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ExitFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ExitMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ExitMutation", m)
+}
+
 // The GateFunc type is an adapter to allow the use of ordinary
 // function as Gate mutator.
 type GateFunc func(context.Context, *ent.GateMutation) (ent.Value, error)
@@ -127,18 +139,6 @@ func (f NodeFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error)
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.NodeMutation", m)
-}
-
-// The OutboundFunc type is an adapter to allow the use of ordinary
-// function as Outbound mutator.
-type OutboundFunc func(context.Context, *ent.OutboundMutation) (ent.Value, error)
-
-// Mutate calls f(ctx, m).
-func (f OutboundFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.OutboundMutation); ok {
-		return f(ctx, mv)
-	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.OutboundMutation", m)
 }
 
 // The PasskeyFunc type is an adapter to allow the use of ordinary

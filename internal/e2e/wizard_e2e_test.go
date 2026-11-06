@@ -152,7 +152,7 @@ func TestWizardSubscriptionRealClients(t *testing.T) {
 	if _, err = (kernels.Cache{Dir: filepath.Join(e.dir, "center-data", "kernels")}).Put("sing-box", "1.14.3", "amd64", data); err != nil {
 		t.Fatal(err)
 	}
-	e.startGate("hk")
+	e.startGate("relay")
 	ctx := e.ctx
 	g := e.s.Store.Ent.Gate.GetX(ctx, e.gateID)
 	if g.PublicHost != "127.0.0.1" {
@@ -165,20 +165,31 @@ func TestWizardSubscriptionRealClients(t *testing.T) {
 	t.Cleanup(dest.Close)
 	homePort, homeHits := socksServer(t)
 
+	nodeIDs := map[string]int{}
 	node := func(body map[string]any) map[string]any {
 		body["gate_id"], body["skip_probe"] = e.gateID, true
-		return e.post("/api/v1/admin/nodes", body, nil)
+		n := e.post("/api/v1/admin/nodes", body, nil)
+		nodeIDs[body["name"].(string)] = int(n["id"].(float64))
+		return n
 	}
 	reality := node(map[string]any{"preset": "vless-reality", "name": "R", "settings": map[string]any{"reality_dest": dest.Listener.Addr().String(), "reality_server_names": "e2e.test"}})
+	e.startGate("hk")
+	e.s.Store.Ent.Gate.UpdateOneID(e.gateID).SetPublicHost("127.0.0.1").ExecX(ctx)
 	node(map[string]any{"preset": "ss2022", "name": "SS"})
 	hy2 := node(map[string]any{"preset": "hysteria2", "name": "HY2"})
 	node(map[string]any{"preset": "tuic", "name": "TUIC"})
-	node(map[string]any{"preset": "ss2022", "name": "HOME", "chain": map[string]any{"kind": "socks5", "address": "127.0.0.1", "port": homePort}})
-	node(map[string]any{"preset": "ss2022", "name": "VIA-R", "chain": map[string]any{"kind": "node", "node_id": reality["id"]}})
+	node(map[string]any{"preset": "ss2022", "name": "HOME", "exit": map[string]any{"kind": "socks5", "address": "127.0.0.1", "port": homePort}})
+	node(map[string]any{"preset": "ss2022", "name": "VIA-R", "exit": map[string]any{"kind": "node", "node_id": reality["id"]}})
 
 	u := e.post("/api/v1/admin/users", map[string]any{"email": "user@e2e.test", "password": "E2eUser1"}, nil)
 	uid := int(u["id"].(float64))
-	e.post(fmt.Sprintf("/api/v1/admin/users/%d/chains", uid), map[string]any{"name": "USER-CHAIN", "entry_node_id": hy2["id"], "exit": map[string]any{"kind": "node", "node_id": reality["id"]}, "skip_probe": true}, nil)
+	ch := e.post(fmt.Sprintf("/api/v1/admin/users/%d/chains", uid), map[string]any{"name": "USER-CHAIN", "entry_node_id": hy2["id"], "exit": map[string]any{"kind": "node", "node_id": reality["id"]}, "skip_probe": true}, nil)
+	tags := map[string]string{}
+	for label, id := range nodeIDs {
+		tags[e.subName(uid, id, 0)] = label
+	}
+	tags[e.subName(uid, int(hy2["id"].(float64)), int(ch["id"].(float64)))] = "USER-CHAIN"
+	e.appliedGate(int(reality["gate_id"].(float64)), "relay node")
 	var detail map[string]any
 	b, _ := e.get(fmt.Sprintf("/api/v1/admin/users/%d", uid), nil)
 	json.Unmarshal(b, &detail)
@@ -205,11 +216,15 @@ func TestWizardSubscriptionRealClients(t *testing.T) {
 			continue
 		}
 		tag := ob["tag"].(string)
-		seen[tag] = true
+		label := tags[tag]
+		if label == "" {
+			t.Fatalf("unexpected subscription resource %s", tag)
+		}
+		seen[label] = true
 		port := e.runSingboxClient(sb, ob)
 		before := homeHits.Load()
 		eventually(t, 25*time.Second, "proxied download via "+tag, func() bool { return fetchVia(port, target.URL, len(blob)) == nil })
-		if tag == "HOME" && homeHits.Load() == before {
+		if label == "HOME" && homeHits.Load() == before {
 			t.Fatal("HOME node traffic did not leave through the home SOCKS5 exit")
 		}
 		t.Logf("%s ok", tag)
@@ -231,7 +246,7 @@ func TestWizardSubscriptionRealClients(t *testing.T) {
 	}
 	json.Unmarshal(nodes, &list)
 	for _, n := range list.Items {
-		if n["chain"].(map[string]any)["kind"] != "none" {
+		if n["exit"].(map[string]any)["kind"] != "freedom" {
 			continue
 		}
 		res := e.post(fmt.Sprintf("/api/v1/admin/nodes/%d/test", int(n["id"].(float64))), map[string]any{}, nil)
@@ -243,7 +258,7 @@ func TestWizardSubscriptionRealClients(t *testing.T) {
 	// 只有内核会拒绝的参数（REALITY short ID 非十六进制）必须被 Gate 上的内核自检拦下。
 	var hy map[string]any
 	for _, n := range list.Items {
-		if n["name"] == "R" {
+		if n["id"] == reality["id"] {
 			hy = n
 		}
 	}

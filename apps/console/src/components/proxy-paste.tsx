@@ -26,11 +26,10 @@ export function ProxyPaste({ onApply }: { onApply: (proxy: ParsedProxy) => void 
     <Field label="粘贴代理信息（可选）" error={error} customError={error} hint="支持整段供应商说明、地址:端口:用户名:密码、空格分隔及代理 URL。一次粘贴一个代理。">
       <Textarea aria-label="粘贴代理信息" rows={3} autoComplete="off" spellCheck={false} value={raw}
         style={{ WebkitTextSecurity: visible ? "none" : "disc" } as CSSProperties}
-        placeholder="整段粘贴代理信息，自动填到下面"
-        onChange={e => { setRaw(e.target.value); setError(""); setNotice(""); }}
-        onPaste={e => { e.preventDefault(); const text = e.clipboardData.getData("text/plain"); setRaw(text); apply(text); }}
-        onBlur={() => apply(raw)} />
+        placeholder="粘贴后点“解析并填入”"
+        onChange={e => { setRaw(e.target.value); setError(""); setNotice(""); }} />
       <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" size="sm" disabled={!raw.trim()} onClick={() => apply(raw)}>解析并填入</Button>
         <Button type="button" variant="ghost" size="sm" aria-pressed={visible} onClick={() => setVisible(v => !v)}>{visible ? "隐藏原文" : "显示原文"}</Button>
         <span role="status" className="text-[var(--weir-ink-3)]">{notice}</span>
       </div>

@@ -2,7 +2,8 @@
 // 按官方摘要校验、用包里的安装脚本安装，失败自动切回。可切回本机保留的上一版本，或重装最近 3 个正式版本之一。
 // 整个过程在这里合成一条记录（useUpdateStatus），和其他后台任务同样显示；版本变了由 UpdateWatcher 刷新页面。
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Form, InsetRow, InsetRows, JobPlaceholder, JobView, Notice } from "@weir/ui";
 import { api } from "../api";
 import { date } from "../lib/models";

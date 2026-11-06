@@ -91,23 +91,23 @@ var (
 		{Name: "user_id", Type: field.TypeInt},
 		{Name: "entry_node_id", Type: field.TypeInt},
 		{Name: "name", Type: field.TypeString, Size: 100},
-		{Name: "exit_kind", Type: field.TypeEnum, Enums: []string{"socks5", "http", "https", "link", "node", "source"}},
-		{Name: "exit_source", Type: field.TypeJSON, Nullable: true},
-		{Name: "exit_address", Type: field.TypeString, Size: 255, Default: ""},
-		{Name: "exit_port", Type: field.TypeInt, Default: 0},
-		{Name: "exit_username", Type: field.TypeString, Size: 255, Default: ""},
-		{Name: "exit_password", Type: field.TypeString, Default: ""},
-		{Name: "exit_node_id", Type: field.TypeInt, Nullable: true},
-		{Name: "exit_link", Type: field.TypeString, Default: ""},
 		{Name: "enabled", Type: field.TypeBool, Default: true},
-		{Name: "policy_type", Type: field.TypeString, Size: 64, Default: ""},
 		{Name: "created_at", Type: field.TypeTime},
+		{Name: "exit_id", Type: field.TypeInt},
 	}
 	// ChainsTable holds the schema information for the "chains" table.
 	ChainsTable = &schema.Table{
 		Name:       "chains",
 		Columns:    ChainsColumns,
 		PrimaryKey: []*schema.Column{ChainsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "chains_exits_chains",
+				Columns:    []*schema.Column{ChainsColumns[6]},
+				RefColumns: []*schema.Column{ExitsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
 		Indexes: []*schema.Index{
 			{
 				Name:    "chain_user_id",
@@ -153,6 +153,43 @@ var (
 				Name:    "credential_user_id",
 				Unique:  false,
 				Columns: []*schema.Column{CredentialsColumns[4]},
+			},
+		},
+	}
+	// ExitsColumns holds the columns for the "exits" table.
+	ExitsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "gate_id", Type: field.TypeInt},
+		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
+		{Name: "remark", Type: field.TypeString, Size: 100, Default: ""},
+		{Name: "kind", Type: field.TypeEnum, Enums: []string{"socks5", "http", "https", "link", "node", "source", "freedom", "blackhole"}},
+		{Name: "address", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "port", Type: field.TypeInt, Default: 0},
+		{Name: "username", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "password", Type: field.TypeString, Default: ""},
+		{Name: "link", Type: field.TypeString, Default: ""},
+		{Name: "exit_node_id", Type: field.TypeInt, Nullable: true},
+		{Name: "source", Type: field.TypeJSON, Nullable: true},
+		{Name: "enabled", Type: field.TypeBool, Default: true},
+		{Name: "tag", Type: field.TypeString, Size: 64},
+		{Name: "policy_type", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// ExitsTable holds the schema information for the "exits" table.
+	ExitsTable = &schema.Table{
+		Name:       "exits",
+		Columns:    ExitsColumns,
+		PrimaryKey: []*schema.Column{ExitsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "exit_gate_id_tag",
+				Unique:  true,
+				Columns: []*schema.Column{ExitsColumns[1], ExitsColumns[13]},
+			},
+			{
+				Name:    "exit_owner_user_id_policy_type",
+				Unique:  false,
+				Columns: []*schema.Column{ExitsColumns[2], ExitsColumns[14]},
 			},
 		},
 	}
@@ -286,55 +323,27 @@ var (
 		{Name: "settings", Type: field.TypeJSON, Nullable: true},
 		{Name: "cert_id", Type: field.TypeInt, Nullable: true},
 		{Name: "enabled", Type: field.TypeBool, Default: true},
-		{Name: "chain_kind", Type: field.TypeEnum, Enums: []string{"none", "socks5", "http", "https", "link", "node", "source"}, Default: "none"},
-		{Name: "chain_source", Type: field.TypeJSON, Nullable: true},
-		{Name: "chain_address", Type: field.TypeString, Size: 255, Default: ""},
-		{Name: "chain_port", Type: field.TypeInt, Default: 0},
-		{Name: "chain_username", Type: field.TypeString, Size: 255, Default: ""},
-		{Name: "chain_password", Type: field.TypeString, Default: ""},
-		{Name: "chain_node_id", Type: field.TypeInt, Nullable: true},
-		{Name: "chain_link", Type: field.TypeString, Default: ""},
 		{Name: "created_at", Type: field.TypeTime},
+		{Name: "exit_id", Type: field.TypeInt},
 	}
 	// NodesTable holds the schema information for the "nodes" table.
 	NodesTable = &schema.Table{
 		Name:       "nodes",
 		Columns:    NodesColumns,
 		PrimaryKey: []*schema.Column{NodesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "nodes_exits_nodes",
+				Columns:    []*schema.Column{NodesColumns[13]},
+				RefColumns: []*schema.Column{ExitsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
 		Indexes: []*schema.Index{
 			{
 				Name:    "node_gate_id_port",
 				Unique:  true,
 				Columns: []*schema.Column{NodesColumns[1], NodesColumns[6]},
-			},
-		},
-	}
-	// OutboundsColumns holds the columns for the "outbounds" table.
-	OutboundsColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "gate_id", Type: field.TypeInt},
-		{Name: "tag", Type: field.TypeString, Size: 64},
-		{Name: "name", Type: field.TypeString, Size: 100, Default: ""},
-		{Name: "protocol", Type: field.TypeString, Size: 32},
-		{Name: "address", Type: field.TypeString, Size: 255, Default: ""},
-		{Name: "port", Type: field.TypeInt, Default: 0},
-		{Name: "username", Type: field.TypeString, Size: 255, Default: ""},
-		{Name: "password", Type: field.TypeString, Default: ""},
-		{Name: "settings", Type: field.TypeJSON, Nullable: true},
-		{Name: "enabled", Type: field.TypeBool, Default: true},
-		{Name: "position", Type: field.TypeInt, Default: 0},
-		{Name: "created_at", Type: field.TypeTime},
-	}
-	// OutboundsTable holds the schema information for the "outbounds" table.
-	OutboundsTable = &schema.Table{
-		Name:       "outbounds",
-		Columns:    OutboundsColumns,
-		PrimaryKey: []*schema.Column{OutboundsColumns[0]},
-		Indexes: []*schema.Index{
-			{
-				Name:    "outbound_gate_id_tag",
-				Unique:  true,
-				Columns: []*schema.Column{OutboundsColumns[1], OutboundsColumns[2]},
 			},
 		},
 	}
@@ -444,18 +453,26 @@ var (
 		{Name: "gate_id", Type: field.TypeInt},
 		{Name: "node_id", Type: field.TypeInt, Nullable: true},
 		{Name: "user_id", Type: field.TypeInt, Nullable: true},
-		{Name: "outbound_tag", Type: field.TypeString, Size: 64},
 		{Name: "domain", Type: field.TypeString, Default: ""},
 		{Name: "ip", Type: field.TypeString, Default: ""},
 		{Name: "enabled", Type: field.TypeBool, Default: true},
 		{Name: "priority", Type: field.TypeInt, Default: 0},
 		{Name: "created_at", Type: field.TypeTime},
+		{Name: "exit_id", Type: field.TypeInt},
 	}
 	// RoutesTable holds the schema information for the "routes" table.
 	RoutesTable = &schema.Table{
 		Name:       "routes",
 		Columns:    RoutesColumns,
 		PrimaryKey: []*schema.Column{RoutesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "routes_exits_routes",
+				Columns:    []*schema.Column{RoutesColumns[9]},
+				RefColumns: []*schema.Column{ExitsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
 		Indexes: []*schema.Index{
 			{
 				Name:    "route_gate_id",
@@ -708,12 +725,12 @@ var (
 		CertificatesTable,
 		ChainsTable,
 		CredentialsTable,
+		ExitsTable,
 		GatesTable,
 		GateActionsTable,
 		KernelDriversTable,
 		LinksTable,
 		NodesTable,
-		OutboundsTable,
 		PasskeysTable,
 		RateSamplesTable,
 		RecoveryCodesTable,
@@ -732,4 +749,7 @@ var (
 )
 
 func init() {
+	ChainsTable.ForeignKeys[0].RefTable = ExitsTable
+	NodesTable.ForeignKeys[0].RefTable = ExitsTable
+	RoutesTable.ForeignKeys[0].RefTable = ExitsTable
 }

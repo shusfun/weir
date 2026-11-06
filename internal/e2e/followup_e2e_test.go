@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shusfun/weir/internal/center"
 	"github.com/shusfun/weir/internal/store/ent/budget"
 )
 
@@ -182,9 +183,36 @@ func pull(t *testing.T, port int, target string) *puller {
 
 func (p *puller) idle() time.Duration { return time.Since(time.Unix(0, p.last.Load())) }
 
-// subOutbound 用 sing-box 格式拉取用户的订阅，取出名为 tag 的出站。
-func (e *env) subOutbound(uid int, tag string) map[string]any {
+// 通过资源身份取得显示名；测试不约定订阅的定位、备注或重名编号。
+func (e *env) subName(uid, nodeID, chainID int) string {
 	e.t.Helper()
+	b, _ := e.get("/api/v1/admin/users/"+strconv.Itoa(uid), nil)
+	var detail struct {
+		Links []struct {
+			Entries []center.Entry `json:"entries"`
+		} `json:"link_items"`
+	}
+	if err := json.Unmarshal(b, &detail); err != nil {
+		e.t.Fatal(err)
+	}
+	if len(detail.Links) > 0 {
+		for _, entry := range detail.Links[0].Entries {
+			if entry.NodeID == nodeID && entry.ChainID == chainID {
+				return entry.Name
+			}
+		}
+	}
+	e.t.Fatalf("subscription missing node %d chain %d", nodeID, chainID)
+	return ""
+}
+
+func (e *env) subOutbound(uid, nodeID int, chainIDs ...int) map[string]any {
+	e.t.Helper()
+	chainID := 0
+	if len(chainIDs) > 0 {
+		chainID = chainIDs[0]
+	}
+	tag := e.subName(uid, nodeID, chainID)
 	var detail map[string]any
 	b, _ := e.get("/api/v1/admin/users/"+strconv.Itoa(uid), nil)
 	json.Unmarshal(b, &detail)
@@ -220,10 +248,10 @@ func TestCenterCarriesOnlyControlTraffic(t *testing.T) {
 	e.gateCenter = link.url()
 	e.startGate("bw")
 	e.s.Store.Ent.Gate.UpdateOneID(e.gateID).SetPublicHost("127.0.0.1").ExecX(e.ctx)
-	e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "ss2022", "name": "S", "skip_probe": true}, nil)
+	n := e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "ss2022", "name": "S", "skip_probe": true}, nil)
 	u := e.post("/api/v1/admin/users", map[string]any{"email": "bw@e2e.test", "password": "E2eUser1"}, nil)
 	e.applied("node for bandwidth test")
-	port := e.runSingboxClient(sb, e.subOutbound(int(u["id"].(float64)), "S"))
+	port := e.runSingboxClient(sb, e.subOutbound(int(u["id"].(float64)), int(n["id"].(float64))))
 	// 限速 10 MiB/s 下载 20 秒：这段时间里 Gate 照常经中转发心跳、计量（每秒一次）与长轮询配置。
 	target := slowTarget(t, 10<<20)
 	time.Sleep(2 * time.Second)
@@ -313,8 +341,8 @@ func TestTwoGatesQuotaWithCenterDown(t *testing.T) {
 	}()
 
 	target := slowTarget(t, 3<<20)
-	pa := pull(t, e.runSingboxClient(sb, e.subOutbound(uid, "A")), target.URL)
-	pb := pull(t, e.runSingboxClient(sb, e.subOutbound(uid, "B")), target.URL)
+	pa := pull(t, e.runSingboxClient(sb, e.subOutbound(uid, na)), target.URL)
+	pb := pull(t, e.runSingboxClient(sb, e.subOutbound(uid, nb)), target.URL)
 	eventually(t, 60*time.Second, "60 MiB metered with the center up", func() bool { return e.s.Store.Ent.User.GetX(e.ctx, uid).Used >= 60<<20 })
 	alloc, sum := enforced()
 	t.Logf("center going down: used %d MiB, allocated A=%d MiB B=%d MiB (sum %d MiB of %d)", e.s.Store.Ent.User.GetX(e.ctx, uid).Used>>20,
@@ -450,7 +478,7 @@ func TestRealityTargetChosenByGateProbe(t *testing.T) {
 	}
 	u := e.post("/api/v1/admin/users", map[string]any{"email": "probe@e2e.test", "password": "E2eUser1"}, nil)
 	e.applied("REALITY node with a probed target")
-	port := e.runSingboxClient(sb, e.subOutbound(int(u["id"].(float64)), "R"))
+	port := e.runSingboxClient(sb, e.subOutbound(int(u["id"].(float64)), int(n["id"].(float64))))
 	proxy, _ := url.Parse(fmt.Sprintf("socks5://127.0.0.1:%d", port))
 	hc := &http.Client{Timeout: 15 * time.Second, Transport: &http.Transport{Proxy: http.ProxyURL(proxy)}}
 	eventually(t, 40*time.Second, "internet via the probed REALITY node", func() bool {

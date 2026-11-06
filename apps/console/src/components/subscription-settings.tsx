@@ -1,6 +1,6 @@
 // 规则模板（6 个内置 + 自定义 ini / Clash YAML）与订阅源页的默认设置。
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { Badge, Button, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, SectionHeader, Segmented, SwitchField, Textarea, useToast, useConfirm } from "@weir/ui";
 import { Plus, Trash2 } from "lucide-react";
 import { api } from "../api";
@@ -96,7 +96,7 @@ function TemplateForm({ value, close, saved }: { value: CustomTemplate | "new"; 
 export function SettingsPanel() {
   const q = useQuery({ queryKey: ["subscription-settings"], queryFn: () => api("/admin/subscriptions/settings") as Promise<SubscriptionSettings> });
   if (q.isPending || q.error) return <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} />;
-  return <SettingsForm key={q.dataUpdatedAt} value={q.data} saved={() => q.refetch()} />;
+  return <SettingsForm value={q.data} saved={() => q.refetch()} />;
 }
 
 const switches = [

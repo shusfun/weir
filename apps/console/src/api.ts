@@ -2,6 +2,7 @@ import { reportError } from "./lib/console-context";
 import { awaitJob, type Job } from "./lib/jobs";
 
 const messages: Record<string, string> = {
+ source_in_use:"这个来源仍被出口使用，请先切换或删除引用它的出口。",
  gate_offline:"这台 VPS 当前离线，请确认 Gate 服务在运行后重试。",
  gate_up_to_date:"这台 VPS 已经是中心的版本，不需要更新。",
  kernel_in_use:"这个内核版本仍在使用",
@@ -411,6 +412,10 @@ export function isConflict(e: unknown) {
   return e instanceof ApiError && e.conflict;
 }
 
+export function isTransient(e: unknown) {
+  return e instanceof ApiError && (e.status === 502 || e.status === 503 || e.status === 0) || e instanceof TypeError || e instanceof DOMException && (e.name === "NetworkError" || e.name === "AbortError");
+}
+
 // 表单错误：错误码能对应到字段的标在该字段下方（<Form errors> 按 name 分发），其余显示在表单底部。
 export type FormError<K extends string> = { field?: K; message: string };
 export function formError<K extends string>(e: unknown, fields: Partial<Record<string, K>>): FormError<K> {
@@ -447,7 +452,7 @@ function joinMessage(base: string, detail: string) {
 
 // errorFrom 把中心的错误响应换成 ApiError（同步返回与后台任务的结果共用）。
 export function errorFrom(path: string, status: number, data: any): ApiError {
-  if (status >= 500 && !data?.error?.code) return new ApiError(upstreamMessage(status), "upstream_unavailable", status);
+  if (status >= 500 && (!data?.error?.code || data.error.code === "upstream_unavailable")) return new ApiError(upstreamMessage(status), "upstream_unavailable", status);
   const code = String(data?.error?.code ?? "http_" + status);
   const base = messages[code] ?? `操作失败（${code}），请检查输入与服务状态后重试。`;
   const message = joinMessage(base, data?.error?.detail ? String(data.error.detail) : "");
@@ -499,7 +504,9 @@ export async function api(
   } catch {
     throw new ApiError("无法连接控制中心，请检查网络后重试。", "network_unreachable", 0);
   }
-  const text = await res.text();
+  let text: string;
+  try { text = await res.text(); }
+  catch { throw new ApiError("读取中心响应时连接中断，请恢复后核对操作结果。", "network_interrupted", 0); }
   let data: any = null;
   if (text) {
     try {

@@ -2,7 +2,8 @@
 // 内容从 Weir 接口读取，不接收 dsh 页面发来的任何消息；按参数说明生成字段：中文名与单位、引用显示名称、改前 / 改后。
 // 管理员可以直接改字段再确认（改过的字段做标记）；危险操作单独标出。dsh 无法确认。
 import { useEffect, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { Badge, Button, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Input, Notice, PasswordInput, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, StatusLamp, Switch, useToast } from "@weir/ui";
 import { api, clause } from "../api";
 import { nodeStatus, type Gate, type NodeItem } from "../lib/core";
@@ -232,7 +233,7 @@ function DraftOutcome({ outcome, close }: { outcome: Outcome; close: () => void 
 // DraftReadFailure：读不到待确认的草稿时在顶部说明原因并给「重新加载」——dsh 说已经提交，这边不能什么也不显示。
 export function DraftReadFailure() {
   const q = useDrafts();
-  if (!q.isError) return null;
+  if (!q.isError || q.data) return null;
   return (
     <div className="origin-banner">
       <Notice tone="bad" role="alert">

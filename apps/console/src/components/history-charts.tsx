@@ -1,6 +1,6 @@
 // 流量与主机历史图表：1 / 6 / 24 小时。数据缺失显示「未知」，不补零，缺口不连线。
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { Segmented } from "@weir/ui";
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@weir/ui/chart";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";

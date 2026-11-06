@@ -275,8 +275,16 @@ func (s *Server) planEntries(ctx context.Context, u *ent.User, entries []Entry, 
 			gates[n.GateID] = g
 		}
 		h := s.healthOf(ctx, n, g)
-		if e.ChainID != 0 && h.Status != "down" {
-			if pr, ok := s.loadExitProbe(ctx, "chain:"+itoa(e.ChainID)); ok && !pr.OK {
+		exitID := n.ExitID
+		if e.ChainID != 0 {
+			ch, err := s.Store.Ent.Chain.Get(ctx, e.ChainID)
+			if err != nil {
+				continue
+			}
+			exitID = ch.ExitID
+		}
+		if h.Status != "down" {
+			if pr, ok := s.loadExitProbe(ctx, exitOwner(exitID)); ok && !pr.OK {
 				h = nodeHealth{Status: "down", Why: "出口实测失败：" + firstNonEmpty(pr.Error, pr.Note)}
 			}
 		}

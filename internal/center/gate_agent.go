@@ -22,7 +22,7 @@ import (
 	"github.com/shusfun/weir/packages/contracts"
 )
 
-func (s *Server) gateRoutes(ready, admin *gin.RouterGroup) {
+func (s *Server) gateRoutes(ready, auth, admin *gin.RouterGroup) {
 	ready.POST("/agent/pair", s.agentPair)
 	ready.POST("/agent/challenge", s.agentChallenge)
 	ready.POST("/agent/auth", s.agentAuthenticate)
@@ -47,6 +47,7 @@ func (s *Server) gateRoutes(ready, admin *gin.RouterGroup) {
 	s.certRoutes(admin)
 	s.nodeCertRoutes(admin)
 	s.nodeRoutes(admin)
+	s.exitRoutes(auth, admin)
 	s.aiRoutes(admin)
 	s.routingRoutes(admin)
 	s.kernelAdminRoutes(admin)

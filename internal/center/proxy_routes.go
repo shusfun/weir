@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	entexit "github.com/shusfun/weir/internal/store/ent/exit"
 	"sort"
 	"strings"
 
@@ -66,7 +67,7 @@ func (s *Server) userTypes(ctx context.Context, u *ent.User) ([]*proxyType, erro
 }
 
 func (s *Server) policyChains(ctx context.Context, uid int, typ string) ([]*ent.Chain, error) {
-	return s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(uid), chain.PolicyTypeEQ(typ)).Order(ent.Asc(chain.FieldID)).All(ctx)
+	return s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(uid), chain.HasExitWith(entexit.PolicyTypeEQ(typ))).Order(ent.Asc(chain.FieldID)).All(ctx)
 }
 
 func (s *Server) getProxy(c *gin.Context, admin bool) {
@@ -125,7 +126,7 @@ func (s *Server) proxyView(ctx context.Context, u *ent.User) (gin.H, error) {
 			chainID := 0
 			if ch := byEntry[n.ID]; ch != nil {
 				chainID = ch.ID
-				if p, ok := s.loadExitProbe(ctx, "chain:"+itoa(ch.ID)); ok && !p.OK && h.Status != "down" {
+				if p, ok := s.loadExitProbe(ctx, exitOwner(ch.ExitID)); ok && !p.OK && h.Status != "down" {
 					h = nodeHealth{Status: "down", Why: "出口实测失败"}
 				}
 			} else if len(chains) > 0 {
@@ -179,15 +180,13 @@ func (s *Server) proxyView(ctx context.Context, u *ent.User) (gin.H, error) {
 
 // chainExitView 是类型出口的显示内容（与链式代理列表一致：密码给本人与管理员看原文）。
 func (s *Server) chainExitView(ctx context.Context, ch *ent.Chain) gin.H {
-	v := gin.H{"kind": ch.ExitKind, "address": ch.ExitAddress, "port": ch.ExitPort, "username": ch.ExitUsername, "node_id": ch.ExitNodeID}
-	if pw, err := s.reveal(ch.ExitPassword); err == nil {
-		v["password"] = pw
+	e, err := s.Store.Ent.Exit.Get(ctx, ch.ExitID)
+	if err != nil {
+		return gin.H{"error": "出口未知"}
 	}
-	if l, err := s.reveal(ch.ExitLink); err == nil && l != "" {
-		v["link"] = l
-	}
-	if ch.ExitKind == chain.ExitKindSource {
-		v["source"] = ch.ExitSource
+	v, err := s.exitResourceView(ctx, e)
+	if err != nil {
+		return gin.H{"error": "出口未知"}
 	}
 	return v
 }
@@ -317,8 +316,8 @@ func (s *Server) putTypeExit(c *gin.Context, admin bool) {
 		return
 	}
 	var req struct {
-		Exit      ChainSpec `json:"exit"`
-		SkipProbe bool      `json:"skip_probe"` // 仅管理员可用
+		Exit      ExitSpec `json:"exit"`
+		SkipProbe bool     `json:"skip_probe"` // 仅管理员可用
 	}
 	if !bind(c, &req) {
 		return
@@ -369,46 +368,71 @@ func (s *Server) putTypeExit(c *gin.Context, admin bool) {
 	for _, ch := range existing {
 		byEntry[ch.EntryNodeID] = ch
 	}
-	gates, _ := s.userGates(ctx, u.ID)
-	keep := map[int]bool{}
-	var probes []func()
-	for _, p := range ok2 {
-		name := truncate(p.node.Name+" · 经"+exitLabel(req.Exit), 100)
-		var id int
-		if ch := byEntry[p.node.ID]; ch != nil {
-			upd := ch.Update().SetName(name).SetEnabled(true)
-			if err = s.saveChainExit(upd.Mutation(), req.Exit); err == nil {
-				_, err = upd.Save(ctx)
-			}
-			id = ch.ID
-		} else {
-			create := s.Store.Ent.Chain.Create().SetUserID(u.ID).SetEntryNodeID(p.node.ID).SetName(name).SetPolicyType(t.Key)
-			if err = s.saveChainExit(create.Mutation(), req.Exit); err == nil {
-				var ch *ent.Chain
-				if ch, err = create.Save(ctx); err == nil {
-					id = ch.ID
-				}
-			}
-		}
-		if err != nil {
-			failInternal(c, 500, "update_failed", err)
+	tx, err := s.Store.Ent.Tx(ctx)
+	if err != nil {
+		failInternal(c, 500, "save_failed", err)
+		return
+	}
+	defer tx.Rollback()
+	exits := map[int]*ent.Exit{}
+	previous := map[int]*ent.Exit{}
+	for _, ch := range existing {
+		e, eerr := tx.Exit.Get(ctx, ch.ExitID)
+		if eerr != nil {
+			failInternal(c, 500, "query_failed", eerr)
 			return
 		}
-		keep[id] = true
-		probe, owner := p.probe, "chain:"+itoa(id)
-		probes = append(probes, func() { s.saveExitProbe(ctx, owner, probe) })
+		previous[e.GateID] = e
 	}
-	if err = s.dropPolicyChains(ctx, existing, keep); err != nil {
-		failInternal(c, 500, "delete_failed", err)
+	keep := map[int]bool{}
+	for _, p := range ok2 {
+		e := exits[p.node.GateID]
+		if e == nil {
+			e, err = s.persistExit(ctx, tx.Client(), p.node.GateID, &u.ID, t.Key, req.Exit, previous[p.node.GateID])
+			if err != nil {
+				failInternal(c, 500, "save_failed", err)
+				return
+			}
+			exits[p.node.GateID] = e
+		}
+		var ch *ent.Chain
+		if prev := byEntry[p.node.ID]; prev != nil {
+			ch, err = tx.Chain.UpdateOneID(prev.ID).SetExitID(e.ID).SetEnabled(true).Save(ctx)
+		} else {
+			ch, err = tx.Chain.Create().SetUserID(u.ID).SetEntryNodeID(p.node.ID).SetName(truncate(p.node.Name+" · 经"+exitKindLabel(req.Exit.Kind), 100)).SetExitID(e.ID).Save(ctx)
+		}
+		if err != nil {
+			failInternal(c, 500, "save_failed", err)
+			return
+		}
+		keep[ch.ID] = true
+	}
+	for _, ch := range existing {
+		if !keep[ch.ID] {
+			if _, err = tx.Credential.Delete().Where(credential.ChainIDEQ(ch.ID)).Exec(ctx); err == nil {
+				err = tx.Chain.DeleteOneID(ch.ID).Exec(ctx)
+			}
+			if err != nil {
+				failInternal(c, 500, "save_failed", err)
+				return
+			}
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		failInternal(c, 500, "save_failed", err)
 		return
+	}
+	for _, p := range ok2 {
+		if e := exits[p.node.GateID]; e != nil {
+			if err = s.refreshExit(ctx, e, p.probe); err != nil {
+				failInternal(c, 500, "source_exit_failed", err)
+				return
+			}
+		}
 	}
 	if err = s.afterChainChange(ctx, u.ID); err != nil {
 		failInternal(c, 500, "sync_failed", err)
 		return
-	}
-	_ = s.bumpGates(ctx, gates)
-	for _, f := range probes {
-		f()
 	}
 	s.audit(c, "proxy.type_exit", "user:"+itoa(u.ID), "ok")
 	u, _ = s.Store.Ent.User.Get(ctx, u.ID)
@@ -419,22 +443,6 @@ func (s *Server) putTypeExit(c *gin.Context, admin bool) {
 	}
 	c.JSON(200, v)
 }
-
-func exitLabel(spec ChainSpec) string {
-	switch spec.Kind {
-	case "socks5", "http", "https":
-		return exitKindLabels[spec.Kind]
-	case "link":
-		return "节点链接"
-	case "source":
-		return "订阅节点"
-	case "node":
-		return "另一节点"
-	}
-	return "出口"
-}
-
-var exitKindLabels = map[string]string{"socks5": "SOCKS5", "http": "HTTP 代理", "https": "HTTPS 代理"}
 
 // dropPolicyChains 删除不在 keep 里的类型出口链与它们的凭据。
 func (s *Server) dropPolicyChains(ctx context.Context, chains []*ent.Chain, keep map[int]bool) error {

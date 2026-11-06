@@ -64,8 +64,8 @@ func TestUserChainExitKinds(t *testing.T) {
 		return mustJSON(t, user, "POST", "/api/v1/me/chains", map[string]any{"name": "出口", "entry_node_id": entry, "exit": exit}, want)
 	}
 	ch := post(map[string]any{"kind": "https", "address": "203.0.113.30", "port": 8443, "username": "u", "password": "p"}, 200)
-	if p, _ := ch["probe"].(map[string]any); p["exit_ip"] != "198.51.100.77" || p["mode"] != "proxy" {
-		t.Fatalf("probe = %v", ch["probe"])
+	if p, _ := ch["exit"].(map[string]any)["probe"].(map[string]any); p["exit_ip"] != "198.51.100.77" || p["mode"] != "proxy" {
+		t.Fatalf("probe = %v", ch["exit"])
 	}
 	post(map[string]any{"kind": "link", "link": ss2022Link}, 200)
 	// Xray 入口连不了 Hysteria2：保存前就说明原因，不建一个下发失败的链。
@@ -86,7 +86,7 @@ func TestUserChainExitKinds(t *testing.T) {
 	}
 	byKind := map[string]contracts.Outbound{}
 	for _, ob := range g.config(0).Outbounds {
-		if strings.HasPrefix(ob.Tag, "chain-") {
+		if strings.HasPrefix(ob.Tag, "exit-") {
 			byKind[ob.Protocol] = ob
 		}
 	}

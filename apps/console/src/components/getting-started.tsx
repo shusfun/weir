@@ -1,6 +1,6 @@
 // GettingStarted：从零到客户端用上的路径。完成与否按现有数据判断，不另存状态；全部完成后不再显示。
 import type { ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { Button, Card, CardContent, StatusLamp } from "@weir/ui";
 import { Link } from "react-router-dom";
 import { api } from "../api";

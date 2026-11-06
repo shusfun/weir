@@ -1,6 +1,6 @@
 // 客户端目录：下载入口、平台、格式与显示顺序。编辑只改本地草稿，点保存一次发布。
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import {
   SortableList,
   CheckboxField,

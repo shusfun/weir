@@ -9,7 +9,6 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/chain"
 	"github.com/shusfun/weir/internal/store/ent/credential"
 	entnode "github.com/shusfun/weir/internal/store/ent/node"
-	"github.com/shusfun/weir/internal/store/ent/outbound"
 	"github.com/shusfun/weir/internal/store/ent/route"
 )
 
@@ -49,41 +48,12 @@ func (s *Server) gateTopology(c *gin.Context) {
 			out = append(out, n)
 		}
 	}
-	direct := topoNode{ID: "exit-direct", Kind: "exit", Label: "直连", Sub: "从这台 VPS 直接出去"}
-	nodeExit := func(id int) topoNode {
-		x, err := s.Store.Ent.Node.Get(ctx, id)
+	exitOf := func(id int) topoNode {
+		e, err := s.Store.Ent.Exit.Get(ctx, id)
 		if err != nil {
-			return topoNode{ID: "exit-node-" + itoa(id), Kind: "exit", Label: "节点 " + itoa(id), Sub: "已不存在"}
+			return topoNode{ID: exitOwner(id), Kind: "exit", Label: "出口未知"}
 		}
-		sub := "另一台 VPS 的节点"
-		if x.GateID == g.ID {
-			sub = "这台 VPS 的节点"
-		}
-		return topoNode{ID: "exit-node-" + itoa(x.ID), Kind: "exit", Label: x.Name, Sub: sub, Link: "/gates?node=" + itoa(x.ID)}
-	}
-	// sourceExit：订阅源节点出口，显示最近一次解析到的节点（还没解析成功时流量被丢弃）。
-	sourceExit := func(id, owner string) topoNode {
-		n := topoNode{ID: id, Kind: "exit", Label: "订阅源节点", Sub: "还没有解析成功（流量丢弃）", Link: "/subscriptions"}
-		if v, ok := s.loadExit(ctx, owner); ok && len(v.Names) > 0 {
-			n.Sub = v.Names[0]
-			if len(v.Names) > 1 {
-				n.Label, n.Sub = "订阅源节点（一组）", fmt.Sprintf("%s 等 %d 个，内核自动切换", v.Names[0], len(v.Names))
-			}
-		}
-		return n
-	}
-	exitOf := func(n *ent.Node) topoNode {
-		switch n.ChainKind {
-		case entnode.ChainKindSocks5:
-			return topoNode{ID: "exit-socks-" + itoa(n.ID), Kind: "exit", Label: "家宽 SOCKS5", Sub: fmt.Sprintf("%s:%d", n.ChainAddress, n.ChainPort)}
-		case entnode.ChainKindNode:
-			if n.ChainNodeID != nil {
-				return nodeExit(*n.ChainNodeID)
-			}
-		case entnode.ChainKindSource:
-			return sourceExit("exit-nodesrc-"+itoa(n.ID), "node:"+itoa(n.ID))
-		}
-		return direct
+		return topoNode{ID: exitOwner(id), Kind: "exit", Label: firstNonEmpty(e.Remark, exitKindLabel(string(e.Kind))), Sub: exitKindLabel(string(e.Kind)), Link: "/exits?gate=" + itoa(g.ID) + "&focus=exit:" + itoa(id)}
 	}
 	for _, n := range nodes {
 		nid := "node-" + itoa(n.ID)
@@ -104,7 +74,7 @@ func (s *Server) gateTopology(c *gin.Context) {
 				edges = append(edges, topoEdge{id, nid})
 			}
 		}
-		ex := exitOf(n)
+		ex := exitOf(n.ExitID)
 		add(ex)
 		edges = append(edges, topoEdge{nid, ex.ID})
 	}
@@ -122,18 +92,7 @@ func (s *Server) gateTopology(c *gin.Context) {
 		cid, uid := "chain-"+itoa(ch.ID), "user-"+itoa(ch.UserID)
 		add(topoNode{ID: uid, Kind: "user", Label: firstNonEmpty(u.Name, u.Email), Link: "/users?user=" + itoa(ch.UserID)})
 		add(topoNode{ID: cid, Kind: "route", Label: "链式代理 " + ch.Name, Sub: "只对 " + firstNonEmpty(u.Name, u.Email) + "，优先", Link: "/users?user=" + itoa(ch.UserID)})
-		var ex topoNode
-		switch ch.ExitKind {
-		case chain.ExitKindSocks5:
-			ex = topoNode{ID: "exit-chain-" + itoa(ch.ID), Kind: "exit", Label: "家宽 SOCKS5", Sub: fmt.Sprintf("%s:%d", ch.ExitAddress, ch.ExitPort), Link: "/users?user=" + itoa(ch.UserID)}
-		case chain.ExitKindSource:
-			ex = sourceExit("exit-chainsrc-"+itoa(ch.ID), "chain:"+itoa(ch.ID))
-		default:
-			if ch.ExitNodeID == nil {
-				continue
-			}
-			ex = nodeExit(*ch.ExitNodeID)
-		}
+		ex := exitOf(ch.ExitID)
 		add(ex)
 		edges = append(edges, topoEdge{"node-" + itoa(ch.EntryNodeID), cid}, topoEdge{cid, ex.ID})
 	}
@@ -152,17 +111,8 @@ func (s *Server) gateTopology(c *gin.Context) {
 				sub += " · 只对 " + firstNonEmpty(u.Name, u.Email)
 			}
 		}
-		add(topoNode{ID: rid, Kind: "route", Label: label, Sub: sub, Link: "routing"})
-		exit := direct
-		if r.OutboundTag != "direct" {
-			if o, err := s.Store.Ent.Outbound.Query().Where(outbound.GateIDEQ(g.ID), outbound.TagEQ(r.OutboundTag)).Only(ctx); err == nil {
-				exit = topoNode{ID: "exit-out-" + itoa(o.ID), Kind: "exit", Label: firstNonEmpty(o.Name, o.Tag), Sub: o.Protocol, Link: "routing"}
-				if o.Protocol == "source" {
-					exit = sourceExit("exit-out-"+itoa(o.ID), "out:"+itoa(o.ID))
-					exit.Label, exit.Link = firstNonEmpty(o.Name, o.Tag)+" · "+exit.Label, "routing"
-				}
-			}
-		}
+		add(topoNode{ID: rid, Kind: "route", Label: label, Sub: sub, Link: "/exits?gate=" + itoa(g.ID)})
+		exit := exitOf(r.ExitID)
 		add(exit)
 		edges = append(edges, topoEdge{rid, exit.ID})
 		for _, n := range nodes {

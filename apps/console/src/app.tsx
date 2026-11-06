@@ -11,22 +11,8 @@ import "./style.css";
 
 // 升级后旧标签页里的入口脚本还指向已删除的分块，按需加载会 404：整页重新加载一次换到新版本；
 // 30 秒内已重新加载过仍失败就交给 LoadBoundary 显示错误，避免反复刷新
-const reloadKey = "weir:chunk-reload";
 class ChunkLoadError extends Error {}
-function reloadForNewBuild(error: unknown): Promise<never> {
-  let last = 0;
-  try {
-    last = Number(sessionStorage.getItem(reloadKey)) || 0;
-    if (Date.now() - last > 30_000) sessionStorage.setItem(reloadKey, String(Date.now()));
-  } catch {
-    last = Date.now();
-  }
-  if (Date.now() - last > 30_000) {
-    window.location.reload();
-    return new Promise<never>(() => {});
-  }
-  return Promise.reject(new ChunkLoadError(error instanceof Error ? error.message : String(error)));
-}
+function reloadForNewBuild(error:unknown):Promise<never>{return Promise.reject(new ChunkLoadError(error instanceof Error?error.message:String(error)));}
 
 // 按需加载页面并保留组件自身的 props 类型；登录后空闲时预加载（见 shell/page-switch.tsx）
 const page = <M extends Record<K, ComponentType<any>>, K extends keyof M>(load: () => Promise<M>, name: K) =>
@@ -49,6 +35,7 @@ class LoadBoundary extends Component<{ children: ReactNode }, { error: Error | n
     );
   }
 }
+const ExitsPage = page(() => import("./pages/exits"), "ExitsPage");
 const GatesPage = page(() => import("./pages/gates"), "GatesPage");
 const SubscriptionsPage = page(() => import("./pages/subscriptions"), "SubscriptionsPage");
 const PublicPagesPage = page(() => import("./pages/public-pages"), "PublicPagesPage");
@@ -70,6 +57,7 @@ const DevUiPage = import.meta.env.DEV ? page(() => import("./pages/dev-ui"), "De
 // 控制台各页面：导航时按路径找到要预先准备的代码
 const consolePages: Record<string, Loader> = {
   "/gates": GatesPage.loader,
+  "/exits": ExitsPage.loader,
   "/users": UsersPage.loader,
   "/kernels": KernelsPage.loader,
   "/system": SystemPage.loader,
@@ -156,6 +144,7 @@ function Console() {
           <Suspense fallback={loading("正在加载页面…")}>
             <Routes location={location}>
               <Route path="/" element={<Navigate to={home} replace />} />
+              <Route path="/exits" element={admin ? <ExitsPage /> : <Navigate to="/proxy" replace />} />
               <Route path="/gates" element={guard(<GatesPage />)} />
               <Route path="/users" element={guard(<UsersPage />)} />
               <Route path="/kernels" element={guard(<KernelsPage />)} />

@@ -354,7 +354,7 @@ func (s *Server) Router() *gin.Engine {
 	s.passkeyRoutes(ready, auth)
 	admin := auth.Group("/admin")
 	admin.Use(requireAdmin)
-	s.gateRoutes(ready, admin)
+	s.gateRoutes(ready, auth, admin)
 	s.userRoutes(auth, admin)
 	s.pullRoutes(auth, admin)
 	s.proxyRoutes(auth, admin)

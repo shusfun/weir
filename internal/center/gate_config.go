@@ -16,10 +16,6 @@ import (
 
 func userKey(uid int) string { return fmt.Sprintf("u%d", uid) }
 
-// chainExitKey / nodeExitKey 是链式代理出口节点上的系统内部凭据标识（不计入任何用户额度）。
-func chainExitKey(chainID int) string { return fmt.Sprintf("chainx-%d", chainID) }
-func nodeExitKey(nodeID int) string   { return fmt.Sprintf("nodex-%d", nodeID) }
-
 // compileGateConfig 把数据库状态编译成某台 Gate 的完整期望配置。
 // 停用的用户、链接、链式代理不下发凭据；到期与额度由 Gate 依据配置在本地执行。
 func (s *Server) compileGateConfig(ctx context.Context, g *ent.Gate) (contracts.GateConfig, error) {

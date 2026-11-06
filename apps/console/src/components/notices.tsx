@@ -1,7 +1,8 @@
 // 管理员通知：中心按当前状态算出要处理的问题（缺内核、版本没有驱动、有新版本、磁盘不足等），
 // 每条带处理按钮，可以忽略；问题解决后自动消失。只给管理员看。
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { useNavigate } from "react-router-dom";
 import { Badge, Button, Popover, PopoverContent, PopoverTrigger, ScrollArea } from "@weir/ui";
 import { Bell } from "lucide-react";

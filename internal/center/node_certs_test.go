@@ -194,7 +194,7 @@ func TestIPCertViaACMEThenExpiryAndRenewal(t *testing.T) {
 	count := func() int {
 		w := admin.do("GET", "/sub/"+token, nil, map[string]string{"User-Agent": "v2rayN/7.0"})
 		raw, _ := base64.StdEncoding.DecodeString(w.Body.String())
-		return strings.Count(string(raw), "trojan://") + strings.Count(string(raw), "vless://")
+		return strings.Count(string(raw), "trojan://") + strings.Count(string(raw), "vless://") - strings.Count(string(raw), "trojan://weir-info@")
 	}
 	if count() != 2 {
 		t.Fatal("valid certificate nodes must be in the subscription")

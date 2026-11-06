@@ -194,15 +194,15 @@ func TestSecretParamsFilledOnlyInConfirmWindow(t *testing.T) {
 // 处理函数整体覆盖的对象（出口）：只改名称时，没给的字段与密码用现值补齐，不被清空；只读工具不给密码。
 func TestOutboundUpdateKeepsPasswordAndHidesIt(t *testing.T) {
 	s, admin, g := setupGate(t)
+	g.serveActions(t, s, nil)
 	m, _ := s.ensureMCP()
 	h := s.mcpHandler(m)
-	gid := itoa(int(g.id))
-	o := mustJSON(t, admin, "POST", "/api/v1/admin/gates/"+gid+"/outbounds", map[string]any{"tag": "home", "protocol": "socks", "address": "203.0.113.9", "port": 1080, "username": "u", "password": "PW-SECRET"}, 200)
+	o := mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"gate_id": int(g.id), "kind": "socks5", "address": "203.0.113.9", "port": 1080, "username": "u", "password": "PW-SECRET"}, 200)
 	oid := int(o["id"].(float64))
-	if text, _ := toolText(t, h, m.webToken, "list_outbounds", map[string]any{"gate_id": g.id}); strings.Contains(text, "PW-SECRET") || !strings.Contains(text, `"has_password": true`) {
-		t.Fatalf("list_outbounds = %s", text)
+	if text, _ := toolText(t, h, m.webToken, "list_exits", map[string]any{"gate_id": g.id}); strings.Contains(text, "PW-SECRET") || !strings.Contains(text, `"has_password": true`) {
+		t.Fatalf("list_exits = %s", text)
 	}
-	if text, isErr := toolText(t, h, m.webToken, "submit_draft", map[string]any{"explain": "改名", "steps": []any{map[string]any{"action": "outbound.update", "args": map[string]any{"outbound_id": oid, "name": "家宽"}}}}); isErr {
+	if text, isErr := toolText(t, h, m.webToken, "submit_draft", map[string]any{"explain": "改备注", "steps": []any{map[string]any{"action": "exit.update", "args": map[string]any{"exit_id": oid, "remark": "家宽"}}}}); isErr {
 		t.Fatal(text)
 	}
 	d := mustJSON(t, admin, "GET", "/api/v1/admin/ai/drafts", nil, 200)["drafts"].([]any)[0].(map[string]any)
@@ -210,8 +210,8 @@ func TestOutboundUpdateKeepsPasswordAndHidesIt(t *testing.T) {
 		t.Fatalf("draft leaks password: %v", d)
 	}
 	mustJSON(t, admin, "POST", "/api/v1/admin/ai/drafts/"+d["id"].(string)+"/apply", nil, 200)
-	got, _ := s.Store.Ent.Outbound.Get(t.Context(), oid)
-	if pw, _ := s.reveal(got.Password); pw != "PW-SECRET" || got.Name != "家宽" || got.Address != "203.0.113.9" || got.Username != "u" {
+	got, _ := s.Store.Ent.Exit.Get(t.Context(), oid)
+	if pw, _ := s.reveal(got.Password); pw != "PW-SECRET" || got.Remark != "家宽" || got.Address != "203.0.113.9" || got.Username != "u" {
 		t.Fatalf("outbound = %+v pw=%q", got, pw)
 	}
 }
@@ -219,12 +219,13 @@ func TestOutboundUpdateKeepsPasswordAndHidesIt(t *testing.T) {
 // 每项声明式草稿能力的试运行都在第一次写入前停下：只提交、不确认时数据库与任务都不变。
 func TestOpDraftDryRunsWriteNothing(t *testing.T) {
 	s, admin, g := setupGate(t)
+	g.serveActions(t, s, nil)
 	m, _ := s.ensureMCP()
 	h := s.mcpHandler(m)
 	ctx := t.Context()
 	gid := itoa(int(g.id))
-	out := mustJSON(t, admin, "POST", "/api/v1/admin/gates/"+gid+"/outbounds", map[string]any{"tag": "home", "protocol": "socks", "address": "203.0.113.9", "port": 1080}, 200)
-	rt := mustJSON(t, admin, "POST", "/api/v1/admin/gates/"+gid+"/routes", map[string]any{"outbound_tag": "home", "domain": "domain:a.com"}, 200)
+	out := mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"gate_id": int(g.id), "kind": "socks5", "address": "203.0.113.9", "port": 1080}, 200)
+	rt := mustJSON(t, admin, "POST", "/api/v1/admin/gates/"+gid+"/routes", map[string]any{"exit_id": out["id"], "domain": "domain:a.com"}, 200)
 	src := mustJSON(t, admin, "POST", "/api/v1/admin/subscriptions/sources", map[string]any{"name": "A", "url": "https://sub.example.com/x"}, 200)
 	prof := mustJSON(t, admin, "POST", "/api/v1/admin/subscriptions/profiles", map[string]any{"name": "P"}, 200)
 	u := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "dry@example.test"}, 200)
@@ -233,7 +234,7 @@ func TestOpDraftDryRunsWriteNothing(t *testing.T) {
 		count := func(n int, _ error) int { return n }
 		return mustString([]any{
 			count(s.Store.Ent.Gate.Query().Count(ctx)), s.mustGateName(t, int(g.id)),
-			count(s.Store.Ent.Outbound.Query().Count(ctx)), count(s.Store.Ent.Route.Query().Count(ctx)),
+			count(s.Store.Ent.Exit.Query().Count(ctx)), count(s.Store.Ent.Route.Query().Count(ctx)),
 			count(s.Store.Ent.SubSource.Query().Count(ctx)), count(s.Store.Ent.SubProfile.Query().Count(ctx)), count(s.Store.Ent.SubGrant.Query().Count(ctx)),
 			count(s.Store.Ent.RuleTemplate.Query().Count(ctx)), count(s.Store.Ent.Link.Query().Count(ctx)), len(s.jobs.List("")),
 		})
@@ -241,9 +242,9 @@ func TestOpDraftDryRunsWriteNothing(t *testing.T) {
 	before := snapshot()
 	steps := []map[string]any{
 		{"action": "gate.update", "args": map[string]any{"gate_id": g.id, "name": "HK-2"}},
-		{"action": "outbound.create", "args": map[string]any{"gate_id": g.id, "tag": "home2", "protocol": "freedom"}},
-		{"action": "outbound.update", "args": map[string]any{"outbound_id": out["id"], "name": "x"}},
-		{"action": "route.create", "args": map[string]any{"gate_id": g.id, "outbound_tag": "home", "domain": "domain:b.com"}},
+		{"action": "exit.create", "args": map[string]any{"gate_id": g.id, "remark": "拦截", "kind": "blackhole"}},
+		{"action": "exit.update", "args": map[string]any{"exit_id": out["id"], "remark": "x"}},
+		{"action": "route.create", "args": map[string]any{"gate_id": g.id, "exit_id": out["id"], "domain": "domain:b.com"}},
 		{"action": "route.update", "args": map[string]any{"route_id": rt["id"], "priority": 5}},
 		{"action": "source.update", "args": map[string]any{"source_id": src["id"], "name": "B"}},
 		{"action": "profile.create", "args": map[string]any{"name": "Q"}},
@@ -260,7 +261,7 @@ func TestOpDraftDryRunsWriteNothing(t *testing.T) {
 		}
 	}
 	for _, st := range []map[string]any{
-		{"action": "outbound.delete", "args": map[string]any{"outbound_id": out["id"]}},
+		{"action": "exit.delete", "args": map[string]any{"exit_id": out["id"]}},
 		{"action": "source.delete", "args": map[string]any{"source_id": src["id"]}},
 		{"action": "profile.delete", "args": map[string]any{"profile_id": prof["id"]}},
 	} {
@@ -316,7 +317,7 @@ func TestReadToolRefsAcceptStringIDsAndExplainErrors(t *testing.T) {
 		{"get_gate", map[string]any{"gate_id": gid}},
 		{"check_port", map[string]any{"gate_id": gid, "reality": true}},
 		{"probe_reality", map[string]any{"gate_id": gid}},
-		{"list_outbounds", map[string]any{"gate_id": gid}},
+		{"list_exits", map[string]any{"gate_id": gid}},
 		{"list_routes", map[string]any{"gate_id": gid}},
 		{"get_kernel_diagnostics", map[string]any{"gate_id": gid, "kernel": "sing-box"}},
 		{"get_node_state", map[string]any{"node_id": itoa(int(n["id"].(float64)))}},

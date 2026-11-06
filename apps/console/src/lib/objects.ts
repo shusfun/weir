@@ -6,7 +6,7 @@
 // - 列表里的对象用 ?focus=类型:编号 滚到并高亮那一行（见 useFocusFromURL）；
 // - 链接、链式代理在所属用户的详情里，先打开用户再高亮；只知道编号时由用户页向中心查归属。
 
-export type ObjectType = "gate" | "node" | "user" | "link" | "chain" | "driver" | "kernel" | "source" | "profile" | "page" | "cert" | "audit";
+export type ObjectType = "exit" | "route" | "gate" | "node" | "user" | "link" | "chain" | "driver" | "kernel" | "source" | "profile" | "page" | "cert" | "audit";
 
 export interface ObjectRef {
   type: ObjectType;
@@ -19,6 +19,8 @@ export interface ObjectRef {
 }
 
 export const objectLabels: Record<ObjectType, string> = {
+  exit: "出口",
+  route: "分流规则",
   gate: "VPS",
   node: "节点",
   user: "用户",
@@ -49,6 +51,9 @@ export function objectHref(ref: ObjectRef): string {
   const k = encodeURIComponent(objectKey(ref));
   const focus = "focus=" + encodeURIComponent(focusValue(ref));
   switch (ref.type) {
+    case "exit":
+    case "route":
+      return `/exits?${focus}`;
     case "gate":
       return `/gates?gate=${k}`;
     case "node":
@@ -82,6 +87,6 @@ export function parseTarget(target: string): ObjectRef | null {
   const m = /^([a-z]+):(\d+)/.exec(target);
   if (!m) return null;
   const type = m[1] as ObjectType;
-  if (!["gate", "node", "user", "link", "chain", "source", "profile", "cert"].includes(type)) return null;
+  if (!["exit", "route", "gate", "node", "user", "link", "chain", "source", "profile", "cert"].includes(type)) return null;
   return { type, id: Number(m[2]) };
 }

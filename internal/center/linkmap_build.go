@@ -11,7 +11,6 @@ import (
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/credential"
 	"github.com/shusfun/weir/internal/store/ent/gate"
-	"github.com/shusfun/weir/internal/store/ent/outbound"
 	"github.com/shusfun/weir/internal/store/ent/route"
 )
 
@@ -170,14 +169,6 @@ func (s *Server) addRules(ctx context.Context, m *linkMap, gates map[int]*mapGat
 	if err != nil {
 		return err
 	}
-	outs, err := s.Store.Ent.Outbound.Query().Where(outbound.EnabledEQ(true)).All(ctx)
-	if err != nil {
-		return err
-	}
-	byTag := map[string]*ent.Outbound{}
-	for _, o := range outs {
-		byTag[itoa(o.GateID)+"/"+o.Tag] = o
-	}
 	for _, r := range rules {
 		if gates[r.GateID] == nil {
 			continue
@@ -188,13 +179,9 @@ func (s *Server) addRules(ctx context.Context, m *linkMap, gates map[int]*mapGat
 		} else if r.IP != "" {
 			label = "IP " + r.IP
 		}
-		exitID := "direct:" + itoa(r.GateID)
-		if o := byTag[itoa(r.GateID)+"/"+r.OutboundTag]; o != nil {
-			exitID = addExit(s.outExit(ctx, o, gates)).ID
-		} else if r.OutboundTag == "direct" {
-			e := &mapExit{ID: exitID, Kind: "direct", Label: exitLabels["direct"], FromGate: r.GateID, Owner: "admin", Place: gates[r.GateID].Place, tag: "direct"}
-			exitID = addExit(e).ID
-		}
+		id := r.ExitID
+		e := s.mapStoredExit(ctx, id, r.GateID, gates, map[int]*ent.Node{})
+		exitID := addExit(e).ID
 		m.Rules = append(m.Rules, mapRule{ID: r.ID, GateID: r.GateID, Label: label, ExitID: exitID, NodeID: r.NodeID, UserID: r.UserID})
 	}
 	return nil

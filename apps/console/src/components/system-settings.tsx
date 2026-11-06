@@ -1,7 +1,7 @@
 // 系统设置卡片：安全策略、邮件服务、通知、WebDAV 备份、订阅备份导入导出、API 令牌。
 // 设置保存直接生效；导入或恢复备份、创建 API 令牌要重新输入密码。
 import { useRef, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { Button, CopyField, Field, FilePicker, Form, FormGrid, Input, Notice, PasswordInput, SwitchField, Textarea, useConfirm, InsetGroup } from "@weir/ui";
 import { Download, Trash2 } from "lucide-react";
 import { api, reauthFields } from "../api";
@@ -95,7 +95,7 @@ export function SMTPCard() {
         <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} />
       </Section>
     );
-  return <SMTPForm key={q.dataUpdatedAt} value={q.data} saved={() => q.refetch()} />;
+  return <SMTPForm value={q.data} saved={() => q.refetch()} />;
 }
 
 function SMTPForm({ value, saved }: { value: SMTPView; saved: () => void }) {
@@ -142,7 +142,7 @@ export function NotifyCard() {
         <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} />
       </Section>
     );
-  return <NotifyForm key={q.dataUpdatedAt} value={q.data} saved={() => q.refetch()} />;
+  return <NotifyForm value={q.data} saved={() => q.refetch()} />;
 }
 
 function NotifyForm({ value, saved }: { value: NotifyView; saved: () => void }) {
@@ -196,7 +196,7 @@ export function BackupCard() {
   return (
     <Section title="备份与迁移" description="订阅源、手动节点、订阅组与规则模板。导入只新增，不删除现有数据；用户与 VPS 不在备份里。">
       <ImportExport />
-      {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : <WebdavForm key={q.dataUpdatedAt} value={q.data} saved={() => q.refetch()} />}
+      {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : <WebdavForm value={q.data} saved={() => q.refetch()} />}
     </Section>
   );
 }

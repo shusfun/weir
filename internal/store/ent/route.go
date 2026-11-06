@@ -9,6 +9,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
+	"github.com/shusfun/weir/internal/store/ent/exit"
 	"github.com/shusfun/weir/internal/store/ent/route"
 )
 
@@ -23,8 +24,8 @@ type Route struct {
 	NodeID *int `json:"node_id,omitempty"`
 	// UserID holds the value of the "user_id" field.
 	UserID *int `json:"user_id,omitempty"`
-	// OutboundTag holds the value of the "outbound_tag" field.
-	OutboundTag string `json:"outbound_tag,omitempty"`
+	// ExitID holds the value of the "exit_id" field.
+	ExitID int `json:"exit_id,omitempty"`
 	// Domain holds the value of the "domain" field.
 	Domain string `json:"domain,omitempty"`
 	// IP holds the value of the "ip" field.
@@ -34,8 +35,31 @@ type Route struct {
 	// Priority holds the value of the "priority" field.
 	Priority int `json:"priority,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
-	CreatedAt    time.Time `json:"created_at,omitempty"`
+	CreatedAt time.Time `json:"created_at,omitempty"`
+	// Edges holds the relations/edges for other nodes in the graph.
+	// The values are being populated by the RouteQuery when eager-loading is set.
+	Edges        RouteEdges `json:"edges"`
 	selectValues sql.SelectValues
+}
+
+// RouteEdges holds the relations/edges for other nodes in the graph.
+type RouteEdges struct {
+	// Exit holds the value of the exit edge.
+	Exit *Exit `json:"exit,omitempty"`
+	// loadedTypes holds the information for reporting if a
+	// type was loaded (or requested) in eager-loading or not.
+	loadedTypes [1]bool
+}
+
+// ExitOrErr returns the Exit value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e RouteEdges) ExitOrErr() (*Exit, error) {
+	if e.Exit != nil {
+		return e.Exit, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: exit.Label}
+	}
+	return nil, &NotLoadedError{edge: "exit"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -45,9 +69,9 @@ func (*Route) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case route.FieldEnabled:
 			values[i] = new(sql.NullBool)
-		case route.FieldID, route.FieldGateID, route.FieldNodeID, route.FieldUserID, route.FieldPriority:
+		case route.FieldID, route.FieldGateID, route.FieldNodeID, route.FieldUserID, route.FieldExitID, route.FieldPriority:
 			values[i] = new(sql.NullInt64)
-		case route.FieldOutboundTag, route.FieldDomain, route.FieldIP:
+		case route.FieldDomain, route.FieldIP:
 			values[i] = new(sql.NullString)
 		case route.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -92,11 +116,11 @@ func (_m *Route) assignValues(columns []string, values []any) error {
 				_m.UserID = new(int)
 				*_m.UserID = int(value.Int64)
 			}
-		case route.FieldOutboundTag:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field outbound_tag", values[i])
+		case route.FieldExitID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field exit_id", values[i])
 			} else if value.Valid {
-				_m.OutboundTag = value.String
+				_m.ExitID = int(value.Int64)
 			}
 		case route.FieldDomain:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -141,6 +165,11 @@ func (_m *Route) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
 }
 
+// QueryExit queries the "exit" edge of the Route entity.
+func (_m *Route) QueryExit() *ExitQuery {
+	return NewRouteClient(_m.config).QueryExit(_m)
+}
+
 // Update returns a builder for updating this Route.
 // Note that you need to call Route.Unwrap() before calling this method if this Route
 // was returned from a transaction, and the transaction was committed or rolled back.
@@ -177,8 +206,8 @@ func (_m *Route) String() string {
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
-	builder.WriteString("outbound_tag=")
-	builder.WriteString(_m.OutboundTag)
+	builder.WriteString("exit_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ExitID))
 	builder.WriteString(", ")
 	builder.WriteString("domain=")
 	builder.WriteString(_m.Domain)

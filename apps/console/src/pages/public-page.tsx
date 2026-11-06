@@ -2,7 +2,7 @@ import {PublicGuestbook} from "../components/guestbook";
 import {PublicSubscriptions,type PublicSubscriptionCard} from "../components/public-subscriptions";
 import {GlobalAnnouncement} from "../components/global-announcement";
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import {
   ArrowUpRight,
   Globe2,

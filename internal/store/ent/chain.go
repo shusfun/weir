@@ -3,7 +3,6 @@
 package ent
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/shusfun/weir/internal/store/ent/chain"
+	"github.com/shusfun/weir/internal/store/ent/exit"
 )
 
 // Chain is the model entity for the Chain schema.
@@ -24,29 +24,36 @@ type Chain struct {
 	EntryNodeID int `json:"entry_node_id,omitempty"`
 	// Name holds the value of the "name" field.
 	Name string `json:"name,omitempty"`
-	// ExitKind holds the value of the "exit_kind" field.
-	ExitKind chain.ExitKind `json:"exit_kind,omitempty"`
-	// ExitSource holds the value of the "exit_source" field.
-	ExitSource map[string]interface{} `json:"exit_source,omitempty"`
-	// ExitAddress holds the value of the "exit_address" field.
-	ExitAddress string `json:"exit_address,omitempty"`
-	// ExitPort holds the value of the "exit_port" field.
-	ExitPort int `json:"exit_port,omitempty"`
-	// ExitUsername holds the value of the "exit_username" field.
-	ExitUsername string `json:"exit_username,omitempty"`
-	// ExitPassword holds the value of the "exit_password" field.
-	ExitPassword string `json:"-"`
-	// ExitNodeID holds the value of the "exit_node_id" field.
-	ExitNodeID *int `json:"exit_node_id,omitempty"`
-	// ExitLink holds the value of the "exit_link" field.
-	ExitLink string `json:"-"`
+	// ExitID holds the value of the "exit_id" field.
+	ExitID int `json:"exit_id,omitempty"`
 	// Enabled holds the value of the "enabled" field.
 	Enabled bool `json:"enabled,omitempty"`
-	// PolicyType holds the value of the "policy_type" field.
-	PolicyType string `json:"policy_type,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
-	CreatedAt    time.Time `json:"created_at,omitempty"`
+	CreatedAt time.Time `json:"created_at,omitempty"`
+	// Edges holds the relations/edges for other nodes in the graph.
+	// The values are being populated by the ChainQuery when eager-loading is set.
+	Edges        ChainEdges `json:"edges"`
 	selectValues sql.SelectValues
+}
+
+// ChainEdges holds the relations/edges for other nodes in the graph.
+type ChainEdges struct {
+	// Exit holds the value of the exit edge.
+	Exit *Exit `json:"exit,omitempty"`
+	// loadedTypes holds the information for reporting if a
+	// type was loaded (or requested) in eager-loading or not.
+	loadedTypes [1]bool
+}
+
+// ExitOrErr returns the Exit value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e ChainEdges) ExitOrErr() (*Exit, error) {
+	if e.Exit != nil {
+		return e.Exit, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: exit.Label}
+	}
+	return nil, &NotLoadedError{edge: "exit"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -54,13 +61,11 @@ func (*Chain) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case chain.FieldExitSource:
-			values[i] = new([]byte)
 		case chain.FieldEnabled:
 			values[i] = new(sql.NullBool)
-		case chain.FieldID, chain.FieldUserID, chain.FieldEntryNodeID, chain.FieldExitPort, chain.FieldExitNodeID:
+		case chain.FieldID, chain.FieldUserID, chain.FieldEntryNodeID, chain.FieldExitID:
 			values[i] = new(sql.NullInt64)
-		case chain.FieldName, chain.FieldExitKind, chain.FieldExitAddress, chain.FieldExitUsername, chain.FieldExitPassword, chain.FieldExitLink, chain.FieldPolicyType:
+		case chain.FieldName:
 			values[i] = new(sql.NullString)
 		case chain.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -103,68 +108,17 @@ func (_m *Chain) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Name = value.String
 			}
-		case chain.FieldExitKind:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field exit_kind", values[i])
-			} else if value.Valid {
-				_m.ExitKind = chain.ExitKind(value.String)
-			}
-		case chain.FieldExitSource:
-			if value, ok := values[i].(*[]byte); !ok {
-				return fmt.Errorf("unexpected type %T for field exit_source", values[i])
-			} else if value != nil && len(*value) > 0 {
-				if err := json.Unmarshal(*value, &_m.ExitSource); err != nil {
-					return fmt.Errorf("unmarshal field exit_source: %w", err)
-				}
-			}
-		case chain.FieldExitAddress:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field exit_address", values[i])
-			} else if value.Valid {
-				_m.ExitAddress = value.String
-			}
-		case chain.FieldExitPort:
+		case chain.FieldExitID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field exit_port", values[i])
+				return fmt.Errorf("unexpected type %T for field exit_id", values[i])
 			} else if value.Valid {
-				_m.ExitPort = int(value.Int64)
-			}
-		case chain.FieldExitUsername:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field exit_username", values[i])
-			} else if value.Valid {
-				_m.ExitUsername = value.String
-			}
-		case chain.FieldExitPassword:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field exit_password", values[i])
-			} else if value.Valid {
-				_m.ExitPassword = value.String
-			}
-		case chain.FieldExitNodeID:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field exit_node_id", values[i])
-			} else if value.Valid {
-				_m.ExitNodeID = new(int)
-				*_m.ExitNodeID = int(value.Int64)
-			}
-		case chain.FieldExitLink:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field exit_link", values[i])
-			} else if value.Valid {
-				_m.ExitLink = value.String
+				_m.ExitID = int(value.Int64)
 			}
 		case chain.FieldEnabled:
 			if value, ok := values[i].(*sql.NullBool); !ok {
 				return fmt.Errorf("unexpected type %T for field enabled", values[i])
 			} else if value.Valid {
 				_m.Enabled = value.Bool
-			}
-		case chain.FieldPolicyType:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field policy_type", values[i])
-			} else if value.Valid {
-				_m.PolicyType = value.String
 			}
 		case chain.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -183,6 +137,11 @@ func (_m *Chain) assignValues(columns []string, values []any) error {
 // This includes values selected through modifiers, order, etc.
 func (_m *Chain) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
+}
+
+// QueryExit queries the "exit" edge of the Chain entity.
+func (_m *Chain) QueryExit() *ExitQuery {
+	return NewChainClient(_m.config).QueryExit(_m)
 }
 
 // Update returns a builder for updating this Chain.
@@ -217,35 +176,11 @@ func (_m *Chain) String() string {
 	builder.WriteString("name=")
 	builder.WriteString(_m.Name)
 	builder.WriteString(", ")
-	builder.WriteString("exit_kind=")
-	builder.WriteString(fmt.Sprintf("%v", _m.ExitKind))
-	builder.WriteString(", ")
-	builder.WriteString("exit_source=")
-	builder.WriteString(fmt.Sprintf("%v", _m.ExitSource))
-	builder.WriteString(", ")
-	builder.WriteString("exit_address=")
-	builder.WriteString(_m.ExitAddress)
-	builder.WriteString(", ")
-	builder.WriteString("exit_port=")
-	builder.WriteString(fmt.Sprintf("%v", _m.ExitPort))
-	builder.WriteString(", ")
-	builder.WriteString("exit_username=")
-	builder.WriteString(_m.ExitUsername)
-	builder.WriteString(", ")
-	builder.WriteString("exit_password=<sensitive>")
-	builder.WriteString(", ")
-	if v := _m.ExitNodeID; v != nil {
-		builder.WriteString("exit_node_id=")
-		builder.WriteString(fmt.Sprintf("%v", *v))
-	}
-	builder.WriteString(", ")
-	builder.WriteString("exit_link=<sensitive>")
+	builder.WriteString("exit_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ExitID))
 	builder.WriteString(", ")
 	builder.WriteString("enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Enabled))
-	builder.WriteString(", ")
-	builder.WriteString("policy_type=")
-	builder.WriteString(_m.PolicyType)
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

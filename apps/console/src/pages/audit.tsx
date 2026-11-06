@@ -1,6 +1,6 @@
 // 操作记录：账户、节点、订阅与设置的变更，可按结果筛选并查看单条详情。
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { useSearchParams } from "react-router-dom";
 import {
   SearchInput,

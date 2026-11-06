@@ -204,6 +204,9 @@ func (s *Server) deleteProfile(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+	if !s.checkExitSourceDeletion(c, 0, id) {
+		return
+	}
 	if c.GetBool(dryRunKey) {
 		p, err := s.Store.Ent.SubProfile.Get(ctx, id)
 		if err != nil {

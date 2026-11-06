@@ -17,7 +17,7 @@ import (
 // 地址由控制台按类型生成。
 
 // objectTypes 与控制台 lib/objects.ts 的 ObjectType 一一对应。
-var objectTypes = []string{"gate", "node", "user", "link", "chain", "driver", "kernel", "source", "profile", "page", "cert", "audit"}
+var objectTypes = []string{"gate", "node", "user", "link", "chain", "exit", "route", "driver", "kernel", "source", "profile", "page", "cert", "audit"}
 
 var (
 	objectKey = regexp.MustCompile(`^[A-Za-z0-9._@:-]{1,80}$`)
@@ -63,6 +63,18 @@ func (s *Server) resolveObject(ctx context.Context, typ, key string) (objectRef,
 			return ref, false
 		}
 		ref.ID, ref.Name = g.ID, g.Name
+	case "exit":
+		e, err := db.Exit.Get(ctx, id)
+		if err != nil {
+			return ref, false
+		}
+		ref.ID, ref.Name = e.ID, firstNonEmpty(e.Remark, exitKindLabel(string(e.Kind)))
+	case "route":
+		r, err := db.Route.Get(ctx, id)
+		if err != nil {
+			return ref, false
+		}
+		ref.ID, ref.Name = r.ID, firstNonEmpty(r.Domain, r.IP)
 	case "node":
 		n, err := db.Node.Get(ctx, id)
 		if err != nil {

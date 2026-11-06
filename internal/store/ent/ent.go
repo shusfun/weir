@@ -17,12 +17,12 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/certificate"
 	"github.com/shusfun/weir/internal/store/ent/chain"
 	"github.com/shusfun/weir/internal/store/ent/credential"
+	"github.com/shusfun/weir/internal/store/ent/exit"
 	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/gateaction"
 	"github.com/shusfun/weir/internal/store/ent/kerneldriver"
 	"github.com/shusfun/weir/internal/store/ent/link"
 	"github.com/shusfun/weir/internal/store/ent/node"
-	"github.com/shusfun/weir/internal/store/ent/outbound"
 	"github.com/shusfun/weir/internal/store/ent/passkey"
 	"github.com/shusfun/weir/internal/store/ent/ratesample"
 	"github.com/shusfun/weir/internal/store/ent/recoverycode"
@@ -102,12 +102,12 @@ func checkColumn(t, c string) error {
 			certificate.Table:  certificate.ValidColumn,
 			chain.Table:        chain.ValidColumn,
 			credential.Table:   credential.ValidColumn,
+			exit.Table:         exit.ValidColumn,
 			gate.Table:         gate.ValidColumn,
 			gateaction.Table:   gateaction.ValidColumn,
 			kerneldriver.Table: kerneldriver.ValidColumn,
 			link.Table:         link.ValidColumn,
 			node.Table:         node.ValidColumn,
-			outbound.Table:     outbound.ValidColumn,
 			passkey.Table:      passkey.ValidColumn,
 			ratesample.Table:   ratesample.ValidColumn,
 			recoverycode.Table: recoverycode.ValidColumn,

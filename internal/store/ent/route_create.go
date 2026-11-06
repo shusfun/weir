@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/shusfun/weir/internal/store/ent/exit"
 	"github.com/shusfun/weir/internal/store/ent/route"
 )
 
@@ -56,9 +57,9 @@ func (_c *RouteCreate) SetNillableUserID(v *int) *RouteCreate {
 	return _c
 }
 
-// SetOutboundTag sets the "outbound_tag" field.
-func (_c *RouteCreate) SetOutboundTag(v string) *RouteCreate {
-	_c.mutation.SetOutboundTag(v)
+// SetExitID sets the "exit_id" field.
+func (_c *RouteCreate) SetExitID(v int) *RouteCreate {
+	_c.mutation.SetExitID(v)
 	return _c
 }
 
@@ -132,6 +133,11 @@ func (_c *RouteCreate) SetNillableCreatedAt(v *time.Time) *RouteCreate {
 	return _c
 }
 
+// SetExit sets the "exit" edge to the Exit entity.
+func (_c *RouteCreate) SetExit(v *Exit) *RouteCreate {
+	return _c.SetExitID(v.ID)
+}
+
 // Mutation returns the RouteMutation object of the builder.
 func (_c *RouteCreate) Mutation() *RouteMutation {
 	return _c.mutation
@@ -194,13 +200,8 @@ func (_c *RouteCreate) check() error {
 	if _, ok := _c.mutation.GateID(); !ok {
 		return &ValidationError{Name: "gate_id", err: errors.New(`ent: missing required field "Route.gate_id"`)}
 	}
-	if _, ok := _c.mutation.OutboundTag(); !ok {
-		return &ValidationError{Name: "outbound_tag", err: errors.New(`ent: missing required field "Route.outbound_tag"`)}
-	}
-	if v, ok := _c.mutation.OutboundTag(); ok {
-		if err := route.OutboundTagValidator(v); err != nil {
-			return &ValidationError{Name: "outbound_tag", err: fmt.Errorf(`ent: validator failed for field "Route.outbound_tag": %w`, err)}
-		}
+	if _, ok := _c.mutation.ExitID(); !ok {
+		return &ValidationError{Name: "exit_id", err: errors.New(`ent: missing required field "Route.exit_id"`)}
 	}
 	if _, ok := _c.mutation.Domain(); !ok {
 		return &ValidationError{Name: "domain", err: errors.New(`ent: missing required field "Route.domain"`)}
@@ -216,6 +217,9 @@ func (_c *RouteCreate) check() error {
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Route.created_at"`)}
+	}
+	if len(_c.mutation.ExitIDs()) == 0 {
+		return &ValidationError{Name: "exit", err: errors.New(`ent: missing required edge "Route.exit"`)}
 	}
 	return nil
 }
@@ -256,10 +260,6 @@ func (_c *RouteCreate) createSpec() (*Route, *sqlgraph.CreateSpec) {
 		_spec.SetField(route.FieldUserID, field.TypeInt, value)
 		_node.UserID = &value
 	}
-	if value, ok := _c.mutation.OutboundTag(); ok {
-		_spec.SetField(route.FieldOutboundTag, field.TypeString, value)
-		_node.OutboundTag = value
-	}
 	if value, ok := _c.mutation.Domain(); ok {
 		_spec.SetField(route.FieldDomain, field.TypeString, value)
 		_node.Domain = value
@@ -279,6 +279,23 @@ func (_c *RouteCreate) createSpec() (*Route, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(route.FieldCreatedAt, field.TypeTime, value)
 		_node.CreatedAt = value
+	}
+	if nodes := _c.mutation.ExitIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   route.ExitTable,
+			Columns: []string{route.ExitColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(exit.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.ExitID = nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec
 }
@@ -398,15 +415,15 @@ func (u *RouteUpsert) ClearUserID() *RouteUpsert {
 	return u
 }
 
-// SetOutboundTag sets the "outbound_tag" field.
-func (u *RouteUpsert) SetOutboundTag(v string) *RouteUpsert {
-	u.Set(route.FieldOutboundTag, v)
+// SetExitID sets the "exit_id" field.
+func (u *RouteUpsert) SetExitID(v int) *RouteUpsert {
+	u.Set(route.FieldExitID, v)
 	return u
 }
 
-// UpdateOutboundTag sets the "outbound_tag" field to the value that was provided on create.
-func (u *RouteUpsert) UpdateOutboundTag() *RouteUpsert {
-	u.SetExcluded(route.FieldOutboundTag)
+// UpdateExitID sets the "exit_id" field to the value that was provided on create.
+func (u *RouteUpsert) UpdateExitID() *RouteUpsert {
+	u.SetExcluded(route.FieldExitID)
 	return u
 }
 
@@ -586,17 +603,17 @@ func (u *RouteUpsertOne) ClearUserID() *RouteUpsertOne {
 	})
 }
 
-// SetOutboundTag sets the "outbound_tag" field.
-func (u *RouteUpsertOne) SetOutboundTag(v string) *RouteUpsertOne {
+// SetExitID sets the "exit_id" field.
+func (u *RouteUpsertOne) SetExitID(v int) *RouteUpsertOne {
 	return u.Update(func(s *RouteUpsert) {
-		s.SetOutboundTag(v)
+		s.SetExitID(v)
 	})
 }
 
-// UpdateOutboundTag sets the "outbound_tag" field to the value that was provided on create.
-func (u *RouteUpsertOne) UpdateOutboundTag() *RouteUpsertOne {
+// UpdateExitID sets the "exit_id" field to the value that was provided on create.
+func (u *RouteUpsertOne) UpdateExitID() *RouteUpsertOne {
 	return u.Update(func(s *RouteUpsert) {
-		s.UpdateOutboundTag()
+		s.UpdateExitID()
 	})
 }
 
@@ -951,17 +968,17 @@ func (u *RouteUpsertBulk) ClearUserID() *RouteUpsertBulk {
 	})
 }
 
-// SetOutboundTag sets the "outbound_tag" field.
-func (u *RouteUpsertBulk) SetOutboundTag(v string) *RouteUpsertBulk {
+// SetExitID sets the "exit_id" field.
+func (u *RouteUpsertBulk) SetExitID(v int) *RouteUpsertBulk {
 	return u.Update(func(s *RouteUpsert) {
-		s.SetOutboundTag(v)
+		s.SetExitID(v)
 	})
 }
 
-// UpdateOutboundTag sets the "outbound_tag" field to the value that was provided on create.
-func (u *RouteUpsertBulk) UpdateOutboundTag() *RouteUpsertBulk {
+// UpdateExitID sets the "exit_id" field to the value that was provided on create.
+func (u *RouteUpsertBulk) UpdateExitID() *RouteUpsertBulk {
 	return u.Update(func(s *RouteUpsert) {
-		s.UpdateOutboundTag()
+		s.UpdateExitID()
 	})
 }
 

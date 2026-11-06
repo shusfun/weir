@@ -40,7 +40,7 @@ func mustJSON(t *testing.T, tc *testClient, method, path string, body any, want 
 		}
 		deadline := time.Now().Add(30 * time.Second)
 		for time.Now().Before(deadline) {
-			j := tc.do("GET", "/api/v1/admin/jobs/"+job["id"].(string), nil, nil)
+			j := tc.do("GET", "/api/v1/me/jobs/"+job["id"].(string), nil, nil)
 			if j.Code != 200 {
 				t.Fatalf("job lookup=%d", j.Code)
 			}
@@ -124,10 +124,10 @@ func TestNodeWizardUsersLinksChainsAndSubscription(t *testing.T) {
 	w := admin.do("GET", "/sub/"+token, nil, map[string]string{"User-Agent": "v2rayN/7.0"})
 	raw, _ := base64.StdEncoding.DecodeString(w.Body.String())
 	uris := strings.Split(string(raw), "\n")
-	if w.Code != 200 || len(uris) != 3 || !strings.Contains(w.Header().Get("Subscription-Userinfo"), "total=21474836480") {
+	if w.Code != 200 || len(uris) != 5 || !strings.Contains(w.Header().Get("Subscription-Userinfo"), "total=21474836480") {
 		t.Fatalf("base64 sub = %d %q %v", w.Code, raw, w.Header())
 	}
-	parsed, err := subscription.ParseLinks(uris)
+	parsed, err := subscription.ParseLinks(uris[2:])
 	if err != nil || len(parsed.Nodes) != 3 || len(parsed.Skipped) != 0 {
 		t.Fatalf("own share links must parse: %v %+v", err, parsed.Skipped)
 	}
@@ -182,13 +182,13 @@ func TestNodeWizardUsersLinksChainsAndSubscription(t *testing.T) {
 		t.Fatalf("user chain without probe = %d %s", w.Code, w.Body.String())
 	}
 	ch := mustJSON(t, admin, "POST", "/api/v1/admin/users/"+itoa(uid)+"/chains", map[string]any{"name": "家宽", "entry_node_id": reality["id"], "exit": map[string]any{"kind": "socks5", "address": "203.0.113.5", "port": 1080, "username": "u", "password": "p"}, "skip_probe": true}, 200)
-	if ch["exit_password"] != "p" {
+	if ch["exit"].(map[string]any)["password"] != "p" {
 		t.Fatalf("admin must see chain password: %v", ch)
 	}
 	cfg = g.config(0)
 	var chainRoute bool
 	for _, r := range cfg.Routes {
-		chainRoute = chainRoute || r.OutboundTag == "chain-"+itoa(int(ch["id"].(float64)))
+		chainRoute = chainRoute || r.OutboundTag == "exit-"+itoa(int(ch["exit_id"].(float64)))
 	}
 	if !chainRoute {
 		t.Fatalf("chain route missing: %+v meta=%v", cfg.Routes, cfg.Meta)
@@ -227,25 +227,32 @@ func TestNodeWizardUsersLinksChainsAndSubscription(t *testing.T) {
 }
 
 func TestNodeChainThroughAnotherNode(t *testing.T) {
-	_, admin, g := setupGate(t)
+	s, admin, g := setupGate(t)
 	gid := int(g.id)
-	exit := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": gid, "preset": "vless-reality", "skip_probe": true}, 200)
-	entry := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": gid, "preset": "ss2022", "skip_probe": true, "chain": map[string]any{"kind": "node", "node_id": exit["id"]}}, 200)
+	eg := pairFakeGate(t, admin)
+	eg.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 2, Version: "test", Hostname: "exit", Arch: "amd64"})
+	exit := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(eg.id), "preset": "vless-reality", "skip_probe": true}, 200)
+	entry := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": gid, "preset": "ss2022", "skip_probe": true, "exit": map[string]any{"kind": "node", "node_id": exit["id"]}}, 200)
+	eid := int(entry["exit_id"].(float64))
 	cfg := g.config(0)
 	found := false
-	for _, c := range cfg.Credentials {
-		found = found || c.StatsKey == nodeExitKey(int(entry["id"].(float64))) && c.Internal
+	for _, c := range eg.config(0).Credentials {
+		found = found || c.StatsKey == exitCredentialKey(eid) && c.Internal
 	}
 	var route bool
 	for _, r := range cfg.Routes {
-		route = route || r.InboundTag == nodeTag(int(entry["id"].(float64))) && strings.HasPrefix(r.OutboundTag, "nodechain-")
+		route = route || r.InboundTag == nodeTag(int(entry["id"].(float64))) && r.OutboundTag == "exit-"+itoa(eid)
 	}
 	if !found || !route {
 		t.Fatalf("internal exit credential=%v route=%v meta=%v", found, route, cfg.Meta)
 	}
 	// 出口被引用时不能删除；自己不能作为自己的出口。
 	mustJSON(t, admin, "DELETE", "/api/v1/admin/nodes/"+itoa(int(exit["id"].(float64))), nil, 409)
-	mustJSON(t, admin, "PATCH", "/api/v1/admin/nodes/"+itoa(int(exit["id"].(float64))), map[string]any{"chain": map[string]any{"kind": "node", "node_id": entry["id"]}, "skip_probe": true}, 422)
+	mustJSON(t, admin, "PATCH", "/api/v1/admin/nodes/"+itoa(int(exit["id"].(float64))), map[string]any{"exit": map[string]any{"kind": "node", "node_id": entry["id"]}, "skip_probe": true}, 422)
+	// 保存失败不会留下尚未绑定的出口。
+	if got := s.Store.Ent.Exit.Query().CountX(t.Context()); got != 3 {
+		t.Fatalf("failed cycle update left exits: %d", got)
+	}
 }
 
 func TestNextReset(t *testing.T) {

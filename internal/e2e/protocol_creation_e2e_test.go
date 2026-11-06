@@ -66,6 +66,7 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 	e.s.Store.Ent.Gate.UpdateOneID(e.gateID).SetPublicHost("127.0.0.1").ExecX(e.ctx)
 	u := e.post("/api/v1/admin/users", map[string]any{"email": "protocols@e2e.test", "all_nodes": true, "quota": 0}, nil)
 	presets := []string{"vless-reality", "vless-ws-tls", "vmess-ws-tls", "trojan-tls", "ss2022", "hysteria2", "tuic", "shadowtls", "wireguard", "socks-local", "http-local"}
+	nodeIDs := map[string]int{}
 	for _, preset := range presets {
 		t.Run(preset, func(t *testing.T) {
 			parent := e.t
@@ -76,6 +77,7 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 				body["cert_id"] = cert["id"]
 			}
 			created := e.post("/api/v1/admin/nodes", body, nil)
+			nodeIDs[preset] = int(created["id"].(float64))
 			tested, ok := created["tested"].(map[string]any)
 			if !ok || tested["done"] != true || tested["stage"] != "connect" {
 				t.Fatalf("creation was not tested: %v", tested)
@@ -92,6 +94,10 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 		t.Fatal(err)
 	}
 	token := ud["link_items"].([]any)[0].(map[string]any)["token"].(string)
+	tags := map[string]string{}
+	for _, preset := range presets {
+		tags[preset] = e.subName(int(u["id"].(float64)), nodeIDs[preset], 0)
+	}
 	b, _ = e.get("/sub/"+token+"?target=singbox", nil)
 	var doc struct {
 		Outbounds []map[string]any `json:"outbounds"`
@@ -110,7 +116,7 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 		}
 	}
 	for _, preset := range presets {
-		if preset != "wireguard" && !names[preset] {
+		if preset != "wireguard" && !names[tags[preset]] {
 			t.Errorf("subscription missing %s", preset)
 		}
 	}
@@ -141,7 +147,7 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 	for _, preset := range presets {
 		t.Run("traffic-"+preset, func(t *testing.T) {
 			port := freePort(t)
-			cfg := map[string]any{"log": map[string]any{"level": "warn"}, "inbounds": []any{map[string]any{"type": "mixed", "listen": "127.0.0.1", "listen_port": port}}, "outbounds": doc.Outbounds, "endpoints": doc.Endpoints, "route": map[string]any{"final": preset}}
+			cfg := map[string]any{"log": map[string]any{"level": "warn"}, "inbounds": []any{map[string]any{"type": "mixed", "listen": "127.0.0.1", "listen_port": port}}, "outbounds": doc.Outbounds, "endpoints": doc.Endpoints, "route": map[string]any{"final": tags[preset]}}
 			body, _ := json.Marshal(cfg)
 			path := filepath.Join(e.dir, "client-"+preset+".json")
 			if err := os.WriteFile(path, body, 0600); err != nil {

@@ -15,9 +15,8 @@ import (
 	"github.com/shusfun/weir/internal/db"
 	"github.com/shusfun/weir/internal/kernelconf"
 	"github.com/shusfun/weir/internal/store/ent"
-	"github.com/shusfun/weir/internal/store/ent/chain"
+	entexit "github.com/shusfun/weir/internal/store/ent/exit"
 	entnode "github.com/shusfun/weir/internal/store/ent/node"
-	"github.com/shusfun/weir/internal/store/ent/outbound"
 	"github.com/shusfun/weir/internal/store/ent/subgrant"
 	"github.com/shusfun/weir/internal/subscription"
 	"github.com/shusfun/weir/packages/contracts"
@@ -169,33 +168,20 @@ func (s *Server) outboundFilter(ctx context.Context, g *ent.Gate, kernels []stri
 	}
 }
 
-// ownerKernels 是会用到某个订阅源出口的内核：节点链式代理与用户自建链用入口节点的内核，分流出口用这台 VPS 上全部节点的。
-func (s *Server) ownerKernels(ctx context.Context, owner string, gid int) []string {
-	kind, id, _ := strings.Cut(owner, ":")
-	switch kind {
-	case "node":
-		if n, err := s.Store.Ent.Node.Get(ctx, atoiOr(id)); err == nil {
-			return []string{n.Kernel}
-		}
-	case "chain":
-		if ch, err := s.Store.Ent.Chain.Get(ctx, atoiOr(id)); err == nil {
-			if n, err := s.Store.Ent.Node.Get(ctx, ch.EntryNodeID); err == nil {
-				return []string{n.Kernel}
-			}
-		}
-	case "out":
-		nodes, _ := s.Store.Ent.Node.Query().Where(entnode.GateIDEQ(gid), entnode.EnabledEQ(true)).All(ctx)
-		seen := map[string]bool{}
-		var out []string
-		for _, n := range nodes {
-			if !seen[n.Kernel] {
-				seen[n.Kernel] = true
-				out = append(out, n.Kernel)
-			}
-		}
-		return out
+func (s *Server) gateExitKernels(ctx context.Context, gid int) ([]string, error) {
+	nodes, err := s.Store.Ent.Node.Query().Where(entnode.GateIDEQ(gid)).All(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	seen := map[string]bool{}
+	var out []string
+	for _, n := range nodes {
+		if n.Kernel != "" && !seen[n.Kernel] {
+			seen[n.Kernel] = true
+			out = append(out, n.Kernel)
+		}
+	}
+	return out, nil
 }
 
 func firstN(list []string, n int) []string {
@@ -205,7 +191,7 @@ func firstN(list []string, n int) []string {
 	return list
 }
 
-// 解析结果按所属对象单独保存：分流出口 out:<id>、节点链式代理 node:<id>、用户自建 chain:<id>。
+// 解析结果只以出口身份 exit:<id> 保存，所有引用者共用。
 func sourceExitKey(owner string) string { return "source-exit:" + owner }
 
 type storedExit struct {
@@ -221,7 +207,11 @@ func (s *Server) refreshSourceExit(ctx context.Context, owner string, gid int, s
 	if err != nil {
 		return err
 	}
-	ex, err := s.resolveSpec(ctx, g, s.ownerKernels(ctx, owner, gid), sp, publicOnly)
+	kernels, err := s.gateExitKernels(ctx, gid)
+	if err != nil {
+		return err
+	}
+	ex, err := s.resolveSpec(ctx, g, kernels, sp, publicOnly)
 	if err != nil {
 		return err
 	}
@@ -275,7 +265,9 @@ var groupFeatures = map[string][]string{"xray": {"balancer", "observatory"}, "si
 func (s *Server) checkGroupSupport(ctx context.Context, g *ent.Gate, kernels ...string) error {
 	need := map[string]bool{}
 	for _, k := range kernels {
-		need[k] = true
+		if k != "" {
+			need[k] = true
+		}
 	}
 	if len(need) == 0 {
 		nodes, err := s.Store.Ent.Node.Query().Where(entnode.GateIDEQ(g.ID), entnode.EnabledEQ(true)).All(ctx)
@@ -322,22 +314,13 @@ func (s *Server) grantedProfiles(ctx context.Context, uid int) (map[int]bool, er
 
 // RefreshSourceExits 在订阅源刷新后更新全部订阅源节点出口（维护任务每分钟调用；失败的保持上一次）。
 func (s *Server) RefreshSourceExits(ctx context.Context) {
-	if outs, err := s.Store.Ent.Outbound.Query().Where(outbound.ProtocolEQ("source")).All(ctx); err == nil {
-		for _, o := range outs {
-			_ = s.refreshSourceExit(ctx, "out:"+itoa(o.ID), o.GateID, specOf(o.Settings), false)
-		}
+	es, err := s.Store.Ent.Exit.Query().Where(entexit.KindEQ(entexit.KindSource), entexit.EnabledEQ(true)).All(ctx)
+	if err != nil {
+		s.tasks.note("refresh-source-exits", err)
+		return
 	}
-	if nodes, err := s.Store.Ent.Node.Query().Where(entnode.ChainKindEQ(entnode.ChainKindSource)).All(ctx); err == nil {
-		for _, n := range nodes {
-			_ = s.refreshSourceExit(ctx, "node:"+itoa(n.ID), n.GateID, specOf(n.ChainSource), false)
-		}
-	}
-	if chains, err := s.Store.Ent.Chain.Query().Where(chain.ExitKindEQ(chain.ExitKindSource)).All(ctx); err == nil {
-		for _, ch := range chains {
-			if n, err := s.Store.Ent.Node.Get(ctx, ch.EntryNodeID); err == nil {
-				_ = s.refreshSourceExit(ctx, "chain:"+itoa(ch.ID), n.GateID, specOf(ch.ExitSource), true)
-			}
-		}
+	for _, e := range es {
+		s.tasks.note("source-exit-"+itoa(e.ID), s.refreshSourceExit(ctx, exitOwner(e.ID), e.GateID, specOf(e.Source), e.OwnerUserID != nil))
 	}
 }
 

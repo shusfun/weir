@@ -6,19 +6,12 @@ import (
 	"strconv"
 
 	"github.com/shusfun/weir/internal/store/ent"
-	"github.com/shusfun/weir/internal/store/ent/chain"
-	"github.com/shusfun/weir/internal/store/ent/node"
 )
-
-var exitLabels = map[string]string{
-	"direct": "直接出去", "socks5": "SOCKS5 代理", "http": "HTTP 代理", "https": "HTTPS 代理", "link": "节点链接",
-	"node": "另一台 VPS", "source": "订阅源节点", "block": "丢弃",
-}
 
 // fillExit 补上出口的显示信息：地址（填写的或订阅源里第一个成员）、位置（优先用实测到的出口 IP）、实测结果、成员。
 func (s *Server) fillExit(ctx context.Context, e *mapExit, address, probeOwner, sourceOwner string) {
 	if e.Label == "" {
-		e.Label = exitLabels[e.Kind]
+		e.Label = exitKindLabel(map[string]string{"direct": "freedom", "block": "blackhole"}[e.Kind])
 	}
 	if sourceOwner != "" {
 		if v, ok := s.loadExit(ctx, sourceOwner); ok {
@@ -59,94 +52,53 @@ func redactExit(e *mapExit) {
 	e.Sub = "管理员配置的出口"
 }
 
-// chainExit 是用户自建链式代理的出口（ID 含入口 Gate）。
 func (s *Server) chainExit(ctx context.Context, ch *ent.Chain, entryGate int, gates map[int]*mapGate, nodes map[int]*ent.Node) *mapExit {
-	e := &mapExit{ID: "chain:" + itoa(ch.ID), Kind: string(ch.ExitKind), FromGate: entryGate, Owner: "self", Link: "/users?user=" + itoa(ch.UserID), tag: "chain-" + itoa(ch.ID)}
-	owner := "chain:" + itoa(ch.ID)
-	switch ch.ExitKind {
-	case chain.ExitKindSource:
-		s.fillExit(ctx, e, "", owner, owner)
-	case chain.ExitKindNode:
-		s.nodeTarget(ctx, e, ch.ExitNodeID, gates, nodes)
-	default:
-		s.fillExit(ctx, e, ch.ExitAddress, owner, "")
-		if e.Address != "" {
-			e.Sub = e.Address + ":" + strconv.Itoa(ch.ExitPort)
-		}
-	}
-	e.Label = ch.Name + " · " + exitLabels[e.Kind]
-	return e
+	return s.mapStoredExit(ctx, ch.ExitID, entryGate, gates, nodes)
 }
-
-// nodeChainExit 是节点自己的出口：直接出去，或管理员在建节点的出口配的链式代理。
 func (s *Server) nodeChainExit(ctx context.Context, n *ent.Node, gates map[int]*mapGate, nodes map[int]*ent.Node) *mapExit {
-	if n.ChainKind == node.ChainKindNone {
-		// 只对这个节点、不限域名的分流规则等于整个节点走那个出口。
-		if o := s.nodeWholeRoute(ctx, n); o != nil {
-			return s.outExit(ctx, o, gates)
-		}
-		e := &mapExit{ID: "direct:" + itoa(n.GateID), Kind: "direct", FromGate: n.GateID, Owner: "admin", Sub: "从这台 VPS 直接访问目标", tag: "direct"}
-		e.Label = exitLabels["direct"]
-		if g := gates[n.GateID]; g != nil {
-			e.Place = g.Place
-		}
-		return e
-	}
-	e := &mapExit{ID: "nodechain:" + itoa(n.ID), Kind: string(n.ChainKind), FromGate: n.GateID, Owner: "admin", Link: "/gates?node=" + itoa(n.ID), tag: "nodechain-" + itoa(n.ID)}
-	owner := "node:" + itoa(n.ID)
-	switch n.ChainKind {
-	case node.ChainKindSource:
-		s.fillExit(ctx, e, "", owner, owner)
-	case node.ChainKindNode:
-		s.nodeTarget(ctx, e, n.ChainNodeID, gates, nodes)
-	default:
-		s.fillExit(ctx, e, n.ChainAddress, owner, "")
-		if e.Address != "" {
-			e.Sub = e.Address + ":" + strconv.Itoa(n.ChainPort)
-		}
-	}
-	e.Label = n.Name + " · " + exitLabels[e.Kind]
-	return e
+	return s.mapStoredExit(ctx, n.ExitID, n.GateID, gates, nodes)
 }
 
-// nodeTarget：出口是另一台 VPS 上的节点，线连到那台 VPS。
-func (s *Server) nodeTarget(ctx context.Context, e *mapExit, id *int, gates map[int]*mapGate, nodes map[int]*ent.Node) {
-	e.Kind, e.Label = "node", exitLabels["node"]
-	if id == nil || nodes[*id] == nil {
-		e.Sub, e.Place = "出口节点已不存在", geoPlace{Why: "出口节点已不存在"}
-		return
+func (s *Server) mapStoredExit(ctx context.Context, id, gid int, gates map[int]*mapGate, nodes map[int]*ent.Node) *mapExit {
+	e, err := s.Store.Ent.Exit.Get(ctx, id)
+	if err != nil {
+		return &mapExit{ID: exitOwner(id), Kind: "unknown", Label: "出口未知", FromGate: gid, Place: geoPlace{Why: "出口不可用"}}
 	}
-	x := nodes[*id]
-	e.ToGate, e.Sub, e.Link = x.GateID, x.Name, "/gates?node="+itoa(x.ID)
-	if g := gates[x.GateID]; g != nil {
-		e.Place, e.Address = g.Place, g.Place.IP
+	out := &mapExit{ID: exitOwner(id), Kind: string(e.Kind), Label: firstNonEmpty(e.Remark, exitKindLabel(string(e.Kind))), FromGate: gid, Owner: "admin", Link: "/exits?gate=" + itoa(gid) + "&focus=exit:" + itoa(id), tag: e.Tag}
+	if e.OwnerUserID != nil {
+		out.Owner = "self"
 	}
-}
-
-// outExit 是管理员在「出口与分流」里建的出口（分流规则指向它）。
-func (s *Server) outExit(ctx context.Context, o *ent.Outbound, gates map[int]*mapGate) *mapExit {
-	e := &mapExit{ID: "out:" + itoa(o.ID), FromGate: o.GateID, Owner: "admin", Link: "routing", Label: firstNonEmpty(o.Name, o.Tag), tag: o.Tag}
-	switch o.Protocol {
-	case "socks":
-		e.Kind = "socks5"
+	switch e.Kind {
 	case "freedom":
-		e.Kind, e.Sub = "direct", "直接出去"
-		if g := gates[o.GateID]; g != nil {
-			e.Place = g.Place
+		out.Kind = "direct"
+		if g := gates[gid]; g != nil {
+			out.Place = g.Place
 		}
-		return e
+		return out
 	case "blackhole":
-		e.Kind, e.Sub, e.Place = "block", "丢弃", geoPlace{Why: "丢弃流量，不出去"}
-		return e
+		out.Kind = "block"
+		out.Place = geoPlace{Why: "丢弃流量，不出去"}
+		return out
+	case "node":
+		if e.ExitNodeID != nil && nodes[*e.ExitNodeID] == nil {
+			if n, err := s.Store.Ent.Node.Get(ctx, *e.ExitNodeID); err == nil { nodes[n.ID] = n }
+		}
+		if e.ExitNodeID == nil || nodes[*e.ExitNodeID] == nil {
+			out.Sub = "出口节点已不存在"
+			out.Place = geoPlace{Why: out.Sub}
+			return out
+		}
+		n := nodes[*e.ExitNodeID]
+		out.ToGate, out.Sub = n.GateID, n.Name
+		if g := gates[n.GateID]; g != nil {
+			out.Place, out.Address = g.Place, g.Place.IP
+		}
+		return out
+	case "source":
+		s.fillExit(ctx, out, "", exitOwner(id), exitOwner(id))
 	default:
-		e.Kind = o.Protocol
+		s.fillExit(ctx, out, e.Address, exitOwner(id), "")
+		out.Sub = e.Address + ":" + strconv.Itoa(e.Port)
 	}
-	owner := "out:" + itoa(o.ID)
-	if o.Protocol == "source" {
-		s.fillExit(ctx, e, "", owner, owner)
-	} else {
-		s.fillExit(ctx, e, o.Address, owner, "")
-	}
-	e.Label = firstNonEmpty(o.Name, o.Tag) + " · " + exitLabels[e.Kind]
-	return e
+	return out
 }

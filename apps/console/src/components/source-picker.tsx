@@ -1,7 +1,7 @@
 // 订阅源里的节点作出口：单个节点（名称完全一致），或按名称正则筛选一组（全部成员下发，由内核自动选择与切换，最多 50 个）。
 // 管理员可选任意订阅源；用户自建只能选分配给他的订阅组里出现的节点（由接口决定给哪些选项）。
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { Badge, Field, Input, Notice, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@weir/ui";
 import { api } from "../api";
 import { State } from "./feedback";

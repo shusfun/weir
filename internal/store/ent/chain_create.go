@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/shusfun/weir/internal/store/ent/chain"
+	"github.com/shusfun/weir/internal/store/ent/exit"
 )
 
 // ChainCreate is the builder for creating a Chain entity.
@@ -40,99 +41,9 @@ func (_c *ChainCreate) SetName(v string) *ChainCreate {
 	return _c
 }
 
-// SetExitKind sets the "exit_kind" field.
-func (_c *ChainCreate) SetExitKind(v chain.ExitKind) *ChainCreate {
-	_c.mutation.SetExitKind(v)
-	return _c
-}
-
-// SetExitSource sets the "exit_source" field.
-func (_c *ChainCreate) SetExitSource(v map[string]interface{}) *ChainCreate {
-	_c.mutation.SetExitSource(v)
-	return _c
-}
-
-// SetExitAddress sets the "exit_address" field.
-func (_c *ChainCreate) SetExitAddress(v string) *ChainCreate {
-	_c.mutation.SetExitAddress(v)
-	return _c
-}
-
-// SetNillableExitAddress sets the "exit_address" field if the given value is not nil.
-func (_c *ChainCreate) SetNillableExitAddress(v *string) *ChainCreate {
-	if v != nil {
-		_c.SetExitAddress(*v)
-	}
-	return _c
-}
-
-// SetExitPort sets the "exit_port" field.
-func (_c *ChainCreate) SetExitPort(v int) *ChainCreate {
-	_c.mutation.SetExitPort(v)
-	return _c
-}
-
-// SetNillableExitPort sets the "exit_port" field if the given value is not nil.
-func (_c *ChainCreate) SetNillableExitPort(v *int) *ChainCreate {
-	if v != nil {
-		_c.SetExitPort(*v)
-	}
-	return _c
-}
-
-// SetExitUsername sets the "exit_username" field.
-func (_c *ChainCreate) SetExitUsername(v string) *ChainCreate {
-	_c.mutation.SetExitUsername(v)
-	return _c
-}
-
-// SetNillableExitUsername sets the "exit_username" field if the given value is not nil.
-func (_c *ChainCreate) SetNillableExitUsername(v *string) *ChainCreate {
-	if v != nil {
-		_c.SetExitUsername(*v)
-	}
-	return _c
-}
-
-// SetExitPassword sets the "exit_password" field.
-func (_c *ChainCreate) SetExitPassword(v string) *ChainCreate {
-	_c.mutation.SetExitPassword(v)
-	return _c
-}
-
-// SetNillableExitPassword sets the "exit_password" field if the given value is not nil.
-func (_c *ChainCreate) SetNillableExitPassword(v *string) *ChainCreate {
-	if v != nil {
-		_c.SetExitPassword(*v)
-	}
-	return _c
-}
-
-// SetExitNodeID sets the "exit_node_id" field.
-func (_c *ChainCreate) SetExitNodeID(v int) *ChainCreate {
-	_c.mutation.SetExitNodeID(v)
-	return _c
-}
-
-// SetNillableExitNodeID sets the "exit_node_id" field if the given value is not nil.
-func (_c *ChainCreate) SetNillableExitNodeID(v *int) *ChainCreate {
-	if v != nil {
-		_c.SetExitNodeID(*v)
-	}
-	return _c
-}
-
-// SetExitLink sets the "exit_link" field.
-func (_c *ChainCreate) SetExitLink(v string) *ChainCreate {
-	_c.mutation.SetExitLink(v)
-	return _c
-}
-
-// SetNillableExitLink sets the "exit_link" field if the given value is not nil.
-func (_c *ChainCreate) SetNillableExitLink(v *string) *ChainCreate {
-	if v != nil {
-		_c.SetExitLink(*v)
-	}
+// SetExitID sets the "exit_id" field.
+func (_c *ChainCreate) SetExitID(v int) *ChainCreate {
+	_c.mutation.SetExitID(v)
 	return _c
 }
 
@@ -150,20 +61,6 @@ func (_c *ChainCreate) SetNillableEnabled(v *bool) *ChainCreate {
 	return _c
 }
 
-// SetPolicyType sets the "policy_type" field.
-func (_c *ChainCreate) SetPolicyType(v string) *ChainCreate {
-	_c.mutation.SetPolicyType(v)
-	return _c
-}
-
-// SetNillablePolicyType sets the "policy_type" field if the given value is not nil.
-func (_c *ChainCreate) SetNillablePolicyType(v *string) *ChainCreate {
-	if v != nil {
-		_c.SetPolicyType(*v)
-	}
-	return _c
-}
-
 // SetCreatedAt sets the "created_at" field.
 func (_c *ChainCreate) SetCreatedAt(v time.Time) *ChainCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -176,6 +73,11 @@ func (_c *ChainCreate) SetNillableCreatedAt(v *time.Time) *ChainCreate {
 		_c.SetCreatedAt(*v)
 	}
 	return _c
+}
+
+// SetExit sets the "exit" edge to the Exit entity.
+func (_c *ChainCreate) SetExit(v *Exit) *ChainCreate {
+	return _c.SetExitID(v.ID)
 }
 
 // Mutation returns the ChainMutation object of the builder.
@@ -213,33 +115,9 @@ func (_c *ChainCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *ChainCreate) defaults() {
-	if _, ok := _c.mutation.ExitAddress(); !ok {
-		v := chain.DefaultExitAddress
-		_c.mutation.SetExitAddress(v)
-	}
-	if _, ok := _c.mutation.ExitPort(); !ok {
-		v := chain.DefaultExitPort
-		_c.mutation.SetExitPort(v)
-	}
-	if _, ok := _c.mutation.ExitUsername(); !ok {
-		v := chain.DefaultExitUsername
-		_c.mutation.SetExitUsername(v)
-	}
-	if _, ok := _c.mutation.ExitPassword(); !ok {
-		v := chain.DefaultExitPassword
-		_c.mutation.SetExitPassword(v)
-	}
-	if _, ok := _c.mutation.ExitLink(); !ok {
-		v := chain.DefaultExitLink
-		_c.mutation.SetExitLink(v)
-	}
 	if _, ok := _c.mutation.Enabled(); !ok {
 		v := chain.DefaultEnabled
 		_c.mutation.SetEnabled(v)
-	}
-	if _, ok := _c.mutation.PolicyType(); !ok {
-		v := chain.DefaultPolicyType
-		_c.mutation.SetPolicyType(v)
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := chain.DefaultCreatedAt()
@@ -263,52 +141,17 @@ func (_c *ChainCreate) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "Chain.name": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.ExitKind(); !ok {
-		return &ValidationError{Name: "exit_kind", err: errors.New(`ent: missing required field "Chain.exit_kind"`)}
-	}
-	if v, ok := _c.mutation.ExitKind(); ok {
-		if err := chain.ExitKindValidator(v); err != nil {
-			return &ValidationError{Name: "exit_kind", err: fmt.Errorf(`ent: validator failed for field "Chain.exit_kind": %w`, err)}
-		}
-	}
-	if _, ok := _c.mutation.ExitAddress(); !ok {
-		return &ValidationError{Name: "exit_address", err: errors.New(`ent: missing required field "Chain.exit_address"`)}
-	}
-	if v, ok := _c.mutation.ExitAddress(); ok {
-		if err := chain.ExitAddressValidator(v); err != nil {
-			return &ValidationError{Name: "exit_address", err: fmt.Errorf(`ent: validator failed for field "Chain.exit_address": %w`, err)}
-		}
-	}
-	if _, ok := _c.mutation.ExitPort(); !ok {
-		return &ValidationError{Name: "exit_port", err: errors.New(`ent: missing required field "Chain.exit_port"`)}
-	}
-	if _, ok := _c.mutation.ExitUsername(); !ok {
-		return &ValidationError{Name: "exit_username", err: errors.New(`ent: missing required field "Chain.exit_username"`)}
-	}
-	if v, ok := _c.mutation.ExitUsername(); ok {
-		if err := chain.ExitUsernameValidator(v); err != nil {
-			return &ValidationError{Name: "exit_username", err: fmt.Errorf(`ent: validator failed for field "Chain.exit_username": %w`, err)}
-		}
-	}
-	if _, ok := _c.mutation.ExitPassword(); !ok {
-		return &ValidationError{Name: "exit_password", err: errors.New(`ent: missing required field "Chain.exit_password"`)}
-	}
-	if _, ok := _c.mutation.ExitLink(); !ok {
-		return &ValidationError{Name: "exit_link", err: errors.New(`ent: missing required field "Chain.exit_link"`)}
+	if _, ok := _c.mutation.ExitID(); !ok {
+		return &ValidationError{Name: "exit_id", err: errors.New(`ent: missing required field "Chain.exit_id"`)}
 	}
 	if _, ok := _c.mutation.Enabled(); !ok {
 		return &ValidationError{Name: "enabled", err: errors.New(`ent: missing required field "Chain.enabled"`)}
 	}
-	if _, ok := _c.mutation.PolicyType(); !ok {
-		return &ValidationError{Name: "policy_type", err: errors.New(`ent: missing required field "Chain.policy_type"`)}
-	}
-	if v, ok := _c.mutation.PolicyType(); ok {
-		if err := chain.PolicyTypeValidator(v); err != nil {
-			return &ValidationError{Name: "policy_type", err: fmt.Errorf(`ent: validator failed for field "Chain.policy_type": %w`, err)}
-		}
-	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Chain.created_at"`)}
+	}
+	if len(_c.mutation.ExitIDs()) == 0 {
+		return &ValidationError{Name: "exit", err: errors.New(`ent: missing required edge "Chain.exit"`)}
 	}
 	return nil
 }
@@ -349,49 +192,30 @@ func (_c *ChainCreate) createSpec() (*Chain, *sqlgraph.CreateSpec) {
 		_spec.SetField(chain.FieldName, field.TypeString, value)
 		_node.Name = value
 	}
-	if value, ok := _c.mutation.ExitKind(); ok {
-		_spec.SetField(chain.FieldExitKind, field.TypeEnum, value)
-		_node.ExitKind = value
-	}
-	if value, ok := _c.mutation.ExitSource(); ok {
-		_spec.SetField(chain.FieldExitSource, field.TypeJSON, value)
-		_node.ExitSource = value
-	}
-	if value, ok := _c.mutation.ExitAddress(); ok {
-		_spec.SetField(chain.FieldExitAddress, field.TypeString, value)
-		_node.ExitAddress = value
-	}
-	if value, ok := _c.mutation.ExitPort(); ok {
-		_spec.SetField(chain.FieldExitPort, field.TypeInt, value)
-		_node.ExitPort = value
-	}
-	if value, ok := _c.mutation.ExitUsername(); ok {
-		_spec.SetField(chain.FieldExitUsername, field.TypeString, value)
-		_node.ExitUsername = value
-	}
-	if value, ok := _c.mutation.ExitPassword(); ok {
-		_spec.SetField(chain.FieldExitPassword, field.TypeString, value)
-		_node.ExitPassword = value
-	}
-	if value, ok := _c.mutation.ExitNodeID(); ok {
-		_spec.SetField(chain.FieldExitNodeID, field.TypeInt, value)
-		_node.ExitNodeID = &value
-	}
-	if value, ok := _c.mutation.ExitLink(); ok {
-		_spec.SetField(chain.FieldExitLink, field.TypeString, value)
-		_node.ExitLink = value
-	}
 	if value, ok := _c.mutation.Enabled(); ok {
 		_spec.SetField(chain.FieldEnabled, field.TypeBool, value)
 		_node.Enabled = value
 	}
-	if value, ok := _c.mutation.PolicyType(); ok {
-		_spec.SetField(chain.FieldPolicyType, field.TypeString, value)
-		_node.PolicyType = value
-	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(chain.FieldCreatedAt, field.TypeTime, value)
 		_node.CreatedAt = value
+	}
+	if nodes := _c.mutation.ExitIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   chain.ExitTable,
+			Columns: []string{chain.ExitColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(exit.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.ExitID = nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec
 }
@@ -493,123 +317,15 @@ func (u *ChainUpsert) UpdateName() *ChainUpsert {
 	return u
 }
 
-// SetExitKind sets the "exit_kind" field.
-func (u *ChainUpsert) SetExitKind(v chain.ExitKind) *ChainUpsert {
-	u.Set(chain.FieldExitKind, v)
+// SetExitID sets the "exit_id" field.
+func (u *ChainUpsert) SetExitID(v int) *ChainUpsert {
+	u.Set(chain.FieldExitID, v)
 	return u
 }
 
-// UpdateExitKind sets the "exit_kind" field to the value that was provided on create.
-func (u *ChainUpsert) UpdateExitKind() *ChainUpsert {
-	u.SetExcluded(chain.FieldExitKind)
-	return u
-}
-
-// SetExitSource sets the "exit_source" field.
-func (u *ChainUpsert) SetExitSource(v map[string]interface{}) *ChainUpsert {
-	u.Set(chain.FieldExitSource, v)
-	return u
-}
-
-// UpdateExitSource sets the "exit_source" field to the value that was provided on create.
-func (u *ChainUpsert) UpdateExitSource() *ChainUpsert {
-	u.SetExcluded(chain.FieldExitSource)
-	return u
-}
-
-// ClearExitSource clears the value of the "exit_source" field.
-func (u *ChainUpsert) ClearExitSource() *ChainUpsert {
-	u.SetNull(chain.FieldExitSource)
-	return u
-}
-
-// SetExitAddress sets the "exit_address" field.
-func (u *ChainUpsert) SetExitAddress(v string) *ChainUpsert {
-	u.Set(chain.FieldExitAddress, v)
-	return u
-}
-
-// UpdateExitAddress sets the "exit_address" field to the value that was provided on create.
-func (u *ChainUpsert) UpdateExitAddress() *ChainUpsert {
-	u.SetExcluded(chain.FieldExitAddress)
-	return u
-}
-
-// SetExitPort sets the "exit_port" field.
-func (u *ChainUpsert) SetExitPort(v int) *ChainUpsert {
-	u.Set(chain.FieldExitPort, v)
-	return u
-}
-
-// UpdateExitPort sets the "exit_port" field to the value that was provided on create.
-func (u *ChainUpsert) UpdateExitPort() *ChainUpsert {
-	u.SetExcluded(chain.FieldExitPort)
-	return u
-}
-
-// AddExitPort adds v to the "exit_port" field.
-func (u *ChainUpsert) AddExitPort(v int) *ChainUpsert {
-	u.Add(chain.FieldExitPort, v)
-	return u
-}
-
-// SetExitUsername sets the "exit_username" field.
-func (u *ChainUpsert) SetExitUsername(v string) *ChainUpsert {
-	u.Set(chain.FieldExitUsername, v)
-	return u
-}
-
-// UpdateExitUsername sets the "exit_username" field to the value that was provided on create.
-func (u *ChainUpsert) UpdateExitUsername() *ChainUpsert {
-	u.SetExcluded(chain.FieldExitUsername)
-	return u
-}
-
-// SetExitPassword sets the "exit_password" field.
-func (u *ChainUpsert) SetExitPassword(v string) *ChainUpsert {
-	u.Set(chain.FieldExitPassword, v)
-	return u
-}
-
-// UpdateExitPassword sets the "exit_password" field to the value that was provided on create.
-func (u *ChainUpsert) UpdateExitPassword() *ChainUpsert {
-	u.SetExcluded(chain.FieldExitPassword)
-	return u
-}
-
-// SetExitNodeID sets the "exit_node_id" field.
-func (u *ChainUpsert) SetExitNodeID(v int) *ChainUpsert {
-	u.Set(chain.FieldExitNodeID, v)
-	return u
-}
-
-// UpdateExitNodeID sets the "exit_node_id" field to the value that was provided on create.
-func (u *ChainUpsert) UpdateExitNodeID() *ChainUpsert {
-	u.SetExcluded(chain.FieldExitNodeID)
-	return u
-}
-
-// AddExitNodeID adds v to the "exit_node_id" field.
-func (u *ChainUpsert) AddExitNodeID(v int) *ChainUpsert {
-	u.Add(chain.FieldExitNodeID, v)
-	return u
-}
-
-// ClearExitNodeID clears the value of the "exit_node_id" field.
-func (u *ChainUpsert) ClearExitNodeID() *ChainUpsert {
-	u.SetNull(chain.FieldExitNodeID)
-	return u
-}
-
-// SetExitLink sets the "exit_link" field.
-func (u *ChainUpsert) SetExitLink(v string) *ChainUpsert {
-	u.Set(chain.FieldExitLink, v)
-	return u
-}
-
-// UpdateExitLink sets the "exit_link" field to the value that was provided on create.
-func (u *ChainUpsert) UpdateExitLink() *ChainUpsert {
-	u.SetExcluded(chain.FieldExitLink)
+// UpdateExitID sets the "exit_id" field to the value that was provided on create.
+func (u *ChainUpsert) UpdateExitID() *ChainUpsert {
+	u.SetExcluded(chain.FieldExitID)
 	return u
 }
 
@@ -622,18 +338,6 @@ func (u *ChainUpsert) SetEnabled(v bool) *ChainUpsert {
 // UpdateEnabled sets the "enabled" field to the value that was provided on create.
 func (u *ChainUpsert) UpdateEnabled() *ChainUpsert {
 	u.SetExcluded(chain.FieldEnabled)
-	return u
-}
-
-// SetPolicyType sets the "policy_type" field.
-func (u *ChainUpsert) SetPolicyType(v string) *ChainUpsert {
-	u.Set(chain.FieldPolicyType, v)
-	return u
-}
-
-// UpdatePolicyType sets the "policy_type" field to the value that was provided on create.
-func (u *ChainUpsert) UpdatePolicyType() *ChainUpsert {
-	u.SetExcluded(chain.FieldPolicyType)
 	return u
 }
 
@@ -738,143 +442,17 @@ func (u *ChainUpsertOne) UpdateName() *ChainUpsertOne {
 	})
 }
 
-// SetExitKind sets the "exit_kind" field.
-func (u *ChainUpsertOne) SetExitKind(v chain.ExitKind) *ChainUpsertOne {
+// SetExitID sets the "exit_id" field.
+func (u *ChainUpsertOne) SetExitID(v int) *ChainUpsertOne {
 	return u.Update(func(s *ChainUpsert) {
-		s.SetExitKind(v)
+		s.SetExitID(v)
 	})
 }
 
-// UpdateExitKind sets the "exit_kind" field to the value that was provided on create.
-func (u *ChainUpsertOne) UpdateExitKind() *ChainUpsertOne {
+// UpdateExitID sets the "exit_id" field to the value that was provided on create.
+func (u *ChainUpsertOne) UpdateExitID() *ChainUpsertOne {
 	return u.Update(func(s *ChainUpsert) {
-		s.UpdateExitKind()
-	})
-}
-
-// SetExitSource sets the "exit_source" field.
-func (u *ChainUpsertOne) SetExitSource(v map[string]interface{}) *ChainUpsertOne {
-	return u.Update(func(s *ChainUpsert) {
-		s.SetExitSource(v)
-	})
-}
-
-// UpdateExitSource sets the "exit_source" field to the value that was provided on create.
-func (u *ChainUpsertOne) UpdateExitSource() *ChainUpsertOne {
-	return u.Update(func(s *ChainUpsert) {
-		s.UpdateExitSource()
-	})
-}
-
-// ClearExitSource clears the value of the "exit_source" field.
-func (u *ChainUpsertOne) ClearExitSource() *ChainUpsertOne {
-	return u.Update(func(s *ChainUpsert) {
-		s.ClearExitSource()
-	})
-}
-
-// SetExitAddress sets the "exit_address" field.
-func (u *ChainUpsertOne) SetExitAddress(v string) *ChainUpsertOne {
-	return u.Update(func(s *ChainUpsert) {
-		s.SetExitAddress(v)
-	})
-}
-
-// UpdateExitAddress sets the "exit_address" field to the value that was provided on create.
-func (u *ChainUpsertOne) UpdateExitAddress() *ChainUpsertOne {
-	return u.Update(func(s *ChainUpsert) {
-		s.UpdateExitAddress()
-	})
-}
-
-// SetExitPort sets the "exit_port" field.
-func (u *ChainUpsertOne) SetExitPort(v int) *ChainUpsertOne {
-	return u.Update(func(s *ChainUpsert) {
-		s.SetExitPort(v)
-	})
-}
-
-// AddExitPort adds v to the "exit_port" field.
-func (u *ChainUpsertOne) AddExitPort(v int) *ChainUpsertOne {
-	return u.Update(func(s *ChainUpsert) {
-		s.AddExitPort(v)
-	})
-}
-
-// UpdateExitPort sets the "exit_port" field to the value that was provided on create.
-func (u *ChainUpsertOne) UpdateExitPort() *ChainUpsertOne {
-	return u.Update(func(s *ChainUpsert) {
-		s.UpdateExitPort()
-	})
-}
-
-// SetExitUsername sets the "exit_username" field.
-func (u *ChainUpsertOne) SetExitUsername(v string) *ChainUpsertOne {
-	return u.Update(func(s *ChainUpsert) {
-		s.SetExitUsername(v)
-	})
-}
-
-// UpdateExitUsername sets the "exit_username" field to the value that was provided on create.
-func (u *ChainUpsertOne) UpdateExitUsername() *ChainUpsertOne {
-	return u.Update(func(s *ChainUpsert) {
-		s.UpdateExitUsername()
-	})
-}
-
-// SetExitPassword sets the "exit_password" field.
-func (u *ChainUpsertOne) SetExitPassword(v string) *ChainUpsertOne {
-	return u.Update(func(s *ChainUpsert) {
-		s.SetExitPassword(v)
-	})
-}
-
-// UpdateExitPassword sets the "exit_password" field to the value that was provided on create.
-func (u *ChainUpsertOne) UpdateExitPassword() *ChainUpsertOne {
-	return u.Update(func(s *ChainUpsert) {
-		s.UpdateExitPassword()
-	})
-}
-
-// SetExitNodeID sets the "exit_node_id" field.
-func (u *ChainUpsertOne) SetExitNodeID(v int) *ChainUpsertOne {
-	return u.Update(func(s *ChainUpsert) {
-		s.SetExitNodeID(v)
-	})
-}
-
-// AddExitNodeID adds v to the "exit_node_id" field.
-func (u *ChainUpsertOne) AddExitNodeID(v int) *ChainUpsertOne {
-	return u.Update(func(s *ChainUpsert) {
-		s.AddExitNodeID(v)
-	})
-}
-
-// UpdateExitNodeID sets the "exit_node_id" field to the value that was provided on create.
-func (u *ChainUpsertOne) UpdateExitNodeID() *ChainUpsertOne {
-	return u.Update(func(s *ChainUpsert) {
-		s.UpdateExitNodeID()
-	})
-}
-
-// ClearExitNodeID clears the value of the "exit_node_id" field.
-func (u *ChainUpsertOne) ClearExitNodeID() *ChainUpsertOne {
-	return u.Update(func(s *ChainUpsert) {
-		s.ClearExitNodeID()
-	})
-}
-
-// SetExitLink sets the "exit_link" field.
-func (u *ChainUpsertOne) SetExitLink(v string) *ChainUpsertOne {
-	return u.Update(func(s *ChainUpsert) {
-		s.SetExitLink(v)
-	})
-}
-
-// UpdateExitLink sets the "exit_link" field to the value that was provided on create.
-func (u *ChainUpsertOne) UpdateExitLink() *ChainUpsertOne {
-	return u.Update(func(s *ChainUpsert) {
-		s.UpdateExitLink()
+		s.UpdateExitID()
 	})
 }
 
@@ -889,20 +467,6 @@ func (u *ChainUpsertOne) SetEnabled(v bool) *ChainUpsertOne {
 func (u *ChainUpsertOne) UpdateEnabled() *ChainUpsertOne {
 	return u.Update(func(s *ChainUpsert) {
 		s.UpdateEnabled()
-	})
-}
-
-// SetPolicyType sets the "policy_type" field.
-func (u *ChainUpsertOne) SetPolicyType(v string) *ChainUpsertOne {
-	return u.Update(func(s *ChainUpsert) {
-		s.SetPolicyType(v)
-	})
-}
-
-// UpdatePolicyType sets the "policy_type" field to the value that was provided on create.
-func (u *ChainUpsertOne) UpdatePolicyType() *ChainUpsertOne {
-	return u.Update(func(s *ChainUpsert) {
-		s.UpdatePolicyType()
 	})
 }
 
@@ -1173,143 +737,17 @@ func (u *ChainUpsertBulk) UpdateName() *ChainUpsertBulk {
 	})
 }
 
-// SetExitKind sets the "exit_kind" field.
-func (u *ChainUpsertBulk) SetExitKind(v chain.ExitKind) *ChainUpsertBulk {
+// SetExitID sets the "exit_id" field.
+func (u *ChainUpsertBulk) SetExitID(v int) *ChainUpsertBulk {
 	return u.Update(func(s *ChainUpsert) {
-		s.SetExitKind(v)
+		s.SetExitID(v)
 	})
 }
 
-// UpdateExitKind sets the "exit_kind" field to the value that was provided on create.
-func (u *ChainUpsertBulk) UpdateExitKind() *ChainUpsertBulk {
+// UpdateExitID sets the "exit_id" field to the value that was provided on create.
+func (u *ChainUpsertBulk) UpdateExitID() *ChainUpsertBulk {
 	return u.Update(func(s *ChainUpsert) {
-		s.UpdateExitKind()
-	})
-}
-
-// SetExitSource sets the "exit_source" field.
-func (u *ChainUpsertBulk) SetExitSource(v map[string]interface{}) *ChainUpsertBulk {
-	return u.Update(func(s *ChainUpsert) {
-		s.SetExitSource(v)
-	})
-}
-
-// UpdateExitSource sets the "exit_source" field to the value that was provided on create.
-func (u *ChainUpsertBulk) UpdateExitSource() *ChainUpsertBulk {
-	return u.Update(func(s *ChainUpsert) {
-		s.UpdateExitSource()
-	})
-}
-
-// ClearExitSource clears the value of the "exit_source" field.
-func (u *ChainUpsertBulk) ClearExitSource() *ChainUpsertBulk {
-	return u.Update(func(s *ChainUpsert) {
-		s.ClearExitSource()
-	})
-}
-
-// SetExitAddress sets the "exit_address" field.
-func (u *ChainUpsertBulk) SetExitAddress(v string) *ChainUpsertBulk {
-	return u.Update(func(s *ChainUpsert) {
-		s.SetExitAddress(v)
-	})
-}
-
-// UpdateExitAddress sets the "exit_address" field to the value that was provided on create.
-func (u *ChainUpsertBulk) UpdateExitAddress() *ChainUpsertBulk {
-	return u.Update(func(s *ChainUpsert) {
-		s.UpdateExitAddress()
-	})
-}
-
-// SetExitPort sets the "exit_port" field.
-func (u *ChainUpsertBulk) SetExitPort(v int) *ChainUpsertBulk {
-	return u.Update(func(s *ChainUpsert) {
-		s.SetExitPort(v)
-	})
-}
-
-// AddExitPort adds v to the "exit_port" field.
-func (u *ChainUpsertBulk) AddExitPort(v int) *ChainUpsertBulk {
-	return u.Update(func(s *ChainUpsert) {
-		s.AddExitPort(v)
-	})
-}
-
-// UpdateExitPort sets the "exit_port" field to the value that was provided on create.
-func (u *ChainUpsertBulk) UpdateExitPort() *ChainUpsertBulk {
-	return u.Update(func(s *ChainUpsert) {
-		s.UpdateExitPort()
-	})
-}
-
-// SetExitUsername sets the "exit_username" field.
-func (u *ChainUpsertBulk) SetExitUsername(v string) *ChainUpsertBulk {
-	return u.Update(func(s *ChainUpsert) {
-		s.SetExitUsername(v)
-	})
-}
-
-// UpdateExitUsername sets the "exit_username" field to the value that was provided on create.
-func (u *ChainUpsertBulk) UpdateExitUsername() *ChainUpsertBulk {
-	return u.Update(func(s *ChainUpsert) {
-		s.UpdateExitUsername()
-	})
-}
-
-// SetExitPassword sets the "exit_password" field.
-func (u *ChainUpsertBulk) SetExitPassword(v string) *ChainUpsertBulk {
-	return u.Update(func(s *ChainUpsert) {
-		s.SetExitPassword(v)
-	})
-}
-
-// UpdateExitPassword sets the "exit_password" field to the value that was provided on create.
-func (u *ChainUpsertBulk) UpdateExitPassword() *ChainUpsertBulk {
-	return u.Update(func(s *ChainUpsert) {
-		s.UpdateExitPassword()
-	})
-}
-
-// SetExitNodeID sets the "exit_node_id" field.
-func (u *ChainUpsertBulk) SetExitNodeID(v int) *ChainUpsertBulk {
-	return u.Update(func(s *ChainUpsert) {
-		s.SetExitNodeID(v)
-	})
-}
-
-// AddExitNodeID adds v to the "exit_node_id" field.
-func (u *ChainUpsertBulk) AddExitNodeID(v int) *ChainUpsertBulk {
-	return u.Update(func(s *ChainUpsert) {
-		s.AddExitNodeID(v)
-	})
-}
-
-// UpdateExitNodeID sets the "exit_node_id" field to the value that was provided on create.
-func (u *ChainUpsertBulk) UpdateExitNodeID() *ChainUpsertBulk {
-	return u.Update(func(s *ChainUpsert) {
-		s.UpdateExitNodeID()
-	})
-}
-
-// ClearExitNodeID clears the value of the "exit_node_id" field.
-func (u *ChainUpsertBulk) ClearExitNodeID() *ChainUpsertBulk {
-	return u.Update(func(s *ChainUpsert) {
-		s.ClearExitNodeID()
-	})
-}
-
-// SetExitLink sets the "exit_link" field.
-func (u *ChainUpsertBulk) SetExitLink(v string) *ChainUpsertBulk {
-	return u.Update(func(s *ChainUpsert) {
-		s.SetExitLink(v)
-	})
-}
-
-// UpdateExitLink sets the "exit_link" field to the value that was provided on create.
-func (u *ChainUpsertBulk) UpdateExitLink() *ChainUpsertBulk {
-	return u.Update(func(s *ChainUpsert) {
-		s.UpdateExitLink()
+		s.UpdateExitID()
 	})
 }
 
@@ -1324,20 +762,6 @@ func (u *ChainUpsertBulk) SetEnabled(v bool) *ChainUpsertBulk {
 func (u *ChainUpsertBulk) UpdateEnabled() *ChainUpsertBulk {
 	return u.Update(func(s *ChainUpsert) {
 		s.UpdateEnabled()
-	})
-}
-
-// SetPolicyType sets the "policy_type" field.
-func (u *ChainUpsertBulk) SetPolicyType(v string) *ChainUpsertBulk {
-	return u.Update(func(s *ChainUpsert) {
-		s.SetPolicyType(v)
-	})
-}
-
-// UpdatePolicyType sets the "policy_type" field to the value that was provided on create.
-func (u *ChainUpsertBulk) UpdatePolicyType() *ChainUpsertBulk {
-	return u.Update(func(s *ChainUpsert) {
-		s.UpdatePolicyType()
 	})
 }
 

@@ -1,6 +1,7 @@
 // VPS 详情：主机观测（缺失显示「未知」）、本机其他程序占用的端口、内核版本锁定、内核诊断 / 重启、节点出口关系。
+import { useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { Badge, Button, Field, Notice, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Sheet, SheetContent, Tabs, TabsList, TabsPanel, TabsTab, useConfirm } from "@weir/ui";
 import { api } from "../api";
 import { useRowAction } from "../lib/action";
@@ -13,7 +14,7 @@ import { KernelDiagnostics, type KernelInfo } from "../pages/kernels";
 import { GateCerts } from "./node-certs";
 import { HistoryCharts } from "./history-charts";
 import { GateTopology } from "./gate-topology";
-import { GateRouting } from "./gate-routing";
+
 import { ObjectLink } from "./object-link";
 import { exitKindName, probeText } from "./chain-exit";
 import { NodeAccess } from "./node-access";
@@ -33,7 +34,7 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { listening_po
   const confirm = useConfirm();
   const kernels = useQuery({ queryKey: ["kernels"], queryFn: async () => (await api("/admin/kernels")).kernels as Record<string, KernelInfo> });
   const [pins, setPins] = useState<Record<string, string>>(gate.kernel_pins ?? {});
-  const [routing, setRouting] = useState(false);
+  const navigate = useNavigate();
   const [diag, setDiag] = useState<{ kernel: string; result: Record<string, unknown> } | null>(null);
   const h = gate.host ?? {};
   // 本项目自己的端口：节点端口与两个内核的统计端口（只监听回环）。
@@ -42,11 +43,11 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { listening_po
   const { run, isBusy, waitFor } = useRowAction<string>();
   const mine = nodes.filter((n) => n.gate_id === gate.id);
   const exitName = (n: NodeItem) => {
-    if (n.chain.kind === "none") return "直连";
-    if (n.chain.kind === "source") return "订阅源节点";
-    if (n.chain.kind !== "node") return `${exitKindName[n.chain.kind]} ${n.chain.address ?? ""}${n.chain.port ? ":" + n.chain.port : ""}`;
-    const x = nodes.find((y) => y.id === n.chain.node_id);
-    return <>经 <ObjectLink to={{ type: "node", id: n.chain.node_id ?? undefined, name: x?.name ?? "节点" }} />{x?.gate_name ? `（${x.gate_name}）` : ""}</>;
+    if (n.exit.kind === "freedom") return "直连";
+    if (n.exit.kind === "source") return "订阅源节点";
+    if (n.exit.kind !== "node") return `${exitKindName[n.exit.kind]} ${n.exit.address ?? ""}${n.exit.port ? ":" + n.exit.port : ""}`;
+    const x = nodes.find((y) => y.id === n.exit.node_id);
+    return <>经 <ObjectLink to={{ type: "node", id: n.exit.node_id ?? undefined, name: x?.name ?? "节点" }} />{x?.gate_name ? `（${x.gate_name}）` : ""}</>;
   };
   const fw = gate.firewall;
   return (
@@ -54,7 +55,7 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { listening_po
       <SheetContent side="right" title={gate.name} description={`${gate.public_host || "等待上报地址"} · ${gate.arch} · Gate ${gate.version || "版本未知"}${gateLags(gate) ? `（未跟上中心 ${gate.center_version}）` : ""} · 最近心跳 ${date(gate.last_seen_at)}`} className="w-full sm:max-w-[640px]">
         <div className="stack p-4">
           <GateUpdateLine gate={gate} />
-          {routing && <GateRouting gate={gate} close={() => setRouting(false)} />}
+
           <Tabs defaultValue="overview">
             <TabsList aria-label="VPS 详情">
               <TabsTab value="overview">概览</TabsTab>
@@ -76,7 +77,7 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { listening_po
           <HistoryCharts path={`/admin/gates/${gate.id}/history`} host />
           <SectionHeader title="本机防火墙" description="只读：节点端口没有放行时在节点上提示，Weir 不改防火墙规则；云厂商的安全组读不到。" />
           <small>
-            {!fw ? unknown : fw.error ? `${fw.tool}：读取失败（${fw.error}）` : fw.tool === "none" ? "没有检测到防火墙" : !fw.active ? `${fw.tool} 未启用（全部放行）` : `${fw.tool} 已启用，放行 ${fw.rules?.length ? fw.rules.join("、") : "无端口"}`}
+            {!fw ? unknown : fw.error ? `${fw.tool}：读取失败（${fw.error}）` : fw.tool === "freedom" ? "没有检测到防火墙" : !fw.active ? `${fw.tool} 未启用（全部放行）` : `${fw.tool} 已启用，放行 ${fw.rules?.length ? fw.rules.join("、") : "无端口"}`}
           </small>
           <SectionHeader title="其他程序占用的端口" description="建节点时自动避开这些端口。" />
           {foreign.length === 0 ? <small>{gate.listening_ports ? "没有" : unknown}</small> : (
@@ -116,18 +117,18 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { listening_po
           <GateCerts gate={gate} />
             </TabsPanel>
             <TabsPanel value="nodes" className="stack">
-          <SectionHeader title="节点与出口" description="入口节点 → 出口。" actions={<Button size="sm" variant="outline" onClick={() => setRouting(true)}>出口与分流</Button>} />
+          <SectionHeader title="节点与出口" description="入口节点 → 出口。" actions={<Button size="sm" variant="outline" onClick={() => navigate(`/exits?gate=${gate.id}`)}>出口与分流</Button>} />
           {mine.length === 0 ? <small>这台 VPS 还没有节点。</small> : (
             <ul className="stack">{mine.map((n) => (
               <li key={n.id} className="stack gap-1 text-body">
                 <span><ObjectLink to={{ type: "node", id: n.id, name: n.name }} className="font-semibold" /> :{n.port} → {exitName(n)}{!n.enabled && <Badge variant="soft" tone="warn">停用</Badge>}</span>
-                {n.chain.kind !== "none" && <small className="text-[var(--weir-ink-3)]">{probeText(n.chain.probe)}</small>}
+                {n.exit.kind !== "freedom" && <small className="text-[var(--weir-ink-3)]">{probeText(n.exit.probe)}</small>}
                 <NodeAccess ports={n.ports} reach={n.reach} />
               </li>
             ))}</ul>
           )}
           <SectionHeader title="关系图" description="用户 → 入口节点 → 路由（用户自建链式代理、分流规则）→ 出口（只读）；点击跳到对应用户、节点、VPS、订阅源或出口与分流。" />
-          <GateTopology gateId={gate.id} openRouting={() => setRouting(true)} />
+          <GateTopology gateId={gate.id} />
             </TabsPanel>
           </Tabs>
         </div>

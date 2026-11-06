@@ -3,7 +3,7 @@
 // 连续 15 秒低于 100 KiB/s 换下一个；都试过后回到其中最快的，不再限速。内容一律按 GitHub 官方摘要校验，摘要只由中心从 GitHub API 取。
 // 调整顺序、增删来源后立即保存；保存失败退回保存前的列表。
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { Collapsible,
   Badge, Button, Field, Form, Input, Notice, SectionHeader,
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SortableList, StatusLamp,

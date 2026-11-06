@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/shusfun/weir/internal/store/ent/predicate"
 )
 
@@ -104,34 +105,9 @@ func Enabled(v bool) predicate.Node {
 	return predicate.Node(sql.FieldEQ(FieldEnabled, v))
 }
 
-// ChainAddress applies equality check predicate on the "chain_address" field. It's identical to ChainAddressEQ.
-func ChainAddress(v string) predicate.Node {
-	return predicate.Node(sql.FieldEQ(FieldChainAddress, v))
-}
-
-// ChainPort applies equality check predicate on the "chain_port" field. It's identical to ChainPortEQ.
-func ChainPort(v int) predicate.Node {
-	return predicate.Node(sql.FieldEQ(FieldChainPort, v))
-}
-
-// ChainUsername applies equality check predicate on the "chain_username" field. It's identical to ChainUsernameEQ.
-func ChainUsername(v string) predicate.Node {
-	return predicate.Node(sql.FieldEQ(FieldChainUsername, v))
-}
-
-// ChainPassword applies equality check predicate on the "chain_password" field. It's identical to ChainPasswordEQ.
-func ChainPassword(v string) predicate.Node {
-	return predicate.Node(sql.FieldEQ(FieldChainPassword, v))
-}
-
-// ChainNodeID applies equality check predicate on the "chain_node_id" field. It's identical to ChainNodeIDEQ.
-func ChainNodeID(v int) predicate.Node {
-	return predicate.Node(sql.FieldEQ(FieldChainNodeID, v))
-}
-
-// ChainLink applies equality check predicate on the "chain_link" field. It's identical to ChainLinkEQ.
-func ChainLink(v string) predicate.Node {
-	return predicate.Node(sql.FieldEQ(FieldChainLink, v))
+// ExitID applies equality check predicate on the "exit_id" field. It's identical to ExitIDEQ.
+func ExitID(v int) predicate.Node {
+	return predicate.Node(sql.FieldEQ(FieldExitID, v))
 }
 
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
@@ -679,384 +655,24 @@ func EnabledNEQ(v bool) predicate.Node {
 	return predicate.Node(sql.FieldNEQ(FieldEnabled, v))
 }
 
-// ChainKindEQ applies the EQ predicate on the "chain_kind" field.
-func ChainKindEQ(v ChainKind) predicate.Node {
-	return predicate.Node(sql.FieldEQ(FieldChainKind, v))
+// ExitIDEQ applies the EQ predicate on the "exit_id" field.
+func ExitIDEQ(v int) predicate.Node {
+	return predicate.Node(sql.FieldEQ(FieldExitID, v))
 }
 
-// ChainKindNEQ applies the NEQ predicate on the "chain_kind" field.
-func ChainKindNEQ(v ChainKind) predicate.Node {
-	return predicate.Node(sql.FieldNEQ(FieldChainKind, v))
+// ExitIDNEQ applies the NEQ predicate on the "exit_id" field.
+func ExitIDNEQ(v int) predicate.Node {
+	return predicate.Node(sql.FieldNEQ(FieldExitID, v))
 }
 
-// ChainKindIn applies the In predicate on the "chain_kind" field.
-func ChainKindIn(vs ...ChainKind) predicate.Node {
-	return predicate.Node(sql.FieldIn(FieldChainKind, vs...))
+// ExitIDIn applies the In predicate on the "exit_id" field.
+func ExitIDIn(vs ...int) predicate.Node {
+	return predicate.Node(sql.FieldIn(FieldExitID, vs...))
 }
 
-// ChainKindNotIn applies the NotIn predicate on the "chain_kind" field.
-func ChainKindNotIn(vs ...ChainKind) predicate.Node {
-	return predicate.Node(sql.FieldNotIn(FieldChainKind, vs...))
-}
-
-// ChainSourceIsNil applies the IsNil predicate on the "chain_source" field.
-func ChainSourceIsNil() predicate.Node {
-	return predicate.Node(sql.FieldIsNull(FieldChainSource))
-}
-
-// ChainSourceNotNil applies the NotNil predicate on the "chain_source" field.
-func ChainSourceNotNil() predicate.Node {
-	return predicate.Node(sql.FieldNotNull(FieldChainSource))
-}
-
-// ChainAddressEQ applies the EQ predicate on the "chain_address" field.
-func ChainAddressEQ(v string) predicate.Node {
-	return predicate.Node(sql.FieldEQ(FieldChainAddress, v))
-}
-
-// ChainAddressNEQ applies the NEQ predicate on the "chain_address" field.
-func ChainAddressNEQ(v string) predicate.Node {
-	return predicate.Node(sql.FieldNEQ(FieldChainAddress, v))
-}
-
-// ChainAddressIn applies the In predicate on the "chain_address" field.
-func ChainAddressIn(vs ...string) predicate.Node {
-	return predicate.Node(sql.FieldIn(FieldChainAddress, vs...))
-}
-
-// ChainAddressNotIn applies the NotIn predicate on the "chain_address" field.
-func ChainAddressNotIn(vs ...string) predicate.Node {
-	return predicate.Node(sql.FieldNotIn(FieldChainAddress, vs...))
-}
-
-// ChainAddressGT applies the GT predicate on the "chain_address" field.
-func ChainAddressGT(v string) predicate.Node {
-	return predicate.Node(sql.FieldGT(FieldChainAddress, v))
-}
-
-// ChainAddressGTE applies the GTE predicate on the "chain_address" field.
-func ChainAddressGTE(v string) predicate.Node {
-	return predicate.Node(sql.FieldGTE(FieldChainAddress, v))
-}
-
-// ChainAddressLT applies the LT predicate on the "chain_address" field.
-func ChainAddressLT(v string) predicate.Node {
-	return predicate.Node(sql.FieldLT(FieldChainAddress, v))
-}
-
-// ChainAddressLTE applies the LTE predicate on the "chain_address" field.
-func ChainAddressLTE(v string) predicate.Node {
-	return predicate.Node(sql.FieldLTE(FieldChainAddress, v))
-}
-
-// ChainAddressContains applies the Contains predicate on the "chain_address" field.
-func ChainAddressContains(v string) predicate.Node {
-	return predicate.Node(sql.FieldContains(FieldChainAddress, v))
-}
-
-// ChainAddressHasPrefix applies the HasPrefix predicate on the "chain_address" field.
-func ChainAddressHasPrefix(v string) predicate.Node {
-	return predicate.Node(sql.FieldHasPrefix(FieldChainAddress, v))
-}
-
-// ChainAddressHasSuffix applies the HasSuffix predicate on the "chain_address" field.
-func ChainAddressHasSuffix(v string) predicate.Node {
-	return predicate.Node(sql.FieldHasSuffix(FieldChainAddress, v))
-}
-
-// ChainAddressEqualFold applies the EqualFold predicate on the "chain_address" field.
-func ChainAddressEqualFold(v string) predicate.Node {
-	return predicate.Node(sql.FieldEqualFold(FieldChainAddress, v))
-}
-
-// ChainAddressContainsFold applies the ContainsFold predicate on the "chain_address" field.
-func ChainAddressContainsFold(v string) predicate.Node {
-	return predicate.Node(sql.FieldContainsFold(FieldChainAddress, v))
-}
-
-// ChainPortEQ applies the EQ predicate on the "chain_port" field.
-func ChainPortEQ(v int) predicate.Node {
-	return predicate.Node(sql.FieldEQ(FieldChainPort, v))
-}
-
-// ChainPortNEQ applies the NEQ predicate on the "chain_port" field.
-func ChainPortNEQ(v int) predicate.Node {
-	return predicate.Node(sql.FieldNEQ(FieldChainPort, v))
-}
-
-// ChainPortIn applies the In predicate on the "chain_port" field.
-func ChainPortIn(vs ...int) predicate.Node {
-	return predicate.Node(sql.FieldIn(FieldChainPort, vs...))
-}
-
-// ChainPortNotIn applies the NotIn predicate on the "chain_port" field.
-func ChainPortNotIn(vs ...int) predicate.Node {
-	return predicate.Node(sql.FieldNotIn(FieldChainPort, vs...))
-}
-
-// ChainPortGT applies the GT predicate on the "chain_port" field.
-func ChainPortGT(v int) predicate.Node {
-	return predicate.Node(sql.FieldGT(FieldChainPort, v))
-}
-
-// ChainPortGTE applies the GTE predicate on the "chain_port" field.
-func ChainPortGTE(v int) predicate.Node {
-	return predicate.Node(sql.FieldGTE(FieldChainPort, v))
-}
-
-// ChainPortLT applies the LT predicate on the "chain_port" field.
-func ChainPortLT(v int) predicate.Node {
-	return predicate.Node(sql.FieldLT(FieldChainPort, v))
-}
-
-// ChainPortLTE applies the LTE predicate on the "chain_port" field.
-func ChainPortLTE(v int) predicate.Node {
-	return predicate.Node(sql.FieldLTE(FieldChainPort, v))
-}
-
-// ChainUsernameEQ applies the EQ predicate on the "chain_username" field.
-func ChainUsernameEQ(v string) predicate.Node {
-	return predicate.Node(sql.FieldEQ(FieldChainUsername, v))
-}
-
-// ChainUsernameNEQ applies the NEQ predicate on the "chain_username" field.
-func ChainUsernameNEQ(v string) predicate.Node {
-	return predicate.Node(sql.FieldNEQ(FieldChainUsername, v))
-}
-
-// ChainUsernameIn applies the In predicate on the "chain_username" field.
-func ChainUsernameIn(vs ...string) predicate.Node {
-	return predicate.Node(sql.FieldIn(FieldChainUsername, vs...))
-}
-
-// ChainUsernameNotIn applies the NotIn predicate on the "chain_username" field.
-func ChainUsernameNotIn(vs ...string) predicate.Node {
-	return predicate.Node(sql.FieldNotIn(FieldChainUsername, vs...))
-}
-
-// ChainUsernameGT applies the GT predicate on the "chain_username" field.
-func ChainUsernameGT(v string) predicate.Node {
-	return predicate.Node(sql.FieldGT(FieldChainUsername, v))
-}
-
-// ChainUsernameGTE applies the GTE predicate on the "chain_username" field.
-func ChainUsernameGTE(v string) predicate.Node {
-	return predicate.Node(sql.FieldGTE(FieldChainUsername, v))
-}
-
-// ChainUsernameLT applies the LT predicate on the "chain_username" field.
-func ChainUsernameLT(v string) predicate.Node {
-	return predicate.Node(sql.FieldLT(FieldChainUsername, v))
-}
-
-// ChainUsernameLTE applies the LTE predicate on the "chain_username" field.
-func ChainUsernameLTE(v string) predicate.Node {
-	return predicate.Node(sql.FieldLTE(FieldChainUsername, v))
-}
-
-// ChainUsernameContains applies the Contains predicate on the "chain_username" field.
-func ChainUsernameContains(v string) predicate.Node {
-	return predicate.Node(sql.FieldContains(FieldChainUsername, v))
-}
-
-// ChainUsernameHasPrefix applies the HasPrefix predicate on the "chain_username" field.
-func ChainUsernameHasPrefix(v string) predicate.Node {
-	return predicate.Node(sql.FieldHasPrefix(FieldChainUsername, v))
-}
-
-// ChainUsernameHasSuffix applies the HasSuffix predicate on the "chain_username" field.
-func ChainUsernameHasSuffix(v string) predicate.Node {
-	return predicate.Node(sql.FieldHasSuffix(FieldChainUsername, v))
-}
-
-// ChainUsernameEqualFold applies the EqualFold predicate on the "chain_username" field.
-func ChainUsernameEqualFold(v string) predicate.Node {
-	return predicate.Node(sql.FieldEqualFold(FieldChainUsername, v))
-}
-
-// ChainUsernameContainsFold applies the ContainsFold predicate on the "chain_username" field.
-func ChainUsernameContainsFold(v string) predicate.Node {
-	return predicate.Node(sql.FieldContainsFold(FieldChainUsername, v))
-}
-
-// ChainPasswordEQ applies the EQ predicate on the "chain_password" field.
-func ChainPasswordEQ(v string) predicate.Node {
-	return predicate.Node(sql.FieldEQ(FieldChainPassword, v))
-}
-
-// ChainPasswordNEQ applies the NEQ predicate on the "chain_password" field.
-func ChainPasswordNEQ(v string) predicate.Node {
-	return predicate.Node(sql.FieldNEQ(FieldChainPassword, v))
-}
-
-// ChainPasswordIn applies the In predicate on the "chain_password" field.
-func ChainPasswordIn(vs ...string) predicate.Node {
-	return predicate.Node(sql.FieldIn(FieldChainPassword, vs...))
-}
-
-// ChainPasswordNotIn applies the NotIn predicate on the "chain_password" field.
-func ChainPasswordNotIn(vs ...string) predicate.Node {
-	return predicate.Node(sql.FieldNotIn(FieldChainPassword, vs...))
-}
-
-// ChainPasswordGT applies the GT predicate on the "chain_password" field.
-func ChainPasswordGT(v string) predicate.Node {
-	return predicate.Node(sql.FieldGT(FieldChainPassword, v))
-}
-
-// ChainPasswordGTE applies the GTE predicate on the "chain_password" field.
-func ChainPasswordGTE(v string) predicate.Node {
-	return predicate.Node(sql.FieldGTE(FieldChainPassword, v))
-}
-
-// ChainPasswordLT applies the LT predicate on the "chain_password" field.
-func ChainPasswordLT(v string) predicate.Node {
-	return predicate.Node(sql.FieldLT(FieldChainPassword, v))
-}
-
-// ChainPasswordLTE applies the LTE predicate on the "chain_password" field.
-func ChainPasswordLTE(v string) predicate.Node {
-	return predicate.Node(sql.FieldLTE(FieldChainPassword, v))
-}
-
-// ChainPasswordContains applies the Contains predicate on the "chain_password" field.
-func ChainPasswordContains(v string) predicate.Node {
-	return predicate.Node(sql.FieldContains(FieldChainPassword, v))
-}
-
-// ChainPasswordHasPrefix applies the HasPrefix predicate on the "chain_password" field.
-func ChainPasswordHasPrefix(v string) predicate.Node {
-	return predicate.Node(sql.FieldHasPrefix(FieldChainPassword, v))
-}
-
-// ChainPasswordHasSuffix applies the HasSuffix predicate on the "chain_password" field.
-func ChainPasswordHasSuffix(v string) predicate.Node {
-	return predicate.Node(sql.FieldHasSuffix(FieldChainPassword, v))
-}
-
-// ChainPasswordEqualFold applies the EqualFold predicate on the "chain_password" field.
-func ChainPasswordEqualFold(v string) predicate.Node {
-	return predicate.Node(sql.FieldEqualFold(FieldChainPassword, v))
-}
-
-// ChainPasswordContainsFold applies the ContainsFold predicate on the "chain_password" field.
-func ChainPasswordContainsFold(v string) predicate.Node {
-	return predicate.Node(sql.FieldContainsFold(FieldChainPassword, v))
-}
-
-// ChainNodeIDEQ applies the EQ predicate on the "chain_node_id" field.
-func ChainNodeIDEQ(v int) predicate.Node {
-	return predicate.Node(sql.FieldEQ(FieldChainNodeID, v))
-}
-
-// ChainNodeIDNEQ applies the NEQ predicate on the "chain_node_id" field.
-func ChainNodeIDNEQ(v int) predicate.Node {
-	return predicate.Node(sql.FieldNEQ(FieldChainNodeID, v))
-}
-
-// ChainNodeIDIn applies the In predicate on the "chain_node_id" field.
-func ChainNodeIDIn(vs ...int) predicate.Node {
-	return predicate.Node(sql.FieldIn(FieldChainNodeID, vs...))
-}
-
-// ChainNodeIDNotIn applies the NotIn predicate on the "chain_node_id" field.
-func ChainNodeIDNotIn(vs ...int) predicate.Node {
-	return predicate.Node(sql.FieldNotIn(FieldChainNodeID, vs...))
-}
-
-// ChainNodeIDGT applies the GT predicate on the "chain_node_id" field.
-func ChainNodeIDGT(v int) predicate.Node {
-	return predicate.Node(sql.FieldGT(FieldChainNodeID, v))
-}
-
-// ChainNodeIDGTE applies the GTE predicate on the "chain_node_id" field.
-func ChainNodeIDGTE(v int) predicate.Node {
-	return predicate.Node(sql.FieldGTE(FieldChainNodeID, v))
-}
-
-// ChainNodeIDLT applies the LT predicate on the "chain_node_id" field.
-func ChainNodeIDLT(v int) predicate.Node {
-	return predicate.Node(sql.FieldLT(FieldChainNodeID, v))
-}
-
-// ChainNodeIDLTE applies the LTE predicate on the "chain_node_id" field.
-func ChainNodeIDLTE(v int) predicate.Node {
-	return predicate.Node(sql.FieldLTE(FieldChainNodeID, v))
-}
-
-// ChainNodeIDIsNil applies the IsNil predicate on the "chain_node_id" field.
-func ChainNodeIDIsNil() predicate.Node {
-	return predicate.Node(sql.FieldIsNull(FieldChainNodeID))
-}
-
-// ChainNodeIDNotNil applies the NotNil predicate on the "chain_node_id" field.
-func ChainNodeIDNotNil() predicate.Node {
-	return predicate.Node(sql.FieldNotNull(FieldChainNodeID))
-}
-
-// ChainLinkEQ applies the EQ predicate on the "chain_link" field.
-func ChainLinkEQ(v string) predicate.Node {
-	return predicate.Node(sql.FieldEQ(FieldChainLink, v))
-}
-
-// ChainLinkNEQ applies the NEQ predicate on the "chain_link" field.
-func ChainLinkNEQ(v string) predicate.Node {
-	return predicate.Node(sql.FieldNEQ(FieldChainLink, v))
-}
-
-// ChainLinkIn applies the In predicate on the "chain_link" field.
-func ChainLinkIn(vs ...string) predicate.Node {
-	return predicate.Node(sql.FieldIn(FieldChainLink, vs...))
-}
-
-// ChainLinkNotIn applies the NotIn predicate on the "chain_link" field.
-func ChainLinkNotIn(vs ...string) predicate.Node {
-	return predicate.Node(sql.FieldNotIn(FieldChainLink, vs...))
-}
-
-// ChainLinkGT applies the GT predicate on the "chain_link" field.
-func ChainLinkGT(v string) predicate.Node {
-	return predicate.Node(sql.FieldGT(FieldChainLink, v))
-}
-
-// ChainLinkGTE applies the GTE predicate on the "chain_link" field.
-func ChainLinkGTE(v string) predicate.Node {
-	return predicate.Node(sql.FieldGTE(FieldChainLink, v))
-}
-
-// ChainLinkLT applies the LT predicate on the "chain_link" field.
-func ChainLinkLT(v string) predicate.Node {
-	return predicate.Node(sql.FieldLT(FieldChainLink, v))
-}
-
-// ChainLinkLTE applies the LTE predicate on the "chain_link" field.
-func ChainLinkLTE(v string) predicate.Node {
-	return predicate.Node(sql.FieldLTE(FieldChainLink, v))
-}
-
-// ChainLinkContains applies the Contains predicate on the "chain_link" field.
-func ChainLinkContains(v string) predicate.Node {
-	return predicate.Node(sql.FieldContains(FieldChainLink, v))
-}
-
-// ChainLinkHasPrefix applies the HasPrefix predicate on the "chain_link" field.
-func ChainLinkHasPrefix(v string) predicate.Node {
-	return predicate.Node(sql.FieldHasPrefix(FieldChainLink, v))
-}
-
-// ChainLinkHasSuffix applies the HasSuffix predicate on the "chain_link" field.
-func ChainLinkHasSuffix(v string) predicate.Node {
-	return predicate.Node(sql.FieldHasSuffix(FieldChainLink, v))
-}
-
-// ChainLinkEqualFold applies the EqualFold predicate on the "chain_link" field.
-func ChainLinkEqualFold(v string) predicate.Node {
-	return predicate.Node(sql.FieldEqualFold(FieldChainLink, v))
-}
-
-// ChainLinkContainsFold applies the ContainsFold predicate on the "chain_link" field.
-func ChainLinkContainsFold(v string) predicate.Node {
-	return predicate.Node(sql.FieldContainsFold(FieldChainLink, v))
+// ExitIDNotIn applies the NotIn predicate on the "exit_id" field.
+func ExitIDNotIn(vs ...int) predicate.Node {
+	return predicate.Node(sql.FieldNotIn(FieldExitID, vs...))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
@@ -1097,6 +713,29 @@ func CreatedAtLT(v time.Time) predicate.Node {
 // CreatedAtLTE applies the LTE predicate on the "created_at" field.
 func CreatedAtLTE(v time.Time) predicate.Node {
 	return predicate.Node(sql.FieldLTE(FieldCreatedAt, v))
+}
+
+// HasExit applies the HasEdge predicate on the "exit" edge.
+func HasExit() predicate.Node {
+	return predicate.Node(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, ExitTable, ExitColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasExitWith applies the HasEdge predicate on the "exit" edge with a given conditions (other predicates).
+func HasExitWith(preds ...predicate.Exit) predicate.Node {
+	return predicate.Node(func(s *sql.Selector) {
+		step := newExitStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
 }
 
 // And groups predicates with the AND operator between them.

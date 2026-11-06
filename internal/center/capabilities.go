@@ -176,7 +176,7 @@ func (s *Server) checkValue(ctx context.Context, p *planCtx, pa Param, v any) er
 		if !ok || len(str) > 2000 {
 			return errors.New("必须是不超过 2000 字的文本")
 		}
-		if name, isRef := strings.CutPrefix(str, "$"); isRef && pa.TagRef && p.refs[name] != "outbound" {
+		if name, isRef := strings.CutPrefix(str, "$"); isRef && pa.TagRef && p.refs[name] != "exit" {
 			return fmt.Errorf("引用的 %s 不是前面步骤新建的出口", str)
 		}
 	case "text":
@@ -259,7 +259,7 @@ func (s *Server) refName(ctx context.Context, p *planCtx, kind string, v any) (s
 		if err != nil {
 			return "", fmt.Errorf("节点 %d 不存在", id)
 		}
-		p.versions[key] = version([]any{n.Name, n.Enabled, n.Port, n.Settings, n.CertID})
+		p.versions[key] = version([]any{n.Name, n.Enabled, n.Port, n.Settings, n.CertID, n.ExitID})
 		return n.Name, nil
 	case "gate":
 		g, err := s.Store.Ent.Gate.Get(ctx, id)
@@ -282,20 +282,20 @@ func (s *Server) refName(ctx context.Context, p *planCtx, kind string, v any) (s
 		// 只看是否已处理：起草、分析中等状态变化不算数据改动。
 		p.versions[key] = version(e.Status == "blocked" || e.Status == "dismissed")
 		return fmt.Sprintf("安全事件 #%d（%s）", e.ID, e.Kind), nil
-	case "outbound":
-		o, err := s.Store.Ent.Outbound.Get(ctx, id)
+	case "exit":
+		o, err := s.Store.Ent.Exit.Get(ctx, id)
 		if err != nil {
 			return "", fmt.Errorf("出口 %d 不存在", id)
 		}
-		p.versions[key] = version([]any{o.Tag, o.Name, o.Protocol, o.Address, o.Port, o.Username, o.Password, o.Enabled, o.Settings})
+		p.versions[key] = version([]any{o.Tag, o.Remark, o.Kind, o.Address, o.Port, o.Username, o.Password, o.Enabled, o.Source, o.Link, o.ExitNodeID})
 		return o.Tag, nil
 	case "route":
 		r, err := s.Store.Ent.Route.Get(ctx, id)
 		if err != nil {
 			return "", fmt.Errorf("分流规则 %d 不存在", id)
 		}
-		p.versions[key] = version([]any{r.OutboundTag, r.Domain, r.IP, r.NodeID, r.UserID, r.Enabled, r.Priority})
-		return fmt.Sprintf("规则 #%d → %s", r.ID, r.OutboundTag), nil
+		p.versions[key] = version([]any{r.ExitID, r.Domain, r.IP, r.NodeID, r.UserID, r.Enabled, r.Priority})
+		return fmt.Sprintf("规则 #%d → 出口 %d", r.ID, r.ExitID), nil
 	case "source":
 		v, err := s.Store.Ent.SubSource.Get(ctx, id)
 		if err != nil {
@@ -335,11 +335,11 @@ func (s *Server) refName(ctx context.Context, p *planCtx, kind string, v any) (s
 }
 
 var objectNames = map[string]string{"user": "用户", "node": "节点", "gate": "VPS", "link": "链接", "event": "安全事件",
-	"outbound": "出口", "route": "分流规则", "source": "订阅源", "profile": "订阅组", "template": "规则模板", "manual": "手动节点", "cert": "证书"}
+	"exit": "出口", "route": "分流规则", "source": "订阅源", "profile": "订阅组", "template": "规则模板", "manual": "手动节点", "cert": "证书"}
 
 // listTools 是查各类对象编号的只读工具，写进参数说明与报错里。
 var listTools = map[string]string{"user": "list_users", "node": "list_nodes", "gate": "list_gates", "link": "get_user", "event": "list_security_events",
-	"outbound": "list_outbounds", "route": "list_routes", "source": "list_sources", "profile": "list_profiles", "template": "list_templates",
+	"exit": "list_exits", "route": "list_routes", "source": "list_sources", "profile": "list_profiles", "template": "list_templates",
 	"manual": "list_manual_nodes", "cert": "list_certs"}
 
 func listHint(kind string) string {

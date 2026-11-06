@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	entexit "github.com/shusfun/weir/internal/store/ent/exit"
 	"net"
 	"sort"
 	"strconv"
@@ -85,7 +86,7 @@ func (s *Server) adminUserView(ctx context.Context, u *ent.User) gin.H {
 	v := userView(u)
 	v["node_ids"], v["usage_reset_at"], v["updated_at"] = u.NodeIds, u.UsageResetAt, u.UpdatedAt
 	v["links"], _ = s.Store.Ent.Link.Query().Where(link.UserIDEQ(u.ID)).Count(ctx)
-	v["chains"], _ = s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(u.ID), chain.PolicyTypeEQ("")).Count(ctx)
+	v["chains"], _ = s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(u.ID), chain.HasExitWith(entexit.PolicyTypeEQ(""))).Count(ctx)
 	return v
 }
 
@@ -498,7 +499,7 @@ func (s *Server) myNodes(c *gin.Context) {
 			continue
 		}
 		g, _ := s.Store.Ent.Gate.Get(ctx, n.GateID)
-		item := gin.H{"id": n.ID, "name": n.Name, "protocol": n.Protocol, "preset": n.Preset}
+		item := gin.H{"id": n.ID, "name": n.Name, "protocol": n.Protocol, "preset": n.Preset, "gate_id": n.GateID}
 		if g != nil {
 			item["gate_name"] = g.Name
 		}
@@ -667,7 +668,7 @@ func (s *Server) applyLink(ctx context.Context, u *ent.User, cur *ent.Link, m *e
 	if req.ChainIDs != nil {
 		ids := dedupe(*req.ChainIDs)
 		if len(ids) > 0 {
-			n, err := s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(u.ID), chain.IDIn(ids...), chain.PolicyTypeEQ("")).Count(ctx)
+			n, err := s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(u.ID), chain.IDIn(ids...), chain.HasExitWith(entexit.PolicyTypeEQ(""))).Count(ctx)
 			if err != nil || n != len(ids) {
 				return errors.New("chain_not_allowed")
 			}
@@ -827,29 +828,21 @@ func (s *Server) rotateLink(c *gin.Context, admin bool) {
 // ---- 用户自建链式代理：生成一个新节点（入口节点 → 出口），只在入口计量一次 ----
 
 func (s *Server) chainViews(ctx context.Context, u *ent.User) ([]gin.H, error) {
-	items, err := s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(u.ID), chain.PolicyTypeEQ("")).Order(ent.Asc(chain.FieldID)).All(ctx)
+	items, err := s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(u.ID), chain.HasExitWith(entexit.PolicyTypeEQ(""))).Order(ent.Asc(chain.FieldID)).All(ctx)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]gin.H, 0, len(items))
 	for _, ch := range items {
-		v := gin.H{"id": ch.ID, "name": ch.Name, "entry_node_id": ch.EntryNodeID, "exit_kind": ch.ExitKind, "exit_address": ch.ExitAddress,
-			"exit_port": ch.ExitPort, "exit_username": ch.ExitUsername, "exit_node_id": ch.ExitNodeID, "enabled": ch.Enabled, "created_at": ch.CreatedAt}
-		if ch.ExitKind == chain.ExitKindSource {
-			v["exit_source"], v["source"] = ch.ExitSource, s.exitView(ctx, "chain:"+itoa(ch.ID))
+		e, err := s.Store.Ent.Exit.Get(ctx, ch.ExitID)
+		if err != nil {
+			return nil, err
 		}
-		if pw, err := s.reveal(ch.ExitPassword); err == nil {
-			v["exit_password"] = pw
+		ev, err := s.exitResourceView(ctx, e)
+		if err != nil {
+			return nil, err
 		}
-		if l, err := s.reveal(ch.ExitLink); err == nil && l != "" {
-			v["exit_link"] = l
-		}
-		if p, ok := s.loadExitProbe(ctx, "chain:"+itoa(ch.ID)); ok {
-			v["probe"] = p
-		}
-		if n, err := s.Store.Ent.Node.Get(ctx, ch.EntryNodeID); err == nil {
-			v["entry_name"] = n.Name
-		}
+		v := gin.H{"id": ch.ID, "name": ch.Name, "entry_node_id": ch.EntryNodeID, "exit_id": ch.ExitID, "exit": ev, "enabled": ch.Enabled, "created_at": ch.CreatedAt}
 		out = append(out, v)
 	}
 	return out, nil
@@ -869,11 +862,12 @@ func (s *Server) listChains(c *gin.Context, admin bool) {
 }
 
 type chainRequest struct {
-	Name        string    `json:"name"`
-	EntryNodeID int       `json:"entry_node_id"`
-	Exit        ChainSpec `json:"exit"`
-	Enabled     *bool     `json:"enabled"`
-	SkipProbe   bool      `json:"skip_probe"` // 仅管理员可用
+	Name        string   `json:"name"`
+	EntryNodeID int      `json:"entry_node_id"`
+	Exit        ExitSpec `json:"exit"`
+	ExitID      int      `json:"exit_id"`
+	Enabled     *bool    `json:"enabled"`
+	SkipProbe   bool     `json:"skip_probe"` // 仅管理员可用
 }
 
 // literalPrivate 拒绝明显的私网 / 回环字面地址；域名在 Gate 上解析后再次检查。
@@ -908,79 +902,16 @@ func (s *Server) checkUserChain(ctx context.Context, u *ent.User, req chainReque
 	if entry == nil || !entry.Enabled {
 		return nil, nil, errors.New("entry_not_allowed")
 	}
-	switch req.Exit.Kind {
-	case "socks5", "http", "https", "link", "source":
-	case "node":
-		if nodes[req.Exit.NodeID] == nil {
-			return nil, nil, errors.New("exit_not_allowed")
-		}
-	default:
-		return nil, nil, errors.New("invalid_chain")
-	}
 	g, err := s.Store.Ent.Gate.Get(ctx, entry.GateID)
 	if err != nil {
 		return nil, nil, err
 	}
-	probe, err := s.validateChain(ctx, g, entry.ID, req.Exit, true, !(admin && req.SkipProbe), chainCtx{kernel: entry.Kernel, userID: u.ID, admin: admin})
-	if err != nil {
-		return nil, nil, err
+	var spec *ExitSpec
+	if req.Exit.Kind != "" {
+		spec = &req.Exit
 	}
-	return entry, probe, nil
-}
-
-func (s *Server) saveChainExit(m *ent.ChainMutation, spec ChainSpec) error {
-	m.SetExitAddress("")
-	m.SetExitPort(0)
-	m.SetExitUsername("")
-	m.SetExitPassword("")
-	m.SetExitLink("")
-	m.ClearExitNodeID()
-	m.ClearExitSource()
-	switch spec.Kind {
-	case "source":
-		m.SetExitKind(chain.ExitKindSource)
-		m.SetExitSource(spec.source().toMap())
-	case "socks5", "http", "https":
-		sealed, err := s.seal(spec.Password)
-		if err != nil {
-			return err
-		}
-		m.SetExitKind(chain.ExitKind(spec.Kind))
-		m.SetExitAddress(strings.Trim(strings.TrimSpace(spec.Address), "[]"))
-		m.SetExitPort(spec.Port)
-		m.SetExitUsername(spec.Username)
-		m.SetExitPassword(sealed)
-	case "link":
-		sealed, err := s.seal(strings.TrimSpace(spec.Link))
-		if err != nil {
-			return err
-		}
-		m.SetExitKind(chain.ExitKindLink)
-		m.SetExitLink(sealed)
-		if o, _, err := parseExitLink(spec.Link); err == nil {
-			m.SetExitAddress(o.Address)
-			m.SetExitPort(o.Port)
-		}
-	default:
-		m.SetExitKind(chain.ExitKindNode)
-		m.SetExitNodeID(spec.NodeID)
-	}
-	return nil
-}
-
-// chainSpecOf 还原已保存的用户链出口（只改名称或入口时按原出口重新校验）。
-func (s *Server) chainSpecOf(ch *ent.Chain) ChainSpec {
-	spec := ChainSpec{Kind: string(ch.ExitKind), Address: ch.ExitAddress, Port: ch.ExitPort, Username: ch.ExitUsername}
-	spec.Password, _ = s.reveal(ch.ExitPassword)
-	spec.Link, _ = s.reveal(ch.ExitLink)
-	if ch.ExitNodeID != nil {
-		spec.NodeID = *ch.ExitNodeID
-	}
-	if ch.ExitKind == chain.ExitKindSource {
-		sp := specOf(ch.ExitSource)
-		spec.SourceID, spec.ProfileID, spec.Mode, spec.Match = sp.SourceID, sp.ProfileID, sp.Mode, sp.Match
-	}
-	return spec
+	_, _, probe, err := s.validateExitSelection(ctx, g, entry.ID, &u.ID, req.ExitID, spec, admin && req.SkipProbe, admin, entry.Kernel)
+	return entry, probe, err
 }
 
 func (s *Server) createChain(c *gin.Context, admin bool) {
@@ -997,7 +928,7 @@ func (s *Server) createChain(c *gin.Context, admin bool) {
 		return
 	}
 	ctx := c.Request.Context()
-	if n, _ := s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(u.ID), chain.PolicyTypeEQ("")).Count(ctx); n >= maxChains {
+	if n, _ := s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(u.ID), chain.HasExitWith(entexit.PolicyTypeEQ(""))).Count(ctx); n >= maxChains {
 		failure(c, 409, "chain_limit")
 		return
 	}
@@ -1014,24 +945,48 @@ func (s *Server) createChain(c *gin.Context, admin bool) {
 		failErr(c, 422, err)
 		return
 	}
+	if dryRun(c, dryResult{Preview: []string{"创建链式代理「" + name + "」"}}) {
+		return
+	}
 	if !jobCommit(c) {
 		return
 	}
-	create := s.Store.Ent.Chain.Create().SetUserID(u.ID).SetEntryNodeID(entry.ID).SetName(name)
-	if err = s.saveChainExit(create.Mutation(), req.Exit); err != nil {
-		failInternal(c, 500, "encrypt_failed", err)
-		return
-	}
-	ch, err := create.Save(ctx)
+	tx, err := s.Store.Ent.Tx(ctx)
 	if err != nil {
 		failInternal(c, 500, "create_failed", err)
+		return
+	}
+	defer tx.Rollback()
+	eid := req.ExitID
+	if eid == 0 {
+		e, err := s.persistExit(ctx, tx.Client(), entry.GateID, &u.ID, "", req.Exit, nil)
+		if err != nil {
+			failInternal(c, 500, "save_failed", err)
+			return
+		}
+		eid = e.ID
+	}
+	ch, err := tx.Chain.Create().SetUserID(u.ID).SetEntryNodeID(entry.ID).SetName(name).SetExitID(eid).Save(ctx)
+	if err == nil {
+		err = tx.Commit()
+	}
+	if err != nil {
+		failInternal(c, 500, "create_failed", err)
+		return
+	}
+	e, err := s.Store.Ent.Exit.Get(ctx, eid)
+	if err != nil {
+		failInternal(c, 500, "query_failed", err)
+		return
+	}
+	if err = s.refreshExit(ctx, e, probe); err != nil {
+		failInternal(c, 500, "source_exit_failed", err)
 		return
 	}
 	if err = s.afterChainChange(ctx, u.ID); err != nil {
 		failInternal(c, 500, "sync_failed", err)
 		return
 	}
-	s.saveExitProbe(ctx, "chain:"+itoa(ch.ID), probe)
 	s.audit(c, "chain.create", "chain:"+itoa(ch.ID), "ok")
 	s.respondChain(c, u, ch.ID)
 }
@@ -1049,14 +1004,6 @@ func (s *Server) afterChainChange(ctx context.Context, uid int) error {
 	}
 	if err == nil {
 		err = s.SyncUser(ctx, uid)
-	}
-	// 订阅源节点出口：保存后解析一次（之后随订阅源刷新）。
-	if chains, qerr := s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(uid), chain.ExitKindEQ(chain.ExitKindSource)).All(ctx); qerr == nil {
-		for _, ch := range chains {
-			if n, nerr := s.Store.Ent.Node.Get(ctx, ch.EntryNodeID); nerr == nil {
-				_ = s.refreshSourceExit(ctx, "chain:"+itoa(ch.ID), n.GateID, specOf(ch.ExitSource), true)
-			}
-		}
 	}
 	return err
 }
@@ -1082,7 +1029,7 @@ func (s *Server) chainParam(c *gin.Context, u *ent.User) (*ent.Chain, bool) {
 		failure(c, 400, "invalid_id")
 		return nil, false
 	}
-	ch, err := s.Store.Ent.Chain.Query().Where(chain.IDEQ(id), chain.UserIDEQ(u.ID), chain.PolicyTypeEQ("")).Only(c.Request.Context())
+	ch, err := s.Store.Ent.Chain.Query().Where(chain.IDEQ(id), chain.UserIDEQ(u.ID), chain.HasExitWith(entexit.PolicyTypeEQ(""))).Only(c.Request.Context())
 	if err != nil {
 		failure(c, 404, "chain_not_found")
 		return nil, false
@@ -1100,66 +1047,118 @@ func (s *Server) updateChain(c *gin.Context, admin bool) {
 		return
 	}
 	var req struct {
-		chainRequest
-		Exit *ChainSpec `json:"exit"`
+		Name        *string   `json:"name"`
+		EntryNodeID *int      `json:"entry_node_id"`
+		ExitID      *int      `json:"exit_id"`
+		Exit        *ExitSpec `json:"exit"`
+		Enabled     *bool     `json:"enabled"`
+		SkipProbe   bool      `json:"skip_probe"`
 	}
 	if !bind(c, &req) {
 		return
 	}
 	ctx := c.Request.Context()
-	jobTitle(ctx, "修改链式代理「"+ch.Name+"」")
-	upd := ch.Update()
-	if name := strings.TrimSpace(req.Name); name != "" {
-		if len(name) > 100 {
+	name, entryID, eid, enabled := ch.Name, ch.EntryNodeID, ch.ExitID, ch.Enabled
+	if req.Name != nil {
+		name = strings.TrimSpace(*req.Name)
+		if name == "" || len(name) > 100 {
 			failure(c, 400, "invalid_name")
 			return
 		}
-		upd.SetName(name)
+	}
+	if req.EntryNodeID != nil {
+		entryID = *req.EntryNodeID
 	}
 	if req.Enabled != nil {
-		upd.SetEnabled(*req.Enabled)
+		enabled = *req.Enabled
 	}
-	if req.Exit != nil || req.EntryNodeID != 0 {
+	if req.ExitID != nil {
+		if *req.ExitID <= 0 {
+			failure(c, 400, "invalid_exit_id")
+			return
+		}
+		eid = *req.ExitID
+	}
+	if req.Exit != nil && req.ExitID != nil {
+		failure(c, 400, "ambiguous_exit")
+		return
+	}
+	changed := entryID != ch.EntryNodeID || eid != ch.ExitID || req.Exit != nil
+	var probe *exitProbe
+	var entry *ent.Node
+	var err error
+	if changed {
 		if !u.AllowChain {
 			failure(c, 403, "chain_disabled")
 			return
 		}
-		check := chainRequest{EntryNodeID: ch.EntryNodeID, SkipProbe: req.SkipProbe}
-		if req.EntryNodeID != 0 {
-			check.EntryNodeID = req.EntryNodeID
-		}
+		check := chainRequest{EntryNodeID: entryID, ExitID: eid, SkipProbe: req.SkipProbe}
 		if req.Exit != nil {
+			check.ExitID = 0
 			check.Exit = *req.Exit
-		} else {
-			check.Exit = s.chainSpecOf(ch)
 		}
-		entry, probe, err := s.checkUserChain(ctx, u, check, admin)
+		entry, probe, err = s.checkUserChain(ctx, u, check, admin)
 		if err != nil {
 			s.audit(c, "chain.update", "chain:"+itoa(ch.ID), "failed")
 			failErr(c, 422, err)
 			return
 		}
-		upd.SetEntryNodeID(entry.ID)
-		defer s.saveExitProbe(ctx, "chain:"+itoa(ch.ID), probe)
-		if err = s.saveChainExit(upd.Mutation(), check.Exit); err != nil {
-			failInternal(c, 500, "encrypt_failed", err)
+	} else if enabled {
+		ex, err := s.Store.Ent.Exit.Get(ctx, eid)
+		if err != nil || !ex.Enabled {
+			failure(c, 409, "exit_not_allowed")
 			return
 		}
-		// 入口变化后旧入口上的凭据由同步删除、新入口重新生成。
+	}
+	if dryRun(c, dryResult{Preview: []string{"修改链式代理「" + ch.Name + "」"}}) {
+		return
 	}
 	if !jobCommit(c) {
 		return
 	}
-	if _, err := upd.Save(ctx); err != nil {
-		failInternal(c, 500, "update_failed", err)
+	tx, err := s.Store.Ent.Tx(ctx)
+	if err != nil {
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
-	gates, _ := s.userGates(ctx, u.ID)
-	if err := s.afterChainChange(ctx, u.ID); err != nil {
+	defer tx.Rollback()
+	if req.Exit != nil {
+		ex, e := s.persistExit(ctx, tx.Client(), entry.GateID, &u.ID, "", *req.Exit, nil)
+		if e != nil {
+			failInternal(c, 500, "save_failed", e)
+			return
+		}
+		eid = ex.ID
+	}
+	_, err = tx.Chain.UpdateOneID(ch.ID).SetName(name).SetEntryNodeID(entryID).SetExitID(eid).SetEnabled(enabled).Save(ctx)
+	if err == nil {
+		err = tx.Commit()
+	}
+	if err != nil {
+		failInternal(c, 500, "save_failed", err)
+		return
+	}
+	if changed {
+		ex, e := s.Store.Ent.Exit.Get(ctx, eid)
+		if e == nil {
+			e = s.refreshExit(ctx, ex, probe)
+		}
+		if e != nil {
+			failInternal(c, 500, "source_exit_failed", e)
+			return
+		}
+	}
+	gates, err := s.userGates(ctx, u.ID)
+	if err == nil {
+		err = s.afterChainChange(ctx, u.ID)
+	}
+	if err == nil {
+		err = s.bumpGates(ctx, gates)
+	}
+	if err != nil {
 		failInternal(c, 500, "sync_failed", err)
 		return
 	}
-	_ = s.bumpGates(ctx, gates)
 	s.audit(c, "chain.update", "chain:"+itoa(ch.ID), "ok")
 	s.respondChain(c, u, ch.ID)
 }

@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/shusfun/weir/internal/store/ent/chain"
+	"github.com/shusfun/weir/internal/store/ent/exit"
 	"github.com/shusfun/weir/internal/store/ent/predicate"
 )
 
@@ -23,6 +24,7 @@ type ChainQuery struct {
 	order      []chain.OrderOption
 	inters     []Interceptor
 	predicates []predicate.Chain
+	withExit   *ExitQuery
 	modifiers  []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -58,6 +60,28 @@ func (_q *ChainQuery) Unique(unique bool) *ChainQuery {
 func (_q *ChainQuery) Order(o ...chain.OrderOption) *ChainQuery {
 	_q.order = append(_q.order, o...)
 	return _q
+}
+
+// QueryExit chains the current query on the "exit" edge.
+func (_q *ChainQuery) QueryExit() *ExitQuery {
+	query := (&ExitClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(chain.Table, chain.FieldID, selector),
+			sqlgraph.To(exit.Table, exit.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, chain.ExitTable, chain.ExitColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
 }
 
 // First returns the first Chain entity from the query.
@@ -252,10 +276,22 @@ func (_q *ChainQuery) Clone() *ChainQuery {
 		order:      append([]chain.OrderOption{}, _q.order...),
 		inters:     append([]Interceptor{}, _q.inters...),
 		predicates: append([]predicate.Chain{}, _q.predicates...),
+		withExit:   _q.withExit.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
 	}
+}
+
+// WithExit tells the query-builder to eager-load the nodes that are connected to
+// the "exit" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *ChainQuery) WithExit(opts ...func(*ExitQuery)) *ChainQuery {
+	query := (&ExitClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withExit = query
+	return _q
 }
 
 // GroupBy is used to group vertices by one or more fields/columns.
@@ -334,8 +370,11 @@ func (_q *ChainQuery) prepareQuery(ctx context.Context) error {
 
 func (_q *ChainQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Chain, error) {
 	var (
-		nodes = []*Chain{}
-		_spec = _q.querySpec()
+		nodes       = []*Chain{}
+		_spec       = _q.querySpec()
+		loadedTypes = [1]bool{
+			_q.withExit != nil,
+		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
 		return (*Chain).scanValues(nil, columns)
@@ -343,6 +382,7 @@ func (_q *ChainQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Chain,
 	_spec.Assign = func(columns []string, values []any) error {
 		node := &Chain{config: _q.config}
 		nodes = append(nodes, node)
+		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
 	}
 	if len(_q.modifiers) > 0 {
@@ -357,7 +397,43 @@ func (_q *ChainQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Chain,
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
+	if query := _q.withExit; query != nil {
+		if err := _q.loadExit(ctx, query, nodes, nil,
+			func(n *Chain, e *Exit) { n.Edges.Exit = e }); err != nil {
+			return nil, err
+		}
+	}
 	return nodes, nil
+}
+
+func (_q *ChainQuery) loadExit(ctx context.Context, query *ExitQuery, nodes []*Chain, init func(*Chain), assign func(*Chain, *Exit)) error {
+	ids := make([]int, 0, len(nodes))
+	nodeids := make(map[int][]*Chain)
+	for i := range nodes {
+		fk := nodes[i].ExitID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(exit.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "exit_id" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
+	}
+	return nil
 }
 
 func (_q *ChainQuery) sqlCount(ctx context.Context) (int, error) {
@@ -387,6 +463,9 @@ func (_q *ChainQuery) querySpec() *sqlgraph.QuerySpec {
 			if fields[i] != chain.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
+		}
+		if _q.withExit != nil {
+			_spec.Node.AddColumnOnce(chain.FieldExitID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {

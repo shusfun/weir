@@ -1,6 +1,6 @@
 // 公开页留言：访客投稿（可匿名、可需审核），管理员在页面管理中审核、回复、隐藏与删除；留言设置变更需验证身份。
 import { useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import {
   Button,
   Card,

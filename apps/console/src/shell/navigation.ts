@@ -33,6 +33,7 @@ export function visibleFor(item: NavItem, admin: boolean) {
 
 export const navigation: NavItem[] = [
   { key: "gates", path: "/gates", label: "VPS 与节点", icon: Server, group: "节点", roles: "admin" },
+  { key: "exits", path: "/exits", label: "出口与分流", icon: Route, group: "节点", roles: "admin" },
   { key: "kernels", path: "/kernels", label: "内核", icon: Cpu, group: "节点", roles: "admin" },
   { key: "linkmap", path: "/linkmap", label: "链路", icon: Globe2, group: "节点", roles: "admin" },
   { key: "users", path: "/users", label: "用户", icon: Users, group: "用户", roles: "admin" },

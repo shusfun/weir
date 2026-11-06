@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 )
 
 const (
@@ -19,8 +20,8 @@ const (
 	FieldNodeID = "node_id"
 	// FieldUserID holds the string denoting the user_id field in the database.
 	FieldUserID = "user_id"
-	// FieldOutboundTag holds the string denoting the outbound_tag field in the database.
-	FieldOutboundTag = "outbound_tag"
+	// FieldExitID holds the string denoting the exit_id field in the database.
+	FieldExitID = "exit_id"
 	// FieldDomain holds the string denoting the domain field in the database.
 	FieldDomain = "domain"
 	// FieldIP holds the string denoting the ip field in the database.
@@ -31,8 +32,17 @@ const (
 	FieldPriority = "priority"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
+	// EdgeExit holds the string denoting the exit edge name in mutations.
+	EdgeExit = "exit"
 	// Table holds the table name of the route in the database.
 	Table = "routes"
+	// ExitTable is the table that holds the exit relation/edge.
+	ExitTable = "routes"
+	// ExitInverseTable is the table name for the Exit entity.
+	// It exists in this package in order to avoid circular dependency with the "exit" package.
+	ExitInverseTable = "exits"
+	// ExitColumn is the table column denoting the exit relation/edge.
+	ExitColumn = "exit_id"
 )
 
 // Columns holds all SQL columns for route fields.
@@ -41,7 +51,7 @@ var Columns = []string{
 	FieldGateID,
 	FieldNodeID,
 	FieldUserID,
-	FieldOutboundTag,
+	FieldExitID,
 	FieldDomain,
 	FieldIP,
 	FieldEnabled,
@@ -60,8 +70,6 @@ func ValidColumn(column string) bool {
 }
 
 var (
-	// OutboundTagValidator is a validator for the "outbound_tag" field. It is called by the builders before save.
-	OutboundTagValidator func(string) error
 	// DefaultDomain holds the default value on creation for the "domain" field.
 	DefaultDomain string
 	// DefaultIP holds the default value on creation for the "ip" field.
@@ -97,9 +105,9 @@ func ByUserID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUserID, opts...).ToFunc()
 }
 
-// ByOutboundTag orders the results by the outbound_tag field.
-func ByOutboundTag(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldOutboundTag, opts...).ToFunc()
+// ByExitID orders the results by the exit_id field.
+func ByExitID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldExitID, opts...).ToFunc()
 }
 
 // ByDomain orders the results by the domain field.
@@ -125,4 +133,18 @@ func ByPriority(opts ...sql.OrderTermOption) OrderOption {
 // ByCreatedAt orders the results by the created_at field.
 func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCreatedAt, opts...).ToFunc()
+}
+
+// ByExitField orders the results by exit field.
+func ByExitField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newExitStep(), sql.OrderByField(field, opts...))
+	}
+}
+func newExitStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(ExitInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, ExitTable, ExitColumn),
+	)
 }

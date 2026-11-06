@@ -1,14 +1,17 @@
 package center
 
-import "testing"
+import (
+	"github.com/shusfun/weir/packages/contracts"
+	"testing"
+)
 
 func TestGateTopologyUsersNodesRoutesExits(t *testing.T) {
 	_, admin, g := setupGate(t)
 	gid := itoa(int(g.id))
 	n := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "ss2022", "skip_probe": true}, 200)
 	u := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "topo@example.test", "name": "小明"}, 200)
-	mustJSON(t, admin, "POST", "/api/v1/admin/gates/"+gid+"/outbounds", map[string]any{"tag": "home", "name": "家宽", "protocol": "socks", "address": "198.51.100.30", "port": 1080}, 200)
-	mustJSON(t, admin, "POST", "/api/v1/admin/gates/"+gid+"/routes", map[string]any{"outbound_tag": "home", "domain": "example.org", "priority": 10}, 200)
+	ex := mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"gate_id": int(g.id), "kind": "blackhole", "remark": "拦截"}, 200)
+	mustJSON(t, admin, "POST", "/api/v1/admin/gates/"+gid+"/routes", map[string]any{"exit_id": ex["id"], "domain": "example.org", "priority": 10}, 200)
 
 	v := mustJSON(t, admin, "GET", "/api/v1/admin/gates/"+gid+"/topology", nil, 200)
 	kinds, links := map[string]int{}, map[string]string{}
@@ -27,7 +30,7 @@ func TestGateTopologyUsersNodesRoutesExits(t *testing.T) {
 	if links["user-"+uid] != "/users?user="+uid {
 		t.Fatalf("user link = %v", links)
 	}
-	want := map[string]bool{"user-" + uid + ">node-" + nid: false, "node-" + nid + ">exit-direct": false}
+	want := map[string]bool{"user-" + uid + ">node-" + nid: false, "node-" + nid + ">" + exitOwner(int(n["exit_id"].(float64))): false}
 	for _, raw := range v["edges"].([]any) {
 		e := raw.(map[string]any)
 		key := e["from"].(string) + ">" + e["to"].(string)
@@ -44,12 +47,14 @@ func TestGateTopologyUsersNodesRoutesExits(t *testing.T) {
 		t.Fatalf("node link = %v", links)
 	}
 
-	// 用户自建链式代理与经同一台 VPS 节点出去的节点都要出现在图上，名字与实际配置一致。
+	// 用户链路与跨 VPS 节点出口共用出口身份，入口统一跳转出口页。
 	mustJSON(t, admin, "PATCH", "/api/v1/admin/users/"+uid, map[string]any{"allow_chain": true}, 200)
 	ch := mustJSON(t, admin, "POST", "/api/v1/admin/users/"+uid+"/chains", map[string]any{"name": "家里", "entry_node_id": n["id"], "exit": map[string]any{"kind": "socks5", "address": "203.0.113.5", "port": 1080}, "skip_probe": true}, 200)
-	rx := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "vless-reality", "skip_probe": true}, 200)
-	via := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "ss2022", "skip_probe": true, "chain": map[string]any{"kind": "node", "node_id": rx["id"]}}, 200)
-	xid := itoa(int(rx["id"].(float64)))
+	eg := pairFakeGate(t, admin)
+	eg.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 2, Version: "test", Arch: "amd64"})
+	rx := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(eg.id), "preset": "vless-reality", "skip_probe": true}, 200)
+	via := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "ss2022", "skip_probe": true, "exit": map[string]any{"kind": "node", "node_id": rx["id"]}}, 200)
+	xid := exitOwner(int(via["exit_id"].(float64)))
 	v = mustJSON(t, admin, "GET", "/api/v1/admin/gates/"+gid+"/topology", nil, 200)
 	byID := map[string]map[string]any{}
 	for _, raw := range v["nodes"].([]any) {
@@ -57,10 +62,11 @@ func TestGateTopologyUsersNodesRoutesExits(t *testing.T) {
 		byID[m["id"].(string)] = m
 	}
 	cid := itoa(int(ch["id"].(float64)))
-	if c := byID["chain-"+cid]; c == nil || c["kind"] != "route" || byID["exit-chain-"+cid]["sub"] != "203.0.113.5:1080" {
+	ceid := exitOwner(int(ch["exit_id"].(float64)))
+	if c := byID["chain-"+cid]; c == nil || c["kind"] != "route" || byID[ceid]["sub"] != "SOCKS5 代理" {
 		t.Fatalf("user chain missing from topology: %v", v["nodes"])
 	}
-	if x := byID["exit-node-"+xid]; x == nil || x["sub"] != "这台 VPS 的节点" || x["link"] != "/gates?node="+xid {
+	if x := byID[xid]; x == nil || x["sub"] != "另一台 VPS" || x["link"] != "/exits?gate="+gid+"&focus="+xid {
 		t.Fatalf("same-VPS exit = %v", x)
 	}
 	edges := map[string]bool{}
@@ -69,7 +75,7 @@ func TestGateTopologyUsersNodesRoutesExits(t *testing.T) {
 		edges[e["from"].(string)+">"+e["to"].(string)] = true
 	}
 	vid := itoa(int(via["id"].(float64)))
-	for _, k := range []string{"node-" + nid + ">chain-" + cid, "chain-" + cid + ">exit-chain-" + cid, "node-" + vid + ">exit-node-" + xid} {
+	for _, k := range []string{"node-" + nid + ">chain-" + cid, "chain-" + cid + ">" + ceid, "node-" + vid + ">" + xid} {
 		if !edges[k] {
 			t.Fatalf("missing edge %s in %v", k, v["edges"])
 		}

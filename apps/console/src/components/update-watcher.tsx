@@ -1,6 +1,6 @@
 // 自更新的进度查询与版本监视。常驻控制台外壳：离开设置页、刷新过页面后，更新完成仍能发现。
 import { useEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { useLocation } from "react-router-dom";
 import { useToast, type Job } from "@weir/ui";
 import { api } from "../api";

@@ -84,7 +84,7 @@ func TestProxyPolicyWindowsAndPulls(t *testing.T) {
 	}
 	json.Unmarshal(bob.do("GET", "/sub/"+tok+"?target=weir", nil, nil).Body.Bytes(), &ws)
 	auto, exploring := countAuto(ws)
-	if auto != 2 || ws.Nodes[0].Name != nodes[1].Name || ws.Nodes[0].RateFrom != "self" || exploring != nodes[2].Name {
+	if auto != 2 || !strings.Contains(ws.Nodes[0].URI, ":"+itoa(nodes[1].Port)+"?") || ws.Nodes[0].RateFrom != "self" || exploring != "[直连] 位置未知 03" {
 		t.Fatalf("ranked by rate = %+v", ws.Nodes)
 	}
 	if w.Header().Get("Profile-Update-Interval") != "1" {
@@ -114,7 +114,7 @@ func TestProxyPolicyWindowsAndPulls(t *testing.T) {
 	code, uris := subLinks(t, bob, tok)
 	via := 0
 	for _, u := range uris {
-		if strings.Contains(u, "%E7%BB%8F") { // 「经」：经出口的那条
+		if strings.Contains(u, "%5B%E9%93%BE%E5%BC%8F%5D") {
 			via++
 		}
 	}
@@ -126,7 +126,7 @@ func TestProxyPolicyWindowsAndPulls(t *testing.T) {
 		t.Fatalf("policy chains must be hidden: %v", items)
 	}
 	mustJSON(t, bob, "DELETE", "/api/v1/me/proxy/types/vless-reality/exit", nil, 200)
-	if code, uris := subLinks(t, bob, tok); code != 200 || len(uris) != 2 || strings.Contains(uris[0], "%E7%BB%8F") {
+	if code, uris := subLinks(t, bob, tok); code != 200 || len(uris) != 2 || strings.Contains(uris[0], "%5B%E9%93%BE%E5%BC%8F%5D") {
 		t.Fatalf("after removing type exit = %d %v", code, uris)
 	}
 	// 管理员看同一个用户的代理页

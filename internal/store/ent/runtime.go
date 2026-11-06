@@ -10,12 +10,12 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/certificate"
 	"github.com/shusfun/weir/internal/store/ent/chain"
 	"github.com/shusfun/weir/internal/store/ent/credential"
+	"github.com/shusfun/weir/internal/store/ent/exit"
 	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/gateaction"
 	"github.com/shusfun/weir/internal/store/ent/kerneldriver"
 	"github.com/shusfun/weir/internal/store/ent/link"
 	"github.com/shusfun/weir/internal/store/ent/node"
-	"github.com/shusfun/weir/internal/store/ent/outbound"
 	"github.com/shusfun/weir/internal/store/ent/passkey"
 	"github.com/shusfun/weir/internal/store/ent/ratesample"
 	"github.com/shusfun/weir/internal/store/ent/recoverycode"
@@ -125,42 +125,12 @@ func init() {
 	chainDescName := chainFields[2].Descriptor()
 	// chain.NameValidator is a validator for the "name" field. It is called by the builders before save.
 	chain.NameValidator = chainDescName.Validators[0].(func(string) error)
-	// chainDescExitAddress is the schema descriptor for exit_address field.
-	chainDescExitAddress := chainFields[5].Descriptor()
-	// chain.DefaultExitAddress holds the default value on creation for the exit_address field.
-	chain.DefaultExitAddress = chainDescExitAddress.Default.(string)
-	// chain.ExitAddressValidator is a validator for the "exit_address" field. It is called by the builders before save.
-	chain.ExitAddressValidator = chainDescExitAddress.Validators[0].(func(string) error)
-	// chainDescExitPort is the schema descriptor for exit_port field.
-	chainDescExitPort := chainFields[6].Descriptor()
-	// chain.DefaultExitPort holds the default value on creation for the exit_port field.
-	chain.DefaultExitPort = chainDescExitPort.Default.(int)
-	// chainDescExitUsername is the schema descriptor for exit_username field.
-	chainDescExitUsername := chainFields[7].Descriptor()
-	// chain.DefaultExitUsername holds the default value on creation for the exit_username field.
-	chain.DefaultExitUsername = chainDescExitUsername.Default.(string)
-	// chain.ExitUsernameValidator is a validator for the "exit_username" field. It is called by the builders before save.
-	chain.ExitUsernameValidator = chainDescExitUsername.Validators[0].(func(string) error)
-	// chainDescExitPassword is the schema descriptor for exit_password field.
-	chainDescExitPassword := chainFields[8].Descriptor()
-	// chain.DefaultExitPassword holds the default value on creation for the exit_password field.
-	chain.DefaultExitPassword = chainDescExitPassword.Default.(string)
-	// chainDescExitLink is the schema descriptor for exit_link field.
-	chainDescExitLink := chainFields[10].Descriptor()
-	// chain.DefaultExitLink holds the default value on creation for the exit_link field.
-	chain.DefaultExitLink = chainDescExitLink.Default.(string)
 	// chainDescEnabled is the schema descriptor for enabled field.
-	chainDescEnabled := chainFields[11].Descriptor()
+	chainDescEnabled := chainFields[4].Descriptor()
 	// chain.DefaultEnabled holds the default value on creation for the enabled field.
 	chain.DefaultEnabled = chainDescEnabled.Default.(bool)
-	// chainDescPolicyType is the schema descriptor for policy_type field.
-	chainDescPolicyType := chainFields[12].Descriptor()
-	// chain.DefaultPolicyType holds the default value on creation for the policy_type field.
-	chain.DefaultPolicyType = chainDescPolicyType.Default.(string)
-	// chain.PolicyTypeValidator is a validator for the "policy_type" field. It is called by the builders before save.
-	chain.PolicyTypeValidator = chainDescPolicyType.Validators[0].(func(string) error)
 	// chainDescCreatedAt is the schema descriptor for created_at field.
-	chainDescCreatedAt := chainFields[13].Descriptor()
+	chainDescCreatedAt := chainFields[5].Descriptor()
 	// chain.DefaultCreatedAt holds the default value on creation for the created_at field.
 	chain.DefaultCreatedAt = chainDescCreatedAt.Default.(func() time.Time)
 	credentialFields := schema.Credential{}.Fields()
@@ -193,6 +163,56 @@ func init() {
 	credentialDescCreatedAt := credentialFields[12].Descriptor()
 	// credential.DefaultCreatedAt holds the default value on creation for the created_at field.
 	credential.DefaultCreatedAt = credentialDescCreatedAt.Default.(func() time.Time)
+	exitFields := schema.Exit{}.Fields()
+	_ = exitFields
+	// exitDescRemark is the schema descriptor for remark field.
+	exitDescRemark := exitFields[2].Descriptor()
+	// exit.DefaultRemark holds the default value on creation for the remark field.
+	exit.DefaultRemark = exitDescRemark.Default.(string)
+	// exit.RemarkValidator is a validator for the "remark" field. It is called by the builders before save.
+	exit.RemarkValidator = exitDescRemark.Validators[0].(func(string) error)
+	// exitDescAddress is the schema descriptor for address field.
+	exitDescAddress := exitFields[4].Descriptor()
+	// exit.DefaultAddress holds the default value on creation for the address field.
+	exit.DefaultAddress = exitDescAddress.Default.(string)
+	// exit.AddressValidator is a validator for the "address" field. It is called by the builders before save.
+	exit.AddressValidator = exitDescAddress.Validators[0].(func(string) error)
+	// exitDescPort is the schema descriptor for port field.
+	exitDescPort := exitFields[5].Descriptor()
+	// exit.DefaultPort holds the default value on creation for the port field.
+	exit.DefaultPort = exitDescPort.Default.(int)
+	// exitDescUsername is the schema descriptor for username field.
+	exitDescUsername := exitFields[6].Descriptor()
+	// exit.DefaultUsername holds the default value on creation for the username field.
+	exit.DefaultUsername = exitDescUsername.Default.(string)
+	// exit.UsernameValidator is a validator for the "username" field. It is called by the builders before save.
+	exit.UsernameValidator = exitDescUsername.Validators[0].(func(string) error)
+	// exitDescPassword is the schema descriptor for password field.
+	exitDescPassword := exitFields[7].Descriptor()
+	// exit.DefaultPassword holds the default value on creation for the password field.
+	exit.DefaultPassword = exitDescPassword.Default.(string)
+	// exitDescLink is the schema descriptor for link field.
+	exitDescLink := exitFields[8].Descriptor()
+	// exit.DefaultLink holds the default value on creation for the link field.
+	exit.DefaultLink = exitDescLink.Default.(string)
+	// exitDescEnabled is the schema descriptor for enabled field.
+	exitDescEnabled := exitFields[11].Descriptor()
+	// exit.DefaultEnabled holds the default value on creation for the enabled field.
+	exit.DefaultEnabled = exitDescEnabled.Default.(bool)
+	// exitDescTag is the schema descriptor for tag field.
+	exitDescTag := exitFields[12].Descriptor()
+	// exit.TagValidator is a validator for the "tag" field. It is called by the builders before save.
+	exit.TagValidator = exitDescTag.Validators[0].(func(string) error)
+	// exitDescPolicyType is the schema descriptor for policy_type field.
+	exitDescPolicyType := exitFields[13].Descriptor()
+	// exit.DefaultPolicyType holds the default value on creation for the policy_type field.
+	exit.DefaultPolicyType = exitDescPolicyType.Default.(string)
+	// exit.PolicyTypeValidator is a validator for the "policy_type" field. It is called by the builders before save.
+	exit.PolicyTypeValidator = exitDescPolicyType.Validators[0].(func(string) error)
+	// exitDescCreatedAt is the schema descriptor for created_at field.
+	exitDescCreatedAt := exitFields[14].Descriptor()
+	// exit.DefaultCreatedAt holds the default value on creation for the created_at field.
+	exit.DefaultCreatedAt = exitDescCreatedAt.Default.(func() time.Time)
 	gateFields := schema.Gate{}.Fields()
 	_ = gateFields
 	// gateDescName is the schema descriptor for name field.
@@ -371,82 +391,10 @@ func init() {
 	nodeDescEnabled := nodeFields[10].Descriptor()
 	// node.DefaultEnabled holds the default value on creation for the enabled field.
 	node.DefaultEnabled = nodeDescEnabled.Default.(bool)
-	// nodeDescChainAddress is the schema descriptor for chain_address field.
-	nodeDescChainAddress := nodeFields[13].Descriptor()
-	// node.DefaultChainAddress holds the default value on creation for the chain_address field.
-	node.DefaultChainAddress = nodeDescChainAddress.Default.(string)
-	// node.ChainAddressValidator is a validator for the "chain_address" field. It is called by the builders before save.
-	node.ChainAddressValidator = nodeDescChainAddress.Validators[0].(func(string) error)
-	// nodeDescChainPort is the schema descriptor for chain_port field.
-	nodeDescChainPort := nodeFields[14].Descriptor()
-	// node.DefaultChainPort holds the default value on creation for the chain_port field.
-	node.DefaultChainPort = nodeDescChainPort.Default.(int)
-	// nodeDescChainUsername is the schema descriptor for chain_username field.
-	nodeDescChainUsername := nodeFields[15].Descriptor()
-	// node.DefaultChainUsername holds the default value on creation for the chain_username field.
-	node.DefaultChainUsername = nodeDescChainUsername.Default.(string)
-	// node.ChainUsernameValidator is a validator for the "chain_username" field. It is called by the builders before save.
-	node.ChainUsernameValidator = nodeDescChainUsername.Validators[0].(func(string) error)
-	// nodeDescChainPassword is the schema descriptor for chain_password field.
-	nodeDescChainPassword := nodeFields[16].Descriptor()
-	// node.DefaultChainPassword holds the default value on creation for the chain_password field.
-	node.DefaultChainPassword = nodeDescChainPassword.Default.(string)
-	// nodeDescChainLink is the schema descriptor for chain_link field.
-	nodeDescChainLink := nodeFields[18].Descriptor()
-	// node.DefaultChainLink holds the default value on creation for the chain_link field.
-	node.DefaultChainLink = nodeDescChainLink.Default.(string)
 	// nodeDescCreatedAt is the schema descriptor for created_at field.
-	nodeDescCreatedAt := nodeFields[19].Descriptor()
+	nodeDescCreatedAt := nodeFields[12].Descriptor()
 	// node.DefaultCreatedAt holds the default value on creation for the created_at field.
 	node.DefaultCreatedAt = nodeDescCreatedAt.Default.(func() time.Time)
-	outboundFields := schema.Outbound{}.Fields()
-	_ = outboundFields
-	// outboundDescTag is the schema descriptor for tag field.
-	outboundDescTag := outboundFields[1].Descriptor()
-	// outbound.TagValidator is a validator for the "tag" field. It is called by the builders before save.
-	outbound.TagValidator = outboundDescTag.Validators[0].(func(string) error)
-	// outboundDescName is the schema descriptor for name field.
-	outboundDescName := outboundFields[2].Descriptor()
-	// outbound.DefaultName holds the default value on creation for the name field.
-	outbound.DefaultName = outboundDescName.Default.(string)
-	// outbound.NameValidator is a validator for the "name" field. It is called by the builders before save.
-	outbound.NameValidator = outboundDescName.Validators[0].(func(string) error)
-	// outboundDescProtocol is the schema descriptor for protocol field.
-	outboundDescProtocol := outboundFields[3].Descriptor()
-	// outbound.ProtocolValidator is a validator for the "protocol" field. It is called by the builders before save.
-	outbound.ProtocolValidator = outboundDescProtocol.Validators[0].(func(string) error)
-	// outboundDescAddress is the schema descriptor for address field.
-	outboundDescAddress := outboundFields[4].Descriptor()
-	// outbound.DefaultAddress holds the default value on creation for the address field.
-	outbound.DefaultAddress = outboundDescAddress.Default.(string)
-	// outbound.AddressValidator is a validator for the "address" field. It is called by the builders before save.
-	outbound.AddressValidator = outboundDescAddress.Validators[0].(func(string) error)
-	// outboundDescPort is the schema descriptor for port field.
-	outboundDescPort := outboundFields[5].Descriptor()
-	// outbound.DefaultPort holds the default value on creation for the port field.
-	outbound.DefaultPort = outboundDescPort.Default.(int)
-	// outboundDescUsername is the schema descriptor for username field.
-	outboundDescUsername := outboundFields[6].Descriptor()
-	// outbound.DefaultUsername holds the default value on creation for the username field.
-	outbound.DefaultUsername = outboundDescUsername.Default.(string)
-	// outbound.UsernameValidator is a validator for the "username" field. It is called by the builders before save.
-	outbound.UsernameValidator = outboundDescUsername.Validators[0].(func(string) error)
-	// outboundDescPassword is the schema descriptor for password field.
-	outboundDescPassword := outboundFields[7].Descriptor()
-	// outbound.DefaultPassword holds the default value on creation for the password field.
-	outbound.DefaultPassword = outboundDescPassword.Default.(string)
-	// outboundDescEnabled is the schema descriptor for enabled field.
-	outboundDescEnabled := outboundFields[9].Descriptor()
-	// outbound.DefaultEnabled holds the default value on creation for the enabled field.
-	outbound.DefaultEnabled = outboundDescEnabled.Default.(bool)
-	// outboundDescPosition is the schema descriptor for position field.
-	outboundDescPosition := outboundFields[10].Descriptor()
-	// outbound.DefaultPosition holds the default value on creation for the position field.
-	outbound.DefaultPosition = outboundDescPosition.Default.(int)
-	// outboundDescCreatedAt is the schema descriptor for created_at field.
-	outboundDescCreatedAt := outboundFields[11].Descriptor()
-	// outbound.DefaultCreatedAt holds the default value on creation for the created_at field.
-	outbound.DefaultCreatedAt = outboundDescCreatedAt.Default.(func() time.Time)
 	passkeyFields := schema.Passkey{}.Fields()
 	_ = passkeyFields
 	// passkeyDescName is the schema descriptor for name field.
@@ -503,10 +451,6 @@ func init() {
 	resource.DefaultCreatedAt = resourceDescCreatedAt.Default.(func() time.Time)
 	routeFields := schema.Route{}.Fields()
 	_ = routeFields
-	// routeDescOutboundTag is the schema descriptor for outbound_tag field.
-	routeDescOutboundTag := routeFields[3].Descriptor()
-	// route.OutboundTagValidator is a validator for the "outbound_tag" field. It is called by the builders before save.
-	route.OutboundTagValidator = routeDescOutboundTag.Validators[0].(func(string) error)
 	// routeDescDomain is the schema descriptor for domain field.
 	routeDescDomain := routeFields[4].Descriptor()
 	// route.DefaultDomain holds the default value on creation for the domain field.

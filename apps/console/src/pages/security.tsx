@@ -1,6 +1,7 @@
 import { UserSessions } from "../components/user-sessions";
 import { useId, useMemo, useState, type ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { QRCodeSVG } from "qrcode.react";
 import { KeyRound, Smartphone, LockKeyhole } from "lucide-react";
 import {

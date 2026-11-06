@@ -1,7 +1,8 @@
 // 订阅链接与自建链式代理：管理员（按用户）与用户本人共用。base 为 "/admin/users/<id>" 或 "/me"。
 // 每条链接一行：地址框末尾是复制图标，常用操作平铺在下面；换地址、换凭据、删除在编辑弹窗底部。
 import { useState, type ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { field, useConsoleContext } from "../lib/console-context";
 import { dataObject } from "./object-link";
 import {
@@ -47,13 +48,15 @@ import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
 import { WaitText } from "./wait";
 import { bytes, date } from "../lib/models";
-import { fromLocalInput, localInput, type ChainItem, type ChainSpec, type LinkItem, type LinkState, type LinkStats, type Pull, type SourceResolved } from "../lib/core";
-import { ChainExitFields, exitErrorFields, exitKindName, probeText } from "./chain-exit";
+import { fromLocalInput, localInput, type ChainItem, type ExitSpec, type LinkItem, type LinkState, type LinkStats, type Pull, type SourceResolved } from "../lib/core";
+import { ExitFields, exitErrorFields, exitKindName, probeText } from "./chain-exit";
+import { ExitSelector } from "./exit-selector";
 import { State } from "./feedback";
 
 export interface NodeOption {
   id: number;
   name: string;
+  gate_id: number;
   gate_name?: string;
 }
 
@@ -481,27 +484,27 @@ export function ChainPanel({ base, nodes, admin }: { base: string; nodes: NodeOp
                 )}
                 <small className="block text-[var(--weir-ink-3)]">
                   {c.entry_name ?? name(c.entry_node_id)} →{" "}
-                  {c.exit_kind === "socks5" || c.exit_kind === "http" || c.exit_kind === "https" ? (
+                  {c.exit.kind === "socks5" || c.exit.kind === "http" || c.exit.kind === "https" ? (
                     <>
-                      {exitKindName[c.exit_kind]} {c.exit_address}:{c.exit_port}
-                      {admin && c.exit_username && (
+                      {exitKindName[c.exit.kind]} {c.exit.address}:{c.exit.port}
+                      {admin && c.exit.username && (
                         <>
-                          {" "}（{c.exit_username} / <SecretText value={c.exit_password ?? ""} />）
+                          {" "}（{c.exit.username} / <SecretText value={c.exit.password ?? ""} />）
                         </>
                       )}
                     </>
-                  ) : c.exit_kind === "link" ? (
+                  ) : c.exit.kind === "link" ? (
                     <>
-                      节点链接 {c.exit_address}:{c.exit_port}
-                      {admin && c.exit_link && <> （<SecretText value={c.exit_link} />）</>}
+                      节点链接 {c.exit.address}:{c.exit.port}
+                      {admin && c.exit.link && <> （<SecretText value={c.exit.link} />）</>}
                     </>
-                  ) : c.exit_kind === "source" ? (
-                    <SourceSummary choice={c.exit_source} resolved={c.source} />
+                  ) : c.exit.kind === "source" ? (
+                    <SourceSummary choice={c.exit.source} resolved={c.exit.resolved} />
                   ) : (
-                    name(c.exit_node_id)
+                    name(c.exit.node_id)
                   )}
                 </small>
-                <small className="block text-[var(--weir-ink-3)]">{probeText(c.probe)}</small>
+                <small className="block text-[var(--weir-ink-3)]">{probeText(c.exit.probe)}</small>
               </span>
               <span className="actions">
                 <Switch
@@ -563,14 +566,15 @@ function ChainForm({
 }) {
   const [name, setName] = useState("");
   const [entry, setEntry] = useState(nodes[0]?.id ?? 0);
+  const [exitId, setExitId] = useState<number|undefined>();
   // 订阅组里的节点排第一个；分给用户的订阅组为空时默认填代理。
   const groups = useQuery({ queryKey: ["chain-sources", base], queryFn: async () => (await api(base === "/me" ? "/me/chain-sources" : `${base}/chain-sources`)).items as unknown[] });
-  const [exit, setExit] = useState<ChainSpec | null>(null);
+  const [exit, setExit] = useState<ExitSpec | null>(null);
   // 订阅组没读到时不按「有订阅组」默认：等读到再定，读失败时说明原因并可重新读取
-  const current: ChainSpec = exit ?? (groups.data && groups.data.length === 0 ? { kind: "socks5" } : { kind: "source", mode: "filter" });
+  const current: ExitSpec = exit ?? (groups.data && groups.data.length === 0 ? { kind: "socks5" } : { kind: "source", mode: "filter" });
   const [skip, setSkip] = useState(false);
-  const save = useFormAction((track) => api(base + "/chains", "POST", { name: name.trim(), entry_node_id: entry, exit: current, skip_probe: admin && skip }, track), {
-    fields: { entry_not_allowed: "entry", ...exitErrorFields(current.kind) },
+  const save = useFormAction((track) => api(base + "/chains", "POST", { name: name.trim(), entry_node_id: entry, ...(exitId?{exit_id:exitId}:{exit:current}), skip_probe: admin && skip }, track), {
+    fields: { entry_not_allowed: "entry", exit_not_allowed:"exit_id", ...exitErrorFields(current.kind) },
     onSuccess: saved,
     wait: () => ({ label: `正在让入口 VPS 经出口实测（${nodes.find((n) => n.id === entry)?.name ?? "入口节点"}）`, max: 45 }),
   });
@@ -592,7 +596,7 @@ function ChainForm({
             <Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
           <Field label="入口节点" name="entry" required>
-            <Select required value={entry ? String(entry) : ""} onValueChange={(v) => setEntry(Number(v))}>
+            <Select required value={entry ? String(entry) : ""} onValueChange={(v) => {setEntry(Number(v));setExitId(undefined);}}>
               <SelectTrigger>
                 <SelectValue>{nodes.find((n) => n.id === entry)?.name ?? "请选择"}</SelectValue>
               </SelectTrigger>
@@ -608,12 +612,17 @@ function ChainForm({
           {groups.isPending || groups.error ? (
             <State loading={groups.isPending} error={groups.error} onRetry={() => groups.refetch()} />
           ) : (
-            <ChainExitFields
+            <ExitSelector
+              key={entry}
+              gateId={nodes.find(n=>n.id===entry)?.gate_id??0}
+              exitId={exitId}
+              onExitId={setExitId}
+              ownerUserId={admin?Number(base.split("/").at(-1)):undefined}
               value={current}
               onChange={setExit}
               admin={false}
               sourcePath={base === "/me" ? "/me/chain-sources" : `${base}/chain-sources`}
-              nodes={nodes.filter((n) => n.id !== entry)}
+              nodes={nodes.filter((n) => n.gate_id !== nodes.find(x=>x.id===entry)?.gate_id)}
               nodeHint="出口需要你可用的另一个节点。"
             />
           )}

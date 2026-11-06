@@ -1,7 +1,8 @@
 // 后台任务（内核 / dsh 下载、SSH 安装、可能超过反代时限的操作）：进度、速度、当前线路、逐条日志与取消。
 // 关掉弹窗任务照常进行，回来能接着看。事件流连着时由中心推送，断开时每秒查一次并写明。
 import { useEffect, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { formatSize, JobLine as UIJobLine, JobPlaceholder, JobView as UIJobView, useToast } from "@weir/ui";
 import { api } from "../api";
 import { useRowAction } from "../lib/action";

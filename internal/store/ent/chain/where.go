@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/shusfun/weir/internal/store/ent/predicate"
 )
 
@@ -69,44 +70,14 @@ func Name(v string) predicate.Chain {
 	return predicate.Chain(sql.FieldEQ(FieldName, v))
 }
 
-// ExitAddress applies equality check predicate on the "exit_address" field. It's identical to ExitAddressEQ.
-func ExitAddress(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldEQ(FieldExitAddress, v))
-}
-
-// ExitPort applies equality check predicate on the "exit_port" field. It's identical to ExitPortEQ.
-func ExitPort(v int) predicate.Chain {
-	return predicate.Chain(sql.FieldEQ(FieldExitPort, v))
-}
-
-// ExitUsername applies equality check predicate on the "exit_username" field. It's identical to ExitUsernameEQ.
-func ExitUsername(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldEQ(FieldExitUsername, v))
-}
-
-// ExitPassword applies equality check predicate on the "exit_password" field. It's identical to ExitPasswordEQ.
-func ExitPassword(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldEQ(FieldExitPassword, v))
-}
-
-// ExitNodeID applies equality check predicate on the "exit_node_id" field. It's identical to ExitNodeIDEQ.
-func ExitNodeID(v int) predicate.Chain {
-	return predicate.Chain(sql.FieldEQ(FieldExitNodeID, v))
-}
-
-// ExitLink applies equality check predicate on the "exit_link" field. It's identical to ExitLinkEQ.
-func ExitLink(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldEQ(FieldExitLink, v))
+// ExitID applies equality check predicate on the "exit_id" field. It's identical to ExitIDEQ.
+func ExitID(v int) predicate.Chain {
+	return predicate.Chain(sql.FieldEQ(FieldExitID, v))
 }
 
 // Enabled applies equality check predicate on the "enabled" field. It's identical to EnabledEQ.
 func Enabled(v bool) predicate.Chain {
 	return predicate.Chain(sql.FieldEQ(FieldEnabled, v))
-}
-
-// PolicyType applies equality check predicate on the "policy_type" field. It's identical to PolicyTypeEQ.
-func PolicyType(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldEQ(FieldPolicyType, v))
 }
 
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
@@ -259,384 +230,24 @@ func NameContainsFold(v string) predicate.Chain {
 	return predicate.Chain(sql.FieldContainsFold(FieldName, v))
 }
 
-// ExitKindEQ applies the EQ predicate on the "exit_kind" field.
-func ExitKindEQ(v ExitKind) predicate.Chain {
-	return predicate.Chain(sql.FieldEQ(FieldExitKind, v))
+// ExitIDEQ applies the EQ predicate on the "exit_id" field.
+func ExitIDEQ(v int) predicate.Chain {
+	return predicate.Chain(sql.FieldEQ(FieldExitID, v))
 }
 
-// ExitKindNEQ applies the NEQ predicate on the "exit_kind" field.
-func ExitKindNEQ(v ExitKind) predicate.Chain {
-	return predicate.Chain(sql.FieldNEQ(FieldExitKind, v))
+// ExitIDNEQ applies the NEQ predicate on the "exit_id" field.
+func ExitIDNEQ(v int) predicate.Chain {
+	return predicate.Chain(sql.FieldNEQ(FieldExitID, v))
 }
 
-// ExitKindIn applies the In predicate on the "exit_kind" field.
-func ExitKindIn(vs ...ExitKind) predicate.Chain {
-	return predicate.Chain(sql.FieldIn(FieldExitKind, vs...))
+// ExitIDIn applies the In predicate on the "exit_id" field.
+func ExitIDIn(vs ...int) predicate.Chain {
+	return predicate.Chain(sql.FieldIn(FieldExitID, vs...))
 }
 
-// ExitKindNotIn applies the NotIn predicate on the "exit_kind" field.
-func ExitKindNotIn(vs ...ExitKind) predicate.Chain {
-	return predicate.Chain(sql.FieldNotIn(FieldExitKind, vs...))
-}
-
-// ExitSourceIsNil applies the IsNil predicate on the "exit_source" field.
-func ExitSourceIsNil() predicate.Chain {
-	return predicate.Chain(sql.FieldIsNull(FieldExitSource))
-}
-
-// ExitSourceNotNil applies the NotNil predicate on the "exit_source" field.
-func ExitSourceNotNil() predicate.Chain {
-	return predicate.Chain(sql.FieldNotNull(FieldExitSource))
-}
-
-// ExitAddressEQ applies the EQ predicate on the "exit_address" field.
-func ExitAddressEQ(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldEQ(FieldExitAddress, v))
-}
-
-// ExitAddressNEQ applies the NEQ predicate on the "exit_address" field.
-func ExitAddressNEQ(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldNEQ(FieldExitAddress, v))
-}
-
-// ExitAddressIn applies the In predicate on the "exit_address" field.
-func ExitAddressIn(vs ...string) predicate.Chain {
-	return predicate.Chain(sql.FieldIn(FieldExitAddress, vs...))
-}
-
-// ExitAddressNotIn applies the NotIn predicate on the "exit_address" field.
-func ExitAddressNotIn(vs ...string) predicate.Chain {
-	return predicate.Chain(sql.FieldNotIn(FieldExitAddress, vs...))
-}
-
-// ExitAddressGT applies the GT predicate on the "exit_address" field.
-func ExitAddressGT(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldGT(FieldExitAddress, v))
-}
-
-// ExitAddressGTE applies the GTE predicate on the "exit_address" field.
-func ExitAddressGTE(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldGTE(FieldExitAddress, v))
-}
-
-// ExitAddressLT applies the LT predicate on the "exit_address" field.
-func ExitAddressLT(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldLT(FieldExitAddress, v))
-}
-
-// ExitAddressLTE applies the LTE predicate on the "exit_address" field.
-func ExitAddressLTE(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldLTE(FieldExitAddress, v))
-}
-
-// ExitAddressContains applies the Contains predicate on the "exit_address" field.
-func ExitAddressContains(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldContains(FieldExitAddress, v))
-}
-
-// ExitAddressHasPrefix applies the HasPrefix predicate on the "exit_address" field.
-func ExitAddressHasPrefix(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldHasPrefix(FieldExitAddress, v))
-}
-
-// ExitAddressHasSuffix applies the HasSuffix predicate on the "exit_address" field.
-func ExitAddressHasSuffix(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldHasSuffix(FieldExitAddress, v))
-}
-
-// ExitAddressEqualFold applies the EqualFold predicate on the "exit_address" field.
-func ExitAddressEqualFold(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldEqualFold(FieldExitAddress, v))
-}
-
-// ExitAddressContainsFold applies the ContainsFold predicate on the "exit_address" field.
-func ExitAddressContainsFold(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldContainsFold(FieldExitAddress, v))
-}
-
-// ExitPortEQ applies the EQ predicate on the "exit_port" field.
-func ExitPortEQ(v int) predicate.Chain {
-	return predicate.Chain(sql.FieldEQ(FieldExitPort, v))
-}
-
-// ExitPortNEQ applies the NEQ predicate on the "exit_port" field.
-func ExitPortNEQ(v int) predicate.Chain {
-	return predicate.Chain(sql.FieldNEQ(FieldExitPort, v))
-}
-
-// ExitPortIn applies the In predicate on the "exit_port" field.
-func ExitPortIn(vs ...int) predicate.Chain {
-	return predicate.Chain(sql.FieldIn(FieldExitPort, vs...))
-}
-
-// ExitPortNotIn applies the NotIn predicate on the "exit_port" field.
-func ExitPortNotIn(vs ...int) predicate.Chain {
-	return predicate.Chain(sql.FieldNotIn(FieldExitPort, vs...))
-}
-
-// ExitPortGT applies the GT predicate on the "exit_port" field.
-func ExitPortGT(v int) predicate.Chain {
-	return predicate.Chain(sql.FieldGT(FieldExitPort, v))
-}
-
-// ExitPortGTE applies the GTE predicate on the "exit_port" field.
-func ExitPortGTE(v int) predicate.Chain {
-	return predicate.Chain(sql.FieldGTE(FieldExitPort, v))
-}
-
-// ExitPortLT applies the LT predicate on the "exit_port" field.
-func ExitPortLT(v int) predicate.Chain {
-	return predicate.Chain(sql.FieldLT(FieldExitPort, v))
-}
-
-// ExitPortLTE applies the LTE predicate on the "exit_port" field.
-func ExitPortLTE(v int) predicate.Chain {
-	return predicate.Chain(sql.FieldLTE(FieldExitPort, v))
-}
-
-// ExitUsernameEQ applies the EQ predicate on the "exit_username" field.
-func ExitUsernameEQ(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldEQ(FieldExitUsername, v))
-}
-
-// ExitUsernameNEQ applies the NEQ predicate on the "exit_username" field.
-func ExitUsernameNEQ(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldNEQ(FieldExitUsername, v))
-}
-
-// ExitUsernameIn applies the In predicate on the "exit_username" field.
-func ExitUsernameIn(vs ...string) predicate.Chain {
-	return predicate.Chain(sql.FieldIn(FieldExitUsername, vs...))
-}
-
-// ExitUsernameNotIn applies the NotIn predicate on the "exit_username" field.
-func ExitUsernameNotIn(vs ...string) predicate.Chain {
-	return predicate.Chain(sql.FieldNotIn(FieldExitUsername, vs...))
-}
-
-// ExitUsernameGT applies the GT predicate on the "exit_username" field.
-func ExitUsernameGT(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldGT(FieldExitUsername, v))
-}
-
-// ExitUsernameGTE applies the GTE predicate on the "exit_username" field.
-func ExitUsernameGTE(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldGTE(FieldExitUsername, v))
-}
-
-// ExitUsernameLT applies the LT predicate on the "exit_username" field.
-func ExitUsernameLT(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldLT(FieldExitUsername, v))
-}
-
-// ExitUsernameLTE applies the LTE predicate on the "exit_username" field.
-func ExitUsernameLTE(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldLTE(FieldExitUsername, v))
-}
-
-// ExitUsernameContains applies the Contains predicate on the "exit_username" field.
-func ExitUsernameContains(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldContains(FieldExitUsername, v))
-}
-
-// ExitUsernameHasPrefix applies the HasPrefix predicate on the "exit_username" field.
-func ExitUsernameHasPrefix(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldHasPrefix(FieldExitUsername, v))
-}
-
-// ExitUsernameHasSuffix applies the HasSuffix predicate on the "exit_username" field.
-func ExitUsernameHasSuffix(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldHasSuffix(FieldExitUsername, v))
-}
-
-// ExitUsernameEqualFold applies the EqualFold predicate on the "exit_username" field.
-func ExitUsernameEqualFold(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldEqualFold(FieldExitUsername, v))
-}
-
-// ExitUsernameContainsFold applies the ContainsFold predicate on the "exit_username" field.
-func ExitUsernameContainsFold(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldContainsFold(FieldExitUsername, v))
-}
-
-// ExitPasswordEQ applies the EQ predicate on the "exit_password" field.
-func ExitPasswordEQ(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldEQ(FieldExitPassword, v))
-}
-
-// ExitPasswordNEQ applies the NEQ predicate on the "exit_password" field.
-func ExitPasswordNEQ(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldNEQ(FieldExitPassword, v))
-}
-
-// ExitPasswordIn applies the In predicate on the "exit_password" field.
-func ExitPasswordIn(vs ...string) predicate.Chain {
-	return predicate.Chain(sql.FieldIn(FieldExitPassword, vs...))
-}
-
-// ExitPasswordNotIn applies the NotIn predicate on the "exit_password" field.
-func ExitPasswordNotIn(vs ...string) predicate.Chain {
-	return predicate.Chain(sql.FieldNotIn(FieldExitPassword, vs...))
-}
-
-// ExitPasswordGT applies the GT predicate on the "exit_password" field.
-func ExitPasswordGT(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldGT(FieldExitPassword, v))
-}
-
-// ExitPasswordGTE applies the GTE predicate on the "exit_password" field.
-func ExitPasswordGTE(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldGTE(FieldExitPassword, v))
-}
-
-// ExitPasswordLT applies the LT predicate on the "exit_password" field.
-func ExitPasswordLT(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldLT(FieldExitPassword, v))
-}
-
-// ExitPasswordLTE applies the LTE predicate on the "exit_password" field.
-func ExitPasswordLTE(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldLTE(FieldExitPassword, v))
-}
-
-// ExitPasswordContains applies the Contains predicate on the "exit_password" field.
-func ExitPasswordContains(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldContains(FieldExitPassword, v))
-}
-
-// ExitPasswordHasPrefix applies the HasPrefix predicate on the "exit_password" field.
-func ExitPasswordHasPrefix(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldHasPrefix(FieldExitPassword, v))
-}
-
-// ExitPasswordHasSuffix applies the HasSuffix predicate on the "exit_password" field.
-func ExitPasswordHasSuffix(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldHasSuffix(FieldExitPassword, v))
-}
-
-// ExitPasswordEqualFold applies the EqualFold predicate on the "exit_password" field.
-func ExitPasswordEqualFold(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldEqualFold(FieldExitPassword, v))
-}
-
-// ExitPasswordContainsFold applies the ContainsFold predicate on the "exit_password" field.
-func ExitPasswordContainsFold(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldContainsFold(FieldExitPassword, v))
-}
-
-// ExitNodeIDEQ applies the EQ predicate on the "exit_node_id" field.
-func ExitNodeIDEQ(v int) predicate.Chain {
-	return predicate.Chain(sql.FieldEQ(FieldExitNodeID, v))
-}
-
-// ExitNodeIDNEQ applies the NEQ predicate on the "exit_node_id" field.
-func ExitNodeIDNEQ(v int) predicate.Chain {
-	return predicate.Chain(sql.FieldNEQ(FieldExitNodeID, v))
-}
-
-// ExitNodeIDIn applies the In predicate on the "exit_node_id" field.
-func ExitNodeIDIn(vs ...int) predicate.Chain {
-	return predicate.Chain(sql.FieldIn(FieldExitNodeID, vs...))
-}
-
-// ExitNodeIDNotIn applies the NotIn predicate on the "exit_node_id" field.
-func ExitNodeIDNotIn(vs ...int) predicate.Chain {
-	return predicate.Chain(sql.FieldNotIn(FieldExitNodeID, vs...))
-}
-
-// ExitNodeIDGT applies the GT predicate on the "exit_node_id" field.
-func ExitNodeIDGT(v int) predicate.Chain {
-	return predicate.Chain(sql.FieldGT(FieldExitNodeID, v))
-}
-
-// ExitNodeIDGTE applies the GTE predicate on the "exit_node_id" field.
-func ExitNodeIDGTE(v int) predicate.Chain {
-	return predicate.Chain(sql.FieldGTE(FieldExitNodeID, v))
-}
-
-// ExitNodeIDLT applies the LT predicate on the "exit_node_id" field.
-func ExitNodeIDLT(v int) predicate.Chain {
-	return predicate.Chain(sql.FieldLT(FieldExitNodeID, v))
-}
-
-// ExitNodeIDLTE applies the LTE predicate on the "exit_node_id" field.
-func ExitNodeIDLTE(v int) predicate.Chain {
-	return predicate.Chain(sql.FieldLTE(FieldExitNodeID, v))
-}
-
-// ExitNodeIDIsNil applies the IsNil predicate on the "exit_node_id" field.
-func ExitNodeIDIsNil() predicate.Chain {
-	return predicate.Chain(sql.FieldIsNull(FieldExitNodeID))
-}
-
-// ExitNodeIDNotNil applies the NotNil predicate on the "exit_node_id" field.
-func ExitNodeIDNotNil() predicate.Chain {
-	return predicate.Chain(sql.FieldNotNull(FieldExitNodeID))
-}
-
-// ExitLinkEQ applies the EQ predicate on the "exit_link" field.
-func ExitLinkEQ(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldEQ(FieldExitLink, v))
-}
-
-// ExitLinkNEQ applies the NEQ predicate on the "exit_link" field.
-func ExitLinkNEQ(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldNEQ(FieldExitLink, v))
-}
-
-// ExitLinkIn applies the In predicate on the "exit_link" field.
-func ExitLinkIn(vs ...string) predicate.Chain {
-	return predicate.Chain(sql.FieldIn(FieldExitLink, vs...))
-}
-
-// ExitLinkNotIn applies the NotIn predicate on the "exit_link" field.
-func ExitLinkNotIn(vs ...string) predicate.Chain {
-	return predicate.Chain(sql.FieldNotIn(FieldExitLink, vs...))
-}
-
-// ExitLinkGT applies the GT predicate on the "exit_link" field.
-func ExitLinkGT(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldGT(FieldExitLink, v))
-}
-
-// ExitLinkGTE applies the GTE predicate on the "exit_link" field.
-func ExitLinkGTE(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldGTE(FieldExitLink, v))
-}
-
-// ExitLinkLT applies the LT predicate on the "exit_link" field.
-func ExitLinkLT(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldLT(FieldExitLink, v))
-}
-
-// ExitLinkLTE applies the LTE predicate on the "exit_link" field.
-func ExitLinkLTE(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldLTE(FieldExitLink, v))
-}
-
-// ExitLinkContains applies the Contains predicate on the "exit_link" field.
-func ExitLinkContains(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldContains(FieldExitLink, v))
-}
-
-// ExitLinkHasPrefix applies the HasPrefix predicate on the "exit_link" field.
-func ExitLinkHasPrefix(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldHasPrefix(FieldExitLink, v))
-}
-
-// ExitLinkHasSuffix applies the HasSuffix predicate on the "exit_link" field.
-func ExitLinkHasSuffix(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldHasSuffix(FieldExitLink, v))
-}
-
-// ExitLinkEqualFold applies the EqualFold predicate on the "exit_link" field.
-func ExitLinkEqualFold(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldEqualFold(FieldExitLink, v))
-}
-
-// ExitLinkContainsFold applies the ContainsFold predicate on the "exit_link" field.
-func ExitLinkContainsFold(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldContainsFold(FieldExitLink, v))
+// ExitIDNotIn applies the NotIn predicate on the "exit_id" field.
+func ExitIDNotIn(vs ...int) predicate.Chain {
+	return predicate.Chain(sql.FieldNotIn(FieldExitID, vs...))
 }
 
 // EnabledEQ applies the EQ predicate on the "enabled" field.
@@ -647,71 +258,6 @@ func EnabledEQ(v bool) predicate.Chain {
 // EnabledNEQ applies the NEQ predicate on the "enabled" field.
 func EnabledNEQ(v bool) predicate.Chain {
 	return predicate.Chain(sql.FieldNEQ(FieldEnabled, v))
-}
-
-// PolicyTypeEQ applies the EQ predicate on the "policy_type" field.
-func PolicyTypeEQ(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldEQ(FieldPolicyType, v))
-}
-
-// PolicyTypeNEQ applies the NEQ predicate on the "policy_type" field.
-func PolicyTypeNEQ(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldNEQ(FieldPolicyType, v))
-}
-
-// PolicyTypeIn applies the In predicate on the "policy_type" field.
-func PolicyTypeIn(vs ...string) predicate.Chain {
-	return predicate.Chain(sql.FieldIn(FieldPolicyType, vs...))
-}
-
-// PolicyTypeNotIn applies the NotIn predicate on the "policy_type" field.
-func PolicyTypeNotIn(vs ...string) predicate.Chain {
-	return predicate.Chain(sql.FieldNotIn(FieldPolicyType, vs...))
-}
-
-// PolicyTypeGT applies the GT predicate on the "policy_type" field.
-func PolicyTypeGT(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldGT(FieldPolicyType, v))
-}
-
-// PolicyTypeGTE applies the GTE predicate on the "policy_type" field.
-func PolicyTypeGTE(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldGTE(FieldPolicyType, v))
-}
-
-// PolicyTypeLT applies the LT predicate on the "policy_type" field.
-func PolicyTypeLT(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldLT(FieldPolicyType, v))
-}
-
-// PolicyTypeLTE applies the LTE predicate on the "policy_type" field.
-func PolicyTypeLTE(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldLTE(FieldPolicyType, v))
-}
-
-// PolicyTypeContains applies the Contains predicate on the "policy_type" field.
-func PolicyTypeContains(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldContains(FieldPolicyType, v))
-}
-
-// PolicyTypeHasPrefix applies the HasPrefix predicate on the "policy_type" field.
-func PolicyTypeHasPrefix(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldHasPrefix(FieldPolicyType, v))
-}
-
-// PolicyTypeHasSuffix applies the HasSuffix predicate on the "policy_type" field.
-func PolicyTypeHasSuffix(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldHasSuffix(FieldPolicyType, v))
-}
-
-// PolicyTypeEqualFold applies the EqualFold predicate on the "policy_type" field.
-func PolicyTypeEqualFold(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldEqualFold(FieldPolicyType, v))
-}
-
-// PolicyTypeContainsFold applies the ContainsFold predicate on the "policy_type" field.
-func PolicyTypeContainsFold(v string) predicate.Chain {
-	return predicate.Chain(sql.FieldContainsFold(FieldPolicyType, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
@@ -752,6 +298,29 @@ func CreatedAtLT(v time.Time) predicate.Chain {
 // CreatedAtLTE applies the LTE predicate on the "created_at" field.
 func CreatedAtLTE(v time.Time) predicate.Chain {
 	return predicate.Chain(sql.FieldLTE(FieldCreatedAt, v))
+}
+
+// HasExit applies the HasEdge predicate on the "exit" edge.
+func HasExit() predicate.Chain {
+	return predicate.Chain(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, ExitTable, ExitColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasExitWith applies the HasEdge predicate on the "exit" edge with a given conditions (other predicates).
+func HasExitWith(preds ...predicate.Exit) predicate.Chain {
+	return predicate.Chain(func(s *sql.Selector) {
+		step := newExitStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
 }
 
 // And groups predicates with the AND operator between them.

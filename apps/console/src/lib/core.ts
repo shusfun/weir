@@ -94,10 +94,11 @@ export interface Preset {
   note?: string;
 }
 
-export type ExitKind = "none" | "socks5" | "http" | "https" | "link" | "node" | "source";
+export type ExitKind = "freedom" | "blackhole" | "socks5" | "http" | "https" | "link" | "node" | "source";
 
-export interface ChainSpec {
+export interface ExitSpec {
   kind: ExitKind;
+  remark?: string;
   address?: string;
   port?: number;
   username?: string;
@@ -142,12 +143,11 @@ export interface NodeItem {
   security: string;
   enabled: boolean;
   credentials: number;
-  // 整个节点实际走的 VPS 出口（只对这个节点、不限域名的分流规则）
-  route_exit?: { tag: string; name: string; protocol: string; address: string; port: number };
   readiness?: { state: "ready" | "credentials" | "pending" | "kernel" | "listener" | "unknown"; why: string };
   cert_id?: number | null;
   settings?: Record<string, unknown>;
-  chain: { kind: ExitKind; address?: string; port?: number; username?: string; password?: string; link?: string; node_id?: number | null; source?: SourceResolved; probe?: ExitProbe };
+  exit_id: number;
+  exit: ExitItem;
   ports?: PortNeed[];
   reach?: Reach;
   // 全部用户直连这个节点时的下载速率
@@ -266,7 +266,7 @@ export interface ProxyType {
   enabled: boolean;
   online: number;
   nodes: ProxyNode[];
-  exit?: { kind: Exclude<ExitKind, "none">; address?: string; port?: number; username?: string; password?: string; link?: string; node_id?: number | null; source?: { source_id?: number; profile_id?: number; mode?: "node" | "filter"; match?: string } | null };
+  exit?: ExitItem;
   missing_exit?: string[] | null;
 }
 
@@ -321,16 +321,8 @@ export interface ChainItem {
   name: string;
   entry_node_id: number;
   entry_name?: string;
-  exit_kind: Exclude<ExitKind, "none">;
-  exit_address?: string;
-  exit_port?: number;
-  exit_username?: string;
-  exit_password?: string;
-  exit_node_id?: number | null;
-  exit_link?: string;
-  probe?: ExitProbe;
-  exit_source?: { source_id?: number; profile_id?: number; mode?: "node" | "filter"; match?: string } | null;
-  source?: SourceResolved;
+  exit_id: number;
+  exit: ExitItem;
   enabled: boolean;
 }
 
@@ -418,3 +410,13 @@ export function relativeTime(value?: string | null) {
   if (s < 86400) return `${Math.floor(s / 3600)} 小时前`;
   return `${Math.floor(s / 86400)} 天前`;
 }
+
+export interface ExitReference { type: "node" | "chain" | "route"; id: number; name: string; owner?: number; enabled: boolean }
+export interface ExitItem extends ExitSpec {
+ id: number; gate_id: number; owner_user_id: number | null; tag: string; label: string; enabled: boolean; policy_type: string;
+ references: ExitReference[]; probe?: ExitProbe;
+ source?: {source_id?:number;profile_id?:number;mode?:"node"|"filter";match?:string};
+ resolved?: SourceResolved; place?: {known:boolean;country?:string;city?:string;ip?:string;why?:string};
+}
+export interface ExitKindInfo {kind:ExitKind;label:string;group:string;description:string;admin_only:boolean}
+export interface ExitList {items:ExitItem[];kinds:ExitKindInfo[]}

@@ -30,7 +30,13 @@ func subLinks(t *testing.T, tc *testClient, token string) (int, []string) {
 	if strings.TrimSpace(string(raw)) == "" {
 		return 200, []string{}
 	}
-	return 200, strings.Split(strings.TrimSpace(string(raw)), "\n")
+	var nodes []string
+	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		if !strings.HasPrefix(line, "trojan://weir-info@127.0.0.1:1?") {
+			nodes = append(nodes, line)
+		}
+	}
+	return 200, nodes
 }
 
 func auditHas(t *testing.T, s *Server, actor int, action, target, result string) bool {
@@ -241,7 +247,7 @@ func TestAcceptanceUserIsolationAuditAndSubscriptions(t *testing.T) {
 
 	// ACL-02：管理员看到 alice 的完整订阅地址与出口密码原文，并可停用、重置、删除。
 	detail = mustJSON(t, admin, "GET", "/api/v1/admin/users/"+itoa(aid), nil, 200)
-	if items := detail["chain_items"].([]any); len(items) != 1 || items[0].(map[string]any)["exit_password"] != "home-secret" {
+	if items := detail["chain_items"].([]any); len(items) != 1 || items[0].(map[string]any)["exit"].(map[string]any)["password"] != "home-secret" {
 		t.Fatalf("admin chain view = %v", detail["chain_items"])
 	}
 	rotated := mustJSON(t, admin, "POST", "/api/v1/admin/users/"+itoa(aid)+"/links/"+lid+"/rotate", nil, 200)

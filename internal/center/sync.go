@@ -7,6 +7,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/chain"
 	"github.com/shusfun/weir/internal/store/ent/credential"
+	entexit "github.com/shusfun/weir/internal/store/ent/exit"
 	"github.com/shusfun/weir/internal/store/ent/link"
 	"github.com/shusfun/weir/internal/store/ent/node"
 )
@@ -102,7 +103,7 @@ func (s *Server) syncUserLocked(ctx context.Context, uid int) ([]int, error) {
 		for _, ch := range chains {
 			entry, ok := nodes[ch.EntryNodeID]
 			// 类型出口生成的链跟着它的入口节点走：链接包含这个入口，就包含经出口的那条
-			picked := contains(l.ChainIds, ch.ID) || ch.PolicyType != "" && contains(l.NodeIds, ch.EntryNodeID)
+			picked := contains(l.ChainIds, ch.ID) || s.exitPolicy(ctx, ch.ExitID) != "" && contains(l.NodeIds, ch.EntryNodeID)
 			if !ok || wgBlocked(entry.Protocol) || !(l.AllNodes || picked) {
 				continue
 			}
@@ -172,19 +173,12 @@ func (s *Server) gatesOf(ctx context.Context, nodeIDs map[int]bool) ([]int, erro
 // syncInternalLocked 维护链式代理出口节点上的系统内部凭据：节点链（nodex-）与用户链（chainx-）。
 func (s *Server) syncInternalLocked(ctx context.Context) ([]int, error) {
 	desired := map[string]int{} // stats key → 出口节点
-	nodes, err := s.Store.Ent.Node.Query().Where(node.ChainKindEQ(node.ChainKindNode), node.ChainNodeIDNotNil()).All(ctx)
+	es, err := s.Store.Ent.Exit.Query().Where(entexit.KindEQ(entexit.KindNode), entexit.EnabledEQ(true), entexit.ExitNodeIDNotNil()).All(ctx)
 	if err != nil {
 		return nil, err
 	}
-	for _, n := range nodes {
-		desired[nodeExitKey(n.ID)] = *n.ChainNodeID
-	}
-	chains, err := s.Store.Ent.Chain.Query().Where(chain.ExitKindEQ(chain.ExitKindNode), chain.ExitNodeIDNotNil()).All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	for _, ch := range chains {
-		desired[chainExitKey(ch.ID)] = *ch.ExitNodeID
+	for _, e := range es {
+		desired[exitCredentialKey(e.ID)] = *e.ExitNodeID
 	}
 	existing, err := s.Store.Ent.Credential.Query().Where(credential.InternalEQ(true)).All(ctx)
 	if err != nil {

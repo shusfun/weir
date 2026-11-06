@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/shusfun/weir/internal/store/ent/chain"
+	entexit "github.com/shusfun/weir/internal/store/ent/exit"
 	"github.com/shusfun/weir/internal/store/ent/link"
 )
 
@@ -121,14 +122,15 @@ func TestProxyCapabilities(t *testing.T) {
 	}
 	d = latest()
 	mustJSON(t, admin, "POST", "/api/v1/admin/ai/drafts/"+d["id"].(string)+"/apply", map[string]any{"edits": map[string]any{"0": map[string]any{"password": "HOME-SECRET"}}}, 200)
-	ch := s.Store.Ent.Chain.Query().Where(chain.PolicyTypeEQ("vless-reality")).OnlyX(ctx)
-	if pw, _ := s.reveal(ch.ExitPassword); pw != "HOME-SECRET" || ch.ExitAddress != "203.0.113.5" {
+	ch := s.Store.Ent.Chain.Query().Where(chain.HasExitWith(entexit.PolicyTypeEQ("vless-reality"))).OnlyX(ctx)
+	ex := s.Store.Ent.Exit.GetX(ctx, ch.ExitID)
+	if pw, _ := s.reveal(ex.Password); pw != "HOME-SECRET" || ex.Address != "203.0.113.5" {
 		t.Fatalf("type exit chain = %+v pw=%q", ch, pw)
 	}
 	if text, _ := toolText(t, h, m.webToken, "get_proxy", map[string]any{"user_id": uid}); strings.Contains(text, "HOME-SECRET") {
 		t.Fatalf("get_proxy leaks exit password: %s", text)
 	}
-	if code, uris := subLinks(t, dave, tok); code != 200 || len(uris) != 1 || !strings.Contains(uris[0], "%E7%BB%8F") {
+	if code, uris := subLinks(t, dave, tok); code != 200 || len(uris) != 1 || !strings.Contains(uris[0], "%5B%E9%93%BE%E5%BC%8F%5D") {
 		t.Fatalf("sub after type_exit = %d %v", code, uris)
 	}
 

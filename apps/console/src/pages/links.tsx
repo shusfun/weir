@@ -2,7 +2,7 @@
 // 操作平铺在每条链接卡片上；换地址、换凭据、删除在编辑弹窗里；最近 30 天的拉取按客户端、来源汇总。
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { Card, CardContent, CopyField, InsetGroup, InsetRow, InsetRows, Meter, Notice, PageHeader, Readout, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SkeletonCards } from "@weir/ui";
 import { api } from "../api";
 import { client } from "../lib/client";
@@ -139,7 +139,7 @@ function AdminLinks({ user, stats }: { user: number | null; stats: Map<number, L
   if (users.isPending || nodes.isPending || users.error || nodes.error)
     return <State loading={users.isPending || nodes.isPending} error={users.error ?? nodes.error} onRetry={() => { void users.refetch(); void nodes.refetch(); }} skeleton={<SkeletonCards count={2} lines={2} />} />;
   const optionsFor = (u: UserItem): NodeOption[] =>
-    nodes.data.filter((n) => n.enabled && (u.all_nodes || (u.node_ids ?? []).includes(n.id))).map((n) => ({ id: n.id, name: n.name, gate_name: n.gate_name }));
+    nodes.data.filter((n) => n.enabled && (u.all_nodes || (u.node_ids ?? []).includes(n.id))).map((n) => ({ id: n.id, name: n.name, gate_id: n.gate_id, gate_name: n.gate_name }));
   const list = user ? users.data.filter((u) => u.id === user) : users.data;
   if (list.length === 0) return <State empty={user ? "这个用户已不存在" : "还没有用户"} />;
   return (

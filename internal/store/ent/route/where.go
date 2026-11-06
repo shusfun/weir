@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/shusfun/weir/internal/store/ent/predicate"
 )
 
@@ -69,9 +70,9 @@ func UserID(v int) predicate.Route {
 	return predicate.Route(sql.FieldEQ(FieldUserID, v))
 }
 
-// OutboundTag applies equality check predicate on the "outbound_tag" field. It's identical to OutboundTagEQ.
-func OutboundTag(v string) predicate.Route {
-	return predicate.Route(sql.FieldEQ(FieldOutboundTag, v))
+// ExitID applies equality check predicate on the "exit_id" field. It's identical to ExitIDEQ.
+func ExitID(v int) predicate.Route {
+	return predicate.Route(sql.FieldEQ(FieldExitID, v))
 }
 
 // Domain applies equality check predicate on the "domain" field. It's identical to DomainEQ.
@@ -239,69 +240,24 @@ func UserIDNotNil() predicate.Route {
 	return predicate.Route(sql.FieldNotNull(FieldUserID))
 }
 
-// OutboundTagEQ applies the EQ predicate on the "outbound_tag" field.
-func OutboundTagEQ(v string) predicate.Route {
-	return predicate.Route(sql.FieldEQ(FieldOutboundTag, v))
+// ExitIDEQ applies the EQ predicate on the "exit_id" field.
+func ExitIDEQ(v int) predicate.Route {
+	return predicate.Route(sql.FieldEQ(FieldExitID, v))
 }
 
-// OutboundTagNEQ applies the NEQ predicate on the "outbound_tag" field.
-func OutboundTagNEQ(v string) predicate.Route {
-	return predicate.Route(sql.FieldNEQ(FieldOutboundTag, v))
+// ExitIDNEQ applies the NEQ predicate on the "exit_id" field.
+func ExitIDNEQ(v int) predicate.Route {
+	return predicate.Route(sql.FieldNEQ(FieldExitID, v))
 }
 
-// OutboundTagIn applies the In predicate on the "outbound_tag" field.
-func OutboundTagIn(vs ...string) predicate.Route {
-	return predicate.Route(sql.FieldIn(FieldOutboundTag, vs...))
+// ExitIDIn applies the In predicate on the "exit_id" field.
+func ExitIDIn(vs ...int) predicate.Route {
+	return predicate.Route(sql.FieldIn(FieldExitID, vs...))
 }
 
-// OutboundTagNotIn applies the NotIn predicate on the "outbound_tag" field.
-func OutboundTagNotIn(vs ...string) predicate.Route {
-	return predicate.Route(sql.FieldNotIn(FieldOutboundTag, vs...))
-}
-
-// OutboundTagGT applies the GT predicate on the "outbound_tag" field.
-func OutboundTagGT(v string) predicate.Route {
-	return predicate.Route(sql.FieldGT(FieldOutboundTag, v))
-}
-
-// OutboundTagGTE applies the GTE predicate on the "outbound_tag" field.
-func OutboundTagGTE(v string) predicate.Route {
-	return predicate.Route(sql.FieldGTE(FieldOutboundTag, v))
-}
-
-// OutboundTagLT applies the LT predicate on the "outbound_tag" field.
-func OutboundTagLT(v string) predicate.Route {
-	return predicate.Route(sql.FieldLT(FieldOutboundTag, v))
-}
-
-// OutboundTagLTE applies the LTE predicate on the "outbound_tag" field.
-func OutboundTagLTE(v string) predicate.Route {
-	return predicate.Route(sql.FieldLTE(FieldOutboundTag, v))
-}
-
-// OutboundTagContains applies the Contains predicate on the "outbound_tag" field.
-func OutboundTagContains(v string) predicate.Route {
-	return predicate.Route(sql.FieldContains(FieldOutboundTag, v))
-}
-
-// OutboundTagHasPrefix applies the HasPrefix predicate on the "outbound_tag" field.
-func OutboundTagHasPrefix(v string) predicate.Route {
-	return predicate.Route(sql.FieldHasPrefix(FieldOutboundTag, v))
-}
-
-// OutboundTagHasSuffix applies the HasSuffix predicate on the "outbound_tag" field.
-func OutboundTagHasSuffix(v string) predicate.Route {
-	return predicate.Route(sql.FieldHasSuffix(FieldOutboundTag, v))
-}
-
-// OutboundTagEqualFold applies the EqualFold predicate on the "outbound_tag" field.
-func OutboundTagEqualFold(v string) predicate.Route {
-	return predicate.Route(sql.FieldEqualFold(FieldOutboundTag, v))
-}
-
-// OutboundTagContainsFold applies the ContainsFold predicate on the "outbound_tag" field.
-func OutboundTagContainsFold(v string) predicate.Route {
-	return predicate.Route(sql.FieldContainsFold(FieldOutboundTag, v))
+// ExitIDNotIn applies the NotIn predicate on the "exit_id" field.
+func ExitIDNotIn(vs ...int) predicate.Route {
+	return predicate.Route(sql.FieldNotIn(FieldExitID, vs...))
 }
 
 // DomainEQ applies the EQ predicate on the "domain" field.
@@ -522,6 +478,29 @@ func CreatedAtLT(v time.Time) predicate.Route {
 // CreatedAtLTE applies the LTE predicate on the "created_at" field.
 func CreatedAtLTE(v time.Time) predicate.Route {
 	return predicate.Route(sql.FieldLTE(FieldCreatedAt, v))
+}
+
+// HasExit applies the HasEdge predicate on the "exit" edge.
+func HasExit() predicate.Route {
+	return predicate.Route(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, ExitTable, ExitColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasExitWith applies the HasEdge predicate on the "exit" edge with a given conditions (other predicates).
+func HasExitWith(preds ...predicate.Exit) predicate.Route {
+	return predicate.Route(func(s *sql.Selector) {
+		step := newExitStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
 }
 
 // And groups predicates with the AND operator between them.

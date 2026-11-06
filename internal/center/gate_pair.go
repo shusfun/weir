@@ -78,7 +78,20 @@ func (s *Server) agentPair(c *gin.Context) {
 	if name == "" {
 		name = "Gate"
 	}
-	g, err := s.Store.Ent.Gate.Create().SetName(name).SetPublicKey(req.PublicKey).Save(c.Request.Context())
+	ctx := c.Request.Context()
+	tx, err := s.Store.Ent.Tx(ctx)
+	if err != nil {
+		failInternal(c, 500, "create_failed", err)
+		return
+	}
+	defer tx.Rollback()
+	g, err := tx.Gate.Create().SetName(name).SetPublicKey(req.PublicKey).Save(ctx)
+	if err == nil {
+		_, err = s.directExit(ctx, tx.Client(), g.ID)
+	}
+	if err == nil {
+		err = tx.Commit()
+	}
 	if err != nil {
 		failure(c, 409, "device_already_registered")
 		return

@@ -1,6 +1,6 @@
 // VPS 详情里的只读关系图：用户 → 入口节点 → 路由 → 出口。点击跳到对应资源，不在图上编辑。
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { useNavigate } from "react-router-dom";
 import { Background, Position, ReactFlow, type Edge, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -26,7 +26,7 @@ const tone: Record<TopoNode["kind"], string> = {
   exit: "var(--weir-ok)",
 };
 
-export function GateTopology({ gateId, openRouting }: { gateId: number; openRouting?: () => void }) {
+export function GateTopology({ gateId }: { gateId: number }) {
   const navigate = useNavigate();
   const q = useQuery({ queryKey: ["topology", gateId], queryFn: () => api(`/admin/gates/${gateId}/topology`) as Promise<{ nodes: TopoNode[]; edges: { from: string; to: string }[] }> });
   const graph = useMemo(() => {
@@ -71,8 +71,7 @@ export function GateTopology({ gateId, openRouting }: { gateId: number; openRout
           proOptions={{ hideAttribution: true }}
           onNodeClick={(_, n) => {
             const link = (n.data as { link?: string }).link;
-            if (link === "routing") openRouting?.();
-            else if (link) navigate(link);
+            if (link) navigate(link);
           }}
           aria-label="节点关系图"
         >

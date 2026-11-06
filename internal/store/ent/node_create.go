@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/shusfun/weir/internal/store/ent/exit"
 	"github.com/shusfun/weir/internal/store/ent/node"
 )
 
@@ -128,107 +129,9 @@ func (_c *NodeCreate) SetNillableEnabled(v *bool) *NodeCreate {
 	return _c
 }
 
-// SetChainKind sets the "chain_kind" field.
-func (_c *NodeCreate) SetChainKind(v node.ChainKind) *NodeCreate {
-	_c.mutation.SetChainKind(v)
-	return _c
-}
-
-// SetNillableChainKind sets the "chain_kind" field if the given value is not nil.
-func (_c *NodeCreate) SetNillableChainKind(v *node.ChainKind) *NodeCreate {
-	if v != nil {
-		_c.SetChainKind(*v)
-	}
-	return _c
-}
-
-// SetChainSource sets the "chain_source" field.
-func (_c *NodeCreate) SetChainSource(v map[string]interface{}) *NodeCreate {
-	_c.mutation.SetChainSource(v)
-	return _c
-}
-
-// SetChainAddress sets the "chain_address" field.
-func (_c *NodeCreate) SetChainAddress(v string) *NodeCreate {
-	_c.mutation.SetChainAddress(v)
-	return _c
-}
-
-// SetNillableChainAddress sets the "chain_address" field if the given value is not nil.
-func (_c *NodeCreate) SetNillableChainAddress(v *string) *NodeCreate {
-	if v != nil {
-		_c.SetChainAddress(*v)
-	}
-	return _c
-}
-
-// SetChainPort sets the "chain_port" field.
-func (_c *NodeCreate) SetChainPort(v int) *NodeCreate {
-	_c.mutation.SetChainPort(v)
-	return _c
-}
-
-// SetNillableChainPort sets the "chain_port" field if the given value is not nil.
-func (_c *NodeCreate) SetNillableChainPort(v *int) *NodeCreate {
-	if v != nil {
-		_c.SetChainPort(*v)
-	}
-	return _c
-}
-
-// SetChainUsername sets the "chain_username" field.
-func (_c *NodeCreate) SetChainUsername(v string) *NodeCreate {
-	_c.mutation.SetChainUsername(v)
-	return _c
-}
-
-// SetNillableChainUsername sets the "chain_username" field if the given value is not nil.
-func (_c *NodeCreate) SetNillableChainUsername(v *string) *NodeCreate {
-	if v != nil {
-		_c.SetChainUsername(*v)
-	}
-	return _c
-}
-
-// SetChainPassword sets the "chain_password" field.
-func (_c *NodeCreate) SetChainPassword(v string) *NodeCreate {
-	_c.mutation.SetChainPassword(v)
-	return _c
-}
-
-// SetNillableChainPassword sets the "chain_password" field if the given value is not nil.
-func (_c *NodeCreate) SetNillableChainPassword(v *string) *NodeCreate {
-	if v != nil {
-		_c.SetChainPassword(*v)
-	}
-	return _c
-}
-
-// SetChainNodeID sets the "chain_node_id" field.
-func (_c *NodeCreate) SetChainNodeID(v int) *NodeCreate {
-	_c.mutation.SetChainNodeID(v)
-	return _c
-}
-
-// SetNillableChainNodeID sets the "chain_node_id" field if the given value is not nil.
-func (_c *NodeCreate) SetNillableChainNodeID(v *int) *NodeCreate {
-	if v != nil {
-		_c.SetChainNodeID(*v)
-	}
-	return _c
-}
-
-// SetChainLink sets the "chain_link" field.
-func (_c *NodeCreate) SetChainLink(v string) *NodeCreate {
-	_c.mutation.SetChainLink(v)
-	return _c
-}
-
-// SetNillableChainLink sets the "chain_link" field if the given value is not nil.
-func (_c *NodeCreate) SetNillableChainLink(v *string) *NodeCreate {
-	if v != nil {
-		_c.SetChainLink(*v)
-	}
+// SetExitID sets the "exit_id" field.
+func (_c *NodeCreate) SetExitID(v int) *NodeCreate {
+	_c.mutation.SetExitID(v)
 	return _c
 }
 
@@ -244,6 +147,11 @@ func (_c *NodeCreate) SetNillableCreatedAt(v *time.Time) *NodeCreate {
 		_c.SetCreatedAt(*v)
 	}
 	return _c
+}
+
+// SetExit sets the "exit" edge to the Exit entity.
+func (_c *NodeCreate) SetExit(v *Exit) *NodeCreate {
+	return _c.SetExitID(v.ID)
 }
 
 // Mutation returns the NodeMutation object of the builder.
@@ -296,30 +204,6 @@ func (_c *NodeCreate) defaults() {
 	if _, ok := _c.mutation.Enabled(); !ok {
 		v := node.DefaultEnabled
 		_c.mutation.SetEnabled(v)
-	}
-	if _, ok := _c.mutation.ChainKind(); !ok {
-		v := node.DefaultChainKind
-		_c.mutation.SetChainKind(v)
-	}
-	if _, ok := _c.mutation.ChainAddress(); !ok {
-		v := node.DefaultChainAddress
-		_c.mutation.SetChainAddress(v)
-	}
-	if _, ok := _c.mutation.ChainPort(); !ok {
-		v := node.DefaultChainPort
-		_c.mutation.SetChainPort(v)
-	}
-	if _, ok := _c.mutation.ChainUsername(); !ok {
-		v := node.DefaultChainUsername
-		_c.mutation.SetChainUsername(v)
-	}
-	if _, ok := _c.mutation.ChainPassword(); !ok {
-		v := node.DefaultChainPassword
-		_c.mutation.SetChainPassword(v)
-	}
-	if _, ok := _c.mutation.ChainLink(); !ok {
-		v := node.DefaultChainLink
-		_c.mutation.SetChainLink(v)
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := node.DefaultCreatedAt()
@@ -386,41 +270,14 @@ func (_c *NodeCreate) check() error {
 	if _, ok := _c.mutation.Enabled(); !ok {
 		return &ValidationError{Name: "enabled", err: errors.New(`ent: missing required field "Node.enabled"`)}
 	}
-	if _, ok := _c.mutation.ChainKind(); !ok {
-		return &ValidationError{Name: "chain_kind", err: errors.New(`ent: missing required field "Node.chain_kind"`)}
-	}
-	if v, ok := _c.mutation.ChainKind(); ok {
-		if err := node.ChainKindValidator(v); err != nil {
-			return &ValidationError{Name: "chain_kind", err: fmt.Errorf(`ent: validator failed for field "Node.chain_kind": %w`, err)}
-		}
-	}
-	if _, ok := _c.mutation.ChainAddress(); !ok {
-		return &ValidationError{Name: "chain_address", err: errors.New(`ent: missing required field "Node.chain_address"`)}
-	}
-	if v, ok := _c.mutation.ChainAddress(); ok {
-		if err := node.ChainAddressValidator(v); err != nil {
-			return &ValidationError{Name: "chain_address", err: fmt.Errorf(`ent: validator failed for field "Node.chain_address": %w`, err)}
-		}
-	}
-	if _, ok := _c.mutation.ChainPort(); !ok {
-		return &ValidationError{Name: "chain_port", err: errors.New(`ent: missing required field "Node.chain_port"`)}
-	}
-	if _, ok := _c.mutation.ChainUsername(); !ok {
-		return &ValidationError{Name: "chain_username", err: errors.New(`ent: missing required field "Node.chain_username"`)}
-	}
-	if v, ok := _c.mutation.ChainUsername(); ok {
-		if err := node.ChainUsernameValidator(v); err != nil {
-			return &ValidationError{Name: "chain_username", err: fmt.Errorf(`ent: validator failed for field "Node.chain_username": %w`, err)}
-		}
-	}
-	if _, ok := _c.mutation.ChainPassword(); !ok {
-		return &ValidationError{Name: "chain_password", err: errors.New(`ent: missing required field "Node.chain_password"`)}
-	}
-	if _, ok := _c.mutation.ChainLink(); !ok {
-		return &ValidationError{Name: "chain_link", err: errors.New(`ent: missing required field "Node.chain_link"`)}
+	if _, ok := _c.mutation.ExitID(); !ok {
+		return &ValidationError{Name: "exit_id", err: errors.New(`ent: missing required field "Node.exit_id"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Node.created_at"`)}
+	}
+	if len(_c.mutation.ExitIDs()) == 0 {
+		return &ValidationError{Name: "exit", err: errors.New(`ent: missing required edge "Node.exit"`)}
 	}
 	return nil
 }
@@ -493,41 +350,26 @@ func (_c *NodeCreate) createSpec() (*Node, *sqlgraph.CreateSpec) {
 		_spec.SetField(node.FieldEnabled, field.TypeBool, value)
 		_node.Enabled = value
 	}
-	if value, ok := _c.mutation.ChainKind(); ok {
-		_spec.SetField(node.FieldChainKind, field.TypeEnum, value)
-		_node.ChainKind = value
-	}
-	if value, ok := _c.mutation.ChainSource(); ok {
-		_spec.SetField(node.FieldChainSource, field.TypeJSON, value)
-		_node.ChainSource = value
-	}
-	if value, ok := _c.mutation.ChainAddress(); ok {
-		_spec.SetField(node.FieldChainAddress, field.TypeString, value)
-		_node.ChainAddress = value
-	}
-	if value, ok := _c.mutation.ChainPort(); ok {
-		_spec.SetField(node.FieldChainPort, field.TypeInt, value)
-		_node.ChainPort = value
-	}
-	if value, ok := _c.mutation.ChainUsername(); ok {
-		_spec.SetField(node.FieldChainUsername, field.TypeString, value)
-		_node.ChainUsername = value
-	}
-	if value, ok := _c.mutation.ChainPassword(); ok {
-		_spec.SetField(node.FieldChainPassword, field.TypeString, value)
-		_node.ChainPassword = value
-	}
-	if value, ok := _c.mutation.ChainNodeID(); ok {
-		_spec.SetField(node.FieldChainNodeID, field.TypeInt, value)
-		_node.ChainNodeID = &value
-	}
-	if value, ok := _c.mutation.ChainLink(); ok {
-		_spec.SetField(node.FieldChainLink, field.TypeString, value)
-		_node.ChainLink = value
-	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(node.FieldCreatedAt, field.TypeTime, value)
 		_node.CreatedAt = value
+	}
+	if nodes := _c.mutation.ExitIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   node.ExitTable,
+			Columns: []string{node.ExitColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(exit.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.ExitID = nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec
 }
@@ -743,123 +585,15 @@ func (u *NodeUpsert) UpdateEnabled() *NodeUpsert {
 	return u
 }
 
-// SetChainKind sets the "chain_kind" field.
-func (u *NodeUpsert) SetChainKind(v node.ChainKind) *NodeUpsert {
-	u.Set(node.FieldChainKind, v)
+// SetExitID sets the "exit_id" field.
+func (u *NodeUpsert) SetExitID(v int) *NodeUpsert {
+	u.Set(node.FieldExitID, v)
 	return u
 }
 
-// UpdateChainKind sets the "chain_kind" field to the value that was provided on create.
-func (u *NodeUpsert) UpdateChainKind() *NodeUpsert {
-	u.SetExcluded(node.FieldChainKind)
-	return u
-}
-
-// SetChainSource sets the "chain_source" field.
-func (u *NodeUpsert) SetChainSource(v map[string]interface{}) *NodeUpsert {
-	u.Set(node.FieldChainSource, v)
-	return u
-}
-
-// UpdateChainSource sets the "chain_source" field to the value that was provided on create.
-func (u *NodeUpsert) UpdateChainSource() *NodeUpsert {
-	u.SetExcluded(node.FieldChainSource)
-	return u
-}
-
-// ClearChainSource clears the value of the "chain_source" field.
-func (u *NodeUpsert) ClearChainSource() *NodeUpsert {
-	u.SetNull(node.FieldChainSource)
-	return u
-}
-
-// SetChainAddress sets the "chain_address" field.
-func (u *NodeUpsert) SetChainAddress(v string) *NodeUpsert {
-	u.Set(node.FieldChainAddress, v)
-	return u
-}
-
-// UpdateChainAddress sets the "chain_address" field to the value that was provided on create.
-func (u *NodeUpsert) UpdateChainAddress() *NodeUpsert {
-	u.SetExcluded(node.FieldChainAddress)
-	return u
-}
-
-// SetChainPort sets the "chain_port" field.
-func (u *NodeUpsert) SetChainPort(v int) *NodeUpsert {
-	u.Set(node.FieldChainPort, v)
-	return u
-}
-
-// UpdateChainPort sets the "chain_port" field to the value that was provided on create.
-func (u *NodeUpsert) UpdateChainPort() *NodeUpsert {
-	u.SetExcluded(node.FieldChainPort)
-	return u
-}
-
-// AddChainPort adds v to the "chain_port" field.
-func (u *NodeUpsert) AddChainPort(v int) *NodeUpsert {
-	u.Add(node.FieldChainPort, v)
-	return u
-}
-
-// SetChainUsername sets the "chain_username" field.
-func (u *NodeUpsert) SetChainUsername(v string) *NodeUpsert {
-	u.Set(node.FieldChainUsername, v)
-	return u
-}
-
-// UpdateChainUsername sets the "chain_username" field to the value that was provided on create.
-func (u *NodeUpsert) UpdateChainUsername() *NodeUpsert {
-	u.SetExcluded(node.FieldChainUsername)
-	return u
-}
-
-// SetChainPassword sets the "chain_password" field.
-func (u *NodeUpsert) SetChainPassword(v string) *NodeUpsert {
-	u.Set(node.FieldChainPassword, v)
-	return u
-}
-
-// UpdateChainPassword sets the "chain_password" field to the value that was provided on create.
-func (u *NodeUpsert) UpdateChainPassword() *NodeUpsert {
-	u.SetExcluded(node.FieldChainPassword)
-	return u
-}
-
-// SetChainNodeID sets the "chain_node_id" field.
-func (u *NodeUpsert) SetChainNodeID(v int) *NodeUpsert {
-	u.Set(node.FieldChainNodeID, v)
-	return u
-}
-
-// UpdateChainNodeID sets the "chain_node_id" field to the value that was provided on create.
-func (u *NodeUpsert) UpdateChainNodeID() *NodeUpsert {
-	u.SetExcluded(node.FieldChainNodeID)
-	return u
-}
-
-// AddChainNodeID adds v to the "chain_node_id" field.
-func (u *NodeUpsert) AddChainNodeID(v int) *NodeUpsert {
-	u.Add(node.FieldChainNodeID, v)
-	return u
-}
-
-// ClearChainNodeID clears the value of the "chain_node_id" field.
-func (u *NodeUpsert) ClearChainNodeID() *NodeUpsert {
-	u.SetNull(node.FieldChainNodeID)
-	return u
-}
-
-// SetChainLink sets the "chain_link" field.
-func (u *NodeUpsert) SetChainLink(v string) *NodeUpsert {
-	u.Set(node.FieldChainLink, v)
-	return u
-}
-
-// UpdateChainLink sets the "chain_link" field to the value that was provided on create.
-func (u *NodeUpsert) UpdateChainLink() *NodeUpsert {
-	u.SetExcluded(node.FieldChainLink)
+// UpdateExitID sets the "exit_id" field to the value that was provided on create.
+func (u *NodeUpsert) UpdateExitID() *NodeUpsert {
+	u.SetExcluded(node.FieldExitID)
 	return u
 }
 
@@ -1097,143 +831,17 @@ func (u *NodeUpsertOne) UpdateEnabled() *NodeUpsertOne {
 	})
 }
 
-// SetChainKind sets the "chain_kind" field.
-func (u *NodeUpsertOne) SetChainKind(v node.ChainKind) *NodeUpsertOne {
+// SetExitID sets the "exit_id" field.
+func (u *NodeUpsertOne) SetExitID(v int) *NodeUpsertOne {
 	return u.Update(func(s *NodeUpsert) {
-		s.SetChainKind(v)
+		s.SetExitID(v)
 	})
 }
 
-// UpdateChainKind sets the "chain_kind" field to the value that was provided on create.
-func (u *NodeUpsertOne) UpdateChainKind() *NodeUpsertOne {
+// UpdateExitID sets the "exit_id" field to the value that was provided on create.
+func (u *NodeUpsertOne) UpdateExitID() *NodeUpsertOne {
 	return u.Update(func(s *NodeUpsert) {
-		s.UpdateChainKind()
-	})
-}
-
-// SetChainSource sets the "chain_source" field.
-func (u *NodeUpsertOne) SetChainSource(v map[string]interface{}) *NodeUpsertOne {
-	return u.Update(func(s *NodeUpsert) {
-		s.SetChainSource(v)
-	})
-}
-
-// UpdateChainSource sets the "chain_source" field to the value that was provided on create.
-func (u *NodeUpsertOne) UpdateChainSource() *NodeUpsertOne {
-	return u.Update(func(s *NodeUpsert) {
-		s.UpdateChainSource()
-	})
-}
-
-// ClearChainSource clears the value of the "chain_source" field.
-func (u *NodeUpsertOne) ClearChainSource() *NodeUpsertOne {
-	return u.Update(func(s *NodeUpsert) {
-		s.ClearChainSource()
-	})
-}
-
-// SetChainAddress sets the "chain_address" field.
-func (u *NodeUpsertOne) SetChainAddress(v string) *NodeUpsertOne {
-	return u.Update(func(s *NodeUpsert) {
-		s.SetChainAddress(v)
-	})
-}
-
-// UpdateChainAddress sets the "chain_address" field to the value that was provided on create.
-func (u *NodeUpsertOne) UpdateChainAddress() *NodeUpsertOne {
-	return u.Update(func(s *NodeUpsert) {
-		s.UpdateChainAddress()
-	})
-}
-
-// SetChainPort sets the "chain_port" field.
-func (u *NodeUpsertOne) SetChainPort(v int) *NodeUpsertOne {
-	return u.Update(func(s *NodeUpsert) {
-		s.SetChainPort(v)
-	})
-}
-
-// AddChainPort adds v to the "chain_port" field.
-func (u *NodeUpsertOne) AddChainPort(v int) *NodeUpsertOne {
-	return u.Update(func(s *NodeUpsert) {
-		s.AddChainPort(v)
-	})
-}
-
-// UpdateChainPort sets the "chain_port" field to the value that was provided on create.
-func (u *NodeUpsertOne) UpdateChainPort() *NodeUpsertOne {
-	return u.Update(func(s *NodeUpsert) {
-		s.UpdateChainPort()
-	})
-}
-
-// SetChainUsername sets the "chain_username" field.
-func (u *NodeUpsertOne) SetChainUsername(v string) *NodeUpsertOne {
-	return u.Update(func(s *NodeUpsert) {
-		s.SetChainUsername(v)
-	})
-}
-
-// UpdateChainUsername sets the "chain_username" field to the value that was provided on create.
-func (u *NodeUpsertOne) UpdateChainUsername() *NodeUpsertOne {
-	return u.Update(func(s *NodeUpsert) {
-		s.UpdateChainUsername()
-	})
-}
-
-// SetChainPassword sets the "chain_password" field.
-func (u *NodeUpsertOne) SetChainPassword(v string) *NodeUpsertOne {
-	return u.Update(func(s *NodeUpsert) {
-		s.SetChainPassword(v)
-	})
-}
-
-// UpdateChainPassword sets the "chain_password" field to the value that was provided on create.
-func (u *NodeUpsertOne) UpdateChainPassword() *NodeUpsertOne {
-	return u.Update(func(s *NodeUpsert) {
-		s.UpdateChainPassword()
-	})
-}
-
-// SetChainNodeID sets the "chain_node_id" field.
-func (u *NodeUpsertOne) SetChainNodeID(v int) *NodeUpsertOne {
-	return u.Update(func(s *NodeUpsert) {
-		s.SetChainNodeID(v)
-	})
-}
-
-// AddChainNodeID adds v to the "chain_node_id" field.
-func (u *NodeUpsertOne) AddChainNodeID(v int) *NodeUpsertOne {
-	return u.Update(func(s *NodeUpsert) {
-		s.AddChainNodeID(v)
-	})
-}
-
-// UpdateChainNodeID sets the "chain_node_id" field to the value that was provided on create.
-func (u *NodeUpsertOne) UpdateChainNodeID() *NodeUpsertOne {
-	return u.Update(func(s *NodeUpsert) {
-		s.UpdateChainNodeID()
-	})
-}
-
-// ClearChainNodeID clears the value of the "chain_node_id" field.
-func (u *NodeUpsertOne) ClearChainNodeID() *NodeUpsertOne {
-	return u.Update(func(s *NodeUpsert) {
-		s.ClearChainNodeID()
-	})
-}
-
-// SetChainLink sets the "chain_link" field.
-func (u *NodeUpsertOne) SetChainLink(v string) *NodeUpsertOne {
-	return u.Update(func(s *NodeUpsert) {
-		s.SetChainLink(v)
-	})
-}
-
-// UpdateChainLink sets the "chain_link" field to the value that was provided on create.
-func (u *NodeUpsertOne) UpdateChainLink() *NodeUpsertOne {
-	return u.Update(func(s *NodeUpsert) {
-		s.UpdateChainLink()
+		s.UpdateExitID()
 	})
 }
 
@@ -1637,143 +1245,17 @@ func (u *NodeUpsertBulk) UpdateEnabled() *NodeUpsertBulk {
 	})
 }
 
-// SetChainKind sets the "chain_kind" field.
-func (u *NodeUpsertBulk) SetChainKind(v node.ChainKind) *NodeUpsertBulk {
+// SetExitID sets the "exit_id" field.
+func (u *NodeUpsertBulk) SetExitID(v int) *NodeUpsertBulk {
 	return u.Update(func(s *NodeUpsert) {
-		s.SetChainKind(v)
+		s.SetExitID(v)
 	})
 }
 
-// UpdateChainKind sets the "chain_kind" field to the value that was provided on create.
-func (u *NodeUpsertBulk) UpdateChainKind() *NodeUpsertBulk {
+// UpdateExitID sets the "exit_id" field to the value that was provided on create.
+func (u *NodeUpsertBulk) UpdateExitID() *NodeUpsertBulk {
 	return u.Update(func(s *NodeUpsert) {
-		s.UpdateChainKind()
-	})
-}
-
-// SetChainSource sets the "chain_source" field.
-func (u *NodeUpsertBulk) SetChainSource(v map[string]interface{}) *NodeUpsertBulk {
-	return u.Update(func(s *NodeUpsert) {
-		s.SetChainSource(v)
-	})
-}
-
-// UpdateChainSource sets the "chain_source" field to the value that was provided on create.
-func (u *NodeUpsertBulk) UpdateChainSource() *NodeUpsertBulk {
-	return u.Update(func(s *NodeUpsert) {
-		s.UpdateChainSource()
-	})
-}
-
-// ClearChainSource clears the value of the "chain_source" field.
-func (u *NodeUpsertBulk) ClearChainSource() *NodeUpsertBulk {
-	return u.Update(func(s *NodeUpsert) {
-		s.ClearChainSource()
-	})
-}
-
-// SetChainAddress sets the "chain_address" field.
-func (u *NodeUpsertBulk) SetChainAddress(v string) *NodeUpsertBulk {
-	return u.Update(func(s *NodeUpsert) {
-		s.SetChainAddress(v)
-	})
-}
-
-// UpdateChainAddress sets the "chain_address" field to the value that was provided on create.
-func (u *NodeUpsertBulk) UpdateChainAddress() *NodeUpsertBulk {
-	return u.Update(func(s *NodeUpsert) {
-		s.UpdateChainAddress()
-	})
-}
-
-// SetChainPort sets the "chain_port" field.
-func (u *NodeUpsertBulk) SetChainPort(v int) *NodeUpsertBulk {
-	return u.Update(func(s *NodeUpsert) {
-		s.SetChainPort(v)
-	})
-}
-
-// AddChainPort adds v to the "chain_port" field.
-func (u *NodeUpsertBulk) AddChainPort(v int) *NodeUpsertBulk {
-	return u.Update(func(s *NodeUpsert) {
-		s.AddChainPort(v)
-	})
-}
-
-// UpdateChainPort sets the "chain_port" field to the value that was provided on create.
-func (u *NodeUpsertBulk) UpdateChainPort() *NodeUpsertBulk {
-	return u.Update(func(s *NodeUpsert) {
-		s.UpdateChainPort()
-	})
-}
-
-// SetChainUsername sets the "chain_username" field.
-func (u *NodeUpsertBulk) SetChainUsername(v string) *NodeUpsertBulk {
-	return u.Update(func(s *NodeUpsert) {
-		s.SetChainUsername(v)
-	})
-}
-
-// UpdateChainUsername sets the "chain_username" field to the value that was provided on create.
-func (u *NodeUpsertBulk) UpdateChainUsername() *NodeUpsertBulk {
-	return u.Update(func(s *NodeUpsert) {
-		s.UpdateChainUsername()
-	})
-}
-
-// SetChainPassword sets the "chain_password" field.
-func (u *NodeUpsertBulk) SetChainPassword(v string) *NodeUpsertBulk {
-	return u.Update(func(s *NodeUpsert) {
-		s.SetChainPassword(v)
-	})
-}
-
-// UpdateChainPassword sets the "chain_password" field to the value that was provided on create.
-func (u *NodeUpsertBulk) UpdateChainPassword() *NodeUpsertBulk {
-	return u.Update(func(s *NodeUpsert) {
-		s.UpdateChainPassword()
-	})
-}
-
-// SetChainNodeID sets the "chain_node_id" field.
-func (u *NodeUpsertBulk) SetChainNodeID(v int) *NodeUpsertBulk {
-	return u.Update(func(s *NodeUpsert) {
-		s.SetChainNodeID(v)
-	})
-}
-
-// AddChainNodeID adds v to the "chain_node_id" field.
-func (u *NodeUpsertBulk) AddChainNodeID(v int) *NodeUpsertBulk {
-	return u.Update(func(s *NodeUpsert) {
-		s.AddChainNodeID(v)
-	})
-}
-
-// UpdateChainNodeID sets the "chain_node_id" field to the value that was provided on create.
-func (u *NodeUpsertBulk) UpdateChainNodeID() *NodeUpsertBulk {
-	return u.Update(func(s *NodeUpsert) {
-		s.UpdateChainNodeID()
-	})
-}
-
-// ClearChainNodeID clears the value of the "chain_node_id" field.
-func (u *NodeUpsertBulk) ClearChainNodeID() *NodeUpsertBulk {
-	return u.Update(func(s *NodeUpsert) {
-		s.ClearChainNodeID()
-	})
-}
-
-// SetChainLink sets the "chain_link" field.
-func (u *NodeUpsertBulk) SetChainLink(v string) *NodeUpsertBulk {
-	return u.Update(func(s *NodeUpsert) {
-		s.SetChainLink(v)
-	})
-}
-
-// UpdateChainLink sets the "chain_link" field to the value that was provided on create.
-func (u *NodeUpsertBulk) UpdateChainLink() *NodeUpsertBulk {
-	return u.Update(func(s *NodeUpsert) {
-		s.UpdateChainLink()
+		s.UpdateExitID()
 	})
 }
 

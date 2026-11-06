@@ -1,6 +1,6 @@
 // 测速下载：浏览器按「GitHub 加速」的来源（直连与镜像）测速，自动选最快可校验来源，下载后核对 SHA-256。
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "../lib/query";
 import { ChoiceCard, CodeBlock, Field, Notice,
   Button, Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter, Progress, StatusLamp, transferText,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SectionHeader, Radio, RadioGroup, FormGrid,
