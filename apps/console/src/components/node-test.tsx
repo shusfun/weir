@@ -23,7 +23,8 @@ function useNodeTest(n: NodeItem) {
     }
   }, [id, status, job.error]);
   const response = job.data?.result as { body?: { test?: NodeTest } } | undefined;
-  const result = n.test && n.test.job_id === id && n.test.status !== "running" ? n.test : response?.body?.test ?? n.test;
+  const completed = response?.body?.test;
+  const result = n.test && n.test.status !== "running" && (!completed || n.test.job_id === id || n.test.at >= completed.at) ? n.test : completed ?? n.test;
   const lost = isJobGone(job.error);
   const busy = !!local.submitting || (!lost && !!id && (!job.data || status === "running"));
   const error = local.error || (lost ? jobGoneText : job.error instanceof Error ? job.error.message : "") || (status === "cancelled" ? "测试已取消" : "");

@@ -131,7 +131,9 @@ func (s *Server) startDeployedNodeTest(c *gin.Context) {
 			s.state.RLock()
 			defer s.state.RUnlock()
 			initial := nodeTestResult{Status: "running", JobID: jobID, TraceID: ht.ID, At: time.Now().UTC(), TCP: nodeprobe.Check{Status: "unknown"}, UDP: nodeprobe.Check{Status: "unknown"}, External: "unknown"}
-			if err := s.storeNodeTest(ctx, id, initial); err != nil { return nil, err }
+			if err := s.storeNodeTest(ctx, id, initial); err != nil {
+				return nil, err
+			}
 			r, err := s.runDeployedNodeTest(ctx, id, actor, job)
 			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
 			defer cancel()
@@ -334,6 +336,7 @@ var deployedProbeBinary = func(s *Server, ctx context.Context) (string, kernelco
 }
 
 func (s *Server) runDeployedNodeTest(ctx context.Context, id, actor int, job JobRun) (r nodeTestResult, resultErr error) {
+	executionCtx := ctx
 	ht, _ := ctx.Value(httpTraceKey{}).(httpTrace)
 	r = nodeTestResult{Status: "unknown", TCP: nodeprobe.Check{Status: "unknown"}, UDP: nodeprobe.Check{Status: "unknown"}, JobID: job.e.job.ID, TraceID: ht.ID, Location: "center", External: "unknown"}
 	job.StepFor("正在排队等待节点测试", 5*time.Minute)
@@ -433,8 +436,9 @@ func (s *Server) runDeployedNodeTest(ctx context.Context, id, actor int, job Job
 	}
 	token, revoke := s.probeGrant()
 	defer revoke()
+	cancel()
 	udp := n.Protocol != "http" && n.Protocol != "shadowtls"
-	res, probeErr := deployedNodeProbe(ctx, nodeprobe.Options{Binary: bin, Run: driver.Run, Check: driver.Check, Client: client, UDP: udp, Target: strings.TrimRight(origin, "/") + "/api/v1/node-test/download", Token: token, Traceparent: ht.parent(), Step: func(step string) { job.StepFor(step, 60*time.Second) }})
+	res, probeErr := deployedNodeProbe(executionCtx, nodeprobe.Options{Binary: bin, Run: driver.Run, Check: driver.Check, Client: client, UDP: udp, Target: strings.TrimRight(origin, "/") + "/api/v1/node-test/download", Token: token, Traceparent: ht.parent(), Step: func(step string) { job.StepFor(step, 60*time.Second) }})
 	r.TCP, r.UDP = res.TCP, res.UDP
 	clean := func(msg string) string {
 		for _, secret := range []string{selected.UUID, selected.Password, token, nodeSetting(n.Settings, "ss_password")} {
