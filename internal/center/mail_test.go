@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/shusfun/weir/internal/mailer"
+	"github.com/shusfun/weir/internal/store/ent/audit"
 	"github.com/shusfun/weir/internal/store/ent/user"
 )
 
@@ -55,10 +56,18 @@ func TestPasswordResetAndRegistration(t *testing.T) {
 	}
 	mustJSON(t, anon, "POST", "/api/v1/auth/email", map[string]any{"email": "frank@example.test", "purpose": "reset"}, 200)
 	code := mail.lastCode(t)
-	mustJSON(t, anon, "POST", "/api/v1/auth/reset", map[string]any{"email": "frank@example.test", "password": "NewPassw0rd", "code": "000000"}, 400)
-	mustJSON(t, anon, "POST", "/api/v1/auth/reset", map[string]any{"email": "frank@example.test", "password": "NewPassw0rd", "code": code}, 200)
-	mustJSON(t, anon, "POST", "/api/v1/auth/reset", map[string]any{"email": "frank@example.test", "password": "OtherPassw0rd", "code": code}, 400)
-	login(t, s, "frank@example.test", "NewPassw0rd")
+	mustJSON(t, anon, "POST", "/api/v1/auth/reset", map[string]any{"email": "frank@example.test", "password": "123456", "code": "000000"}, 400)
+	resetTrace := "0123456789abcdef0123456789abcdef"
+	reset := anon.do("POST", "/api/v1/auth/reset", map[string]any{"email": "frank@example.test", "password": "123456", "code": code}, map[string]string{"traceparent": "00-" + resetTrace + "-1111111111111111-01"})
+	if reset.Code != 200 || reset.Header().Get("X-Trace-Id") != resetTrace {
+		t.Fatalf("six-digit password reset: status=%d headers=%v body=%s", reset.Code, reset.Header(), reset.Body)
+	}
+	resetAudit := s.Store.Ent.Audit.Query().Where(audit.ActionEQ("auth.reset")).OnlyX(t.Context())
+	if resetAudit.Detail["trace_id"] != resetTrace || resetAudit.Detail["request_id"] != reset.Header().Get("X-Request-Id") {
+		t.Fatalf("password reset audit trace = %v", resetAudit.Detail)
+	}
+	mustJSON(t, anon, "POST", "/api/v1/auth/reset", map[string]any{"email": "frank@example.test", "password": "654321", "code": code}, 400)
+	login(t, s, "frank@example.test", "123456")
 	if w := anon.do("POST", "/api/v1/auth/login", map[string]string{"email": "frank@example.test", "password": "Passw0rd"}, nil); w.Code == 200 {
 		t.Fatal("old password still works")
 	}
@@ -72,7 +81,15 @@ func TestPasswordResetAndRegistration(t *testing.T) {
 	mustJSON(t, admin, "PUT", "/api/v1/admin/settings/security", map[string]any{"totp_enabled": true, "passkey_enabled": true, "registration_enabled": true, "email_verification": true}, 200)
 	mustJSON(t, anon, "POST", "/api/v1/auth/register", map[string]any{"email": "gina@example.test", "password": "Passw0rd"}, 400)
 	mustJSON(t, anon, "POST", "/api/v1/auth/email", map[string]any{"email": "gina@example.test", "purpose": "register"}, 200)
-	mustJSON(t, anon, "POST", "/api/v1/auth/register", map[string]any{"email": "gina@example.test", "password": "Passw0rd", "code": mail.lastCode(t)}, 201)
+	registerTrace := "fedcba9876543210fedcba9876543210"
+	registered := anon.do("POST", "/api/v1/auth/register", map[string]any{"email": "gina@example.test", "password": "111111", "code": mail.lastCode(t)}, map[string]string{"traceparent": "00-" + registerTrace + "-2222222222222222-01"})
+	if registered.Code != 201 || registered.Header().Get("X-Trace-Id") != registerTrace {
+		t.Fatalf("six-digit password registration: status=%d headers=%v body=%s", registered.Code, registered.Header(), registered.Body)
+	}
+	registerAudit := s.Store.Ent.Audit.Query().Where(audit.ActionEQ("auth.register")).OnlyX(t.Context())
+	if registerAudit.Detail["trace_id"] != registerTrace || registerAudit.Detail["request_id"] != registered.Header().Get("X-Request-Id") {
+		t.Fatalf("registration audit trace = %v", registerAudit.Detail)
+	}
 	g := s.Store.Ent.User.Query().Where(user.EmailEQ("gina@example.test")).OnlyX(t.Context())
 	if g.AllNodes || len(g.NodeIds) != 0 || g.AllowChain || g.Role != user.RoleUser {
 		t.Fatalf("self-registered user must have no nodes: %+v", g)

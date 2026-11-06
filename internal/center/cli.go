@@ -159,7 +159,7 @@ func (p prompter) ask(label, def string) (string, error) {
 
 func (p prompter) newPassword() (string, error) {
 	for {
-		first, err := p.readSecret("管理员密码（6–72 位，含大写、小写字母和数字）")
+		first, err := p.readSecret("管理员密码（至少 6 个字符，最多 72 字节）")
 		if err != nil {
 			return "", err
 		}

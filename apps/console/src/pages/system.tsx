@@ -11,6 +11,7 @@ import { NodeCertCard } from "../components/node-certs";
 import { UpdateCard } from "../components/self-update";
 import { systemSections } from "../shell/navigation";
 import { field, useConsoleContext } from "../lib/console-context";
+import { LogoSettings } from "../components/logo-settings";
 
 export function SystemPage() {
   const [params, setParams] = useSearchParams();
@@ -45,6 +46,7 @@ export function SystemPage() {
         <TabsPanel value="certs" className="stack"><NodeCertCard /></TabsPanel>
         <TabsPanel value="backup" className="stack"><BackupCard /></TabsPanel>
         <TabsPanel value="distribution" className="stack">
+          <Card><CardContent><LogoSettings /></CardContent></Card>
           <Card><CardContent><AnnouncementEditor /></CardContent></Card>
           <Card><CardContent><ClientCatalogEditor /></CardContent></Card>
         </TabsPanel>

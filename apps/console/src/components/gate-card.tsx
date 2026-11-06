@@ -12,6 +12,7 @@ import { openDsh } from "./dsh";
 import { ObjectLink, dataObject, useDialogParam } from "./object-link";
 import { exitKindName, probeText } from "./chain-exit";
 import { NodeAccess } from "./node-access";
+import { NodeTestControl } from "./node-test";
 
 import { ProcessUsage, freshHost } from "./resource-usage";
 import { NodeSummary } from "./node-summary";
@@ -112,11 +113,14 @@ const navigate=useNavigate();
                     const [s, t, why] = nodeStatus(n, g);
                     return (
                       <li key={n.id} {...dataObject({ type: "node", id: n.id })}>
-                        <button type="button" onClick={() => onNode(n)} className="weir-press flex min-h-[var(--weir-tap-touch)] w-full flex-wrap items-center gap-x-3 gap-y-0.5 py-1.5 text-left text-sm">
+                        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 max-sm:grid-cols-1">
+                        <button type="button" onClick={() => onNode(n)} className="weir-press flex min-h-[var(--weir-tap-touch)] w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 py-1.5 text-left text-sm">
                           <span className="flex min-w-0 items-start gap-2"><StatusLamp tone={t} label={s} /><NodeSummary node={n} /></span>
                           <small className="text-[var(--weir-ink-3)]">{s} · {n.rate?.minutes ? rateText(n.rate.p90_bps) : "速率未知"}</small>
                           {t !== "ok" && <small className={"basis-full " + (t === "bad" ? "text-[var(--weir-bad-ink)]" : t === "warn" ? "text-[var(--weir-warn-ink)]" : "text-[var(--weir-ink-3)]")}>{why}</small>}
                         </button>
+                        <NodeTestControl node={n} gate={g} />
+                        </div>
                       </li>
                     );
                   })}

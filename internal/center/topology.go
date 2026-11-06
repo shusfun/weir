@@ -62,7 +62,7 @@ func (s *Server) gateTopology(c *gin.Context) {
 			sub += " · 停用"
 		}
 		add(topoNode{ID: nid, Kind: "node", Label: n.Name, Sub: sub, Link: "/gates?node=" + itoa(n.ID)})
-		creds, _ := s.Store.Ent.Credential.Query().Where(credential.NodeIDEQ(n.ID), credential.InternalEQ(false), credential.UserIDNotNil()).All(ctx)
+		creds, _ := s.Store.Ent.Credential.Query().Where(credential.NodeIDEQ(n.ID), credential.InternalEQ(false), credential.UserIDNotNil(), credential.ProbeParentIDIsNil()).All(ctx)
 		users := map[int]int{}
 		for _, cr := range creds {
 			users[*cr.UserID]++

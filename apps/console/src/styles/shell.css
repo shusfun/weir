@@ -147,12 +147,13 @@
 .shell[data-collapsed="true"] .rail {
   padding-inline: 10px;
 }
-.shell[data-collapsed="true"] .rail-brand > strong,
 .shell[data-collapsed="true"] .rail-group-label,
 .shell[data-collapsed="true"] .rail-account-text,
 .shell[data-collapsed="true"] .rail-account > svg {
   display: none;
 }
+.shell[data-collapsed="true"] .rail-brand:has(.rail-mark) > strong { display: none; }
+.shell[data-collapsed="true"] .rail-brand > strong { font-size: var(--weir-text-meta); }
 /* 收起后文字只对读屏保留：链接的可访问名称来自这段文字，display: none 会让它变成无名链接 */
 .shell[data-collapsed="true"] .rail-item > .rail-label {
   position: absolute;

@@ -275,9 +275,7 @@ export function SetupPage({ done }: { done: () => void }) {
       <div className="setup-container">
         <header className="setup-heading">
           <div className="auth-brand">
-            <span>
-              <BrandMark />
-            </span>
+            <BrandMark />
             <strong>Weir</strong>
           </div>
           <h1>初始化你的控制中心</h1>
@@ -466,7 +464,7 @@ export function SetupPage({ done }: { done: () => void }) {
                       <Field
                         label="密码"
                         htmlFor={id + "password"}
-                        hint="至少 6 位，含大写字母、小写字母和数字。"
+                        hint="至少 6 个字符。"
                         customError={password ? accountPasswordError(password) : ""}
                       >
                         <PasswordInput

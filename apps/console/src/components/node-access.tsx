@@ -20,7 +20,7 @@ export function NodeAccess({ ports, reach, compact }: { ports?: PortNeed[]; reac
         ))}
         {reach && (
           <Badge variant="soft" tone={reach.status === "ok" ? "ok" : reach.status === "failed" ? "bad" : "neutral"} title={reach.why}>
-            外部连接{reach.status === "ok" ? "正常" : reach.status === "failed" ? "失败" : "未知"}
+            {reach.status === "ok" ? "TCP 端口可达" : reach.status === "failed" ? "TCP 端口不可达" : "外部可达性未知"}
           </Badge>
         )}
       </div>

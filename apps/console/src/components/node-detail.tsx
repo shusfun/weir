@@ -13,6 +13,7 @@ import { openDsh } from "./dsh";
 import { ObjectLink, dataObject, useDialogParam } from "./object-link";
 import { exitKindName, probeText } from "./chain-exit";
 import { NodeAccess } from "./node-access";
+import { NodeTestControl } from "./node-test";
 
 import { GateDetail, pct, size } from "./gate-detail";
 import { api } from "../api";
@@ -62,6 +63,7 @@ export function NodeDetail({ node: n, gate: g, nodes, close, changed }: { node: 
             <Readout label="下载速率" value={n.rate?.minutes ? rateText(n.rate.p90_bps) : "未知"} caption={n.rate?.minutes ? `近 24 小时 ${n.rate.minutes} 分钟有流量` : "近 24 小时没有流量"} />
           </div>
           <NodeAccess ports={n.ports} reach={n.reach} />
+          <NodeTestControl node={n} gate={g} detail />
           <div className="text-body">
             <span className="text-[var(--weir-ink-3)]">出口：</span><ExitSummary exit={n.exit} expanded />
             {n.exit.kind !== "freedom" && <small className="block text-[var(--weir-ink-3)]">{probeText(n.exit.probe)}</small>}
@@ -76,10 +78,6 @@ export function NodeDetail({ node: n, gate: g, nodes, close, changed }: { node: 
           </Button>
           <Button variant="outline" onClick={()=>setEditing(true)}><Pencil />编辑</Button>
           <Button variant="outline" onClick={() => { close(); openDsh({ notice: `dsh 已知道你在看节点「${n.name}」，直接说要怎么调整即可。`, nodeId: n.id, nodeName: n.name }); }}><Sparkles />AI 调整</Button>
-          <Button disabled={isBusy() || !g?.online} busy={isBusy("test")} busyText="正在实测…"
-            onClick={() => void run("test", async () => { const r = await api(`/admin/nodes/${n.id}/test`, "POST", {}); toast(`实测通过：${r.latency_ms} ms`, { tone: "ok" }); }, undefined, { wait: { label: `正在让 ${g?.name ?? "VPS"} 用真实内核实测「${n.name}」`, max: 50 } })}>
-            实测
-          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

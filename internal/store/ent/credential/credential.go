@@ -29,6 +29,8 @@ const (
 	FieldPassword = "password"
 	// FieldInternal holds the string denoting the internal field in the database.
 	FieldInternal = "internal"
+	// FieldProbeParentID holds the string denoting the probe_parent_id field in the database.
+	FieldProbeParentID = "probe_parent_id"
 	// FieldMeterEpoch holds the string denoting the meter_epoch field in the database.
 	FieldMeterEpoch = "meter_epoch"
 	// FieldMeterUp holds the string denoting the meter_up field in the database.
@@ -54,6 +56,7 @@ var Columns = []string{
 	FieldUUID,
 	FieldPassword,
 	FieldInternal,
+	FieldProbeParentID,
 	FieldMeterEpoch,
 	FieldMeterUp,
 	FieldMeterDown,
@@ -134,6 +137,11 @@ func ByPassword(opts ...sql.OrderTermOption) OrderOption {
 // ByInternal orders the results by the internal field.
 func ByInternal(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldInternal, opts...).ToFunc()
+}
+
+// ByProbeParentID orders the results by the probe_parent_id field.
+func ByProbeParentID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProbeParentID, opts...).ToFunc()
 }
 
 // ByMeterEpoch orders the results by the meter_epoch field.

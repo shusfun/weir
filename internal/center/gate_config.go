@@ -107,6 +107,18 @@ func (s *Server) addCredentials(ctx context.Context, g *ent.Gate, cfg *contracts
 	users, links, chains := map[int]*ent.User{}, map[int]*ent.Link{}, map[int]*ent.Chain{}
 	chainKeys := map[int][]string{}
 	for _, c := range creds {
+		if c.ProbeParentID != nil {
+			parent, err := s.Store.Ent.Credential.Get(ctx, *c.ProbeParentID)
+			if ent.IsNotFound(err) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			if parent.ProbeParentID != nil || !sameCredentialOwner(c, parent) {
+				continue
+			}
+		}
 		item := contracts.Credential{ID: int64(c.ID), InboundID: int64(c.NodeID), StatsKey: c.StatsKey, UUID: c.UUID, Password: c.Password}
 		if c.Internal {
 			item.UserKey, item.Internal = "internal", true

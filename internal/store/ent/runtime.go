@@ -148,19 +148,19 @@ func init() {
 	// credential.DefaultInternal holds the default value on creation for the internal field.
 	credential.DefaultInternal = credentialDescInternal.Default.(bool)
 	// credentialDescMeterEpoch is the schema descriptor for meter_epoch field.
-	credentialDescMeterEpoch := credentialFields[8].Descriptor()
+	credentialDescMeterEpoch := credentialFields[9].Descriptor()
 	// credential.DefaultMeterEpoch holds the default value on creation for the meter_epoch field.
 	credential.DefaultMeterEpoch = credentialDescMeterEpoch.Default.(string)
 	// credentialDescMeterUp is the schema descriptor for meter_up field.
-	credentialDescMeterUp := credentialFields[9].Descriptor()
+	credentialDescMeterUp := credentialFields[10].Descriptor()
 	// credential.DefaultMeterUp holds the default value on creation for the meter_up field.
 	credential.DefaultMeterUp = credentialDescMeterUp.Default.(int64)
 	// credentialDescMeterDown is the schema descriptor for meter_down field.
-	credentialDescMeterDown := credentialFields[10].Descriptor()
+	credentialDescMeterDown := credentialFields[11].Descriptor()
 	// credential.DefaultMeterDown holds the default value on creation for the meter_down field.
 	credential.DefaultMeterDown = credentialDescMeterDown.Default.(int64)
 	// credentialDescCreatedAt is the schema descriptor for created_at field.
-	credentialDescCreatedAt := credentialFields[12].Descriptor()
+	credentialDescCreatedAt := credentialFields[13].Descriptor()
 	// credential.DefaultCreatedAt holds the default value on creation for the created_at field.
 	credential.DefaultCreatedAt = credentialDescCreatedAt.Default.(func() time.Time)
 	exitFields := schema.Exit{}.Fields()

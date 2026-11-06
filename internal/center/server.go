@@ -78,6 +78,7 @@ type Server struct {
 	// events 是控制台事件流的提醒与停止信号（见 events.go）。
 	events      eventHub
 	reachChecks nodeReachChecks
+	nodeProbes  nodeProbeState
 	// tasks 是周期任务正在失败的项（见 tasks.go），管理员通知据此提示。
 	tasks taskLog
 	// kernelDefaultAfter：下载任务编号 → 下载成功后设为默认（内核页「下载并设为默认」）。
@@ -272,9 +273,13 @@ func (s *Server) audit(c *gin.Context, action, target, result string) {
 	}
 	q := s.Store.Ent.Audit.Create().SetActor(c.GetInt("user_id")).SetAction(action).SetTarget(target).SetResult(result).SetIP(c.ClientIP())
 	if id := c.GetString("trace_id"); id != "" {
-		q.SetDetail(map[string]any{"trace_id": id, "span_id": c.GetString("span_id"), "request_id": c.GetString("request_id")})
+		q.SetDetail(traceDetail(c))
 	}
 	_, _ = q.Save(c.Request.Context())
+}
+
+func traceDetail(c *gin.Context) map[string]any {
+	return map[string]any{"trace_id": c.GetString("trace_id"), "span_id": c.GetString("span_id"), "request_id": c.GetString("request_id")}
 }
 
 func (s *Server) Router() *gin.Engine {
@@ -325,6 +330,7 @@ func (s *Server) Router() *gin.Engine {
 	r.GET("/healthz", s.health)
 	s.installRoutes(r)
 	api := r.Group("/api/v1")
+	api.GET("/logo", s.getLogo)
 	api.GET("/setup/status", s.setupStatus)
 	api.POST("/setup/verify", s.setupGuard, func(c *gin.Context) { c.JSON(200, gin.H{"valid": true}) })
 	api.POST("/setup/detect-store", s.setupGuard, s.detectStoreHandler)
@@ -342,6 +348,7 @@ func (s *Server) Router() *gin.Engine {
 	ready.GET("/public", s.publicSettings)
 	// 回显来源 IP：链式代理实测时经出口访问它，得到实际出口 IP（只信任本机回环反代的转发头）。
 	ready.GET("/ip", func(c *gin.Context) { c.Header("Cache-Control", "no-store"); c.JSON(200, gin.H{"ip": c.ClientIP()}) })
+	ready.GET("/node-test/download", s.nodeTestDownload)
 	ready.POST("/auth/login", s.login)
 	ready.POST("/auth/mfa", s.completeMFA)
 	auth := ready.Group("")
@@ -356,6 +363,8 @@ func (s *Server) Router() *gin.Engine {
 	s.passkeyRoutes(ready, auth)
 	admin := auth.Group("/admin")
 	admin.Use(requireAdmin)
+	admin.PUT("/settings/logo", s.putLogo)
+	admin.DELETE("/settings/logo", s.deleteLogo)
 	s.gateRoutes(ready, auth, admin)
 	s.userRoutes(auth, admin)
 	s.pullRoutes(auth, admin)

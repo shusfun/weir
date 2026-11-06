@@ -178,9 +178,7 @@ export function LoginPage({ done }: { done: () => void }) {
     <main className="auth-screen">
       <div className="auth-container">
         <a href="/" className="auth-brand" aria-label="Weir 首页">
-          <span>
-            <BrandMark />
-          </span>
+          <BrandMark />
           <strong>Weir</strong>
         </a>
         <p className="auth-subtitle">独立节点，统一管理。</p>
@@ -245,7 +243,7 @@ export function LoginPage({ done }: { done: () => void }) {
                     label={mode === "reset" ? "新密码" : "密码"}
                     htmlFor={id + "password"}
                     name="password"
-                    hint={mode !== "login" ? "至少 6 位，须包含大写字母、小写字母和数字。" : undefined}
+                    hint={mode !== "login" ? "至少 6 个字符。" : undefined}
                     customError={mode !== "login" && password ? accountPasswordError(password) : ""}
                   >
                     <PasswordInput

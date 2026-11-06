@@ -94,6 +94,11 @@ func Internal(v bool) predicate.Credential {
 	return predicate.Credential(sql.FieldEQ(FieldInternal, v))
 }
 
+// ProbeParentID applies equality check predicate on the "probe_parent_id" field. It's identical to ProbeParentIDEQ.
+func ProbeParentID(v int) predicate.Credential {
+	return predicate.Credential(sql.FieldEQ(FieldProbeParentID, v))
+}
+
 // MeterEpoch applies equality check predicate on the "meter_epoch" field. It's identical to MeterEpochEQ.
 func MeterEpoch(v string) predicate.Credential {
 	return predicate.Credential(sql.FieldEQ(FieldMeterEpoch, v))
@@ -512,6 +517,56 @@ func InternalEQ(v bool) predicate.Credential {
 // InternalNEQ applies the NEQ predicate on the "internal" field.
 func InternalNEQ(v bool) predicate.Credential {
 	return predicate.Credential(sql.FieldNEQ(FieldInternal, v))
+}
+
+// ProbeParentIDEQ applies the EQ predicate on the "probe_parent_id" field.
+func ProbeParentIDEQ(v int) predicate.Credential {
+	return predicate.Credential(sql.FieldEQ(FieldProbeParentID, v))
+}
+
+// ProbeParentIDNEQ applies the NEQ predicate on the "probe_parent_id" field.
+func ProbeParentIDNEQ(v int) predicate.Credential {
+	return predicate.Credential(sql.FieldNEQ(FieldProbeParentID, v))
+}
+
+// ProbeParentIDIn applies the In predicate on the "probe_parent_id" field.
+func ProbeParentIDIn(vs ...int) predicate.Credential {
+	return predicate.Credential(sql.FieldIn(FieldProbeParentID, vs...))
+}
+
+// ProbeParentIDNotIn applies the NotIn predicate on the "probe_parent_id" field.
+func ProbeParentIDNotIn(vs ...int) predicate.Credential {
+	return predicate.Credential(sql.FieldNotIn(FieldProbeParentID, vs...))
+}
+
+// ProbeParentIDGT applies the GT predicate on the "probe_parent_id" field.
+func ProbeParentIDGT(v int) predicate.Credential {
+	return predicate.Credential(sql.FieldGT(FieldProbeParentID, v))
+}
+
+// ProbeParentIDGTE applies the GTE predicate on the "probe_parent_id" field.
+func ProbeParentIDGTE(v int) predicate.Credential {
+	return predicate.Credential(sql.FieldGTE(FieldProbeParentID, v))
+}
+
+// ProbeParentIDLT applies the LT predicate on the "probe_parent_id" field.
+func ProbeParentIDLT(v int) predicate.Credential {
+	return predicate.Credential(sql.FieldLT(FieldProbeParentID, v))
+}
+
+// ProbeParentIDLTE applies the LTE predicate on the "probe_parent_id" field.
+func ProbeParentIDLTE(v int) predicate.Credential {
+	return predicate.Credential(sql.FieldLTE(FieldProbeParentID, v))
+}
+
+// ProbeParentIDIsNil applies the IsNil predicate on the "probe_parent_id" field.
+func ProbeParentIDIsNil() predicate.Credential {
+	return predicate.Credential(sql.FieldIsNull(FieldProbeParentID))
+}
+
+// ProbeParentIDNotNil applies the NotNil predicate on the "probe_parent_id" field.
+func ProbeParentIDNotNil() predicate.Credential {
+	return predicate.Credential(sql.FieldNotNull(FieldProbeParentID))
 }
 
 // MeterEpochEQ applies the EQ predicate on the "meter_epoch" field.

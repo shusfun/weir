@@ -33,6 +33,8 @@ type Credential struct {
 	Password string `json:"-"`
 	// Internal holds the value of the "internal" field.
 	Internal bool `json:"internal,omitempty"`
+	// ProbeParentID holds the value of the "probe_parent_id" field.
+	ProbeParentID *int `json:"probe_parent_id,omitempty"`
 	// MeterEpoch holds the value of the "meter_epoch" field.
 	MeterEpoch string `json:"meter_epoch,omitempty"`
 	// MeterUp holds the value of the "meter_up" field.
@@ -53,7 +55,7 @@ func (*Credential) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case credential.FieldInternal:
 			values[i] = new(sql.NullBool)
-		case credential.FieldID, credential.FieldNodeID, credential.FieldLinkID, credential.FieldChainID, credential.FieldUserID, credential.FieldMeterUp, credential.FieldMeterDown:
+		case credential.FieldID, credential.FieldNodeID, credential.FieldLinkID, credential.FieldChainID, credential.FieldUserID, credential.FieldProbeParentID, credential.FieldMeterUp, credential.FieldMeterDown:
 			values[i] = new(sql.NullInt64)
 		case credential.FieldStatsKey, credential.FieldUUID, credential.FieldPassword, credential.FieldMeterEpoch:
 			values[i] = new(sql.NullString)
@@ -130,6 +132,13 @@ func (_m *Credential) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field internal", values[i])
 			} else if value.Valid {
 				_m.Internal = value.Bool
+			}
+		case credential.FieldProbeParentID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field probe_parent_id", values[i])
+			} else if value.Valid {
+				_m.ProbeParentID = new(int)
+				*_m.ProbeParentID = int(value.Int64)
 			}
 		case credential.FieldMeterEpoch:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -225,6 +234,11 @@ func (_m *Credential) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("internal=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Internal))
+	builder.WriteString(", ")
+	if v := _m.ProbeParentID; v != nil {
+		builder.WriteString("probe_parent_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("meter_epoch=")
 	builder.WriteString(_m.MeterEpoch)

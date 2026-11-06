@@ -72,6 +72,26 @@ export interface Reach {
   at?: string;
 }
 
+export interface NodeTestCheck {
+  status: "passed" | "failed" | "unknown" | "not_applicable";
+  why?: string;
+  latency_ms?: number;
+  bytes?: number;
+}
+export interface NodeTest {
+  status: "running" | "passed" | "failed" | "unknown";
+  why?: string;
+  tcp: NodeTestCheck;
+  udp: NodeTestCheck;
+  at: string;
+  job_id: string;
+  trace_id: string;
+  location: "center" | "colocated";
+  external: "passed" | "failed" | "unknown";
+  user_id?: number;
+  link_id?: number;
+}
+
 // PresetField 是方案「高级」里可以改的一个字段（中文名、类型、单位、可选值）。
 export interface PresetField {
   key: string;
@@ -153,6 +173,7 @@ export interface NodeItem extends NodeChoice {
   exit: ExitItem;
   ports?: PortNeed[];
   reach?: Reach;
+  test?: NodeTest;
   // 全部用户直连这个节点时的下载速率
   rate?: RateStat;
 }

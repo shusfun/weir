@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 )
@@ -144,21 +145,7 @@ func validEmail(s string) bool {
 	return len(a) == 2 && len(a[0]) > 0 && strings.Contains(a[1], ".")
 }
 
-// validAccountPassword 只用于设置新密码：6–72 位，同时包含大写、小写字母和数字。
+// validAccountPassword 只用于设置新密码：至少 6 个字符，最多 72 字节。
 func validAccountPassword(password string) bool {
-	if len(password) < 6 || len(password) > 72 {
-		return false
-	}
-	var upper, lower, digit bool
-	for _, r := range password {
-		switch {
-		case r >= 'A' && r <= 'Z':
-			upper = true
-		case r >= 'a' && r <= 'z':
-			lower = true
-		case r >= '0' && r <= '9':
-			digit = true
-		}
-	}
-	return upper && lower && digit
+	return utf8.RuneCountInString(password) >= 6 && len(password) <= 72
 }

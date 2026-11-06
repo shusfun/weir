@@ -1,8 +1,8 @@
 # AGENTS.md
 
-Weir 是个人使用的代理管理面板：合并 [MiGate](https://github.com/imzyb/MiGate)（Gate 设备、Xray / sing-box 内核管理）与原来的订阅管理（JS 版，已逐文件迁移到 Go）。[Sub2API](https://github.com/Wei-Shaw/sub2api) 只作后台布局、认证、安装方式的参考，不作功能来源。
+Weir 是个人使用的代理管理面板：合并 [MiGate](https://github.com/imzyb/MiGate)（Gate 设备、Xray / sing-box 内核管理）与原来的订阅管理（JS 版，已逐文件迁移到 Go）。
 
-- 用户最新的明确要求优先于文档；文档没写到的业务问题先问用户，不要自己定。
+- 用户最新的明确要求优先；业务问题不明确时先问用户，不要自己定。
 
 ## 术语
 
@@ -54,8 +54,6 @@ python deploy/e2e.py [-run 正则]  # 容器里跑真实内核，需要 Docker �
 CGO_ENABLED=0 GOOS=linux go build -o dist/weir ./apps/weir
 ```
 
-
-
 ## 规则
 
 - **先读代码再改**，沿用现有架构、命名和风格。服务端只用 Go；Node.js 只用于构建、上游对照测试和托管的 dsh。
@@ -67,18 +65,20 @@ CGO_ENABLED=0 GOOS=linux go build -o dist/weir ./apps/weir
 
 ## 安全底线
 
+以下不得违反：
 
 - 后端强制校验角色和资源归属，隐藏菜单不能代替鉴权。普通用户只能看到和管理自己的链接、节点、链式代理；管理员可以查看所有用户的配置原文。
 - Gate 主动连接中心，不开放公网管理接口；配对凭证短时一次性，设备身份可撤销；Agent 只执行白名单动作，不提供任意 Shell。
+- 中心只接受 HTTPS（本机回环直连除外），只信任本机回环反代的转发头。
 - 用户自建链式代理只允许公网地址，保存前由 Gate 实际连接测试。
 - AI 只提交草稿，由 Weir 弹窗、管理员确认；节点密码、UUID、订阅令牌、SOCKS5 密码、私钥不发给模型；模型故障不能影响基础功能。dsh 的隔离规则见 [internal/dsh/AGENTS.md](internal/dsh/AGENTS.md)。
 - 私钥、令牌、真实订阅凭据和服务器登录信息不得写入仓库或文档。
 
 ## 文档与提交
 
-- 文档用 HTML，只记与用户确认过的业务和规则，写当前状态，不记过程、证据和运行快照。只改现有文档，不新建重复用途的文档；行为变了同步改，错的直接改正。
-- design.html 的「已有 / 目标」以代码为准，发现标错就改正。
 - 改了控制台要连同 `apps/weir/static` 的构建产物一起提交。
+- 提交、推送、发版只在用户要求时做；不改写已推送的历史。
 
 ## 修改本文件
 
+本文件只放每次会话都要遵守的规则，每条一到三行。只在某个目录适用的写进该目录的 `AGENTS.md`。

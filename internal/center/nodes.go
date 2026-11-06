@@ -130,7 +130,7 @@ func (s *Server) probeReality(c *gin.Context) {
 func (s *Server) nodeView(ctx context.Context, n *ent.Node) gin.H {
 	g, _ := s.Store.Ent.Gate.Get(ctx, n.GateID)
 	choice := s.nodeChoice(ctx, n, g, nil)
-	creds, _ := s.Store.Ent.Credential.Query().Where(credential.NodeIDEQ(n.ID), credential.InternalEQ(false)).Count(ctx)
+	creds, _ := s.Store.Ent.Credential.Query().Where(credential.NodeIDEQ(n.ID), credential.InternalEQ(false), credential.ProbeParentIDIsNil()).Count(ctx)
 	view := gin.H{
 		"id": n.ID, "gate_id": n.GateID, "name": n.Name, "preset": n.Preset, "kernel": n.Kernel, "protocol": n.Protocol,
 		"port": n.Port, "network": n.Network, "security": n.Security, "settings": n.Settings, "cert_id": n.CertID,
@@ -154,6 +154,9 @@ func (s *Server) nodeView(ctx context.Context, n *ent.Node) gin.H {
 	}
 	// 全部用户直连这个节点时的下载速率（近 24 小时第 90 百分位）；没有流量时 minutes 为 0，页面显示「未知」
 	view["rate"] = s.nodeRates(ctx, []int{n.ID})[n.ID]
+	if test := s.loadNodeTest(ctx, n); test != nil {
+		view["test"] = test
+	}
 	return view
 }
 

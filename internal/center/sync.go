@@ -116,6 +116,9 @@ func (s *Server) syncUserLocked(ctx context.Context, uid int) ([]int, error) {
 	}
 	touched := map[int]bool{}
 	for _, c := range existing {
+		if c.ProbeParentID != nil {
+			continue
+		}
 		lid, cid := 0, 0
 		if c.LinkID != nil {
 			lid = *c.LinkID
@@ -144,6 +147,24 @@ func (s *Server) syncUserLocked(ctx context.Context, uid int) ([]int, error) {
 			return nil, err
 		}
 		touched[w.nodeID] = true
+	}
+	for _, c := range existing {
+		if c.ProbeParentID == nil {
+			continue
+		}
+		parent, e := s.Store.Ent.Credential.Get(ctx, *c.ProbeParentID)
+		if e == nil && u.Enabled && u.Quota == 0 && sameCredentialOwner(c, parent) {
+			if l, e := s.Store.Ent.Link.Get(ctx, *parent.LinkID); e == nil && l.Enabled {
+				continue
+			}
+		}
+		if e != nil && !ent.IsNotFound(e) {
+			return nil, e
+		}
+		if err = s.Store.Ent.Credential.DeleteOne(c).Exec(ctx); err != nil {
+			return nil, err
+		}
+		touched[c.NodeID] = true
 	}
 	return s.gatesOf(ctx, touched)
 }

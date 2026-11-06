@@ -49,7 +49,7 @@ type subscriptionEntry struct {
 }
 
 func (s *Server) selectSubscriptionEntries(ctx context.Context, u *ent.User, l *ent.Link) ([]subscriptionEntry, error) {
-	creds, err := s.Store.Ent.Credential.Query().Where(credential.LinkIDEQ(l.ID), credential.InternalEQ(false)).Order(ent.Asc(credential.FieldNodeID), ent.Asc(credential.FieldID)).All(ctx)
+	creds, err := s.Store.Ent.Credential.Query().Where(credential.LinkIDEQ(l.ID), credential.InternalEQ(false), credential.ProbeParentIDIsNil()).Order(ent.Asc(credential.FieldNodeID), ent.Asc(credential.FieldID)).All(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -92,7 +92,7 @@ func TestAESEncryptor_RoundTrip(t *testing.T) {
 		name      string
 		plaintext string
 	}{
-		{"ascii", "Hello, Sub2API!"},
+		{"ascii", "Hello, Weir!"},
 		{"chinese_multibyte", "你好，世界！这是多字节 UTF-8 文本。"},
 		{"empty_string", ""},
 		{"long_string_gt_1KB", strings.Repeat("x", 2048)},
@@ -110,6 +110,14 @@ func TestAESEncryptor_RoundTrip(t *testing.T) {
 			assert.Equal(t, tt.plaintext, got)
 		})
 	}
+}
+
+func TestAESEncryptorLegacyCiphertext(t *testing.T) {
+	enc, err := NewAESEncryptor(strings.Repeat("00", 32))
+	require.NoError(t, err)
+	plain, err := enc.Decrypt("AAAAAAAAAAAAAAAAUw+K+8dFNrmpY7TxxMtziw==")
+	require.NoError(t, err)
+	require.Empty(t, plain)
 }
 
 // ── IV/Nonce 随机性 ──────────────────────────────────────────────────────────

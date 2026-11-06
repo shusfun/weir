@@ -1,4 +1,3 @@
-// Adapted from Wei-Shaw/sub2api b0a02a3, LGPL-3.0; see third_party/sub2api/LICENSE.
 package secrets
 
 import (
@@ -11,83 +10,48 @@ import (
 	"io"
 )
 
-// AESEncryptor implements SecretEncryptor using AES-256-GCM
-type AESEncryptor struct {
-	key []byte
-}
+type AESEncryptor struct{ aead cipher.AEAD }
 
-// NewAESEncryptor creates a new AES encryptor
 func NewAESEncryptor(keyHex string) (*AESEncryptor, error) {
 	key, err := hex.DecodeString(keyHex)
 	if err != nil {
 		return nil, fmt.Errorf("invalid totp encryption key: %w", err)
 	}
-
 	if len(key) != 32 {
 		return nil, fmt.Errorf("totp encryption key must be 32 bytes (64 hex chars), got %d bytes", len(key))
 	}
-
-	return &AESEncryptor{key: key}, nil
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("create cipher: %w", err)
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("create gcm: %w", err)
+	}
+	return &AESEncryptor{aead: aead}, nil
 }
 
-// Encrypt encrypts plaintext using AES-256-GCM
-// Output format: base64(nonce + ciphertext + tag)
 func (e *AESEncryptor) Encrypt(plaintext string) (string, error) {
-	block, err := aes.NewCipher(e.key)
-	if err != nil {
-		return "", fmt.Errorf("create cipher: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", fmt.Errorf("create gcm: %w", err)
-	}
-
-	// Generate a random nonce
-	nonce := make([]byte, gcm.NonceSize())
+	nonce := make([]byte, e.aead.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return "", fmt.Errorf("generate nonce: %w", err)
 	}
-
-	// Encrypt the plaintext
-	// Seal appends the ciphertext and tag to the nonce
-	ciphertext := gcm.Seal(nonce, nonce, []byte(plaintext), nil)
-
-	// Encode as base64
-	return base64.StdEncoding.EncodeToString(ciphertext), nil
+	sealed := e.aead.Seal(nil, nonce, []byte(plaintext), nil)
+	return base64.StdEncoding.EncodeToString(append(nonce, sealed...)), nil
 }
 
-// Decrypt decrypts ciphertext using AES-256-GCM
 func (e *AESEncryptor) Decrypt(ciphertext string) (string, error) {
-	// Decode from base64
 	data, err := base64.StdEncoding.DecodeString(ciphertext)
 	if err != nil {
 		return "", fmt.Errorf("decode base64: %w", err)
 	}
-
-	block, err := aes.NewCipher(e.key)
-	if err != nil {
-		return "", fmt.Errorf("create cipher: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", fmt.Errorf("create gcm: %w", err)
-	}
-
-	nonceSize := gcm.NonceSize()
-	if len(data) < nonceSize {
+	n := e.aead.NonceSize()
+	if len(data) < n {
 		return "", fmt.Errorf("ciphertext too short")
 	}
-
-	// Extract nonce and ciphertext
-	nonce, ciphertextData := data[:nonceSize], data[nonceSize:]
-
-	// Decrypt
-	plaintext, err := gcm.Open(nil, nonce, ciphertextData, nil)
+	plain, err := e.aead.Open(nil, data[:n], data[n:], nil)
 	if err != nil {
 		return "", fmt.Errorf("decrypt: %w", err)
 	}
-
-	return string(plaintext), nil
+	return string(plain), nil
 }

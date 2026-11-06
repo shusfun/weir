@@ -1,5 +1,5 @@
 #!/bin/bash
-# Weir 安装脚本，用法对齐 Sub2API：
+# Weir 在线安装脚本：
 #   curl -sSL https://raw.githubusercontent.com/shusfun/weir/main/deploy/install-online.sh | bash
 set -euo pipefail
 

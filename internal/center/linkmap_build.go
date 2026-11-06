@@ -41,7 +41,7 @@ func (s *Server) buildLinkMap(ctx context.Context, viewer int) (*linkMap, error)
 		}
 		gates[g.ID] = mg
 	}
-	q := s.Store.Ent.Credential.Query().Where(credential.InternalEQ(false), credential.UserIDNotNil())
+	q := s.Store.Ent.Credential.Query().Where(credential.InternalEQ(false), credential.UserIDNotNil(), credential.ProbeParentIDIsNil())
 	if !admin {
 		q = q.Where(credential.UserIDEQ(viewer))
 	}

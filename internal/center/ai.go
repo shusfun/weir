@@ -141,16 +141,7 @@ func (s *Server) testNodeWith(ctx context.Context, n *ent.Node, settings map[str
 }
 
 func (s *Server) testNodeHandler(c *gin.Context) {
-	n, ok := s.nodeParam(c)
-	if !ok {
-		return
-	}
-	res, err := s.testNode(c.Request.Context(), n, n.Settings)
-	if err != nil {
-		failDetail(c, 422, "node_test_failed", err.Error(), gin.H{"result": res})
-		return
-	}
-	c.JSON(200, res)
+	s.startDeployedNodeTest(c)
 }
 
 // Draft 是一份待确认的草稿（保存在 KV，1 小时后过期）：能力目录里的多步草稿（见 action_drafts.go），

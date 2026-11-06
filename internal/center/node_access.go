@@ -30,7 +30,7 @@ func nodeProtos(protocol string) []string {
 	switch protocol {
 	case "hysteria2", "tuic", "wireguard":
 		return []string{"udp"}
-	case "shadowsocks":
+	case "shadowsocks", "socks":
 		return []string{"tcp", "udp"}
 	}
 	return []string{"tcp"}
@@ -136,6 +136,9 @@ func (s *Server) nodeReadiness(ctx context.Context, n *ent.Node, g *ent.Gate) (s
 	now := time.Now()
 	active := false
 	for _, c := range cfg.Credentials {
+		if cr, err := s.Store.Ent.Credential.Get(ctx, int(c.ID)); err != nil || cr.ProbeParentID != nil {
+			continue
+		}
 		if c.InboundID != int64(n.ID) || !c.InWindow(now) {
 			continue
 		}

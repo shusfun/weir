@@ -3537,32 +3537,34 @@ func (m *ChainMutation) ResetEdge(name string) error {
 // CredentialMutation represents an operation that mutates the Credential nodes in the graph.
 type CredentialMutation struct {
 	config
-	op            Op
-	typ           string
-	id            *int
-	node_id       *int
-	addnode_id    *int
-	link_id       *int
-	addlink_id    *int
-	chain_id      *int
-	addchain_id   *int
-	user_id       *int
-	adduser_id    *int
-	stats_key     *string
-	uuid          *string
-	password      *string
-	internal      *bool
-	meter_epoch   *string
-	meter_up      *int64
-	addmeter_up   *int64
-	meter_down    *int64
-	addmeter_down *int64
-	meter_at      *time.Time
-	created_at    *time.Time
-	clearedFields map[string]struct{}
-	done          bool
-	oldValue      func(context.Context) (*Credential, error)
-	predicates    []predicate.Credential
+	op                 Op
+	typ                string
+	id                 *int
+	node_id            *int
+	addnode_id         *int
+	link_id            *int
+	addlink_id         *int
+	chain_id           *int
+	addchain_id        *int
+	user_id            *int
+	adduser_id         *int
+	stats_key          *string
+	uuid               *string
+	password           *string
+	internal           *bool
+	probe_parent_id    *int
+	addprobe_parent_id *int
+	meter_epoch        *string
+	meter_up           *int64
+	addmeter_up        *int64
+	meter_down         *int64
+	addmeter_down      *int64
+	meter_at           *time.Time
+	created_at         *time.Time
+	clearedFields      map[string]struct{}
+	done               bool
+	oldValue           func(context.Context) (*Credential, error)
+	predicates         []predicate.Credential
 }
 
 var _ ent.Mutation = (*CredentialMutation)(nil)
@@ -4073,6 +4075,76 @@ func (m *CredentialMutation) ResetInternal() {
 	m.internal = nil
 }
 
+// SetProbeParentID sets the "probe_parent_id" field.
+func (m *CredentialMutation) SetProbeParentID(i int) {
+	m.probe_parent_id = &i
+	m.addprobe_parent_id = nil
+}
+
+// ProbeParentID returns the value of the "probe_parent_id" field in the mutation.
+func (m *CredentialMutation) ProbeParentID() (r int, exists bool) {
+	v := m.probe_parent_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProbeParentID returns the old "probe_parent_id" field's value of the Credential entity.
+// If the Credential object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CredentialMutation) OldProbeParentID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProbeParentID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProbeParentID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProbeParentID: %w", err)
+	}
+	return oldValue.ProbeParentID, nil
+}
+
+// AddProbeParentID adds i to the "probe_parent_id" field.
+func (m *CredentialMutation) AddProbeParentID(i int) {
+	if m.addprobe_parent_id != nil {
+		*m.addprobe_parent_id += i
+	} else {
+		m.addprobe_parent_id = &i
+	}
+}
+
+// AddedProbeParentID returns the value that was added to the "probe_parent_id" field in this mutation.
+func (m *CredentialMutation) AddedProbeParentID() (r int, exists bool) {
+	v := m.addprobe_parent_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearProbeParentID clears the value of the "probe_parent_id" field.
+func (m *CredentialMutation) ClearProbeParentID() {
+	m.probe_parent_id = nil
+	m.addprobe_parent_id = nil
+	m.clearedFields[credential.FieldProbeParentID] = struct{}{}
+}
+
+// ProbeParentIDCleared returns if the "probe_parent_id" field was cleared in this mutation.
+func (m *CredentialMutation) ProbeParentIDCleared() bool {
+	_, ok := m.clearedFields[credential.FieldProbeParentID]
+	return ok
+}
+
+// ResetProbeParentID resets all changes to the "probe_parent_id" field.
+func (m *CredentialMutation) ResetProbeParentID() {
+	m.probe_parent_id = nil
+	m.addprobe_parent_id = nil
+	delete(m.clearedFields, credential.FieldProbeParentID)
+}
+
 // SetMeterEpoch sets the "meter_epoch" field.
 func (m *CredentialMutation) SetMeterEpoch(s string) {
 	m.meter_epoch = &s
@@ -4340,7 +4412,7 @@ func (m *CredentialMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *CredentialMutation) Fields() []string {
-	fields := make([]string, 0, 13)
+	fields := make([]string, 0, 14)
 	if m.node_id != nil {
 		fields = append(fields, credential.FieldNodeID)
 	}
@@ -4364,6 +4436,9 @@ func (m *CredentialMutation) Fields() []string {
 	}
 	if m.internal != nil {
 		fields = append(fields, credential.FieldInternal)
+	}
+	if m.probe_parent_id != nil {
+		fields = append(fields, credential.FieldProbeParentID)
 	}
 	if m.meter_epoch != nil {
 		fields = append(fields, credential.FieldMeterEpoch)
@@ -4404,6 +4479,8 @@ func (m *CredentialMutation) Field(name string) (ent.Value, bool) {
 		return m.Password()
 	case credential.FieldInternal:
 		return m.Internal()
+	case credential.FieldProbeParentID:
+		return m.ProbeParentID()
 	case credential.FieldMeterEpoch:
 		return m.MeterEpoch()
 	case credential.FieldMeterUp:
@@ -4439,6 +4516,8 @@ func (m *CredentialMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldPassword(ctx)
 	case credential.FieldInternal:
 		return m.OldInternal(ctx)
+	case credential.FieldProbeParentID:
+		return m.OldProbeParentID(ctx)
 	case credential.FieldMeterEpoch:
 		return m.OldMeterEpoch(ctx)
 	case credential.FieldMeterUp:
@@ -4514,6 +4593,13 @@ func (m *CredentialMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetInternal(v)
 		return nil
+	case credential.FieldProbeParentID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProbeParentID(v)
+		return nil
 	case credential.FieldMeterEpoch:
 		v, ok := value.(string)
 		if !ok {
@@ -4569,6 +4655,9 @@ func (m *CredentialMutation) AddedFields() []string {
 	if m.adduser_id != nil {
 		fields = append(fields, credential.FieldUserID)
 	}
+	if m.addprobe_parent_id != nil {
+		fields = append(fields, credential.FieldProbeParentID)
+	}
 	if m.addmeter_up != nil {
 		fields = append(fields, credential.FieldMeterUp)
 	}
@@ -4591,6 +4680,8 @@ func (m *CredentialMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedChainID()
 	case credential.FieldUserID:
 		return m.AddedUserID()
+	case credential.FieldProbeParentID:
+		return m.AddedProbeParentID()
 	case credential.FieldMeterUp:
 		return m.AddedMeterUp()
 	case credential.FieldMeterDown:
@@ -4632,6 +4723,13 @@ func (m *CredentialMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddUserID(v)
 		return nil
+	case credential.FieldProbeParentID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddProbeParentID(v)
+		return nil
 	case credential.FieldMeterUp:
 		v, ok := value.(int64)
 		if !ok {
@@ -4663,6 +4761,9 @@ func (m *CredentialMutation) ClearedFields() []string {
 	if m.FieldCleared(credential.FieldUserID) {
 		fields = append(fields, credential.FieldUserID)
 	}
+	if m.FieldCleared(credential.FieldProbeParentID) {
+		fields = append(fields, credential.FieldProbeParentID)
+	}
 	if m.FieldCleared(credential.FieldMeterAt) {
 		fields = append(fields, credential.FieldMeterAt)
 	}
@@ -4688,6 +4789,9 @@ func (m *CredentialMutation) ClearField(name string) error {
 		return nil
 	case credential.FieldUserID:
 		m.ClearUserID()
+		return nil
+	case credential.FieldProbeParentID:
+		m.ClearProbeParentID()
 		return nil
 	case credential.FieldMeterAt:
 		m.ClearMeterAt()
@@ -4723,6 +4827,9 @@ func (m *CredentialMutation) ResetField(name string) error {
 		return nil
 	case credential.FieldInternal:
 		m.ResetInternal()
+		return nil
+	case credential.FieldProbeParentID:
+		m.ResetProbeParentID()
 		return nil
 	case credential.FieldMeterEpoch:
 		m.ResetMeterEpoch()

@@ -67,7 +67,7 @@ function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new
               <Input maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
             </Field>
           </FormGrid>
-          <Field label={isNew ? "初始密码（可选）" : "重设密码（可选）"} name="password" hint={isNew ? "留空时自动生成，只显示一次。" : "至少 6 位，含大小写字母和数字；修改后该用户需重新登录。"}>
+          <Field label={isNew ? "初始密码（可选）" : "重设密码（可选）"} name="password" hint={isNew ? "留空时自动生成，只显示一次。" : "至少 6 个字符；修改后该用户需重新登录。"}>
             <PasswordInput autoComplete="new-password" minLength={6} maxLength={72} value={password} onChange={(e) => setPassword(e.target.value)} />
           </Field>
           <FormGrid>

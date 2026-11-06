@@ -435,11 +435,11 @@ var opDraftCaps = []Capability{
 	{Name: "exit.create", Title: "新建出口", Purpose: "在入口 VPS 上新建公共出口，供节点与分流规则共用。类型包括代理、节点链接、订阅源、另一台 VPS 和拦截；直连由系统创建。保存前实测并检查全部入口内核。",
 		Kind: "draft", Risk: "normal", Object: "exit", Creates: true, Params: exitParams(false),
 		op: &opSpec{kind: "create", method: "POST", handler: h(func(s *Server) gin.HandlerFunc { return func(c *gin.Context) { s.saveExit(c, true) } }), path: noPath, body: exitBody,
-		needs: exitNeeds, secrets: exitSecrets, undo: "exit.delete", idKey: "exit_id"}},
+			needs: exitNeeds, secrets: exitSecrets, undo: "exit.delete", idKey: "exit_id"}},
 	{Name: "exit.update", Title: "修改出口", Purpose: "修改共享出口会影响全部引用者；没给的字段保持原样。标签固定；仍被启用对象引用时不能停用。只改备注不实测，连接配置变化才实测。",
 		Kind: "draft", Risk: "normal", Object: "exit", Params: exitParams(true),
 		op: &opSpec{kind: "update", method: "PATCH", handler: h(func(s *Server) gin.HandlerFunc { return func(c *gin.Context) { s.saveExit(c, true) } }), path: exitPath, body: exitBody, pathKeys: []string{"exit_id"},
-		self: "exit_id", load: loadExit, full: true, needs: exitNeeds, secrets: exitSecrets}},
+			self: "exit_id", load: loadExit, full: true, needs: exitNeeds, secrets: exitSecrets}},
 	{Name: "exit.delete", Title: "删除出口", Purpose: "删除出口；仍被节点、用户链路或分流引用时返回占用对象。系统直连不能删除。不能撤回，只能是最后一步。",
 		Kind: "draft", Risk: "danger", Object: "exit", Last: true, Params: []Param{{Key: "exit_id", Label: "出口", Kind: "ref", Ref: "exit", Required: true}},
 		op: &opSpec{kind: "delete", method: "DELETE", handler: h(func(s *Server) gin.HandlerFunc { return func(c *gin.Context) { s.deleteExit(c, true) } }), path: exitPath, pathKeys: []string{"exit_id"}, self: "exit_id"}},
@@ -624,7 +624,7 @@ var opReadCaps = []Capability{
 		read: func(ctx context.Context, s *Server, args map[string]any) (any, error) {
 			return s.readVia(ctx, s.probeReality, "POST", pathOf("id", itoa(intArg(args, "gate_id"))), nil, nil)
 		}},
-	{Name: "test_node", Title: "节点实测", Purpose: "让节点所在 VPS 用节点现在的参数实测一次（内核自检 + 本机回环真连），返回到达的阶段（build / check / connect）、延迟与失败原因。不改节点；会让 VPS 实际发起连接，记审计。", Kind: "read", Probe: true,
+	{Name: "test_node", Title: "节点实测", Purpose: "由中心连接已部署节点的实际地址和端口，使用有效用户凭据验证真实下载及适用的 UDP 转发，流量计入所选用户用量。同机检测不证明外部可达性；返回后台任务及分项结果，不返回凭据。", Kind: "read", Probe: true,
 		Params: []Param{{Key: "node_id", Label: "节点", Kind: "ref", Ref: "node", Required: true}},
 		read: func(ctx context.Context, s *Server, args map[string]any) (any, error) {
 			return s.readVia(ctx, s.testNodeHandler, "POST", pathOf("id", itoa(intArg(args, "node_id"))), nil, nil)

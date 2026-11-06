@@ -104,7 +104,7 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
       <div className="shell" data-collapsed={collapsed}>
         <aside className="rail">
           <NavLink to={admin ? "/gates" : "/links"} className="rail-brand weir-press" aria-label="Weir 首页">
-            <span className="rail-mark"><BrandMark /></span>
+            <BrandMark className="rail-mark" />
             <strong>Weir</strong>
           </NavLink>
           <ScrollArea className="rail-nav" viewportClassName="rail-nav-viewport">

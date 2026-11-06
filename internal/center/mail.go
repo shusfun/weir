@@ -298,7 +298,7 @@ func (s *Server) resetPassword(c *gin.Context) {
 		return
 	}
 	s.dropSessions(ctx, u.ID)
-	_, _ = s.Store.Ent.Audit.Create().SetActor(u.ID).SetAction("auth.reset").SetTarget("user:" + strconv.Itoa(u.ID)).SetResult("ok").SetIP(c.ClientIP()).Save(ctx)
+	_, _ = s.Store.Ent.Audit.Create().SetActor(u.ID).SetAction("auth.reset").SetTarget("user:" + strconv.Itoa(u.ID)).SetResult("ok").SetIP(c.ClientIP()).SetDetail(traceDetail(c)).Save(ctx)
 	c.JSON(200, gin.H{"reset": true})
 }
 
@@ -351,6 +351,6 @@ func (s *Server) register(c *gin.Context) {
 		failInternal(c, 500, "link_failed", err)
 		return
 	}
-	_, _ = s.Store.Ent.Audit.Create().SetActor(u.ID).SetAction("auth.register").SetTarget("user:" + strconv.Itoa(u.ID)).SetResult("ok").SetIP(c.ClientIP()).Save(ctx)
+	_, _ = s.Store.Ent.Audit.Create().SetActor(u.ID).SetAction("auth.register").SetTarget("user:" + strconv.Itoa(u.ID)).SetResult("ok").SetIP(c.ClientIP()).SetDetail(traceDetail(c)).Save(ctx)
 	c.JSON(201, gin.H{"registered": true})
 }

@@ -321,7 +321,7 @@ export function SecurityPage({ loginRequired }: { loginRequired: () => void }) {
                         name={id + "new"}
                         field="next"
                         label="新密码"
-                        hint="至少 6 位，含大写字母、小写字母和数字。"
+                        hint="至少 6 个字符。"
                         type="password"
                         required
                         customError={next ? accountPasswordError(next) : ""}

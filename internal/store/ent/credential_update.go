@@ -186,6 +186,33 @@ func (_u *CredentialUpdate) SetNillableInternal(v *bool) *CredentialUpdate {
 	return _u
 }
 
+// SetProbeParentID sets the "probe_parent_id" field.
+func (_u *CredentialUpdate) SetProbeParentID(v int) *CredentialUpdate {
+	_u.mutation.ResetProbeParentID()
+	_u.mutation.SetProbeParentID(v)
+	return _u
+}
+
+// SetNillableProbeParentID sets the "probe_parent_id" field if the given value is not nil.
+func (_u *CredentialUpdate) SetNillableProbeParentID(v *int) *CredentialUpdate {
+	if v != nil {
+		_u.SetProbeParentID(*v)
+	}
+	return _u
+}
+
+// AddProbeParentID adds value to the "probe_parent_id" field.
+func (_u *CredentialUpdate) AddProbeParentID(v int) *CredentialUpdate {
+	_u.mutation.AddProbeParentID(v)
+	return _u
+}
+
+// ClearProbeParentID clears the value of the "probe_parent_id" field.
+func (_u *CredentialUpdate) ClearProbeParentID() *CredentialUpdate {
+	_u.mutation.ClearProbeParentID()
+	return _u
+}
+
 // SetMeterEpoch sets the "meter_epoch" field.
 func (_u *CredentialUpdate) SetMeterEpoch(v string) *CredentialUpdate {
 	_u.mutation.SetMeterEpoch(v)
@@ -347,6 +374,15 @@ func (_u *CredentialUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	}
 	if value, ok := _u.mutation.Internal(); ok {
 		_spec.SetField(credential.FieldInternal, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.ProbeParentID(); ok {
+		_spec.SetField(credential.FieldProbeParentID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedProbeParentID(); ok {
+		_spec.AddField(credential.FieldProbeParentID, field.TypeInt, value)
+	}
+	if _u.mutation.ProbeParentIDCleared() {
+		_spec.ClearField(credential.FieldProbeParentID, field.TypeInt)
 	}
 	if value, ok := _u.mutation.MeterEpoch(); ok {
 		_spec.SetField(credential.FieldMeterEpoch, field.TypeString, value)
@@ -547,6 +583,33 @@ func (_u *CredentialUpdateOne) SetNillableInternal(v *bool) *CredentialUpdateOne
 	return _u
 }
 
+// SetProbeParentID sets the "probe_parent_id" field.
+func (_u *CredentialUpdateOne) SetProbeParentID(v int) *CredentialUpdateOne {
+	_u.mutation.ResetProbeParentID()
+	_u.mutation.SetProbeParentID(v)
+	return _u
+}
+
+// SetNillableProbeParentID sets the "probe_parent_id" field if the given value is not nil.
+func (_u *CredentialUpdateOne) SetNillableProbeParentID(v *int) *CredentialUpdateOne {
+	if v != nil {
+		_u.SetProbeParentID(*v)
+	}
+	return _u
+}
+
+// AddProbeParentID adds value to the "probe_parent_id" field.
+func (_u *CredentialUpdateOne) AddProbeParentID(v int) *CredentialUpdateOne {
+	_u.mutation.AddProbeParentID(v)
+	return _u
+}
+
+// ClearProbeParentID clears the value of the "probe_parent_id" field.
+func (_u *CredentialUpdateOne) ClearProbeParentID() *CredentialUpdateOne {
+	_u.mutation.ClearProbeParentID()
+	return _u
+}
+
 // SetMeterEpoch sets the "meter_epoch" field.
 func (_u *CredentialUpdateOne) SetMeterEpoch(v string) *CredentialUpdateOne {
 	_u.mutation.SetMeterEpoch(v)
@@ -738,6 +801,15 @@ func (_u *CredentialUpdateOne) sqlSave(ctx context.Context) (_node *Credential, 
 	}
 	if value, ok := _u.mutation.Internal(); ok {
 		_spec.SetField(credential.FieldInternal, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.ProbeParentID(); ok {
+		_spec.SetField(credential.FieldProbeParentID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedProbeParentID(); ok {
+		_spec.AddField(credential.FieldProbeParentID, field.TypeInt, value)
+	}
+	if _u.mutation.ProbeParentIDCleared() {
+		_spec.ClearField(credential.FieldProbeParentID, field.TypeInt)
 	}
 	if value, ok := _u.mutation.MeterEpoch(); ok {
 		_spec.SetField(credential.FieldMeterEpoch, field.TypeString, value)

@@ -1,4 +1,3 @@
-// Adapted from Wei-Shaw/sub2api b0a02a3, LGPL-3.0.
 package mailer
 
 import (

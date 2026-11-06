@@ -97,3 +97,18 @@ func TestRequestLogPropagatesTraceparentAndRecordsSuccess(t *testing.T) {
 		t.Fatalf("success trace log = %s", buf.String())
 	}
 }
+
+func TestAccountPasswordRoutesRecordSuccessfulRequests(t *testing.T) {
+	for _, route := range []string{
+		"/api/v1/setup/install",
+		"/api/v1/auth/reset",
+		"/api/v1/auth/register",
+		"/api/v1/auth/verify",
+		"/api/v1/security/password",
+		"/api/v1/admin/users",
+	} {
+		if !customTraceRoute(route) {
+			t.Errorf("account password route %q is not traced on success", route)
+		}
+	}
+}

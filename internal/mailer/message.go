@@ -1,4 +1,3 @@
-// Adapted from Wei-Shaw/sub2api b0a02a3, LGPL-3.0; see third_party/sub2api/LICENSE.
 package mailer
 
 import (
@@ -15,101 +14,56 @@ import (
 )
 
 type smtpMessage struct {
-	envelopeFrom string
-	envelopeTo   string
-	data         []byte
+	envelopeFrom, envelopeTo string
+	data                     []byte
 }
 
 func buildSMTPMessage(config *SMTPConfig, to, subject, body string) (smtpMessage, error) {
 	if config == nil {
 		return smtpMessage{}, errors.New("missing SMTP configuration")
 	}
-
-	fromAddress, err := parseSMTPAddress(config.From, "from")
+	parse := func(value, field string) (*mail.Address, error) {
+		if strings.ContainsAny(value, "\r\n") {
+			return nil, fmt.Errorf("invalid SMTP %s address: contains a line break", field)
+		}
+		addr, err := mail.ParseAddress(strings.TrimSpace(value))
+		if err != nil {
+			return nil, fmt.Errorf("invalid SMTP %s address: %w", field, err)
+		}
+		return addr, nil
+	}
+	from, err := parse(config.From, "from")
 	if err != nil {
 		return smtpMessage{}, err
 	}
-	recipientAddress, err := parseSMTPAddress(to, "recipient")
+	recipient, err := parse(to, "recipient")
 	if err != nil {
 		return smtpMessage{}, err
 	}
-	messageID, err := generateEmailMessageID(fromAddress.Address, config.Host)
-	if err != nil {
+	var id [16]byte
+	if _, err := rand.Read(id[:]); err != nil {
 		return smtpMessage{}, fmt.Errorf("generate message ID: %w", err)
 	}
-
-	fromName := sanitizeEmailHeader(config.FromName)
-	if strings.TrimSpace(fromName) == "" {
-		fromName = fromAddress.Name
+	name := strings.NewReplacer("\r", "", "\n", "").Replace(config.FromName)
+	if strings.TrimSpace(name) == "" {
+		name = from.Name
 	}
-	fromHeader := (&mail.Address{
-		Name:    fromName,
-		Address: fromAddress.Address,
-	}).String()
-	toHeader := (&mail.Address{
-		Name:    recipientAddress.Name,
-		Address: recipientAddress.Address,
-	}).String()
-	subjectHeader := mime.QEncoding.Encode("UTF-8", sanitizeEmailHeader(subject))
-
-	var message bytes.Buffer
-	fmt.Fprintf(&message, "From: %s\r\n", fromHeader)
-	fmt.Fprintf(&message, "To: %s\r\n", toHeader)
-	fmt.Fprintf(&message, "Date: %s\r\n", time.Now().UTC().Format(time.RFC1123Z))
-	fmt.Fprintf(&message, "Message-ID: %s\r\n", messageID)
-	fmt.Fprintf(&message, "Subject: %s\r\n", subjectHeader)
-	fmt.Fprint(&message, "MIME-Version: 1.0\r\n"+
-		"Content-Type: text/html; charset=UTF-8\r\n"+
-		"Content-Transfer-Encoding: quoted-printable\r\n\r\n")
-
-	bodyWriter := quotedprintable.NewWriter(&message)
-	if _, err := bodyWriter.Write([]byte(body)); err != nil {
-		return smtpMessage{}, fmt.Errorf("encode email body: %w", err)
+	domain := config.Host
+	if i := strings.LastIndexByte(from.Address, '@'); i >= 0 && i+1 < len(from.Address) {
+		domain = from.Address[i+1:]
 	}
-	if err := bodyWriter.Close(); err != nil {
-		return smtpMessage{}, fmt.Errorf("close email body encoder: %w", err)
-	}
-
-	return smtpMessage{
-		envelopeFrom: fromAddress.Address,
-		envelopeTo:   recipientAddress.Address,
-		data:         message.Bytes(),
-	}, nil
-}
-
-func parseSMTPAddress(value, field string) (*mail.Address, error) {
-	if strings.ContainsAny(value, "\r\n") {
-		return nil, fmt.Errorf("invalid SMTP %s address: contains a line break", field)
-	}
-
-	cleaned := strings.TrimSpace(value)
-	address, err := mail.ParseAddress(cleaned)
-	if err != nil || strings.TrimSpace(address.Address) == "" {
-		if err == nil {
-			err = fmt.Errorf("address is empty")
-		}
-		return nil, fmt.Errorf("invalid SMTP %s address: %w", field, err)
-	}
-	return address, nil
-}
-
-func generateEmailMessageID(fromAddress, smtpHost string) (string, error) {
-	randomID := make([]byte, 16)
-	if _, err := rand.Read(randomID); err != nil {
-		return "", err
-	}
-
-	domain := strings.TrimSpace(sanitizeEmailHeader(smtpHost))
-	if at := strings.LastIndexByte(fromAddress, '@'); at >= 0 && at < len(fromAddress)-1 {
-		domain = fromAddress[at+1:]
-	}
-	domain = strings.Trim(domain, "[]<>")
+	domain = strings.Trim(strings.NewReplacer("\r", "", "\n", "").Replace(domain), "[]<>")
 	if domain == "" {
 		domain = "localhost"
 	}
-
-	return fmt.Sprintf("<%s@%s>", hex.EncodeToString(randomID), domain), nil
+	var out bytes.Buffer
+	fmt.Fprintf(&out, "From: %s\r\nTo: %s\r\nDate: %s\r\nMessage-ID: <%s@%s>\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n", (&mail.Address{Name: name, Address: from.Address}).String(), recipient.String(), time.Now().UTC().Format(time.RFC1123Z), hex.EncodeToString(id[:]), domain, mime.QEncoding.Encode("UTF-8", strings.NewReplacer("\r", "", "\n", "").Replace(subject)))
+	writer := quotedprintable.NewWriter(&out)
+	if _, err := writer.Write([]byte(body)); err != nil {
+		return smtpMessage{}, fmt.Errorf("encode email body: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return smtpMessage{}, fmt.Errorf("close email body encoder: %w", err)
+	}
+	return smtpMessage{envelopeFrom: from.Address, envelopeTo: recipient.Address, data: out.Bytes()}, nil
 }
-
-// sanitizeEmailHeader prevents SMTP header injection (Sub2API).
-func sanitizeEmailHeader(s string) string { return strings.NewReplacer("\r", "", "\n", "").Replace(s) }

@@ -118,6 +118,20 @@ func (_c *CredentialCreate) SetNillableInternal(v *bool) *CredentialCreate {
 	return _c
 }
 
+// SetProbeParentID sets the "probe_parent_id" field.
+func (_c *CredentialCreate) SetProbeParentID(v int) *CredentialCreate {
+	_c.mutation.SetProbeParentID(v)
+	return _c
+}
+
+// SetNillableProbeParentID sets the "probe_parent_id" field if the given value is not nil.
+func (_c *CredentialCreate) SetNillableProbeParentID(v *int) *CredentialCreate {
+	if v != nil {
+		_c.SetProbeParentID(*v)
+	}
+	return _c
+}
+
 // SetMeterEpoch sets the "meter_epoch" field.
 func (_c *CredentialCreate) SetMeterEpoch(v string) *CredentialCreate {
 	_c.mutation.SetMeterEpoch(v)
@@ -341,6 +355,10 @@ func (_c *CredentialCreate) createSpec() (*Credential, *sqlgraph.CreateSpec) {
 		_spec.SetField(credential.FieldInternal, field.TypeBool, value)
 		_node.Internal = value
 	}
+	if value, ok := _c.mutation.ProbeParentID(); ok {
+		_spec.SetField(credential.FieldProbeParentID, field.TypeInt, value)
+		_node.ProbeParentID = &value
+	}
 	if value, ok := _c.mutation.MeterEpoch(); ok {
 		_spec.SetField(credential.FieldMeterEpoch, field.TypeString, value)
 		_node.MeterEpoch = value
@@ -548,6 +566,30 @@ func (u *CredentialUpsert) SetInternal(v bool) *CredentialUpsert {
 // UpdateInternal sets the "internal" field to the value that was provided on create.
 func (u *CredentialUpsert) UpdateInternal() *CredentialUpsert {
 	u.SetExcluded(credential.FieldInternal)
+	return u
+}
+
+// SetProbeParentID sets the "probe_parent_id" field.
+func (u *CredentialUpsert) SetProbeParentID(v int) *CredentialUpsert {
+	u.Set(credential.FieldProbeParentID, v)
+	return u
+}
+
+// UpdateProbeParentID sets the "probe_parent_id" field to the value that was provided on create.
+func (u *CredentialUpsert) UpdateProbeParentID() *CredentialUpsert {
+	u.SetExcluded(credential.FieldProbeParentID)
+	return u
+}
+
+// AddProbeParentID adds v to the "probe_parent_id" field.
+func (u *CredentialUpsert) AddProbeParentID(v int) *CredentialUpsert {
+	u.Add(credential.FieldProbeParentID, v)
+	return u
+}
+
+// ClearProbeParentID clears the value of the "probe_parent_id" field.
+func (u *CredentialUpsert) ClearProbeParentID() *CredentialUpsert {
+	u.SetNull(credential.FieldProbeParentID)
 	return u
 }
 
@@ -820,6 +862,34 @@ func (u *CredentialUpsertOne) SetInternal(v bool) *CredentialUpsertOne {
 func (u *CredentialUpsertOne) UpdateInternal() *CredentialUpsertOne {
 	return u.Update(func(s *CredentialUpsert) {
 		s.UpdateInternal()
+	})
+}
+
+// SetProbeParentID sets the "probe_parent_id" field.
+func (u *CredentialUpsertOne) SetProbeParentID(v int) *CredentialUpsertOne {
+	return u.Update(func(s *CredentialUpsert) {
+		s.SetProbeParentID(v)
+	})
+}
+
+// AddProbeParentID adds v to the "probe_parent_id" field.
+func (u *CredentialUpsertOne) AddProbeParentID(v int) *CredentialUpsertOne {
+	return u.Update(func(s *CredentialUpsert) {
+		s.AddProbeParentID(v)
+	})
+}
+
+// UpdateProbeParentID sets the "probe_parent_id" field to the value that was provided on create.
+func (u *CredentialUpsertOne) UpdateProbeParentID() *CredentialUpsertOne {
+	return u.Update(func(s *CredentialUpsert) {
+		s.UpdateProbeParentID()
+	})
+}
+
+// ClearProbeParentID clears the value of the "probe_parent_id" field.
+func (u *CredentialUpsertOne) ClearProbeParentID() *CredentialUpsertOne {
+	return u.Update(func(s *CredentialUpsert) {
+		s.ClearProbeParentID()
 	})
 }
 
@@ -1269,6 +1339,34 @@ func (u *CredentialUpsertBulk) SetInternal(v bool) *CredentialUpsertBulk {
 func (u *CredentialUpsertBulk) UpdateInternal() *CredentialUpsertBulk {
 	return u.Update(func(s *CredentialUpsert) {
 		s.UpdateInternal()
+	})
+}
+
+// SetProbeParentID sets the "probe_parent_id" field.
+func (u *CredentialUpsertBulk) SetProbeParentID(v int) *CredentialUpsertBulk {
+	return u.Update(func(s *CredentialUpsert) {
+		s.SetProbeParentID(v)
+	})
+}
+
+// AddProbeParentID adds v to the "probe_parent_id" field.
+func (u *CredentialUpsertBulk) AddProbeParentID(v int) *CredentialUpsertBulk {
+	return u.Update(func(s *CredentialUpsert) {
+		s.AddProbeParentID(v)
+	})
+}
+
+// UpdateProbeParentID sets the "probe_parent_id" field to the value that was provided on create.
+func (u *CredentialUpsertBulk) UpdateProbeParentID() *CredentialUpsertBulk {
+	return u.Update(func(s *CredentialUpsert) {
+		s.UpdateProbeParentID()
+	})
+}
+
+// ClearProbeParentID clears the value of the "probe_parent_id" field.
+func (u *CredentialUpsertBulk) ClearProbeParentID() *CredentialUpsertBulk {
+	return u.Update(func(s *CredentialUpsert) {
+		s.ClearProbeParentID()
 	})
 }
 
