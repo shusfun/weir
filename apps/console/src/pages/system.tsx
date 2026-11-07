@@ -36,6 +36,7 @@ export function SystemPage() {
           <LayaCard />
         </TabsPanel>
         <TabsPanel value="login" className="stack">
+          <Card><CardContent><LogoSettings /></CardContent></Card>
           <SecurityCard />
           <APITokensCard />
         </TabsPanel>
@@ -46,7 +47,6 @@ export function SystemPage() {
         <TabsPanel value="certs" className="stack"><NodeCertCard /></TabsPanel>
         <TabsPanel value="backup" className="stack"><BackupCard /></TabsPanel>
         <TabsPanel value="distribution" className="stack">
-          <Card><CardContent><LogoSettings /></CardContent></Card>
           <Card><CardContent><AnnouncementEditor /></CardContent></Card>
           <Card><CardContent><ClientCatalogEditor /></CardContent></Card>
         </TabsPanel>
