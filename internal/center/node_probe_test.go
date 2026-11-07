@@ -153,7 +153,7 @@ func TestWireGuardProbeCredentialLifecycle(t *testing.T) {
 		t.Fatalf("probe counted as user access: %v", view["credentials"])
 	}
 	s.Store.Ent.Link.UpdateOne(l).SetEndsAt(time.Now().Add(-time.Minute)).ExecX(ctx)
-	if err := s.SyncUser(ctx, u.ID); err != nil {
+	if err := s.revokeExpiredNodeProbes(ctx, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if s.Store.Ent.Credential.Query().Where(credential.IDEQ(probe.ID)).ExistX(ctx) {
@@ -161,7 +161,9 @@ func TestWireGuardProbeCredentialLifecycle(t *testing.T) {
 	}
 	s.Store.Ent.Link.UpdateOne(l).ClearEndsAt().ExecX(ctx)
 	probe, err = s.wireGuardProbeCredential(ctx, parent)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	s.Store.Ent.Link.UpdateOne(l).SetEnabled(false).ExecX(ctx)
 	if err := s.SyncUser(ctx, u.ID); err != nil {
 		t.Fatal(err)
@@ -172,7 +174,7 @@ func TestWireGuardProbeCredentialLifecycle(t *testing.T) {
 }
 
 func TestDeployedNodeTestDedupTraceAndIsolation(t *testing.T) {
-	s, admin, n := readyDeployedNode(t, "hysteria2")
+	s, admin, n := readyDeployedNode(t, "ss2022")
 	entered, release := make(chan struct{}), make(chan struct{})
 	var calls atomic.Int32
 	stubDeployedProbe(t, func(ctx context.Context, o nodeprobe.Options) (nodeprobe.Result, error) {
@@ -221,9 +223,18 @@ func TestDeployedNodeTestDedupTraceAndIsolation(t *testing.T) {
 	reachDial = func(context.Context, string) (net.Conn, error) { a, b := net.Pipe(); b.Close(); return a, nil }
 	t.Cleanup(func() { reachDial = oldDial })
 	s.checkReachability(t.Context(), n.ID)
+	s.CheckReachabilityAll(t.Context(), time.Date(2026, 11, 6, 10, 10, 0, 0, time.UTC))
+	reachRunning.Lock()
+	reachRunning.Unlock()
 	if got := s.loadNodeTest(t.Context(), n); got == nil || got.Status != "passed" || calls.Load() != 1 {
 		t.Fatal("lightweight check changed full result or ran client")
 	}
+	selected := s.Store.Ent.Credential.GetX(t.Context(), r.CredentialID)
+	s.Store.Ent.Credential.UpdateOne(selected).SetPassword("changed-test-credential").ExecX(t.Context())
+	if got := s.loadNodeTest(t.Context(), n); got == nil || got.Status != "unknown" || got.TCP.Status != "unknown" {
+		t.Fatal("credential rotation retained successful result")
+	}
+	s.Store.Ent.Credential.UpdateOne(selected).SetPassword(selected.Password).ExecX(t.Context())
 	s.Store.Ent.Gate.UpdateOneID(n.GateID).AddConfigRevision(1).ExecX(t.Context())
 	if got := s.loadNodeTest(t.Context(), n); got == nil || got.Status != "unknown" {
 		t.Fatal("stale result remained successful")
@@ -238,6 +249,9 @@ func TestDeployedNodeTestDedupTraceAndIsolation(t *testing.T) {
 }
 
 func TestDeployedNodeTestUnknownAndDownloadGrant(t *testing.T) {
+	if !customTraceRoute("/api/v1/node-test/download") {
+		t.Fatal("download requests must retain trace logs")
+	}
 	s, admin, n := readyDeployedNode(t, "http-local")
 	stubDeployedProbe(t, func(context.Context, nodeprobe.Options) (nodeprobe.Result, error) {
 		t.Fatal("missing origin must not run a client")
@@ -348,5 +362,31 @@ func TestDeployedNodeTestFailureAndAuthorization(t *testing.T) {
 	s.checkAfterApplied(t.Context(), n.ID, n.GateID)
 	if got := s.loadNodeTest(t.Context(), n); got == nil || got.Status != "failed" {
 		t.Fatal("application check overwrote full result")
+	}
+}
+
+func TestDeployedNodeTestCancelDiscardsLateSuccess(t *testing.T) {
+	s, admin, n := readyDeployedNode(t, "ss2022")
+	entered := make(chan struct{})
+	stubDeployedProbe(t, func(ctx context.Context, o nodeprobe.Options) (nodeprobe.Result, error) {
+		close(entered)
+		<-ctx.Done()
+		return nodeprobe.Result{TCP: nodeprobe.Check{Status: "passed"}, UDP: nodeprobe.Check{Status: "passed"}}, nil
+	})
+	j := startNodeTest(t, admin, n.ID)
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("test did not start")
+	}
+	if err := s.jobs.Cancel(jobViewer{admin: true}, j.ID); err != nil {
+		t.Fatal(err)
+	}
+	r := finishNodeTest(t, s, j)
+	if r.Status != "unknown" || r.TCP.Status != "unknown" || r.UDP.Status != "unknown" || r.External != "unknown" {
+		t.Fatalf("cancelled task retained late success: %+v", r)
+	}
+	if job, _ := s.jobs.Get(j.ID); job.Status != jobCancelled {
+		t.Fatalf("cancelled task status = %s", job.Status)
 	}
 }

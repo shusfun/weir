@@ -962,7 +962,7 @@ func (s *Server) deleteNode(c *gin.Context) {
 		return
 	}
 	if c.GetBool(dryRunKey) {
-		creds, _ := s.Store.Ent.Credential.Query().Where(credential.NodeIDEQ(n.ID), credential.InternalEQ(false)).Count(ctx)
+		creds, _ := s.Store.Ent.Credential.Query().Where(credential.NodeIDEQ(n.ID), credential.InternalEQ(false), credential.ProbeParentIDIsNil()).Count(ctx)
 		preview := []string{fmt.Sprintf("删除节点「%s」：%d 份用户凭据随之删除，已导入客户端的这个节点随即失效", n.Name, creds)}
 		if len(chains) > 0 {
 			preview = append(preview, fmt.Sprintf("一并删除以它为入口或出口的 %d 条用户自建链式代理", len(chains)))

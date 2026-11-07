@@ -3,6 +3,7 @@ package center
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/chain"
@@ -154,7 +155,7 @@ func (s *Server) syncUserLocked(ctx context.Context, uid int) ([]int, error) {
 		}
 		parent, e := s.Store.Ent.Credential.Get(ctx, *c.ProbeParentID)
 		if e == nil && u.Enabled && u.Quota == 0 && sameCredentialOwner(c, parent) {
-			if l, e := s.Store.Ent.Link.Get(ctx, *parent.LinkID); e == nil && l.Enabled {
+			if l, e := s.Store.Ent.Link.Get(ctx, *parent.LinkID); e == nil && l.Enabled && windowState(u, l, time.Now()) == "active" {
 				continue
 			}
 		}

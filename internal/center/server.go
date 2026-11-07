@@ -209,6 +209,7 @@ func (s *Server) maintenance(ctx context.Context) {
 					// 各任务互不影响：一项失败不阻止其他项。
 					report.note("admin-all-nodes", s.EnsureAdminsAllNodes(ctx))
 					report.note("reset-usage", s.ResetDueUsage(ctx, now))
+					report.note("node-test-credentials", s.revokeExpiredNodeProbes(ctx, now))
 					report.note("refresh-sources", s.RefreshSources(ctx, now))
 					s.RefreshSourceExits(ctx)
 					report.note("auto-backup", s.AutoBackup(ctx, now))

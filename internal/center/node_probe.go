@@ -141,7 +141,8 @@ func (s *Server) startDeployedNodeTest(c *gin.Context) {
 				r.Why = safeCheckOutput(err.Error())
 			}
 			if ctx.Err() != nil {
-				r.Status, r.Why = "unknown", "测试已取消"
+				r.Status, r.Why, r.External = "unknown", "测试已取消", "unknown"
+				r.TCP, r.UDP = nodeprobe.Check{Status: "unknown"}, nodeprobe.Check{Status: "unknown"}
 			}
 			r.At = time.Now().UTC()
 			if err := s.storeNodeTest(cleanup, id, r); err != nil {
@@ -159,6 +160,9 @@ func (s *Server) startDeployedNodeTest(c *gin.Context) {
 			slog.Info("node test", "trace", ht.ID, "request", request, "job", r.JobID, "node", id, "user", actor, "status", r.Status, "tcp", r.TCP.Status, "udp", r.UDP.Status, "detail", r.Why)
 			s.notifyConsole("gate", itoa(n.GateID))
 			body := map[string]any{"test": r}
+			if ctx.Err() != nil {
+				return map[string]any{"status": 200, "body": body}, ctx.Err()
+			}
 			if r.Status == "failed" {
 				return map[string]any{"status": 200, "body": body}, errors.New("节点实测失败")
 			}
@@ -227,6 +231,35 @@ func (s *Server) selectNodeTestCredential(ctx context.Context, n *ent.Node, g *e
 
 func sameCredentialOwner(a, b *ent.Credential) bool {
 	return a.UserID != nil && b.UserID != nil && *a.UserID == *b.UserID && a.LinkID != nil && b.LinkID != nil && *a.LinkID == *b.LinkID && a.NodeID == b.NodeID && a.ChainID == nil && b.ChainID == nil && !a.Internal && !b.Internal
+}
+
+// Gate enforces the time window immediately; maintenance removes the retired peer.
+func (s *Server) revokeExpiredNodeProbes(ctx context.Context, now time.Time) error {
+	creds, err := s.Store.Ent.Credential.Query().Where(credential.ProbeParentIDNotNil()).All(ctx)
+	if err != nil {
+		return err
+	}
+	users := map[int]bool{}
+	for _, c := range creds {
+		if c.UserID == nil || c.LinkID == nil || users[*c.UserID] {
+			continue
+		}
+		u, err := s.Store.Ent.User.Get(ctx, *c.UserID)
+		if err != nil {
+			return err
+		}
+		l, err := s.Store.Ent.Link.Get(ctx, *c.LinkID)
+		if err != nil {
+			return err
+		}
+		if !u.Enabled || !l.Enabled || windowState(u, l, now) != "active" {
+			if err := s.SyncUser(ctx, u.ID); err != nil {
+				return err
+			}
+			users[u.ID] = true
+		}
+	}
+	return nil
 }
 
 func (s *Server) wireGuardProbeCredential(ctx context.Context, parent *ent.Credential) (*ent.Credential, error) {

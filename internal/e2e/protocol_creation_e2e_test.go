@@ -4,13 +4,16 @@ package e2e
 
 import (
 	"bytes"
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"net"
@@ -23,6 +26,8 @@ import (
 	"time"
 
 	"github.com/shusfun/weir/internal/kernels"
+	"github.com/shusfun/weir/internal/nodeprobe"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // 从实际创建入口验收，不跳过创建前实测；TLS 使用显式信任的隔离测试 CA。
@@ -54,7 +59,7 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("SSL_CERT_FILE", rootPath)
-	leaf := &x509.Certificate{SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: "127.0.0.1"}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+	leaf := &x509.Certificate{SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: "127.0.0.1"}, DNSNames: []string{"node-center.e2e.test"}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
 	der, err = x509.CreateCertificate(rand.Reader, leaf, ca, &key.PublicKey, key)
 	if err != nil {
 		t.Fatal(err)
@@ -144,6 +149,68 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 	}
 	target.Start()
 	defer target.Close()
+	// The HTTPS target must remain reachable through WireGuard, which cannot
+	// reach the remote host's loopback interface.
+	hosts, err := os.OpenFile("/etc/hosts", os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = fmt.Fprintf(hosts, "\n%s node-center.e2e.test\n", host)
+	_ = hosts.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsCert, err := tls.X509KeyPair([]byte(certPEM), pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kd}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	center := httptest.NewUnstartedServer(e.s.Router())
+	_ = center.Listener.Close()
+	center.Listener, err = net.Listen("tcp", net.JoinHostPort(host, "0"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	center.TLS = &tls.Config{Certificates: []tls.Certificate{tlsCert}}
+	center.StartTLS()
+	defer center.Close()
+	secureURL := "https://" + net.JoinHostPort("node-center.e2e.test", fmt.Sprint(center.Listener.Addr().(*net.TCPAddr).Port))
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM(root)
+	secureClient := &http.Client{Jar: e.admin.Jar, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}, Timeout: 30 * time.Second}
+	for _, op := range []struct{ method, path, body string }{
+		{"POST", "/api/v1/auth/login", `{"email":"admin@e2e.test","password":"E2eAdmin1"}`},
+		{"PUT", "/api/v1/admin/center-origin", fmt.Sprintf(`{"origin":%q}`, secureURL)},
+	} {
+		req, _ := http.NewRequest(op.method, secureURL+op.path, bytes.NewBufferString(op.body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Sec-Fetch-Site", "same-origin")
+		resp, err := secureClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != 200 {
+			t.Fatalf("%s: %d", op.path, resp.StatusCode)
+		}
+	}
+	for _, preset := range presets {
+		t.Run("deployed-"+preset, func(t *testing.T) {
+			parent := e.t
+			e.t = t
+			defer func() { e.t = parent }()
+			r := e.post(fmt.Sprintf("/api/v1/admin/nodes/%d/test", nodeIDs[preset]), map[string]any{}, nil)["test"].(map[string]any)
+			if r["status"] != "passed" {
+				t.Fatalf("deployed test: %+v", r)
+			}
+			want := "passed"
+			if preset == "http-local" || preset == "shadowtls" {
+				want = "not_applicable"
+			}
+			if r["udp"].(map[string]any)["status"] != want || r["tcp"].(map[string]any)["bytes"] != float64(256<<10) {
+				t.Fatalf("incomplete result: %+v", r)
+			}
+		})
+	}
 	for _, preset := range presets {
 		t.Run("traffic-"+preset, func(t *testing.T) {
 			port := freePort(t)
@@ -160,6 +227,120 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 			}
 			defer func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }()
 			eventually(t, 25*time.Second, "formal traffic through "+preset, func() bool { return fetchVia(port, target.URL, len(blob)) == nil })
+			if preset == "wireguard" {
+				parent := e.t
+				e.t = t
+				defer func() { e.t = parent }()
+				r := e.post(fmt.Sprintf("/api/v1/admin/nodes/%d/test", nodeIDs[preset]), map[string]any{}, nil)["test"].(map[string]any)
+				if r["status"] != "passed" {
+					t.Fatalf("parallel WireGuard test: %v", r)
+				}
+				if err := fetchVia(port, target.URL, len(blob)); err != nil {
+					t.Fatalf("probe displaced WireGuard client: %v", err)
+				}
+			}
 		})
 	}
+	probeTarget := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/stall" {
+			select {
+			case <-r.Context().Done():
+			case <-time.After(5 * time.Second):
+			}
+			return
+		}
+		_, _ = w.Write(nodeprobe.Payload("isolated-probe"))
+	}))
+	_ = probeTarget.Listener.Close()
+	probeTarget.Listener, err = net.Listen("tcp", net.JoinHostPort(host, "0"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	probeTarget.TLS = &tls.Config{Certificates: []tls.Certificate{tlsCert}}
+	probeTarget.StartTLS()
+	defer probeTarget.Close()
+	probeURL := "https://" + net.JoinHostPort("node-center.e2e.test", fmt.Sprint(probeTarget.Listener.Addr().(*net.TCPAddr).Port))
+	runProbe := func(t *testing.T, outbound map[string]any, udp bool) nodeprobe.Result {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(t.Context(), 40*time.Second)
+		defer cancel()
+		r, err := nodeprobe.Run(ctx, nodeprobe.Options{Binary: sb, Run: []string{"run", "-c", "{config}"}, Check: []string{"check", "-c", "{config}"}, Client: contracts.NodeTestClient{Outbounds: []map[string]any{outbound}, Target: outbound["tag"].(string)}, Target: probeURL, Token: "isolated-probe", UDP: udp, UDPServers: []string{"127.0.0.1:9"}})
+		if r.TCP.Status == "unknown" {
+			t.Fatalf("test setup failed: %v %+v", err, r)
+		}
+		return r
+	}
+	copyOutbound := func(preset string) map[string]any {
+		for _, o := range doc.Outbounds {
+			if o["tag"] == tags[preset] {
+				b, _ := json.Marshal(o)
+				var out map[string]any
+				_ = json.Unmarshal(b, &out)
+				return out
+			}
+		}
+		t.Fatalf("missing outbound %s", preset)
+		return nil
+	}
+	t.Run("wrong-credentials", func(t *testing.T) {
+		o := copyOutbound("trojan-tls")
+		o["password"] = "deliberately-invalid"
+		if r := runProbe(t, o, false); r.TCP.Status != "failed" {
+			t.Fatalf("wrong credential accepted: %+v", r)
+		}
+	})
+	t.Run("wrong-certificate", func(t *testing.T) {
+		o := copyOutbound("trojan-tls")
+		o["tls"].(map[string]any)["server_name"] = "wrong-certificate.invalid"
+		if r := runProbe(t, o, false); r.TCP.Status != "failed" {
+			t.Fatalf("wrong certificate accepted: %+v", r)
+		}
+	})
+	t.Run("open-port-wrong-protocol", func(t *testing.T) {
+		l, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer l.Close()
+		go func() {
+			for {
+				c, err := l.Accept()
+				if err != nil {
+					return
+				}
+				_ = c.Close()
+			}
+		}()
+		o := copyOutbound("socks-local")
+		o["server_port"] = l.Addr().(*net.TCPAddr).Port
+		if r := runProbe(t, o, false); r.TCP.Status != "failed" {
+			t.Fatalf("bare TCP accepted as protocol success: %+v", r)
+		}
+	})
+	t.Run("udp-only-failure", func(t *testing.T) {
+		if r := runProbe(t, copyOutbound("socks-local"), true); r.TCP.Status != "passed" || r.UDP.Status != "failed" {
+			t.Fatalf("UDP failure flattened: %+v", r)
+		}
+	})
+	t.Run("timeout-cleans-client", func(t *testing.T) {
+		before, _ := filepath.Glob(filepath.Join(os.TempDir(), "weir-node-probe-*"))
+		o := copyOutbound("socks-local")
+		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+		defer cancel()
+		r, err := nodeprobe.Run(ctx, nodeprobe.Options{Binary: sb, Run: []string{"run", "-c", "{config}"}, Check: []string{"check", "-c", "{config}"}, Client: contracts.NodeTestClient{Outbounds: []map[string]any{o}, Target: o["tag"].(string)}, Target: probeURL + "/stall", Token: "isolated-probe"})
+		if !errors.Is(err, context.DeadlineExceeded) || r.TCP.Status == "passed" {
+			t.Fatalf("timeout result: %+v %v", r, err)
+		}
+		after, _ := filepath.Glob(filepath.Join(os.TempDir(), "weir-node-probe-*"))
+		if len(after) != len(before) {
+			t.Fatalf("temporary client credentials leaked: before %d after %d", len(before), len(after))
+		}
+		pids, _ := filepath.Glob("/proc/[0-9]*/cmdline")
+		for _, path := range pids {
+			b, _ := os.ReadFile(path)
+			if bytes.Contains(b, []byte("/weir-node-probe-")) {
+				t.Fatalf("test client still running: %s", path)
+			}
+		}
+	})
 }

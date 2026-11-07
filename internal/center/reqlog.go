@@ -98,6 +98,9 @@ func validTraceHex(s string, n int) bool {
 
 // Successful records are limited to this batch's operations; routes never contain tokens.
 func customTraceRoute(route string) bool {
+	if route == "/api/v1/node-test/download" {
+		return true
+	}
 	return strings.Contains(route, "/center/resources") || route == "/api/v1/admin/settings/logo" || route == "/api/v1/agent/heartbeat" || strings.Contains(route, "/proxy/") || strings.Contains(route, "/exits") || strings.Contains(route, "/nodes") || strings.Contains(route, "/chains") || strings.Contains(route, "/routes") || strings.Contains(route, "/users") || route == "/api/v1/setup/install" || route == "/api/v1/auth/reset" || route == "/api/v1/auth/register" || route == "/api/v1/auth/verify" || route == "/api/v1/security/password" || route == "/sub/:token/rules" || route == "/sub/:token" || route == "/api/v1/agent/pair"
 }
 
