@@ -215,11 +215,24 @@ func (s *Server) proxyView(ctx context.Context, u *ent.User) (gin.H, error) {
 	custom := customView(pol.Custom)
 	custom["revision"] = pol.Revision
 	names, planItems := []string{}, []subout.Item{}
+	usedNames := map[string]bool{}
 	for _, line := range lines {
 		if !line.Available {
 			continue
 		}
-		names = append(names, line.Name)
+		name := line.Name
+		if name == "" {
+			name = line.Ref
+		}
+		if usedNames[name] {
+			base := name + "（" + line.Ref + "）"
+			name = base
+			for i := 2; usedNames[name]; i++ {
+				name = fmt.Sprintf("%s %d", base, i)
+			}
+		}
+		usedNames[name] = true
+		names = append(names, name)
 		planItems = append(planItems, subout.Item{Ref: line.Ref, Direct: !line.Chained, Auto: !line.Chained && line.Health != "down"})
 	}
 	plan := subout.Plan{Groups: pol.Groups, HiddenLines: pol.HiddenLines}

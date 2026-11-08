@@ -108,29 +108,32 @@ func (p *Plan) reserved(used map[string]bool) {
 
 func (p *Plan) layout(names []string, items []Item) layout {
 	refs := map[string]string{}
-	back := map[string]string{}
-	var auto, direct []string
+	var auto, autoRefs, direct, directRefs []string
 	for i, item := range items {
 		if item.Ref != "" {
-			refs[item.Ref], back[names[i]] = names[i], item.Ref
+			refs[item.Ref] = names[i]
 		}
 		if item.Direct {
 			direct = append(direct, names[i])
+			directRefs = append(directRefs, item.Ref)
 		}
 		if item.Direct && item.Auto {
 			auto = append(auto, names[i])
+			autoRefs = append(autoRefs, item.Ref)
 		}
 	}
 	if len(auto) == 0 {
-		auto = direct
+		auto, autoRefs = direct, directRefs
 	}
 	var custom []group
 	grouped := map[string]bool{}
 	for _, g := range p.Groups {
 		members, memberRefs := []string{}, []string{}
+		seen := map[string]bool{}
 		for _, ref := range g.Members {
-			if name, ok := refs[ref]; ok && (strings.HasPrefix(ref, "node:") || strings.HasPrefix(ref, "chain:")) && !slices.Contains(members, name) {
+			if name, ok := refs[ref]; ok && (strings.HasPrefix(ref, "node:") || strings.HasPrefix(ref, "chain:")) && !seen[ref] {
 				members, memberRefs = append(members, name), append(memberRefs, ref)
+				seen[ref] = true
 				grouped[ref] = true
 			}
 		}
@@ -139,8 +142,7 @@ func (p *Plan) layout(names []string, items []Item) layout {
 		}
 		ref := fmt.Sprintf("group:%d", g.ID)
 		name := CleanLabel(g.Name)
-		refs[ref], back[name] = name, ref
-		custom = append(custom, group{Ref: ref, Name: name, Kind: g.Kind, Members: members, MemberRefs: memberRefs, Provider: fmt.Sprintf("group-%d", g.ID), Hidden: true, TestURL: p.testURL(), IntervalSec: g.IntervalSeconds, ToleranceMS: g.ToleranceMS})
+		custom = append(custom, group{Ref: ref, Name: name, Kind: g.Kind, Members: members, MemberRefs: memberRefs, Provider: fmt.Sprintf("group-%d", g.ID), Hidden: g.Kind != "select", TestURL: p.testURL(), IntervalSec: g.IntervalSeconds, ToleranceMS: g.ToleranceMS})
 	}
 	policy := func(target string) string {
 		if target == "direct" {
@@ -151,10 +153,6 @@ func (p *Plan) layout(names []string, items []Item) layout {
 	out := layout{Final: GroupProxy}
 	root := group{Ref: "proxy", Name: GroupProxy, Kind: "select", Provider: SingleProvider, Root: true, Members: []string{}, MemberRefs: []string{}}
 	if len(auto) > 0 {
-		autoRefs := make([]string, len(auto))
-		for i, name := range auto {
-			autoRefs[i] = back[name]
-		}
 		out.Groups = append(out.Groups, group{Ref: "auto", Name: GroupAuto, Kind: "url-test", Hidden: true, Members: auto, MemberRefs: autoRefs, Provider: AutoProvider, TestURL: p.testURL(), IntervalSec: 60, ToleranceMS: 50})
 		root.Members, root.MemberRefs = append(root.Members, GroupAuto), append(root.MemberRefs, "auto")
 	}

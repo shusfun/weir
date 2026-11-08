@@ -45,14 +45,16 @@ func TestProxyGroupsRealKernels(t *testing.T) {
 	if os.Getenv("WEIR_E2E_GEOIP") == "" {
 		t.Fatal("需要有效的 GeoIP 缓存，不能删除国内规则")
 	}
-	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "ok") }))
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "primary") }))
 	defer primary.Close()
-	secondary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "ok") }))
+	secondary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "secondary") }))
 	defer secondary.Close()
 	a, _ := socksServer(t, strings.TrimPrefix(primary.URL, "http://"))
 	b, _ := socksServer(t, strings.TrimPrefix(secondary.URL, "http://"))
 	items := []subout.Item{{Link: fmt.Sprintf("socks5://127.0.0.1:%d#Primary", a), Ref: "node:1", Auto: true, Direct: true}, {Link: fmt.Sprintf("socks5://127.0.0.1:%d#Secondary", b), Ref: "chain:2", Auto: true}}
 	plan := &subout.Plan{Groups: []contracts.ProxyGroup{{ID: 1, Name: "主备", Kind: "fallback", Members: []string{"node:1", "chain:2"}, IntervalSeconds: 30}}, Rules: []subout.Rule{{Kind: "geoip", Values: []string{"cn"}, Target: "direct"}}, TestURL: "http://probe.example.test/"}
+	items = append(items, subout.Item{Link: fmt.Sprintf("socks5://127.0.0.1:%d#美东", a), Ref: "node:3"}, subout.Item{Link: fmt.Sprintf("socks5://127.0.0.1:%d#美东", b), Ref: "node:6"})
+	plan.Groups = append(plan.Groups, contracts.ProxyGroup{ID: 2, Name: "手动", Kind: "select", Members: []string{"node:3", "node:6"}})
 
 	for _, target := range []string{"clash", "singbox"} {
 		body, _, err := subout.RenderPlan(items, target, plan)
@@ -128,7 +130,7 @@ func TestProxyGroupsRealKernels(t *testing.T) {
 	}
 	eventually(t, 15*time.Second, "PROXY 默认与顺序", func() bool {
 		g := get("/proxies/" + url.PathEscape("PROXY"))
-		return g != nil && g["now"] == "自动选择" && reflect.DeepEqual(g["all"], []any{"自动选择", "主备"})
+		return g != nil && g["now"] == "自动选择" && reflect.DeepEqual(g["all"], []any{"自动选择", "主备", "手动"})
 	})
 	if g := get("/proxies/" + url.PathEscape("主备")); !reflect.DeepEqual(g["all"], []any{"Primary", "Secondary"}) {
 		t.Fatalf("主备顺序=%v", g)
@@ -138,10 +140,44 @@ func TestProxyGroupsRealKernels(t *testing.T) {
 			t.Fatalf("子组未隐藏：%s %v", name, group)
 		}
 	}
+	manual := get("/proxies/" + url.PathEscape("手动"))
+	members, ok := manual["all"].([]any)
+	if !ok || len(members) != 2 || members[0] == members[1] || manual["hidden"] != false || manual["type"] != "Selector" {
+		t.Fatalf("手动组不可选择或同名成员丢失：%v", manual)
+	}
+	choose := func(group, member string) {
+		t.Helper()
+		body, _ := json.Marshal(map[string]string{"name": member})
+		req, _ := http.NewRequest("PUT", "http://"+controller+"/proxies/"+url.PathEscape(group), strings.NewReader(string(body)))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusNoContent {
+			t.Fatalf("选择 %s：HTTP %d", group, resp.StatusCode)
+		}
+	}
+	choose("PROXY", "手动")
+	choose("手动", members[1].(string))
+	proxyURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", cfg["mixed-port"].(int)))
+	traffic := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}, Timeout: 5 * time.Second}
+	resp, err := traffic.Get("http://probe.example.test/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotBody, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	traffic.CloseIdleConnections()
+	if err != nil || string(gotBody) != "secondary" {
+		t.Fatalf("手动节点未生效：%q %v", gotBody, err)
+	}
+	choose("PROXY", "自动选择")
 	eventually(t, 10*time.Second, "主用可用", func() bool { return get("/proxies/" + url.PathEscape("主备"))["now"] == "Primary" })
 	primary.Close()
 	// 触发对应集合健康检查并核对内核实际切到备用。
-	resp, err := client.Get("http://" + controller + "/providers/proxies/p-group-1/healthcheck")
+	resp, err = client.Get("http://" + controller + "/providers/proxies/p-group-1/healthcheck")
 	if err == nil {
 		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()

@@ -241,6 +241,8 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 	eventually(t, 10*time.Second, "Gate 经 HTTPS 上报", func() bool {
 		return e.s.Store.Ent.Gate.GetX(e.ctx, e.gateID).CenterURL == secureURL
 	})
+	// 心跳先于重连后的配置应用，不能据此假定 WireGuard 已重新监听。
+	e.applied("Gate 经 HTTPS 重连后恢复节点配置")
 	for _, p := range mhDoc.Proxies {
 		if p["name"] != tags["wireguard"] {
 			continue

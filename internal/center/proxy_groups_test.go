@@ -3,12 +3,14 @@ package center
 import (
 	"context"
 	"encoding/json"
+	"net/url"
 	"reflect"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/shusfun/weir/internal/store/ent/audit"
 	"github.com/shusfun/weir/internal/store/ent/credential"
 	"github.com/shusfun/weir/internal/store/ent/ratesample"
@@ -131,6 +133,76 @@ func TestProxyGroupsHTTPFlow(t *testing.T) {
 	v = mustJSON(t, owner, "GET", "/api/v1/proxy", nil, 200)
 	if v["groups"].([]any)[0].(map[string]any)["valid_members"] != float64(0) {
 		t.Fatal("撤销后仍输出成员")
+	}
+}
+
+func TestProxySameNameMembersInViewAndPlan(t *testing.T) {
+	s, admin, gate := setupGate(t)
+	ctx := t.Context()
+	refs := []string{}
+	entries := []Entry{}
+	for i := 0; i < 2; i++ {
+		v := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": gate.id, "preset": "ss2022", "name": "美东", "skip_probe": true}, 200)
+		id := int(v["id"].(float64))
+		ref := "node:" + itoa(id)
+		refs = append(refs, ref)
+		entries = append(entries, Entry{NodeID: id, Ref: ref, Name: "美东", Type: "ss2022", URI: "socks5://test:secret@203.0.113.1:1080#美东"})
+	}
+	u := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "same-name@example.test", "password": "SameName2026", "all_nodes": true}, 200)
+	uid := int(u["id"].(float64))
+	view := mustJSON(t, admin, "POST", "/api/v1/proxy/groups?user="+itoa(uid), map[string]any{"revision": 0, "name": "双线路", "kind": "select", "members": refs}, 200)
+	layout := view["layout"].([]any)
+	root := layout[0].(map[string]any)
+	rootRefs := root["member_refs"].([]any)
+	if len(rootRefs) != 2 || rootRefs[0] != "auto" || rootRefs[1] != "group:1" {
+		t.Fatalf("同名成员错误地单独输出：%v", rootRefs)
+	}
+	group := layout[2].(map[string]any)
+	memberRefs := group["member_refs"].([]any)
+	members := group["members"].([]any)
+	if len(memberRefs) != 2 || memberRefs[0] != refs[0] || memberRefs[1] != refs[1] || members[0] == members[1] {
+		t.Fatalf("页面布局丢失或混淆同名线路：%v", group)
+	}
+	user := s.Store.Ent.User.GetX(ctx, uid)
+	planned, err := s.planEntries(ctx, user, entries, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, items := s.subPlan(ctx, planned)
+	names := []string{"美东", "美东（" + refs[1] + "）"}
+	groups, _ := plan.Layout(names, items)
+	if !reflect.DeepEqual(groups[2].MemberRefs, refs) || len(groups[0].MemberRefs) != 2 {
+		t.Fatalf("真实计划丢失同名线路：%+v", groups)
+	}
+	path := "/api/v1/proxy/groups/1?user=" + itoa(uid)
+	invalid := mustJSON(t, admin, "PUT", path, map[string]any{"revision": 1, "name": "双线路", "kind": "select", "members": []string{}}, 400)
+	if invalid["error"].(map[string]any)["code"] != "invalid_group_members" || loadPolicy(s.Store.Ent.User.GetX(ctx, uid)).Revision != 1 {
+		t.Fatal("移除最后成员必须拒绝且不写入", invalid)
+	}
+	actor, err := s.systemActor(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, method := range []string{"PUT", "DELETE"} {
+		code, result := call(actor, func(c *gin.Context) { s.writeProxyGroup(c, false) }, method, gin.Params{{Key: "group", Value: "1"}}, url.Values{"user": {itoa(uid)}}, map[string]any{"revision": 1, "name": "试运行", "kind": "select", "members": refs[:1]}, true)
+		if code != 200 || result["dry_run"] == nil || loadPolicy(s.Store.Ent.User.GetX(ctx, uid)).Revision != 1 {
+			t.Fatalf("分组 %s 试运行写入：%d %v", method, code, result)
+		}
+	}
+	user.Update().SetAllNodes(false).SetNodeIds([]int{entries[0].NodeID}).ExecX(ctx)
+	planned, err = s.planEntries(ctx, user, entries, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, items = s.subPlan(ctx, planned)
+	groups, _ = plan.Layout(names[:1], items)
+	if len(items) != 1 || !reflect.DeepEqual(groups[1].MemberRefs, refs[:1]) || !reflect.DeepEqual(groups[2].MemberRefs, refs[:1]) || len(groups[0].MemberRefs) != 2 {
+		t.Fatalf("重新授权后仍输出失效引用：%+v", groups)
+	}
+	view = mustJSON(t, admin, "GET", "/api/v1/proxy?user="+itoa(uid), nil, 200)
+	membersView := view["groups"].([]any)[0].(map[string]any)["members"].([]any)
+	if membersView[1].(map[string]any)["available"] != false || membersView[1].(map[string]any)["reason"] == "" {
+		t.Fatal("失效成员缺少原因", membersView)
 	}
 }
 

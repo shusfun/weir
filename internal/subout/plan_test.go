@@ -47,6 +47,119 @@ func TestPlanLayout(t *testing.T) {
 	}
 }
 
+func TestSameNameMembersKeepDistinctRefs(t *testing.T) {
+	items := []Item{{Ref: "node:1", Direct: true, Auto: true}, {Ref: "node:3"}, {Ref: "node:6"}}
+	p := &Plan{Groups: []contracts.ProxyGroup{{ID: 1, Name: "链式", Kind: "select", Members: []string{"node:3", "node:6"}}}}
+	lay := p.layout([]string{"直连", "美东", "美东"}, items)
+	if !reflect.DeepEqual(lay.Groups[0].MemberRefs, []string{"auto", "group:1", "node:1"}) {
+		t.Fatalf("组成员泄漏到顶层：%v", lay.Groups[0].MemberRefs)
+	}
+	if !reflect.DeepEqual(lay.Groups[1].MemberRefs, []string{"node:1"}) {
+		t.Fatalf("自动选择引用错误：%v", lay.Groups[1].MemberRefs)
+	}
+	if !reflect.DeepEqual(lay.Groups[2].MemberRefs, []string{"node:3", "node:6"}) || lay.Groups[2].Hidden {
+		t.Fatalf("同名成员丢失或手动组不可见：%+v", lay.Groups[2])
+	}
+	items[1].Direct, items[1].Auto = true, true
+	items[2].Direct, items[2].Auto = true, true
+	lay = p.layout([]string{"直连", "美东", "美东"}, items)
+	if !reflect.DeepEqual(lay.Groups[1].MemberRefs, []string{"node:1", "node:3", "node:6"}) {
+		t.Fatalf("自动选择混淆同名引用：%v", lay.Groups[1].MemberRefs)
+	}
+}
+
+func TestManualGroupVisibleInFormats(t *testing.T) {
+	p, items := testPlan()
+	p.Groups = []contracts.ProxyGroup{{ID: 1, Name: "手动", Kind: "select", Members: []string{"chain:2", "node:3"}}}
+	items[1].Link = strings.Replace(items[1].Link, "#JP", "#美东", 1)
+	items[2].Link = strings.Replace(items[2].Link, "#US", "#美东", 1)
+	for _, target := range []string{"clash", "mihomo", "singbox", "surge", "loon", "quanx", "egern"} {
+		t.Run(target, func(t *testing.T) {
+			body, _, err := RenderPlan(items, target, p)
+			if err != nil || !strings.Contains(string(body), "手动") {
+				t.Fatalf("手动分组输出失败：%s %v", body, err)
+			}
+			switch target {
+			case "clash", "mihomo", "egern":
+				var cfg map[string]any
+				if err := yaml.Unmarshal(body, &cfg); err != nil {
+					t.Fatal(err)
+				}
+				key, memberKey := "proxy-groups", "proxies"
+				if target == "egern" {
+					key, memberKey = "policy_groups", "policies"
+				}
+				found := false
+				for _, raw := range cfg[key].([]any) {
+					g := raw.(map[string]any)
+					if target == "egern" {
+						if g["select"] == nil {
+							continue
+						}
+						g = g["select"].(map[string]any)
+					}
+					if g["name"] != "手动" {
+						continue
+					}
+					members := g[memberKey].([]any)
+					if g["hidden"] != false || len(members) != 2 || members[0] == members[1] {
+						t.Fatalf("手动组不可见或同名成员丢失：%v", g)
+					}
+					found = true
+				}
+				if !found {
+					t.Fatal("缺少手动组")
+				}
+			case "singbox":
+				var cfg map[string]any
+				if err := json.Unmarshal(body, &cfg); err != nil {
+					t.Fatal(err)
+				}
+				found := false
+				for _, raw := range cfg["outbounds"].([]any) {
+					g := raw.(map[string]any)
+					if g["tag"] != "手动" {
+						continue
+					}
+					members := g["outbounds"].([]any)
+					if g["type"] != "selector" || len(members) != 2 || members[0] == members[1] {
+						t.Fatalf("手动选择丢失：%v", g)
+					}
+					found = true
+				}
+				if !found {
+					t.Fatal("缺少手动组")
+				}
+			default:
+				found := false
+				for _, line := range strings.Split(string(body), "\n") {
+					if strings.HasPrefix(line, "手动 = select") || strings.HasPrefix(line, "static=手动,") {
+						if strings.Contains(line, "hidden=true") {
+							t.Fatalf("手动分组不应隐藏：%s", line)
+						}
+						members := strings.Split(line, ",")
+						if len(members) != 3 || strings.TrimSpace(members[1]) == strings.TrimSpace(members[2]) {
+							t.Fatalf("同名成员丢失：%s", line)
+						}
+						found = true
+					}
+				}
+				if !found {
+					t.Fatal("缺少手动组")
+				}
+			}
+		})
+	}
+	provider, err := ClashProvider(items, p, "group-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string][]map[string]any
+	if err := yaml.Unmarshal(provider, &got); err != nil || len(got["proxies"]) != 2 || got["proxies"][0]["name"] == got["proxies"][1]["name"] {
+		t.Fatalf("同名成员 provider 不完整：%s %v", provider, err)
+	}
+}
+
 func TestEmptyPlanPreviewHasArrayMembers(t *testing.T) {
 	groups, _ := (&Plan{}).Layout(nil, nil)
 	b, err := json.Marshal(groups)
