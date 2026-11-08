@@ -5,6 +5,7 @@ import { proxyURL } from "../lib/proxy-targets";
 import { CustomRulesCard } from "../components/custom-rules";
 import { NodeSummary, ExitSummary } from "../components/node-summary";
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "../lib/query";
 import { useNodeChoices } from "../lib/node-choices";
@@ -32,6 +33,7 @@ const healthText: Record<Health, string> = { ok: "可用", down: "不可用", un
 
 
 export function ProxyPage({ admin }: { admin: boolean }) {
+  const client = useQueryClient();
   const [params, setParams] = useSearchParams();
   const uid = admin ? Number(params.get("user")) || null : null;
   const base = uid ? `/admin/users/${uid}` : "/me";
@@ -39,6 +41,10 @@ export function ProxyPage({ admin }: { admin: boolean }) {
   const confirm = useConfirm();
   const changeParams = async (next: URLSearchParams) => { setParams(next); };
   const view = useQuery({ queryKey: ["proxy", base], queryFn: () => api(proxyURL(base)) as Promise<ProxyView>, refetchInterval: 30_000 });
+  const updateView = (updated: ProxyView) => {
+    void client.cancelQueries({ queryKey: ["proxy", base], exact: true });
+    client.setQueryData(["proxy", base], updated);
+  };
   const nodes = useNodeOptions(admin, uid);
   useConsoleContext({
     page: "代理",
@@ -70,12 +76,12 @@ export function ProxyPage({ admin }: { admin: boolean }) {
       <ProxyMigration base={base} view={v} onSaved={() => view.refetch()} />
       <Tabs value={tab} onValueChange={(value) => { const p = new URLSearchParams(params); p.set("tab", String(value)); p.delete("proxy_group"); p.delete("new_group"); p.delete("type_exit"); void changeParams(p); }}>
         <TabsList className="flex flex-wrap h-auto"><TabsTab value="clients">客户端选择</TabsTab><TabsTab value="rules">全局清单</TabsTab><TabsTab value="nodes">节点与出口</TabsTab></TabsList>
-        <TabsPanel value="clients"><ProxyGroups key={base} base={base} view={v} admin={admin} onSaved={() => view.refetch()} /></TabsPanel>
+        <TabsPanel value="clients"><ProxyGroups key={base} base={base} view={v} admin={admin} onUpdated={updateView} /></TabsPanel>
       <TabsPanel value="rules" className="stack"><CustomRulesCard key={base} base={base} view={v} onSaved={() => view.refetch({ throwOnError: true })} /><InsetGroup title="后续内置规则" description="清单从上到下优先匹配，随后依次匹配以下规则。"><InsetRows>{["局域网与本机 → 直连", "国内域名与国内 IP → 直连", "其余流量 → PROXY"].map((text) => <InsetRow key={text}>{text}</InsetRow>)}</InsetRows></InsetGroup></TabsPanel>
       <TabsPanel value="nodes" className="stack">
         {!v.types.length && <State empty="还没有可用的节点" detail="请先分配节点，再设置协议类型和出口。" />}
-        <TypesCard base={base} view={v} nodes={nodes} admin={admin} onSaved={() => void view.refetch()} />
-        <PolicyCard key={base + v.policy.revision} base={base} view={v} onSaved={() => void view.refetch()} />
+        <TypesCard base={base} view={v} nodes={nodes} admin={admin} onSaved={() => void view.refetch()} onUpdated={updateView} />
+        <PolicyCard key={base + v.policy.revision} base={base} view={v} onUpdated={updateView} />
         <RankingCard view={v} admin={admin} />
         <ChainPanel key={base} base={base} admin={!!uid} />
       </TabsPanel>
@@ -106,16 +112,26 @@ function UserPick({ value, onChange }: { value: number | null; onChange: (id: nu
 }
 
 // TypesCard：每个类型一块。开关决定放不放进订阅；出口给这一类的全部节点统一加（每个节点由入口 VPS 实测）。
-function TypesCard({ base, view, nodes, admin, onSaved }: { base: string; view: ProxyView; nodes: NodeOption[]; admin: boolean; onSaved: () => void }) {
+function TypesCard({ base, view, nodes, admin, onSaved, onUpdated }: { base: string; view: ProxyView; nodes: NodeOption[]; admin: boolean; onSaved: () => void; onUpdated: (view: ProxyView) => void }) {
   const confirm = useConfirm();
   const navigate = useNavigate();
   const exitParam = useStringDialogParam("type_exit");
   const exitFor = view.types.find((t) => t.key === exitParam.value);
   const { run, isBusy } = useRowAction<string>({ refetch: async () => onSaved() });
+  const typeAction = useRowAction<string>();
   const disabled = new Set(view.policy.disabled ?? []);
   const toggle = (key: string, on: boolean) => {
     const next = on ? [...disabled].filter((k) => k !== key) : [...disabled, key];
-    return run(key, () => api(proxyURL(base), "PUT", { ...view.policy, disabled: next }), on ? "已放进订阅" : "已从订阅里拿掉");
+    return typeAction.run(key, async () => {
+      try {
+        const updated = await api(proxyURL(base), "PUT", { ...view.policy, disabled: next }) as ProxyView;
+        onUpdated(updated);
+        return updated;
+      } catch (error) {
+        if (error instanceof ApiError && error.code === "proxy_revision_conflict") onSaved();
+        throw error;
+      }
+    }, on ? "已放进订阅" : "已从订阅里拿掉");
   };
   return (
     <InsetGroup title="节点类型" description="同一种协议方案的节点归为一类。关掉的类型不放进订阅；加了出口的类型，订阅里换成经出口的版本。">
@@ -127,7 +143,7 @@ function TypesCard({ base, view, nodes, admin, onSaved }: { base: string; view: 
                   <span className="truncate">{t.label}</span>
                   <TypeCount type={t} />
                 </strong>
-                <Switch aria-label={`${t.label} 放进订阅`} checked={t.enabled} disabled={isBusy(t.key) || isBusy("exit:" + t.key)} onCheckedChange={(on) => void toggle(t.key, on)} />
+                <Switch aria-label={`${t.label} 放进订阅`} checked={t.enabled} disabled={typeAction.isBusy() || isBusy(t.key) || isBusy("exit:" + t.key)} onCheckedChange={(on) => void toggle(t.key, on)} />
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {/* 管理员点节点打开它的详情；普通用户只看状况 */}
@@ -227,11 +243,11 @@ function TypeExitDialog({ base, type, nodes, admin, close, saved, revision }: { 
 
 
 
-function PolicyCard({ base, view, onSaved }: { base: string; view: ProxyView; onSaved: () => void }) {
+function PolicyCard({ base, view, onUpdated }: { base: string; view: ProxyView; onUpdated: (view: ProxyView) => void }) {
   const [refresh, setRefresh] = useState(String(view.policy.auto.refresh_minutes));
   const dirty = refresh !== String(view.policy.auto.refresh_minutes);
   useUnsavedChanges(dirty);
-  const save = useFormAction(() => api(proxyURL(base), "PUT", { ...view.policy, auto: { refresh_minutes: Number(refresh) } }), { fields: { invalid_refresh: "refresh" }, onSuccess: onSaved, ok: "已保存刷新间隔" });
+  const save = useFormAction<ProxyView>(() => api(proxyURL(base), "PUT", { ...view.policy, auto: { refresh_minutes: Number(refresh) } }) as Promise<ProxyView>, { fields: { invalid_refresh: "refresh" }, onSuccess: onUpdated, ok: "已保存刷新间隔" });
   useConsoleContext({form:[field("refresh", "节点列表刷新间隔", refresh)]});
   return <InsetGroup title="节点列表刷新"><Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}><Field name="refresh" label="节点列表刷新间隔（分钟）" required hint="30–1440 分钟。与分组探测间隔分开；分组结构变化需更新完整订阅。"><Input type="number" min={30} max={1440} step={1} required value={refresh} onChange={(e) => setRefresh(e.target.value)} /></Field><Button type="submit" disabled={!dirty} busy={save.busy} busyText="正在保存">保存</Button><div className="min-h-6" role="status">{save.error}</div></Form></InsetGroup>;
 }
