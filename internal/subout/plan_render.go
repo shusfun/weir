@@ -3,23 +3,57 @@ package subout
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/shusfun/weir/internal/sub"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
 // urlTestSec 是 url-test 组测延迟的间隔；与节点列表刷新（Plan.IntervalSec）无关。
-const urlTestSec = 300
+const urlTestSec = 60
 
 // RenderPlan 按计划输出带分组与分流的订阅；plan 为空时与 Render 相同。
 func RenderPlan(items []Item, target string, plan *Plan) ([]byte, string, error) {
 	if plan == nil {
 		return Render(linksOf(items), target)
 	}
+	original := items
 	items = itemsForTarget(items, target)
+	if len(items) == 0 {
+		return nil, "", fmt.Errorf("%s：没有可输出的代理节点", target)
+	}
+	for _, g := range plan.Groups {
+		for _, ref := range g.Members {
+			before, after := false, false
+			for _, it := range original {
+				before = before || it.Ref == ref
+			}
+			for _, it := range items {
+				after = after || it.Ref == ref
+			}
+			if before && !after {
+				return nil, "", fmt.Errorf("%s：分组「%s」的成员 %s 无法表达", target, g.Name, ref)
+			}
+		}
+	}
+	for _, r := range plan.Custom {
+		for _, it := range original {
+			if r.Target == it.Ref && !slices.ContainsFunc(items, func(other Item) bool { return other.Ref == it.Ref }) {
+				return nil, "", fmt.Errorf("%s：清单引用的线路 %s 无法表达", target, r.Target)
+			}
+		}
+	}
+	names := make([]string, len(items))
+	for i := range names {
+		names[i] = fmt.Sprintf("node-%d", i)
+	}
+	if len(plan.layout(names, items).Groups[0].Members) == 0 {
+		return nil, "", fmt.Errorf("%s：PROXY 没有可输出成员", target)
+	}
 	switch target {
 	case "clash", "mihomo":
 		b, err := clashPlan(items, plan)
@@ -38,22 +72,46 @@ func RenderPlan(items []Item, target string, plan *Plan) ([]byte, string, error)
 	return Render(linksOf(items), target)
 }
 
-// ClashProvider 输出 Clash proxy-providers 的一份节点列表：key 为 auto（自动选择）或某个类型。
+// ClashProvider 先为全部节点统一分配名称，再按用途截取，避免子集里的重名编号漂移。
 func ClashProvider(items []Item, plan *Plan, key string) ([]byte, error) {
-	var picked []string
-	for _, it := range itemsForTarget(items, "clash") {
-		if key == AutoProvider && it.Auto || it.Type == key {
-			picked = append(picked, it.Link)
-		}
-	}
-	if key == AutoProvider && len(picked) == 0 {
-		picked = linksOf(items)
-	}
-	proxies, _, err := clashProxies(picked, map[string]bool{})
+	items = itemsForTarget(items, "clash")
+	proxies, names, err := clashProxies(linksOf(items), reservedNames(plan))
 	if err != nil {
 		return nil, err
 	}
-	return yaml.Marshal(map[string]any{"proxies": proxies})
+	lay := plan.layout(names, items)
+	if len(lay.Groups[0].Members) == 0 {
+		return nil, fmt.Errorf("PROXY 没有可输出成员")
+	}
+	var wanted []string
+	if key == AllProvider {
+		wanted = names
+	} else if key == SingleProvider {
+		for _, name := range lay.Groups[0].Members {
+			if slices.Contains(names, name) {
+				wanted = append(wanted, name)
+			}
+		}
+	} else {
+		for _, g := range lay.Groups {
+			if !g.Root && g.Provider == key {
+				wanted = g.Members
+				break
+			}
+		}
+	}
+	if len(wanted) == 0 {
+		return nil, fmt.Errorf("节点列表 %s 没有可用成员", key)
+	}
+	picked := make([]map[string]any, 0, len(wanted))
+	for _, name := range wanted {
+		for _, proxy := range proxies {
+			if proxy["name"] == name {
+				picked = append(picked, proxy)
+			}
+		}
+	}
+	return yaml.Marshal(map[string]any{"proxies": picked})
 }
 
 func itemsForTarget(items []Item, target string) []Item {
@@ -106,53 +164,52 @@ func clashPlan(items []Item, plan *Plan) ([]byte, error) {
 	}
 	lay := plan.layout(names, items)
 	cfg := map[string]any{"mixed-port": 7890, "mode": "rule"}
+	if len(lay.Groups[0].Members) == 0 {
+		return nil, fmt.Errorf("PROXY 没有可输出成员")
+	}
 	var groups []any
-	if plan.Providers != nil {
-		// 节点放进 proxy-providers：每个类型一份、自动选择一份；节点选择组直接列出各组，不再逐个列节点
-		providers := map[string]any{}
-		add := func(key string) {
-			providers["p-"+key] = map[string]any{"type": "http", "url": plan.Providers(key), "interval": plan.interval(),
-				"health-check": map[string]any{"enable": false}}
-		}
-		for _, g := range lay.Groups {
-			switch {
-			case g.Name == GroupSelect:
-				var sel []string
-				for _, m := range g.Members {
-					if m == GroupAuto || m == "DIRECT" || isGroupName(lay, m) {
-						sel = append(sel, m)
-					}
+	providers := map[string]any{}
+	for _, g := range lay.Groups {
+		m := map[string]any{"name": g.Name, "type": g.Kind, "hidden": g.Hidden}
+		if plan.Providers == nil {
+			m["proxies"] = g.Members
+		} else {
+			var fixed, nodes []string
+			for _, name := range g.Members {
+				if isGroupName(lay, name) {
+					fixed = append(fixed, name)
+				} else {
+					nodes = append(nodes, name)
 				}
-				groups = append(groups, map[string]any{"name": g.Name, "type": "select", "proxies": sel})
-			case g.Name == GroupAuto:
-				add(AutoProvider)
-				groups = append(groups, map[string]any{"name": g.Name, "type": "url-test", "use": []string{"p-" + AutoProvider}, "url": plan.testURL(), "interval": urlTestSec, "tolerance": 50})
-			default:
-				add(g.Type)
-				groups = append(groups, map[string]any{"name": g.Name, "type": "url-test", "use": []string{"p-" + g.Type}, "url": plan.testURL(), "interval": urlTestSec, "tolerance": 50})
+			}
+			if len(fixed) > 0 {
+				m["proxies"] = fixed
+			}
+			if len(nodes) > 0 {
+				key := "p-" + g.Provider
+				health := map[string]any{"enable": false}
+				if g.Kind != "select" {
+					health = map[string]any{"enable": true, "url": g.testURL(), "interval": g.interval(), "lazy": false}
+				}
+				providers[key] = map[string]any{"type": "http", "url": plan.Providers(g.Provider), "interval": plan.interval(), "health-check": health}
+				m["use"] = []string{key}
 			}
 		}
-		cfg["proxy-providers"] = providers
-	} else {
-		cfg["proxies"] = proxies
-		for _, g := range lay.Groups {
-			m := map[string]any{"name": g.Name, "type": g.Kind, "proxies": g.Members}
+		if g.Kind != "select" {
+			m["url"], m["interval"], m["lazy"] = g.testURL(), g.interval(), false
 			if g.Kind == "url-test" {
-				m["url"], m["interval"], m["tolerance"] = plan.testURL(), urlTestSec, 50
+				m["tolerance"] = g.ToleranceMS
 			}
-			groups = append(groups, m)
 		}
+		groups = append(groups, m)
+	}
+	if plan.Providers == nil {
+		cfg["proxies"] = proxies
+	} else {
+		cfg["proxy-providers"] = providers
 	}
 	cfg["proxy-groups"] = groups
 	rules := []string{}
-	for _, c := range privateCIDRs {
-		rules = append(rules, clashRule("ip_cidr", c, "DIRECT"))
-	}
-	if plan.RuleSet != nil {
-		// 清单为空也引用：以后第一次添加同样不必更新整份配置
-		cfg["rule-providers"] = map[string]any{CustomRuleSetName: map[string]any{"type": "http", "behavior": "classical", "format": "text", "url": plan.RuleSet(), "interval": CustomRuleSetSec}}
-		rules = append(rules, "RULE-SET,"+CustomRuleSetName+","+lay.CustomPolicy)
-	}
 	for _, r := range lay.Rules {
 		for _, v := range r.Values {
 			if line := clashRule(r.Kind, v, r.Policy); line != "" {
@@ -193,16 +250,15 @@ func singboxPlan(items []Item, plan *Plan) ([]byte, error) {
 		for _, m := range g.Members {
 			members = append(members, tag(m))
 		}
-		if g.Kind == "url-test" {
-			groups = append(groups, map[string]any{"type": "urltest", "tag": g.Name, "outbounds": members, "url": plan.testURL(), "interval": strconv.Itoa(urlTestSec) + "s", "tolerance": 50})
+		if g.Kind == "url-test" || g.Kind == "fallback" {
+			groups = append(groups, map[string]any{"type": "urltest", "tag": g.Name, "outbounds": members, "url": g.testURL(), "interval": strconv.Itoa(g.interval()) + "s", "idle_timeout": strconv.Itoa(max(1800, g.interval())) + "s", "tolerance": g.ToleranceMS})
 		} else {
 			groups = append(groups, map[string]any{"type": "selector", "tag": g.Name, "outbounds": members, "default": members[0]})
 		}
 	}
 	out = append(append(groups, out...), map[string]any{"type": "direct", "tag": "direct"})
-	// sing-box 新版本已不支持内置的 GeoIP 库，规则集又要从外网下载（下载失败会让客户端启动失败），
-	// 所以「国内直连」只按域名后缀匹配，GeoIP 规则在这里跳过。
-	rules := []map[string]any{{"action": "sniff"}, {"ip_cidr": privateCIDRs, "outbound": "direct"}}
+	rules := []map[string]any{{"action": "sniff"}}
+	sets := []map[string]any{}
 	for _, r := range lay.Rules {
 		var rule map[string]any
 		switch r.Kind {
@@ -214,6 +270,16 @@ func singboxPlan(items []Item, plan *Plan) ([]byte, error) {
 			rule = map[string]any{"domain_keyword": r.Values}
 		case "ip_cidr":
 			rule = map[string]any{"ip_cidr": r.Values}
+		case "geoip":
+			for _, country := range r.Values {
+				if country != "cn" {
+					return nil, fmt.Errorf("sing-box：不支持 GeoIP %s", country)
+				}
+			}
+			rule = map[string]any{"rule_set": []string{"geoip-cn"}}
+			if len(sets) == 0 {
+				sets = append(sets, map[string]any{"type": "remote", "tag": "geoip-cn", "format": "binary", "url": sub.RemoteSources["geoip-cn"].Singbox, "download_detour": GroupProxy})
+			}
 		default:
 			continue
 		}
@@ -226,9 +292,12 @@ func singboxPlan(items []Item, plan *Plan) ([]byte, error) {
 	}
 	final := tag(lay.Final)
 	if final == "REJECT" {
-		final = GroupSelect
+		final = GroupAuto
 	}
 	cfg := map[string]any{"outbounds": out, "route": map[string]any{"rules": rules, "final": final, "auto_detect_interface": true}}
+	if len(sets) > 0 {
+		cfg["route"].(map[string]any)["rule_set"] = sets
+	}
 	if len(endpoints) > 0 {
 		cfg["endpoints"] = endpoints
 	}
@@ -244,24 +313,30 @@ func iniPlan(items []Item, target string, plan *Plan) ([]byte, error) {
 	}
 	lay := plan.layout(names, items)
 	if target == "quanx" {
-		return quanxPlan(lines, lay, plan), nil
+		return quanxPlan(lines, lay, plan)
 	}
 	var b strings.Builder
 	if target == "surge" && plan.ManagedURL != "" {
 		fmt.Fprintf(&b, "#!MANAGED-CONFIG %s interval=%d strict=false\n\n", plan.ManagedURL, max(plan.UpdateSec, 3600))
 	}
-	b.WriteString("[General]\n\n[Proxy]\n" + strings.Join(lines, "\n") + "\n\n[Proxy Group]\n")
+	b.WriteString("[General]\nproxy-test-url = " + plan.testURL() + "\n\n[Proxy]\n" + strings.Join(lines, "\n") + "\n\n[Proxy Group]\n")
 	for _, g := range lay.Groups {
-		if g.Kind == "url-test" {
-			fmt.Fprintf(&b, "%s = url-test, %s, url=%s, interval=%d, tolerance=50\n", g.Name, strings.Join(g.Members, ", "), plan.testURL(), urlTestSec)
-		} else {
-			fmt.Fprintf(&b, "%s = select, %s\n", g.Name, strings.Join(g.Members, ", "))
+		fmt.Fprintf(&b, "%s = %s, %s", g.Name, g.Kind, strings.Join(g.Members, ", "))
+		if g.Kind != "select" {
+			if target != "surge" {
+				fmt.Fprintf(&b, ", url=%s", g.testURL())
+			}
+			fmt.Fprintf(&b, ", interval=%d", g.interval())
+			if g.Kind == "url-test" {
+				fmt.Fprintf(&b, ", tolerance=%d", g.ToleranceMS)
+			}
 		}
+		if target == "surge" && g.Hidden {
+			b.WriteString(", hidden=true")
+		}
+		b.WriteByte('\n')
 	}
 	b.WriteString("\n[Rule]\n")
-	for _, c := range privateCIDRs {
-		fmt.Fprintf(&b, "IP-CIDR, %s, DIRECT, no-resolve\n", c)
-	}
 	for _, r := range lay.Rules {
 		for _, v := range r.Values {
 			switch r.Kind {
@@ -286,7 +361,11 @@ func iniPlan(items []Item, target string, plan *Plan) ([]byte, error) {
 	return []byte(b.String()), nil
 }
 
-func quanxPlan(lines []string, lay layout, plan *Plan) []byte {
+func quanxPlan(lines []string, lay layout, plan *Plan) ([]byte, error) {
+	probe, err := sharedProbeURL(lay, "QuanX")
+	if err != nil {
+		return nil, err
+	}
 	policy := func(p string) string {
 		switch p {
 		case "DIRECT":
@@ -297,22 +376,21 @@ func quanxPlan(lines []string, lay layout, plan *Plan) []byte {
 		return p
 	}
 	var b strings.Builder
-	b.WriteString("[server_local]\n" + strings.Join(lines, "\n") + "\n\n[policy]\n")
+	b.WriteString("[general]\nserver_check_url = " + probe + "\n\n[server_local]\n" + strings.Join(lines, "\n") + "\n\n[policy]\n")
 	for _, g := range lay.Groups {
 		members := make([]string, 0, len(g.Members))
 		for _, m := range g.Members {
 			members = append(members, policy(m))
 		}
 		if g.Kind == "url-test" {
-			fmt.Fprintf(&b, "url-latency-benchmark=%s, %s, check-interval=%d, tolerance=50\n", g.Name, strings.Join(members, ", "), urlTestSec)
+			fmt.Fprintf(&b, "url-latency-benchmark=%s, %s, check-interval=%d, tolerance=%d\n", g.Name, strings.Join(members, ", "), g.interval(), g.ToleranceMS)
+		} else if g.Kind == "fallback" {
+			fmt.Fprintf(&b, "available=%s, %s, check-interval=%d\n", g.Name, strings.Join(members, ", "), g.interval())
 		} else {
 			fmt.Fprintf(&b, "static=%s, %s\n", g.Name, strings.Join(members, ", "))
 		}
 	}
 	b.WriteString("\n[filter_local]\n")
-	for _, c := range privateCIDRs {
-		fmt.Fprintf(&b, "ip-cidr, %s, direct\n", c)
-	}
 	for _, r := range lay.Rules {
 		for _, v := range r.Values {
 			switch r.Kind {
@@ -334,7 +412,7 @@ func quanxPlan(lines []string, lay layout, plan *Plan) []byte {
 		}
 	}
 	fmt.Fprintf(&b, "final, %s\n", policy(lay.Final))
-	return []byte(b.String())
+	return []byte(b.String()), nil
 }
 
 // ---- Egern ----
@@ -345,18 +423,26 @@ func egernPlan(items []Item, plan *Plan) ([]byte, error) {
 		return nil, err
 	}
 	lay := plan.layout(names, items)
+	probe, err := sharedProbeURL(lay, "Egern")
+	if err != nil {
+		return nil, err
+	}
 	var groups []any
 	for _, g := range lay.Groups {
-		if g.Kind == "url-test" {
-			groups = append(groups, map[string]any{"auto_test": map[string]any{"name": g.Name, "policies": g.Members, "interval": urlTestSec, "tolerance": 50}})
-		} else {
-			groups = append(groups, map[string]any{"select": map[string]any{"name": g.Name, "policies": g.Members}})
+		kind := g.Kind
+		if kind == "url-test" {
+			kind = "auto_test"
 		}
+		body := map[string]any{"name": g.Name, "policies": g.Members, "hidden": g.Hidden}
+		if kind != "select" {
+			body["interval"] = g.interval()
+			if kind == "auto_test" {
+				body["tolerance"] = g.ToleranceMS
+			}
+		}
+		groups = append(groups, map[string]any{kind: body})
 	}
 	rules := []any{}
-	for _, c := range privateCIDRs {
-		rules = append(rules, map[string]any{"ip_cidr": map[string]any{"match": c, "policy": "DIRECT", "no_resolve": true}})
-	}
 	for _, r := range lay.Rules {
 		for _, v := range r.Values {
 			switch r.Kind {
@@ -374,7 +460,7 @@ func egernPlan(items []Item, plan *Plan) ([]byte, error) {
 		}
 	}
 	rules = append(rules, map[string]any{"default": map[string]any{"policy": lay.Final}})
-	return yaml.Marshal(map[string]any{"general": map[string]any{"dns_server": []string{"223.5.5.5", "1.1.1.1"}, "ipv6": false}, "proxies": proxies, "policy_groups": groups, "rules": rules})
+	return yaml.Marshal(map[string]any{"general": map[string]any{"http_test_url": probe, "dns_server": []string{"223.5.5.5", "1.1.1.1"}, "ipv6": false}, "proxies": proxies, "policy_groups": groups, "rules": rules})
 }
 
 // Layout 给 Weir 自己的格式用：按节点名排出各组与规则（names 与 items 一一对应，由调用方保证唯一）。
@@ -382,11 +468,26 @@ func (p *Plan) Layout(names []string, items []Item) ([]contracts.WeirGroup, []co
 	lay := p.layout(names, items)
 	groups := make([]contracts.WeirGroup, 0, len(lay.Groups))
 	for _, g := range lay.Groups {
-		groups = append(groups, contracts.WeirGroup{Name: g.Name, Kind: g.Kind, Members: g.Members})
+		groups = append(groups, contracts.WeirGroup{Ref: g.Ref, Name: g.Name, Kind: g.Kind, Members: g.Members, MemberRefs: g.MemberRefs, ProbeURL: g.TestURL, IntervalSeconds: g.IntervalSec, Hidden: g.Hidden, ToleranceMS: g.ToleranceMS})
 	}
-	rules := []contracts.WeirRule{{Kind: "ip_cidr", Values: privateCIDRs, Policy: "DIRECT"}}
+	rules := []contracts.WeirRule{}
 	for _, r := range lay.Rules {
 		rules = append(rules, contracts.WeirRule{Kind: r.Kind, Values: r.Values, Policy: r.Policy})
 	}
 	return groups, append(rules, contracts.WeirRule{Kind: "final", Policy: lay.Final})
+}
+
+// 这两种格式只提供全局探测地址，不能把多个不同地址静默合并。
+func sharedProbeURL(lay layout, format string) (string, error) {
+	probe := ""
+	for _, g := range lay.Groups {
+		if g.Kind == "select" {
+			continue
+		}
+		if probe != "" && probe != g.testURL() {
+			return "", fmt.Errorf("%s：分组「%s」的探测地址与其他组不同，该格式只能设置一个探测地址", format, g.Name)
+		}
+		probe = g.testURL()
+	}
+	return probe, nil
 }

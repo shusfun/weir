@@ -91,7 +91,7 @@ func TestSubscriptionNamesReachEveryFormatAndRefresh(t *testing.T) {
 						t.Fatal(err)
 					}
 					if len(doc.Proxies) == 0 {
-						provider := admin.do("GET", "/sub/"+token+"/provider/ss2022", nil, nil)
+						provider := admin.do("GET", "/sub/"+token+"/provider/single", nil, nil)
 						if provider.Code != 200 {
 							t.Fatalf("provider=%d %s", provider.Code, provider.Body)
 						}
@@ -102,11 +102,11 @@ func TestSubscriptionNamesReachEveryFormatAndRefresh(t *testing.T) {
 					if len(doc.Proxies) != 1 || doc.Proxies[0].Name != "[直连] "+remark {
 						t.Fatalf("clash names=%v", doc.Proxies)
 					}
-					allowed := map[string]bool{"DIRECT": true, "REJECT": true, "节点选择": true, "自动选择": true}
+					allowed := map[string]bool{"DIRECT": true, "REJECT": true, "自动选择": true}
 					for _, p := range doc.Proxies {
 						allowed[p.Name] = true
 					}
-					// Provider-backed type groups use provider names, while inline references must not retain the old remark.
+					// provider 刷新与主配置使用相同名称，不能残留改名前的节点引用。
 					for _, group := range doc.Groups {
 						for _, ref := range group.Proxies {
 							if strings.Contains(ref, "备注") && !allowed[ref] {

@@ -186,6 +186,40 @@ func (_u *CredentialUpdate) SetNillableInternal(v *bool) *CredentialUpdate {
 	return _u
 }
 
+// SetPurpose sets the "purpose" field.
+func (_u *CredentialUpdate) SetPurpose(v string) *CredentialUpdate {
+	_u.mutation.SetPurpose(v)
+	return _u
+}
+
+// SetNillablePurpose sets the "purpose" field if the given value is not nil.
+func (_u *CredentialUpdate) SetNillablePurpose(v *string) *CredentialUpdate {
+	if v != nil {
+		_u.SetPurpose(*v)
+	}
+	return _u
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (_u *CredentialUpdate) SetExpiresAt(v time.Time) *CredentialUpdate {
+	_u.mutation.SetExpiresAt(v)
+	return _u
+}
+
+// SetNillableExpiresAt sets the "expires_at" field if the given value is not nil.
+func (_u *CredentialUpdate) SetNillableExpiresAt(v *time.Time) *CredentialUpdate {
+	if v != nil {
+		_u.SetExpiresAt(*v)
+	}
+	return _u
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (_u *CredentialUpdate) ClearExpiresAt() *CredentialUpdate {
+	_u.mutation.ClearExpiresAt()
+	return _u
+}
+
 // SetProbeParentID sets the "probe_parent_id" field.
 func (_u *CredentialUpdate) SetProbeParentID(v int) *CredentialUpdate {
 	_u.mutation.ResetProbeParentID()
@@ -374,6 +408,15 @@ func (_u *CredentialUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	}
 	if value, ok := _u.mutation.Internal(); ok {
 		_spec.SetField(credential.FieldInternal, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.Purpose(); ok {
+		_spec.SetField(credential.FieldPurpose, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ExpiresAt(); ok {
+		_spec.SetField(credential.FieldExpiresAt, field.TypeTime, value)
+	}
+	if _u.mutation.ExpiresAtCleared() {
+		_spec.ClearField(credential.FieldExpiresAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.ProbeParentID(); ok {
 		_spec.SetField(credential.FieldProbeParentID, field.TypeInt, value)
@@ -580,6 +623,40 @@ func (_u *CredentialUpdateOne) SetNillableInternal(v *bool) *CredentialUpdateOne
 	if v != nil {
 		_u.SetInternal(*v)
 	}
+	return _u
+}
+
+// SetPurpose sets the "purpose" field.
+func (_u *CredentialUpdateOne) SetPurpose(v string) *CredentialUpdateOne {
+	_u.mutation.SetPurpose(v)
+	return _u
+}
+
+// SetNillablePurpose sets the "purpose" field if the given value is not nil.
+func (_u *CredentialUpdateOne) SetNillablePurpose(v *string) *CredentialUpdateOne {
+	if v != nil {
+		_u.SetPurpose(*v)
+	}
+	return _u
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (_u *CredentialUpdateOne) SetExpiresAt(v time.Time) *CredentialUpdateOne {
+	_u.mutation.SetExpiresAt(v)
+	return _u
+}
+
+// SetNillableExpiresAt sets the "expires_at" field if the given value is not nil.
+func (_u *CredentialUpdateOne) SetNillableExpiresAt(v *time.Time) *CredentialUpdateOne {
+	if v != nil {
+		_u.SetExpiresAt(*v)
+	}
+	return _u
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (_u *CredentialUpdateOne) ClearExpiresAt() *CredentialUpdateOne {
+	_u.mutation.ClearExpiresAt()
 	return _u
 }
 
@@ -801,6 +878,15 @@ func (_u *CredentialUpdateOne) sqlSave(ctx context.Context) (_node *Credential, 
 	}
 	if value, ok := _u.mutation.Internal(); ok {
 		_spec.SetField(credential.FieldInternal, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.Purpose(); ok {
+		_spec.SetField(credential.FieldPurpose, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ExpiresAt(); ok {
+		_spec.SetField(credential.FieldExpiresAt, field.TypeTime, value)
+	}
+	if _u.mutation.ExpiresAtCleared() {
+		_spec.ClearField(credential.FieldExpiresAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.ProbeParentID(); ok {
 		_spec.SetField(credential.FieldProbeParentID, field.TypeInt, value)

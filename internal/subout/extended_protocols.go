@@ -160,15 +160,21 @@ func extendedClash(p map[string]any, n subscription.ParsedLink, s subscription.S
 	if v == nil {
 		return fmt.Errorf("missing WireGuard settings")
 	}
-	p["private-key"], p["public-key"], p["ip"], p["remote-dns-resolve"] = n.Password, v.PublicKey, v.Address, true
+	p["private-key"], p["public-key"], p["remote-dns-resolve"] = n.Password, v.PublicKey, true
+	for _, address := range v.Address {
+		if !strings.Contains(address, ":") {
+			p["ip"] = strings.Split(address, "/")[0]
+			break
+		}
+	}
 	for _, address := range v.Address {
 		if strings.Contains(address, ":") {
-			p["ipv6"] = address
+			p["ipv6"] = strings.Split(address, "/")[0]
 			break
 		}
 	}
 	if v.PresharedKey != "" {
-		p["preshared-key"] = v.PresharedKey
+		p["pre-shared-key"] = v.PresharedKey
 	}
 	if len(v.AllowedIPs) > 0 {
 		p["allowed-ips"] = v.AllowedIPs

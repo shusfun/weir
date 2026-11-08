@@ -2,9 +2,12 @@ package nodeprobe
 
 import (
 	"context"
+	"encoding/binary"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"golang.org/x/net/dns/dnsmessage"
@@ -65,10 +68,9 @@ func TestDNSProbeRoundTrip(t *testing.T) {
 }
 
 func TestDownloadChecksBytesAndStatus(t *testing.T) {
-	// A real HTTP proxy forwards the absolute request to an isolated endpoint.
 	token := "isolated-test-token"
 	mode := "valid"
-	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	endpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer "+token {
 			t.Error("grant missing")
 		}
@@ -81,11 +83,52 @@ func TestDownloadChecksBytesAndStatus(t *testing.T) {
 			w.WriteHeader(403)
 		}
 	}))
+	defer endpoint.Close()
+	proxy, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer proxy.Close()
-	o := Options{Target: "http://isolated.example.test/download", Token: token}
+	go func() {
+		for {
+			c, err := proxy.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer c.Close()
+				var greeting [2]byte
+				if _, err := io.ReadFull(c, greeting[:]); err != nil {
+					return
+				}
+				methods := make([]byte, int(greeting[1]))
+				if _, err := io.ReadFull(c, methods); err != nil {
+					return
+				}
+				_, _ = c.Write([]byte{5, 0})
+				var connect [4]byte
+				if _, err := io.ReadFull(c, connect[:]); err != nil || connect[3] != 1 {
+					return
+				}
+				var address [6]byte
+				if _, err := io.ReadFull(c, address[:]); err != nil {
+					return
+				}
+				dst, err := net.Dial("tcp", net.JoinHostPort(net.IP(address[:4]).String(), strconv.Itoa(int(binary.BigEndian.Uint16(address[4:])))))
+				if err != nil {
+					return
+				}
+				defer dst.Close()
+				_, _ = c.Write([]byte{5, 0, 0, 1, 127, 0, 0, 1, 0, 0})
+				go func() { _, _ = io.Copy(dst, c) }()
+				_, _ = io.Copy(c, dst)
+			}()
+		}
+	}()
+	o := Options{Target: endpoint.URL + "/download", Token: token}
 	for _, m := range []string{"valid", "bad", "status"} {
 		mode = m
-		r := download(context.Background(), proxy.Listener.Addr().String(), o)
+		r := download(context.Background(), proxy.Addr().String(), o)
 		if (r.Status == "passed") != (m == "valid") {
 			t.Fatalf("%s: %+v", m, r)
 		}

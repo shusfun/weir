@@ -1,8 +1,8 @@
 // 公开页面：匿名可访问的介绍页（/p/<slug>），展示已分享的订阅组卡片与留言板。
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useState } from "react";
 import { useQuery } from "../lib/query";
-import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, PageHeader, Segmented, SkeletonList, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField, Textarea, useToast, useConfirm } from "@weir/ui";
+import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, PageHeader, Segmented, SkeletonList, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField, Textarea, Tabs, TabsList, TabsPanel, TabsTab, useToast, useConfirm } from "@weir/ui";
 import { ArrowUpRight, MessageSquare, Plus, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -11,6 +11,9 @@ import { GuestbookManager } from "../components/guestbook";
 import type { Profile } from "../lib/subscriptions";
 import { dataObject } from "../components/object-link";
 import { field, useConsoleContext } from "../lib/console-context";
+import { distributionSections } from "../shell/navigation";
+import { ClientCatalogEditor } from "../components/client-catalog";
+import { AnnouncementEditor } from "../components/global-announcement";
 
 interface PageCard {
   profile_id: number;
@@ -40,6 +43,8 @@ const blank: PageData = { enabled: false, title: "", description: "", notice: ""
 const targets = [["clash", "Clash"], ["singbox", "sing-box"], ["surge", "Surge"], ["loon", "Loon"], ["quanx", "QuanX"], ["egern", "Egern"], ["base64", "Base64"]] as const;
 
 export function PublicPagesPage() {
+  const [params, setParams] = useSearchParams();
+  const tab = distributionSections.some((s) => s.key === params.get("tab")) ? params.get("tab")! : distributionSections[0].key;
   const confirm = useConfirm();
   const toast = useToast();
   const q = useQuery({ queryKey: ["public-pages"], queryFn: async () => (await api("/admin/public-pages")).items as PageItem[] });
@@ -50,10 +55,13 @@ export function PublicPagesPage() {
     if (!(await confirm({ title: `删除页面「${p.data.title}」？`, description: "它的留言会一并删除。", confirmText: "删除", tone: "danger" }))) return;
     await run(p.id, () => api("/admin/public-pages/" + p.id, "DELETE"), "页面已删除", { fail: "删除失败" });
   }
-  useConsoleContext({ page: "公开页面", list: { total: q.data?.length ?? 0, items: (q.data ?? []).slice(0, 20).map((p) => ({ type: "page", name: p.data.title, key: p.slug })) } });
+  useConsoleContext({ page: "公开页面", tab: distributionSections.find((s) => s.key === tab)?.label, list: tab === "pages" ? { total: q.data?.length ?? 0, items: (q.data ?? []).slice(0, 20).map((p) => ({ type: "page", name: p.data.title, key: p.slug })) } : undefined });
   return (
     <div className="stack">
-      <PageHeader title="公开页面" description="匿名可访问的介绍页，可展示已分享的订阅组与留言板。" actions={<Button onClick={() => setEdit("new")}><Plus />新建页面</Button>} />
+      <PageHeader title="公开页面" description="管理匿名介绍页、客户端目录和登录后显示的全局公告。" actions={tab === "pages" ? <Button onClick={() => setEdit("new")}><Plus />新建页面</Button> : undefined} />
+      <Tabs value={tab} onValueChange={(v) => setParams({ tab: String(v) }, { replace: true })}>
+        <TabsList aria-label="公开页面分区">{distributionSections.map((s) => <TabsTab key={s.key} value={s.key}>{s.label}</TabsTab>)}</TabsList>
+        <TabsPanel value="pages" className="stack">
       {q.isPending || q.error ? (
         <State
           loading={q.isPending}
@@ -85,6 +93,10 @@ export function PublicPagesPage() {
           </CardContent>
         </Card>
       )}
+        </TabsPanel>
+        <TabsPanel value="clients" className="stack"><ClientCatalogEditor /></TabsPanel>
+        <TabsPanel value="announcements" className="stack"><AnnouncementEditor /></TabsPanel>
+      </Tabs>
       {edit && <PageForm value={edit} close={() => setEdit(null)} saved={() => { setEdit(null); toast("已保存", { tone: "ok" }); void q.refetch(); }} />}
       {guestbook && <GuestbookManager page={{ id: guestbook.id, data: { ...guestbook.data } }} close={() => setGuestbook(null)} />}
     </div>

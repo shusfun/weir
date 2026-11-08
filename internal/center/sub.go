@@ -25,12 +25,12 @@ import (
 func (s *Server) subRoutes(r *gin.Engine, ready *gin.RouterGroup) {
 	r.GET("/sub/:token", s.serveSub)
 	r.GET("/sub/:token/provider/:key", s.serveProvider)
-	r.GET("/sub/:token/rules", s.serveCustomRules)
 	ready.GET("/sub-info/:token", s.subInfo)
 }
 
 // Entry 是订阅里的一个节点：自有节点或用户自建链式代理，各带本链接独立的凭据。
 type Entry struct {
+	Ref      string `json:"ref"`
 	Name     string `json:"name"`
 	NodeID   int    `json:"node_id"`
 	ChainID  int    `json:"chain_id,omitempty"`
@@ -267,7 +267,17 @@ func (s *Server) serveSub(c *gin.Context) {
 		failInternal(c, 503, "subscription_unavailable", err)
 		return
 	}
-	p := s.planEntries(ctx, u, entries, true)
+	p, err := s.planEntries(ctx, u, entries, true)
+	if err != nil {
+		s.recordPull(c, l, target, "failed")
+		failInternal(c, 503, "subscription_unavailable", err)
+		return
+	}
+	if len(p.Entries) == 0 {
+		s.recordPull(c, l, target, "failed")
+		failDetail(c, 422, "subscription_no_nodes", "没有可输出的代理节点", nil)
+		return
+	}
 	var body []byte
 	contentType := "application/json"
 	if target == "weir" {
@@ -292,7 +302,7 @@ func (s *Server) serveSub(c *gin.Context) {
 	}
 	if err != nil {
 		s.recordPull(c, l, target, "failed")
-		failure(c, 422, "format_conversion_failed")
+		failDetail(c, 422, "format_conversion_failed", err.Error(), nil)
 		return
 	}
 	_, end := linkWindow(u, l)
@@ -310,7 +320,7 @@ func (s *Server) serveSub(c *gin.Context) {
 	c.Data(200, contentType, body)
 }
 
-// serveProvider 是 Clash proxy-providers 的一份节点列表（key 为 auto 或某个类型），客户端按代理页的刷新间隔拉取。
+// serveProvider 是 Clash proxy-providers 的一份节点列表（全部线路、自动候选或用户分组），客户端按代理页的刷新间隔拉取。
 // 生效时间与主订阅相同；不单独计一次拉取（刷新频繁，统计里只看整份配置的拉取）。
 func (s *Server) serveProvider(c *gin.Context) {
 	if !s.Config.Installed || s.Store == nil {
@@ -332,41 +342,28 @@ func (s *Server) serveProvider(c *gin.Context) {
 		failInternal(c, 503, "subscription_unavailable", err)
 		return
 	}
-	plan, items := s.subPlan(ctx, s.planEntries(ctx, u, entries, false))
+	p, err := s.planEntries(ctx, u, entries, false)
+	if err != nil {
+		failInternal(c, 503, "subscription_unavailable", err)
+		return
+	}
+	plan, items := s.subPlan(ctx, p)
 	key := c.Param("key")
-	found := key == subout.AutoProvider
-	for _, t := range plan.Types {
-		found = found || t.Key == key
+	found := key == subout.AutoProvider || key == subout.SingleProvider
+	for _, g := range plan.Groups {
+		found = found || key == "group-"+itoa(g.ID)
 	}
 	if !found {
-		// 类型已不存在时返回 404：客户端保留上一次的列表，而不是换成空列表
+		// 分组已不存在时返回 404，避免旧配置收到一份空列表。
 		failure(c, 404, "provider_not_found")
 		return
 	}
 	body, err := subout.ClashProvider(items, plan, key)
 	if err != nil {
-		failure(c, 422, "format_conversion_failed")
+		failDetail(c, 422, "format_conversion_failed", err.Error(), nil)
 		return
 	}
 	c.Data(200, "application/yaml; charset=utf-8", body)
-}
-
-// serveCustomRules 是 Clash rule-providers 拉取的自定义清单；与 serveProvider 一样不计拉取次数。
-func (s *Server) serveCustomRules(c *gin.Context) {
-	if !s.Config.Installed || s.Store == nil {
-		failure(c, 503, "setup_required")
-		return
-	}
-	l, u, ok := s.linkByToken(c.Request.Context(), c.Param("token"))
-	if !ok {
-		failure(c, 404, "subscription_not_found")
-		return
-	}
-	if state := windowState(u, l, time.Now()); state != "active" {
-		failure(c, 403, "subscription_"+state)
-		return
-	}
-	c.Data(200, "text/plain; charset=utf-8", []byte(customRuleFile(loadPolicy(u).Custom)))
 }
 
 // weirSubscription 是 target=weir 的内容：节点仍是节点链接，带名次、状况与分组、规则。
@@ -376,10 +373,12 @@ func (s *Server) weirSubscription(ctx context.Context, u *ent.User, l *ent.Link,
 	out := contracts.WeirSubscription{Version: contracts.WeirSubscriptionVersion, Name: firstNonEmpty(l.Name, "订阅"), Generated: time.Now().UTC(),
 		Usage: contracts.WeirUsage{Used: u.Used, Quota: u.Quota}, Window: contracts.WeirWindow{StartsAt: start, EndsAt: end},
 		Refresh: p.Policy.Auto.RefreshMinutes, Auto: p.Policy.Auto, Types: map[string]string{}}
-	used := map[string]bool{subout.GroupSelect: true, subout.GroupAuto: true, "DIRECT": true, "REJECT": true}
-	for _, t := range plan.Types {
-		used[t.Label] = true
-		out.Types[t.Key] = t.Label
+	used := map[string]bool{subout.GroupProxy: true, subout.GroupAuto: true, "DIRECT": true, "REJECT": true}
+	for _, g := range plan.Groups {
+		used[subout.CleanLabel(g.Name)] = true
+	}
+	for _, e := range p.Entries {
+		out.Types[e.Type] = e.Type
 	}
 	names := make([]string, len(items))
 	for i, e := range p.Entries {
@@ -390,7 +389,7 @@ func (s *Server) weirSubscription(ctx context.Context, u *ent.User, l *ent.Link,
 		used[name], names[i] = true, name
 		r := p.Ranked[i]
 		health := map[string]string{"ok": "ok", "down": "degraded"}[r.Health.Status]
-		node := contracts.WeirNode{Name: name, Type: e.Type, URI: e.URI, Rank: r.Rank, Health: firstNonEmpty(health, "unknown"), Auto: r.Auto, Exploring: r.Exploring}
+		node := contracts.WeirNode{Ref: e.Ref, Name: name, Type: e.Type, URI: e.URI, Rank: r.Rank, Health: firstNonEmpty(health, "unknown"), Auto: r.Auto}
 		if r.Rate.known() {
 			node.RateBps, node.RateMinutes, node.RateFrom = int64(r.Rate.P90), r.Rate.Minutes, r.Rate.From
 		}

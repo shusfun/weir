@@ -339,7 +339,7 @@ func (a *Agent) meter(ctx context.Context) error {
 }
 
 func (a *Agent) heartbeat(ctx context.Context) error {
-	hb := contracts.Heartbeat{NodeTestVersion: 2, Version: buildinfo.Version, Arch: runtime.GOARCH, Kernels: map[string]string{}, Host: sampleHost()}
+	hb := contracts.Heartbeat{NodeTestVersion: 3, Version: buildinfo.Version, Arch: runtime.GOARCH, Kernels: map[string]string{}, Host: sampleHost()}
 	hb.SelfUpdate = a.updateStatus()
 	hb.Hostname, _ = os.Hostname()
 	hb.Center = a.center.origin()

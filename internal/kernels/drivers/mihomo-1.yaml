@@ -1,0 +1,14 @@
+kernel: mihomo
+name: mihomo-1
+min_version: 1.19.0
+notes: 仅用于订阅检查和临时客户端实测，不提供服务端入站。
+protocols: [vless, vmess, trojan, shadowsocks, hysteria2, tuic, shadowtls, socks, http, wireguard, anytls]
+run: [-f, "{config}"]
+check: [-t, -f, "{config}"]
+templates:
+  root:
+    mode: rule
+    allow-lan: false
+    bind-address: 127.0.0.1
+    proxies: []
+    rules: []

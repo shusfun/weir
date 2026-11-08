@@ -3,8 +3,6 @@ package center
 import (
 	"strings"
 	"testing"
-
-	"github.com/shusfun/weir/packages/contracts"
 )
 
 func TestOptimizeCustomRules(t *testing.T) {
@@ -71,20 +69,16 @@ func TestLegacyCustomRulesSubscription(t *testing.T) {
 	s, admin, g := setupGate(t)
 	mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "vless-reality", "skip_probe": true}, 200)
 	u := s.Store.Ent.User.GetX(t.Context(), 1)
-	old := contracts.ProxyPolicy{Custom: contracts.CustomRules{Mode: "only", SourceMode: "bypass", Source: "failed.example", Lines: []string{"DOMAIN-SUFFIX,active.example"}, Check: &contracts.CustomCheck{Status: "failed", Detail: "bad candidate"}}}
-	u.Update().SetProxyPolicy(policyMap(old)).ExecX(t.Context())
-	view := mustJSON(t, admin, "GET", "/api/v1/me/proxy", nil, 200)
+	u.Update().SetProxyPolicy(map[string]any{"custom": map[string]any{"mode": "only", "source_mode": "bypass", "source": "failed.example", "lines": []string{"DOMAIN-SUFFIX,active.example"}, "check": map[string]any{"status": "failed", "detail": "bad candidate"}}}).ExecX(t.Context())
+	view := mustJSON(t, admin, "GET", "/api/v1/proxy", nil, 200)
 	custom := view["custom"].(map[string]any)
-	if custom["pending"] == nil || custom["legacy_only"] != true || custom["entries"].([]any)[0].(map[string]any)["value"] != "active.example" {
+	if custom["pending"] == nil || custom["entries"].([]any)[0].(map[string]any)["value"] != "active.example" {
 		t.Fatalf("migration: %v", custom)
 	}
 	token := mustJSON(t, admin, "GET", "/api/v1/me/links", nil, 200)["items"].([]any)[0].(map[string]any)["token"].(string)
 	body := admin.do("GET", "/sub/"+token, nil, map[string]string{"User-Agent": "clash.meta"}).Body.String()
-	if !strings.Contains(body, "DOMAIN-SUFFIX,active.example,节点选择") || !strings.Contains(body, "MATCH,DIRECT") || strings.Contains(body, "RULE-SET,weir-custom") || strings.Contains(body, "failed.example") {
+	if !strings.Contains(body, "DOMAIN-SUFFIX,active.example,PROXY") || !strings.Contains(body, "MATCH,PROXY") || strings.Contains(body, "RULE-SET,weir-custom") || strings.Contains(body, "failed.example") {
 		t.Fatalf("subscription: %s", body)
 	}
-	if rules := admin.do("GET", "/sub/"+token+"/rules", nil, nil).Body.String(); rules != "DOMAIN-SUFFIX,active.example\n" {
-		t.Fatalf("legacy snapshot: %q", rules)
-	}
-	mustJSON(t, admin, "PUT", "/api/v1/me/proxy/custom", map[string]any{"mode": "bypass", "source": "unversioned.example"}, 400)
+	mustJSON(t, admin, "PUT", "/api/v1/proxy/custom", map[string]any{"mode": "bypass", "source": "unversioned.example"}, 400)
 }

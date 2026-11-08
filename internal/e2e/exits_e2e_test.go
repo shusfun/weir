@@ -5,10 +5,15 @@ package e2e
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -33,7 +38,30 @@ func (e *env) patch(path string, body any) map[string]any {
 
 // 同一个出口由节点和规则引用；用真实客户端验证默认出口、选择性分流、拦截与用户链路的优先级。
 func TestUnifiedExitsAndSelectiveRouting(t *testing.T) {
+	if os.Getenv("WEIR_E2E_PUBLIC_NETWORK") != "1" {
+		t.Skip("用户链路只允许公网地址，需 WEIR_E2E_NETWORK 指定 TEST-NET 容器网络")
+	}
+	var router http.Handler
+	secure := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { router.ServeHTTP(w, r) }))
+	secure.EnableHTTP2 = true
+	secure.StartTLS()
+	t.Cleanup(secure.Close)
+	// 保留公共 CA，同时让临时客户端和 Gate 信任这次隔离中心的证书。
+	bundle, err := os.ReadFile("/etc/ssl/certs/ca-certificates.crt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle = append(bundle, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: secure.Certificate().Raw})...)
+	caFile := filepath.Join(t.TempDir(), "ca.pem")
+	if err := os.WriteFile(caFile, bundle, 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SSL_CERT_FILE", caFile)
 	e := setup(t)
+	router = e.s.Router()
+	e.url = secure.URL
+	e.admin.Transport = secure.Client().Transport
+	e.s.Store.Ent.Setting.Create().SetKey("center-origin").SetValue(map[string]any{"origin": secure.URL}).SaveX(e.ctx)
 	sb := e.seedSingbox()
 	e.startGate("exits")
 	gid := e.gateID
@@ -77,9 +105,34 @@ func TestUnifiedExitsAndSelectiveRouting(t *testing.T) {
 	// 管理员代建的用户链路仍属于该用户，走另一台 VPS 并越过管理员的选择性拦截。
 	e.startGate("exit-relay")
 	relayID := e.gateID
-	e.s.Store.Ent.Gate.UpdateOneID(relayID).SetPublicHost("127.0.0.1").ExecX(e.ctx)
-	relay := e.post("/api/v1/admin/nodes", map[string]any{"gate_id": relayID, "preset": "vless-reality", "skip_probe": true, "settings": map[string]any{"reality_dest": localDest(t), "reality_server_names": "e2e.test"}}, nil)
+	addresses, err := net.InterfaceAddrs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicHost := ""
+	for _, addr := range addresses {
+		ip, _, _ := net.ParseCIDR(addr.String())
+		if ip != nil && ip.To4() != nil && !ip.IsLoopback() {
+			publicHost = ip.String()
+			break
+		}
+	}
+	if publicHost == "" {
+		t.Fatal("缺少 TEST-NET 容器地址")
+	}
+	e.s.Store.Ent.Gate.UpdateOneID(relayID).SetPublicHost(publicHost).ExecX(e.ctx)
+	relay := e.post("/api/v1/admin/nodes", map[string]any{"gate_id": relayID, "preset": "vless-reality", "skip_probe": true, "settings": map[string]any{"reality_dest": strings.TrimPrefix(secure.URL, "https://"), "reality_server_names": "example.com"}}, nil)
+	e.appliedGate(relayID, "relay before exit verification")
+	address := net.JoinHostPort(publicHost, fmt.Sprint(relay["port"]))
+	c, err := net.DialTimeout("tcp", address, 3*time.Second)
+	if err != nil {
+		t.Fatalf("隔离网络节点端口 %s 不可达：%v", address, err)
+	}
+	_ = c.Close()
 	ch := e.post(fmt.Sprintf("/api/v1/admin/users/%d/chains", uid), map[string]any{"name": "relay exit", "entry_node_id": direct["id"], "exit": map[string]any{"kind": "node", "node_id": relay["id"]}, "skip_probe": true}, nil)
+	if p, pending := ch["pending"]; pending {
+		t.Fatalf("真实出口未通过验证：%v", p)
+	}
 	e.appliedGate(gid, "user link takes precedence")
 	e.appliedGate(relayID, "internal credentials")
 	pc := e.runSingboxClient(sb, e.subOutbound(uid, int(direct["id"].(float64)), int(ch["id"].(float64))))

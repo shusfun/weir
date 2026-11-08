@@ -7,7 +7,30 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/shusfun/weir/internal/store/ent/setting"
 )
+
+func TestSubscriptionSettingsMigratesSourceRefresh(t *testing.T) {
+	s, _ := newInstalledServer(t)
+	ctx := t.Context()
+	_, err := s.Store.Ent.Setting.Create().SetKey(notifyKey).SetValue(map[string]any{"source_refresh_hours": 12}).Save(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.subscriptionSettings(ctx)
+	if err != nil || got.SourceRefresh != 12 {
+		t.Fatalf("migrated refresh = %d, err=%v", got.SourceRefresh, err)
+	}
+	row, err := s.Store.Ent.Setting.Query().Where(setting.KeyEQ(subscriptionSettingKey)).Only(ctx)
+	if err != nil || row.Value["source_refresh_hours"] == nil {
+		t.Fatalf("new setting missing: %v", err)
+	}
+	got, err = s.subscriptionSettings(ctx)
+	if err != nil || got.SourceRefresh != 12 {
+		t.Fatalf("migration not idempotent: %d, err=%v", got.SourceRefresh, err)
+	}
+}
 
 func TestSubscriptionSourcesProfilesGrantsAndShare(t *testing.T) {
 	s, admin := newInstalledServer(t)

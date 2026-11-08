@@ -3,15 +3,11 @@ package gate
 import (
 	"context"
 	"crypto/tls"
-	"encoding/binary"
 	"errors"
-	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"regexp"
-	"strconv"
 	"sync"
 	"time"
 
@@ -44,11 +40,7 @@ func (a *Agent) runAction(ctx context.Context, act contracts.Action) contracts.A
 	case contracts.ActionRealityProbe:
 		out, err = realityProbe(ctx, p)
 	case contracts.ActionChainProbe, contracts.ActionOutboundProbe:
-		if _, ok := p["client"].(map[string]any); ok {
-			out, err = a.clientProbe(ctx, p)
-		} else {
-			out, err = chainProbe(ctx, p)
-		}
+		out, err = a.clientProbe(ctx, p)
 	case contracts.ActionLiveStart:
 		if a.runCtx == nil {
 			err = errors.New("agent not running")
@@ -186,93 +178,4 @@ var cgnat, benchmark = &net.IPNet{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMas
 
 func publicIP(ip net.IP) bool {
 	return !(ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() || cgnat.Contains(ip) || benchmark.Contains(ip) || len(ip) == net.IPv6len && ip[0]&0xfe == 0xfc)
-}
-
-// chainProbe 实测链式代理出口：socks5 完成握手（含认证）并经它 CONNECT 一个目标；node 只测 TCP 可达。
-// public_only 为真（用户自建）时，解析后的地址必须是公网地址，并直接连接该 IP，避免 DNS 被换。
-func chainProbe(ctx context.Context, p map[string]any) (map[string]any, error) {
-	host, port := str(p, "address"), num(p, "port")
-	if host == "" || port <= 0 || port > 65535 {
-		return nil, errors.New("invalid exit address")
-	}
-	ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
-	if err != nil || len(ips) == 0 {
-		return nil, errors.New("出口地址无法解析")
-	}
-	if p["public_only"] == true {
-		for _, ip := range ips {
-			if !publicIP(ip) {
-				return nil, errors.New("出口地址不是公网地址")
-			}
-		}
-	}
-	start := time.Now()
-	conn, err := (&net.Dialer{Timeout: 8 * time.Second}).DialContext(ctx, "tcp", net.JoinHostPort(ips[0].String(), strconv.Itoa(port)))
-	if err != nil {
-		return nil, errors.New("出口不可达：" + err.Error())
-	}
-	defer conn.Close()
-	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
-	mode := "tcp"
-	if str(p, "kind") == "socks5" {
-		mode = "proxy"
-		target := str(p, "target")
-		if target == "" {
-			target = "www.gstatic.com:443"
-		}
-		if err = socks5Connect(conn, str(p, "username"), str(p, "password"), target); err != nil {
-			return nil, err
-		}
-	}
-	return map[string]any{"latency_ms": time.Since(start).Milliseconds(), "ip": ips[0].String(), "mode": mode}, nil
-}
-
-// socks5Connect 按 RFC 1928 / 1929 完成握手与认证，并请求连接 target。
-func socks5Connect(conn net.Conn, username, password, target string) error {
-	methods := []byte{0x00}
-	if username != "" {
-		methods = []byte{0x02}
-	}
-	if _, err := conn.Write(append([]byte{5, byte(len(methods))}, methods...)); err != nil {
-		return err
-	}
-	reply := make([]byte, 2)
-	if _, err := io.ReadFull(conn, reply); err != nil || reply[0] != 5 {
-		return errors.New("出口不是 SOCKS5 服务")
-	}
-	switch reply[1] {
-	case 0x00:
-	case 0x02:
-		if len(username) > 255 || len(password) > 255 {
-			return errors.New("SOCKS5 用户名或密码过长")
-		}
-		msg := append([]byte{1, byte(len(username))}, username...)
-		msg = append(append(msg, byte(len(password))), password...)
-		if _, err := conn.Write(msg); err != nil {
-			return err
-		}
-		if _, err := io.ReadFull(conn, reply); err != nil || reply[1] != 0 {
-			return errors.New("SOCKS5 认证失败")
-		}
-	default:
-		return errors.New("SOCKS5 不接受所给的认证方式")
-	}
-	host, portText, err := net.SplitHostPort(target)
-	port, perr := strconv.Atoi(portText)
-	if err != nil || perr != nil || len(host) > 255 {
-		return errors.New("invalid probe target")
-	}
-	req := append([]byte{5, 1, 0, 3, byte(len(host))}, host...)
-	req = binary.BigEndian.AppendUint16(req, uint16(port))
-	if _, err = conn.Write(req); err != nil {
-		return err
-	}
-	head := make([]byte, 4)
-	if _, err = io.ReadFull(conn, head); err != nil {
-		return err
-	}
-	if head[1] != 0 {
-		return fmt.Errorf("SOCKS5 出口无法连接目标（代码 %d）", head[1])
-	}
-	return nil
 }

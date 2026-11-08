@@ -67,18 +67,18 @@ func TestNodeChainProxyDraft(t *testing.T) {
 	if w := admin.do("POST", apply, nil, nil); w.Code != 422 || !strings.Contains(w.Body.String(), "代理密码") {
 		t.Fatalf("apply without password = %d %s", w.Code, w.Body.String())
 	}
-	// 代理不通：不生效，原因记下来给 dsh。
-	if w := admin.do("POST", apply, map[string]any{"edits": map[string]any{"0": map[string]any{"chain_password": "PROXY-SECRET"}}}, nil); w.Code != 422 {
-		t.Fatalf("apply unreachable = %d %s", w.Code, w.Body.String())
+	// 未通过的出口只保存候选，不创建节点，结果只含脱敏状态。
+	queued := mustJSON(t, admin, "POST", apply, map[string]any{"edits": map[string]any{"0": map[string]any{"chain_password": "PROXY-SECRET"}}}, 200)
+	if len(queued["outputs"].([]any)) != 1 || strings.Contains(mustString(queued), "PROXY-SECRET") {
+		t.Fatal(queued)
 	}
-	if n := s.Store.Ent.Node.Query().CountX(ctx); n != 0 {
-		t.Fatalf("unreachable exit saved %d nodes", n)
+	if s.Store.Ent.Node.Query().CountX(ctx) != 0 {
+		t.Fatal("未验证出口提前创建节点")
 	}
 	text, _ := toolText(t, h, m.webToken, "get_console_context", map[string]any{})
-	if !strings.Contains(text, draftFailed) || strings.Contains(text, "PROXY-SECRET") {
-		t.Fatalf("context after failure = %s", text)
+	if strings.Contains(text, "PROXY-SECRET") {
+		t.Fatal("秘密进入上下文")
 	}
-	mustJSON(t, admin, "DELETE", "/api/v1/admin/ai/drafts/"+d["id"].(string), nil, 204)
 
 	if text, isErr := submit(args("203.0.113.5")); isErr {
 		t.Fatal(text)

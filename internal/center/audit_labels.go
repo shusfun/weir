@@ -23,8 +23,9 @@ var auditLabels = map[string]string{
 	"job.cancel": "取消任务", "kernel.defaults": "修改默认内核版本", "kernel.fetch": "下载内核", "kernel.remove": "删除内核版本",
 	"link.create": "新建订阅链接", "link.delete": "删除订阅链接", "link.rotate": "更换订阅地址", "link.update": "修改订阅链接",
 	"node.create": "新建节点", "node.delete": "删除节点", "node.update": "修改节点", "node.test": "实测节点",
-	"exit.delete": "删除出口", "exit.save": "保存出口", "exit.probe": "实测出口", "page.delete": "删除公开页面", "page.save": "保存公开页面",
+	"exit.delete": "删除出口", "exit.save": "保存出口", "exit.probe": "实测出口", "exit.candidate": "验证候选出口", "exit.retry": "重试候选出口", "exit.discard": "放弃候选出口", "page.delete": "删除公开页面", "page.save": "保存公开页面",
 	"proxy.type_exit": "给类型加出口", "proxy.type_exit_delete": "去掉类型出口", "proxy.update": "修改代理设置", "proxy.custom_rules": "修改自定义清单",
+	"proxy.group.post": "新建我的分组", "proxy.group.put": "修改我的分组", "proxy.group.delete": "删除我的分组", "proxy.denied": "拒绝越权访问代理设置", "proxy.migration.ack": "确认分流目标迁移",
 	"route.delete": "删除分流规则", "route.save": "保存分流规则",
 	"settings.announcement": "修改全局公告", "settings.logo": "修改 Logo", "settings.notify": "修改通知设置", "settings.security": "修改安全设置", "settings.smtp": "修改邮件设置",
 	"subscription.nodes.import": "导入手动节点", "subscription.profile.delete": "删除订阅组", "subscription.profile.grants": "分配订阅组", "subscription.profile.save": "保存订阅组",
@@ -68,7 +69,7 @@ func (s *Server) auditActorName(ctx context.Context, id int, actors map[int]stri
 }
 
 var auditObjectNames = map[string]string{"gate": "VPS", "node": "节点", "user": "用户", "link": "链接", "chain": "链式代理", "driver": "驱动", "kernel": "内核版本",
-	"source": "订阅源", "profile": "订阅组", "page": "公开页面", "cert": "证书", "audit": "审计记录", "exit": "出口", "route": "分流规则"}
+	"source": "订阅源", "profile": "订阅组", "page": "公开页面", "cert": "证书", "audit": "审计记录", "exit": "出口", "route": "分流规则", "proxy_group": "我的分组"}
 
 // auditTargetName 把「类型:编号」换成对象名称；对象已删除或不是这种格式时说明 / 原样返回。
 func (s *Server) auditTargetName(ctx context.Context, target string) string {

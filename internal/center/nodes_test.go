@@ -17,15 +17,48 @@ import (
 func setupGate(t *testing.T) (*Server, *testClient, *fakeGate) {
 	t.Helper()
 	s, admin := newInstalledServer(t)
-	for _, k := range [][2]string{{"xray", "26.3.27"}, {"sing-box", "1.12.4"}} {
+	for _, k := range [][2]string{{"xray", "26.3.27"}, {"sing-box", "1.12.4"}, {"mihomo", "1.19.33"}} {
 		if _, err := s.kernelCache().Put(k[0], k[1], "amd64", []byte(k[0]+"-binary")); err != nil {
 			t.Fatal(err)
 		}
 	}
 	g := pairFakeGate(t, admin)
-	if code, _ := g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 2, Version: "test", Hostname: "hk", Arch: "amd64"}); code != 200 {
+	if code, _ := g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 3, Version: "test", Hostname: "hk", Arch: "amd64"}); code != 200 {
 		t.Fatalf("heartbeat = %d", code)
 	}
+	// 模拟 Gate 收到短时内部授权后的应用确认，普通业务配置仍由各测试显式确认。
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		tick := time.NewTicker(10 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+				rows, err := s.Store.Ent.Credential.Query().Where(credential.PurposeEQ("probe")).All(ctx)
+				if err != nil {
+					continue
+				}
+				for _, c := range rows {
+					n, err := s.Store.Ent.Node.Get(ctx, c.NodeID)
+					if err != nil {
+						continue
+					}
+					gate, err := s.Store.Ent.Gate.Get(ctx, n.GateID)
+					if err != nil {
+						continue
+					}
+					if gate.AppliedRevision < gate.ConfigRevision {
+						_ = gate.Update().SetAppliedRevision(gate.ConfigRevision).Exec(ctx)
+					}
+				}
+			}
+		}
+	}()
+	t.Cleanup(func() { cancel(); <-done })
 	return s, admin, g
 }
 
@@ -174,13 +207,15 @@ func TestNodeWizardUsersLinksChainsAndSubscription(t *testing.T) {
 	if n, _ := s.Store.Ent.Credential.Query().Where(credential.UserIDEQ(uid)).Count(ctx); n != 3+1+8*3 {
 		t.Fatalf("credentials = %d", n)
 	}
-	// 自建链式代理：出口必须是公网地址；管理员可跳过 Gate 实测。
+	// 自建链式代理：出口必须是公网地址，管理员同样经过实测。
 	mustJSON(t, alice, "POST", "/api/v1/me/chains", map[string]any{"name": "家宽", "entry_node_id": reality["id"], "exit": map[string]any{"kind": "socks5", "address": "192.168.1.2", "port": 1080}}, 422)
 	// 普通用户不能跳过实测：Gate 离线时直接失败（不会等待探测超时）。
 	s.Store.Ent.Gate.UpdateOneID(gid).ClearLastSeenAt().ExecX(ctx)
-	if w := alice.do("POST", "/api/v1/me/chains", map[string]any{"name": "家宽", "entry_node_id": reality["id"], "exit": map[string]any{"kind": "socks5", "address": "203.0.113.5", "port": 1080}, "skip_probe": true}, nil); w.Code != 422 || !strings.Contains(w.Body.String(), "gate_offline") {
+	if w := alice.do("POST", "/api/v1/me/chains", map[string]any{"name": "家宽", "entry_node_id": reality["id"], "exit": map[string]any{"kind": "socks5", "address": "203.0.113.5", "port": 1080}, "skip_probe": true}, nil); w.Code != 202 || !strings.Contains(w.Body.String(), "gate_offline") {
 		t.Fatalf("user chain without probe = %d %s", w.Code, w.Body.String())
 	}
+	s.Store.Ent.Gate.UpdateOneID(gid).SetLastSeenAt(time.Now()).ExecX(ctx)
+	g.serveActions(t, s, nil)
 	ch := mustJSON(t, admin, "POST", "/api/v1/admin/users/"+itoa(uid)+"/chains", map[string]any{"name": "家宽", "entry_node_id": reality["id"], "exit": map[string]any{"kind": "socks5", "address": "203.0.113.5", "port": 1080, "username": "u", "password": "p"}, "skip_probe": true}, 200)
 	if ch["exit"].(map[string]any)["password"] != "p" {
 		t.Fatalf("admin must see chain password: %v", ch)
@@ -228,9 +263,10 @@ func TestNodeWizardUsersLinksChainsAndSubscription(t *testing.T) {
 
 func TestNodeChainThroughAnotherNode(t *testing.T) {
 	s, admin, g := setupGate(t)
+	g.serveActions(t, s, nil)
 	gid := int(g.id)
 	eg := pairFakeGate(t, admin)
-	eg.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 2, Version: "test", Hostname: "exit", Arch: "amd64"})
+	eg.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 3, Version: "test", Hostname: "exit", Arch: "amd64"})
 	exit := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(eg.id), "preset": "vless-reality", "skip_probe": true}, 200)
 	entry := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": gid, "preset": "ss2022", "skip_probe": true, "exit": map[string]any{"kind": "node", "node_id": exit["id"]}}, 200)
 	eid := int(entry["exit_id"].(float64))

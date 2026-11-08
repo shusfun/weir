@@ -1,6 +1,6 @@
 ---
 name: weir-driver
-description: 管理员要支持新的 Xray / sing-box 版本、内核更新后配置报错、或要为内核新增或修改驱动时使用。
+description: 管理员要支持新的 Xray / sing-box / mihomo 版本、内核更新后配置报错、或要为内核新增或修改驱动时使用。
 ---
 
 # 写 Weir 内核驱动
@@ -15,6 +15,8 @@ description: 管理员要支持新的 Xray / sing-box 版本、内核更新后�
 4. 新版本只写变化：新建一个驱动，`extends` 上一版本的驱动，写自己的 `name`、`min_version`（需要时 `max_version`），只覆盖有变化的 `templates` 条目或用 `strip` 删除被移除的字段；同时把上一版本驱动的 `max_version` 收紧（另一步草稿）。没有变化就回答「不需要新驱动」。
 5. `submit_draft` 提交 `driver.save`。被拒时按返回的原因改：解析错误、样例配置生成失败、内核检查失败的输出、VPS 实测失败。
 6. 以下情况回答「需要 Weir 发版」，不要硬写驱动：全新的协议；需要新的统计方式；需要新的节点链接或订阅格式；引擎没有提供需要的变量。
+
+mihomo 驱动仅用于临时客户端实测与中心 Clash 订阅检查，不提供服务端方案；无 presets 时检查最小客户端配置。Xray 与 sing-box 保留节点服务端和服务端出站，sing-box 也用于中心 sing-box 订阅检查。三者以独立程序调用，mihomo 不参与常驻配置应用或开机恢复。
 
 ## 格式
 

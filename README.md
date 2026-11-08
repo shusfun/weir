@@ -18,7 +18,7 @@ curl -sSL https://raw.githubusercontent.com/shusfun/weir/main/deploy/install-onl
 
 脚本依次询问语言、角色和中心监听地址（默认 `127.0.0.1:19810`），按本机架构（amd64 / arm64）从 GitHub Release 下载安装包，目标机器不编译。没有终端（如 SSH 直接执行）时不提问，用默认值。直连 GitHub 低于 100 KiB/s 持续 15 秒时依次改用 `gh-proxy.com`、`ghfast.top`、`ghproxy.net`、`gh.llkk.cc`；校验和始终直连 GitHub 获取，镜像返回的包校验不一致就丢弃。`WEIR_GITHUB_MIRRORS=off` 关闭镜像，也可以写逗号分隔的主机名替换默认列表。
 
-装好后，中心的所有 GitHub 下载（内核、Gate 安装包、中心与 Gate 自更新、客户端安装包）都按「系统设置 → 版本与更新 → GitHub 加速」里排好的来源顺序：GitHub 直连、加速镜像（前缀 + GitHub 地址，兼容 gh-proxy，可以自建）、经某台 VPS 中转。同样是连续 15 秒低于 100 KiB/s 就换下一个，内容一律按 GitHub 官方摘要校验。规则见 [design.html#github-sources](docs/design.html#github-sources)。
+装好后，中心的所有 GitHub 下载（内核、Gate 安装包、中心与 Gate 自更新、客户端安装包）都按「系统设置 → 版本与下载 → GitHub 加速」里排好的来源顺序：GitHub 直连、加速镜像（前缀 + GitHub 地址，兼容 gh-proxy，可以自建）、经某台 VPS 中转。同样是连续 15 秒低于 100 KiB/s 就换下一个，内容一律按 GitHub 官方摘要校验。规则见 [design.html#github-sources](docs/design.html#github-sources)。
 
 中心只接受 HTTPS（本机回环直连除外）。保持监听 `127.0.0.1`，在 1Panel 等本机反代里把域名指向这个地址并配好证书，反代需要转发 `Host` 和 `X-Forwarded-Proto`。安装时不问域名，管理员第一次用域名打开控制台时自动记下。
 
@@ -39,7 +39,7 @@ curl -sSL https://raw.githubusercontent.com/shusfun/weir/main/deploy/install-onl
 
 root 在终端执行 `weir` 打开中文菜单：服务状态、启动、停止、重启、重设管理员密码（不需要旧密码，并撤销该管理员的全部登录）、卸载。
 
-更新：控制台「系统设置 → 版本与更新」里点更新（要当前密码与二次验证码）。由 root 的 `weir-update` 服务自己从 GitHub 下载、按官方摘要校验、安装，启动失败自动切回；也可以切回上一版本。Gate 随后自动跟随到同一版本：自己从 GitHub 下载（失败退回从中心下载），失败后 10 分钟内不自动重试；VPS 卡片上可以手动「更新到 x」。终端里也可以：
+更新：控制台「系统设置 → 版本与下载」里点更新（要当前密码与二次验证码）。由 root 的 `weir-update` 服务自己从 GitHub 下载、按官方摘要校验、安装，启动失败自动切回；也可以切回上一版本。Gate 随后自动跟随到同一版本：自己从 GitHub 下载（失败退回从中心下载），失败后 10 分钟内不自动重试；VPS 卡片上可以手动「更新到 x」。终端里也可以：
 
 ```sh
 weir self-update --version 0.1.14          # 以 root 更新到指定版本；--rollback 切回上一版本

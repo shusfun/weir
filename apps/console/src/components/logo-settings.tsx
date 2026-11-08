@@ -1,5 +1,6 @@
+// Logo 设置只负责上传与移除；展示组件负责固定尺寸占位，favicon 由应用根部统一提供。
 import { useState } from "react";
-import { Button, Field, FilePicker } from "@weir/ui";
+import { Button, Field, FilePicker, useConfirm } from "@weir/ui";
 import { Trash2 } from "lucide-react";
 import { api } from "../api";
 import { useRowAction } from "../lib/action";
@@ -9,6 +10,7 @@ import { Section } from "./system-settings";
 
 export function LogoSettings() {
   const logo = useLogo();
+  const confirm = useConfirm();
   const [error, setError] = useState("");
   const { run, isBusy } = useRowAction({ invalidate: [["logo"]] });
   async function upload(file: File) {
@@ -25,11 +27,11 @@ export function LogoSettings() {
   }
   return <Section title="Logo" description="登录页和控制台使用的标识。">
     {logo.isPending || logo.error || !logo.data ? <State loading={logo.isPending} error={logo.error} onRetry={() => logo.refetch()} /> : <div className="stack">
-      {logo.data.data ? <img src={logo.data.data} alt="当前 Logo" width={64} height={64} className="object-contain" /> : <p>尚未设置 Logo</p>}
+      {logo.data.configured ? <img src="/api/v1/logo" alt="当前 Logo" width={64} height={64} className="object-contain" /> : <State empty="尚未设置 Logo" />}
       <Field label="上传 Logo" error={error} hint="PNG、JPEG 或 GIF，最大 512 KiB，边长不超过 1024 像素。">
         <FilePicker accept="image/png,image/jpeg,image/gif" maxBytes={512 * 1024} disabled={isBusy()} onError={setError} onFile={(file) => void upload(file)}>选择图片，或拖到这里</FilePicker>
       </Field>
-      {logo.data.data && <div><Button variant="outline" disabled={isBusy()} busy={isBusy("remove")} onClick={() => void run("remove", () => api("/admin/settings/logo", "DELETE"), "Logo 已移除")}><Trash2 />移除 Logo</Button></div>}
+      {logo.data.configured && <div><Button variant="outline" disabled={isBusy()} busy={isBusy("remove")} onClick={async () => { if (await confirm({ title: "移除 Logo？", confirmText: "移除", tone: "danger" })) await run("remove", () => api("/admin/settings/logo", "DELETE"), "Logo 已移除"); }}><Trash2 />移除 Logo</Button></div>}
     </div>}
   </Section>;
 }

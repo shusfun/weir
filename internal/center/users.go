@@ -925,11 +925,11 @@ func (s *Server) checkUserChain(ctx context.Context, u *ent.User, req chainReque
 	if req.Exit.Kind != "" {
 		spec = &req.Exit
 	}
-	_, _, probe, err := s.validateExitSelection(ctx, g, entry.ID, &u.ID, req.ExitID, spec, admin && req.SkipProbe, admin, entry.Kernel)
+	_, _, probe, err := s.validateExitSelection(ctx, g, entry.ID, &u.ID, req.ExitID, spec, false, admin, entry.Kernel)
 	return entry, probe, err
 }
 
-func (s *Server) createChain(c *gin.Context, admin bool) {
+func (s *Server) createChainNow(c *gin.Context, admin bool) {
 	u, ok := s.subject(c, admin)
 	if !ok {
 		return
@@ -955,6 +955,9 @@ func (s *Server) createChain(c *gin.Context, admin bool) {
 	jobTitle(ctx, "新建链式代理「"+name+"」")
 	entry, probe, err := s.checkUserChain(ctx, u, req, admin)
 	if err != nil {
+		if s.deferExitChange(c, err) {
+			return
+		}
 		// 校验或 Gate 实测失败也写审计：操作者、目标用户与失败结果。
 		s.audit(c, "chain.create", "user:"+itoa(u.ID), "failed")
 		failErr(c, 422, err)
@@ -1052,7 +1055,7 @@ func (s *Server) chainParam(c *gin.Context, u *ent.User) (*ent.Chain, bool) {
 	return ch, true
 }
 
-func (s *Server) updateChain(c *gin.Context, admin bool) {
+func (s *Server) updateChainNow(c *gin.Context, admin bool) {
 	u, ok := s.subject(c, admin)
 	if !ok {
 		return
@@ -1114,6 +1117,9 @@ func (s *Server) updateChain(c *gin.Context, admin bool) {
 		}
 		entry, probe, err = s.checkUserChain(ctx, u, check, admin)
 		if err != nil {
+			if s.deferExitChange(c, err) {
+				return
+			}
 			s.audit(c, "chain.update", "chain:"+itoa(ch.ID), "failed")
 			failErr(c, 422, err)
 			return

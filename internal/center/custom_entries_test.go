@@ -6,36 +6,34 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/audit"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
 func TestCustomEntryMigration(t *testing.T) {
 	for _, mode := range []string{"", "bypass", "only"} {
-		old := contracts.CustomRules{Mode: mode, SourceMode: firstNonEmpty(mode, "off"), Source: "a.example\nb.example", Lines: []string{"DOMAIN-SUFFIX,a.example", "DOMAIN-SUFFIX,b.example"}}
-		p := migrateCustomPolicy(contracts.ProxyPolicy{Custom: old, Rules: map[string]string{"ai": "auto"}})
-		if p.Custom.Version != 2 || len(p.Custom.Entries) != 2 || p.Custom.Legacy.RulesFile != customRuleFile(old) {
-			t.Fatalf("migration %s: %+v", mode, p)
+		raw := map[string]any{"custom": map[string]any{"mode": mode, "source": "a.example\nb.example", "lines": []string{"DOMAIN-SUFFIX,a.example", "DOMAIN-SUFFIX,b.example"}}, "rules": map[string]string{"ai": "auto"}}
+		p := loadPolicy(&ent.User{ProxyPolicy: raw})
+		if p.Version != 3 || len(p.Custom.Entries) != 2 {
+			t.Fatal(p)
 		}
 		for _, e := range p.Custom.Entries {
-			if e.ID == "" || e.Enabled != (mode != "") || (mode == "only") != (e.Target == "select") {
-				t.Fatalf("entry %s: %+v", mode, e)
+			if e.ID == "" || e.Enabled != (mode != "") || (mode == "only") != (e.Target == "proxy") {
+				t.Fatal(mode, e)
 			}
 		}
-		if mode == "only" && (p.Rules["ai"] != "direct" || p.Rules["final"] != "direct" || p.Custom.Legacy.Rules["ai"] != "auto") {
-			t.Fatalf("only migration: %+v", p)
-		}
-		if policyFingerprint(migrateCustomPolicy(p)) != policyFingerprint(p) {
-			t.Fatal("migration must be idempotent")
+		if policyFingerprint(loadPolicy(&ent.User{ProxyPolicy: policyMap(p)})) != policyFingerprint(p) {
+			t.Fatal("迁移不幂等")
 		}
 	}
 	r := parseCustomEntries("example.com\nDOMAIN,child.example.com\n1.2.3.0/25\n1.2.3.128/25\nexample.com\nGEOSITE,cn")
 	if len(r.Rules) != 4 || r.Reduced != 1 || len(r.Unused) != 1 || r.Rules[1].Kind != "domain" {
 		t.Fatalf("ordered parse: %+v", r)
 	}
-	failed := migrateCustomPolicy(contracts.ProxyPolicy{Custom: contracts.CustomRules{Source: "failed.example", Lines: []string{"DOMAIN-SUFFIX,valid.example"}, Check: &contracts.CustomCheck{Status: "failed"}}})
-	if failed.Custom.Entries[0].Value != "valid.example" || failed.Custom.Entries[0].Enabled || failed.Custom.Pending.Entries[0].Value != "failed.example" {
-		t.Fatalf("disabled failed migration: %+v", failed.Custom)
+	failed := loadPolicy(&ent.User{ProxyPolicy: map[string]any{"custom": map[string]any{"source": "failed.example", "lines": []string{"DOMAIN-SUFFIX,valid.example"}, "check": map[string]any{"status": "failed"}}}})
+	if failed.Custom.Pending == nil || failed.Custom.Entries[0].Value != "valid.example" || failed.Custom.Entries[0].Enabled {
+		t.Fatal(failed)
 	}
 }
 
@@ -54,7 +52,7 @@ func TestCustomEntriesFlow(t *testing.T) {
 		}
 		return nil, nil
 	}
-	root := "/api/v1/me/proxy/custom"
+	root := "/api/v1/proxy/custom"
 	view := mustJSON(t, owner, "POST", root+"/append", map[string]any{"revision": 0, "source": "example.com\nDOMAIN,child.example.com\nGEOSITE,cn", "target": "direct"}, 200)
 	c := view["custom"].(map[string]any)
 	rows := c["entries"].([]any)
@@ -76,12 +74,12 @@ func TestCustomEntriesFlow(t *testing.T) {
 	if r := test(second, "child.example.com"); r["entry_matches"] != true || r["match"].(map[string]any)["entry_id"] != first {
 		t.Fatalf("shadowed: %v", r)
 	}
-	patch(second, map[string]any{"target": "auto", "position": 0})
-	if r := test(second, "child.example.com"); r["match"].(map[string]any)["entry_id"] != second || r["match"].(map[string]any)["policy"] != "自动选择" {
+	patch(second, map[string]any{"target": "proxy", "position": 0})
+	if r := test(second, "child.example.com"); r["match"].(map[string]any)["entry_id"] != second || r["match"].(map[string]any)["policy"] != "PROXY" {
 		t.Fatalf("ordered: %v", r)
 	}
 	patch(second, map[string]any{"target": "direct"})
-	if r := patch(second, map[string]any{"target": "auto"}); r["entries"].([]any)[0].(map[string]any)["last_proxy_target"] != "auto" {
+	if r := patch(second, map[string]any{"target": "proxy"}); r["entries"].([]any)[0].(map[string]any)["target"] != "proxy" {
 		t.Fatalf("restore group: %v", r)
 	}
 	patch(second, map[string]any{"enabled": false})
@@ -89,7 +87,7 @@ func TestCustomEntriesFlow(t *testing.T) {
 		t.Fatalf("disabled: %v", r)
 	}
 	// 重复追加不改变条目走向，且不会跨规则合并。
-	view = mustJSON(t, owner, "POST", root+"/append", map[string]any{"revision": revision, "source": "example.com\n8.8.8.8", "target": "auto"}, 200)
+	view = mustJSON(t, owner, "POST", root+"/append", map[string]any{"revision": revision, "source": "example.com\n8.8.8.8", "target": "proxy"}, 200)
 	c = view["custom"].(map[string]any)
 	revision = int(c["revision"].(float64))
 	if len(c["entries"].([]any)) != 3 || c["entries"].([]any)[1].(map[string]any)["target"] != "direct" {
@@ -98,7 +96,7 @@ func TestCustomEntriesFlow(t *testing.T) {
 	// 保存失败保留有效条目和完整候选；同一种方式的失败也必须可见。
 	fail = true
 	mustJSON(t, owner, "PATCH", rowURL(first), map[string]any{"revision": revision, "value": "failed.example"}, 422)
-	c = mustJSON(t, owner, "GET", "/api/v1/me/proxy", nil, 200)["custom"].(map[string]any)
+	c = mustJSON(t, owner, "GET", "/api/v1/proxy", nil, 200)["custom"].(map[string]any)
 	revision = int(c["revision"].(float64))
 	if c["pending"] == nil || c["entries"].([]any)[1].(map[string]any)["value"] != "example.com" {
 		t.Fatalf("failed candidate: %v", c)
@@ -123,8 +121,8 @@ func TestCustomEntriesFlow(t *testing.T) {
 	}
 	mustJSON(t, owner, "POST", root+"/parse", map[string]any{"source": strings.Repeat("x", customMaxSource+1)}, 400)
 	// 普通用户不能通过管理员路径读写别人的清单。
-	mustJSON(t, owner, "PATCH", "/api/v1/admin/users/1/proxy/custom/entries/"+first, map[string]any{"revision": revision, "enabled": false}, 403)
-	view = mustJSON(t, admin, "GET", "/api/v1/admin/users/"+itoa(uid)+"/proxy", nil, 200)
+	mustJSON(t, owner, "PATCH", "/api/v1/proxy/custom/entries/"+first+"?user=1", map[string]any{"revision": revision, "enabled": false}, 403)
+	view = mustJSON(t, admin, "GET", "/api/v1/proxy?user="+itoa(uid), nil, 200)
 	if view["custom"].(map[string]any)["revision"] != float64(revision) {
 		t.Fatal("admin sees different list")
 	}
@@ -134,11 +132,8 @@ func TestCustomEntriesFlow(t *testing.T) {
 	}
 	token := mustJSON(t, owner, "GET", "/api/v1/me/links", nil, 200)["items"].([]any)[0].(map[string]any)["token"].(string)
 	w := owner.do("GET", "/sub/"+token, nil, map[string]string{"User-Agent": "clash.meta"})
-	if strings.Contains(w.Body.String(), "RULE-SET,weir-custom") || !strings.Contains(w.Body.String(), "IP-CIDR,8.8.8.8/32,自动选择") || w.Header().Get("Profile-Update-Interval") != "1" {
+	if strings.Contains(w.Body.String(), "RULE-SET,weir-custom") || !strings.Contains(w.Body.String(), "IP-CIDR,8.8.8.8/32,PROXY") || w.Header().Get("Profile-Update-Interval") != "1" {
 		t.Fatalf("inline subscription: %s", w.Body.String())
-	}
-	if old := owner.do("GET", "/sub/"+token+"/rules", nil, nil).Body.String(); old != customEmptyRule+"\n" {
-		t.Fatalf("legacy snapshot changed: %q", old)
 	}
 	a := s.Store.Ent.Audit.Query().Where(audit.ActionEQ("proxy.custom_rules")).FirstX(t.Context())
 	if a.Detail["trace_id"] == "" || a.Detail["request_id"] == "" {
@@ -157,27 +152,27 @@ func TestCustomEntriesRejectConcurrentPolicyChange(t *testing.T) {
 			changed = true
 			u := s.Store.Ent.User.GetX(ctx, 1)
 			p := loadPolicy(u)
-			p.Rules["ai"] = "direct"
+			p.HiddenLines = []string{"node:1"}
 			u.Update().SetProxyPolicy(policyMap(p)).ExecX(ctx)
 		}
 		return nil, nil
 	}
-	mustJSON(t, admin, "POST", "/api/v1/me/proxy/custom/append", map[string]any{"revision": 0, "source": "concurrent.example", "target": "direct"}, 409)
+	mustJSON(t, admin, "POST", "/api/v1/proxy/custom/append", map[string]any{"revision": 0, "source": "concurrent.example", "target": "direct"}, 409)
 	u := s.Store.Ent.User.GetX(t.Context(), 1)
-	if p := loadPolicy(u); len(p.Custom.Entries) != 0 || p.Rules["ai"] != "direct" {
+	if p := loadPolicy(u); len(p.Custom.Entries) != 0 || len(p.HiddenLines) != 1 {
 		t.Fatalf("lost settings: %+v", p)
 	}
 }
 
 func TestCustomEntriesUnknownStillSaves(t *testing.T) {
 	_, owner, _ := setupGate(t)
-	v := mustJSON(t, owner, "POST", "/api/v1/me/proxy/custom/append", map[string]any{"revision": 0, "source": "unknown.example", "target": "direct"}, 200)
+	v := mustJSON(t, owner, "POST", "/api/v1/proxy/custom/append", map[string]any{"revision": 0, "source": "unknown.example", "target": "direct"}, 200)
 	c := v["custom"].(map[string]any)
 	if c["check"].(map[string]any)["status"] != "unknown" || c["pending"] != nil || len(c["entries"].([]any)) != 1 {
 		t.Fatalf("unknown must save effective entries: %v", c)
 	}
 	id := c["entries"].([]any)[0].(map[string]any)["id"].(string)
-	v = mustJSON(t, owner, "PATCH", "/api/v1/me/proxy/custom/entries/"+id, map[string]any{"revision": 1, "enabled": false}, 200)
+	v = mustJSON(t, owner, "PATCH", "/api/v1/proxy/custom/entries/"+id, map[string]any{"revision": 1, "enabled": false}, 200)
 	c = v["custom"].(map[string]any)
 	if c["check"].(map[string]any)["status"] != "unknown" || c["entries"].([]any)[0].(map[string]any)["enabled"] != false {
 		t.Fatalf("unknown single save: %v", c)

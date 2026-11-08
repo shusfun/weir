@@ -7,6 +7,7 @@ import { useFormAction } from "../lib/action";
 import { useConsoleContext } from "../lib/console-context";
 import { ExitSelector } from "./exit-selector";
 import { exitErrorFields } from "./chain-exit";
+import type { PendingExit } from "./pending-exits";
 
 export function NodeEdit({node,nodes,close}:{node:NodeItem;nodes:NodeItem[];close:()=>void}) {
   const client = useQueryClient();
@@ -15,7 +16,7 @@ export function NodeEdit({node,nodes,close}:{node:NodeItem;nodes:NodeItem[];clos
   const [exit,setExit]=useState<ExitSpec>({kind:"freedom"});
   const save=useFormAction(async track=>api(`/admin/nodes/${node.id}`,"PATCH",{name:name.trim(),port:Number(port),...(exitId?{exit_id:exitId}:{exit})},track),{
     fields:{invalid_name:"name",invalid_port:"port",port_in_use:"port",exit_not_allowed:"exit_id",...exitErrorFields(exit.kind)},
-    onSuccess:(updated:NodeItem)=>{client.setQueryData<NodeItem[]>(["nodes"],old=>old?.map(n=>n.id===updated.id?updated:n));void client.invalidateQueries({queryKey:["gates"]});close();},
+    onSuccess:(updated:NodeItem | {pending:PendingExit})=>{if (!("pending" in updated)) client.setQueryData<NodeItem[]>(["nodes"],old=>old?.map(n=>n.id===updated.id?updated:n));void client.invalidateQueries({queryKey:["gates"]});void client.invalidateQueries({queryKey:["pending-exits"]});close();},
   });
   useConsoleContext({object:{type:"node",id:node.id,name:node.name},dialog:{title:"编辑节点"}});
   return <Dialog open onOpenChange={v=>!v&&!save.busy&&close()}><DialogContent size="lg"><DialogTitle>编辑节点</DialogTitle><DialogDescription>协议：{node.protocol}（只读）</DialogDescription><Form busy={save.busy} errors={save.errors} onSubmit={()=>void save.submit()}>

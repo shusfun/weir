@@ -2,7 +2,6 @@ package center
 
 import (
 	"context"
-	"fmt"
 	"net/netip"
 	"regexp"
 	"slices"
@@ -326,26 +325,6 @@ func customPlanRules(lines []string) []subout.Rule {
 	return out
 }
 
-// customRuleFile 是 Clash rule-providers 拉取的内容。不使用或清单为空时给一条不会命中的占位。
-func customRuleFile(c contracts.CustomRules) string {
-	if c.Version >= 2 && c.Legacy != nil {
-		return c.Legacy.RulesFile
-	}
-	if c.Mode == "" || len(c.Lines) == 0 {
-		return customEmptyRule + "\n"
-	}
-	var b strings.Builder
-	for _, l := range c.Lines {
-		b.WriteString(l)
-		if strings.HasPrefix(l, "IP-CIDR,") {
-			b.WriteString(",no-resolve")
-		}
-		b.WriteByte('\n')
-	}
-	return b.String()
-}
-
-// customView 是代理页显示的内容：mode 是用户最后一次提交的方式，active_mode 是订阅实际用的方式。
 func customView(c contracts.CustomRules) gin.H {
 	entries := c.Entries
 	if entries == nil {
@@ -357,52 +336,13 @@ func customView(c contracts.CustomRules) gin.H {
 			active++
 		}
 	}
-	migration := ""
-	if c.Legacy != nil && (c.Legacy.Source != "" || len(c.Legacy.Lines) > 0 || c.Legacy.Mode != "") {
-		switch c.Legacy.Mode {
-		case contracts.CustomOnly:
-			migration = "旧“只经过代理”已转换：清单内走节点选择，分类和其余流量直连；可分别调整。"
-		case contracts.CustomBypass:
-			migration = "旧“不经过代理”已转换为逐条直连规则，可随时调整走向和启停。"
-		default:
-			migration = "旧“不使用”已转换为停用条目，需要时可逐条启用。"
-		}
-		migration += " 迁移前设置与旧规则文件快照已保留。"
-	}
-	return gin.H{"version": c.Version, "revision": c.Revision, "entries": entries, "pending": c.Pending, "legacy_only": c.Legacy != nil && c.Legacy.Mode == contracts.CustomOnly,
-		"migration": migration,
-		"mode":      firstNonEmpty(c.SourceMode, c.Mode, "off"), "active_mode": firstNonEmpty(c.Mode, "off"), "active_count": active,
-		"source": c.Source, "check": c.Check, "result": optimizeCustomRules(c.Source), "refresh_seconds": subout.CustomRuleSetSec}
+	return gin.H{"version": c.Version, "revision": c.Revision, "entries": entries, "pending": c.Pending, "active_count": active, "source": c.Source, "check": c.Check, "result": parseCustomEntries(c.Source)}
 }
 
 type customRequest struct {
 	Revision *int                     `json:"revision"`
 	Entries  *[]contracts.CustomEntry `json:"entries"`
-	Mode     string                   `json:"mode"`
 	Source   string                   `json:"source"`
-}
-
-// candidate 校验请求并算出候选设置；失败时已写好响应。
-func (req customRequest) candidate(c *gin.Context) (string, customResult, bool) {
-	mode := req.Mode
-	switch mode {
-	case "off":
-		mode = ""
-	case "", contracts.CustomBypass, contracts.CustomOnly:
-	default:
-		failure(c, 400, "invalid_custom_mode")
-		return "", customResult{}, false
-	}
-	if len(req.Source) > customMaxSource {
-		failDetail(c, 400, "custom_rules_too_large", fmt.Sprintf("内容超过 %d KB", customMaxSource>>10), nil)
-		return "", customResult{}, false
-	}
-	res := optimizeCustomRules(req.Source)
-	if len(res.Rules) > customMaxRules {
-		failDetail(c, 400, "custom_rules_too_large", fmt.Sprintf("优化后仍有 %d 条，最多 %d 条", len(res.Rules), customMaxRules), nil)
-		return "", customResult{}, false
-	}
-	return mode, res, true
 }
 
 // customPlanned 用候选设置生成计划：节点取用户第一条在生效时间内、有节点的链接；没有时计划里没有节点。
@@ -419,7 +359,11 @@ func (s *Server) customPlanned(ctx context.Context, u *ent.User, pol contracts.P
 		if err != nil {
 			return planned{}, err
 		}
-		if p := s.planEntries(ctx, u, entries, false); len(p.Entries) > 0 {
+		p, err := s.planEntries(ctx, u, entries, false)
+		if err != nil {
+			return planned{}, err
+		}
+		if len(p.Entries) > 0 {
 			p.Policy = pol
 			return p, nil
 		}
@@ -472,7 +416,7 @@ func (s *Server) checkCustomRules(ctx context.Context, u *ent.User, pol contract
 
 // 整份替换与单条修改使用相同的版本校验、内核检查与提交逻辑。
 func (s *Server) putCustomRules(c *gin.Context, admin bool) {
-	u, ok := s.subject(c, admin)
+	u, ok := s.proxySubject(c, admin)
 	if !ok {
 		return
 	}
@@ -499,7 +443,7 @@ func customTestTarget(raw string) string {
 
 // testCustomRules 算一个目标按粘贴框当前内容的走向：只计算，不发起连接，不写入。
 func (s *Server) testCustomRules(c *gin.Context, admin bool) {
-	u, ok := s.subject(c, admin)
+	u, ok := s.proxySubject(c, admin)
 	if !ok {
 		return
 	}
@@ -515,37 +459,16 @@ func (s *Server) testCustomRules(c *gin.Context, admin bool) {
 		failure(c, 400, "invalid_test_target")
 		return
 	}
-	if req.Revision != nil || req.Entries != nil || req.Mode == "" && req.Source == "" {
-		pol := loadPolicy(u)
-		if req.Revision != nil && *req.Revision != pol.Custom.Revision {
-			failure(c, 409, "custom_revision_conflict")
+	pol := loadPolicy(u)
+	if req.Revision != nil && *req.Revision != pol.Revision {
+		failure(c, 409, "custom_revision_conflict")
+		return
+	}
+	if req.Entries != nil {
+		pol.Custom.Entries = slices.Clone(*req.Entries)
+		if !s.validateCustomEntries(c, u, loadPolicy(u), pol.Custom.Entries) {
 			return
 		}
-		if req.Entries != nil {
-			pol.Custom.Entries = slices.Clone(*req.Entries)
-			if !s.validateCustomEntries(c, u, loadPolicy(u), pol.Custom.Entries) {
-				return
-			}
-		}
-		s.respondCustomMatch(c, u, pol, target, gin.H{"revision": pol.Custom.Revision})
-		return
 	}
-	mode, res, ok := req.candidate(c)
-	if !ok {
-		return
-	}
-	ctx := c.Request.Context()
-	pol := loadPolicy(u)
-	pol.Custom = contracts.CustomRules{Mode: mode, Lines: customLines(res.Rules)}
-	p, err := s.customPlanned(ctx, u, pol)
-	if err != nil {
-		failInternal(c, 503, "query_failed", err)
-		return
-	}
-	plan, items := s.subPlan(ctx, p)
-	names := make([]string, len(p.Entries))
-	for i, e := range p.Entries {
-		names[i] = e.Name
-	}
-	c.JSON(200, gin.H{"target": target, "match": plan.Match(target, names, items)})
+	s.respondCustomMatch(c, u, pol, target, gin.H{"revision": pol.Revision})
 }

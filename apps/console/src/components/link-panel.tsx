@@ -1,3 +1,4 @@
+import { ClientDistribution } from "./client-distribution";
 import { NodeSummary, ExitSummary, nodeTitle } from "./node-summary";
 import type { NodeChoice } from "../lib/core";
 import { useNodeChoices } from "../lib/node-choices";
@@ -7,7 +8,8 @@ import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "../lib/query";
 import { field, useConsoleContext } from "../lib/console-context";
-import { dataObject } from "./object-link";
+import { dataObject, ObjectLink, useStringDialogParam } from "./object-link";
+import { useUnsavedChanges } from "../lib/dirty";
 import {
   Badge,
   Button,
@@ -25,6 +27,7 @@ import {
   Input,
   InsetRow,
   InsetRows,
+  InsetGroup,
   Notice,
   SectionHeader,
   Select,
@@ -196,11 +199,12 @@ function LinkRow({ base, link: l, stats, showCredentials, inlineQr, onEdit, refe
           </small>
           <small className="block text-[var(--weir-ink-3)]">
             {stats
-              ? <>近 24 小时拉取 <span className="tabular-nums">{stats.pulls_24h}</span> 次 · 最近 {stats.last_pull ? `${date(stats.last_pull.at)}（${stats.last_pull.client || "未识别的客户端"}）` : "尚无记录"}</>
+              ? <>近 24 小时拉取 <span className="tabular-nums">{stats.pulls_24h}</span> 次 · 最近 {stats.last_pull ? `${date(stats.last_pull.at)}（${stats.last_pull.client || "未识别"}）` : "尚无记录"}</>
               : <>最近获取 {date(l.last_used_at)}</>}
           </small>
         </div>
       </div>
+      {stats && <Collapsible title="客户端分布"><ClientDistribution clients={stats.clients} /></Collapsible>}
       <CopyField label="订阅地址" value={l.url} onError={() => toast("复制失败", { description: "浏览器未允许复制，请在地址框里手动复制。", tone: "warn" })} />
       <div className="flex flex-wrap gap-1.5">
         <Button size="sm" variant="outline" onClick={() => setQr(true)}><QrCode />二维码</Button>
@@ -443,14 +447,14 @@ export function ChainPanel({ base, admin }: { base: string; admin?: boolean }) {
   const chains = useChains(base);
   const choices = useNodeChoices(base);
   const nodes = choices.data ?? [];
-  const [open, setOpen] = useState(false);
+  const create = useStringDialogParam("new_chain");
   const { run: act, isBusy } = useRowAction<number>({ refetch: chains.refetch });
+  useConsoleContext({ list: { total: chains.data?.items.length ?? 0, items: (chains.data?.items ?? []).map((c) => ({ type: "chain", id: c.id, name: c.name })) } });
   if (chains.isPending || choices.isPending || chains.error || choices.error)
     return <State loading={chains.isPending || choices.isPending} error={chains.error ?? choices.error} onRetry={() => { void chains.refetch(); void choices.refetch(); }} />;
   const name = (id?: number | null) => { const n = nodes.find((n) => n.id === id); return n ? nodeTitle(n) : "节点"; };
   return (
-    <section className="stack">
-      <SectionHeader
+    <InsetGroup
         title="链式代理"
         description="经入口节点再从订阅节点、代理或另一节点出去；流量只在入口计量一次。"
         actions={
@@ -458,24 +462,25 @@ export function ChainPanel({ base, admin }: { base: string; admin?: boolean }) {
             <Button
               size="sm"
               disabled={chains.data.items.length >= 10 || nodes.length === 0}
-              onClick={() => setOpen(true)}
+              onClick={() => create.open("1")}
             >
               <Plus />
               新建
             </Button>
           )
         }
-      />
+      >
       {!chains.data.allow_chain && (
         <Notice role="status">{admin ? "该用户未开放链式代理，可在编辑用户中打开。" : "管理员未开放链式代理。"}</Notice>
       )}
       {chains.data.items.length === 0 ? (
         <State empty="还没有链式代理" detail="想让流量经另一个代理再出去时才需要。" />
       ) : (
-        <ul className="stack">
+        <InsetRows>
           {chains.data.items.map((c) => (
-            <li key={c.id} {...dataObject({ type: "chain", id: c.id })} className="flex flex-wrap items-center justify-between gap-2">
+            <InsetRow key={c.id} {...dataObject({ type: "chain", id: c.id })} className="flex flex-wrap items-center justify-between gap-2">
               <span className="min-w-0">
+                <ObjectLink to={{ type: "chain", id: c.id, name: c.name }} href={`/proxy?tab=nodes${base === "/me" ? "" : `&user=${base.split("/").at(-1)}`}&focus=${encodeURIComponent(`chain:${c.id}`)}`} />{" · "}
                 <ExitSummary exit={c.exit} expanded />{" "}
                 {!c.enabled && (
                   <Badge variant="soft" tone="warn">
@@ -530,24 +535,23 @@ export function ChainPanel({ base, admin }: { base: string; admin?: boolean }) {
                   <Trash2 />
                 </Button>
               </span>
-            </li>
+            </InsetRow>
           ))}
-        </ul>
+        </InsetRows>
       )}
-      {open && (
+      {create.value && (
         <ChainForm
           base={base}
           nodes={nodes}
           admin={admin}
-          close={() => setOpen(false)}
+          close={() => create.close()}
           saved={() => {
-            setOpen(false);
-            toast("链式代理已创建", { tone: "ok" });
+            create.close();
             void chains.refetch();
           }}
         />
       )}
-    </section>
+    </InsetGroup>
   );
 }
 
@@ -572,12 +576,20 @@ function ChainForm({
   const [exit, setExit] = useState<ExitSpec | null>(null);
   // 订阅组没读到时不按「有订阅组」默认：等读到再定，读失败时说明原因并可重新读取
   const current: ExitSpec = exit ?? (groups.data && groups.data.length === 0 ? { kind: "socks5" } : { kind: "source", mode: "filter" });
-  const [skip, setSkip] = useState(false);
-  const save = useFormAction((track) => api(base + "/chains", "POST", { name: name.trim(), entry_node_id: entry, ...(exitId?{exit_id:exitId}:{exit:current}), skip_probe: admin && skip }, track), {
+  const confirm = useConfirm();
+  const dirty = !!name || entry !== (nodes[0]?.id ?? 0) || !!exitId || !!exit;
+  const markSaved = useUnsavedChanges(dirty);
+  const save = useFormAction((track) => api(base + "/chains", "POST", { name: name.trim(), entry_node_id: entry, ...(exitId?{exit_id:exitId}:{exit:current}) }, track), {
     fields: { entry_not_allowed: "entry", exit_not_allowed:"exit_id", ...exitErrorFields(current.kind) },
-    onSuccess: saved,
+    onSuccess: () => { markSaved(); saved(); },
     wait: () => ({ label: `正在让入口 VPS 经出口实测（${nodes.find((n) => n.id === entry)?.name ?? "入口节点"}）`, max: 45 }),
   });
+  const requestClose = async () => {
+    if (save.busy && !save.detachable) return;
+    if (!dirty || await confirm({ title: "放弃未保存修改？", description: "链式代理尚未保存。", confirmText: "放弃修改", tone: "danger" })) {
+      save.leave(); markSaved(); close();
+    }
+  };
   useConsoleContext({
     dialog: { title: "新建链式代理" },
     form: [
@@ -587,7 +599,7 @@ function ChainForm({
     ],
   });
   return (
-    <Dialog open onOpenChange={(o) => { if (!o && (!save.busy || save.detachable)) { save.leave(); close(); } }}>
+    <Dialog open onOpenChange={(o) => { if (!o) void requestClose(); }}>
       <DialogContent size="md">
         <DialogTitle>新建链式代理</DialogTitle>
         <DialogDescription>会作为一个新节点出现在订阅里。保存前由入口 VPS 实测出口是否可用。</DialogDescription>
@@ -626,9 +638,8 @@ function ChainForm({
               nodeHint="出口需要你可用的另一个节点。"
             />
           )}
-          {admin && <CheckboxField label="跳过 VPS 实测（仅管理员）" checked={skip} onCheckedChange={setSkip} />}
           <DialogFooter error={save.error} status={save.wait && <WaitText wait={save.wait} />}>
-            <Button type="button" variant="outline" disabled={save.busy} onClick={close}>
+            <Button type="button" variant="outline" disabled={save.busy} onClick={() => void requestClose()}>
               取消
             </Button>
             <Button type="submit" disabled={save.busy || !groups.data} busy={save.busy} busyText="正在实测并保存…">保存</Button>

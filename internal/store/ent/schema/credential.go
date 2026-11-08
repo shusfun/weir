@@ -23,6 +23,8 @@ func (Credential) Fields() []ent.Field {
 		field.String("uuid").Sensitive().Default(""),
 		field.String("password").Sensitive().Default(""),
 		field.Bool("internal").Default(false),
+		field.String("purpose").Default(""),
+		field.Time("expires_at").Optional().Nillable(),
 		// WireGuard 检测使用独立 peer，沿用父凭据的授权，但不能出现在用户订阅中。
 		field.Int("probe_parent_id").Optional().Nillable(),
 		field.String("meter_epoch").Default(""),

@@ -39,7 +39,7 @@ export function UpdateCard() {
   const blocked = !!view?.blocker || running;
   const older = (rel?.older ?? []).filter((r) => r.version !== view?.previous);
   return (
-    <Section title="版本与更新" description="中心先按下方「GitHub 加速」的顺序下载发布包（含经 VPS 中转），root 的更新服务按官方摘要校验后安装，启动失败自动切回上一版本。Gate 随后跟着更新到同一版本。">
+    <Section title="版本与下载" description="内核、Gate 安装、中心更新和客户端下载都按下方 GitHub 来源顺序下载；root 的更新服务按官方摘要校验后安装，启动失败自动切回上一版本。">
       {status.isPending || (!view && status.error) || !view ? <State loading={status.isPending} error={status.error} onRetry={() => status.refetch()} /> : (
         <InsetRows>
           <InsetRow className="stack">

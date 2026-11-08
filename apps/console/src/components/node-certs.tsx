@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "../lib/query";
-import { Badge, Button, Collapsible, Field, Form, FormGrid, Input, Notice, PasswordInput, SectionHeader, SwitchField } from "@weir/ui";
+import { Badge, Button, Collapsible, Field, Form, FormGrid, Input, Notice, PasswordInput, SectionHeader, SwitchField, TextLink } from "@weir/ui";
 import { RefreshCw } from "lucide-react";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -57,7 +57,7 @@ export function NodeCertCard() {
       title="节点证书"
       description="Trojan、WebSocket + TLS 节点默认用 VPS 公网 IP 的证书，不需要为每台 VPS 加解析：VPS 上有 1Panel 时经 1Panel 申请；否则 80 端口空闲时由中心向 Let's Encrypt 申请（约 6 天有效，到期前自动续签）。两者都不可用时，用下面的节点证书域名兜底。"
     >
-      <small className="text-[var(--weir-ink-3)]">上传或删除具体证书在 <Link className="underline" to="/gates?certs=1">证书管理</Link>。</small>
+      <small className="text-[var(--weir-ink-3)]">上传或删除具体证书在 <TextLink render={<Link to="/gates?certs=1" />}>证书管理</TextLink>。</small>
       {q.isPending || q.error || !v ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : (
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
           <FormGrid>

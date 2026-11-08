@@ -163,6 +163,10 @@ func (s *Server) putSecurity(c *gin.Context) {
 	if !bind(c, &req) {
 		return
 	}
+	if req.RequireAdminMFA && !req.TOTP {
+		failDetail(c, 400, "invalid_security_settings", "管理员必须二次验证时必须允许 TOTP", gin.H{"field": "require_admin_mfa", "reason": "totp_required"})
+		return
+	}
 	if err := s.Store.Ent.Setting.Create().SetKey("security").SetValue(toMap(req.SecuritySettings)).OnConflictColumns(setting.FieldKey).UpdateNewValues().Exec(c.Request.Context()); err != nil {
 		failInternal(c, 500, "save_failed", err)
 		return

@@ -100,7 +100,7 @@ func TestExitSharingOwnershipAndTrace(t *testing.T) {
 	mustJSON(t, admin, "PATCH", "/api/v1/admin/exits/"+itoa(id), map[string]any{"remark": "更新备注"}, 200)
 	// VPS 身份固定，不能引用另一台 VPS 的出口。
 	eg := pairFakeGate(t, admin)
-	eg.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 2, Version: "test", Arch: "amd64"})
+	eg.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 3, Version: "test", Arch: "amd64"})
 	other := s.Store.Ent.Exit.Query().Where(entexit.GateIDEQ(int(eg.id)), entexit.TagEQ("direct")).OnlyX(ctx)
 	mustJSON(t, admin, "PATCH", "/api/v1/admin/nodes/"+itoa(int(n["id"].(float64))), map[string]any{"exit_id": other.ID, "skip_probe": true}, 422)
 }

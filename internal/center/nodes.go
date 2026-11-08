@@ -153,7 +153,12 @@ func (s *Server) nodeView(ctx context.Context, n *ent.Node) gin.H {
 		view["reach"] = reachResult{Status: "unknown", Why: "还没有检查过"}
 	}
 	// 全部用户直连这个节点时的下载速率（近 24 小时第 90 百分位）；没有流量时 minutes 为 0，页面显示「未知」
-	view["rate"] = s.nodeRates(ctx, []int{n.ID})[n.ID]
+	rates, rateErr := s.nodeRates(ctx, []int{n.ID})
+	view["rate"] = rates[n.ID]
+	if rateErr != nil {
+		s.tasks.note("node-rates", rateErr)
+		view["rate_error"] = "下载速度读取失败"
+	}
 	if test := s.loadNodeTest(ctx, n); test != nil {
 		view["test"] = test
 	}
@@ -316,12 +321,12 @@ func (s *Server) resolveExitSpec(ctx context.Context, self int, spec ExitSpec, p
 		if err != nil || eg.PublicHost == "" {
 			return resolvedExit{}, errors.New("chain_exit_no_address")
 		}
-		// 入口到出口节点的内部凭据保存后才生成：这里先用占位凭据检查参数与内核能否连接，实测只测端口。
+		// 先用占位凭据校验协议参数，实测阶段另外签发并下发短时内部凭据。
 		o, err := nodeExit("", exit, eg.PublicHost, &ent.Credential{UUID: "00000000-0000-4000-8000-000000000000", Password: "probe"})
 		if err != nil {
 			return resolvedExit{}, errors.New("chain_exit_unsupported")
 		}
-		return resolvedExit{Outbound: o, Names: []string{exit.Name}, TCPOnly: true}, nil
+		return resolvedExit{Outbound: o, Names: []string{exit.Name}, TestNodeID: exit.ID}, nil
 	}
 	return resolvedExit{}, errors.New("invalid_chain")
 }
@@ -348,7 +353,11 @@ func (s *Server) validateExitSpec(ctx context.Context, entry *ent.Gate, self int
 	if !probe {
 		return nil, nil
 	}
-	return s.probeExit(ctx, entry, ex, publicOnly)
+	result, err := s.probeExit(ctx, entry, ex, publicOnly)
+	if err != nil {
+		return result, exitVerificationError{err}
+	}
+	return result, nil
 }
 
 // seal 加密保存的出口凭据；空值不加密。
@@ -426,7 +435,7 @@ func (s *Server) checkSettings(ctx context.Context, g *ent.Gate, kernel, protoco
 }
 
 // createNode 建节点：协议（预设）、VPS、出口。伪装参数由预设与 Gate 实测决定。
-func (s *Server) createNode(c *gin.Context) {
+func (s *Server) createNodeNow(c *gin.Context) {
 	var req struct {
 		GateID        int            `json:"gate_id"`
 		Preset        string         `json:"preset"`
@@ -549,8 +558,11 @@ func (s *Server) createNode(c *gin.Context) {
 		failSettings(c, err)
 		return
 	}
-	selected, spec, probe, err := s.validateExitSelection(ctx, g, 0, nil, req.ExitID, req.Exit, req.SkipProbe, true, p.Kernel)
+	selected, spec, probe, err := s.validateExitSelection(ctx, g, 0, nil, req.ExitID, req.Exit, false, true, p.Kernel)
 	if err != nil {
+		if s.deferExitChange(c, err) {
+			return
+		}
 		failErr(c, 422, err)
 		return
 	}
@@ -581,13 +593,19 @@ func (s *Server) createNode(c *gin.Context) {
 			if res, err = s.testNode(ctx, candidate, st); err == nil {
 				break
 			}
+			if missingMihomo(err) {
+				break
+			}
 			failed = append(failed, strings.TrimSpace(t+" "+err.Error()))
 		}
-		if err != nil {
+		if missingMihomo(err) {
+			tested = gin.H{"done": false, "pending": true, "status": "unknown", "why": "未执行：mihomo 正在下载，完成后自动实测"}
+		} else if err != nil {
 			failDetail(c, 422, "node_test_failed", strings.Join(failed, "；"), gin.H{"result": res})
 			return
+		} else {
+			tested = gin.H{"done": true, "latency_ms": res["latency_ms"], "skipped_targets": failed, "stage": res["stage"]}
 		}
-		tested = gin.H{"done": true, "latency_ms": res["latency_ms"], "skipped_targets": failed, "stage": res["stage"]}
 	}
 	if c.GetBool(dryRunKey) {
 		r := dryResult{Pin: map[string]any{"port": req.Port}, Preview: []string{fmt.Sprintf("在 %s 上新建 %s 节点「%s」，端口 %d", g.Name, p.Name, name, req.Port)}}
@@ -658,6 +676,12 @@ func (s *Server) createNode(c *gin.Context) {
 	if err = s.afterNodeChange(ctx, n); err != nil {
 		failInternal(c, 500, "sync_failed", err)
 		return
+	}
+	if tested["pending"] == true {
+		if err := s.queueNodeProbe(ctx, n, c.GetInt("user_id")); err != nil {
+			failInternal(c, 500, "save_failed", err)
+			return
+		}
 	}
 	go s.checkAfterApplied(context.WithoutCancel(ctx), n.ID, g.ID)
 	s.audit(c, "node.create", "node:"+itoa(n.ID), "ok")
@@ -771,7 +795,7 @@ func (s *Server) invalidateDependentExitProbes(ctx context.Context, nodeID int) 
 	return nil
 }
 
-func (s *Server) updateNode(c *gin.Context) {
+func (s *Server) updateNodeNow(c *gin.Context) {
 	n, ok := s.nodeParam(c)
 	if !ok {
 		return
@@ -866,8 +890,11 @@ func (s *Server) updateNode(c *gin.Context) {
 			}
 			id = *req.ExitID
 		}
-		selected, spec, probe, err = s.validateExitSelection(ctx, g, n.ID, nil, id, req.Exit, req.SkipProbe || id == n.ExitID, true, n.Kernel)
+		selected, spec, probe, err = s.validateExitSelection(ctx, g, n.ID, nil, id, req.Exit, id == n.ExitID, true, n.Kernel)
 		if err != nil {
+			if s.deferExitChange(c, err) {
+				return
+			}
 			failErr(c, 422, err)
 			return
 		}
@@ -880,6 +907,9 @@ func (s *Server) updateNode(c *gin.Context) {
 		}
 	}
 	if dryRun(c, dryResult{Preview: []string{"修改节点「" + n.Name + "」"}}) {
+		return
+	}
+	if !jobCommit(c) {
 		return
 	}
 	if selected != nil || req.Exit != nil || req.ExitID != nil {
@@ -939,6 +969,15 @@ func (s *Server) updateNode(c *gin.Context) {
 		return
 	}
 	s.audit(c, "node.update", "node:"+itoa(n.ID), "ok")
+	if n.Port != previous.Port || n.ExitID != previous.ExitID || n.Enabled != previous.Enabled || !reflect.DeepEqual(n.Settings, previous.Settings) || !reflect.DeepEqual(n.CertID, previous.CertID) {
+		if _, _, e := s.gateKernels(ctx, g, map[string]bool{"mihomo": true}); e != nil && missingMihomo(e) {
+			if e = s.queueNodeProbe(ctx, n, c.GetInt("user_id")); e != nil {
+				failInternal(c, 500, "save_failed", e)
+				return
+			}
+		}
+		go s.checkAfterApplied(context.WithoutCancel(ctx), n.ID, g.ID)
+	}
 	c.JSON(200, s.nodeView(ctx, n))
 }
 

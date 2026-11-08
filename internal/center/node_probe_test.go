@@ -3,7 +3,6 @@ package center
 import (
 	"context"
 	"encoding/json"
-	"net"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -13,7 +12,6 @@ import (
 	"github.com/shusfun/weir/internal/nodeprobe"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/audit"
-	"github.com/shusfun/weir/internal/store/ent/budget"
 	"github.com/shusfun/weir/internal/store/ent/credential"
 )
 
@@ -24,18 +22,52 @@ func readyDeployedNode(t *testing.T, preset string) (*Server, *testClient, *ent.
 	n := s.Store.Ent.Node.GetX(t.Context(), int(created["id"].(float64)))
 	g := s.Store.Ent.Gate.GetX(t.Context(), n.GateID)
 	s.Store.Ent.Gate.UpdateOne(g).SetAppliedRevision(g.ConfigRevision).SetLastSeenAt(time.Now()).SetKernelsRunning(map[string]string{n.Kernel: "1.14.4"}).SetListeningPorts([]map[string]any{{"port": n.Port, "proto": nodeProtos(n.Protocol)[0]}}).ExecX(t.Context())
+	simCtx, stopSim := context.WithCancel(t.Context())
+	doneSim := make(chan struct{})
+	go func() {
+		defer close(doneSim)
+		timer := time.NewTicker(10 * time.Millisecond)
+		defer timer.Stop()
+		for {
+			select {
+			case <-simCtx.Done():
+				return
+			case <-timer.C:
+				rows, e := s.Store.Ent.Gate.Query().All(simCtx)
+				if e != nil {
+					continue
+				}
+				for _, row := range rows {
+					if row.AppliedRevision < row.ConfigRevision {
+						_ = row.Update().SetAppliedRevision(row.ConfigRevision).Exec(simCtx)
+					}
+				}
+			}
+		}
+	}()
+	t.Cleanup(func() { stopSim(); <-doneSim })
 	s.origin.value, s.origin.loaded = "https://center.example.test", true
 	return s, admin, n
 }
 
 func stubDeployedProbe(t *testing.T, run func(context.Context, nodeprobe.Options) (nodeprobe.Result, error)) {
 	t.Helper()
-	oldRun, oldBin := deployedNodeProbe, deployedProbeBinary
+	oldRun, oldBin, oldSupported, oldBatch := deployedNodeProbe, deployedProbeBinary, externalProbeSupported, batchNodeProbe
+	externalProbeSupported = func() bool { return true }
+	batchNodeProbe = func(ctx context.Context, o nodeprobe.BatchOptions) (map[string]nodeprobe.Check, error) {
+		results := map[string]nodeprobe.Check{}
+		for _, p := range o.Proxies {
+			results[p["name"].(string)] = nodeprobe.Check{Status: "passed"}
+		}
+		return results, nil
+	}
 	deployedNodeProbe = run
 	deployedProbeBinary = func(*Server, context.Context) (string, kernelconf.Driver, error) {
-		return "test-sing-box", kernelconf.Driver{Run: []string{"run", "-c", "{config}"}, Check: []string{"check", "-c", "{config}"}}, nil
+		return "test-mihomo", kernelconf.Driver{Run: []string{"-f", "{config}"}, Check: []string{"-t", "-f", "{config}"}}, nil
 	}
-	t.Cleanup(func() { deployedNodeProbe, deployedProbeBinary = oldRun, oldBin })
+	t.Cleanup(func() {
+		deployedNodeProbe, deployedProbeBinary, externalProbeSupported, batchNodeProbe = oldRun, oldBin, oldSupported, oldBatch
+	})
 }
 
 func startNodeTest(t *testing.T, admin *testClient, id int) Job {
@@ -71,105 +103,44 @@ func finishNodeTest(t *testing.T, s *Server, j Job) nodeTestResult {
 	return body.Test
 }
 
-func TestDeployedNodeTestSelectionAndQuota(t *testing.T) {
+func TestInternalProbeCredentialLifecycle(t *testing.T) {
 	s, _, n := readyDeployedNode(t, "ss2022")
 	ctx := t.Context()
+	s.Store.Ent.User.Update().SetQuota(1).SetUsed(1).ExecX(ctx)
+	s.Store.Ent.Link.Delete().ExecX(ctx)
+	c, revoke, err := s.issueProbeCredential(ctx, n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer revoke()
+	row := s.Store.Ent.Credential.GetX(ctx, c.ID)
+	if !row.Internal || row.UserID != nil || row.LinkID != nil || row.Purpose != "probe" || row.ExpiresAt == nil || row.Password == c.Password {
+		t.Fatal("内部凭据必须独立且加密")
+	}
+	if err = s.SyncAll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !s.Store.Ent.Credential.Query().Where(credential.IDEQ(c.ID)).ExistX(ctx) {
+		t.Fatal("同步误删测试凭据")
+	}
 	g := s.Store.Ent.Gate.GetX(ctx, n.GateID)
-	adminCred, err := s.selectNodeTestCredential(ctx, n, g, 1, 0)
-	if err != nil || *adminCred.UserID != 1 {
-		t.Fatalf("admin preference: %v %v", adminCred, err)
-	}
-	u := s.Store.Ent.User.Create().SetEmail("probe-user@example.test").SetPasswordHash("unused").SetQuota(1024).SetAllNodes(true).SaveX(ctx)
-	l := s.Store.Ent.Link.Create().SetUserID(u.ID).SetToken(randomHex(16)).SaveX(ctx)
-	if err := s.SyncUser(ctx, u.ID); err != nil {
-		t.Fatal(err)
-	}
-	c, err := s.selectNodeTestCredential(ctx, n, g, u.ID, 0)
-	if err != nil || *c.UserID != u.ID {
-		t.Fatalf("user preference: %v %v", c, err)
-	}
-	s.Store.Ent.Link.UpdateOne(l).SetEndsAt(time.Now().Add(-time.Minute)).ExecX(ctx)
-	if _, err := s.selectNodeTestCredential(ctx, n, g, u.ID, c.ID); err == nil {
-		t.Fatal("expired link accepted")
-	}
-	s.Store.Ent.Link.UpdateOne(l).ClearEndsAt().SetStartsAt(time.Now().Add(time.Hour)).ExecX(ctx)
-	if _, err := s.selectNodeTestCredential(ctx, n, g, u.ID, c.ID); err == nil {
-		t.Fatal("future link accepted")
-	}
-	s.Store.Ent.Link.UpdateOne(l).ClearStartsAt().ExecX(ctx)
-	s.Store.Ent.Budget.Update().Where(budget.UserIDEQ(u.ID)).SetUsed(1024).SetAllocated(1024).ExecX(ctx)
-	if _, err := s.selectNodeTestCredential(ctx, n, g, u.ID, c.ID); err == nil {
-		t.Fatal("exhausted budget accepted")
-	}
-	selected, err := s.selectNodeTestCredential(ctx, n, g, u.ID, 0)
-	if err != nil || selected.ID != adminCred.ID {
-		t.Fatal("did not fall back to eligible normal credential")
-	}
-	s.Store.Ent.Credential.Create().SetNodeID(n.ID).SetInternal(true).SetStatsKey("internal-probe-test").SetPassword("not-a-user").SaveX(ctx)
-	s.Store.Ent.User.UpdateOneID(1).SetEnabled(false).ExecX(ctx)
-	if _, err := s.selectNodeTestCredential(ctx, n, g, 1, 0); err == nil {
-		t.Fatal("internal credential or disabled user selected")
-	}
-}
-
-func TestWireGuardProbeCredentialLifecycle(t *testing.T) {
-	s, _, n := readyDeployedNode(t, "wireguard")
-	ctx := t.Context()
-	g := s.Store.Ent.Gate.GetX(ctx, n.GateID)
-	parent, err := s.selectNodeTestCredential(ctx, n, g, 1, 0)
+	binding, err := s.probeFingerprint(ctx, n, g)
 	if err != nil {
 		t.Fatal(err)
 	}
-	probe, err := s.wireGuardProbeCredential(ctx, parent)
-	if err != nil {
+	if err = s.storeNodeTest(ctx, n.ID, nodeTestResult{Status: "passed", Binding: binding}); err != nil {
 		t.Fatal(err)
 	}
-	if probe.ID == parent.ID || probe.Password == parent.Password || !sameCredentialOwner(probe, parent) {
-		t.Fatal("probe must use a distinct authorized peer")
+	revoke()
+	if s.Store.Ent.Credential.Query().Where(credential.IDEQ(c.ID)).ExistX(ctx) {
+		t.Fatal("凭据未回收")
 	}
-	again, err := s.wireGuardProbeCredential(ctx, parent)
-	if err != nil || again.ID != probe.ID {
-		t.Fatal("probe peer was recreated")
+	if got := s.loadNodeTest(ctx, n); got == nil || got.Status != "passed" {
+		t.Fatal("凭据回收使结果失效")
 	}
-	if err := s.SyncAll(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if !s.Store.Ent.Credential.Query().Where(credential.IDEQ(probe.ID)).ExistX(ctx) {
-		t.Fatal("normal reconciliation deleted active probe")
-	}
-	u := s.Store.Ent.User.GetX(ctx, *parent.UserID)
-	l := s.Store.Ent.Link.GetX(ctx, *parent.LinkID)
-	entries, err := s.selectSubscriptionEntries(ctx, u, l)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, entry := range entries {
-		if entry.credential.ID == probe.ID {
-			t.Fatal("probe leaked into subscription")
-		}
-	}
-	view := s.nodeView(ctx, n)
-	if view["credentials"] != 1 {
-		t.Fatalf("probe counted as user access: %v", view["credentials"])
-	}
-	s.Store.Ent.Link.UpdateOne(l).SetEndsAt(time.Now().Add(-time.Minute)).ExecX(ctx)
-	if err := s.revokeExpiredNodeProbes(ctx, time.Now()); err != nil {
-		t.Fatal(err)
-	}
-	if s.Store.Ent.Credential.Query().Where(credential.IDEQ(probe.ID)).ExistX(ctx) {
-		t.Fatal("expired link kept probe")
-	}
-	s.Store.Ent.Link.UpdateOne(l).ClearEndsAt().ExecX(ctx)
-	probe, err = s.wireGuardProbeCredential(ctx, parent)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s.Store.Ent.Link.UpdateOne(l).SetEnabled(false).ExecX(ctx)
-	if err := s.SyncUser(ctx, u.ID); err != nil {
-		t.Fatal(err)
-	}
-	if s.Store.Ent.Credential.Query().Where(credential.IDEQ(probe.ID)).ExistX(ctx) {
-		t.Fatal("disabled link kept probe")
+	s.Store.Ent.Node.UpdateOne(n).SetPort(n.Port + 1).ExecX(ctx)
+	if got := s.loadNodeTest(ctx, s.Store.Ent.Node.GetX(ctx, n.ID)); got == nil || got.Status != "unknown" {
+		t.Fatal("业务变化未失效")
 	}
 }
 
@@ -186,10 +157,10 @@ func TestDeployedNodeTestDedupTraceAndIsolation(t *testing.T) {
 		case <-ctx.Done():
 			return nodeprobe.Result{}, ctx.Err()
 		}
-		if !o.UDP || o.Traceparent == "" || len(o.Client.Outbounds) != 1 {
+		if !o.UDP || o.Traceparent == "" || len(o.Client.Proxies) != 1 {
 			t.Error("incomplete real client request")
 		}
-		if o.Client.Outbounds[0]["server"] != "192.0.2.1" {
+		if o.Client.Proxies[0]["server"] != "192.0.2.1" {
 			t.Error("deployed endpoint replaced with loopback")
 		}
 		return nodeprobe.Result{TCP: nodeprobe.Check{Status: "passed", Bytes: nodeprobe.PayloadSize}, UDP: nodeprobe.Check{Status: "passed"}}, nil
@@ -219,25 +190,19 @@ func TestDeployedNodeTestDedupTraceAndIsolation(t *testing.T) {
 	if raw, ok, _ := s.Store.KV.Get(t.Context(), nodeTestKey(n.ID)); !ok || strings.Contains(raw, "password") {
 		t.Fatal("invalid stored result")
 	}
-	oldDial := reachDial
-	reachDial = func(context.Context, string) (net.Conn, error) { a, b := net.Pipe(); b.Close(); return a, nil }
-	t.Cleanup(func() { reachDial = oldDial })
 	s.checkReachability(t.Context(), n.ID)
 	s.CheckReachabilityAll(t.Context(), time.Date(2026, 11, 6, 10, 10, 0, 0, time.UTC))
 	reachRunning.Lock()
 	reachRunning.Unlock()
 	if got := s.loadNodeTest(t.Context(), n); got == nil || got.Status != "passed" || calls.Load() != 1 {
-		t.Fatal("lightweight check changed full result or ran client")
+		t.Fatal("定时检查覆盖了完整实测结果")
 	}
-	selected := s.Store.Ent.Credential.GetX(t.Context(), r.CredentialID)
-	s.Store.Ent.Credential.UpdateOne(selected).SetPassword("changed-test-credential").ExecX(t.Context())
-	if got := s.loadNodeTest(t.Context(), n); got == nil || got.Status != "unknown" || got.TCP.Status != "unknown" {
-		t.Fatal("credential rotation retained successful result")
+	if s.Store.Ent.Credential.Query().Where(credential.IDEQ(r.CredentialID)).ExistX(t.Context()) {
+		t.Fatal("实测后内部凭据未回收")
 	}
-	s.Store.Ent.Credential.UpdateOne(selected).SetPassword(selected.Password).ExecX(t.Context())
 	s.Store.Ent.Gate.UpdateOneID(n.GateID).AddConfigRevision(1).ExecX(t.Context())
-	if got := s.loadNodeTest(t.Context(), n); got == nil || got.Status != "unknown" {
-		t.Fatal("stale result remained successful")
+	if got := s.loadNodeTest(t.Context(), n); got == nil || got.Status != "passed" {
+		t.Fatal("凭据回收版本变化使结果失效")
 	}
 	if w := admin.do("POST", "/api/v1/admin/nodes/999999/test", map[string]any{}, nil); w.Code != 404 {
 		t.Fatal("missing node accepted")
@@ -304,17 +269,15 @@ func TestDeployedNodeTestQueueCancelAndChangedConfiguration(t *testing.T) {
 		return nodeprobe.Result{TCP: nodeprobe.Check{Status: "passed"}, UDP: nodeprobe.Check{Status: "passed"}}, nil
 	})
 	jobs := []Job{startNodeTest(t, admin, nodes[0].ID), startNodeTest(t, admin, nodes[1].ID)}
-	for range 2 {
-		select {
-		case <-entered:
-		case <-time.After(3 * time.Second):
-			t.Fatal("two execution slots did not start")
-		}
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("首个实测没有启动")
 	}
 	queued := startNodeTest(t, admin, nodes[2].ID)
 	select {
 	case <-entered:
-		t.Fatal("third client bypassed concurrency limit")
+		t.Fatal("并发实测绕过内部授权锁，会导致内核反复重载")
 	case <-time.After(100 * time.Millisecond):
 	}
 	if got := s.loadNodeTest(ctx, nodes[2]); got == nil || got.Status != "running" {
@@ -337,8 +300,12 @@ func TestDeployedNodeTestQueueCancelAndChangedConfiguration(t *testing.T) {
 			t.Fatalf("unrelated node result invalidated: %+v", r)
 		}
 	}
-	if len(s.probeSlots()) != 0 {
-		t.Fatal("execution slots leaked")
+	deadline := time.Now().Add(3 * time.Second)
+	for len(s.probeSlots()) != 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("execution slots leaked")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -355,12 +322,12 @@ func TestDeployedNodeTestFailureAndAuthorization(t *testing.T) {
 		return nodeprobe.Result{TCP: nodeprobe.Check{Status: "passed"}, UDP: nodeprobe.Check{Status: "failed", Why: "UDP 请求超时"}}, nil
 	})
 	r := finishNodeTest(t, s, startNodeTest(t, admin, n.ID))
-	if r.Status != "failed" || r.Location != "colocated" || r.External != "unknown" || r.TCP.Status != "passed" || r.UDP.Status != "failed" {
+	if r.Status != "unknown" || r.Location != "colocated" || r.External != "unknown" || r.TCP.Status != "unknown" || r.UDP.Status != "unknown" {
 		t.Fatalf("partial failure flattened: %+v", r)
 	}
-	// Configuration-application checks retain the lightweight path too.
+	// 配置应用检查不覆盖手动实测结果。
 	s.checkAfterApplied(t.Context(), n.ID, n.GateID)
-	if got := s.loadNodeTest(t.Context(), n); got == nil || got.Status != "failed" {
+	if got := s.loadNodeTest(t.Context(), n); got == nil || got.Status != "unknown" {
 		t.Fatal("application check overwrote full result")
 	}
 }

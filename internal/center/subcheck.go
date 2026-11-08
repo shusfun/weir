@@ -193,8 +193,8 @@ func (s *Server) recordSubCheck(parent context.Context, ref, name, target string
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), time.Minute)
 		defer cancel()
 		s.state.RLock()
+		defer s.state.RUnlock()
 		ready := s.Store == st && st != nil
-		s.state.RUnlock()
 		if !ready {
 			return
 		}

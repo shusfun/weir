@@ -176,6 +176,7 @@ export interface NodeItem extends NodeChoice {
   test?: NodeTest;
   // 全部用户直连这个节点时的下载速率
   rate?: RateStat;
+  rate_error?: string;
 }
 
 export interface Cert {
@@ -266,7 +267,7 @@ export interface Pull {
 // ---- 代理页 ----
 export type Health = "ok" | "down" | "unknown";
 
-// RateStat 是节点自己统计的下载速率：最近 24 小时有流量的分钟的第 90 百分位（字节/秒）。minutes 为 0 是没有数据（未知）；
+// RateStat 是近 24 小时已完成且下载至少 1 MiB 的有效分钟速度 P90（字节/秒）。minutes 为 0 是没有数据（未知）；
 // from：self 是这个用户自己的，all 是全部用户的（他自己没有数据时补上）。
 export interface RateStat {
   p90_bps: number;
@@ -295,9 +296,21 @@ export interface ProxyType {
 }
 
 export interface ProxyPolicy {
-  disabled?: string[];
-  rules?: Record<string, string>;
-  auto: { mode: "latency" | "ranked"; top: number; refresh_minutes: number };
+  version: number; revision: number; hidden_lines?: string[];
+  groups?: ProxyGroup[]; target_migration?: string[]; disabled?: string[];
+  auto: { refresh_minutes: number };
+}
+export interface ProxyGroup {
+  id: number; name: string; kind: "fallback" | "url-test" | "select";
+  members: string[]; interval_seconds: number; tolerance_ms: number;
+}
+export interface ProxyLine {
+  ref: string; name: string; node_id: number; chain_id?: number; gate_id: number; gate_name: string;
+  chained: boolean; gate_status: "online" | "offline" | "unknown"; health: Health; why?: string; available: boolean;
+}
+export interface ProxyGroupView {
+  group: ProxyGroup; members: { ref: string; line: ProxyLine; available: boolean; reason?: string }[];
+  valid_members: number; used_by: string[]; effective_target: string;
 }
 
 export type CustomMode = "off" | "bypass" | "only";
@@ -334,7 +347,9 @@ export interface CustomEntry {
   value: string;
   target: string;
   enabled: boolean;
-  last_proxy_target?: string;
+  notice?: string;
+  effective_target?: string;
+  warning?: string;
 }
 
 export interface CustomMatch {
@@ -347,11 +362,15 @@ export interface CustomMatch {
 }
 
 export interface ProxyView {
+  user_id: number;
+  groups: ProxyGroupView[];
+  lines: ProxyLine[];
   policy: ProxyPolicy;
   custom: CustomView;
   types: ProxyType[];
-  categories: { key: string; label: string; hint?: string; default: string; target: string }[];
-  ranking: { node_id: number; name: string; type: string; health: Health; why?: string; rate: RateStat; rank: number; auto: boolean; exploring: boolean }[];
+  layout: { ref: string; name: string; kind: string; members: string[]; member_refs: string[]; hidden: boolean }[];
+  presets: { key: string; label: string; domains: string[] }[];
+  ranking: { ref: string; node_id: number; chain_id?: number; name: string; type: string; health: Health; why?: string; rate: RateStat; rank: number; auto: boolean; exploring: boolean }[];
   allow_chain: boolean;
   min_refresh: number;
 }

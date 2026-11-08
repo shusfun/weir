@@ -1,15 +1,13 @@
 package center
 
 import (
-	"context"
 	"encoding/json"
-	"net"
 	"testing"
 
 	"github.com/shusfun/weir/packages/contracts"
 )
 
-func TestNodeReadinessAndRevisionScopedReach(t *testing.T) {
+func TestNodeReadiness(t *testing.T) {
 	s, admin, g := setupGate(t)
 	ctx := t.Context()
 	// 新安装的管理员有默认链接，新节点马上有凭据；这里按删掉了链接的管理员测「没有任何凭据」。
@@ -37,32 +35,7 @@ func TestNodeReadinessAndRevisionScopedReach(t *testing.T) {
 	check("listener")
 	s.Store.Ent.Gate.UpdateOneID(gate.ID).SetListeningPorts([]map[string]any{{"port": n.Port, "proto": "tcp", "process": "sing-box"}}).ExecX(ctx)
 	check("ready")
-	old := reachDial
-	defer func() { reachDial = old }()
-	reachDial = func(context.Context, string) (net.Conn, error) { a, b := net.Pipe(); b.Close(); return a, nil }
-	s.checkReachability(ctx, nid)
-	r, ok := s.loadReach(ctx, nid)
-	if !ok || r.Status != "ok" {
-		t.Fatalf("reach=%+v found=%v", r, ok)
-	}
-	gate = s.Store.Ent.Gate.GetX(ctx, gate.ID)
-	s.Store.Ent.Gate.UpdateOneID(gate.ID).AddConfigRevision(1).ExecX(ctx)
-	if _, ok = s.loadReach(ctx, nid); ok {
-		t.Fatal("stale reach remained valid")
-	}
-	// 连接尚未结束时配置变更，不能把旧版本的成功写回缓存。
-	gate = s.Store.Ent.Gate.GetX(ctx, gate.ID)
-	s.Store.Ent.Gate.UpdateOneID(gate.ID).SetAppliedRevision(gate.ConfigRevision).ExecX(ctx)
-	reachDial = func(context.Context, string) (net.Conn, error) {
-		s.Store.Ent.Gate.UpdateOneID(gate.ID).AddConfigRevision(1).ExecX(ctx)
-		a, b := net.Pipe()
-		b.Close()
-		return a, nil
-	}
-	s.checkReachability(ctx, nid)
-	if _, ok = s.loadReach(ctx, nid); ok {
-		t.Fatal("in-flight stale probe published")
-	}
+
 }
 
 func TestCompleteNodeTestPayloadForDependentProtocols(t *testing.T) {

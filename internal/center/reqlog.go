@@ -71,7 +71,7 @@ type httpTrace struct{ ID, Span, Flags string }
 
 func (t httpTrace) parent() string { return "00-" + t.ID + "-" + t.Span + "-" + t.Flags }
 
-// Only version 00 is accepted here; malformed or zero identifiers start a new trace.
+// 仅接受版本 00；格式错误或全零编号会生成新的关联编号。
 func newHTTPTrace(parent string) httpTrace {
 	t := httpTrace{ID: randomHex(16), Span: randomHex(8), Flags: "01"}
 	p := strings.Split(parent, "-")
@@ -96,8 +96,11 @@ func validTraceHex(s string, n int) bool {
 	return err == nil
 }
 
-// Successful records are limited to this batch's operations; routes never contain tokens.
+// 成功记录只覆盖需要排查的操作；路由模板不包含令牌。
 func customTraceRoute(route string) bool {
+	if strings.Contains(route, "/proxy") || strings.Contains(route, "/link-stats") || strings.Contains(route, "/pulls") || strings.Contains(route, "/provider/") || route == "/api/v1/agent/meter" || route == "/api/v1/agent/live" {
+		return true
+	}
 	if route == "/api/v1/node-test/download" {
 		return true
 	}

@@ -74,12 +74,11 @@ export const distributionSections = [
 
 // 系统设置分区（?tab=）
 export const systemSections = [
-  { key: "update", label: "版本与更新" },
-  { key: "ai", label: "AI 与 dsh" },
-  { key: "defense", label: "安全防御" },
-  { key: "login", label: "登录与令牌" },
+  { key: "update", label: "版本与下载" },
+  { key: "login", label: "登录与安全" },
   { key: "notify", label: "通知" },
+  { key: "defense", label: "安全防御" },
+  { key: "ai", label: "AI 与 dsh" },
   { key: "certs", label: "节点证书" },
-  { key: "backup", label: "备份迁移" },
-  { key: "distribution", label: "分发" },
+  { key: "data", label: "订阅数据与接口" },
 ] as const;

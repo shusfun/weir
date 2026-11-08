@@ -54,7 +54,7 @@ func (s *Server) agentMeter(c *gin.Context) {
 		if err != nil {
 			return err
 		}
-		return cur.Update().SetMeterEpoch(rep.Epoch).SetMeterSeq(rep.Seq).Exec(ctx)
+		return nil
 	})
 	if err != nil {
 		failInternal(c, 500, "meter_failed", err)
@@ -71,6 +71,34 @@ func (s *Server) agentMeter(c *gin.Context) {
 }
 
 func (s *Server) applyMeter(ctx context.Context, g *ent.Gate, rep contracts.MeterReport) (map[int]bool, error) {
+	tx, err := s.Store.Ent.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	meterStore := *s.Store
+	meterStore.Ent = tx.Client()
+	worker := &Server{Store: &meterStore}
+	daily := map[int]int64{}
+	affected, err := worker.applyMeterRows(ctx, g, rep, daily)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Gate.UpdateOneID(g.ID).SetMeterEpoch(rep.Epoch).SetMeterSeq(rep.Seq).Exec(ctx); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	// SQLite 缓存与业务表共用连接，缓存更新必须在事务释放连接之后执行。
+	for id, delta := range daily {
+		_, err := s.Store.KV.IncrBy(ctx, dayTrafficKey(time.Now(), id), delta, 50*time.Hour)
+		s.tasks.note("daily-traffic", err)
+	}
+	return affected, nil
+}
+
+func (s *Server) applyMeterRows(ctx context.Context, g *ent.Gate, rep contracts.MeterReport, daily map[int]int64) (map[int]bool, error) {
 	affected := map[int]bool{}
 	nodeIDs, err := s.Store.Ent.Node.Query().Where(node.GateIDEQ(g.ID)).IDs(ctx)
 	if err != nil || len(nodeIDs) == 0 {
@@ -78,17 +106,17 @@ func (s *Server) applyMeter(ctx context.Context, g *ent.Gate, rep contracts.Mete
 	}
 	now := time.Now()
 	// 历史：计数可用（fresh）时才记，这一分钟即使没有流量也记为 0；不可用时不记，图表显示为未知。
-	fresh := rep.Status != "unavailable"
+	fresh := rep.Status == "fresh" && g.Status == "active"
 	gateTotal, users := int64(0), map[int]int64{}
-	defer func() {
-		if !fresh {
-			return
+	if fresh {
+		creds, err := s.Store.Ent.Credential.Query().Where(credential.NodeIDIn(nodeIDs...), credential.InternalEQ(false), credential.UserIDNotNil()).All(ctx)
+		if err != nil {
+			return nil, err
 		}
-		s.recordTraffic(ctx, entsample.ScopeGate, g.ID, gateTotal, now)
-		for uid, d := range users {
-			s.recordTraffic(ctx, entsample.ScopeUser, uid, d, now)
+		for _, cred := range creds {
+			users[*cred.UserID] = 0
 		}
-	}()
+	}
 	for _, sample := range rep.Usage {
 		cred, err := s.Store.Ent.Credential.Query().Where(credential.StatsKeyEQ(sample.StatsKey), credential.NodeIDIn(nodeIDs...)).Only(ctx)
 		if ent.IsNotFound(err) {
@@ -105,11 +133,13 @@ func (s *Server) applyMeter(ctx context.Context, g *ent.Gate, rep contracts.Mete
 			return nil, err
 		}
 		if fresh && !cred.Internal && cred.UserID != nil {
-			s.recordRate(ctx, cred, rep.Epoch, sample.Down, now)
+			if err := s.recordRate(ctx, cred, rep.Epoch, sample.Down, now); err != nil {
+				return nil, err
+			}
 		}
 		if delta > 0 {
 			// 按天累计（中心本地日期），链路页显示每条路径今天的流量；内部凭据也记，用于出口一侧的连线。
-			_, _ = s.Store.KV.IncrBy(ctx, dayTrafficKey(now, cred.ID), delta, 50*time.Hour)
+			daily[cred.ID] += delta
 		}
 		if cred.Internal || cred.UserID == nil {
 			continue
@@ -132,6 +162,16 @@ func (s *Server) applyMeter(ctx context.Context, g *ent.Gate, rep contracts.Mete
 			return nil, err
 		}
 		affected[uid] = true
+	}
+	if fresh {
+		if err := s.recordTraffic(ctx, entsample.ScopeGate, g.ID, gateTotal, now); err != nil {
+			return nil, err
+		}
+		for uid, delta := range users {
+			if err := s.recordTraffic(ctx, entsample.ScopeUser, uid, delta, now); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return affected, nil
 }

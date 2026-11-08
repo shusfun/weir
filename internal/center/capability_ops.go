@@ -307,7 +307,11 @@ func planOp(c Capability) func(ctx context.Context, s *Server, p *planCtx, st *D
 			return err
 		}
 		if h != st.Tested {
-			code, out := call(systemActor(ctx), o.handler(s), o.method, params, q, body, true)
+			actor, err := s.systemActor(ctx)
+			if err != nil {
+				return err
+			}
+			code, out := call(actor, o.handler(s), o.method, params, q, body, true)
 			if code >= 300 {
 				return handlerError(code, out)
 			}
@@ -374,6 +378,24 @@ func execOp(c Capability) func(ctx context.Context, s *Server, x *execCtx, st *D
 		if code >= 300 {
 			return nil, handlerError(code, out)
 		}
+		if pending, ok := out["pending"].(map[string]any); ok {
+			cancelCandidate := func(context.Context) error {
+				id, _ := pending["id"].(string)
+				code, result := call(x.actor, s.discardPendingExit, "DELETE", pathOf("candidate", id), nil, map[string]any{"revision": pending["revision"]}, false)
+				if code >= 300 {
+					return handlerError(code, result)
+				}
+				return nil
+			}
+			if st.As != "" {
+				if err := cancelCandidate(ctx); err != nil {
+					return nil, fmt.Errorf("新资源尚未验证通过，回收候选失败：%w", err)
+				}
+				return nil, errors.New("新资源尚未验证通过，无法供后续步骤引用；本次候选已放弃，请单独提交出口草稿")
+			}
+			x.outputs = append(x.outputs, map[string]any{"pending_exit": modelSafe(pending)})
+			return cancelCandidate, nil
+		}
 		x.touched(c, args, params, numberOf(out["id"]))
 		if o.kind == "create" {
 			id := numberOf(out["id"])
@@ -388,11 +410,15 @@ func execOp(c Capability) func(ctx context.Context, s *Server, x *execCtx, st *D
 				return nil, nil
 			}
 			return func(ctx context.Context) error {
-				p, err := del.op.path(ctx, s, map[string]any{o.idKey: float64(id)})
+				undoArgs := merged(args, map[string]any{o.idKey: float64(id)})
+				p, err := del.op.path(ctx, s, undoArgs)
 				if err != nil {
 					return err
 				}
-				if code, out := call(x.actor, del.op.handler(s), del.op.method, p, nil, nil, false); code >= 300 {
+				if err := s.refreshProxyUndoRevision(ctx, c.Name, undoArgs); err != nil {
+					return err
+				}
+				if code, out := call(x.actor, del.op.handler(s), del.op.method, p, nil, del.op.reqBody(undoArgs), false); code >= 300 {
 					return handlerError(code, out)
 				}
 				return nil
@@ -413,6 +439,11 @@ func execOp(c Capability) func(ctx context.Context, s *Server, x *execCtx, st *D
 			ub["skip_probe"] = true
 		}
 		return func(ctx context.Context) error {
+			prev["user_id"] = args["user_id"]
+			if err := s.refreshProxyUndoRevision(ctx, c.Name, prev); err != nil {
+				return err
+			}
+			ub = o.reqBody(prev)
 			if code, out := call(x.actor, o.handler(s), o.method, params, nil, ub, false); code >= 300 {
 				return handlerError(code, out)
 			}
@@ -424,7 +455,7 @@ func execOp(c Capability) func(ctx context.Context, s *Server, x *execCtx, st *D
 // touched 记下这一步改动的节点与 VPS，确认后据此显示它们实际跑起来没有。
 func (x *execCtx) touched(c Capability, args map[string]any, params gin.Params, id int) {
 	switch {
-	case c.Object == "node" && c.op != nil && c.op.kind == "create":
+	case c.Object == "node" && c.op != nil && c.op.kind == "create" && id > 0:
 		x.nodes = append(x.nodes, id)
 	case c.Object == "node" && numberOf(args["node_id"]) > 0 && c.op != nil && c.op.kind != "delete":
 		x.nodes = append(x.nodes, numberOf(args["node_id"]))
@@ -466,7 +497,11 @@ func init() {
 
 // readVia 以只读方式调用手动操作的处理函数（GET 或实测类），结果去掉机密后交给模型。
 func (s *Server) readVia(ctx context.Context, handler gin.HandlerFunc, method string, params gin.Params, q url.Values, body any) (any, error) {
-	code, out := call(systemActor(ctx), handler, method, params, q, body, false)
+	actor, err := s.systemActor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	code, out := call(actor, handler, method, params, q, body, false)
 	if code >= 300 {
 		err := handlerError(code, out)
 		if e, ok := out["error"].(map[string]any); ok && e["result"] != nil {

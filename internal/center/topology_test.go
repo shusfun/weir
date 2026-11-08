@@ -6,7 +6,8 @@ import (
 )
 
 func TestGateTopologyUsersNodesRoutesExits(t *testing.T) {
-	_, admin, g := setupGate(t)
+	s, admin, g := setupGate(t)
+	g.serveActions(t, s, nil)
 	gid := itoa(int(g.id))
 	n := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "ss2022", "skip_probe": true}, 200)
 	u := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "topo@example.test", "name": "小明"}, 200)
@@ -51,7 +52,7 @@ func TestGateTopologyUsersNodesRoutesExits(t *testing.T) {
 	mustJSON(t, admin, "PATCH", "/api/v1/admin/users/"+uid, map[string]any{"allow_chain": true}, 200)
 	ch := mustJSON(t, admin, "POST", "/api/v1/admin/users/"+uid+"/chains", map[string]any{"name": "家里", "entry_node_id": n["id"], "exit": map[string]any{"kind": "socks5", "address": "203.0.113.5", "port": 1080}, "skip_probe": true}, 200)
 	eg := pairFakeGate(t, admin)
-	eg.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 2, Version: "test", Arch: "amd64"})
+	eg.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 3, Version: "test", Arch: "amd64"})
 	rx := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(eg.id), "preset": "vless-reality", "skip_probe": true}, 200)
 	via := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "ss2022", "skip_probe": true, "exit": map[string]any{"kind": "node", "node_id": rx["id"]}}, 200)
 	xid := exitOwner(int(via["exit_id"].(float64)))

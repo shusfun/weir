@@ -2,8 +2,10 @@ package center
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
@@ -21,19 +23,52 @@ const maxLogoBytes = 512 * 1024
 
 func (s *Server) getLogo(c *gin.Context) {
 	if s.Store == nil {
-		c.JSON(http.StatusOK, gin.H{"data": ""})
+		c.Status(http.StatusNotFound)
 		return
 	}
 	row, err := s.Store.Ent.Setting.Query().Where(setting.KeyEQ(logoKey)).Only(c.Request.Context())
 	if ent.IsNotFound(err) {
-		c.JSON(http.StatusOK, gin.H{"data": ""})
+		c.Status(http.StatusNotFound)
 		return
 	}
 	if err != nil {
 		failInternal(c, 503, "settings_unavailable", err)
 		return
 	}
-	c.JSON(http.StatusOK, row.Value)
+	data, _ := row.Value["data"].(string)
+	if data == "" {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	comma := bytes.IndexByte([]byte(data), ',')
+	if comma < 0 {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	header, raw64 := data[:comma], data[comma+1:]
+	if len(header) < 6 || header[:5] != "data:" {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	mime := header[5:]
+	if i := bytes.IndexByte([]byte(mime), ';'); i >= 0 {
+		mime = mime[:i]
+	}
+	raw, err := base64.StdEncoding.Strict().DecodeString(raw64)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	sum := sha256.Sum256(raw)
+	etag := `"` + fmt.Sprintf("%x", sum[:]) + `"`
+	c.Header("Content-Type", mime)
+	c.Header("ETag", etag)
+	c.Header("Cache-Control", "no-cache")
+	if c.GetHeader("If-None-Match") == etag {
+		c.Status(http.StatusNotModified)
+		return
+	}
+	c.Data(http.StatusOK, mime, raw)
 }
 
 func (s *Server) putLogo(c *gin.Context) {

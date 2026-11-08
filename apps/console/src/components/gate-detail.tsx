@@ -1,3 +1,4 @@
+import { PendingExits } from "./pending-exits";
 // VPS 详情：主机观测（缺失显示「未知」）、本机其他程序占用的端口、内核版本锁定、内核诊断 / 重启、节点出口关系。
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
@@ -57,6 +58,7 @@ export function GateDetail({ gate, nodes, close }: { gate: Gate & { listening_po
       <SheetContent side="right" title={gate.name} description={`${gate.public_host || "等待上报地址"} · ${gate.arch} · Gate ${gate.version || "版本未知"}${gateLags(gate) ? `（未跟上中心 ${gate.center_version}）` : ""} · 最近心跳 ${date(gate.last_seen_at)}`} className="w-full sm:max-w-[640px]">
         <div className="stack p-4">
           <GateUpdateLine gate={gate} />
+          <PendingExits all gateId={gate.id} />
 
           <Tabs defaultValue="overview">
             <TabsList aria-label="VPS 详情">

@@ -20,13 +20,14 @@ import (
 
 const pullKeep = 30 * 24 * time.Hour
 
-// clientNames 按 User-Agent 认客户端（先匹配的优先，长的写在前面）。
+// 很多客户端为了兼容机场会在 UA 中带上 clash-verge，具体应用必须先于兼容标记匹配。
 var clientNames = [][2]string{
-	{"clash-verge", "Clash Verge"}, {"clash verge", "Clash Verge"}, {"mihomo.party", "Mihomo Party"}, {"mihomo-party", "Mihomo Party"}, {"clash party", "Clash Party"},
-	{"flclash", "FlClash"}, {"stash", "Stash"}, {"nyanpasu", "Clash Nyanpasu"}, {"clashmetaforandroid", "Clash Meta for Android"}, {"clash.meta", "Clash Meta"},
-	{"mihomo", "mihomo"}, {"clash", "Clash"}, {"hiddify", "Hiddify"}, {"sfa", "sing-box (Android)"}, {"sfi", "sing-box (iOS)"}, {"sfm", "sing-box (macOS)"},
+	{"flclash", "FlClash"}, {"flyclash", "FlyClash"}, {"mihomo.party", "Mihomo Party"}, {"mihomo-party", "Mihomo Party"}, {"mihomo party", "Mihomo Party"}, {"clashparty", "Clash Party"}, {"clash party", "Clash Party"}, {"clash-party", "Clash Party"},
+	{"stash", "Stash"}, {"nyanpasu", "Clash Nyanpasu"}, {"clashmetaforandroid", "Clash Meta for Android"},
+	{"hiddify", "Hiddify"}, {"sfa", "sing-box (Android)"}, {"sfi", "sing-box (iOS)"}, {"sfm", "sing-box (macOS)"},
 	{"sing-box", "sing-box"}, {"karing", "Karing"}, {"shadowrocket", "Shadowrocket"}, {"quantumult", "Quantumult X"}, {"surge", "Surge"}, {"loon", "Loon"},
 	{"egern", "Egern"}, {"v2rayng", "v2rayNG"}, {"v2rayn", "v2rayN"}, {"nekobox", "NekoBox"}, {"nekoray", "NekoRay"}, {"streisand", "Streisand"},
+	{"clash-verge-rev", "Clash Verge Rev"}, {"clash verge rev", "Clash Verge Rev"}, {"clashvergerev", "Clash Verge Rev"}, {"clash-verge", "Clash Verge"}, {"clash verge", "Clash Verge"}, {"clash.meta", "Clash Meta"}, {"mihomo", "mihomo"}, {"clash", "Clash"},
 	{"curl", "curl"}, {"wget", "wget"},
 }
 
@@ -125,7 +126,7 @@ func (s *Server) collectLinkStats(ctx context.Context, uid int, withSource bool)
 				if p.Status != "ok" {
 					refused++
 				}
-				counts[firstNonEmpty(p.Client, "其他")]++
+				counts[firstNonEmpty(clientName(p.UserAgent), "未识别")]++
 				ips[p.IP] = true
 			}
 			clients := make([]clientCount, 0, len(counts))
@@ -147,7 +148,7 @@ func (s *Server) collectLinkStats(ctx context.Context, uid int, withSource bool)
 					v["last_pull"] = s.pullView(ctx, pulls[0])
 				} else {
 					p := pulls[0]
-					v["last_pull"] = gin.H{"at": p.At, "target": p.Target, "client": p.Client, "status": p.Status}
+					v["last_pull"] = gin.H{"at": p.At, "target": p.Target, "client": clientName(p.UserAgent), "status": p.Status}
 				}
 			}
 			out = append(out, v)
@@ -157,7 +158,7 @@ func (s *Server) collectLinkStats(ctx context.Context, uid int, withSource bool)
 }
 
 func (s *Server) pullView(ctx context.Context, p *ent.SubPull) gin.H {
-	v := gin.H{"at": p.At, "target": p.Target, "client": p.Client, "user_agent": p.UserAgent, "ip": p.IP, "status": p.Status, "trace_id": p.TraceID}
+	v := gin.H{"at": p.At, "target": p.Target, "client": clientName(p.UserAgent), "user_agent": p.UserAgent, "ip": p.IP, "status": p.Status, "trace_id": p.TraceID}
 	if p.IP != "" {
 		if place := s.locate(ctx, p.IP); place.Known {
 			v["place"] = strings.Join(nonEmpty(place.Country, place.Region, place.City), " · ")

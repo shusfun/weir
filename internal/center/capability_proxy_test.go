@@ -2,7 +2,6 @@ package center
 
 import (
 	"context"
-	"net"
 	"strings"
 	"testing"
 	"time"
@@ -29,9 +28,7 @@ func TestProxyCapabilities(t *testing.T) {
 	stop := make(chan struct{})
 	defer close(stop)
 	g.serveChainProbes("203.0.113.9", stop)
-	old := reachDial
-	reachDial = func(context.Context, string) (net.Conn, error) { a, b := net.Pipe(); b.Close(); return a, nil }
-	defer func() { reachDial = old }()
+
 	mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "vless-reality", "skip_probe": true}, 200)
 	mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "ss2022", "skip_probe": true}, 200)
 	created := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "dave@example.test", "password": "Passw0rd-dave", "all_nodes": true}, 200)
@@ -55,7 +52,7 @@ func TestProxyCapabilities(t *testing.T) {
 
 	// 只读：代理设置带类型与速率；拉取统计有客户端、没有来源 IP
 	text, isErr := toolText(t, h, m.webToken, "get_proxy", map[string]any{"user_id": uid})
-	if isErr || !strings.Contains(text, `"vless-reality"`) || !strings.Contains(text, `"p90_bps"`) || !strings.Contains(text, `"categories"`) {
+	if isErr || !strings.Contains(text, `"vless-reality"`) || !strings.Contains(text, `"p90_bps"`) || !strings.Contains(text, `"layout"`) {
 		t.Fatalf("get_proxy = %s", text)
 	}
 	text, isErr = toolText(t, h, m.webToken, "get_link_stats", map[string]any{"user_id": uid})
@@ -64,13 +61,13 @@ func TestProxyCapabilities(t *testing.T) {
 	}
 
 	// proxy.update：只改两项，其余保持原样；试运行不写；确认后生效；校验与手动相同
-	if text, isErr := submit(map[string]any{"action": "proxy.update", "args": map[string]any{"user_id": uid, "refresh_minutes": 10}}); !isErr || !strings.Contains(text, "超出范围") {
+	if text, isErr := submit(map[string]any{"action": "proxy.update", "args": map[string]any{"revision": 0, "user_id": uid, "refresh_minutes": 10}}); !isErr || !strings.Contains(text, "超出范围") {
 		t.Fatalf("refresh below min = %q", text)
 	}
-	if text, isErr := submit(map[string]any{"action": "proxy.update", "args": map[string]any{"user_id": uid, "rule_final": "reject"}}); !isErr {
+	if text, isErr := submit(map[string]any{"action": "proxy.update", "args": map[string]any{"revision": 0, "user_id": uid, "rule_final": "reject"}}); !isErr {
 		t.Fatalf("final reject must be refused at submit: %q", text)
 	}
-	if text, isErr := submit(map[string]any{"action": "proxy.update", "args": map[string]any{"user_id": uid, "disabled": "ss2022", "auto_mode": "ranked"}}); isErr {
+	if text, isErr := submit(map[string]any{"action": "proxy.update", "args": map[string]any{"revision": 0, "user_id": uid, "disabled": "ss2022"}}); isErr {
 		t.Fatal(text)
 	}
 	if u := s.Store.Ent.User.GetX(ctx, uid); len(u.ProxyPolicy) != 0 {
@@ -79,7 +76,7 @@ func TestProxyCapabilities(t *testing.T) {
 	d := latest()
 	mustJSON(t, admin, "POST", "/api/v1/admin/ai/drafts/"+d["id"].(string)+"/apply", nil, 200)
 	pol := loadPolicy(s.Store.Ent.User.GetX(ctx, uid))
-	if len(pol.Disabled) != 1 || pol.Disabled[0] != "ss2022" || pol.Auto.Mode != "ranked" || pol.Auto.RefreshMinutes != 30 || pol.Rules["cn"] != "" {
+	if len(pol.Disabled) != 1 || pol.Disabled[0] != "ss2022" || pol.Auto.RefreshMinutes != 30 {
 		t.Fatalf("policy after apply = %+v", pol)
 	}
 	if code, uris := subLinks(t, dave, tok); code != 200 || len(uris) != 1 {
@@ -87,13 +84,13 @@ func TestProxyCapabilities(t *testing.T) {
 	}
 
 	// proxy.custom_rules：试运行给出优化统计、不写；确认后与手动保存相同；get_proxy 能读到结果
-	if text, isErr := submit(map[string]any{"action": "proxy.custom_rules", "args": map[string]any{"user_id": uid, "list": map[string]any{"revision": 0, "entries": []map[string]any{{"kind": "domain_suffix", "value": "a.example", "target": "nope", "enabled": true}}}}}); !isErr {
+	if text, isErr := submit(map[string]any{"action": "proxy.custom_rules", "args": map[string]any{"user_id": uid, "list": map[string]any{"revision": 1, "entries": []map[string]any{{"kind": "domain_suffix", "value": "a.example", "target": "nope", "enabled": true}}}}}); !isErr {
 		t.Fatalf("unknown mode must be refused at submit: %q", text)
 	}
-	if text, isErr := submit(map[string]any{"action": "proxy.custom_rules", "args": map[string]any{"user_id": uid, "list": map[string]any{"revision": 0, "entries": []map[string]any{{"kind": "domain_suffix", "value": "netflix.com", "target": "direct", "enabled": true}}}}}); isErr {
+	if text, isErr := submit(map[string]any{"action": "proxy.custom_rules", "args": map[string]any{"user_id": uid, "list": map[string]any{"revision": 1, "entries": []map[string]any{{"kind": "domain_suffix", "value": "netflix.com", "target": "direct", "enabled": true}}}}}); isErr {
 		t.Fatal(text)
 	}
-	if c := loadPolicy(s.Store.Ent.User.GetX(ctx, uid)).Custom; c.Source != "" || c.Mode != "" {
+	if c := loadPolicy(s.Store.Ent.User.GetX(ctx, uid)).Custom; c.Source != "" || len(c.Entries) != 0 {
 		t.Fatalf("dry run wrote custom rules: %+v", c)
 	}
 	mustJSON(t, admin, "POST", "/api/v1/admin/ai/drafts/"+latest()["id"].(string)+"/apply", nil, 200)
@@ -105,7 +102,7 @@ func TestProxyCapabilities(t *testing.T) {
 	}
 
 	// proxy.type_exit：代理密码不能由 dsh 填；管理员在确认窗里填后保存，订阅换成经出口的版本
-	exit := map[string]any{"user_id": uid, "type_key": "vless-reality", "kind": "socks5", "address": "203.0.113.5", "port": 1080, "username": "u"}
+	exit := map[string]any{"user_id": uid, "revision": 2, "type_key": "vless-reality", "kind": "socks5", "address": "203.0.113.5", "port": 1080, "username": "u"}
 	withPW := map[string]any{}
 	for k, v := range exit {
 		withPW[k] = v
@@ -135,7 +132,7 @@ func TestProxyCapabilities(t *testing.T) {
 	}
 
 	// proxy.type_exit_delete：去掉后恢复直连
-	if text, isErr := submit(map[string]any{"action": "proxy.type_exit_delete", "args": map[string]any{"user_id": uid, "type_key": "vless-reality"}}); isErr {
+	if text, isErr := submit(map[string]any{"action": "proxy.type_exit_delete", "args": map[string]any{"revision": 3, "user_id": uid, "type_key": "vless-reality"}}); isErr {
 		t.Fatal(text)
 	}
 	if n := s.Store.Ent.Chain.Query().CountX(ctx); n != 1 {

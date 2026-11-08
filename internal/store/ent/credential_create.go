@@ -118,6 +118,34 @@ func (_c *CredentialCreate) SetNillableInternal(v *bool) *CredentialCreate {
 	return _c
 }
 
+// SetPurpose sets the "purpose" field.
+func (_c *CredentialCreate) SetPurpose(v string) *CredentialCreate {
+	_c.mutation.SetPurpose(v)
+	return _c
+}
+
+// SetNillablePurpose sets the "purpose" field if the given value is not nil.
+func (_c *CredentialCreate) SetNillablePurpose(v *string) *CredentialCreate {
+	if v != nil {
+		_c.SetPurpose(*v)
+	}
+	return _c
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (_c *CredentialCreate) SetExpiresAt(v time.Time) *CredentialCreate {
+	_c.mutation.SetExpiresAt(v)
+	return _c
+}
+
+// SetNillableExpiresAt sets the "expires_at" field if the given value is not nil.
+func (_c *CredentialCreate) SetNillableExpiresAt(v *time.Time) *CredentialCreate {
+	if v != nil {
+		_c.SetExpiresAt(*v)
+	}
+	return _c
+}
+
 // SetProbeParentID sets the "probe_parent_id" field.
 func (_c *CredentialCreate) SetProbeParentID(v int) *CredentialCreate {
 	_c.mutation.SetProbeParentID(v)
@@ -249,6 +277,10 @@ func (_c *CredentialCreate) defaults() {
 		v := credential.DefaultInternal
 		_c.mutation.SetInternal(v)
 	}
+	if _, ok := _c.mutation.Purpose(); !ok {
+		v := credential.DefaultPurpose
+		_c.mutation.SetPurpose(v)
+	}
 	if _, ok := _c.mutation.MeterEpoch(); !ok {
 		v := credential.DefaultMeterEpoch
 		_c.mutation.SetMeterEpoch(v)
@@ -283,6 +315,9 @@ func (_c *CredentialCreate) check() error {
 	}
 	if _, ok := _c.mutation.Internal(); !ok {
 		return &ValidationError{Name: "internal", err: errors.New(`ent: missing required field "Credential.internal"`)}
+	}
+	if _, ok := _c.mutation.Purpose(); !ok {
+		return &ValidationError{Name: "purpose", err: errors.New(`ent: missing required field "Credential.purpose"`)}
 	}
 	if _, ok := _c.mutation.MeterEpoch(); !ok {
 		return &ValidationError{Name: "meter_epoch", err: errors.New(`ent: missing required field "Credential.meter_epoch"`)}
@@ -354,6 +389,14 @@ func (_c *CredentialCreate) createSpec() (*Credential, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Internal(); ok {
 		_spec.SetField(credential.FieldInternal, field.TypeBool, value)
 		_node.Internal = value
+	}
+	if value, ok := _c.mutation.Purpose(); ok {
+		_spec.SetField(credential.FieldPurpose, field.TypeString, value)
+		_node.Purpose = value
+	}
+	if value, ok := _c.mutation.ExpiresAt(); ok {
+		_spec.SetField(credential.FieldExpiresAt, field.TypeTime, value)
+		_node.ExpiresAt = &value
 	}
 	if value, ok := _c.mutation.ProbeParentID(); ok {
 		_spec.SetField(credential.FieldProbeParentID, field.TypeInt, value)
@@ -566,6 +609,36 @@ func (u *CredentialUpsert) SetInternal(v bool) *CredentialUpsert {
 // UpdateInternal sets the "internal" field to the value that was provided on create.
 func (u *CredentialUpsert) UpdateInternal() *CredentialUpsert {
 	u.SetExcluded(credential.FieldInternal)
+	return u
+}
+
+// SetPurpose sets the "purpose" field.
+func (u *CredentialUpsert) SetPurpose(v string) *CredentialUpsert {
+	u.Set(credential.FieldPurpose, v)
+	return u
+}
+
+// UpdatePurpose sets the "purpose" field to the value that was provided on create.
+func (u *CredentialUpsert) UpdatePurpose() *CredentialUpsert {
+	u.SetExcluded(credential.FieldPurpose)
+	return u
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (u *CredentialUpsert) SetExpiresAt(v time.Time) *CredentialUpsert {
+	u.Set(credential.FieldExpiresAt, v)
+	return u
+}
+
+// UpdateExpiresAt sets the "expires_at" field to the value that was provided on create.
+func (u *CredentialUpsert) UpdateExpiresAt() *CredentialUpsert {
+	u.SetExcluded(credential.FieldExpiresAt)
+	return u
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (u *CredentialUpsert) ClearExpiresAt() *CredentialUpsert {
+	u.SetNull(credential.FieldExpiresAt)
 	return u
 }
 
@@ -862,6 +935,41 @@ func (u *CredentialUpsertOne) SetInternal(v bool) *CredentialUpsertOne {
 func (u *CredentialUpsertOne) UpdateInternal() *CredentialUpsertOne {
 	return u.Update(func(s *CredentialUpsert) {
 		s.UpdateInternal()
+	})
+}
+
+// SetPurpose sets the "purpose" field.
+func (u *CredentialUpsertOne) SetPurpose(v string) *CredentialUpsertOne {
+	return u.Update(func(s *CredentialUpsert) {
+		s.SetPurpose(v)
+	})
+}
+
+// UpdatePurpose sets the "purpose" field to the value that was provided on create.
+func (u *CredentialUpsertOne) UpdatePurpose() *CredentialUpsertOne {
+	return u.Update(func(s *CredentialUpsert) {
+		s.UpdatePurpose()
+	})
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (u *CredentialUpsertOne) SetExpiresAt(v time.Time) *CredentialUpsertOne {
+	return u.Update(func(s *CredentialUpsert) {
+		s.SetExpiresAt(v)
+	})
+}
+
+// UpdateExpiresAt sets the "expires_at" field to the value that was provided on create.
+func (u *CredentialUpsertOne) UpdateExpiresAt() *CredentialUpsertOne {
+	return u.Update(func(s *CredentialUpsert) {
+		s.UpdateExpiresAt()
+	})
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (u *CredentialUpsertOne) ClearExpiresAt() *CredentialUpsertOne {
+	return u.Update(func(s *CredentialUpsert) {
+		s.ClearExpiresAt()
 	})
 }
 
@@ -1339,6 +1447,41 @@ func (u *CredentialUpsertBulk) SetInternal(v bool) *CredentialUpsertBulk {
 func (u *CredentialUpsertBulk) UpdateInternal() *CredentialUpsertBulk {
 	return u.Update(func(s *CredentialUpsert) {
 		s.UpdateInternal()
+	})
+}
+
+// SetPurpose sets the "purpose" field.
+func (u *CredentialUpsertBulk) SetPurpose(v string) *CredentialUpsertBulk {
+	return u.Update(func(s *CredentialUpsert) {
+		s.SetPurpose(v)
+	})
+}
+
+// UpdatePurpose sets the "purpose" field to the value that was provided on create.
+func (u *CredentialUpsertBulk) UpdatePurpose() *CredentialUpsertBulk {
+	return u.Update(func(s *CredentialUpsert) {
+		s.UpdatePurpose()
+	})
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (u *CredentialUpsertBulk) SetExpiresAt(v time.Time) *CredentialUpsertBulk {
+	return u.Update(func(s *CredentialUpsert) {
+		s.SetExpiresAt(v)
+	})
+}
+
+// UpdateExpiresAt sets the "expires_at" field to the value that was provided on create.
+func (u *CredentialUpsertBulk) UpdateExpiresAt() *CredentialUpsertBulk {
+	return u.Update(func(s *CredentialUpsert) {
+		s.UpdateExpiresAt()
+	})
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (u *CredentialUpsertBulk) ClearExpiresAt() *CredentialUpsertBulk {
+	return u.Update(func(s *CredentialUpsert) {
+		s.ClearExpiresAt()
 	})
 }
 

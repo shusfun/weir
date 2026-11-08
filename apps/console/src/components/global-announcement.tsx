@@ -7,8 +7,6 @@ import {
   FormGrid,
   Notice,
   Button,
-  Card,
-  CardContent,
   Input,
   Textarea,
   Select,
@@ -23,6 +21,7 @@ import { ConflictNotice, State } from "./feedback";
 import { useFormAction } from "../lib/action";
 import { PublishedAnnouncement, type NoticeNode, type PublishedNotice } from "./published-announcement";
 import { field, useConsoleContext } from "../lib/console-context";
+import { Section } from "./system-settings";
 
 interface Announcement {
   content_format?: string;
@@ -109,8 +108,8 @@ export function AnnouncementEditor() {
   const previewReady = !html || (!!preview.data && !preview.isError);
   useConsoleContext({ tab: "分发", form: [field("announcement_enabled", "启用全局公告", draft.enabled ? "是" : "否")] });
   return (
-    <Card>
-      <CardContent className="stack announcement-editor">
+    <Section title="全局公告" description="统一发布服务通知；登录用户与匿名公开页分别选择，页面自己的公告保持独立。">
+      <div className="stack announcement-editor">
         <div>
           <h3>全局公告</h3>
           <p>统一发布服务通知。登录用户与匿名公开页分别选择；页面自己的公告保持独立。</p>
@@ -197,7 +196,7 @@ export function AnnouncementEditor() {
             {save.error && !isConflict(save.raw) && <Notice tone="bad">{save.error}</Notice>}
           </Form>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </Section>
   );
 }

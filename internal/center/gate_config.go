@@ -3,6 +3,7 @@ package center
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/shusfun/weir/internal/buildinfo"
 	"github.com/shusfun/weir/internal/kernelconf"
@@ -108,19 +109,22 @@ func (s *Server) addCredentials(ctx context.Context, g *ent.Gate, cfg *contracts
 	chainKeys := map[int][]string{}
 	for _, c := range creds {
 		if c.ProbeParentID != nil {
-			parent, err := s.Store.Ent.Credential.Get(ctx, *c.ProbeParentID)
-			if ent.IsNotFound(err) {
-				continue
-			}
-			if err != nil {
-				return nil, err
-			}
-			if parent.ProbeParentID != nil || !sameCredentialOwner(c, parent) {
-				continue
-			}
+			continue
 		}
 		item := contracts.Credential{ID: int64(c.ID), InboundID: int64(c.NodeID), StatsKey: c.StatsKey, UUID: c.UUID, Password: c.Password}
 		if c.Internal {
+			if c.Purpose == "probe" {
+				if c.ExpiresAt == nil || !time.Now().Before(*c.ExpiresAt) {
+					continue
+				}
+				item.ExpiresAt = c.ExpiresAt
+				if item.UUID, err = s.reveal(c.UUID); err != nil {
+					return nil, err
+				}
+				if item.Password, err = s.reveal(c.Password); err != nil {
+					return nil, err
+				}
+			}
 			item.UserKey, item.Internal = "internal", true
 			cfg.Credentials = append(cfg.Credentials, item)
 			continue

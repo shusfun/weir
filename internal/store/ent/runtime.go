@@ -147,20 +147,24 @@ func init() {
 	credentialDescInternal := credentialFields[7].Descriptor()
 	// credential.DefaultInternal holds the default value on creation for the internal field.
 	credential.DefaultInternal = credentialDescInternal.Default.(bool)
+	// credentialDescPurpose is the schema descriptor for purpose field.
+	credentialDescPurpose := credentialFields[8].Descriptor()
+	// credential.DefaultPurpose holds the default value on creation for the purpose field.
+	credential.DefaultPurpose = credentialDescPurpose.Default.(string)
 	// credentialDescMeterEpoch is the schema descriptor for meter_epoch field.
-	credentialDescMeterEpoch := credentialFields[9].Descriptor()
+	credentialDescMeterEpoch := credentialFields[11].Descriptor()
 	// credential.DefaultMeterEpoch holds the default value on creation for the meter_epoch field.
 	credential.DefaultMeterEpoch = credentialDescMeterEpoch.Default.(string)
 	// credentialDescMeterUp is the schema descriptor for meter_up field.
-	credentialDescMeterUp := credentialFields[10].Descriptor()
+	credentialDescMeterUp := credentialFields[12].Descriptor()
 	// credential.DefaultMeterUp holds the default value on creation for the meter_up field.
 	credential.DefaultMeterUp = credentialDescMeterUp.Default.(int64)
 	// credentialDescMeterDown is the schema descriptor for meter_down field.
-	credentialDescMeterDown := credentialFields[11].Descriptor()
+	credentialDescMeterDown := credentialFields[13].Descriptor()
 	// credential.DefaultMeterDown holds the default value on creation for the meter_down field.
 	credential.DefaultMeterDown = credentialDescMeterDown.Default.(int64)
 	// credentialDescCreatedAt is the schema descriptor for created_at field.
-	credentialDescCreatedAt := credentialFields[13].Descriptor()
+	credentialDescCreatedAt := credentialFields[15].Descriptor()
 	// credential.DefaultCreatedAt holds the default value on creation for the created_at field.
 	credential.DefaultCreatedAt = credentialDescCreatedAt.Default.(func() time.Time)
 	exitFields := schema.Exit{}.Fields()

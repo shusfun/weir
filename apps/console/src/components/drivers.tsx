@@ -201,7 +201,7 @@ function NewDriverDialog({ close, created }: { close: () => void; created: (name
   const { run, isBusy, waitFor } = useRowAction<string>();
   const parents = (list.data ?? []).filter((d) => d.kernel === f.kernel && !d.error);
   const parent = f.parent || parents.sort((a, b) => b.min_version.localeCompare(a.min_version, undefined, { numeric: true }))[0]?.name || "";
-  const text = `kernel: ${f.kernel}\nname: ${f.name}\nextends: ${parent}\nmin_version: ${f.min}\nnotes: \n`;
+  const text = `kernel: ${f.kernel}\nname: ${f.name}\nextends: ${parent}\nmin_version: ${f.min}\nnotes:\n`;
   return (
     <Dialog open onOpenChange={(o) => !o && !isBusy() && close()}>
       <DialogContent size="lg">

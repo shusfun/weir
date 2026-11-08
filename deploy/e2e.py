@@ -1,7 +1,7 @@
 """端到端测试：交叉编译 e2e 测试程序，在 debian 容器中用真实内核运行。
 
 用法：python deploy/e2e.py [-run 正则]
-需要 Docker 与 dist/cores 下的 Linux 版 Xray（26.3.27）和带统计接口的 sing-box（目录名 sing-box-1.14.3-stats，放 CI 发布的 with_v2ray_api 版本，目前是 1.14.4）。
+需要 Docker 与 dist/cores 下的 Linux 版 Xray（26.3.27）、mihomo 和带统计接口的 sing-box（目录名 sing-box-1.14.3-stats，放 CI 发布的 with_v2ray_api 版本，目前是 1.14.4）。
 """
 import os
 import pathlib
@@ -12,14 +12,15 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "dist" / "e2e"
 XRAY = ROOT / "dist" / "cores" / "v26.3.27" / "xray"
 SINGBOX = ROOT / "dist" / "cores" / "sing-box-1.14.3-stats" / "sing-box"  # 带 with_v2ray_api 的构建
-# 订阅检查用的 mihomo（可选）：由 Weir 的内核下载（官方摘要校验）放到这里，缺少时相关测试跳过。
+# 实测与 Clash 订阅检查共用 mihomo，必须经过官方摘要校验。
 MIHOMO = ROOT / "dist" / "cores" / "fetched" / "mihomo" / "1.19.33" / "amd64" / "mihomo"
+GEOIP = pathlib.Path(os.environ.get("WEIR_E2E_GEOIP", str(ROOT / "dist" / "cores" / "Country.mmdb")))
 IMAGE = os.environ.get("WEIR_E2E_IMAGE", "debian:bookworm-slim")
 CA_BUNDLE = pathlib.Path(os.environ.get("WEIR_E2E_CA_BUNDLE", "/etc/ssl/cert.pem"))
 
 
 def main(argv):
-    for f in (XRAY, SINGBOX):
+    for f in (XRAY, SINGBOX, MIHOMO):
         if not f.is_file():
             raise SystemExit(f"missing {f}")
     OUT.mkdir(parents=True, exist_ok=True)
@@ -32,8 +33,12 @@ def main(argv):
     cmd = ["docker", "run", "--rm",
            "-v", f"{OUT}:/t", "-v", f"{XRAY}:/cores/xray:ro", "-v", f"{SINGBOX}:/cores/sing-box:ro",
            "-e", "WEIR_E2E_XRAY=/cores/xray", "-e", "WEIR_E2E_SINGBOX=/cores/sing-box", "-e", "WEIR_E2E_BINARY=/t/weir"]
+    if os.environ.get("WEIR_E2E_NETWORK"):
+        cmd += ["--network", os.environ["WEIR_E2E_NETWORK"], "-e", "WEIR_E2E_PUBLIC_NETWORK=1"]
     if MIHOMO.is_file():
         cmd += ["-v", f"{MIHOMO}:/cores/mihomo:ro", "-e", "WEIR_E2E_MIHOMO=/cores/mihomo"]
+    if GEOIP.is_file():
+        cmd += ["-v", f"{GEOIP}:/cores/Country.mmdb:ro", "-e", "WEIR_E2E_GEOIP=/cores/Country.mmdb"]
     # 精简镜像没有 CA 证书库（安装器会补装）；Gate 实测 REALITY 目标等访问外网的测试借用本机的证书库，只读。
     if CA_BUNDLE.is_file():
         cmd += ["-v", f"{CA_BUNDLE}:/etc/ssl/certs/ca-certificates.crt:ro"]

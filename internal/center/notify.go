@@ -28,15 +28,14 @@ const notifyKey = "notify"
 
 // NotifySettings 是通知设置；Bot Token 加密保存、只写不读。
 type NotifySettings struct {
-	Enabled       bool   `json:"enabled"`
-	BotToken      string `json:"bot_token,omitempty"`
-	ChatID        string `json:"chat_id"`
-	APIBase       string `json:"api_base"` // 默认 https://api.telegram.org，可填自建反代
-	GateOffline   bool   `json:"gate_offline"`
-	UserQuota     int    `json:"user_quota_percent"` // 用户用量达到该百分比时提醒，0 关闭
-	UserExpiry    int    `json:"user_expiry_days"`   // 用户到期前若干天提醒，0 关闭
-	SourceExpiry  int    `json:"source_expiry_days"` // 订阅源（机场）到期前若干天提醒，0 关闭
-	SourceRefresh int    `json:"source_refresh_hours"`
+	Enabled      bool   `json:"enabled"`
+	BotToken     string `json:"bot_token,omitempty"`
+	ChatID       string `json:"chat_id"`
+	APIBase      string `json:"api_base"` // 默认 https://api.telegram.org，可填自建反代
+	GateOffline  bool   `json:"gate_offline"`
+	UserQuota    int    `json:"user_quota_percent"` // 用户用量达到该百分比时提醒，0 关闭
+	UserExpiry   int    `json:"user_expiry_days"`   // 用户到期前若干天提醒，0 关闭
+	SourceExpiry int    `json:"source_expiry_days"` // 订阅源（机场）到期前若干天提醒，0 关闭
 }
 
 func defaultNotify() NotifySettings {
@@ -95,7 +94,7 @@ func (s *Server) putNotify(c *gin.Context) {
 		return
 	}
 	if len(cfg.ChatID) > 64 || strings.ContainsAny(cfg.ChatID, " /?&#\r\n") || cfg.UserQuota < 0 || cfg.UserQuota > 100 || cfg.UserExpiry < 0 || cfg.UserExpiry > 60 ||
-		cfg.SourceExpiry < 0 || cfg.SourceExpiry > 60 || cfg.SourceRefresh < 0 || cfg.SourceRefresh > 168 || len(cfg.BotToken) > 256 || strings.ContainsAny(cfg.BotToken, "/?#\r\n ") {
+		cfg.SourceExpiry < 0 || cfg.SourceExpiry > 60 || len(cfg.BotToken) > 256 || strings.ContainsAny(cfg.BotToken, "/?#\r\n ") {
 		failure(c, 400, "invalid_notify_settings")
 		return
 	}
@@ -214,11 +213,11 @@ func (s *Server) CheckAlerts(ctx context.Context, now time.Time) error {
 
 // RefreshSources 按设置的间隔重新拉取全部启用的订阅源（保护性缓存照常生效），并清除订阅组输出缓存。
 func (s *Server) RefreshSources(ctx context.Context, now time.Time) error {
-	cfg, err := s.notifySettings(ctx)
-	if err != nil || cfg.SourceRefresh <= 0 {
+	st, err := s.subscriptionSettings(ctx)
+	if err != nil || st.SourceRefresh <= 0 {
 		return err
 	}
-	if ok, _ := s.Store.KV.SetNX(ctx, "sources-refreshed", now.Format(time.RFC3339), time.Duration(cfg.SourceRefresh)*time.Hour); !ok {
+	if ok, _ := s.Store.KV.SetNX(ctx, "sources-refreshed", now.Format(time.RFC3339), time.Duration(st.SourceRefresh)*time.Hour); !ok {
 		return nil
 	}
 	rows, err := s.Store.Ent.SubSource.Query().Where(subsource.EnabledEQ(true)).All(ctx)

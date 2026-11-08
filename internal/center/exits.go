@@ -135,6 +135,9 @@ func (s *Server) persistExit(ctx context.Context, db *ent.Client, gid int, owner
 }
 
 func (s *Server) validateExitSelection(ctx context.Context, g *ent.Gate, self int, owner *int, id int, spec *ExitSpec, skip, admin bool, kernel string) (*ent.Exit, ExitSpec, *exitProbe, error) {
+	if spec != nil && utf8.RuneCountInString(strings.TrimSpace(spec.Remark)) > 100 {
+		return nil, ExitSpec{}, nil, errors.New("invalid_remark")
+	}
 	if id != 0 && spec != nil {
 		return nil, ExitSpec{}, nil, errors.New("ambiguous_exit")
 	}
@@ -354,7 +357,7 @@ func (s *Server) listExits(c *gin.Context, admin bool) {
 	c.JSON(200, gin.H{"items": items, "kinds": kinds})
 }
 
-func (s *Server) saveExit(c *gin.Context, admin bool) {
+func (s *Server) saveExitNow(c *gin.Context, admin bool) {
 	defer s.auditExitFailure(c, "exit.save")
 	ctx := c.Request.Context()
 	var old *ent.Exit
@@ -514,6 +517,9 @@ func (s *Server) saveExit(c *gin.Context, admin bool) {
 			}
 		}
 		if err != nil {
+			if s.deferExitChange(c, err) {
+				return
+			}
 			failErr(c, 422, err)
 			return
 		}

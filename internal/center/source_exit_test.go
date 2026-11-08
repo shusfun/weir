@@ -88,6 +88,7 @@ func TestSourceGroupNeedsKernelSupport(t *testing.T) {
 
 func TestChainStepThreeSourceAndUserRestriction(t *testing.T) {
 	s, admin, g := setupGate(t)
+	g.serveActions(t, s, nil)
 	ctx := t.Context()
 	src, _ := s.Store.Ent.SubSource.Create().SetName("机场").SetURL("https://example.com/sub").Save(ctx)
 	kvCache{s}.Store(ctx, src.ID, []string{"trojan://pw1@198.51.100.10:443?sni=b.example.com#HK-01", "trojan://pw2@198.51.100.11:443?sni=c.example.com#HK-02"})
@@ -128,7 +129,6 @@ func TestChainStepThreeSourceAndUserRestriction(t *testing.T) {
 	}
 	// 订阅组里的节点名是处理后的名称（默认加地区旗帜），用户在页面上看到、按这个名称选。
 	_ = s.Store.Ent.Gate.UpdateOneID(int(g.id)).SetLastSeenAt(nowUTC()).Exec(ctx)
-	g.serveActions(t, s, nil)
 	ch := mustJSON(t, alice, "POST", "/api/v1/me/chains", body(map[string]any{"kind": "source", "profile_id": int(mine["id"].(float64)), "mode": "node", "match": "🇭🇰 HK-02"}), 200)
 	if ch["exit"].(map[string]any)["kind"] != "source" {
 		t.Fatalf("user chain = %v", ch)

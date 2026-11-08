@@ -24,6 +24,19 @@ import (
 
 const subscriptionSettingKey = "subscription-settings"
 
+func sourceRefreshValue(v any) (int, bool) {
+	switch n := v.(type) {
+	case float64:
+		return int(n), true
+	case int:
+		return n, true
+	case int64:
+		return int(n), true
+	default:
+		return 0, false
+	}
+}
+
 // SubscriptionSettings 是订阅源页的全局默认值（订阅组可逐项覆盖）。
 type SubscriptionSettings struct {
 	FlagEmoji        bool           `json:"flag_emoji"`
@@ -42,6 +55,7 @@ type SubscriptionSettings struct {
 	FilterInclude    string         `json:"filter_include"`
 	FilterExclude    string         `json:"filter_exclude"`
 	UpdateInterval   int            `json:"update_interval"`
+	SourceRefresh    int            `json:"source_refresh_hours"`
 	// Disguise 是伪装页开关（默认关闭）：打开后浏览器访问订阅地址只看到伪装页，剩余流量与一键导入改为登录后
 	// 在「我的订阅」查看；客户端拉取订阅不受影响。
 	Disguise bool `json:"disguise"`
@@ -49,13 +63,26 @@ type SubscriptionSettings struct {
 
 func defaultSubscriptionSettings() SubscriptionSettings {
 	return SubscriptionSettings{FlagEmoji: true, PrependManual: true, ManualPrefix: "手动节点", PrependSources: true, RuleLevel: "std",
-		TrafficNodes: true, CacheMinutes: 10, EnableUDP: true, UpdateInterval: 24}
+		TrafficNodes: true, CacheMinutes: 10, EnableUDP: true, UpdateInterval: 24, SourceRefresh: 0}
 }
 
 func (s *Server) subscriptionSettings(ctx context.Context) (SubscriptionSettings, error) {
 	out := defaultSubscriptionSettings()
 	row, err := s.Store.Ent.Setting.Query().Where(setting.KeyEQ(subscriptionSettingKey)).Only(ctx)
 	if ent.IsNotFound(err) {
+		if old, e := s.Store.Ent.Setting.Query().Where(setting.KeyEQ(notifyKey)).Only(ctx); e == nil {
+			if raw, ok := old.Value["source_refresh_hours"]; ok {
+				if n, ok := sourceRefreshValue(raw); ok {
+					out.SourceRefresh = int(n)
+				}
+				value := map[string]any{}
+				bb, _ := json.Marshal(out)
+				_ = json.Unmarshal(bb, &value)
+				_ = s.Store.Ent.Setting.Create().SetKey(subscriptionSettingKey).SetValue(value).OnConflictColumns(setting.FieldKey).UpdateNewValues().Exec(ctx)
+				delete(old.Value, "source_refresh_hours")
+				_, _ = s.Store.Ent.Setting.Update().Where(setting.KeyEQ(notifyKey)).SetValue(old.Value).Save(ctx)
+			}
+		}
 		return out, nil
 	}
 	if err != nil {
@@ -63,7 +90,25 @@ func (s *Server) subscriptionSettings(ctx context.Context) (SubscriptionSettings
 	}
 	b, _ := json.Marshal(row.Value)
 	err = json.Unmarshal(b, &out)
-	return out, err
+	if err != nil {
+		return out, err
+	}
+	if _, ok := row.Value["source_refresh_hours"]; !ok {
+		if old, e := s.Store.Ent.Setting.Query().Where(setting.KeyEQ(notifyKey)).Only(ctx); e == nil {
+			if raw, ok := old.Value["source_refresh_hours"]; ok {
+				if n, ok := sourceRefreshValue(raw); ok {
+					out.SourceRefresh = int(n)
+				}
+				value := map[string]any{}
+				bb, _ := json.Marshal(out)
+				_ = json.Unmarshal(bb, &value)
+				_ = s.Store.Ent.Setting.Create().SetKey(subscriptionSettingKey).SetValue(value).OnConflictColumns(setting.FieldKey).UpdateNewValues().Exec(ctx)
+				delete(old.Value, "source_refresh_hours")
+				_, _ = s.Store.Ent.Setting.Update().Where(setting.KeyEQ(notifyKey)).SetValue(old.Value).Save(ctx)
+			}
+		}
+	}
+	return out, nil
 }
 
 func (s *Server) subscriptionRoutes(r *gin.Engine, auth, admin *gin.RouterGroup) {
@@ -116,7 +161,7 @@ func (s *Server) putSubscriptionSettings(c *gin.Context) {
 		failDetail(c, 400, "invalid_operators", err.Error(), nil)
 		return
 	}
-	if st.CacheMinutes < 0 || st.CacheMinutes > 1440 || st.UpdateInterval < 1 || st.UpdateInterval > 168 || !validRuleLevel(st.RuleLevel) {
+	if st.CacheMinutes < 0 || st.CacheMinutes > 1440 || st.UpdateInterval < 1 || st.UpdateInterval > 168 || st.SourceRefresh < 0 || st.SourceRefresh > 168 || !validRuleLevel(st.RuleLevel) {
 		failure(c, 400, "invalid_settings")
 		return
 	}

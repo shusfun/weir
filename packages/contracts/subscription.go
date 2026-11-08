@@ -2,110 +2,73 @@ package contracts
 
 import "time"
 
-// ProxyPolicy 是代理页的设置：按类型开关、按网站类别分流到哪一组、自动选择怎么做。
-// 存在用户上（每个用户一份，作用于他的全部链接）；类型的出口是单独的链式代理（chain.policy_type），不在这里。
+// ProxyPolicy 是每个用户的客户端选择与有序清单。
 type ProxyPolicy struct {
-	// Disabled 是不放进订阅的类型；新出现的类型默认放进去。
-	Disabled []string `json:"disabled,omitempty"`
-	// Rules：类别（RuleCategories 的 key）→ 目标。目标是 auto（自动选择）、select（节点选择）、direct（直连）、
-	// reject（拒绝），或一个类型的 key（走这一类节点）。没写的类别用默认目标。
-	Rules map[string]string `json:"rules,omitempty"`
-	Auto  AutoPolicy        `json:"auto"`
-	// Custom 是用户粘贴的自定义清单，同样写进订阅由客户端执行。
-	Custom CustomRules `json:"custom,omitzero"`
+	Version            int          `json:"version"`
+	Revision           int          `json:"revision"`
+	HiddenLines        []string     `json:"hidden_lines,omitempty"`
+	Disabled           []string     `json:"disabled,omitempty"`
+	Auto               AutoPolicy   `json:"auto"`
+	Groups             []ProxyGroup `json:"groups,omitempty"`
+	NextGroupID        int          `json:"next_group_id,omitempty"`
+	TargetMigration    []string     `json:"target_migration,omitempty"`
+	MigrationConfirmed bool         `json:"migration_confirmed"`
+	Custom             CustomRules  `json:"custom"`
 }
 
-const (
-	// CustomBypass：清单内直连，其余按分流设置。
-	CustomBypass = "bypass"
-	// CustomOnly：清单内走节点选择，其余全部直连，分流类别不起作用。
-	CustomOnly = "only"
-)
+const MaxProxyGroups = 20
 
-// CustomRules：Mode 与 Lines 是订阅实际使用的（规范写法，如 DOMAIN-SUFFIX,netflix.com）；Source 与 SourceMode
-// 是用户最后一次提交的原文与方式。内核检查没通过时只更新后两者，客户端继续用上一次的规则。
+// ProxyGroup 的创建顺序与 Members 顺序稳定，不受观测变化影响。
+type ProxyGroup struct {
+	ID              int      `json:"id"`
+	Name            string   `json:"name"`
+	Kind            string   `json:"kind"`
+	Members         []string `json:"members"`
+	IntervalSeconds int      `json:"interval_seconds"`
+	ToleranceMS     int      `json:"tolerance_ms"`
+}
+
+// Revision 记录清单的生效版本，写入使用 ProxyPolicy.Revision 校验并发。
 type CustomRules struct {
-	Version    int              `json:"version,omitempty"`
-	Revision   int              `json:"revision,omitempty"`
-	Entries    []CustomEntry    `json:"entries,omitempty"`
-	Pending    *CustomCandidate `json:"pending,omitempty"`
-	Legacy     *CustomLegacy    `json:"legacy,omitempty"`
-	Mode       string           `json:"mode,omitempty"`
-	Lines      []string         `json:"lines,omitempty"`
-	Source     string           `json:"source,omitempty"`
-	SourceMode string           `json:"source_mode,omitempty"`
-	Check      *CustomCheck     `json:"check,omitempty"`
+	Version  int              `json:"version"`
+	Revision int              `json:"revision"`
+	Entries  []CustomEntry    `json:"entries"`
+	Pending  *CustomCandidate `json:"pending,omitempty"`
+	Source   string           `json:"source,omitempty"`
+	Check    *CustomCheck     `json:"check,omitempty"`
 }
-
-// CustomEntry 的顺序就是优先级。LastProxyTarget 让直连与代理之间切换时不丢失选过的组。
 type CustomEntry struct {
-	ID              string `json:"id"`
-	Kind            string `json:"kind"`
-	Value           string `json:"value"`
-	Target          string `json:"target"`
-	Enabled         bool   `json:"enabled"`
-	LastProxyTarget string `json:"last_proxy_target,omitempty"`
+	ID      string `json:"id"`
+	Kind    string `json:"kind"`
+	Value   string `json:"value"`
+	Target  string `json:"target"`
+	Enabled bool   `json:"enabled"`
+	Notice  string `json:"notice,omitempty"`
 }
-
 type CustomCandidate struct {
 	Entries []CustomEntry `json:"entries"`
 	Source  string        `json:"source,omitempty"`
 }
-
-// Legacy 保留升级前的输入与分流设置；RulesFile 专供尚未更新整份配置的旧客户端。
-type CustomLegacy struct {
-	Mode       string            `json:"mode"`
-	SourceMode string            `json:"source_mode"`
-	Source     string            `json:"source"`
-	Lines      []string          `json:"lines"`
-	Rules      map[string]string `json:"rules"`
-	RulesFile  string            `json:"rules_file"`
-}
-
-// CustomCheck 是最后一次提交的内核检查结果：passed / failed / unknown。
 type CustomCheck struct {
 	Status string    `json:"status"`
 	Detail string    `json:"detail,omitempty"`
 	At     time.Time `json:"at"`
 }
-
-// AutoPolicy：latency 由客户端按延迟测速自动选；ranked 由中心按各节点自己统计的下载速率（最近 24 小时有流量的
-// 分钟的第 90 百分位）排序，订阅里只放 Top 个节点：前 Top−1 个按速率，留 1 个轮换位给还没有速率数据的节点，
-// 客户端在其中再按延迟选。RefreshMinutes 是客户端刷新节点列表的间隔。
 type AutoPolicy struct {
-	Mode           string `json:"mode,omitempty"` // latency / ranked，空为 latency
-	Top            int    `json:"top,omitempty"`
-	RefreshMinutes int    `json:"refresh_minutes,omitempty"`
+	RefreshMinutes int `json:"refresh_minutes"`
 }
 
 const (
-	AutoLatency = "latency"
-	AutoRanked  = "ranked"
-	// MinRefreshMinutes 是节点列表刷新的最短间隔：太频繁会让中心压力变大、客户端来回切换。
 	MinRefreshMinutes     = 30
 	DefaultRefreshMinutes = 30
-	DefaultRankedTop      = 3
 )
 
-// Normalized 补上默认值并把越界的值收回范围。
 func (p ProxyPolicy) Normalized() ProxyPolicy {
-	if p.Auto.Mode != AutoRanked {
-		p.Auto.Mode = AutoLatency
+	if p.Auto.RefreshMinutes < 30 {
+		p.Auto.RefreshMinutes = 30
 	}
-	if p.Auto.RefreshMinutes < MinRefreshMinutes {
-		p.Auto.RefreshMinutes = DefaultRefreshMinutes
-	}
-	if p.Auto.RefreshMinutes > 24*60 {
-		p.Auto.RefreshMinutes = 24 * 60
-	}
-	if p.Auto.Top <= 0 {
-		p.Auto.Top = DefaultRankedTop
-	}
-	if p.Auto.Top > 20 {
-		p.Auto.Top = 20
-	}
-	if p.Rules == nil {
-		p.Rules = map[string]string{}
+	if p.Auto.RefreshMinutes > 1440 {
+		p.Auto.RefreshMinutes = 1440
 	}
 	return p
 }
@@ -127,7 +90,7 @@ type WeirSubscription struct {
 }
 
 // WeirSubscriptionVersion 在结构有不兼容变化时加一。
-const WeirSubscriptionVersion = 1
+const WeirSubscriptionVersion = 2
 
 type WeirUsage struct {
 	Used  int64 `json:"used"`
@@ -140,9 +103,10 @@ type WeirWindow struct {
 }
 
 // WeirNode：Rank 是中心排序后的名次（从 1 起，0 为不可用、没有参与排序）；Health 是 ok / degraded / unknown。
-// RateBps 是最近 24 小时下载速率的第 90 百分位（字节/秒），没有数据时为 0 且 RateMinutes 为 0；
-// RateFrom 是 self（这个用户自己）或 all（全部用户，他自己没有数据时补上）。Exploring：这次是轮换位。
+// RateBps 是最近 24 小时已完成且下载至少 1 MiB 的有效分钟速度的第 90 百分位（字节/秒），没有数据时为 0 且 RateMinutes 为 0；
+// RateFrom 是 self（这个用户自己）或 all（全部用户，他自己没有数据时补上）。
 type WeirNode struct {
+	Ref         string `json:"ref"`
 	Name        string `json:"name"`
 	Type        string `json:"type"`
 	URI         string `json:"uri"`
@@ -152,13 +116,18 @@ type WeirNode struct {
 	RateMinutes int    `json:"rate_minutes,omitempty"`
 	RateFrom    string `json:"rate_from,omitempty"`
 	Auto        bool   `json:"auto"` // 是否在「自动选择」组里
-	Exploring   bool   `json:"exploring,omitempty"`
 }
 
 type WeirGroup struct {
-	Name    string   `json:"name"`
-	Kind    string   `json:"kind"` // select / url-test
-	Members []string `json:"members"`
+	Ref             string   `json:"ref"`
+	Name            string   `json:"name"`
+	Kind            string   `json:"kind"` // select / url-test / fallback
+	Members         []string `json:"members"`
+	MemberRefs      []string `json:"member_refs"`
+	ProbeURL        string   `json:"probe_url,omitempty"`
+	IntervalSeconds int      `json:"interval_seconds,omitempty"`
+	ToleranceMS     int      `json:"tolerance_ms,omitempty"`
+	Hidden          bool     `json:"hidden"`
 }
 
 // WeirRule：Kind 是 domain / domain_suffix / domain_keyword / ip_cidr / geoip / final；Values 为空时只有 final。

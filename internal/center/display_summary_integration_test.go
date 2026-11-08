@@ -10,6 +10,7 @@ import (
 
 func TestUserNodeSummaryUsesEffectiveExitAndKeepsAdminEndpointPrivate(t *testing.T) {
 	s, admin, g := setupGate(t)
+	g.serveActions(t, s, nil)
 	n := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "ss2022", "name": "入口备注", "skip_probe": true, "exit": map[string]any{"kind": "socks5", "remark": "管理员出口", "address": "203.0.113.99", "port": 1080, "password": "admin-private-password"}}, 200)
 	mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "summary@test.invalid", "password": "SummaryTest2026", "all_nodes": true, "allow_chain": true}, 200)
 	u := login(t, s, "summary@test.invalid", "SummaryTest2026")
@@ -25,10 +26,8 @@ func TestUserNodeSummaryUsesEffectiveExitAndKeepsAdminEndpointPrivate(t *testing
 		}
 	}
 	check("管理员出口")
-	g.serveActions(t, s, map[string]func(contracts.Action) contracts.ActionResult{contracts.ActionChainProbe: func(contracts.Action) contracts.ActionResult {
-		return contracts.ActionResult{OK: true, Result: map[string]any{"mode": "proxy", "exit_ip": "198.51.100.77"}}
-	}})
-	mustJSON(t, u, "PUT", "/api/v1/me/proxy/types/ss2022/exit", map[string]any{"exit": map[string]any{"kind": "socks5", "remark": "我的出口", "address": "203.0.113.5", "port": 1080}}, 200)
+
+	mustJSON(t, u, "PUT", "/api/v1/proxy/types/ss2022/exit", map[string]any{"revision": 0, "exit": map[string]any{"kind": "socks5", "remark": "我的出口", "address": "203.0.113.5", "port": 1080}}, 200)
 	check("我的出口")
 	links := mustJSON(t, u, "GET", "/api/v1/me/links", nil, 200)["items"].([]any)
 	token := links[0].(map[string]any)["token"].(string)
@@ -57,6 +56,7 @@ func TestUserNodeSummaryUsesEffectiveExitAndKeepsAdminEndpointPrivate(t *testing
 
 func TestDownstreamChangeInvalidatesExitIPObservation(t *testing.T) {
 	s, admin, g := setupGate(t)
+	g.serveActions(t, s, nil)
 	g2 := pairFakeGate(t, admin)
 	heartbeat(t, g2, contracts.Heartbeat{Version: "test", Arch: "amd64"})
 	makeNode := func(gid int, name string, exit any) map[string]any {

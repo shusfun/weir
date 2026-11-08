@@ -33,6 +33,10 @@ type Credential struct {
 	Password string `json:"-"`
 	// Internal holds the value of the "internal" field.
 	Internal bool `json:"internal,omitempty"`
+	// Purpose holds the value of the "purpose" field.
+	Purpose string `json:"purpose,omitempty"`
+	// ExpiresAt holds the value of the "expires_at" field.
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 	// ProbeParentID holds the value of the "probe_parent_id" field.
 	ProbeParentID *int `json:"probe_parent_id,omitempty"`
 	// MeterEpoch holds the value of the "meter_epoch" field.
@@ -57,9 +61,9 @@ func (*Credential) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case credential.FieldID, credential.FieldNodeID, credential.FieldLinkID, credential.FieldChainID, credential.FieldUserID, credential.FieldProbeParentID, credential.FieldMeterUp, credential.FieldMeterDown:
 			values[i] = new(sql.NullInt64)
-		case credential.FieldStatsKey, credential.FieldUUID, credential.FieldPassword, credential.FieldMeterEpoch:
+		case credential.FieldStatsKey, credential.FieldUUID, credential.FieldPassword, credential.FieldPurpose, credential.FieldMeterEpoch:
 			values[i] = new(sql.NullString)
-		case credential.FieldMeterAt, credential.FieldCreatedAt:
+		case credential.FieldExpiresAt, credential.FieldMeterAt, credential.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -132,6 +136,19 @@ func (_m *Credential) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field internal", values[i])
 			} else if value.Valid {
 				_m.Internal = value.Bool
+			}
+		case credential.FieldPurpose:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field purpose", values[i])
+			} else if value.Valid {
+				_m.Purpose = value.String
+			}
+		case credential.FieldExpiresAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field expires_at", values[i])
+			} else if value.Valid {
+				_m.ExpiresAt = new(time.Time)
+				*_m.ExpiresAt = value.Time
 			}
 		case credential.FieldProbeParentID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -234,6 +251,14 @@ func (_m *Credential) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("internal=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Internal))
+	builder.WriteString(", ")
+	builder.WriteString("purpose=")
+	builder.WriteString(_m.Purpose)
+	builder.WriteString(", ")
+	if v := _m.ExpiresAt; v != nil {
+		builder.WriteString("expires_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteString(", ")
 	if v := _m.ProbeParentID; v != nil {
 		builder.WriteString("probe_parent_id=")

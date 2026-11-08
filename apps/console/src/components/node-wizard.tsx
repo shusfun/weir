@@ -18,6 +18,7 @@ import { exitErrorFields, exitKindName, probeText } from "./chain-exit";
 import { NodeAccess } from "./node-access";
 import { Link } from "react-router-dom";
 import { objectHref } from "../lib/objects";
+import { PendingExits, type PendingExit } from "./pending-exits";
 
 // 默认只列最常用的三个，其余收在「更多协议」里。
 const recommended = ["vless-reality", "hysteria2", "ss2022"];
@@ -54,6 +55,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
   const [advanced, setAdvanced] = useState<Record<string, string | number | boolean>>({});
   const [shares, setShares] = useState<Share[] | null>(null);
   const [created, setCreated] = useState<NodeItem | null>(null);
+  const [candidate, setCandidate] = useState<PendingExit | null>(null);
   const active = gates.filter((g) => g.status === "active");
   const chosen = presets.data?.find((p) => p.id === preset);
   const gate = active.find((g) => g.id === gateId);
@@ -70,7 +72,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
         gate_id: gateId, preset, name: name.trim(), port: Number(port) || 0, cert_id: certId || 0,
         reality_target: target.trim(), ...(exitId ? {exit_id:exitId}:{exit:chain}),
         settings: advanced, user_ids: me.data ? [me.data.id] : [],
-      }, track) as Promise<NodeItem & { shares?: Share[] }>,
+      }, track) as Promise<(NodeItem & { shares?: Share[] }) | { pending: PendingExit }>,
     {
       wait: () => ({ label: `正在 ${gate?.name ?? "VPS"} 上新建 ${chosen?.name ?? ""} 节点并实测` }),
       fields: errorFields,
@@ -80,6 +82,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
       },
       onSuccess: (n) => {
         done();
+        if ("pending" in n) { setCandidate(n.pending); return; }
         setCreated(n);
         setShares(n.shares ?? []);
       },
@@ -95,6 +98,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
     setAdvanced({});
     setShares(null);
     setCreated(null);
+    setCandidate(null);
     save.reset();
     close();
   };
@@ -110,6 +114,12 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
       ...Object.entries(advanced).map(([k, v]) => field("set." + k, chosen?.fields?.find((f) => f.key === k)?.label ?? k, v)),
     ],
   } : null);
+  if (candidate) return <Dialog open={open} onOpenChange={(o) => !o && reset()}><DialogContent size="lg">
+    <DialogTitle>出口已保存，等待验证</DialogTitle>
+    <DialogDescription>节点尚未创建，验证通过后自动创建并下发。可以关闭窗口，稍后在 VPS 或出口页面查看任务。</DialogDescription>
+    <PendingExits candidate={candidate.id} />
+    <DialogFooter><Button onClick={reset}>完成</Button></DialogFooter>
+  </DialogContent></Dialog>;
   if (shares) {
     return (
       <Dialog open={open} onOpenChange={(o) => !o && reset()}>
@@ -129,7 +139,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
     <Dialog open={open} onOpenChange={(o) => { if (!o && (!save.busy || save.detachable)) { save.leave(); reset(); } }}>
       <DialogContent size="lg">
         <DialogTitle>新建节点</DialogTitle>
-        <DialogDescription>选好 VPS 和协议就能创建；保存前由 VPS 用真实内核实测，不通不会保存。</DialogDescription>
+        <DialogDescription>选好 VPS 和协议即可创建。mihomo 尚未下载时先保存普通节点，下载完成后自动实测；链式出口验证通过后才启用。</DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
           {active.length === 0 ? (
             <State empty="还没有已连接的 VPS" detail="先在列表页添加 VPS 并执行安装命令。" />

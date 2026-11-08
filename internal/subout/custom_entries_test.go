@@ -8,9 +8,9 @@ import (
 func TestCustomEntriesPreserveOrderAndTargets(t *testing.T) {
 	p, items := testPlan()
 	p.Custom = []Rule{
-		{ID: "exact", Kind: "domain", Values: []string{"child.example.com"}, Target: "trojan-tls"},
+		{ID: "exact", Kind: "domain", Values: []string{"child.example.com"}, Target: "proxy"},
 		{ID: "suffix", Kind: "domain_suffix", Values: []string{"example.com"}, Target: "direct"},
-		{ID: "ip", Kind: "ip_cidr", Values: []string{"8.8.8.0/24"}, Target: "auto"},
+		{ID: "ip", Kind: "ip_cidr", Values: []string{"8.8.8.0/24"}, Target: "proxy"},
 	}
 	for _, target := range []string{"clash", "singbox", "surge", "loon", "quanx", "egern"} {
 		use := items
@@ -27,7 +27,7 @@ func TestCustomEntriesPreserveOrderAndTargets(t *testing.T) {
 		}
 	}
 	m := p.Match("child.example.com", []string{"HK", "JP", "US"}, items)
-	if m.EntryID != "exact" || m.Policy != "Trojan" {
+	if m.EntryID != "exact" || m.Policy != "PROXY" {
 		t.Fatalf("exact: %+v", m)
 	}
 	m = p.Match("other.example.com", []string{"HK", "JP", "US"}, items)
@@ -35,7 +35,7 @@ func TestCustomEntriesPreserveOrderAndTargets(t *testing.T) {
 		t.Fatalf("suffix: %+v", m)
 	}
 	m = p.Match("8.8.8.8", []string{"HK", "JP", "US"}, items)
-	if m.EntryID != "ip" || m.Policy != GroupAuto {
+	if m.EntryID != "ip" || m.Policy != GroupProxy {
 		t.Fatalf("ip: %+v", m)
 	}
 }

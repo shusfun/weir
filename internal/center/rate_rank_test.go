@@ -19,73 +19,16 @@ func rate(bps float64) rateStat {
 	return rateStat{P90: bps, Minutes: 10, From: "self"}
 }
 
-func autoKeys(in rankInput, r []rankedEntry) (auto []string, exploring string) {
-	for _, e := range r {
-		if e.Auto {
-			auto = append(auto, in.keys[e.Index])
-		}
-		if e.Exploring {
-			exploring = in.keys[e.Index]
-		}
-	}
-	return
-}
-
 func TestRankEntriesByRate(t *testing.T) {
-	// a 快、b 中、c 慢、d 没数据、e 不可用
-	in := rankInput{keys: []string{"a", "b", "c", "d", "e"}, health: []nodeHealth{ok(), ok(), ok(), ok(), down()},
-		rates: []rateStat{rate(9e6), rate(5e6), rate(1e6), rate(0), rate(20e6)}, prev: map[string]bool{}}
-
-	// 放 3 个：前 2 个按速率，第 3 个是轮换位（没数据的 d）；不可用的 e 再快也不放
-	r := rankEntries(in, contracts.AutoRanked, 3)
-	auto, exp := autoKeys(in, r)
-	if len(auto) != 3 || auto[0] != "a" || auto[1] != "b" || auto[2] != "d" || exp != "d" || r[4].Rank != 0 {
-		t.Fatalf("ranked top3 = %v exploring %q ranks %+v", auto, exp, r)
+	in := rankInput{keys: []string{"slow", "fast", "unknown", "down"}, health: []nodeHealth{ok(), ok(), ok(), down()}, rates: []rateStat{rate(1e6), rate(9e6), rate(0), rate(20e6)}}
+	r := rankEntries(in)
+	if r[0].Rank != 2 || r[1].Rank != 1 || r[2].Rank != 3 || r[3].Rank != 0 {
+		t.Fatal(r)
 	}
-	if r[0].Rank != 1 || r[1].Rank != 2 || r[2].Rank != 3 || r[3].Rank != 4 {
-		t.Fatalf("ranks = %+v", r)
-	}
-	// 放 1 个：不留轮换位，只放最快的
-	if auto, exp := autoKeys(in, rankEntries(in, contracts.AutoRanked, 1)); len(auto) != 1 || auto[0] != "a" || exp != "" {
-		t.Fatalf("top1 = %v %q", auto, exp)
-	}
-	// 客户端测延迟：全部可用的都放
-	if auto, _ := autoKeys(in, rankEntries(in, contracts.AutoLatency, 3)); len(auto) != 4 {
-		t.Fatalf("latency = %v", auto)
-	}
-	// 上一次在里面的 b 按 1.25 倍算：5e6×1.25 仍低于 9e6，a 照样第一；c 按 1.25 倍也追不上 b
-	in.prev = map[string]bool{"b": true, "c": true}
-	if auto, _ := autoKeys(in, rankEntries(in, contracts.AutoRanked, 3)); auto[0] != "a" || auto[1] != "b" {
-		t.Fatalf("hysteresis = %v", auto)
-	}
-	// b 比 a 只慢一点（8e6 vs 9e6），上一次在里面：b 留在第一，不来回换
-	in.rates[1] = rate(8e6)
-	in.prev = map[string]bool{"b": true}
-	if r := rankEntries(in, contracts.AutoRanked, 3); r[1].Rank != 1 {
-		t.Fatalf("near tie must keep incumbent: %+v", r)
-	}
-}
-
-func TestRankEntriesExploreRotationAndFill(t *testing.T) {
-	in := rankInput{keys: []string{"a", "x", "y", "z"}, health: []nodeHealth{ok(), ok(), ok(), ok()},
-		rates: []rateStat{rate(9e6), rate(0), rate(0), rate(0)}, prev: map[string]bool{}}
-	// 有速率的只有 1 个，放 3 个：a + 轮换位 + 再用没数据的补 1 个；每次拉取轮到下一个
-	var seen []string
-	for turn := 0; turn < 3; turn++ {
-		in.turn = turn
-		auto, exp := autoKeys(in, rankEntries(in, contracts.AutoRanked, 3))
-		if len(auto) != 3 || auto[0] != "a" {
-			t.Fatalf("turn %d auto = %v", turn, auto)
+	for i := range r {
+		if r[i].Index != i {
+			t.Fatal("排名改变输出顺序")
 		}
-		seen = append(seen, exp)
-	}
-	if seen[0] == seen[1] || seen[1] == seen[2] || seen[0] == seen[2] {
-		t.Fatalf("explore slot must rotate: %v", seen)
-	}
-	// 全都没有速率数据：放全部可用节点，交给客户端测延迟
-	in.rates[0] = rate(0)
-	if auto, exp := autoKeys(in, rankEntries(in, contracts.AutoRanked, 2)); len(auto) != 4 || exp != "" {
-		t.Fatalf("no data = %v %q", auto, exp)
 	}
 }
 
@@ -138,14 +81,22 @@ func TestMeterRecordsRate(t *testing.T) {
 	if b := s.Store.Ent.RateSample.Query().OnlyX(ctx).Bytes; b != 10<<20 {
 		t.Fatalf("long gap must not add rate bytes: %d", b)
 	}
-	own := s.userRates(ctx, uid)[pathKey(nid, 0)]
-	all := s.nodeRates(ctx, []int{nid})[nid]
+	s.Store.Ent.RateSample.Update().SetAt(minuteOf(time.Now()).Add(-time.Minute)).ExecX(ctx)
+	ownMap, err := s.userRates(ctx, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	allMap, err := s.nodeRates(ctx, []int{nid})
+	if err != nil {
+		t.Fatal(err)
+	}
+	own, all := ownMap[pathKey(nid, 0)], allMap[nid]
 	if !own.known() || own.From != "self" || all.From != "all" || own.P90 < 800_000 || own.P90 > 1_200_000 {
 		t.Fatalf("rates own=%+v all=%+v", own, all)
 	}
 	// 代理页的节点与排序带上速率
 	carol := login(t, s, "carol@example.test", "Passw0rd-carol")
-	v := mustJSON(t, carol, "GET", "/api/v1/me/proxy", nil, 200)
+	v := mustJSON(t, carol, "GET", "/api/v1/proxy", nil, 200)
 	r := v["ranking"].([]any)[0].(map[string]any)["rate"].(map[string]any)
 	if r["from"] != "self" || r["minutes"].(float64) != 1 {
 		t.Fatalf("proxy ranking rate = %v", r)

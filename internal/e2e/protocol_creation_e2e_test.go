@@ -22,12 +22,17 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/shusfun/weir/internal/gate"
 	"github.com/shusfun/weir/internal/kernels"
 	"github.com/shusfun/weir/internal/nodeprobe"
 	"github.com/shusfun/weir/packages/contracts"
+	"gopkg.in/yaml.v3"
 )
 
 // 从实际创建入口验收，不跳过创建前实测；TLS 使用显式信任的隔离测试 CA。
@@ -37,11 +42,9 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 		t.Fatal("real sing-box required")
 	}
 	e := setup(t)
+	mh := os.Getenv("WEIR_E2E_MIHOMO")
 	data, err := os.ReadFile(sb)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = (kernels.Cache{Dir: filepath.Join(e.dir, "center-data", "kernels")}).Put("sing-box", "1.14.4", "amd64", data); err != nil {
 		t.Fatal(err)
 	}
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -77,6 +80,11 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 			parent := e.t
 			e.t = t
 			defer func() { e.t = parent }()
+			if preset == "ss2022" {
+				if _, err = (kernels.Cache{Dir: filepath.Join(e.dir, "center-data", "kernels")}).Put("sing-box", "1.14.4", "amd64", data); err != nil {
+					t.Fatal(err)
+				}
+			}
 			body := map[string]any{"gate_id": e.gateID, "preset": preset, "name": preset}
 			if preset == "vless-ws-tls" || preset == "vmess-ws-tls" || preset == "trojan-tls" {
 				body["cert_id"] = cert["id"]
@@ -88,6 +96,16 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 				t.Fatalf("creation was not tested: %v", tested)
 			}
 			e.applied(preset)
+			if preset == "vless-reality" {
+				eventually(t, 10*time.Second, "仅 Xray 的 VPS 上报运行内核", func() bool { return e.s.Store.Ent.Gate.GetX(e.ctx, e.gateID).KernelsRunning["xray"] != "" })
+				g := e.s.Store.Ent.Gate.GetX(e.ctx, e.gateID)
+				if g.KernelsRunning["xray"] == "" || g.KernelsRunning["sing-box"] != "" || g.KernelsRunning["mihomo"] != "" {
+					t.Fatalf("仅 Xray 的 VPS 运行职责错误：%v", g.KernelsRunning)
+				}
+				if _, _, err := (kernels.Cache{Dir: filepath.Join(e.dir, "center-data", "kernels")}).Get("sing-box", "1.14.4", "amd64"); err == nil {
+					t.Fatal("VLESS 实测不应要求 sing-box 缓存")
+				}
+			}
 		})
 	}
 	if t.Failed() {
@@ -125,7 +143,14 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 			t.Errorf("subscription missing %s", preset)
 		}
 	}
-	blob := bytes.Repeat([]byte("w"), 256<<10)
+	b, _ = e.get("/sub/"+token+"/provider/single", nil)
+	var mhDoc struct {
+		Proxies []map[string]any `yaml:"proxies"`
+	}
+	if err = yaml.Unmarshal(b, &mhDoc); err != nil {
+		t.Fatal(err)
+	}
+	blob := nodeprobe.Payload("formal-traffic")
 	target := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(blob) }))
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
@@ -147,10 +172,8 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	target.Start()
 	defer target.Close()
-	// The HTTPS target must remain reachable through WireGuard, which cannot
-	// reach the remote host's loopback interface.
+	// WireGuard 无法访问远端回环地址，HTTPS 端点使用容器网卡。
 	hosts, err := os.OpenFile("/etc/hosts", os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
 		t.Fatal(err)
@@ -160,10 +183,19 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tlsCert, err := tls.X509KeyPair([]byte(certPEM), pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kd}))
+	// 原始 IP 与域名都经过相同的隔离 CA 校验。
+	leaf.IPAddresses = append(leaf.IPAddresses, net.ParseIP(host))
+	der, err = x509.CreateCertificate(rand.Reader, leaf, ca, &key.PublicKey, key)
 	if err != nil {
 		t.Fatal(err)
 	}
+	centerPEM := append(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), root...)
+	tlsCert, err := tls.X509KeyPair(centerPEM, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kd}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target.TLS = &tls.Config{Certificates: []tls.Certificate{tlsCert}}
+	target.StartTLS()
 	center := httptest.NewUnstartedServer(e.s.Router())
 	_ = center.Listener.Close()
 	center.Listener, err = net.Listen("tcp", net.JoinHostPort(host, "0"))
@@ -193,6 +225,38 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 			t.Fatalf("%s: %d", op.path, resp.StatusCode)
 		}
 	}
+	// Gate 改经容器网卡的 HTTPS 地址连接，心跳与实测使用同一隔离 CA。
+	e.stopAgent()
+	gateConfig, err := gate.LoadConfig(e.paths.Config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gateConfig.Center, gateConfig.CAFile = secureURL, rootPath
+	gateJSON, _ := json.Marshal(gateConfig)
+	if err = os.WriteFile(e.paths.Config, gateJSON, 0600); err != nil {
+		t.Fatal(err)
+	}
+	e.runAgent()
+	defer func() { e.stopAgent() }()
+	eventually(t, 10*time.Second, "Gate 经 HTTPS 上报", func() bool {
+		return e.s.Store.Ent.Gate.GetX(e.ctx, e.gateID).CenterURL == secureURL
+	})
+	for _, p := range mhDoc.Proxies {
+		if p["name"] != tags["wireguard"] {
+			continue
+		}
+		for _, endpoint := range []string{target.URL, strings.Replace(target.URL, host, "node-center.e2e.test", 1)} {
+			t.Run("wireguard-https-"+strings.TrimPrefix(endpoint, "https://"), func(t *testing.T) {
+				r, err := nodeprobe.Run(t.Context(), nodeprobe.Options{Binary: mh, Run: []string{"-f", "{config}"}, Check: []string{"-t", "-f", "{config}"}, Client: contracts.NodeTestClient{Proxies: []map[string]any{p}, Target: tags["wireguard"]}, Target: endpoint, Token: "formal-traffic"})
+				if err != nil || r.TCP.Status != "passed" {
+					t.Fatalf("WireGuard HTTPS：%+v %v", r, err)
+				}
+			})
+		}
+	}
+	if t.Failed() {
+		return
+	}
 	for _, preset := range presets {
 		t.Run("deployed-"+preset, func(t *testing.T) {
 			parent := e.t
@@ -214,13 +278,14 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 	for _, preset := range presets {
 		t.Run("traffic-"+preset, func(t *testing.T) {
 			port := freePort(t)
-			cfg := map[string]any{"log": map[string]any{"level": "warn"}, "inbounds": []any{map[string]any{"type": "mixed", "listen": "127.0.0.1", "listen_port": port}}, "outbounds": doc.Outbounds, "endpoints": doc.Endpoints, "route": map[string]any{"final": tags[preset]}}
+			cfg := (contracts.NodeTestClient{Proxies: mhDoc.Proxies, Target: tags[preset]}).Config(port)
 			body, _ := json.Marshal(cfg)
 			path := filepath.Join(e.dir, "client-"+preset+".json")
 			if err := os.WriteFile(path, body, 0600); err != nil {
 				t.Fatal(err)
 			}
-			cmd := exec.Command(sb, "run", "-c", path)
+			clientHome := t.TempDir()
+			cmd := exec.Command(mh, "-f", path, "-d", clientHome)
 			cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 			if err := cmd.Start(); err != nil {
 				t.Fatal(err)
@@ -235,9 +300,8 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 				if r["status"] != "passed" {
 					t.Fatalf("parallel WireGuard test: %v", r)
 				}
-				if err := fetchVia(port, target.URL, len(blob)); err != nil {
-					t.Fatalf("probe displaced WireGuard client: %v", err)
-				}
+				e.applied("回收内部测试凭据")
+				eventually(t, 25*time.Second, "内部凭据回收后普通 WireGuard 凭据仍可连接", func() bool { return fetchVia(port, target.URL, len(blob)) == nil })
 			}
 		})
 	}
@@ -259,20 +323,20 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 	probeTarget.TLS = &tls.Config{Certificates: []tls.Certificate{tlsCert}}
 	probeTarget.StartTLS()
 	defer probeTarget.Close()
-	probeURL := "https://" + net.JoinHostPort("node-center.e2e.test", fmt.Sprint(probeTarget.Listener.Addr().(*net.TCPAddr).Port))
+	probeURL := "https://" + net.JoinHostPort(host, fmt.Sprint(probeTarget.Listener.Addr().(*net.TCPAddr).Port))
 	runProbe := func(t *testing.T, outbound map[string]any, udp bool) nodeprobe.Result {
 		t.Helper()
 		ctx, cancel := context.WithTimeout(t.Context(), 40*time.Second)
 		defer cancel()
-		r, err := nodeprobe.Run(ctx, nodeprobe.Options{Binary: sb, Run: []string{"run", "-c", "{config}"}, Check: []string{"check", "-c", "{config}"}, Client: contracts.NodeTestClient{Outbounds: []map[string]any{outbound}, Target: outbound["tag"].(string)}, Target: probeURL, Token: "isolated-probe", UDP: udp, UDPServers: []string{"127.0.0.1:9"}})
+		r, err := nodeprobe.Run(ctx, nodeprobe.Options{Binary: mh, Run: []string{"-f", "{config}"}, Check: []string{"-t", "-f", "{config}"}, Client: contracts.NodeTestClient{Proxies: []map[string]any{outbound}, Target: outbound["name"].(string)}, Target: probeURL, Token: "isolated-probe", UDP: udp, UDPServers: []string{"127.0.0.1:9"}})
 		if r.TCP.Status == "unknown" {
 			t.Fatalf("test setup failed: %v %+v", err, r)
 		}
 		return r
 	}
 	copyOutbound := func(preset string) map[string]any {
-		for _, o := range doc.Outbounds {
-			if o["tag"] == tags[preset] {
+		for _, o := range mhDoc.Proxies {
+			if o["name"] == tags[preset] {
 				b, _ := json.Marshal(o)
 				var out map[string]any
 				_ = json.Unmarshal(b, &out)
@@ -281,6 +345,26 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 		}
 		t.Fatalf("missing outbound %s", preset)
 		return nil
+	}
+	for _, preset := range []string{"hysteria2", "tuic"} {
+		t.Run("udp-filter-"+preset, func(t *testing.T) {
+			o := copyOutbound(preset)
+			blocked := udpFilter(t, fmt.Sprintf("%v:%v", o["server"], o["port"]), o)
+			if r := runProbe(t, o, false); r.TCP.Status != "passed" {
+				t.Fatalf("UDP 放行后未连接：%+v", r)
+			}
+			blocked.Store(true)
+			ctx, cancel := context.WithTimeout(t.Context(), 4*time.Second)
+			r, err := nodeprobe.Run(ctx, nodeprobe.Options{Binary: mh, Run: []string{"-f", "{config}"}, Check: []string{"-t", "-f", "{config}"}, Client: contracts.NodeTestClient{Proxies: []map[string]any{o}, Target: o["name"].(string)}, Target: probeURL, Token: "isolated-probe"})
+			cancel()
+			if r.TCP.Status == "passed" || r.TCP.Why == "" {
+				t.Fatalf("UDP 阻断后错误地成功或缺少原因：%+v %v", r, err)
+			}
+			blocked.Store(false)
+			if r := runProbe(t, o, false); r.TCP.Status != "passed" {
+				t.Fatalf("UDP 恢复后未连接：%+v", r)
+			}
+		})
 	}
 	t.Run("wrong-credentials", func(t *testing.T) {
 		o := copyOutbound("trojan-tls")
@@ -291,7 +375,7 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 	})
 	t.Run("wrong-certificate", func(t *testing.T) {
 		o := copyOutbound("trojan-tls")
-		o["tls"].(map[string]any)["server_name"] = "wrong-certificate.invalid"
+		o["sni"] = "wrong-certificate.invalid"
 		if r := runProbe(t, o, false); r.TCP.Status != "failed" {
 			t.Fatalf("wrong certificate accepted: %+v", r)
 		}
@@ -312,7 +396,7 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 			}
 		}()
 		o := copyOutbound("socks-local")
-		o["server_port"] = l.Addr().(*net.TCPAddr).Port
+		o["port"] = l.Addr().(*net.TCPAddr).Port
 		if r := runProbe(t, o, false); r.TCP.Status != "failed" {
 			t.Fatalf("bare TCP accepted as protocol success: %+v", r)
 		}
@@ -327,7 +411,7 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 		o := copyOutbound("socks-local")
 		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 		defer cancel()
-		r, err := nodeprobe.Run(ctx, nodeprobe.Options{Binary: sb, Run: []string{"run", "-c", "{config}"}, Check: []string{"check", "-c", "{config}"}, Client: contracts.NodeTestClient{Outbounds: []map[string]any{o}, Target: o["tag"].(string)}, Target: probeURL + "/stall", Token: "isolated-probe"})
+		r, err := nodeprobe.Run(ctx, nodeprobe.Options{Binary: mh, Run: []string{"-f", "{config}"}, Check: []string{"-t", "-f", "{config}"}, Client: contracts.NodeTestClient{Proxies: []map[string]any{o}, Target: o["name"].(string)}, Target: probeURL + "/stall", Token: "isolated-probe"})
 		if !errors.Is(err, context.DeadlineExceeded) || r.TCP.Status == "passed" {
 			t.Fatalf("timeout result: %+v %v", r, err)
 		}
@@ -343,4 +427,58 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 			}
 		}
 	})
+}
+
+// 在真实节点前只转发 UDP；丢弃两个方向的数据验证 QUIC 节点不能绕过 UDP 阻断。
+func udpFilter(t *testing.T, target string, outbound map[string]any) *atomic.Bool {
+	t.Helper()
+	remote, err := net.ResolveUDPAddr("udp", target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	upstream, err := net.DialUDP("udp", nil, remote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
+	if err != nil {
+		_ = upstream.Close()
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close(); _ = upstream.Close() })
+	outbound["server"], outbound["port"] = "127.0.0.1", listener.LocalAddr().(*net.UDPAddr).Port
+	blocked := new(atomic.Bool)
+	var mu sync.Mutex
+	var client *net.UDPAddr
+	go func() {
+		buf := make([]byte, 65536)
+		for {
+			n, addr, err := listener.ReadFromUDP(buf)
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			client = addr
+			mu.Unlock()
+			if !blocked.Load() {
+				_, _ = upstream.Write(buf[:n])
+			}
+		}
+	}()
+	go func() {
+		buf := make([]byte, 65536)
+		for {
+			n, err := upstream.Read(buf)
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			addr := client
+			mu.Unlock()
+			if addr != nil && !blocked.Load() {
+				_, _ = listener.WriteToUDP(buf[:n], addr)
+			}
+		}
+	}()
+	return blocked
 }

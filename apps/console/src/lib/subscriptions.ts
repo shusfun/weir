@@ -100,6 +100,7 @@ export interface SubscriptionSettings {
   filter_include: string;
   filter_exclude: string;
   update_interval: number;
+  source_refresh_hours: number;
 }
 
 export const ruleLevels = [["none", "不加规则"], ["lite", "精简"], ["std", "标准"], ["full", "完整"]] as const;

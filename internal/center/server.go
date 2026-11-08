@@ -106,6 +106,12 @@ func NewWait(ctx context.Context, c Config, path string, assets fs.FS) (*Server,
 			return nil, err
 		}
 	}
+	if s.Store != nil {
+		if err := s.cleanupProbeCredentials(ctx, time.Now(), true); err != nil {
+			s.Store.Close()
+			return nil, err
+		}
+	}
 	return s, nil
 }
 
@@ -209,7 +215,8 @@ func (s *Server) maintenance(ctx context.Context) {
 					// 各任务互不影响：一项失败不阻止其他项。
 					report.note("admin-all-nodes", s.EnsureAdminsAllNodes(ctx))
 					report.note("reset-usage", s.ResetDueUsage(ctx, now))
-					report.note("node-test-credentials", s.revokeExpiredNodeProbes(ctx, now))
+
+					report.note("internal-test-credentials", s.cleanupProbeCredentials(ctx, now, false))
 					report.note("refresh-sources", s.RefreshSources(ctx, now))
 					s.RefreshSourceExits(ctx)
 					report.note("auto-backup", s.AutoBackup(ctx, now))
@@ -219,6 +226,8 @@ func (s *Server) maintenance(ctx context.Context) {
 					report.note("renew-certs", s.RenewCerts(ctx, now))
 					report.note("prune-samples", s.PruneSamples(ctx, now))
 					s.CheckReachabilityAll(ctx, now)
+					go s.resumePendingNodeProbes(context.WithoutCancel(ctx))
+					go s.resumePendingExits(context.WithoutCancel(ctx))
 					s.RefreshGeoIP(ctx, now)
 					s.dropLegacyAIProvider(ctx)
 					return nil
@@ -354,6 +363,12 @@ func (s *Server) Router() *gin.Engine {
 	ready.POST("/auth/mfa", s.completeMFA)
 	auth := ready.Group("")
 	auth.Use(s.authenticate)
+	auth.Use(func(c *gin.Context) {
+		if c.Query("dryRun") == "true" {
+			c.Set(dryRunKey, true)
+		}
+		c.Next()
+	})
 	auth.GET("/me", s.me)
 	auth.POST("/auth/logout", s.logout)
 	auth.POST("/security/totp/setup", s.setupTOTP)
@@ -363,7 +378,7 @@ func (s *Server) Router() *gin.Engine {
 	s.sessionRoutes(auth)
 	s.passkeyRoutes(ready, auth)
 	admin := auth.Group("/admin")
-	admin.Use(requireAdmin)
+	admin.Use(s.auditProxyDenied, requireAdmin)
 	admin.PUT("/settings/logo", s.putLogo)
 	admin.DELETE("/settings/logo", s.deleteLogo)
 	s.gateRoutes(ready, auth, admin)

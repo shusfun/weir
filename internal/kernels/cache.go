@@ -91,6 +91,15 @@ func (c Cache) Remove(kernel, version string) error {
 	return os.RemoveAll(filepath.Join(c.Dir, kernel, version))
 }
 
+// RemoveArch 只移除未通过检查的程序，保留同版本其他架构的缓存。
+func (c Cache) RemoveArch(kernel, version, arch string) error {
+	dir, err := c.path(kernel, version, arch)
+	if err != nil {
+		return err
+	}
+	return os.RemoveAll(dir)
+}
+
 // Versions 列出已缓存的版本（新到旧）。
 func (c Cache) Versions(kernel, arch string) []string {
 	entries, _ := os.ReadDir(filepath.Join(c.Dir, kernel))

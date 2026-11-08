@@ -10,6 +10,7 @@ import { OperatorEditor, type Operator } from "./operator-editor";
 import { TemplatePicker, useTemplates } from "./subscription-profiles";
 import { State } from "./feedback";
 import { field, useConsoleContext } from "../lib/console-context";
+import { useUnsavedChanges } from "../lib/dirty";
 
 export function TemplatesPanel() {
   const confirm = useConfirm();
@@ -114,6 +115,8 @@ function SettingsForm({ value, saved }: { value: SubscriptionSettings; saved: ()
   const [s, setS] = useState<SubscriptionSettings>(value);
   const [ops, setOps] = useState<Operator[]>(value.default_operators ?? []);
   const set = (patch: Partial<SubscriptionSettings>) => setS({ ...s, ...patch });
+  const dirty = JSON.stringify(s) !== JSON.stringify(value) || JSON.stringify(ops) !== JSON.stringify(value.default_operators ?? []);
+  useUnsavedChanges(dirty);
   const save = useFormAction(() => api("/admin/subscriptions/settings", "PUT", { ...s, default_operators: ops }), {
     ok: "已保存",
     fields: { invalid_template: "template" },
@@ -128,6 +131,7 @@ function SettingsForm({ value, saved }: { value: SubscriptionSettings; saved: ()
         <Field label="手动节点前缀"><Input value={s.manual_prefix} onChange={(e) => set({ manual_prefix: e.target.value })} /></Field>
         <Field label="输出缓存（分钟）" hint="0 表示每次都实时拉取订阅源。"><Input inputMode="numeric" value={String(s.cache_minutes)} onChange={(e) => set({ cache_minutes: Number(e.target.value.replace(/\D/g, "")) || 0 })} /></Field>
         <Field label="客户端更新间隔（小时）"><Input inputMode="numeric" value={String(s.update_interval)} onChange={(e) => set({ update_interval: Number(e.target.value.replace(/\D/g, "")) || 24 })} /></Field>
+        <Field label="订阅源定时刷新（小时）" hint="0 表示只在访问订阅组时按缓存刷新。"><Input inputMode="numeric" value={String(s.source_refresh_hours)} onChange={(e) => set({ source_refresh_hours: Number(e.target.value.replace(/\D/g, "")) || 0 })} /></Field>
       </FormGrid>
       <FormGrid>
         {switches.map(([k, label]) => (

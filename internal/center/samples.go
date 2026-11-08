@@ -18,8 +18,8 @@ const sampleKeep = 25 * time.Hour
 func minuteOf(t time.Time) time.Time { return t.UTC().Truncate(time.Minute) }
 
 // recordTraffic 累加一分钟内的流量；delta 为 0 也写一条，表示这一分钟「已知为 0」。
-func (s *Server) recordTraffic(ctx context.Context, scope sample.Scope, id int, delta int64, now time.Time) {
-	_ = s.Store.Ent.Sample.Create().SetScope(scope).SetSubjectID(id).SetAt(minuteOf(now)).SetTraffic(delta).
+func (s *Server) recordTraffic(ctx context.Context, scope sample.Scope, id int, delta int64, now time.Time) error {
+	return s.Store.Ent.Sample.Create().SetScope(scope).SetSubjectID(id).SetAt(minuteOf(now)).SetTraffic(delta).
 		OnConflictColumns(sample.FieldScope, sample.FieldSubjectID, sample.FieldAt).AddTraffic(delta).Exec(ctx)
 }
 

@@ -97,7 +97,7 @@ var (
 var GenPattern = genPattern
 
 // Kernels 是驱动可以描述的内核。
-var Kernels = []string{"xray", "sing-box"}
+var Kernels = []string{"xray", "sing-box", "mihomo"}
 
 // ParseDriver 严格解析一份展开后的驱动（不处理 extends）。
 func ParseDriver(text string) (Driver, error) {

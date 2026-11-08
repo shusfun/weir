@@ -19,6 +19,9 @@ import (
 
 // defaultArgs 是驱动没有给出参数时（旧状态文件）的运行与自检参数。
 func defaultArgs(name string) kernelconf.KernelArgs {
+	if name == "mihomo" {
+		return kernelconf.KernelArgs{Run: []string{"-f", "{config}"}, Check: []string{"-t", "-f", "{config}"}}
+	}
 	if name == "sing-box" {
 		return kernelconf.KernelArgs{Run: []string{"run", "-c", "{config}"}, Check: []string{"check", "-c", "{config}"}}
 	}

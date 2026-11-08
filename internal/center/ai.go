@@ -75,10 +75,10 @@ func (s *Server) testNodeWith(ctx context.Context, n *ent.Node, settings map[str
 	if err != nil {
 		return nil, err
 	}
-	if fmt.Sprint(g.Host["node_test_version"]) != "2" {
+	if fmt.Sprint(g.Host["node_test_version"]) != "3" {
 		return nil, errors.New("这台 VPS 尚不支持完整客户端实测，请先升级 Gate 并等待心跳")
 	}
-	kernels, profiles, err := s.gateKernels(ctx, g, map[string]bool{n.Kernel: true, "sing-box": true})
+	kernels, profiles, err := s.gateKernels(ctx, g, map[string]bool{n.Kernel: true, "mihomo": true})
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (s *Server) testNodeWith(ctx context.Context, n *ent.Node, settings map[str
 	id, password := newSecret(n.Protocol)
 	in := contracts.Inbound{ID: 1, Tag: "test", Kernel: n.Kernel, Protocol: n.Protocol, Network: n.Network, Security: n.Security, Settings: settings}
 	cfg := contracts.GateConfig{Kernels: kernels, Drivers: profiles, Inbounds: []contracts.Inbound{in},
-		Credentials: []contracts.Credential{{ID: 1, InboundID: 1, StatsKey: "test", UserKey: "test", UUID: id, Password: password}}, Budgets: map[string]contracts.GateBudget{"test": {Unlimited: true}}}
+		Credentials: []contracts.Credential{{ID: 1, InboundID: 1, StatsKey: "test", UserKey: "test", UUID: id, Password: password, Internal: true}}, Budgets: map[string]contracts.GateBudget{"test": {Unlimited: true}}}
 	var cert *ent.Certificate
 	if n.CertID != nil {
 		if cert, err = s.Store.Ent.Certificate.Get(ctx, *n.CertID); err != nil {
@@ -108,32 +108,11 @@ func (s *Server) testNodeWith(ctx context.Context, n *ent.Node, settings map[str
 	if err != nil {
 		return nil, err
 	}
-	body, _, err := subout.Render([]string{link}, "singbox")
+	proxy, err := subout.ClashProxy(link)
 	if err != nil {
 		return nil, fmt.Errorf("客户端配置无法生成：%w", err)
 	}
-	var doc contracts.NodeTestClient
-	if err = json.Unmarshal(body, &doc); err != nil {
-		return nil, err
-	}
-	// Render 的 selector/urltest 不是被测节点；端点和 detour 必须一起传给 Gate。
-	var outbounds []map[string]any
-	for _, o := range doc.Outbounds {
-		if o["type"] == "selector" || o["type"] == "urltest" || o["type"] == "direct" || o["type"] == "block" {
-			continue
-		}
-		outbounds = append(outbounds, o)
-		if o["type"] != "shadowtls" {
-			doc.Target, _ = o["tag"].(string)
-		}
-	}
-	doc.Outbounds = outbounds
-	for _, ep := range doc.Endpoints {
-		doc.Target, _ = ep["tag"].(string)
-	}
-	if doc.Target == "" {
-		return nil, errors.New("客户端配置为空")
-	}
+	doc := contracts.NodeTestClient{Proxies: []map[string]any{proxy}, Target: proxy["name"].(string)}
 	var payload map[string]any
 	raw, _ := json.Marshal(map[string]any{"config": cfg, "client": doc})
 	_ = json.Unmarshal(raw, &payload)

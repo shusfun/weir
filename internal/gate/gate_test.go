@@ -2,9 +2,7 @@ package gate
 
 import (
 	"context"
-	"io"
 	"net"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -86,81 +84,15 @@ func TestOfflineQuotaEnforcement(t *testing.T) {
 	}
 }
 
-// fakeSocks 是只支持用户名密码认证与 CONNECT 的最小 SOCKS5 服务。
-func fakeSocks(t *testing.T, user, pass string) int {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { ln.Close() })
-	go func() {
-		for {
-			c, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			go func(c net.Conn) {
-				defer c.Close()
-				head := make([]byte, 2)
-				io.ReadFull(c, head)
-				io.ReadFull(c, make([]byte, head[1]))
-				c.Write([]byte{5, 2})
-				ver := make([]byte, 2)
-				io.ReadFull(c, ver)
-				u := make([]byte, ver[1])
-				io.ReadFull(c, u)
-				pl := make([]byte, 1)
-				io.ReadFull(c, pl)
-				p := make([]byte, pl[0])
-				io.ReadFull(c, p)
-				if string(u) != user || string(p) != pass {
-					c.Write([]byte{1, 1})
-					return
-				}
-				c.Write([]byte{1, 0})
-				req := make([]byte, 5)
-				io.ReadFull(c, req)
-				io.ReadFull(c, make([]byte, int(req[4])+2))
-				c.Write([]byte{5, 0, 0, 1, 0, 0, 0, 0, 0, 0})
-			}(c)
-		}
-	}()
-	return ln.Addr().(*net.TCPAddr).Port
-}
-
-func TestChainProbeSocks5(t *testing.T) {
-	port := fakeSocks(t, "home", "secret")
-	ctx := context.Background()
-	base := map[string]any{"kind": "socks5", "address": "127.0.0.1", "port": float64(port), "username": "home", "password": "secret", "target": "example.com:443"}
-	if _, err := chainProbe(ctx, base); err != nil {
-		t.Fatalf("admin probe: %v", err)
-	}
-	bad := map[string]any{}
-	for k, v := range base {
-		bad[k] = v
-	}
-	bad["password"] = "wrong"
-	if _, err := chainProbe(ctx, bad); err == nil || !strings.Contains(err.Error(), "认证失败") {
-		t.Fatalf("wrong password: %v", err)
-	}
-	// 用户自建链式代理：回环 / 内网地址被拒，不会去连接。
-	base["public_only"] = true
-	if _, err := chainProbe(ctx, base); err == nil || !strings.Contains(err.Error(), "公网") {
-		t.Fatalf("public_only loopback: %v", err)
-	}
-	for _, ip := range []string{"10.0.0.1", "192.168.1.1", "169.254.169.254", "fd00::1", "100.100.100.200", "100.64.1.2", "198.18.0.1"} {
-		if publicIP(net.ParseIP(ip)) {
-			t.Fatalf("%s treated as public", ip)
+func TestPublicProbeAddresses(t *testing.T) {
+	for _, address := range []string{"127.0.0.1", "10.0.0.1", "192.168.1.1", "169.254.169.254", "fd00::1", "100.100.100.200", "198.18.0.1"} {
+		if publicIP(net.ParseIP(address)) {
+			t.Fatalf("非公网地址被接受：%s", address)
 		}
 	}
 	if !publicIP(net.ParseIP("203.0.113.9")) {
-		t.Fatal("documentation address treated as private")
+		t.Fatal("公网测试地址被拒绝")
 	}
-	if _, err := chainProbe(ctx, map[string]any{"kind": "node", "address": "127.0.0.1", "port": float64(1)}); err == nil {
-		t.Fatal("unreachable node exit accepted")
-	}
-	_ = strconv.Itoa
 }
 
 func TestRunActionRejectsUnknownAndExpired(t *testing.T) {

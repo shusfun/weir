@@ -54,7 +54,7 @@ func (g *fakeGate) serveChainProbes(unreachable string, stop chan struct{}) {
 				return
 			default:
 			}
-			_, _ = g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 2, Version: "test", Hostname: "hk", Arch: "amd64"})
+			_, _ = g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 3, Version: "test", Hostname: "hk", Arch: "amd64"})
 			code, body := g.call("GET", "/api/v1/agent/actions", nil)
 			if code != 200 {
 				time.Sleep(50 * time.Millisecond)
@@ -197,7 +197,7 @@ func TestAcceptanceUserIsolationAuditAndSubscriptions(t *testing.T) {
 			t.Fatalf("chain exit %s = %d %s", addr, w.Code, w.Body.String())
 		}
 	}
-	if w := ac.do("POST", "/api/v1/me/chains", map[string]any{"name": "家宽", "entry_node_id": id1, "exit": map[string]any{"kind": "socks5", "address": "203.0.113.9", "port": 1080}}, nil); w.Code != 422 || !strings.Contains(w.Body.String(), "chain_probe_failed") {
+	if w := ac.do("POST", "/api/v1/me/chains", map[string]any{"name": "家宽", "entry_node_id": id1, "exit": map[string]any{"kind": "socks5", "address": "203.0.113.9", "port": 1080}}, nil); w.Code != 202 || !strings.Contains(w.Body.String(), "chain_probe_failed") {
 		t.Fatalf("unreachable exit = %d %s", w.Code, w.Body.String())
 	}
 	if !auditHas(t, s, aid, "chain.create", "user:"+itoa(aid), "failed") {
@@ -304,7 +304,7 @@ func TestAcceptanceUserIsolationAuditAndSubscriptions(t *testing.T) {
 		t.Fatalf("alice subscription = %v (own creds %d)", uris, len(mine))
 	}
 	s.Store.Ent.Node.Update().Where(node.IDEQ(id1)).SetEnabled(false).ExecX(ctx)
-	if code, uris := subLinks(t, admin, tok1); code != 200 || len(uris) != 0 {
+	if code, uris := subLinks(t, admin, tok1); code != 422 || len(uris) != 0 {
 		t.Fatalf("subscription with disabled node = %d %v", code, uris)
 	}
 	s.Store.Ent.Node.Update().Where(node.IDEQ(id1)).SetEnabled(true).ExecX(ctx)

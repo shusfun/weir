@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	entexit "github.com/shusfun/weir/internal/store/ent/exit"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -13,30 +15,59 @@ import (
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/chain"
 	"github.com/shusfun/weir/internal/store/ent/credential"
+	"github.com/shusfun/weir/internal/subout"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
-// 代理页的接口：管理员按用户（/admin/users/:uid/proxy）、用户本人（/me/proxy）共用同一组处理函数。
-
+// 代理接口统一按登录账号与 user 查询参数解析归属。
 func (s *Server) proxyRoutes(auth, admin *gin.RouterGroup) {
-	for _, g := range []struct {
-		r     *gin.RouterGroup
-		base  string
-		admin bool
-	}{{admin, "/users/:uid", true}, {auth, "/me", false}} {
-		admin := g.admin
-		g.r.GET(g.base+"/proxy", func(c *gin.Context) { s.getProxy(c, admin) })
-		g.r.PUT(g.base+"/proxy", func(c *gin.Context) { s.putProxy(c, admin) })
-		g.r.PUT(g.base+"/proxy/custom", s.asJob("保存自定义清单", "已取消，清单保持原样", func(c *gin.Context) { s.putCustomRules(c, admin) }))
-		g.r.POST(g.base+"/proxy/custom/parse", func(c *gin.Context) { s.parseCustomList(c, admin) })
-		g.r.POST(g.base+"/proxy/custom/append", s.asJob("添加清单规则", "已取消，清单保持原样", func(c *gin.Context) { s.appendCustomEntries(c, admin) }))
-		g.r.PATCH(g.base+"/proxy/custom/entries/:entry", s.asJob("更新清单规则", "已取消，清单保持原样", func(c *gin.Context) { s.changeCustomEntry(c, admin) }))
-		g.r.DELETE(g.base+"/proxy/custom/entries/:entry", s.asJob("删除清单规则", "已取消，清单保持原样", func(c *gin.Context) { s.changeCustomEntry(c, admin) }))
-		g.r.POST(g.base+"/proxy/custom/entries/:entry/test", func(c *gin.Context) { s.testCustomEntry(c, admin) })
-		g.r.POST(g.base+"/proxy/custom/test", func(c *gin.Context) { s.testCustomRules(c, admin) })
-		g.r.PUT(g.base+"/proxy/types/:type/exit", s.asJob("给一类节点加出口", "已取消，出口保持原样", func(c *gin.Context) { s.putTypeExit(c, admin) }))
-		g.r.DELETE(g.base+"/proxy/types/:type/exit", func(c *gin.Context) { s.deleteTypeExit(c, admin) })
+	s.pendingExitRoutes(auth)
+	auth.GET("/proxy", func(c *gin.Context) { s.getProxy(c, false) })
+	auth.POST("/proxy/groups", func(c *gin.Context) { s.writeProxyGroup(c, false) })
+	auth.PUT("/proxy/groups/:group", func(c *gin.Context) { s.writeProxyGroup(c, false) })
+	auth.DELETE("/proxy/groups/:group", func(c *gin.Context) { s.writeProxyGroup(c, false) })
+	auth.POST("/proxy/migration/ack", func(c *gin.Context) { s.ackProxyMigration(c, false) })
+	auth.PUT("/proxy", func(c *gin.Context) { s.putProxy(c, false) })
+	auth.PUT("/proxy/custom", s.asJob("保存自定义清单", "已取消，清单保持原样", func(c *gin.Context) { s.putCustomRules(c, false) }))
+	auth.POST("/proxy/custom/parse", func(c *gin.Context) { s.parseCustomList(c, false) })
+	auth.POST("/proxy/custom/append", s.asJob("添加清单规则", "已取消，清单保持原样", func(c *gin.Context) { s.appendCustomEntries(c, false) }))
+	auth.PATCH("/proxy/custom/entries/:entry", s.asJob("更新清单规则", "已取消，清单保持原样", func(c *gin.Context) { s.changeCustomEntry(c, false) }))
+	auth.DELETE("/proxy/custom/entries/:entry", s.asJob("删除清单规则", "已取消，清单保持原样", func(c *gin.Context) { s.changeCustomEntry(c, false) }))
+	auth.POST("/proxy/custom/entries/:entry/test", func(c *gin.Context) { s.testCustomEntry(c, false) })
+	auth.POST("/proxy/custom/test", func(c *gin.Context) { s.testCustomRules(c, false) })
+	auth.PUT("/proxy/types/:type/exit", s.asJob("给一类节点加出口", "已取消，出口保持原样", func(c *gin.Context) { s.putTypeExit(c, false) }))
+	auth.DELETE("/proxy/types/:type/exit", func(c *gin.Context) { s.deleteTypeExit(c, false) })
+}
+
+func (s *Server) proxySubject(c *gin.Context, internal bool) (*ent.User, bool) {
+	actor := c.MustGet("account").(*ent.User)
+	raw := c.Query("user")
+	if internal && c.Param("uid") != "" {
+		raw = c.Param("uid")
 	}
+	if raw == "" {
+		raw = itoa(actor.ID)
+	}
+	id, err := strconv.Atoi(raw)
+	if err != nil || id <= 0 {
+		failure(c, 400, "invalid_user")
+		return nil, false
+	}
+	if actor.Role != "admin" && id != actor.ID {
+		s.audit(c, "proxy.denied", "user:"+itoa(id), "forbidden")
+		failure(c, 403, "forbidden")
+		return nil, false
+	}
+	u, err := s.Store.Ent.User.Get(c.Request.Context(), id)
+	if ent.IsNotFound(err) {
+		failure(c, 404, "user_not_found")
+		return nil, false
+	}
+	if err != nil {
+		failInternal(c, 503, "query_failed", err)
+		return nil, false
+	}
+	return u, true
 }
 
 // proxyType 是代理页里的一个类型：节点、是否放进订阅、统一出口。
@@ -76,7 +107,7 @@ func (s *Server) policyChains(ctx context.Context, uid int, typ string) ([]*ent.
 }
 
 func (s *Server) getProxy(c *gin.Context, admin bool) {
-	u, ok := s.subject(c, admin)
+	u, ok := s.proxySubject(c, admin)
 	if !ok {
 		return
 	}
@@ -99,15 +130,20 @@ func (s *Server) proxyView(ctx context.Context, u *ent.User) (gin.H, error) {
 		disabled[t] = true
 	}
 	gates := map[int]*ent.Gate{}
-	in := rankInput{prev: s.loadRankPrev(ctx, u.ID), turn: s.rankTurn(ctx, u.ID)}
 	var nodeIDs []int
 	for _, t := range types {
 		for _, n := range t.nodes {
 			nodeIDs = append(nodeIDs, n.ID)
 		}
 	}
-	own, all := s.userRates(ctx, u.ID), s.nodeRates(ctx, nodeIDs)
-	var refs []gin.H
+	own, err := s.userRates(ctx, u.ID)
+	if err != nil {
+		return nil, err
+	}
+	all, err := s.nodeRates(ctx, nodeIDs)
+	if err != nil {
+		return nil, err
+	}
 	items := []gin.H{}
 	for _, t := range types {
 		chains, err := s.policyChains(ctx, u.ID, t.Key)
@@ -147,11 +183,6 @@ func (s *Server) proxyView(ctx context.Context, u *ent.User) (gin.H, error) {
 				item["gate_id"], item["gate_name"] = g.ID, g.Name
 			}
 			nodes = append(nodes, item)
-			if !disabled[t.Key] {
-				in.keys = append(in.keys, pathKey(n.ID, chainID))
-				in.health, in.rates = append(in.health, h), append(in.rates, rate)
-				refs = append(refs, gin.H{"node_id": n.ID, "name": item["display_name"], "type": t.Label, "health": h.Status, "why": h.Why, "rate": rate})
-			}
 		}
 		v := gin.H{"key": t.Key, "label": t.Label, "enabled": !disabled[t.Key], "nodes": nodes, "online": online, "missing_exit": missing}
 		if len(chains) > 0 {
@@ -159,12 +190,15 @@ func (s *Server) proxyView(ctx context.Context, u *ent.User) (gin.H, error) {
 		}
 		items = append(items, v)
 	}
-	// 排序预览：与下一次客户端拉取时的结果相同，但不记作这次的结果（只有拉取才推进轮换、影响下一次排序）
+	// 名次仅供展示，客户端成员顺序由统一布局决定。
 	ranking := []gin.H{}
-	for _, r := range rankEntries(in, pol.Auto.Mode, pol.Auto.Top) {
-		ref := refs[r.Index]
-		ref["rank"], ref["auto"], ref["exploring"] = r.Rank, r.Auto, r.Exploring
-		ranking = append(ranking, ref)
+	preview, err := s.customPlanned(ctx, u, pol)
+	if err != nil {
+		return nil, err
+	}
+	for i, e := range preview.Entries {
+		r := preview.Ranked[i]
+		ranking = append(ranking, gin.H{"ref": e.Ref, "node_id": e.NodeID, "chain_id": e.ChainID, "name": e.Name, "type": e.Type, "health": r.Health.Status, "why": r.Health.Why, "rate": r.Rate, "rank": r.Rank, "auto": r.Auto})
 	}
 	sort.SliceStable(ranking, func(i, j int) bool {
 		ri, rj := ranking[i]["rank"].(int), ranking[j]["rank"].(int)
@@ -173,15 +207,33 @@ func (s *Server) proxyView(ctx context.Context, u *ent.User) (gin.H, error) {
 		}
 		return ri < rj
 	})
-	cats := make([]gin.H, 0, len(ruleCategories))
-	for _, rc := range ruleCategories {
-		cats = append(cats, gin.H{"key": rc.Key, "label": rc.Label, "hint": rc.Hint, "default": rc.Default, "target": firstNonEmpty(pol.Rules[rc.Key], rc.Default)})
+	lines, err := s.proxyLines(ctx, u)
+	if err != nil {
+		return nil, err
 	}
-	// 清单单独给：policy 会被页面原样提交回来，不必带上整份原文
+	groups := proxyGroupsView(pol, lines)
 	custom := customView(pol.Custom)
+	custom["revision"] = pol.Revision
+	names, planItems := []string{}, []subout.Item{}
+	for _, line := range lines {
+		if !line.Available {
+			continue
+		}
+		names = append(names, line.Name)
+		planItems = append(planItems, subout.Item{Ref: line.Ref, Direct: !line.Chained, Auto: !line.Chained && line.Health != "down"})
+	}
+	plan := subout.Plan{Groups: pol.Groups, HiddenLines: pol.HiddenLines}
+	layout, _ := plan.Layout(names, planItems)
+	presets := []gin.H{}
+	for _, rc := range ruleCategories {
+		if rc.Key == "cn" || rc.Key == "final" {
+			continue
+		}
+		presets = append(presets, gin.H{"key": rc.Key, "label": rc.Label, "domains": rc.Domains})
+	}
 	pol.Custom = contracts.CustomRules{}
-	return gin.H{"policy": pol, "custom": custom, "types": items, "categories": cats, "ranking": ranking, "allow_chain": u.AllowChain,
-		"min_refresh": contracts.MinRefreshMinutes}, nil
+	return gin.H{"policy": pol, "custom": custom, "types": items, "layout": layout, "presets": presets, "ranking": ranking, "allow_chain": u.AllowChain,
+		"min_refresh": contracts.MinRefreshMinutes, "groups": groups, "lines": lines, "user_id": u.ID}, nil
 }
 
 // chainExitView 是类型出口的显示内容（与链式代理列表一致：密码给本人与管理员看原文）。
@@ -198,14 +250,14 @@ func (s *Server) chainExitView(ctx context.Context, ch *ent.Chain) gin.H {
 }
 
 type proxyRequest struct {
-	Disabled []string             `json:"disabled"`
-	Rules    map[string]string    `json:"rules"`
-	Auto     contracts.AutoPolicy `json:"auto"`
+	Revision    *int                 `json:"revision"`
+	Disabled    []string             `json:"disabled"`
+	HiddenLines []string             `json:"hidden_lines"`
+	Auto        contracts.AutoPolicy `json:"auto"`
 }
 
-// putProxy 保存类型开关、分流规则与自动选择；客户端下次更新订阅时生效。
 func (s *Server) putProxy(c *gin.Context, admin bool) {
-	u, ok := s.subject(c, admin)
+	u, ok := s.proxySubject(c, admin)
 	if !ok {
 		return
 	}
@@ -214,67 +266,63 @@ func (s *Server) putProxy(c *gin.Context, admin bool) {
 		return
 	}
 	ctx := c.Request.Context()
-	types, err := s.userTypes(ctx, u)
-	if err != nil {
-		failInternal(c, 503, "query_failed", err)
-		return
-	}
-	known := map[string]bool{}
-	for _, t := range types {
-		known[t.Key] = true
-	}
-	for cat, target := range req.Rules {
-		rc, ok := ruleCategory(cat)
-		switch {
-		case !ok:
-			failure(c, 400, "unknown_rule_category")
-			return
-		case target == "auto" || target == "select" || target == "direct" || known[target]:
-		case target == "reject" && rc.Key != "final":
-		default:
-			failure(c, 400, "invalid_rule_target")
-			return
-		}
-	}
-	if req.Auto.Mode != "" && req.Auto.Mode != contracts.AutoLatency && req.Auto.Mode != contracts.AutoRanked {
-		failure(c, 400, "invalid_auto_mode")
-		return
-	}
-	if req.Auto.RefreshMinutes != 0 && (req.Auto.RefreshMinutes < contracts.MinRefreshMinutes || req.Auto.RefreshMinutes > 24*60) {
-		failure(c, 400, "invalid_refresh")
-		return
-	}
-	if req.Auto.Top < 0 || req.Auto.Top > 20 {
-		failure(c, 400, "invalid_top")
-		return
-	}
-	// 已不存在的类型从关闭列表里去掉；规则里写默认值的不存（以后默认值变了跟着变）
-	pol := contracts.ProxyPolicy{Auto: req.Auto, Rules: map[string]string{}, Custom: loadPolicy(u).Custom}
-	for _, t := range dedupeStr(req.Disabled) {
-		if known[t] {
-			pol.Disabled = append(pol.Disabled, t)
-		}
-	}
-	for cat, target := range req.Rules {
-		if rc, _ := ruleCategory(cat); target != rc.Default {
-			pol.Rules[cat] = target
-		}
-	}
-	pol = pol.Normalized()
-	if dryRun(c, dryResult{Preview: []string{"客户端下次更新订阅时按新的分组与分流生效；订阅地址不变"}}) {
-		return
-	}
-	err = s.Store.Lock.Do(ctx, "proxy-policy:"+itoa(u.ID), func(ctx context.Context) error {
+	conflict, invalid := errors.New("proxy revision conflict"), errors.New("invalid settings")
+	var code, detail string
+	err := s.Store.Lock.Do(ctx, "proxy-policy:"+itoa(u.ID), func(ctx context.Context) error {
 		latest, err := s.Store.Ent.User.Get(ctx, u.ID)
 		if err != nil {
 			return err
 		}
-		pol.Custom = loadPolicy(latest).Custom
-		u, err = latest.Update().SetProxyPolicy(policyMap(pol)).Save(ctx)
+		p := loadPolicy(latest)
+		if req.Revision == nil || *req.Revision != p.Revision {
+			return conflict
+		}
+		if req.Auto.RefreshMinutes < 30 || req.Auto.RefreshMinutes > 1440 {
+			code, detail = "invalid_refresh", "刷新间隔须为 30 至 1440 分钟"
+			return invalid
+		}
+		types, err := s.userTypes(ctx, latest)
+		if err != nil {
+			return err
+		}
+		for _, key := range req.Disabled {
+			if !slices.ContainsFunc(types, func(t *proxyType) bool { return t.Key == key }) {
+				code, detail = "invalid_disabled", "请选择已授权的协议类型"
+				return invalid
+			}
+		}
+		lines, err := s.proxyLines(ctx, latest)
+		if err != nil {
+			return err
+		}
+		for _, ref := range req.HiddenLines {
+			if !slices.Contains(p.HiddenLines, ref) && !slices.ContainsFunc(lines, func(l proxyLine) bool { return l.Ref == ref }) {
+				code, detail = "invalid_hidden_lines", "请选择已授权的线路"
+				return invalid
+			}
+		}
+		p.Disabled, p.HiddenLines, p.Auto = dedupeStr(req.Disabled), dedupeStr(req.HiddenLines), req.Auto
+		p = p.Normalized()
+		if dryRun(c, dryResult{Preview: []string{"客户端下次更新订阅时生效，订阅地址不变"}}) {
+			return nil
+		}
+		p.Revision++
+		u, err = latest.Update().SetProxyPolicy(policyMap(p)).Save(ctx)
 		return err
 	})
+	if errors.Is(err, conflict) {
+		failure(c, 409, "proxy_revision_conflict")
+		return
+	}
+	if errors.Is(err, invalid) {
+		failDetail(c, 400, code, detail, nil)
+		return
+	}
 	if err != nil {
 		failInternal(c, 500, "update_failed", err)
+		return
+	}
+	if c.Writer.Written() {
 		return
 	}
 	s.audit(c, "proxy.update", "user:"+itoa(u.ID), "ok")
@@ -317,8 +365,8 @@ func (s *Server) typeParam(c *gin.Context, u *ent.User) (*proxyType, bool) {
 // putTypeExit 给一个类型的全部节点加同一个出口：每个节点一条链式代理（入口是这个节点），保存前逐个由入口 VPS 实测，
 // 有一个不通就整体不保存并列出原因。出口是另一个节点时，那个节点自己作入口时跳过（不能经自己出去）。
 // 以后新增的这类节点不会自动加出口，页面上会列出还没加的节点，再保存一次即可。
-func (s *Server) putTypeExit(c *gin.Context, admin bool) {
-	u, ok := s.subject(c, admin)
+func (s *Server) putTypeExitNow(c *gin.Context, admin bool) {
+	u, ok := s.proxySubject(c, admin)
 	if !ok {
 		return
 	}
@@ -331,10 +379,14 @@ func (s *Server) putTypeExit(c *gin.Context, admin bool) {
 		return
 	}
 	var req struct {
-		Exit      ExitSpec `json:"exit"`
-		SkipProbe bool     `json:"skip_probe"` // 仅管理员可用
+		Exit     ExitSpec `json:"exit"`
+		Revision *int     `json:"revision"`
 	}
 	if !bind(c, &req) {
+		return
+	}
+	if req.Revision == nil || *req.Revision != loadPolicy(u).Revision {
+		failure(c, 409, "proxy_revision_conflict")
 		return
 	}
 	ctx := c.Request.Context()
@@ -342,8 +394,23 @@ func (s *Server) putTypeExit(c *gin.Context, admin bool) {
 		node  *ent.Node
 		probe *exitProbe
 	}
+	for _, n := range t.nodes {
+		if req.Exit.Kind == "node" && req.Exit.NodeID == n.ID {
+			continue
+		}
+		g, e := s.Store.Ent.Gate.Get(ctx, n.GateID)
+		if e != nil {
+			failInternal(c, 503, "query_failed", e)
+			return
+		}
+		if _, _, _, e = s.validateExitSelection(ctx, g, n.ID, &u.ID, 0, &req.Exit, true, c.MustGet("account").(*ent.User).Role == "admin", n.Kernel); e != nil {
+			failErr(c, 422, e)
+			return
+		}
+	}
 	var ok2 []planned
 	var failed []gin.H
+	var verificationFailures []error
 	jobTitle(ctx, "给「"+t.Label+"」加出口")
 	for i, n := range t.nodes {
 		if req.Exit.Kind == "node" && req.Exit.NodeID == n.ID {
@@ -351,8 +418,12 @@ func (s *Server) putTypeExit(c *gin.Context, admin bool) {
 		}
 		// 每个节点经出口的实测在 checkUserChain 里报步骤，这里给它加上是第几个节点
 		pctx := jobPrefix(ctx, fmt.Sprintf("第 %d/%d 个节点（%s）· ", i+1, len(t.nodes), n.Name))
-		_, probe, err := s.checkUserChain(pctx, u, chainRequest{EntryNodeID: n.ID, Exit: req.Exit, SkipProbe: req.SkipProbe}, admin)
+		_, probe, err := s.checkUserChain(pctx, u, chainRequest{EntryNodeID: n.ID, Exit: req.Exit}, admin)
 		if err != nil {
+			var verification exitVerificationError
+			if errors.As(err, &verification) {
+				verificationFailures = append(verificationFailures, fmt.Errorf("%s：%w", n.Name, err))
+			}
 			code, detail, _ := strings.Cut(err.Error(), ": ")
 			failed = append(failed, gin.H{"node_id": n.ID, "name": n.Name, "code": code, "detail": detail})
 			continue
@@ -360,6 +431,9 @@ func (s *Server) putTypeExit(c *gin.Context, admin bool) {
 		ok2 = append(ok2, planned{n, probe})
 	}
 	if len(failed) > 0 {
+		if len(verificationFailures) > 0 && s.deferExitChange(c, exitVerificationError{errors.Join(verificationFailures...)}) {
+			return
+		}
 		s.audit(c, "proxy.type_exit", "user:"+itoa(u.ID), "failed")
 		failDetail(c, 422, "type_exit_failed", "有节点经这个出口连不通，没有保存", gin.H{"nodes": failed})
 		return
@@ -433,6 +507,12 @@ func (s *Server) putTypeExit(c *gin.Context, admin bool) {
 			}
 		}
 	}
+	pol := loadPolicy(u)
+	pol.Revision++
+	if err = tx.User.UpdateOneID(u.ID).SetProxyPolicy(policyMap(pol)).Exec(ctx); err != nil {
+		failInternal(c, 500, "save_failed", err)
+		return
+	}
 	if err = tx.Commit(); err != nil {
 		failInternal(c, 500, "save_failed", err)
 		return
@@ -476,9 +556,19 @@ func (s *Server) dropPolicyChains(ctx context.Context, chains []*ent.Chain, keep
 }
 
 // deleteTypeExit 去掉类型出口：这类节点恢复直接出去。
-func (s *Server) deleteTypeExit(c *gin.Context, admin bool) {
-	u, ok := s.subject(c, admin)
+func (s *Server) deleteTypeExitNow(c *gin.Context, admin bool) {
+	u, ok := s.proxySubject(c, admin)
 	if !ok {
+		return
+	}
+	var req struct {
+		Revision *int `json:"revision"`
+	}
+	if !bind(c, &req) {
+		return
+	}
+	if req.Revision == nil || *req.Revision != loadPolicy(u).Revision {
+		failure(c, 409, "proxy_revision_conflict")
 		return
 	}
 	ctx := c.Request.Context()
@@ -495,8 +585,32 @@ func (s *Server) deleteTypeExit(c *gin.Context, admin bool) {
 	if dryRun(c, dryResult{Preview: []string{"这类节点恢复直接从 VPS 出去"}}) {
 		return
 	}
+	if !jobCommit(c) {
+		return
+	}
 	gates, _ := s.userGates(ctx, u.ID)
-	if err = s.dropPolicyChains(ctx, chains, nil); err != nil {
+	tx, err := s.Store.Ent.Tx(ctx)
+	if err != nil {
+		failInternal(c, 500, "delete_failed", err)
+		return
+	}
+	defer tx.Rollback()
+	for _, ch := range chains {
+		if _, err = tx.Credential.Delete().Where(credential.ChainIDEQ(ch.ID)).Exec(ctx); err == nil {
+			err = tx.Chain.DeleteOneID(ch.ID).Exec(ctx)
+		}
+		if err != nil {
+			failInternal(c, 500, "delete_failed", err)
+			return
+		}
+	}
+	pol := loadPolicy(u)
+	pol.Revision++
+	if err = tx.User.UpdateOneID(u.ID).SetProxyPolicy(policyMap(pol)).Exec(ctx); err != nil {
+		failInternal(c, 500, "save_failed", err)
+		return
+	}
+	if err = tx.Commit(); err != nil {
 		failInternal(c, 500, "delete_failed", err)
 		return
 	}
@@ -504,7 +618,15 @@ func (s *Server) deleteTypeExit(c *gin.Context, admin bool) {
 		failInternal(c, 500, "sync_failed", err)
 		return
 	}
-	_ = s.bumpGates(ctx, gates)
+	if err = s.bumpGates(ctx, gates); err != nil {
+		failInternal(c, 500, "sync_failed", err)
+		return
+	}
+	u, err = s.Store.Ent.User.Get(ctx, u.ID)
+	if err != nil {
+		failInternal(c, 503, "query_failed", err)
+		return
+	}
 	s.audit(c, "proxy.type_exit_delete", "user:"+itoa(u.ID), "ok")
 	v, err := s.proxyView(ctx, u)
 	if err != nil {

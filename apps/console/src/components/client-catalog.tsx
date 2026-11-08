@@ -11,8 +11,6 @@ import {
   SearchInput,
   SectionHeader,
   Button,
-  Card,
-  CardContent,
   Input,
   Textarea,
   Select,
@@ -37,6 +35,7 @@ import { client } from "../lib/client";
 import { api, isConflict } from "../api";
 import type { CatalogClient } from "../lib/models";
 import { field, useConsoleContext } from "../lib/console-context";
+import { Section } from "./system-settings";
 
 const platforms = ["windows", "macos", "linux", "android", "ios", "harmonyos"];
 const platformNames: Record<string, string> = {
@@ -134,8 +133,8 @@ export function ClientCatalogEditor() {
   );
   useConsoleContext({ dialog: editor ? { title: "编辑客户端" } : undefined, list: { total: items.length }, form: [field("search", "搜索", search)] });
   return (
-    <Card>
-      <CardContent className="stack client-catalog-editor">
+    <Section title="客户端目录" description="下载入口、平台、格式与显示顺序。改完点保存目录后生效。">
+      <div className="stack client-catalog-editor">
         <SectionHeader
           level="h3"
           title="客户端目录"
@@ -204,8 +203,8 @@ export function ClientCatalogEditor() {
             )}
           </DialogContent>
         </Dialog>
-      </CardContent>
-    </Card>
+      </div>
+    </Section>
   );
 }
 

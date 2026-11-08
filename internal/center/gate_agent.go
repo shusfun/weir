@@ -332,7 +332,7 @@ func (s *Server) waitAction(ctx context.Context, id int, timeout time.Duration) 
 func (s *Server) agentKernel(c *gin.Context) {
 	g := gateFrom(c)
 	kernel := c.Param("kernel")
-	if kernel != "xray" && kernel != "sing-box" {
+	if !validKernel(kernel) {
 		failure(c, 404, "kernel_not_found")
 		return
 	}

@@ -26,16 +26,25 @@ func TestCustomEntriesRealKernelRouting(t *testing.T) {
 	upstream := strings.TrimPrefix(httpServer.URL, "http://")
 	firstPort, first := socksServer(t, upstream)
 	secondPort, second := socksServer(t, upstream)
-	items := []subout.Item{
-		{Link: fmt.Sprintf("socks5://127.0.0.1:%d#First", firstPort), Type: "first"},
-		{Link: fmt.Sprintf("socks5://127.0.0.1:%d#Second", secondPort), Type: "second"},
+	// 直连域名落到隔离 HTTP 服务，代理流量由可观测 SOCKS 出口接收。
+	for _, host := range []string{"www.example.test"} {
+		f, err := os.OpenFile("/etc/hosts", os.O_APPEND|os.O_WRONLY, 0600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fmt.Fprintf(f, "\n127.0.0.1 %s\n", host)
+		f.Close()
 	}
-	plan := &subout.Plan{Types: []subout.TypeGroup{{Key: "first", Label: "FirstGroup"}, {Key: "second", Label: "SecondGroup"}}, Final: "direct", Custom: []subout.Rule{
-		{ID: "exact", Kind: "domain", Values: []string{"api.example.test"}, Target: "first"},
-		{ID: "suffix", Kind: "domain_suffix", Values: []string{"example.test"}, Target: "second"},
-		{ID: "keyword", Kind: "domain_keyword", Values: []string{"keyword"}, Target: "first"},
-		{ID: "public-ip", Kind: "ip_cidr", Values: []string{"203.0.113.0/24"}, Target: "second"},
-		{ID: "private-ip", Kind: "ip_cidr", Values: []string{"127.0.0.0/8"}, Target: "first"},
+	items := []subout.Item{
+		{Link: fmt.Sprintf("socks5://127.0.0.1:%d#First", firstPort), Ref: "node:1", Type: "first"},
+		{Link: fmt.Sprintf("socks5://127.0.0.1:%d#Second", secondPort), Ref: "node:2", Type: "second"},
+	}
+	plan := &subout.Plan{Custom: []subout.Rule{
+		{ID: "exact", Kind: "domain", Values: []string{"api.example.test"}, Target: "proxy"},
+		{ID: "suffix", Kind: "domain_suffix", Values: []string{"example.test"}, Target: "direct"},
+		{ID: "keyword", Kind: "domain_keyword", Values: []string{"keyword"}, Target: "proxy"},
+		{ID: "public-ip", Kind: "ip_cidr", Values: []string{"203.0.113.0/24"}, Target: "direct"},
+		{ID: "private-ip", Kind: "ip_cidr", Values: []string{"127.0.0.0/8"}, Target: "proxy"},
 	}}
 	for _, kernel := range []string{"mihomo", "sing-box"} {
 		t.Run(kernel, func(t *testing.T) {
@@ -63,6 +72,7 @@ func TestCustomEntriesRealKernelRouting(t *testing.T) {
 			path := filepath.Join(dir, "config.json")
 			if kernel == "mihomo" {
 				cfg["mixed-port"], cfg["log-level"] = port, "warning"
+				cfg["hosts"] = map[string]any{"www.example.test": "127.0.0.1"}
 				args = []string{"-d", dir, "-f", path}
 			} else {
 				cfg["log"] = map[string]any{"level": "warn"}
@@ -89,10 +99,22 @@ func TestCustomEntriesRealKernelRouting(t *testing.T) {
 				}
 				return err == nil
 			})
-			for _, host := range []string{"api.example.test", "www.example.test", "keyword.example.org", "203.0.113.7", "127.0.0.1"} {
+			// 自动组启动时会探测；先等探测稳定，再只比较业务请求的连接增量。
+			previousA, previousB, stable := first.Load(), second.Load(), 0
+			eventually(t, 10*time.Second, "startup probes settled", func() bool {
+				a, b := first.Load(), second.Load()
+				if a == previousA && b == previousB {
+					stable++
+				} else {
+					stable = 0
+				}
+				previousA, previousB = a, b
+				return stable >= 4
+			})
+			for _, host := range []string{"api.example.test", "www.example.test", "keyword.example.org", "127.0.0.1"} {
 				m := plan.Match(host, []string{"First", "Second"}, items)
 				a, b := first.Load(), second.Load()
-				url := "http://" + host + "/"
+				url := "http://" + net.JoinHostPort(host, fmt.Sprint(httpServer.Listener.Addr().(*net.TCPAddr).Port)) + "/"
 				if host == "127.0.0.1" {
 					url = httpServer.URL
 				}
@@ -100,7 +122,7 @@ func TestCustomEntriesRealKernelRouting(t *testing.T) {
 					t.Fatalf("%s (%+v): %v", host, m, err)
 				}
 				gotA, gotB := first.Load()-a, second.Load()-b
-				if gotA != boolCount(m.Policy == "FirstGroup") || gotB != boolCount(m.Policy == "SecondGroup") {
+				if gotA != boolCount(m.Policy == "PROXY") || gotB != int64(0) {
 					t.Fatalf("%s matched %+v but packets first=%d second=%d", host, m, gotA, gotB)
 				}
 				t.Logf("%s rule=%s policy=%s packets first=%d second=%d", host, m.EntryID, m.Policy, gotA, gotB)

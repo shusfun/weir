@@ -10,6 +10,18 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// ClashProxy 与订阅共用单节点渲染，不依赖分组、规则或 provider。
+func ClashProxy(link string) (map[string]any, error) {
+	proxies, _, err := clashProxies([]string{link}, map[string]bool{})
+	if err != nil {
+		return nil, err
+	}
+	if len(proxies) != 1 {
+		return nil, fmt.Errorf("客户端配置必须包含一个节点")
+	}
+	return proxies[0], nil
+}
+
 func clashOutput(links []string) ([]byte, error) {
 	proxies, names, err := clashProxies(links, map[string]bool{"PROXY": true, "DIRECT": true, "REJECT": true})
 	if err != nil {

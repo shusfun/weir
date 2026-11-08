@@ -23,17 +23,13 @@ type MaybeRule struct {
 	Policy  string `json:"policy"`
 }
 
-// Match 按与渲染相同的顺序计算 target（已规范的小写域名或 IP）的走向：内网 → 规则 → 其余流量。names 与 items 一一对应。
+// Match 按与渲染相同的顺序计算 target（已规范的小写域名或 IP）的走向：用户清单 → 内网 → 国内直连 → 其余流量。names 与 items 一一对应。
 func (p *Plan) Match(target string, names []string, items []Item) Match {
 	addr, err := netip.ParseAddr(target)
 	isIP := err == nil
 	if isIP {
 		addr = addr.Unmap()
-		for _, c := range privateCIDRs {
-			if netip.MustParsePrefix(c).Contains(addr) {
-				return Match{Label: "内网地址", Kind: "ip_cidr", Value: c, Policy: "DIRECT"}
-			}
-		}
+
 	}
 	lay := p.layout(names, items)
 	var maybe []MaybeRule

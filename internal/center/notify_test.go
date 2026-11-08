@@ -80,3 +80,9 @@ func TestNotifyAlertsOnceAndExternalAPI(t *testing.T) {
 		t.Fatalf("revoked token = %d", w.Code)
 	}
 }
+
+func TestSecurityRequiresTOTPForAdminMFA(t *testing.T) {
+	_, admin := newInstalledServer(t)
+	mustJSON(t, admin, "PUT", "/api/v1/admin/settings/security", map[string]any{"totp_enabled": false, "passkey_enabled": true, "require_admin_mfa": true}, 400)
+	mustJSON(t, admin, "PUT", "/api/v1/admin/settings/security", map[string]any{"totp_enabled": true, "passkey_enabled": true, "require_admin_mfa": true}, 200)
+}

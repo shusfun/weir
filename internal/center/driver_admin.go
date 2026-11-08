@@ -246,8 +246,18 @@ func (s *Server) checkDriver(ctx context.Context, name, text string, live bool) 
 		res.Samples = append(res.Samples, sample)
 	}
 	if len(drv.Presets) == 0 {
-		res.Error = "驱动没有任何方案，无法生成样例配置检查"
-		return res
+		if drv.Kernel != "mihomo" {
+			res.Error = "驱动没有任何方案，无法生成样例配置检查"
+			return res
+		}
+		sample := DriverSample{Preset: "client", State: "unknown"}
+		if bin != "" {
+			sample.State = "passed"
+			if output, e := runCheck(ctx, bin, drv, mihomoCheckConfig, dir, "client"); e != nil {
+				sample.State, sample.Log, failed = "failed", safeCheckOutput(output), true
+			}
+		}
+		res.Samples = append(res.Samples, sample)
 	}
 	switch {
 	case failed:
@@ -321,7 +331,11 @@ func runCheck(ctx context.Context, bin string, drv kernelconf.Driver, body []byt
 	}
 	cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(cctx, bin, kernelconf.Args(drv.Check, path)...).CombinedOutput()
+	args := kernelconf.Args(drv.Check, path)
+	if drv.Kernel == "mihomo" {
+		args = append(args, "-d", dir)
+	}
+	out, err := exec.CommandContext(cctx, bin, args...).CombinedOutput()
 	text := strings.TrimSpace(string(out))
 	if len(text) > 1200 {
 		text = text[len(text)-1200:]

@@ -137,7 +137,7 @@ func TestCleanPrefetchKeepsCurrent(t *testing.T) {
 
 // 内核自动设默认：唯一的版本才设；已有默认不改；有多个版本由管理员选。
 func TestEnsureKernelDefault(t *testing.T) {
-	s, _, _ := setupGate(t)
+	s, _ := newInstalledServer(t)
 	ctx := context.Background()
 	if s.ensureKernelDefault(ctx, "mihomo") {
 		t.Fatal("no version should not set default")

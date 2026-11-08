@@ -50,14 +50,14 @@ func (s *Server) kernelAdminRoutes(admin *gin.RouterGroup) {
 	admin.PUT("/kernels/defaults", s.setKernelDefaults)
 }
 
-// kernelArches 是某个内核需要的架构：中心本机，加上已接入 Gate 的架构（mihomo 只在中心运行）。
+// kernelArches 包含中心本机与已接入 Gate 的架构，mihomo 同时用于中心和 VPS 的临时实测。
 // 中心不是 Linux 时（开发环境）只按 Gate 的架构算，没有 Gate 时用 amd64。
 func (s *Server) kernelArches(ctx context.Context, kernel string) []string {
 	set := map[string]bool{}
 	if runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64") {
 		set[runtime.GOARCH] = true
 	}
-	if kernel != "mihomo" && s.Store != nil {
+	if s.Store != nil {
 		if arches, err := s.Store.Ent.Gate.Query().Unique(true).Select("arch").Strings(ctx); err == nil {
 			for _, a := range arches {
 				if a == "amd64" || a == "arm64" {
@@ -140,7 +140,7 @@ func (s *Server) listKernels(c *gin.Context) {
 			}
 			pinned, running := s.kernelUsers(ctx, name, v)
 			item := gin.H{"version": v, "arches": have, "default": defaults[name] == v, "pinned_by": refNames(pinned), "running_on": refNames(running), "pinned_refs": nonNilRefs(pinned), "running_refs": nonNilRefs(running)}
-			if name != "mihomo" {
+			if validKernel(name) {
 				if d, _, err := s.drivers(ctx).Select(name, v); err == nil {
 					item["driver"] = d.Name
 				} else {
@@ -179,7 +179,7 @@ func (s *Server) kernelReleases(c *gin.Context) {
 	for _, r := range list {
 		item := gin.H{"version": r.Version, "published_at": r.PublishedAt, "notes": r.Notes, "downloads": r.Downloads, "recommended": r.Version == rec.Version,
 			"young": time.Since(r.PublishedAt) < recommendAge}
-		if name != "mihomo" {
+		if validKernel(name) {
 			if drv, _, err := d.Select(name, r.Version); err == nil {
 				item["driver"] = drv.Name
 				if why := s.incompatible(ctx, drv, name, r.Version); why != "" {
@@ -195,6 +195,8 @@ func (s *Server) kernelReleases(c *gin.Context) {
 // kernelJobID 是下载某内核版本的任务 id；同一版本同时只有一个任务。
 func kernelJobID(kernel, version string) string { return "kernel:" + kernel + ":" + version }
 
+var mihomoCheckConfig = []byte(`{"mode":"rule","allow-lan":false,"bind-address":"127.0.0.1","proxies":[],"rules":["MATCH,DIRECT"]}`)
+
 // startKernelFetch 在后台下载一个版本需要的全部架构（已缓存的跳过），完成后让 Gate 重新编译配置。
 // 下载成功后：管理员要求「下载并设为默认」的设为默认；否则这个内核只有这一个版本且没有默认时自动设为默认。
 func (s *Server) startKernelFetch(ctx context.Context, kernel, version string, actor int, ip string) Job {
@@ -205,22 +207,47 @@ func (s *Server) startKernelFetch(ctx context.Context, kernel, version string, a
 		if err != nil {
 			return nil, err
 		}
+		if _, _, err = s.drivers(bg).Select(kernel, version); err != nil {
+			return nil, err
+		}
 		f.Progress, f.Step, f.Log = run.Progress, run.Stage, run.Log
 		sums := map[string]any{}
 		for i, arch := range arches {
-			if _, sum, e := f.Cache.Get(kernel, version, arch); e == nil {
+			_, sum, cachedErr := f.Cache.Get(kernel, version, arch)
+			if cachedErr == nil {
 				run.Log(arch + " 已下载，跳过")
-				sums[arch] = sum
-				continue
-			}
-			if len(arches) > 1 {
-				run.Step(fmt.Sprintf("下载 %s（%d/%d）", arch, i+1, len(arches)))
 			} else {
-				run.Step("下载 " + arch)
+				if len(arches) > 1 {
+					run.Step(fmt.Sprintf("下载 %s（%d/%d）", arch, i+1, len(arches)))
+				} else {
+					run.Step("下载 " + arch)
+				}
+				if sum, err = f.Fetch(bg, kernel, version, arch); err != nil {
+					break
+				}
 			}
-			var sum string
-			if sum, err = f.Fetch(bg, kernel, version, arch); err != nil {
-				break
+			if kernel == "mihomo" && runtime.GOOS == "linux" && arch == runtime.GOARCH {
+				var bin string
+				bin, _, err = f.Cache.Get(kernel, version, arch)
+				if err == nil {
+					driver, _, e := s.drivers(bg).Select(kernel, version)
+					err = e
+					if err == nil {
+						var dir string
+						dir, err = os.MkdirTemp("", "weir-kernel-check-")
+						if err == nil {
+							output, e := runCheck(bg, bin, driver, mihomoCheckConfig, dir, "client")
+							_ = os.RemoveAll(dir)
+							if e != nil {
+								err = fmt.Errorf("mihomo 驱动检查失败：%s", safeCheckOutput(output))
+							}
+						}
+					}
+				}
+				if err != nil {
+					_ = f.Cache.RemoveArch(kernel, version, arch)
+					break
+				}
 			}
 			sums[arch] = sum
 			run.Log(arch + " 已校验并缓存，SHA-256 " + sum[:16] + "…")
@@ -247,6 +274,10 @@ func (s *Server) startKernelFetch(ctx context.Context, kernel, version string, a
 				}
 			}
 		}
+		if err == nil {
+			go s.resumePendingNodeProbes(context.WithoutCancel(bg))
+			go s.resumePendingExits(context.WithoutCancel(bg))
+		}
 		return map[string]any{"sha256": sums, "arches": arches}, err
 	})
 }
@@ -254,6 +285,42 @@ func (s *Server) startKernelFetch(ctx context.Context, kernel, version string, a
 // autoKernelFetch 是编译 Gate 配置时发现缺内核而自动发起的下载；上次自动下载失败不到 10 分钟时不重试，
 // 避免每次心跳都去请求 GitHub。管理员在内核页手动下载不受此限制。
 func (s *Server) autoKernelFetch(ctx context.Context, kernel, version string) {
+	if version == "" {
+		id := kernelJobID(kernel, "latest")
+		if j, ok := s.jobs.Get(id); ok && j.Status == jobFailed && j.Finished != nil && time.Since(*j.Finished) < 10*time.Minute {
+			return
+		}
+		s.jobs.Start(id, "kernel", "正在查询 "+kernelTitle(kernel)+" 最新稳定版", func(bg context.Context, run JobRun) (map[string]any, error) {
+			run.Step("查询最新稳定版")
+			f, err := s.kernelFetcher(bg)
+			if err != nil {
+				return nil, err
+			}
+			releases, err := f.Releases(bg, kernel)
+			if err != nil {
+				return nil, err
+			}
+			if len(releases) == 0 {
+				return nil, fmt.Errorf("%s 没有可下载的稳定版", kernel)
+			}
+			latest := releases[0].Version
+			if _, _, err := s.drivers(bg).Select(kernel, latest); err != nil {
+				return nil, err
+			}
+			j := s.startKernelFetch(bg, kernel, latest, 0, "")
+			run.Step("正在下载并校验 " + latest)
+			result, ok := s.jobs.Wait(bg, j.ID)
+			if bg.Err() != nil {
+				return nil, bg.Err()
+			}
+			if !ok || result.Status != jobDone {
+				return nil, fmt.Errorf("%s 下载未完成：%s", kernel, result.Error)
+			}
+			return map[string]any{"version": latest, "job_id": j.ID}, nil
+		})
+		return
+	}
+
 	if j, ok := s.jobs.Get(kernelJobID(kernel, version)); ok && j.Status == jobFailed && j.Finished != nil && time.Since(*j.Finished) < 10*time.Minute {
 		return
 	}
@@ -294,7 +361,7 @@ func (s *Server) fetchKernel(c *gin.Context) {
 		return
 	}
 	if req.SetDefault {
-		if name != "mihomo" {
+		if validKernel(name) {
 			if _, _, err := s.drivers(c.Request.Context()).Select(name, version); err != nil {
 				c.AbortWithStatusJSON(409, gin.H{"error": gin.H{"code": "driver_missing", "message": err.Error()}})
 				return
@@ -333,7 +400,7 @@ func (s *Server) removeKernelVersion(c *gin.Context) {
 
 // saveKernelDefault 把一个已下载的版本设为默认并让 Gate 重新生成配置（未锁定版本的 VPS 随之切换）。
 func (s *Server) saveKernelDefault(ctx context.Context, kernel, version string, actor int, ip, why string) error {
-	if kernel != "mihomo" {
+	if validKernel(kernel) {
 		if _, _, err := s.drivers(ctx).Select(kernel, version); err != nil {
 			return err
 		}
@@ -409,7 +476,7 @@ func (s *Server) setKernelDefaults(c *gin.Context) {
 			c.AbortWithStatusJSON(409, gin.H{"error": gin.H{"code": "kernel_not_cached", "message": fmt.Sprintf("%s %s 还缺 %s，已开始下载，完成后再设为默认", name, v, strings.Join(missing, "、"))}, "job": job})
 			return
 		}
-		if name != "mihomo" {
+		if validKernel(name) {
 			if _, _, err := s.drivers(ctx).Select(name, v); err != nil {
 				c.AbortWithStatusJSON(409, gin.H{"error": gin.H{"code": "driver_missing", "message": err.Error()}})
 				return

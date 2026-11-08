@@ -22,6 +22,7 @@ func u64p(v uint64) *uint64 { return &v }
 // 实时速率按相邻两次计数算，用户的出口速率只算自己的路径（出口计数里有别人的流量）。
 func TestLinkMapScopesAndLiveRates(t *testing.T) {
 	s, admin, g := setupGate(t)
+	g.serveActions(t, s, nil)
 	gid := int(g.id)
 	s.GeoDB = fakeGeo{
 		"203.0.113.50": {IP: "203.0.113.50", Lat: 22.3, Lon: 114.2, City: "香港", Country: "HK", Org: "HK DC"},

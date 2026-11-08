@@ -5,7 +5,7 @@ import { reopenDrafts, useDrafts } from "./draft-confirm";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "../lib/query";
-import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Form, FormGrid, Input, Notice, ScrollArea, SkeletonList, StatusLamp, SwitchField, useConfirm } from "@weir/ui";
+import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Form, FormGrid, Input, Notice, ScrollArea, SkeletonList, StatusLamp, SwitchField, TextLink, useConfirm } from "@weir/ui";
 import { Bot, CircleHelp, Download, Maximize2, Minimize2, Minus, RotateCcw, Star, Trash2, X } from "lucide-react";
 import { api, ApiError } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -478,7 +478,7 @@ export function DshSettingsCard() {
         <div className="stack">
           <DshStartStep view={q.data} />
           <DshAddressForm view={q.data} />
-          <small className="text-[var(--weir-ink-3)]">下载、切换版本在 <Link className="underline" to="/kernels?tab=dsh">内核 → dsh</Link>。</small>
+          <small className="text-[var(--weir-ink-3)]">下载、切换版本在 <TextLink render={<Link to="/kernels?tab=dsh" />}>内核 → dsh</TextLink>。</small>
         </div>
       )}
     </Section>

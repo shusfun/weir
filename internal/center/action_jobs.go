@@ -76,6 +76,10 @@ func jobCommitCtx(ctx context.Context) bool {
 
 // jobCommit 同 jobCommitCtx；已被取消时返回 409，调用方直接返回。
 func jobCommit(c *gin.Context) bool {
+	if guard, ok := c.Get("exit_commit_guard"); ok && !guard.(func() bool)() {
+		failDetail(c, 409, "candidate_stale", "资源或授权已变化，没有应用候选", nil)
+		return false
+	}
 	if jobCommitCtx(c.Request.Context()) {
 		return true
 	}

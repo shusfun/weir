@@ -69,7 +69,7 @@ func (s *Server) defaultKernelVersion(ctx context.Context, kernel, arch string) 
 // 需要的内核尚未下载时返回错误：Gate 保持上一份已生效配置，不会收到缺内核的配置。
 func (s *Server) gateKernels(ctx context.Context, g *ent.Gate, need map[string]bool) (map[string]contracts.Kernel, map[string]string, error) {
 	ks, profiles := map[string]contracts.Kernel{}, map[string]string{}
-	for _, kernel := range []string{"xray", "sing-box"} {
+	for _, kernel := range []string{"xray", "sing-box", "mihomo"} {
 		if !need[kernel] {
 			continue
 		}
@@ -91,14 +91,15 @@ func (s *Server) gateKernels(ctx context.Context, g *ent.Gate, need map[string]b
 			// 这台 VPS 的架构还没有任何版本：用中心已有的最新版本（或默认版本）为它补下。
 			if v := s.newestAnyArch(kernel); v != "" {
 				s.autoKernelFetch(ctx, kernel, v)
-				return nil, nil, fmt.Errorf("%s %s（%s）正在下载，完成后自动生效", kernel, v, g.Arch)
+				return nil, nil, kernelNotReady{Kernel: kernel, Detail: fmt.Sprintf("%s %s（%s）正在下载，完成后自动生效", kernel, v, g.Arch)}
 			}
-			return nil, nil, fmt.Errorf("%s 尚未下载，请先在内核页面下载", kernel)
+			s.autoKernelFetch(ctx, kernel, "")
+			return nil, nil, kernelNotReady{Kernel: kernel, Detail: kernel + " 正在下载最新稳定版，完成后自动实测"}
 		}
 		_, sum, err := s.kernelCache().Get(kernel, version, g.Arch)
 		if err != nil {
 			s.autoKernelFetch(ctx, kernel, version)
-			return nil, nil, fmt.Errorf("%s %s（%s）正在下载，完成后自动生效", kernel, version, g.Arch)
+			return nil, nil, kernelNotReady{Kernel: kernel, Detail: fmt.Sprintf("%s %s（%s）正在下载，完成后自动生效", kernel, version, g.Arch)}
 		}
 		_, text, err := s.drivers(ctx).Select(kernel, version)
 		if err != nil {
@@ -140,4 +141,12 @@ func (s *Server) explicitDefault(ctx context.Context, kernel string) string {
 		}
 	}
 	return ""
+}
+
+type kernelNotReady struct{ Kernel, Detail string }
+
+func (e kernelNotReady) Error() string { return e.Detail }
+func missingMihomo(err error) bool {
+	var unavailable kernelNotReady
+	return errors.As(err, &unavailable) && unavailable.Kernel == "mihomo"
 }

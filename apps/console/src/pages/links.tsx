@@ -1,3 +1,4 @@
+import { ClientDistribution } from "../components/client-distribution";
 // 订阅链接：管理员与普通用户共用一页。默认看自己的额度、订阅链接与拉取统计；管理员可切到某个用户（?user=编号）或全部用户（?user=all）。
 // 操作平铺在每条链接卡片上；换地址、换凭据、删除在编辑弹窗里；最近 30 天的拉取按客户端、来源汇总。
 import { useMemo } from "react";
@@ -86,7 +87,7 @@ function StatsOverview({ stats, scope }: { stats: ReturnType<typeof useStats>; s
   const sum = (f: (s: LinkStats) => number) => items.reduce((n, s) => n + f(s), 0);
   const clients = new Map<string, number>();
   for (const s of items) for (const c of s.clients) clients.set(c.name, (clients.get(c.name) ?? 0) + c.count);
-  const top = [...clients.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
+
   const active = items.filter((s) => s.enabled && s.state === "active").length;
   return (
     <Card>
@@ -94,7 +95,7 @@ function StatsOverview({ stats, scope }: { stats: ReturnType<typeof useStats>; s
         <Readout label="生效中的链接" value={`${active} / ${items.length}`} caption={scope} />
         <Readout label="近 24 小时拉取" value={`${sum((s) => s.pulls_24h)} 次`} />
         <Readout label="近 30 天拉取" value={`${sum((s) => s.pulls_30d)} 次`} caption={sum((s) => s.refused_30d) > 0 ? `其中 ${sum((s) => s.refused_30d)} 次不在生效时间内` : undefined} />
-        <Readout label="常用客户端" value={top.length ? top[0][0] : "—"} caption={top.length ? top.slice(1).map(([n, c]) => `${n} ${c}`).join(" · ") || `${top[0][1]} 次` : "还没有拉取记录"} />
+        <div className="col-span-2 stack sm:col-span-4"><strong className="text-meta">常用客户端</strong><ClientDistribution clients={[...clients].map(([name,count]) => ({ name,count }))} /></div>
       </CardContent>
     </Card>
   );

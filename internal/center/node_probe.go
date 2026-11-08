@@ -2,12 +2,11 @@ package center
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -17,7 +16,6 @@ import (
 	"github.com/shusfun/weir/internal/kernelconf"
 	"github.com/shusfun/weir/internal/nodeprobe"
 	"github.com/shusfun/weir/internal/store/ent"
-	"github.com/shusfun/weir/internal/store/ent/credential"
 	"github.com/shusfun/weir/internal/subout"
 	"github.com/shusfun/weir/packages/contracts"
 )
@@ -96,7 +94,7 @@ func (s *Server) probeSlots() chan struct{} {
 	s.nodeProbes.Lock()
 	defer s.nodeProbes.Unlock()
 	if s.nodeProbes.slots == nil {
-		s.nodeProbes.slots = make(chan struct{}, 2)
+		s.nodeProbes.slots = make(chan struct{}, 1)
 	}
 	return s.nodeProbes.slots
 }
@@ -146,7 +144,7 @@ func (s *Server) startDeployedNodeTest(c *gin.Context) {
 			}
 			r.At = time.Now().UTC()
 			if err := s.storeNodeTest(cleanup, id, r); err != nil {
-				r.Status, r.Why, r.External, r.Binding = "unknown", "配置或凭据已变化，本次结果已失效", "unknown", ""
+				r.Status, r.Why, r.External, r.Binding = "unknown", "业务配置已变化，本次结果已失效", "unknown", ""
 				r.TCP, r.UDP = nodeprobe.Check{Status: "unknown"}, nodeprobe.Check{Status: "unknown"}
 				if saveErr := s.storeNodeTest(cleanup, id, r); saveErr != nil {
 					slog.Error("node test result", "trace", ht.ID, "node", id, "err", redact(saveErr.Error()))
@@ -172,216 +170,63 @@ func (s *Server) startDeployedNodeTest(c *gin.Context) {
 	c.JSON(202, gin.H{"job": j})
 }
 
-// selectNodeTestCredential only chooses normal node access, never internal hops or user chains.
-func (s *Server) selectNodeTestCredential(ctx context.Context, n *ent.Node, g *ent.Gate, actor, exact int) (*ent.Credential, error) {
-	cfg := contracts.GateConfig{Budgets: map[string]contracts.GateBudget{}}
-	if _, err := s.addCredentials(ctx, g, &cfg, []int{n.ID}); err != nil {
-		return nil, err
-	}
-	active := map[int]bool{}
-	for _, c := range cfg.Credentials {
-		b := cfg.Budgets[c.UserKey]
-		if !c.Internal && c.InWindow(time.Now()) && (b.Unlimited || b.Allocated > b.Used) {
-			active[int(c.ID)] = true
-		}
-	}
-	q := s.Store.Ent.Credential.Query().Where(credential.NodeIDEQ(n.ID), credential.InternalEQ(false), credential.ChainIDIsNil(), credential.ProbeParentIDIsNil(), credential.UserIDNotNil(), credential.LinkIDNotNil())
-	if exact != 0 {
-		q = q.Where(credential.IDEQ(exact))
-	}
-	creds, err := q.Order(ent.Asc(credential.FieldID)).All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var first *ent.Credential
-	for _, c := range creds {
-		if !active[c.ID] {
-			continue
-		}
-		u, err := s.Store.Ent.User.Get(ctx, *c.UserID)
-		if err != nil {
-			return nil, err
-		}
-		allowed, err := s.userNodeIDs(ctx, u)
-		if err != nil {
-			return nil, err
-		}
-		if allowed[n.ID] == nil || n.Protocol == "wireguard" && u.Quota != 0 {
-			continue
-		}
-		l, err := s.Store.Ent.Link.Get(ctx, *c.LinkID)
-		if err != nil {
-			return nil, err
-		}
-		if l.UserID != u.ID || !l.AllNodes && !contains(l.NodeIds, n.ID) {
-			continue
-		}
-		if first == nil {
-			first = c
-		}
-		if *c.UserID == actor {
-			return c, nil
-		}
-	}
-	if first != nil {
-		return first, nil
-	}
-	return nil, errors.New("没有有效普通节点凭据，请检查用户授权、订阅有效期和可用额度")
-}
-
-func sameCredentialOwner(a, b *ent.Credential) bool {
-	return a.UserID != nil && b.UserID != nil && *a.UserID == *b.UserID && a.LinkID != nil && b.LinkID != nil && *a.LinkID == *b.LinkID && a.NodeID == b.NodeID && a.ChainID == nil && b.ChainID == nil && !a.Internal && !b.Internal
-}
-
-// Gate enforces the time window immediately; maintenance removes the retired peer.
-func (s *Server) revokeExpiredNodeProbes(ctx context.Context, now time.Time) error {
-	creds, err := s.Store.Ent.Credential.Query().Where(credential.ProbeParentIDNotNil()).All(ctx)
-	if err != nil {
-		return err
-	}
-	users := map[int]bool{}
-	for _, c := range creds {
-		if c.UserID == nil || c.LinkID == nil || users[*c.UserID] {
-			continue
-		}
-		u, err := s.Store.Ent.User.Get(ctx, *c.UserID)
-		if err != nil {
-			return err
-		}
-		l, err := s.Store.Ent.Link.Get(ctx, *c.LinkID)
-		if err != nil {
-			return err
-		}
-		if !u.Enabled || !l.Enabled || windowState(u, l, now) != "active" {
-			if err := s.SyncUser(ctx, u.ID); err != nil {
-				return err
-			}
-			users[u.ID] = true
-		}
-	}
-	return nil
-}
-
-func (s *Server) wireGuardProbeCredential(ctx context.Context, parent *ent.Credential) (*ent.Credential, error) {
-	var out *ent.Credential
-	created := false
-	err := s.Store.Lock.Do(ctx, "cred-sync", func(ctx context.Context) error {
-		var err error
-		current, err := s.Store.Ent.Credential.Get(ctx, parent.ID)
-		if err != nil {
-			return err
-		}
-		if !sameCredentialOwner(current, parent) || current.ProbeParentID != nil {
-			return errors.New("凭据已变化")
-		}
-		out, err = s.Store.Ent.Credential.Query().Where(credential.ProbeParentIDEQ(parent.ID)).Only(ctx)
-		if err == nil && sameCredentialOwner(out, current) {
-			return nil
-		}
-		if err != nil && !ent.IsNotFound(err) {
-			return err
-		}
-		_, password := newSecret("wireguard")
-		out, err = s.Store.Ent.Credential.Create().SetNodeID(parent.NodeID).SetUserID(*parent.UserID).SetLinkID(*parent.LinkID).
-			SetProbeParentID(parent.ID).SetStatsKey(newStatsKey()).SetPassword(password).Save(ctx)
-		created = err == nil
-		return err
-	})
-	if err == nil && created {
-		n, e := s.Store.Ent.Node.Get(ctx, parent.NodeID)
-		if e != nil {
-			return nil, e
-		}
-		err = s.bumpGates(ctx, []int{n.GateID})
-	}
-	return out, err
-}
-
 func nodeClient(link string) (contracts.NodeTestClient, error) {
-	body, _, err := subout.Render([]string{link}, "singbox")
+	proxy, err := subout.ClashProxy(link)
 	if err != nil {
 		return contracts.NodeTestClient{}, err
 	}
-	var doc contracts.NodeTestClient
-	if err = json.Unmarshal(body, &doc); err != nil {
-		return doc, err
-	}
-	var outs []map[string]any
-	for _, o := range doc.Outbounds {
-		switch o["type"] {
-		case "selector", "urltest", "direct", "block", "dns":
-			continue
-		}
-		outs = append(outs, o)
-		if o["type"] != "shadowtls" {
-			doc.Target, _ = o["tag"].(string)
-		}
-	}
-	doc.Outbounds = outs
-	for _, ep := range doc.Endpoints {
-		doc.Target, _ = ep["tag"].(string)
-	}
-	if doc.Target == "" {
-		return doc, errors.New("客户端配置为空")
-	}
-	return doc, nil
+	return contracts.NodeTestClient{Proxies: []map[string]any{proxy}, Target: proxy["name"].(string)}, nil
 }
 
 func (s *Server) nodeTestBinding(ctx context.Context, n *ent.Node, g *ent.Gate, selected *ent.Credential) (string, error) {
-	if !n.Enabled || g.Status != "active" || g.AppliedRevision < g.ConfigRevision {
-		return "", errors.New("节点配置已变化")
+	if !n.Enabled || g.Status != "active" {
+		return "", errors.New("节点已停用或 VPS 已撤销")
 	}
-	parent := selected
-	if selected.ProbeParentID != nil {
-		var err error
-		parent, err = s.Store.Ent.Credential.Get(ctx, *selected.ProbeParentID)
-		if err != nil || !sameCredentialOwner(selected, parent) {
-			return "", errors.New("检测凭据已撤销")
-		}
-	}
-	if _, err := s.selectNodeTestCredential(ctx, n, g, 0, parent.ID); err != nil {
-		return "", err
-	}
-	cert := ""
-	if n.CertID != nil {
-		c, err := s.Store.Ent.Certificate.Get(ctx, *n.CertID)
-		if err != nil {
-			return "", err
-		}
-		cert = c.CertPem
-	}
-	b, err := json.Marshal([]any{n.ID, n.Protocol, n.Network, n.Security, n.Port, n.Settings, n.CertID, cert, n.ExitID, g.ConfigRevision, g.PublicHost, selected.ID, selected.UUID, selected.Password, parent.ID, parent.UUID, parent.Password, parent.UserID, parent.LinkID})
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%x", sha256.Sum256(b)), nil
+	return s.probeFingerprint(ctx, n, g)
+}
+
+var externalProbeSupported = func() bool {
+	return runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64")
 }
 
 // Tests replace execution, not credential selection or result invalidation.
 var deployedNodeProbe = nodeprobe.Run
 var deployedProbeBinary = func(s *Server, ctx context.Context) (string, kernelconf.Driver, error) {
-	bin, version, err := defaultSubCheckBinary(s, ctx, "sing-box")
+	bin, version, err := defaultSubCheckBinary(s, ctx, "mihomo")
 	if err != nil {
 		return "", kernelconf.Driver{}, err
 	}
-	d, _, err := s.drivers(ctx).Select("sing-box", version)
+	d, _, err := s.drivers(ctx).Select("mihomo", version)
 	return bin, d, err
 }
 
 func (s *Server) runDeployedNodeTest(ctx context.Context, id, actor int, job JobRun) (r nodeTestResult, resultErr error) {
+	trace, _ := ctx.Value(httpTraceKey{}).(httpTrace)
+	r = nodeTestResult{Status: "unknown", JobID: job.e.job.ID, TraceID: trace.ID, Location: "center", External: "unknown", TCP: nodeprobe.Check{Status: "unknown"}, UDP: nodeprobe.Check{Status: "unknown"}}
+	job.StepFor("正在等待其他实测完成", 5*time.Minute)
+	queue, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	select {
+	case s.probeSlots() <- struct{}{}:
+		defer func() { <-s.probeSlots() }()
+	case <-queue.Done():
+		return r, queue.Err()
+	}
+	resultErr = s.Store.Lock.Do(queue, "internal-node-probes", func(context.Context) error {
+		var err error
+		r, err = s.runDeployedNodeTestNow(ctx, id, actor, job)
+		return err
+	})
+	return r, resultErr
+}
+
+func (s *Server) runDeployedNodeTestNow(ctx context.Context, id, actor int, job JobRun) (r nodeTestResult, resultErr error) {
 	executionCtx := ctx
 	ht, _ := ctx.Value(httpTraceKey{}).(httpTrace)
 	r = nodeTestResult{Status: "unknown", TCP: nodeprobe.Check{Status: "unknown"}, UDP: nodeprobe.Check{Status: "unknown"}, JobID: job.e.job.ID, TraceID: ht.ID, Location: "center", External: "unknown"}
 	job.StepFor("正在排队等待节点测试", 5*time.Minute)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	slots := s.probeSlots()
-	select {
-	case slots <- struct{}{}:
-		defer func() { <-slots }()
-	case <-ctx.Done():
-		return r, ctx.Err()
-	}
 	bin, driver, err := deployedProbeBinary(s, ctx)
 	if err != nil {
 		return r, err
@@ -390,7 +235,7 @@ func (s *Server) runDeployedNodeTest(ctx context.Context, id, actor int, job Job
 	if !strings.HasPrefix(origin, "https://") {
 		return r, errors.New("中心尚未记录 HTTPS 公共地址，无法准备下载测试端点")
 	}
-	job.StepFor("正在读取已部署配置与有效用户凭据", 5*time.Minute)
+	job.StepFor("正在读取已部署配置并准备短时内部授权", 5*time.Minute)
 	n, err := s.Store.Ent.Node.Get(ctx, id)
 	if err != nil {
 		return r, err
@@ -405,18 +250,18 @@ func (s *Server) runDeployedNodeTest(ctx context.Context, id, actor int, job Job
 	if !n.Enabled || g.Status != "active" || g.LastSeenAt == nil || time.Since(*g.LastSeenAt) > 90*time.Second {
 		return r, errors.New("节点已停用或 VPS 离线／已撤销")
 	}
-	parent, err := s.selectNodeTestCredential(ctx, n, g, actor, 0)
+	if colocated(g) {
+		return r, errors.New("中心与这台 VPS 在同一台机器上，无法验证外部连接")
+	}
+	if !externalProbeSupported() {
+		return r, errors.New("中心不是 Linux amd64／arm64，无法执行外部实测")
+	}
+	selected, revokeCredential, err := s.issueProbeCredential(ctx, n)
 	if err != nil {
 		return r, err
 	}
-	selected := parent
-	if n.Protocol == "wireguard" {
-		selected, err = s.wireGuardProbeCredential(ctx, parent)
-		if err != nil {
-			return r, err
-		}
-	}
-	r.UserID, r.LinkID, r.CredentialID = *selected.UserID, *selected.LinkID, selected.ID
+	defer revokeCredential()
+	r.CredentialID = selected.ID
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
@@ -441,12 +286,8 @@ func (s *Server) runDeployedNodeTest(ctx context.Context, id, actor int, job Job
 	if err != nil {
 		return r, err
 	}
-	if state, why := s.nodeReadiness(ctx, n, g); state != "ready" {
-		return r, errors.New(why)
-	}
-	selected, err = s.Store.Ent.Credential.Get(ctx, selected.ID)
-	if err != nil {
-		return r, err
+	if !n.Enabled || g.KernelsRunning[n.Kernel] == "" {
+		return r, errors.New("节点已停用或服务端内核尚未运行")
 	}
 	r.Binding, err = s.nodeTestBinding(ctx, n, g, selected)
 	if err != nil {
@@ -524,11 +365,7 @@ func (s *Server) storeNodeTest(ctx context.Context, id int, r nodeTestResult) er
 	if err != nil {
 		return err
 	}
-	c, err := s.Store.Ent.Credential.Get(ctx, r.CredentialID)
-	if err != nil {
-		return err
-	}
-	binding, err := s.nodeTestBinding(ctx, n, g, c)
+	binding, err := s.nodeTestBinding(ctx, n, g, nil)
 	if err != nil {
 		return err
 	}
@@ -562,16 +399,13 @@ func (s *Server) loadNodeTest(ctx context.Context, n *ent.Node) *nodeTestResult 
 	if err != nil {
 		return nil
 	}
-	c, err := s.Store.Ent.Credential.Get(ctx, r.CredentialID)
-	if err == nil {
-		var binding string
-		binding, err = s.nodeTestBinding(ctx, n, g, c)
-		if binding != stored.Binding {
-			err = errors.New("节点配置已变化")
-		}
+	binding, err := s.nodeTestBinding(ctx, n, g, nil)
+	if err == nil && binding != stored.Binding {
+		err = errors.New("节点配置已变化")
 	}
+
 	if err != nil {
-		r.Status, r.Why, r.External = "unknown", "配置或凭据已变化，上次实测结果已失效", "unknown"
+		r.Status, r.Why, r.External = "unknown", "业务配置已变化，上次实测结果已失效", "unknown"
 		r.TCP, r.UDP = nodeprobe.Check{Status: "unknown"}, nodeprobe.Check{Status: "unknown"}
 	}
 	return &r

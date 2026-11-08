@@ -15,8 +15,8 @@ import (
 func TestLogoSettings(t *testing.T) {
 	s, admin := newInstalledServer(t)
 	anon := &testClient{t: t, router: admin.router}
-	if got := mustJSON(t, anon, "GET", "/api/v1/logo", nil, 200); got["data"] != "" {
-		t.Fatalf("initial logo: %v", got)
+	if w := anon.do("GET", "/api/v1/logo", nil, nil); w.Code != 404 {
+		t.Fatalf("initial logo: %d", w.Code)
 	}
 	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
 	img.Set(0, 0, color.RGBA{R: 255, A: 255})
@@ -34,8 +34,12 @@ func TestLogoSettings(t *testing.T) {
 	if err != nil || record.Detail["trace_id"] != w.Header().Get("X-Trace-Id") || record.Detail["request_id"] != w.Header().Get("X-Request-Id") {
 		t.Fatalf("audit: %v %v", record, err)
 	}
-	if got := mustJSON(t, anon, "GET", "/api/v1/logo", nil, 200); got["data"] != data {
-		t.Fatalf("read: %v", got)
+	read := anon.do("GET", "/api/v1/logo", nil, nil)
+	if read.Code != 200 || read.Header().Get("Content-Type") != "image/png" || read.Header().Get("ETag") == "" || !bytes.Equal(read.Body.Bytes(), b.Bytes()) {
+		t.Fatalf("read: %d %s", read.Code, read.Body.String())
+	}
+	if cached := anon.do("GET", "/api/v1/logo", nil, map[string]string{"If-None-Match": read.Header().Get("ETag")}); cached.Code != 304 {
+		t.Fatalf("cache: %d", cached.Code)
 	}
 	mustJSON(t, anon, "PUT", "/api/v1/admin/settings/logo", map[string]string{"data": ""}, 401)
 	mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "logo-user@example.test", "password": "Passw0rd"}, 200)
@@ -44,7 +48,7 @@ func TestLogoSettings(t *testing.T) {
 	mustJSON(t, admin, "PUT", "/api/v1/admin/settings/logo", map[string]string{"data": "data:image/png;base64,AAAA"}, 400)
 	mustJSON(t, admin, "PUT", "/api/v1/admin/settings/logo", map[string]string{"data": "data:image/png;base64," + strings.Repeat("A", maxLogoBytes*2)}, 400)
 	mustJSON(t, admin, "DELETE", "/api/v1/admin/settings/logo", nil, 200)
-	if got := mustJSON(t, anon, "GET", "/api/v1/logo", nil, 200); got["data"] != "" {
-		t.Fatalf("deleted logo: %v", got)
+	if w := anon.do("GET", "/api/v1/logo", nil, nil); w.Code != 404 {
+		t.Fatalf("deleted logo: %d", w.Code)
 	}
 }

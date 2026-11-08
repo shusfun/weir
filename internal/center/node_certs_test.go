@@ -24,8 +24,6 @@ import (
 // 中心测试一律不访问真实的 Let's Encrypt：默认指向一个连不上的地址，需要签发的测试换成假 CA。
 func TestMain(m *testing.M) {
 	acmeDirectory = func(NodeCertSettings) string { return "http://127.0.0.1:1/directory" }
-	// 建节点后会在后台从中心连一次节点端口：测试里不连外部地址，直接当作连不上。
-	reachDial = func(context.Context, string) (net.Conn, error) { return nil, errors.New("test: no dialing") }
 	// VPS 公网地址里的域名不查真实 DNS：只认 testHosts 里的名称，其余当作不存在。
 	lookupPublicHost = func(_ context.Context, host string) ([]net.IP, error) {
 		if v, ok := testHosts[host]; ok {
@@ -85,7 +83,7 @@ func useFakeCA(t *testing.T) *acmetest.CA {
 func heartbeat(t *testing.T, g *fakeGate, hb contracts.Heartbeat) {
 	t.Helper()
 	hb.Version, hb.Arch = "test", "amd64"
-	hb.NodeTestVersion = 2
+	hb.NodeTestVersion = 3
 	if code, body := g.call("POST", "/api/v1/agent/heartbeat", hb); code != 200 {
 		t.Fatalf("heartbeat = %d %s", code, body)
 	}

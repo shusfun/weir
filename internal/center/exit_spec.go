@@ -21,17 +21,17 @@ import (
 
 // 出口的统一表示：链式代理（管理员建节点的出口、用户自建）与分流出口都先解析成 resolvedExit，
 // 再按入口内核检查能不能连、由入口 Gate 实测、编译进 Gate 配置。
-// 每个成员同时保留一条节点链接，实测时据此生成 sing-box 客户端。
+// 每个成员同时保留一条节点链接，实测时据此生成 mihomo 客户端。
 
 // proxyKinds 是填地址的代理出口；link 是单条节点链接。
 var proxyKinds = map[string]string{"socks5": "socks", "http": "http", "https": "https"}
 
 type resolvedExit struct {
-	Outbound contracts.Outbound // 单个出口，或 Protocol 为 group 的一组
-	Names    []string           // 成员名称（订阅源节点）
-	Links    []string           // 每个成员的节点链接，与成员一一对应
-	Skipped  []string           // 订阅源里匹配但不能作出口的节点及原因
-	TCPOnly  bool               // 只能测端口（另一台 VPS 的节点：内部凭据保存后才生成）
+	Outbound   contracts.Outbound // 单个出口，或 Protocol 为 group 的一组
+	Names      []string           // 成员名称（订阅源节点）
+	Links      []string           // 每个成员的节点链接，与成员一一对应
+	Skipped    []string           // 订阅源里匹配但不能作出口的节点及原因
+	TestNodeID int                // 另一节点使用短时内部授权完成协议实测
 }
 
 func (r resolvedExit) members() []contracts.Outbound {
@@ -189,32 +189,13 @@ func (s *Server) probeTarget(ctx context.Context) string {
 	return "https://www.gstatic.com/generate_204"
 }
 
-// clientOutbound 把节点链接生成 sing-box 客户端出站（与订阅里的写法一致）；生成不了时返回错误，调用方退回只测端口。
-func clientOutbound(link string) (map[string]any, error) {
-	body, _, err := subout.Render([]string{link}, "singbox")
-	if err != nil {
-		return nil, err
-	}
-	var doc struct {
-		Outbounds []map[string]any `json:"outbounds"`
-	}
-	if err = json.Unmarshal(body, &doc); err != nil {
-		return nil, err
-	}
-	for _, o := range doc.Outbounds {
-		switch o["type"] {
-		case "selector", "urltest", "direct", "block", "dns":
-			continue
-		}
-		return o, nil
-	}
-	return nil, errors.New("客户端配置为空")
-}
+// clientOutbound 与订阅复用同一个 mihomo 单代理条目。
+func clientOutbound(link string) (map[string]any, error) { return subout.ClashProxy(link) }
 
 // exitProbe 是一次实测的结果；保存在 exit-probe:<所属对象>，链路页据此显示实际出口 IP 与延迟。
 type exitProbe struct {
 	OK        bool      `json:"ok"`
-	Mode      string    `json:"mode"` // proxy：按协议真连；tcp：只测了端口
+	Mode      string    `json:"mode"` // proxy：按协议完成真实请求
 	LatencyMS int64     `json:"latency_ms,omitempty"`
 	ExitIP    string    `json:"exit_ip,omitempty"`
 	Note      string    `json:"note,omitempty"`
@@ -241,59 +222,71 @@ func (s *Server) loadExitProbe(ctx context.Context, owner string) (exitProbe, bo
 	return p, true
 }
 
-// probeExit 由入口 Gate 实测出口：有节点链接时用 sing-box 客户端按协议真连一次，经它访问中心拿到实际出口 IP；
-// sing-box 表达不了这个出口或入口 VPS 拿不到 sing-box 时退回只测端口，并在结果里写明。一组至少一个成员通过（最多试 5 个）。
+// probeExit 不把端口可达当作协议实测成功。
 func (s *Server) probeExit(ctx context.Context, entry *ent.Gate, ex resolvedExit, publicOnly bool) (*exitProbe, error) {
+	kernels, profiles, err := s.gateKernels(ctx, entry, map[string]bool{"mihomo": true})
+	if err != nil {
+		return nil, err
+	}
+	if ex.TestNodeID != 0 {
+		n, err := s.Store.Ent.Node.Get(ctx, ex.TestNodeID)
+		if err != nil {
+			return nil, err
+		}
+		credential, revoke, err := s.issueProbeCredential(ctx, n)
+		if err != nil {
+			return nil, err
+		}
+		defer revoke()
+		g, err := s.waitProbeApplied(ctx, n)
+		if err != nil {
+			return nil, err
+		}
+		var cert *ent.Certificate
+		if n.CertID != nil {
+			cert, err = s.Store.Ent.Certificate.Get(ctx, *n.CertID)
+			if err != nil {
+				return nil, err
+			}
+		}
+		link, err := shareLink(n, g.PublicHost, credential, "exit-test", cert)
+		if err != nil {
+			return nil, err
+		}
+		ex.Links = []string{link}
+	}
 	members := ex.members()
 	var last error
 	for i, m := range members {
 		if i >= 5 {
 			break
 		}
-		payload := map[string]any{"kind": "node", "address": m.Address, "port": m.Port, "public_only": publicOnly}
-		note := ""
-		if !ex.TCPOnly && i < len(ex.Links) && ex.Links[i] != "" {
-			client, cerr := clientOutbound(ex.Links[i])
-			kernels, profiles, kerr := s.gateKernels(ctx, entry, map[string]bool{"sing-box": true})
-			switch {
-			case cerr != nil:
-				note = "实测客户端表达不了这个出口，只测了端口"
-			case kerr != nil:
-				note = "入口 VPS 暂时拿不到 sing-box，只测了端口"
-			default:
-				var cfg map[string]any
-				raw, _ := json.Marshal(map[string]any{"kernels": kernels, "drivers": map[string]string{"sing-box": profiles["sing-box"]}, "client": client})
-				_ = json.Unmarshal(raw, &cfg)
-				for k, v := range cfg {
-					payload[k] = v
-				}
-				payload["target"] = s.probeTarget(ctx)
-			}
-		} else if ex.TCPOnly {
-			note = "另一台 VPS 的节点：只测了端口，这个节点本身已在建节点时实测"
+		if i >= len(ex.Links) || ex.Links[i] == "" {
+			return nil, errors.New("出口缺少可实测的客户端配置")
 		}
-		if len(members) > 1 {
-			jobStep(ctx, fmt.Sprintf("正在经出口实测（第 %d/%d 个成员 %s）", i+1, min(len(members), 5), net.JoinHostPort(m.Address, strconv.Itoa(m.Port))), 45*time.Second)
-		} else {
-			jobStep(ctx, "正在经出口实测（"+net.JoinHostPort(m.Address, strconv.Itoa(m.Port))+"）", 45*time.Second)
+		client, err := clientOutbound(ex.Links[i])
+		if err != nil {
+			return nil, fmt.Errorf("出口客户端配置无法生成：%w", err)
 		}
+		payload := map[string]any{"address": m.Address, "port": m.Port, "public_only": publicOnly, "target": s.probeTarget(ctx)}
+		raw, _ := json.Marshal(map[string]any{"kernels": kernels, "drivers": profiles, "client": client})
+		var config map[string]any
+		_ = json.Unmarshal(raw, &config)
+		for k, v := range config {
+			payload[k] = v
+		}
+		jobStep(ctx, fmt.Sprintf("正在经出口实测（第 %d/%d 个成员）", i+1, min(len(members), 5)), 45*time.Second)
 		res, err := s.gateProbe(ctx, entry, contracts.ActionChainProbe, payload, 45*time.Second)
 		if err != nil {
 			last = err
 			continue
 		}
-		p := &exitProbe{OK: true, Mode: "tcp", Note: note, At: time.Now().UTC()}
-		if v, ok := res["mode"].(string); ok && v != "" {
-			p.Mode = v
-		}
+		p := &exitProbe{OK: true, Mode: "proxy", At: time.Now().UTC()}
 		if v, ok := res["latency_ms"].(float64); ok {
 			p.LatencyMS = int64(v)
 		}
 		if v, ok := res["exit_ip"].(string); ok {
 			p.ExitIP = v
-		}
-		if p.Mode == "tcp" && p.Note == "" {
-			p.Note = "只测了端口"
 		}
 		return p, nil
 	}

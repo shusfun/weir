@@ -68,7 +68,7 @@ func (e *env) post(path string, body any, header map[string]string) map[string]a
 	if resp.StatusCode == http.StatusAccepted {
 		job, ok := out["job"].(map[string]any)
 		if !ok {
-			e.t.Fatal("202 response missing job")
+			e.t.Fatalf("202 response missing job: %v", out["pending"])
 		}
 		deadline := time.Now().Add(4 * time.Minute)
 		for time.Now().Before(deadline) {
@@ -127,6 +127,7 @@ func setup(t *testing.T) *env {
 	path := filepath.Join(dir, "center", "config.json")
 	cfg, _ := center.LoadConfig(path)
 	cfg.DataDir = filepath.Join(dir, "center-data")
+	seedSubscriptionGeoIP(t, filepath.Join(cfg.DataDir, "subcheck", "mihomo"))
 	token, err := center.Initialize(path, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -148,6 +149,17 @@ func setup(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	if _, err = (kernels.Cache{Dir: filepath.Join(cfg.DataDir, "kernels")}).Put("xray", "26.3.27", "amd64", data); err != nil {
+		t.Fatal(err)
+	}
+	mh := os.Getenv("WEIR_E2E_MIHOMO")
+	if mh == "" {
+		t.Fatal("需要真实 mihomo")
+	}
+	mhData, err := os.ReadFile(mh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = (kernels.Cache{Dir: filepath.Join(cfg.DataDir, "kernels")}).Put("mihomo", "1.19.33", "amd64", mhData); err != nil {
 		t.Fatal(err)
 	}
 	return e

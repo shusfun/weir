@@ -1,15 +1,16 @@
+import { PendingExits } from "../components/pending-exits";
+import { hasUnsavedChanges, useUnsavedChanges } from "../lib/dirty";
+import { ProxyGroups, ProxyMigration } from "../components/proxy-groups";
+import { proxyURL } from "../lib/proxy-targets";
 import { CustomRulesCard } from "../components/custom-rules";
 import { NodeSummary, ExitSummary } from "../components/node-summary";
-// 代理：管理员与普通用户共用一页。把已授权的节点按类型（协议方案）归类：选哪些类型放进订阅、给某个类型统一加出口；
-// 按网站类别分流到某一组；自动选择由客户端测延迟，或由中心按各 VPS 的情况排序后只给排在前面的几个。
-// 这些都写进订阅、由客户端执行（代理流量不经过中心），客户端下次更新订阅时生效。管理员可以选用户查看、修改他的设置。
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "../lib/query";
 import { useNodeChoices } from "../lib/node-choices";
 import {
   Badge, Button, Card, CardContent, CheckboxField, Chip, ChipLabel, ChoiceCard, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, InsetGroup, InsetRow, InsetRows, Notice,
-  PageHeader, Radio, RadioGroup, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SkeletonCards, Switch,
+  PageHeader, Radio, RadioGroup, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SkeletonCards, Switch, Tabs, TabsList, TabsPanel, TabsTab,
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useConfirm, type LampTone,
 } from "@weir/ui";
 import { Plus, Route, Trash2 } from "lucide-react";
@@ -21,7 +22,7 @@ import type { ExitSpec, Health, NodeItem, ProxyType, ProxyView, UserItem } from 
 import { ExitFields, exitErrorFields, exitKindName } from "../components/chain-exit";
 import { ChainPanel, SourceSummary, type NodeOption } from "../components/link-panel";
 import { State } from "../components/feedback";
-import { ObjectLink } from "../components/object-link";
+import { useStringDialogParam, dataObject, ObjectLink } from "../components/object-link";
 import { objectHref } from "../lib/objects";
 import { rateText } from "../lib/linkmap";
 import type { RateStat } from "../lib/core";
@@ -34,10 +35,14 @@ export function ProxyPage({ admin }: { admin: boolean }) {
   const [params, setParams] = useSearchParams();
   const uid = admin ? Number(params.get("user")) || null : null;
   const base = uid ? `/admin/users/${uid}` : "/me";
-  const view = useQuery({ queryKey: ["proxy", base], queryFn: () => api(base + "/proxy") as Promise<ProxyView>, refetchInterval: 30_000 });
+  const tab = ["clients", "rules", "nodes"].includes(params.get("tab") ?? "") ? params.get("tab")! : "clients";
+  const confirm = useConfirm();
+  const changeParams = async (next: URLSearchParams) => { setParams(next); };
+  const view = useQuery({ queryKey: ["proxy", base], queryFn: () => api(proxyURL(base)) as Promise<ProxyView>, refetchInterval: 30_000 });
   const nodes = useNodeOptions(admin, uid);
   useConsoleContext({
     page: "代理",
+    tab: ({clients:"客户端选择",rules:"全局清单",nodes:"节点与出口"})[tab],
     list: {
       filters: admin ? { 用户: uid ? String(uid) : "自己" } : undefined,
       total: view.data?.types.length ?? 0,
@@ -47,8 +52,8 @@ export function ProxyPage({ admin }: { admin: boolean }) {
   const header = (
     <PageHeader
       title="代理"
-      description="按类型管理已授权的节点：选哪些放进订阅、给类型加出口、按网站分流、自动选择。客户端下次更新订阅时生效。"
-      actions={admin ? <UserPick value={uid} onChange={(id) => setParams((p) => { if (id) p.set("user", String(id)); else p.delete("user"); return p; }, { replace: true })} /> : undefined}
+      description="管理客户端选择、全局清单和节点出口。客户端下次更新订阅时生效。"
+      actions={admin ? <div className="flex flex-wrap items-center gap-2"><span>查看用户</span><UserPick value={uid} onChange={(id) => { const p = new URLSearchParams(params); if (id) p.set("user", String(id)); else p.delete("user"); p.delete("proxy_group"); p.delete("new_group"); p.delete("type_exit"); void changeParams(p); }} /></div> : undefined}
     />
   );
   if (view.isPending || view.error)
@@ -62,17 +67,20 @@ export function ProxyPage({ admin }: { admin: boolean }) {
   return (
     <div className="stack">
       {header}
-      {v.types.length === 0 ? (
-        <State empty="还没有可用的节点" detail={admin ? "先在「VPS 与节点」里建节点，并分给这个用户。" : "请联系管理员分配节点。"} />
-      ) : (
-        <>
-          <TypesCard base={base} view={v} nodes={nodes} admin={admin} onSaved={() => void view.refetch()} />
-          <CustomRulesCard key={base} base={base} view={v} onSaved={() => view.refetch({ throwOnError: true })} />
-          <PolicyCard base={base} view={v} onSaved={() => void view.refetch()} />
-          <RankingCard view={v} admin={admin} />
-          <Card><CardContent><ChainPanel base={base} admin={!!uid} /></CardContent></Card>
-        </>
-      )}
+      <ProxyMigration base={base} view={v} onSaved={() => view.refetch()} />
+      <Tabs value={tab} onValueChange={(value) => { const p = new URLSearchParams(params); p.set("tab", String(value)); p.delete("proxy_group"); p.delete("new_group"); p.delete("type_exit"); void changeParams(p); }}>
+        <TabsList className="flex flex-wrap h-auto"><TabsTab value="clients">客户端选择</TabsTab><TabsTab value="rules">全局清单</TabsTab><TabsTab value="nodes">节点与出口</TabsTab></TabsList>
+        <TabsPanel value="clients"><ProxyGroups key={base} base={base} view={v} admin={admin} onSaved={() => view.refetch()} /></TabsPanel>
+      <TabsPanel value="rules" className="stack"><CustomRulesCard key={base} base={base} view={v} onSaved={() => view.refetch({ throwOnError: true })} /><InsetGroup title="后续内置规则" description="清单从上到下优先匹配，随后依次匹配以下规则。"><InsetRows>{["局域网与本机 → 直连", "国内域名与国内 IP → 直连", "其余流量 → PROXY"].map((text) => <InsetRow key={text}>{text}</InsetRow>)}</InsetRows></InsetGroup></TabsPanel>
+      <TabsPanel value="nodes" className="stack">
+        {!v.types.length && <State empty="还没有可用的节点" detail="请先分配节点，再设置协议类型和出口。" />}
+        <TypesCard base={base} view={v} nodes={nodes} admin={admin} onSaved={() => void view.refetch()} />
+        <PolicyCard key={base + v.policy.revision} base={base} view={v} onSaved={() => void view.refetch()} />
+        <RankingCard view={v} admin={admin} />
+        <ChainPanel key={base} base={base} admin={!!uid} />
+      </TabsPanel>
+      </Tabs>
+      <PendingExits base={base} />
     </div>
   );
 }
@@ -101,12 +109,13 @@ function UserPick({ value, onChange }: { value: number | null; onChange: (id: nu
 function TypesCard({ base, view, nodes, admin, onSaved }: { base: string; view: ProxyView; nodes: NodeOption[]; admin: boolean; onSaved: () => void }) {
   const confirm = useConfirm();
   const navigate = useNavigate();
-  const [exitFor, setExitFor] = useState<ProxyType | null>(null);
+  const exitParam = useStringDialogParam("type_exit");
+  const exitFor = view.types.find((t) => t.key === exitParam.value);
   const { run, isBusy } = useRowAction<string>({ refetch: async () => onSaved() });
   const disabled = new Set(view.policy.disabled ?? []);
   const toggle = (key: string, on: boolean) => {
     const next = on ? [...disabled].filter((k) => k !== key) : [...disabled, key];
-    return run(key, () => api(base + "/proxy", "PUT", { ...view.policy, disabled: next }), on ? "已放进订阅" : "已从订阅里拿掉");
+    return run(key, () => api(proxyURL(base), "PUT", { ...view.policy, disabled: next }), on ? "已放进订阅" : "已从订阅里拿掉");
   };
   return (
     <InsetGroup title="节点类型" description="同一种协议方案的节点归为一类。关掉的类型不放进订阅；加了出口的类型，订阅里换成经出口的版本。">
@@ -124,11 +133,7 @@ function TypesCard({ base, view, nodes, admin, onSaved }: { base: string; view: 
                 {/* 管理员点节点打开它的详情；普通用户只看状况 */}
                 {t.nodes.map((n) => {
                   const meta = n.health === "down" ? healthText.down : n.rate.minutes ? rateText(n.rate.p90_bps) : healthText[n.health];
-                  return admin ? (
-                    <Chip key={n.id} tone={healthTone[n.health]} meta={meta} title={n.why} onClick={() => navigate(objectHref({ type: "node", id: n.id }))}><NodeSummary node={n} compact /></Chip>
-                  ) : (
-                    <ChipLabel key={n.id} tone={healthTone[n.health]} meta={meta} title={n.why}><NodeSummary node={n} compact /></ChipLabel>
-                  );
+                  return <ChipLabel key={n.id} tone={healthTone[n.health]} meta={meta} title={n.why}><ObjectLink to={{ type: "node", id: n.id, name: n.name }} href={admin ? undefined : `/proxy?tab=nodes&focus=${encodeURIComponent(`node:${n.id}`)}`}><NodeSummary node={n} compact /></ObjectLink></ChipLabel>;
                 })}
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 text-meta">
@@ -137,13 +142,13 @@ function TypesCard({ base, view, nodes, admin, onSaved }: { base: string; view: 
                 </span>
                 <span className="flex gap-1.5">
                   {view.allow_chain && (
-                    <Button size="sm" variant="outline" onClick={() => setExitFor(t)}>
+                    <Button size="sm" variant="outline" onClick={() => exitParam.open(t.key)}>
                       {t.exit ? "改出口" : <><Plus />加出口</>}
                     </Button>
                   )}
                   {t.exit && (
                     <Button size="icon-sm" variant="destructive" aria-label={`去掉 ${t.label} 的出口`} disabled={isBusy()} busy={isBusy("exit:" + t.key)} busyText="正在去掉"
-                      onClick={async () => (await confirm({ title: `去掉「${t.label}」的出口？`, description: "这类节点恢复直接从 VPS 出去。", confirmText: "去掉", tone: "danger" })) && run("exit:" + t.key, () => api(`${base}/proxy/types/${encodeURIComponent(t.key)}/exit`, "DELETE"), "已去掉出口")}>
+                      onClick={async () => (await confirm({ title: `去掉「${t.label}」的出口？`, description: "这类节点恢复直接从 VPS 出去。", confirmText: "去掉", tone: "danger" })) && run("exit:" + t.key, () => api(proxyURL(base, `/types/${encodeURIComponent(t.key)}/exit`), "DELETE", { revision: view.policy.revision }), "已去掉出口")}>
                       <Trash2 />
                     </Button>
                   )}
@@ -156,7 +161,7 @@ function TypesCard({ base, view, nodes, admin, onSaved }: { base: string; view: 
           ))}
         </InsetRows>
         {!view.allow_chain && <Notice role="status">{admin ? "这个用户没有开放链式代理，不能给类型加出口；可在用户详情里打开。" : "管理员没有开放链式代理，不能给类型加出口。"}</Notice>}
-        {exitFor && <TypeExitDialog base={base} type={exitFor} nodes={nodes} admin={admin && base !== "/me"} close={() => setExitFor(null)} saved={() => { setExitFor(null); onSaved(); }} />}
+        {exitFor && <TypeExitDialog revision={view.policy.revision} base={base} type={exitFor} nodes={nodes} admin={admin && base !== "/me"} close={() => exitParam.close()} saved={() => { exitParam.close(); onSaved(); }} />}
     </InsetGroup>
   );
 }
@@ -174,15 +179,24 @@ function TypeCount({ type: t }: { type: ProxyType }) {
 }
 
 // TypeExitDialog：给一个类型的全部节点加同一个出口；有一个节点连不通就整体不保存，逐个列出原因。
-function TypeExitDialog({ base, type, nodes, admin, close, saved }: { base: string; type: ProxyType; nodes: NodeOption[]; admin: boolean; close: () => void; saved: () => void }) {
+function TypeExitDialog({ base, type, nodes, admin, close, saved, revision }: { revision: number; base: string; type: ProxyType; nodes: NodeOption[]; admin: boolean; close: () => void; saved: () => void }) {
   const e = type.exit;
+  const confirm = useConfirm();
   const [exit, setExit] = useState<ExitSpec>(
     e ? { remark:e.remark, kind: e.kind, address: e.address, port: e.port, username: e.username, password: e.password, link: e.link, node_id: e.node_id ?? undefined, ...(e.source ?? {}) } : { kind: "socks5" },
   );
-  const [skip, setSkip] = useState(false);
-  const save = useFormAction((track) => api(`${base}/proxy/types/${encodeURIComponent(type.key)}/exit`, "PUT", { exit, skip_probe: admin && skip }, track), {
+  const [initial] = useState(() => JSON.stringify(exit));
+  const dirty = JSON.stringify(exit) !== initial;
+  const markSaved = useUnsavedChanges(dirty);
+  const requestClose = async () => {
+    if (save.busy && !save.detachable) return;
+    if (!dirty || await confirm({title:"放弃未保存修改？",description:"出口尚未保存。",confirmText:"放弃修改",tone:"danger"})) {
+      save.leave(); markSaved(); close();
+    }
+  };
+  const save = useFormAction((track) => api(proxyURL(base, `/types/${encodeURIComponent(type.key)}/exit`), "PUT", { exit, revision }, track), {
     fields: exitErrorFields(exit.kind),
-    onSuccess: saved,
+    onSuccess: () => { markSaved(); saved(); },
     wait: { label: `正在逐个实测「${type.label}」的 ${type.nodes.length} 个节点`, max: 45 * type.nodes.length },
   });
   const failed = save.raw instanceof ApiError && save.raw.code === "type_exit_failed" ? (save.raw.extra.nodes as { name: string; code: string; detail?: string }[] | undefined) : undefined;
@@ -195,20 +209,14 @@ function TypeExitDialog({ base, type, nodes, admin, close, saved }: { base: stri
     ],
   });
   return (
-    <Dialog open onOpenChange={(o) => { if (!o && (!save.busy || save.detachable)) { save.leave(); close(); } }}>
+    <Dialog open onOpenChange={(o) => { if (!o) void requestClose(); }}>
       <DialogContent size="md">
         <DialogTitle>{e ? "改" : "加"}出口：{type.label}</DialogTitle>
-        <DialogDescription>这一类的 {type.nodes.length} 个节点都经这个出口出去；保存前由每个节点所在的 VPS 实测。</DialogDescription>
+        <DialogDescription>这一类的 {type.nodes.length} 个节点都经这个出口出去；由每个节点所在的 VPS 实测，全部通过后才切换；未通过的候选可重试或放弃。</DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
           <ExitFields value={exit} onChange={setExit} admin={false} sourcePath={base === "/me" ? "/me/chain-sources" : `${base}/chain-sources`} nodes={nodes} nodeHint="出口需要你可用的另一个节点；这个节点自己作入口时直接出去。" />
-          {admin && <CheckboxField label="跳过 VPS 实测（仅管理员）" checked={skip} onCheckedChange={setSkip} />}
-          {failed && (
-            <ul className="stack gap-1 text-meta text-[var(--weir-bad-ink)]">
-              {failed.map((f) => <li key={f.name}><strong>{f.name}</strong>：{f.detail || f.code}</li>)}
-            </ul>
-          )}
-          <DialogFooter error={failed ? undefined : save.error} status={save.wait && <WaitText wait={save.wait} />}>
-            <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
+          <DialogFooter error={failed ? <span className="block max-h-24 overflow-y-auto">{failed.map((f) => <span className="block" key={f.name}><strong>{f.name}</strong>：{f.detail || f.code}</span>)}</span> : save.error} status={save.wait && <WaitText wait={save.wait} />}>
+            <Button type="button" variant="outline" disabled={save.busy} onClick={() => void requestClose()}>取消</Button>
             <Button type="submit" busy={save.busy} busyText="正在逐个实测…">保存</Button>
           </DialogFooter>
         </Form>
@@ -217,95 +225,23 @@ function TypeExitDialog({ base, type, nodes, admin, close, saved }: { base: stri
   );
 }
 
-const targetBase: [string, string][] = [["auto", "自动选择"], ["select", "节点选择（手动）"], ["direct", "直连"], ["reject", "拒绝"]];
 
-// PolicyCard：分流与自动选择。改完点保存，一次提交。
+
 function PolicyCard({ base, view, onSaved }: { base: string; view: ProxyView; onSaved: () => void }) {
-  const [rules, setRules] = useState<Record<string, string>>(() => Object.fromEntries(view.categories.map((c) => [c.key, c.target])));
-  const [mode, setMode] = useState(view.policy.auto.mode);
-  const [top, setTop] = useState(String(view.policy.auto.top));
   const [refresh, setRefresh] = useState(String(view.policy.auto.refresh_minutes));
-  // 别处（类型开关、出口）保存后服务端值变了：没有改动时跟着更新
-  const dirty = mode !== view.policy.auto.mode || top !== String(view.policy.auto.top) || refresh !== String(view.policy.auto.refresh_minutes) || view.categories.some((c) => rules[c.key] !== c.target);
-  useEffect(() => {
-    if (dirty) return;
-    setRules(Object.fromEntries(view.categories.map((c) => [c.key, c.target])));
-  }, [view]); // eslint-disable-line react-hooks/exhaustive-deps
-  const targets = [...targetBase, ...view.types.filter((t) => t.enabled).map((t) => [t.key, t.label] as [string, string])];
-  const refreshNum = Number(refresh);
-  const refreshError = !refresh || refreshNum < view.min_refresh || refreshNum > 1440 ? `最短 ${view.min_refresh} 分钟、最长 1440 分钟` : "";
-  const topError = mode === "ranked" && (!(Number(top) >= 1) || Number(top) > 20) ? "1–20 个" : "";
-  const save = useFormAction(() => api(base + "/proxy", "PUT", { disabled: view.policy.disabled ?? [], rules, auto: { mode, top: Number(top), refresh_minutes: refreshNum } }), {
-    ok: "已保存，客户端下次更新订阅时生效",
-    fields: { invalid_refresh: "refresh", invalid_top: "top", invalid_rule_target: "rules" },
-    onSuccess: onSaved,
-  });
-  useConsoleContext({
-    form: [
-      ...view.categories.map((c) => field("rule." + c.key, c.label, targets.find(([k]) => k === rules[c.key])?.[1] ?? rules[c.key])),
-      field("auto.mode", "自动选择", mode === "ranked" ? "按速率排序" : "客户端测延迟"), field("auto.top", "进自动选择的节点数", top), field("auto.refresh", "节点列表刷新（分钟）", refresh),
-    ],
-  });
-  return (
-    <Card>
-      <CardContent>
-        <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
-          <SectionHeader title="分流" description="按网站类别走哪一组。规则写进订阅，由客户端执行；只给节点列表的客户端（v2rayN 等）用不上分流。" />
-          <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2" data-field="rules">
-            {view.categories.map((c) => (
-              <Field key={c.key} label={c.label} hint={c.hint}>
-                <Select value={rules[c.key]} onValueChange={(v) => setRules({ ...rules, [c.key]: String(v) })}>
-                  <SelectTrigger aria-label={c.label + " 走哪一组"}>
-                    <SelectValue>{targets.find(([k]) => k === rules[c.key])?.[1] ?? "节点选择（手动）"}</SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {targets.filter(([k]) => !(c.key === "final" && k === "reject")).map(([k, label]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </Field>
-            ))}
-          </div>
-          <SectionHeader className="mt-2" title="自动选择" description="「自动选择」组里放哪些节点、客户端多久刷新一次节点列表。Clash 系客户端按这个间隔单独刷新节点，分组与规则不变。" />
-          <RadioGroup value={mode} onValueChange={(v) => setMode(v as typeof mode)} aria-label="自动选择方式" className="grid gap-2 sm:grid-cols-2">
-            {([
-              ["latency", "客户端测延迟", "全部可用的节点都放进去，客户端每 5 分钟测一次延迟，用最快的。"],
-              ["ranked", "按速率排序", "按各节点自己统计的下载速率（近 24 小时第 90 百分位）排，前几个按速率，留 1 个轮换位给还没有速率数据的节点；排名有缓冲，不会因为一点差别来回换。"],
-            ] as const).map(([v, label, hint]) => (
-              <ChoiceCard key={v} selected={mode === v} render={<label />} className="cursor-pointer">
-                <span className="flex items-center gap-2"><Radio value={v} /><strong>{label}</strong></span>
-                <small className="text-[var(--weir-ink-3)]">{hint}</small>
-              </ChoiceCard>
-            ))}
-          </RadioGroup>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {mode === "ranked" && (
-              <Field label="放进自动选择的节点数" name="top" required hint="大于 1 时其中 1 个是轮换位。" customError={topError}>
-                <Input inputMode="numeric" value={top} onChange={(e) => setTop(e.target.value.replace(/\D/g, ""))} />
-              </Field>
-            )}
-            <Field label="节点列表刷新间隔（分钟）" name="refresh" required hint={`最短 ${view.min_refresh} 分钟；整份配置按小时更新。`} customError={refreshError}>
-              <Input inputMode="numeric" value={refresh} onChange={(e) => setRefresh(e.target.value.replace(/\D/g, ""))} />
-            </Field>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button type="submit" disabled={!dirty || !!refreshError || !!topError} busy={save.busy} busyText="正在保存…"><Route />保存分流与自动选择</Button>
-            {save.error && <small className="text-[var(--weir-bad-ink)]">{save.error}</small>}
-          </div>
-        </Form>
-      </CardContent>
-    </Card>
-  );
+  const dirty = refresh !== String(view.policy.auto.refresh_minutes);
+  useUnsavedChanges(dirty);
+  const save = useFormAction(() => api(proxyURL(base), "PUT", { ...view.policy, auto: { refresh_minutes: Number(refresh) } }), { fields: { invalid_refresh: "refresh" }, onSuccess: onSaved, ok: "已保存刷新间隔" });
+  useConsoleContext({form:[field("refresh", "节点列表刷新间隔", refresh)]});
+  return <InsetGroup title="节点列表刷新"><Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}><Field name="refresh" label="节点列表刷新间隔（分钟）" required hint="30–1440 分钟。与分组探测间隔分开；分组结构变化需更新完整订阅。"><Input type="number" min={30} max={1440} step={1} required value={refresh} onChange={(e) => setRefresh(e.target.value)} /></Field><Button type="submit" disabled={!dirty} busy={save.busy} busyText="正在保存">保存</Button><div className="min-h-6" role="status">{save.error}</div></Form></InsetGroup>;
 }
 
-// RankingCard：此刻的排序（与客户端下次拉取时一致）。速率来自各节点自己统计的流量，没有数据写「未知」。
+// 速度排名只供展示；客户端成员顺序由统一订阅计划决定。
 function RankingCard({ view, admin }: { view: ProxyView; admin: boolean }) {
-  const ranked = view.policy.auto.mode === "ranked";
   return (
     <InsetGroup
-      title="节点状况与速率"
-      description={ranked
-        ? `按下载速率排：近 24 小时有流量的分钟取第 90 百分位，你自己没用过的节点用全部用户的速率补上。放 ${view.policy.auto.top} 个进「自动选择」${view.policy.auto.top > 1 ? "，其中 1 个轮流给还没有速率数据的节点" : ""}。`
-        : "全部可用的节点都在「自动选择」里，由客户端测延迟。速率来自各节点自己统计的流量，只作参考。"}
+      title="近 24 小时下载速度（有效分钟 P90）"
+      description="近 24 小时已完成且下载至少 1 MiB 的有效分钟，按采样秒数计算速度后取 P90。速度仅作参考，不改变客户端节点与分组顺序。"
     >
         {view.ranking.length === 0 ? (
           <State empty="订阅里没有节点" detail="类型都关掉了，或节点都不可用。" />
@@ -318,27 +254,27 @@ function RankingCard({ view, admin }: { view: ProxyView; admin: boolean }) {
                   <TableHead>节点</TableHead>
                   <TableHead>类型</TableHead>
                   <TableHead>状况</TableHead>
-                  <TableHead className="text-right">下载速率</TableHead>
-                  <TableHead className="text-right">有流量的分钟</TableHead>
+                  <TableHead className="text-right">下载速度</TableHead>
+                  <TableHead className="text-right">有效分钟</TableHead>
                   <TableHead>自动选择</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {view.ranking.map((r) => (
-                  <TableRow key={`${r.node_id}-${r.type}`}>
+                  <TableRow key={r.ref} {...dataObject({ type: r.ref.startsWith("chain:") ? "chain" : "node", id: r.ref.startsWith("chain:") ? r.chain_id : r.node_id })}>
                     <TableCell className="tabular-nums">{r.rank || "—"}</TableCell>
-                    <TableCell>{admin ? <ObjectLink to={{ type: "node", id: r.node_id, name: r.name }} /> : r.name}</TableCell>
-                    <TableCell>{r.type}</TableCell>
+                    <TableCell><ObjectLink href={admin ? undefined : `/proxy?tab=nodes&focus=${encodeURIComponent(r.ref)}`} to={{ type: r.ref.startsWith("chain:") ? "chain" : "node", id: r.ref.startsWith("chain:") ? r.chain_id : r.node_id, owner: view.user_id, name: r.name }} /></TableCell>
+                    <TableCell>{view.types.find((t) => t.key === r.type)?.label ?? r.type}</TableCell>
                     <TableCell>
                       <Badge variant="soft" tone={r.health === "ok" ? "ok" : r.health === "down" ? "bad" : "neutral"}>{healthText[r.health]}</Badge>
-                      {r.why && <small className="block text-[var(--weir-ink-3)]">{r.why}</small>}
+                      {r.why && <p className="text-meta text-[var(--weir-ink-2)]">{r.why}</p>}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {r.rate.minutes ? rateText(r.rate.p90_bps) : "未知"}
-                      {r.rate.from === "all" && <small className="block text-[var(--weir-ink-3)]">全部用户</small>}
+                      {r.rate.from === "all" && <p className="text-meta text-[var(--weir-ink-2)]">全部用户</p>}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{r.rate.minutes || "—"}</TableCell>
-                    <TableCell>{r.exploring ? <Badge variant="soft" tone="info">轮换中</Badge> : r.auto ? "在" : <span className="text-[var(--weir-ink-3)]">不在</span>}</TableCell>
+                    <TableCell>{r.auto ? "在" : <span className="text-[var(--weir-ink-3)]">不在</span>}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

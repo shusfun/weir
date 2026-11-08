@@ -16,7 +16,7 @@ import (
 )
 
 // 节点能不能从外面连上：需要放行的端口（协议决定 TCP / UDP）、Gate 本机防火墙有没有放行、
-// 中心从外部能不能连上（只测 TCP；中心与 Gate 在同一台机器时测不了）。云厂商安全组 Weir 管不了，只提示。
+// 中心通过 mihomo 完成协议连接；中心与 Gate 在同一台机器时结果为未知。云厂商安全组由用户管理。
 
 type portNeed struct {
 	Port     int    `json:"port"`
@@ -102,6 +102,8 @@ type reachResult struct {
 	Why       string    `json:"why,omitempty"`
 	LatencyMS int       `json:"latency_ms,omitempty"`
 	At        time.Time `json:"at"`
+	Binding   string    `json:"binding"`
+	TraceID   string    `json:"trace_id,omitempty"`
 }
 
 func reachKey(id int) string { return "reach:node:" + itoa(id) }
@@ -117,7 +119,11 @@ func (s *Server) loadReach(ctx context.Context, id int) (reachResult, bool) {
 		return reachResult{}, false
 	}
 	g, err := s.Store.Ent.Gate.Get(ctx, n.GateID)
-	if err != nil || r.Revision != g.ConfigRevision || r.Host != g.PublicHost || r.Port != n.Port {
+	if err != nil {
+		return reachResult{}, false
+	}
+	binding, err := s.probeFingerprint(ctx, n, g)
+	if err != nil || r.Binding == "" || r.Binding != binding {
 		return reachResult{}, false
 	}
 	return r, true
@@ -136,7 +142,7 @@ func (s *Server) nodeReadiness(ctx context.Context, n *ent.Node, g *ent.Gate) (s
 	now := time.Now()
 	active := false
 	for _, c := range cfg.Credentials {
-		if cr, err := s.Store.Ent.Credential.Get(ctx, int(c.ID)); err != nil || cr.ProbeParentID != nil {
+		if cr, err := s.Store.Ent.Credential.Get(ctx, int(c.ID)); err != nil || cr.ProbeParentID != nil || cr.Purpose == "probe" {
 			continue
 		}
 		if c.InboundID != int64(n.ID) || !c.InWindow(now) {
@@ -206,11 +212,16 @@ func (s *Server) refreshGateReachability(gid int) {
 			if ctx.Err() == nil {
 				ids, err := s.Store.Ent.Node.Query().Where(node.GateIDEQ(gid), node.EnabledEQ(true)).IDs(ctx)
 				if err == nil {
+					var stale []int
 					for _, id := range ids {
-						if ctx.Err() != nil {
-							break
+						result, valid := s.loadReach(ctx, id)
+						if !valid || time.Since(result.At) >= 10*time.Minute {
+							stale = append(stale, id)
 						}
-						s.checkReachability(ctx, id)
+					}
+					// 内部测试授权会推进应用版本；只有业务配置改变才需要再次检查，避免循环发放凭据。
+					if len(stale) > 0 {
+						s.checkReachabilities(ctx, stale)
 					}
 				}
 				s.notifyConsole("gate", itoa(gid))
@@ -250,6 +261,16 @@ func loopbackURL(raw string) bool {
 // 马上检查只会得到「连不上」。建节点向导在结果出来之前一直刷新。
 func (s *Server) checkAfterApplied(ctx context.Context, nodeID, gateID int) {
 	st, stop := s.Store, s.events.stopped()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		select {
+		case <-stop:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
 	if g, err := st.Ent.Gate.Get(ctx, gateID); err == nil {
 		want := g.ConfigRevision
 		for i := 0; i < 30 && g.AppliedRevision < want && g.FailedRevision < want; i++ {
@@ -272,54 +293,15 @@ func (s *Server) checkAfterApplied(ctx context.Context, nodeID, gateID int) {
 	default:
 	}
 	if s.Store == st {
+		go s.resumePendingNodeProbes(context.WithoutCancel(ctx))
+		go s.resumePendingExits(context.WithoutCancel(ctx))
 		s.checkReachability(ctx, nodeID)
 	}
 }
 
-// checkReachability 从中心连接一次节点端口（TCP）并保存结果。
+// 单节点检查与定时批量检查使用同一条协议实测路径。
 func (s *Server) checkReachability(ctx context.Context, id int) {
-	n, err := s.Store.Ent.Node.Get(ctx, id)
-	if err != nil || !n.Enabled {
-		return
-	}
-	g, err := s.Store.Ent.Gate.Get(ctx, n.GateID)
-	if err != nil {
-		return
-	}
-	r := reachResult{Status: "unknown", At: time.Now().UTC(), Revision: g.ConfigRevision, Host: g.PublicHost, Port: n.Port}
-	ready, why := s.nodeReadiness(ctx, n, g)
-	switch {
-	case ready != "ready":
-		r.Why = why
-	case g.PublicHost == "":
-		r.Why = "VPS 没有公网地址"
-	case colocated(g):
-		r.Why = "中心与这台 VPS 在同一台机器上，测不出外部能否连上"
-	case !containsStr(nodeProtos(n.Protocol), "tcp"):
-		r.Why = "UDP 端口无法从外部确认，请在客户端实际连接"
-	default:
-		begin := time.Now()
-		conn, err := reachDial(ctx, net.JoinHostPort(g.PublicHost, strconv.Itoa(n.Port)))
-		if err != nil {
-			r.Status, r.Why = "failed", "中心连不上 "+net.JoinHostPort(g.PublicHost, strconv.Itoa(n.Port))+"：可能是防火墙或云厂商安全组没有放行"
-		} else {
-			conn.Close()
-			r.Status, r.LatencyMS = "ok", max(1, int(time.Since(begin).Milliseconds()))
-		}
-	}
-	// 连接过程中可能已收到下一版配置；旧结果不能覆盖新版本。
-	latest, err := s.Store.Ent.Gate.Get(ctx, g.ID)
-	current, nerr := s.Store.Ent.Node.Get(ctx, n.ID)
-	if err != nil || nerr != nil || latest.ConfigRevision != r.Revision || latest.PublicHost != r.Host || current.Port != r.Port {
-		return
-	}
-	b, _ := json.Marshal(r)
-	_ = s.Store.KV.Set(ctx, reachKey(id), string(b), 24*time.Hour)
-}
-
-// reachDial 连接节点端口（测试中替换，不真的连外部地址）。
-var reachDial = func(ctx context.Context, addr string) (net.Conn, error) {
-	return (&net.Dialer{Timeout: 6 * time.Second}).DialContext(ctx, "tcp", addr)
+	s.checkReachabilities(ctx, []int{id})
 }
 
 var reachRunning sync.Mutex
@@ -336,10 +318,21 @@ func (s *Server) CheckReachabilityAll(ctx context.Context, now time.Time) {
 	}
 	go func() {
 		defer reachRunning.Unlock()
-		bg := context.WithoutCancel(ctx)
-		for _, id := range ids {
-			s.checkReachability(bg, id)
+		s.state.RLock()
+		defer s.state.RUnlock()
+		if s.Store == nil {
+			return
 		}
+		bg, cancel := context.WithCancel(context.WithoutCancel(ctx))
+		defer cancel()
+		go func() {
+			select {
+			case <-s.events.stopped():
+				cancel()
+			case <-bg.Done():
+			}
+		}()
+		s.checkReachabilities(bg, ids)
 	}()
 }
 

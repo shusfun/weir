@@ -17,54 +17,6 @@ import (
 	"github.com/shusfun/weir/packages/contracts"
 )
 
-// 读取时转换保持无写入；首次保存连同旧规则集快照一起持久化。
-func migrateCustomPolicy(p contracts.ProxyPolicy) contracts.ProxyPolicy {
-	c := p.Custom
-	if c.Version >= 2 {
-		return p
-	}
-	rules := map[string]string{}
-	for k, v := range p.Rules {
-		rules[k] = v
-	}
-	c.Legacy = &contracts.CustomLegacy{Mode: c.Mode, SourceMode: c.SourceMode, Source: c.Source, Lines: slices.Clone(c.Lines), Rules: rules, RulesFile: customRuleFile(c)}
-	c.Version = 2
-	c.Entries = []contracts.CustomEntry{}
-	convert := func(lines []string, mode string) []contracts.CustomEntry {
-		out := []contracts.CustomEntry{}
-		for _, r := range customPlanRules(lines) {
-			for _, value := range r.Values {
-				target := "direct"
-				if mode == contracts.CustomOnly {
-					target = "select"
-				}
-				out = append(out, contracts.CustomEntry{ID: "legacy-" + digest(r.Kind + ":" + value)[:20], Kind: r.Kind, Value: value, Target: target, Enabled: mode != "", LastProxyTarget: "select"})
-			}
-		}
-		return out
-	}
-	lines := c.Lines
-	if c.Mode == "" && (c.Check == nil || c.Check.Status != "failed") {
-		lines = customLines(optimizeCustomRules(c.Source).Rules)
-	}
-	c.Entries = convert(lines, c.Mode)
-	if c.Check != nil && c.Check.Status == "failed" {
-		mode := c.SourceMode
-		if mode == "off" {
-			mode = ""
-		}
-		c.Pending = &contracts.CustomCandidate{Entries: convert(customLines(optimizeCustomRules(c.Source).Rules), mode), Source: c.Source}
-	}
-	if c.Mode == contracts.CustomOnly {
-		p.Rules = map[string]string{}
-		for _, cat := range ruleCategories {
-			p.Rules[cat.Key] = "direct"
-		}
-	}
-	p.Custom = c
-	return p
-}
-
 // 新清单只去重，不精简覆盖关系：重排、启停或不同走向可能让原本被遮住的规则生效。
 func parseCustomEntries(source string) customResult {
 	r := customResult{Rules: []customRule{}, Counts: map[string]int{}, Unused: []customUnused{}, Warnings: []string{}}
@@ -104,7 +56,7 @@ type customEntryRequest struct {
 }
 
 func (s *Server) parseCustomList(c *gin.Context, admin bool) {
-	if _, ok := s.subject(c, admin); !ok {
+	if _, ok := s.proxySubject(c, admin); !ok {
 		return
 	}
 	var req customEntryRequest
@@ -124,7 +76,7 @@ func (s *Server) parseCustomList(c *gin.Context, admin bool) {
 }
 
 func (s *Server) appendCustomEntries(c *gin.Context, admin bool) {
-	u, ok := s.subject(c, admin)
+	u, ok := s.proxySubject(c, admin)
 	if !ok {
 		return
 	}
@@ -142,7 +94,7 @@ func (s *Server) appendCustomEntries(c *gin.Context, admin bool) {
 	for _, e := range entries {
 		seen[customRule{e.Kind, e.Value}] = true
 	}
-	target := "select"
+	target := "proxy"
 	if req.Target != nil {
 		target = *req.Target
 	}
@@ -151,18 +103,14 @@ func (s *Server) appendCustomEntries(c *gin.Context, admin bool) {
 			r.Reduced++
 			continue
 		}
-		last := target
-		if last == "direct" {
-			last = "select"
-		}
-		entries = append(entries, contracts.CustomEntry{ID: randomHex(12), Kind: item.Kind, Value: item.Value, Target: target, Enabled: true, LastProxyTarget: last})
+		entries = append(entries, contracts.CustomEntry{ID: randomHex(12), Kind: item.Kind, Value: item.Value, Target: target, Enabled: true})
 		seen[item] = true
 	}
 	s.writeCustomEntries(c, u, req.Revision, entries, req.Source, &r)
 }
 
 func (s *Server) changeCustomEntry(c *gin.Context, admin bool) {
-	u, ok := s.subject(c, admin)
+	u, ok := s.proxySubject(c, admin)
 	if !ok {
 		return
 	}
@@ -187,13 +135,7 @@ func (s *Server) changeCustomEntry(c *gin.Context, admin bool) {
 			e.Value = *req.Value
 		}
 		if req.Target != nil {
-			if e.Target != "direct" {
-				e.LastProxyTarget = e.Target
-			}
 			e.Target = *req.Target
-			if e.Target != "direct" {
-				e.LastProxyTarget = e.Target
-			}
 		}
 		if req.Enabled != nil {
 			e.Enabled = *req.Enabled
@@ -217,20 +159,11 @@ func policyFingerprint(p contracts.ProxyPolicy) string {
 }
 
 func (s *Server) validateCustomEntries(c *gin.Context, u *ent.User, base contracts.ProxyPolicy, entries []contracts.CustomEntry) bool {
-	ctx := c.Request.Context()
 	if len(entries) > customMaxRules {
 		failure(c, 400, "custom_rules_too_large")
 		return false
 	}
-	types, err := s.userTypes(ctx, u)
-	if err != nil {
-		failInternal(c, 503, "query_failed", err)
-		return false
-	}
-	targets := map[string]bool{"direct": true, "auto": true, "select": true}
-	for _, typ := range types {
-		targets[typ.Key] = true
-	}
+	targets := map[string]bool{"direct": true, "proxy": true}
 	old := map[string]contracts.CustomEntry{}
 	for _, e := range base.Custom.Entries {
 		old[e.ID] = e
@@ -271,7 +204,7 @@ func (s *Server) validateCustomEntries(c *gin.Context, u *ent.User, base contrac
 			return false
 		}
 		rules[rule] = true
-		if !targets[e.Target] && old[e.ID].Target != e.Target {
+		if !targets[e.Target] && !(e.Target == "reject" && !e.Enabled && old[e.ID].Target == "reject") {
 			failure(c, 400, "invalid_rule_target")
 			return false
 		}
@@ -279,13 +212,10 @@ func (s *Server) validateCustomEntries(c *gin.Context, u *ent.User, base contrac
 			failure(c, 400, "invalid_rule_target")
 			return false
 		}
-		if e.LastProxyTarget == "" || e.LastProxyTarget == "direct" {
-			e.LastProxyTarget = "select"
+		if old[e.ID].Notice != "" && e.Target != "reject" {
+			e.Notice = ""
 		}
-		if !targets[e.LastProxyTarget] && old[e.ID].LastProxyTarget != e.LastProxyTarget {
-			failure(c, 400, "invalid_rule_target")
-			return false
-		}
+
 	}
 	return true
 }
@@ -294,7 +224,7 @@ func (s *Server) validateCustomEntries(c *gin.Context, u *ent.User, base contrac
 func (s *Server) writeCustomEntries(c *gin.Context, u *ent.User, revision *int, entries []contracts.CustomEntry, source string, parsed *customResult) {
 	ctx := c.Request.Context()
 	base := loadPolicy(u)
-	if revision == nil || *revision != base.Custom.Revision {
+	if revision == nil || *revision != base.Revision {
 		failure(c, 409, "custom_revision_conflict")
 		return
 	}
@@ -335,10 +265,11 @@ func (s *Server) writeCustomEntries(c *gin.Context, u *ent.User, revision *int, 
 		if source != "" {
 			pol.Custom.Source = source
 		}
-		pol.Custom.Revision++
+		pol.Revision++
 		if check.Status == "failed" {
 			pol.Custom.Pending = &contracts.CustomCandidate{Entries: entries, Source: source}
 		} else {
+			pol.Custom.Revision++
 			pol.Custom.Entries = entries
 			pol.Custom.Pending = nil
 		}
@@ -371,7 +302,7 @@ func (s *Server) writeCustomEntries(c *gin.Context, u *ent.User, revision *int, 
 }
 
 func (s *Server) testCustomEntry(c *gin.Context, admin bool) {
-	u, ok := s.subject(c, admin)
+	u, ok := s.proxySubject(c, admin)
 	if !ok {
 		return
 	}
@@ -384,7 +315,7 @@ func (s *Server) testCustomEntry(c *gin.Context, admin bool) {
 		return
 	}
 	pol := loadPolicy(u)
-	if req.Revision == nil || *req.Revision != pol.Custom.Revision {
+	if req.Revision == nil || *req.Revision != pol.Revision {
 		failure(c, 409, "custom_revision_conflict")
 		return
 	}

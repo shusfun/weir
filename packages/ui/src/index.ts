@@ -64,3 +64,4 @@ export * from "./press-origin";
 export * from "./action-button";
 export * from "./job";
 export * from "./object-link";
+export * from "./text-link";

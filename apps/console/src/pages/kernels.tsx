@@ -1,3 +1,4 @@
+import { PendingExits } from "../components/pending-exits";
 // 内核：中心从上游拉取 Xray / sing-box / mihomo 并按官方摘要校验，再推送给 VPS；配置按内核驱动生成。
 // 架构不用选：按中心本机与已接入 VPS 的架构一起下载。分区记在地址栏 ?tab=（版本 / 驱动 / 订阅检查 / dsh）。
 import { useState } from "react";
@@ -15,6 +16,8 @@ import { JobLine, latestJob, useJobs, useStartedJob, type Job } from "../compone
 import { DriversPanel } from "../components/drivers";
 import { date } from "../lib/models";
 import { ObjectLink, dataObject } from "../components/object-link";
+import { Link } from "react-router-dom";
+import { TextLink } from "@weir/ui";
 import { useConsoleContext } from "../lib/console-context";
 
 interface KernelVersion {
@@ -49,7 +52,8 @@ interface Release {
   incompatible?: string;
 }
 
-export const kernelNames: Record<string, string> = { xray: "Xray", "sing-box": "sing-box", mihomo: "mihomo（订阅检查）" };
+export const kernelNames: Record<string, string> = { xray: "Xray", "sing-box": "sing-box", mihomo: "mihomo（连接实测与订阅检查）" };
+const kernelUses: Record<string, string> = { xray: "运行 VLESS 类节点，创建这类节点时自动下载。", "sing-box": "运行 SS2022、Hysteria2、TUIC、ShadowTLS 节点，创建这类节点时自动下载；中心还用它检查 sing-box 订阅。", mihomo: "中心检查 Clash 订阅、实测节点；按需自动下发到 VPS，只在测试时临时运行。" };
 const order = ["xray", "sing-box", "mihomo"];
 const tabs = [
   { key: "versions", label: "版本" },
@@ -72,8 +76,9 @@ export function KernelsPage() {
         <TabsPanel value="versions" className="stack"><Versions /></TabsPanel>
         <TabsPanel value="drivers" className="stack"><DriversPanel /></TabsPanel>
         <TabsPanel value="checks" className="stack"><SubChecks /></TabsPanel>
-        <TabsPanel value="dsh" className="stack"><DshVersions /></TabsPanel>
+        <TabsPanel value="dsh" className="stack"><TextLink render={<Link to="/system?tab=ai" />}>返回系统设置的「AI 与 dsh」</TextLink><DshVersions /></TabsPanel>
       </Tabs>
+      <PendingExits all />
     </div>
   );
 }
@@ -103,7 +108,7 @@ function Versions() {
             key={kernel}
             {...dataObject({ type: "kernel", key: kernel })}
             title={kernelNames[kernel] ?? kernel}
-            description={`${k.default ? `默认版本 ${k.default}。` : "未设置默认版本：VPS 保持正在运行的版本，新部署的 VPS 使用已下载的最新版本。下载新版本不会自动替换。"} 需要的架构：${k.arches.join("、")}（按中心与已接入的 VPS 自动决定）。`}
+            description={`${kernelUses[kernel] ?? ""} ${k.default ? `默认版本 ${k.default}。` : "首次自动下载最新稳定版并检查，通过后设为默认；已有版本继续遵循锁定、默认与运行版本规则。"} 需要的架构：${k.arches.join("、")}（按中心与已接入的 VPS 自动决定）。`}
             actions={<Button size="sm" variant="outline" onClick={() => setReleases(kernel)}><Download />拉取版本</Button>}
           >
               <JobLine job={job} idle="没有进行中的下载" onFinish={() => void q.refetch()} />

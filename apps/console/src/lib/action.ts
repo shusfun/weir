@@ -70,8 +70,13 @@ export function useRowAction<K extends string | number = string>(opts: Refresh =
     },
     onMutate: ({ key }) => setBusy(key),
     onSuccess: async (r, { ok, extra }) => {
-      const title = typeof ok === "function" ? ok(r) : ok;
-      if (title) toast(title, { tone: "ok", description: extra?.detail?.(r) });
+      if (r && typeof r === "object" && "pending" in r) {
+        toast("候选出口已保存，等待验证", { tone: "ok", description: "验证通过后自动应用，可在出口验证任务中查看。" });
+        await client.invalidateQueries({ queryKey: ["pending-exits"] });
+      } else {
+        const title = typeof ok === "function" ? ok(r) : ok;
+        if (title) toast(title, { tone: "ok", description: extra?.detail?.(r) });
+      }
       await refresh(client, opts);
     },
     onError: (e, { extra }) => toast(extra?.fail ?? "操作未完成", { description: messageOf(e), tone: "bad" }),
@@ -140,7 +145,11 @@ export function useFormAction<T = unknown, F extends string = string>(
     onSuccess: async (r) => {
       // 窗口已经关掉（操作在后台做完）：没有地方显示结果，用提示告诉人
       const gone = away();
-      if (opts.ok) toast(opts.ok, { tone: "ok" });
+      if (r && typeof r === "object" && "pending" in r) {
+        toast("候选出口已保存，等待验证", { description: "验证通过后自动应用，可在出口验证任务中查看。", tone: "ok" });
+        await client.invalidateQueries({ queryKey: ["pending-exits"] });
+      }
+      else if (opts.ok) toast(opts.ok, { tone: "ok" });
       else if (gone) toast((last.current?.job?.title ?? "操作") + "：已完成", { tone: "ok" });
       await refresh(client, opts);
       if (!gone) await opts.onSuccess?.(r);

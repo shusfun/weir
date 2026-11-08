@@ -29,6 +29,10 @@ const (
 	FieldPassword = "password"
 	// FieldInternal holds the string denoting the internal field in the database.
 	FieldInternal = "internal"
+	// FieldPurpose holds the string denoting the purpose field in the database.
+	FieldPurpose = "purpose"
+	// FieldExpiresAt holds the string denoting the expires_at field in the database.
+	FieldExpiresAt = "expires_at"
 	// FieldProbeParentID holds the string denoting the probe_parent_id field in the database.
 	FieldProbeParentID = "probe_parent_id"
 	// FieldMeterEpoch holds the string denoting the meter_epoch field in the database.
@@ -56,6 +60,8 @@ var Columns = []string{
 	FieldUUID,
 	FieldPassword,
 	FieldInternal,
+	FieldPurpose,
+	FieldExpiresAt,
 	FieldProbeParentID,
 	FieldMeterEpoch,
 	FieldMeterUp,
@@ -81,6 +87,8 @@ var (
 	DefaultPassword string
 	// DefaultInternal holds the default value on creation for the "internal" field.
 	DefaultInternal bool
+	// DefaultPurpose holds the default value on creation for the "purpose" field.
+	DefaultPurpose string
 	// DefaultMeterEpoch holds the default value on creation for the "meter_epoch" field.
 	DefaultMeterEpoch string
 	// DefaultMeterUp holds the default value on creation for the "meter_up" field.
@@ -137,6 +145,16 @@ func ByPassword(opts ...sql.OrderTermOption) OrderOption {
 // ByInternal orders the results by the internal field.
 func ByInternal(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldInternal, opts...).ToFunc()
+}
+
+// ByPurpose orders the results by the purpose field.
+func ByPurpose(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPurpose, opts...).ToFunc()
+}
+
+// ByExpiresAt orders the results by the expires_at field.
+func ByExpiresAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldExpiresAt, opts...).ToFunc()
 }
 
 // ByProbeParentID orders the results by the probe_parent_id field.

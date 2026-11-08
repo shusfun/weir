@@ -127,6 +127,8 @@ var (
 		{Name: "uuid", Type: field.TypeString, Default: ""},
 		{Name: "password", Type: field.TypeString, Default: ""},
 		{Name: "internal", Type: field.TypeBool, Default: false},
+		{Name: "purpose", Type: field.TypeString, Default: ""},
+		{Name: "expires_at", Type: field.TypeTime, Nullable: true},
 		{Name: "probe_parent_id", Type: field.TypeInt, Nullable: true},
 		{Name: "meter_epoch", Type: field.TypeString, Default: ""},
 		{Name: "meter_up", Type: field.TypeInt64, Default: 0},

@@ -75,7 +75,7 @@ func (t *tailBuffer) String() string {
 	return strings.TrimSpace(string(t.buf))
 }
 
-// nodeTest 是 AI 草稿与节点修改的实测：在本机回环端口上用候选配置起服务端内核，再用 sing-box 客户端
+// nodeTest 是 AI 草稿与节点修改的实测：在本机回环端口上用候选配置起服务端内核，再用 mihomo 客户端
 // 按订阅里的出站连接它，经代理下载 256 KiB 并核对长度。不改动正在运行的内核与配置。
 // payload.config 是只含一个入站与一份测试凭据的 GateConfig（端口为 0，由这里分配）；
 // payload.client 保留订阅客户端的完整依赖图与目标标签，由这里改成临时本机端点。
@@ -90,8 +90,8 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 	if err := json.Unmarshal(raw, &client); err != nil || client.Target == "" {
 		return nil, errors.New("invalid test client")
 	}
-	if _, ok := cfg.Kernels["sing-box"]; !ok {
-		return nil, errors.New("sing-box client kernel missing")
+	if _, ok := cfg.Kernels["mihomo"]; !ok {
+		return nil, errors.New("mihomo 测试内核未就绪")
 	}
 	if err := a.ensureKernels(ctx, cfg); err != nil {
 		return nil, err
@@ -138,7 +138,7 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 		return nil, err
 	}
 	if b, err := exec.CommandContext(ctx, bin(kernel), test...).CombinedOutput(); err != nil {
-		return map[string]any{"stage": "check", "log": lastLines(string(b), 20)}, errors.New("内核自检未通过")
+		return map[string]any{"stage": "check", "log": maskIPs(lastLines(string(b), 20))}, errors.New("内核自检未通过")
 	}
 	runCtx, cancel := context.WithTimeout(ctx, 40*time.Second)
 	defer cancel()
@@ -157,26 +157,26 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 	if err := client.Loopback(port); err != nil {
 		return map[string]any{"stage": "client_build"}, err
 	}
-	cc, _ := json.Marshal(map[string]any{
-		"log":       map[string]any{"level": "warn"},
-		"inbounds":  []any{map[string]any{"type": "mixed", "listen": "127.0.0.1", "listen_port": socks}},
-		"outbounds": client.Outbounds,
-		"endpoints": client.Endpoints,
-		"route":     map[string]any{"final": client.Target},
-	})
+	cc, _ := json.Marshal(client.Config(socks))
 	clientPath := filepath.Join(dir, "client.json")
 	if err = os.WriteFile(clientPath, cc, 0600); err != nil {
 		return nil, err
 	}
-	// 客户端：sing-box 的驱动参数（这次配置没有 sing-box 入站时用默认参数）。
-	if run, test, err = kernelArgs("sing-box", out.Args["sing-box"], clientPath); err != nil {
+	d, err := kernelconf.DriverFor(cfg, "mihomo")
+	if err != nil || d == nil {
+		return nil, errors.New("mihomo 测试驱动缺失或无效")
+	}
+	clientArgs := kernelconf.KernelArgs{Run: d.Run, Check: d.Check}
+	// 测试驱动只决定临时客户端的调用参数。
+	if run, test, err = kernelArgs("mihomo", clientArgs, clientPath); err != nil {
 		return nil, err
 	}
-	if b, err := exec.CommandContext(runCtx, bin("sing-box"), test...).CombinedOutput(); err != nil {
-		return map[string]any{"stage": "client_check", "log": lastLines(string(b), 20)}, errors.New("客户端内核自检未通过")
+	run, test = append(run, "-d", dir), append(test, "-d", dir)
+	if b, err := exec.CommandContext(runCtx, bin("mihomo"), test...).CombinedOutput(); err != nil {
+		return map[string]any{"stage": "client_check", "log": maskIPs(lastLines(string(b), 20))}, errors.New("客户端内核自检未通过")
 	}
-	cp := exec.CommandContext(runCtx, bin("sing-box"), run...)
-	cp.Stdout, cp.Stderr = clientLog, clientLog
+	cp := exec.CommandContext(runCtx, bin("mihomo"), run...)
+	cp.Stdout, cp.Stderr, cp.Dir = clientLog, clientLog, dir
 	if err = cp.Start(); err != nil {
 		return nil, err
 	}
@@ -221,7 +221,7 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 	if strings.Contains(clientLog.String(), "FATAL") || strings.Contains(serverLog.String(), "FATAL") {
 		stage = "start"
 	}
-	return map[string]any{"stage": stage, "server_log": lastLines(serverLog.String(), 20), "client_log": lastLines(clientLog.String(), 20)}, fmt.Errorf("经候选配置连接失败：%v", last)
+	return map[string]any{"stage": stage, "server_log": maskIPs(lastLines(serverLog.String(), 20)), "client_log": maskIPs(lastLines(clientLog.String(), 20))}, fmt.Errorf("经候选配置连接失败：%v", last)
 }
 
 func nodeTestTargetAddress() (string, error) {

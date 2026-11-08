@@ -465,12 +465,24 @@ func (s *Server) webdavRequest(ctx context.Context, cfg WebdavConfig, method, na
 
 type davMultistatus struct {
 	Responses []struct {
-		Href string `xml:"href"`
+		Href     string `xml:"href"`
+		Propstat []struct {
+			Prop struct {
+				Size     int64  `xml:"getcontentlength"`
+				Modified string `xml:"getlastmodified"`
+			} `xml:"prop"`
+		} `xml:"propstat"`
 	} `xml:"response"`
 }
 
+type WebdavFile struct {
+	Name     string `json:"name"`
+	Size     int64  `json:"size"`
+	Modified string `json:"modified,omitempty"`
+}
+
 // WebdavFiles 列出备份目录里的 weir-subscriptions-*.json，按名称（即时间）从新到旧。
-func (s *Server) WebdavFiles(ctx context.Context, cfg WebdavConfig) ([]string, error) {
+func (s *Server) WebdavFiles(ctx context.Context, cfg WebdavConfig) ([]WebdavFile, error) {
 	resp, err := s.webdavRequest(ctx, cfg, "PROPFIND", "", nil, map[string]string{"Depth": "1", "Content-Type": "application/xml"})
 	if err != nil {
 		return nil, err
@@ -483,14 +495,19 @@ func (s *Server) WebdavFiles(ctx context.Context, cfg WebdavConfig) ([]string, e
 	if err = xml.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&ms); err != nil {
 		return nil, errors.New("webdav_invalid_listing")
 	}
-	var out []string
+	var out []WebdavFile
 	for _, r := range ms.Responses {
 		name, _ := url.PathUnescape(path.Base(strings.TrimRight(r.Href, "/")))
 		if strings.HasPrefix(name, "weir-subscriptions-") && strings.HasSuffix(name, ".json") {
-			out = append(out, name)
+			file := WebdavFile{Name: name}
+			if len(r.Propstat) > 0 {
+				file.Size = r.Propstat[0].Prop.Size
+				file.Modified = r.Propstat[0].Prop.Modified
+			}
+			out = append(out, file)
 		}
 	}
-	sort.Sort(sort.Reverse(sort.StringSlice(out)))
+	sort.Slice(out, func(i, j int) bool { return out[i].Name > out[j].Name })
 	return out, nil
 }
 
@@ -516,7 +533,7 @@ func (s *Server) RunWebdavBackup(ctx context.Context) (string, error) {
 			ctx := context.WithoutCancel(ctx)
 			if files, lerr := s.WebdavFiles(ctx, cfg); lerr == nil {
 				for _, old := range files[min(len(files), cfg.Keep):] {
-					if r, derr := s.webdavRequest(ctx, cfg, "DELETE", old, nil, nil); derr == nil {
+					if r, derr := s.webdavRequest(ctx, cfg, "DELETE", old.Name, nil, nil); derr == nil {
 						r.Body.Close()
 					}
 				}

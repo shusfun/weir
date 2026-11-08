@@ -79,21 +79,21 @@ func TestRequestLogPropagatesTraceparentAndRecordsSuccess(t *testing.T) {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(requestLog)
-	r.PUT("/api/v1/me/proxy/custom", func(c *gin.Context) {
+	r.PUT("/api/v1/proxy/custom", func(c *gin.Context) {
 		if c.GetString("trace_id") != "0123456789abcdef0123456789abcdef" || c.GetString("request_id") == "" {
 			t.Errorf("trace context = %q %q", c.GetString("trace_id"), c.GetString("request_id"))
 		}
 		c.Status(200)
 	})
 	parent := "00-0123456789abcdef0123456789abcdef-1111111111111111-01"
-	req := httptest.NewRequest("PUT", "/api/v1/me/proxy/custom", nil)
+	req := httptest.NewRequest("PUT", "/api/v1/proxy/custom", nil)
 	req.Header.Set("traceparent", parent)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if w.Code != 200 || w.Header().Get("X-Trace-Id") != "0123456789abcdef0123456789abcdef" || w.Header().Get("traceparent") == parent || !strings.HasPrefix(w.Header().Get("traceparent"), "00-0123456789abcdef0123456789abcdef-") {
 		t.Fatalf("response trace: status=%d headers=%v", w.Code, w.Header())
 	}
-	if !strings.Contains(buf.String(), "level=INFO") || !strings.Contains(buf.String(), "trace=0123456789abcdef0123456789abcdef") || !strings.Contains(buf.String(), "route=/api/v1/me/proxy/custom") {
+	if !strings.Contains(buf.String(), "level=INFO") || !strings.Contains(buf.String(), "trace=0123456789abcdef0123456789abcdef") || !strings.Contains(buf.String(), "route=/api/v1/proxy/custom") {
 		t.Fatalf("success trace log = %s", buf.String())
 	}
 }

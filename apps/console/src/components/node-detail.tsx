@@ -1,3 +1,4 @@
+import { PendingExits } from "./pending-exits";
 import { NodeSummary, ExitSummary, nodeTitle } from "./node-summary";
 // VPS 与节点：每台 VPS 一张卡片，最上面是在不在线，直接显示主机观测；它上面的每个节点一行，点开看细节；
 // 「＋ 协议」直接在这台 VPS 上建节点。VPS 用 SSH 一次装好，或复制安装命令自己执行。
@@ -60,10 +61,11 @@ export function NodeDetail({ node: n, gate: g, nodes, close, changed }: { node: 
             <Readout label="端口" value={String(n.port)} />
             <Readout label="内核" value={n.kernel || "未知"} />
             <Readout label="凭据" value={String(n.credentials)} caption="每条链接一份" />
-            <Readout label="下载速率" value={n.rate?.minutes ? rateText(n.rate.p90_bps) : "未知"} caption={n.rate?.minutes ? `近 24 小时 ${n.rate.minutes} 分钟有流量` : "近 24 小时没有流量"} />
+            <Readout label="近 24 小时下载速度（有效分钟 P90）" value={n.rate?.minutes ? rateText(n.rate.p90_bps) : "未知"} caption={n.rate_error ? `读取失败：${n.rate_error}` : n.rate?.minutes ? `近 24 小时 ${n.rate.minutes} 个有效分钟（下载至少 1 MiB）` : "近 24 小时没有有效分钟"} />
           </div>
           <NodeAccess ports={n.ports} reach={n.reach} />
           <NodeTestControl node={n} gate={g} detail />
+          <PendingExits all nodeId={n.id} />
           <div className="text-body">
             <span className="text-[var(--weir-ink-3)]">出口：</span><ExitSummary exit={n.exit} expanded />
             {n.exit.kind !== "freedom" && <small className="block text-[var(--weir-ink-3)]">{probeText(n.exit.probe)}</small>}

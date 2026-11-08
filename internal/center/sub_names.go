@@ -58,6 +58,10 @@ func (s *Server) selectSubscriptionEntries(ctx context.Context, u *ent.User, l *
 		disabled[t] = true
 	}
 	ti := s.typeIndex(ctx)
+	authorized, err := s.userNodeIDs(ctx, u)
+	if err != nil {
+		return nil, err
+	}
 	viaExit := map[int]bool{}
 	if u.AllowChain {
 		for _, c := range creds {
@@ -71,6 +75,9 @@ func (s *Server) selectSubscriptionEntries(ctx context.Context, u *ent.User, l *
 	}
 	out := []subscriptionEntry{}
 	for _, c := range creds {
+		if authorized[c.NodeID] == nil {
+			continue
+		}
 		n, err := s.Store.Ent.Node.Get(ctx, c.NodeID)
 		if err != nil || !n.Enabled {
 			continue
@@ -90,7 +97,7 @@ func (s *Server) selectSubscriptionEntries(ctx context.Context, u *ent.User, l *
 				continue
 			}
 			ch, err := s.Store.Ent.Chain.Get(ctx, *c.ChainID)
-			if err != nil || !ch.Enabled {
+			if err != nil || !ch.Enabled || ch.UserID != u.ID || ch.EntryNodeID != n.ID {
 				continue
 			}
 			e.chain, e.ChainID = ch, ch.ID
@@ -99,6 +106,13 @@ func (s *Server) selectSubscriptionEntries(ctx context.Context, u *ent.User, l *
 		ex, err := s.Store.Ent.Exit.Get(ctx, eid)
 		if err != nil {
 			return nil, err
+		}
+		if !ex.Enabled {
+			continue
+		}
+		e.Ref = "node:" + itoa(n.ID)
+		if e.chain != nil && ex.PolicyType == "" {
+			e.Ref = "chain:" + itoa(e.ChainID)
 		}
 		e.exit = ex
 		e.Chained = ex.Kind != "freedom"

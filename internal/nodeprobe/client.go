@@ -1,4 +1,4 @@
-// Package nodeprobe runs a short-lived client against an already deployed node.
+// Package nodeprobe 用短时 mihomo 客户端实测已部署节点。
 package nodeprobe
 
 import (
@@ -86,7 +86,7 @@ func args(template []string, path string) []string {
 	for i := range out {
 		out[i] = strings.ReplaceAll(out[i], "{config}", path)
 	}
-	return out
+	return append(out, "-d", filepath.Dir(path))
 }
 
 func freePort(network string) (int, error) {
@@ -126,14 +126,14 @@ func Run(ctx context.Context, o Options) (Result, error) {
 	if err != nil {
 		return r, err
 	}
-	inbounds := []any{map[string]any{"type": "mixed", "tag": "download", "listen": "127.0.0.1", "listen_port": socks}}
+	var tunnels []any
 	servers := o.UDPServers
 	if len(servers) == 0 {
 		servers = []string{"1.1.1.1:53", "8.8.8.8:53"}
 	}
 	var udpPorts []int
 	if o.UDP {
-		for i, server := range servers {
+		for _, server := range servers {
 			host, port, err := net.SplitHostPort(server)
 			if err != nil {
 				return r, err
@@ -147,10 +147,25 @@ func Run(ctx context.Context, o Options) (Result, error) {
 				return r, err
 			}
 			udpPorts = append(udpPorts, p)
-			inbounds = append(inbounds, map[string]any{"type": "direct", "tag": fmt.Sprintf("udp-%d", i), "listen": "127.0.0.1", "listen_port": p, "network": "udp", "override_address": host, "override_port": targetPort})
+			tunnels = append(tunnels, map[string]any{"network": []string{"udp"}, "address": net.JoinHostPort("127.0.0.1", fmt.Sprint(p)), "target": net.JoinHostPort(host, fmt.Sprint(targetPort)), "proxy": o.Client.Target})
 		}
 	}
-	cfg := map[string]any{"log": map[string]any{"level": "warn"}, "inbounds": inbounds, "outbounds": o.Client.Outbounds, "endpoints": o.Client.Endpoints, "route": map[string]any{"final": o.Client.Target}}
+	cfg := o.Client.Config(socks)
+	// 测试端点使用中心的解析结果，避免临时内核忽略系统 hosts；连接和 TLS 仍完整经过待测节点。
+	endpoint, err := url.Parse(o.Target)
+	if err != nil || endpoint.Hostname() == "" {
+		return r, errors.New("测试端点地址无效")
+	}
+	if net.ParseIP(endpoint.Hostname()) == nil {
+		addresses, err := net.DefaultResolver.LookupHost(ctx, endpoint.Hostname())
+		if err != nil {
+			return r, fmt.Errorf("无法解析测试端点：%w", err)
+		}
+		cfg["hosts"] = map[string]any{endpoint.Hostname(): addresses}
+	}
+	if len(tunnels) > 0 {
+		cfg["tunnels"] = tunnels
+	}
 	body, err := json.Marshal(cfg)
 	if err != nil {
 		return r, err
@@ -165,7 +180,7 @@ func Run(ctx context.Context, o Options) (Result, error) {
 	checkCtx, stopCheck := context.WithTimeout(ctx, 10*time.Second)
 	log := &tail{}
 	check := exec.CommandContext(checkCtx, o.Binary, args(o.Check, path)...)
-	check.Stdout, check.Stderr = log, log
+	check.Stdout, check.Stderr, check.Dir = log, log, dir
 	err = check.Run()
 	stopCheck()
 	if err != nil {
@@ -173,7 +188,7 @@ func Run(ctx context.Context, o Options) (Result, error) {
 	}
 	log = &tail{}
 	cmd := exec.CommandContext(ctx, o.Binary, args(o.Run, path)...)
-	cmd.Stdout, cmd.Stderr = log, log
+	cmd.Stdout, cmd.Stderr, cmd.Dir = log, log, dir
 	if err = cmd.Start(); err != nil {
 		return r, fmt.Errorf("测试客户端启动失败：%w", err)
 	}
@@ -241,7 +256,7 @@ wait:
 }
 
 func download(ctx context.Context, addr string, o Options) Check {
-	proxy, _ := url.Parse("http://" + addr)
+	proxy, _ := url.Parse("socks5://" + addr)
 	transport := &http.Transport{Proxy: http.ProxyURL(proxy), DisableKeepAlives: true}
 	defer transport.CloseIdleConnections()
 	hc := &http.Client{Timeout: 20 * time.Second, Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}

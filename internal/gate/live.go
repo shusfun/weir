@@ -97,10 +97,12 @@ func readLiveCounters(ctx context.Context, cfg contracts.GateConfig, names map[s
 		if err != nil {
 			continue
 		}
+		seen := map[string]bool{}
 		for _, st := range stats {
 			sample := contracts.MeterSample{StatsKey: st.ScopeKey, Up: st.Uplink, Down: st.Downlink}
 			switch st.ScopeType {
 			case "client":
+				seen[sample.StatsKey] = true
 				users = append(users, sample)
 			case "outbound":
 				tag, ok := names[st.ScopeKey]
@@ -115,6 +117,24 @@ func readLiveCounters(ctx context.Context, cfg contracts.GateConfig, names map[s
 				}
 			}
 		}
+		users = append(users, idleLiveUsers(cfg, name, seen, time.Now())...)
 	}
 	return users, outbounds
+}
+
+// 只补刚刚成功读取的内核，避免把读取失败、未启用或过期凭据误报为空闲。
+func idleLiveUsers(cfg contracts.GateConfig, kernel string, seen map[string]bool, now time.Time) []contracts.MeterSample {
+	inbounds := map[int64]bool{}
+	for _, in := range cfg.Inbounds {
+		if in.Kernel == kernel {
+			inbounds[in.ID] = true
+		}
+	}
+	var users []contracts.MeterSample
+	for _, c := range cfg.Credentials {
+		if inbounds[c.InboundID] && c.InWindow(now) && !seen[c.StatsKey] {
+			users = append(users, contracts.MeterSample{StatsKey: c.StatsKey})
+		}
+	}
+	return users
 }

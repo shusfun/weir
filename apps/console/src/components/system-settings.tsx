@@ -1,8 +1,8 @@
 // 系统设置卡片：安全策略、邮件服务、通知、WebDAV 备份、订阅备份导入导出、API 令牌。
 // 设置保存直接生效；导入或恢复备份、创建 API 令牌要重新输入密码。
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "../lib/query";
-import { Button, CopyField, Field, FilePicker, Form, FormGrid, Input, Notice, PasswordInput, SwitchField, Textarea, useConfirm, InsetGroup } from "@weir/ui";
+import { Button, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, FilePicker, Form, FormGrid, Input, Notice, PasswordInput, SwitchField, Textarea, useConfirm, InsetGroup } from "@weir/ui";
 import { Download, Trash2 } from "lucide-react";
 import { api, reauthFields } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -10,6 +10,7 @@ import { ActionsWait } from "./wait";
 import { saveBlob } from "../lib/download";
 import { date } from "../lib/models";
 import { State } from "./feedback";
+import { useUnsavedChanges } from "../lib/dirty";
 
 export type ReauthValue = { password: string; code: string };
 export const emptyReauth: ReauthValue = { password: "", code: "" };
@@ -55,8 +56,13 @@ const securityFlags = [
 
 export function SecurityCard() {
   const q = useQuery({ queryKey: ["security-settings"], queryFn: () => api("/admin/settings/security") as Promise<Record<string, boolean>> });
+  const smtp = useQuery({ queryKey: ["smtp-settings"], queryFn: () => api("/admin/settings/smtp") as Promise<{ configured: boolean }> });
+  const me = useQuery({ queryKey: ["me"], queryFn: () => api("/me") as Promise<{ totp_enrolled?: boolean }> });
+  const confirm = useConfirm();
   const [draft, setDraft] = useState<Record<string, boolean> | null>(null);
   const v = draft ?? q.data;
+  const dirty = !!q.data && !!draft && JSON.stringify(draft) !== JSON.stringify(q.data);
+  useUnsavedChanges(dirty);
   const save = useFormAction(() => api("/admin/settings/security", "PUT", v), {
     ok: "已保存",
     onSuccess: () => {
@@ -71,12 +77,18 @@ export function SecurityCard() {
       ) : (
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
           <div className="settings-group">
-            {securityFlags.map(([k, label, description]) => (
-              <SwitchField placement="end" key={k} label={label} description={description || undefined} checked={!!v[k]} onCheckedChange={(on) => setDraft({ ...v, [k]: on })} />
-            ))}
+            {securityFlags.map(([k, label, description]) => {
+              const disabled = (k === "email_verification" && (!smtp.data?.configured || !v.registration_enabled)) || (k === "require_admin_mfa" && !v.totp_enabled);
+              const detail = k === "email_verification" && disabled ? (!smtp.data?.configured ? "需要先配置邮件服务。" : "需要先允许自助注册。") : k === "totp_enabled" ? "关闭后，已绑定用户仍可使用现有 TOTP，不能再绑定新设备。" : k === "passkey_enabled" ? "关闭后，已绑定的通行密钥仍可使用，但不能再新增。" : description;
+              return <SwitchField placement="end" key={k} label={label} description={detail || undefined} disabled={disabled} checked={!!v[k]} onCheckedChange={async (on) => {
+                if (k === "require_admin_mfa" && on && !me.data?.totp_enrolled && !(await confirm({ title: "当前管理员还没有绑定 TOTP", description: "保存后管理员需要先完成二次验证设置，未完成前不能继续管理后台。", confirmText: "继续" }))) return;
+                setDraft({ ...v, [k]: on });
+              }} />;
+            })}
           </div>
           <div className="actions">
-            <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
+            <Button type="submit" disabled={save.busy || !dirty} busy={save.busy} busyText="正在保存…">保存</Button>
+            {dirty && <Button type="button" variant="ghost" disabled={save.busy} onClick={() => setDraft(null)}>放弃修改</Button>}
           </div>
           {save.error && <Notice tone="bad">{save.error}</Notice>}
         </Form>
@@ -100,7 +112,10 @@ export function SMTPCard() {
 
 function SMTPForm({ value, saved }: { value: SMTPView; saved: () => void }) {
   const [f, setF] = useState({ host: value.host, port: String(value.port || 465), username: value.username, password: "", from: value.from, from_name: value.from_name, use_tls: value.use_tls || !value.host });
+  useEffect(() => setF({ host: value.host, port: String(value.port || 465), username: value.username, password: "", from: value.from, from_name: value.from_name, use_tls: value.use_tls || !value.host }), [value]);
   const set = (p: Partial<typeof f>) => setF({ ...f, ...p });
+  const dirty = f.host !== value.host || f.port !== String(value.port || 465) || f.username !== value.username || f.password !== "" || f.from !== value.from || f.from_name !== value.from_name || f.use_tls !== value.use_tls;
+  useUnsavedChanges(dirty);
   const save = useFormAction(() => api("/admin/settings/smtp", "PUT", { ...f, port: Number(f.port) || 0 }), { ok: "已保存", onSuccess: saved });
   const { run, isBusy, waitFor } = useRowAction();
   return (
@@ -118,27 +133,29 @@ function SMTPForm({ value, saved }: { value: SMTPView; saved: () => void }) {
           <SwitchField placement="end" label="使用 TLS" description="465 端口直接 TLS，其他端口 STARTTLS。" checked={f.use_tls} onCheckedChange={(use_tls) => set({ use_tls })} />
         </div>
         <div className="actions">
-          <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
+            <Button type="submit" disabled={save.busy || !dirty} busy={save.busy} busyText="正在保存…">保存</Button>
+            {dirty && <Button type="button" variant="ghost" disabled={save.busy} onClick={() => setF({ host: value.host, port: String(value.port || 465), username: value.username, password: "", from: value.from, from_name: value.from_name, use_tls: value.use_tls || !value.host })}>放弃修改</Button>}
           {value.configured && (
-            <Button type="button" variant="outline" disabled={isBusy()} busy={isBusy("test")} busyText="正在发送…" onClick={() => void run("test", () => api("/admin/settings/smtp/test", "POST", {}), "测试邮件已发出", { wait: { label: `正在经 ${value.host || "SMTP 服务器"} 发送测试邮件`, max: 25 } })}>
+            <Button type="button" variant="outline" disabled={isBusy() || dirty} busy={isBusy("test")} busyText="正在发送…" onClick={() => void run("test", () => api("/admin/settings/smtp/test", "POST", {}), "测试邮件已发出", { wait: { label: `正在经 ${value.host || "SMTP 服务器"} 发送测试邮件`, max: 25 } })}>
               发送测试邮件
             </Button>
           )}
           <ActionsWait wait={waitFor("test")} />
         </div>
+        {dirty && <small className="text-[var(--weir-ink-3)]">未保存；先保存，再测试。</small>}
         {save.error && <Notice tone="bad">{save.error}</Notice>}
       </Form>
     </Section>
   );
 }
 
-interface NotifyView { enabled: boolean; token_set: boolean; chat_id: string; api_base: string; gate_offline: boolean; user_quota_percent: number; user_expiry_days: number; source_expiry_days: number; source_refresh_hours: number }
+interface NotifyView { enabled: boolean; token_set: boolean; chat_id: string; api_base: string; gate_offline: boolean; user_quota_percent: number; user_expiry_days: number; source_expiry_days: number }
 
 export function NotifyCard() {
   const q = useQuery({ queryKey: ["notify-settings"], queryFn: () => api("/admin/settings/notify") as Promise<NotifyView> });
   if (q.isPending || q.error)
     return (
-      <Section title="通知与定时任务" description="Telegram 提醒与订阅源定时刷新。">
+        <Section title="Telegram 通知" description="Telegram 提醒只包含名称与数值，不含订阅地址或凭据。">
         <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} />
       </Section>
     );
@@ -147,41 +164,45 @@ export function NotifyCard() {
 
 function NotifyForm({ value, saved }: { value: NotifyView; saved: () => void }) {
   const [f, setF] = useState({ ...value, bot_token: "" });
+  useEffect(() => setF({ ...value, bot_token: "" }), [value]);
   const set = (p: Partial<typeof f>) => setF({ ...f, ...p });
+  const dirty = f.enabled !== value.enabled || f.chat_id !== value.chat_id || f.api_base !== value.api_base || f.gate_offline !== value.gate_offline || f.user_quota_percent !== value.user_quota_percent || f.user_expiry_days !== value.user_expiry_days || f.source_expiry_days !== value.source_expiry_days || f.bot_token !== "";
+  useUnsavedChanges(dirty);
   const save = useFormAction(() => api("/admin/settings/notify", "PUT", f), { ok: "已保存", onSuccess: saved });
   const { run, isBusy, waitFor } = useRowAction();
-  const num = (k: "user_quota_percent" | "user_expiry_days" | "source_expiry_days" | "source_refresh_hours", label: string, hint: string, max?: number) => (
-    <Field label={label} hint={hint} customError={max !== undefined && f[k] > max ? `不能大于 ${max}` : ""}>
-      <Input inputMode="numeric" value={String(f[k])} onChange={(e) => set({ [k]: Number(e.target.value.replace(/\D/g, "")) || 0 })} />
+  const num = (k: "user_quota_percent" | "user_expiry_days" | "source_expiry_days", label: string, hint: string, max?: number) => (
+    <Field label={label} hint={hint} customError={String(f[k]) === "" ? "请输入数值" : max !== undefined && Number(f[k]) > max ? `不能大于 ${max}` : ""}>
+      <Input inputMode="numeric" value={String(f[k])} disabled={!f.enabled} onChange={(e) => { const raw = e.target.value.replace(/\D/g, ""); set({ [k]: (raw === "" ? "" : Number(raw)) } as Partial<typeof f>); }} />
     </Field>
   );
   return (
-    <Section title="通知与定时任务" description="提醒只包含名称与数值，不含订阅地址或凭据；同一事件 24 小时内只提醒一次。">
+    <Section title="Telegram 通知" description="提醒只包含名称与数值，不含订阅地址或凭据；同一事件 24 小时内只提醒一次。">
       <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
         <div className="settings-group">
           <SwitchField placement="end" label="开启 Telegram 通知" checked={f.enabled} onCheckedChange={(enabled) => set({ enabled })} />
         </div>
         <FormGrid>
-          <Field label="Bot Token" hint={value.token_set ? "已保存；留空则沿用。" : undefined}><PasswordInput autoComplete="off" value={f.bot_token} onChange={(e) => set({ bot_token: e.target.value })} /></Field>
-          <Field label="Chat ID"><Input value={f.chat_id} onChange={(e) => set({ chat_id: e.target.value })} /></Field>
-          <Field label="接口地址" hint="默认 https://api.telegram.org，可填自建反代。"><Input value={f.api_base} onChange={(e) => set({ api_base: e.target.value })} /></Field>
+          <Field label="Bot Token" hint={value.token_set ? "已保存；留空则沿用。" : undefined}><PasswordInput autoComplete="off" disabled={!f.enabled} value={f.bot_token} onChange={(e) => set({ bot_token: e.target.value })} /></Field>
+          <Field label="Chat ID"><Input disabled={!f.enabled} value={f.chat_id} onChange={(e) => set({ chat_id: e.target.value })} /></Field>
+          <Field label="接口地址" hint="默认 https://api.telegram.org，可填自建反代。"><Input disabled={!f.enabled} value={f.api_base} onChange={(e) => set({ api_base: e.target.value })} /></Field>
           {num("user_quota_percent", "用户用量提醒（%）", "0 表示不提醒。", 100)}
           {num("user_expiry_days", "用户到期前提醒（天）", "0 表示不提醒。")}
           {num("source_expiry_days", "订阅源到期前提醒（天）", "按机场报告的到期时间。")}
-          {num("source_refresh_hours", "订阅源定时刷新（小时）", "0 表示只在访问订阅组时按缓存刷新。")}
         </FormGrid>
         <div className="settings-group">
           <SwitchField placement="end" label="VPS 离线超过 5 分钟时提醒" checked={f.gate_offline} onCheckedChange={(gate_offline) => set({ gate_offline })} />
         </div>
         <div className="actions">
-          <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
+          <Button type="submit" disabled={save.busy || !dirty} busy={save.busy} busyText="正在保存…">保存</Button>
+          {dirty && <Button type="button" variant="ghost" disabled={save.busy} onClick={() => setF({ ...value, bot_token: "" })}>放弃修改</Button>}
           {value.enabled && value.token_set && (
-            <Button type="button" variant="outline" disabled={isBusy()} busy={isBusy("test")} busyText="正在发送…" onClick={() => void run("test", () => api("/admin/settings/notify/test", "POST", {}), "测试通知已发出", { wait: { label: "正在发送测试通知", max: 15 } })}>
+            <Button type="button" variant="outline" disabled={isBusy() || dirty} busy={isBusy("test")} busyText="正在发送…" onClick={() => void run("test", () => api("/admin/settings/notify/test", "POST", {}), "测试通知已发出", { wait: { label: "正在发送测试通知", max: 15 } })}>
               发送测试通知
             </Button>
           )}
           <ActionsWait wait={waitFor("test")} />
         </div>
+        {dirty && <small className="text-[var(--weir-ink-3)]">未保存；先保存，再测试。</small>}
         {save.error && <Notice tone="bad">{save.error}</Notice>}
       </Form>
     </Section>
@@ -189,6 +210,7 @@ function NotifyForm({ value, saved }: { value: NotifyView; saved: () => void }) 
 }
 
 interface WebdavView { url: string; username: string; password_set: boolean; keep: number; auto: boolean; hours: number; last_run_at?: string | null; last_error?: string }
+interface WebdavFile { name: string; size: number; modified?: string }
 interface ImportStats { sources: number; nodes: number; profiles: number; templates: number; skipped: string[] | null }
 
 export function BackupCard() {
@@ -265,7 +287,7 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
   const restoreForm = useRef<HTMLFormElement>(null);
   const [f, setF] = useState({ url: value.url, username: value.username, password: "", keep: String(value.keep), auto: value.auto, hours: String(value.hours) });
   const [re, setRe] = useState(emptyReauth);
-  const [files, setFiles] = useState<string[] | null>(null);
+  const [files, setFiles] = useState<WebdavFile[] | null>(null);
   const [stats, setStats] = useState<ImportStats | null>(null);
   const set = (p: Partial<typeof f>) => setF({ ...f, ...p });
   const save = useFormAction(() => api("/admin/backup/webdav", "PUT", { ...f, keep: Number(f.keep) || 10, hours: Number(f.hours) || 24 }), {
@@ -320,9 +342,9 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
           <Form ref={restoreForm} busy={restore.busy} errors={restore.errors} onSubmit={() => undefined}>
             <Reauth value={re} onChange={setRe} reason="从备份导入要验证管理员身份。" />
             <ul className="stack">
-              {files.map((name) => (
-                <li key={name} className="flex items-center justify-between gap-2">
-                  <code className="text-meta">{name}</code>
+              {files.map((file) => (
+                <li key={file.name} className="flex items-center justify-between gap-2">
+                  <span className="min-w-0"><code className="text-meta">{file.name}</code><small className="block text-[var(--weir-ink-3)]">{file.modified || "时间未知"} · {file.size ? `${Math.round(file.size / 1024)} KiB` : "大小未知"}</small></span>
                   <Button
                     type="button"
                     size="sm"
@@ -331,12 +353,12 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
                     onClick={async () => {
                       // 导入需要当前密码：未填写时在密码栏下提示，不弹确认框
                       if (!restoreForm.current?.reportValidity()) return;
-                      if (!(await confirm({ title: `从 ${name} 导入？`, description: "只新增，不删除现有数据。", confirmText: "导入" }))) return;
-                      target.current = name;
-                      setRestoring(name);
+                      if (!(await confirm({ title: `从 ${file.name} 导入？`, description: "只新增，不删除现有数据。", confirmText: "导入" }))) return;
+                      target.current = file.name;
+                      setRestoring(file.name);
                       void restore.submit();
                     }}
-                    busy={restore.busy && restoring === name}
+                    busy={restore.busy && restoring === file.name}
                     busyText="正在导入…"
                   >
                     导入这份
@@ -360,6 +382,7 @@ export function APITokensCard() {
   const [name, setName] = useState("");
   const [re, setRe] = useState(emptyReauth);
   const [created, setCreated] = useState("");
+  const [open, setOpen] = useState(false);
   const { run, isBusy } = useRowAction<number>({ refetch: q.refetch });
   const create = useReauthAction(() => api("/admin/api-tokens", "POST", { name: name.trim(), ...re }) as Promise<{ token: string }>, {
     ok: "已创建",
@@ -367,6 +390,7 @@ export function APITokensCard() {
     onSuccess: (r) => {
       setCreated(r.token);
       setName("");
+      setOpen(true);
     },
   });
   return (
@@ -381,7 +405,7 @@ export function APITokensCard() {
             <li key={t.id} className="flex items-center justify-between gap-2">
               <span>
                 {t.name}
-                <small className="block text-[var(--weir-ink-3)]">创建 {date(t.created_at)} · 最近使用 {date(t.last_used_at)}</small>
+                <small className="block text-[var(--weir-ink-3)]">创建 {date(t.created_at)} · 最近使用 {t.last_used_at ? date(t.last_used_at) : "从未使用"}</small>
               </span>
               <Button
                 size="icon-sm"
@@ -398,20 +422,19 @@ export function APITokensCard() {
           ))}
         </ul>
       )}
-      {created && (
-        <CopyField label="新令牌" value={created} />
-      )}
-      {created && <Notice role="status">令牌只显示这一次，请现在复制保存。</Notice>}
-      <Form busy={create.busy} errors={create.errors} onSubmit={() => void create.submit()}>
-        <Field label="新令牌名称" customError={name && !name.trim() ? "请输入新令牌名称" : ""}>
-          <Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
-        </Field>
-        <Reauth value={re} onChange={setRe} />
-        <div className="actions">
-          <Button type="submit" disabled={create.busy} busy={create.busy} busyText="正在创建…">创建令牌</Button>
-        </div>
-        {create.error && <Notice tone="bad">{create.error}</Notice>}
-      </Form>
+      <Button onClick={() => setOpen(true)}>新建令牌</Button>
+      <Dialog open={open} onOpenChange={(v) => !v && !create.busy && setOpen(false)}>
+        <DialogContent>
+          <DialogTitle>{created ? "令牌已创建" : "新建令牌"}</DialogTitle>
+          <DialogDescription>{created ? "令牌只显示这一次，请复制保存后确认关闭。" : "令牌只能访问订阅数据接口。"}</DialogDescription>
+          {created ? <CopyField label="新令牌" value={created} /> : <Form busy={create.busy} errors={create.errors} onSubmit={() => void create.submit()}>
+            <Field label="新令牌名称" customError={name && !name.trim() ? "请输入新令牌名称" : ""}><Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} /></Field>
+            <Reauth value={re} onChange={setRe} />
+            <DialogFooter error={create.error}><Button type="button" variant="outline" disabled={create.busy} onClick={() => setOpen(false)}>取消</Button><Button type="submit" disabled={create.busy} busy={create.busy} busyText="正在创建…">创建令牌</Button></DialogFooter>
+          </Form>}
+          {created && <DialogFooter><Button onClick={() => { setCreated(""); setRe(emptyReauth); setOpen(false); }}>我已保存</Button></DialogFooter>}
+        </DialogContent>
+      </Dialog>
     </Section>
   );
 }

@@ -28,6 +28,7 @@ import (
 )
 
 var helperKernels = []string{"xray", "sing-box"}
+var installableKernels = []string{"xray", "sing-box", "mihomo"}
 var safeVer = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$`)
 
 // ApplyRequest 是 Agent 交给辅助程序的一次整体应用：每个内核的版本与配置（nil 表示停止该内核）。
@@ -142,6 +143,15 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 
 func known(name string) bool { return name == "xray" || name == "sing-box" }
 
+func installable(name string) bool {
+	for _, kernel := range installableKernels {
+		if name == kernel {
+			return true
+		}
+	}
+	return false
+}
+
 func sumOf(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToString(s[:]) }
 
 // setCenter 只改设备配置里的中心地址，设备 ID 与私钥不变；新地址必须是 HTTPS。
@@ -167,7 +177,7 @@ func (h *Helper) setCenter(w http.ResponseWriter, r *http.Request) {
 
 func (h *Helper) installKernel(w http.ResponseWriter, r *http.Request) {
 	name, version, want := r.Header.Get("X-Kernel"), r.Header.Get("X-Version"), r.Header.Get("X-SHA256")
-	if !known(name) || !safeVer.MatchString(version) || len(want) != 64 {
+	if !installable(name) || !safeVer.MatchString(version) || len(want) != 64 {
 		writeJSON(w, 400, ApplyResult{Error: "invalid kernel reference"})
 		return
 	}
@@ -193,7 +203,7 @@ func (h *Helper) installed() map[string][]string {
 	out := map[string][]string{}
 	entries, _ := os.ReadDir(h.P.KernelsDir)
 	for _, e := range entries {
-		for _, name := range helperKernels {
+		for _, name := range installableKernels {
 			if v := strings.TrimPrefix(e.Name(), name+"-"); v != e.Name() && !strings.HasSuffix(v, ".new") && safeVer.MatchString(v) {
 				out[name] = append(out[name], v)
 			}

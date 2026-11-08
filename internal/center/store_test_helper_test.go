@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -20,7 +21,22 @@ func testStore(t *testing.T, dir string) map[string]any {
 	if os.Getenv("WEIR_CENTER_STORE") != "postgres" {
 		return map[string]any{"driver": "sqlite", "sqlite_path": filepath.Join(dir, "weir.db")}
 	}
-	admin, err := sql.Open("pgx", "postgres://weir:local-test-only@127.0.0.1:25432/weir?sslmode=disable")
+	host := os.Getenv("WEIR_TEST_HOST")
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	port := 25432
+	if raw := os.Getenv("WEIR_TEST_PG_PORT"); raw != "" {
+		var err error
+		if port, err = strconv.Atoi(raw); err != nil {
+			t.Fatal(err)
+		}
+	}
+	redisAddr := os.Getenv("WEIR_TEST_REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = host + ":26379"
+	}
+	admin, err := sql.Open("pgx", fmt.Sprintf("postgres://weir:local-test-only@%s:%d/weir?sslmode=disable", host, port))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +44,7 @@ func testStore(t *testing.T, dir string) map[string]any {
 	if _, err = admin.Exec("CREATE DATABASE " + name); err != nil {
 		t.Fatal(err)
 	}
-	rdb := redis.NewClient(&redis.Options{Addr: "127.0.0.1:26379", Username: "weir", Password: "local-test-only"})
+	rdb := redis.NewClient(&redis.Options{Addr: redisAddr, Username: "weir", Password: "local-test-only"})
 	flush := func() {
 		ctx := context.Background()
 		iter := rdb.Scan(ctx, 0, "weir:*", 500).Iterator()
@@ -45,6 +61,6 @@ func testStore(t *testing.T, dir string) map[string]any {
 		admin.Close()
 	})
 	return map[string]any{"driver": "postgres",
-		"postgres": map[string]any{"host": "127.0.0.1", "port": 25432, "user": "weir", "password": "local-test-only", "database": name, "ssl_mode": "disable"},
-		"redis":    map[string]any{"address": "127.0.0.1:26379", "username": "weir", "password": "local-test-only"}}
+		"postgres": map[string]any{"host": host, "port": port, "user": "weir", "password": "local-test-only", "database": name, "ssl_mode": "disable"},
+		"redis":    map[string]any{"address": redisAddr, "username": "weir", "password": "local-test-only"}}
 }

@@ -88,7 +88,7 @@ func TestGatePairConfigMeterAndRevoke(t *testing.T) {
 		t.Fatal(err)
 	}
 	g := pairFakeGate(t, admin)
-	if code, _ := g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 2, Version: "test", Hostname: "hk", Arch: "amd64", ListeningPorts: []contracts.ListeningPort{{Port: 54321, Proto: "tcp", Process: "x-ui"}}}); code != 200 {
+	if code, _ := g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 3, Version: "test", Hostname: "hk", Arch: "amd64", ListeningPorts: []contracts.ListeningPort{{Port: 54321, Proto: "tcp", Process: "x-ui"}}}); code != 200 {
 		t.Fatalf("heartbeat = %d", code)
 	}
 	gate, _ := s.Store.Ent.Gate.Get(ctx, int(g.id))

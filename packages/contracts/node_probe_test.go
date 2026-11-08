@@ -2,26 +2,24 @@ package contracts
 
 import "testing"
 
-func TestNodeTestClientDependencyGraph(t *testing.T) {
-	shadow := map[string]any{"type": "shadowtls", "tag": "tls", "server": "example.com", "server_port": 443}
-	ss := map[string]any{"type": "shadowsocks", "tag": "ss", "detour": "tls"}
-	c := NodeTestClient{Target: "ss", Outbounds: []map[string]any{shadow, ss}}
-	if err := c.Loopback(12345); err != nil {
-		t.Fatal(err)
+func TestNodeTestClientLoopback(t *testing.T) {
+	for _, kind := range []string{"vless", "ss", "wireguard"} {
+		t.Run(kind, func(t *testing.T) {
+			p := map[string]any{"name": "test", "type": kind, "server": "example.com", "port": 443, "servername": "sni.example.com", "plugin-opts": map[string]any{"host": "sni.example.com"}}
+			c := NodeTestClient{Target: "test", Proxies: []map[string]any{p}}
+			if err := c.Loopback(12345); err != nil {
+				t.Fatal(err)
+			}
+			if p["server"] != "127.0.0.1" || p["port"] != 12345 || p["servername"] != "sni.example.com" {
+				t.Fatal(p)
+			}
+			cfg := c.Config(12346)
+			if cfg["allow-lan"] != false || cfg["bind-address"] != "127.0.0.1" {
+				t.Fatal(cfg)
+			}
+		})
 	}
-	if ss["detour"] != "tls" || ss["server"] != nil || shadow["server"] != "127.0.0.1" || shadow["server_port"] != 12345 {
-		t.Fatal("dependency graph corrupted")
-	}
-	peer := map[string]any{"address": "example.com", "port": 443, "public_key": "keep"}
-	c = NodeTestClient{Target: "wg", Endpoints: []map[string]any{{"tag": "wg", "type": "wireguard", "peers": []any{peer}}}}
-	if err := c.Loopback(12346); err != nil {
-		t.Fatal(err)
-	}
-	if peer["address"] != "127.0.0.1" || peer["port"] != 12346 || peer["public_key"] != "keep" {
-		t.Fatal("peer corrupted")
-	}
-	c = NodeTestClient{Target: "ss", Outbounds: []map[string]any{ss}}
-	if c.Loopback(12345) == nil {
-		t.Fatal("missing dependency accepted")
+	if (NodeTestClient{}).Loopback(12345) == nil {
+		t.Fatal("缺少代理不能测试")
 	}
 }

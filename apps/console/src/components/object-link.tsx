@@ -5,8 +5,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import { ObjectLink as UIObjectLink, useDialogParam as useUIDialogParam, useStringDialogParam as useUIStringDialogParam, useToast } from "@weir/ui";
 import { focusValue, objectHref, objectLabels, objectKey, type ObjectRef } from "../lib/objects";
 
-export function ObjectLink({ to, children, className }: { to: ObjectRef; children?: ReactNode; className?: string }) {
-  const href = objectHref(to);
+export function ObjectLink({ to, children, className, href: target }: { to: ObjectRef; children?: ReactNode; className?: string; href?: string }) {
+  const href = target ?? objectHref(to);
   return (
     <UIObjectLink href={href} kind={objectLabels[to.type]} name={to.name ?? objectKey(to)} className={className} render={<Link to={href} />}>
       {children ?? to.name ?? `${objectLabels[to.type]} ${objectKey(to)}`}

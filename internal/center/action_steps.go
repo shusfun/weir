@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/shusfun/weir/internal/ai"
+	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/link"
 	"github.com/shusfun/weir/internal/store/ent/user"
 )
@@ -41,7 +42,7 @@ func call(actor *gin.Context, handler gin.HandlerFunc, method string, params gin
 		}
 	}
 	c.Request, c.Params = req, params
-	for _, k := range []string{"user_id", "account", "role", "session_key", "session"} {
+	for _, k := range []string{"user_id", "account", "role", "session_key", "session", "trace_id", "request_id", "span_id"} {
 		if v, ok := actor.Get(k); ok {
 			c.Set(k, v)
 		}
@@ -71,6 +72,23 @@ func systemActor(ctx context.Context) *gin.Context {
 	c.Request = httptest.NewRequest("GET", "/internal", nil).WithContext(ctx)
 	c.Request.RemoteAddr = "127.0.0.1:0"
 	return c
+}
+
+// MCP 的只读与预演只向管理员开放；使用仍有效的管理员身份复用手动接口的归属检查。
+func (s *Server) systemActor(ctx context.Context) (*gin.Context, error) {
+	u, err := s.Store.Ent.User.Query().Where(user.RoleEQ(user.RoleAdmin), user.EnabledEQ(true)).Order(ent.Asc(user.FieldID)).First(ctx)
+	if err != nil {
+		return nil, err
+	}
+	c := systemActor(ctx)
+	c.Set("account", u)
+	c.Set("user_id", u.ID)
+	c.Set("role", string(u.Role))
+	if trace, ok := ctx.Value(httpTraceKey{}).(httpTrace); ok {
+		c.Set("trace_id", trace.ID)
+		c.Set("span_id", trace.Span)
+	}
+	return c, nil
 }
 
 const dryRunKey = "weir_dry_run"

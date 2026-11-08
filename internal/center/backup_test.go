@@ -114,7 +114,7 @@ func TestSubscriptionBackupImportExportAndWebdav(t *testing.T) {
 		t.Fatalf("keep=1 must prune old backups: %v", list)
 	}
 	mustJSON(t, admin, "POST", "/api/v1/admin/backup/webdav/restore", map[string]any{"file": "../etc/passwd", "password": "Passw0rd"}, 400)
-	res := mustJSON(t, admin, "POST", "/api/v1/admin/backup/webdav/restore", map[string]any{"file": list[0], "password": "Passw0rd"}, 200)
+	res := mustJSON(t, admin, "POST", "/api/v1/admin/backup/webdav/restore", map[string]any{"file": list[0].(map[string]any)["name"], "password": "Passw0rd"}, 200)
 	if res["profiles"].(float64) != 2 {
 		t.Fatalf("restore = %v", res)
 	}

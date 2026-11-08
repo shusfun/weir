@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Button } from "@weir/ui";
+import { Button, JobLine } from "@weir/ui";
 import { FlaskConical } from "lucide-react";
 import { api } from "../api";
 import { queryClient } from "../lib/query";
@@ -11,8 +11,7 @@ import type { Gate, NodeItem, NodeTest, NodeTestCheck } from "../lib/core";
 type RequestState = { submitting?: boolean; jobId?: string; startedAt?: number; error?: string };
 
 function useNodeTest(n: NodeItem) {
-  const key = ["node-test-ui", n.id];
-  const local = useQuery<RequestState>({ queryKey: key, queryFn: () => ({}), enabled: false, initialData: {} }).data;
+  const [local, setLocal] = useState<RequestState>({});
   const running = n.test?.status === "running" ? n.test : undefined;
   const id = running && (!local.jobId || running.job_id !== local.jobId && Date.parse(running.at) > (local.startedAt ?? 0)) ? running.job_id : local.jobId;
   const job = useQuery<Job>({ queryKey: jobKey(id ?? null), queryFn: () => fetchJob(id!), enabled: !!id, refetchInterval: jobRefetch, retry: jobRetry });
@@ -30,19 +29,19 @@ function useNodeTest(n: NodeItem) {
   const busy = !!local.submitting || (!lost && !!id && (!job.data || status === "running"));
   const error = (job.data?.result ? "" : local.error) || (lost ? jobGoneText : job.error instanceof Error ? job.error.message : "") || (status === "cancelled" ? "测试已取消" : "");
   const run = async () => {
-    if (busy || queryClient.getQueryData<RequestState>(key)?.submitting) return;
-    queryClient.setQueryData(key, { submitting: true });
+    if (busy || local.submitting) return;
+    setLocal({ submitting: true, error: "" });
     try {
-      await api(`/admin/nodes/${n.id}/test`, "POST", {}, { onJob: (j) => queryClient.setQueryData(key, { submitting: false, jobId: j.id, startedAt: Date.parse(j.started_at) }) });
+      await api(`/admin/nodes/${n.id}/test`, "POST", {}, { onJob: (j) => setLocal({ submitting: false, jobId: j.id, startedAt: Date.parse(j.started_at) }) });
     } catch (e) {
-      queryClient.setQueryData<RequestState>(key, (old) => ({ ...old, error: e instanceof Error ? e.message : String(e) }));
+      setLocal((old) => ({ ...old, error: e instanceof Error ? e.message : String(e) }));
     } finally {
-      queryClient.setQueryData<RequestState>(key, (old) => ({ ...old, submitting: false }));
+      setLocal((old) => ({ ...old, submitting: false }));
       void queryClient.invalidateQueries({ queryKey: ["nodes"] });
       void queryClient.invalidateQueries({ queryKey: ["node"] });
     }
   };
-  return { busy, error, result, step: job.data?.step, run };
+  return { busy, error, result, step: job.data?.step, job: job.data, run };
 }
 
 const checkText = (c: NodeTestCheck) => ({ passed: "通过", failed: "失败", unknown: "未知", not_applicable: "不适用" })[c.status];
@@ -51,17 +50,17 @@ export function NodeTestControl({ node, gate, detail = false }: { node: NodeItem
   const t = useNodeTest(node);
   const disabledReason = !node.enabled ? "节点已停用" : !gate?.online ? "VPS 离线" : gate.status !== "active" ? "VPS 已撤销" : "";
   const r = t.result;
-  const title = t.error || (t.busy ? t.step || "正在提交节点测试" : r?.why) || "使用有效用户凭据实测，流量计入该用户用量";
   const tone = t.error || r?.status === "failed" ? "text-[var(--weir-bad-ink)]" : r?.status === "passed" ? "text-[var(--weir-ok-ink)]" : "text-[var(--weir-ink-3)]";
   return (
     <div className={"flex min-w-0 items-start gap-2 " + (detail ? "w-full" : "")}>
-      <Button className="order-last" size="icon-sm" variant="ghost" busy={t.busy} busyText={`正在测试 ${node.name}`} disabled={!!disabledReason}
-        title={disabledReason || "实测节点"} aria-label={`实测节点 ${node.name}`} onClick={() => void t.run()}><FlaskConical /></Button>
-      <div className={"grid h-16 min-w-0 flex-1 content-center text-meta " + tone} role="status" aria-live="polite" aria-atomic="true" title={title}>
+      <Button className="order-last" size={detail ? "sm" : "icon-sm"} variant={detail ? "outline" : "ghost"} busy={t.busy} busyText={`正在测试 ${node.name}`} disabled={!!disabledReason}
+        title={disabledReason || "实测节点"} aria-label={`实测节点 ${node.name}`} onClick={() => void t.run()}>{detail ? <><FlaskConical />实测</> : <FlaskConical />}</Button>
+      <div className={"grid min-h-24 min-w-0 flex-1 content-center text-meta " + tone} role="status" aria-live="polite" aria-atomic="true">
         <span className="block truncate">{t.busy ? "正在实测…" : t.error ? "实测未完成" : !r ? "尚未实测" : r.status === "passed" ? "实测通过" : r.status === "failed" ? "实测失败" : "实测未知"}
           {!t.busy && r && ` · TCP ${checkText(r.tcp)} · UDP ${checkText(r.udp)}`}</span>
         <span className="block truncate text-[var(--weir-ink-3)]">{t.busy ? t.step || "正在提交，等候中心任务" : r ? `${date(r.at)}${r.location === "colocated" ? " · 同机实测，外部可达性未知" : ""}` : "点击图标测试真实连接"}</span>
-        <span className="block truncate text-[var(--weir-ink-3)]">{t.busy ? "\u00a0" : t.error || r?.why || disabledReason || "\u00a0"}</span>
+        <span className="block h-12 overflow-y-auto whitespace-pre-wrap break-words text-[var(--weir-ink-3)]">{t.error || r?.why || disabledReason || "使用短时内部凭据实测，不计用户用量或速度样本"}</span>
+        {detail && <JobLine job={t.job} idle="尚未开始实测" note="内部测试不计用户用量" />}
       </div>
     </div>
   );

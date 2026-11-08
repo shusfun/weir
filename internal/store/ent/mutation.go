@@ -3552,6 +3552,8 @@ type CredentialMutation struct {
 	uuid               *string
 	password           *string
 	internal           *bool
+	purpose            *string
+	expires_at         *time.Time
 	probe_parent_id    *int
 	addprobe_parent_id *int
 	meter_epoch        *string
@@ -4075,6 +4077,91 @@ func (m *CredentialMutation) ResetInternal() {
 	m.internal = nil
 }
 
+// SetPurpose sets the "purpose" field.
+func (m *CredentialMutation) SetPurpose(s string) {
+	m.purpose = &s
+}
+
+// Purpose returns the value of the "purpose" field in the mutation.
+func (m *CredentialMutation) Purpose() (r string, exists bool) {
+	v := m.purpose
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPurpose returns the old "purpose" field's value of the Credential entity.
+// If the Credential object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CredentialMutation) OldPurpose(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPurpose is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPurpose requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPurpose: %w", err)
+	}
+	return oldValue.Purpose, nil
+}
+
+// ResetPurpose resets all changes to the "purpose" field.
+func (m *CredentialMutation) ResetPurpose() {
+	m.purpose = nil
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (m *CredentialMutation) SetExpiresAt(t time.Time) {
+	m.expires_at = &t
+}
+
+// ExpiresAt returns the value of the "expires_at" field in the mutation.
+func (m *CredentialMutation) ExpiresAt() (r time.Time, exists bool) {
+	v := m.expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExpiresAt returns the old "expires_at" field's value of the Credential entity.
+// If the Credential object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CredentialMutation) OldExpiresAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExpiresAt: %w", err)
+	}
+	return oldValue.ExpiresAt, nil
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (m *CredentialMutation) ClearExpiresAt() {
+	m.expires_at = nil
+	m.clearedFields[credential.FieldExpiresAt] = struct{}{}
+}
+
+// ExpiresAtCleared returns if the "expires_at" field was cleared in this mutation.
+func (m *CredentialMutation) ExpiresAtCleared() bool {
+	_, ok := m.clearedFields[credential.FieldExpiresAt]
+	return ok
+}
+
+// ResetExpiresAt resets all changes to the "expires_at" field.
+func (m *CredentialMutation) ResetExpiresAt() {
+	m.expires_at = nil
+	delete(m.clearedFields, credential.FieldExpiresAt)
+}
+
 // SetProbeParentID sets the "probe_parent_id" field.
 func (m *CredentialMutation) SetProbeParentID(i int) {
 	m.probe_parent_id = &i
@@ -4412,7 +4499,7 @@ func (m *CredentialMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *CredentialMutation) Fields() []string {
-	fields := make([]string, 0, 14)
+	fields := make([]string, 0, 16)
 	if m.node_id != nil {
 		fields = append(fields, credential.FieldNodeID)
 	}
@@ -4436,6 +4523,12 @@ func (m *CredentialMutation) Fields() []string {
 	}
 	if m.internal != nil {
 		fields = append(fields, credential.FieldInternal)
+	}
+	if m.purpose != nil {
+		fields = append(fields, credential.FieldPurpose)
+	}
+	if m.expires_at != nil {
+		fields = append(fields, credential.FieldExpiresAt)
 	}
 	if m.probe_parent_id != nil {
 		fields = append(fields, credential.FieldProbeParentID)
@@ -4479,6 +4572,10 @@ func (m *CredentialMutation) Field(name string) (ent.Value, bool) {
 		return m.Password()
 	case credential.FieldInternal:
 		return m.Internal()
+	case credential.FieldPurpose:
+		return m.Purpose()
+	case credential.FieldExpiresAt:
+		return m.ExpiresAt()
 	case credential.FieldProbeParentID:
 		return m.ProbeParentID()
 	case credential.FieldMeterEpoch:
@@ -4516,6 +4613,10 @@ func (m *CredentialMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldPassword(ctx)
 	case credential.FieldInternal:
 		return m.OldInternal(ctx)
+	case credential.FieldPurpose:
+		return m.OldPurpose(ctx)
+	case credential.FieldExpiresAt:
+		return m.OldExpiresAt(ctx)
 	case credential.FieldProbeParentID:
 		return m.OldProbeParentID(ctx)
 	case credential.FieldMeterEpoch:
@@ -4592,6 +4693,20 @@ func (m *CredentialMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetInternal(v)
+		return nil
+	case credential.FieldPurpose:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPurpose(v)
+		return nil
+	case credential.FieldExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExpiresAt(v)
 		return nil
 	case credential.FieldProbeParentID:
 		v, ok := value.(int)
@@ -4761,6 +4876,9 @@ func (m *CredentialMutation) ClearedFields() []string {
 	if m.FieldCleared(credential.FieldUserID) {
 		fields = append(fields, credential.FieldUserID)
 	}
+	if m.FieldCleared(credential.FieldExpiresAt) {
+		fields = append(fields, credential.FieldExpiresAt)
+	}
 	if m.FieldCleared(credential.FieldProbeParentID) {
 		fields = append(fields, credential.FieldProbeParentID)
 	}
@@ -4789,6 +4907,9 @@ func (m *CredentialMutation) ClearField(name string) error {
 		return nil
 	case credential.FieldUserID:
 		m.ClearUserID()
+		return nil
+	case credential.FieldExpiresAt:
+		m.ClearExpiresAt()
 		return nil
 	case credential.FieldProbeParentID:
 		m.ClearProbeParentID()
@@ -4827,6 +4948,12 @@ func (m *CredentialMutation) ResetField(name string) error {
 		return nil
 	case credential.FieldInternal:
 		m.ResetInternal()
+		return nil
+	case credential.FieldPurpose:
+		m.ResetPurpose()
+		return nil
+	case credential.FieldExpiresAt:
+		m.ResetExpiresAt()
 		return nil
 	case credential.FieldProbeParentID:
 		m.ResetProbeParentID()

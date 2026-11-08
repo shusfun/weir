@@ -1,21 +1,17 @@
-import { useEffect } from "react";
 import { useQuery } from "../lib/query";
-import { api } from "../api";
 
 export function useLogo() {
-  return useQuery({ queryKey: ["logo"], queryFn: () => api("/logo") as Promise<{ data: string }> });
+  return useQuery({ queryKey: ["logo"], queryFn: async () => {
+    const res = await fetch("/api/v1/logo", { credentials: "same-origin" });
+    if (res.status === 404) return { src: "", configured: false };
+    if (!res.ok) throw new Error("Logo 加载失败");
+    return { src: "/api/v1/logo", configured: true };
+  } });
 }
 
 export function BrandMark({ className }: { className?: string }) {
   const logo = useLogo();
-  useEffect(() => {
-    document.querySelector('link[rel="icon"]')?.remove();
-    if (logo.data?.data) {
-      const icon = document.createElement("link");
-      icon.rel = "icon";
-      icon.href = logo.data.data;
-      document.head.appendChild(icon);
-    }
-  }, [logo.data?.data]);
-  return logo.data?.data ? <span className={className}><img src={logo.data.data} alt="" className="block size-full object-contain" /></span> : null;
+  return <span className={className ?? "block size-8"} aria-label="Weir">
+    {logo.data?.src ? <img src={logo.data.src} alt="" className="block size-full object-contain" /> : <span className="grid size-full place-items-center rounded-[var(--weir-radius)] bg-[var(--weir-accent)] text-sm font-semibold text-white">W</span>}
+  </span>;
 }
