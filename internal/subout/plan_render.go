@@ -191,7 +191,10 @@ func clashPlan(items []Item, plan *Plan) ([]byte, error) {
 				if g.Kind != "select" {
 					health = map[string]any{"enable": true, "url": g.testURL(), "interval": g.interval(), "lazy": false}
 				}
-				providers[key] = map[string]any{"type": "http", "url": plan.Providers(g.Provider), "interval": plan.interval(), "health-check": health}
+				// 可见选择组与内部自动组共用列表，健康检查由自动组决定。
+				if providers[key] == nil || g.Kind != "select" {
+					providers[key] = map[string]any{"type": "http", "url": plan.Providers(g.Provider), "interval": plan.interval(), "health-check": health}
+				}
 				m["use"] = []string{key}
 			}
 		}

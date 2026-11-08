@@ -55,6 +55,7 @@ func TestProxyGroupsRealKernels(t *testing.T) {
 	plan := &subout.Plan{Groups: []contracts.ProxyGroup{{ID: 1, Name: "主备", Kind: "fallback", Members: []string{"node:1", "chain:2"}, IntervalSeconds: 30}}, Rules: []subout.Rule{{Kind: "geoip", Values: []string{"cn"}, Target: "direct"}}, TestURL: "http://probe.example.test/"}
 	items = append(items, subout.Item{Link: fmt.Sprintf("socks5://127.0.0.1:%d#美东", a), Ref: "node:3"}, subout.Item{Link: fmt.Sprintf("socks5://127.0.0.1:%d#美东", b), Ref: "node:6"})
 	plan.Groups = append(plan.Groups, contracts.ProxyGroup{ID: 2, Name: "手动", Kind: "select", Members: []string{"node:3", "node:6"}})
+	plan.Groups = append(plan.Groups, contracts.ProxyGroup{ID: 3, Name: "链式", Kind: "url-test", Members: []string{"node:3", "node:6"}, IntervalSeconds: 60, ToleranceMS: 50})
 
 	for _, target := range []string{"clash", "singbox"} {
 		body, _, err := subout.RenderPlan(items, target, plan)
@@ -130,12 +131,12 @@ func TestProxyGroupsRealKernels(t *testing.T) {
 	}
 	eventually(t, 15*time.Second, "PROXY 默认与顺序", func() bool {
 		g := get("/proxies/" + url.PathEscape("PROXY"))
-		return g != nil && g["now"] == "自动选择" && reflect.DeepEqual(g["all"], []any{"自动选择", "主备", "手动"})
+		return g != nil && g["now"] == "自动选择" && reflect.DeepEqual(g["all"], []any{"自动选择", "主备", "手动", "链式"})
 	})
-	if g := get("/proxies/" + url.PathEscape("主备")); !reflect.DeepEqual(g["all"], []any{"Primary", "Secondary"}) {
+	if g := get("/proxies/" + url.PathEscape("主备")); g["hidden"] != false || g["now"] != "主备 · 主备切换" || !reflect.DeepEqual(g["all"], []any{"主备 · 主备切换", "Primary", "Secondary"}) {
 		t.Fatalf("主备顺序=%v", g)
 	}
-	for _, name := range []string{"自动选择", "主备"} {
+	for _, name := range []string{"自动选择", "主备 · 主备切换", "链式 · 自动选择"} {
 		if group := get("/proxies/" + url.PathEscape(name)); group["hidden"] != true {
 			t.Fatalf("子组未隐藏：%s %v", name, group)
 		}
@@ -173,8 +174,36 @@ func TestProxyGroupsRealKernels(t *testing.T) {
 	if err != nil || string(gotBody) != "secondary" {
 		t.Fatalf("手动节点未生效：%q %v", gotBody, err)
 	}
+	chain := get("/proxies/" + url.PathEscape("链式"))
+	if chain["hidden"] != false || chain["type"] != "Selector" || chain["now"] != "链式 · 自动选择" || !reflect.DeepEqual(chain["all"], []any{"链式 · 自动选择", members[0], members[1]}) {
+		t.Fatalf("自动组没有可见手动入口：%v", chain)
+	}
+	choose("PROXY", "链式")
+	choose("链式", members[1].(string))
+	resp, err = traffic.Get("http://probe.example.test/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotBody, err = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil || string(gotBody) != "secondary" {
+		t.Fatalf("自动组中手动指定节点未生效：%q %v", gotBody, err)
+	}
+	choose("链式", "链式 · 自动选择")
+	if g := get("/proxies/" + url.PathEscape("链式")); g["now"] != "链式 · 自动选择" {
+		t.Fatalf("不能恢复自动选择：%v", g)
+	}
+	resp, err = traffic.Get("http://probe.example.test/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotBody, err = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil || (string(gotBody) != "primary" && string(gotBody) != "secondary") {
+		t.Fatalf("恢复自动后无有效流量：%q %v", gotBody, err)
+	}
 	choose("PROXY", "自动选择")
-	eventually(t, 10*time.Second, "主用可用", func() bool { return get("/proxies/" + url.PathEscape("主备"))["now"] == "Primary" })
+	eventually(t, 10*time.Second, "主用可用", func() bool { return get("/proxies/" + url.PathEscape("主备 · 主备切换"))["now"] == "Primary" })
 	primary.Close()
 	// 触发对应集合健康检查并核对内核实际切到备用。
 	resp, err = client.Get("http://" + controller + "/providers/proxies/p-group-1/healthcheck")
@@ -182,7 +211,17 @@ func TestProxyGroupsRealKernels(t *testing.T) {
 		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 	}
-	eventually(t, 15*time.Second, "故障切换备用", func() bool { return get("/proxies/" + url.PathEscape("主备"))["now"] == "Secondary" })
+	eventually(t, 15*time.Second, "故障切换备用", func() bool { return get("/proxies/" + url.PathEscape("主备 · 主备切换"))["now"] == "Secondary" })
+	choose("PROXY", "主备")
+	resp, err = traffic.Get("http://probe.example.test/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotBody, err = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil || string(gotBody) != "secondary" {
+		t.Fatalf("主备入口未保留自动切换流量：%q %v", gotBody, err)
+	}
 	mu.Lock()
 	plan.Groups[0].Members = []string{"chain:2", "node:1"}
 	mu.Unlock()
@@ -194,7 +233,7 @@ func TestProxyGroupsRealKernels(t *testing.T) {
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 	eventually(t, 10*time.Second, "集合刷新后成员重排", func() bool {
-		return reflect.DeepEqual(get("/proxies/" + url.PathEscape("主备"))["all"], []any{"Secondary", "Primary"})
+		return reflect.DeepEqual(get("/proxies/" + url.PathEscape("主备"))["all"], []any{"主备 · 主备切换", "Secondary", "Primary"}) && reflect.DeepEqual(get("/proxies/" + url.PathEscape("主备 · 主备切换"))["all"], []any{"Secondary", "Primary"})
 	})
 	t.Log("真实内核：配置加载、PROXY 默认、成员顺序、provider 刷新和故障转移通过")
 }

@@ -23,14 +23,17 @@ func testPlan() (*Plan, []Item) {
 func TestPlanLayout(t *testing.T) {
 	p, items := testPlan()
 	l := p.layout([]string{"HK", "JP", "US"}, items)
-	if len(l.Groups) != 3 || l.Groups[0].Name != "PROXY" || l.Groups[0].Kind != "select" || !reflect.DeepEqual(l.Groups[0].Members, []string{"自动选择", "主备", "HK"}) {
+	if len(l.Groups) != 4 || l.Groups[0].Name != "PROXY" || l.Groups[0].Kind != "select" || !reflect.DeepEqual(l.Groups[0].Members, []string{"自动选择", "主备", "HK"}) {
 		t.Fatalf("布局=%+v", l.Groups)
 	}
 	if !reflect.DeepEqual(l.Groups[1].Members, []string{"HK", "US"}) || !l.Groups[1].Hidden || l.Groups[1].IntervalSec != 60 || l.Groups[1].ToleranceMS != 50 {
 		t.Fatalf("自动选择=%+v", l.Groups[1])
 	}
-	if !l.Groups[2].Hidden || !reflect.DeepEqual(l.Groups[2].MemberRefs, []string{"chain:2", "node:3"}) {
+	if l.Groups[2].Hidden || l.Groups[2].Kind != "select" || !reflect.DeepEqual(l.Groups[2].MemberRefs, []string{"group:1:auto", "chain:2", "node:3"}) {
 		t.Fatal(l.Groups[2])
+	}
+	if !l.Groups[3].Hidden || l.Groups[3].Kind != "fallback" || !reflect.DeepEqual(l.Groups[3].MemberRefs, []string{"chain:2", "node:3"}) {
+		t.Fatal(l.Groups[3])
 	}
 	for i := range items {
 		items[i].Auto = false
@@ -69,94 +72,102 @@ func TestSameNameMembersKeepDistinctRefs(t *testing.T) {
 }
 
 func TestManualGroupVisibleInFormats(t *testing.T) {
-	p, items := testPlan()
-	p.Groups = []contracts.ProxyGroup{{ID: 1, Name: "手动", Kind: "select", Members: []string{"chain:2", "node:3"}}}
-	items[1].Link = strings.Replace(items[1].Link, "#JP", "#美东", 1)
-	items[2].Link = strings.Replace(items[2].Link, "#US", "#美东", 1)
-	for _, target := range []string{"clash", "mihomo", "singbox", "surge", "loon", "quanx", "egern"} {
-		t.Run(target, func(t *testing.T) {
-			body, _, err := RenderPlan(items, target, p)
-			if err != nil || !strings.Contains(string(body), "手动") {
-				t.Fatalf("手动分组输出失败：%s %v", body, err)
+	for _, kind := range []string{"select", "url-test", "fallback"} {
+		t.Run(kind, func(t *testing.T) {
+			p, items := testPlan()
+			p.Groups = []contracts.ProxyGroup{{ID: 1, Name: "手动", Kind: kind, Members: []string{"chain:2", "node:3"}, IntervalSeconds: 60, ToleranceMS: 50}}
+			memberCount := 2
+			if kind != "select" {
+				memberCount++
 			}
-			switch target {
-			case "clash", "mihomo", "egern":
-				var cfg map[string]any
-				if err := yaml.Unmarshal(body, &cfg); err != nil {
-					t.Fatal(err)
-				}
-				key, memberKey := "proxy-groups", "proxies"
-				if target == "egern" {
-					key, memberKey = "policy_groups", "policies"
-				}
-				found := false
-				for _, raw := range cfg[key].([]any) {
-					g := raw.(map[string]any)
-					if target == "egern" {
-						if g["select"] == nil {
-							continue
+			items[1].Link = strings.Replace(items[1].Link, "#JP", "#美东", 1)
+			items[2].Link = strings.Replace(items[2].Link, "#US", "#美东", 1)
+			for _, target := range []string{"clash", "mihomo", "singbox", "surge", "loon", "quanx", "egern"} {
+				t.Run(target, func(t *testing.T) {
+					body, _, err := RenderPlan(items, target, p)
+					if err != nil || !strings.Contains(string(body), "手动") {
+						t.Fatalf("手动分组输出失败：%s %v", body, err)
+					}
+					switch target {
+					case "clash", "mihomo", "egern":
+						var cfg map[string]any
+						if err := yaml.Unmarshal(body, &cfg); err != nil {
+							t.Fatal(err)
 						}
-						g = g["select"].(map[string]any)
-					}
-					if g["name"] != "手动" {
-						continue
-					}
-					members := g[memberKey].([]any)
-					if g["hidden"] != false || len(members) != 2 || members[0] == members[1] {
-						t.Fatalf("手动组不可见或同名成员丢失：%v", g)
-					}
-					found = true
-				}
-				if !found {
-					t.Fatal("缺少手动组")
-				}
-			case "singbox":
-				var cfg map[string]any
-				if err := json.Unmarshal(body, &cfg); err != nil {
-					t.Fatal(err)
-				}
-				found := false
-				for _, raw := range cfg["outbounds"].([]any) {
-					g := raw.(map[string]any)
-					if g["tag"] != "手动" {
-						continue
-					}
-					members := g["outbounds"].([]any)
-					if g["type"] != "selector" || len(members) != 2 || members[0] == members[1] {
-						t.Fatalf("手动选择丢失：%v", g)
-					}
-					found = true
-				}
-				if !found {
-					t.Fatal("缺少手动组")
-				}
-			default:
-				found := false
-				for _, line := range strings.Split(string(body), "\n") {
-					if strings.HasPrefix(line, "手动 = select") || strings.HasPrefix(line, "static=手动,") {
-						if strings.Contains(line, "hidden=true") {
-							t.Fatalf("手动分组不应隐藏：%s", line)
+						key, memberKey := "proxy-groups", "proxies"
+						if target == "egern" {
+							key, memberKey = "policy_groups", "policies"
 						}
-						members := strings.Split(line, ",")
-						if len(members) != 3 || strings.TrimSpace(members[1]) == strings.TrimSpace(members[2]) {
-							t.Fatalf("同名成员丢失：%s", line)
+						found := false
+						for _, raw := range cfg[key].([]any) {
+							g := raw.(map[string]any)
+							if target == "egern" {
+								if g["select"] == nil {
+									continue
+								}
+								g = g["select"].(map[string]any)
+							}
+							if g["name"] != "手动" {
+								continue
+							}
+							members := g[memberKey].([]any)
+							if g["hidden"] != false || len(members) != memberCount || members[len(members)-2] == members[len(members)-1] {
+								t.Fatalf("手动组不可见或同名成员丢失：%v", g)
+							}
+							found = true
 						}
-						found = true
+						if !found {
+							t.Fatal("缺少手动组")
+						}
+					case "singbox":
+						var cfg map[string]any
+						if err := json.Unmarshal(body, &cfg); err != nil {
+							t.Fatal(err)
+						}
+						found := false
+						for _, raw := range cfg["outbounds"].([]any) {
+							g := raw.(map[string]any)
+							if g["tag"] != "手动" {
+								continue
+							}
+							members := g["outbounds"].([]any)
+							if g["type"] != "selector" || len(members) != memberCount || members[len(members)-2] == members[len(members)-1] {
+								t.Fatalf("手动选择丢失：%v", g)
+							}
+							found = true
+						}
+						if !found {
+							t.Fatal("缺少手动组")
+						}
+					default:
+						found := false
+						for _, line := range strings.Split(string(body), "\n") {
+							if strings.HasPrefix(line, "手动 = select") || strings.HasPrefix(line, "static=手动,") {
+								if strings.Contains(line, "hidden=true") {
+									t.Fatalf("手动分组不应隐藏：%s", line)
+								}
+								members := strings.Split(line, ",")
+								if len(members) != memberCount+1 || strings.TrimSpace(members[len(members)-2]) == strings.TrimSpace(members[len(members)-1]) {
+									t.Fatalf("同名成员丢失：%s", line)
+								}
+								found = true
+							}
+						}
+						if !found {
+							t.Fatal("缺少手动组")
+						}
 					}
-				}
-				if !found {
-					t.Fatal("缺少手动组")
-				}
+				})
+			}
+			provider, err := ClashProvider(items, p, "group-1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got map[string][]map[string]any
+			if err := yaml.Unmarshal(provider, &got); err != nil || len(got["proxies"]) != 2 || got["proxies"][0]["name"] == got["proxies"][1]["name"] {
+				t.Fatalf("同名成员 provider 不完整：%s %v", provider, err)
 			}
 		})
-	}
-	provider, err := ClashProvider(items, p, "group-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got map[string][]map[string]any
-	if err := yaml.Unmarshal(provider, &got); err != nil || len(got["proxies"]) != 2 || got["proxies"][0]["name"] == got["proxies"][1]["name"] {
-		t.Fatalf("同名成员 provider 不完整：%s %v", provider, err)
 	}
 }
 
@@ -205,11 +216,11 @@ func TestRenderPlanFormats(t *testing.T) {
 					t.Fatal(text)
 				}
 			case "surge":
-				if !strings.Contains(text, "hidden=true") || !strings.Contains(text, "主备 = fallback") {
+				if !strings.Contains(text, "hidden=true") || !strings.Contains(text, "主备 · 主备切换 = fallback") || !strings.Contains(text, "主备 = select") {
 					t.Fatal(text)
 				}
 			case "loon":
-				if strings.Contains(text, "hidden=") || !strings.Contains(text, "主备 = fallback") {
+				if strings.Contains(text, "hidden=") || !strings.Contains(text, "主备 · 主备切换 = fallback") || !strings.Contains(text, "主备 = select") {
 					t.Fatal(text)
 				}
 			case "quanx":

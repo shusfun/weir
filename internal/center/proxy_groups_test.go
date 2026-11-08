@@ -81,7 +81,14 @@ func TestProxyGroupsHTTPFlow(t *testing.T) {
 	if w.Code != 200 || w.Header().Get("X-Trace-Id") != trace {
 		t.Fatal(w.Code, w.Body)
 	}
-	id := int(decode(t, w)["id"].(float64))
+	created := decode(t, w)
+	id := int(created["id"].(float64))
+	layout := created["layout"].([]any)
+	selection := layout[2].(map[string]any)
+	automatic := layout[3].(map[string]any)
+	if selection["kind"] != "select" || selection["hidden"] != false || !reflect.DeepEqual(selection["member_refs"], []any{"group:" + itoa(id) + ":auto", "node:" + itoa(nid)}) || automatic["kind"] != "url-test" || automatic["hidden"] != true {
+		t.Fatalf("默认延迟组必须同时提供自动和手动选择：%v", layout)
+	}
 	p := loadPolicy(s.Store.Ent.User.GetX(ctx, uid))
 	if p.Revision != 1 || p.Groups[0].Kind != "url-test" || p.Groups[0].ToleranceMS != 50 {
 		t.Fatal(p)

@@ -104,6 +104,36 @@ func (p *Plan) reserved(used map[string]bool) {
 	for _, g := range p.Groups {
 		used[CleanLabel(g.Name)] = true
 	}
+	for _, name := range p.automaticGroupNames(nil) {
+		used[name] = true
+	}
+}
+
+func (p *Plan) automaticGroupNames(nodes []string) map[int]string {
+	used := map[string]bool{GroupProxy: true, GroupAuto: true, "DIRECT": true, "REJECT": true}
+	for _, name := range nodes {
+		used[name] = true
+	}
+	for _, g := range p.Groups {
+		used[CleanLabel(g.Name)] = true
+	}
+	names := map[int]string{}
+	for _, g := range p.Groups {
+		if g.Kind == "select" {
+			continue
+		}
+		suffix := " · 自动选择"
+		if g.Kind == "fallback" {
+			suffix = " · 主备切换"
+		}
+		base := CleanLabel(g.Name) + suffix
+		name := base
+		for i := 2; used[name]; i++ {
+			name = fmt.Sprintf("%s (%d)", base, i)
+		}
+		used[name], names[g.ID] = true, name
+	}
+	return names
 }
 
 func (p *Plan) layout(names []string, items []Item) layout {
@@ -125,7 +155,8 @@ func (p *Plan) layout(names []string, items []Item) layout {
 	if len(auto) == 0 {
 		auto, autoRefs = direct, directRefs
 	}
-	var custom []group
+	var custom, automatic []group
+	automaticNames := p.automaticGroupNames(names)
 	grouped := map[string]bool{}
 	for _, g := range p.Groups {
 		members, memberRefs := []string{}, []string{}
@@ -142,7 +173,16 @@ func (p *Plan) layout(names []string, items []Item) layout {
 		}
 		ref := fmt.Sprintf("group:%d", g.ID)
 		name := CleanLabel(g.Name)
-		custom = append(custom, group{Ref: ref, Name: name, Kind: g.Kind, Members: members, MemberRefs: memberRefs, Provider: fmt.Sprintf("group-%d", g.ID), Hidden: g.Kind != "select", TestURL: p.testURL(), IntervalSec: g.IntervalSeconds, ToleranceMS: g.ToleranceMS})
+		provider := fmt.Sprintf("group-%d", g.ID)
+		selection := group{Ref: ref, Name: name, Kind: "select", Members: members, MemberRefs: memberRefs, Provider: provider}
+		if g.Kind != "select" {
+			// 可见入口始终可手选节点，原自动策略作为默认成员保留。
+			innerRef, innerName := ref+":auto", automaticNames[g.ID]
+			automatic = append(automatic, group{Ref: innerRef, Name: innerName, Kind: g.Kind, Members: members, MemberRefs: memberRefs, Provider: provider, Hidden: true, TestURL: p.testURL(), IntervalSec: g.IntervalSeconds, ToleranceMS: g.ToleranceMS})
+			selection.Members = append([]string{innerName}, members...)
+			selection.MemberRefs = append([]string{innerRef}, memberRefs...)
+		}
+		custom = append(custom, selection)
 	}
 	policy := func(target string) string {
 		if target == "direct" {
@@ -157,6 +197,7 @@ func (p *Plan) layout(names []string, items []Item) layout {
 		root.Members, root.MemberRefs = append(root.Members, GroupAuto), append(root.MemberRefs, "auto")
 	}
 	out.Groups = append(out.Groups, custom...)
+	out.Groups = append(out.Groups, automatic...)
 	for _, g := range custom {
 		root.Members, root.MemberRefs = append(root.Members, g.Name), append(root.MemberRefs, g.Ref)
 	}
