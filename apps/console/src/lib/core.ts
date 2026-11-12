@@ -28,10 +28,23 @@ export interface Gate {
   self_update?: GateSelfUpdate | null;
   // Gate 最近一次上报的主机观测；字段缺失表示没读到（未知）。
   host?: GateHost | null;
+  kernel_events?: KernelEvent[];
+}
+
+export interface KernelEvent {
+  at?: string;
+  kernel?: string;
+  kind?: string;
+  pid?: number;
+  disconnects?: number;
+  reason?: string;
+  trace_id?: string;
+  revision?: number;
 }
 
 export interface ProcessSample { observed_at: string; state: "running" | "stopped" | "unknown"; cpu_percent?: number; memory_rss?: number; error?: string }
-export interface GateHost { observed_at?: string; observation_id?: string; cpu_percent?: number; load1?: number; mem_used?: number; mem_total?: number; disk_used?: number; disk_total?: number; net_rx_bytes?: number; net_tx_bytes?: number; uptime_secs?: number; processes?: Record<string, ProcessSample> }
+export interface GateHealth { dns?: string; congestion?: string; udp_buffer?: number; cpu_steal?: number; ipv6?: boolean; mtu?: number; conntrack_free?: number; file_handles_free?: number; cert_days?: number }
+export interface GateHost { observed_at?: string; observation_id?: string; cpu_percent?: number; load1?: number; mem_used?: number; mem_total?: number; disk_used?: number; disk_total?: number; net_rx_bytes?: number; net_tx_bytes?: number; uptime_secs?: number; processes?: Record<string, ProcessSample>; health?: GateHealth | null }
 export interface DisplaySummary { name: string; kind: string; region: string }
 export interface NodeChoice { id: number; name: string; display_name?: string; protocol?: string; network?: string; security?: string; gate_id?: number; gate_name?: string; host?: string; port?: number; exit_summary?: DisplaySummary }
 
@@ -86,7 +99,8 @@ export interface NodeTest {
   at: string;
   job_id: string;
   trace_id: string;
-  location: "center" | "colocated";
+  location: "center" | "colocated" | "gate";
+  execution_gate_id?: number;
   external: "passed" | "failed" | "unknown";
   user_id?: number;
   link_id?: number;
@@ -286,6 +300,7 @@ export interface ProxyNode extends NodeChoice {
 }
 
 export interface ProxyType {
+  udp?: string;
   key: string;
   label: string;
   enabled: boolean;
@@ -393,6 +408,7 @@ export interface UserItem {
   role: "admin" | "user";
   enabled: boolean;
   quota: number;
+  unlimited: boolean;
   used: number;
   expires_at?: string | null;
   monthly_reset: boolean;
@@ -401,6 +417,7 @@ export interface UserItem {
   allow_chain: boolean;
   links: number;
   chains: number;
+  created_at?: string;
   password?: string;
   link_items?: LinkItem[];
   chain_items?: ChainItem[];
@@ -446,9 +463,9 @@ export const protocolNames: Record<string, string> = {
 
 export function nodeStatus(n: NodeItem, g?: Gate): [string, LampTone, string] {
   if (!n.enabled) return ["已停用", "off", "节点已停用，不在订阅里"];
-  if (!g || g.status === "revoked") return ["不可用", "bad", "VPS 已撤销"];
+  if (!g || g.status === "revoked") return ["离线", "bad", "VPS 已撤销"];
   if (!g.online) return ["离线", "bad", "VPS 离线"];
-  if (g.state === "failed") return ["不可用", "bad", "VPS 配置应用失败：" + g.last_error];
+  if (g.state === "failed") return ["待生效", "bad", "VPS 配置应用失败，仍在用上一份配置：" + g.last_error];
   if (g.state === "pending") return ["待生效", "warn", "配置正在下发到 VPS"];
   if (n.readiness && n.readiness.state !== "ready") {
     const label = ({ credentials: "待分配", pending: "待生效", kernel: "内核未运行", listener: "未监听", unknown: "未知" } as Record<string, string>)[n.readiness.state] ?? "未知";
@@ -456,7 +473,7 @@ export function nodeStatus(n: NodeItem, g?: Gate): [string, LampTone, string] {
   }
   if ((n.ports ?? []).some((p) => p.firewall === "blocked")) return ["未放行", "bad", (n.ports ?? []).find((p) => p.firewall === "blocked")?.why ?? "本机防火墙没有放行端口"];
   if (n.reach?.status === "failed") return ["连不上", "bad", (n.reach.why ?? "中心从外部连不上") + "。这是中心的连接结果，节点是否真的不可用以客户端实测为准"];
-  if (n.reach?.status === "ok") return ["端口可达", "ok", n.reach.latency_ms ? `中心 TCP 连接用了 ${n.reach.latency_ms} ms；协议连接以客户端实测为准` : "中心 TCP 端口可达；协议连接以客户端实测为准"];
+  if (n.reach?.status === "ok") return ["在线", "ok", n.reach.latency_ms ? `中心 TCP 连接用了 ${n.reach.latency_ms} ms；协议连接以客户端实测为准` : "中心 TCP 端口可达；协议连接以客户端实测为准"];
   return ["未知", "unknown", n.reach?.why ?? "还没有外部连接结果"];
 }
 
@@ -475,7 +492,7 @@ export interface ExitReference { type: "node" | "chain" | "route"; id: number; n
 export interface ExitItem extends ExitSpec {
  summary?: DisplaySummary;
  id: number; gate_id: number; owner_user_id: number | null; tag: string; label: string; enabled: boolean; policy_type: string;
- references: ExitReference[]; probe?: ExitProbe;
+ references: ExitReference[]; probe?: ExitProbe; udp?: "supported" | "unsupported" | "unknown";
  source?: {source_id?:number;profile_id?:number;mode?:"node"|"filter";match?:string};
  resolved?: SourceResolved; place?: {known:boolean;country?:string;city?:string;ip?:string;why?:string};
 }

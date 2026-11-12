@@ -1,8 +1,8 @@
 // 控制台界面扫描：逐个路由、标签页、弹层，在 390×844 / 1280×800、浅色 / 深色下检查排版、反馈与动效，输出到 out/<时间>/。
 // 用法：node apps/console/scan/scan.mjs [--routes /system,/gates] [--checks tap,contrast] [--widths 390] [--themes light]
-//       [--popups 0] [--tabs 0] [--base http://127.0.0.1:5173]
+//       [--popups 0] [--tabs 0] [--base http://127.0.0.1:22340]
 // 检查项：tokens type tap contrast press motion cls frames overflow scroll keyboard（页面错误总是记录）
-import { inEgo, relay, parseArgs, loadConfig, openSpace, ensureLogin, ensureProbe, transient, outRoot, scanDir, stamp } from "./lib.mjs";
+import { inEgo, relay, parseArgs, loadConfig, openSpace, ensureLogin, ensureProbe, transient, outRoot, scanDir, stamp, api } from "./lib.mjs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { readFile, writeFile, mkdir, appendFile } from "node:fs/promises";
@@ -14,7 +14,7 @@ const cfg = await loadConfig();
 const allChecks = ["tokens", "type", "tap", "contrast", "press", "motion", "cls", "frames", "overflow", "scroll", "keyboard"];
 const checks = cfg.checks ? String(cfg.checks).split(",").map((s) => s.trim()).filter((c) => allChecks.includes(c)) : allChecks;
 const has = (c) => checks.includes(c);
-const base = (cfg.base || "http://127.0.0.1:5173").replace(/\/$/, "");
+const base = (cfg.base || "http://127.0.0.1:22340").replace(/\/$/, "");
 const widths = (cfg.widths ? String(cfg.widths).split(",") : ["390", "1280"]).map(Number).filter(Boolean);
 // 按压与键盘检查会移动焦点、可能关掉非模态弹层，放在最后一个主题跑；默认最后一个是浅色
 const themes = cfg.themes ? String(cfg.themes).split(",") : ["dark", "light"];
@@ -88,8 +88,15 @@ async function setWidth(w) {
   await page.cdp("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
 }
 // 主题：控制台在「跟随系统」时监听 prefers-color-scheme；先把存储的主题设为 system，再模拟系统明暗
+// 外观跟着账号保存，登录后会用账号上的主题校正本机；扫描期间账号上也临时设为「跟随系统」，结束后恢复
 let savedTheme = null;
+let savedAccount = null;
 async function prepareTheme() {
+  const r = await api(page, "/me/appearance").catch(() => null);
+  if (r?.status === 200 && r.data?.saved) {
+    savedAccount = r.data.appearance;
+    await api(page, "/me/appearance", "PUT", { ...savedAccount, theme: "system" }).catch(() => {});
+  }
   savedTheme = await page.evaluate(() => {
     try {
       const v = localStorage.getItem("weir-theme");
@@ -108,6 +115,7 @@ async function setTheme(t) {
   await wait(350); // 等主题过渡结束
 }
 async function restoreBrowser() {
+  if (savedAccount) await api(page, "/me/appearance", "PUT", savedAccount).catch(() => {});
   await page.cdp("Emulation.setEmulatedMedia", { features: [] }).catch(() => {});
   await page.cdp("Emulation.clearDeviceMetricsOverride").catch(() => {});
   await page.cdp("Emulation.setFocusEmulationEnabled", { enabled: false }).catch(() => {});
@@ -257,7 +265,7 @@ async function openUrl(url, full) {
     await settle();
   });
   // 中心重启后会话失效会回到登录表单：重新登录再打开
-  if (!url.startsWith("/p/") && (await page.evaluate(() => !!document.querySelector('input[autocomplete="username"]')))) {
+  if (!url.startsWith("/p/") && (await page.evaluate(() => !!document.querySelector('input[autocomplete~="username"]')))) {
     log("会话失效，重新登录");
     await ensureLogin(page, base, cfg.email || "admin@dev.test", cfg.password || "WeirDev2026");
     await page.goto(base + url);

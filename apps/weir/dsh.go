@@ -4,11 +4,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/shusfun/weir/internal/center"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/shusfun/weir/internal/dsh"
+	"github.com/shusfun/weir/packages/dsh"
 )
 
 // runDSH：weir dsh agent --dir <托管目录>。dsh 的管理进程，以系统用户 weir-dsh 运行
@@ -26,7 +27,7 @@ func runDSH(args []string) int {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	if err := dsh.RunAgent(ctx, *dir); err != nil {
+	if err := dsh.RunAgent(ctx, *dir, dsh.AgentOptions{ValidatePlugin: center.ValidateDSHPlugin}); err != nil {
 		return fatal(err)
 	}
 	return 0

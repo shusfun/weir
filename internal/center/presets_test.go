@@ -13,7 +13,7 @@ func TestNewPresetsAdvancedFieldsAndChosenUsers(t *testing.T) {
 	_, admin, g := setupGate(t)
 	gid := int(g.id)
 	// 一个不限额度、一个有额度、一个只有部分节点的用户。
-	free := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "free@example.test"}, 200)
+	free := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "free@example.test", "unlimited": true}, 200)
 	limited := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "limited@example.test", "quota": 10 << 30}, 200)
 	picky := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "picky@example.test", "all_nodes": false, "node_ids": []int{}}, 200)
 	ids := []int{int(free["id"].(float64)), int(limited["id"].(float64)), int(picky["id"].(float64))}
@@ -105,8 +105,8 @@ func TestNewPresetsAdvancedFieldsAndChosenUsers(t *testing.T) {
 			}
 		}
 	}
-	// 不限额度的用户 + 同样不限额度的管理员
-	if peers != 2 {
+	// 不限额度的用户 + 管理员 + 长期实测凭据
+	if peers != 3 {
 		t.Fatalf("wireguard peers = %d", peers)
 	}
 	for _, in := range cfg.Inbounds {

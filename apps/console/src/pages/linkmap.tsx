@@ -1,7 +1,7 @@
-// 链路页：平铺世界地图上的 VPS 与出口，连线是「入口 VPS → 出口」，粗细与流动随实时速率；右侧（窄屏在下方）是详情，
-// 下面是全部路径的列表（键盘与读屏用它）。管理员看全部，可按用户、VPS 筛选；普通用户只看自己的。
+// 链路页（设计稿 ALinkmap）：大字结论下是一条条链路卡（用户 → 入口 VPS → 出口，点线亮度随实时速率）；背景地球画出航线。
+// 平面地图与详情、全部路径表折叠在下面（键盘与读屏用表格）。管理员看全部，可按用户、VPS 筛选；普通用户只看自己的。
 import { useSearchParams } from "react-router-dom";
-import { Badge, Card, CardContent, PageHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, ScrollArea } from "@weir/ui";
+import { Badge, Card, CardContent, Collapsible, PageHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, ScrollArea } from "@weir/ui";
 import { State } from "../components/feedback";
 import { LinkMapCanvas } from "../components/link-map-canvas";
 import { LinkMapDetail } from "../components/link-map-detail";
@@ -30,8 +30,10 @@ export function LinkMapPage({ admin }: { admin: boolean }) {
   });
   const header = (
     <PageHeader
-      title={admin ? "链路" : "我的链路"}
-      description={admin ? "全部 VPS、节点与出口在地图上的位置与实时流量。速率每 2 秒更新一次，只在有人打开这个页面时采集。" : "你的节点与链式代理在地图上的位置与实时流量；只显示你自己的。"}
+      size="hero"
+      eyebrow={admin ? "链路" : "我的链路"}
+      title={m ? (() => { const active = m.paths.filter((p) => !store.stale(p.gate_id) && (store.smooth(store.paths.get(p.id)) ?? 0) > 0).length; return active > 0 ? <>{active} 条链路<br />正在使用</> : <>{m.paths.length} 条链路<br />此刻没有流量</>; })() : (admin ? "链路" : "我的链路")}
+      description="背景的地球显示此刻的节点和链路。下面每一条是一个用户经入口 VPS 到出口的链路，从左到右：用户 → VPS → 出口。"
     />
   );
   if (!m) return <div className="stack">{header}<State loading={!error} error={error} onRetry={() => void reload()} /></div>;
@@ -71,6 +73,29 @@ export function LinkMapPage({ admin }: { admin: boolean }) {
           </Select>
         </div>
       ) : null}
+      {visible.length === 0 ? (
+        <State empty={admin ? "还没有用户在用节点" : "你的链接里还没有节点"} detail={admin ? "给用户分配节点后，这里列出每个用户经哪个入口、从哪个出口出去。" : "管理员给你分配节点后会出现在这里。"} />
+      ) : (
+        <div className="grid max-w-[781px] gap-[15px]">
+          {visible.slice(0, 12).map((p) => {
+            const x = m.exits.find((e) => e.id === p.exit_id);
+            const g = m.gates.find((y) => y.id === p.gate_id);
+            const v = store.stale(p.gate_id) ? null : store.smooth(store.paths.get(p.id));
+            const level = v == null ? 0 : Math.min(1, Math.log10(1 + v / 1024) / 4);
+            return (
+              <button key={p.id} type="button" className="weir-route-card" aria-pressed={selected === p.id} onClick={() => set({ sel: p.id })}>
+                <span className="min-w-0 text-left"><b className="block truncate">{admin ? `${p.user} · ${p.node}` : p.node}</b><small>{p.today_bytes === null ? "今天未知" : `今天 ${bytes(p.today_bytes)}`}</small></span>
+                <span className="weir-route-stream" style={{ "--level": String(level) } as React.CSSProperties} aria-hidden />
+                <span className="min-w-0 text-center"><b className="block truncate">{g?.name ?? "未知 VPS"}</b><small>{p.route === "chain" ? `自建 · ${p.chain ?? ""}` : p.node}</small></span>
+                <span className="weir-route-stream" style={{ "--level": String(level) } as React.CSSProperties} aria-hidden />
+                <span className="min-w-0 text-right"><b className="block truncate">{x?.label ?? "未知"}{x?.place?.city ? ` · ${x.place.city}` : ""}</b><small className="font-[family-name:var(--weir-mono)]">{rateText(v)}</small></span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <p className="m-0 text-fine text-[var(--weir-ink-3)]">位置按 IP 估算，只对管理员显示；普通用户只看到自己的链路，背景地球也只显示自己能用的节点。{m.geo.ready ? " IP 定位数据来自 DB-IP（CC BY 4.0）。" : ` IP 定位：${m.geo.error ?? "未就绪"}。`}</p>
+      <Collapsible title="平面地图与详情">
       {/* 宽屏：详情不参与行高（contain:size），高度跟左边的地图一列一样、内部滚动；选中别的对象时地图与下面的列表不移动 */}
       <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="stack gap-2 min-w-0">
@@ -90,6 +115,8 @@ export function LinkMapPage({ admin }: { admin: boolean }) {
         </div>
         <Card className="flex flex-col lg:[contain:size]" data-linkmap-detail><ScrollArea className="min-h-0 flex-1"><CardContent><LinkMapDetail m={m} store={store} selected={selected} /></CardContent></ScrollArea></Card>
       </div>
+      </Collapsible>
+      <Collapsible title={`全部路径（${visible.length}）`}>
       <Card>
         <CardContent className="stack gap-2">
           <h2 className="font-semibold">路径</h2>
@@ -129,6 +156,7 @@ export function LinkMapPage({ admin }: { admin: boolean }) {
           )}
         </CardContent>
       </Card>
+      </Collapsible>
     </div>
   );
 }

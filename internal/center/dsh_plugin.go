@@ -15,13 +15,11 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/shusfun/weir/internal/dsh"
+	"github.com/shusfun/weir/packages/dsh"
 )
 
-// dshPluginSettingKey 保存管理员确认过的适配插件；没有时使用内置插件。
-// Weir 维护的 dsh 插件：随程序发布（dshplugin/），由中心写到 runtime/plugins/（dsh 只读）。
-// 插件只用 dsh 的声明式组合（预设、人设、工具行、skill 加载），不含任何脚本。dsh 出新版本后由 Weir 测试，
-// 在下一个版本里放宽 package.json 的已验证范围；超出范围时只启用基础预设，后台安全分析暂停。
+// dshplugin/ supplies the default declarative layer. Approved external and
+// site layers can replace it without changing the executable restrictions.
 
 //go:embed dshplugin/*
 var dshPluginFS embed.FS
@@ -119,6 +117,12 @@ func validatePlugin(files map[string]string) (pluginMeta, error) {
 		}
 	}
 	return meta, nil
+}
+
+// ValidateDSHPlugin applies the same policy in the isolated management process.
+func ValidateDSHPlugin(files map[string]string) error {
+	_, err := validatePlugin(files)
+	return err
 }
 
 // checkYAMLTags 拒绝 !!js 等自定义标签（dsh 会把它们当成代码执行）。
@@ -257,8 +261,24 @@ func checkMCPRow(n *yaml.Node) error {
 func (s *Server) materializePlugin(source string, files map[string]string) (string, error) {
 	root := filepath.Join(s.dshLayout().Runtime(), "plugins")
 	dir := filepath.Join(root, source+"-"+pluginHash(files)[:16])
-	if _, err := os.Stat(filepath.Join(dir, ".complete")); err == nil {
-		return dir, nil
+	if entries, err := os.ReadDir(dir); err == nil && len(entries) == len(files) {
+		matches := true
+		for _, entry := range entries {
+			want, ok := files[entry.Name()]
+			info, statErr := entry.Info()
+			if !ok || entry.Type()&os.ModeSymlink != 0 || statErr != nil || !info.Mode().IsRegular() || info.Size() != int64(len(want)) {
+				matches = false
+				break
+			}
+			got, readErr := os.ReadFile(filepath.Join(dir, entry.Name()))
+			if readErr != nil || string(got) != want {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			return dir, nil
+		}
 	}
 	tmp := dir + ".new"
 	_ = os.RemoveAll(tmp)
@@ -270,9 +290,6 @@ func (s *Server) materializePlugin(source string, files map[string]string) (stri
 			return "", err
 		}
 	}
-	if err := os.WriteFile(filepath.Join(tmp, ".complete"), nil, 0o644); err != nil {
-		return "", err
-	}
 	_ = os.RemoveAll(dir)
 	if err := os.Rename(tmp, dir); err != nil {
 		return "", err
@@ -281,31 +298,30 @@ func (s *Server) materializePlugin(source string, files map[string]string) (stri
 	return dir, nil
 }
 
-// pluginVerified 判断某个 dsh 版本是否在内置插件已验证的范围内（只比较版本，不写文件）。
-func pluginVerified(dshVersion string) bool {
-	meta, err := validatePlugin(builtinPluginFiles())
-	if err != nil {
-		return false
-	}
-	ok, _ := dsh.InRange(dshVersion, meta.Weir.DSH)
-	return ok
-}
-
-// activePlugin 为当前 dsh 版本选插件：在已验证范围内用内置插件；超出范围时不加载，返回原因。
+// activePlugin selects the effective approved plugin and compatibility range.
 // verified 为 false 时后台安全分析暂停（它按工具 id 禁用工具，新版本改了 id 时禁用会悄悄失效）。
 func (s *Server) activePlugin(dshVersion string) (dir, label, note string, verified bool) {
-	files := builtinPluginFiles()
+	profile, profileErr := s.aiProfile(context.Background())
+	if profileErr != nil {
+		return "", "", "AI 外置配置无效，后台分析暂停", false
+	}
+	files := profile.Effective.Plugin
 	meta, err := validatePlugin(files)
 	if err != nil {
 		return "", "", "内置插件无效：" + err.Error(), false
 	}
 	if ok, _ := dsh.InRange(dshVersion, meta.Weir.DSH); ok {
-		if dir, err = s.materializePlugin("builtin", files); err == nil {
-			return dir, "内置插件 " + meta.Version, "", true
+		source := profile.Sources["plugin"]
+		if dir, err = s.materializePlugin(source, files); err == nil {
+			label := "内置插件 "
+			if source != "default" {
+				label = "外置插件 "
+			}
+			return dir, label + meta.Version, "", true
 		}
 		return "", "", "写入插件失败：" + err.Error(), false
 	}
-	return "", "", fmt.Sprintf("这个 dsh 版本（%s）还没验证（已验证 %s），Weir 助手预设未启用、后台安全分析暂停，等 Weir 发版适配", dshVersion, meta.Weir.DSH), false
+	return "", "", fmt.Sprintf("这个 dsh 版本（%s）还没验证（已验证 %s），只启用基础预设、后台分析暂停；请更新并确认外置兼容配置", dshVersion, meta.Weir.DSH), false
 }
 
 // fileDiff 是两份文本的差异（逐行，未变的长段落折叠）；驱动草稿与驱动历史用它显示改前改后。

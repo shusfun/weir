@@ -93,6 +93,15 @@ func TestPlanExhaustedUserGetsNothingMore(t *testing.T) {
 	}
 }
 
+func TestPlanDoesNotTurnMeterOvershootIntoGrant(t *testing.T) {
+	const mib = int64(1 << 20)
+	rows := []*ent.Budget{budgetRow(1, 160*mib, 168*mib, 36*mib, 3*float64(mib)), budgetRow(2, 32*mib, 32*mib, 37*mib, 3*float64(mib))}
+	plan := planBudgets(127*mib, rows, nil)
+	if plan[2] > 32*mib {
+		t.Fatalf("meter overshoot became a new grant: %v", plan)
+	}
+}
+
 func TestPlanReclaimsFromLongOfflineGate(t *testing.T) {
 	const gib = int64(1 << 30)
 	// Gate 1 持有已确认的 10 GiB 后长期离线，一直没有确认下调；Gate 2 在线。

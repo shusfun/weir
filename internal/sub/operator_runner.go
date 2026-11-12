@@ -1,6 +1,8 @@
 package sub
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
 
 	js "github.com/shusfun/weir/internal/sub/jscompat"
@@ -63,9 +65,9 @@ func filterObjects(list []*js.Object, pred func(*js.Object, int) bool) []*js.Obj
 	return out
 }
 
-func opFilter(nodes []*js.Object, paramsVal any) []*js.Object {
+func opFilter(nodes []*js.Object, paramsVal any) ([]*js.Object, error) {
 	if !js.Truthy(paramsVal) {
-		return nodes
+		return nodes, nil
 	}
 	result := append([]*js.Object(nil), nodes...)
 	include, exclude := objGet(paramsVal, "include"), objGet(paramsVal, "exclude")
@@ -101,7 +103,26 @@ func opFilter(nodes []*js.Object, paramsVal any) []*js.Object {
 		}
 		result = filterObjects(result, func(r *js.Object, _ int) bool { return has(r.Get("regionZh")) || has(r.Get("region")) })
 	}
-	return result
+	if script := objGet(paramsVal, "script"); js.Truthy(objGet(script, "enabled")) {
+		var evaluationError error
+		expression := objGet(script, "expression")
+		result = filterObjects(result, func(r *js.Object, index int) bool {
+			record := EnsureRegionInfo(r, true).Clone()
+			record.Set("index", float64(index+1))
+			matches, err := EvaluateDslExpressionChecked(expression, buildDslContext(record))
+			if err != nil {
+				evaluationError = err
+			}
+			return matches
+		})
+		if evaluationError != nil {
+			return nil, evaluationError
+		}
+	}
+	if js.Truthy(objGet(objGet(paramsVal, "useless"), "enabled")) {
+		result = filterObjects(result, func(r *js.Object, _ int) bool { return !isUselessNode(r) })
+	}
+	return result, nil
 }
 
 func templateOffset(template any) float64 {
@@ -112,11 +133,12 @@ func templateOffset(template any) float64 {
 	return n
 }
 
-func opRename(nodes []*js.Object, paramsVal any) []*js.Object {
+func opRename(nodes []*js.Object, paramsVal any) ([]*js.Object, error) {
 	if !js.Truthy(paramsVal) {
-		return nodes
+		return nodes, nil
 	}
 	result := append([]*js.Object(nil), nodes...)
+	outputBytes := operatorRecordBytes(result)
 	regex, template := objGet(paramsVal, "regex"), objGet(paramsVal, "template")
 	if js.Truthy(objGet(regex, "enabled")) {
 		if rules := normalizeRules(objGet(regex, "rules")); len(rules) > 0 {
@@ -130,18 +152,29 @@ func opRename(nodes []*js.Object, paramsVal any) []*js.Object {
 					if isObj {
 						if rep, ok := ro.Get("replacement").(string); ok && rep != "" && strings.Contains(rep, "{") {
 							c := ro.Clone()
-							c.Set("replacement", RenderTemplate(rep, vars, r))
+							replacement, err := RenderTemplateChecked(rep, vars, r)
+							if err != nil {
+								return nil, err
+							}
+							c.Set("replacement", replacement)
 							processed.Push(c)
 							continue
 						}
 					}
 					processed.Push(rule)
 				}
-				newName := ApplyRegexRename(r.Get("name"), processed, r)
+				newName, err := ApplyRegexRenameChecked(r.Get("name"), processed, r)
+				if err != nil {
+					return nil, err
+				}
 				if !js.StrictEquals(newName, r.Get("name")) {
 					n := r.Clone()
 					n.Set("name", newName)
 					n.Set("url", SetNodeName(r.Get("url"), r.Get("protocol"), newName))
+					outputBytes += len(strOr(n.Get("url"))) - len(strOr(result[i].Get("url")))
+					if outputBytes > operatorOutputLimit {
+						return nil, fmt.Errorf("operator_output_too_large")
+					}
 					result[i] = n
 				}
 			}
@@ -167,19 +200,26 @@ func opRename(nodes []*js.Object, paramsVal any) []*js.Object {
 			vars := js.Obj("name", r.Get("name"), "protocol", r.Get("protocol"), "region", enriched.Get("region"),
 				"regionZh", enriched.Get("regionZh"), "emoji", enriched.Get("emoji"), "server", r.Get("server"), "port", r.Get("port"),
 				"index", groupIndex+offset-1, "globalIndex", float64(index)+offset)
-			newName := RenderTemplate(objGet(template, "template"), vars, r)
+			newName, err := RenderTemplateChecked(objGet(template, "template"), vars, r)
+			if err != nil {
+				return nil, err
+			}
 			if !js.StrictEquals(newName, r.Get("name")) {
 				n := r.Clone()
 				n.Set("name", newName)
 				n.Set("url", SetNodeName(r.Get("url"), r.Get("protocol"), newName))
+				outputBytes += len(strOr(n.Get("url"))) - len(strOr(result[index].Get("url")))
+				if outputBytes > operatorOutputLimit {
+					return nil, fmt.Errorf("operator_output_too_large")
+				}
 				result[index] = n
 			}
 		}
 	}
-	return result
+	return result, nil
 }
 
-func opScript(nodes []*js.Object, paramsVal any, target string) []*js.Object {
+func opScript(nodes []*js.Object, paramsVal any, target string) ([]*js.Object, error) {
 	params := paramsVal
 	if params == nil {
 		params = js.NewObject()
@@ -191,20 +231,30 @@ func opScript(nodes []*js.Object, paramsVal any, target string) []*js.Object {
 		dsl = []any{params}
 	}
 	if len(dsl) == 0 {
-		return nodes
+		return nodes, nil
 	}
 	result := make([]*js.Object, len(nodes))
 	for i, r := range nodes {
 		result[i] = EnsureRegionInfo(r, true)
 	}
+	outputBytes := operatorRecordBytes(result)
 	for _, step := range dsl {
 		action := js.ToLower(strOr(objGet(step, "action")))
 		if action == "filter" {
+			var evaluationError error
 			result = filterObjects(result, func(node *js.Object, index int) bool {
 				rec := node.Clone()
 				rec.Set("index", float64(index+1))
-				return MatchesDslCondition(rec, step)
+				matches, err := MatchesDslConditionChecked(rec, step)
+				if err != nil {
+					evaluationError = err
+				}
+				return matches
 			})
+			if evaluationError != nil {
+				return nil, evaluationError
+			}
+			outputBytes = operatorRecordBytes(result)
 			continue
 		}
 		if action == "rename" {
@@ -216,7 +266,11 @@ func opScript(nodes []*js.Object, paramsVal any, target string) []*js.Object {
 				ctx := node.Clone()
 				ctx.Set("index", float64(index+1))
 				ctx.Set("target", target)
-				var nextName any = RenderDslTemplate(template, ctx)
+				rendered, err := RenderDslTemplateChecked(template, ctx)
+				if err != nil {
+					return nil, err
+				}
+				var nextName any = rendered
 				if nextName == "" {
 					nextName = node.Get("name")
 				}
@@ -233,11 +287,15 @@ func opScript(nodes []*js.Object, paramsVal any, target string) []*js.Object {
 				} else {
 					n.Set("metadata", meta)
 				}
+				outputBytes += len(strOr(n.Get("url"))) - len(strOr(result[index].Get("url")))
+				if outputBytes > operatorOutputLimit {
+					return nil, fmt.Errorf("operator_output_too_large")
+				}
 				result[index] = n
 			}
 		}
 	}
-	return result
+	return result, nil
 }
 
 // nameLength 对应 `(name || "").length`；非字符串名称的 length 为 undefined，比较结果恒为 false。
@@ -280,13 +338,40 @@ func metadataLookup(src any) func(string) any {
 
 // RunOperatorChain 对应 runOperatorChain。
 func RunOperatorChain(nodeURLs []string, operators any, ctx OperatorContext) []any {
+	out, _ := RunOperatorChainChecked(nodeURLs, operators, ctx)
+	return out
+}
+
+// RunOperatorChainChecked preserves configuration and evaluation errors for callers.
+func RunOperatorChainChecked(nodeURLs []string, operators any, ctx OperatorContext) ([]any, error) {
+	inputBytes := 0
+	for _, value := range nodeURLs {
+		if len(value)+1 > operatorOutputLimit-inputBytes {
+			return nil, fmt.Errorf("operator_output_too_large")
+		}
+		inputBytes += len(value) + 1
+	}
+	if raw, ok := js.JSONStringify(operators); ok {
+		if len(raw) > 1<<20 {
+			return nil, fmt.Errorf("operators_too_large")
+		}
+		var value any
+		if err := json.Unmarshal([]byte(raw), &value); err != nil {
+			return nil, fmt.Errorf("invalid_operators")
+		}
+		if err := ValidateOperatorPatterns(value); err != nil {
+			return nil, err
+		}
+	} else if operators != nil {
+		return nil, fmt.Errorf("invalid_operators")
+	}
 	ops, ok := operators.(*js.Array)
 	if !ok || ops.Len() == 0 {
 		out := make([]any, len(nodeURLs))
 		for i, u := range nodeURLs {
 			out[i] = u
 		}
-		return out
+		return out, nil
 	}
 	records := NodeURLsToRecords(nodeURLs, false, false)
 	if lookup := metadataLookup(ctx.NodeMetadataByURL); lookup != nil {
@@ -309,7 +394,8 @@ func RunOperatorChain(nodeURLs []string, operators any, ctx OperatorContext) []a
 	if target == "" {
 		target = "base64"
 	}
-	for _, op := range ops.Items {
+	for index, op := range ops.Items {
+		var err error
 		typ := objGet(op, "type")
 		params := objGet(op, "params")
 		if js.StrictEquals(objGet(op, "enabled"), false) {
@@ -317,11 +403,11 @@ func RunOperatorChain(nodeURLs []string, operators any, ctx OperatorContext) []a
 		}
 		switch js.ToString(typ) {
 		case "filter":
-			records = opFilter(records, params)
+			records, err = opFilter(records, params)
 		case "rename":
-			records = opRename(records, params)
+			records, err = opRename(records, params)
 		case "script":
-			records = opScript(records, params, target)
+			records, err = opScript(records, params, target)
 		case "sort":
 			keys, isArr := objGet(params, "keys").(*js.Array)
 			if !js.Truthy(params) || !isArr {
@@ -374,6 +460,25 @@ func RunOperatorChain(nodeURLs []string, operators any, ctx OperatorContext) []a
 				records = append(records, seen[k])
 			}
 		}
+		if err != nil {
+			return nil, fmt.Errorf("operator[%d]: %w", index, err)
+		}
+		if operatorRecordBytes(records) > operatorOutputLimit {
+			return nil, fmt.Errorf("operator_output_too_large")
+		}
 	}
-	return RecordsToNodeURLs(records)
+	return RecordsToNodeURLs(records), nil
+}
+
+const operatorOutputLimit = 16 << 20
+
+func operatorRecordBytes(records []*js.Object) int {
+	total := 0
+	for _, record := range records {
+		total += len(strOr(record.Get("url"))) + 1
+		if total > operatorOutputLimit {
+			return total
+		}
+	}
+	return total
 }

@@ -217,6 +217,26 @@ func (s *Server) checkValue(ctx context.Context, p *planCtx, pa Param, v any) er
 				return err
 			}
 		}
+	case "members":
+		list, ok := v.([]any)
+		if !ok || len(list) > maxSubscriptionMembers {
+			return errors.New("必须是有序成员列表")
+		}
+		for _, raw := range list {
+			m, ok := raw.(map[string]any)
+			if !ok || len(m) != 2 {
+				return errors.New("成员只能包含 kind 和 id")
+			}
+			kind, _ := m["kind"].(string)
+			ref := map[string]string{"source": "source", "node": "manual", "profile": "profile"}[kind]
+			id, ok := m["id"].(float64)
+			if ref == "" || !ok || id <= 0 || id != float64(int(id)) {
+				return errors.New("成员必须引用数据库编号")
+			}
+			if _, err := s.refName(ctx, p, ref, id); err != nil {
+				return err
+			}
+		}
 	case "object":
 		if _, ok := v.(map[string]any); !ok {
 			return errors.New("必须是对象")
@@ -247,12 +267,19 @@ func (s *Server) refName(ctx context.Context, p *planCtx, kind string, v any) (s
 	id := int(f)
 	key := fmt.Sprintf("%s:%d", kind, id)
 	switch kind {
+	case "account_plan":
+		plan, err := s.Store.Ent.AccountPlan.Get(ctx, id)
+		if err != nil {
+			return "", fmt.Errorf("套餐 %d 不存在", id)
+		}
+		p.versions[key] = version(plan.Revision)
+		return plan.Name, nil
 	case "user":
 		u, err := s.Store.Ent.User.Get(ctx, id)
 		if err != nil {
 			return "", fmt.Errorf("用户 %d 不存在", id)
 		}
-		p.versions[key] = version([]any{u.Name, u.Role, u.Enabled, u.Quota, u.ExpiresAt, u.MonthlyReset, u.AllNodes, u.NodeIds, u.AllowChain})
+		p.versions[key] = version([]any{u.Name, u.Role, u.Enabled, u.Quota, u.Unlimited, u.ExpiresAt, u.MonthlyReset, u.AllNodes, u.NodeIds, u.AllowChain})
 		return firstNonEmpty(u.Name, u.Email), nil
 	case "node":
 		n, err := s.Store.Ent.Node.Get(ctx, id)
@@ -308,7 +335,7 @@ func (s *Server) refName(ctx context.Context, p *planCtx, kind string, v any) (s
 		if err != nil {
 			return "", fmt.Errorf("订阅组 %d 不存在", id)
 		}
-		p.versions[key] = version([]any{v.Name, v.Enabled, v.AllSources, v.SourceIds, v.NodeIds, v.Settings, v.ExpiresAt})
+		p.versions[key] = version([]any{v.Name, v.Enabled, v.AllSources, v.SourceIds, v.NodeIds, v.Members, v.Settings, v.ExpiresAt})
 		return v.Name, nil
 	case "template":
 		v, err := s.Store.Ent.RuleTemplate.Get(ctx, id)
@@ -334,11 +361,11 @@ func (s *Server) refName(ctx context.Context, p *planCtx, kind string, v any) (s
 	return "", fmt.Errorf("不支持的引用类型 %s", kind)
 }
 
-var objectNames = map[string]string{"user": "用户", "node": "节点", "gate": "VPS", "link": "链接", "event": "安全事件",
+var objectNames = map[string]string{"account_plan": "套餐", "user": "用户", "node": "节点", "gate": "VPS", "link": "链接", "event": "安全事件",
 	"exit": "出口", "route": "分流规则", "source": "订阅源", "profile": "订阅组", "template": "规则模板", "manual": "手动节点", "cert": "证书"}
 
 // listTools 是查各类对象编号的只读工具，写进参数说明与报错里。
-var listTools = map[string]string{"user": "list_users", "node": "list_nodes", "gate": "list_gates", "link": "get_user", "event": "list_security_events",
+var listTools = map[string]string{"account_plan": "list_account_plans", "user": "list_users", "node": "list_nodes", "gate": "list_gates", "link": "get_user", "event": "list_security_events",
 	"exit": "list_exits", "route": "list_routes", "source": "list_sources", "profile": "list_profiles", "template": "list_templates",
 	"manual": "list_manual_nodes", "cert": "list_certs"}
 
@@ -429,6 +456,23 @@ func (s *Server) display(ctx context.Context, p *planCtx, pa Param, v any) strin
 			return "无"
 		}
 		return strings.Join(names, "、")
+	case "members":
+		b, _ := json.Marshal(v)
+		var members []struct {
+			Kind string `json:"kind"`
+			ID   int    `json:"id"`
+		}
+		_ = json.Unmarshal(b, &members)
+		var names []string
+		for _, m := range members {
+			ref := map[string]string{"source": "source", "node": "manual", "profile": "profile"}[m.Kind]
+			name, _ := s.refName(ctx, p, ref, float64(m.ID))
+			names = append(names, name)
+		}
+		if len(names) == 0 {
+			return "无"
+		}
+		return strings.Join(names, " → ")
 	case "object":
 		b, _ := json.Marshal(v)
 		return string(b)
@@ -513,7 +557,7 @@ var readCaps = []Capability{
 			out := []map[string]any{}
 			for _, u := range us {
 				links, _ := s.Store.Ent.Link.Query().Where(link.UserIDEQ(u.ID)).Count(ctx)
-				out = append(out, map[string]any{"id": u.ID, "email": u.Email, "name": u.Name, "role": u.Role, "enabled": u.Enabled, "quota_bytes": u.Quota, "used_bytes": u.Used,
+				out = append(out, map[string]any{"id": u.ID, "email": u.Email, "name": u.Name, "role": u.Role, "enabled": u.Enabled, "quota_bytes": u.Quota, "unlimited": u.Unlimited, "used_bytes": u.Used,
 					"expires_at": u.ExpiresAt, "monthly_reset": u.MonthlyReset, "all_nodes": u.AllNodes, "node_ids": u.NodeIds, "allow_chain": u.AllowChain, "links": links})
 			}
 			return out, err
@@ -532,7 +576,7 @@ var readCaps = []Capability{
 				ls = append(ls, map[string]any{"id": l.ID, "name": l.Name, "enabled": l.Enabled, "all_nodes": l.AllNodes, "node_ids": l.NodeIds, "chain_ids": l.ChainIds, "last_used_at": l.LastUsedAt,
 					"starts_at": l.StartsAt, "ends_at": l.EndsAt, "effective_ends_at": end, "state": windowState(u, l, time.Now())})
 			}
-			return map[string]any{"id": u.ID, "email": u.Email, "name": u.Name, "role": u.Role, "enabled": u.Enabled, "quota_bytes": u.Quota, "used_bytes": u.Used, "expires_at": u.ExpiresAt,
+			return map[string]any{"id": u.ID, "email": u.Email, "name": u.Name, "role": u.Role, "enabled": u.Enabled, "quota_bytes": u.Quota, "unlimited": u.Unlimited, "used_bytes": u.Used, "expires_at": u.ExpiresAt,
 				"monthly_reset": u.MonthlyReset, "all_nodes": u.AllNodes, "node_ids": u.NodeIds, "allow_chain": u.AllowChain, "links": ls}, nil
 		}},
 	{Name: "list_security_events", Title: "安全事件", Purpose: "列出最近的安全事件（来源地址已替换为代号）与 Laya 的判断。", Kind: "read", Sources: []string{"dsh", "analysis"},
@@ -559,7 +603,8 @@ var readCaps = []Capability{
 
 var planParams = []Param{
 	{Key: "name", Label: "名称", Kind: "string"},
-	{Key: "quota_gb", Label: "流量额度", Kind: "gb", Unit: "GB", Min: num(0), Hint: "0 为不限"},
+	{Key: "quota_gb", Label: "流量额度", Kind: "gb", Unit: "GB", Min: num(0), Hint: "0 为零额度；不限流量请显式设置不限额度"},
+	{Key: "unlimited", Label: "不限额度", Kind: "bool"},
 	{Key: "expires_days", Label: "有效期", Kind: "days", Unit: "天", Min: num(0), Max: num(3650), Hint: "从确认时起算；0 为不到期"},
 	{Key: "monthly_reset", Label: "每月重置用量", Kind: "bool"},
 	{Key: "all_nodes", Label: "全部节点", Kind: "bool"},
@@ -590,12 +635,13 @@ var draftCaps = []Capability{
 // catalog 返回某个来源可用的能力（后台分析只能读安全事件、提交封禁草稿）。
 func catalog(source string) []Capability {
 	var out []Capability
-	for _, list := range [][]Capability{readCaps, opReadCaps, driverReadCaps, draftCaps, opDraftCaps, driverDraftCaps} {
+	for _, list := range [][]Capability{readCaps, opReadCaps, driverReadCaps, draftCaps, opDraftCaps, driverDraftCaps, aiProfileCaps, observationEvidenceCaps, accountPolicyCaps, accountPlanCaps, protectionCaps, protectionTightenCaps, protectionPromotionCaps, workerPolicyCaps} {
 		for _, c := range list {
 			if c.Role == "" {
 				c.Role = "admin"
 			}
-			if len(c.Sources) == 0 && source == "dsh" || containsStr(c.Sources, source) {
+			observationAllowed := source == "observation" && c.Name != "ai.profile.update" && (c.Kind == "draft" || c.Kind == "read" && containsStr([]string{"list_gates", "get_gate", "list_nodes", "list_presets", "get_kernel_diagnostics", "list_kernel_releases", "get_kernel_release_notes", "list_drivers", "get_driver", "get_observation_evidence"}, c.Name))
+			if len(c.Sources) == 0 && source == "dsh" || containsStr(c.Sources, source) || observationAllowed {
 				out = append(out, c)
 			}
 		}

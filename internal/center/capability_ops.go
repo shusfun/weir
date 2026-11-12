@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -434,6 +435,20 @@ func execOp(c Capability) func(ctx context.Context, s *Server, x *execCtx, st *D
 				prev[k] = v
 			}
 		}
+		if c.Name == "profile.update" {
+			for _, key := range []string{"members", "source_ids", "node_ids", "all_sources"} {
+				if _, given := args[key]; given {
+					delete(prev, "source_ids")
+					delete(prev, "node_ids")
+					prev["all_sources"] = before["all_sources"]
+					prev["members"] = before["members"]
+					if before["all_sources"] == true {
+						prev["members"] = nil
+					}
+					break
+				}
+			}
+		}
 		ub := o.reqBody(prev)
 		if o.probe {
 			ub["skip_probe"] = true
@@ -496,8 +511,10 @@ func init() {
 // —— 只读能力的通用部分 ——
 
 // readVia 以只读方式调用手动操作的处理函数（GET 或实测类），结果去掉机密后交给模型。
+type modelReadKey struct{}
+
 func (s *Server) readVia(ctx context.Context, handler gin.HandlerFunc, method string, params gin.Params, q url.Values, body any) (any, error) {
-	actor, err := s.systemActor(ctx)
+	actor, err := s.systemActor(context.WithValue(ctx, modelReadKey{}, true))
 	if err != nil {
 		return nil, err
 	}
@@ -545,8 +562,30 @@ func modelSafe(v any) any {
 			out[i] = modelSafe(item)
 		}
 		return out
+	case string:
+		return redactText(t)
 	}
 	return v
+}
+
+// 字段名识别不到的机密：日志、错误、外部文本里夹带的凭据。凭据 UUID 只用作节点密码，对象编号都是整数或十六进制，不会误伤。
+var (
+	secretPEM   = regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(-----END [A-Z ]*PRIVATE KEY-----|$)`)
+	secretUUID  = regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`)
+	secretLink  = regexp.MustCompile(`(?i)\b(vless|vmess|trojan|ss|ssr|hysteria2|hy2|tuic|socks5?|https?|anytls|wireguard|wg)://[^\s"'<>]+`)
+	secretPair  = regexp.MustCompile(`(?i)\b(password|passwd|pass|token|secret|private[_-]?key|psk|uuid|auth)\s*[=:]\s*("[^"]*"|'[^']*'|[^\s,;&"']+)`)
+	secretSubID = regexp.MustCompile(`/sub/[A-Za-z0-9_-]{16,}`)
+)
+
+func redactText(s string) string {
+	if len(s) < 8 {
+		return s
+	}
+	s = secretPEM.ReplaceAllString(s, "<redacted>")
+	s = secretLink.ReplaceAllStringFunc(s, maskURL)
+	s = secretSubID.ReplaceAllString(s, "/sub/<redacted>")
+	s = secretPair.ReplaceAllString(s, "$1=<redacted>")
+	return secretUUID.ReplaceAllString(s, "<redacted>")
 }
 
 func isBool(v any) bool { _, ok := v.(bool); return ok }

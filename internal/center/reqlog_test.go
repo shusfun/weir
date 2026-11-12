@@ -83,6 +83,9 @@ func TestRequestLogPropagatesTraceparentAndRecordsSuccess(t *testing.T) {
 		if c.GetString("trace_id") != "0123456789abcdef0123456789abcdef" || c.GetString("request_id") == "" {
 			t.Errorf("trace context = %q %q", c.GetString("trace_id"), c.GetString("request_id"))
 		}
+		if got := traceOf(c.Request.Context()); got != c.GetString("trace_id") {
+			t.Errorf("operation trace = %q", got)
+		}
 		c.Status(200)
 	})
 	parent := "00-0123456789abcdef0123456789abcdef-1111111111111111-01"
@@ -109,6 +112,54 @@ func TestAccountPasswordRoutesRecordSuccessfulRequests(t *testing.T) {
 	} {
 		if !customTraceRoute(route) {
 			t.Errorf("account password route %q is not traced on success", route)
+		}
+	}
+}
+
+func TestWorkerTimelineRecordsSuccessfulRequest(t *testing.T) {
+	buf := captureLog(t)
+	r := gin.New()
+	r.Use(requestLog)
+	r.POST("/api/v1/admin/workers/tasks/:id/timeline", func(c *gin.Context) { c.Status(200) })
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("POST", "/api/v1/admin/workers/tasks/example/timeline", nil))
+	if !strings.Contains(buf.String(), "trace="+w.Header().Get("X-Trace-Id")) || !strings.Contains(buf.String(), "route=/api/v1/admin/workers/tasks/:id/timeline") || !strings.Contains(buf.String(), "status=200") {
+		t.Fatalf("successful timeline request missing from logs: %s", buf.String())
+	}
+}
+
+func TestContentObservationEntryRecordsHTTPTrace(t *testing.T) {
+	buf := captureLog(t)
+	r := gin.New()
+	r.Use(requestLog)
+	for _, route := range []string{"/api/v1/admin/public-pages", "/api/v1/pages/:slug/guestbook", "/api/v1/admin/defense/laya/test"} {
+		r.POST(route, func(c *gin.Context) { c.Status(201) })
+	}
+	for _, path := range []string{"/api/v1/admin/public-pages", "/api/v1/pages/untrusted-title/guestbook", "/api/v1/admin/defense/laya/test"} {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest("POST", path, nil))
+		if !strings.Contains(buf.String(), "trace="+w.Header().Get("X-Trace-Id")) {
+			t.Fatal("observation entry is missing its HTTP trace", path)
+		}
+	}
+	if strings.Contains(buf.String(), "untrusted-title") {
+		t.Fatal("public content slug leaked into access log")
+	}
+}
+
+func TestAuditReturnsOnlyValidatedTraceProjection(t *testing.T) {
+	s, admin := newInstalledServer(t)
+	root := "0123456789abcdef0123456789abcdef"
+	for _, trace := range []string{root, "malformed"} {
+		row := s.Store.Ent.Audit.Create().SetAction("fixture.trace").SetResult("ok").SetDetail(map[string]any{"trace_id": trace, "secret": "NEVERPROJECT"}).SaveX(t.Context())
+		v := mustJSON(t, admin, "GET", "/api/v1/admin/audit?id="+itoa(row.ID), nil, 200)
+		item := v["items"].([]any)[0].(map[string]any)
+		want := ""
+		if trace == root {
+			want = root
+		}
+		if item["trace_id"] != want || strings.Contains(jsonText(v), "NEVERPROJECT") {
+			t.Fatal("unsafe audit projection", v)
 		}
 	}
 }

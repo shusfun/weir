@@ -3,7 +3,7 @@
 import { useId, useState } from "react";
 import { useQuery } from "../lib/query";
 import {
-  Button, CodeBlock, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, FilePicker, Form, Input, Notice, PasswordInput, Segmented,
+  Button, CodeBlock, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, FilePicker, Form, Input, Notice, PasswordInput, Segmented, Step, Steps,
   Tabs, TabsList, TabsPanel, TabsTab, Textarea,
 } from "@weir/ui";
 import { ShieldCheck } from "lucide-react";
@@ -35,7 +35,7 @@ export function InviteGate({ open, close, done }: { open: boolean; close: () => 
       <DialogContent size="lg">
         <DialogTitle>添加 VPS</DialogTitle>
         <DialogDescription>装好后 VPS 主动连中心，之后建节点、改配置都在这里操作，不用再登录 VPS。</DialogDescription>
-        <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
+        <Tabs data-tour="vps-install" value={mode} onValueChange={(v) => setMode(v as Mode)}>
           <TabsList aria-label="安装方式">
             <TabsTab value="ssh">SSH 一次装好</TabsTab>
             <TabsTab value="command">复制安装命令</TabsTab>
@@ -87,10 +87,20 @@ function SSHInstall({ name, setName, close, done }: { name: string; setName: (v:
       field("password", "登录密码", password, true), field("private_key", "私钥", key, true)],
   });
   const restart = () => { setJob(null); setResult(null); setProbe(null); install.reset(); check.reset(); };
+  const step = job ? 3 : probe ? 2 : 1;
+  const steps = (
+    <Steps orientation="horizontal" aria-label="添加 VPS">
+      <Step index={1} label="连接方式" status={step > 1 ? "complete" : "current"} />
+      <Step index={2} label="SSH 登录" status={step > 2 ? "complete" : step === 2 ? "current" : "upcoming"} />
+      <Step index={3} label="安装与上线" status={step > 3 ? "complete" : step === 3 ? "current" : "upcoming"} />
+      <Step index={4} label="建第一个节点" status="upcoming" caption="装好后在 VPS 页新建" />
+    </Steps>
+  );
   if (job) {
     const gid = result?.status === "done" ? Number(result.result?.gate_id) : 0;
     return (
       <div className="stack">
+        {steps}
         <JobByID id={job.id} initial={job} openLogs onFinish={(j) => { setResult(j); if (j.status === "done") done(); }} />
         {result?.status === "done" && <Notice tone="ok">已安装并上线。{gid ? <Link className="underline" to={objectHref({ type: "gate", id: gid })} onClick={close}>打开这台 VPS</Link> : null}，点「＋ 协议」建节点。</Notice>}
         {result && result.status !== "done" && <Notice tone="warn">没有装好：{result.error}。可以改登录信息后重试，或换「复制安装命令」自己执行。</Notice>}
@@ -104,6 +114,7 @@ function SSHInstall({ name, setName, close, done }: { name: string; setName: (v:
   if (probe) {
     return (
       <Form id={formId} busy={install.busy} errors={install.errors} onSubmit={() => void install.submit()}>
+        {steps}
         <Notice role="status">
           <ShieldCheck className="inline size-4" /> 第一次连接 <strong>{host}:{port}</strong>，主机公钥（{probe.key_type}）的指纹是：
           <CodeBlock className="mt-2 block break-all">{probe.fingerprint}</CodeBlock>
@@ -118,6 +129,7 @@ function SSHInstall({ name, setName, close, done }: { name: string; setName: (v:
   }
   return (
     <Form id={formId} busy={check.busy} errors={check.errors} onSubmit={() => void check.submit()}>
+      {steps}
       <NameField name={name} setName={setName} />
       <div className="grid gap-3 sm:grid-cols-[1fr_96px_140px]">
         <Field label="VPS 地址" name="host" required hint="公网 IP 或域名。">

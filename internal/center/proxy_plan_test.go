@@ -7,6 +7,7 @@ import (
 
 	"github.com/shusfun/weir/internal/store/ent"
 	entexit "github.com/shusfun/weir/internal/store/ent/exit"
+	"github.com/shusfun/weir/internal/subout"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -47,6 +48,9 @@ func TestProxyPlanEntriesAutoAndAuthorization(t *testing.T) {
 			t.Fatal(err)
 		}
 		plan, items := s.subPlan(ctx, p)
+		if plan.TestURL != subout.SubscriptionProbeURL {
+			t.Fatalf("订阅探测地址=%q，预期=%q", plan.TestURL, subout.SubscriptionProbeURL)
+		}
 		names := make([]string, len(p.Entries))
 		for i, e := range p.Entries {
 			names[i] = e.Name

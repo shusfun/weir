@@ -8,7 +8,7 @@ protocols: [vless, vmess, trojan, shadowsocks, socks, http]
 networks: [tcp, raw, ws, grpc, xhttp, httpupgrade]
 securities: [tls, reality]
 outbound_networks: [tcp, ws, grpc, xhttp, httpupgrade]
-features: [balancer, observatory]
+features: [balancer, observatory, handler_users]
 run: [run, -config, "{config}"]
 check: [run, -test, -config, "{config}"]
 
@@ -127,7 +127,7 @@ templates:
     policy:
       levels: {"0": {statsUserUplink: true, statsUserDownlink: true}}
       system: {statsInboundUplink: true, statsInboundDownlink: true, statsOutboundUplink: true, statsOutboundDownlink: true}
-    api: {tag: api, services: [StatsService]}
+    api: {tag: api, services: [StatsService, HandlerService]}
 
   rule:
     $merge:
@@ -242,7 +242,7 @@ templates:
       $then:
         certificates?:
           $if: "ib.tls_cert_file and ib.tls_key_file"
-          $then: [{certificateFile: "${ib.tls_cert_file}", keyFile: "${ib.tls_key_file}"}]
+          $then: [{certificateFile: "${ib.tls_cert_file}", keyFile: "${ib.tls_key_file}", oneTimeLoading: false}]
         serverName?: "${ib.tls_sni}"
         fingerprint?: "${ib.tls_fingerprint}"
         alpn?: "${ib.tls_alpn | split}"

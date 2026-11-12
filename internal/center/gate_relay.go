@@ -1,73 +1,29 @@
 package center
 
-// 经 VPS 中转下载 GitHub 文件：中心连不上 GitHub（或很慢）时，让某台 VPS 下载、按官方摘要校验后分块上传给中心。
-// 上传编号只在中心进程内存里，绑定到发起的那台 Gate；中心重启或下载取消后编号作废，Gate 的上传会收到 404 并停止。
-// 中心收完后照常按摘要校验（fetch.Download），VPS 只是又一个来源。
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"runtime"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
-
 	"github.com/shusfun/weir/internal/fetch"
 	"github.com/shusfun/weir/internal/ghrelease"
 	"github.com/shusfun/weir/internal/kernels"
 	"github.com/shusfun/weir/internal/store/ent/gateaction"
+	"github.com/shusfun/weir/internal/store/ent/resource"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
-// relayPickup 是 Gate 领取中转任务的时限；relayCheck 是检查 Gate 是否仍在线的间隔。
 var (
 	relayPickup = 2 * time.Minute
 	relayCheck  = 10 * time.Second
 )
-
-type relayUpload struct {
-	gateID    int
-	path      string
-	size      int64 // GitHub 给出的大小；0 表示未知
-	maxSize   int64
-	received  int64
-	closed    bool
-	report    fetch.Reporter
-	name      string
-	uploading bool
-	reported  bool
-	stage     string
-	changed   chan struct{}
-}
-
-type relayHub struct {
-	mu      sync.Mutex
-	uploads map[string]*relayUpload
-}
-
-func (h *relayHub) add(id string, u *relayUpload) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.uploads == nil {
-		h.uploads = map[string]*relayUpload{}
-	}
-	h.uploads[id] = u
-}
-
-// remove 作废上传编号；之后到达的上传一律 404，不会再写文件。
-func (h *relayHub) remove(id string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if u := h.uploads[id]; u != nil {
-		u.closed = true
-	}
-	delete(h.uploads, id)
-}
 
 // githubClientHTTP 是访问 GitHub 与镜像的 HTTP 客户端（测试时用注入的）。
 func (s *Server) githubClientHTTP() *http.Client {
@@ -91,7 +47,7 @@ func (s *Server) downloadGitHub(ctx context.Context) (ghrelease.Client, []ghrele
 	if err != nil {
 		return ghrelease.Client{}, nil, fmt.Errorf("读取 GitHub 加速设置失败：%w", err)
 	}
-	return ghrelease.Client{HTTP: githubHTTP(), Sources: set.Sources}, set.Sources, nil
+	return ghrelease.Client{HTTP: githubHTTP(), Query: s.queryReleases, Sources: set.Sources}, set.Sources, nil
 }
 
 // kernelFetcher 是下载内核用的 Fetcher：按「GitHub 加速」的顺序，gate 来源经 VPS 中转。
@@ -140,8 +96,8 @@ func (s *Server) relaySources(gh ghrelease.Client, sources []ghrelease.Source, r
 	return out
 }
 
-// relayFetch 让 Gate gid 下载 req.URLs 并上传到 dest。Gate 离线、没有领取、报告失败时立即返回其原因；
-// VPS 下载与传回中心两段的进度都经 rep 报给下载任务。
+// relayFetch uses durable, gate-bound chunks only for the final fallback.
+// The destination is materialized after task completion and local verification.
 func (s *Server) relayFetch(ctx context.Context, gid int, req contracts.AssetFetch, dest string, rep fetch.Reporter) error {
 	g, err := s.Store.Ent.Gate.Get(ctx, gid)
 	if err != nil {
@@ -150,136 +106,187 @@ func (s *Server) relayFetch(ctx context.Context, gid int, req contracts.AssetFet
 	if !gateOnline(g) {
 		return errors.New("VPS 离线")
 	}
-	f, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	session, err := s.openRelay(ctx, gid, req)
 	if err != nil {
+		if session.ID != "" && session.ConsumerToken != "" {
+			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			defer cancel()
+			s.tasks.note("asset-relay-close", s.closeRelay(cleanup, session.ID, gid, session.ConsumerToken))
+		}
 		return err
 	}
-	_ = f.Close()
-	req.UploadID = randomHex(16)
-	if req.MaxSize <= 0 {
-		req.MaxSize = 256 << 20
-	}
-	name := "VPS " + g.Name
-	up := &relayUpload{gateID: gid, path: dest, size: req.Size, maxSize: req.MaxSize, report: rep, name: name, changed: make(chan struct{}, 1)}
-	s.relays.add(req.UploadID, up)
-	defer s.relays.remove(req.UploadID)
-	payload := map[string]any{"upload_id": req.UploadID, "urls": req.URLs, "sha256": req.SHA256, "size": req.Size, "max_size": req.MaxSize}
-	a, err := s.enqueueAction(ctx, gid, contracts.ActionAssetFetch, payload, relayPickup)
-	if err != nil {
-		return fmt.Errorf("下发中转任务失败：%w", err)
-	}
-	rep.Stage("等 " + name + " 领取任务")
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		closeErr := s.closeRelay(cleanup, session.ID, gid, session.ConsumerToken)
+		s.tasks.note("asset-relay-close", closeErr)
+		if task, err := s.Store.Tasks.Legacy(cleanup, session.ActionID); err == nil && closeErr == nil {
+			_ = s.Store.Tasks.Cancel(cleanup, task.Task.ID)
+			_ = s.Store.Notifications.Publish(cleanup, "workers")
+		}
+	}()
+	rep.Stage("等 VPS 领取持久中转任务")
 	tick := time.NewTicker(relayCheck)
 	defer tick.Stop()
-	started := time.Time{}
 	for {
-		done := s.actionDone.wait(a.ID)
-		cur, err := s.Store.Ent.GateAction.Get(ctx, a.ID)
+		done := s.actionDone.wait(session.ActionID)
+		current, err := s.renewRelayConsumer(ctx, session)
 		if err != nil {
 			return err
 		}
-		s.relays.mu.Lock()
-		silent := !up.reported && !up.uploading
-		s.relays.mu.Unlock()
-		// 新版 Gate 一领取就上报；领取后迟迟没有上报的是不报进度的旧版 Gate，如实写明，不让进度条像卡死
-		if cur.Status == gateaction.StatusRunning && silent {
-			if started.IsZero() {
-				started = time.Now()
-				rep.Stage(name + " 下载中")
-			} else if time.Since(started) >= relayCheck {
-				rep.Stage(name + " 下载中（这台 VPS 不报进度）")
-			}
+		session = current
+		action, err := s.Store.Ent.GateAction.Get(ctx, session.ActionID)
+		if err != nil {
+			return err
 		}
-		switch cur.Status {
+		if session.Received > 0 {
+			rep.Stage("VPS 传回中心")
+			rep.Report(session.Received, session.Size, 0)
+		} else if session.Progress.Done > 0 {
+			rep.Stage("VPS 下载中")
+			rep.Report(session.Progress.Done, session.Progress.Total, session.Progress.Speed)
+		}
+		switch action.Status {
 		case gateaction.StatusFailed:
-			if cur.Error != "" {
-				return errors.New(cur.Error)
+			if action.Error != "" {
+				return errors.New(action.Error)
 			}
 			return errors.New("VPS 报告下载失败")
 		case gateaction.StatusExpired:
 			return errors.New("VPS 没有领取中转任务")
 		case gateaction.StatusDone:
-			s.relays.mu.Lock()
-			got := up.received
-			s.relays.mu.Unlock()
-			if req.Size > 0 && got != req.Size {
-				return fmt.Errorf("VPS 报告完成，但只上传了 %s / %s", fetch.Size(got), fetch.Size(req.Size))
+			rep.Stage("校验持久分块与完整摘要")
+			return s.materializeRelay(ctx, session, dest)
+		}
+		if time.Since(session.CreatedAt) > relayPickup {
+			task, lookupErr := s.Store.Tasks.Legacy(ctx, session.ActionID)
+			if errors.Is(lookupErr, sql.ErrNoRows) {
+				if action.Status == gateaction.StatusPending {
+					return errors.New("VPS 没有领取中转任务")
+				}
+			} else if lookupErr != nil {
+				return lookupErr
+			} else if task.Status == "pending" {
+				return errors.New("VPS 没有领取中转任务")
 			}
-			return nil
 		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-done:
-		case <-up.changed:
 		case <-tick.C:
 			if g, err := s.Store.Ent.Gate.Get(ctx, gid); err == nil && !gateOnline(g) {
 				return errors.New("VPS 离线")
 			}
-			// 待领取超过时限的动作在 Gate 下次取动作时才标记过期：这里按时间直接判断
-			if cur.Status == gateaction.StatusPending && time.Now().After(cur.ExpiresAt) {
-				return errors.New("VPS 没有领取中转任务")
-			}
 		}
 	}
 }
 
-// relayUploadFor 找到 Gate 自己的上传；别的 Gate 的编号一律当作不存在。调用方持有 relays.mu。
-func (s *Server) relayUploadFor(c *gin.Context) *relayUpload {
-	u := s.relays.uploads[c.Param("id")]
-	if u == nil || u.closed || u.gateID != gateFrom(c).ID {
+// Leased workers carry their current attempt on each upload request. Legacy
+// callers are accepted only while this session has no new-protocol task.
+func (s *Server) relayCaller(c *gin.Context) (relaySession, error) {
+	session, err := s.loadRelay(c.Request.Context(), c.Param("id"), gateFrom(c).ID)
+	if err != nil {
+		return session, err
+	}
+	return session, s.checkRelayLease(c.Request.Context(), session, c.GetHeader("X-Weir-Task-ID"), c.GetHeader("X-Weir-Task-Attempt"), c.GetHeader("X-Weir-Task-Lease"))
+}
+
+func (s *Server) checkRelayLease(ctx context.Context, session relaySession, id, attemptText, token string) error {
+	task, err := s.Store.Tasks.Legacy(ctx, session.ActionID)
+	if errors.Is(err, sql.ErrNoRows) {
+		action, e := s.Store.Ent.GateAction.Get(ctx, session.ActionID)
+		if e != nil {
+			return e
+		}
+		if action.GateID != session.GateID || action.Status != gateaction.StatusRunning || !time.Now().Before(action.ExpiresAt) {
+			return errors.New("task_lease_lost")
+		}
 		return nil
 	}
-	return u
+	if err != nil {
+		return err
+	}
+	attempt, _ := strconv.Atoi(attemptText)
+	if task.Task.ID != id || task.GateID != session.GateID || task.Task.Attempt != attempt || task.Task.LeaseToken != token || task.Status != "leased" || !time.Now().Before(task.Task.LeaseUntil) || !time.Now().Before(task.Task.Deadline) {
+		return errors.New("task_lease_lost")
+	}
+	return nil
 }
 
-// agentUploadState 返回已收到的字节数，Gate 断线后据此续传。
+func relayHTTPFailure(c *gin.Context, err error) {
+	switch err.Error() {
+	case "upload_not_found":
+		failure(c, 404, "upload_not_found")
+	case "task_lease_lost":
+		failure(c, 409, "task_lease_lost")
+	case "upload_too_large":
+		failure(c, 413, "upload_too_large")
+	case "relay_rate_invalid", "relay_rate_state_invalid":
+		failure(c, 503, err.Error())
+	default:
+		failInternal(c, 503, "relay_storage_unavailable", err)
+	}
+}
+
 func (s *Server) agentUploadState(c *gin.Context) {
-	s.relays.mu.Lock()
-	defer s.relays.mu.Unlock()
-	u := s.relayUploadFor(c)
-	if u == nil {
-		failure(c, 404, "upload_not_found")
+	session, err := s.relayCaller(c)
+	if err != nil {
+		relayHTTPFailure(c, err)
 		return
 	}
-	c.JSON(200, contracts.UploadState{Received: u.received})
+	c.JSON(200, contracts.UploadState{Received: session.Received})
 }
 
-// agentUploadProgress 接收 Gate 下载阶段的进度（Gate 下载完才开始上传，这段中心自己看不到）。只用于显示，
-// 不影响下载；开始上传后到达的旧进度丢弃，避免进度条往回跳。
 func (s *Server) agentUploadProgress(c *gin.Context) {
-	var p contracts.UploadProgress
-	if !bind(c, &p) {
+	var progress contracts.UploadProgress
+	if !bindWorker(c, &progress, 4096) {
 		return
 	}
-	s.relays.mu.Lock()
-	defer s.relays.mu.Unlock()
-	u := s.relayUploadFor(c)
-	if u == nil {
-		failure(c, 404, "upload_not_found")
+	if progress.Done < 0 || progress.Total < 0 || progress.Speed < 0 || progress.Done > relayMaximumBytes || progress.Total > relayMaximumBytes || progress.Total > 0 && progress.Done > progress.Total {
+		failure(c, 400, "invalid_upload_progress")
 		return
 	}
-	if !u.uploading {
-		stage := u.name + " 下载中"
-		if p.Source != "" {
-			stage += "（" + p.Source + "）"
+	session, err := s.relayCaller(c)
+	if err != nil {
+		relayHTTPFailure(c, err)
+		return
+	}
+	// Upstream source labels are external text, not a safe progress message.
+	progress.Source = ""
+	err = s.Store.Lock.Do(c.Request.Context(), "asset-relay:"+session.ID, func(ctx context.Context) error {
+		current, err := s.loadRelay(ctx, session.ID, session.GateID)
+		if err != nil {
+			return err
 		}
-		if stage != u.stage {
-			u.stage = stage
-			u.report.Stage(stage)
+		if err = s.checkRelayLease(ctx, current, c.GetHeader("X-Weir-Task-ID"), c.GetHeader("X-Weir-Task-Attempt"), c.GetHeader("X-Weir-Task-Lease")); err != nil {
+			return err
 		}
-		u.reported = true
-		u.report.Report(p.Done, p.Total, p.Speed)
+		if current.Received == 0 && progress.Done >= current.Progress.Done {
+			current.Progress = progress
+			if err = s.Store.Ent.Resource.Update().Where(resource.KindEQ(relaySessionKind), resource.KeyEQ(current.ID)).SetData(toMap(current)).Exec(ctx); err != nil {
+				return err
+			}
+			s.actionDone.notify(session.ActionID)
+		}
+		return nil
+	})
+	if err != nil {
+		relayHTTPFailure(c, err)
+		return
 	}
 	c.JSON(200, gin.H{"ok": true})
 }
 
-// agentUploadChunk 写入一块：offset 必须等于已收到的字节数（否则 409 并回已收到的字节数），
-// 单块不超过 UploadChunk，总量不超过 MaxSize。
 func (s *Server) agentUploadChunk(c *gin.Context) {
 	offset, err := strconv.ParseInt(c.Query("offset"), 10, 64)
 	if err != nil || offset < 0 {
 		failure(c, 400, "invalid_offset")
+		return
+	}
+	session, err := s.relayCaller(c)
+	if err != nil {
+		relayHTTPFailure(c, err)
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(c.Request.Body, contracts.UploadChunk+1))
@@ -291,44 +298,23 @@ func (s *Server) agentUploadChunk(c *gin.Context) {
 		failure(c, 413, "chunk_too_large")
 		return
 	}
-	s.relays.mu.Lock()
-	defer s.relays.mu.Unlock()
-	u := s.relayUploadFor(c)
-	if u == nil {
-		failure(c, 404, "upload_not_found")
-		return
-	}
-	if offset != u.received {
-		c.AbortWithStatusJSON(409, gin.H{"received": u.received, "error": gin.H{"code": "offset_mismatch", "message": "offset_mismatch"}})
-		return
-	}
-	end := offset + int64(len(body))
-	if end > u.maxSize || u.size > 0 && end > u.size {
-		failure(c, 413, "upload_too_large")
-		return
-	}
-	f, err := os.OpenFile(u.path, os.O_WRONLY, 0o644)
-	if err == nil {
-		_, err = f.WriteAt(body, offset)
-		if cerr := f.Close(); err == nil {
-			err = cerr
-		}
-	}
+	_, budget, err := s.workerPolicy(c.Request.Context())
 	if err != nil {
-		failInternal(c, 500, "upload_write_failed", err)
+		relayHTTPFailure(c, err)
 		return
 	}
-	u.received = end
-	if !u.uploading {
-		u.uploading = true
-		u.report.Stage(u.name + " 传回中心")
+	current, err := s.writeRelayChunk(c.Request.Context(), session.ID, session.GateID, offset, body, budget.BandwidthBytesPerSecond, func(ctx context.Context) error {
+		return s.checkRelayLease(ctx, session, c.GetHeader("X-Weir-Task-ID"), c.GetHeader("X-Weir-Task-Attempt"), c.GetHeader("X-Weir-Task-Lease"))
+	})
+	if err != nil {
+		if err.Error() == "offset_mismatch" {
+			c.AbortWithStatusJSON(409, gin.H{"received": current.Received, "error": gin.H{"code": "offset_mismatch", "message": "offset_mismatch"}})
+			return
+		}
+		relayHTTPFailure(c, err)
+		return
 	}
-	u.report.Report(end, u.size, 0)
-	select {
-	case u.changed <- struct{}{}:
-	default:
-	}
-	c.JSON(200, contracts.UploadState{Received: u.received})
+	c.JSON(200, contracts.UploadState{Received: current.Received})
 }
 
 // centerArch 是中心本机的架构（测速、预下载取发布包用）。

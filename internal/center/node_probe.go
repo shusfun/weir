@@ -36,6 +36,7 @@ type nodeTestResult struct {
 	JobID        string          `json:"job_id"`
 	TraceID      string          `json:"trace_id"`
 	Location     string          `json:"location"` // center / colocated
+	ExecutionGateID int          `json:"execution_gate_id,omitempty"`
 	External     string          `json:"external"` // passed / failed / unknown
 	UserID       int             `json:"user_id,omitempty"`
 	LinkID       int             `json:"link_id,omitempty"`
@@ -62,6 +63,15 @@ func (s *Server) nodeTestJob(id int) (Job, bool) {
 // A fixed path keeps the bearer credential out of proxy access logs.
 func (s *Server) nodeTestDownload(c *gin.Context) {
 	token := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
+	if validTraceHex(token,48) {
+		_,found,err:=s.Store.KV.GetDel(c.Request.Context(),"node-probe-grant:"+digest(token))
+		if err!=nil {failure(c,503,"probe_grant_unavailable");return}
+		if found {
+			c.Header("Cache-Control","no-store")
+			c.Data(http.StatusOK,"application/octet-stream",nodeprobe.Payload(token))
+			return
+		}
+	}
 	s.nodeProbes.Lock()
 	until, ok := s.nodeProbes.targets[token]
 	delete(s.nodeProbes.targets, token)
@@ -90,6 +100,13 @@ func (s *Server) probeGrant() (string, func()) {
 	return token, func() { s.nodeProbes.Lock(); delete(s.nodeProbes.targets, token); s.nodeProbes.Unlock() }
 }
 
+func (s *Server) issueProbeGrant(ctx context.Context) (string,func(),error) {
+	token:=randomHex(24)
+	key:="node-probe-grant:"+digest(token)
+	if err:=s.Store.KV.Set(ctx,key,"1",3*time.Minute);err!=nil {return "",func(){},err}
+	return token,func(){cleanup,cancel:=context.WithTimeout(context.WithoutCancel(ctx),3*time.Second);defer cancel();_ = s.Store.KV.Del(cleanup,key)},nil
+}
+
 func (s *Server) probeSlots() chan struct{} {
 	s.nodeProbes.Lock()
 	defer s.nodeProbes.Unlock()
@@ -108,6 +125,16 @@ func (s *Server) startDeployedNodeTest(c *gin.Context) {
 		failDetail(c, 422, "node_test_failed", "节点已停用", nil)
 		return
 	}
+	var execution struct {GateID int `json:"gate_id"`}
+	if c.Request.ContentLength != 0 && !bindWorker(c,&execution,4096) {return}
+	if execution.GateID<0 {failure(c,400,"invalid_gate_id");return}
+	if execution.GateID>0 {
+		g,err:=s.Store.Ent.Gate.Get(c.Request.Context(),execution.GateID)
+		if err!=nil || !gateOnline(g) {failure(c,422,"probe_gate_unavailable");return}
+		supported,err:=s.gateSupportsTask(c.Request.Context(),g,contracts.TaskNodeProbe,0)
+		if err!=nil {failInternal(c,503,"capabilities_unavailable",err);return}
+		if !supported {failure(c,409,"agent_upgrade_required");return}
+	}
 	id, actor, ip := n.ID, c.GetInt("user_id"), c.ClientIP()
 	ht, _ := c.Request.Context().Value(httpTraceKey{}).(httpTrace)
 	request := c.GetString("request_id")
@@ -124,6 +151,7 @@ func (s *Server) startDeployedNodeTest(c *gin.Context) {
 	s.nodeProbes.jobs[id] = jobID
 	j := s.jobs.StartWith(jobSpec{ID: jobID, Kind: "action", Title: "实测节点「" + n.Name + "」", Owner: actor, Trace: ht.ID, CancelMsg: "节点测试已取消"},
 		func(ctx context.Context, job JobRun) (map[string]any, error) {
+			ctx=context.WithValue(ctx,nodeProbeExecutionKey{},execution.GateID)
 			ctx = context.WithValue(withTrace(ctx, request), httpTraceKey{}, ht)
 			ctx = context.WithValue(ctx, jobCtxKey{}, &job)
 			s.state.RLock()
@@ -151,11 +179,18 @@ func (s *Server) startDeployedNodeTest(c *gin.Context) {
 				}
 			}
 			_, auditErr := s.Store.Ent.Audit.Create().SetActor(actor).SetAction("node.test").SetTarget("node:" + itoa(id)).SetResult(r.Status).SetIP(ip).
-				SetDetail(map[string]any{"trace_id": ht.ID, "request_id": request, "job_id": r.JobID, "user_id": r.UserID, "link_id": r.LinkID, "tcp": r.TCP.Status, "udp": r.UDP.Status}).Save(cleanup)
+				SetDetail(map[string]any{"trace_id": ht.ID, "request_id": request, "job_id": r.JobID, "user_id": r.UserID, "link_id": r.LinkID, "location":r.Location,"execution_gate_id":r.ExecutionGateID,"tcp": r.TCP.Status, "udp": r.UDP.Status}).Save(cleanup)
 			if auditErr != nil {
 				slog.Error("node test audit", "trace", ht.ID, "node", id, "err", redact(auditErr.Error()))
 			}
 			slog.Info("node test", "trace", ht.ID, "request", request, "job", r.JobID, "node", id, "user", actor, "status", r.Status, "tcp", r.TCP.Status, "udp", r.UDP.Status, "detail", r.Why)
+			if ctx.Err() == nil && (r.Status == "failed" || r.Status == "unknown") {
+				_, observeErr := s.enqueueObservation(cleanup, observationInput{Point: "node.test", Resource: "node:" + itoa(id), Text: r.Why + "\n" + r.TCP.Why + "\n" + r.UDP.Why, Origin: "center.startDeployedNodeTest"})
+				s.tasks.note("observation-producer", observeErr)
+			}
+			if ctx.Err() == nil && r.Status == "failed" {
+				s.triggerOps(cleanup, n.GateID, "node.test", "节点 "+itoa(id)+" 实测失败："+r.Why)
+			}
 			s.notifyConsole("gate", itoa(n.GateID))
 			body := map[string]any{"test": r}
 			if ctx.Err() != nil {
@@ -200,6 +235,8 @@ var deployedProbeBinary = func(s *Server, ctx context.Context) (string, kernelco
 	return bin, d, err
 }
 
+type nodeProbeExecutionKey struct{}
+
 func (s *Server) runDeployedNodeTest(ctx context.Context, id, actor int, job JobRun) (r nodeTestResult, resultErr error) {
 	trace, _ := ctx.Value(httpTraceKey{}).(httpTrace)
 	r = nodeTestResult{Status: "unknown", JobID: job.e.job.ID, TraceID: trace.ID, Location: "center", External: "unknown", TCP: nodeprobe.Check{Status: "unknown"}, UDP: nodeprobe.Check{Status: "unknown"}}
@@ -224,12 +261,17 @@ func (s *Server) runDeployedNodeTestNow(ctx context.Context, id, actor int, job 
 	executionCtx := ctx
 	ht, _ := ctx.Value(httpTraceKey{}).(httpTrace)
 	r = nodeTestResult{Status: "unknown", TCP: nodeprobe.Check{Status: "unknown"}, UDP: nodeprobe.Check{Status: "unknown"}, JobID: job.e.job.ID, TraceID: ht.ID, Location: "center", External: "unknown"}
+	executorID,_:=ctx.Value(nodeProbeExecutionKey{}).(int)
+	if executorID>0 {r.Location="gate";r.ExecutionGateID=executorID}
 	job.StepFor("正在排队等待节点测试", 5*time.Minute)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	bin, driver, err := deployedProbeBinary(s, ctx)
-	if err != nil {
-		return r, err
+	var bin string
+	var driver kernelconf.Driver
+	var err error
+	if executorID==0 {
+		bin,driver,err=deployedProbeBinary(s,ctx)
+		if err!=nil {return r,err}
 	}
 	origin := s.centerOrigin(ctx)
 	if !strings.HasPrefix(origin, "https://") {
@@ -244,23 +286,22 @@ func (s *Server) runDeployedNodeTestNow(ctx context.Context, id, actor int, job 
 	if err != nil {
 		return r, err
 	}
-	if colocated(g) {
+	if executorID==0 && colocated(g) {
 		r.Location = "colocated"
 	}
 	if !n.Enabled || g.Status != "active" || g.LastSeenAt == nil || time.Since(*g.LastSeenAt) > 90*time.Second {
 		return r, errors.New("节点已停用或 VPS 离线／已撤销")
 	}
-	if colocated(g) {
+	if executorID==0 && colocated(g) {
 		return r, errors.New("中心与这台 VPS 在同一台机器上，无法验证外部连接")
 	}
-	if !externalProbeSupported() {
+	if executorID==0 && !externalProbeSupported() {
 		return r, errors.New("中心不是 Linux amd64／arm64，无法执行外部实测")
 	}
-	selected, revokeCredential, err := s.issueProbeCredential(ctx, n)
+	selected, err := s.probeCredential(ctx, n)
 	if err != nil {
 		return r, err
 	}
-	defer revokeCredential()
 	r.CredentialID = selected.ID
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -308,12 +349,37 @@ func (s *Server) runDeployedNodeTestNow(ctx context.Context, id, actor int, job 
 	if err != nil {
 		return r, err
 	}
-	token, revoke := s.probeGrant()
+	token, revoke, err := s.issueProbeGrant(executionCtx)
+	if err!=nil{return r,err}
 	defer revoke()
+	// 等待配置的 ctx 到这里结束。出口查询必须用还活着的 executionCtx，
+	// 取消后的查询失败会被当成「未知」，于是照常发 UDP，把「出口不支持」测成超时。
 	cancel()
 	udp := n.Protocol != "http" && n.Protocol != "shadowtls"
-	res, probeErr := deployedNodeProbe(executionCtx, nodeprobe.Options{Binary: bin, Run: driver.Run, Check: driver.Check, Client: client, UDP: udp, Target: strings.TrimRight(origin, "/") + "/api/v1/node-test/download", Token: token, Traceparent: ht.parent(), Step: func(step string) { job.StepFor(step, 60*time.Second) }})
+	if supported, known := s.nodeUDP(executionCtx, n); known && !supported {
+		udp = false
+	}
+	var res nodeprobe.Result
+	var probeErr error
+	probeTarget:=strings.TrimRight(origin,"/")+"/api/v1/node-test/download"
+	if executorID>0 {
+		executor,e:=s.Store.Ent.Gate.Get(executionCtx,executorID)
+		if e!=nil {return r,e}
+		kernels,drivers,e:=s.gateKernels(executionCtx,executor,map[string]bool{"mihomo":true})
+		if e!=nil{return r,e}
+		request:=contracts.NodeProbeTask{Client:client,UDP:udp,Credentials:contracts.FetchSecrets{URL:probeTarget,Authorization:token},Kernels:kernels,Drivers:drivers}
+		job.StepFor("正在指定 VPS 上实测已部署节点",2*time.Minute)
+		raw,_,e:=s.dispatchWorkerTask(executionCtx,contracts.TaskNodeProbe,request,contracts.TaskRequirements{TargetGateID:executorID},[]int{executorID})
+		if e!=nil{return r,e}
+		if e=contracts.DecodeStrict(raw,&res,64<<10);e!=nil{return r,e}
+		res.TCP.Why,res.UDP.Why=probeReasonText(res.TCP.Why),probeReasonText(res.UDP.Why)
+	} else {
+		res,probeErr=deployedNodeProbe(executionCtx,nodeprobe.Options{Binary:bin,Run:driver.Run,Check:driver.Check,Client:client,UDP:udp,Target:probeTarget,Token:token,Traceparent:ht.parent(),Step:func(step string){job.StepFor(step,60*time.Second)}})
+	}
 	r.TCP, r.UDP = res.TCP, res.UDP
+	if supported, known := s.nodeUDP(executionCtx, n); known && !supported {
+		r.UDP = nodeprobe.Check{Status: "not_applicable", Why: "出口不支持"}
+	}
 	clean := func(msg string) string {
 		for _, secret := range []string{selected.UUID, selected.Password, token, nodeSetting(n.Settings, "ss_password")} {
 			if secret != "" {
@@ -343,9 +409,10 @@ func (s *Server) runDeployedNodeTestNow(ctx context.Context, id, actor int, job 
 			r.Why = clean(probeErr.Error())
 		}
 	}
-	if r.Location != "colocated" {
+	if r.Location != "colocated" && executorID!=g.ID {
 		r.External = r.Status
 	}
+	if executorID==g.ID {r.Why="在节点所在 VPS 上实测，外部可达性未知。"+r.Why}
 	return r, nil
 }
 

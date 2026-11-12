@@ -3,7 +3,7 @@
 // 保存后显示要放行的端口（对照本机防火墙）与出口实测结果，再给出管理员本人的链接与二维码；谁能用节点在用户页分配。
 import { useEffect, useState } from "react";
 import { useQuery } from "../lib/query";
-import { Badge, Button, ChoiceCard, Collapsible, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Radio, RadioGroup, SwitchField, ScrollArea } from "@weir/ui";
+import { Badge, Button, ChoiceCard, Collapsible, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Radio, RadioGroup, Step, Steps, SwitchField } from "@weir/ui";
 import { QRCodeSVG } from "qrcode.react";
 import { ExitSelector } from "./exit-selector";
 import { api, ApiError } from "../api";
@@ -139,6 +139,12 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
     <Dialog open={open} onOpenChange={(o) => { if (!o && (!save.busy || save.detachable)) { save.leave(); reset(); } }}>
       <DialogContent size="lg">
         <DialogTitle>新建节点</DialogTitle>
+        <Steps orientation="horizontal" aria-label="新建节点">
+          <Step index={1} label="VPS" status={gateId ? "complete" : "current"} />
+          <Step index={2} label="协议" status={!gateId ? "upcoming" : "complete"} />
+          <Step index={3} label="出口" status={gateId ? "current" : "upcoming"} />
+          <Step index={4} label="创建" status="upcoming" />
+        </Steps>
         <DialogDescription>选好 VPS 和协议即可创建。mihomo 尚未下载时先保存普通节点，下载完成后自动实测；链式出口验证通过后才启用。</DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
           {active.length === 0 ? (
@@ -161,13 +167,13 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
               这台 VPS 还没有公网地址，生成不了节点链接。请先到 <Link className="underline" to={objectHref({ type: "gate", id: gate.id })} onClick={reset}>VPS 详情</Link> 填写{gate.public_host_hint ? `（本机网卡上的公网 IP 是 ${gate.public_host_hint}）` : ""}。
             </Notice>
           )}
-          <Field label="协议">
+          <Field label="协议" data-tour="node-preset">
             <PresetChoice presets={presets} value={preset} onChange={(v) => { setPreset(v); setAdvanced({}); }} />
           </Field>
           {chosen?.note && <Notice tone="warn">{chosen.note}</Notice>}
           <ExitSelector gateId={gateId ?? 0} exitId={exitId} onExitId={id=>setExitId(id??0)} value={chain} onChange={setChain} admin sourcePath="/admin/chain-sources" nodes={exits} nodeHint="出口需要另一台 VPS 上能作出口的节点（VLESS / VMess / Trojan 方案）。" />
           <small className="text-[var(--weir-ink-3)]">这里的出口管这个节点的全部流量。按网站分流在 VPS 的「出口与分流」，按协议类型统一加出口在 <Link className="underline" to="/proxy" onClick={reset}>代理</Link>。</small>
-          <Collapsible key={more ? "more" : "less"} title="高级：名称、端口、证书" defaultOpen={more}>
+          <div data-tour="node-options"><Collapsible key={more ? "more" : "less"} title="高级：名称、端口、证书" defaultOpen={more}>
             <div className="stack">
               <Field label="节点名称" hint="留空时自动命名。">
                 <Input maxLength={100} value={name} placeholder={gate && chosen ? `${gate.name} ${chosen.name}` : ""} onChange={(e) => setName(e.target.value)} />
@@ -176,7 +182,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
                 <Input inputMode="numeric" value={port} onChange={(e) => setPort(e.target.value.replace(/\D/g, ""))} />
               </Field>
               {chosen?.id === "vless-reality" && (
-                <Field label="伪装目标" name="target" hint="留空时由 VPS 实测候选站点，选 TLS 1.3 + h2 且延迟最低者。">
+                <Field label="伪装目标" name="target" hint="留空时由这台 VPS 用 DoH 解析候选站点，再选 TLS 1.3、h2 且握手最快的。DoH 失败的候选不算合适。">
                   <Input value={target} placeholder="www.microsoft.com" onChange={(e) => setTarget(e.target.value)} />
                 </Field>
               )}
@@ -199,10 +205,10 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
                 </Field>
               )}
             </div>
-          </Collapsible>
+          </Collapsible></div>
           <DialogFooter error={save.error} status={save.wait && <WaitText wait={save.wait} />}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={reset}>取消</Button>
-            <Button type="submit" disabled={blocked} busy={save.busy} busyText="正在实测并保存…">创建节点</Button>
+            <Button data-tour="node-submit" type="submit" disabled={blocked} busy={save.busy} busyText="正在实测并保存…">创建节点</Button>
           </DialogFooter>
         </Form>
       </DialogContent>
@@ -277,7 +283,6 @@ function AdvancedFields({ fields, value, onChange }: { fields: PresetField[]; va
 function ShareList({ shares, leave }: { shares: Share[]; leave: () => void }) {
   const [qr, setQr] = useState("");
   return (
-    <ScrollArea className="max-h-[60vh]">
     <ul className="stack">
       {shares.map((s) => (
         <li key={s.user_id} className="rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3">
@@ -302,7 +307,6 @@ function ShareList({ shares, leave }: { shares: Share[]; leave: () => void }) {
         </li>
       ))}
     </ul>
-    </ScrollArea>
   );
 }
 

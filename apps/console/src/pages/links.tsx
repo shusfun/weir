@@ -1,10 +1,10 @@
 import { ClientDistribution } from "../components/client-distribution";
 // 订阅链接：管理员与普通用户共用一页。默认看自己的额度、订阅链接与拉取统计；管理员可切到某个用户（?user=编号）或全部用户（?user=all）。
 // 操作平铺在每条链接卡片上；换地址、换凭据、删除在编辑弹窗里；最近 30 天的拉取按客户端、来源汇总。
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "../lib/query";
-import { Card, CardContent, CopyField, InsetGroup, InsetRow, InsetRows, Meter, Notice, PageHeader, Readout, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SkeletonCards } from "@weir/ui";
+import { Badge, Card, CardContent, CopyField, DotCrowd, Input, InsetGroup, InsetRow, InsetRows, Meter, Notice, PageHeader, Readout, SectionHeader, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SkeletonCards } from "@weir/ui";
 import { api } from "../api";
 import { client } from "../lib/client";
 import { ClientDownload } from "../components/client-download";
@@ -14,9 +14,11 @@ import { LinkPanel, type NodeOption } from "../components/link-panel";
 import { bytes, date } from "../lib/models";
 import type { LinkStats, NodeItem, UserItem, Withheld } from "../lib/core";
 import { useConsoleContext } from "../lib/console-context";
+import { RedeemCard } from "../features/accounts/redeem";
 
 interface Summary {
   quota: number;
+  unlimited: boolean;
   used: number;
   expires_at?: string | null;
   monthly_reset: boolean;
@@ -39,10 +41,14 @@ export function LinksPage({ admin }: { admin: boolean }) {
   const userParam = Number(scope) || null;
   const stats = useStats(!!scope, userParam);
   const byLink = useMemo(() => new Map((stats.data ?? []).map((s) => [s.id, s])), [stats.data]);
+  const [query, setQuery] = useState("");
+  const [attention, setAttention] = useState<"all" | "care" | "off">("all");
+  const pulled = (stats.data ?? []).filter((s) => s.pulls_24h > 0).length;
+  const refused = (stats.data ?? []).reduce((n, s) => n + s.refused_30d, 0);
   const header = (
     <PageHeader
       title="订阅链接"
-      description={scope ? "查看其他用户的订阅链接与拉取统计。每条链接可单独设置生效时间。" : "每条链接凭据独立、共享同一份额度；可以给不同设备分别生成，并设置什么时候开始、什么时候结束。"}
+      description={stats.data ? <span className="weir-sum"><span><b>{stats.data.length}</b> 条链接</span><span><b>{pulled}</b> 条 24 小时内拉取过</span>{refused > 0 && <span className="text-[var(--weir-warn-ink)]">{refused} 次不在生效时间内</span>}</span> : "拉取统计未知"}
       actions={admin ? <UserFilter value={scope} onChange={(v) => setParams((p) => { if (v) p.set("user", v); else p.delete("user"); p.delete("focus"); return p; }, { replace: true })} /> : undefined}
     />
   );
@@ -57,9 +63,33 @@ export function LinksPage({ admin }: { admin: boolean }) {
   return (
     <div className="stack">
       {header}
+      <div className="flex flex-wrap items-center gap-[9px]">
+        <Input className="w-[261px] max-w-full" aria-label="搜索设备或用户" placeholder="搜索设备或用户" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <Segmented aria-label="链接筛选" value={attention} onValueChange={setAttention} options={[["all", `全部 ${stats.data?.length ?? ""}`.trim()], ["care", `需要注意 ${(stats.data ?? []).filter((s) => s.enabled && s.pulls_24h === 0).length}`], ["off", `已停用 ${(stats.data ?? []).filter((s) => !s.enabled).length}`]] as const} />
+      </div>
+      {scope ? <AdminLinks user={userParam} stats={byLink} query={query} attention={attention} /> : <MyLinks admin={admin} stats={byLink} query={query} attention={attention} />}
+      <RecentPulls stats={stats.data} />
       <StatsOverview stats={stats} scope={scope ? (userParam ? "这个用户" : "全部用户") : undefined} />
-      {scope ? <AdminLinks user={userParam} stats={byLink} /> : <MyLinks admin={admin} stats={byLink} />}
     </div>
+  );
+}
+
+function RecentPulls({ stats }: { stats?: LinkStats[] }) {
+  const rows = (stats ?? []).filter((s) => s.last_pull);
+  return (
+    <section className="stack">
+      <SectionHeader className="mt-[25px]" title="最近拉取" actions={<span className="text-meta text-[var(--weir-ink-3)]">来源只对管理员显示</span>} />
+      {!stats ? <State loading /> : rows.length === 0 ? <State empty="还没有拉取记录" /> : (
+        <Card className="overflow-hidden p-0">
+          {rows.slice(0, 8).map((s) => (
+            <div key={s.id} className="weir-set-row">
+              <div className="min-w-0"><b className="block truncate">{s.name || "未命名"} · {s.last_pull?.client || "未知客户端"}</b><div className="font-[family-name:var(--weir-mono)] text-fine text-[var(--weir-ink-3)]">{s.last_pull ? date(s.last_pull.at) : "未知"} · {s.last_pull?.ip || "来源未知"}</div></div>
+              {s.last_pull?.status === "ok" ? <span className="text-meta text-[var(--weir-ink-3)]">返回 {s.last_pull.target || "订阅"}</span> : <Badge variant="soft" tone="warn">{s.last_pull?.status || "未知"}</Badge>}
+            </div>
+          ))}
+        </Card>
+      )}
+    </section>
   );
 }
 
@@ -101,7 +131,7 @@ function StatsOverview({ stats, scope }: { stats: ReturnType<typeof useStats>; s
   );
 }
 
-function MyLinks({ admin, stats }: { admin: boolean; stats: Map<number, LinkStats> }) {
+function MyLinks({ admin, stats, query, attention }: { admin: boolean; stats: Map<number, LinkStats>; query: string; attention: "all" | "care" | "off" }) {
   const summary = useQuery({ queryKey: ["me-subscription"], queryFn: () => api("/me/subscription") as Promise<Summary>, refetchInterval: 30_000 });
   const nodes = useQuery({ queryKey: ["me-nodes"], queryFn: async () => (await api("/me/nodes")).items as NodeOption[] });
   if (summary.isPending || nodes.isPending || summary.error || nodes.error)
@@ -111,10 +141,10 @@ function MyLinks({ admin, stats }: { admin: boolean; stats: Map<number, LinkStat
     <>
       <Card>
         <CardContent className="grid gap-4 sm:grid-cols-3">
-          <Readout label="已用流量" value={bytes(s.used)} caption={s.quota ? `共 ${bytes(s.quota)}` : "不限额度"} />
+          <Readout label="已用流量" value={bytes(s.used)} caption={s.unlimited ? "不限额度" : `共 ${bytes(s.quota)}`} />
           <Readout label="套餐到期" value={s.expires_at ? date(s.expires_at) : "长期有效"} caption="链接的结束时间不能晚于它" />
           <Readout label="用量重置" value={s.monthly_reset ? date(s.next_reset ?? undefined) : "不重置"} caption={s.monthly_reset ? "每月自动清零" : undefined} />
-          {s.quota > 0 && <Meter className="sm:col-span-3" label="流量使用" value={s.used} max={s.quota} />}
+          {!s.unlimited && s.quota > 0 && <Meter className="sm:col-span-3" label="流量使用" value={s.used} max={s.quota} />}
         </CardContent>
       </Card>
       {(s.withheld ?? []).length > 0 && (
@@ -122,19 +152,17 @@ function MyLinks({ admin, stats }: { admin: boolean; stats: Map<number, LinkStat
           你的套餐有流量额度，以下 WireGuard 节点没有放进订阅：{s.withheld!.map((w) => w.name).join("、")}。WireGuard 没有按用户的流量统计，无法执行额度，只发给不限额度的用户。
         </Notice>
       )}
-      {nodes.data.length === 0 ? (
-        <State empty="暂无可用节点" detail={admin ? "到「VPS 与节点」建好节点后，会自动进入你的订阅。" : "请联系管理员分配节点。"} />
-      ) : (
-        <Card><CardContent><LinkPanel base="/me" planEnds={s.expires_at} stats={stats} /></CardContent></Card>
-      )}
+      {nodes.data.length === 0 && <State empty="暂无可用节点" detail={admin ? "到「VPS 与节点」建好节点后，会自动进入你的订阅。" : "请联系管理员分配节点。"} />}
+      <LinkPanel base="/me" planEnds={s.expires_at} stats={stats} variant="tickets" query={query} attention={attention} title="订阅链接" />
       <GroupsCard />
+      <RedeemCard />
       <ClientsCard />
     </>
   );
 }
 
 // AdminLinks：选了用户时只看这个用户；全部用户时每人一段，各自的「新链接」建在这个用户名下。
-function AdminLinks({ user, stats }: { user: number | null; stats: Map<number, LinkStats> }) {
+function AdminLinks({ user, stats, query, attention }: { user: number | null; stats: Map<number, LinkStats>; query: string; attention: "all" | "care" | "off" }) {
   const users = useQuery({ queryKey: ["users"], queryFn: async () => (await api("/admin/users")).items as UserItem[] });
   const nodes = useQuery({ queryKey: ["nodes"], queryFn: async () => (await api("/admin/nodes")).items as NodeItem[] });
   if (users.isPending || nodes.isPending || users.error || nodes.error)
@@ -152,9 +180,12 @@ function AdminLinks({ user, stats }: { user: number | null; stats: Map<number, L
               base={`/admin/users/${u.id}`}
               planEnds={u.expires_at}
               stats={stats}
+              variant="tickets"
+              query={query}
+              attention={attention}
               showCredentials={!!user}
               title={u.name ? `${u.name}（${u.email}）` : u.email}
-              description={`已用 ${bytes(u.used)}${u.quota ? " / " + bytes(u.quota) : "（不限额度）"} · 套餐${u.expires_at ? " " + date(u.expires_at) + " 到期" : "长期有效"}${u.enabled ? "" : " · 账户已停用"}`}
+              description={`已用 ${bytes(u.used)}${u.unlimited ? "（不限额度）" : " / " + bytes(u.quota)} · 套餐${u.expires_at ? " " + date(u.expires_at) + " 到期" : "长期有效"}${u.enabled ? "" : " · 账户已停用"}`}
             />
           </CardContent>
         </Card>

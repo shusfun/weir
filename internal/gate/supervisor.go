@@ -39,6 +39,16 @@ func kernelArgs(name string, a kernelconf.KernelArgs, config string) (run, test 
 	return kernelconf.Args(a.Run, config), kernelconf.Args(a.Check, config), nil
 }
 
+// kernelEnv 继承当前环境。sing-box 1.14 把未写域名解析器当成致命错误；
+// 钉死某一个 DoH 会让出站拨号跳过 DNS 规则，失败时到不了 UDP。这个变量只放开该检查。
+func kernelEnv(name string) []string {
+	env := os.Environ()
+	if name == "sing-box" {
+		env = append(env, "ENABLE_DEPRECATED_MISSING_DOMAIN_RESOLVER=true")
+	}
+	return env
+}
+
 // args 读取某内核已应用的参数（与配置文件放在一起）；没有时用默认参数。
 func (s *Supervisor) args(name string) kernelconf.KernelArgs {
 	var a kernelconf.KernelArgs
@@ -71,6 +81,8 @@ type Supervisor struct {
 	p     Paths
 	mu    sync.Mutex
 	procs map[string]*proc
+	// onLife 在进程真正起来、意外退出或自动拉起时调用。调用方不得再锁 supervisor。
+	onLife func(name, kind string, pid *int)
 }
 
 func NewSupervisor(p Paths) *Supervisor { return &Supervisor{p: p, procs: map[string]*proc{}} }
@@ -114,6 +126,7 @@ func (s *Supervisor) keep(pr *proc, bin string, started chan<- error) {
 			return
 		}
 		cmd := exec.Command(bin, run...)
+		cmd.Env = kernelEnv(pr.name)
 		dropPrivileges(cmd, s.p.RunAs)
 		out, _ := cmd.StdoutPipe()
 		cmd.Stderr = cmd.Stdout
@@ -127,6 +140,14 @@ func (s *Supervisor) keep(pr *proc, bin string, started chan<- error) {
 		if first {
 			started <- err
 			first = false
+		}
+		var startedPID *int
+		if err == nil && cmd.Process != nil {
+			pid := cmd.Process.Pid
+			startedPID = &pid
+			if !first {
+				s.emitLife(pr.name, "recover", startedPID)
+			}
 		}
 		if err == nil {
 			s.collect(pr, out)
@@ -142,6 +163,7 @@ func (s *Supervisor) keep(pr *proc, bin string, started chan<- error) {
 		if stopped {
 			return
 		}
+		s.emitLife(pr.name, "crash", startedPID)
 		// 内核输出只留在内存（重启辅助程序就没了），退出原因要写进服务日志；IP 与诊断接口一样遮盖。
 		log.Printf("%s exited (%v), restarting in %s; last output: %s", pr.name, err, backoff, maskIPs(last))
 		time.Sleep(backoff)
@@ -196,6 +218,13 @@ func (s *Supervisor) Running() map[string]int {
 	return out
 }
 
+func (s *Supervisor) emitLife(name, kind string, pid *int) {
+	if s == nil || s.onLife == nil {
+		return
+	}
+	s.onLife(name, kind, pid)
+}
+
 func (s *Supervisor) Logs(name string) []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -218,6 +247,7 @@ func (s *Supervisor) Test(ctx context.Context, name, version, config string, a k
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, test...)
+	cmd.Env = kernelEnv(name)
 	dropPrivileges(cmd, s.p.RunAs)
 	out, err := cmd.CombinedOutput()
 	if err != nil {

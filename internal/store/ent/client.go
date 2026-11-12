@@ -15,6 +15,8 @@ import (
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/shusfun/weir/internal/store/ent/accesscode"
+	entaccountplan "github.com/shusfun/weir/internal/store/ent/accountplan"
 	"github.com/shusfun/weir/internal/store/ent/audit"
 	"github.com/shusfun/weir/internal/store/ent/budget"
 	"github.com/shusfun/weir/internal/store/ent/certificate"
@@ -47,6 +49,10 @@ type Client struct {
 	config
 	// Schema is the client for creating, migrating and dropping schema.
 	Schema *migrate.Schema
+	// AccessCode is the client for interacting with the AccessCode builders.
+	AccessCode *AccessCodeClient
+	// AccountPlan is the client for interacting with the AccountPlan builders.
+	AccountPlan *AccountPlanClient
 	// Audit is the client for interacting with the Audit builders.
 	Audit *AuditClient
 	// Budget is the client for interacting with the Budget builders.
@@ -108,6 +114,8 @@ func NewClient(opts ...Option) *Client {
 
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
+	c.AccessCode = NewAccessCodeClient(c.config)
+	c.AccountPlan = NewAccountPlanClient(c.config)
 	c.Audit = NewAuditClient(c.config)
 	c.Budget = NewBudgetClient(c.config)
 	c.Certificate = NewCertificateClient(c.config)
@@ -225,6 +233,8 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	return &Tx{
 		ctx:          ctx,
 		config:       cfg,
+		AccessCode:   NewAccessCodeClient(cfg),
+		AccountPlan:  NewAccountPlanClient(cfg),
 		Audit:        NewAuditClient(cfg),
 		Budget:       NewBudgetClient(cfg),
 		Certificate:  NewCertificateClient(cfg),
@@ -269,6 +279,8 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	return &Tx{
 		ctx:          ctx,
 		config:       cfg,
+		AccessCode:   NewAccessCodeClient(cfg),
+		AccountPlan:  NewAccountPlanClient(cfg),
 		Audit:        NewAuditClient(cfg),
 		Budget:       NewBudgetClient(cfg),
 		Certificate:  NewCertificateClient(cfg),
@@ -300,7 +312,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 // Debug returns a new debug-client. It's used to get verbose logging on specific operations.
 //
 //	client.Debug().
-//		Audit.
+//		AccessCode.
 //		Query().
 //		Count(ctx)
 func (c *Client) Debug() *Client {
@@ -323,10 +335,11 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.Audit, c.Budget, c.Certificate, c.Chain, c.Credential, c.Exit, c.Gate,
-		c.GateAction, c.KernelDriver, c.Link, c.Node, c.Passkey, c.RateSample,
-		c.RecoveryCode, c.Resource, c.Route, c.RuleTemplate, c.Sample, c.Setting,
-		c.SubGrant, c.SubNode, c.SubProfile, c.SubPull, c.SubSource, c.User,
+		c.AccessCode, c.AccountPlan, c.Audit, c.Budget, c.Certificate, c.Chain,
+		c.Credential, c.Exit, c.Gate, c.GateAction, c.KernelDriver, c.Link, c.Node,
+		c.Passkey, c.RateSample, c.RecoveryCode, c.Resource, c.Route, c.RuleTemplate,
+		c.Sample, c.Setting, c.SubGrant, c.SubNode, c.SubProfile, c.SubPull,
+		c.SubSource, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -336,10 +349,11 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.Audit, c.Budget, c.Certificate, c.Chain, c.Credential, c.Exit, c.Gate,
-		c.GateAction, c.KernelDriver, c.Link, c.Node, c.Passkey, c.RateSample,
-		c.RecoveryCode, c.Resource, c.Route, c.RuleTemplate, c.Sample, c.Setting,
-		c.SubGrant, c.SubNode, c.SubProfile, c.SubPull, c.SubSource, c.User,
+		c.AccessCode, c.AccountPlan, c.Audit, c.Budget, c.Certificate, c.Chain,
+		c.Credential, c.Exit, c.Gate, c.GateAction, c.KernelDriver, c.Link, c.Node,
+		c.Passkey, c.RateSample, c.RecoveryCode, c.Resource, c.Route, c.RuleTemplate,
+		c.Sample, c.Setting, c.SubGrant, c.SubNode, c.SubProfile, c.SubPull,
+		c.SubSource, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -348,6 +362,10 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 // Mutate implements the ent.Mutator interface.
 func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
+	case *AccessCodeMutation:
+		return c.AccessCode.mutate(ctx, m)
+	case *AccountPlanMutation:
+		return c.AccountPlan.mutate(ctx, m)
 	case *AuditMutation:
 		return c.Audit.mutate(ctx, m)
 	case *BudgetMutation:
@@ -400,6 +418,272 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.User.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
+	}
+}
+
+// AccessCodeClient is a client for the AccessCode schema.
+type AccessCodeClient struct {
+	config
+}
+
+// NewAccessCodeClient returns a client for the AccessCode from the given config.
+func NewAccessCodeClient(c config) *AccessCodeClient {
+	return &AccessCodeClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `accesscode.Hooks(f(g(h())))`.
+func (c *AccessCodeClient) Use(hooks ...Hook) {
+	c.hooks.AccessCode = append(c.hooks.AccessCode, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `accesscode.Intercept(f(g(h())))`.
+func (c *AccessCodeClient) Intercept(interceptors ...Interceptor) {
+	c.inters.AccessCode = append(c.inters.AccessCode, interceptors...)
+}
+
+// Create returns a builder for creating a AccessCode entity.
+func (c *AccessCodeClient) Create() *AccessCodeCreate {
+	mutation := newAccessCodeMutation(c.config, OpCreate)
+	return &AccessCodeCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of AccessCode entities.
+func (c *AccessCodeClient) CreateBulk(builders ...*AccessCodeCreate) *AccessCodeCreateBulk {
+	return &AccessCodeCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *AccessCodeClient) MapCreateBulk(slice any, setFunc func(*AccessCodeCreate, int)) *AccessCodeCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &AccessCodeCreateBulk{err: fmt.Errorf("calling to AccessCodeClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*AccessCodeCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &AccessCodeCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for AccessCode.
+func (c *AccessCodeClient) Update() *AccessCodeUpdate {
+	mutation := newAccessCodeMutation(c.config, OpUpdate)
+	return &AccessCodeUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *AccessCodeClient) UpdateOne(_m *AccessCode) *AccessCodeUpdateOne {
+	mutation := newAccessCodeMutation(c.config, OpUpdateOne, withAccessCode(_m))
+	return &AccessCodeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *AccessCodeClient) UpdateOneID(id int) *AccessCodeUpdateOne {
+	mutation := newAccessCodeMutation(c.config, OpUpdateOne, withAccessCodeID(id))
+	return &AccessCodeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for AccessCode.
+func (c *AccessCodeClient) Delete() *AccessCodeDelete {
+	mutation := newAccessCodeMutation(c.config, OpDelete)
+	return &AccessCodeDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *AccessCodeClient) DeleteOne(_m *AccessCode) *AccessCodeDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *AccessCodeClient) DeleteOneID(id int) *AccessCodeDeleteOne {
+	builder := c.Delete().Where(accesscode.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &AccessCodeDeleteOne{builder}
+}
+
+// Query returns a query builder for AccessCode.
+func (c *AccessCodeClient) Query() *AccessCodeQuery {
+	return &AccessCodeQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeAccessCode},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a AccessCode entity by its id.
+func (c *AccessCodeClient) Get(ctx context.Context, id int) (*AccessCode, error) {
+	return c.Query().Where(accesscode.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *AccessCodeClient) GetX(ctx context.Context, id int) *AccessCode {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *AccessCodeClient) Hooks() []Hook {
+	return c.hooks.AccessCode
+}
+
+// Interceptors returns the client interceptors.
+func (c *AccessCodeClient) Interceptors() []Interceptor {
+	return c.inters.AccessCode
+}
+
+func (c *AccessCodeClient) mutate(ctx context.Context, m *AccessCodeMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&AccessCodeCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&AccessCodeUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&AccessCodeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&AccessCodeDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown AccessCode mutation op: %q", m.Op())
+	}
+}
+
+// AccountPlanClient is a client for the AccountPlan schema.
+type AccountPlanClient struct {
+	config
+}
+
+// NewAccountPlanClient returns a client for the AccountPlan from the given config.
+func NewAccountPlanClient(c config) *AccountPlanClient {
+	return &AccountPlanClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `entaccountplan.Hooks(f(g(h())))`.
+func (c *AccountPlanClient) Use(hooks ...Hook) {
+	c.hooks.AccountPlan = append(c.hooks.AccountPlan, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `entaccountplan.Intercept(f(g(h())))`.
+func (c *AccountPlanClient) Intercept(interceptors ...Interceptor) {
+	c.inters.AccountPlan = append(c.inters.AccountPlan, interceptors...)
+}
+
+// Create returns a builder for creating a AccountPlan entity.
+func (c *AccountPlanClient) Create() *AccountPlanCreate {
+	mutation := newAccountPlanMutation(c.config, OpCreate)
+	return &AccountPlanCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of AccountPlan entities.
+func (c *AccountPlanClient) CreateBulk(builders ...*AccountPlanCreate) *AccountPlanCreateBulk {
+	return &AccountPlanCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *AccountPlanClient) MapCreateBulk(slice any, setFunc func(*AccountPlanCreate, int)) *AccountPlanCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &AccountPlanCreateBulk{err: fmt.Errorf("calling to AccountPlanClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*AccountPlanCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &AccountPlanCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for AccountPlan.
+func (c *AccountPlanClient) Update() *AccountPlanUpdate {
+	mutation := newAccountPlanMutation(c.config, OpUpdate)
+	return &AccountPlanUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *AccountPlanClient) UpdateOne(_m *AccountPlan) *AccountPlanUpdateOne {
+	mutation := newAccountPlanMutation(c.config, OpUpdateOne, withAccountPlan(_m))
+	return &AccountPlanUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *AccountPlanClient) UpdateOneID(id int) *AccountPlanUpdateOne {
+	mutation := newAccountPlanMutation(c.config, OpUpdateOne, withAccountPlanID(id))
+	return &AccountPlanUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for AccountPlan.
+func (c *AccountPlanClient) Delete() *AccountPlanDelete {
+	mutation := newAccountPlanMutation(c.config, OpDelete)
+	return &AccountPlanDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *AccountPlanClient) DeleteOne(_m *AccountPlan) *AccountPlanDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *AccountPlanClient) DeleteOneID(id int) *AccountPlanDeleteOne {
+	builder := c.Delete().Where(entaccountplan.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &AccountPlanDeleteOne{builder}
+}
+
+// Query returns a query builder for AccountPlan.
+func (c *AccountPlanClient) Query() *AccountPlanQuery {
+	return &AccountPlanQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeAccountPlan},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a AccountPlan entity by its id.
+func (c *AccountPlanClient) Get(ctx context.Context, id int) (*AccountPlan, error) {
+	return c.Query().Where(entaccountplan.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *AccountPlanClient) GetX(ctx context.Context, id int) *AccountPlan {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *AccountPlanClient) Hooks() []Hook {
+	return c.hooks.AccountPlan
+}
+
+// Interceptors returns the client interceptors.
+func (c *AccountPlanClient) Interceptors() []Interceptor {
+	return c.inters.AccountPlan
+}
+
+func (c *AccountPlanClient) mutate(ctx context.Context, m *AccountPlanMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&AccountPlanCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&AccountPlanUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&AccountPlanUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&AccountPlanDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown AccountPlan mutation op: %q", m.Op())
 	}
 }
 
@@ -3827,15 +4111,15 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		Audit, Budget, Certificate, Chain, Credential, Exit, Gate, GateAction,
-		KernelDriver, Link, Node, Passkey, RateSample, RecoveryCode, Resource, Route,
-		RuleTemplate, Sample, Setting, SubGrant, SubNode, SubProfile, SubPull,
-		SubSource, User []ent.Hook
+		AccessCode, AccountPlan, Audit, Budget, Certificate, Chain, Credential, Exit,
+		Gate, GateAction, KernelDriver, Link, Node, Passkey, RateSample, RecoveryCode,
+		Resource, Route, RuleTemplate, Sample, Setting, SubGrant, SubNode, SubProfile,
+		SubPull, SubSource, User []ent.Hook
 	}
 	inters struct {
-		Audit, Budget, Certificate, Chain, Credential, Exit, Gate, GateAction,
-		KernelDriver, Link, Node, Passkey, RateSample, RecoveryCode, Resource, Route,
-		RuleTemplate, Sample, Setting, SubGrant, SubNode, SubProfile, SubPull,
-		SubSource, User []ent.Interceptor
+		AccessCode, AccountPlan, Audit, Budget, Certificate, Chain, Credential, Exit,
+		Gate, GateAction, KernelDriver, Link, Node, Passkey, RateSample, RecoveryCode,
+		Resource, Route, RuleTemplate, Sample, Setting, SubGrant, SubNode, SubProfile,
+		SubPull, SubSource, User []ent.Interceptor
 	}
 )

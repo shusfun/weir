@@ -1,6 +1,6 @@
 // 经接口给本地开发中心造演示数据：用户、订阅源、手动节点、订阅组、公开页面、全局公告。
 // 可重复运行：按邮箱 / 名称 / 地址 / slug 查重，已存在的不再创建。VPS 要真实 Gate 配对，这里不造。
-// 用法：node apps/console/scan/seed.mjs [--base http://127.0.0.1:5173]
+// 用法：node apps/console/scan/seed.mjs [--base http://127.0.0.1:22340]
 import { inEgo, relay, parseArgs, loadConfig, openSpace, ensureLogin, api } from "./lib.mjs";
 import { fileURLToPath } from "node:url";
 
@@ -9,7 +9,7 @@ if (!inEgo) {
 }
 
 const cfg = await loadConfig();
-const base = cfg.base || "http://127.0.0.1:5173";
+const base = cfg.base || "http://127.0.0.1:22340";
 const { task, page } = await openSpace("seed");
 const items = (d) => (Array.isArray(d) ? d : d?.items ?? []);
 const log = [];

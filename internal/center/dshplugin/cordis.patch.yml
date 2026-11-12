@@ -28,7 +28,7 @@
             config:
               providerName: weir
               includeDefaultRoots: false
-              customSkillDirs: ['{{WEIR_SKILLS_DIR}}']
+              customSkillDirs: ['{{DSH_SKILLS_DIR}}']
           - id: tool-skill
             name: '@deepseek-ai/dsh-tool-skill'
           - id: mcp-weir
@@ -36,9 +36,9 @@
             config:
               serverName: weir
               transport: streamable-http
-              url: '{{WEIR_MCP_URL}}'
+              url: '{{DSH_MCP_URL}}'
               headers:
-                Authorization: 'Bearer {{WEIR_MCP_TOKEN}}'
+                Authorization: 'Bearer {{DSH_MCP_TOKEN}}'
               toolCallTimeoutMs: 180000
 - id: agent-preset-registry
   config:

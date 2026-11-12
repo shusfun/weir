@@ -137,8 +137,20 @@ func (s *Server) notices(ctx context.Context) []Notice {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	for _, kernel := range kernels.Names {
+		versions, catalogErr := s.kernelVersions(ctx, kernel)
+		if catalogErr != nil {
+			out = append(out, Notice{ID: "kernel-catalog:" + kernel, Level: "warn", Title: kernelTitle(kernel) + " 发行档案状态未知", Detail: "无法读取已保存的版本档案。", Action: &NoticeAction{Kind: "open", Label: "去内核页", To: "/kernels"}})
+			continue
+		}
 		for _, arch := range s.kernelArches(ctx, kernel) {
-			if len(s.kernelCache().Versions(kernel, arch)) > 0 {
+			prepared := false
+			for _, version := range versions {
+				if s.kernelPrepared(ctx, kernel, version, arch) == nil {
+					prepared = true
+					break
+				}
+			}
+			if prepared {
 				continue
 			}
 			n := Notice{ID: "kernel-missing:" + kernel + ":" + arch, Level: "warn", Title: fmt.Sprintf("%s 还没有 %s 版本", kernelTitle(kernel), arch)}
@@ -146,7 +158,7 @@ func (s *Server) notices(ctx context.Context) []Notice {
 			case "mihomo":
 				n.Detail = "中心用它检查生成的 Clash 订阅；没有时订阅检查显示「未知」。"
 			default:
-				n.Detail = "建节点和节点实测都要用它；这个架构的 VPS 在下载完成前无法生效。"
+				n.Detail = "建节点和实测需要固定的发行来源与摘要；VPS 下载并校验成功后才能应用配置。"
 			}
 			var rec Recommendation
 			err := s.githubOnce(ctx, "recommend:"+kernel, func(bg context.Context) error {
@@ -185,17 +197,10 @@ func (s *Server) notices(ctx context.Context) []Notice {
 		if kernel == "mihomo" {
 			continue
 		}
-		seen := map[string]bool{}
-		for _, arch := range []string{"amd64", "arm64"} {
-			for _, v := range s.kernelCache().Versions(kernel, arch) {
-				if seen[v] {
-					continue
-				}
-				seen[v] = true
-				if _, _, err := d.Select(kernel, v); err != nil {
-					out = append(out, Notice{ID: "driver-missing:" + kernel + ":" + v, Level: "warn", Title: fmt.Sprintf("%s %s 没有适用的驱动", kernelTitle(kernel), v),
-						Detail: "这个版本不能设为默认，也不能给 VPS 用；可以在驱动页新增，或让 dsh 起草一份。", Action: &NoticeAction{Kind: "open", Label: "去驱动页", To: "/kernels?tab=drivers"}})
-				}
+		for _, v := range versions {
+			if _, _, err := d.Select(kernel, v); err != nil {
+				out = append(out, Notice{ID: "driver-missing:" + kernel + ":" + v, Level: "warn", Title: fmt.Sprintf("%s %s 没有适用的驱动", kernelTitle(kernel), v),
+					Detail: "这个版本不能设为默认，也不能给 VPS 用；可以在驱动页新增，或让 dsh 起草一份。", Action: &NoticeAction{Kind: "open", Label: "去驱动页", To: "/kernels?tab=drivers"}})
 			}
 		}
 	}
@@ -305,7 +310,7 @@ func (s *Server) incompatible(ctx context.Context, drv kernelconf.Driver, kernel
 	}
 	ov := s.explicitDefault(ctx, other)
 	if ov == "" {
-		ov = s.newestAnyArch(other)
+		ov = s.newestAnyArch(ctx, other)
 	}
 	if ov == "" {
 		return ""
@@ -352,11 +357,11 @@ func (s *Server) recommendedHandler(c *gin.Context) {
 	ctx := c.Request.Context()
 	base := s.explicitDefault(ctx, kernel)
 	if base == "" {
-		base = s.newestAnyArch(kernel)
+		base = s.newestAnyArch(ctx, kernel)
 	}
 	cached := rec.Version != ""
 	for _, arch := range s.kernelArches(ctx, kernel) {
-		if _, _, err := s.kernelCache().Get(kernel, rec.Version, arch); err != nil {
+		if err := s.kernelPrepared(ctx, kernel, rec.Version, arch); err != nil {
 			cached = false
 		}
 	}

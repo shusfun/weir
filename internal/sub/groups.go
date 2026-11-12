@@ -1,6 +1,7 @@
 package sub
 
 import (
+	"regexp"
 	"strings"
 
 	js "github.com/shusfun/weir/internal/sub/jscompat"
@@ -44,7 +45,7 @@ var RegionGroupPatterns = []RegionGroupPattern{
 var reHanRun = js.MustRegExp(`[一-龥]+`, "")
 
 type regionOverride struct {
-	pattern *js.RegExp
+	pattern *regexp.Regexp
 	region  string
 }
 
@@ -58,7 +59,7 @@ func normalizeRegionOverrides(overrides any) []regionOverride {
 		if !js.Truthy(rule) || !js.Truthy(objGet(rule, "pattern")) || !js.Truthy(objGet(rule, "region")) {
 			continue
 		}
-		re, err := js.NewRegExp(js.ToString(objGet(rule, "pattern")), js.ToString(js.Or(objGet(rule, "flags"), "i")))
+		re, err := CompileRegionPattern(js.ToString(objGet(rule, "pattern")), js.ToString(js.Or(objGet(rule, "flags"), "i")))
 		if err != nil {
 			continue
 		}
@@ -78,7 +79,7 @@ func GroupNodeLinesByRegion(nodes []*js.Object, options *js.Object) []*js.Object
 		region := "其他"
 		var override *regionOverride
 		for i := range overrides {
-			if overrides[i].pattern.Test(tagStr) {
+			if overrides[i].pattern.MatchString(tagStr) {
 				override = &overrides[i]
 				break
 			}

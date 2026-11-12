@@ -12,6 +12,9 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/shusfun/weir/internal/store/ent/accesscode"
+
+	entaccountplan "github.com/shusfun/weir/internal/store/ent/accountplan"
 	"github.com/shusfun/weir/internal/store/ent/audit"
 	"github.com/shusfun/weir/internal/store/ent/budget"
 	"github.com/shusfun/weir/internal/store/ent/certificate"
@@ -97,31 +100,33 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			audit.Table:        audit.ValidColumn,
-			budget.Table:       budget.ValidColumn,
-			certificate.Table:  certificate.ValidColumn,
-			chain.Table:        chain.ValidColumn,
-			credential.Table:   credential.ValidColumn,
-			exit.Table:         exit.ValidColumn,
-			gate.Table:         gate.ValidColumn,
-			gateaction.Table:   gateaction.ValidColumn,
-			kerneldriver.Table: kerneldriver.ValidColumn,
-			link.Table:         link.ValidColumn,
-			node.Table:         node.ValidColumn,
-			passkey.Table:      passkey.ValidColumn,
-			ratesample.Table:   ratesample.ValidColumn,
-			recoverycode.Table: recoverycode.ValidColumn,
-			resource.Table:     resource.ValidColumn,
-			route.Table:        route.ValidColumn,
-			ruletemplate.Table: ruletemplate.ValidColumn,
-			sample.Table:       sample.ValidColumn,
-			setting.Table:      setting.ValidColumn,
-			subgrant.Table:     subgrant.ValidColumn,
-			subnode.Table:      subnode.ValidColumn,
-			subprofile.Table:   subprofile.ValidColumn,
-			subpull.Table:      subpull.ValidColumn,
-			subsource.Table:    subsource.ValidColumn,
-			user.Table:         user.ValidColumn,
+			accesscode.Table:     accesscode.ValidColumn,
+			entaccountplan.Table: entaccountplan.ValidColumn,
+			audit.Table:          audit.ValidColumn,
+			budget.Table:         budget.ValidColumn,
+			certificate.Table:    certificate.ValidColumn,
+			chain.Table:          chain.ValidColumn,
+			credential.Table:     credential.ValidColumn,
+			exit.Table:           exit.ValidColumn,
+			gate.Table:           gate.ValidColumn,
+			gateaction.Table:     gateaction.ValidColumn,
+			kerneldriver.Table:   kerneldriver.ValidColumn,
+			link.Table:           link.ValidColumn,
+			node.Table:           node.ValidColumn,
+			passkey.Table:        passkey.ValidColumn,
+			ratesample.Table:     ratesample.ValidColumn,
+			recoverycode.Table:   recoverycode.ValidColumn,
+			resource.Table:       resource.ValidColumn,
+			route.Table:          route.ValidColumn,
+			ruletemplate.Table:   ruletemplate.ValidColumn,
+			sample.Table:         sample.ValidColumn,
+			setting.Table:        setting.ValidColumn,
+			subgrant.Table:       subgrant.ValidColumn,
+			subnode.Table:        subnode.ValidColumn,
+			subprofile.Table:     subprofile.ValidColumn,
+			subpull.Table:        subpull.ValidColumn,
+			subsource.Table:      subsource.ValidColumn,
+			user.Table:           user.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

@@ -79,6 +79,9 @@ func TestSubscriptionNamesReachEveryFormatAndRefresh(t *testing.T) {
 						t.Fatalf("name missing: %s", decoded)
 					}
 				case "clash":
+					if !strings.Contains(string(body), subout.SubscriptionProbeURL) {
+						t.Fatalf("clash 订阅未使用订阅探测地址 %q", subout.SubscriptionProbeURL)
+					}
 					var doc struct {
 						Proxies []struct {
 							Name string `yaml:"name"`

@@ -1,19 +1,9 @@
 // Package contracts defines the versioned control/agent wire protocol.
 package contracts
 
-import "time"
-
 const Version = 1
 const BudgetBlock int64 = 32 * 1024 * 1024
 
-type Task struct {
-	ID        int            `json:"id"`
-	DeviceID  int            `json:"device_id"`
-	Operation string         `json:"operation"`
-	Revision  int64          `json:"revision"`
-	Payload   map[string]any `json:"payload"`
-	ExpiresAt time.Time      `json:"expires_at"`
-}
 type Result struct {
 	TaskID   int            `json:"task_id"`
 	Revision int64          `json:"revision"`

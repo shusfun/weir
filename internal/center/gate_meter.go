@@ -2,6 +2,8 @@ package center
 
 import (
 	"context"
+	"errors"
+	"math"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -10,6 +12,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/budget"
 	"github.com/shusfun/weir/internal/store/ent/credential"
 	"github.com/shusfun/weir/internal/store/ent/node"
+	"github.com/shusfun/weir/internal/store/ent/resource"
 	entsample "github.com/shusfun/weir/internal/store/ent/sample"
 	"github.com/shusfun/weir/packages/contracts"
 )
@@ -17,7 +20,7 @@ import (
 // meterDelta 按纪元与累计值算出本次新增用量：纪元变化（内核重启）时新纪元从零起算；
 // 同一纪元内累计值回退视为异常，不计入、不扣减。
 func meterDelta(prevEpoch string, prevUp, prevDown int64, epoch string, up, down int64) (int64, bool) {
-	if up < 0 || down < 0 {
+	if up < 0 || down < 0 || up > math.MaxInt64-down {
 		return 0, false
 	}
 	if epoch != prevEpoch {
@@ -33,15 +36,16 @@ func meterDelta(prevEpoch string, prevUp, prevDown int64, epoch string, up, down
 // 同一纪元内序号不前进的上报（重放、重复提交）直接确认，不重复扣减。
 func (s *Server) agentMeter(c *gin.Context) {
 	var rep contracts.MeterReport
-	if !bind(c, &rep) {
+	if !bindWorker(c, &rep, 16<<20) {
 		return
 	}
 	g, ctx := gateFrom(c), c.Request.Context()
-	if rep.Epoch == "" {
+	if !validMeterReport(rep) {
 		failure(c, 400, "invalid_meter")
 		return
 	}
 	var affected map[int]bool
+	accepted := true
 	err := s.Store.Lock.Do(ctx, "meter:"+itoa(g.ID), func(ctx context.Context) error {
 		cur, err := s.Store.Ent.Gate.Get(ctx, g.ID)
 		if err != nil {
@@ -50,6 +54,19 @@ func (s *Server) agentMeter(c *gin.Context) {
 		if rep.Epoch == cur.MeterEpoch && rep.Seq <= cur.MeterSeq {
 			return nil
 		}
+		if rep.Epoch != cur.MeterEpoch {
+			seen, e := s.Store.Ent.Resource.Query().Where(resource.KindEQ("gate-meter-epoch"), resource.KeyEQ(itoa(g.ID)+":"+rep.Epoch)).Exist(ctx)
+			if e != nil {
+				return e
+			}
+			if seen {
+				accepted = false
+				return nil
+			}
+			if rep.Partial {
+				return errMeterBaseline
+			}
+		}
 		affected, err = s.applyMeter(ctx, cur, rep)
 		if err != nil {
 			return err
@@ -57,6 +74,10 @@ func (s *Server) agentMeter(c *gin.Context) {
 		return nil
 	})
 	if err != nil {
+		if errors.Is(err, errMeterBaseline) {
+			failure(c, 409, "meter_full_baseline_required")
+			return
+		}
 		failInternal(c, 500, "meter_failed", err)
 		return
 	}
@@ -64,10 +85,27 @@ func (s *Server) agentMeter(c *gin.Context) {
 		if gates, err := s.rebalanceUser(ctx, uid); err == nil {
 			for _, gid := range gates {
 				s.waiters.notify(gid)
+				_ = s.Store.Notifications.Publish(ctx, "gate:"+itoa(gid))
 			}
 		}
 	}
-	c.JSON(200, gin.H{"ok": true})
+	c.JSON(200, contracts.MeterAck{Epoch: rep.Epoch, Seq: rep.Seq, Accepted: accepted})
+}
+
+var errMeterBaseline = errors.New("meter full baseline required")
+
+func validMeterReport(rep contracts.MeterReport) bool {
+	if rep.Epoch == "" || len(rep.Epoch) > 100 || rep.Seq < 0 || (rep.Protocol != 0 && rep.Protocol != 2) || rep.Partial && rep.Protocol != 2 || len(rep.Usage) > 100000 || (rep.Status != "fresh" && rep.Status != "unavailable" && rep.Status != "") {
+		return false
+	}
+	seen := map[string]bool{}
+	for _, sample := range rep.Usage {
+		if sample.StatsKey == "" || len(sample.StatsKey) > 200 || seen[sample.StatsKey] || sample.Up < 0 || sample.Down < 0 || sample.Up > math.MaxInt64-sample.Down {
+			return false
+		}
+		seen[sample.StatsKey] = true
+	}
+	return true
 }
 
 func (s *Server) applyMeter(ctx context.Context, g *ent.Gate, rep contracts.MeterReport) (map[int]bool, error) {
@@ -76,6 +114,24 @@ func (s *Server) applyMeter(ctx context.Context, g *ent.Gate, rep contracts.Mete
 		return nil, err
 	}
 	defer tx.Rollback()
+	if rep.Epoch != g.MeterEpoch {
+		for _, epoch := range []string{g.MeterEpoch, rep.Epoch} {
+			if epoch == "" {
+				continue
+			}
+			key := itoa(g.ID) + ":" + epoch
+			seen, e := tx.Resource.Query().Where(resource.KindEQ("gate-meter-epoch"), resource.KeyEQ(key)).Exist(ctx)
+			if e != nil {
+				return nil, e
+			}
+			if seen {
+				continue
+			}
+			if err = tx.Resource.Create().SetKind("gate-meter-epoch").SetKey(key).SetData(map[string]any{"gate_id": g.ID}).Exec(ctx); err != nil {
+				return nil, err
+			}
+		}
+	}
 	meterStore := *s.Store
 	meterStore.Ent = tx.Client()
 	worker := &Server{Store: &meterStore}

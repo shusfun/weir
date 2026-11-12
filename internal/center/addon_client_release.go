@@ -76,11 +76,14 @@ func releaseAssets(raw []ghrelease.Asset, repo string) []releaseAsset {
 
 // fetchClientRelease 经 ghrelease 读取仓库的最新正式发布。client 的 CheckRedirect 决定允许哪些跳转（见 releaseRedirect）。
 func fetchClientRelease(ctx context.Context, client *http.Client, repo string, now time.Time) clientRelease {
+	return projectClientRelease(ctx, ghrelease.Client{HTTP: client, MaxBody: 512 * 1024}, repo, now)
+}
+
+func projectClientRelease(ctx context.Context, gh ghrelease.Client, repo string, now time.Time) clientRelease {
 	result := clientRelease{Status: "unknown", Source: "github-releases", ObservedAt: now.UTC().Format(time.RFC3339)}
 	if !catalogRepo.MatchString(repo) {
 		return result
 	}
-	gh := ghrelease.Client{HTTP: client, MaxBody: 512 * 1024}
 	rel, final, e := gh.Latest(ctx, repo)
 	switch {
 	case errors.Is(e, ghrelease.ErrNotFound):
@@ -175,11 +178,9 @@ func (s *Server) getClientRelease(c *gin.Context) {
 		return
 	}
 	// Keep the lease until TTL; no blind deletion can remove a later owner's lease.
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = nil
-	defer transport.CloseIdleConnections()
-	client := &http.Client{Timeout: 8 * time.Second, Transport: transport, CheckRedirect: releaseRedirect}
-	result := fetchClientRelease(ctx, client, item.Repo, now)
+	queryCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	defer cancel()
+	result := projectClientRelease(queryCtx, s.weirGitHub(), item.Repo, now)
 	ttl := 24 * time.Hour
 	if result.Status != "current" {
 		ttl = 5 * time.Minute

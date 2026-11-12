@@ -16,6 +16,7 @@ import (
 	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/shusfun/weir/internal/accountsecurity"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/recoverycode"
 	"github.com/shusfun/weir/internal/store/ent/setting"
@@ -96,16 +97,33 @@ func (s *Server) securityEvent(c *gin.Context, kind, scope, severity string) {
 	s.audit(c, "security."+kind, scope, severity)
 }
 
-func (s *Server) failedLoginEvent(c *gin.Context) {
-	if n, err := s.Store.KV.Incr(c.Request.Context(), "failed-login:"+digest(c.ClientIP()), 10*time.Minute); err == nil && n == 5 {
+func failedLoginIPKey(c *gin.Context) string { return "failed-login:" + digest(c.ClientIP()) }
+
+// failedLoginAccountKey 按邮箱计失败次数：换 IP 猜同一个账号也要过人机验证。只要求验证、不锁账号，免得别人故意输错把主人锁在门外。
+func failedLoginAccountKey(email string) string { return "failed-login-account:" + digest(email) }
+
+func (s *Server) failedLoginEvent(c *gin.Context, email string) bool {
+	n, err := s.Store.KV.Incr(c.Request.Context(), failedLoginIPKey(c), 10*time.Minute)
+	if err == nil && email != "" {
+		var m int64
+		if m, err = s.Store.KV.Incr(c.Request.Context(), failedLoginAccountKey(email), 10*time.Minute); err == nil && m == 5 && n < 5 {
+			s.securityEvent(c, "repeated-login-failure", "authentication", "warning")
+		}
+	}
+	if err != nil {
+		failInternal(c, 503, "human_verification_unavailable", err)
+		return false
+	}
+	if n == 5 {
 		s.securityEvent(c, "repeated-login-failure", "authentication", "warning")
 	}
+	return true
 }
 
 func userView(u *ent.User) gin.H {
 	return gin.H{
 		"id": u.ID, "email": u.Email, "name": u.Name, "role": u.Role, "enabled": u.Enabled,
-		"quota": u.Quota, "used": u.Used, "expires_at": u.ExpiresAt, "monthly_reset": u.MonthlyReset,
+		"quota": u.Quota, "unlimited": u.Unlimited, "used": u.Used, "expires_at": u.ExpiresAt, "monthly_reset": u.MonthlyReset,
 		"all_nodes": u.AllNodes, "allow_chain": u.AllowChain, "totp_enrolled": u.TotpSecret != "",
 		"email_verified": true, "created_at": u.CreatedAt,
 	}
@@ -117,7 +135,27 @@ func (s *Server) publicSettings(c *gin.Context) {
 		return
 	}
 	_, smtp, _ := s.smtpSettings(c.Request.Context())
-	c.JSON(200, gin.H{"registration_enabled": p.Registration, "email_verification": p.EmailVerification && smtp, "password_reset": smtp, "totp_enabled": p.TOTP, "passkey_enabled": p.Passkey})
+	allow := []string{}
+	inviteRequired := false
+	if p.Registration {
+		view, err := s.effectiveAccountPolicy(c.Request.Context())
+		if err != nil {
+			failInternal(c, 503, "account_policy_unavailable", err)
+			return
+		}
+		policy, err := accountsecurity.ParsePolicy(view.Effective)
+		if err != nil {
+			failInternal(c, 503, "account_policy_unavailable", err)
+			return
+		}
+		allow = policy.Allow
+		inviteRequired = policy.InviteRequired
+	}
+	required, ok := s.loginHumanRequired(c, "")
+	if !ok {
+		return
+	}
+	c.JSON(200, gin.H{"human_login_required": required, "registration_enabled": p.Registration, "invite_required": inviteRequired, "email_verification": p.EmailVerification && smtp, "registration_email_suffixes": allow, "password_reset": smtp, "totp_enabled": p.TOTP, "passkey_enabled": p.Passkey})
 }
 
 func (s *Server) storeSession(c *gin.Context, u *ent.User, mfa bool) error {
@@ -156,13 +194,24 @@ func (s *Server) login(c *gin.Context) {
 		return
 	}
 	var req struct {
+		humanProof
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
 	if !bind(c, &req) {
 		return
 	}
-	u, err := s.Store.Ent.User.Query().Where(user.EmailEQ(strings.ToLower(strings.TrimSpace(req.Email)))).Only(c.Request.Context())
+	email, _ := accountsecurity.Mailbox(req.Email)
+	required, ok := s.loginHumanRequired(c, email)
+	if !ok {
+		return
+	}
+	if req.Website != "" || required {
+		if !s.verifyHuman(c, "login", req.humanProof) {
+			return
+		}
+	}
+	u, err := s.Store.Ent.User.Query().Where(user.EmailEQ(email)).Only(c.Request.Context())
 	hash := nonexistentAccountHash
 	if err == nil {
 		hash = []byte(u.PasswordHash)
@@ -170,12 +219,20 @@ func (s *Server) login(c *gin.Context) {
 	passwordErr := bcrypt.CompareHashAndPassword(hash, []byte(req.Password))
 	if err != nil || !u.Enabled || passwordErr != nil {
 		s.audit(c, "auth.login", "", "denied")
-		s.failedLoginEvent(c)
+		if !s.failedLoginEvent(c, email) {
+			return
+		}
 		failure(c, 401, "invalid_credentials")
 		return
 	}
 	if _, ok := s.securityPolicy(c); !ok {
 		return
+	}
+	for _, key := range []string{failedLoginIPKey(c), failedLoginAccountKey(email)} {
+		if _, _, err := s.Store.KV.GetDel(c.Request.Context(), key); err != nil {
+			failInternal(c, 503, "human_verification_unavailable", err)
+			return
+		}
 	}
 	if u.TotpSecret != "" {
 		challenge := randomToken(32)

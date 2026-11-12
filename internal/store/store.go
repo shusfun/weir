@@ -21,6 +21,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/taskqueue"
 )
 
 const (
@@ -54,12 +55,15 @@ type RedisConfig struct {
 
 // Store 是中心持有的全部存储句柄。
 type Store struct {
-	Driver string
-	DB     *sql.DB
-	Ent    *ent.Client
-	KV     KV
-	Lock   Locker
-	closer func() error
+	Driver        string
+	DB            *sql.DB
+	Ent           *ent.Client
+	KV            KV
+	Transient     Transient
+	Lock          Locker
+	Tasks         *taskqueue.Queue
+	Notifications *Notifications
+	closer        func() error
 }
 
 func (c Config) Validate() error {
@@ -86,14 +90,24 @@ func Open(ctx context.Context, c Config) (*Store, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
+	var s *Store
+	var err error
 	if c.Driver == DriverSQLite {
-		return openSQLite(ctx, c.SQLitePath)
+		s, err = openSQLite(ctx, c.SQLitePath)
+	} else {
+		s, err = openPostgres(ctx, c)
 	}
-	return openPostgres(ctx, c)
+	if err == nil {
+		s.observeGateReads()
+	}
+	return s, err
 }
 
 func (s *Store) Close() error {
 	var errs []error
+	if s.Notifications != nil {
+		s.Notifications.Close()
+	}
 	if s.Ent != nil {
 		errs = append(errs, s.Ent.Close())
 	}
@@ -221,8 +235,12 @@ func openSQLite(ctx context.Context, path string) (*Store, error) {
 	}
 	// SQLite 单写者：一个连接即可避免 SQLITE_BUSY，读写都经由同一连接串行。
 	db.SetMaxOpenConns(1)
+	if err = migrateUserQuota(ctx, db, DriverSQLite); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate user allowance: %w", err)
+	}
 	client := ent.NewClient(ent.Driver(entsql.OpenDB(dialect.SQLite, db)))
-	s := &Store{Driver: DriverSQLite, DB: db, Ent: client, Lock: newLocalLocker(), closer: db.Close}
+	s := &Store{Driver: DriverSQLite, DB: db, Ent: client, Lock: newLocalLocker(), Transient: &memoryTransient{}, closer: db.Close}
 	if err = client.Schema.Create(ctx); err != nil {
 		s.Close()
 		return nil, fmt.Errorf("create schema: %w", err)
@@ -233,6 +251,12 @@ func openSQLite(ctx context.Context, path string) (*Store, error) {
 		return nil, err
 	}
 	s.KV = kv
+	s.Tasks = &taskqueue.Queue{DB: db, Lock: s.Lock}
+	if err = s.Tasks.Migrate(ctx); err != nil {
+		s.Close()
+		return nil, fmt.Errorf("create worker schema: %w", err)
+	}
+	s.Notifications, _ = newNotifications(context.Background(), nil)
 	return s, nil
 }
 
@@ -258,9 +282,19 @@ func openPostgres(ctx context.Context, c Config) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("create weir schema: %w", err)
 	}
+	if err = migrateUserQuota(ctx, db, DriverPostgres); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate user allowance: %w", err)
+	}
 	client := ent.NewClient(ent.Driver(entsql.OpenDB(dialect.Postgres, db)))
 	rdb := newRedisClient(c.Redis)
-	s := &Store{Driver: DriverPostgres, DB: db, Ent: client, KV: redisKV{rdb}, Lock: pgLocker{db}, closer: func() error { return errors.Join(rdb.Close(), db.Close()) }}
+	// Session locks must not consume the business pool. Otherwise independent
+	// lock owners can occupy every slot and all wait on their own transactions.
+	lockDB := stdlib.OpenDB(*pc)
+	lockDB.SetMaxOpenConns(8)
+	lockDB.SetMaxIdleConns(2)
+	lockDB.SetConnMaxLifetime(30 * time.Minute)
+	s := &Store{Driver: DriverPostgres, DB: db, Ent: client, KV: redisKV{rdb}, Transient: redisKV{rdb}, Lock: pgLocker{lockDB}, closer: func() error { return errors.Join(lockDB.Close(), rdb.Close(), db.Close()) }}
 	if err = client.Schema.Create(ctx); err != nil {
 		s.Close()
 		return nil, fmt.Errorf("create schema: %w", err)
@@ -268,6 +302,16 @@ func openPostgres(ctx context.Context, c Config) (*Store, error) {
 	if err = s.KV.Ping(ping); err != nil {
 		s.Close()
 		return nil, fmt.Errorf("%w: %w", ErrRedisUnavailable, err)
+	}
+	s.Tasks = &taskqueue.Queue{DB: db, Lock: s.Lock}
+	if err = s.Tasks.Migrate(ctx); err != nil {
+		s.Close()
+		return nil, fmt.Errorf("create worker schema: %w", err)
+	}
+	s.Notifications, err = newNotifications(context.Background(), rdb)
+	if err != nil {
+		s.Close()
+		return nil, fmt.Errorf("worker notifications: %w", err)
 	}
 	return s, nil
 }

@@ -1,21 +1,45 @@
-// 动效公共工具：读取“减少动态效果”偏好。CSS 动画已由 theme.css 全局压到 1ms，
-// 这里给 JS 驱动的动效（爆散、卡片堆叠、弹窗展开）用：偏好开启时直接跳到终态，不插入动画元素。
+// 动效档位：组件不自己猜。html[data-motion] 为 full / balanced / lite；没写时跟随系统
+// （减少动态效果或省流量 → lite，否则 balanced）。prefersReducedMotion 并进这里：只有省电档为真。
 import { useSyncExternalStore } from "react";
 
-const query = "(prefers-reduced-motion: reduce)";
+export type MotionTier = "full" | "balanced" | "lite";
 
-function prefersReducedMotion() {
-  return typeof window !== "undefined" && !!window.matchMedia?.(query).matches;
+const reduceQuery = "(prefers-reduced-motion: reduce)";
+
+function systemTier(): MotionTier {
+  if (typeof window === "undefined") return "balanced";
+  const reduce = !!window.matchMedia?.(reduceQuery).matches;
+  const save = !!(navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
+  return reduce || save ? "lite" : "balanced";
 }
 
-function subscribe(onChange: () => void) {
-  const media = window.matchMedia?.(query);
+function readMotionTier(): MotionTier {
+  if (typeof document === "undefined") return "balanced";
+  const set = document.documentElement.dataset.motion;
+  if (set === "full" || set === "balanced" || set === "lite") return set;
+  return systemTier();
+}
+
+function prefersReducedMotion() {
+  return readMotionTier() === "lite";
+}
+
+function subscribeMotion(onChange: () => void) {
+  const media = window.matchMedia?.(reduceQuery);
   media?.addEventListener("change", onChange);
-  return () => media?.removeEventListener("change", onChange);
+  const conn = (navigator as Navigator & { connection?: EventTarget }).connection;
+  conn?.addEventListener?.("change", onChange);
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-motion"] });
+  return () => {
+    media?.removeEventListener("change", onChange);
+    conn?.removeEventListener?.("change", onChange);
+    observer.disconnect();
+  };
 }
 
 function usePrefersReducedMotion() {
-  return useSyncExternalStore(subscribe, prefersReducedMotion, () => false);
+  return useSyncExternalStore(subscribeMotion, prefersReducedMotion, () => false);
 }
 
-export { prefersReducedMotion, usePrefersReducedMotion };
+export { prefersReducedMotion, readMotionTier, subscribeMotion, usePrefersReducedMotion };

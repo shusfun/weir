@@ -26,6 +26,10 @@ type Sampler struct {
 	prevTotal, prevBusy uint64
 	prevAt              time.Time
 	processes           map[string]counter
+	CertDir             string
+	DNS                 func(context.Context) (string, bool)
+	dnsValue            *string
+	dnsAt               time.Time
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -38,7 +42,16 @@ func (s *Sampler) Sample(disk string, pids map[string]int) *contracts.HostSample
 		root = "/proc"
 	}
 	now := time.Now().UTC()
-	h := &contracts.HostSample{ObservedAt: now, Processes: map[string]contracts.ProcessSample{}}
+	h := &contracts.HostSample{ObservedAt: now, Processes: map[string]contracts.ProcessSample{}, Health: readHealth(root)}
+	if h.Health != nil && s.CertDir != "" {
+		if days, ok := certRemainingDays(s.CertDir, now); ok {
+			h.Health.CertDays = &days
+		}
+	}
+	if h.Health != nil && s.dnsValue != nil {
+		v := *s.dnsValue
+		h.Health.DNS = &v
+	}
 	read := func(name string) ([]byte, error) { return os.ReadFile(filepath.Join(root, name)) }
 	var total, busy uint64
 	if b, err := read("stat"); err == nil {
@@ -179,11 +192,34 @@ func (s *Sampler) Sample(disk string, pids map[string]int) *contracts.HostSample
 	return h
 }
 
+// RefreshDNS 最多每 5 分钟查一次。查不到就保持未知，不把失败写成正常。
+func (s *Sampler) RefreshDNS(ctx context.Context) {
+	if s == nil || s.DNS == nil {
+		return
+	}
+	s.mu.Lock()
+	fresh := !s.dnsAt.IsZero() && time.Since(s.dnsAt) < 5*time.Minute
+	s.mu.Unlock()
+	if fresh {
+		return
+	}
+	cctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	status, ok := s.DNS(cctx)
+	cancel()
+	s.mu.Lock()
+	s.dnsAt = time.Now()
+	if ok && (status == "clean" || status == "polluted") {
+		s.dnsValue = &status
+	}
+	s.mu.Unlock()
+}
+
 // Run samples even when no console is open; cancellation releases its ticker.
 func (s *Sampler) Run(ctx context.Context, disk string, pids func() map[string]int, accept func(*contracts.HostSample)) {
 	tick := time.NewTicker(10 * time.Second)
 	defer tick.Stop()
 	for {
+		s.RefreshDNS(ctx)
 		accept(s.Sample(disk, pids()))
 		select {
 		case <-ctx.Done():

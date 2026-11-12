@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -21,14 +22,61 @@ type Counter struct {
 
 // State 是 Agent 的本地状态，原子写入 <Data>/state.json。中心离线时依靠它继续执行额度与到期。
 type State struct {
-	Config    *contracts.GateConfig `json:"config,omitempty"` // 最后一份成功应用的配置
-	Applied   int64                 `json:"applied"`
-	Epoch     string                `json:"epoch"` // 本地计量纪元；状态丢失时换新，中心据此从零起算
-	Seq       int64                 `json:"seq"`
-	Totals    map[string]Counter    `json:"totals"`   // 本纪元内各凭据累计（单调递增）
-	Last      map[string]Counter    `json:"last"`     // 上一次的内核原始读数
-	Baseline  map[string]int64      `json:"baseline"` // 收到配置时各用户的本地累计
-	Signature string                `json:"signature"`
+	PendingMeter      *contracts.MeterReport `json:"pending_meter,omitempty"`
+	AcknowledgedEpoch string                 `json:"acknowledged_epoch,omitempty"`
+	Acknowledged      map[string]Counter     `json:"acknowledged,omitempty"`
+	Config            *contracts.GateConfig  `json:"config,omitempty"` // 最后一份成功应用的配置
+	Applied           int64                  `json:"applied"`
+	Epoch             string                 `json:"epoch"` // 本地计量纪元；状态丢失时换新，中心据此从零起算
+	Seq               int64                  `json:"seq"`
+	Totals            map[string]Counter     `json:"totals"`   // 本纪元内各凭据累计（单调递增）
+	Last              map[string]Counter     `json:"last"`     // 上一次的内核原始读数
+	Baseline          map[string]int64       `json:"baseline"` // 收到配置时各用户的本地累计
+	Signature         string                 `json:"signature"`
+}
+
+// A report remains immutable until the center acknowledges its exact epoch
+// and sequence. Baselines survive restarts alongside the pending report.
+func (st *State) prepareMeter(fresh, partialSupported bool) contracts.MeterReport {
+	if st.PendingMeter != nil {
+		return *st.PendingMeter
+	}
+	rep := contracts.MeterReport{Revision: st.Applied, Epoch: st.Epoch, Seq: st.Seq, Status: "fresh"}
+	if !fresh {
+		rep.Status = "unavailable"
+	}
+	if partialSupported {
+		rep.Protocol = 2
+		rep.Partial = st.AcknowledgedEpoch == st.Epoch
+	}
+	for key, total := range st.Totals {
+		previous, ok := st.Acknowledged[key]
+		if rep.Partial && ok && previous == total {
+			continue
+		}
+		rep.Usage = append(rep.Usage, contracts.MeterSample{StatsKey: key, Up: total.Up, Down: total.Down})
+	}
+	sort.Slice(rep.Usage, func(i, j int) bool { return rep.Usage[i].StatsKey < rep.Usage[j].StatsKey })
+	if rep.Protocol == 2 {
+		st.PendingMeter = &rep
+	}
+	return rep
+}
+
+func (st *State) acknowledgeMeter(ack contracts.MeterAck) error {
+	pending := st.PendingMeter
+	if pending == nil || !ack.Accepted || ack.Epoch != pending.Epoch || ack.Seq != pending.Seq {
+		return errors.New("meter acknowledgement does not match pending report")
+	}
+	if !pending.Partial || st.AcknowledgedEpoch != pending.Epoch || st.Acknowledged == nil {
+		st.Acknowledged = map[string]Counter{}
+	}
+	for _, sample := range pending.Usage {
+		st.Acknowledged[sample.StatsKey] = Counter{Up: sample.Up, Down: sample.Down}
+	}
+	st.AcknowledgedEpoch = pending.Epoch
+	st.PendingMeter = nil
+	return nil
 }
 
 func newEpoch() string {
@@ -107,6 +155,23 @@ func (st *State) resetBaseline(cfg contracts.GateConfig) {
 	}
 }
 
+// 额度通知里的 Used 已包含中心刚确认的本地流量。只推进这部分基线，
+// 保留尚未上报的本地增量；直接重置到当前计数会漏掉在途用量。
+func (st *State) advanceBaseline(cfg contracts.GateConfig) {
+	next := make(map[string]int64, len(cfg.Budgets))
+	for user, budget := range cfg.Budgets {
+		local := st.localUsage(cfg, user)
+		previous, ok := st.Config.Budgets[user]
+		if !ok || budget.Used < previous.Used {
+			next[user] = local
+			continue
+		}
+		base := min(local, st.Baseline[user])
+		next[user] = base + min(local-base, budget.Used-previous.Used)
+	}
+	st.Baseline = next
+}
+
 // exhausted 返回在本 Gate 上额度已用尽的用户（中心已记账用量 + 收到配置后的本地新增 ≥ 已分配额度）。
 func (st *State) exhausted(cfg contracts.GateConfig) map[string]bool {
 	out := map[string]bool{}
@@ -126,7 +191,7 @@ func (st *State) exhausted(cfg contracts.GateConfig) map[string]bool {
 func signature(cfg contracts.GateConfig, now time.Time, exhausted map[string]bool) string {
 	var keys []string
 	for _, c := range cfg.Credentials {
-		if !c.InWindow(now) {
+		if c.Revoke != "" || !c.InWindow(now) {
 			continue
 		}
 		if !c.Internal && exhausted[c.UserKey] {

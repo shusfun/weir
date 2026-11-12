@@ -2,15 +2,19 @@ package center
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"sort"
 	"time"
+
+	"github.com/gin-gonic/gin"
 
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/budget"
 	"github.com/shusfun/weir/internal/store/ent/credential"
 	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/node"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 const (
@@ -125,6 +129,12 @@ func planBudgets(remaining int64, rows []*ent.Budget, stale map[int]bool) map[in
 			}
 		}
 	}
+	for _, r := range rows {
+		// 已经超出本地限额的用量只记账，不把这段超用改写成新的授权额度。
+		if out[r.GateID] <= r.Used && out[r.GateID] > held(r) {
+			out[r.GateID] = held(r)
+		}
+	}
 	return out
 }
 
@@ -158,24 +168,50 @@ func (s *Server) rebalanceUser(ctx context.Context, uid int) ([]int, error) {
 			}
 			rows = append(rows, row)
 		}
-		if u.Quota == 0 {
+		// 计量事务可能在逐行读取期间提交。总用量最后读取，避免用旧总量
+		// 配上新 Gate 用量，把刚消耗的额度再次分配；较新的总量只会保守少发。
+		u, err = s.Store.Ent.User.Get(ctx, uid)
+		if err != nil {
+			return err
+		}
+		if u.Unlimited {
+			for _, gid := range gates {
+				execution, err := s.loadExecution(ctx, gid)
+				if err != nil {
+					return err
+				}
+				if !execution.Budgets[userKey(uid)].Unlimited {
+					if err := s.publishExecution(ctx, gid); err != nil {
+						return err
+					}
+					changed = append(changed, gid)
+				}
+			}
 			return nil
 		}
 		for gid, alloc := range planBudgets(u.Quota-u.Used, rows, stale) {
 			for _, r := range rows {
-				if r.GateID != gid || r.Allocated == alloc {
+				if r.GateID != gid {
 					continue
 				}
-				// 先写新值（版本标为不可确认）再加 Gate 的配置版本：Gate 按新版本编译配置时一定读到新值，
-				// 不会出现「回报的版本已含新值、实际执行的还是旧值」而被误记为已确认。
-				if r, err = r.Update().SetAllocated(alloc).SetRevision(unconfirmable).Save(ctx); err != nil {
+				if r.Allocated == alloc {
+					execution, e := s.loadExecution(ctx, gid)
+					if e != nil {
+						return e
+					}
+					if execution.Budgets[userKey(uid)].Unlimited {
+						if e = s.publishExecution(ctx, gid); e != nil {
+							return e
+						}
+						changed = append(changed, gid)
+					}
+					continue
+				}
+				// 纯记账不推进配置版本。版本先标成不可确认，Gate 确认执行状态后再写回。
+				if r, err = r.Update().SetConfirmed(maxInt64(r.Allocated, r.Confirmed)).SetAllocated(alloc).SetRevision(unconfirmable).Save(ctx); err != nil {
 					return err
 				}
-				rev, err := s.bumpGate(ctx, gid)
-				if err != nil {
-					return err
-				}
-				if _, err = r.Update().SetRevision(rev).Save(ctx); err != nil {
+				if err = s.publishExecution(ctx, gid); err != nil {
 					return err
 				}
 				changed = append(changed, gid)
@@ -197,13 +233,19 @@ func (s *Server) ReclaimStaleBudgets(ctx context.Context, now time.Time) error {
 	if ok, err := s.Store.KV.SetNX(ctx, "budget-reclaim", "1", 10*time.Minute); err != nil || !ok {
 		return err
 	}
-	gs, err := s.Store.Ent.Gate.Query().Where(gate.LastSeenAtLT(now.Add(-reclaimAfter))).All(ctx)
+	gs, err := s.Store.Ent.Gate.Query().All(ctx)
 	if err != nil || len(gs) == 0 {
 		return err
 	}
 	ids := make([]int, 0, len(gs))
 	for _, g := range gs {
+		if !gateStale(g, now) {
+			continue
+		}
 		ids = append(ids, g.ID)
+	}
+	if len(ids) == 0 {
+		return nil
 	}
 	rows, err := s.Store.Ent.Budget.Query().Where(budget.GateIDIn(ids...), budget.ConfirmedGT(0)).All(ctx)
 	if err != nil {
@@ -215,29 +257,171 @@ func (s *Server) ReclaimStaleBudgets(ctx context.Context, now time.Time) error {
 			continue
 		}
 		seen[r.UserID] = true
-		changed, err := s.rebalanceUser(ctx, r.UserID)
-		if err == nil && len(changed) > 0 {
-			err = s.bumpGates(ctx, changed)
-		}
-		if err != nil {
+		// 回收只改额度分配。rebalanceUser 已发布执行状态；不推进配置版本，避免无意义地重写内核配置。
+		if _, err = s.rebalanceUser(ctx, r.UserID); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// Rebalance 重新分配某用户的额度并唤醒受影响 Gate 的配置长轮询（套餐、节点、链接变化后调用）。
+// Rebalance 重新分配某用户的额度。凭据变化由 SyncUser 推进配置版本；
+// 这里只发布执行状态，不改变内核配置。
 func (s *Server) Rebalance(ctx context.Context, uid int) error {
-	gates, err := s.rebalanceUser(ctx, uid)
+	_, err := s.rebalanceUser(ctx, uid)
+	return err
+}
+
+func executionKey(gid int) string { return "gate-exec:" + itoa(gid) }
+
+func (s *Server) publishExecution(ctx context.Context, gid int) error {
+	return s.Store.Lock.Do(ctx, "gate-execution:"+itoa(gid), func(ctx context.Context) error {
+		return s.publishExecutionLocked(ctx, gid)
+	})
+}
+
+func (s *Server) publishExecutionLocked(ctx context.Context, gid int) error {
+	raw, _, err := s.Store.KV.Get(ctx, executionKey(gid))
+	seq := int64(1)
 	if err != nil {
 		return err
 	}
-	// 凭据集合可能也变了：即使额度未变，也让该用户所在的 Gate 重新下发配置。
-	all, err := s.userGates(ctx, uid)
+	if raw != "" {
+		var prev contracts.GateExecution
+		_ = json.Unmarshal([]byte(raw), &prev)
+		seq = prev.Seq + 1
+	}
+	rows, err := s.Store.Ent.Budget.Query().Where(budget.GateIDEQ(gid)).All(ctx)
 	if err != nil {
 		return err
 	}
-	return s.bumpGates(ctx, append(gates, all...))
+	exec := contracts.GateExecution{Seq: seq, Budgets: map[string]contracts.GateBudget{}}
+	for _, row := range rows {
+		u, err := s.Store.Ent.User.Get(ctx, row.UserID)
+		if err != nil {
+			return err
+		}
+		item := contracts.GateBudget{Allocated: row.Allocated, Used: row.Used}
+		if u.Unlimited {
+			item.Unlimited = true
+		}
+		exec.Budgets[userKey(u.ID)] = item
+	}
+	force, err := s.forceDisconnect(ctx)
+	if err != nil {
+		return err
+	}
+	exec.ForceDisconnect = &force
+	body, err := json.Marshal(exec)
+	if err != nil {
+		return err
+	}
+	if err = s.Store.KV.Set(ctx, executionKey(gid), string(body), 0); err != nil {
+		return err
+	}
+	s.waiters.notify(gid)
+	_ = s.Store.Notifications.Publish(ctx, "gate:"+itoa(gid))
+	return nil
+}
+
+func (s *Server) loadExecution(ctx context.Context, gid int) (contracts.GateExecution, error) {
+	raw, ok, err := s.Store.KV.Get(ctx, executionKey(gid))
+	if err != nil || !ok || raw == "" {
+		return contracts.GateExecution{}, err
+	}
+	var exec contracts.GateExecution
+	if err = json.Unmarshal([]byte(raw), &exec); err != nil {
+		return contracts.GateExecution{}, err
+	}
+	return exec, nil
+}
+
+func (s *Server) confirmExecution(ctx context.Context, gid int, seq int64) error {
+	if seq <= 0 {
+		return nil
+	}
+	execution, err := s.loadExecution(ctx, gid)
+	if err != nil || seq != execution.Seq {
+		return err
+	}
+	rows, err := s.Store.Ent.Budget.Query().Where(budget.GateIDEQ(gid), budget.RevisionEQ(unconfirmable)).All(ctx)
+	if err != nil {
+		return err
+	}
+	g, err := s.Store.Ent.Gate.Get(ctx, gid)
+	if err != nil {
+		return err
+	}
+	var freed []int
+	for _, row := range rows {
+		err = s.Store.Lock.Do(ctx, "budget:"+itoa(row.UserID), func(ctx context.Context) error {
+			current, err := s.loadExecution(ctx, gid)
+			if err != nil || current.Seq != seq {
+				return err
+			}
+			r, err := s.Store.Ent.Budget.Get(ctx, row.ID)
+			if err != nil {
+				return err
+			}
+			item, ok := current.Budgets[userKey(r.UserID)]
+			if !ok || item.Allocated != r.Allocated || r.Revision != unconfirmable {
+				return nil
+			}
+			if err = r.Update().SetConfirmed(r.Allocated).SetRevision(g.ConfigRevision).Exec(ctx); err != nil {
+				return err
+			}
+			if r.Confirmed > r.Allocated {
+				freed = append(freed, r.UserID)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	}
+	for _, uid := range freed {
+		if _, err = s.rebalanceUser(ctx, uid); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Server) getForceDisconnect(c *gin.Context) {
+	on, err := s.forceDisconnect(c.Request.Context())
+	if err != nil {
+		failInternal(c, 503, "query_failed", err)
+		return
+	}
+	c.JSON(200, gin.H{"enabled": on})
+}
+
+func (s *Server) putForceDisconnect(c *gin.Context) {
+	var req struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if !bind(c, &req) || req.Enabled == nil {
+		failure(c, 400, "invalid_force_disconnect")
+		return
+	}
+	value := "true"
+	if !*req.Enabled {
+		value = "false"
+	}
+	if err := s.Store.KV.Set(c.Request.Context(), "force-disconnect", value, 0); err != nil {
+		failInternal(c, 500, "save_failed", err)
+		return
+	}
+	s.audit(c, "settings.force_disconnect", "system", value)
+	c.JSON(200, gin.H{"enabled": *req.Enabled})
+}
+
+func (s *Server) forceDisconnect(ctx context.Context) (bool, error) {
+	raw, ok, err := s.Store.KV.Get(ctx, "force-disconnect")
+	if err != nil || !ok || raw == "" {
+		return true, err
+	}
+	return raw != "false", nil
 }
 
 // confirmBudgets 在 Gate 回报已应用 revision 后，把该 Gate 上版本不晚于它的额度标记为已确认。

@@ -1,11 +1,17 @@
 /* 登录与初始化：居中一块面板，底色为分组背景。 */
 .auth { max-width: 500px; margin: 10vh auto; padding: 0 var(--weir-space-5); display: grid; gap: var(--weir-space-3); justify-items: center; color: var(--weir-ink-2); }
-.auth-screen { min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 40px var(--weir-space-5); background: var(--weir-base); }
-.auth-container { width: 100%; max-width: 430px; min-width: 0; }
-.auth-brand { display: flex; align-items: center; justify-content: center; gap: var(--weir-space-3); font-size: var(--weir-text-display); line-height: var(--weir-leading-display); font-weight: var(--weir-weight-bold); letter-spacing: -0.02em; text-decoration: none; color: var(--weir-ink); }
+/* 登录（设计稿 ALogin）：左侧一列，Logo、大字问候、导语、卡片；右下角是机房航线地球 */
+.auth-screen { position: relative; min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 40px var(--weir-space-5); background: var(--weir-base); }
+.auth-screen:not(.setup-screen) { align-items: flex-start; justify-content: flex-start; padding: 161px var(--weir-space-5) 61px 221px; overflow: hidden; }
+.auth-container { position: relative; z-index: 1; width: 100%; max-width: 421px; min-width: 0; }
+.auth-brand { display: inline-flex; align-items: center; gap: var(--weir-space-3); font-size: var(--weir-text-display); line-height: var(--weir-leading-display); font-weight: var(--weir-weight-bold); letter-spacing: -0.02em; text-decoration: none; color: var(--weir-ink); }
+.auth-title { margin: 21px 0 0; font-size: var(--weir-text-detail); line-height: var(--weir-leading-detail); font-weight: var(--weir-weight-bold); letter-spacing: -0.03em; }
+.auth-screen:not(.setup-screen) .auth-footer { justify-content: flex-start; margin-top: var(--weir-gap-9); }
+.auth-footnote { margin: 21px 0 0; font-size: var(--weir-text-caption2); line-height: var(--weir-leading-caption2); color: var(--weir-ink-3); }
 /* 应用图标：iOS 图标的圆角约为边长的 22%，44 × 0.22 ≈ 10 */
-.auth-brand > span { display: grid; place-items: center; width: 44px; height: 44px; overflow: hidden; border-radius: var(--weir-radius); }
-.auth-subtitle { margin: var(--weir-space-3) 0 var(--weir-space-6); text-align: center; font-size: var(--weir-text-body); line-height: var(--weir-leading-body); color: var(--weir-ink-3); }
+.auth-brand > span { display: grid; place-items: center; width: 45px; height: 45px; overflow: hidden; border-radius: var(--weir-radius-15); }
+.auth-brand > span > span { font-size: var(--weir-text-title3); border-radius: var(--weir-radius-15); }
+.auth-subtitle { margin: 9px 0 29px; font-size: var(--weir-text-subheadline); line-height: 25px; color: var(--weir-ink-2); }
 .auth-heading { text-align: center; margin-bottom: var(--weir-space-5); }
 .auth-heading h1 { margin: 0 0 var(--weir-space-2); }
 .auth-heading p { margin: 0; font-size: var(--weir-text-meta); line-height: var(--weir-leading-meta); }
@@ -36,11 +42,14 @@
 .setup-info code { overflow-wrap: anywhere; }
 .setup-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--weir-space-3); margin-top: var(--weir-space-1); }
 
+@media (max-width: 1100px) {
+  .auth-screen:not(.setup-screen) { padding-left: var(--weir-space-5); justify-content: center; }
+}
 @media (max-width: 760px) {
   .setup-workspace { grid-template-columns: 1fr; gap: var(--weir-space-5); }
   .setup-progress { padding: 0; }
   .setup-progress > p { display: none; }
 }
 @media (max-width: 480px) {
-  .auth-screen { padding: var(--weir-space-6) var(--weir-space-4); align-items: flex-start; }
+  .auth-screen { padding: var(--weir-space-6) var(--weir-space-4); align-items: flex-start; justify-content: center; }
 }

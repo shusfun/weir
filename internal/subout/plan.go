@@ -30,6 +30,10 @@ const SingleProvider = "single"
 const AutoProvider = "auto"
 const AllProvider = "all"
 
+// SubscriptionProbeURL 使用固定的无敏感 204 地址。订阅客户端刚加载 provider 时，
+// HTTP 探测避免首轮 TLS 握手与 provider 加载并发导致 FlClash 显示超时。
+const SubscriptionProbeURL = "http://www.gstatic.com/generate_204"
+
 // Ref 对应节点默认线路或用户自建链式线路；名称变化不改变引用。
 type Item struct {
 	Link   string

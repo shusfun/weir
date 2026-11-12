@@ -2,17 +2,19 @@ package center
 
 import (
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -20,13 +22,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/publicsuffix"
 
-	"github.com/shusfun/weir/internal/dsh"
+	"github.com/shusfun/weir/internal/fetch"
 	"github.com/shusfun/weir/internal/store/ent/setting"
+	"github.com/shusfun/weir/packages/dsh"
 )
 
 // 托管的 dsh（DeepSeek Harness）：中心像内核一样下载、校验、切换版本，但不运行它。dsh 由独立的管理进程
 // （系统用户 weir-dsh，生产环境是 systemd 单元 weir-dsh）启动，只监听回环，读不到中心的配置、数据库与密钥；
-// 中心与它只通过 control/、status/ 两个目录交换文件（见 internal/dsh/agent.go）。
+// 中心与它只通过 control/、status/ 两个目录交换文件（见 packages/dsh/agent.go）。
 // 浏览器只能经 Weir 的 dsh 子域名网关、从控制台的 dsh 窗口里打开它（见 dsh_gateway.go）。
 // DeepSeek 的 Key 只在 dsh 自己的设置里填写，Weir 不保存也不读取。
 
@@ -82,10 +85,46 @@ func (s *Server) dshDir() string {
 
 func (s *Server) dshLayout() dsh.Layout { return dsh.Layout{Root: s.dshDir()} }
 
-func (s *Server) dshInstaller() dsh.Installer { return dsh.DefaultInstaller(s.dshLayout().Runtime()) }
+func (s *Server) dshInstaller() dsh.Installer {
+	in := dsh.DefaultInstaller(s.dshLayout().Runtime())
+	in.Namespace = "weir"
+	for _, item := range strings.Split(os.Getenv("WEIR_NPM_REGISTRIES"), ",") {
+		if item = strings.TrimRight(strings.TrimSpace(item), "/"); strings.HasPrefix(item, "https://") {
+			in.Registries = append(in.Registries, item)
+		}
+	}
+	for _, item := range strings.Split(os.Getenv("WEIR_NODE_MIRRORS"), ",") {
+		if item = strings.TrimRight(strings.TrimSpace(item), "/"); strings.HasPrefix(item, "https://") {
+			in.NodeMirrors = append(in.NodeMirrors, item)
+		}
+	}
+	in.Download = func(ctx context.Context, req dsh.DownloadRequest) error {
+		return fetch.Download(ctx, fetch.Request{URLs: req.URLs, Dest: req.Dest, SHA256: req.SHA256,
+			MaxSize: req.MaxSize, HTTP: req.HTTP, OnStep: req.OnStep, Log: req.Log,
+			OnProgress: func(p fetch.Progress) {
+				if req.OnProgress != nil {
+					req.OnProgress(dsh.Progress{Done: p.Done, Total: p.Total, Speed: float64(p.Speed)})
+				}
+			}})
+	}
+	in.Observe = dshObservation
+	return in
+}
+
+func dshObservation(ctx context.Context, event dsh.Event) {
+	slog.InfoContext(ctx, "dsh operation", "trace", event.TraceID, "operation", event.Operation,
+		"status", event.Status, "code", event.Code, "ms", event.Finished.Sub(event.Started).Milliseconds())
+}
 
 // dshExternal 表示管理进程由 systemd 单元 weir-dsh 托管，中心不自己启动它。
 func dshExternal() bool { return os.Getenv("WEIR_DSH_AGENT") == "systemd" }
+
+func dshEnvironment() map[string]string {
+	if value := os.Getenv("WEIR_DSH_DEEPSEEK_BASE_URL"); value != "" {
+		return map[string]string{"DEEPSEEK_BASE_URL": value}
+	}
+	return nil
+}
 
 func (s *Server) dshSettings(ctx context.Context) DSHSettings {
 	var out DSHSettings
@@ -205,12 +244,27 @@ func (s *Server) reconcileDSH(ctx context.Context) {
 			return
 		}
 		url := "http://" + m.addr + "/mcp"
-		want = dsh.Desired{Version: set.Version, TrustedHost: domain, WebPatch: basePatch(url, m.webToken), AnalystPatch: analystPatch(m.addr, m.analystToken),
-			Instructions: dshInstructions, MCPURL: url, MCPToken: m.webToken}
+		profile, profileErr := s.aiProfile(ctx)
+		if profileErr != nil {
+			s.pauseDSHAnalysis("AI 外置配置无效，后台分析暂停")
+			s.dshLogNote().note("dsh-profile", profileErr)
+			return
+		}
+		want = dsh.Desired{Namespace: "weir", Environment: dshEnvironment(), Version: set.Version, TrustedHost: domain, WebPatch: basePatch(url, m.webToken), AnalystPatch: analystPatch(m.addr, dsh.BackgroundTokenPlaceholder),
+			BackgroundProfiles: map[string]string{"observation": analystPatch(m.addr, m.observationToken)},
+			Instructions:       *profile.Effective.Instructions, MCPURL: url, MCPToken: m.webToken}
+		if meta, err := validatePlugin(profile.Effective.Plugin); err == nil {
+			want.Compatibility = &dsh.Compatibility{VerifiedRange: meta.Weir.DSH, OutOfRange: dsh.DegradeBaseOnly}
+		}
 		var verified bool
 		want.PluginDir, want.PluginLabel, note, verified = s.activePlugin(set.Version)
 		if verified {
-			want.SkillsDir, _ = s.writeDSHSkills()
+			want.SkillsDir, err = s.writeDSHSkills()
+			if err != nil {
+				s.pauseDSHAnalysis("无法生成生效 skills，后台分析暂停")
+				s.dshLogNote().note("dsh-skills", err)
+				return
+			}
 		}
 		s.dsh.mu.Lock()
 		s.dsh.verified = verified
@@ -229,7 +283,7 @@ func (s *Server) reconcileDSH(ctx context.Context) {
 	s.dsh.mu.Unlock()
 	prev := cur
 	prev.Generation = 0
-	if cur.Generation != 0 && prev == want && !force {
+	if cur.Generation != 0 && reflect.DeepEqual(prev, want) && !force {
 		return
 	}
 	// 用时间作 Generation：中心重启后不会与上一次撞号（MCP 的端口与令牌每次启动都会换，dsh 必须跟着重启）。
@@ -252,6 +306,13 @@ func (s *Server) reconcileDSH(ctx context.Context) {
 	s.dsh.mu.Unlock()
 }
 
+func (s *Server) pauseDSHAnalysis(reason string) {
+	s.dsh.mu.Lock()
+	s.dsh.verified = false
+	s.dsh.pluginNote = reason
+	s.dsh.mu.Unlock()
+}
+
 // prepareDSHDirs 建好托管目录：runtime/、control/ 归中心（control/ 对 dsh 组只读），status/、state/ 归管理进程。
 // 生产环境由安装脚本建好并设置属主；开发容器里中心以 root 运行，这里把 status/、state/ 交给 weir-dsh。
 func (s *Server) prepareDSHDirs() error {
@@ -268,7 +329,7 @@ func (s *Server) prepareDSHDirs() error {
 			return err
 		}
 	}
-	uid, gid, drop := dsh.AgentUser()
+	uid, gid, drop := dsh.AgentUser("weir-dsh")
 	for d, mode := range map[string]os.FileMode{l.Status(): 0o750, l.State(): 0o700} {
 		if err := os.MkdirAll(d, mode); err != nil {
 			return err
@@ -307,7 +368,12 @@ func (s *Server) ensureAgent() {
 		cmd.Env = append(cmd.Env, "WEIR_DSH_DEEPSEEK_BASE_URL="+v)
 	}
 	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
-	cmd.SysProcAttr = dsh.AgentProcAttr()
+	procAttr, err := dsh.AgentProcAttr("weir-dsh")
+	if err != nil {
+		slog.Error("cannot start dsh agent without isolated identity", "err", err)
+		return
+	}
+	cmd.SysProcAttr = procAttr
 	s.dsh.started = time.Now()
 	if err = cmd.Start(); err != nil {
 		return
@@ -345,22 +411,73 @@ func (s *Server) stopAgent() {
 }
 
 // errUnverifiedDSH：后台分析只在已验证的 dsh 版本上运行（它按工具 id 禁用工具，新版本改了 id 时禁用会悄悄失效）。
-var errUnverifiedDSH = errors.New("这个 dsh 版本还没验证，后台安全分析暂停；等 Weir 发版适配")
+var errUnverifiedDSH = errors.New("这个 dsh 版本还没验证，后台分析暂停；请更新并确认外置兼容配置")
+var errDSHAnalysisBusy = errors.New("background analysis capacity is occupied")
 
 // runDSHJob 把一次后台分析交给管理进程。
 func (s *Server) runDSHJob(ctx context.Context, task string) (dsh.Result, error) {
+	return s.runDSHProfile(ctx, task, "")
+}
+
+func (s *Server) runDSHProfile(ctx context.Context, task, profile string) (dsh.Result, error) {
+	if _, err := s.aiProfile(ctx); err != nil {
+		s.pauseDSHAnalysis("AI 外置配置无效，后台分析暂停")
+		return dsh.Result{}, errors.New("AI 外置配置无效，后台分析暂停")
+	}
 	s.dsh.mu.Lock()
 	verified := s.dsh.verified || s.dsh.jobRunner != nil
 	s.dsh.mu.Unlock()
 	if !verified {
 		return dsh.Result{}, errUnverifiedDSH
 	}
-	res, err := s.dshJob(ctx, dsh.JobRequest{Kind: "analysis", Task: task})
+	ctx, cancel := context.WithTimeout(ctx, 6*time.Minute)
+	defer cancel()
+	identity := randomHex(16)
+	const capacityKey = "dsh-analysis-capacity"
+	err := s.Store.Lock.Do(ctx, capacityKey, func(ctx context.Context) error {
+		acquired, err := s.Store.KV.SetNX(ctx, capacityKey, identity, 7*time.Minute)
+		if err == nil && !acquired {
+			return errDSHAnalysisBusy
+		}
+		return err
+	})
+	if err != nil {
+		return dsh.Result{}, err
+	}
+	defer func() {
+		cleanup, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cleanupCancel()
+		_ = s.Store.Lock.Do(cleanup, capacityKey, func(ctx context.Context) error {
+			value, ok, err := s.Store.KV.Get(ctx, capacityKey)
+			if err == nil && ok && value == identity {
+				return s.Store.KV.Del(ctx, capacityKey)
+			}
+			return err
+		})
+	}()
+	req := dsh.JobRequest{Kind: "analysis", Profile: profile, Task: task}
+	if profile == "" {
+		grant, _ := ctx.Value(securityRunKey{}).(securityRunGrant)
+		if grant.EventID > 0 {
+			grant.RunID, grant.TraceID, grant.Until = identity, taskTrace(ctx), time.Now().UTC().Add(6*time.Minute)
+			req.ToolToken = randomHex(32)
+			encoded, _ := json.Marshal(grant)
+			key := "security-run:" + digest(req.ToolToken)
+			if err = s.Store.KV.Set(ctx, key, string(encoded), 6*time.Minute); err != nil {
+				return dsh.Result{}, err
+			}
+			defer s.Store.KV.Del(context.WithoutCancel(ctx), key)
+		}
+	}
+	res, err := s.dshJob(ctx, req)
 	return res.Result, err
 }
 
 // dshJob 把一个任务交给管理进程：写 control/jobs/<id>.json，等 status/jobs/<id>.json（最多 6 分钟或 ctx 结束）。
 func (s *Server) dshJob(ctx context.Context, req dsh.JobRequest) (dsh.JobResult, error) {
+	if req.TraceID == "" {
+		req.TraceID = taskTrace(ctx)
+	}
 	if s.dsh.jobRunner != nil {
 		return s.dsh.jobRunner(ctx, req)
 	}
@@ -417,7 +534,7 @@ func basePatch(url, token string) string {
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              prefix: 你是 Weir 的运维助手。只能通过 Weir 的工具读取脱敏后的状态、提交草稿；草稿要经过实测与管理员确认才会生效。请用中文回答。
+              prefix: 你是 Weir 的运维助手。通过 Weir 工具读取脱敏状态、提交草稿；业务修改须通过预演和管理员确认。绑定安全事件的后台任务可请求单项临时收紧，是否自动生效仅由宿主护栏决定；放宽、永久处置和自身规则修改始终需管理员确认。请用中文回答。
           - id: mcp-weir
             name: '@deepseek-ai/dsh-mcp-client'
             config:
@@ -478,6 +595,7 @@ func analystPatch(addr, token string) string {
 }
 
 func (s *Server) dshRoutes(admin *gin.RouterGroup) {
+	s.aiProfileRoutes(admin)
 	admin.GET("/dsh", s.dshStatus)
 	admin.PUT("/dsh/settings", s.putDSHSettings)
 	admin.GET("/dsh/releases", s.dshReleases)
@@ -624,6 +742,16 @@ func frameSite(r *http.Request) string {
 }
 
 func (s *Server) dshReleases(c *gin.Context) {
+	profile, err := s.aiProfile(c.Request.Context())
+	if err != nil {
+		failInternal(c, 503, "ai_profile_unavailable", err)
+		return
+	}
+	meta, err := validatePlugin(profile.Effective.Plugin)
+	if err != nil {
+		failInternal(c, 503, "ai_profile_unavailable", err)
+		return
+	}
 	list, err := s.dshInstaller().Releases(c.Request.Context())
 	if err != nil {
 		_ = c.Error(err)
@@ -633,7 +761,8 @@ func (s *Server) dshReleases(c *gin.Context) {
 	// verified：在 Weir 插件已验证的版本范围内（「Weir 助手」预设与后台分析可用）
 	out := make([]gin.H, 0, len(list))
 	for _, r := range list {
-		out = append(out, gin.H{"version": r.Version, "published_at": r.PublishedAt, "tags": r.Tags, "verified": pluginVerified(r.Version)})
+		verified, _ := dsh.InRange(r.Version, meta.Weir.DSH)
+		out = append(out, gin.H{"version": r.Version, "published_at": r.PublishedAt, "tags": r.Tags, "verified": verified})
 	}
 	c.JSON(200, gin.H{"releases": out})
 }
@@ -657,7 +786,10 @@ func (s *Server) fetchDSH(c *gin.Context) {
 	actor, ip := c.GetInt("user_id"), c.ClientIP()
 	job := s.jobs.Start("dsh:"+req.Version, "dsh", "dsh "+req.Version, func(bg context.Context, run JobRun) (map[string]any, error) {
 		in := s.dshInstaller()
-		in.Progress, in.Step, in.Log = run.Progress, run.Stage, run.Log
+		in.Progress = func(p dsh.Progress) {
+			run.Progress(fetch.Progress{Done: p.Done, Total: p.Total, Speed: int64(p.Speed)})
+		}
+		in.Step, in.Log = run.Stage, run.Log
 		meta, err := in.Install(bg, req.Version)
 		res := "ok"
 		if err != nil {
@@ -758,23 +890,89 @@ var dshSkillsFS embed.FS
 
 // writeDSHSkills 把随程序发布的 skill 写到 control/skills/（dsh 只读），返回目录。
 func (s *Server) writeDSHSkills() (string, error) {
-	dir := filepath.Join(s.dshLayout().Control(), "skills")
-	if err := dsh.SharedDir(dir); err != nil {
+	profile, err := s.aiProfile(context.Background())
+	if err != nil {
 		return "", err
 	}
-	err := fs.WalkDir(dshSkillsFS, "dshskills", func(p string, d fs.DirEntry, err error) error {
-		if err != nil || p == "dshskills" {
-			return err
+	root := filepath.Join(s.dshLayout().Control(), "skills")
+	if err = dsh.SharedDir(root); err != nil {
+		return "", err
+	}
+	b, _ := json.Marshal(profile.Effective.Skills)
+	sum := sha256.Sum256(b)
+	name := hex.EncodeToString(sum[:])
+	dir := filepath.Join(root, name)
+	if st, e := os.Lstat(dir); e == nil {
+		if !st.IsDir() || st.Mode()&os.ModeSymlink != 0 {
+			return "", errors.New("effective skills directory is invalid")
 		}
-		dest := filepath.Join(dir, strings.TrimPrefix(p, "dshskills/"))
-		if d.IsDir() {
-			return dsh.SharedDir(dest)
+		if err := verifyEffectiveSkills(dir, profile.Effective.Skills); err != nil {
+			return "", err
 		}
-		b, err := dshSkillsFS.ReadFile(p)
+		return dir, nil
+	} else if !os.IsNotExist(e) {
+		return "", e
+	}
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		return "", err
+	}
+	defer r.Close()
+	if err = r.RemoveAll(name + ".new"); err != nil {
+		return "", err
+	}
+	tmp := filepath.Join(root, name+".new")
+	if err = dsh.SharedDir(tmp); err != nil {
+		return "", err
+	}
+	for file, body := range profile.Effective.Skills {
+		dest := filepath.Join(tmp, filepath.FromSlash(file))
+		if err = dsh.SharedDir(filepath.Dir(dest)); err != nil {
+			return "", err
+		}
+		if err = dsh.WriteSharedBytes(dest, []byte(body)); err != nil {
+			return "", err
+		}
+	}
+	if err = os.Rename(tmp, dir); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+func verifyEffectiveSkills(dir string, expected map[string]string) error {
+	found := 0
+	err := filepath.WalkDir(dir, func(name string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		return dsh.WriteSharedBytes(dest, b)
+		if entry.Type()&os.ModeSymlink != 0 {
+			return errors.New("effective skill symlink is not allowed")
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(dir, name)
+		if err != nil {
+			return err
+		}
+		want, ok := expected[filepath.ToSlash(rel)]
+		info, err := entry.Info()
+		if !ok || err != nil || !info.Mode().IsRegular() || info.Size() != int64(len(want)) {
+			return errors.New("effective skills content mismatch")
+		}
+		b, err := os.ReadFile(name)
+		if err != nil || string(b) != want {
+			return errors.New("effective skills content mismatch")
+		}
+		found++
+		return nil
 	})
-	return dir, err
+	if err != nil {
+		return err
+	}
+	if found != len(expected) {
+		return errors.New("effective skill file is missing")
+	}
+	return nil
 }

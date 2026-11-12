@@ -38,7 +38,7 @@ function Collapsible({
         className={cn(
           // 行内标题视觉紧凑，触屏下行高做到 44；card 变体整行可点，按下叠填充色
           "group/collapsible weir-press relative flex max-w-full min-h-7 cursor-pointer items-center gap-1 rounded-[var(--weir-radius-xs)] text-left text-body text-[var(--weir-accent-text)] touch:min-h-11",
-          variant === "card" && "w-full rounded-[calc(var(--weir-radius)-1px)] px-3 py-1 text-[var(--weir-ink)]",
+          variant === "card" && "w-full rounded-[var(--weir-radius-9)] px-3 py-1 text-[var(--weir-ink)]",
         )}
       >
         <ChevronRight className="size-4 shrink-0 transition-[rotate] duration-[var(--weir-spring-dur)] ease-[var(--weir-spring)] group-data-[panel-open]/collapsible:rotate-90" aria-hidden />

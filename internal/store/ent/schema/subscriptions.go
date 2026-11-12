@@ -6,6 +6,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // SubSource 是机场订阅源（http 订阅地址）。网站、备注只是元数据，中心不访问网站。
@@ -66,6 +67,7 @@ func (SubProfile) Fields() []ent.Field {
 		field.Bool("all_sources").Default(false), // 包含全部已启用的订阅源与手动节点
 		field.JSON("source_ids", []int{}).Optional(),
 		field.JSON("node_ids", []int{}).Optional(),
+		field.JSON("members", []contracts.SubscriptionMember{}).Optional(),
 		field.JSON("operators", []any{}).Optional(),
 		field.JSON("settings", map[string]any{}).Optional(), // 前缀、模板、规则等级、筛选、旗帜
 		field.Time("expires_at").Optional().Nillable(),

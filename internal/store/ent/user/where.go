@@ -59,6 +59,11 @@ func Email(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldEmail, v))
 }
 
+// NormalizedEmail applies equality check predicate on the "normalized_email" field. It's identical to NormalizedEmailEQ.
+func NormalizedEmail(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldNormalizedEmail, v))
+}
+
 // Name applies equality check predicate on the "name" field. It's identical to NameEQ.
 func Name(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldName, v))
@@ -77,6 +82,11 @@ func Enabled(v bool) predicate.User {
 // Quota applies equality check predicate on the "quota" field. It's identical to QuotaEQ.
 func Quota(v int64) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldQuota, v))
+}
+
+// Unlimited applies equality check predicate on the "unlimited" field. It's identical to UnlimitedEQ.
+func Unlimited(v bool) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldUnlimited, v))
 }
 
 // Used applies equality check predicate on the "used" field. It's identical to UsedEQ.
@@ -192,6 +202,81 @@ func EmailEqualFold(v string) predicate.User {
 // EmailContainsFold applies the ContainsFold predicate on the "email" field.
 func EmailContainsFold(v string) predicate.User {
 	return predicate.User(sql.FieldContainsFold(FieldEmail, v))
+}
+
+// NormalizedEmailEQ applies the EQ predicate on the "normalized_email" field.
+func NormalizedEmailEQ(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldNormalizedEmail, v))
+}
+
+// NormalizedEmailNEQ applies the NEQ predicate on the "normalized_email" field.
+func NormalizedEmailNEQ(v string) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldNormalizedEmail, v))
+}
+
+// NormalizedEmailIn applies the In predicate on the "normalized_email" field.
+func NormalizedEmailIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldIn(FieldNormalizedEmail, vs...))
+}
+
+// NormalizedEmailNotIn applies the NotIn predicate on the "normalized_email" field.
+func NormalizedEmailNotIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldNormalizedEmail, vs...))
+}
+
+// NormalizedEmailGT applies the GT predicate on the "normalized_email" field.
+func NormalizedEmailGT(v string) predicate.User {
+	return predicate.User(sql.FieldGT(FieldNormalizedEmail, v))
+}
+
+// NormalizedEmailGTE applies the GTE predicate on the "normalized_email" field.
+func NormalizedEmailGTE(v string) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldNormalizedEmail, v))
+}
+
+// NormalizedEmailLT applies the LT predicate on the "normalized_email" field.
+func NormalizedEmailLT(v string) predicate.User {
+	return predicate.User(sql.FieldLT(FieldNormalizedEmail, v))
+}
+
+// NormalizedEmailLTE applies the LTE predicate on the "normalized_email" field.
+func NormalizedEmailLTE(v string) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldNormalizedEmail, v))
+}
+
+// NormalizedEmailContains applies the Contains predicate on the "normalized_email" field.
+func NormalizedEmailContains(v string) predicate.User {
+	return predicate.User(sql.FieldContains(FieldNormalizedEmail, v))
+}
+
+// NormalizedEmailHasPrefix applies the HasPrefix predicate on the "normalized_email" field.
+func NormalizedEmailHasPrefix(v string) predicate.User {
+	return predicate.User(sql.FieldHasPrefix(FieldNormalizedEmail, v))
+}
+
+// NormalizedEmailHasSuffix applies the HasSuffix predicate on the "normalized_email" field.
+func NormalizedEmailHasSuffix(v string) predicate.User {
+	return predicate.User(sql.FieldHasSuffix(FieldNormalizedEmail, v))
+}
+
+// NormalizedEmailIsNil applies the IsNil predicate on the "normalized_email" field.
+func NormalizedEmailIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldNormalizedEmail))
+}
+
+// NormalizedEmailNotNil applies the NotNil predicate on the "normalized_email" field.
+func NormalizedEmailNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldNormalizedEmail))
+}
+
+// NormalizedEmailEqualFold applies the EqualFold predicate on the "normalized_email" field.
+func NormalizedEmailEqualFold(v string) predicate.User {
+	return predicate.User(sql.FieldEqualFold(FieldNormalizedEmail, v))
+}
+
+// NormalizedEmailContainsFold applies the ContainsFold predicate on the "normalized_email" field.
+func NormalizedEmailContainsFold(v string) predicate.User {
+	return predicate.User(sql.FieldContainsFold(FieldNormalizedEmail, v))
 }
 
 // NameEQ applies the EQ predicate on the "name" field.
@@ -392,6 +477,16 @@ func QuotaLT(v int64) predicate.User {
 // QuotaLTE applies the LTE predicate on the "quota" field.
 func QuotaLTE(v int64) predicate.User {
 	return predicate.User(sql.FieldLTE(FieldQuota, v))
+}
+
+// UnlimitedEQ applies the EQ predicate on the "unlimited" field.
+func UnlimitedEQ(v bool) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldUnlimited, v))
+}
+
+// UnlimitedNEQ applies the NEQ predicate on the "unlimited" field.
+func UnlimitedNEQ(v bool) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldUnlimited, v))
 }
 
 // UsedEQ applies the EQ predicate on the "used" field.

@@ -157,7 +157,7 @@ func (s *Server) subPlan(ctx context.Context, p planned) (*subout.Plan, []subout
 	for i, e := range p.Entries {
 		items[i] = subout.Item{Link: e.URI, Type: e.Type, Ref: e.Ref, Auto: p.Ranked[i].Auto, Direct: !e.Chained}
 	}
-	plan := &subout.Plan{Groups: p.Policy.Groups, HiddenLines: p.Policy.HiddenLines, IntervalSec: p.Policy.Auto.RefreshMinutes * 60, UpdateSec: p.Policy.Auto.RefreshMinutes * 60}
+	plan := &subout.Plan{Groups: p.Policy.Groups, HiddenLines: p.Policy.HiddenLines, IntervalSec: p.Policy.Auto.RefreshMinutes * 60, UpdateSec: p.Policy.Auto.RefreshMinutes * 60, TestURL: subout.SubscriptionProbeURL}
 	custom := p.Policy.Custom
 	for _, e := range custom.Entries {
 		if e.Enabled {

@@ -25,6 +25,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/subprofile"
 	"github.com/shusfun/weir/internal/store/ent/subsource"
 	"github.com/shusfun/weir/internal/subgroup"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // 订阅备份与导入：订阅源、手动节点、订阅组与规则模板（type weir-subscriptions）。
@@ -102,6 +103,16 @@ var iniShape = regexp.MustCompile(`(?i)\[(custom|proxy\s*group|rule|ruleset|prox
 // ImportSubscriptions 在一个事务里导入订阅备份。
 func (s *Server) ImportSubscriptions(ctx context.Context, raw []byte) (ImportStats, error) {
 	var st ImportStats
+	err := s.Store.Lock.Do(ctx, "subscription-profiles", func(ctx context.Context) error {
+		var err error
+		st, err = s.importSubscriptionsLocked(ctx, raw)
+		return err
+	})
+	return st, err
+}
+
+func (s *Server) importSubscriptionsLocked(ctx context.Context, raw []byte) (ImportStats, error) {
+	var st ImportStats
 	var b backupFile
 	if err := json.Unmarshal(raw, &b); err != nil {
 		return st, errors.New("not_a_backup")
@@ -167,6 +178,7 @@ func (s *Server) ImportSubscriptions(ctx context.Context, raw []byte) (ImportSta
 			st.Skipped = append(st.Skipped, fmt.Sprintf("%s：不是订阅地址或可识别的节点", firstNonEmpty(name, id)))
 		}
 	}
+	templateIDs := map[string]int{}
 	for _, t := range b.Data.RuleTemplates {
 		content, name := str(t, "content"), str(t, "name")
 		format := "ini"
@@ -177,12 +189,16 @@ func (s *Server) ImportSubscriptions(ctx context.Context, raw []byte) (ImportSta
 			st.Skipped = append(st.Skipped, fmt.Sprintf("模板 %s：内容无效", name))
 			continue
 		}
-		if _, err := tx.RuleTemplate.Create().SetName(trimTo(firstNonEmpty(name, "导入的模板"), 100)).SetFormat(ruletemplate.Format(format)).SetContent(content).Save(ctx); err != nil {
+		row, err := tx.RuleTemplate.Create().SetName(trimTo(firstNonEmpty(name, "导入的模板"), 100)).SetFormat(ruletemplate.Format(format)).SetContent(content).Save(ctx)
+		if err != nil {
 			return st, err
 		}
+		templateIDs[idOf(t["id"])] = row.ID
 		st.Templates++
 	}
 	pos, _ := tx.SubProfile.Query().Count(ctx)
+	profileIDs := map[string]int{}
+	imported := make([]*ent.SubProfile, 0, len(profiles))
 	for _, p := range profiles {
 		name := trimTo(firstNonEmpty(str(p, "name"), "导入的订阅组"), 100)
 		var srcIDs, nodeIDs []int
@@ -224,8 +240,22 @@ func (s *Server) ImportSubscriptions(ctx context.Context, raw []byte) (ImportSta
 				settings["template"] = "remote:" + tpl
 			}
 		}
+		if rawSettings, ok := p["settings"].(map[string]any); ok {
+			ps, err := decodeProfileSettings(rawSettings)
+			if err != nil || ps.RuleLevel != nil && !validRuleLevel(*ps.RuleLevel) {
+				return st, errors.New("invalid_profile_settings")
+			}
+			settings = rawSettings
+			if ps.Template != nil && strings.HasPrefix(*ps.Template, "custom:") {
+				id, ok := templateIDs["t"+strings.TrimPrefix(*ps.Template, "custom:")]
+				if !ok {
+					return st, errors.New("invalid_template")
+				}
+				settings["template"] = "custom:" + itoa(id)
+			}
+		}
 		create := tx.SubProfile.Create().SetName(name).SetEnabled(boolOr(p, "enabled", true)).SetSourceIds(dedupe(srcIDs)).SetNodeIds(dedupe(nodeIDs)).
-			SetOperators(ops).SetSettings(settings).SetPosition(pos)
+			SetOperators(ops).SetSettings(settings).SetPosition(pos).SetAllSources(boolOr(p, "all_sources", false))
 		if e := str(p, "expiresAt"); e != "" {
 			if t, err := time.Parse(time.RFC3339, e); err == nil {
 				create.SetExpiresAt(t)
@@ -233,11 +263,65 @@ func (s *Server) ImportSubscriptions(ctx context.Context, raw []byte) (ImportSta
 				create.SetExpiresAt(t)
 			}
 		}
-		if _, err := create.Save(ctx); err != nil {
+		row, err := create.Save(ctx)
+		if err != nil {
 			return st, err
 		}
+		key := idOf(p["id"])
+		if _, exists := profileIDs[key]; exists && key != "" {
+			return st, errors.New("duplicate_profile_id")
+		}
+		profileIDs[key] = row.ID
+		imported = append(imported, row)
 		pos++
 		st.Profiles++
+	}
+	// Resolve references only after every profile has its new database ID.
+	for i, p := range profiles {
+		rawMembers, exists := p["members"]
+		if !exists || rawMembers == nil {
+			continue
+		}
+		list, ok := rawMembers.([]any)
+		if !ok || len(list) > maxSubscriptionMembers {
+			return st, errors.New("invalid_profile_members")
+		}
+		members := []contracts.SubscriptionMember{}
+		var srcIDs, nodeIDs []int
+		for _, raw := range list {
+			m, ok := raw.(map[string]any)
+			if !ok || len(m) != 2 {
+				return st, errors.New("invalid_profile_members")
+			}
+			kind, ref := str(m, "kind"), idOf(m["id"])
+			var id int
+			switch kind {
+			case "source":
+				id = sources[ref]
+				srcIDs = append(srcIDs, id)
+			case "node":
+				id = nodes[ref]
+				nodeIDs = append(nodeIDs, id)
+			case "profile":
+				id = profileIDs[ref]
+			default:
+				return st, errors.New("invalid_profile_members")
+			}
+			if id == 0 {
+				return st, errors.New("unknown_profile_member")
+			}
+			members = append(members, contracts.SubscriptionMember{Kind: kind, ID: id})
+		}
+		if err := tx.SubProfile.UpdateOneID(imported[i].ID).SetMembers(members).SetSourceIds(srcIDs).SetNodeIds(nodeIDs).Exec(ctx); err != nil {
+			return st, err
+		}
+	}
+	rows, err := tx.SubProfile.Query().All(ctx)
+	if err != nil {
+		return st, err
+	}
+	if err := validateProfileGraph(rows); err != nil {
+		return st, err
 	}
 	if err = tx.Commit(); err != nil {
 		return st, err
@@ -259,7 +343,7 @@ func trimTo(v string, n int) string {
 
 // ExportSubscriptions 生成订阅备份（订阅源 s<ID>、手动节点 n<ID>），可再导入。
 func (s *Server) ExportSubscriptions(ctx context.Context) ([]byte, error) {
-	b := backupFile{Version: 1, App: "Weir", Type: "weir-subscriptions", ExportedAt: time.Now().UTC()}
+	b := backupFile{Version: 2, App: "Weir", Type: "weir-subscriptions", ExportedAt: time.Now().UTC()}
 	sources, err := s.Store.Ent.SubSource.Query().Order(ent.Asc(subsource.FieldPosition), ent.Asc(subsource.FieldID)).All(ctx)
 	if err != nil {
 		return nil, err
@@ -300,6 +384,15 @@ func (s *Server) ExportSubscriptions(ctx context.Context) ([]byte, error) {
 			man = append(man, fmt.Sprintf("n%d", id))
 		}
 		item := map[string]any{"id": fmt.Sprintf("p%d", p.ID), "name": p.Name, "enabled": p.Enabled, "subscriptions": subs, "manualNodes": man, "operators": p.Operators}
+		item["settings"], item["all_sources"] = p.Settings, p.AllSources
+		if p.Members != nil {
+			members := []map[string]any{}
+			for _, m := range p.Members {
+				prefix := map[string]string{"source": "s", "node": "n", "profile": "p"}[m.Kind]
+				members = append(members, map[string]any{"kind": m.Kind, "id": prefix + itoa(m.ID)})
+			}
+			item["members"] = members
+		}
 		if p.ExpiresAt != nil {
 			item["expiresAt"] = p.ExpiresAt.UTC().Format(time.RFC3339)
 		}

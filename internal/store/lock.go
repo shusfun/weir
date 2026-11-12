@@ -3,8 +3,10 @@ package store
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"hash/fnv"
 	"sync"
+	"time"
 )
 
 // Locker 让「读出 → 修改 → 写回」这类操作在同一名字下串行执行。
@@ -22,37 +24,76 @@ func lockKey(name string) int64 {
 }
 
 func (l pgLocker) Do(ctx context.Context, name string, fn func(ctx context.Context) error) error {
-	conn, err := l.db.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
 	key := lockKey(name)
-	if _, err = conn.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, key); err != nil {
-		return err
+	var conn *sql.Conn
+	for {
+		var err error
+		conn, err = l.db.Conn(ctx)
+		if err != nil {
+			return err
+		}
+		var acquired bool
+		err = conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1)`, key).Scan(&acquired)
+		if err != nil {
+			discardLockConn(conn)
+			return err
+		}
+		if acquired {
+			break
+		}
+		conn.Close()
+		// Waiters must release pool slots: the owner needs a second connection
+		// for business queries and transactions while holding its session lock.
+		timer := time.NewTimer(25 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
 	}
-	// 解锁使用独立上下文，调用方取消时也必须释放。
-	defer conn.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1)`, key)
+	defer func() {
+		release, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		var unlocked bool
+		if err := conn.QueryRowContext(release, `SELECT pg_advisory_unlock($1)`, key).Scan(&unlocked); err != nil || !unlocked {
+			discardLockConn(conn)
+			return
+		}
+		conn.Close()
+	}()
 	return fn(ctx)
+}
+
+func discardLockConn(conn *sql.Conn) {
+	// A canceled query may have acquired the lock before losing its reply.
+	// Discard that physical session rather than returning a possible lock to
+	// the pool, where a different request could accidentally re-enter it.
+	_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+	_ = conn.Close()
 }
 
 type localLocker struct {
 	mu    sync.Mutex
-	locks map[string]*sync.Mutex
+	locks map[string]chan struct{}
 }
 
-func newLocalLocker() *localLocker { return &localLocker{locks: map[string]*sync.Mutex{}} }
+func newLocalLocker() *localLocker { return &localLocker{locks: map[string]chan struct{}{}} }
 
 func (l *localLocker) Do(ctx context.Context, name string, fn func(ctx context.Context) error) error {
 	l.mu.Lock()
 	m, ok := l.locks[name]
 	if !ok {
-		m = &sync.Mutex{}
+		m = make(chan struct{}, 1)
 		l.locks[name] = m
 	}
 	l.mu.Unlock()
-	m.Lock()
-	defer m.Unlock()
+	select {
+	case m <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	defer func() { <-m }()
 	if err := ctx.Err(); err != nil {
 		return err
 	}

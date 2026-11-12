@@ -83,7 +83,7 @@
   }
   /* 不撑满时只占内容宽度：放在网格 / 纵向 flex 里也不会被拉成整行 */
   .weir-segmented:not([data-full-width]) { justify-self: start; align-self: flex-start; }
-  .weir-segmented > .weir-key { background: transparent; border-radius: calc(var(--weir-radius) - 2px); }
+  .weir-segmented > .weir-key { background: transparent; border-radius: var(--weir-radius-9); }
   .weir-segmented > .weir-key.is-pressed { background: var(--weir-key-selected); }
   /* 底座横向可滚动，外扩的焦点环会被裁：改为内描边 */
   .weir-segmented > .weir-key:focus-visible { outline-offset: -2px; }
@@ -146,11 +146,11 @@
   }
 
   /*
-   * 覆盖式滚动条（scroll-area.tsx），只在桌面（pointer: fine）显示。根定尺寸，视口在根里伸缩：
+   * 自定义滚动条（scroll-area.tsx）。根定尺寸，视口在根里伸缩：
    * 根给 max-h 时视口随内容长到上限再滚，根给 h / flex-1 时视口撑满。滚动条绝对定位在根内、盖在内容上，不占宽度。
    * 显示：滚动中（data-scrolling）、鼠标停在滚动条上（:hover）、拖动拇指（:active）；
    * 淡出前停留 --weir-scrollbar-linger，加上 Base UI 的 500 ms 判定，停止滚动约 600 ms 后开始淡出。
-   * 触屏：隐藏这条细条，恢复浏览器原生滚动条（手机上本来就是覆盖式、带回弹）。
+   * 触屏：overlay 恢复原生滚动条；stable 保留独立轨道，避免表单内容被覆盖。
    */
   .weir-scroll-root {
     position: relative;
@@ -212,10 +212,10 @@
   }
   .weir-scroll-corner { background: transparent; }
   @media (pointer: coarse) {
-    .weir-scrollbar { display: none; }
+    .weir-scroll-root[data-gutter="overlay"] > .weir-scrollbar { display: none; }
     /* Base UI 用 .base-ui-disable-scrollbar 隐藏原生滚动条，触屏上恢复 */
-    .weir-scroll-viewport.base-ui-disable-scrollbar { scrollbar-width: auto; }
-    .weir-scroll-viewport.base-ui-disable-scrollbar::-webkit-scrollbar { display: initial; }
+    .weir-scroll-root[data-gutter="overlay"] > .weir-scroll-viewport.base-ui-disable-scrollbar { scrollbar-width: auto; }
+    .weir-scroll-root[data-gutter="overlay"] > .weir-scroll-viewport.base-ui-disable-scrollbar::-webkit-scrollbar { display: initial; }
   }
   /* 整页滚动区（PageScrollArea，只在桌面）：铺满视口；html / body 不再滚动 */
   .weir-page-scroll { height: 100dvh; }
@@ -274,3 +274,57 @@ html:has(.weir-page-scroll) body {
   height: 100%;
   overflow: hidden;
 }
+
+@layer components {
+  .weir-button {
+    --weir-button-height: var(--weir-tap);
+    --weir-button-padding: var(--weir-space-3);
+    --weir-button-icon: var(--weir-icon);
+    min-height: var(--weir-button-height);
+    padding: 0 var(--weir-button-padding);
+    gap: var(--weir-gap-7);
+    font-size: var(--weir-text-control);
+    line-height: var(--weir-leading-control);
+  }
+  .weir-button-xs { --weir-button-height: var(--weir-tap-xs); --weir-button-padding: var(--weir-space-2); --weir-button-icon: var(--weir-icon-sm); font-size: var(--weir-text-meta); line-height: var(--weir-leading-meta); }
+  .weir-button-sm { --weir-button-height: var(--weir-tap-sm); --weir-button-padding: var(--weir-space-2); }
+  .weir-button-lg { --weir-button-height: var(--weir-tap-lg); --weir-button-padding: var(--weir-space-5); gap: var(--weir-space-2); font-size: var(--weir-text-subheadline); line-height: var(--weir-leading-subheadline); }
+  .weir-button-icon { width: var(--weir-button-height); height: var(--weir-button-height); padding: 0; }
+  .weir-key-link { background: transparent; }
+  .weir-key-link::after { display: none; }
+  .weir-key-link:active { scale: none; opacity: var(--weir-press-opacity); }
+  .weir-card { --weir-card-padding: var(--weir-space-4); --weir-card-block: var(--weir-space-3); --weir-card-inline: var(--weir-card-padding); }
+  .weir-card[data-size="sm"] { --weir-card-padding: var(--weir-space-3); --weir-card-block: var(--weir-space-2); }
+  .weir-card[data-size="lg"] { --weir-card-padding: var(--weir-space-6); --weir-card-block: var(--weir-space-4); }
+  .weir-card[data-variant="plain"] { --weir-card-inline: 0px; --weir-card-padding: var(--weir-space-3); }
+  .weir-card-header, .weir-card-footer { padding: var(--weir-card-block) var(--weir-card-inline); gap: var(--weir-space-3); }
+  .weir-card-content { padding: var(--weir-card-padding) var(--weir-card-inline); }
+  .weir-scroll-root[data-gutter="stable"]:not([data-orientation="horizontal"]) { padding-inline-end: var(--weir-scrollbar-gutter); }
+  .weir-scroll-root[data-gutter="stable"]:not([data-orientation="vertical"]) { padding-block-end: var(--weir-scrollbar-gutter); }
+  .weir-dialog { --weir-dialog-padding: var(--weir-space-6); }
+  .weir-dialog > [data-slot="dialog-pinned-header"] { padding-inline-end: calc(var(--weir-tap-sm) + var(--weir-space-3)); }
+  .weir-dialog-close { top: var(--weir-space-2); right: var(--weir-space-2); }
+  .weir-dialog-footer { margin-inline: calc(-1 * var(--weir-dialog-padding)); margin-bottom: calc(-1 * var(--weir-dialog-padding)); padding: var(--weir-space-4) var(--weir-dialog-padding); }
+  .weir-module-toggle { min-height: var(--weir-tap-sm); }
+  @media (pointer: coarse), (max-width: 767.98px) {
+    .weir-button { --weir-button-height: var(--weir-tap-touch); min-width: var(--weir-tap-touch); }
+    .weir-module-toggle { min-height: var(--weir-tap-touch); }
+  }
+  @media (max-width: 639.98px) {
+    .weir-card[data-size="lg"] { --weir-card-padding: var(--weir-space-5); }
+    .weir-dialog { --weir-dialog-padding: var(--weir-space-5); }
+    .weir-dialog-footer { padding-block: var(--weir-space-3); }
+  }
+}
+.weir-tabs-list { gap: var(--weir-gap-3); }
+.weir-tabs-tab { height: var(--weir-tab-height); padding-inline: var(--weir-gap-13); }
+@media (pointer: coarse), (max-width: 767px) {
+  .weir-tabs-tab { min-height: var(--weir-tap-touch); min-width: var(--weir-tap-touch); }
+}
+
+.weir-overlay-body { min-height: 0; min-width: 0; }
+.weir-action-group { display: flex; flex-wrap: wrap; align-items: center; gap: var(--weir-space-2); }
+.weir-action-group[data-align="end"] { justify-content: flex-end; }
+.weir-overlay-footer { flex-shrink: 0; border-top: 1px solid var(--weir-line-soft); padding-top: var(--weir-space-4); margin-top: var(--weir-space-4); }
+
+.weir-overlay-body[data-gutter="stable"] { margin-inline-end: calc(-1 * var(--weir-scrollbar-gutter)); }

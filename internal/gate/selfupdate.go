@@ -14,6 +14,8 @@ import (
 	"github.com/shusfun/weir/internal/buildinfo"
 	"github.com/shusfun/weir/internal/fetch"
 	"github.com/shusfun/weir/internal/ghrelease"
+	"github.com/shusfun/weir/internal/publicnet"
+	"github.com/shusfun/weir/internal/releasefiles"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -130,9 +132,18 @@ func (a *Agent) manualUpdate(ctx context.Context, rel contracts.ReleaseTarget) e
 // selfUpdate 先按中心给的地址从 GitHub（或镜像）下载发布包，校验后取出 weir；没有地址或都失败时改从中心下载，
 // 再交给辅助程序替换（辅助程序随后重启本服务）。失败原因写进状态随心跳上报，VPS 卡片上能看到，不只留在本机日志。
 func (a *Agent) selfUpdate(ctx context.Context, rel contracts.ReleaseTarget) error {
+	release, err := a.downloads.acquire(ctx, false)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if releasefiles.Trace(ctx) == "" {
+		ctx = releasefiles.WithTrace(ctx, "")
+	}
 	version := rel.Version
+	log.Printf("self update trace=%s version=%s stage=start", releasefiles.Trace(ctx), version)
 	fail := func(msg string) error {
-		log.Printf("self update to %s failed: %s", version, msg)
+		log.Printf("self update trace=%s version=%s failed: %s", releasefiles.Trace(ctx), version, msg)
 		a.setUpdateStatus(&contracts.SelfUpdateStatus{Version: version, State: "failed", Error: msg, At: time.Now().UTC()})
 		return errors.New(msg)
 	}
@@ -170,12 +181,17 @@ func (a *Agent) selfUpdate(ctx context.Context, rel contracts.ReleaseTarget) err
 	if err := a.replace(ctx, version, sumOf(data), data); err != nil {
 		return fail("替换程序失败：" + err.Error())
 	}
+	a.cleanupUpdateDownloads(ctx, version, nil)
+	log.Printf("self update trace=%s version=%s stage=done", releasefiles.Trace(ctx), version)
 	a.setUpdateStatus(nil)
 	return nil
 }
 
 // replace 交给辅助程序替换程序（测试中替换）。
 func (a *Agent) replace(ctx context.Context, version, sum string, data []byte) error {
+	if err := a.checkExecutionLease(ctx); err != nil {
+		return err
+	}
 	if a.replaceFn != nil {
 		return a.replaceFn(ctx, version, sum, data)
 	}
@@ -190,7 +206,10 @@ func (a *Agent) releaseFromGitHub(ctx context.Context, rel contracts.ReleaseTarg
 	}
 	dir := filepath.Join(a.P.Data, "update")
 	name := "weir-" + rel.Version + ".tar.gz"
-	cleanDir(dir, name)
+	if err := releasefiles.DownloadDir(dir, name); err != nil {
+		return nil, err
+	}
+	a.cleanupUpdateDownloads(ctx, rel.Version, map[string]bool{name: true, name + ".part": true})
 	dest := filepath.Join(dir, name)
 	err = fetch.Download(ctx, fetch.Request{URLs: urls, Dest: dest, SHA256: rel.SHA256, MaxSize: releaseMaxSize, HTTP: a.externalHTTP(),
 		OnProgress: func(p fetch.Progress) {
@@ -201,7 +220,9 @@ func (a *Agent) releaseFromGitHub(ctx context.Context, rel contracts.ReleaseTarg
 		return nil, err
 	}
 	pkg, err := os.ReadFile(dest)
-	_ = os.Remove(dest)
+	if removeErr := os.Remove(dest); removeErr != nil {
+		log.Printf("WARN self update cleanup trace=%s version=%s error=%q", releasefiles.Trace(ctx), rel.Version, removeErr)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -212,13 +233,14 @@ func (a *Agent) releaseFromGitHub(ctx context.Context, rel contracts.ReleaseTarg
 	return files["weir"], nil
 }
 
-// cleanDir 删除 dir 下除 keep（及其 .part）以外的文件：换了版本后，旧版本的残留不再有用。
-func cleanDir(dir, keep string) {
-	entries, _ := os.ReadDir(dir)
-	for _, e := range entries {
-		if n := e.Name(); n != keep && n != keep+".part" {
-			_ = os.RemoveAll(filepath.Join(dir, n))
-		}
+func (a *Agent) cleanupUpdateDownloads(ctx context.Context, version string, keep map[string]bool) {
+	stats, err := releasefiles.Prune(filepath.Join(a.P.Data, "update"), keep, func(n string) bool {
+		return strings.HasPrefix(n, "weir-") && (strings.HasSuffix(n, ".tar.gz") || strings.HasSuffix(n, ".tar.gz.part"))
+	}, nil)
+	if err != nil {
+		log.Printf("WARN self update cleanup trace=%s version=%s %s error=%q", releasefiles.Trace(ctx), version, stats, err)
+	} else {
+		log.Printf("self update cleanup trace=%s version=%s %s", releasefiles.Trace(ctx), version, stats)
 	}
 }
 
@@ -228,5 +250,5 @@ func (a *Agent) externalHTTP() *http.Client {
 	if a.extHTTP != nil {
 		return a.extHTTP
 	}
-	return &http.Client{Transport: http.DefaultTransport.(*http.Transport).Clone()}
+	return a.workerHTTP(publicnet.Client(0))
 }

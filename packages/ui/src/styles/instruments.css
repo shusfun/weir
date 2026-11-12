@@ -70,7 +70,7 @@
     color: var(--weir-ink-engraved);
     font-family: var(--weir-font);
     font-size: var(--weir-text-headline);
-    line-height: var(--weir-leading-display);
+    line-height: var(--weir-leading-headline);
   }
   .weir-readout-unit {
     font-size: var(--weir-text-meta);
@@ -168,3 +168,658 @@
   .weir-faceplate::before,
   .weir-faceplate::after { display: none; }
 }
+
+/* 新范式部件：尺寸与颜色只引用 --weir-*。省电档由 [data-motion=lite] 停掉动画与毛玻璃。 */
+@layer components {
+  .weir-above-globe { position: relative; z-index: 1; }
+  .weir-globe {
+    position: fixed;
+    z-index: 0;
+    right: 0;
+    bottom: 0;
+    width: var(--weir-globe-size);
+    height: var(--weir-globe-size);
+    transform: translate(50%, 50%);
+    pointer-events: none;
+    opacity: var(--weir-globe);
+  }
+  .weir-globe canvas { display: block; width: 100%; height: 100%; }
+  .weir-globe-routes { position: absolute; inset: 0; overflow: visible; }
+
+  .weir-squircle {
+    position: relative;
+    border-radius: var(--weir-squircle-radius, var(--weir-radius-surface));
+    corner-shape: squircle;
+  }
+  .weir-squircle-shape {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+  }
+  .weir-squircle-shape path {
+    fill: var(--weir-panel);
+    stroke: var(--weir-line);
+    stroke-width: 1px;
+  }
+  .weir-squircle-body { position: relative; z-index: 1; min-height: 100%; }
+  [data-motion="full"] .weir-squircle-shape {
+    filter: drop-shadow(0 var(--weir-gap-17) var(--weir-gap-41) var(--weir-shade));
+  }
+
+  /* VPS 文件夹（设计稿 .fd / .fd-back / .fd-file / .fd-front） */
+  .weir-folder {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: var(--weir-folder-h);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .weir-folder-back {
+    position: absolute;
+    inset: 23px 0 0;
+    border-radius: var(--weir-radius-stage);
+    background: var(--weir-folder-tint), var(--weir-well);
+    box-shadow: var(--weir-shadow-card);
+    corner-shape: squircle;
+  }
+  .weir-folder-back::before {
+    content: "";
+    position: absolute;
+    top: -23px;
+    left: 0;
+    width: 41%;
+    height: var(--weir-gap-41);
+    border-radius: var(--weir-radius-surface) var(--weir-radius-surface) 0 0;
+    background: inherit;
+    corner-shape: squircle;
+  }
+  .weir-folder-back[data-hue="0"] { --weir-folder-tint: var(--weir-folder-tint-0); }
+  .weir-folder-back[data-hue="1"] { --weir-folder-tint: var(--weir-folder-tint-1); }
+  .weir-folder-file {
+    position: absolute;
+    top: 31px;
+    left: calc(7% + var(--i) * 22%);
+    display: flex;
+    flex-direction: column;
+    width: 43%;
+    height: 151px;
+    padding: var(--weir-gap-9) var(--weir-gap-13);
+    overflow: hidden;
+    border: 1px solid var(--weir-line-soft);
+    border-radius: var(--weir-radius);
+    background: var(--weir-paper);
+    box-shadow: 0 9px 21px var(--weir-shade-paper);
+    color: var(--weir-ink);
+    transform: rotate(var(--tilt, 0deg));
+    corner-shape: squircle;
+    transition: transform var(--weir-mid) var(--weir-spring);
+  }
+  .weir-folder:hover .weir-folder-file { transform: rotate(var(--tilt, 0deg)) translateY(-5px); }
+  /* 按下整块缩一点（与按钮同一套按压参数） */
+  .weir-folder, .weir-folder-slot, .weir-route-card { transition: scale var(--weir-press) var(--weir-ease); }
+  .weir-folder:active, .weir-folder-slot:active, .weir-route-card:active { scale: var(--weir-press-scale); }
+  .weir-folder-file-kind { font-size: var(--weir-text-caption2); line-height: var(--weir-leading-caption2); color: var(--weir-ink-3); }
+  .weir-folder-file-title { font-weight: var(--weir-weight-bold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .weir-folder-file-meta { font-family: var(--weir-mono); font-size: var(--weir-text-caption2); line-height: var(--weir-leading-caption2); color: var(--weir-ink-3); }
+  .weir-folder-front {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    height: 67%;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 19px var(--weir-gap-21);
+    border: 1px solid var(--weir-glass-line);
+    border-radius: var(--weir-radius-stage);
+    background: var(--weir-glass);
+    box-shadow: var(--weir-highlight), var(--weir-shadow-float);
+    -webkit-backdrop-filter: blur(var(--weir-glass-blur)) saturate(1.3);
+    backdrop-filter: blur(var(--weir-glass-blur)) saturate(1.3);
+    corner-shape: squircle;
+  }
+  [data-motion="lite"] .weir-folder-front {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: var(--weir-panel);
+  }
+  .weir-folder-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--weir-gap-9); }
+  .weir-folder-name {
+    display: block;
+    font-size: var(--weir-text-name);
+    line-height: var(--weir-leading-name);
+    font-weight: var(--weir-weight-bold);
+    letter-spacing: -0.02em;
+  }
+  .weir-folder-addr {
+    display: block;
+    color: var(--weir-ink-2);
+    font-family: var(--weir-mono);
+    font-size: var(--weir-text-meta);
+    line-height: var(--weir-leading-meta);
+  }
+  .weir-folder-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--weir-gap-9); }
+  .weir-folder-dots { display: grid; grid-template-columns: repeat(21, 5px); gap: 3px; }
+  .weir-folder-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--weir-dot); }
+  .weir-folder-dots i[data-on="accent"] { background: var(--weir-dot-line); filter: var(--weir-glow); }
+  .weir-folder-dots i[data-on="warn"] { background: var(--weir-warn); }
+  .weir-folder-dots i[data-unknown] { background: transparent; box-shadow: inset 0 0 0 1px var(--weir-dot); }
+  .weir-folder-caption { display: block; margin-top: 5px; font-size: var(--weir-text-caption2); line-height: var(--weir-leading-caption2); color: var(--weir-ink-3); }
+  .weir-folder-metric { text-align: right; }
+  .weir-folder-metric .weir-digits { font-size: var(--weir-text-headline); line-height: 21px; font-weight: var(--weir-weight-bold); }
+  .weir-folder-metric small { font-size: var(--weir-text-caption2); color: var(--weir-ink-3); font-weight: var(--weir-weight-regular); }
+  /* 详情页右上的文件夹（稿子 281 高，前板 57%） */
+  .weir-folder-compact { height: 281px; cursor: default; }
+  .weir-folder-compact .weir-folder-front { height: 57%; }
+  .weir-folder-slot {
+    display: flex;
+    height: calc(var(--weir-folder-h) - 23px);
+    margin-top: 23px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--weir-gap-7);
+    border: 1px dashed var(--weir-line);
+    border-radius: var(--weir-radius-stage);
+    background: var(--weir-base);
+    color: var(--weir-ink-3);
+    font: inherit;
+    cursor: pointer;
+    corner-shape: squircle;
+  }
+  .weir-folder-slot b { color: var(--weir-ink-2); }
+  .weir-folder-slot-plus { font-size: var(--weir-text-title1); line-height: 29px; }
+  .weir-folder-slot:hover { border-color: var(--weir-input-line-hi); color: var(--weir-ink-2); }
+
+  .weir-dot-block { display: grid; gap: var(--weir-gap-7); }
+  .weir-dot-label {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--weir-space-2);
+    color: var(--weir-ink-3);
+    font-size: var(--weir-text-meta);
+    line-height: var(--weir-leading-meta);
+  }
+  .weir-dots {
+    display: grid;
+    grid-template-columns: repeat(var(--weir-dot-cols, 21), var(--weir-dot-size));
+    gap: var(--weir-dot-gap);
+  }
+  .weir-dots span {
+    width: var(--weir-dot-size);
+    height: var(--weir-dot-size);
+    border-radius: var(--weir-radius-full);
+    background: var(--weir-dot);
+  }
+  .weir-dots span[data-on="accent"] { background: var(--weir-dot-line); filter: var(--weir-glow); }
+  .weir-dots span[data-on="ok"] { background: var(--weir-ok); }
+  .weir-dots span[data-on="warn"] { background: var(--weir-warn); }
+  .weir-dots span[data-on="bad"] { background: var(--weir-bad); }
+  .weir-dots span[data-unknown] { background: transparent; border: 1px dashed var(--weir-ink-3); }
+  /* 群像（稿子 .v-cloud）：正常是带光晕的亮点，需要处理是黄点，停用是虚线空圈 */
+  .weir-crowd { display: flex; flex-wrap: wrap; align-items: center; gap: var(--weir-gap-7); }
+  .weir-crowd-dot {
+    width: var(--weir-dot-size);
+    height: var(--weir-dot-size);
+    padding: 0;
+    border: 0;
+    border-radius: var(--weir-radius-full);
+    background: var(--weir-dot);
+  }
+  .weir-crowd-dot[data-size="md"] { width: var(--weir-gap-7); height: var(--weir-gap-7); }
+  .weir-crowd-dot[data-size="lg"] { width: var(--weir-gap-9); height: var(--weir-gap-9); }
+  .weir-crowd-dot[data-tone="ok"] { background: var(--weir-dot-line); filter: var(--weir-glow); }
+  .weir-crowd-dot[data-tone="warn"] { background: var(--weir-warn); }
+  .weir-crowd-dot[data-tone="bad"] { background: var(--weir-bad); }
+  .weir-crowd-dot[data-tone="info"] { background: var(--weir-dot-line); filter: var(--weir-glow); }
+  .weir-crowd-dot[data-tone="off"] { background: transparent; border: 1px dashed var(--weir-ink-3); }
+  .weir-crowd-dot[data-tone="unknown"] { background: transparent; border: 1px dashed var(--weir-ink-3); }
+
+  .weir-spark { width: var(--weir-spark-w); height: var(--weir-spark-h); display: block; color: var(--weir-ink-3); }
+  .weir-spark path { fill: none; stroke: currentColor; stroke-width: 1px; stroke-linecap: round; stroke-linejoin: round; }
+  .weir-spark[data-tone="ok"] { color: var(--weir-ok); }
+  .weir-spark[data-tone="warn"] { color: var(--weir-warn); }
+  .weir-spark[data-tone="bad"] { color: var(--weir-bad); }
+  .weir-spark[data-tone="info"] { color: var(--weir-accent); }
+  .weir-spark-unknown {
+    display: inline-flex;
+    align-items: center;
+    width: var(--weir-spark-w);
+    height: var(--weir-spark-h);
+    color: var(--weir-ink-3);
+    font-size: var(--weir-text-meta);
+    line-height: var(--weir-leading-meta);
+  }
+  [data-motion="full"] .weir-spark[data-draw] path {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: weir-spark-draw var(--weir-settle) var(--weir-decel) forwards;
+  }
+  @keyframes weir-spark-draw { to { stroke-dashoffset: 0; } }
+
+  /* 指标行（稿子状态页页头下的三组数字）：不画外框，大号等宽数字在上、说明在下，组间距 33 */
+  .weir-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--weir-gap-17) var(--weir-gap-33);
+  }
+  .weir-metrics-cell { min-width: 0; }
+  .weir-metrics .weir-readout {
+    display: flex;
+    flex-direction: column-reverse;
+    justify-content: flex-end;
+    gap: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .weir-metrics .weir-readout-value { font-weight: var(--weir-weight-bold); letter-spacing: 0; }
+  .weir-metrics .weir-readout > .weir-engraved { font-size: var(--weir-text-meta); line-height: var(--weir-leading-meta); color: var(--weir-ink-3); }
+  .weir-metric-delta {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--weir-gap-3);
+    margin-top: var(--weir-gap-3);
+    color: var(--weir-ink-3);
+    font-size: var(--weir-text-meta);
+    line-height: var(--weir-leading-meta);
+  }
+  .weir-metric-delta svg { width: var(--weir-gap-13); height: var(--weir-gap-13); }
+  .weir-metric-delta.is-good { color: var(--weir-ok-ink); }
+  .weir-metric-delta.is-bad { color: var(--weir-bad-ink); }
+
+  .weir-timeline { display: grid; margin: 0; padding: 0; list-style: none; }
+  .weir-tl-item {
+    position: relative;
+    display: grid;
+    gap: var(--weir-gap-3);
+    padding: 0 0 var(--weir-space-4) var(--weir-space-5);
+  }
+  .weir-tl-item::before {
+    content: "";
+    position: absolute;
+    top: var(--weir-gap-5);
+    left: 0;
+    width: var(--weir-gap-9);
+    height: var(--weir-gap-9);
+    border-radius: var(--weir-radius-full);
+    background: var(--weir-tl, var(--weir-ink-3));
+    transform: translateX(-50%);
+  }
+  .weir-tl-item::after {
+    content: "";
+    position: absolute;
+    top: var(--weir-gap-17);
+    bottom: 1px;
+    left: 0;
+    width: 1px;
+    background: var(--weir-line);
+    transform: translateX(-50%);
+  }
+  .weir-tl-item:last-child::after { display: none; }
+  .weir-tl-item[data-tone="restart"],
+  .weir-tl-item[data-tone="fail"] { --weir-tl: var(--weir-bad); }
+  .weir-tl-item[data-tone="laya"] { --weir-tl: var(--weir-accent); }
+  .weir-tl-item[data-tone="hot"] { --weir-tl: var(--weir-ok); }
+  .weir-tl-item[data-tone="neutral"] { --weir-tl: var(--weir-ink-3); }
+  .weir-tl-item[data-tone="restart"]::before,
+  .weir-tl-item[data-tone="fail"]::before { box-shadow: 0 0 0 var(--weir-tl-halo) var(--weir-bad-soft); }
+  .weir-tl-item[data-tone="unknown"]::before { background: transparent; border: 1px dashed var(--weir-ink-3); }
+  .weir-tl-time {
+    color: var(--weir-ink-3);
+    font-family: var(--weir-mono);
+    font-size: var(--weir-text-meta);
+    line-height: var(--weir-leading-meta);
+  }
+  .weir-tl-title { font-size: var(--weir-text-body); line-height: var(--weir-leading-body); font-weight: var(--weir-weight-semibold); }
+  .weir-tl-note, .weir-tl-meta {
+    color: var(--weir-ink-3);
+    font-size: var(--weir-text-meta);
+    line-height: var(--weir-leading-meta);
+  }
+  .weir-tl-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--weir-space-2); }
+
+  /* 点阵进度环（稿子运行观测右上角） */
+  .weir-dot-ring { position: relative; flex: 0 0 auto; }
+  .weir-dot-ring svg { display: block; overflow: visible; }
+  .weir-dot-ring circle[data-tone="ok"] { fill: var(--weir-ok); }
+  .weir-dot-ring circle[data-tone="acc"] { fill: var(--weir-accent); }
+  .weir-dot-ring circle[data-tone="off"] { fill: var(--weir-dot); }
+  .weir-dot-ring circle[data-tone="bad"] { fill: var(--weir-bad); }
+  .weir-dot-ring circle[data-tone="warn"] { fill: var(--weir-warn); }
+  .weir-dot-ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  .weir-dot-ring-caption { color: var(--weir-ink-3); font-size: var(--weir-text-meta); line-height: var(--weir-leading-meta); }
+  .weir-dot-ring-value { font-family: var(--weir-mono); font-variant-numeric: tabular-nums; font-size: var(--weir-text-detail); line-height: var(--weir-leading-detail); font-weight: var(--weir-weight-bold); }
+  .weir-dot-ring-value small { color: var(--weir-ink-3); font-size: var(--weir-text-title3); line-height: var(--weir-leading-title3); }
+  .weir-dot-ring b { margin-top: var(--weir-gap-3); }
+
+  /* 对象详情页页头（稿子 .v-crumb / .v-hero2，右侧主视觉 461 宽） */
+  .weir-object-top { display: flex; min-height: 37px; align-items: center; justify-content: space-between; gap: var(--weir-gap-13); }
+  .weir-crumb { display: flex; align-items: center; gap: var(--weir-gap-7); color: var(--weir-ink-3); }
+  .weir-crumb a { color: var(--weir-accent-text); text-decoration: none; }
+  .weir-crumb svg { width: 15px; height: 15px; color: var(--weir-accent-text); }
+  .weir-crumb b { color: var(--weir-ink); font-weight: var(--weir-weight-semibold); }
+  .weir-object-hero { display: grid; align-items: center; gap: var(--weir-gap-41); margin-top: 29px; }
+  .weir-object-hero.has-aside { grid-template-columns: minmax(0, 1fr) 461px; }
+  .weir-object-aside { min-width: 0; }
+  @media (max-width: 1100px) { .weir-object-hero.has-aside { grid-template-columns: minmax(0, 1fr); } .weir-object-aside { display: none; } }
+  /* 体检卡（稿子左侧环形总览） */
+  .weir-health { margin: 0; padding: 0; list-style: none; }
+  .weir-health-side { display: flex; align-items: center; gap: var(--weir-gap-9); }
+
+  /* 节点链路三段（稿子 BNodeDetail）：卡片之间用三个点连起来，出口受限时黄色描边 */
+  .weir-chain { display: grid; grid-template-columns: minmax(0, 1fr) 41px minmax(0, 1fr) 41px minmax(0, 1fr); align-items: center; gap: var(--weir-gap-9); }
+  .weir-chain-seg { min-width: 0; padding: 15px var(--weir-gap-21); border: 1px solid var(--weir-line-soft); border-radius: var(--weir-radius-17); background: var(--weir-panel); box-shadow: var(--weir-highlight), var(--weir-shadow-card); corner-shape: squircle; }
+  .weir-chain-seg[data-tone="warn"] { border-color: var(--weir-warn); }
+  .weir-chain-seg small { color: var(--weir-ink-3); font-size: var(--weir-text-caption2); }
+  .weir-chain-dots { display: flex; justify-content: center; gap: 5px; }
+  .weir-chain-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--weir-dot-line); }
+  @media (max-width: 900px) { .weir-chain { grid-template-columns: 1fr; } .weir-chain-dots { transform: rotate(90deg); } }
+  /* 属性小标签组（稿子 BNodeDetail「VLESS | REALITY | 52766」） */
+  .weir-tags { display: inline-flex; overflow: hidden; border: 1px solid var(--weir-line-soft); border-radius: var(--weir-radius-7); font-family: var(--weir-font); font-size: var(--weir-text-body); color: var(--weir-ink-2); }
+  .weir-tags > span { padding: 3px 11px; }
+  .weir-tags > span + span { border-left: 1px solid var(--weir-line-soft); }
+  /* 小卡（稿子用户详情「能用的节点」） */
+  .weir-mini-card { display: grid; gap: 3px; padding: 15px 17px; border: 1px solid var(--weir-line-soft); border-radius: var(--weir-radius-17); background: var(--weir-panel); box-shadow: var(--weir-highlight), var(--weir-shadow-card); color: var(--weir-ink); text-decoration: none; corner-shape: squircle; }
+  .weir-mini-card small { line-height: var(--weir-leading-fine); color: var(--weir-ink-3); font-size: var(--weir-text-fine); }
+  /* 拨杆（稿子代理页 .tg）：竖向拨块，拨上去且亮绿灯表示在订阅里 */
+  .weir-lever { position: relative; display: block; width: 61px; height: 101px; flex: 0 0 61px; border: 1px solid var(--weir-line); border-radius: var(--weir-radius-17); background: var(--weir-well); box-shadow: inset 0 3px 9px var(--weir-shade-well); corner-shape: squircle; }
+  .weir-lever i { position: absolute; left: 7px; right: 7px; bottom: 7px; height: 43px; border-radius: var(--weir-radius); background: var(--weir-raised); box-shadow: 0 5px 13px var(--weir-shade-lift), var(--weir-highlight); corner-shape: squircle; transition: top var(--weir-mid) var(--weir-spring), bottom var(--weir-mid) var(--weir-spring); }
+  .weir-lever[data-on] i { top: 7px; bottom: auto; background: linear-gradient(var(--weir-raised), var(--weir-panel)); }
+  .weir-lever[data-on] i::after { content: ""; position: absolute; left: 23px; top: 17px; width: 7px; height: 7px; border-radius: 50%; background: var(--weir-ok); box-shadow: 0 0 9px var(--weir-ok); }
+  /* 纸面预览（稿子代理页 .paper）：带横线的纸，微微倾斜 */
+  .weir-paper { margin: 0; padding: var(--weir-gap-25) var(--weir-gap-29); overflow: auto; border-radius: var(--weir-radius-5); background: var(--weir-paper); background-image: repeating-linear-gradient(transparent 0 20px, var(--weir-line-soft) 20px 21px); box-shadow: 0 1px 0 var(--weir-line), 0 17px 41px var(--weir-shade-lift); color: var(--weir-ink-2); font-family: var(--weir-mono); font-size: var(--weir-text-body); line-height: 21px; white-space: pre-wrap; transform: rotate(-1deg); }
+  [data-motion="lite"] .weir-paper { transform: none; box-shadow: 0 0 0 1px var(--weir-line); }
+  /* 链路卡（稿子 ALinkmap）：用户 → VPS → 出口，中间是表示流量的点线，速率越高越亮；不做持续动画 */
+  .weir-route-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(61px, 1fr) minmax(0, 1fr) minmax(61px, 1fr) minmax(0, 1fr); align-items: center; gap: var(--weir-gap-17); padding: 17px var(--weir-gap-21); border: 1px solid var(--weir-line-soft); border-radius: var(--weir-radius-17); background: var(--weir-panel); box-shadow: var(--weir-highlight), var(--weir-shadow-card); color: var(--weir-ink); font: inherit; cursor: pointer; corner-shape: squircle; }
+  .weir-route-card[aria-pressed="true"] { border-color: var(--weir-accent); }
+  .weir-route-card small { display: block; overflow: hidden; color: var(--weir-ink-3); font-size: var(--weir-text-caption2); line-height: var(--weir-leading-caption2); text-overflow: ellipsis; white-space: nowrap; }
+  .weir-route-stream { height: 7px; background: repeating-linear-gradient(90deg, var(--weir-dot-line) 0 1px, transparent 1px 5px); opacity: calc(0.21 + var(--level, 0) * 0.79); mask-image: linear-gradient(90deg, transparent, #000 13%, #000 87%, transparent); }
+  @media (max-width: 767.98px) { .weir-route-card { grid-template-columns: 1fr; } .weir-route-stream { display: none; } }
+  /* 卡片里的一行（稿子 .v-set） */
+  .weir-set-row { display: flex; min-height: var(--weir-draft-peek-height); align-items: center; justify-content: space-between; gap: var(--weir-gap-17); padding: var(--weir-gap-13) var(--weir-gap-21); }
+  .weir-set-row + .weir-set-row { border-top: 1px solid var(--weir-line-soft); }
+  /* 草稿叠放（稿子运行观测）：后面两份只露出一条，当前那份浮在最上 */
+  .weir-draft-stack { position: relative; padding-top: 0; }
+  .weir-draft-peek { position: absolute; top: 0; left: var(--weir-gap-29); right: var(--weir-gap-29); display: flex; height: var(--weir-draft-peek-height); justify-content: space-between; padding: var(--weir-gap-13) var(--weir-gap-21); border: 1px solid var(--weir-line-soft); border-radius: var(--weir-radius-surface); background: var(--weir-well); color: var(--weir-ink-3); font-size: var(--weir-text-meta); corner-shape: squircle; }
+  .weir-draft-peek[data-depth="1"] { top: var(--weir-gap-13); left: var(--weir-gap-13); right: var(--weir-gap-13); background: var(--weir-panel); }
+  .weir-draft-card { position: relative; padding: var(--weir-gap-25) var(--weir-gap-29); background: var(--weir-raised); box-shadow: var(--weir-highlight), var(--weir-shadow-float); }
+
+  /* 洞察横幅（稿子 .v-ins / .v-ai） */
+  .weir-insight {
+    display: flex;
+    max-width: 621px;
+    align-items: center;
+    gap: 15px;
+    padding: 15px 15px 15px 17px;
+    border: 1px solid var(--weir-line-soft);
+    border-radius: var(--weir-radius-surface);
+    background: var(--weir-panel);
+    box-shadow: var(--weir-shadow-card);
+    corner-shape: squircle;
+  }
+  .weir-insight-mark {
+    display: flex;
+    width: 41px;
+    height: 41px;
+    flex: 0 0 41px;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--weir-radius);
+    background: var(--weir-accent-soft);
+    color: var(--weir-accent-text);
+    font-weight: 800;
+    corner-shape: squircle;
+  }
+  .weir-insight-mark svg { width: 19px; height: 19px; }
+  .weir-insight-copy { min-width: 0; flex: 1; }
+  .weir-insight-title {
+    margin: 0;
+    font-size: var(--weir-text-subheadline);
+    line-height: var(--weir-leading-subheadline);
+    font-weight: var(--weir-weight-bold);
+  }
+  .weir-insight-meta {
+    margin: var(--weir-gap-3) 0 0;
+    color: var(--weir-ink-3);
+    font-size: var(--weir-text-meta);
+    line-height: var(--weir-leading-meta);
+  }
+  .weir-insight-action { flex: 0 0 auto; }
+
+
+  .weir-hold { position: relative; overflow: hidden; }
+  .weir-hold-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 100%;
+    background: var(--weir-neutral-veil);
+    transform: scaleX(var(--hold, 0));
+    transform-origin: left center;
+    pointer-events: none;
+  }
+  .weir-hold-label { position: relative; }
+
+  .weir-dsh {
+    position: fixed;
+    z-index: 40;
+    top: var(--weir-gap-41);
+    right: var(--weir-gap-17);
+    display: flex;
+    flex-direction: column;
+    width: min(var(--weir-dsh-w), calc(100vw - var(--weir-gap-17) - var(--weir-gap-17)));
+    height: min(var(--weir-dsh-h), calc(100dvh - var(--weir-gap-41) - var(--weir-gap-17)));
+    overflow: hidden;
+    border: 1px solid var(--weir-line);
+    border-radius: var(--weir-radius-stage);
+    background: var(--weir-raised);
+    corner-shape: squircle;
+  }
+  [data-motion="full"] .weir-dsh,
+  [data-motion="balanced"] .weir-dsh,
+  :root:not([data-motion="lite"]) .weir-dsh { box-shadow: var(--weir-shade-strong); }
+  [data-motion="lite"] .weir-dsh { box-shadow: none; }
+  .weir-dsh[data-max] {
+    inset: var(--weir-gap-41) var(--weir-gap-17) var(--weir-gap-17) var(--weir-gap-41);
+    width: auto;
+    height: auto;
+    transform: none;
+  }
+  .weir-dsh-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--weir-space-3);
+    padding: var(--weir-space-3) var(--weir-space-4);
+    cursor: grab;
+  }
+  .weir-dsh-page {
+    color: var(--weir-ink-3);
+    font-size: var(--weir-text-meta);
+    line-height: var(--weir-leading-meta);
+  }
+  .weir-dsh-tools { display: flex; gap: var(--weir-gap-3); }
+  .weir-dsh-notice {
+    padding: var(--weir-gap-7) var(--weir-space-4);
+    background: var(--weir-warn-soft);
+    color: var(--weir-warn-ink);
+    font-size: var(--weir-text-meta);
+    line-height: var(--weir-leading-meta);
+  }
+  .weir-dsh-body { min-height: 0; flex: 1; overflow: auto; padding: var(--weir-space-4); }
+  .weir-dsh-setup { display: grid; gap: var(--weir-space-3); }
+  .weir-dsh-setup-title {
+    margin: 0;
+    font-size: var(--weir-text-heading);
+    line-height: var(--weir-leading-heading);
+    font-weight: var(--weir-weight-semibold);
+  }
+  .weir-dsh-grip {
+    position: absolute;
+    right: var(--weir-gap-5);
+    bottom: var(--weir-gap-5);
+    width: var(--weir-gap-17);
+    height: var(--weir-gap-17);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: nwse-resize;
+  }
+  .weir-dsh-grip::before {
+    content: "";
+    position: absolute;
+    right: var(--weir-gap-3);
+    bottom: var(--weir-gap-3);
+    width: var(--weir-gap-9);
+    height: var(--weir-gap-9);
+    border-right: 1px solid var(--weir-ink-3);
+    border-bottom: 1px solid var(--weir-ink-3);
+  }
+  .weir-dsh-capsule {
+    position: fixed;
+    z-index: 40;
+    right: var(--weir-space-6);
+    bottom: var(--weir-space-3);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--weir-gap-9);
+    height: var(--weir-input-h);
+    padding: 0 var(--weir-space-4);
+    border: 1px solid var(--weir-line);
+    border-radius: var(--weir-radius-full);
+    background: var(--weir-raised);
+    color: var(--weir-ink);
+    font-size: var(--weir-text-body);
+    line-height: var(--weir-leading-body);
+  }
+  [data-motion="full"] .weir-dsh-capsule[data-drafts] {
+    animation: weir-dsh-breathe var(--weir-settle) var(--weir-ease) infinite alternate;
+  }
+  @keyframes weir-dsh-breathe { to { opacity: 0.72; } }
+
+  /* 五步流程（稿子 .v-flow / .v-fs）：圆形序号连成一条线；完成是绿底勾，当前是墨色加强调光圈，失败是红圈叉 */
+  .weir-flow { position: relative; display: grid; grid-template-columns: repeat(var(--weir-flow-n, 5), minmax(0, 1fr)); margin: 0; padding: 0; list-style: none; }
+  .weir-flow::before { content: ""; position: absolute; top: 13px; left: calc(50% / var(--weir-flow-n, 5)); right: calc(50% / var(--weir-flow-n, 5)); height: 1px; background: var(--weir-line); }
+  .weir-flow li { position: relative; display: flex; min-width: 0; flex-direction: column; align-items: center; gap: var(--weir-gap-7); text-align: center; color: var(--weir-ink-3); }
+  .weir-flow b { position: relative; z-index: 1; display: flex; width: 27px; height: 27px; align-items: center; justify-content: center; border: 1px solid var(--weir-line); border-radius: 50%; background: var(--weir-well); font-size: var(--weir-text-caption2); line-height: var(--weir-leading-caption2); }
+  .weir-flow b svg { width: 15px; height: 15px; }
+  .weir-flow li[data-status="complete"] b { border-color: transparent; background: var(--weir-ok); color: var(--weir-knob); }
+  .weir-flow li[data-status="current"] { color: var(--weir-ink); font-weight: var(--weir-weight-semibold); }
+  .weir-flow li[data-status="current"] b { border-color: transparent; background: var(--weir-pill); color: var(--weir-pill-ink); box-shadow: 0 0 0 5px var(--weir-accent-soft); }
+  .weir-flow li[data-status="fail"] b { border-color: var(--weir-bad); background: var(--weir-bad-soft); color: var(--weir-bad-ink); }
+  .weir-flow li[data-status="unknown"] b { border-style: dashed; }
+  .weir-flow-label { font-size: var(--weir-text-body); line-height: var(--weir-leading-body); }
+  .weir-flow-value { font-size: var(--weir-text-caption2); line-height: var(--weir-leading-caption2); color: var(--weir-ink-3); font-weight: var(--weir-weight-regular); }
+  .weir-flow small { font-size: var(--weir-text-caption2); line-height: var(--weir-leading-caption2); color: var(--weir-ink-3); font-weight: var(--weir-weight-regular); }
+  .weir-pipeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(161px, 1fr)); gap: var(--weir-gap-9); margin: 0; padding: 0; list-style: none; }
+  .weir-pipeline li { display: flex; flex-direction: column; padding: var(--weir-gap-13) 15px; border: 1px solid var(--weir-line-soft); border-radius: var(--weir-radius-17); background: var(--weir-well); corner-shape: squircle; }
+  .weir-pipeline small { color: var(--weir-ink-3); font-size: var(--weir-text-caption2); line-height: var(--weir-leading-caption2); }
+  .weir-pipeline strong { margin-top: 5px; font-family: var(--weir-mono); font-size: var(--weir-text-title2); line-height: var(--weir-leading-title2); font-weight: var(--weir-weight-bold); }
+  .weir-pipeline-dots { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 11px; }
+  .weir-pipeline-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--weir-dot); }
+  .weir-pipeline-dots i[data-on] { background: var(--weir-dot-line); filter: var(--weir-glow); }
+  .weir-lanes { width: 100%; overflow: hidden; }
+  .weir-lanes svg { display: block; width: 100%; height: auto; }
+  /* 订阅链接票据（稿子 .tk / .stub）：右侧存根与主体之间是虚线，上下各打一个半圆缺口 */
+  .weir-ticket { position: relative; display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) 121px; overflow: hidden; border: 1px solid var(--weir-line-soft); border-radius: var(--weir-radius-surface); background: var(--weir-panel); box-shadow: var(--weir-highlight), var(--weir-shadow-card); corner-shape: squircle; }
+  .weir-ticket::before, .weir-ticket::after { content: ""; position: absolute; right: 111px; width: 21px; height: 21px; border-radius: 50%; background: var(--weir-base); }
+  .weir-ticket::before { top: -11px; }
+  .weir-ticket::after { bottom: -11px; }
+  .weir-ticket-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 341px), 1fr)); gap: var(--weir-gap-21); }
+  .weir-ticket-main { min-width: 0; padding: 19px var(--weir-gap-21); }
+  .weir-ticket-stub { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--weir-gap-7); padding: var(--weir-gap-13); border-left: 1px dashed var(--weir-line); }
+  .weir-ticket-stub svg { width: 77px; height: 77px; }
+  .weir-ticket-url { margin-top: var(--weir-gap-13); padding: 9px 11px; overflow: hidden; border: 1px solid var(--weir-line-soft); border-radius: var(--weir-radius-9); background: var(--weir-well); color: var(--weir-ink-2); font-family: var(--weir-mono); font-size: var(--weir-text-caption2); line-height: var(--weir-leading-caption2); text-overflow: ellipsis; white-space: nowrap; corner-shape: squircle; }
+  .weir-ticket-days { display: flex; gap: 3px; margin-top: var(--weir-gap-13); }
+  .weir-ticket-days i { width: 5px; height: 13px; border-radius: var(--weir-radius-full); background: var(--weir-dot); }
+  .weir-ticket-days i[data-day="ok"] { background: var(--weir-dot-line); filter: var(--weir-glow); }
+  .weir-ticket-days i[data-day="warn"] { background: var(--weir-warn); }
+  .weir-ticket-days i[data-day="unknown"] { background: transparent; box-shadow: inset 0 0 0 1px var(--weir-dot); }
+  .weir-ticket-actions { margin-top: var(--weir-gap-13); }
+  .weir-ticket-actions, .weir-bulk { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--weir-space-2); }
+  .weir-phone { width: min(100%, 321px); margin-inline: auto; overflow: hidden; border: 1px solid var(--weir-line); border-radius: var(--weir-radius-lg); background: var(--weir-base); corner-shape: squircle; }
+  .weir-phone[data-device="desktop"] { width: 100%; }
+  .weir-phone iframe { display: block; width: 100%; height: 70vh; border: 0; background: var(--weir-base); }
+  .weir-phone-fallback { padding: var(--weir-space-4); }
+  .weir-choice-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--weir-space-3); }
+  .weir-theme-swatch { display: block; height: var(--weir-space-8); border: 1px solid var(--weir-line); border-radius: var(--weir-radius); background: var(--weir-swatch-day-bg); }
+  .weir-theme-swatch[data-preview="dark"] { background: var(--weir-swatch-night-bg); }
+  .weir-theme-swatch[data-preview="system"] { background: linear-gradient(90deg, var(--weir-swatch-day-bg) 50%, var(--weir-swatch-night-bg) 50%); }
+  /* 批量操作条（稿子 .v-bulk）：墨色胶囊浮条，里面是描边透明按钮 */
+  .weir-bulk { align-items: center; padding: 7px 7px 7px 17px; border-radius: var(--weir-radius-17); background: var(--weir-pill); color: var(--weir-pill-ink); box-shadow: var(--weir-shadow-float); corner-shape: squircle; }
+  .weir-bulk [data-slot="button"] { border: 1px solid var(--weir-neutral-edge); background: transparent; color: var(--weir-pill-ink); box-shadow: none; }
+  /* 表格里的细点阵（稿子用户行的 21 格用量） */
+  .weir-mini-dots { display: grid; grid-template-columns: repeat(21, var(--weir-gap-3)); gap: var(--weir-gap-3); margin-top: var(--weir-gap-5); }
+  .weir-mini-dots i { width: var(--weir-gap-3); height: var(--weir-gap-3); border-radius: var(--weir-radius-full); background: var(--weir-dot); }
+  .weir-mini-dots i[data-on="accent"] { background: var(--weir-dot-line); }
+  .weir-mini-dots i[data-on="warn"] { background: var(--weir-warn); }
+  /* 审计热力格（稿子 CAudit）：每格 29 高，亮度表示数量，重启的格子黄色带光圈 */
+  .weir-heat { display: grid; gap: 3px; }
+  .weir-heat i { display: block; height: 29px; border-radius: var(--weir-radius-5); background: var(--weir-dot); }
+  .weir-heat i[data-on] { background: var(--weir-dot-line); }
+  .weir-heat i[data-restart] { background: var(--weir-warn); opacity: 1; box-shadow: 0 0 0 3px var(--weir-warn-soft), 0 0 13px var(--weir-warn-soft); }
+  /* 一行摘要（稿子 .v-sum）与图例 */
+  .weir-sum { display: flex; flex-wrap: wrap; gap: var(--weir-gap-17); color: var(--weir-ink-2); }
+  .weir-sum b { color: var(--weir-ink); font-weight: var(--weir-weight-semibold); }
+  .weir-legend { display: flex; gap: var(--weir-gap-13); color: var(--weir-ink-3); font-size: var(--weir-text-caption2); line-height: var(--weir-leading-caption2); }
+  .weir-legend > span { display: inline-flex; align-items: center; gap: 5px; }
+  .weir-legend i { width: 7px; height: 7px; border-radius: 50%; }
+  .weir-legend i[data-tone="ok"] { background: var(--weir-dot-line); }
+  .weir-legend i[data-tone="warn"] { background: var(--weir-warn); }
+  .weir-legend i[data-tone="off"] { border: 1px dashed var(--weir-ink-3); }
+  /* 头像首字母块（稿子 .v-av） */
+  .weir-avatar { display: inline-flex; width: 29px; height: 29px; flex: 0 0 29px; align-items: center; justify-content: center; border: 1px solid var(--weir-line-soft); border-radius: var(--weir-radius-9); background: var(--weir-well); color: var(--weir-ink-2); font-size: var(--weir-text-body); font-weight: var(--weir-weight-bold); corner-shape: squircle; }
+  .weir-avatar[data-size="lg"] { width: 61px; height: var(--weir-draft-peek-height); flex-basis: 61px; border-radius: 21px; font-size: var(--weir-text-title2); }
+  /* 版本格（稿子 .v-ver）：等宽小胶囊；可升级时是黄框加光圈；没用到时只写灰字 */
+  .weir-ver { display: inline-flex; height: 29px; align-items: center; gap: 5px; padding: 0 11px; border: 1px solid var(--weir-line-soft); border-radius: var(--weir-radius-9); background: var(--weir-well); font-family: var(--weir-mono); font-size: var(--weir-text-body); font-variant-numeric: tabular-nums; corner-shape: squircle; }
+  .weir-ver[data-empty] { height: auto; padding: 0; border: 0; background: transparent; color: var(--weir-ink-3); font-family: var(--weir-font); font-size: var(--weir-text-meta); }
+  .weir-ver[data-old] { border-color: var(--weir-warn); background: var(--weir-warn-soft); color: var(--weir-warn-ink); box-shadow: 0 0 0 5px var(--weir-warn-soft); }
+  .weir-recheck { display: grid; gap: var(--weir-space-2); padding: var(--weir-space-4); border: 1px solid var(--weir-warn); border-radius: var(--weir-radius); background: var(--weir-warn-soft); }
+  .weir-recheck p { margin: 0; color: var(--weir-ink-2); }
+}
+
+@media (max-width: 767.98px) {
+  .weir-choice-board { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 767.98px) {
+  .weir-insight { align-items: flex-start; flex-wrap: wrap; }
+  .weir-folder { height: calc(var(--weir-folder-h) * 0.8); }
+}
+
+.weir-draft-stack[data-count="2"] { padding-top: var(--weir-gap-13); }
+.weir-draft-stack[data-count="3"] { padding-top: var(--weir-gap-29); }
+.weir-draft-peek > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.weir-draft-peek > span:last-child { flex-shrink: 0; }
+.weir-traffic-usage { display: grid; font-size: var(--weir-text-meta); }
+.weir-traffic-usage small { color: var(--weir-ink-3); }
+.weir-traffic-ring { width: min(100%, var(--weir-traffic-ring)); aspect-ratio: 1; }
+.weir-traffic-ring > svg { width: 100%; height: 100%; }
+.weir-mini-dots i[data-on="bad"] { background: var(--weir-bad); }
+
+.weir-object-top { flex-wrap: wrap; }
+.weir-crumb { min-width: 0; flex-wrap: wrap; }
+.weir-crumb a, .weir-crumb svg { flex-shrink: 0; }
+.weir-crumb b { overflow-wrap: anywhere; }
+@media (pointer: coarse), (max-width: 767.98px) {
+  .weir-crumb a { display: inline-flex; align-items: center; min-width: var(--weir-tap-touch); min-height: var(--weir-tap-touch); }
+}
+.weir-object-header[data-keep-aside] .weir-object-aside { display: block; }
+@media (max-width: 1100px) {
+ .weir-object-header[data-keep-aside] .weir-object-aside { justify-self: center; width: min(100%, var(--weir-traffic-ring)); }
+}
+
+.weir-traffic-value { font-weight: var(--weir-weight-semibold); color: var(--weir-ink); }
+.weir-traffic-limit { color: var(--weir-ink-3); }

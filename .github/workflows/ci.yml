@@ -9,7 +9,16 @@ permissions:
   contents: read
 
 jobs:
+  deployment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m unittest discover -s deploy -p '*_test.py'
   test:
+    if: github.repository == 'shusfun/weir'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,6 +26,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - uses: actions/cache/restore@v4
         id: go-cache
         with:
@@ -27,7 +39,7 @@ jobs:
           restore-keys: |
             go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum') }}-
             go-${{ runner.os }}-${{ runner.arch }}-
-      - run: go test ./...
+      - run: go test -timeout=40m ./...
       - if: steps.go-cache.outputs.cache-hit != 'true'
         continue-on-error: true
         uses: actions/cache/save@v4
@@ -38,6 +50,7 @@ jobs:
           key: ${{ steps.go-cache.outputs.cache-primary-key }}
 
   frontend:
+    if: github.repository == 'shusfun/weir'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,13 +59,14 @@ jobs:
           version: 10.17.1
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
 
   shell:
+    if: github.repository == 'shusfun/weir'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

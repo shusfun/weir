@@ -14,6 +14,8 @@ import {
   Badge,
   Button,
   CheckboxField,
+  CopyButton,
+  Ticket,
   CodeBlock,
   Collapsible,
   CopyField,
@@ -96,6 +98,9 @@ export function LinkPanel({
   stats,
   title = "订阅链接",
   description = "每条链接凭据独立、共用同一份额度；最多 10 条。",
+  variant = "rows",
+  query = "",
+  attention = "all",
 }: {
   base: string;
   showCredentials?: boolean;
@@ -107,6 +112,9 @@ export function LinkPanel({
   stats?: Map<number, LinkStats>;
   title?: ReactNode;
   description?: ReactNode;
+  variant?: "rows" | "tickets";
+  query?: string;
+  attention?: "all" | "care" | "off";
 }) {
   const toast = useToast();
   const client = useQueryClient();
@@ -142,11 +150,7 @@ export function LinkPanel({
       ) : links.data.length === 0 ? (
         <State empty="还没有链接" detail="订阅链接导入客户端后才能上网。点上方「新链接」生成一条；默认包含全部节点，以后新增的自动加入。" />
       ) : (
-        <InsetRows>
-          {links.data.map((l) => (
-            <LinkRow key={l.id} base={base} link={l} stats={stats?.get(l.id)} showCredentials={showCredentials} inlineQr={inlineQr} onEdit={() => setEdit(l)} refetch={refetch} />
-          ))}
-        </InsetRows>
+        <LinkList variant={variant} links={links.data.filter((l) => linkVisible(l, stats?.get(l.id), query, attention))} base={base} stats={stats} showCredentials={showCredentials} inlineQr={inlineQr || variant === "tickets"} onEdit={setEdit} refetch={refetch} />
       )}
       {edit && (choices.isPending || choices.error ? <State loading={choices.isPending} error={choices.error} onRetry={() => choices.refetch()} /> : (
         <LinkForm
@@ -171,13 +175,28 @@ export function LinkPanel({
   );
 }
 
+function linkVisible(l: LinkItem, stats: LinkStats | undefined, query: string, attention: "all" | "care" | "off") {
+  const text = `${l.name ?? ""} ${stats?.user ?? ""}`.toLowerCase();
+  if (query && !text.includes(query.trim().toLowerCase())) return false;
+  if (attention === "off") return !l.enabled;
+  if (attention === "care") return !l.enabled || l.state === "expired" || (stats?.refused_30d ?? 0) > 0;
+  return true;
+}
+
+function LinkList({ variant, links, base, stats, showCredentials, inlineQr, onEdit, refetch }: { variant: "rows" | "tickets"; links: LinkItem[]; base: string; stats?: Map<number, LinkStats>; showCredentials?: boolean; inlineQr?: boolean; onEdit: (l: LinkItem) => void; refetch: () => void }) {
+  if (!links.length) return <State empty="没有符合筛选的链接" />;
+  const rows = links.map((l) => <LinkRow key={l.id} base={base} link={l} stats={stats?.get(l.id)} showCredentials={showCredentials} inlineQr={inlineQr} ticket={variant === "tickets"} onEdit={() => onEdit(l)} refetch={refetch} />);
+  return variant === "tickets" ? <div className="weir-ticket-grid">{rows}</div> : <InsetRows>{rows}</InsetRows>;
+}
+
 // LinkRow：一条链接。复制在地址框末尾（最常用），其余常用操作平铺在地址下面。
-function LinkRow({ base, link: l, stats, showCredentials, inlineQr, onEdit, refetch }: {
+function LinkRow({ base, link: l, stats, showCredentials, inlineQr, ticket, onEdit, refetch }: {
   base: string;
   link: LinkItem;
   stats?: LinkStats;
   showCredentials?: boolean;
   inlineQr?: boolean;
+  ticket?: boolean;
   onEdit: () => void;
   refetch: () => void;
 }) {
@@ -186,8 +205,8 @@ function LinkRow({ base, link: l, stats, showCredentials, inlineQr, onEdit, refe
   const [pulls, setPulls] = useState(false);
   const { run: act, isBusy } = useRowAction<number>({ refetch: async () => refetch() });
   const [stateLabel, stateTone] = stateText[l.state ?? "active"];
-  return (
-    <InsetRow {...dataObject({ type: "link", id: l.id })} className="stack">
+  const body = (
+    <>
       <div>
         <div className="min-w-0">
           <strong className="flex flex-wrap items-center gap-1.5">
@@ -247,8 +266,26 @@ function LinkRow({ base, link: l, stats, showCredentials, inlineQr, onEdit, refe
         </DialogContent>
       </Dialog>
       {pulls && <PullsDialog base={base} link={l} close={() => setPulls(false)} />}
-    </InsetRow>
+    </>
   );
+  if (ticket) {
+    return (
+      <div {...dataObject({ type: "link", id: l.id })}>
+        <Ticket
+          name={l.name || "未命名"}
+          meta={`${stats?.user || "使用者未知"} · ${windowText(l)} · ${l.nodes} 个节点`}
+          url={l.url}
+          last={stats?.last_pull ? new Date(stats.last_pull.at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false }) : l.last_used_at ? date(l.last_used_at) : "未拉取"}
+          tone={!l.enabled ? "unknown" : stats && stats.pulls_24h > 0 ? "ok" : "warn"}
+          qr={l.enabled ? <QRCodeSVG value={l.url} size={77} bgColor="transparent" fgColor="currentColor" title={(l.name || "订阅链接") + " 二维码"} /> : undefined}
+          note={stats ? `最近 21 天的拉取 · 24 小时 ${stats.pulls_24h} 次` : "最近 21 天的拉取"}
+          actions={<><Button size="sm" variant="ghost" onClick={onEdit}>编辑</Button><Button size="sm" variant="ghost" onClick={() => setPulls(true)}>拉取记录</Button></>}
+        />
+        {pulls && <PullsDialog base={base} link={l} close={() => setPulls(false)} />}
+      </div>
+    );
+  }
+  return <InsetRow {...dataObject({ type: "link", id: l.id })} className="stack">{body}</InsetRow>;
 }
 
 const pullStatus: Record<Pull["status"], [string, "ok" | "warn" | "bad"]> = {

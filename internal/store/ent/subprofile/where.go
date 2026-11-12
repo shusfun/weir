@@ -204,6 +204,16 @@ func NodeIdsNotNil() predicate.SubProfile {
 	return predicate.SubProfile(sql.FieldNotNull(FieldNodeIds))
 }
 
+// MembersIsNil applies the IsNil predicate on the "members" field.
+func MembersIsNil() predicate.SubProfile {
+	return predicate.SubProfile(sql.FieldIsNull(FieldMembers))
+}
+
+// MembersNotNil applies the NotNil predicate on the "members" field.
+func MembersNotNil() predicate.SubProfile {
+	return predicate.SubProfile(sql.FieldNotNull(FieldMembers))
+}
+
 // OperatorsIsNil applies the IsNil predicate on the "operators" field.
 func OperatorsIsNil() predicate.SubProfile {
 	return predicate.SubProfile(sql.FieldIsNull(FieldOperators))

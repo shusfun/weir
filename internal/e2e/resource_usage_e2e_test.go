@@ -41,9 +41,16 @@ func TestResourceUsageWithSupervisedKernel(t *testing.T) {
 	if p := center.Host.Processes["weir-center"]; p.State != "running" || p.CPUPercent == nil || p.MemoryRSS == nil {
 		t.Fatalf("center=%+v", center.Host)
 	}
+	beforePID := helperRunning(t, e.paths.Socket)[kernel]
+	restartedAt := time.Now()
 	e.post(fmt.Sprintf("/api/v1/admin/gates/%d/kernels/%s/restart", e.gateID, kernel), map[string]any{}, nil)
-	eventually(t, 15*time.Second, "restart resets CPU baseline", func() bool { p := read().Processes[kernel]; return p.State == "running" && p.CPUPercent == nil })
-	eventually(t, 15*time.Second, "CPU after restart", func() bool { return read().Processes[kernel].CPUPercent != nil })
+	eventually(t, 15*time.Second, "new supervised process", func() bool { pid := helperRunning(t, e.paths.Socket)[kernel]; return pid > 0 && pid != beforePID })
+	// 采样器的首帧未知由单元测试覆盖；心跳可能已经带上重启后的第二帧。
+	eventually(t, 2*contracts.HostSampleEvery+5*time.Second, "fresh CPU after restart", func() bool {
+		h := read()
+		p := h.Processes[kernel]
+		return h.ObservedAt.After(restartedAt) && p.State == "running" && p.CPUPercent != nil && p.MemoryRSS != nil
+	})
 	for _, path := range []string{"/api/v1/admin/center/resources/history", fmt.Sprintf("/api/v1/admin/gates/%d/history", e.gateID)} {
 		b, _ := e.get(path, nil)
 		var history struct {

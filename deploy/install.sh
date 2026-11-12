@@ -16,8 +16,10 @@ base=/opt/weir
 etc=/etc/weir
 lib=/var/lib/weir
 units_dir=/etc/systemd/system
+update_id=${WEIR_UPDATE_ID:-install-$$}
+case "$update_id" in ''|*[!a-zA-Z0-9._-]*) update_id=install-$$;; esac
 # weir-update.service 不在这里：自更新时 install.sh 由它运行，停掉它会连带结束安装本身。
-all_units="weir-center.service weir-dsh.service weir-gate.service weir-helper.service weir-local-pair.service weir-update.path"
+all_units="weir-center.service weir-dsh.service weir-laya-helper.service weir-gate.service weir-helper.service weir-local-pair.service weir-update.path"
 
 stop_units() {
  for unit in $all_units; do
@@ -76,33 +78,69 @@ port=${listen##*:}
 case "$port" in ''|*[!0-9]*) echo 'invalid listen address' >&2; exit 2;; esac
 
 # —— 程序：releases/<版本>，current 指向当前，保留上一版本用于回退 ——
+for dir in /opt "$base" "$base/releases"; do
+ [ ! -L "$dir" ] || { echo "Refusing symlink directory: $dir" >&2; exit 1; }
+done
 previous=''
-if [ -L "$base/current" ]; then previous=$(basename "$(readlink "$base/current")"); fi
-[ "$previous" != "$version" ] || previous=''
+read_pointer() {
+ link=$(readlink "$base/$1") || return 1
+ name=$(basename "$link")
+ case "$name" in ''|.|..|*[!a-zA-Z0-9._+-]*) return 1;; esac
+ [ "$link" = "releases/$name" ] && [ -d "$base/releases/$name" ] && [ ! -L "$base/releases/$name" ] || return 1
+ printf '%s\n' "$name"
+}
+if [ -e "$base/current" ] || [ -L "$base/current" ]; then
+ previous=$(read_pointer current) || { echo 'Invalid current release pointer' >&2; exit 1; }
+fi
+original_current=$previous
+original_previous=''
+if [ -e "$base/previous" ] || [ -L "$base/previous" ]; then
+ original_previous=$(read_pointer previous) || { echo 'Invalid previous release pointer' >&2; exit 1; }
+fi
+if [ "$previous" = "$version" ]; then
+ previous=$original_previous
+fi
 install -d -m 0755 "$base" "$base/releases"
-if [ -e "$base/releases/$version" ]; then rm -rf "$base/releases/$version"; fi
+[ ! -L "$base/releases/$version" ] || { echo 'Refusing symlink release' >&2; exit 1; }
 install -d -m 0755 "$base/releases/$version"
-# 保留整个发布包（含 install.sh），面板里「切回上一版本」直接用它重新安装。
-for item in *; do cp -R "$item" "$base/releases/$version/"; done
+# 校验清单只列包内文件，下载到同一目录的外层压缩包不属于安装内容。
+while read -r digest item; do
+ case "$item" in ''|/*|..|../*|*/../*|*/..|*\\*|*' '*|*//*|./*) echo 'Invalid package manifest path' >&2; exit 1;; esac
+ [ "${#digest}" = 64 ] || { echo 'Invalid package digest' >&2; exit 1; }
+ case "$digest" in *[!0-9a-fA-F]*) echo 'Invalid package digest' >&2; exit 1;; esac
+ [ -f "$package/$item" ] && [ ! -L "$package/$item" ] && [ "$(readlink -f "$package/$item")" = "$package/$item" ] || { echo 'Invalid package file' >&2; exit 1; }
+ parent=$(dirname "$base/releases/$version/$item")
+ check=$parent
+ while [ "$check" != "$base/releases/$version" ]; do
+  [ ! -L "$check" ] || { echo 'Refusing symlink package directory' >&2; exit 1; }
+  check=$(dirname "$check")
+ done
+ mkdir -p "$parent"
+ target=$base/releases/$version/$item
+ [ ! -L "$target.new" ] && [ ! -d "$target.new" ] || { echo 'Refusing unsafe package staging file' >&2; exit 1; }
+ cp "$package/$item" "$target.new"
+ mv -f "$target.new" "$target"
+done < "$package/SHA256SUMS"
+[ ! -L "$base/releases/$version/SHA256SUMS.new" ] && [ ! -d "$base/releases/$version/SHA256SUMS.new" ] || { echo 'Refusing unsafe checksum staging file' >&2; exit 1; }
+cp "$package/SHA256SUMS" "$base/releases/$version/SHA256SUMS.new"
+mv -f "$base/releases/$version/SHA256SUMS.new" "$base/releases/$version/SHA256SUMS"
 chmod 0755 "$base/releases/$version/weir" "$base/releases/$version/install.sh"
 stop_units
 if [ -n "$previous" ]; then ln -sfn "releases/$previous" "$base/previous"; fi
 ln -sfn "releases/$version" "$base/current"
 ln -sfn "$base/current/weir" /usr/local/bin/weir
-for old in "$base"/releases/*; do
- name=$(basename "$old")
- [ "$name" = "$version" ] || [ "$name" = "$previous" ] || rm -rf "$old"
-done
 install -d -m 0755 /usr/local/lib/weir
 install -m 0755 "$package/install.sh" /usr/local/lib/weir/install.sh
 install -d -m 0755 "$etc"
 
 rollback() {
- if [ -n "$previous" ]; then
-  ln -sfn "releases/$previous" "$base/current"
+ if [ -n "$original_current" ]; then
+  ln -sfn "releases/$original_current" "$base/current"
+  if [ -n "$original_previous" ]; then ln -sfn "releases/$original_previous" "$base/previous"
+  else rm -f "$base/previous"; fi
   systemctl daemon-reload
   for unit in $active; do systemctl restart "$unit" || true; done
-  echo "Startup failed; switched back to $previous" >&2
+  echo "Startup failed; switched back to $original_current" >&2
  else
   echo 'Startup failed; no previous version to restore' >&2
  fi
@@ -121,6 +159,7 @@ if [ "$has_center" = true ]; then
  install -d -m 0755 "$lib"
  install -d -m 0700 -o weir-center -g weir-center "$etc/center" "$lib/center"
  install -d -m 0755 "$lib/dsh"
+ install -d -m 0755 -o root -g root "$base/center-laya"
  # 自更新：中心写请求、读进度（组 weir-center 可写）；root 的 weir-update 执行，解包目录只有 root 能进。
  install -d -m 2770 -o root -g weir-center "$lib/update"
  install -d -m 0700 "$lib/update-work"
@@ -144,8 +183,8 @@ if [ "$has_center" = true ]; then
  cat > "$units_dir/weir-center.service" <<UNIT
 [Unit]
 Description=Weir center
-After=network-online.target$local_after
-Wants=network-online.target$local_after
+After=network-online.target weir-laya-helper.service$local_after
+Wants=network-online.target weir-laya-helper.service$local_after
 # 开机时存储容器可能比中心晚起来：不限次数，每 5 秒重试一次，不会因为「启动太频繁」停在 failed
 StartLimitIntervalSec=0
 [Service]
@@ -164,7 +203,34 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
+Delegate=cpu
 ReadWritePaths=/etc/weir/center /var/lib/weir/center /var/lib/weir/dsh/runtime /var/lib/weir/dsh/control /var/lib/weir/update$local_paths
+[Install]
+WantedBy=multi-user.target
+UNIT
+ # 专用 Laya 辅助程序不暴露 Gate 接口；中心只能请求 root 批准档案中的固定操作。
+ cat > "$units_dir/weir-laya-helper.service" <<'UNIT'
+[Unit]
+Description=Weir bounded Laya helper
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+[Service]
+Type=simple
+User=root
+Group=weir-center
+ExecStart=/opt/weir/current/weir laya helper
+Restart=always
+RestartSec=5
+RuntimeDirectory=weir-laya
+RuntimeDirectoryMode=0750
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+RestrictAddressFamilies=AF_UNIX
+ReadWritePaths=/run/weir-laya
 [Install]
 WantedBy=multi-user.target
 UNIT
@@ -211,7 +277,7 @@ ExecStart=/opt/weir/current/weir self-update --apply
 TimeoutStartSec=30min
 UMask=0027
 UNIT
- active="$active weir-center.service weir-dsh.service weir-update.path"
+ active="$active weir-center.service weir-dsh.service weir-laya-helper.service weir-update.path"
 fi
 
 # —— Gate ——
@@ -251,6 +317,7 @@ ProtectHome=yes
 PrivateTmp=yes
 ReadWritePaths=/run/weir /etc/weir/gate /opt/weir/cores /opt/weir
 ReadWritePaths=-/www/server/nginx/html/.well-known/acme-challenge
+ReadWritePaths=-/etc/resolv.conf -/etc/systemd/resolved.conf.d -/run/systemd/resolve
 [Install]
 WantedBy=multi-user.target
 UNIT
@@ -276,6 +343,7 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
+Delegate=cpu
 ReadWritePaths=/var/lib/weir/gate /run/weir
 [Install]
 WantedBy=multi-user.target
@@ -339,6 +407,39 @@ if [ "$has_gate" = true ]; then
   systemctl start --no-block weir-local-pair.service
  fi
 fi
+
+prune_releases() {
+ # 安装器仍持有 weir-install.lock；这里只删除已切换且启动成功后的旧目录。
+ references=$(for proc in /proc/[0-9]*; do
+  for file in "$proc/exe" "$proc/cwd" "$proc"/fd/*; do readlink "$file" 2>/dev/null || true; done
+  if [ -r "$proc/maps" ]; then sed -n 's/^[^/]*\(\/.*\)$/\1/p' "$proc/maps"; fi
+ done)
+ for proc in /proc/[0-9]*; do
+  if [ -d "$proc" ] && { [ ! -r "$proc/fd" ] || [ ! -r "$proc/maps" ]; }; then
+   echo "WARN release cleanup update=$update_id version=$version cannot_inspect=$(basename "$proc")" >&2
+   return
+  fi
+ done
+ removed=0; bytes=0; protected=0
+ for old in "$base"/releases/*; do
+  name=$(basename "$old")
+  case "$name" in [0-9]*) ;; *) continue;; esac
+  case "$name" in ''|.|..|*[!a-zA-Z0-9._+-]*) continue;; esac
+  [ "$name" != "$version" ] && [ "$name" != "$previous" ] || continue
+  if [ -L "$old" ] || [ ! -d "$old" ]; then
+   echo "WARN release cleanup update=$update_id version=$version unsafe=$name" >&2
+   continue
+  fi
+  if printf '%s\n' "$references" | awk -v p="$old" '$0 == p || $0 == p " (deleted)" || index($0, p "/") == 1 {found=1} END {exit !found}'; then protected=$((protected+1)); continue; fi
+  size_line=$(du -sb "$old") || { echo "WARN release cleanup update=$update_id version=$version size_failed=$name" >&2; continue; }
+  size=${size_line%%[!0-9]*}
+  case "$size" in ''|*[!0-9]*) echo "WARN release cleanup update=$update_id version=$version invalid_size=$name" >&2; continue;; esac
+  if rm -rf -- "$old"; then removed=$((removed+1)); bytes=$((bytes+size))
+  else echo "WARN release cleanup update=$update_id version=$version remove_failed=$name" >&2; fi
+ done
+ echo "release cleanup update=$update_id version=$version removed=$removed bytes=$bytes protected=$protected"
+}
+prune_releases
 
 echo "Installed Weir $version ($role)."
 if [ "$has_center" = true ]; then

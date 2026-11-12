@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/shusfun/weir/internal/store/ent/subprofile"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // SubProfileCreate is the builder for creating a SubProfile entity.
@@ -65,6 +66,12 @@ func (_c *SubProfileCreate) SetSourceIds(v []int) *SubProfileCreate {
 // SetNodeIds sets the "node_ids" field.
 func (_c *SubProfileCreate) SetNodeIds(v []int) *SubProfileCreate {
 	_c.mutation.SetNodeIds(v)
+	return _c
+}
+
+// SetMembers sets the "members" field.
+func (_c *SubProfileCreate) SetMembers(v []contracts.SubscriptionMember) *SubProfileCreate {
+	_c.mutation.SetMembers(v)
 	return _c
 }
 
@@ -300,6 +307,10 @@ func (_c *SubProfileCreate) createSpec() (*SubProfile, *sqlgraph.CreateSpec) {
 		_spec.SetField(subprofile.FieldNodeIds, field.TypeJSON, value)
 		_node.NodeIds = value
 	}
+	if value, ok := _c.mutation.Members(); ok {
+		_spec.SetField(subprofile.FieldMembers, field.TypeJSON, value)
+		_node.Members = value
+	}
 	if value, ok := _c.mutation.Operators(); ok {
 		_spec.SetField(subprofile.FieldOperators, field.TypeJSON, value)
 		_node.Operators = value
@@ -453,6 +464,24 @@ func (u *SubProfileUpsert) UpdateNodeIds() *SubProfileUpsert {
 // ClearNodeIds clears the value of the "node_ids" field.
 func (u *SubProfileUpsert) ClearNodeIds() *SubProfileUpsert {
 	u.SetNull(subprofile.FieldNodeIds)
+	return u
+}
+
+// SetMembers sets the "members" field.
+func (u *SubProfileUpsert) SetMembers(v []contracts.SubscriptionMember) *SubProfileUpsert {
+	u.Set(subprofile.FieldMembers, v)
+	return u
+}
+
+// UpdateMembers sets the "members" field to the value that was provided on create.
+func (u *SubProfileUpsert) UpdateMembers() *SubProfileUpsert {
+	u.SetExcluded(subprofile.FieldMembers)
+	return u
+}
+
+// ClearMembers clears the value of the "members" field.
+func (u *SubProfileUpsert) ClearMembers() *SubProfileUpsert {
+	u.SetNull(subprofile.FieldMembers)
 	return u
 }
 
@@ -702,6 +731,27 @@ func (u *SubProfileUpsertOne) UpdateNodeIds() *SubProfileUpsertOne {
 func (u *SubProfileUpsertOne) ClearNodeIds() *SubProfileUpsertOne {
 	return u.Update(func(s *SubProfileUpsert) {
 		s.ClearNodeIds()
+	})
+}
+
+// SetMembers sets the "members" field.
+func (u *SubProfileUpsertOne) SetMembers(v []contracts.SubscriptionMember) *SubProfileUpsertOne {
+	return u.Update(func(s *SubProfileUpsert) {
+		s.SetMembers(v)
+	})
+}
+
+// UpdateMembers sets the "members" field to the value that was provided on create.
+func (u *SubProfileUpsertOne) UpdateMembers() *SubProfileUpsertOne {
+	return u.Update(func(s *SubProfileUpsert) {
+		s.UpdateMembers()
+	})
+}
+
+// ClearMembers clears the value of the "members" field.
+func (u *SubProfileUpsertOne) ClearMembers() *SubProfileUpsertOne {
+	return u.Update(func(s *SubProfileUpsert) {
+		s.ClearMembers()
 	})
 }
 
@@ -1137,6 +1187,27 @@ func (u *SubProfileUpsertBulk) UpdateNodeIds() *SubProfileUpsertBulk {
 func (u *SubProfileUpsertBulk) ClearNodeIds() *SubProfileUpsertBulk {
 	return u.Update(func(s *SubProfileUpsert) {
 		s.ClearNodeIds()
+	})
+}
+
+// SetMembers sets the "members" field.
+func (u *SubProfileUpsertBulk) SetMembers(v []contracts.SubscriptionMember) *SubProfileUpsertBulk {
+	return u.Update(func(s *SubProfileUpsert) {
+		s.SetMembers(v)
+	})
+}
+
+// UpdateMembers sets the "members" field to the value that was provided on create.
+func (u *SubProfileUpsertBulk) UpdateMembers() *SubProfileUpsertBulk {
+	return u.Update(func(s *SubProfileUpsert) {
+		s.UpdateMembers()
+	})
+}
+
+// ClearMembers clears the value of the "members" field.
+func (u *SubProfileUpsertBulk) ClearMembers() *SubProfileUpsertBulk {
+	return u.Update(func(s *SubProfileUpsert) {
+		s.ClearMembers()
 	})
 }
 

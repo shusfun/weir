@@ -23,6 +23,8 @@ const (
 	FieldSourceIds = "source_ids"
 	// FieldNodeIds holds the string denoting the node_ids field in the database.
 	FieldNodeIds = "node_ids"
+	// FieldMembers holds the string denoting the members field in the database.
+	FieldMembers = "members"
 	// FieldOperators holds the string denoting the operators field in the database.
 	FieldOperators = "operators"
 	// FieldSettings holds the string denoting the settings field in the database.
@@ -51,6 +53,7 @@ var Columns = []string{
 	FieldAllSources,
 	FieldSourceIds,
 	FieldNodeIds,
+	FieldMembers,
 	FieldOperators,
 	FieldSettings,
 	FieldExpiresAt,

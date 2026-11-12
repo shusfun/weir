@@ -1,3 +1,4 @@
+import { useConsoleContext } from "../lib/console-context";
 import { useEffect, useId, useRef, useState } from "react";
 import { BrandMark } from "../components/brand-mark";
 import {
@@ -74,6 +75,7 @@ const sslLabels: Record<string, string> = {
   "verify-full": "验证 CA 与服务器名称",
 };
 export function SetupPage({ done }: { done: () => void }) {
+  useConsoleContext({ page: "初始化" });
   const id = useId();
   const [step, setStep] = useState(0),
     [token, setToken] = useState("");

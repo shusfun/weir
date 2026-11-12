@@ -1,7 +1,8 @@
 {
   "api": {
     "services": [
-      "StatsService"
+      "StatsService",
+      "HandlerService"
     ],
     "tag": "api"
   },
@@ -108,7 +109,8 @@
           "certificates": [
             {
               "certificateFile": "/weir-test-certs/5.crt",
-              "keyFile": "/weir-test-certs/5.key"
+              "keyFile": "/weir-test-certs/5.key",
+              "oneTimeLoading": false
             }
           ],
           "fingerprint": "firefox",
@@ -146,7 +148,8 @@
           "certificates": [
             {
               "certificateFile": "/weir-test-certs/6.crt",
-              "keyFile": "/weir-test-certs/6.key"
+              "keyFile": "/weir-test-certs/6.key",
+              "oneTimeLoading": false
             }
           ]
         },
@@ -183,7 +186,8 @@
           "certificates": [
             {
               "certificateFile": "/weir-test-certs/7.crt",
-              "keyFile": "/weir-test-certs/7.key"
+              "keyFile": "/weir-test-certs/7.key",
+              "oneTimeLoading": false
             }
           ]
         }

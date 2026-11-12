@@ -1,6 +1,7 @@
 package sub
 
 import (
+	"errors"
 	"strings"
 
 	js "github.com/shusfun/weir/internal/sub/jscompat"
@@ -100,20 +101,32 @@ func dslGetField(ctx *js.Object, name any) any {
 	return ""
 }
 
-func dslSafeMatch(value, pattern, flags any) bool {
-	re, err := js.NewRegExp(strOr(pattern), js.ToString(js.Or(flags, "i")))
+type dslEvaluation struct {
+	err   error
+	depth int
+}
+
+func (e *dslEvaluation) match(value, pattern, flags any) bool {
+	re, err := js.NewConfigRegExp(strOr(pattern), js.ToString(js.Or(flags, "i")))
 	if err != nil {
+		e.err = errors.New("dsl_invalid_regex")
 		return false
 	}
 	return re.Test(strOr(value))
 }
 
-func dslSafeReplace(value, pattern, replacement, flags any) string {
-	re, err := js.NewRegExp(strOr(pattern), js.ToString(js.Or(flags, "g")))
+func (e *dslEvaluation) replace(value, pattern, replacement, flags any) string {
+	re, err := js.NewConfigRegExp(strOr(pattern), js.ToString(js.Or(flags, "g")))
 	if err != nil {
-		return strOr(value)
+		e.err = errors.New("dsl_invalid_regex")
+		return ""
 	}
-	return re.Replace(strOr(value), strOr(replacement))
+	out, err := re.ReplaceBounded(strOr(value), strOr(replacement), 64<<10)
+	if err != nil {
+		e.err = errors.New("dsl_output_too_large")
+		return ""
+	}
+	return out
 }
 
 func dslFallback(values []any) any {
@@ -132,7 +145,16 @@ func argAt(args []any, i int) any {
 	return nil
 }
 
-func dslEvalValue(expr any, ctx *js.Object) any {
+func (e *dslEvaluation) value(expr any, ctx *js.Object) any {
+	if e.err != nil {
+		return ""
+	}
+	if e.depth >= 32 || len(strOr(expr)) > 64<<10 {
+		e.err = errors.New("dsl_expression_limit")
+		return ""
+	}
+	e.depth++
+	defer func() { e.depth-- }()
 	text := js.Trim(strOr(expr))
 	if text == "" {
 		return ""
@@ -155,7 +177,7 @@ func dslEvalValue(expr any, ctx *js.Object) any {
 		fn := m.Str(1)
 		var args []any
 		for _, a := range dslSplitArgs(m.Str(2)) {
-			args = append(args, dslEvalValue(a, ctx))
+			args = append(args, e.value(a, ctx))
 		}
 		switch fn {
 		case "upper":
@@ -167,11 +189,11 @@ func dslEvalValue(expr any, ctx *js.Object) any {
 		case "trim":
 			return js.Trim(strOr(argAt(args, 0)))
 		case "replace":
-			return dslSafeReplace(argAt(args, 0), argAt(args, 1), js.Or(argAt(args, 2), ""), argAt(args, 3))
+			return e.replace(argAt(args, 0), argAt(args, 1), js.Or(argAt(args, 2), ""), argAt(args, 3))
 		case "contains":
 			return strings.Contains(js.ToLower(strOr(argAt(args, 0))), js.ToLower(strOr(argAt(args, 1))))
 		case "match":
-			return dslSafeMatch(argAt(args, 0), argAt(args, 1), js.Or(argAt(args, 2), "i"))
+			return e.match(argAt(args, 0), argAt(args, 1), js.Or(argAt(args, 2), "i"))
 		case "fallback":
 			return dslFallback(args)
 		case "pick":
@@ -188,6 +210,29 @@ func dslEvalValue(expr any, ctx *js.Object) any {
 
 // EvaluateDslExpression 对应 evaluateDslExpression。
 func EvaluateDslExpression(expression any, ctx *js.Object) bool {
+	value, _ := EvaluateDslExpressionChecked(expression, ctx)
+	return value
+}
+
+func EvaluateDslExpressionChecked(expression any, ctx *js.Object) (bool, error) {
+	e := &dslEvaluation{}
+	value := e.evaluate(expression, ctx)
+	if e.err != nil {
+		return false, e.err
+	}
+	return value, nil
+}
+
+func (e *dslEvaluation) evaluate(expression any, ctx *js.Object) bool {
+	if e.err != nil {
+		return false
+	}
+	if e.depth >= 32 || len(strOr(expression)) > 64<<10 {
+		e.err = errors.New("dsl_expression_limit")
+		return false
+	}
+	e.depth++
+	defer func() { e.depth-- }()
 	if ctx == nil {
 		ctx = js.NewObject()
 	}
@@ -195,25 +240,25 @@ func EvaluateDslExpression(expression any, ctx *js.Object) bool {
 	if expr == "" {
 		return true
 	}
-	if parts := reDSLOr.Split(expr, -1); len(parts) > 1 {
+	if parts := dslSplitBoolean(expr, "||"); len(parts) > 1 {
 		for _, p := range parts {
-			if EvaluateDslExpression(p, ctx) {
+			if e.evaluate(p, ctx) {
 				return true
 			}
 		}
 		return false
 	}
-	if parts := reDSLAnd.Split(expr, -1); len(parts) > 1 {
+	if parts := dslSplitBoolean(expr, "&&"); len(parts) > 1 {
 		for _, p := range parts {
-			if !EvaluateDslExpression(p, ctx) {
+			if !e.evaluate(p, ctx) {
 				return false
 			}
 		}
 		return true
 	}
 	if m := reDSLCompare.MatchFirst(expr); m != nil {
-		left := dslEvalValue(m.Str(1), ctx)
-		right := dslEvalValue(m.Str(3), ctx)
+		left := e.value(m.Str(1), ctx)
+		right := e.value(m.Str(3), ctx)
 		switch m.Str(2) {
 		case "===":
 			return js.ToString(left) == js.ToString(right)
@@ -230,28 +275,80 @@ func EvaluateDslExpression(expression any, ctx *js.Object) bool {
 		}
 		return false
 	}
-	return js.Truthy(dslEvalValue(expr, ctx))
+	return js.Truthy(e.value(expr, ctx))
 }
 
 // RenderDslTemplate 对应 renderDslTemplate。
 func RenderDslTemplate(template any, ctx *js.Object) string {
+	value, _ := RenderDslTemplateChecked(template, ctx)
+	return value
+}
+
+func RenderDslTemplateChecked(template any, ctx *js.Object) (string, error) {
+	e := &dslEvaluation{}
+	value := e.render(template, ctx)
+	if e.err != nil {
+		return "", e.err
+	}
+	return value, nil
+}
+
+func (e *dslEvaluation) render(template any, ctx *js.Object) string {
+	if len(strOr(template)) > 64<<10 {
+		e.err = errors.New("dsl_template_limit")
+		return ""
+	}
 	if ctx == nil {
 		ctx = js.NewObject()
 	}
-	out := reDSLTemplate.ReplaceFunc(strOr(template), func(m *js.Match) string {
-		v := dslEvalValue(m.Str(1), ctx)
-		if js.IsNullish(v) {
+	text := strOr(template)
+	var out strings.Builder
+	write := func(value string) bool {
+		if len(value) > (64<<10)-out.Len() {
+			e.err = errors.New("dsl_output_too_large")
+			return false
+		}
+		out.WriteString(value)
+		return true
+	}
+	pos := 0
+	for _, m := range reDSLTemplate.FindAll(text) {
+		if !write(text[pos:m.Index]) {
 			return ""
 		}
-		return js.ToString(v)
-	})
-	return js.Trim(out)
+		v := e.value(m.Str(1), ctx)
+		if e.err != nil {
+			return ""
+		}
+		if !js.IsNullish(v) && !write(js.ToString(v)) {
+			return ""
+		}
+		pos = m.End
+	}
+	if !write(text[pos:]) {
+		return ""
+	}
+	return js.Trim(out.String())
 }
 
 // MatchesDslCondition 对应 matchesDslCondition；condition 可以是表达式字符串或 {field, op, value, flags}。
 func MatchesDslCondition(record *js.Object, condition any) bool {
+	value, _ := MatchesDslConditionChecked(record, condition)
+	return value
+}
+
+func MatchesDslConditionChecked(record *js.Object, condition any) (bool, error) {
+	e := &dslEvaluation{}
+	value := e.condition(record, condition)
+	if e.err != nil {
+		return false, e.err
+	}
+	return value, nil
+}
+
+func (e *dslEvaluation) condition(record *js.Object, condition any) bool {
 	if s, ok := condition.(string); ok {
-		return EvaluateDslExpression(s, record)
+		return e.evaluate(s, record)
 	}
 	cond, ok := condition.(*js.Object)
 	if !ok {
@@ -274,7 +371,7 @@ func MatchesDslCondition(record *js.Object, condition any) bool {
 	case "not_contains":
 		return !strings.Contains(js.ToLower(strOr(actual)), js.ToLower(strOr(expected)))
 	case "match", "regex":
-		return dslSafeMatch(actual, expected, js.Or(cond.Get("flags"), "i"))
+		return e.match(actual, expected, js.Or(cond.Get("flags"), "i"))
 	case "in":
 		arr, isArr := expected.(*js.Array)
 		if !isArr {
@@ -290,3 +387,46 @@ func MatchesDslCondition(record *js.Object, condition any) bool {
 	}
 	return false
 }
+
+func dslSplitBoolean(text, token string) []string {
+	var parts []string
+	quote := byte(0)
+	escaped, depth, start := false, 0, 0
+	for i := 0; i < len(text); i++ {
+		ch := text[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' {
+			escaped = true
+			continue
+		}
+		if quote != 0 {
+			if ch == quote {
+				quote = 0
+			}
+			continue
+		}
+		if ch == '\'' || ch == '"' {
+			quote = ch
+			continue
+		}
+		if ch == '(' {
+			depth++
+			continue
+		}
+		if ch == ')' {
+			depth--
+			continue
+		}
+		if depth == 0 && i > 0 && i+len(token) < len(text) && dslSpace(text[i-1]) && dslSpace(text[i+len(token)]) && strings.HasPrefix(text[i:], token) {
+			parts = append(parts, text[start:i])
+			i += len(token) - 1
+			start = i + 1
+		}
+	}
+	return append(parts, text[start:])
+}
+
+func dslSpace(ch byte) bool { return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' }

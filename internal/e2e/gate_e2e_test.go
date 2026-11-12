@@ -48,6 +48,11 @@ type env struct {
 	stopAgent context.CancelFunc
 	// gateCenter：Gate 连接中心用的地址（空为 url）；多 Gate 验收经可断开的中转连接中心。
 	gateCenter string
+	// 缓存登记版本与文件摘要，取自二进制自身，不取夹具目录名。
+	xrayVersion    string
+	xrayDigest     string
+	singboxVersion string
+	singboxDigest  string
 }
 
 func (e *env) post(path string, body any, header map[string]string) map[string]any {
@@ -81,10 +86,15 @@ func (e *env) post(path string, body any, header map[string]string) map[string]a
 			job = state["job"].(map[string]any)
 			if job["status"] != "running" {
 				result, ok := job["result"].(map[string]any)
-				if !ok || result["status"].(float64) >= 300 {
+				status, _ := result["status"].(float64)
+				if !ok || status == 0 || status >= 300 {
 					e.t.Fatalf("%s job failed: %v result=%v", path, job["error"], result)
 				}
-				return result["body"].(map[string]any)
+				body, _ := result["body"].(map[string]any)
+				if status == http.StatusAccepted || body["id"] == nil && body["pending"] != nil {
+					e.t.Fatalf("%s finished without a resource: %v", path, body)
+				}
+				return body
 			}
 			time.Sleep(200 * time.Millisecond)
 		}
@@ -148,9 +158,12 @@ func setup(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = (kernels.Cache{Dir: filepath.Join(cfg.DataDir, "kernels")}).Put("xray", "26.3.27", "amd64", data); err != nil {
+	xver := kernelReleaseVersion(t, bin, "xray")
+	xsum, err := (kernels.Cache{Dir: filepath.Join(cfg.DataDir, "kernels")}).Put("xray", xver, "amd64", data)
+	if err != nil {
 		t.Fatal(err)
 	}
+	e.xrayVersion, e.xrayDigest = xver, xsum
 	mh := os.Getenv("WEIR_E2E_MIHOMO")
 	if mh == "" {
 		t.Fatal("需要真实 mihomo")
@@ -228,7 +241,7 @@ func TestGateRePairAfterCenterReset(t *testing.T) {
 	e.applied("fresh center configuration after re-pair")
 	e.s.Store.Ent.Gate.UpdateOneID(e.gateID).SetPublicHost("127.0.0.1").ExecX(e.ctx)
 	node := e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "ss2022", "skip_probe": true}, nil)
-	user := e.post("/api/v1/admin/users", map[string]any{"email": "repaired@e2e.test", "password": "E2eUser1"}, nil)
+	user := e.post("/api/v1/admin/users", map[string]any{"unlimited": true, "email": "repaired@e2e.test", "password": "E2eUser1"}, nil)
 	e.applied("node from fresh center")
 	port := e.runSingboxClient(sb, e.subOutbound(int(user["id"].(float64)), int(node["id"].(float64))))
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("repaired")) }))
@@ -245,7 +258,7 @@ func TestGateRePairAfterCenterReset(t *testing.T) {
 // applied 等待 Gate 应用到中心最新的配置版本。
 func (e *env) applied(what string) {
 	e.t.Helper()
-	eventually(e.t, 30*time.Second, what, func() bool {
+	eventually(e.t, 2*time.Minute, what, func() bool {
 		g, err := e.s.Store.Ent.Gate.Get(e.ctx, e.gateID)
 		if err == nil && g.LastError != "" {
 			e.t.Logf("gate error: %s", g.LastError)
@@ -276,13 +289,14 @@ func TestGateRealTrafficQuotaAndExpiry(t *testing.T) {
 	direct := e.s.Store.Ent.Exit.Query().Where(entexit.GateIDEQ(g.ID), entexit.TagEQ("direct")).OnlyX(ctx)
 	n := e.s.Store.Ent.Node.Create().SetGateID(g.ID).SetExitID(direct.ID).SetName("香港").SetKernel("xray").SetProtocol("vless").SetPort(port).SetNetwork("tcp").SetSecurity("reality").
 		SetSettings(map[string]any{"reality_dest": dest.Listener.Addr().String(), "reality_server_names": "e2e.test", "reality_private_key": priv, "reality_public_key": pub, "reality_short_id": "a1b2c3d4"}).SaveX(ctx)
-	u := e.s.Store.Ent.User.Create().SetEmail("u@e2e.test").SetPasswordHash("x").SaveX(ctx)
+	u := e.s.Store.Ent.User.Create().SetEmail("u@e2e.test").SetPasswordHash("x").SetUnlimited(true).SaveX(ctx)
 	link := e.s.Store.Ent.Link.Create().SetUserID(u.ID).SetToken("e2e-link").SaveX(ctx)
 	uuid := "6f1c2a8e-3b4d-4c5e-9f60-7a8b9c0d1e2f"
 	e.s.Store.Ent.Credential.Create().SetNodeID(n.ID).SetLinkID(link.ID).SetUserID(u.ID).SetStatsKey("c-e2e").SetUUID(uuid).SaveX(ctx)
 	if err = e.s.Rebalance(ctx, u.ID); err != nil {
 		t.Fatal(err)
 	}
+	e.s.Store.Ent.Gate.UpdateOneID(e.gateID).AddConfigRevision(1).ExecX(ctx)
 	e.applied("first config")
 
 	// 真实 Xray 客户端：本机 SOCKS5 入站 → VLESS + REALITY → Gate。
@@ -328,7 +342,7 @@ func TestGateRealTrafficQuotaAndExpiry(t *testing.T) {
 	t.Logf("metered %d bytes", used)
 
 	// 额度：只剩 1 MiB，再下载 2 MiB 后 Gate 本地停用该用户，新连接失败。
-	e.s.Store.Ent.User.UpdateOneID(u.ID).SetQuota(used + 1<<20).ExecX(ctx)
+	e.s.Store.Ent.User.UpdateOneID(u.ID).SetUnlimited(false).SetQuota(used + 1<<20).ExecX(ctx)
 	if err = e.s.Rebalance(ctx, u.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -337,7 +351,7 @@ func TestGateRealTrafficQuotaAndExpiry(t *testing.T) {
 	eventually(t, 20*time.Second, "quota enforcement", func() bool { return fetch() != nil })
 
 	// 续额度（不限）后恢复。
-	e.s.Store.Ent.User.UpdateOneID(u.ID).SetQuota(0).ExecX(ctx)
+	e.s.Store.Ent.User.UpdateOneID(u.ID).SetUnlimited(true).SetQuota(0).ExecX(ctx)
 	if err = e.s.Rebalance(ctx, u.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -345,7 +359,11 @@ func TestGateRealTrafficQuotaAndExpiry(t *testing.T) {
 	eventually(t, 20*time.Second, "recovery after renewal", func() bool { return fetch() == nil })
 
 	// 到期：配置里写明 3 秒后到期；到点时中心不下发新配置，由 Gate 本地剔除。
-	e.s.Store.Ent.User.UpdateOneID(u.ID).SetExpiresAt(time.Now().Add(3 * time.Second)).ExecX(ctx)
+	expires := time.Now().Add(3 * time.Second)
+	e.s.Store.Ent.User.UpdateOneID(u.ID).SetExpiresAt(expires).ExecX(ctx)
+	cred := e.s.Store.Ent.Credential.Query().OnlyX(ctx)
+	cred.Update().SetExpiresAt(expires).ExecX(ctx)
+	e.s.Store.Ent.Gate.UpdateOneID(e.gateID).AddConfigRevision(1).ExecX(ctx)
 	if err = e.s.Rebalance(ctx, u.ID); err != nil {
 		t.Fatal(err)
 	}

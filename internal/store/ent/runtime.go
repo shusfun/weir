@@ -5,6 +5,8 @@ package ent
 import (
 	"time"
 
+	"github.com/shusfun/weir/internal/store/ent/accesscode"
+	entaccountplan "github.com/shusfun/weir/internal/store/ent/accountplan"
 	"github.com/shusfun/weir/internal/store/ent/audit"
 	"github.com/shusfun/weir/internal/store/ent/budget"
 	"github.com/shusfun/weir/internal/store/ent/certificate"
@@ -37,6 +39,56 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	accesscodeFields := schema.AccessCode{}.Fields()
+	_ = accesscodeFields
+	// accesscodeDescDigest is the schema descriptor for digest field.
+	accesscodeDescDigest := accesscodeFields[1].Descriptor()
+	// accesscode.DigestValidator is a validator for the "digest" field. It is called by the builders before save.
+	accesscode.DigestValidator = accesscodeDescDigest.Validators[0].(func(string) error)
+	// accesscodeDescPlanRevision is the schema descriptor for plan_revision field.
+	accesscodeDescPlanRevision := accesscodeFields[3].Descriptor()
+	// accesscode.DefaultPlanRevision holds the default value on creation for the plan_revision field.
+	accesscode.DefaultPlanRevision = accesscodeDescPlanRevision.Default.(int)
+	// accesscodeDescRevoked is the schema descriptor for revoked field.
+	accesscodeDescRevoked := accesscodeFields[8].Descriptor()
+	// accesscode.DefaultRevoked holds the default value on creation for the revoked field.
+	accesscode.DefaultRevoked = accesscodeDescRevoked.Default.(bool)
+	// accesscodeDescTraceID is the schema descriptor for trace_id field.
+	accesscodeDescTraceID := accesscodeFields[10].Descriptor()
+	// accesscode.DefaultTraceID holds the default value on creation for the trace_id field.
+	accesscode.DefaultTraceID = accesscodeDescTraceID.Default.(string)
+	// accesscode.TraceIDValidator is a validator for the "trace_id" field. It is called by the builders before save.
+	accesscode.TraceIDValidator = accesscodeDescTraceID.Validators[0].(func(string) error)
+	// accesscodeDescCreatedAt is the schema descriptor for created_at field.
+	accesscodeDescCreatedAt := accesscodeFields[11].Descriptor()
+	// accesscode.DefaultCreatedAt holds the default value on creation for the created_at field.
+	accesscode.DefaultCreatedAt = accesscodeDescCreatedAt.Default.(func() time.Time)
+	entaccountplanFields := schema.AccountPlan{}.Fields()
+	_ = entaccountplanFields
+	// entaccountplanDescName is the schema descriptor for name field.
+	entaccountplanDescName := entaccountplanFields[0].Descriptor()
+	// entaccountplan.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	entaccountplan.NameValidator = entaccountplanDescName.Validators[0].(func(string) error)
+	// entaccountplanDescRevision is the schema descriptor for revision field.
+	entaccountplanDescRevision := entaccountplanFields[1].Descriptor()
+	// entaccountplan.DefaultRevision holds the default value on creation for the revision field.
+	entaccountplan.DefaultRevision = entaccountplanDescRevision.Default.(int)
+	// entaccountplan.RevisionValidator is a validator for the "revision" field. It is called by the builders before save.
+	entaccountplan.RevisionValidator = entaccountplanDescRevision.Validators[0].(func(int) error)
+	// entaccountplanDescEnabled is the schema descriptor for enabled field.
+	entaccountplanDescEnabled := entaccountplanFields[2].Descriptor()
+	// entaccountplan.DefaultEnabled holds the default value on creation for the enabled field.
+	entaccountplan.DefaultEnabled = entaccountplanDescEnabled.Default.(bool)
+	// entaccountplanDescCreatedAt is the schema descriptor for created_at field.
+	entaccountplanDescCreatedAt := entaccountplanFields[4].Descriptor()
+	// entaccountplan.DefaultCreatedAt holds the default value on creation for the created_at field.
+	entaccountplan.DefaultCreatedAt = entaccountplanDescCreatedAt.Default.(func() time.Time)
+	// entaccountplanDescUpdatedAt is the schema descriptor for updated_at field.
+	entaccountplanDescUpdatedAt := entaccountplanFields[5].Descriptor()
+	// entaccountplan.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	entaccountplan.DefaultUpdatedAt = entaccountplanDescUpdatedAt.Default.(func() time.Time)
+	// entaccountplan.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	entaccountplan.UpdateDefaultUpdatedAt = entaccountplanDescUpdatedAt.UpdateDefault.(func() time.Time)
 	auditFields := schema.Audit{}.Fields()
 	_ = auditFields
 	// auditDescActor is the schema descriptor for actor field.
@@ -580,19 +632,19 @@ func init() {
 	// subprofile.DefaultAllSources holds the default value on creation for the all_sources field.
 	subprofile.DefaultAllSources = subprofileDescAllSources.Default.(bool)
 	// subprofileDescShareToken is the schema descriptor for share_token field.
-	subprofileDescShareToken := subprofileFields[8].Descriptor()
+	subprofileDescShareToken := subprofileFields[9].Descriptor()
 	// subprofile.DefaultShareToken holds the default value on creation for the share_token field.
 	subprofile.DefaultShareToken = subprofileDescShareToken.Default.(string)
 	// subprofileDescDownloads is the schema descriptor for downloads field.
-	subprofileDescDownloads := subprofileFields[10].Descriptor()
+	subprofileDescDownloads := subprofileFields[11].Descriptor()
 	// subprofile.DefaultDownloads holds the default value on creation for the downloads field.
 	subprofile.DefaultDownloads = subprofileDescDownloads.Default.(int)
 	// subprofileDescPosition is the schema descriptor for position field.
-	subprofileDescPosition := subprofileFields[11].Descriptor()
+	subprofileDescPosition := subprofileFields[12].Descriptor()
 	// subprofile.DefaultPosition holds the default value on creation for the position field.
 	subprofile.DefaultPosition = subprofileDescPosition.Default.(int)
 	// subprofileDescCreatedAt is the schema descriptor for created_at field.
-	subprofileDescCreatedAt := subprofileFields[12].Descriptor()
+	subprofileDescCreatedAt := subprofileFields[13].Descriptor()
 	// subprofile.DefaultCreatedAt holds the default value on creation for the created_at field.
 	subprofile.DefaultCreatedAt = subprofileDescCreatedAt.Default.(func() time.Time)
 	subpullFields := schema.SubPull{}.Fields()
@@ -725,58 +777,66 @@ func init() {
 	userDescEmail := userFields[0].Descriptor()
 	// user.EmailValidator is a validator for the "email" field. It is called by the builders before save.
 	user.EmailValidator = userDescEmail.Validators[0].(func(string) error)
+	// userDescNormalizedEmail is the schema descriptor for normalized_email field.
+	userDescNormalizedEmail := userFields[1].Descriptor()
+	// user.NormalizedEmailValidator is a validator for the "normalized_email" field. It is called by the builders before save.
+	user.NormalizedEmailValidator = userDescNormalizedEmail.Validators[0].(func(string) error)
 	// userDescName is the schema descriptor for name field.
-	userDescName := userFields[1].Descriptor()
+	userDescName := userFields[2].Descriptor()
 	// user.DefaultName holds the default value on creation for the name field.
 	user.DefaultName = userDescName.Default.(string)
 	// user.NameValidator is a validator for the "name" field. It is called by the builders before save.
 	user.NameValidator = userDescName.Validators[0].(func(string) error)
 	// userDescEnabled is the schema descriptor for enabled field.
-	userDescEnabled := userFields[4].Descriptor()
+	userDescEnabled := userFields[5].Descriptor()
 	// user.DefaultEnabled holds the default value on creation for the enabled field.
 	user.DefaultEnabled = userDescEnabled.Default.(bool)
 	// userDescQuota is the schema descriptor for quota field.
-	userDescQuota := userFields[5].Descriptor()
+	userDescQuota := userFields[6].Descriptor()
 	// user.DefaultQuota holds the default value on creation for the quota field.
 	user.DefaultQuota = userDescQuota.Default.(int64)
 	// user.QuotaValidator is a validator for the "quota" field. It is called by the builders before save.
 	user.QuotaValidator = userDescQuota.Validators[0].(func(int64) error)
+	// userDescUnlimited is the schema descriptor for unlimited field.
+	userDescUnlimited := userFields[7].Descriptor()
+	// user.DefaultUnlimited holds the default value on creation for the unlimited field.
+	user.DefaultUnlimited = userDescUnlimited.Default.(bool)
 	// userDescUsed is the schema descriptor for used field.
-	userDescUsed := userFields[6].Descriptor()
+	userDescUsed := userFields[8].Descriptor()
 	// user.DefaultUsed holds the default value on creation for the used field.
 	user.DefaultUsed = userDescUsed.Default.(int64)
 	// user.UsedValidator is a validator for the "used" field. It is called by the builders before save.
 	user.UsedValidator = userDescUsed.Validators[0].(func(int64) error)
 	// userDescMonthlyReset is the schema descriptor for monthly_reset field.
-	userDescMonthlyReset := userFields[8].Descriptor()
+	userDescMonthlyReset := userFields[10].Descriptor()
 	// user.DefaultMonthlyReset holds the default value on creation for the monthly_reset field.
 	user.DefaultMonthlyReset = userDescMonthlyReset.Default.(bool)
 	// userDescUsageResetAt is the schema descriptor for usage_reset_at field.
-	userDescUsageResetAt := userFields[9].Descriptor()
+	userDescUsageResetAt := userFields[11].Descriptor()
 	// user.DefaultUsageResetAt holds the default value on creation for the usage_reset_at field.
 	user.DefaultUsageResetAt = userDescUsageResetAt.Default.(func() time.Time)
 	// userDescAllNodes is the schema descriptor for all_nodes field.
-	userDescAllNodes := userFields[10].Descriptor()
+	userDescAllNodes := userFields[12].Descriptor()
 	// user.DefaultAllNodes holds the default value on creation for the all_nodes field.
 	user.DefaultAllNodes = userDescAllNodes.Default.(bool)
 	// userDescAllowChain is the schema descriptor for allow_chain field.
-	userDescAllowChain := userFields[12].Descriptor()
+	userDescAllowChain := userFields[14].Descriptor()
 	// user.DefaultAllowChain holds the default value on creation for the allow_chain field.
 	user.DefaultAllowChain = userDescAllowChain.Default.(bool)
 	// userDescTotpSecret is the schema descriptor for totp_secret field.
-	userDescTotpSecret := userFields[14].Descriptor()
+	userDescTotpSecret := userFields[16].Descriptor()
 	// user.DefaultTotpSecret holds the default value on creation for the totp_secret field.
 	user.DefaultTotpSecret = userDescTotpSecret.Default.(string)
 	// userDescTotpStep is the schema descriptor for totp_step field.
-	userDescTotpStep := userFields[15].Descriptor()
+	userDescTotpStep := userFields[17].Descriptor()
 	// user.DefaultTotpStep holds the default value on creation for the totp_step field.
 	user.DefaultTotpStep = userDescTotpStep.Default.(int64)
 	// userDescCreatedAt is the schema descriptor for created_at field.
-	userDescCreatedAt := userFields[16].Descriptor()
+	userDescCreatedAt := userFields[18].Descriptor()
 	// user.DefaultCreatedAt holds the default value on creation for the created_at field.
 	user.DefaultCreatedAt = userDescCreatedAt.Default.(func() time.Time)
 	// userDescUpdatedAt is the schema descriptor for updated_at field.
-	userDescUpdatedAt := userFields[17].Descriptor()
+	userDescUpdatedAt := userFields[19].Descriptor()
 	// user.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	user.DefaultUpdatedAt = userDescUpdatedAt.Default.(func() time.Time)
 	// user.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

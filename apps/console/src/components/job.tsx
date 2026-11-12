@@ -35,6 +35,8 @@ const refreshAfter: Record<string, string[][]> = {
   "gate-release": [["gates"]],
   "gate-ssh": [["gates"], ["nodes"]],
   dsh: [["dsh"], ["notices"]],
+  laya: [["laya-hosting"], ["observe-system-health"]],
+  "observation-analysis": [["observe-analyses"]],
   // 转成后台任务的操作由发起它的页面刷新；页面已经关掉时由事件流的提示整体刷新（events.ts）
   action: [],
 };
@@ -145,7 +147,7 @@ export function JobByID({ id, initial, onFinish, openLogs }: { id: string; initi
 }
 
 // JobLine：卡片与下载窗口里固定占一行的任务位（展示在 @weir/ui）。这里跟踪任务，详情窗读取带日志的详情。
-export function JobLine({ job, id, idle, onFinish }: { job?: Job; id?: string | null; idle: string; onFinish?: (j: Job) => void }) {
+export function JobLine({ job, id, idle, onFinish, detailDescription }: { job?: Job; id?: string | null; idle: string; onFinish?: (j: Job) => void; detailDescription?: string }) {
   const tracked = useJob(id ?? job?.id ?? null, onFinish);
   const streaming = useLive();
   if (tracked.gone) return <JobPlaceholder text={jobGoneText} tone="bad" />;
@@ -155,7 +157,7 @@ export function JobLine({ job, id, idle, onFinish }: { job?: Job; id?: string | 
       job={j}
       idle={idle}
       note={streaming ? undefined : pollingNote}
-      detailDescription="关掉这个窗口任务照常进行；取消后已下载的部分保留，再次下载时续传。"
+      detailDescription={detailDescription ?? "关掉这个窗口任务照常进行；取消后已下载的部分保留，再次下载时续传。"}
       detail={j && <JobByID id={j.id} initial={j} />}
     />
   );

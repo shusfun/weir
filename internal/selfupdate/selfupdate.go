@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -34,6 +35,8 @@ import (
 	"github.com/shusfun/weir/internal/buildinfo"
 	"github.com/shusfun/weir/internal/fetch"
 	"github.com/shusfun/weir/internal/ghrelease"
+	"github.com/shusfun/weir/internal/lockfile"
+	"github.com/shusfun/weir/internal/releasefiles"
 )
 
 // MinVersion 是能自更新到的最低版本。Weir 已从 0.1.1 重新开始发版；更早的历史版本不是 Weir 安装包。
@@ -55,9 +58,14 @@ var (
 	runInstaller = func(ctx context.Context, dir string, args []string, log func(string)) error {
 		cmd := exec.CommandContext(ctx, "sh", append([]string{filepath.Join(dir, "install.sh")}, args...)...)
 		cmd.Dir = dir
+		if id, ok := ctx.Value(updateIDKey{}).(string); ok {
+			cmd.Env = append(os.Environ(), "WEIR_UPDATE_ID="+id)
+		}
 		return runLogged(cmd, log)
 	}
 )
+
+type updateIDKey struct{}
 
 var safeVersion = regexp.MustCompile(`^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,4}$`)
 
@@ -166,6 +174,11 @@ func Apply(ctx context.Context) error {
 		_ = os.Remove(path)
 		return errors.New("请求文件无效")
 	}
+	unlock, err := lockfile.TryAcquire(WorkDir + ".lock")
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	data, err := os.ReadFile(path)
 	_ = os.Remove(path)
 	if err != nil {
@@ -185,6 +198,7 @@ func Apply(ctx context.Context) error {
 		w.fail(err)
 		return err
 	}
+	ctx = context.WithValue(ctx, updateIDKey{}, req.ID)
 	switch req.Action {
 	case "update":
 		err = w.update(ctx, req.Version, req.Sources)
@@ -417,10 +431,11 @@ func (w *writer) update(ctx context.Context, version string, sources []ghrelease
 	if err != nil {
 		return err
 	}
-	if err = os.MkdirAll(WorkDir, 0o700); err != nil {
+	if err = releasefiles.DownloadDir(WorkDir, name); err != nil {
 		return err
 	}
 	archive := filepath.Join(WorkDir, name)
+	w.cleanup(WorkDir, map[string]bool{name: true, name + ".part": true}, workArtifact)
 	w.adopt(name, archive, want)
 	err = fetch.Download(ctx, fetch.Request{URLs: urls, Dest: archive, SHA256: want, MaxSize: 256 << 20, HTTP: gh.HTTP,
 		OnProgress: func(p fetch.Progress) { w.set(func(s *Status) { s.Progress = &p }) }, Log: w.log})
@@ -472,16 +487,16 @@ func sameDigest(path, want string) (bool, error) {
 func (w *writer) install(ctx context.Context, archive, version string, args []string) error {
 	w.set(func(s *Status) { s.State, s.Progress = "installing", nil })
 	dir := filepath.Join(WorkDir, "v"+version)
-	_ = os.RemoveAll(dir)
+	w.cleanup(WorkDir, nil, func(n string) bool { return n == "v"+version })
+	defer w.cleanup(WorkDir, nil, func(n string) bool { return n == "v"+version })
 	if err := extract(archive, dir); err != nil {
 		return err
 	}
-	defer os.RemoveAll(dir)
 	w.log("安装 v" + version + "（服务会重启，控制台短暂不可用）")
 	if err := runInstaller(ctx, dir, args, w.log); err != nil {
 		return fmt.Errorf("安装失败，已保持或切回原版本：%w", err)
 	}
-	_ = os.Remove(archive)
+	w.cleanup(WorkDir, nil, func(n string) bool { return n == filepath.Base(archive) || n == filepath.Base(archive)+".part" })
 	return nil
 }
 
@@ -499,11 +514,13 @@ func (w *writer) rollback(ctx context.Context) error {
 	w.log("切回本机保留的 v" + prev)
 	src := filepath.Join(Base, "releases", prev)
 	dir := filepath.Join(WorkDir, "rollback-"+prev)
-	_ = os.RemoveAll(dir)
-	if err = os.MkdirAll(dir, 0o700); err != nil {
+	w.cleanup(WorkDir, nil, workArtifact)
+	root, err := releasefiles.Ensure(dir, 0o700)
+	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(dir)
+	defer root.Close()
+	defer w.cleanup(WorkDir, nil, func(n string) bool { return n == "rollback-"+prev })
 	entries, err := os.ReadDir(src)
 	if err != nil {
 		return err
@@ -516,7 +533,13 @@ func (w *writer) rollback(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if err = os.WriteFile(filepath.Join(dir, e.Name()), b, 0o755); err != nil {
+		f, err := root.OpenFile(e.Name(), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o755)
+		if err != nil {
+			return err
+		}
+		_, err = f.Write(b)
+		err = errors.Join(err, f.Close())
+		if err != nil {
 			return err
 		}
 	}
@@ -525,6 +548,26 @@ func (w *writer) rollback(ctx context.Context) error {
 		return fmt.Errorf("切回失败：%w", err)
 	}
 	return nil
+}
+
+func workArtifact(name string) bool {
+	if strings.HasPrefix(name, "rollback-") {
+		return releasefiles.Version(strings.TrimPrefix(name, "rollback-"))
+	}
+	if strings.HasPrefix(name, "v") {
+		return releasefiles.Version(strings.TrimPrefix(name, "v"))
+	}
+	return strings.HasPrefix(name, "weir-") && (strings.HasSuffix(name, ".tar.gz") || strings.HasSuffix(name, ".tar.gz.part"))
+}
+
+func (w *writer) cleanup(dir string, keep map[string]bool, owned func(string) bool) {
+	stats, err := releasefiles.Prune(dir, keep, owned, nil)
+	message := fmt.Sprintf("release cleanup update=%s version=%s %s", w.st.ID, w.st.Version, stats)
+	if err != nil {
+		message = fmt.Sprintf("WARN %s error=%q", message, err)
+	}
+	log.Print(message)
+	w.log(message)
 }
 
 // extract 解开发布包到 dir：只取顶层普通文件，拒绝路径穿越。
@@ -538,9 +581,23 @@ func extract(archive, dir string) error {
 		return err
 	}
 	defer gz.Close()
-	if err = os.MkdirAll(dir, 0o700); err != nil {
+	parent, err := releasefiles.Open(filepath.Dir(dir))
+	if err != nil {
 		return err
 	}
+	defer parent.Close()
+	name := filepath.Base(dir)
+	if st, e := parent.Lstat(name); e == nil && (!st.IsDir() || st.Mode()&os.ModeSymlink != 0) {
+		return errors.New("更新解压目录不安全")
+	}
+	if err = parent.MkdirAll(name, 0o700); err != nil {
+		return err
+	}
+	root, err := parent.OpenRoot(name)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
 	tr := tar.NewReader(gz)
 	for {
 		h, err := tr.Next()
@@ -554,7 +611,7 @@ func extract(archive, dir string) error {
 		if h.Typeflag != tar.TypeReg || name == "" || strings.Contains(name, "/") || strings.Contains(name, "..") {
 			continue
 		}
-		f, err := os.OpenFile(filepath.Join(dir, name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o755)
+		f, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o755)
 		if err != nil {
 			return err
 		}

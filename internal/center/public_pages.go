@@ -165,6 +165,8 @@ func (s *Server) savePage(c *gin.Context) {
 		}
 	}
 	s.audit(c, "page.save", "page:"+saved.Key, "ok")
+	_, observeErr := s.enqueueObservation(ctx, observationInput{Point: "content.spam", Resource: "page:" + itoa(saved.ID), Text: d.Title + "\n" + d.Description + "\n" + d.Notice, Origin: "center.savePage"})
+	s.tasks.note("observation-producer", observeErr)
 	c.JSON(200, pageView(saved))
 }
 
@@ -383,10 +385,13 @@ func (s *Server) submitGuestbook(c *gin.Context) {
 	if u != nil {
 		m.UserID = u.ID
 	}
-	if _, err := s.Store.Ent.Resource.Create().SetKind(kindGuestbook).SetKey(randomToken(12)).SetOwnerID(r.ID).SetData(toMap(m)).Save(ctx); err != nil {
+	saved, err := s.Store.Ent.Resource.Create().SetKind(kindGuestbook).SetKey(randomToken(12)).SetOwnerID(r.ID).SetData(toMap(m)).Save(ctx)
+	if err != nil {
 		failInternal(c, 503, "guestbook_save_failed", err)
 		return
 	}
+	_, observeErr := s.enqueueObservation(ctx, observationInput{Point: "content.spam", Resource: "guestbook:" + itoa(saved.ID), Text: m.Content, Origin: "center.submitGuestbook"})
+	s.tasks.note("observation-producer", observeErr)
 	c.JSON(201, gin.H{"pending": m.Status == "pending"})
 }
 

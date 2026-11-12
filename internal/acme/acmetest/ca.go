@@ -167,6 +167,11 @@ func (f *CA) handle(w http.ResponseWriter, r *http.Request) {
 // Directory 是假 CA 的目录地址。
 func (f *CA) Directory() string { return f.url("/directory") }
 
+// PEM 是测试 CA 的证书，客户端用来信任这次签发的叶子。
+func (f *CA) PEM() []byte {
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: f.caCert.Raw})
+}
+
 // Order 返回最近一次下单的标识与 profile。
 func (f *CA) Order() (map[string]string, string) {
 	f.mu.Lock()

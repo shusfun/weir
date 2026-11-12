@@ -72,7 +72,7 @@ var nodeCreateParams = []Param{
 	{Key: "preset", Label: "协议方案", Kind: "string", Required: true, Hint: "方案编号，见 list_presets（如 vless-reality、hysteria2、ss2022）"},
 	{Key: "name", Label: "节点名称", Kind: "string", Hint: "不填时用「VPS 名 + 方案名」"},
 	{Key: "port", Label: "端口", Kind: "int", Min: num(1024), Max: num(65535), Hint: "不填时自动分配（REALITY 优先 443）；先用 check_port 确认没被占用"},
-	{Key: "reality_target", Label: "伪装目标", Kind: "string", Hint: "只用于 REALITY 方案，如 www.microsoft.com；不填时由 VPS 实测内置候选站点，取最快且连得通的"},
+	{Key: "reality_target", Label: "伪装目标", Kind: "string", Hint: "只用于 REALITY 方案，如 www.microsoft.com；不填时由目标 VPS 用 DoH 解析内置候选，再取 TLS 1.3、h2 且握手最快的。DoH 失败不算合适"},
 	{Key: "cert_id", Label: "证书", Kind: "ref", Ref: "cert", Hint: "只用于需要证书的方案；不填时由中心为这台 VPS 准备"},
 	{Key: "settings", Label: "高级参数", Kind: "object", Hint: "只能改方案 fields 里列出的字段"},
 	{Key: "chain_kind", Label: "出口", Kind: "enum", Options: [][2]string{{"none", "直接出去"}, {"node", "经另一台 VPS 上的节点"}, {"source", "经订阅源里的节点"},
@@ -309,13 +309,14 @@ func profileParams(update bool) []Param {
 		Param{Key: "all_sources", Label: "包含全部已启用的订阅源与手动节点", Kind: "bool"},
 		Param{Key: "source_ids", Label: "订阅源", Kind: "refs", Ref: "source", Hint: "按这个顺序输出"},
 		Param{Key: "node_ids", Label: "手动节点", Kind: "refs", Ref: "manual"},
+		Param{Key: "members", Label: "有序成员", Kind: "members", Hint: "数组，每项为 {kind:source/node/profile,id:数据库编号}；与 source_ids/node_ids 二选一，all_sources 必须为 false；嵌套最多向下三层"},
 		Param{Key: "settings", Label: "输出设置", Kind: "object", Hint: "可选键：template（builtin:编号 / custom:编号，见 list_templates）、rule_level、flag_emoji、prepend_manual、manual_prefix、prepend_sources、prepend_group_name、filter_include、filter_exclude、traffic_nodes；不给的沿用默认设置"},
 		Param{Key: "expires_days", Label: "有效天数", Kind: "days", Unit: "天", Min: num(0), Max: num(3650), Hint: "从确认时起算；0 为不到期"},
 	)
 }
 
 func profileBody(args map[string]any) map[string]any {
-	body := pick(args, "name", "enabled", "all_sources", "source_ids", "node_ids", "settings")
+	body := pick(args, "name", "enabled", "all_sources", "source_ids", "node_ids", "settings", "members")
 	if v, ok := args["expires_days"].(float64); ok {
 		if v > 0 {
 			body["expires_at"] = time.Now().Add(time.Duration(v*24) * time.Hour).UTC()
@@ -340,7 +341,7 @@ func loadProfile(ctx context.Context, s *Server, args map[string]any) (map[strin
 		settings[k] = x
 	}
 	return map[string]any{"name": v.Name, "enabled": v.Enabled, "all_sources": v.AllSources, "source_ids": idList(v.SourceIds), "node_ids": idList(v.NodeIds),
-		"settings": settings, "expires_days": days}, nil
+		"members": append([]contracts.SubscriptionMember{}, profileMembers(v)...), "settings": settings, "expires_days": days}, nil
 }
 
 func templateParams(update bool) []Param {
@@ -417,6 +418,12 @@ func forceQuery(args map[string]any) url.Values {
 }
 
 var opDraftCaps = []Capability{
+	{Name: "subscription.converter.update", Title: "修改外部转换后端", Purpose: "配置可信的 subconverter 兼容端点；节点及连接凭据会交给该后端，授权值只由管理员填写，必须确认后生效。", Kind: "draft", Risk: "danger", Last: true,
+		Params: []Param{{Key: "enabled", Label: "启用", Kind: "bool"}, {Key: "endpoint", Label: "完整转换端点", Kind: "string", Hint: "HTTPS /sub 端点，不带查询参数"}, {Key: "preferred_gate_id", Label: "优先 VPS ID", Kind: "int", Min: num(0)}, {Key: "max_bytes", Label: "最大输出字节", Kind: "int", Min: num(1024), Max: num(10 << 20)}, {Key: "authorization", Label: "Authorization", Kind: "string", Secret: true, Hint: "留空保留；仅管理员填写"}, {Key: "clear_authorization", Label: "移除授权值", Kind: "bool"}},
+		op: &opSpec{kind: "update", method: "PUT", handler: h(func(s *Server) gin.HandlerFunc { return s.putConverterSettings }), path: noPath, full: true, noUndo: true, load: func(ctx context.Context, s *Server, _ map[string]any) (map[string]any, error) {
+			cfg, err := s.converterSettings(ctx)
+			return map[string]any{"enabled": cfg.Enabled, "endpoint": cfg.Endpoint, "preferred_gate_id": cfg.PreferredGate, "max_bytes": cfg.MaxBytes}, err
+		}}},
 	{Name: "node.create", Title: "新建节点", Purpose: "在一台 VPS 上按协议方案新建节点，与手动「新建节点」同一流程：分配端口、准备证书、REALITY 由 VPS 实测伪装目标，保存前在这台 VPS 上用真实内核实测连接；试运行通过才弹窗，确认后按试运行定下的端口与伪装目标保存。",
 		Kind: "draft", Risk: "normal", Object: "node", Creates: true, Params: nodeCreateParams,
 		op: &opSpec{kind: "create", method: "POST", handler: h(func(s *Server) gin.HandlerFunc { return s.createNode }), path: noPath, body: nodeCreateBody,
@@ -637,6 +644,38 @@ var opReadCaps = []Capability{
 				return nil, err
 			}
 			return s.readVia(ctx, func(c *gin.Context) { s.probeSavedExit(c, true) }, "POST", p, nil, nil)
+		}},
+	{Name: "host.repair", Title: "宿主修复", Purpose: "按白名单修改一台 VPS 的系统参数或把被污染的系统 DNS 改到公网解析器。执行前备份，执行后按体检同样的方法复测，没有改善就回退，不重启代理内核。只能在管理员确认并且 Laya 复判通过后执行。", Kind: "draft", Risk: "normal", Object: "gate", Sources: []string{"dsh", "analysis"},
+		Params: []Param{
+			{Key: "gate_id", Label: "VPS", Kind: "ref", Ref: "gate", Required: true},
+			{Key: "key", Label: "项目", Kind: "enum", Required: true, Options: [][2]string{{"net.ipv4.tcp_congestion_control", "拥塞控制"}, {"net.core.default_qdisc", "排队规则"}, {"net.core.rmem_max", "接收缓冲"}, {"net.core.wmem_max", "发送缓冲"}, {"dns.resolvers", "系统 DNS"}}},
+			{Key: "value", Label: "目标值", Kind: "string", Required: true, Hint: "拥塞控制用 bbr 或 cubic；排队规则用 fq 或 fq_codel；缓冲用 16777216 或 8388608；系统 DNS 用 public"},
+		},
+		plan: func(ctx context.Context, s *Server, _ *planCtx, st *DraftStep) error {
+			key, _ := st.Args["key"].(string)
+			value, _ := st.Args["value"].(string)
+			if !hostRepairAllowed(key, value) {
+				return fmt.Errorf("不允许修改 %s=%s", key, value)
+			}
+			st.Preview = []string{"写前备份，复测没有改善就回退，不重启代理内核"}
+			st.Checked = []string{key + " → " + value}
+			return nil
+		},
+		exec: func(ctx context.Context, s *Server, x *execCtx, st *DraftStep) (func(context.Context) error, error) {
+			gid := intArg(st.Args, "gate_id")
+			key, _ := st.Args["key"].(string)
+			value, _ := st.Args["value"].(string)
+			prev, err := s.applyHostRepair(ctx, gid, key, value)
+			if err != nil {
+				return nil, err
+			}
+			return func(ctx context.Context) error {
+				if prev == "" {
+					return nil
+				}
+				_, err := s.applyHostRepair(ctx, gid, key, prev)
+				return err
+			}, nil
 		}},
 	{Name: "get_kernel_diagnostics", Title: "内核诊断", Purpose: "读取 VPS 上一个内核的诊断：错误分类计数与最近的日志（来源 IP 已遮盖）。排查连不上、断流时先读。会让 VPS 执行一次读取，记审计。", Kind: "read", Probe: true,
 		Params: []Param{{Key: "gate_id", Label: "VPS", Kind: "ref", Ref: "gate", Required: true}, {Key: "kernel", Label: "内核", Kind: "enum", Required: true, Options: [][2]string{{"xray", "Xray"}, {"sing-box", "sing-box"}}}},

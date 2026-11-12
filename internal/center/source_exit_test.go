@@ -1,6 +1,7 @@
 package center
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -127,9 +128,24 @@ func TestChainStepThreeSourceAndUserRestriction(t *testing.T) {
 	if w := alice.do("POST", "/api/v1/me/chains", body(map[string]any{"kind": "source", "profile_id": int(other["id"].(float64)), "mode": "node", "match": "HK-01"}), nil); w.Code != 422 {
 		t.Fatalf("user must not pick an ungranted group: %d %s", w.Code, w.Body.String())
 	}
-	// 订阅组里的节点名是处理后的名称（默认加地区旗帜），用户在页面上看到、按这个名称选。
+	// 用户按接口展示的处理后名称选择，包含站点默认的源名称前缀和地区旗帜。
+	choices := mustJSON(t, alice, "GET", "/api/v1/me/chain-sources", nil, 200)["items"].([]any)
+	selected := ""
+	for _, choice := range choices {
+		if int(choice.(map[string]any)["id"].(float64)) != int(mine["id"].(float64)) {
+			continue
+		}
+		for _, name := range choice.(map[string]any)["nodes"].([]any) {
+			if strings.HasSuffix(name.(string), "HK-02") {
+				selected = name.(string)
+			}
+		}
+	}
+	if selected == "" || !strings.Contains(selected, "🇭🇰") {
+		t.Fatalf("processed node missing: %v", choices)
+	}
 	_ = s.Store.Ent.Gate.UpdateOneID(int(g.id)).SetLastSeenAt(nowUTC()).Exec(ctx)
-	ch := mustJSON(t, alice, "POST", "/api/v1/me/chains", body(map[string]any{"kind": "source", "profile_id": int(mine["id"].(float64)), "mode": "node", "match": "🇭🇰 HK-02"}), 200)
+	ch := mustJSON(t, alice, "POST", "/api/v1/me/chains", body(map[string]any{"kind": "source", "profile_id": int(mine["id"].(float64)), "mode": "node", "match": selected}), 200)
 	if ch["exit"].(map[string]any)["kind"] != "source" {
 		t.Fatalf("user chain = %v", ch)
 	}

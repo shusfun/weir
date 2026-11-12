@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"crypto/sha256"
+	"debug/elf"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -19,13 +21,36 @@ import (
 	"github.com/shusfun/weir/packages/contracts"
 )
 
-func xrayZip(body string) []byte {
+func xrayZip(body []byte) []byte {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	w, _ := zw.Create("xray")
-	_, _ = w.Write([]byte(body))
+	_, _ = w.Write(body)
 	_ = zw.Close()
 	return buf.Bytes()
+}
+
+// testELF 是能通过架构校验的最小 ELF64，只用于假发布包。
+func testELF(machine elf.Machine) []byte {
+	const eh, ph = 64, 56
+	b := make([]byte, eh+ph)
+	copy(b[:4], []byte{0x7f, 'E', 'L', 'F'})
+	b[4], b[5], b[6] = 2, 1, 1
+	binary.LittleEndian.PutUint16(b[16:], uint16(elf.ET_DYN))
+	binary.LittleEndian.PutUint16(b[18:], uint16(machine))
+	binary.LittleEndian.PutUint32(b[20:], 1)
+	binary.LittleEndian.PutUint64(b[32:], eh)
+	binary.LittleEndian.PutUint16(b[52:], eh)
+	binary.LittleEndian.PutUint16(b[54:], ph)
+	binary.LittleEndian.PutUint16(b[56:], 1)
+	binary.LittleEndian.PutUint32(b[eh:], uint32(elf.PT_LOAD))
+	binary.LittleEndian.PutUint32(b[eh+4:], 5)
+	binary.LittleEndian.PutUint64(b[eh+16:], 0x400000)
+	binary.LittleEndian.PutUint64(b[eh+24:], 0x400000)
+	binary.LittleEndian.PutUint64(b[eh+32:], uint64(len(b)))
+	binary.LittleEndian.PutUint64(b[eh+40:], uint64(len(b)))
+	binary.LittleEndian.PutUint64(b[eh+48:], 0x1000)
+	return b
 }
 
 // fakeReleases 扮演 GitHub：Xray 三个版本（发布时间、下载量各不同），每个版本 amd64 与 arm64 两个下载包。
@@ -40,25 +65,41 @@ func fakeReleases(t *testing.T, s *Server) *int32 {
 	}
 	rels := []rel{{"26.10.17", 3 * 24 * time.Hour, 900}, {"26.3.27", 60 * 24 * time.Hour, 500}, {"25.1.30", 200 * 24 * time.Hour, 800}}
 	var srv *httptest.Server
+	one := func(x rel) map[string]any {
+		var as []map[string]any
+		for _, arch := range []string{"amd64", "arm64"} {
+			name := "Xray-linux-64.zip"
+			machine := elf.EM_X86_64
+			if arch == "arm64" {
+				name = "Xray-linux-arm64-v8a.zip"
+				machine = elf.EM_AARCH64
+			}
+			path := "/dl/" + x.v + "/" + name
+			if _, ok := assets[path]; !ok {
+				assets[path] = xrayZip(testELF(machine))
+			}
+			sum := sha256.Sum256(assets[path])
+			as = append(as, map[string]any{"name": name, "browser_download_url": srv.URL + path, "digest": "sha256:" + hex.EncodeToString(sum[:]), "size": len(assets[path]), "download_count": x.count})
+		}
+		return map[string]any{"tag_name": "v" + x.v, "published_at": time.Now().Add(-x.age).Format(time.RFC3339), "assets": as}
+	}
 	srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/repos/XTLS/Xray-core/releases":
 			var list []map[string]any
 			for _, x := range rels {
-				var as []map[string]any
-				for _, arch := range []string{"amd64", "arm64"} {
-					name := "Xray-linux-64.zip"
-					if arch == "arm64" {
-						name = "Xray-linux-arm64-v8a.zip"
-					}
-					path := "/dl/" + x.v + "/" + name
-					assets[path] = xrayZip("xray-" + x.v + "-" + arch)
-					sum := sha256.Sum256(assets[path])
-					as = append(as, map[string]any{"name": name, "browser_download_url": srv.URL + path, "digest": "sha256:" + hex.EncodeToString(sum[:]), "download_count": x.count})
-				}
-				list = append(list, map[string]any{"tag_name": "v" + x.v, "published_at": time.Now().Add(-x.age).Format(time.RFC3339), "assets": as})
+				list = append(list, one(x))
 			}
 			_ = json.NewEncoder(w).Encode(list)
+		case strings.HasPrefix(r.URL.Path, "/repos/XTLS/Xray-core/releases/tags/"):
+			tag := strings.TrimPrefix(r.URL.Path, "/repos/XTLS/Xray-core/releases/tags/")
+			for _, x := range rels {
+				if "v"+x.v == tag {
+					_ = json.NewEncoder(w).Encode(one(x))
+					return
+				}
+			}
+			http.NotFound(w, r)
 		case strings.HasPrefix(r.URL.Path, "/dl/"):
 			atomic.AddInt32(&downloads, 1)
 			if b, ok := assets[r.URL.Path]; ok {

@@ -6,13 +6,15 @@ import { PageState, ScrollArea, Dialog, DialogContent, DialogTitle, Kbd, Button 
 import { Search, Server, User, CornerDownLeft, type LucideIcon } from "lucide-react";
 import { api } from "../api";
 import { navigation, visibleFor } from "./navigation";
+import { reopenDrafts } from "../components/draft-confirm";
 
 interface Entry {
   id: string;
   group: string;
   label: string;
   hint?: string;
-  to: string;
+  to?: string;
+  run?: () => void;
   icon: LucideIcon;
 }
 
@@ -23,6 +25,7 @@ export function CommandPalette({ open, onOpenChange, admin }: { open: boolean; o
   // 快速跳转只要名称：查询键与列表页分开（列表页缓存的是数组，这里是 { items }，同一个键会互相覆盖、让列表页崩掉）
   const devices = useQuery({ queryKey: ["palette", "gates"], queryFn: async () => (await api("/admin/gates")) as { items: { id: number; name: string }[] }, enabled: open && admin });
   const users = useQuery({ queryKey: ["palette", "users"], queryFn: async () => (await api("/admin/users")) as { items: { id: number; email: string; name: string }[] }, enabled: open && admin });
+  const drafts = useQuery({ queryKey: ["ai-drafts"], queryFn: async () => (await api("/admin/ai/drafts")).drafts as { id: string; explain: string; steps?: { title: string }[] | null }[], enabled: open && admin });
 
   useEffect(() => {
     if (open) {
@@ -33,25 +36,35 @@ export function CommandPalette({ open, onOpenChange, admin }: { open: boolean; o
 
   const entries = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const hit = (text: string) => !q || text.toLowerCase().includes(q);
+    const actionsOnly = q.startsWith(">");
+    const text = actionsOnly ? q.slice(1).trim() : q;
+    const match = (value: string) => !text || value.toLowerCase().includes(text);
     const list: Entry[] = navigation
-      .filter((item) => (admin || visibleFor(item, false)) && hit(item.label))
-      .map((item) => ({ id: "nav:" + item.key, group: "页面", label: item.label, hint: item.group, to: item.path, icon: item.icon }));
-    for (const d of devices.data?.items ?? [])
-      if (hit(d.name || "") || q === String(d.id))
-        list.push({ id: "gate:" + d.id, group: "VPS", label: d.name || "未命名 VPS", hint: "#" + d.id, to: "/gates", icon: Server });
-    for (const u of users.data?.items ?? [])
-      if (q && (hit(u.email) || hit(u.name || "")))
-        list.push({ id: "user:" + u.id, group: "用户", label: u.email, hint: u.name || "#" + u.id, to: "/users", icon: User });
+      .filter((item) => (admin || visibleFor(item, false)) && match(item.label))
+      .map((item) => ({ id: "nav:" + item.key, group: "操作", label: item.label, hint: item.group, to: item.path, icon: item.icon }));
+    if (!actionsOnly) {
+      for (const d of devices.data?.items ?? [])
+        if (match(d.name || "") || text === String(d.id))
+          list.push({ id: "gate:" + d.id, group: "对象", label: d.name || "未命名 VPS", hint: "VPS", to: "/gates/" + d.id, icon: Server });
+      for (const u of users.data?.items ?? [])
+        if (text && (match(u.email) || match(u.name || "")))
+          list.push({ id: "user:" + u.id, group: "对象", label: u.email, hint: u.name || "用户", to: "/users/" + u.id, icon: User });
+      for (const draft of drafts.data ?? [])
+        if (match(draft.explain || draft.id))
+          list.push({ id: "draft:" + draft.id, group: "待处理", label: draft.steps?.[0]?.title || "确认草稿", hint: "运行观测", run: reopenDrafts, icon: Search });
+    }
     return list.slice(0, 40);
-  }, [query, admin, devices.data, users.data]);
+  }, [query, admin, devices.data, users.data, drafts.data]);
 
   useEffect(() => setActive(0), [query]);
 
-  function go(entry: Entry | undefined) {
+  function go(entry: Entry | undefined, newTab = false) {
     if (!entry) return;
     onOpenChange(false);
-    navigate(entry.to);
+    entry.run?.();
+    if (!entry.to) return;
+    if (newTab) window.open(entry.to, "_blank", "noopener");
+    else navigate(entry.to);
   }
 
   let lastGroup = "";
@@ -68,7 +81,7 @@ export function CommandPalette({ open, onOpenChange, admin }: { open: boolean; o
             aria-controls="command-list"
             aria-activedescendant={entries[active] ? "command-" + entries[active].id : undefined}
             aria-label="搜索页面、设备、用户或订阅组"
-            placeholder="搜索页面、设备、用户或订阅组…"
+            placeholder="搜索、跳转或执行操作"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -80,7 +93,7 @@ export function CommandPalette({ open, onOpenChange, admin }: { open: boolean; o
                 setActive((v) => Math.max(0, v - 1));
               } else if (e.key === "Enter") {
                 e.preventDefault();
-                go(entries[active]);
+                go(entries[active], e.metaKey || e.ctrlKey);
               }
             }}
           />
@@ -133,7 +146,9 @@ export function CommandPalette({ open, onOpenChange, admin }: { open: boolean; o
         )}
         <div className="command-foot">
           <span><Kbd>↑</Kbd><Kbd>↓</Kbd> 选择</span>
-          <span><Kbd><CornerDownLeft size={11} /></Kbd> 打开</span>
+          <span><Kbd><CornerDownLeft size={11} /></Kbd> 执行</span>
+          <span>Ctrl 回车在新标签打开</span>
+          <span>输入 &gt; 只搜操作</span>
         </div>
       </DialogContent>
     </Dialog>

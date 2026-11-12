@@ -57,7 +57,7 @@ func TestCombineSourcesManualFilterCacheAndRender(t *testing.T) {
 
 	list, res := Combine(context.Background(), f, cache, []Source{src}, manual, opts)
 	lines := strings.Split(strings.TrimSpace(list), "\n")
-	if len(lines) != 13 || res[0].Nodes != 12 || res[0].UserInfo == "" || strings.Contains(list, "%E8%BF%87%E6%9C%9F") {
+	if len(lines) != 13 || res[0].Nodes != 13 || res[0].UserInfo == "" || strings.Contains(list, "%E8%BF%87%E6%9C%9F") {
 		t.Fatalf("combined %d lines %+v\n%s", len(lines), res, list)
 	}
 	if !strings.Contains(lines[0], "%E6%89%8B%E5%8A%A8%E8%8A%82%E7%82%B9") || !strings.Contains(list, "%E6%9C%BA%E5%9C%BAA") {

@@ -1,5 +1,5 @@
-// 覆盖式滚动条：底层仍是原生滚动（触控板惯性、键盘翻页、读屏、scrollIntoView 照常），
-// 隐藏系统滚动条，改画一条浮在内容上的细条，不占布局宽度，出现滚动条时内容不左右跳。
+// 自定义滚动条：底层仍是原生滚动（触控板惯性、键盘翻页、读屏、scrollIntoView 照常），
+// overlay 模式不占布局宽度；stable 模式始终预留轨道与焦点环余量，适用于表单弹窗。两者显隐均不改变内容宽度。
 // 只在滚动中、或鼠标停在滚动条上时显示；停止滚动后 Base UI 约 500 ms 取消 data-scrolling，
 // 再经 CSS 过渡延迟淡出（合计约 600 ms），样式见 styles/controls.css 的 .weir-scroll-*。
 //
@@ -17,6 +17,7 @@ type ScrollAreaProps = Omit<ComponentProps<"div">, "children" | "content"> & {
   children?: ReactNode;
   // 允许滚动的方向；另一方向裁掉，不出现滚动条
   orientation?: Orientation;
+  gutter?: "overlay" | "stable";
   viewportClassName?: string;
   viewportRef?: Ref<HTMLDivElement>;
   // 视口上的其他属性（aria-label、role、onScroll 等）
@@ -38,6 +39,7 @@ function ScrollArea({
   className,
   children,
   orientation = "vertical",
+  gutter = "overlay",
   viewportClassName,
   viewportRef,
   viewportProps,
@@ -48,7 +50,7 @@ function ScrollArea({
 }: ScrollAreaProps) {
   const { style: viewportStyle, ...restViewport } = viewportProps ?? {};
   return (
-    <ScrollAreaPrimitive.Root data-slot="scroll-area" data-orientation={orientation} className={cn("weir-scroll-root", className)} {...props}>
+    <ScrollAreaPrimitive.Root data-slot="scroll-area" data-orientation={orientation} data-gutter={gutter} className={cn("weir-scroll-root", className)} {...props}>
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
         ref={viewportRef}

@@ -1,7 +1,7 @@
-/* 外壳：左侧导航栏 + 顶栏 + 主区。导航栏是一整块面板（iPad 侧边栏），未选中项只有图标和文字，当前项是浅蓝底。 */
+/* 外壳（设计稿 .v-side / .v-top / .v-main）：导航栏与页面同底、不画面板；只有文字，当前项是墨色胶囊；顶栏透明，搜索框浮在页面上。 */
 .shell {
   display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
+  grid-template-columns: 221px minmax(0, 1fr);
   min-height: 100dvh;
 }
 .shell[data-collapsed="true"] {
@@ -13,18 +13,16 @@
   height: 100dvh;
   display: flex;
   flex-direction: column;
-  gap: var(--weir-space-1);
-  padding: var(--weir-space-4) var(--weir-space-3) var(--weir-space-3);
-  /* 不透明面板底：半透明填充叠在灰底上，次要文字对比度不到 4.5 */
-  background: var(--weir-panel);
-  border-right: 1px solid var(--weir-line-soft);
+  gap: 0;
+  padding: var(--weir-gap-17) var(--weir-gap-13);
+  background: var(--weir-base);
   z-index: 20;
 }
 .rail-brand {
   display: flex;
   align-items: center;
-  gap: var(--weir-space-3);
-  padding: var(--weir-space-1) var(--weir-space-2) var(--weir-space-4);
+  gap: var(--weir-gap-9);
+  padding: var(--weir-gap-3) var(--weir-gap-9) var(--weir-gap-17);
   border-radius: var(--weir-radius);
   text-decoration: none;
   color: var(--weir-ink);
@@ -32,16 +30,16 @@
 .rail-mark {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 27px;
+  height: 27px;
   overflow: hidden;
-  border-radius: var(--weir-radius);
+  border-radius: var(--weir-radius-9);
 }
 .rail-brand strong {
   display: block;
-  font-size: var(--weir-text-heading);
-  line-height: var(--weir-leading-heading);
-  font-weight: var(--weir-weight-semibold);
+  font-size: var(--weir-text-subheadline);
+  line-height: var(--weir-leading-subheadline);
+  font-weight: var(--weir-weight-bold);
   letter-spacing: -0.02em;
 }
 /* 导航滚动区（ScrollArea）：根占满剩余高度，视口里留出焦点环的空间，避免被滚动容器裁切 */
@@ -54,20 +52,22 @@
 }
 .rail-group {
   display: grid;
-  gap: var(--weir-space-1);
-  margin-bottom: var(--weir-space-4);
+  gap: 0;
 }
 .rail-group-label {
-  padding: var(--weir-space-2) var(--weir-space-3) var(--weir-space-1);
+  padding: var(--weir-gap-17) var(--weir-gap-13) var(--weir-gap-5);
+  font-size: var(--weir-text-caption2);
+  line-height: var(--weir-leading-caption2);
+  color: var(--weir-ink-3);
 }
 .rail-item {
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--weir-space-3);
-  /* 桌面 36，触屏（含窄屏导航抽屉）44 */
-  min-height: 36px;
-  padding: 0 var(--weir-space-3);
+  gap: var(--weir-gap-9);
+  /* 桌面 33（稿子 .v-nav），触屏（含窄屏导航抽屉）45 */
+  min-height: var(--weir-tap);
+  padding: 0 var(--weir-gap-13);
   border-radius: var(--weir-radius);
   color: var(--weir-ink-2);
   font-size: var(--weir-text-body);
@@ -86,28 +86,33 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 展开时只有文字（稿子没有图标）；收起后才用图标 */
 .rail-item svg {
+  display: none;
   width: 17px;
   height: 17px;
   color: var(--weir-ink-3);
 }
+.shell[data-collapsed="true"] .rail-item svg {
+  display: block;
+}
 .rail-item:hover {
   color: var(--weir-ink);
 }
-/* 当前项：浅蓝底（深色下是深蓝底，不发灰） */
+/* 当前项：墨色胶囊加投影（稿子 .v-nav.on） */
 .rail-item.active {
-  background: var(--weir-accent-soft);
-  color: var(--weir-accent-soft-ink);
+  background: var(--weir-pill);
+  color: var(--weir-pill-ink);
   font-weight: var(--weir-weight-semibold);
+  box-shadow: var(--weir-shadow-pill);
 }
 .rail-item.active svg {
-  color: var(--weir-accent-soft-ink);
+  color: var(--weir-pill-ink);
 }
 .rail-foot {
   display: grid;
   gap: var(--weir-space-2);
-  padding-top: var(--weir-space-3);
-  border-top: 1px solid var(--weir-line-soft);
+  padding-top: var(--weir-gap-13);
 }
 /* 左下角个人中心：点开向上弹出菜单 */
 .rail-account {
@@ -188,16 +193,40 @@
   z-index: 15;
   display: flex;
   align-items: center;
-  gap: var(--weir-space-3);
-  min-height: 56px;
-  padding: 0 var(--weir-space-6);
-  background: color-mix(in srgb, var(--weir-base) 94%, var(--weir-panel));
-  border-bottom: 1px solid var(--weir-line);
-  box-shadow: 0 1px 0 var(--weir-highlight);
+  gap: var(--weir-gap-13);
+  min-height: 71px;
+  padding: var(--weir-gap-17) var(--weir-gap-41) var(--weir-gap-17) var(--weir-gap-21);
+  /* 透明顶栏：滚动时下面的内容从搜索框后面经过，只加一层与底色一致的渐隐 */
+  background: linear-gradient(var(--weir-base) 61%, transparent);
 }
 .topbar-title {
   min-width: 0;
-  flex: 1;
+}
+.topbar-tools {
+  margin-left: auto;
+}
+/* 搜索框（稿子 .v-cmd）：卡片底、细描边、卡片投影 */
+.command-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--weir-gap-9);
+  min-width: 261px;
+  height: 35px;
+  padding: 0 var(--weir-gap-13);
+  border-radius: var(--weir-radius);
+  background: var(--weir-panel);
+  border: 1px solid var(--weir-line-soft);
+  box-shadow: var(--weir-shadow-card);
+  color: var(--weir-ink-3);
+  font-size: var(--weir-text-body);
+  cursor: pointer;
+}
+.command-trigger svg {
+  width: 15px;
+  height: 15px;
+}
+@media (pointer: coarse), (max-width: 767.98px) {
+  .command-trigger { min-width: var(--weir-tap-touch); height: var(--weir-tap-touch); flex: 1 1 auto; justify-content: center; }
 }
 .topbar-title > span {
   /* 顶栏标题：iOS 导航栏标题（headline）。桌面端页面标题在 PageHeader，这里只在窄屏显示 */
@@ -222,20 +251,19 @@
   display: grid;
   gap: var(--weir-space-2);
   width: 100%;
-  max-width: 1480px;
-  margin: 0 auto;
-  padding: var(--weir-space-4) var(--weir-space-6) 0;
+  margin: 0;
+  padding: var(--weir-gap-17) var(--weir-gap-41) 0 var(--weir-gap-21);
 }
 @media (max-width: 900px) {
   .origin-banner {
     padding: var(--weir-space-3) var(--weir-space-4) 0;
   }
 }
+/* 主区铺满侧栏右边的全部宽度；需要控制行长的文字（导语等）各自限宽 */
 .shell-main {
   width: 100%;
-  max-width: 1480px;
-  margin: 0 auto;
-  padding: var(--weir-space-6) var(--weir-space-6) 40px;
+  margin: 0;
+  padding: var(--weir-gap-25) var(--weir-gap-41) var(--weir-gap-41) var(--weir-gap-21);
   flex: 1;
   min-width: 0;
   position: relative;
@@ -277,6 +305,48 @@
   from { opacity: 0; transform: translateY(6px); }
 }
 /* 切换超过 300 ms 才出现的提示：浮在内容区顶部，不占位 */
+/* 全局读取状态（components/query-status.tsx）：浮在右下角 dsh 按钮上方，不占布局，也不盖住页头的操作按钮 */
+.query-status {
+  position: fixed;
+  bottom: calc(var(--weir-gap-25) + var(--weir-tap-touch) + var(--weir-gap-13) + env(safe-area-inset-bottom));
+  right: var(--weir-gap-25);
+  z-index: 58;
+  display: flex;
+  align-items: center;
+  gap: var(--weir-gap-9);
+  width: min(421px, calc(100vw - 2 * var(--weir-gap-17)));
+  padding: var(--weir-gap-9) var(--weir-gap-9) var(--weir-gap-9) var(--weir-gap-13);
+  border: 1px solid var(--weir-line-soft);
+  border-radius: var(--weir-radius);
+  background: var(--weir-raised);
+  box-shadow: var(--weir-highlight), var(--weir-shadow-float);
+  color: var(--weir-ink-2);
+  font-size: var(--weir-text-meta);
+  line-height: var(--weir-leading-meta);
+  corner-shape: squircle;
+  animation: query-status-in var(--weir-mid) var(--weir-decel) both;
+}
+.query-status p {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.query-status-lamp {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: var(--weir-warn);
+}
+.query-status[data-tone="bad"] .query-status-lamp { background: var(--weir-bad); }
+@keyframes query-status-in {
+  from { opacity: 0; translate: 0 5px; }
+}
+[data-motion="lite"] .query-status { animation: none; }
+@media (max-width: 900px) {
+  .query-status { right: var(--weir-gap-17); bottom: calc(var(--weir-gap-17) + var(--weir-tap-touch) + var(--weir-gap-9) + env(safe-area-inset-bottom)); }
+}
 .page-switch-hint {
   position: absolute;
   top: 6px;
@@ -326,7 +396,7 @@
   .shell-main [data-slot="page-header"] {
     min-height: 0;
   }
-  .shell-main [data-slot="page-title"] {
+  .shell-main [data-slot="page-header"] [data-slot="page-title"] {
     position: absolute;
     width: 1px;
     height: 1px;

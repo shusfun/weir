@@ -26,6 +26,10 @@ func (s *Server) recordTraffic(ctx context.Context, scope sample.Scope, id int, 
 // recordHost 记下 VPS 这一分钟的主机观测；读取失败的字段保持为空（未知）。
 func (s *Server) recordHost(ctx context.Context, gid int, h *contracts.HostSample, now time.Time) {
 	s.tasks.note("resource-samples", s.recordResourceHost(ctx, sample.ScopeGate, gid, h, now))
+	// 体检里只有 DNS 污染有对应的白名单修复，其余项只展示。
+	if h != nil && h.Health != nil && h.Health.DNS != nil && *h.Health.DNS == "polluted" {
+		s.triggerOps(ctx, gid, "host.health", "体检发现系统 DNS 被污染")
+	}
 }
 
 func (s *Server) recordResourceHost(ctx context.Context, scope sample.Scope, id int, h *contracts.HostSample, now time.Time) error {

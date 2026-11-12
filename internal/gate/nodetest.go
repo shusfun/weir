@@ -137,13 +137,16 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 	if err != nil {
 		return nil, err
 	}
-	if b, err := exec.CommandContext(ctx, bin(kernel), test...).CombinedOutput(); err != nil {
+	check := exec.CommandContext(ctx, bin(kernel), test...)
+	check.Env = kernelEnv(kernel)
+	if b, err := check.CombinedOutput(); err != nil {
 		return map[string]any{"stage": "check", "log": maskIPs(lastLines(string(b), 20))}, errors.New("内核自检未通过")
 	}
 	runCtx, cancel := context.WithTimeout(ctx, 40*time.Second)
 	defer cancel()
 	serverLog, clientLog := &tailBuffer{}, &tailBuffer{}
 	sp := exec.CommandContext(runCtx, bin(kernel), run...)
+	sp.Env = kernelEnv(kernel)
 	sp.Stdout, sp.Stderr = serverLog, serverLog
 	if err = sp.Start(); err != nil {
 		return nil, err

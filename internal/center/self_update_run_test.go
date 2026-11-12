@@ -203,6 +203,20 @@ func TestRelayProgressBothStages(t *testing.T) {
 	if code, body := g.call("POST", path+"/progress", map[string]any{"done": 500, "total": 1000, "source": "gh-proxy.com"}); code != 200 {
 		t.Fatalf("progress = %d %s", code, body)
 	}
+	// 持久中转按周期读取进度；上传阶段开始前先等下载阶段被消费者观察到。
+	var got []string
+	observed := false
+	deadline := time.NewTimer(5 * time.Second)
+	defer deadline.Stop()
+	for !observed {
+		select {
+		case event := <-events:
+			got = append(got, event)
+			observed = event == "p:500/1000"
+		case <-deadline.C:
+			t.Fatal("download progress was not observed")
+		}
+	}
 	if code, body := g.rawCall("PUT", path+"?offset=0", content); code != 200 {
 		t.Fatalf("chunk = %d %s", code, body)
 	}
@@ -214,12 +228,11 @@ func TestRelayProgressBothStages(t *testing.T) {
 		t.Fatal(err)
 	}
 	close(events)
-	var got []string
 	for e := range events {
 		got = append(got, e)
 	}
 	all := strings.Join(got, "|")
-	for _, want := range []string{"下载中（gh-proxy.com）", "p:500/1000", "传回中心", "p:1000/1000"} {
+	for _, want := range []string{"VPS 下载中", "p:500/1000", "传回中心", "p:1000/1000"} {
 		if !strings.Contains(all, want) {
 			t.Fatalf("missing %q in %s", want, all)
 		}

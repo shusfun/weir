@@ -36,12 +36,13 @@ export const useQuery: typeof useRawQuery = ((options:any, client?:QueryClient)=
   const interval=options.refetchInterval;
   const result=useRawQuery({...options,refetchInterval:(q:Query)=>isTransient(q.state.error)?5000:typeof interval==="function"?interval(q):interval},client);
   useSyncExternalStore(subscribe,snapshot,snapshot);
-  if(!result.error)return result;
   const q=(client??queryClient).getQueryCache().find({queryKey:options.queryKey,exact:true});
   const failure=q?failures.get(q.queryHash):undefined;
-  if(result.data!==undefined || !visibleError(result.error,failure?.since??Date.now()))
+  const error=result.error??failure?.error;
+  if(!error)return result;
+  if(result.data!==undefined || !visibleError(error,failure?.since??Date.now()))
     return {...result,error:null,isError:false,isLoadingError:false,isRefetchError:false,isPending:result.data===undefined,isLoading:result.data===undefined,status:result.data===undefined?"pending":"success"};
-  return result;
+  return {...result,error,isError:true,isLoadingError:true,isRefetchError:false,isPending:false,isLoading:false,status:"error"};
 }) as typeof useRawQuery;
 
 export function visibleBackgroundFailures(failures:ReturnType<typeof useQueryFailures>) {

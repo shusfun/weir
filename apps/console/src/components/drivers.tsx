@@ -154,14 +154,14 @@ function DriverDialog({ name, close, changed }: { name: string; close: () => voi
           {q.data ? <>{q.data.driver.kernel} {q.data.driver.min_version} – {q.data.driver.max_version || "最新"}；{(q.data.usage.versions ?? []).length > 0 ? <>已下载版本 {q.data.usage.versions!.map((v, i) => <span key={v}>{i > 0 && "、"}<ObjectLink to={{ type: "kernel", key: `${q.data!.driver.kernel}@${v}`, name: v }} /></span>)}</> : "没有已下载的版本"}{(q.data.usage.gate_refs ?? []).length > 0 && <>；在用：{q.data.usage.gate_refs!.map((g, i) => <span key={g.id}>{i > 0 && "、"}<ObjectLink to={{ type: "gate", id: g.id, name: g.name }} /></span>)}</>}。</> : "正在读取…"}
         </DialogDescription>
         {q.isPending || q.error || !q.data ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : (
-          <ScrollArea className="max-h-[70vh]" viewportClassName="weir-focus-gutter" contentClassName="stack">
+          <div className="stack">
             {q.data.resolve_error && <Notice tone="bad">无法展开：{q.data.resolve_error}</Notice>}
             <Form onSubmit={() => void save()}>
               <Field label="原文（YAML）" hint="只写与继承的驱动不同的部分；在 {…} 里写可省略的键要加引号，如 &quot;host?&quot;:。">
                 <Textarea className="min-h-[18rem] font-mono text-meta" spellCheck={false} value={value} onChange={(e) => { setText(e.target.value); setCheck(null); }} />
               </Field>
               <Field label="说明" hint="这次改了什么、依据哪段更新说明（记在历史里）。"><Input value={note} onChange={(e) => setNote(e.target.value)} /></Field>
-              <div className="actions">
+              <DialogFooter status={<WaitText wait={waitFor("check") || waitFor("save")} />}>
                 <Button type="button" variant="outline" disabled={isBusy()} onClick={() => void run("check", async () => { const c = (await api("/admin/drivers/check", "POST", { name, text: value, live: true })).check as DriverCheck; setCheck(c); return c; }, (c) => (c as DriverCheck).state === "passed" ? "检查通过" : "", { wait: { label: `正在用真实内核检查驱动 ${name}`, max: 20 } })} busy={isBusy("check")} busyText="正在检查…">只检查</Button>
                 <Button type="submit" disabled={!dirty || isBusy()} busy={isBusy("save")} busyText="正在检查并保存…">检查并保存</Button>
                 {q.data.driver.disabled ? (
@@ -170,8 +170,8 @@ function DriverDialog({ name, close, changed }: { name: string; close: () => voi
                   <Button type="button" variant="ghost" disabled={isBusy()} busy={isBusy("toggle")} busyText="正在停用…" onClick={async () => (await confirm({ title: `停用驱动 ${name}？`, description: "停用后这个版本区间没有可用驱动的内核版本不能设为默认，也不能给 VPS 用。", confirmText: "停用", tone: "danger" })) && void run("toggle", () => api(`/admin/drivers/${encodeURIComponent(name)}/disable`, "POST"), "已停用")}>停用</Button>
                 )}
                 {q.data.driver.source === "modified" && <Button type="button" variant="ghost" disabled={isBusy()} busy={isBusy("restore")} busyText="正在恢复…" onClick={async () => (await confirm({ title: `把 ${name} 恢复为内置版本？`, description: "改动会保留在历史里，可以再退回。", confirmText: "恢复内置" })) && void run("restore", () => api(`/admin/drivers/${encodeURIComponent(name)}/restore`, "POST"), "已恢复内置")}><RotateCcw />恢复内置</Button>}
-                <ActionsWait wait={waitFor("check") || waitFor("save")} />
-              </div>
+
+              </DialogFooter>
               {check && <CheckView c={check} />}
             </Form>
             <Collapsible title="展开 extends 后的全文">
@@ -186,7 +186,7 @@ function DriverDialog({ name, close, changed }: { name: string; close: () => voi
                 </div>
               </Collapsible>
             ))}
-          </ScrollArea>
+          </div>
         )}
       </DialogContent>
     </Dialog>

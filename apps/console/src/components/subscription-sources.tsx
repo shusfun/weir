@@ -1,7 +1,8 @@
 // 订阅源：机场订阅地址。中心拉取时只连公网地址；保护性缓存在上游失败或节点骤减时保留上次结果。
 import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "../lib/query";
-import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Meter, Notice, SectionHeader, SkeletonTable, SwitchField, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, useToast, useConfirm } from "@weir/ui";
+import { Badge, Button, Card, CardContent, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Meter, Notice, PageState, Readout, SectionHeader, SkeletonTable, SwitchField, TrafficUsage, trafficReading, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, useToast, useConfirm } from "@weir/ui";
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -49,52 +50,98 @@ export function SourcesPanel() {
         <State empty="还没有订阅源" detail="想把机场订阅合并进来时才需要。填上订阅地址后，可在订阅组里处理并分给用户。" />
       ) : (
         <>
-          {q.data.traffic.sources > 0 && (
+          {(
             <div className="stack">
-              <small>上游流量合计（{q.data.traffic.sources} 个源报告）：{bytes(q.data.traffic.used)} / {bytes(q.data.traffic.total)}</small>
-              <Meter label="上游流量合计" value={q.data.traffic.used} max={q.data.traffic.total} />
+              <small>上游流量合计 · {q.data.traffic.sources} / {q.data.items.filter((s) => s.enabled && !s.exclude_traffic).length} 个来源报告完整流量；失败来源保留上次成功值</small>
+              <TrafficUsage used={q.data.traffic.sources ? q.data.traffic.used : null} quota={q.data.traffic.sources ? q.data.traffic.total : null} />
             </div>
           )}
-          <div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>名称</TableHead>
-                  <TableHead>节点</TableHead>
-                  <TableHead>用量</TableHead>
-                  <TableHead>最近拉取</TableHead>
-                  <TableHead><span className="sr-only">操作</span></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {q.data.items.map((s) => {
-                  const ui = s.user_info;
-                  return (
-                    <TableRow key={s.id} {...dataObject({ type: "source", id: s.id })}>
-                      <TableCell>
-                        <strong>{s.name || s.title || "未命名"}</strong> {!s.enabled && <Badge variant="soft" tone="warn">停用</Badge>}
-                        <small className="block max-w-72 truncate text-[var(--weir-ink-3)]" title={s.url}>{waitFor("refresh:" + s.id) ? <WaitText wait={waitFor("refresh:" + s.id)} /> : s.url}</small>
-                        {s.last_error && <small className="block text-[var(--weir-bad-ink)]">{s.last_error}</small>}
-                      </TableCell>
-                      <TableCell>{s.fetched_at ? s.node_count : "未知"}</TableCell>
-                      <TableCell className="whitespace-nowrap">{ui?.total ? `${bytes((ui.upload ?? 0) + (ui.download ?? 0))} / ${bytes(ui.total)}` : "未知"}{ui?.expire ? <small className="block">到期 {date(ui.expire)}</small> : null}</TableCell>
-                      <TableCell className="whitespace-nowrap">{date(s.fetched_at ?? undefined)}</TableCell>
-                      <TableCell>
-                        <span className="flex flex-nowrap gap-1.5">
-                          <Button size="sm" variant="outline" disabled={isBusy()} busy={isBusy("refresh:" + s.id)} busyText="正在刷新…" onClick={() => void refresh(s)}><RefreshCw />刷新</Button>
-                          <Button size="sm" variant="outline" onClick={() => setEdit(s)}>编辑</Button>
-                          <Button size="icon-sm" variant="destructive" aria-label={"删除 " + (s.name || s.url)} disabled={isBusy()} busy={isBusy("del:" + s.id)} busyText="正在删除" onClick={() => void remove(s)}><Trash2 /></Button>
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {[...q.data.items].sort((a, b) => Number(!!b.last_error) - Number(!!a.last_error)).map((s) => {
+              const ui = s.user_info;
+              const used = ui?.upload != null && ui.download != null ? ui.upload + ui.download : null;
+              return (
+                <Card key={s.id} className={s.last_error ? "border-[var(--weir-bad)]" : undefined} {...dataObject({ type: "source", id: s.id })}>
+                  <CardContent className="stack">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <strong>{s.name || s.title || "未命名"}</strong>
+                        <small className="block truncate text-[var(--weir-ink-3)]" title={s.url}>{s.url || "未知"}</small>
+                      </div>
+                      {s.last_error ? <Badge variant="status" tone="bad">刷新失败</Badge> : !s.enabled ? <Badge variant="soft" tone="warn">停用</Badge> : null}
+                    </div>
+                    <TrafficUsage used={used} quota={ui?.total} />
+                    <small className="text-[var(--weir-ink-3)]">上次成功更新：{s.fetched_at ? date(s.fetched_at) : "未知"}{s.last_error && s.user_info ? " · 当前为上次成功值" : ""}</small>
+                    <small className="text-[var(--weir-ink-3)]">{s.fetched_at ? `${s.node_count} 个节点` : "节点数未知"}{ui?.expire ? ` · ${date(ui.expire)} 到期` : ""}</small>
+                    {s.last_error && <small className="text-[var(--weir-bad-ink)]">{s.last_error}</small>}
+                    {waitFor("refresh:" + s.id) && <WaitText wait={waitFor("refresh:" + s.id)} />}
+                    <div className="flex flex-wrap gap-1.5">
+                      <Button size="sm" disabled={isBusy()} busy={isBusy("refresh:" + s.id)} busyText="正在刷新…" onClick={() => void refresh(s)}>重新刷新</Button>
+                      <Button size="sm" variant="outline" onClick={() => setEdit(s)}>编辑</Button>
+                      <Button size="sm" variant="destructive" aria-label={"删除 " + (s.name || s.url)} disabled={isBusy()} busy={isBusy("del:" + s.id)} busyText="正在删除" onClick={() => void remove(s)}><Trash2 /></Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </>
       )}
       {edit && <SourceForm value={edit} close={() => setEdit(null)} saved={() => { setEdit(null); toast("已保存", { tone: "ok" }); void q.refetch(); }} />}
+      <Dialog open={!!nodes} onOpenChange={(o) => !o && setNodes(null)}>
+        <DialogContent size="lg">
+          <DialogTitle>{nodes?.name} · {nodes?.list.length ?? 0} 个节点</DialogTitle>
+          <DialogDescription>{nodes?.error ? `本次拉取：${nodes.error}（已按保护性缓存处理）` : "本次拉取并处理后的节点。"}</DialogDescription>
+          <CodeBlock className="block max-h-96 overflow-auto whitespace-pre text-meta">{nodes?.list.join("\n") || "（空）"}</CodeBlock>
+        </DialogContent>
+      </Dialog>
+    </section>
+  );
+}
+
+export function SourceDetail({ id }: { id: string }) {
+  const navigate = useNavigate();
+  const confirm = useConfirm();
+  const toast = useToast();
+  const q = useSources();
+  const [edit, setEdit] = useState(false);
+  const [nodes, setNodes] = useState<{ name: string; list: string[]; error: string } | null>(null);
+  const { run, isBusy, waitFor } = useRowAction<string>({ refetch: q.refetch });
+  const item = q.data?.items.find((s) => String(s.id) === id);
+  if (q.isPending) return <State loading />;
+  if (q.error) return <State error={q.error} onRetry={() => void q.refetch()} />;
+  if (!item) return <PageState kind="empty" title="没有这个订阅源" detail="它可能已被删除，或你没有权限查看。" action={<Link to="/subscriptions?tab=sources">返回订阅源</Link>} />;
+  const source = item;
+  const ui = source.user_info;
+  const used = ui?.upload != null && ui.download != null ? ui.upload + ui.download : null;
+  const refresh = () => run("refresh:" + source.id, async () => {
+    const r = await api(`/admin/subscriptions/sources/${source.id}/refresh`, "POST", {});
+    setNodes({ name: source.name || source.url, list: r.nodes, error: r.result?.error ?? "" });
+  }, undefined, { wait: { label: "正在拉取订阅源" } });
+  async function remove() {
+    if (!(await confirm({ title: `删除订阅源「${source.name || source.url}」？`, description: "订阅组中的引用会一并移除。", confirmText: "删除", tone: "danger" }))) return;
+    await run("del:" + source.id, () => api("/admin/subscriptions/sources/" + source.id, "DELETE"), "订阅源已删除");
+    navigate("/subscriptions?tab=sources");
+  }
+  return (
+    <section className="stack">
+      <div className="flex flex-wrap gap-1.5">
+        <Button size="sm" variant="outline" disabled={isBusy()} busy={isBusy("refresh:" + source.id)} busyText="正在刷新…" onClick={() => void refresh()}><RefreshCw />刷新</Button>
+        <Button size="sm" variant="outline" onClick={() => setEdit(true)}>编辑</Button>
+        <Button size="sm" variant="destructive" disabled={isBusy()} busy={isBusy("del:" + source.id)} busyText="正在删除" onClick={() => void remove()}><Trash2 />删除</Button>
+      </div>
+      {waitFor("refresh:" + source.id) && <WaitText wait={waitFor("refresh:" + source.id)} />}
+      {source.last_error ? <Notice tone="bad">{source.last_error}</Notice> : null}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Readout label="状态" value={source.enabled ? "启用" : "已停用"} />
+        <Readout label="节点" value={source.fetched_at ? source.node_count : null} />
+        <Readout label="用量" value={trafficReading({ used, quota: ui?.total }).text} caption={ui?.expire ? `到期 ${date(ui.expire)}` : "到期未知"} />
+        <Readout label="上次成功更新" value={source.fetched_at ? date(source.fetched_at) : null} />
+        <Readout label="订阅地址" value={source.url || null} />
+        <Readout label="机场网站" value={source.website || null} />
+      </div>
+      <p className="text-body text-[var(--weir-ink-2)]">{source.remark || "没有备注"}</p>
+      {edit && <SourceForm value={source} close={() => setEdit(false)} saved={() => { setEdit(false); toast("已保存", { tone: "ok" }); void q.refetch(); }} />}
       <Dialog open={!!nodes} onOpenChange={(o) => !o && setNodes(null)}>
         <DialogContent size="lg">
           <DialogTitle>{nodes?.name} · {nodes?.list.length ?? 0} 个节点</DialogTitle>

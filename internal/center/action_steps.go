@@ -143,13 +143,16 @@ func (x *execCtx) resolve(v any) any {
 // planBody 把套餐参数换成处理函数的请求字段：GB → 字节，天数 → 到期时间。
 func (x *execCtx) planBody(args map[string]any) map[string]any {
 	body := map[string]any{}
-	for _, k := range []string{"name", "monthly_reset", "all_nodes", "allow_chain", "enabled"} {
+	for _, k := range []string{"name", "unlimited", "monthly_reset", "all_nodes", "allow_chain", "enabled"} {
 		if v, ok := args[k]; ok {
 			body[k] = v
 		}
 	}
 	if v, ok := args["quota_gb"].(float64); ok {
 		body["quota"] = int64(v * (1 << 30))
+		if _, explicit := body["unlimited"]; !explicit {
+			body["unlimited"] = false
+		}
 	}
 	if v, ok := args["expires_days"].(float64); ok {
 		if v > 0 {
@@ -211,7 +214,7 @@ func userBefore(u *entUser) map[string]any {
 	for _, id := range u.NodeIds {
 		ids = append(ids, float64(id))
 	}
-	return map[string]any{"name": u.Name, "quota_gb": float64(u.Quota) / (1 << 30), "expires_days": days, "monthly_reset": u.MonthlyReset,
+	return map[string]any{"name": u.Name, "quota_gb": float64(u.Quota) / (1 << 30), "unlimited": u.Unlimited, "expires_days": days, "monthly_reset": u.MonthlyReset,
 		"all_nodes": u.AllNodes, "node_ids": ids, "allow_chain": u.AllowChain, "enabled": u.Enabled}
 }
 
@@ -260,7 +263,7 @@ func execUserUpdate(ctx context.Context, s *Server, x *execCtx, st *DraftStep) (
 		return nil, handlerError(code, out)
 	}
 	// 撤回：把本步改过的字段恢复成改前的值（到期时间按原值恢复，不按天数换算）。
-	prev := map[string]any{"name": u.Name, "quota": u.Quota, "expires_at": u.ExpiresAt, "monthly_reset": u.MonthlyReset,
+	prev := map[string]any{"name": u.Name, "quota": u.Quota, "unlimited": u.Unlimited, "expires_at": u.ExpiresAt, "monthly_reset": u.MonthlyReset,
 		"all_nodes": u.AllNodes, "node_ids": u.NodeIds, "allow_chain": u.AllowChain, "enabled": u.Enabled}
 	return func(context.Context) error {
 		if code, out := invoke(x, s.updateUser, "PATCH", params, prev); code >= 300 {

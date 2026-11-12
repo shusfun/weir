@@ -14,14 +14,14 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/shusfun/weir/internal/kernels"
+	"github.com/shusfun/weir/internal/publicnet"
+	"github.com/shusfun/weir/internal/store/ent/resource"
 	"github.com/shusfun/weir/internal/store/ent/setting"
 )
 
 // githubHTTP 访问 GitHub 与镜像：不设整体时限（大文件下载由 fetch 的无数据超时控制），只限制等响应头的时间。
 func githubHTTP() *http.Client {
-	tr := http.DefaultTransport.(*http.Transport).Clone()
-	tr.ResponseHeaderTimeout = 30 * time.Second
-	return &http.Client{Transport: tr}
+	return publicnet.Client(0)
 }
 
 // fetcher 是列版本、读缓存用的 Fetcher（只访问 GitHub API）；下载用 kernelFetcher（按「GitHub 加速」的来源顺序）。
@@ -29,7 +29,7 @@ func (s *Server) fetcher() kernels.Fetcher {
 	if g := s.GitHub; g != nil {
 		return kernels.Fetcher{HTTP: g.HTTP, API: g.API, DownloadHost: g.Host, Cache: s.kernelCache()}
 	}
-	return kernels.Fetcher{HTTP: githubHTTP(), Cache: s.kernelCache()}
+	return kernels.Fetcher{Query: s.queryReleases, HTTP: githubHTTP(), Cache: s.kernelCache()}
 }
 
 func validKernel(name string) bool {
@@ -125,21 +125,23 @@ func (s *Server) listKernels(c *gin.Context) {
 	for _, name := range kernels.Names {
 		arches := s.kernelArches(ctx, name)
 		cache := s.kernelCache()
-		versions := map[string]bool{}
-		for _, arch := range []string{"amd64", "arm64"} {
-			for _, v := range cache.Versions(name, arch) {
-				versions[v] = true
-			}
+		versions, err := s.kernelVersions(ctx, name)
+		if err != nil {
+			failInternal(c, 503, "kernel_catalog_unavailable", err)
+			return
 		}
 		list := make([]gin.H, 0, len(versions))
-		for v := range versions {
+		for _, v := range versions {
 			have := gin.H{}
+			binaries := gin.H{}
 			for _, arch := range arches {
 				_, _, err := cache.Get(name, v, arch)
-				have[arch] = err == nil
+				binaries[arch] = err == nil
+				have[arch] = s.kernelPrepared(ctx, name, v, arch) == nil
 			}
 			pinned, running := s.kernelUsers(ctx, name, v)
 			item := gin.H{"version": v, "arches": have, "default": defaults[name] == v, "pinned_by": refNames(pinned), "running_on": refNames(running), "pinned_refs": nonNilRefs(pinned), "running_refs": nonNilRefs(running)}
+			item["center_binaries"] = binaries
 			if validKernel(name) {
 				if d, _, err := s.drivers(ctx).Select(name, v); err == nil {
 					item["driver"] = d.Name
@@ -213,6 +215,25 @@ func (s *Server) startKernelFetch(ctx context.Context, kernel, version string, a
 		f.Progress, f.Step, f.Log = run.Progress, run.Stage, run.Log
 		sums := map[string]any{}
 		for i, arch := range arches {
+			required, e := s.kernelBinaryRequired(bg, kernel, arch)
+			if e != nil {
+				err = e
+				break
+			}
+			if !required {
+				run.Step("固定发行来源与摘要 " + arch)
+				artifact, e := f.ResolveArtifact(bg, kernel, version, arch)
+				if e == nil {
+					e = s.saveKernelArtifact(bg, artifact)
+				}
+				if e != nil {
+					err = e
+					break
+				}
+				sums[arch] = artifact.SHA256
+				run.Log(arch + " 发行档案已固定，VPS 自行下载并校验")
+				continue
+			}
 			_, sum, cachedErr := f.Cache.Get(kernel, version, arch)
 			if cachedErr == nil {
 				run.Log(arch + " 已下载，跳过")
@@ -222,7 +243,15 @@ func (s *Server) startKernelFetch(ctx context.Context, kernel, version string, a
 				} else {
 					run.Step("下载 " + arch)
 				}
-				if sum, err = f.Fetch(bg, kernel, version, arch); err != nil {
+				artifact, e := f.ResolveArtifact(bg, kernel, version, arch)
+				if e == nil {
+					e = s.saveKernelArtifact(bg, artifact)
+				}
+				if e != nil {
+					err = e
+					break
+				}
+				if sum, err = f.FetchArtifact(bg, artifact); err != nil {
 					break
 				}
 			}
@@ -393,6 +422,10 @@ func (s *Server) removeKernelVersion(c *gin.Context) {
 		failure(c, 400, "invalid_version")
 		return
 	}
+	if _, err := s.Store.Ent.Resource.Delete().Where(resource.KindEQ(kernelArtifactKind), resource.KeyHasPrefix(name+":"+version+":")).Exec(ctx); err != nil {
+		failInternal(c, 503, "kernel_catalog_unavailable", err)
+		return
+	}
 	s.audit(c, "kernel.remove", name+" "+version, "ok")
 	s.ensureKernelDefault(ctx, name)
 	c.JSON(200, gin.H{"ok": true})
@@ -406,7 +439,7 @@ func (s *Server) saveKernelDefault(ctx context.Context, kernel, version string, 
 		}
 	}
 	for _, arch := range s.kernelArches(ctx, kernel) {
-		if _, _, err := s.kernelCache().Get(kernel, version, arch); err != nil {
+		if err := s.kernelPrepared(ctx, kernel, version, arch); err != nil {
 			return fmt.Errorf("还缺 %s", arch)
 		}
 	}
@@ -432,20 +465,11 @@ func (s *Server) ensureKernelDefault(ctx context.Context, kernel string) bool {
 	if s.explicitDefault(ctx, kernel) != "" {
 		return false
 	}
-	versions := map[string]bool{}
-	for _, arch := range []string{"amd64", "arm64"} {
-		for _, v := range s.kernelCache().Versions(kernel, arch) {
-			versions[v] = true
-		}
-	}
-	if len(versions) != 1 {
+	versions, err := s.kernelVersions(ctx, kernel)
+	if err != nil || len(versions) != 1 {
 		return false
 	}
-	var only string
-	for v := range versions {
-		only = v
-	}
-	return s.saveKernelDefault(ctx, kernel, only, 0, "", "唯一的版本，自动设为默认") == nil
+	return s.saveKernelDefault(ctx, kernel, versions[0], 0, "", "唯一的版本，自动设为默认") == nil
 }
 
 // setKernelDefaults 设置各内核的默认版本：没有单独锁定版本的 Gate 会按新版本重新下发配置。
@@ -467,7 +491,7 @@ func (s *Server) setKernelDefaults(c *gin.Context) {
 		}
 		var missing []string
 		for _, arch := range s.kernelArches(ctx, name) {
-			if _, _, err := s.kernelCache().Get(name, v, arch); err != nil {
+			if err := s.kernelPrepared(ctx, name, v, arch); err != nil {
 				missing = append(missing, arch)
 			}
 		}

@@ -3,7 +3,6 @@ package center
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/shusfun/weir/internal/buildinfo"
 	"github.com/shusfun/weir/internal/kernelconf"
@@ -17,6 +16,17 @@ import (
 
 func userKey(uid int) string { return fmt.Sprintf("u%d", uid) }
 
+func directIPv4(g *ent.Gate) string {
+	if g == nil || g.Host == nil {
+		return "1"
+	}
+	health, _ := g.Host["health"].(map[string]any)
+	if v, ok := health["ipv6"].(bool); ok && v {
+		return "0"
+	}
+	return "1"
+}
+
 // compileGateConfig 把数据库状态编译成某台 Gate 的完整期望配置。
 // 停用的用户、链接、链式代理不下发凭据；到期与额度由 Gate 依据配置在本地执行。
 func (s *Server) compileGateConfig(ctx context.Context, g *ent.Gate) (contracts.GateConfig, error) {
@@ -25,9 +35,9 @@ func (s *Server) compileGateConfig(ctx context.Context, g *ent.Gate) (contracts.
 		return contracts.GateConfig{}, err
 	}
 	cfg := contracts.GateConfig{
-		Revision: g.ConfigRevision, Version: buildinfo.Version,
+		Revision: g.ConfigRevision, Version: buildinfo.Version, TraceID: taskTrace(ctx),
 		Ports:   contracts.PortPlan{XrayStats: g.XrayStatsPort, SingboxStats: g.SingboxStatsPort},
-		Budgets: map[string]contracts.GateBudget{}, Meta: map[string]string{},
+		Budgets: map[string]contracts.GateBudget{}, Meta: map[string]string{"dns": "doh", "direct_ipv4": directIPv4(g)},
 	}
 	nodes, err := s.Store.Ent.Node.Query().Where(node.GateIDEQ(g.ID), node.EnabledEQ(true)).Order(ent.Asc(node.FieldID)).All(ctx)
 	if err != nil {
@@ -35,7 +45,14 @@ func (s *Server) compileGateConfig(ctx context.Context, g *ent.Gate) (contracts.
 	}
 	need, byID, ids, certs := map[string]bool{}, map[int]*ent.Node{}, []int{}, map[int]bool{}
 	for _, n := range nodes {
-		in := contracts.Inbound{ID: int64(n.ID), Tag: nodeTag(n.ID), Kernel: n.Kernel, Protocol: n.Protocol, Port: n.Port, Network: n.Network, Security: n.Security, Settings: n.Settings}
+		settings := map[string]any{}
+		for k, v := range n.Settings {
+			settings[k] = v
+		}
+		if supported, known := s.nodeUDP(ctx, n); known && !supported {
+			settings["reject_udp"] = true
+		}
+		in := contracts.Inbound{ID: int64(n.ID), Tag: nodeTag(n.ID), Kernel: n.Kernel, Protocol: n.Protocol, Port: n.Port, Network: n.Network, Security: n.Security, Settings: settings}
 		if n.CertID != nil {
 			in.CertID = int64(*n.CertID)
 			if !certs[*n.CertID] {
@@ -114,10 +131,9 @@ func (s *Server) addCredentials(ctx context.Context, g *ent.Gate, cfg *contracts
 		item := contracts.Credential{ID: int64(c.ID), InboundID: int64(c.NodeID), StatsKey: c.StatsKey, UUID: c.UUID, Password: c.Password}
 		if c.Internal {
 			if c.Purpose == "probe" {
-				if c.ExpiresAt == nil || !time.Now().Before(*c.ExpiresAt) {
+				if c.ExpiresAt != nil {
 					continue
 				}
-				item.ExpiresAt = c.ExpiresAt
 				if item.UUID, err = s.reveal(c.UUID); err != nil {
 					return nil, err
 				}
@@ -139,7 +155,11 @@ func (s *Server) addCredentials(ctx context.Context, g *ent.Gate, cfg *contracts
 			}
 			users[u.ID] = u
 		}
+		key := userKey(u.ID)
 		if !u.Enabled {
+			item.UserKey = key
+			item.Revoke = "disabled"
+			cfg.Credentials = append(cfg.Credentials, item)
 			continue
 		}
 		var lk *ent.Link
@@ -152,6 +172,9 @@ func (s *Server) addCredentials(ctx context.Context, g *ent.Gate, cfg *contracts
 				links[l.ID] = l
 			}
 			if !l.Enabled {
+				item.UserKey = key
+				item.Revoke = "disabled"
+				cfg.Credentials = append(cfg.Credentials, item)
 				continue
 			}
 			lk = l
@@ -169,14 +192,13 @@ func (s *Server) addCredentials(ctx context.Context, g *ent.Gate, cfg *contracts
 			}
 			chainKeys[ch.ID] = append(chainKeys[ch.ID], c.StatsKey)
 		}
-		key := userKey(u.ID)
 		item.UserKey = key
 		item.StartsAt, item.ExpiresAt = linkWindow(u, lk)
 		cfg.Credentials = append(cfg.Credentials, item)
 		if _, done := cfg.Budgets[key]; done {
 			continue
 		}
-		if u.Quota == 0 {
+		if u.Unlimited {
 			cfg.Budgets[key] = contracts.GateBudget{Unlimited: true}
 			continue
 		}

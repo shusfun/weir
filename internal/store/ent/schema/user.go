@@ -14,12 +14,15 @@ type User struct{ ent.Schema }
 func (User) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("email").MaxLen(254).Unique(),
+		// Alias identity at registration time; delivery and login keep email.
+		field.String("normalized_email").MaxLen(254).Optional().Nillable().Sensitive(),
 		field.String("name").MaxLen(100).Default(""),
 		field.String("password_hash").Sensitive(),
 		field.Enum("role").Values("admin", "user").Default("user"),
 		field.Bool("enabled").Default(true),
-		// 套餐：quota 为 0 表示不限额度；expires_at 为空表示不限期限。
+		// 额度与不限标记独立；零额度不授予流量。expires_at 为空表示不限期限。
 		field.Int64("quota").NonNegative().Default(0),
+		field.Bool("unlimited").Default(false),
 		field.Int64("used").NonNegative().Default(0),
 		field.Time("expires_at").Optional().Nillable(),
 		field.Bool("monthly_reset").Default(false),

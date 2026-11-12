@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "../lib/query";
 import { useNavigate } from "react-router-dom";
-import { Badge, Button, Popover, PopoverContent, PopoverTrigger, ScrollArea } from "@weir/ui";
+import { Badge, Button, Popover, PopoverContent, PopoverTrigger, ScrollArea, Segmented, TextLink } from "@weir/ui";
+import { Link } from "react-router-dom";
 import { Bell } from "lucide-react";
 import { api } from "../api";
 import { useRowAction } from "../lib/action";
@@ -22,6 +23,7 @@ interface Notice {
 export function NoticesButton() {
   const q = useQuery({ queryKey: ["notices"], queryFn: () => api("/admin/notices") as Promise<{ notices: Notice[]; dismissed: number }>, refetchInterval: 60000 });
   const [open, setOpen] = useState(false);
+  const [scope, setScope] = useState("open");
   const nav = useNavigate();
   const client = useQueryClient();
   const { run, isBusy } = useRowAction<string>({ refetch: q.refetch });
@@ -45,10 +47,11 @@ export function NoticesButton() {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger render={<Button variant="ghost" size="icon-sm" className="relative" aria-label={count ? `通知：${count} 条待处理` : "通知：没有待处理"} />}>
         <Bell />
-        {count > 0 && <span className={"absolute -top-0.5 -right-0.5 min-w-4 rounded-full px-1 text-center text-fine font-semibold text-[var(--weir-badge-ink)] " + (warn ? "bg-[var(--weir-badge)]" : "bg-[var(--weir-accent)]")}>{count}</span>}
+        {count > 0 && <span className={"absolute -top-0.5 -right-0.5 min-w-4 rounded-full px-1 text-center text-fine font-semibold text-[var(--weir-badge-ink)] " + (warn ? "bg-[var(--weir-badge-bad)]" : "bg-[var(--weir-badge)]")}>{count}</span>}
       </PopoverTrigger>
       <PopoverContent className="w-[min(92vw,380px)] p-0">
-        <div className="border-b border-[var(--weir-line)] px-3 py-2 text-body font-semibold">待处理{q.data?.dismissed ? <small className="ml-2 font-normal text-[var(--weir-ink-3)]">另有 {q.data.dismissed} 条已忽略</small> : null}</div>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--weir-line)] px-3 py-2"><strong>通知</strong><Segmented size="sm" aria-label="通知范围" value={scope} onValueChange={setScope} options={[["open", `待处理 ${count}`], ["all", "全部"]] as const} /></div>
+        {scope === "all" && <p className="m-0 px-3 py-2 text-meta text-[var(--weir-ink-3)]">{q.data?.dismissed ? `另有 ${q.data.dismissed} 条已忽略，接口不返回它们的正文。` : "已忽略的通知未知。"}</p>}
         <DraftsPending onOpen={() => setOpen(false)} />
         {q.error ? <p className="m-0 p-3 text-body text-[var(--weir-bad-ink)]">通知读取失败，稍后重试。</p> : list.length === 0 ? (drafts > 0 ? null : <p className="m-0 p-3 text-body text-[var(--weir-ink-3)]">{q.isPending ? "正在读取…" : "没有待处理的问题。"}</p>) : (
           <ScrollArea className="max-h-[60vh]">
@@ -70,6 +73,7 @@ export function NoticesButton() {
           </ul>
           </ScrollArea>
         )}
+        <div className="border-t border-[var(--weir-line)] px-3 py-2"><TextLink render={<Link to="/ops/observe" onClick={() => setOpen(false)} />}>在运行观测里查看全部</TextLink></div>
       </PopoverContent>
     </Popover>
   );

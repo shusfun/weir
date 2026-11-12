@@ -6,12 +6,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/shusfun/weir/internal/publicnet"
 )
 
 // maxBody 是单个订阅源响应的上限。
@@ -19,18 +21,8 @@ const maxBody = 16 << 20
 
 // publicIP 拒绝回环、内网、链路本地、组播、云元数据等地址。
 func publicIP(ip net.IP) bool {
-	if ip == nil || ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
-		ip.IsUnspecified() || ip.IsMulticast() || ip.IsInterfaceLocalMulticast() {
-		return false
-	}
-	if v4 := ip.To4(); v4 != nil {
-		// 100.64.0.0/10（CGNAT）、0.0.0.0/8、198.18.0.0/15（基准测试）
-		if v4[0] == 0 || v4[0] == 100 && v4[1]&0xc0 == 64 || v4[0] == 198 && v4[1]&0xfe == 18 {
-			return false
-		}
-		return true
-	}
-	return ip[0]&0xfe != 0xfc // fc00::/7
+	addr, ok := netip.AddrFromSlice(ip)
+	return ok && publicnet.Public(addr)
 }
 
 // CheckURL 只接受 http(s)、不含账号的公网地址（解析后的 IP 在连接时再次检查）。
@@ -56,12 +48,21 @@ func CheckURL(raw string) (*url.URL, error) {
 type Fetcher struct {
 	AllowPrivate bool
 	Timeout      time.Duration
+	Fetch        func(context.Context, string, string) (Response, error)
 }
 
 func (f Fetcher) client() *http.Client {
+	if !f.AllowPrivate {
+		timeout := f.Timeout
+		if timeout == 0 {
+			timeout = 30 * time.Second
+		}
+		return publicnet.Client(timeout)
+	}
 	dialer := &net.Dialer{Timeout: 10 * time.Second}
 	tr := &http.Transport{
-		Proxy: nil, // 不使用环境代理
+		DisableCompression: true,
+		Proxy:              nil, // 不使用环境代理
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			host, port, err := net.SplitHostPort(addr)
 			if err != nil {
@@ -101,10 +102,14 @@ type Response struct {
 	Body     []byte
 	UserInfo string // Subscription-Userinfo 原文
 	Title    string // Profile-Title（已解码）
+	Location string
 }
 
 // Get 拉取订阅源；User-Agent 只允许可见 ASCII，防止头注入。
 func (f Fetcher) Get(ctx context.Context, raw, userAgent string) (Response, error) {
+	if f.Fetch != nil {
+		return f.Fetch(ctx, raw, userAgent)
+	}
 	u, err := CheckURL(raw)
 	if err != nil && !f.AllowPrivate {
 		return Response{}, err
@@ -124,7 +129,10 @@ func (f Fetcher) Get(ctx context.Context, raw, userAgent string) (Response, erro
 		return Response{}, err
 	}
 	req.Header.Set("User-Agent", userAgent)
-	resp, err := f.client().Do(req)
+	req.Header.Set("Accept-Encoding", "gzip")
+	client := f.client()
+	defer client.CloseIdleConnections()
+	resp, err := client.Do(req)
 	if err != nil {
 		return Response{}, err
 	}
@@ -132,12 +140,9 @@ func (f Fetcher) Get(ctx context.Context, raw, userAgent string) (Response, erro
 	if resp.StatusCode != 200 {
 		return Response{}, fmt.Errorf("source_http_%d", resp.StatusCode)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
+	body, err := publicnet.ReadBody(resp, maxBody, maxBody)
 	if err != nil {
 		return Response{}, err
-	}
-	if len(body) > maxBody {
-		return Response{}, errors.New("source_too_large")
 	}
 	return Response{Body: body, UserInfo: resp.Header.Get("Subscription-Userinfo"), Title: profileTitle(resp.Header)}, nil
 }

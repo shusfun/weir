@@ -67,10 +67,10 @@ export async function openSpace(kind = "scan") {
 // 走登录表单登录；已登录就直接返回。直接请求登录接口会被拒（origin_rejected）。
 export async function ensureLogin(page, base, email, password) {
   await page.goto(base + "/");
-  await page.waitForFunction(() => !!document.querySelector('input[autocomplete="username"], .shell-main, [aria-label="主导航"], [aria-label="打开导航"]'), undefined, { timeout: 20_000 });
-  const needLogin = await page.evaluate(() => !!document.querySelector('input[autocomplete="username"]'));
+  await page.waitForFunction(() => !!document.querySelector('input[autocomplete~="username"], .shell-main, [aria-label="主导航"], [aria-label="打开导航"]'), undefined, { timeout: 20_000 });
+  const needLogin = await page.evaluate(() => !!document.querySelector('input[autocomplete~="username"]'));
   if (!needLogin) return false;
-  await page.fill('input[autocomplete="username"]', email);
+  await page.fill('input[autocomplete~="username"]', email);
   await page.fill('input[autocomplete="current-password"]', password);
   await page.click('form button[type="submit"]', { label: "提交登录表单" });
   await page.waitForFunction(() => !!document.querySelector(".shell-main"), undefined, { timeout: 20_000 });

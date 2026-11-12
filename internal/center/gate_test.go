@@ -111,8 +111,18 @@ func TestGatePairConfigMeterAndRevoke(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := g.config(0)
-	if len(cfg.Inbounds) != 1 || len(cfg.Credentials) != 1 || cfg.Credentials[0].StatsKey != "c-u1" {
-		t.Fatalf("config inbounds=%d credentials=%+v (disabled user must be excluded)", len(cfg.Inbounds), cfg.Credentials)
+	active := 0
+	for _, c := range cfg.Credentials {
+		if c.Revoke != "" || c.Internal {
+			continue
+		}
+		active++
+		if c.StatsKey != "c-u1" {
+			t.Fatalf("active credential = %+v", c)
+		}
+	}
+	if len(cfg.Inbounds) != 1 || active != 1 {
+		t.Fatalf("config inbounds=%d credentials=%+v (disabled user must stay revoked)", len(cfg.Inbounds), cfg.Credentials)
 	}
 	if b := cfg.Budgets[userKey(u.ID)]; b.Allocated != 10<<30 || b.Unlimited {
 		t.Fatalf("single-gate user must get the whole remaining quota: %+v", b)
@@ -158,6 +168,27 @@ func TestGatePairConfigMeterAndRevoke(t *testing.T) {
 	}
 	if c := s.Store.Ent.Credential.GetX(ctx, cred.ID); c.MeterEpoch != "e2" || c.MeterUp != 100 {
 		t.Fatalf("credential meter = %+v", c)
+	}
+	// A late packet from a retired epoch must not switch the baseline back.
+	old := report
+	old.Epoch, old.Seq = "e1", 99
+	old.Usage = []contracts.MeterSample{{StatsKey: "c-u1", Up: 900, Down: 700}}
+	code, body := g.call("POST", "/api/v1/agent/meter", old)
+	var ack contracts.MeterAck
+	_ = json.Unmarshal(body, &ack)
+	if code != 200 || ack.Accepted || s.Store.Ent.User.GetX(ctx, u.ID).Used != 1600 {
+		t.Fatalf("old epoch counted again: %d %s", code, body)
+	}
+	partial := contracts.MeterReport{Protocol: 2, Partial: true, Epoch: "e2", Seq: 2, Status: "fresh"}
+	if code, body = g.call("POST", "/api/v1/agent/meter", partial); code != 200 {
+		t.Fatalf("partial: %d %s", code, body)
+	}
+	if c := s.Store.Ent.Credential.GetX(ctx, cred.ID); c.MeterEpoch != "e2" || c.MeterUp != 100 {
+		t.Fatalf("absent credential reset: %+v", c)
+	}
+	partial.Epoch = "e3"
+	if code, _ = g.call("POST", "/api/v1/agent/meter", partial); code != 409 {
+		t.Fatalf("new epoch accepted incomplete baseline: %d", code)
 	}
 	// Gate 报告端口被占用：中心给节点换端口并提高配置版本。
 	before := s.Store.Ent.Gate.GetX(ctx, gate.ID).ConfigRevision

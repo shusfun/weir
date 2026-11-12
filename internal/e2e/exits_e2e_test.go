@@ -73,7 +73,7 @@ func TestUnifiedExitsAndSelectiveRouting(t *testing.T) {
 	n2 := e.post("/api/v1/admin/nodes", map[string]any{"gate_id": gid, "preset": "ss2022", "exit_id": eid, "skip_probe": true}, nil)
 	direct := e.post("/api/v1/admin/nodes", map[string]any{"gate_id": gid, "preset": "ss2022", "skip_probe": true}, nil)
 	linked := e.post("/api/v1/admin/nodes", map[string]any{"gate_id": gid, "preset": "ss2022", "exit": map[string]any{"kind": "link", "link": fmt.Sprintf("socks5://127.0.0.1:%d#linked", proxyPort)}, "skip_probe": true}, nil)
-	uid := int(e.post("/api/v1/admin/users", map[string]any{"email": "exit@e2e.test", "password": "E2eUser1", "allow_chain": true}, nil)["id"].(float64))
+	uid := int(e.post("/api/v1/admin/users", map[string]any{"unlimited": true, "email": "exit@e2e.test", "password": "E2eUser1", "allow_chain": true}, nil)["id"].(float64))
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("exit")) }))
 	t.Cleanup(target.Close)
 	e.applied("shared exits and direct node")

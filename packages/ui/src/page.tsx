@@ -10,20 +10,29 @@ function PageHeader({
   title,
   description,
   actions,
+  eyebrow,
   className,
+  size = "data",
 }: {
   title: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
+  /** 标题上方的小眉标题（稿子 .v-eye）：状态页写页面名，详情页写对象类型。 */
+  eyebrow?: ReactNode;
   className?: string;
+  /** data 是数据页和集合页小标题；hero 是状态页大字结论；detail 是详情页对象名。 */
+  size?: "data" | "hero" | "detail";
 }) {
+  const titleClass = size === "hero" ? "text-hero font-bold tracking-[-0.035em]" : size === "detail" ? "text-detail font-bold tracking-[-0.03em]" : "text-title font-bold tracking-[-0.02em]";
+  // 状态页大字结论下的说明用导语（稿子 .v-lead：15/25、次要文字色、限宽 521）；数据页是一行摘要
+  const leadClass = size === "data" ? "mt-[5px] max-w-[80em] text-body text-[var(--weir-ink-2)]" : "mt-[13px] max-w-[521px] text-lead text-[var(--weir-ink-2)]";
   return (
-    <header data-slot="page-header" className={cn("flex min-h-[calc(var(--weir-leading-title)+var(--weir-space-1)+var(--weir-leading-body))] flex-wrap items-start justify-between gap-x-6 gap-y-3", className)}>
+    <header data-tour="page-header" data-slot="page-header" data-size={size} className={cn("flex min-h-[calc(var(--weir-leading-title)+var(--weir-space-1)+var(--weir-leading-body))] flex-wrap items-start justify-between gap-x-6 gap-y-3", className)}>
       {/* 标题区至少留 16em（容器更窄时取满宽）：放不下操作区时操作区整体换到下一行，标题不会被挤成一字一行 */}
       <div className="min-w-[min(100%,16em)] flex-1">
-        <h1 data-slot="page-title" className="m-0 text-title font-semibold tracking-[-0.02em] text-[var(--weir-ink)]">{title}</h1>
-        {/* 限宽约 80 个汉字：一般一行放下，超宽屏上也不至于一行太长读不下来 */}
-        {description && <p className="mt-1 mb-0 max-w-[80em] text-body text-[var(--weir-ink-3)]">{description}</p>}
+        {eyebrow && <div data-slot="page-eyebrow" className="mb-[9px] text-fine font-bold tracking-[0.09em] text-[var(--weir-ink-3)]">{eyebrow}</div>}
+        <h1 data-slot="page-title" className={cn("m-0 text-[var(--weir-ink)]", titleClass)}>{title}</h1>
+        {description && <p className={cn("mb-0", leadClass)}>{description}</p>}
       </div>
       {actions && <div data-slot="page-actions" className="flex max-w-full flex-wrap items-center gap-2">{actions}</div>}
     </header>

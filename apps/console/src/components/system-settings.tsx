@@ -50,7 +50,7 @@ const securityFlags = [
   ["totp_enabled", "允许二次验证（TOTP）", ""],
   ["passkey_enabled", "允许通行密钥登录", ""],
   ["require_admin_mfa", "管理员必须开启二次验证", ""],
-  ["registration_enabled", "允许自助注册", "注册用户没有节点，需管理员分配。"],
+  ["registration_enabled", "允许自助注册", "邀请码可附带初始套餐；未附带时，新用户没有流量与节点。"],
   ["email_verification", "注册时验证邮箱", "需要邮件服务。"],
 ] as const;
 
@@ -79,7 +79,7 @@ export function SecurityCard() {
           <div className="settings-group">
             {securityFlags.map(([k, label, description]) => {
               const disabled = (k === "email_verification" && (!smtp.data?.configured || !v.registration_enabled)) || (k === "require_admin_mfa" && !v.totp_enabled);
-              const detail = k === "email_verification" && disabled ? (!smtp.data?.configured ? "需要先配置邮件服务。" : "需要先允许自助注册。") : k === "totp_enabled" ? "关闭后，已绑定用户仍可使用现有 TOTP，不能再绑定新设备。" : k === "passkey_enabled" ? "关闭后，已绑定的通行密钥仍可使用，但不能再新增。" : description;
+              const detail = k === "email_verification" && disabled ? (!smtp.data?.configured ? "需要先配置邮件服务。" : "需要先允许自助注册。") : k === "totp_enabled" ? "关闭后，已绑定用户仍可使用现有 TOTP，不能再绑定新设备。" : k === "passkey_enabled" ? "关闭后不能绑定或使用通行密钥登录。开启时，浏览器会在邮箱框提供本站可发现密钥。" : description;
               return <SwitchField placement="end" key={k} label={label} description={detail || undefined} disabled={disabled} checked={!!v[k]} onCheckedChange={async (on) => {
                 if (k === "require_admin_mfa" && on && !me.data?.totp_enrolled && !(await confirm({ title: "当前管理员还没有绑定 TOTP", description: "保存后管理员需要先完成二次验证设置，未完成前不能继续管理后台。", confirmText: "继续" }))) return;
                 setDraft({ ...v, [k]: on });

@@ -1,7 +1,8 @@
 // 订阅组：选订阅源与手动节点（或全部），配处理链与规则模板；预览、分配给用户、匿名分享。
 import { useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "../lib/query";
-import { Badge, Button, CheckboxField, CodeBlock, Collapsible, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, SectionHeader, Segmented, SkeletonList, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField, Textarea, useToast, useConfirm, ScrollArea } from "@weir/ui";
+import { Badge, Button, CheckboxField, CodeBlock, Collapsible, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, PageState, Readout, SectionHeader, Segmented, SkeletonList, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SortableList, SwitchField, Textarea, useToast, useConfirm, ScrollArea } from "@weir/ui";
 import { Eye, Plus, Share2, Trash2, Users } from "lucide-react";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -10,11 +11,15 @@ import { fromLocalInput, localInput, type UserItem } from "../lib/core";
 import { ruleLevels, type BuiltinTemplate, type CustomTemplate, type Profile, type ProfileSettings } from "../lib/subscriptions";
 import { OperatorEditor, type Operator } from "./operator-editor";
 import { useSources } from "./subscription-sources";
-import { useManualNodes } from "./subscription-nodes";
+import { useManualNodes, nodeName } from "./subscription-nodes";
 import { State } from "./feedback";
 import { SubCheckBadge } from "./sub-check";
-import { dataObject } from "./object-link";
+import { dataObject, useDialogParam } from "./object-link";
 import { field, useConsoleContext } from "../lib/console-context";
+import { RenderingSettingsFields, renderingErrorFields } from "../features/subscriptions/settings/rendering-settings";
+import { ProfileProbe } from "../features/subscriptions/probes/profile-probe";
+
+type Member = NonNullable<Profile["members"]>[number];
 
 export function useTemplates() {
   return useQuery({ queryKey: ["subscription-templates"], queryFn: () => api("/admin/subscriptions/templates") as Promise<{ builtin: BuiltinTemplate[]; custom: CustomTemplate[] }> });
@@ -47,8 +52,17 @@ export function ProfilesPanel() {
   const confirm = useConfirm();
   const toast = useToast();
   const q = useQuery({ queryKey: ["subscription-profiles"], queryFn: async () => (await api("/admin/subscriptions/profiles")).items as Profile[] });
-  const [edit, setEdit] = useState<Profile | "new" | null>(null);
+  const [params, setParams] = useSearchParams();
+  const editParam = useDialogParam("profile", q.data, !q.isFetching && !q.error);
+  const edit = params.get("create") === "profile" ? "new" : editParam.current;
+  const setEdit = (value: Profile | "new" | null) => setParams((next) => {
+    next.delete("profile"); next.delete("create");
+    if (value === "new") next.set("create", "profile");
+    else if (value) next.set("profile", String(value.id));
+    return next;
+  }, { replace: value === null });
   const [preview, setPreview] = useState<Profile | null>(null);
+  const [probe, setProbe] = useState<Profile | null>(null);
   const [share, setShare] = useState<Profile | null>(null);
   const [grants, setGrants] = useState<Profile | null>(null);
   const { run, isBusy } = useRowAction<number>({ refetch: q.refetch });
@@ -77,11 +91,12 @@ export function ProfilesPanel() {
               <span className="min-w-0">
                 <strong>{p.name}</strong> {!p.enabled && <Badge variant="soft" tone="warn">停用</Badge>} {p.shared && <Badge variant="soft" tone="ok">已分享</Badge>}
                 <small className="block text-[var(--weir-ink-3)]">
-                  {p.all_sources ? "全部订阅源与手动节点" : `${p.source_ids?.length ?? 0} 个订阅源 · ${p.node_ids?.length ?? 0} 个手动节点`} · {p.user_ids.length} 个用户 · 下载 {p.downloads} 次{p.expires_at ? ` · 到期 ${date(p.expires_at)}` : ""}
+                  {p.all_sources ? "全部订阅源与手动节点" : p.members ? `${p.members.length} 个有序成员（含 ${p.members.filter((m) => m.kind === "profile").length} 个子组）` : `${p.source_ids?.length ?? 0} 个订阅源 · ${p.node_ids?.length ?? 0} 个手动节点`} · {p.user_ids.length} 个用户 · 下载 {p.downloads} 次{p.expires_at ? ` · 到期 ${date(p.expires_at)}` : ""}
                 </small>
               </span>
               <span className="flex flex-wrap gap-1.5">
                 <Button size="sm" variant="outline" onClick={() => setPreview(p)}><Eye />预览</Button>
+                <Button size="sm" variant="outline" onClick={() => setProbe(p)}>实测</Button>
                 <Button size="sm" variant="outline" onClick={() => setGrants(p)}><Users />用户</Button>
                 <Button size="sm" variant="outline" onClick={() => setShare(p)}><Share2 />分享</Button>
                 <Button size="sm" variant="outline" onClick={() => setEdit(p)}>编辑</Button>
@@ -93,8 +108,57 @@ export function ProfilesPanel() {
       )}
       {edit && <ProfileForm value={edit} close={() => setEdit(null)} saved={() => { setEdit(null); done("已保存"); }} />}
       {preview && <ProfilePreview profile={preview} close={() => setPreview(null)} />}
+      {probe && <ProfileProbe profile={probe} close={() => setProbe(null)} />}
       {share && <ShareDialog profile={share} close={() => setShare(null)} changed={() => void q.refetch()} />}
       {grants && <GrantDialog profile={grants} close={() => setGrants(null)} saved={() => { setGrants(null); done("用户分配已保存"); }} />}
+    </section>
+  );
+}
+
+export function ProfileDetail({ id, tab }: { id: string; tab: string }) {
+  const navigate = useNavigate();
+  const [, setParams] = useSearchParams();
+  const confirm = useConfirm();
+  const toast = useToast();
+  const q = useQuery({ queryKey: ["subscription-profiles"], queryFn: async () => (await api("/admin/subscriptions/profiles")).items as Profile[] });
+  const [edit, setEdit] = useState(false);
+  const [preview, setPreview] = useState(false);
+  const [share, setShare] = useState(false);
+  const [grants, setGrants] = useState(false);
+  const { run, isBusy } = useRowAction<number>({ refetch: q.refetch });
+  const item = q.data?.find((p) => String(p.id) === id);
+  if (q.isPending) return <State loading />;
+  if (q.error) return <State error={q.error} onRetry={() => void q.refetch()} />;
+  if (!item) return <PageState kind="empty" title="没有这个订阅组" detail="它可能已被删除，或你没有权限查看。" action={<Link to="/subscriptions?tab=profiles">返回订阅组</Link>} />;
+  async function remove() {
+    if (!(await confirm({ title: `删除订阅组「${item!.name}」？`, description: "分配给用户的地址与分享地址都会失效。", confirmText: "删除", tone: "danger" }))) return;
+    await run(item!.id, () => api("/admin/subscriptions/profiles/" + item!.id, "DELETE"), "订阅组已删除");
+    navigate("/subscriptions?tab=profiles");
+  }
+  const members = item.members?.length ?? ((item.source_ids?.length ?? 0) + (item.node_ids?.length ?? 0));
+  return (
+    <section className="stack">
+      <div className="flex flex-wrap gap-1.5">
+        <Button size="sm" variant="outline" onClick={() => setPreview(true)}><Eye />预览</Button>
+        <Button size="sm" variant="outline" onClick={() => setGrants(true)}><Users />用户</Button>
+        <Button size="sm" variant="outline" onClick={() => setShare(true)}><Share2 />分享</Button>
+        <Button size="sm" variant="outline" onClick={() => setEdit(true)}>编辑</Button>
+        <Button size="sm" variant="destructive" disabled={isBusy()} busy={isBusy(item.id)} busyText="正在删除" onClick={() => void remove()}><Trash2 />删除</Button>
+      </div>
+      {tab === "probe" ? <ProfileProbe profile={item} close={() => setParams((p) => { p.set("tab", "overview"); return p; }, { replace: true })} /> : (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Readout label="状态" value={item.enabled ? "启用" : "已停用"} />
+          <Readout label="成员" value={item.all_sources ? "全部订阅源与手动节点" : members} />
+          <Readout label="用户" value={item.user_ids?.length ?? null} />
+          <Readout label="下载" value={item.downloads ?? null} />
+          <Readout label="到期" value={item.expires_at ? date(item.expires_at) : null} />
+          <Readout label="分享" value={item.shared ? (item.share_expires_at ? `到期 ${date(item.share_expires_at)}` : "已分享") : "未分享"} />
+        </div>
+      )}
+      {edit && <ProfileForm value={item} close={() => setEdit(false)} saved={() => { setEdit(false); toast("已保存", { tone: "ok" }); void q.refetch(); }} />}
+      {preview && <ProfilePreview profile={item} close={() => setPreview(false)} />}
+      {share && <ShareDialog profile={item} close={() => setShare(false)} changed={() => void q.refetch()} />}
+      {grants && <GrantDialog profile={item} close={() => setGrants(false)} saved={() => { setGrants(false); toast("用户分配已保存", { tone: "ok" }); void q.refetch(); }} />}
     </section>
   );
 }
@@ -106,12 +170,21 @@ function ProfileForm({ value, close, saved }: { value: Profile | "new"; close: (
   const [name, setName] = useState(p?.name ?? "");
   const [enabled, setEnabled] = useState(p?.enabled ?? true);
   const [all, setAll] = useState(p?.all_sources ?? false);
-  const [sourceIds, setSourceIds] = useState<number[]>(p?.source_ids ?? []);
-  const [nodeIds, setNodeIds] = useState<number[]>(p?.node_ids ?? []);
+  const profiles = useQuery({ queryKey: ["subscription-profiles"], queryFn: async () => (await api("/admin/subscriptions/profiles")).items as Profile[] });
+  const [members, setMembers] = useState<Member[]>(p?.members ?? [...(p?.node_ids ?? []).map((id) => ({ kind: "node" as const, id })), ...(p?.source_ids ?? []).map((id) => ({ kind: "source" as const, id }))]);
   const [settings, setSettings] = useState<ProfileSettings>(p?.settings ?? {});
   const [ops, setOps] = useState<Operator[]>(p?.operators ?? []);
   const [expiry, setExpiry] = useState(localInput(p?.expires_at));
-  const toggle = (list: number[], id: number, on: boolean) => (on ? [...list, id] : list.filter((x) => x !== id));
+  const loadingMembers = sources.isPending || nodes.isPending || profiles.isPending;
+  const membersError = sources.error || nodes.error || profiles.error;
+  const toggle = (kind: Member["kind"], id: number, on: boolean) => setMembers((current) => on ? [...current, { kind, id }] : current.filter((m) => m.kind !== kind || m.id !== id));
+  const chosen = (kind: Member["kind"], id: number) => members.some((m) => m.kind === kind && m.id === id);
+  const memberName = (m: Member) => {
+    if (m.kind === "profile") return profiles.data?.find((p) => p.id === m.id)?.name ?? `订阅组 #${m.id}`;
+    if (m.kind === "source") return sources.data?.items.find((s) => s.id === m.id)?.name || `订阅源 #${m.id}`;
+    const node = nodes.data?.items.find((n) => n.id === m.id);
+    return node ? nodeName(node) : `手动节点 #${m.id}`;
+  };
   const setS = (patch: Partial<ProfileSettings>) => {
     const next = { ...settings, ...patch };
     for (const k of Object.keys(patch) as (keyof ProfileSettings)[]) if (patch[k] === undefined) delete next[k];
@@ -119,30 +192,31 @@ function ProfileForm({ value, close, saved }: { value: Profile | "new"; close: (
   };
   const save = useFormAction(
     () => {
-      const body = { name: name.trim(), enabled, all_sources: all, source_ids: all ? [] : sourceIds, node_ids: all ? [] : nodeIds, settings, operators: ops, expires_at: fromLocalInput(expiry) };
+      const body = { name: name.trim(), enabled, all_sources: all, members: all ? null : members, settings, operators: ops, expires_at: fromLocalInput(expiry) };
       return p ? api("/admin/subscriptions/profiles/" + p.id, "PATCH", body) : api("/admin/subscriptions/profiles", "POST", body);
     },
-    { fields: { invalid_template: "template" }, onSuccess: saved },
+    { fields: { invalid_template: "template", invalid_profile_members: "members", ...renderingErrorFields }, onSuccess: saved },
   );
-  useConsoleContext({ dialog: { title: p ? "编辑订阅组" : "新建订阅组" }, object: p ? { type: "profile", name: p.name, id: p.id } : undefined, form: [field("name", "名称", name), field("enabled", "启用", enabled ? "是" : "否"), field("all_sources", "全部订阅源", all ? "是" : "否"), field("source_ids", "订阅源编号", sourceIds.join("、")), field("node_ids", "手动节点编号", nodeIds.join("、")), field("expires_at", "到期", expiry || "长期")] });
+  useConsoleContext({ dialog: { title: p ? "编辑订阅组" : "新建订阅组" }, object: p ? { type: "profile", name: p.name, id: p.id } : undefined, form: [field("name", "名称", name), field("enabled", "启用", enabled ? "是" : "否"), field("all_sources", "全部订阅源", all ? "是" : "否"), field("members", "有序成员", members.map(memberName).join("、")), field("expires_at", "到期", expiry || "长期")] });
   return (
     <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
       <DialogContent size="xl">
         <DialogTitle>{p ? "编辑订阅组" : "新建订阅组"}</DialogTitle>
-        <DialogDescription>节点按这里勾选的顺序输出：先手动节点，再各订阅源。未单独设置的项沿用默认设置。</DialogDescription>
+        <DialogDescription>勾选订阅源、手动节点或其他订阅组，再拖动调整顺序；子组最多嵌套三层。未单独设置的项沿用默认设置。</DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
           <FormGrid>
-            <Field label="名称" hint="也是客户端里显示的配置名。"><Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} /></Field>
+            <Field label="名称" name="name" required hint="也是客户端里显示的配置名。"><Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} /></Field>
             <Field label="到期时间（可选）" hint="到期后只输出一个「订阅已到期」提示节点。"><Input type="datetime-local" value={expiry} onChange={(e) => setExpiry(e.target.value)} /></Field>
           </FormGrid>
           <SwitchField label="包含全部已启用的订阅源与手动节点" checked={all} onCheckedChange={setAll} />
+          {!all && (loadingMembers || membersError) && <State loading={loadingMembers} error={membersError} onRetry={()=>{ void sources.refetch(); void nodes.refetch(); void profiles.refetch(); }} />}
           {!all && (
             <FormGrid>
               <fieldset className="grid min-w-0 content-start gap-2">
                 <legend className="mb-1 text-meta font-medium text-[var(--weir-ink-2)]">订阅源</legend>
                 <ScrollArea className="max-h-56" viewportClassName="weir-focus-gutter" contentClassName="grid content-start gap-2">
                   {(sources.data?.items ?? []).map((s) => (
-                    <CheckboxField key={s.id} label={s.name || s.url} checked={sourceIds.includes(s.id)} onCheckedChange={(v) => setSourceIds(toggle(sourceIds, s.id, v))} />
+                    <CheckboxField key={s.id} label={s.name || s.url} disabled={!s.enabled && !chosen("source", s.id)} checked={chosen("source", s.id)} onCheckedChange={(v) => toggle("source", s.id, v)} />
                   ))}
                   {sources.data?.items.length === 0 && <small>还没有订阅源。</small>}
                 </ScrollArea>
@@ -153,9 +227,9 @@ function ProfileForm({ value, close, saved }: { value: Profile | "new"; close: (
                   {(nodes.data?.items ?? []).map((n) => (
                     <CheckboxField
                       key={n.id}
-                      label={<>{n.name || decodeURIComponent(n.url.split("#")[1] ?? "") || n.id}{n.group && <small className="text-[var(--weir-ink-3)]">（{n.group}）</small>}</>}
-                      checked={nodeIds.includes(n.id)}
-                      onCheckedChange={(v) => setNodeIds(toggle(nodeIds, n.id, v))}
+                      label={<>{nodeName(n)}{n.group && <small className="text-[var(--weir-ink-3)]">（{n.group}）</small>}</>}
+                      disabled={!n.enabled && !chosen("node", n.id)} checked={chosen("node", n.id)}
+                      onCheckedChange={(v) => toggle("node", n.id, v)}
                     />
                   ))}
                   {nodes.data?.items.length === 0 && <small>还没有手动节点。</small>}
@@ -163,6 +237,10 @@ function ProfileForm({ value, close, saved }: { value: Profile | "new"; close: (
               </fieldset>
             </FormGrid>
           )}
+          {!all && <fieldset className="grid min-w-0 gap-2"><legend className="text-meta font-medium text-[var(--weir-ink-2)]">引用其他订阅组</legend>
+            {(profiles.data ?? []).filter((item) => item.id !== p?.id).map((item) => <CheckboxField key={item.id} label={item.name} disabled={!item.enabled && !chosen("profile", item.id)} checked={chosen("profile", item.id)} onCheckedChange={(v) => toggle("profile", item.id, v)} />)}
+          </fieldset>}
+          {!all && <Field label="输出顺序" name="members"><SortableList label="订阅组成员顺序" items={members} onReorder={setMembers} getId={(m) => `${m.kind}:${m.id}`} itemLabel={(m) => memberName(m)} renderItem={(m, { reorder }) => <div className="flex items-center justify-between gap-2"><span>{memberName(m)}</span>{reorder}</div>} /></Field>}
           <FormGrid>
             <Field label="规则模板" name="template"><TemplatePicker inherit value={settings.template} onChange={(v) => setS({ template: v })} /></Field>
             <Field label="规则等级">
@@ -170,6 +248,7 @@ function ProfileForm({ value, close, saved }: { value: Profile | "new"; close: (
                 options={[["__inherit", "默认"], ...ruleLevels] as const} />
             </Field>
           </FormGrid>
+          <Field label="转换引擎" name="engine"><Segmented aria-label="转换引擎" value={settings.engine ?? "__inherit"} onValueChange={(v) => setS({ engine: v === "__inherit" ? undefined : v })} options={[["__inherit", "默认"], ["builtin", "内置"], ["external", "外部"]] as const} /></Field>
           <Field label="只保留（每行一条）"><Textarea rows={2} value={settings.filter_include ?? ""} onChange={(e) => setS({ filter_include: e.target.value || undefined })} /></Field>
           <Field label="排除（每行一条）"><Textarea rows={2} value={settings.filter_exclude ?? ""} onChange={(e) => setS({ filter_exclude: e.target.value || undefined })} /></Field>
           <FormGrid>
@@ -180,13 +259,14 @@ function ProfileForm({ value, close, saved }: { value: Profile | "new"; close: (
               </Field>
             ))}
           </FormGrid>
+          <RenderingSettingsFields inherit value={settings} change={setS} />
           <Collapsible title={`订阅组处理链（${ops.length} 步；为空时使用默认处理链）`}>
             <OperatorEditor value={ops} change={setOps} />
           </Collapsible>
           {p && <SwitchField label="启用" checked={enabled} onCheckedChange={setEnabled} />}
           <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
-            <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
+            <Button type="submit" disabled={save.busy || (!all && (loadingMembers || !!membersError))} busy={save.busy} busyText="正在保存…">保存</Button>
           </DialogFooter>
         </Form>
       </DialogContent>

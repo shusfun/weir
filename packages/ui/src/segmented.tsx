@@ -12,6 +12,7 @@ function Segmented<T extends string>({
   size = "default",
   fullWidth = false,
   className,
+  id,
   "aria-label": ariaLabel,
 }: {
   value: T;
@@ -21,10 +22,12 @@ function Segmented<T extends string>({
   // true：始终撑满；"mobile"：仅窄屏撑满（工具栏里的筛选）
   fullWidth?: boolean | "mobile";
   className?: string;
+  id?: string;
   "aria-label": string;
 }) {
   return (
     <ToggleGroup
+      id={id}
       data-slot="segmented"
       aria-label={ariaLabel}
       value={[value]}
@@ -42,9 +45,9 @@ function Segmented<T extends string>({
           value={key}
           className={(state) =>
             cn(
-              "weir-key inline-flex shrink-0 items-center justify-center gap-1.5 px-3 font-medium whitespace-nowrap text-[var(--weir-ink-2)] hover:text-[var(--weir-ink)] [&_svg]:size-3.5",
-              // 底座内边距 2px：桌面整体 28（sm 24）；触屏每项至少 44×44（「开 / 关」这类单字项也不窄于 44）、整体 48
-              size === "sm" ? "h-5 text-meta touch:h-11 touch:min-w-11" : "h-6 text-meta touch:h-11 touch:min-w-11 touch:text-body",
+              "weir-key inline-flex shrink-0 items-center justify-center gap-[var(--weir-gap-7)] px-[var(--weir-space-3)] font-medium whitespace-nowrap text-[var(--weir-ink-2)] hover:text-[var(--weir-ink)] [&_svg]:size-[var(--weir-icon-sm)]",
+              // 保留分段控件的紧凑档位，触屏单项的命中区至少 45。
+              size === "sm" ? "h-[var(--weir-gap-21)] text-meta touch:h-[var(--weir-tap-touch)] touch:min-w-[var(--weir-tap-touch)]" : "h-[var(--weir-gap-25)] text-meta touch:h-[var(--weir-tap-touch)] touch:min-w-[var(--weir-tap-touch)] touch:text-body",
               state.pressed && "is-pressed font-semibold text-[var(--weir-ink)]",
             )
           }

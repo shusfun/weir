@@ -95,6 +95,8 @@ export function ThemeControl({ withLabel = false }: { withLabel?: boolean }) {
           // 浏览器禁止存储时仅本次生效
         }
         setTheme(current.next);
+        // 顶栏切的主题同样记到账号，否则下次登录会被账号里的旧值盖回去
+        void import("./appearance").then(({ pushAccountAppearance, readAppearance }) => pushAccountAppearance({ ...readAppearance(), theme: current.next }));
       }}
     >
       <Icon />

@@ -1,6 +1,7 @@
 import {PublicGuestbook} from "../components/guestbook";
 import {PublicSubscriptions,type PublicSubscriptionCard} from "../components/public-subscriptions";
 import {GlobalAnnouncement} from "../components/global-announcement";
+import { GuideButton } from "../components/guide";
 import { useEffect, useState } from "react";
 import { useQuery } from "../lib/query";
 import {
@@ -79,12 +80,15 @@ export function PublicPage() {
           <Globe2 size={21} />
           <span>公开目录</span>
         </a>
+        <div className="published-top-actions">
+        <GuideButton />
         {page?.show_login && (
           <Button variant="outline" onClick={() => location.assign("/")}>
             <LogIn size={16} />
             登录
           </Button>
         )}
+        </div>
       </header>
       {query.isPending ? (
         <Card>
@@ -122,6 +126,7 @@ export function PublicPage() {
               {copied && <p role="status">页面地址已复制。</p>}
               {error && <Notice tone="bad">{error}</Notice>}
             </section>
+            {!!page.subscriptions?.length&&<PublicSubscriptions items={page.subscriptions}/>}
             <GlobalAnnouncement audience="public"/>
             <PublishedAnnouncement notice={page} scope={slug}/>
             {!!page.cards?.length && (
@@ -158,7 +163,6 @@ export function PublicPage() {
                 </div>
               </section>
             )}
-            {!!page.subscriptions?.length&&<PublicSubscriptions items={page.subscriptions}/>}
             {page.guestbook?.enabled&&<PublicGuestbook slug={slug}/>}
 <footer className="published-footer">Weir · 公开内容</footer>
           </>

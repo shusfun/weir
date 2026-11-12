@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -81,7 +82,11 @@ func runOracle(t *testing.T, cases []oracleCase) {
 			continue
 		}
 		want = weirNames.Replace(want)
-		if g := js.Describe(got); g != want {
+		g := js.Describe(got)
+		if udpOutputFunctions[c.Fn] {
+			want, g = normalizeUDPDefault(want), normalizeUDPDefault(g)
+		}
+		if g != want {
 			t.Errorf("[%s] 与上游不一致\n%s", c.Name, diffSnippet(want, g))
 		}
 	}
@@ -124,3 +129,23 @@ func ok(v any) (any, error) { return v, nil }
 
 // strs 把字符串切片转换为 jscompat 数组。
 func strs(items ...string) *js.Array { return js.StrArr(items) }
+
+// Weir 不再用默认 udp:false 禁止协议原有能力；对照只忽略这一已确认差异。
+// 显式开启仍比较值；删除默认字段导致 udp/tfo 的插入顺序变化也归一，其他配置逐字比较。
+// 禁用参数的行为另由协议能力用例覆盖。
+var udpOutputFunctions = map[string]bool{
+	"urlToClashProxy": true, "urlsToClashProxies": true, "generateClashConfig": true,
+	"transformBuiltinSubscription": true, "generateProxiesOnly": true,
+	"renderClashFromIniTemplate": true,
+}
+var udpYAMLDefault = regexp.MustCompile(`\\n +udp: false`)
+var udpYAMLOrder = regexp.MustCompile(`(\\n +)udp: true(\\n +)(tfo: (?:true|false))`)
+
+func normalizeUDPDefault(value string) string {
+	value = strings.ReplaceAll(value, `,"udp":false`, "")
+	value = strings.ReplaceAll(value, `"udp":false,`, "")
+	value = strings.ReplaceAll(value, `,\"udp\":false`, "")
+	value = strings.ReplaceAll(value, `\"udp\":false,`, "")
+	value = udpYAMLDefault.ReplaceAllString(value, "")
+	return udpYAMLOrder.ReplaceAllString(value, "${1}${3}${2}udp: true")
+}

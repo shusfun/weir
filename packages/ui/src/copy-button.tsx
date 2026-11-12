@@ -45,7 +45,7 @@ function CopyButton({
   return (
     <Button
       type="button"
-      size={size ?? (iconOnly ? "icon-sm" : undefined)}
+      size={size ?? (iconOnly ? "icon" : undefined)}
       variant={variant ?? (iconOnly ? "ghost" : undefined)}
       title={iconOnly ? (copied ? copiedLabel : props["aria-label"]) : undefined}
       {...props}
@@ -65,7 +65,10 @@ function CopyButton({
       {iconOnly ? (
         <span className="sr-only" aria-live="polite">{copied ? copiedLabel : ""}</span>
       ) : (
-        <span aria-live="polite">{copied ? copiedLabel : children}</span>
+        <span aria-live="polite" className="grid [&>*]:col-start-1 [&>*]:row-start-1">
+          <span aria-hidden={copied || undefined} className={copied ? "invisible" : undefined}>{children}</span>
+          <span aria-hidden={!copied || undefined} className={!copied ? "invisible" : undefined}>{copiedLabel}</span>
+        </span>
       )}
     </Button>
   );

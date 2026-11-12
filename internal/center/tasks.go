@@ -22,13 +22,21 @@ type taskFailure struct {
 
 // taskLabels 是要进通知的周期任务（没有别的地方显示它们的结果）。
 var taskLabels = map[string]string{
-	"resource-samples": "保存资源观测",
-	"reset-usage":      "按月清零用量",
-	"check-alerts":     "离线与额度提醒",
-	"observe-security": "整理安全事件",
-	"reclaim-budgets":  "回收离线 VPS 的额度",
-	"prune-samples":    "清理过期的观测记录",
-	"maintenance-lock": "获取周期任务锁",
+	"automatic-protection-notify":     "通知管理员安全临时收紧",
+	"subscription-timeline":           "保存订阅处理时间线",
+	"subscription-cache-invalidation": "更新订阅组缓存版本",
+	"subscription-source-result":      "保存订阅源处理结果",
+	"account-grant-sync":              "同步账户套餐授权",
+	"resource-samples":                "保存资源观测",
+	"gate-presence-checkpoint":        "保存 VPS 离线时间",
+	"reset-usage":                     "按月清零用量",
+	"check-alerts":                    "离线与额度提醒",
+	"observe-security":                "整理安全事件",
+	"observe-text":                    "观察点判断与分析",
+	"observation-producer":            "保存观察点事件",
+	"reclaim-budgets":                 "回收离线 VPS 的额度",
+	"prune-samples":                   "清理过期的观测记录",
+	"maintenance-lock":                "获取周期任务锁",
 }
 
 func (t *taskLog) note(task string, err error) {

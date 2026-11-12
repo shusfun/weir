@@ -31,7 +31,7 @@ func (s *Server) presetDriver(ctx context.Context, kernel string) (kernelconf.Dr
 	drivers := s.drivers(ctx)
 	version := s.explicitDefault(ctx, kernel)
 	if version == "" {
-		version = s.newestAnyArch(kernel)
+		version = s.newestAnyArch(ctx, kernel)
 	}
 	if version != "" {
 		if d, _, err := drivers.Select(kernel, version); err == nil {

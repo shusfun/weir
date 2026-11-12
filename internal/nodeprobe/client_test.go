@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"sync/atomic"
 	"testing"
 
 	"golang.org/x/net/dns/dnsmessage"
@@ -70,7 +71,17 @@ func TestDNSProbeRoundTrip(t *testing.T) {
 func TestDownloadChecksBytesAndStatus(t *testing.T) {
 	token := "isolated-test-token"
 	mode := "valid"
+	var earlyClose atomic.Bool
+	var requests atomic.Int32
 	endpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if earlyClose.Swap(false) {
+			conn, _, err := w.(http.Hijacker).Hijack()
+			if err == nil {
+				conn.Close()
+			}
+			return
+		}
 		if r.Header.Get("Authorization") != "Bearer "+token {
 			t.Error("grant missing")
 		}
@@ -128,9 +139,19 @@ func TestDownloadChecksBytesAndStatus(t *testing.T) {
 	o := Options{Target: endpoint.URL + "/download", Token: token}
 	for _, m := range []string{"valid", "bad", "status"} {
 		mode = m
+		requests.Store(0)
 		r := download(context.Background(), proxy.Addr().String(), o)
 		if (r.Status == "passed") != (m == "valid") {
 			t.Fatalf("%s: %+v", m, r)
 		}
+		if requests.Load() != 1 {
+			t.Fatalf("%s retried a definitive result", m)
+		}
+	}
+	mode = "valid"
+	requests.Store(0)
+	earlyClose.Store(true)
+	if r := download(t.Context(), proxy.Addr().String(), o); r.Status != "passed" || requests.Load() != 2 {
+		t.Fatalf("startup disconnect: %+v, requests=%d", r, requests.Load())
 	}
 }

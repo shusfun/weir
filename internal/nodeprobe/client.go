@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"golang.org/x/net/dns/dnsmessage"
@@ -30,23 +31,15 @@ import (
 
 const PayloadSize = 256 << 10
 
-type Check struct {
-	Status    string `json:"status"` // passed / failed / unknown / not_applicable
-	Why       string `json:"why,omitempty"`
-	LatencyMS int64  `json:"latency_ms,omitempty"`
-	Bytes     int64  `json:"bytes,omitempty"`
-}
-
-type Result struct {
-	TCP Check `json:"tcp"`
-	UDP Check `json:"udp"`
-}
+type Check = contracts.NodeProbeCheck
+type Result = contracts.NodeProbeResult
 
 type Options struct {
 	Binary, Target, Token, Traceparent string
 	Run, Check                         []string
 	Client                             contracts.NodeTestClient
 	UDP                                bool
+	PublicOnly                         bool
 	Step                               func(string)
 	// UDPServers is only overridden by isolated tests; production always uses DNS.
 	UDPServers []string
@@ -151,12 +144,19 @@ func Run(ctx context.Context, o Options) (Result, error) {
 		}
 	}
 	cfg := o.Client.Config(socks)
+	if o.PublicOnly {
+		hosts, err := PublicHosts(ctx, o.Client.Proxies, o.Target)
+		if err != nil {
+			return r, err
+		}
+		cfg["hosts"] = hosts
+	}
 	// 测试端点使用中心的解析结果，避免临时内核忽略系统 hosts；连接和 TLS 仍完整经过待测节点。
 	endpoint, err := url.Parse(o.Target)
 	if err != nil || endpoint.Hostname() == "" {
 		return r, errors.New("测试端点地址无效")
 	}
-	if net.ParseIP(endpoint.Hostname()) == nil {
+	if !o.PublicOnly && net.ParseIP(endpoint.Hostname()) == nil {
 		addresses, err := net.DefaultResolver.LookupHost(ctx, endpoint.Hostname())
 		if err != nil {
 			return r, fmt.Errorf("无法解析测试端点：%w", err)
@@ -267,7 +267,26 @@ func download(ctx context.Context, addr string, o Options) Check {
 	req.Header.Set("Authorization", "Bearer "+o.Token)
 	req.Header.Set("traceparent", o.Traceparent)
 	start := time.Now()
-	resp, err := hc.Do(req)
+	// mihomo 先监听 SOCKS，再启用转发；启动窗口内完成 SOCKS 握手仍可能被断开。
+	// 只重试传输层提前断开，HTTP 拒绝、证书错误和内容校验失败保持原结果。
+	readyUntil := start.Add(5 * time.Second)
+	var resp *http.Response
+	for {
+		resp, err = hc.Do(req.Clone(ctx))
+		if err == nil || time.Now().After(readyUntil) || !(errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, syscall.ECONNRESET)) {
+			break
+		}
+		if o.Step != nil {
+			o.Step("测试客户端连接提前断开，正在重试")
+		}
+		timer := time.NewTimer(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return Check{Status: "failed", Why: "经节点访问测试端点失败：" + ctx.Err().Error()}
+		case <-timer.C:
+		}
+	}
 	if err != nil {
 		return Check{Status: "failed", Why: "经节点访问测试端点失败：" + err.Error()}
 	}

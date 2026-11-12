@@ -3,8 +3,10 @@ package center
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -28,14 +30,19 @@ func (s *Server) gateRoutes(ready, auth, admin *gin.RouterGroup) {
 	ready.POST("/agent/auth", s.agentAuthenticate)
 	a := ready.Group("/agent")
 	a.Use(s.agentAuth)
+	a.Use(s.agentCommunication)
 	a.GET("/config", s.agentConfig)
 	a.POST("/state", s.agentState)
 	a.POST("/heartbeat", s.agentHeartbeat)
+	a.POST("/heartbeat/v2", s.agentHeartbeat)
 	a.POST("/meter", s.agentMeter)
 	a.POST("/live", s.agentLive)
 	a.GET("/actions", s.agentActions)
+	a.POST("/poll", s.agentPoll)
+	a.POST("/tasks/:id/:operation", s.agentTaskUpdate)
 	a.POST("/actions/:id", s.agentActionResult)
 	a.GET("/kernels/:kernel/:version", s.agentKernel)
+	a.GET("/kernel-assets/:kernel/:version", s.agentKernelArchive)
 	a.GET("/release/:version", s.agentRelease)
 	a.GET("/certs/:id", s.agentCert)
 	a.POST("/panel-secret", s.agentPanelSecret)
@@ -44,6 +51,7 @@ func (s *Server) gateRoutes(ready, auth, admin *gin.RouterGroup) {
 	a.POST("/uploads/:id/progress", s.agentUploadProgress)
 	a.POST("/self-update", s.agentSelfUpdate)
 	s.gateAdminRoutes(admin)
+	s.workerObservationRoutes(admin)
 	s.certRoutes(admin)
 	s.nodeCertRoutes(admin)
 	s.nodeRoutes(admin)
@@ -66,6 +74,40 @@ func (s *Server) agentConfig(c *gin.Context) {
 		cur, err := s.Store.Ent.Gate.Get(ctx, g.ID)
 		if err != nil {
 			failInternal(c, 503, "config_unavailable", err)
+			return
+		}
+		execSince, execErr := strconv.ParseInt(c.Query("exec_since"), 10, 64)
+		if c.Query("exec_since") != "" && execErr == nil && cur.ConfigRevision == since {
+			exec, err := s.loadExecution(ctx, g.ID)
+			if err != nil {
+				failInternal(c, 503, "execution_unavailable", err)
+				return
+			}
+			if exec.Seq != 0 && exec.Seq != execSince {
+				cfg, err := s.compileGateConfig(ctx, cur)
+				if err != nil {
+					failInternal(c, 503, "execution_unavailable", err)
+					return
+				}
+				cfg.ExecutionOnly = true
+				cfg.ExecutionSeq = exec.Seq
+				cfg.Budgets = exec.Budgets
+				cfg.ForceDisconnect = exec.ForceDisconnect
+				c.JSON(200, cfg)
+				return
+			}
+		}
+		if raw, ok, err := s.Store.KV.Get(ctx, certPushKey(g.ID)); err != nil {
+			failInternal(c, 503, "cert_sync_unavailable", err)
+			return
+		} else if ok && raw != "" && cur.ConfigRevision == since {
+			cfg, err := s.compileGateConfig(ctx, cur)
+			if err != nil {
+				failInternal(c, 503, "cert_sync_unavailable", err)
+				return
+			}
+			cfg.CertOnly = true
+			c.JSON(200, cfg)
 			return
 		}
 		if cur.ConfigRevision != since {
@@ -92,10 +134,18 @@ func (s *Server) agentConfig(c *gin.Context) {
 // agentState 记录应用结果；新版本生效后确认对应额度，释放的额度分给其他 Gate。
 func (s *Server) agentState(c *gin.Context) {
 	var st contracts.GateState
-	if !bind(c, &st) {
+	if !bindWorker(c, &st, contracts.MaxTaskPayload) {
 		return
 	}
 	g, ctx := gateFrom(c), c.Request.Context()
+	if st.Apply != nil && !validKernelEvents(st.Apply.Events) {
+		failure(c, 400, "invalid_gate_state")
+		return
+	}
+	if st.AppliedRevision < 0 || st.AppliedRevision > g.ConfigRevision || st.FailedRevision < 0 || st.FailedRevision > g.ConfigRevision || len(st.Error) > 8192 || st.ConflictPort < 0 || st.ConflictPort > 65535 {
+		failure(c, 400, "invalid_gate_state")
+		return
+	}
 	upd := g.Update().SetLastError(st.Error)
 	advanced := st.AppliedRevision > g.AppliedRevision
 	if advanced {
@@ -107,6 +157,8 @@ func (s *Server) agentState(c *gin.Context) {
 	// 远端 VPS 的服务日志不在中心这台机器上：被拒绝的版本在中心也记一次（同一版本只记一次）。
 	if st.FailedRevision > g.FailedRevision {
 		slog.Error("gate rejected revision", "gate", g.ID, "revision", st.FailedRevision, "applied", st.AppliedRevision, "err", redact(st.Error))
+		_, observeErr := s.enqueueObservation(ctx, observationInput{Point: "gate.kernel", Resource: "gate:" + itoa(g.ID), Text: st.Error, Origin: "center.agentState"})
+		s.tasks.note("observation-producer", observeErr)
 	}
 	g, err := upd.Save(ctx)
 	if err != nil {
@@ -118,6 +170,13 @@ func (s *Server) agentState(c *gin.Context) {
 			_ = g.Update().SetLastError("端口冲突无法自动解决：" + err.Error()).Exec(ctx)
 		}
 		s.waiters.notify(g.ID)
+		_ = s.Store.Notifications.Publish(ctx, "gate:"+itoa(g.ID))
+	}
+	if st.ExecutionSeq > 0 && st.FailedRevision == 0 && st.Error == "" {
+		if err = s.confirmExecution(ctx, g.ID, st.ExecutionSeq); err != nil {
+			failInternal(c, 500, "save_failed", err)
+			return
+		}
 	}
 	if advanced {
 		s.refreshGateReachability(g.ID)
@@ -126,12 +185,45 @@ func (s *Server) agentState(c *gin.Context) {
 			_, _ = s.rebalanceUser(ctx, uid)
 		}
 	}
+	if st.CertSynced {
+		if err = s.Store.KV.Del(ctx, certPushKey(g.ID)); err != nil {
+			failInternal(c, 500, "save_failed", err)
+			return
+		}
+	}
+	if st.Apply != nil {
+		trace := st.Apply.TraceID
+		if trace == "" {
+			if id, _ := traceDetail(c)["trace_id"].(string); id != "" {
+				trace = id
+			}
+		}
+		if err = s.appendKernelEvents(ctx, g.ID, st.Apply.Revision, trace, st.Apply.Events); err != nil {
+			failInternal(c, 500, "save_failed", err)
+			return
+		}
+	}
+	if advanced || st.FailedRevision > 0 || st.ConflictPort > 0 || (st.Apply != nil && st.Apply.Mode != "") {
+		result := "ok"
+		if st.FailedRevision > 0 || st.ConflictPort > 0 {
+			result = "failed"
+		}
+		detail := traceDetail(c)
+		detail["origin"], detail["applied_revision"], detail["failed_revision"], detail["conflict_port"] = "center.agentState", st.AppliedRevision, st.FailedRevision, st.ConflictPort
+		if st.Apply != nil {
+			detail["mode"], detail["reason"] = st.Apply.Mode, st.Apply.Reason
+			if st.Apply.TraceID != "" {
+				detail["trace_id"] = st.Apply.TraceID
+			}
+		}
+		_, recordErr := s.Store.Ent.Audit.Create().SetAction("gate.config.apply").SetTarget(itoa(g.ID)).SetResult(result).SetDetail(detail).Save(ctx)
+		s.tasks.note("gate-config-record", recordErr)
+	}
 	c.JSON(200, gin.H{"ok": true})
 }
 
 func publicAddress(ip string) string {
-	addr := net.ParseIP(ip)
-	if addr == nil || addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() || addr.IsUnspecified() {
+	if !publicAddr(net.ParseIP(ip)) {
 		return ""
 	}
 	return ip
@@ -165,7 +257,11 @@ func (s *Server) agentSelfUpdate(c *gin.Context) {
 
 func (s *Server) agentHeartbeat(c *gin.Context) {
 	var hb contracts.Heartbeat
-	if !bind(c, &hb) {
+	if !bindWorker(c, &hb, contracts.MaxTaskPayload) {
+		return
+	}
+	if hb.Protocol != 0 {
+		s.agentHeartbeatV2(c, hb)
 		return
 	}
 	g, ctx := gateFrom(c), c.Request.Context()
@@ -229,13 +325,25 @@ func (s *Server) agentHeartbeat(c *gin.Context) {
 	}
 	if g.ConfigRevision != before {
 		s.waiters.notify(g.ID)
+		_ = s.Store.Notifications.Publish(ctx, "gate:"+itoa(g.ID))
 	}
-	c.JSON(200, contracts.HeartbeatReply{ConfigRevision: g.ConfigRevision, Center: s.centerOrigin(ctx), Release: s.heartbeatRelease(ctx, g, hb.Version)})
+	c.JSON(200, contracts.HeartbeatReply{HeartbeatProtocol: contracts.HeartbeatProtocol, ConfigRevision: g.ConfigRevision, Center: s.centerOrigin(ctx), Release: s.heartbeatRelease(ctx, g, hb.Version)})
 }
 
 // validUpdateState：旧版 Gate 不报 state（只报失败原因），按空值接受。
 func validUpdateState(v string) bool {
 	return v == "" || v == "downloading" || v == "replacing" || v == "failed"
+}
+
+// unexpiredActions 用绝对时间丢掉已过期动作。SQLite 的时间比较不是时区感知的。
+func unexpiredActions(items []*ent.GateAction, now time.Time) []*ent.GateAction {
+	out := make([]*ent.GateAction, 0, len(items))
+	for _, a := range items {
+		if a.ExpiresAt.After(now) {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // agentActions 长轮询待执行动作；过期的动作标记为已过期，不再下发。
@@ -245,20 +353,36 @@ func (s *Server) agentActions(c *gin.Context) {
 	defer timeout.Stop()
 	for {
 		wait := s.actionWaiters.wait(g.ID)
-		_, _ = s.Store.Ent.GateAction.Update().Where(gateaction.GateIDEQ(g.ID), gateaction.StatusEQ(gateaction.StatusPending), gateaction.ExpiresAtLT(time.Now())).SetStatus(gateaction.StatusExpired).Save(ctx)
+		// SQLite 按字符串比较时间，UTC 与本地时区会对不上。过期与否在读出后用绝对时间判断。
 		items, err := s.Store.Ent.GateAction.Query().Where(gateaction.GateIDEQ(g.ID), gateaction.StatusEQ(gateaction.StatusPending)).Order(ent.Asc(gateaction.FieldID)).Limit(10).All(ctx)
 		if err != nil {
 			failInternal(c, 503, "actions_unavailable", err)
 			return
 		}
+		items = unexpiredActions(items, time.Now())
 		if len(items) > 0 {
 			out := make([]contracts.Action, 0, len(items))
-			for _, a := range items {
-				if _, err = a.Update().SetStatus(gateaction.StatusRunning).Save(ctx); err != nil {
-					failInternal(c, 500, "save_failed", err)
-					return
+			err = s.Store.Lock.Do(ctx, "legacy-actions:"+itoa(g.ID), func(ctx context.Context) error {
+				if _, e := s.Store.Tasks.Capabilities(ctx, g.ID); e == nil {
+					return nil
+				} else if !errors.Is(e, sql.ErrNoRows) {
+					return e
 				}
-				out = append(out, contracts.Action{ID: int64(a.ID), Kind: a.Kind, Payload: a.Payload, ExpiresAt: a.ExpiresAt})
+				for _, a := range items {
+					n, e := s.Store.Ent.GateAction.Update().Where(gateaction.IDEQ(a.ID), gateaction.StatusEQ(gateaction.StatusPending)).SetStatus(gateaction.StatusRunning).Save(ctx)
+					if e != nil {
+						return e
+					}
+					if n != 1 {
+						continue
+					}
+					out = append(out, contracts.Action{ID: int64(a.ID), Kind: a.Kind, Payload: a.Payload, ExpiresAt: a.ExpiresAt})
+				}
+				return nil
+			})
+			if err != nil {
+				failInternal(c, 503, "actions_unavailable", err)
+				return
 			}
 			c.JSON(200, out)
 			return
@@ -286,6 +410,10 @@ func (s *Server) agentActionResult(c *gin.Context) {
 		failure(c, 404, "action_not_found")
 		return
 	}
+	if _, queued := a.Payload["protocol"]; queued {
+		failure(c, 409, "task_lease_required")
+		return
+	}
 	if a.Status == gateaction.StatusDone || a.Status == gateaction.StatusFailed {
 		c.JSON(200, gin.H{"ok": true})
 		return
@@ -304,6 +432,11 @@ func (s *Server) agentActionResult(c *gin.Context) {
 
 // enqueueAction 下发一次性动作并唤醒 Gate 的动作长轮询。
 func (s *Server) enqueueAction(ctx context.Context, gid int, kind string, payload map[string]any, ttl time.Duration) (*ent.GateAction, error) {
+	if _, err := s.Store.Tasks.Capabilities(ctx, gid); err == nil {
+		return s.enqueueWorkerTask(ctx, gid, kind, payload, ttl)
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
 	a, err := s.Store.Ent.GateAction.Create().SetGateID(gid).SetKind(kind).SetPayload(payload).SetExpiresAt(time.Now().Add(ttl)).Save(ctx)
 	if err == nil {
 		s.actionWaiters.notify(gid)
@@ -342,7 +475,7 @@ func (s *Server) agentKernel(c *gin.Context) {
 		return
 	}
 	c.Header("X-Kernel-SHA256", sum)
-	c.File(path)
+	s.distributeFile(c, path)
 }
 
 var selfDigest struct {
@@ -384,5 +517,5 @@ func (s *Server) agentRelease(c *gin.Context) {
 		return
 	}
 	c.Header("X-Release-SHA256", sum)
-	c.File(exe)
+	s.distributeFile(c, exe)
 }

@@ -2,6 +2,7 @@ package gate
 
 import (
 	"bufio"
+	"context"
 	"os"
 	"strconv"
 	"strings"
@@ -38,4 +39,7 @@ func netCounters() (*uint64, *uint64) {
 }
 
 // The fallback supports older helpers without process observations.
-func sampleHost() *contracts.HostSample { return hostSampler.Sample("/", nil) }
+func sampleHost() *contracts.HostSample {
+	hostSampler.RefreshDNS(context.Background())
+	return hostSampler.Sample("/", nil)
+}

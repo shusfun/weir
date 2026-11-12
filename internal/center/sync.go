@@ -2,6 +2,7 @@ package center
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/shusfun/weir/internal/store/ent"
@@ -50,18 +51,62 @@ func (s *Server) userNodeIDs(ctx context.Context, u *ent.User) (map[int]*ent.Nod
 	return out, nil
 }
 
+func pendingBumpKey(uid int) string { return "sync-bump:" + itoa(uid) }
+
+func (s *Server) pendingBumps(ctx context.Context, uid int) ([]int, error) {
+	raw, ok, err := s.Store.KV.Get(ctx, pendingBumpKey(uid))
+	if err != nil || !ok || raw == "" {
+		return nil, err
+	}
+	var ids []int
+	if err = json.Unmarshal([]byte(raw), &ids); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+func (s *Server) savePendingBumps(ctx context.Context, uid int, ids []int) error {
+	b, err := json.Marshal(ids)
+	if err != nil {
+		return err
+	}
+	return s.Store.KV.Set(ctx, pendingBumpKey(uid), string(b), 0)
+}
+
 // SyncUser 让该用户的凭据与其套餐、链接、链式代理一致，然后重新分配额度并通知相关 Gate。
+// 凭据先提交，配置版本在锁外推进。推进失败时先把 Gate 记下来：下次即使凭据已经一致，
+// 也要重试推进，不能把还没通知到的 Gate 当成同步完成。
 func (s *Server) SyncUser(ctx context.Context, uid int) error {
 	var gates []int
 	err := s.Store.Lock.Do(ctx, "cred-sync", func(ctx context.Context) error {
-		var err error
-		gates, err = s.syncUserLocked(ctx, uid)
-		return err
+		changed, err := s.syncUserLocked(ctx, uid)
+		if err != nil {
+			return err
+		}
+		pending, err := s.pendingBumps(ctx, uid)
+		if err != nil {
+			return err
+		}
+		seen := map[int]bool{}
+		for _, id := range append(changed, pending...) {
+			if id == 0 || seen[id] {
+				continue
+			}
+			seen[id] = true
+			gates = append(gates, id)
+		}
+		if len(gates) > 0 {
+			return s.savePendingBumps(ctx, uid, gates)
+		}
+		return nil
 	})
 	if err != nil {
 		return err
 	}
 	if err = s.bumpGates(ctx, gates); err != nil {
+		return err
+	}
+	if err = s.Store.KV.Del(ctx, pendingBumpKey(uid)); err != nil {
 		return err
 	}
 	return s.Rebalance(ctx, uid)
@@ -90,7 +135,7 @@ func (s *Server) syncUserLocked(ctx context.Context, uid int) ([]int, error) {
 	}
 	desired := map[string]want{}
 	// WireGuard 没有按用户的流量统计，Gate 无法执行额度：只给不限额度的用户发凭据。
-	wgBlocked := func(protocol string) bool { return protocol == "wireguard" && u.Quota > 0 }
+	wgBlocked := func(protocol string) bool { return protocol == "wireguard" && !u.Unlimited }
 	for _, l := range links {
 		for id, n := range nodes {
 			if wgBlocked(n.Protocol) {

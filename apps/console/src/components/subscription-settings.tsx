@@ -11,6 +11,8 @@ import { TemplatePicker, useTemplates } from "./subscription-profiles";
 import { State } from "./feedback";
 import { field, useConsoleContext } from "../lib/console-context";
 import { useUnsavedChanges } from "../lib/dirty";
+import { RenderingSettingsFields, renderingErrorFields } from "../features/subscriptions/settings/rendering-settings";
+import { ConverterSettingsPanel } from "../features/subscriptions/settings/converter-settings";
 
 export function TemplatesPanel() {
   const confirm = useConfirm();
@@ -97,7 +99,7 @@ function TemplateForm({ value, close, saved }: { value: CustomTemplate | "new"; 
 export function SettingsPanel() {
   const q = useQuery({ queryKey: ["subscription-settings"], queryFn: () => api("/admin/subscriptions/settings") as Promise<SubscriptionSettings> });
   if (q.isPending || q.error) return <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} />;
-  return <SettingsForm value={q.data} saved={() => q.refetch()} />;
+  return <section className="stack"><SettingsForm key={JSON.stringify(q.data)} value={q.data} saved={() => q.refetch()} /><ConverterSettingsPanel /></section>;
 }
 
 const switches = [
@@ -106,8 +108,6 @@ const switches = [
   ["prepend_sources", "订阅源节点加源名称"],
   ["prepend_group_name", "手动节点加分组名"],
   ["traffic_nodes", "置顶流量 / 到期提示节点"],
-  ["enable_udp", "输出中开启 UDP"],
-  ["skip_cert_verify", "输出中跳过证书校验（不推荐）"],
   ["disguise", "伪装页：浏览器打开订阅地址只看到普通页面（用量与一键导入改为登录后在「我的订阅」查看；客户端拉取不受影响）"],
 ] as const;
 
@@ -119,11 +119,12 @@ function SettingsForm({ value, saved }: { value: SubscriptionSettings; saved: ()
   useUnsavedChanges(dirty);
   const save = useFormAction(() => api("/admin/subscriptions/settings", "PUT", { ...s, default_operators: ops }), {
     ok: "已保存",
-    fields: { invalid_template: "template" },
+    fields: { invalid_engine: "engine", invalid_template: "template", ...renderingErrorFields },
     onSuccess: saved,
   });
   return (
     <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
+      <Field name="engine" label="默认转换引擎"><Segmented aria-label="默认转换引擎" value={s.engine || "builtin"} onValueChange={(engine) => set({ engine })} options={[["builtin", "内置"], ["external", "外部"]] as const} /></Field>
       <SectionHeader title="默认设置" description="订阅组未单独设置的项使用这里的值。" />
       <FormGrid>
         <Field label="默认规则模板" name="template"><TemplatePicker value={s.template} onChange={(v) => set({ template: v ?? "" })} /></Field>
@@ -140,6 +141,7 @@ function SettingsForm({ value, saved }: { value: SubscriptionSettings; saved: ()
       </FormGrid>
       <Field label="全局只保留（每行一条）"><Textarea rows={2} value={s.filter_include} onChange={(e) => set({ filter_include: e.target.value })} /></Field>
       <Field label="全局排除（每行一条）"><Textarea rows={2} value={s.filter_exclude} onChange={(e) => set({ filter_exclude: e.target.value })} /></Field>
+      <RenderingSettingsFields value={s} change={(patch) => set(patch)} />
       <Collapsible title={`默认处理链（${ops.length} 步；订阅组没有自己的处理链时使用）`}>
         <OperatorEditor value={ops} change={setOps} />
       </Collapsible>

@@ -30,6 +30,10 @@ func (g *fakeGate) serveNodeTests(t *testing.T, fail int, seen *[]map[string]any
 			json.Unmarshal(body, &acts)
 			for _, a := range acts {
 				res := contracts.ActionResult{OK: true, Result: map[string]any{"stage": "connect", "latency_ms": 3}}
+				if a.Kind == contracts.ActionRealityProbe {
+					res.Result["best"] = "www.microsoft.com"
+					res.Result["results"] = []any{map[string]any{"host": "www.microsoft.com", "suitable": true, "latency_ms": 3}}
+				}
 				if a.Kind == contracts.ActionNodeTest {
 					if time.Until(a.ExpiresAt) < 4*time.Minute {
 						t.Error("node test expires before cold kernel preparation can finish")

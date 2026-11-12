@@ -201,6 +201,8 @@ type exitProbe struct {
 	Note      string    `json:"note,omitempty"`
 	Error     string    `json:"error,omitempty"`
 	At        time.Time `json:"at"`
+	// UDP 是 SOCKS5 等出口的实测结果。没有测过时为空，页面显示未知。
+	UDP *bool `json:"udp,omitempty"`
 }
 
 func exitProbeKey(owner string) string { return "exit-probe:" + owner }
@@ -233,11 +235,10 @@ func (s *Server) probeExit(ctx context.Context, entry *ent.Gate, ex resolvedExit
 		if err != nil {
 			return nil, err
 		}
-		credential, revoke, err := s.issueProbeCredential(ctx, n)
+		credential, err := s.probeCredential(ctx, n)
 		if err != nil {
 			return nil, err
 		}
-		defer revoke()
 		g, err := s.waitProbeApplied(ctx, n)
 		if err != nil {
 			return nil, err
@@ -275,8 +276,9 @@ func (s *Server) probeExit(ctx context.Context, entry *ent.Gate, ex resolvedExit
 		for k, v := range config {
 			payload[k] = v
 		}
-		jobStep(ctx, fmt.Sprintf("正在经出口实测（第 %d/%d 个成员）", i+1, min(len(members), 5)), 45*time.Second)
-		res, err := s.gateProbe(ctx, entry, contracts.ActionChainProbe, payload, 45*time.Second)
+		// 第一次实测要先把 mihomo 拉到 Gate，不能把下载时间算进短连接时限里。
+		jobStep(ctx, fmt.Sprintf("正在经出口实测（第 %d/%d 个成员）", i+1, min(len(members), 5)), 3*time.Minute)
+		res, err := s.gateProbe(ctx, entry, contracts.ActionChainProbe, payload, 3*time.Minute)
 		if err != nil {
 			last = err
 			continue
@@ -287,6 +289,9 @@ func (s *Server) probeExit(ctx context.Context, entry *ent.Gate, ex resolvedExit
 		}
 		if v, ok := res["exit_ip"].(string); ok {
 			p.ExitIP = v
+		}
+		if v, ok := res["udp"].(bool); ok {
+			p.UDP = &v
 		}
 		return p, nil
 	}

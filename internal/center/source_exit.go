@@ -37,6 +37,20 @@ type sourceSpec struct {
 	Match     string `json:"match"`
 }
 
+// measuredSocksUDP 把已经实测过的同一 SOCKS5 地址结果用到分组成员上。没测过保持未知，不当成支持。
+func (s *Server) measuredSocksUDP(ctx context.Context, address string, port int) *bool {
+	rows, err := s.Store.Ent.Exit.Query().Where(entexit.KindEQ(entexit.KindSocks5), entexit.AddressEQ(address), entexit.PortEQ(port)).All(ctx)
+	if err != nil {
+		return nil
+	}
+	for _, e := range rows {
+		if p, ok := s.loadExitProbe(ctx, exitOwner(e.ID)); ok && p.UDP != nil {
+			return p.UDP
+		}
+	}
+	return nil
+}
+
 func specOf(m map[string]any) sourceSpec {
 	b, _ := json.Marshal(m)
 	var sp sourceSpec
@@ -120,6 +134,13 @@ func (s *Server) resolveSpec(ctx context.Context, g *ent.Gate, kernels []string,
 			ex.Skipped = append(ex.Skipped, n.Remark+"："+err.Error())
 			continue
 		}
+		s.stampMeasuredUDP(ctx, &o)
+		if supported, known := outboundKnownUDP(o); known {
+			if o.Settings == nil {
+				o.Settings = map[string]any{}
+			}
+			o.Settings["udp"] = supported
+		}
 		members = append(members, o)
 		ex.Names, ex.Links = append(ex.Names, n.Remark), append(ex.Links, n.RawLink)
 		if sp.Mode != "filter" {
@@ -134,7 +155,12 @@ func (s *Server) resolveSpec(ctx context.Context, g *ent.Gate, kernels []string,
 	case len(members) > contracts.MaxGroupMembers:
 		return resolvedExit{}, fmt.Errorf("匹配到 %d 个节点，一组最多 %d 个，请收紧筛选条件", len(members), contracts.MaxGroupMembers)
 	case sp.Mode == "filter":
-		ex.Outbound = contracts.Outbound{Protocol: "group", Members: members}
+		udp := udpMembers(members)
+		settings := map[string]any{"udp_members": len(udp)}
+		if len(members) > 0 && allUDPKnown(members) && len(udp) == 0 {
+			settings["udp_supported"] = false
+		}
+		ex.Outbound = contracts.Outbound{Protocol: "group", Members: members, Settings: settings}
 	default:
 		ex.Outbound = members[0]
 	}
@@ -202,7 +228,9 @@ type storedExit struct {
 }
 
 // refreshSourceExit 解析并保存；结果有变化时让 Gate 重新下发。解析失败保留上一次可用的。
-func (s *Server) refreshSourceExit(ctx context.Context, owner string, gid int, sp sourceSpec, publicOnly bool) error {
+// probe 为真时（定时刷新用户出口）成员变化后先经 Gate 实测：订阅源里的域名可能已改指内网，字面检查拦不住。
+// 实测不过保留上一次可用的出口，和保存时的规则一致。保存路径已经实测过，传 false。
+func (s *Server) refreshSourceExit(ctx context.Context, owner string, gid int, sp sourceSpec, publicOnly, probe bool) error {
 	g, err := s.Store.Ent.Gate.Get(ctx, gid)
 	if err != nil {
 		return err
@@ -221,6 +249,12 @@ func (s *Server) refreshSourceExit(ctx context.Context, owner string, gid int, s
 	if string(a) == string(b) && len(ex.Skipped) == len(prev.Skipped) {
 		return nil
 	}
+	var measured *exitProbe
+	if probe && publicOnly && string(a) != string(b) {
+		if measured, err = s.probeExit(ctx, g, ex, true); err != nil {
+			return fmt.Errorf("订阅源出口成员变化后实测未通过，保留上一次可用的出口：%w", err)
+		}
+	}
 	// A changed member set invalidates the previously observed egress IP.
 	if err := s.Store.KV.Del(ctx, exitProbeKey(owner)); err != nil {
 		return err
@@ -232,8 +266,52 @@ func (s *Server) refreshSourceExit(ctx context.Context, owner string, gid int, s
 	if err = s.Store.KV.Set(ctx, sourceExitKey(owner), string(raw), 0); err != nil {
 		return err
 	}
+	s.saveExitProbe(ctx, owner, measured)
 	_, err = s.bumpGate(ctx, gid)
 	return err
+}
+
+// stampMeasuredUDP 把同一地址已有的 SOCKS5 实测写到成员上。编译时再写一次，避免保存时还没测完就一直把 UDP 发给未知成员。
+func (s *Server) stampMeasuredUDP(ctx context.Context, o *contracts.Outbound) {
+	if o == nil || (o.Protocol != "socks" && o.Protocol != "socks5") {
+		return
+	}
+	measured := s.measuredSocksUDP(ctx, o.Address, o.Port)
+	supported, known := udpKind(o.Protocol, measured)
+	if !known {
+		return
+	}
+	if o.Settings == nil {
+		o.Settings = map[string]any{}
+	}
+	o.Settings["udp"] = supported
+}
+
+func outboundKnownUDP(o contracts.Outbound) (supported, known bool) {
+	var measured *bool
+	if o.Settings != nil {
+		if v, ok := o.Settings["udp"].(bool); ok {
+			measured = &v
+		}
+	}
+	return udpKind(o.Protocol, measured)
+}
+
+func (s *Server) stampGroupUDP(ctx context.Context, o *contracts.Outbound) {
+	if o == nil || o.Protocol != "group" {
+		return
+	}
+	for i := range o.Members {
+		s.stampMeasuredUDP(ctx, &o.Members[i])
+	}
+	udp := udpMembers(o.Members)
+	if o.Settings == nil {
+		o.Settings = map[string]any{}
+	}
+	o.Settings["udp_members"] = len(udp)
+	if len(o.Members) > 0 && allUDPKnown(o.Members) && len(udp) == 0 {
+		o.Settings["udp_supported"] = false
+	}
 }
 
 func (s *Server) loadExit(ctx context.Context, owner string) (storedExit, bool) {
@@ -327,7 +405,7 @@ func (s *Server) RefreshSourceExits(ctx context.Context) {
 		return
 	}
 	for _, e := range es {
-		s.tasks.note("source-exit-"+itoa(e.ID), s.refreshSourceExit(ctx, exitOwner(e.ID), e.GateID, specOf(e.Source), e.OwnerUserID != nil))
+		s.tasks.note("source-exit-"+itoa(e.ID), s.refreshSourceExit(ctx, exitOwner(e.ID), e.GateID, specOf(e.Source), e.OwnerUserID != nil, true))
 	}
 }
 

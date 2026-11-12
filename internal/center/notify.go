@@ -187,7 +187,7 @@ func (s *Server) CheckAlerts(ctx context.Context, now time.Time) error {
 	}
 	for _, u := range users {
 		name := firstNonEmpty(u.Name, u.Email)
-		if cfg.UserQuota > 0 && u.Quota > 0 && u.Used*100 >= u.Quota*int64(cfg.UserQuota) {
+		if cfg.UserQuota > 0 && !u.Unlimited && u.Quota > 0 && u.Used*100 >= u.Quota*int64(cfg.UserQuota) {
 			s.notifyOnce(ctx, fmt.Sprintf("quota:%d:%d", u.ID, u.UsageResetAt.Unix()), fmt.Sprintf("用户「%s」已用 %s / %s。", name, subgroup.FormatBytes(u.Used), subgroup.FormatBytes(u.Quota)))
 		}
 		if cfg.UserExpiry > 0 && u.ExpiresAt != nil && u.ExpiresAt.After(now) && u.ExpiresAt.Sub(now) <= time.Duration(cfg.UserExpiry)*24*time.Hour {
@@ -228,6 +228,9 @@ func (s *Server) RefreshSources(ctx context.Context, now time.Time) error {
 	for _, r := range rows {
 		sources = append(sources, toSource(r))
 	}
+	ctx, finish := s.startSubscriptionRun(ctx, 0)
+	defer finish(nil)
+	ctx = s.subscriptionContext(ctx, 0)
 	_, results := subgroup.Combine(ctx, s.subFetcher(), kvCache{s}, sources, nil, subgroup.Options{UserAgent: "clash-meta/2.5.0"})
 	s.recordResults(ctx, results)
 	s.invalidateGroups(ctx)

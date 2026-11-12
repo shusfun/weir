@@ -2,19 +2,27 @@
 // 规则防线（限流、失败登录计数）不依赖任何模型；Laya 或 dsh 不可用时事件照常记录，判断显示为「未知」。
 import { useState } from "react";
 import { useQuery } from "../lib/query";
-import { Badge, Button, Field, Form, FormGrid, Input, Notice, SwitchField, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, PasswordInput } from "@weir/ui";
+import { Badge, Button, Field, Form, FormGrid, Input, Notice, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, PasswordInput } from "@weir/ui";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
 import { ActionsWait } from "./wait";
 import { date } from "../lib/models";
 import { State } from "./feedback";
 import { Section } from "./system-settings";
+import { useConsoleContext } from "../lib/console-context";
+import { useUnsavedChanges } from "../lib/dirty";
+import { LayaHosting } from "../features/ai/laya-hosting";
+import { OpsRecords } from "../features/ai/ops-records";
+import { LayaDiscovery } from "../features/ai/laya-discovery";
 
 interface LayaView {
+	mode?: "center" | "gate";
+	gate_id?: number;
   enabled: boolean;
   url: string;
   model: string;
   key_set: boolean;
+  compatibility?: { installed_version?: string; verified_range: string; verified: boolean; enable_background: boolean; code?: string; reason?: string };
 }
 
 type Verdict = { verdict: { category: string; confidence: number } };
@@ -24,9 +32,12 @@ export function LayaCard() {
   const [draft, setDraft] = useState<LayaView | null>(null);
   const [key, setKey] = useState("");
   const v = draft ?? q.data;
-  const save = useFormAction(() => api("/admin/defense/laya", "PUT", { ...v, key }), {
+  const gates = useQuery({ queryKey: ["gates"], queryFn: async () => (await api("/admin/gates")).items as { id: number; name: string; online: boolean }[] });
+  useUnsavedChanges(draft !== null || key !== "");
+  useConsoleContext({ notices: ["Laya 接入设置；判断规则在 AI 外置配置中版本化维护。"], form: [{ key: "laya_key", label: "Laya API Key", secret: true, filled: key !== "" }] });
+  const save = useFormAction(() => api("/admin/defense/laya", "PUT", { mode: v?.mode, gate_id: v?.gate_id, enabled: v?.enabled, url: v?.url, model: v?.model, key }), {
     ok: "已保存",
-    fields: { invalid_laya_url: "url" },
+    fields: { invalid_laya_url: "url", invalid_laya_gate: "gate_id", invalid_laya_settings: "model" },
     onSuccess: () => {
       setDraft(null);
       setKey("");
@@ -38,27 +49,35 @@ export function LayaCard() {
     run("test", () => api("/admin/defense/laya/test", "POST"), (r) => {
       const { verdict } = r as Verdict;
       return `Laya 可用：合成事件判为「${verdicts[verdict.category] ?? verdict.category}」`;
-    }, { detail: (r) => `置信度 ${Math.round((r as Verdict).verdict.confidence * 100)}%`, fail: "Laya 测试未通过", wait: { label: "正在请 Laya 判断一条合成事件", max: 8 } });
+    }, { detail: (r) => (r as Verdict).verdict.category === "unknown" ? "判断未知，请查看活动记录" : `置信度 ${Math.round((r as Verdict).verdict.confidence * 100)}%`, fail: "Laya 测试未通过", wait: { label: "正在请 Laya 判断一条合成事件", max: 17 } });
   return (
-    <Section title="Laya 安全观察" description="Laya 只判断安全事件是否可疑（原生 /v1/systemone 接口）。发给它的事件只有类型与次数，不含来源地址、账号和日志原文。Key 加密保存，不会再显示。">
+    <Section title="Laya 安全观察" description="接入官方 ollaya 原生接口。中心可直连已有实例；VPS 模式通过任务通道在指定 VPS 上判断，离线时显示未知。判断问题与可见置信度由 AI 外置配置管理。">
       {q.isPending || q.error || !v ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : (
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
           <div className="settings-group">
             <SwitchField placement="end" label="启用 Laya 判断" checked={v.enabled} onCheckedChange={(on) => setDraft({ ...v, enabled: on })} />
           </div>
+          {q.data?.enabled && <Notice tone={q.data.compatibility?.enable_background ? "info" : "warn"}>实际版本：{q.data.compatibility?.installed_version ?? "未知"}；已验证范围：{q.data.compatibility?.verified_range ?? "未知"}。{q.data.compatibility?.enable_background ? "版本已验证，后台分析仍受总开关和权限限制。" : q.data.compatibility?.reason ?? "版本状态未知，后台分析暂停。"}</Notice>}
           <FormGrid>
-            <Field label="Laya 地址" name="url" hint="HTTPS；会自动补上 /v1/systemone。"><Input type="url" placeholder="https://laya.example.com" value={v.url} onChange={(e) => setDraft({ ...v, url: e.target.value })} /></Field>
-            <Field label="模型"><Input placeholder="observer" value={v.model} onChange={(e) => setDraft({ ...v, model: e.target.value })} /></Field>
+            <Field label="推理位置" name="mode"><Select value={v.mode ?? "center"} onValueChange={(mode) => setDraft({ ...v, mode: mode as "center" | "gate" })}><SelectTrigger aria-label="推理位置"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="center">中心接入或托管</SelectItem><SelectItem value="gate">指定 VPS</SelectItem></SelectContent></Select></Field>
+            <Field label="模型" name="model" required><Input required placeholder="laya:multilingual" value={v.model} onChange={(e) => setDraft({ ...v, model: e.target.value })} /></Field>
           </FormGrid>
-          <Field label="API Key" hint={v.key_set ? "已保存；留空则沿用。" : "加密保存，不会再显示。"}>
+          {v.mode === "gate" ? <>
+            {gates.isPending || gates.error ? <State loading={gates.isPending} error={gates.error} onRetry={() => gates.refetch()} /> : <Field label="执行 VPS" name="gate_id" required hint="目标需完成 Laya 部署批准与模型安装；不会改派到其他 VPS。"><Select value={v.gate_id ? String(v.gate_id) : ""} onValueChange={(id) => setDraft({ ...v, gate_id: Number(id) })}><SelectTrigger aria-label="执行 VPS"><SelectValue placeholder="选择 VPS" /></SelectTrigger><SelectContent>{gates.data.map((g) => <SelectItem key={g.id} value={String(g.id)}>{g.name}{!g.online && "（离线）"}</SelectItem>)}</SelectContent></Select></Field>}
+          </> : <>
+          <Field label="Laya 地址" name="url" required hint="HTTPS；本机回环允许 HTTP，自动补上 /v1/systemone。"><Input required type="url" placeholder="http://127.0.0.1:11435" value={v.url} onChange={(e) => setDraft({ ...v, url: e.target.value })} /></Field>
+          <Field label="API Key" hint={v.key_set ? "已保存；留空则沿用。" : "可选；官方回环实例可以不填。加密保存，不会再显示。"}>
             <PasswordInput autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} />
           </Field>
+          </>}
           <div className="actions">
             <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
             <Button type="button" variant="outline" disabled={isBusy() || !q.data?.enabled} onClick={() => void test()} busy={isBusy()} busyText="正在测试…">测试</Button>
             <ActionsWait wait={waitFor("test")} />
           </div>
           {save.error && <Notice tone="bad">{save.error}</Notice>}
+          {v.mode !== "gate" && <><LayaDiscovery url={v.url} model={v.model} apiKey={key} onAttached={() => { setDraft(null); setKey(""); void q.refetch(); }} /><LayaHosting onUse={(url, model) => setDraft({ ...v, url, model })} /></>}
+          <OpsRecords />
         </Form>
       )}
     </Section>
@@ -73,7 +92,7 @@ interface SecurityEvent {
   failed_logins_10m: number;
   status: string;
   created_at: string;
-  laya?: { category: string; confidence: number };
+  laya?: { category: string; confidence: number; code?: string; profile_version?: string };
   laya_error?: string;
   analysis?: string;
 }
@@ -108,7 +127,7 @@ export function EventsCard({ dshReady }: { dshReady: boolean }) {
                     <TableCell className="whitespace-nowrap text-meta">{date(e.created_at)}</TableCell>
                     <TableCell>{kinds[e.kind] ?? e.kind}<small className="block text-[var(--weir-ink-3)]">10 分钟内失败登录 {e.failed_logins_10m} 次</small></TableCell>
                     <TableCell><code className="text-meta">{e.source_ip || "未知"}</code></TableCell>
-                    <TableCell>{e.laya ? <Badge variant="soft" tone={e.laya.category === "suspicious" ? "bad" : e.laya.category === "normal" ? "ok" : "neutral"}>{verdicts[e.laya.category]} {Math.round(e.laya.confidence * 100)}%</Badge> : <small className="text-[var(--weir-ink-3)]" title={e.laya_error}>未知</small>}</TableCell>
+                    <TableCell>{e.laya ? <span title={[e.laya_error, e.laya.code, e.laya.profile_version].filter(Boolean).join(" · ")}><Badge variant="soft" tone={e.laya.category === "suspicious" ? "bad" : e.laya.category === "normal" ? "ok" : "neutral"}>{verdicts[e.laya.category]}{e.laya.category !== "unknown" && ` ${Math.round(e.laya.confidence * 100)}%`}</Badge></span> : <small className="text-[var(--weir-ink-3)]" title={e.laya_error}>未知</small>}</TableCell>
                     <TableCell><Badge variant="soft" tone={tone}>{label}</Badge>{e.analysis && <small className="mt-1 block max-w-[28ch] whitespace-pre-wrap break-words">{e.analysis}</small>}</TableCell>
                     <TableCell>
                       {(e.status === "new" || e.status === "no_action") && (

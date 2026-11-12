@@ -7,6 +7,7 @@ import (
 
 func TestGateTopologyUsersNodesRoutesExits(t *testing.T) {
 	s, admin, g := setupGate(t)
+	followProbeRevisions(t, s)
 	g.serveActions(t, s, nil)
 	gid := itoa(int(g.id))
 	n := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "ss2022", "skip_probe": true}, 200)

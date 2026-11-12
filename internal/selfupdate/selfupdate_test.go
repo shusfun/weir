@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/shusfun/weir/internal/ghrelease"
 )
@@ -68,7 +69,7 @@ func setup(t *testing.T, roleName string, tamper bool) *env {
 				_, _ = w.Write(append([]byte("x"), body...))
 				return
 			}
-			_, _ = w.Write(body)
+			http.ServeContent(w, r, name, time.Time{}, bytes.NewReader(body))
 		default:
 			http.NotFound(w, r)
 		}

@@ -9,7 +9,7 @@
   /* 页面内的通用部件（图标方块、链接、焦点轮廓）随公开页主题色 */
   --weir-accent-text: var(--public-accent);
   --weir-accent-soft: var(--public-soft);
-  max-width: 1120px;
+  max-width: var(--weir-public-width);
   margin: 0 auto;
   padding: 0 var(--weir-space-8) var(--weir-space-8);
   min-height: 100dvh;
@@ -43,9 +43,11 @@
   line-height: var(--weir-leading-heading);
   font-weight: var(--weir-weight-semibold);
 }
+.published-top-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: end; gap: var(--weir-gap-9); }
+.published-top { flex-wrap: wrap; }
 .published-hero {
-  padding: 64px 0 48px;
-  max-width: 850px;
+  padding: var(--weir-public-hero-space) 0 var(--weir-gap-41);
+  max-width: var(--weir-public-hero-width);
   overflow-wrap: anywhere;
 }
 
@@ -54,7 +56,7 @@
   font-size: var(--weir-text-large-title);
   line-height: var(--weir-leading-large-title);
   font-weight: var(--weir-weight-bold);
-  letter-spacing: -0.02em;
+  letter-spacing: var(--weir-track-heading);
   margin: var(--weir-space-4) 0 var(--weir-space-5);
 }
 .published-description {
@@ -94,7 +96,7 @@
   color: var(--weir-ink-2);
 }
 .published-directory {
-  margin-top: 48px;
+  margin-top: var(--weir-gap-41);
 }
 .published-directory-heading {
   display: flex;
@@ -138,7 +140,7 @@
 }
 .published-card-link:hover .published-card {
   border-color: var(--public-accent);
-  box-shadow: 0 6px 22px var(--weir-shade);
+  box-shadow: var(--weir-shadow-card);
 }
 .published-card-body {
   display: flex;
@@ -172,7 +174,7 @@
   padding-top: var(--weir-space-2);
 }
 .published-footer {
-  margin-top: 64px;
+  margin-top: var(--weir-public-hero-space);
   padding-top: var(--weir-space-6);
   border-top: 1px solid var(--weir-line-soft);
   font-size: var(--weir-text-meta);
@@ -183,10 +185,10 @@
 .published-qr > svg {
   margin: var(--weir-space-4) auto;
   /* 二维码必须保持白底以保证扫码识别 */
-  background: #fff;
-  padding: 12px;
+  background: var(--weir-qr-paper);
+  padding: var(--weir-gap-13);
   box-sizing: content-box;
-  max-width: calc(100% - 24px);
+  max-width: calc(100% - var(--weir-gap-13) * 2);
   height: auto;
 }
 .published-qr p {
@@ -198,7 +200,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .published-hero {
-    padding-top: 48px;
+    padding-top: var(--weir-gap-41);
   }
 }
 @media (max-width: 540px) {

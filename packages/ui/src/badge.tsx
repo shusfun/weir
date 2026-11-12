@@ -1,11 +1,11 @@
-// 来源 codedthemes/uiable badge；本地改为 iOS 风格：无边框的浅色小胶囊（和圆角矩形的按钮、输入框区分），状态色文字取达标的 -ink 变体。
+// 来源 codedthemes/uiable badge；按设计稿 .v-pill：25 高、圆角 9 的小标签，状态色文字加 11% 浅底，中性标签是凹面底加细描边。
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 
 const badgeVariants = cva(
-  "group/badge inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-fine font-medium whitespace-nowrap [&>svg]:pointer-events-none [&>svg]:size-3!",
+  "group/badge inline-flex h-[25px] w-fit shrink-0 items-center justify-center gap-[5px] overflow-hidden has-[a]:overflow-visible rounded-[var(--weir-radius-9)] border border-transparent px-[11px] text-fine font-semibold whitespace-nowrap [&>svg]:pointer-events-none [&>svg]:size-3!",
   {
     variants: {
       variant: {
@@ -19,6 +19,8 @@ const badgeVariants = cva(
         soft: "",
         // 状态文字：透明底 + 状态色文字，通常前置 StatusLamp（任务 / 设备 / 授权状态）
         status: "gap-1.5 bg-transparent pr-2 pl-1",
+        // 小标签（稿子 .v-tag）：协议、安全层这类属性，比状态标签更轻
+        tag: "h-auto rounded-[var(--weir-radius-7)] border-[var(--weir-line-soft)] bg-[var(--weir-well)] px-[7px] py-px font-normal text-[var(--weir-ink-2)]",
       },
       tone: {
         neutral: "",
@@ -29,7 +31,7 @@ const badgeVariants = cva(
       },
     },
     compoundVariants: [
-      { variant: "soft", tone: "neutral", className: "bg-[var(--weir-fill-4)] text-[var(--weir-ink-2)]" },
+      { variant: "soft", tone: "neutral", className: "border-[var(--weir-line-soft)] bg-[var(--weir-well)] text-[var(--weir-ink-2)]" },
       { variant: "soft", tone: "ok", className: "bg-[var(--weir-ok-soft)] text-[var(--weir-ok-ink)]" },
       { variant: "soft", tone: "warn", className: "bg-[var(--weir-warn-soft)] text-[var(--weir-warn-ink)]" },
       { variant: "soft", tone: "bad", className: "bg-[var(--weir-bad-soft)] text-[var(--weir-bad-ink)]" },

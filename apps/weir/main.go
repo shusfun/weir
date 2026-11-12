@@ -37,6 +37,8 @@ func dispatch(args []string) int {
 		return runKernel(args[1:])
 	case "dsh":
 		return runDSH(args[1:])
+	case "laya":
+		return runLaya(args[1:])
 	case "self-update":
 		return runSelfUpdate(args[1:])
 	case "version", "--version":
@@ -58,6 +60,7 @@ func usage() {
   weir gate <命令> [参数]  Gate：run / pair / local-pair / helper / helper-health / version
   weir kernel import <内核> <版本> <架构> <文件>   离线导入内核到中心缓存
   weir dsh agent --dir <目录>   dsh 管理进程（由 systemd 单元 weir-dsh 启动）
+  weir laya helper          Laya 专用受限辅助程序（由 systemd 启动）
   weir self-update [--version X | --rollback | --apply]   以 root 从 GitHub Release 自更新
   weir version             显示版本`)
 }

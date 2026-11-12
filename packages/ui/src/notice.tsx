@@ -8,6 +8,8 @@ const tones = {
   ok: "bg-[var(--weir-ok-soft)] text-[var(--weir-ok-ink)] before:bg-[var(--weir-ok)]",
   warn: "bg-[var(--weir-warn-soft)] text-[var(--weir-warn-ink)] before:bg-[var(--weir-warn)]",
   bad: "bg-[var(--weir-bad-soft)] text-[var(--weir-bad-ink)] before:bg-[var(--weir-bad)]",
+  // 洞察：强调色浅底，不是告警。完整横幅用 InsightBanner。
+  insight: "bg-[var(--weir-accent-soft)] text-[var(--weir-accent-soft-ink)] before:bg-[var(--weir-accent)]",
 } as const;
 
 function Notice({

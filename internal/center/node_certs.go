@@ -24,8 +24,8 @@ import (
 )
 
 // 节点证书：加 VPS 不需要加 DNS 解析。建节点向导不再有证书一步，中心只决定「为这台 VPS 准备证书」：
-//   - Hysteria2 / TUIC 未选证书：同一台 VPS 共用一张 10 年自签，订阅中固定指纹；
-//   - Trojan、WS + TLS：VPS 公网 IP 的证书，按顺序取得：
+//   - Hysteria2 / TUIC 未选证书：按下面同一顺序取可信证书，都取不到才用这台 VPS 共用的 10 年自签（订阅中固定指纹），并记下原因；
+//   - Trojan、WS + TLS：必须可信证书，按顺序取得：
 //     1. VPS 上有 1Panel 且已填 API 密钥：Gate 经本机 1Panel 申请，1Panel 自动续签；
 //     2. 没有 1Panel、Gate 上报 80 端口空闲：中心运行 ACME（shortlived），Gate 临时在 80 端口应答，到期前续签；
 //     3. 都不可用：全项目共用的「节点证书域名」（兜底），中心经本机反代完成 HTTP 验证并续签。
@@ -63,6 +63,22 @@ var acmeDirectory = func(v NodeCertSettings) string {
 		return acme.LetsEncryptStaging
 	}
 	return acme.LetsEncrypt
+}
+
+// SetACMEDirectoryForTest 把签发地址换成隔离测试 CA，并返回恢复函数。生产路径不调用。
+func SetACMEDirectoryForTest(fn func(NodeCertSettings) string) func() {
+	prev := acmeDirectory
+	if fn == nil {
+		acmeDirectory = func(v NodeCertSettings) string {
+			if v.Staging {
+				return acme.LetsEncryptStaging
+			}
+			return acme.LetsEncrypt
+		}
+	} else {
+		acmeDirectory = fn
+	}
+	return func() { acmeDirectory = prev }
 }
 
 // acmeClient 取得 ACME 客户端；账户私钥第一次使用时生成并加密保存。
@@ -169,7 +185,12 @@ func (s *Server) discoverGatePanel(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if fmt.Sprint(g.Host["node_test_version"]) != "2" {
+	supported, err := s.gateSupportsTask(c.Request.Context(), g, contracts.ActionPanelDiscover, 2)
+	if err != nil {
+		failInternal(c, 503, "capabilities_unavailable", err)
+		return
+	}
+	if !supported {
 		failDetail(c, 409, "agent_upgrade_required", "请先升级 Gate 并等待心跳", nil)
 		return
 	}
@@ -276,7 +297,9 @@ func (s *Server) deleteGatePanel(c *gin.Context) {
 func (s *Server) absorbPanelReport(ctx context.Context, g *ent.Gate, hb contracts.Heartbeat) {
 	if hb.Panel != nil {
 		v := map[string]any{"http01_webroot": hb.Panel.HTTP01Webroot, "kind": hb.Panel.Kind, "detected": hb.Panel.Detected, "configured": hb.Panel.Configured, "version": hb.Panel.Version, "error": hb.Panel.Error, "at": time.Now().UTC()}
-		_ = g.Update().SetPanel(v).Exec(ctx)
+		if jsonText(withoutObservationTime(g.Panel)) != jsonText(withoutObservationTime(v)) {
+			_ = g.Update().SetPanel(v).Exec(ctx)
+		}
 	}
 	for id, pc := range hb.PanelCerts {
 		if pc.NotAfter.IsZero() || !time.Now().Before(pc.NotAfter) || !strings.Contains(pc.CertPEM, "BEGIN CERTIFICATE") {
@@ -612,15 +635,47 @@ func (s *Server) serveACMEChallenge(c *gin.Context) {
 
 const acmeChallengePath = "/.well-known/acme-challenge/"
 
+// trustedCert 返回这台 VPS 已经有或现在就能签到的可信证书。签不到时返回原因，不生成自签证书。
+func (s *Server) trustedCert(ctx context.Context, g *ent.Gate) (*ent.Certificate, string) {
+	// 与 Trojan 等必须可信证书的协议同一顺序：已有证书 → 1Panel → 80 端口签 IP 证书 → 共用的节点证书域名。
+	c, why := s.ipCertFor(ctx, g)
+	if c != nil {
+		return c, ""
+	}
+	if s.nodeCertSettings(ctx).EdgeDomain != "" {
+		e, err := s.edgeCert(ctx)
+		if err == nil {
+			return e, ""
+		}
+		why = append(why, err.Error())
+	}
+	if len(why) == 0 {
+		return nil, "没有可用的可信证书"
+	}
+	return nil, strings.Join(why, "；")
+}
+
 // certForNode 为新节点准备证书（建节点时没有手动选择证书）。返回证书与写进节点的 SNI。
 func (s *Server) certForNode(ctx context.Context, g *ent.Gate, mode string) (*ent.Certificate, string, error) {
 	switch mode {
 	case "self_signed_ok":
-		c, err := s.selfSignedFor(ctx, g)
-		if err != nil {
-			return nil, "", err
+		if c, why := s.trustedCert(ctx, g); c != nil {
+			return c, c.Domain, nil
+		} else {
+			c, err := s.selfSignedFor(ctx, g)
+			if err != nil {
+				return nil, "", err
+			}
+			if why == "" {
+				why = "没有可用的可信证书"
+			}
+			msg := "未取得可信证书，已改用自签证书：" + why
+			if c.LastError != msg {
+				_ = c.Update().SetLastError(msg).Exec(ctx)
+				c.LastError = msg
+			}
+			return c, c.Domain, nil
 		}
-		return c, c.Domain, nil
 	case "required":
 		c, why := s.ipCertFor(ctx, g)
 		if c != nil {
@@ -717,8 +772,8 @@ func (s *Server) renewCert(ctx context.Context, c *ent.Certificate) error {
 		return err
 	}
 	_ = s.Store.KV.Del(ctx, fmt.Sprintf("cert-renew-fail:%d", c.ID))
-	jobStep(ctx, "正在把新证书下发给用到它的 VPS", 0)
-	return s.bumpCertGates(ctx, c.ID)
+	jobStep(ctx, "正在把新证书文件发给用到它的 VPS", 0)
+	return s.pushCertFiles(ctx, c.ID)
 }
 
 // renewBackoff 是连续失败后的等待时间：10 分钟起每次翻倍，最长 6 小时。
@@ -742,20 +797,32 @@ func trimErr(err error) string {
 	return m
 }
 
-// bumpCertGates 让用到这张证书的 Gate 重新下发配置（下载新证书）。
-func (s *Server) bumpCertGates(ctx context.Context, id int) error {
+func certPushKey(gid int) string { return "cert-push:" + itoa(gid) }
+
+// pushCertFiles 让 Gate 换上新证书文件。不推进配置版本：内核配置仍指向同一路径，重启或 SIGHUP 都会断开已有连接。
+// PushCertFiles 把已保存的证书文件同步到用到它的 Gate，不推进配置版本。
+func (s *Server) PushCertFiles(ctx context.Context, id int) error {
+	return s.pushCertFiles(ctx, id)
+}
+
+func (s *Server) pushCertFiles(ctx context.Context, id int) error {
 	nodes, err := s.Store.Ent.Node.Query().Where(node.CertIDEQ(id)).All(ctx)
 	if err != nil {
 		return err
 	}
-	seen, gates := map[int]bool{}, []int{}
+	seen := map[int]bool{}
 	for _, n := range nodes {
-		if !seen[n.GateID] {
-			seen[n.GateID] = true
-			gates = append(gates, n.GateID)
+		if seen[n.GateID] {
+			continue
 		}
+		seen[n.GateID] = true
+		if err = s.Store.KV.Set(ctx, certPushKey(n.GateID), "1", 0); err != nil {
+			return err
+		}
+		s.waiters.notify(n.GateID)
+		_ = s.Store.Notifications.Publish(ctx, "gate:"+itoa(n.GateID))
 	}
-	return s.bumpGates(ctx, gates)
+	return nil
 }
 
 func (s *Server) renewCertNow(c *gin.Context) {

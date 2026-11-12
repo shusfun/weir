@@ -43,6 +43,26 @@ func (_u *UserUpdate) SetNillableEmail(v *string) *UserUpdate {
 	return _u
 }
 
+// SetNormalizedEmail sets the "normalized_email" field.
+func (_u *UserUpdate) SetNormalizedEmail(v string) *UserUpdate {
+	_u.mutation.SetNormalizedEmail(v)
+	return _u
+}
+
+// SetNillableNormalizedEmail sets the "normalized_email" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableNormalizedEmail(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetNormalizedEmail(*v)
+	}
+	return _u
+}
+
+// ClearNormalizedEmail clears the value of the "normalized_email" field.
+func (_u *UserUpdate) ClearNormalizedEmail() *UserUpdate {
+	_u.mutation.ClearNormalizedEmail()
+	return _u
+}
+
 // SetName sets the "name" field.
 func (_u *UserUpdate) SetName(v string) *UserUpdate {
 	_u.mutation.SetName(v)
@@ -117,6 +137,20 @@ func (_u *UserUpdate) SetNillableQuota(v *int64) *UserUpdate {
 // AddQuota adds value to the "quota" field.
 func (_u *UserUpdate) AddQuota(v int64) *UserUpdate {
 	_u.mutation.AddQuota(v)
+	return _u
+}
+
+// SetUnlimited sets the "unlimited" field.
+func (_u *UserUpdate) SetUnlimited(v bool) *UserUpdate {
+	_u.mutation.SetUnlimited(v)
+	return _u
+}
+
+// SetNillableUnlimited sets the "unlimited" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableUnlimited(v *bool) *UserUpdate {
+	if v != nil {
+		_u.SetUnlimited(*v)
+	}
 	return _u
 }
 
@@ -336,6 +370,11 @@ func (_u *UserUpdate) check() error {
 			return &ValidationError{Name: "email", err: fmt.Errorf(`ent: validator failed for field "User.email": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.NormalizedEmail(); ok {
+		if err := user.NormalizedEmailValidator(v); err != nil {
+			return &ValidationError{Name: "normalized_email", err: fmt.Errorf(`ent: validator failed for field "User.normalized_email": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Name(); ok {
 		if err := user.NameValidator(v); err != nil {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "User.name": %w`, err)}
@@ -374,6 +413,12 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Email(); ok {
 		_spec.SetField(user.FieldEmail, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.NormalizedEmail(); ok {
+		_spec.SetField(user.FieldNormalizedEmail, field.TypeString, value)
+	}
+	if _u.mutation.NormalizedEmailCleared() {
+		_spec.ClearField(user.FieldNormalizedEmail, field.TypeString)
+	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(user.FieldName, field.TypeString, value)
 	}
@@ -391,6 +436,9 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedQuota(); ok {
 		_spec.AddField(user.FieldQuota, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.Unlimited(); ok {
+		_spec.SetField(user.FieldUnlimited, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Used(); ok {
 		_spec.SetField(user.FieldUsed, field.TypeInt64, value)
@@ -479,6 +527,26 @@ func (_u *UserUpdateOne) SetNillableEmail(v *string) *UserUpdateOne {
 	return _u
 }
 
+// SetNormalizedEmail sets the "normalized_email" field.
+func (_u *UserUpdateOne) SetNormalizedEmail(v string) *UserUpdateOne {
+	_u.mutation.SetNormalizedEmail(v)
+	return _u
+}
+
+// SetNillableNormalizedEmail sets the "normalized_email" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableNormalizedEmail(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetNormalizedEmail(*v)
+	}
+	return _u
+}
+
+// ClearNormalizedEmail clears the value of the "normalized_email" field.
+func (_u *UserUpdateOne) ClearNormalizedEmail() *UserUpdateOne {
+	_u.mutation.ClearNormalizedEmail()
+	return _u
+}
+
 // SetName sets the "name" field.
 func (_u *UserUpdateOne) SetName(v string) *UserUpdateOne {
 	_u.mutation.SetName(v)
@@ -553,6 +621,20 @@ func (_u *UserUpdateOne) SetNillableQuota(v *int64) *UserUpdateOne {
 // AddQuota adds value to the "quota" field.
 func (_u *UserUpdateOne) AddQuota(v int64) *UserUpdateOne {
 	_u.mutation.AddQuota(v)
+	return _u
+}
+
+// SetUnlimited sets the "unlimited" field.
+func (_u *UserUpdateOne) SetUnlimited(v bool) *UserUpdateOne {
+	_u.mutation.SetUnlimited(v)
+	return _u
+}
+
+// SetNillableUnlimited sets the "unlimited" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableUnlimited(v *bool) *UserUpdateOne {
+	if v != nil {
+		_u.SetUnlimited(*v)
+	}
 	return _u
 }
 
@@ -785,6 +867,11 @@ func (_u *UserUpdateOne) check() error {
 			return &ValidationError{Name: "email", err: fmt.Errorf(`ent: validator failed for field "User.email": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.NormalizedEmail(); ok {
+		if err := user.NormalizedEmailValidator(v); err != nil {
+			return &ValidationError{Name: "normalized_email", err: fmt.Errorf(`ent: validator failed for field "User.normalized_email": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Name(); ok {
 		if err := user.NameValidator(v); err != nil {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "User.name": %w`, err)}
@@ -840,6 +927,12 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	if value, ok := _u.mutation.Email(); ok {
 		_spec.SetField(user.FieldEmail, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.NormalizedEmail(); ok {
+		_spec.SetField(user.FieldNormalizedEmail, field.TypeString, value)
+	}
+	if _u.mutation.NormalizedEmailCleared() {
+		_spec.ClearField(user.FieldNormalizedEmail, field.TypeString)
+	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(user.FieldName, field.TypeString, value)
 	}
@@ -857,6 +950,9 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.AddedQuota(); ok {
 		_spec.AddField(user.FieldQuota, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.Unlimited(); ok {
+		_spec.SetField(user.FieldUnlimited, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Used(); ok {
 		_spec.SetField(user.FieldUsed, field.TypeInt64, value)

@@ -15,6 +15,7 @@ import { NodeAccess } from "./node-access";
 import { NodeTestControl } from "./node-test";
 
 import { ProcessUsage, freshHost } from "./resource-usage";
+import { healthSummary } from "./gate-health";
 import { NodeSummary } from "./node-summary";
 import { GateDetail, pct, size } from "./gate-detail";
 import { api } from "../api";
@@ -106,6 +107,7 @@ const navigate=useNavigate();
                   </div>
                 ))}
               </dl>
+              <small className="text-[var(--weir-ink-3)]">{healthSummary(freshHost(g.host, g.online)?.health)}</small>
               <ProcessUsage host={g.host} online={g.online} names={["xray", "sing-box"]} />
               {list.length > 0 && (
                 <ul className="group-list" aria-label={`${g.name} 上的节点`}>

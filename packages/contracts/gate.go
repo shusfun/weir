@@ -10,6 +10,7 @@ import (
 // GateConfig 是中心下发给某台 Gate 的完整期望配置。Gate 只按版本号整份应用，
 // 用同一程序内的构建器生成内核配置；中心离线时仍可据此在本地剔除到期 / 超额凭据。
 type GateConfig struct {
+	TraceID     string                `json:"trace_id,omitempty"`
 	Revision    int64                 `json:"revision"`
 	Version     string                `json:"version"` // 中心程序版本；与 Gate 不一致时 Gate 先自更新
 	Kernels     map[string]Kernel     `json:"kernels"` // "xray" / "sing-box"
@@ -22,12 +23,20 @@ type GateConfig struct {
 	Certs       []CertRef             `json:"certs"`
 	Budgets     map[string]GateBudget `json:"budgets"` // 用户键 → 本 Gate 可用额度
 	Meta        map[string]string     `json:"meta,omitempty"`
+	// ExecutionOnly 为真时，这份正文只携带额度等执行状态，不能当作内核配置应用。
+	// CertOnly 为真时只同步证书文件，不应用内核配置、不推进已应用版本。
+	ExecutionOnly   bool  `json:"execution_only,omitempty"`
+	CertOnly        bool  `json:"cert_only,omitempty"`
+	ExecutionSeq    int64 `json:"execution_seq,omitempty"`
+	ForceDisconnect *bool `json:"force_disconnect,omitempty"`
 }
 
-// Kernel 指定内核版本与官方（或 CI 编译）摘要；Gate 从中心下载并校验。
+// Kernel pins a verified archive or an explicitly imported binary. SHA256 is
+// the binary digest for legacy/offline imports; Artifact is preferred.
 type Kernel struct {
-	Version string `json:"version"`
-	SHA256  string `json:"sha256"`
+	Version  string          `json:"version"`
+	SHA256   string          `json:"sha256,omitempty"`
+	Artifact *KernelArtifact `json:"artifact,omitempty"`
 }
 
 // PortPlan 由中心按 Gate 上报的占用端口分配，只监听回环。
@@ -97,6 +106,9 @@ type Credential struct {
 	StartsAt  *time.Time `json:"starts_at,omitempty"`
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 	Internal  bool       `json:"internal,omitempty"`
+	// Revoke 非空表示这条凭据仍要下发，但不得进入内核：disabled 是停用。
+	// 到期和额度用尽由 Gate 本地判断，用来和普通删除区分，避免误重启。
+	Revoke string `json:"revoke,omitempty"`
 }
 
 // InWindow 判断此刻是否在凭据的可用时段内。
@@ -127,10 +139,14 @@ type CertRef struct {
 
 // GateState 是 Gate 应用配置后的上报。
 type GateState struct {
-	AppliedRevision int64  `json:"applied_revision"`
-	FailedRevision  int64  `json:"failed_revision,omitempty"`
-	Error           string `json:"error,omitempty"`
-	ConflictPort    int    `json:"conflict_port,omitempty"`
+	AppliedRevision int64        `json:"applied_revision"`
+	FailedRevision  int64        `json:"failed_revision,omitempty"`
+	Error           string       `json:"error,omitempty"`
+	ConflictPort    int          `json:"conflict_port,omitempty"`
+	Apply           *ApplyReport `json:"apply,omitempty"`
+	ExecutionSeq    int64        `json:"execution_seq,omitempty"`
+	// CertSynced 表示这次只确认证书文件已换上，不是新的配置版本。
+	CertSynced bool `json:"cert_synced,omitempty"`
 }
 
 // CertSum 是证书与私钥一起计算的摘要；中心下发、Gate 核对已安装文件都用它。

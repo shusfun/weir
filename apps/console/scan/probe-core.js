@@ -65,8 +65,13 @@ S.tokens = function () {
     if (!raw) continue;
     t.names.push(name);
     if (CSS.supports("color", raw)) {
-      probe.style.color = `var(${name})`;
-      const c = S.rgba(getComputedStyle(probe).color);
+      // 每个颜色也用新的探测元素：新版 Chromium 复用同一元素连续改 color 时，计算值会停在第一次的结果上
+      const cp = document.createElement("div");
+      cp.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;width:0;height:0";
+      root.appendChild(cp);
+      cp.style.color = `var(${name})`;
+      const c = S.rgba(getComputedStyle(cp).color);
+      cp.remove();
       if (c) t.colors.push({ name, c });
       continue;
     }
@@ -75,13 +80,17 @@ S.tokens = function () {
       continue;
     }
     if (/^[\d.]+(px|rem|em)$/.test(raw)) {
-      probe.style.borderTopLeftRadius = `var(${name})`;
-      const v = getComputedStyle(probe).borderTopLeftRadius;
+      // 每个长度单独用一个新的探测元素：复用同一个元素时，新版 Chromium 在先算过 color 后会把圆角算成 0px
+      const lp = document.createElement("div");
+      lp.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;width:0;height:0";
+      root.appendChild(lp);
+      lp.style.borderTopLeftRadius = `var(${name})`;
+      lp.style.fontSize = `var(${name})`;
+      const v = getComputedStyle(lp).borderTopLeftRadius;
+      const px = parseFloat(getComputedStyle(lp).fontSize);
+      lp.remove();
       if (/radius/.test(name)) t.radii.add(v);
-      if (/(font-size|text-|leading|line-height)/.test(name)) {
-        probe.style.fontSize = `var(${name})`;
-        t.sizes.push({ name, px: parseFloat(getComputedStyle(probe).fontSize) });
-      }
+      if (/(font-size|text-|leading|line-height)/.test(name)) t.sizes.push({ name, px });
       continue;
     }
     if (/,/.test(raw) && /(sans|serif|mono|system-ui)/.test(raw)) t.fonts.add(S.normFont(raw));

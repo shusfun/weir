@@ -7,7 +7,9 @@ import { Workspace } from "./components/workspace";
 import { GlobalAnnouncement } from "./components/global-announcement";
 import { lazyPage, PageSwitch, preloadWhenIdle, SlowHint, type Loader } from "./shell/page-switch";
 import { api, ApiError } from "./api";
+import { syncAccountAppearance } from "./appearance";
 import "./style.css";
+import { GuideProvider, GuideButton, GuideIdentitySync } from "./components/guide";
 
 // 升级后旧标签页里的入口脚本还指向已删除的分块，按需加载会 404：整页重新加载一次换到新版本；
 // 30 秒内已重新加载过仍失败就交给 LoadBoundary 显示错误，避免反复刷新
@@ -40,10 +42,18 @@ const GatesPage = page(() => import("./pages/gates"), "GatesPage");
 const SubscriptionsPage = page(() => import("./pages/subscriptions"), "SubscriptionsPage");
 const PublicPagesPage = page(() => import("./pages/public-pages"), "PublicPagesPage");
 const AuditPage = page(() => import("./pages/audit"), "AuditPage");
+const ObservePage = page(() => import("./pages/observe"), "ObservePage");
 const KernelsPage = page(() => import("./pages/kernels"), "KernelsPage");
 const SystemPage = page(() => import("./pages/system"), "SystemPage");
 const SubPage = page(() => import("./pages/sub-page"), "SubPage");
 const UsersPage = page(() => import("./pages/users"), "UsersPage");
+const GateDetailPage = page(() => import("./pages/object-pages"), "GateDetailPage");
+const NodeDetailPage = page(() => import("./pages/object-pages"), "NodeDetailPage");
+const UserDetailPage = page(() => import("./pages/object-pages"), "UserDetailPage");
+const SourceDetailPage = page(() => import("./pages/object-pages"), "SourceDetailPage");
+const ProfileDetailPage = page(() => import("./pages/object-pages"), "ProfileDetailPage");
+const PublicPageDetail = page(() => import("./pages/object-pages"), "PublicPageDetail");
+const AccountsPage = page(() => import("./features/accounts/page"), "AccountsPage");
 const LinksPage = page(() => import("./pages/links"), "LinksPage");
 const ProxyPage = page(() => import("./pages/proxy"), "ProxyPage");
 const SecurityPage = page(() => import("./pages/security"), "SecurityPage");
@@ -59,11 +69,13 @@ const consolePages: Record<string, Loader> = {
   "/gates": GatesPage.loader,
   "/exits": ExitsPage.loader,
   "/users": UsersPage.loader,
+  "/accounts": AccountsPage.loader,
   "/kernels": KernelsPage.loader,
   "/system": SystemPage.loader,
   "/subscriptions": SubscriptionsPage.loader,
   "/pages": PublicPagesPage.loader,
   "/ops/audit": AuditPage.loader,
+  "/ops/observe": ObservePage.loader,
   "/linkmap": LinkMapPage.loader,
   "/my/linkmap": LinkMapPage.loader,
   "/links": LinksPage.loader,
@@ -73,7 +85,7 @@ const consolePages: Record<string, Loader> = {
 };
 const matchPage = (pathname: string) => consolePages[pathname.replace(/\/+$/, "") || "/"];
 
-type Account = { email?: string; role?: string };
+type Account = { id?: number; email?: string; role?: string };
 const loading = (title: string) => <PageState kind="loading" title={title} />;
 
 function Console() {
@@ -90,6 +102,7 @@ function Console() {
       try {
         setMe(await api("/me"));
         setStatus("ready");
+        void syncAccountAppearance();
       } catch (e) {
         // 只有 401（没登录或会话过期）才去登录页；中心 5xx、网络断开时显示可重试的错误，不让人白白重新登录
         if (e instanceof ApiError && e.status === 401) return setStatus("login");
@@ -127,31 +140,40 @@ function Console() {
       </div>
     );
   if (status !== "ready")
-    return <Suspense fallback={<div className="auth">{loading("正在加载账户页面…")}</div>}>{status === "setup" ? <SetupPage done={boot} /> : <LoginPage done={boot} />}</Suspense>;
+    return <><GuideIdentitySync id="anonymous" role="guest" /><GuideButton standalone /><div data-tour="auth-content"><Suspense fallback={<div className="auth">{loading("正在加载账户页面…")}</div>}>{status === "setup" ? <SetupPage done={boot} /> : <LoginPage done={boot} />}</Suspense></div></>;
 
   const admin = me.role === "admin";
   const home = admin ? "/gates" : "/links";
   const guard = (node: ReactNode) => (admin ? node : <Navigate to="/links" replace />);
   return (
     <Workspace admin={admin} email={me.email ?? ""} onLogout={logout}>
+      <GuideIdentitySync id={String(me.id ?? "anonymous")} role={admin ? "admin" : "user"} />
       <main className="shell-main">
         <SlowHint>正在加载页面…</SlowHint>
         <div className="stack">
           <GlobalAnnouncement audience="authenticated" />
           <PageSwitch match={matchPage}>
             {(location) => (
-          <div className="page-content">
+          <div className="page-content" data-tour="page-content">
           <Suspense fallback={loading("正在加载页面…")}>
             <Routes location={location}>
               <Route path="/" element={<Navigate to={home} replace />} />
               <Route path="/exits" element={admin ? <ExitsPage /> : <Navigate to="/proxy" replace />} />
               <Route path="/gates" element={guard(<GatesPage />)} />
+              <Route path="/gates/:id" element={guard(<GateDetailPage />)} />
+              <Route path="/nodes/:id" element={guard(<NodeDetailPage />)} />
               <Route path="/users" element={guard(<UsersPage />)} />
+              <Route path="/users/:id" element={guard(<UserDetailPage />)} />
+              <Route path="/accounts" element={guard(<AccountsPage />)} />
               <Route path="/kernels" element={guard(<KernelsPage />)} />
               <Route path="/system" element={guard(<SystemPage />)} />
               <Route path="/subscriptions" element={guard(<SubscriptionsPage />)} />
+              <Route path="/subscriptions/sources/:id" element={guard(<SourceDetailPage />)} />
+              <Route path="/subscriptions/profiles/:id" element={guard(<ProfileDetailPage />)} />
               <Route path="/pages" element={guard(<PublicPagesPage />)} />
+              <Route path="/pages/:id" element={guard(<PublicPageDetail />)} />
               <Route path="/ops/audit" element={guard(<AuditPage />)} />
+              <Route path="/ops/observe" element={guard(<ObservePage />)} />
               <Route path="/linkmap" element={guard(<LinkMapPage admin />)} />
               <Route path="/links" element={<LinksPage admin={admin} />} />
               <Route path="/proxy" element={<ProxyPage admin={admin} />} />
@@ -174,9 +196,9 @@ function Console() {
 
 export default function Application() {
   return (
-    <LoadBoundary>
+    <GuideProvider><LoadBoundary>
       <Routed />
-    </LoadBoundary>
+    </LoadBoundary></GuideProvider>
   );
 }
 
@@ -185,15 +207,15 @@ function Routed() {
   if (pathname.startsWith("/sub/"))
     return (
       <Suspense fallback={loading("正在加载订阅…")}>
-        <Routes>
+        <div data-tour="public-content"><GuideIdentitySync id="anonymous" role="guest" /><GuideButton standalone /><Routes>
           <Route path="/sub/:token" element={<SubPage />} />
-        </Routes>
+        </Routes></div>
       </Suspense>
     );
   if (pathname.startsWith("/p/"))
     return (
       <Suspense fallback={loading("正在加载页面…")}>
-        <PublicPage />
+        <div data-tour="public-content"><GuideIdentitySync id="anonymous" role="guest" /><PublicPage /></div>
       </Suspense>
     );
   return <Console />;

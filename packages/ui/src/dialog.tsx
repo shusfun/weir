@@ -30,7 +30,7 @@ import { cn } from "cn";
 import { XIcon } from "lucide-react";
 import { originFor, pressOrigin } from "./press-origin";
 import { prefersReducedMotion } from "./motion";
-import { ScrollArea } from "./scroll-area";
+import { OverlayBody } from "./overlay-layout";
 
 type DialogSlots = { host: HTMLElement | null; formId: string | null };
 const DialogSlotContext = createContext<DialogSlots | null>(null);
@@ -155,23 +155,23 @@ function DialogOverlay({
 // 弹窗宽度档位：sm 确认 / 简单提示，md 常规表单，lg 列表编辑 / 多栏表单，xl 预览 / 大型编辑器。
 // 业务侧只选档位，不再用 !important 写死宽度。
 const dialogSizes = {
-  sm: "sm:max-w-sm",
-  md: "sm:max-w-[560px]",
-  lg: "sm:max-w-[720px]",
-  xl: "sm:max-w-[900px]",
+  sm: "sm:max-w-[var(--weir-dialog-sm)]",
+  md: "sm:max-w-[var(--weir-dialog-md)]",
+  lg: "sm:max-w-[var(--weir-dialog-lg)]",
+  xl: "sm:max-w-[var(--weir-dialog-xl)]",
 } as const;
 
 // 弹窗靠上固定（参照 Element Plus 的 top: 15vh）：内容增减只改下沿，标题和已经看到的内容不跟着跳；
 // 超出视口在弹窗里滚动。二级弹窗按层级再往下错开一档，父弹窗留在原位。
 // 桌面：缩放 0.96→1 并淡入（缩放按轻快弹簧），退场淡出并缩回 0.96。
 // 640px 以下改为 iOS 底部抽屉（sheet）：圆角顶、顶部把手，按轻快弹簧从底部升起，退场加速下沉；不缩放、不淡入。
-// sm 档（确认框、简单提示）按内容高度；其余档固定从顶部 8dvh 铺到底，内容变化时上沿与按钮都不动。
-// 命令面板（placement=palette）固定在 14vh，窄屏也不变成抽屉。
+// sm 档（确认框、简单提示）按内容高度；其余档固定从顶部 --weir-dialog-sheet-top 铺到底，内容变化时上沿与按钮都不动。
+// 命令面板（placement=palette）使用 --weir-dialog-palette-top，窄屏也不变成抽屉。
 const sheetBase =
-  "max-sm:inset-x-0 max-sm:bottom-0 max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:rounded-b-none max-sm:rounded-t-[var(--weir-radius-sheet)] max-sm:border-x-0 max-sm:border-b-0 max-sm:pt-2 max-sm:pb-[calc(var(--weir-space-5)+env(safe-area-inset-bottom,0px))] max-sm:[transition:translate_var(--weir-spring-dur)_var(--weir-spring)] max-sm:data-[starting-style]:translate-y-full max-sm:data-[starting-style]:scale-100 max-sm:data-[starting-style]:opacity-100 max-sm:data-[ending-style]:translate-y-full max-sm:data-[ending-style]:scale-100 max-sm:data-[ending-style]:opacity-100 max-sm:data-[ending-style]:[transition:translate_var(--weir-slow)_var(--weir-ease-in)]";
-const sheetFit = "max-sm:top-auto max-sm:max-h-[calc(100dvh-24px)]";
-const sheetFull = "max-sm:top-[calc(8dvh_+_var(--weir-dialog-depth)_*_16px)] max-sm:max-h-none";
-const anchored = "top-[calc(12vh_+_var(--weir-dialog-depth)_*_24px)] max-h-[calc(88vh_-_24px_-_var(--weir-dialog-depth)_*_24px)]";
+  "max-sm:inset-x-0 max-sm:bottom-0 max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:rounded-b-none max-sm:rounded-t-[var(--weir-radius-sheet)] max-sm:border-x-0 max-sm:border-b-0 max-sm:pt-[var(--weir-space-2)] max-sm:pb-[calc(var(--weir-space-5)+env(safe-area-inset-bottom,0px))] max-sm:[transition:translate_var(--weir-spring-dur)_var(--weir-spring)] max-sm:data-[starting-style]:translate-y-full max-sm:data-[starting-style]:scale-100 max-sm:data-[starting-style]:opacity-100 max-sm:data-[ending-style]:translate-y-full max-sm:data-[ending-style]:scale-100 max-sm:data-[ending-style]:opacity-100 max-sm:data-[ending-style]:[transition:translate_var(--weir-slow)_var(--weir-ease-in)]";
+const sheetFit = "max-sm:top-auto max-sm:max-h-[calc(100dvh-var(--weir-space-6))]";
+const sheetFull = "max-sm:top-[calc(var(--weir-dialog-sheet-top)_+_var(--weir-dialog-depth)_*_var(--weir-space-4))] max-sm:max-h-none";
+const anchored = "top-[calc(var(--weir-dialog-top)_+_var(--weir-dialog-depth)_*_var(--weir-space-6))] max-h-[calc(100dvh_-_var(--weir-dialog-top)_-_var(--weir-space-6)_-_var(--weir-dialog-depth)_*_var(--weir-space-6))]";
 
 type ContentProps = DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
@@ -236,13 +236,14 @@ function DialogLayer({
       <DialogPrimitive.Popup
         ref={setPopup}
         data-slot="dialog-content"
+        data-tour="dialog"
         data-size={size}
         data-depth={depth}
         style={{ "--weir-dialog-depth": depth, ...(style as CSSProperties) } as CSSProperties}
         className={cn(
           layer === "top" ? "z-[57]" : "z-50",
-          "group/dialog fixed left-1/2 flex w-full max-w-[calc(100%-2rem)] -translate-x-1/2 flex-col gap-4 overflow-hidden rounded-[var(--weir-radius-dialog)] border border-[var(--weir-line-soft)] bg-[var(--weir-raised)] p-6 text-body text-card-foreground shadow-[0_18px_48px_-12px_var(--weir-shade-strong)] outline-none [transition:opacity_var(--weir-mid)_var(--weir-ease),scale_var(--weir-spring-dur)_var(--weir-spring)] data-[starting-style]:scale-[0.96] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.96] data-[ending-style]:opacity-0 data-[ending-style]:[transition-duration:var(--weir-fast)] max-sm:p-5",
-          placement === "palette" ? "top-[14vh] max-h-[calc(86dvh-16px)]" : cn(anchored, sheetBase, size === "sm" ? sheetFit : sheetFull),
+          "weir-dialog group/dialog fixed inset-x-0 mx-auto flex w-full max-w-[calc(100%-var(--weir-space-8))] flex-col gap-[var(--weir-space-4)] overflow-hidden rounded-[var(--weir-radius-dialog)] border border-[var(--weir-line-soft)] bg-[var(--weir-raised)] p-[var(--weir-dialog-padding)] text-body text-card-foreground shadow-[var(--weir-shadow-float)] outline-none [transition:opacity_var(--weir-mid)_var(--weir-ease),scale_var(--weir-spring-dur)_var(--weir-spring)] data-[starting-style]:scale-[0.96] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.96] data-[ending-style]:opacity-0 data-[ending-style]:[transition-duration:var(--weir-fast)]",
+          placement === "palette" ? "top-[var(--weir-dialog-palette-top)] max-h-[calc(100dvh-var(--weir-dialog-palette-top)-var(--weir-space-4))]" : cn(anchored, sheetBase, size === "sm" ? sheetFit : sheetFull),
           dialogSizes[size],
           className,
         )}
@@ -251,18 +252,18 @@ function DialogLayer({
         {/* 底部抽屉的把手：只是提示可以下滑关闭的样子，关闭仍用右上角关闭键、Esc 与点遮罩 */}
         {sheet && <div aria-hidden data-slot="dialog-handle" className="weir-sheet-handle mb-0 hidden max-sm:block" />}
         {header.length > 0 && (
-          <div data-slot="dialog-pinned-header" className="flex shrink-0 flex-col gap-2">
+          <div data-slot="dialog-pinned-header" className="flex shrink-0 flex-col gap-[var(--weir-space-2)]">
             {header}
           </div>
         )}
-        <ScrollArea
+        <OverlayBody
           data-slot="dialog-body"
           className="min-h-0 min-w-0 flex-auto"
           viewportClassName="weir-focus-gutter"
-          contentClassName="flex min-h-full min-w-0 flex-col gap-4 [&>*]:min-w-0 [&>*]:shrink-0 [&>form]:flex [&>form]:min-w-0 [&>form]:flex-[1_0_auto] [&>form]:flex-col"
+          contentClassName="flex min-h-full min-w-0 flex-col gap-[var(--weir-space-4)] [&>*]:min-w-0 [&>*]:shrink-0 [&>form]:flex [&>form]:min-w-0 [&>form]:flex-[1_0_auto] [&>form]:flex-col"
         >
           {body}
-        </ScrollArea>
+        </OverlayBody>
         <div ref={setHost} data-slot="dialog-footer-host" className="shrink-0 empty:hidden" />
         {showCloseButton && (
           <DialogPrimitive.Close
@@ -270,7 +271,7 @@ function DialogLayer({
             render={
               <Button
                 variant="ghost"
-                className="absolute top-2 right-2 rounded-full"
+                className="weir-dialog-close absolute rounded-full"
                 size="icon-sm"
               />
             }
@@ -325,7 +326,7 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "-mx-6 -mb-6 flex shrink-0 flex-col-reverse gap-2 rounded-b-[var(--weir-radius-dialog)] border-t border-[var(--weir-line-soft)] bg-[var(--weir-raised)] px-6 py-4 max-sm:-mx-5 max-sm:-mb-5 max-sm:px-5 max-sm:py-3 sm:flex-row sm:items-start sm:justify-end",
+        "weir-dialog-footer flex shrink-0 flex-col-reverse gap-[var(--weir-space-2)] rounded-b-[var(--weir-radius-dialog)] border-t border-[var(--weir-line-soft)] bg-[var(--weir-raised)] sm:flex-row sm:flex-wrap sm:items-center sm:justify-end",
         className,
       )}
       {...props}

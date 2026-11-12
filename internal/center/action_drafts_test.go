@@ -1,6 +1,7 @@
 package center
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -45,7 +46,14 @@ func TestMultiStepDraftRefsEditsAndRollback(t *testing.T) {
 		}
 	}
 	// 管理员在确认窗里把额度改成 5 GB：改过的字段做标记并重新试运行，整体生效。
-	res := mustJSON(t, admin, "POST", "/api/v1/admin/ai/drafts/"+d["id"].(string)+"/apply", map[string]any{"edits": map[string]any{"0": map[string]any{"quota_gb": 5}}}, 200)
+	response := admin.do("POST", "/api/v1/admin/ai/drafts/"+d["id"].(string)+"/apply", map[string]any{"edits": map[string]any{"0": map[string]any{"quota_gb": 5}}}, map[string]string{"traceparent": "00-12345678901234567890123456789012-1234567890123456-01"})
+	if response.Code != 200 {
+		t.Fatalf("apply = %d %s", response.Code, response.Body.String())
+	}
+	var res map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
 	u, err := s.Store.Ent.User.Query().Where(user.EmailEQ("xm@example.test")).Only(ctx)
 	if err != nil || u.Quota != 5<<30 {
 		t.Fatalf("user = %+v %v", u, err)
@@ -58,7 +66,7 @@ func TestMultiStepDraftRefsEditsAndRollback(t *testing.T) {
 		t.Fatalf("outputs = %v", res["outputs"])
 	}
 	a, err := s.Store.Ent.Audit.Query().Where(audit.ActionEQ("ai.apply")).Only(ctx)
-	if err != nil || !strings.Contains(a.Target, "dsh 草稿 · 管理员确认") || a.Detail["steps"] == nil {
+	if err != nil || !strings.Contains(a.Target, "dsh 草稿 · 管理员确认") || a.Detail["steps"] == nil || a.Detail["trace_id"] != "12345678901234567890123456789012" || a.Detail["request_id"] != response.Header().Get("X-Request-Id") {
 		t.Fatalf("audit = %+v %v", a, err)
 	}
 	if edited := a.Detail["steps"].([]any)[0].(map[string]any)["edited"].([]any); len(edited) != 1 || edited[0] != "quota_gb" {

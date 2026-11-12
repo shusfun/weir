@@ -1,0 +1,23 @@
+.guide-highlight { position:fixed; z-index:10000; pointer-events:none; border:2px solid var(--weir-accent-text); border-radius:var(--weir-radius-card); box-shadow:0 0 0 4000px var(--weir-scrim); }
+.guide-popover { position:fixed; z-index:10001; right:24px; bottom:24px; width:min(380px,calc(100vw - 32px)); max-height:calc(100dvh - 32px); overflow:auto; box-shadow:0 12px 40px var(--weir-shade-strong); }
+.guide-in-dialog { position:relative; inset:auto; z-index:60; width:100%; max-height:40dvh; flex-shrink:0; box-shadow:none; }
+.guide-ring-only { box-shadow:none; }
+body:has(.guide-in-dialog) .dsh-fab { visibility:hidden; }
+.guide-card-content { display:grid; gap:12px; padding:16px; }
+.guide-heading,.guide-footer { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.guide-heading { font-size:var(--weir-text-meta); color:var(--weir-ink-3); }
+.guide-text strong { display:block; font-size:var(--weir-text-heading); }
+.guide-text p { margin:8px 0 0; line-height:1.7; overflow-wrap:anywhere; }
+.guide-footer > span { white-space:nowrap; color:var(--weir-ink-3); font-size:12px; }
+.guide-dialog-entry { position:absolute; top:var(--weir-space-2); right:calc(var(--weir-space-2) * 2 + var(--weir-tap-sm)); z-index:2; }
+.guide-public-entry { position:fixed; right:12px; top:12px; z-index:40; }
+.guide-welcome { margin:16px 24px 0; }
+.guide-welcome-content { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:16px; }
+.guide-welcome-content p { margin:4px 0 0; color:var(--weir-ink-3); }
+.guide-update-dot { width:6px; height:6px; border-radius:50%; background:var(--weir-accent-text); }
+@media(max-width:640px) { .guide-popover { left:12px; right:12px; bottom:max(12px,env(safe-area-inset-bottom)); width:auto; max-height:45dvh; } .guide-card-content { gap:8px; padding:12px; } .guide-welcome { margin:12px 14px 0; } .guide-trigger { padding-inline:8px; } .guide-in-dialog { inset:auto; width:100%; max-height:40dvh; } .guide-text p { font-size:13px; } .guide-footer { flex-wrap:wrap; } }
+
+.weir-dialog:has(> .guide-dialog-entry) > [data-slot="dialog-pinned-header"] { padding-inline-end: calc(var(--weir-tap-touch) * 2 + var(--weir-space-6)); }
+@media (pointer: coarse), (max-width: 767.98px) {
+  .guide-dialog-entry { right: calc(var(--weir-space-2) * 2 + var(--weir-tap-touch)); }
+}

@@ -139,6 +139,21 @@ func Build(cfg contracts.GateConfig, opt Options) (Output, error) {
 		if err != nil {
 			return out, err
 		}
+		if cfg.Meta != nil && cfg.Meta["dns"] == "doh" {
+			version := ""
+			if cfg.Kernels != nil {
+				version = cfg.Kernels[kernel].Version
+			}
+			body = withDNS(body, kernel, version, cfg.Meta["direct_ipv4"] != "0")
+		}
+		var reject []string
+		for _, in := range cfg.Inbounds {
+			if in.Kernel == kernel && in.Settings["reject_udp"] == true {
+				reject = append(reject, rejectInboundTag(kernel, in))
+			}
+		}
+		body = rejectUDP(body, kernel, reject)
+		body = selectGroupUDP(body, kernel, groups)
 		if kernel == "xray" {
 			out.Xray = body
 		} else {
@@ -371,6 +386,7 @@ const groupMemberBase int64 = 1 << 30
 type group struct {
 	id      int64
 	members []int64
+	udp     []int64
 }
 
 // OutboundNames 把内核里的出口标签（xray-out-<id>、singbox-out-<id>）对应回 GateConfig 的出口标签：
@@ -413,6 +429,9 @@ func expandGroups(cfg contracts.GateConfig) (contracts.GateConfig, []group, erro
 			next++
 			outs = append(outs, m)
 			g.members = append(g.members, m.ID)
+			if supported, known := outboundUDP(m); known && supported {
+				g.udp = append(g.udp, m.ID)
+			}
 		}
 		groups = append(groups, g)
 	}

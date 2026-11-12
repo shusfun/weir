@@ -20,6 +20,8 @@ type User struct {
 	ID int `json:"id,omitempty"`
 	// Email holds the value of the "email" field.
 	Email string `json:"email,omitempty"`
+	// NormalizedEmail holds the value of the "normalized_email" field.
+	NormalizedEmail *string `json:"-"`
 	// Name holds the value of the "name" field.
 	Name string `json:"name,omitempty"`
 	// PasswordHash holds the value of the "password_hash" field.
@@ -30,6 +32,8 @@ type User struct {
 	Enabled bool `json:"enabled,omitempty"`
 	// Quota holds the value of the "quota" field.
 	Quota int64 `json:"quota,omitempty"`
+	// Unlimited holds the value of the "unlimited" field.
+	Unlimited bool `json:"unlimited,omitempty"`
 	// Used holds the value of the "used" field.
 	Used int64 `json:"used,omitempty"`
 	// ExpiresAt holds the value of the "expires_at" field.
@@ -64,11 +68,11 @@ func (*User) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case user.FieldNodeIds, user.FieldProxyPolicy:
 			values[i] = new([]byte)
-		case user.FieldEnabled, user.FieldMonthlyReset, user.FieldAllNodes, user.FieldAllowChain:
+		case user.FieldEnabled, user.FieldUnlimited, user.FieldMonthlyReset, user.FieldAllNodes, user.FieldAllowChain:
 			values[i] = new(sql.NullBool)
 		case user.FieldID, user.FieldQuota, user.FieldUsed, user.FieldTotpStep:
 			values[i] = new(sql.NullInt64)
-		case user.FieldEmail, user.FieldName, user.FieldPasswordHash, user.FieldRole, user.FieldTotpSecret:
+		case user.FieldEmail, user.FieldNormalizedEmail, user.FieldName, user.FieldPasswordHash, user.FieldRole, user.FieldTotpSecret:
 			values[i] = new(sql.NullString)
 		case user.FieldExpiresAt, user.FieldUsageResetAt, user.FieldCreatedAt, user.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -99,6 +103,13 @@ func (_m *User) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Email = value.String
 			}
+		case user.FieldNormalizedEmail:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field normalized_email", values[i])
+			} else if value.Valid {
+				_m.NormalizedEmail = new(string)
+				*_m.NormalizedEmail = value.String
+			}
 		case user.FieldName:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field name", values[i])
@@ -128,6 +139,12 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field quota", values[i])
 			} else if value.Valid {
 				_m.Quota = value.Int64
+			}
+		case user.FieldUnlimited:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field unlimited", values[i])
+			} else if value.Valid {
+				_m.Unlimited = value.Bool
 			}
 		case user.FieldUsed:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -245,6 +262,8 @@ func (_m *User) String() string {
 	builder.WriteString("email=")
 	builder.WriteString(_m.Email)
 	builder.WriteString(", ")
+	builder.WriteString("normalized_email=<sensitive>")
+	builder.WriteString(", ")
 	builder.WriteString("name=")
 	builder.WriteString(_m.Name)
 	builder.WriteString(", ")
@@ -258,6 +277,9 @@ func (_m *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("quota=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Quota))
+	builder.WriteString(", ")
+	builder.WriteString("unlimited=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Unlimited))
 	builder.WriteString(", ")
 	builder.WriteString("used=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Used))

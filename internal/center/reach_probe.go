@@ -68,18 +68,17 @@ func (s *Server) checkReachabilitiesNow(ctx context.Context, ids []int) {
 			c.result.Why = "中心不是 Linux amd64／arm64，无法执行外部实测"
 		case binaryErr != nil:
 			c.result.Why = "mihomo 未就绪：" + safeCheckOutput(binaryErr.Error())
-			s.autoKernelFetch(ctx, "mihomo", s.newestAnyArch("mihomo"))
+			s.autoKernelFetch(ctx, "mihomo", s.newestAnyArch(ctx, "mihomo"))
 		case g.PublicHost == "":
 			c.result.Why = "VPS 没有公网地址"
 		case g.Status != "active" || g.LastSeenAt == nil || time.Since(*g.LastSeenAt) > 90*time.Second:
 			c.result.Why = "VPS 离线或已撤销"
 		default:
-			credential, revoke, err := s.issueProbeCredential(ctx, n)
+			credential, err := s.probeCredential(ctx, n)
 			if err != nil {
 				c.result.Why = "无法准备内部测试授权"
 				break
 			}
-			defer revoke()
 			var cert *ent.Certificate
 			if n.CertID != nil {
 				cert, err = s.Store.Ent.Certificate.Get(ctx, *n.CertID)

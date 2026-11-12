@@ -184,7 +184,7 @@ func (s *Server) proxyView(ctx context.Context, u *ent.User) (gin.H, error) {
 			}
 			nodes = append(nodes, item)
 		}
-		v := gin.H{"key": t.Key, "label": t.Label, "enabled": !disabled[t.Key], "nodes": nodes, "online": online, "missing_exit": missing}
+		v := gin.H{"key": t.Key, "label": t.Label, "enabled": !disabled[t.Key], "nodes": nodes, "online": online, "missing_exit": missing, "udp": typeUDP(s, ctx, t.nodes)}
 		if len(chains) > 0 {
 			v["exit"] = s.chainExitView(ctx, chains[0])
 		}

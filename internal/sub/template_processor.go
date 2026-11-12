@@ -80,7 +80,7 @@ func resolveGroupFilters(model *js.Object) {
 				}
 				continue
 			}
-			re, err := js.NewRegExp(js.ToString(f), "i")
+			re, err := js.NewConfigRegExp(js.ToString(f), "i")
 			if err != nil {
 				continue
 			}

@@ -2,6 +2,7 @@ package gate
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -13,22 +14,26 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/shusfun/weir/internal/releasefiles"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
 // centerClient 封装与中心的通信：用设备私钥签名一次性挑战换取 15 分钟访问令牌，过期或 401 时自动重新认证。
 // 中心地址可在运行中切换（见 Agent.switchCenter），由 mu 保护。
 type centerClient struct {
-	cfg    Config
-	http   *http.Client
-	long   *http.Client // 长轮询与下载使用更长超时
-	mu     sync.Mutex
-	center string
-	token  string
-	until  time.Time
+	gzipPayload atomic.Bool
+	cfg         Config
+	http        *http.Client
+	long        *http.Client // 长轮询与下载使用更长超时
+	mu          sync.Mutex
+	center      string
+	token       string
+	until       time.Time
 }
 
 func newCenterClient(cfg Config) (*centerClient, error) {
@@ -60,6 +65,7 @@ func (c *centerClient) setOrigin(center string) {
 func (c *centerClient) raw(ctx context.Context, client *http.Client, method, path string, body any, auth bool) (*http.Response, error) {
 	var rd io.Reader
 	ctype := "application/json"
+	compressed := false
 	if rb, ok := body.(rawBody); ok {
 		rd, ctype = rb.r, rb.ctype
 	} else if body != nil {
@@ -77,6 +83,20 @@ func (c *centerClient) raw(ctx context.Context, client *http.Client, method, pat
 		if err != nil {
 			return nil, err
 		}
+		if c.gzipPayload.Load() && len(b) >= 32<<10 && (path == "/agent/meter" || strings.HasPrefix(path, "/agent/tasks/")) {
+			var zipped bytes.Buffer
+			writer := gzip.NewWriter(&zipped)
+			if _, err = writer.Write(b); err != nil {
+				return nil, err
+			}
+			if err = writer.Close(); err != nil {
+				return nil, err
+			}
+			if zipped.Len() < len(b) {
+				b = zipped.Bytes()
+				compressed = true
+			}
+		}
 		rd = bytes.NewReader(b)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, c.origin()+"/api/v1"+path, rd)
@@ -84,15 +104,26 @@ func (c *centerClient) raw(ctx context.Context, client *http.Client, method, pat
 		return nil, err
 	}
 	req.Header.Set("Content-Type", ctype)
+	if compressed {
+		req.Header.Set("Content-Encoding", "gzip")
+	}
 	var traceBytes [24]byte
 	if _, err := rand.Read(traceBytes[:]); err != nil {
 		return nil, err
 	}
 	traceID := hex.EncodeToString(traceBytes[:16])
+	if updateTrace := releasefiles.Trace(ctx); updateTrace != "" {
+		traceID = updateTrace
+	}
 	if hb, ok := body.(contracts.Heartbeat); ok && hb.Host != nil {
 		traceID = hb.Host.ObservationID
 	}
 	req.Header.Set("traceparent", "00-"+traceID+"-"+hex.EncodeToString(traceBytes[16:])+"-01")
+	if lease, ok := ctx.Value(taskLeaseKey{}).(taskLease); ok && strings.HasPrefix(path, "/agent/uploads/") {
+		req.Header.Set("X-Weir-Task-ID", lease.id)
+		req.Header.Set("X-Weir-Task-Attempt", strconv.Itoa(lease.attempt))
+		req.Header.Set("X-Weir-Task-Lease", lease.token)
+	}
 	if auth {
 		token, err := c.bearer(ctx)
 		if err != nil {
@@ -115,7 +146,7 @@ func (c *centerClient) raw(ctx context.Context, client *http.Client, method, pat
 // call 发送请求并把 2xx 响应解码到 out；204 视为成功但无内容。
 func (c *centerClient) call(ctx context.Context, method, path string, body, out any) (int, error) {
 	client := c.http
-	if path == "/agent/config" || len(path) > 13 && path[:14] == "/agent/config?" || path == "/agent/actions" {
+	if path == "/agent/poll" || path == "/agent/config" || len(path) > 13 && path[:14] == "/agent/config?" || path == "/agent/actions" {
 		client = c.long
 	}
 	resp, err := c.raw(ctx, client, method, path, body, true)

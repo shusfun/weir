@@ -72,15 +72,21 @@ func (s *Server) listGates(c *gin.Context) {
 	}
 	out := make([]gin.H, 0, len(items))
 	for _, g := range items {
-		out = append(out, gateView(g))
+		view := gateView(g)
+		view["kernel_events"] = s.kernelEvents(c.Request.Context(), g.ID)
+		out = append(out, view)
 	}
 	c.JSON(200, gin.H{"items": out})
 }
 
 func (s *Server) getGate(c *gin.Context) {
-	if g, ok := s.gateParam(c); ok {
-		c.JSON(200, gateView(g))
+	g, ok := s.gateParam(c)
+	if !ok {
+		return
 	}
+	view := gateView(g)
+	view["kernel_events"] = s.kernelEvents(c.Request.Context(), g.ID)
+	c.JSON(200, view)
 }
 
 // inviteGate 生成一次性配对凭证（1 小时）与可直接粘贴到 VPS 执行的一行命令。
@@ -197,6 +203,7 @@ func (s *Server) updateGate(c *gin.Context) {
 		return
 	}
 	s.waiters.notify(g.ID)
+	_ = s.Store.Notifications.Publish(c.Request.Context(), "gate:"+itoa(g.ID))
 	s.audit(c, "gate.update", strconv.Itoa(g.ID), "ok")
 	c.JSON(200, gateView(g))
 }
@@ -213,6 +220,7 @@ func (s *Server) revokeGate(c *gin.Context) {
 		return
 	}
 	s.waiters.notify(g.ID)
+	_ = s.Store.Notifications.Publish(c.Request.Context(), "gate:"+itoa(g.ID))
 	s.audit(c, "gate.revoke", strconv.Itoa(g.ID), "ok")
 	c.JSON(200, gateView(g))
 }

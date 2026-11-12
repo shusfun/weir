@@ -10,14 +10,14 @@ function Tabs({ className, ...props }: TabsPrimitive.Root.Props) {
 // 底部分隔线用内阴影绘制、标签不再用 -mb-px 压线：否则内容比容器高 1px，overflow 会冒出纵向滚动条。
 // 窄屏标签过多时仍可横向滑动，但不显示滚动条。标签条横向可滚动，焦点环画在标签内侧，免得被裁。
 export const tabListClass =
-  "flex min-w-0 items-end gap-1 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_var(--weir-line)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+  "weir-tabs-list flex min-w-0 items-end overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_var(--weir-line-soft)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
 
 function TabsList({ className, ...props }: TabsPrimitive.List.Props) {
   return <TabsPrimitive.List data-slot="tabs-list" className={cn(tabListClass, className)} {...props} />;
 }
 
 export const tabTriggerClass =
-  "weir-press relative inline-flex h-9 shrink-0 items-center gap-2 rounded-t-[var(--weir-radius-sm)] border-b-2 border-transparent px-3 text-body font-medium whitespace-nowrap text-[var(--weir-ink-3)] no-underline touch:h-11 hover:text-[var(--weir-ink)] focus-visible:outline-offset-[-2px] aria-selected:border-[var(--weir-accent-text)] aria-selected:text-[var(--weir-ink)] aria-[current=page]:border-[var(--weir-accent-text)] aria-[current=page]:text-[var(--weir-ink)] [&_svg]:size-4";
+  "weir-tabs-tab weir-press relative inline-flex shrink-0 items-center justify-center gap-2 border-b-2 border-transparent text-body whitespace-nowrap text-[var(--weir-ink-3)] no-underline hover:text-[var(--weir-ink)] focus-visible:outline-offset-[-2px] aria-selected:border-[var(--weir-accent)] aria-selected:font-semibold aria-selected:text-[var(--weir-ink)] aria-[current=page]:border-[var(--weir-accent)] aria-[current=page]:font-semibold aria-[current=page]:text-[var(--weir-ink)] [&_svg]:size-4";
 
 function TabsTab({ className, ...props }: TabsPrimitive.Tab.Props) {
   return <TabsPrimitive.Tab data-slot="tabs-tab" className={cn(tabTriggerClass, className)} {...props} />;
@@ -29,6 +29,7 @@ function TabsPanel({ className, ...props }: TabsPrimitive.Panel.Props) {
   return (
     <TabsPrimitive.Panel
       data-slot="tabs-panel"
+      data-tour="tab-panel"
       className={cn("min-w-0 rounded-[var(--weir-radius-sm)] focus-visible:outline-offset-[-2px]", className)}
       {...props}
     />

@@ -56,7 +56,12 @@ func (r Release) Asset(name string) (Asset, bool) {
 
 // Client 访问 GitHub API。API 默认 https://api.github.com；Host 是允许的下载主机，默认 github.com。
 // Sources 是按优先级排好的下载来源；为空时用 Mirrors（直连在前，再经各镜像）。
+type QueryFunc func(context.Context, string, string, int) ([]Release, error)
+
 type Client struct {
+	// Query lets the control plane delegate metadata retrieval to a worker.
+	// perPage>0 lists releases; otherwise tag=="" means latest.
+	Query   QueryFunc
 	HTTP    *http.Client
 	API     string
 	Host    string
@@ -91,6 +96,9 @@ func (c Client) List(ctx context.Context, repo string, perPage int) ([]Release, 
 	if perPage <= 0 || perPage > 100 {
 		perPage = 50
 	}
+	if c.Query != nil {
+		return c.Query(ctx, repo, "", perPage)
+	}
 	var out []Release
 	err := c.getJSON(ctx, fmt.Sprintf("%s/repos/%s/releases?per_page=%d", c.api(), repo, perPage), &out)
 	return out, err
@@ -98,6 +106,9 @@ func (c Client) List(ctx context.Context, repo string, perPage int) ([]Release, 
 
 // Tag 读取指定标签的发布。
 func (c Client) Tag(ctx context.Context, repo, tag string) (Release, error) {
+	if c.Query != nil {
+		return c.queryOne(ctx, repo, tag)
+	}
 	var out Release
 	err := c.getJSON(ctx, fmt.Sprintf("%s/repos/%s/releases/tags/%s", c.api(), repo, url.PathEscape(tag)), &out)
 	return out, err
@@ -112,9 +123,25 @@ var ErrRateLimited = errors.New("GitHub API 限流，稍后再试")
 // Latest 读取仓库的最新正式发布，并返回实际读到的仓库：仓库在 GitHub 上改过名时，API 会跳转到新地址，
 // 调用方据此核对下载地址属于哪个仓库。跳转规则由 HTTP 客户端的 CheckRedirect 决定。
 func (c Client) Latest(ctx context.Context, repo string) (Release, *url.URL, error) {
+	if c.Query != nil {
+		rel, err := c.queryOne(ctx, repo, "")
+		final, _ := url.Parse("https://api.github.com/repos/" + repo + "/releases/latest")
+		return rel, final, err
+	}
 	var out Release
 	final, err := c.get(ctx, fmt.Sprintf("%s/repos/%s/releases/latest", c.api(), repo), &out)
 	return out, final, err
+}
+
+func (c Client) queryOne(ctx context.Context, repo, tag string) (Release, error) {
+	rs, err := c.Query(ctx, repo, tag, 0)
+	if err != nil {
+		return Release{}, err
+	}
+	if len(rs) != 1 {
+		return Release{}, errors.New("invalid delegated release result")
+	}
+	return rs[0], nil
 }
 
 func (c Client) getJSON(ctx context.Context, u string, out any) error {

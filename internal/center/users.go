@@ -7,6 +7,7 @@ import (
 	"fmt"
 	entexit "github.com/shusfun/weir/internal/store/ent/exit"
 	"net"
+	"net/netip"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/shusfun/weir/internal/publicnet"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/budget"
 	"github.com/shusfun/weir/internal/store/ent/chain"
@@ -108,6 +110,7 @@ func (s *Server) listUsers(c *gin.Context) {
 type planRequest struct {
 	Name         *string         `json:"name"`
 	Quota        *int64          `json:"quota"`
+	Unlimited    *bool           `json:"unlimited"`
 	ExpiresAt    json.RawMessage `json:"expires_at"`
 	MonthlyReset *bool           `json:"monthly_reset"`
 	AllNodes     *bool           `json:"all_nodes"`
@@ -129,6 +132,12 @@ func (s *Server) applyPlan(ctx context.Context, m *ent.UserMutation, p planReque
 			return errors.New("invalid_quota")
 		}
 		m.SetQuota(*p.Quota)
+	}
+	if p.Unlimited != nil {
+		m.SetUnlimited(*p.Unlimited)
+	} else if p.Quota != nil {
+		// Older clients still express unlimited as an explicitly supplied zero.
+		m.SetUnlimited(*p.Quota == 0)
 	}
 	if len(p.ExpiresAt) > 0 {
 		if string(p.ExpiresAt) == "null" {
@@ -298,7 +307,7 @@ func (s *Server) getUser(c *gin.Context) {
 // 只给不限额度的用户。写明原因，不悄悄少发。
 func (s *Server) withheldNodes(ctx context.Context, u *ent.User) []gin.H {
 	out := []gin.H{}
-	if u.Quota == 0 {
+	if u.Unlimited {
 		return out
 	}
 	nodes, err := s.userNodeIDs(ctx, u)
@@ -542,7 +551,7 @@ func (s *Server) mySubscription(c *gin.Context) {
 		failInternal(c, 503, "query_failed", err)
 		return
 	}
-	c.JSON(200, gin.H{"quota": u.Quota, "used": u.Used, "expires_at": u.ExpiresAt, "monthly_reset": u.MonthlyReset, "next_reset": resetHint(u), "links": links,
+	c.JSON(200, gin.H{"quota": u.Quota, "unlimited": u.Unlimited, "used": u.Used, "expires_at": u.ExpiresAt, "monthly_reset": u.MonthlyReset, "next_reset": resetHint(u), "links": links,
 		"withheld": s.withheldNodes(c.Request.Context(), u)})
 }
 
@@ -891,19 +900,9 @@ func literalPrivate(host string) bool {
 	return ip != nil && !publicAddr(ip)
 }
 
-// nonPublic4 是 Go 的 IsPrivate 不包含、但同样不是公网的 IPv4 段：运营商级 NAT 与基准测试段（本机代理的 fake-ip 常用它）。
-var nonPublic4 = []*net.IPNet{{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMask(10, 32)}, {IP: net.IPv4(198, 18, 0, 0), Mask: net.CIDRMask(15, 32)}}
-
 func publicAddr(ip net.IP) bool {
-	if ip == nil {
-		return false
-	}
-	for _, n := range nonPublic4 {
-		if n.Contains(ip) {
-			return false
-		}
-	}
-	return !(ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() || len(ip) == net.IPv6len && ip.To4() == nil && ip[0]&0xfe == 0xfc)
+	addr, ok := netip.AddrFromSlice(ip)
+	return ok && publicnet.Public(addr)
 }
 
 // checkUserChain 校验用户自建链：入口必须是该用户可用的节点；出口可以是 SOCKS5 / HTTP(S) 代理、单条节点链接、

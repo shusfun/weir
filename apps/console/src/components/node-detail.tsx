@@ -15,6 +15,7 @@ import { ObjectLink, dataObject, useDialogParam } from "./object-link";
 import { exitKindName, probeText } from "./chain-exit";
 import { NodeAccess } from "./node-access";
 import { NodeTestControl } from "./node-test";
+import { NodeDetailPage } from "./node-detail-page";
 
 import { GateDetail, pct, size } from "./gate-detail";
 import { api } from "../api";
@@ -36,7 +37,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { NodeEdit } from "./node-edit";
 import { protocolLabel } from "./gate-card";
 // NodeDetail：一个节点的全部细节与操作：能不能用、要放行的端口、出口、启用、实测、AI 调整、删除。
-export function NodeDetail({ node: n, gate: g, nodes, close, changed }: { node: NodeItem; gate?: Gate; nodes: NodeItem[]; close: () => void; changed: () => void }) {
+export function NodeDetail({ node: n, gate: g, nodes, close, changed, layout = "dialog" }: { node: NodeItem; gate?: Gate; nodes: NodeItem[]; close: () => void; changed: () => void; layout?: "dialog" | "page" }) {
   const confirm = useConfirm();
   const toast = useToast();
   const { run, isBusy, waitFor } = useRowAction<string>();
@@ -47,13 +48,8 @@ export function NodeDetail({ node: n, gate: g, nodes, close, changed }: { node: 
   const [editing, setEditing] = useState(false);
   const patch = async (enabled: boolean) => { const updated = await api(`/admin/nodes/${n.id}`, "PATCH", {enabled}) as NodeItem; client.setQueryData<NodeItem[]>(["nodes"],old=>old?.map(x=>x.id===n.id?updated:x)); void client.invalidateQueries({queryKey:["gates"]}); };
   const remove = async () => { await api(`/admin/nodes/${n.id}`, "DELETE"); client.setQueryData<NodeItem[]>(["nodes"],old=>old?.filter(x=>x.id!==n.id)); void client.invalidateQueries({queryKey:["gates"]}); };
-  return (
+  const fields = (
     <>
-    {editing && <NodeEdit node={n} nodes={nodes} close={()=>setEditing(false)}/>}
-    <Dialog open onOpenChange={(o) => !o && close()}>
-      <DialogContent size="md">
-        <DialogTitle>{nodeTitle(n)}</DialogTitle>
-        <DialogDescription><NodeSummary node={n} /></DialogDescription>
         <div className="stack">
           <p className="flex items-center gap-2 text-body"><StatusLamp tone={tone} label={s} /><strong>{s}</strong><span className="text-[var(--weir-ink-3)]">{why}</span></p>
           {n.readiness?.state === "credentials" && <Notice tone="warn">请到 <Link to="/users" onClick={close}>用户</Link> 分配这个节点并创建可用订阅；节点会在凭据生效后启动。</Notice>}
@@ -74,15 +70,32 @@ export function NodeDetail({ node: n, gate: g, nodes, close, changed }: { node: 
             onCheckedChange={(v) => void run("enable", () => patch(v), v ? "节点已启用" : "节点已停用")} />
           {g && !g.online && <Notice tone="warn">这台 VPS 离线，实测要等它重新连上。</Notice>}
         </div>
-        <DialogFooter status={(waitFor("test") || waitFor("delete")) && <WaitText wait={waitFor("test") || waitFor("delete")} />}>
+        <div className="flex flex-wrap gap-2">
           <Button variant="destructive" disabled={isBusy()} busy={isBusy("delete")} busyText="正在删除…" onClick={async () => (await confirm({ title: `删除节点「${n.name}」？`, description: "使用它的订阅会立即失效。", confirmText: "删除", tone: "danger" })) && (await run("delete", remove, "节点已删除")) && close()}>
             <Trash2 />删除
           </Button>
           <Button variant="outline" onClick={()=>setEditing(true)}><Pencil />编辑</Button>
           <Button variant="outline" onClick={() => { close(); openDsh({ notice: `dsh 已知道你在看节点「${n.name}」，直接说要怎么调整即可。`, nodeId: n.id, nodeName: n.name }); }}><Sparkles />AI 调整</Button>
-        </DialogFooter>
+        </div>
+        {(waitFor("test") || waitFor("delete")) && <WaitText wait={waitFor("test") || waitFor("delete")} />}
+    </>
+  );
+  return (
+    <>
+    {editing && <NodeEdit node={n} nodes={nodes} close={()=>setEditing(false)}/>}
+    {layout === "page" ? (
+      <NodeDetailPage node={n} gate={g} busy={isBusy()} onEdit={() => setEditing(true)}
+        onToggle={(v) => void run("enable", () => patch(v), v ? "节点已启用" : "节点已停用")}
+        onDelete={async () => { if ((await confirm({ title: `删除节点「${n.name}」？`, description: "使用它的订阅会立即失效。", confirmText: "删除", tone: "danger" })) && (await run("delete", remove, "节点已删除"))) close(); }} />
+    ) : (
+    <Dialog open onOpenChange={(o) => !o && close()}>
+      <DialogContent size="md">
+        <DialogTitle>{nodeTitle(n)}</DialogTitle>
+        <DialogDescription><NodeSummary node={n} /></DialogDescription>
+        {fields}
       </DialogContent>
     </Dialog>
+    )}
     </>
   );
 }

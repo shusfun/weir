@@ -3,14 +3,19 @@ package gate
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/shusfun/weir/internal/publicnet"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -30,6 +35,9 @@ func num(m map[string]any, k string) int {
 
 // runAction 只执行白名单动作；过期动作不执行。
 func (a *Agent) runAction(ctx context.Context, act contracts.Action) contracts.ActionResult {
+	if err := a.checkExecutionLease(ctx); err != nil {
+		return contracts.ActionResult{Error: err.Error()}
+	}
 	if time.Now().After(act.ExpiresAt) {
 		return contracts.ActionResult{Error: "action expired"}
 	}
@@ -37,6 +45,11 @@ func (a *Agent) runAction(ctx context.Context, act contracts.Action) contracts.A
 	var err error
 	p := act.Payload
 	switch act.Kind {
+	case contracts.TaskCoreInstall:
+		var req contracts.KernelInstallTask
+		if err = convert(p, &req); err == nil {
+			out, err = a.installKernelTask(ctx, req)
+		}
 	case contracts.ActionRealityProbe:
 		out, err = realityProbe(ctx, p)
 	case contracts.ActionChainProbe, contracts.ActionOutboundProbe:
@@ -49,6 +62,10 @@ func (a *Agent) runAction(ctx context.Context, act contracts.Action) contracts.A
 		}
 	case contracts.ActionDiagnostics:
 		out, err = a.helper.Diagnostics(ctx, str(p, "kernel"))
+	case contracts.ActionHostRepair:
+		var prev string
+		prev, err = a.helper.RepairHost(ctx, str(p, "key"), str(p, "value"))
+		out = map[string]any{"previous": prev}
 	case contracts.ActionCoreRestart:
 		err = a.helper.Restart(ctx, str(p, "kernel"))
 	case contracts.ActionReleaseReplace:
@@ -110,26 +127,29 @@ func (a *Agent) configurePanel(ctx context.Context, p map[string]any) (map[strin
 func realityProbe(ctx context.Context, p map[string]any) (map[string]any, error) {
 	list, _ := p["targets"].([]any)
 	if len(list) == 0 || len(list) > 20 {
-		return nil, errors.New("targets must contain 1-20 hosts")
+		return nil, errors.New("reality_targets_invalid")
 	}
 	// 并行探测，结果按候选顺序返回；总耗时约等于最慢的一个站点（单站最多约 13 秒）。
-	results := make([]map[string]any, len(list))
-	latencies := make([]time.Duration, len(list))
-	var wg sync.WaitGroup
+	hosts := make([]string, len(list))
 	for i, item := range list {
 		host, _ := item.(string)
 		if !probeHost.MatchString(host) {
-			continue
+			return nil, errors.New("reality_targets_invalid")
 		}
+		hosts[i] = host
+	}
+	results := make([]map[string]any, len(hosts))
+	latencies := make([]time.Duration, len(hosts))
+	var wg sync.WaitGroup
+	for i, host := range hosts {
 		wg.Add(1)
 		go func(i int, host string) {
 			defer wg.Done()
-			results[i], latencies[i] = probeOne(host)
+			results[i], latencies[i] = probeOneContext(ctx, host)
 		}(i, host)
 	}
 	wg.Wait()
 	best, bestLatency := "", time.Duration(0)
-	kept := results[:0]
 	for i, r := range results {
 		if r == nil {
 			continue
@@ -137,45 +157,180 @@ func realityProbe(ctx context.Context, p map[string]any) (map[string]any, error)
 		if r["suitable"] == true && (best == "" || latencies[i] < bestLatency) {
 			best, bestLatency = r["host"].(string), latencies[i]
 		}
-		kept = append(kept, r)
 	}
-	results = kept
-	if best == "" {
-		return map[string]any{"results": results}, errors.New("没有找到合适的伪装目标")
+	out := map[string]any{"results": results}
+	if best != "" {
+		out["best"] = best
 	}
-	return map[string]any{"results": results, "best": best}, nil
+	return out, nil
 }
 
 // probeOne 检查单个站点：TLS 1.3、协商出 h2、首页不跳转到其他域名。
 func probeOne(host string) (map[string]any, time.Duration) {
+	return probeOneContext(context.Background(), host)
+}
+
+func probeOneContext(ctx context.Context, host string) (map[string]any, time.Duration) {
 	r := map[string]any{"host": host}
 	start := time.Now()
-	dialer := &net.Dialer{Timeout: 5 * time.Second}
-	conn, err := tls.DialWithDialer(dialer, "tcp", net.JoinHostPort(host, "443"), &tls.Config{ServerName: host, MinVersion: tls.VersionTLS13, NextProtos: []string{"h2", "http/1.1"}})
-	if err != nil {
-		r["error"] = err.Error()
+	ctx, cancel := context.WithTimeout(ctx, 13*time.Second)
+	defer cancel()
+	ips, dohErr := dohResolve(ctx, host)
+	if dohErr != nil || len(ips) == 0 {
+		r["doh_error"] = dohErrorCode(dohErr)
+		r["suitable"] = false
+		return r, 0
+	}
+	r["doh_ips"] = ips
+	// DoH 常返回多个地址，第一个不通不代表站点不可用；逐个试，最多 3 个，避免拖过单站时限。
+	var raw net.Conn
+	var err error
+	for i, ip := range ips {
+		if i >= 3 || ctx.Err() != nil {
+			break
+		}
+		if raw, err = publicnet.DialIP(ctx, "tcp", net.JoinHostPort(ip, "443"), &net.Dialer{Timeout: 3 * time.Second}); err == nil {
+			break
+		}
+	}
+	if raw == nil {
+		if err == nil {
+			err = errors.New("public_connection_failed")
+		}
+		r["error"] = "public_connection_failed"
+		r["suitable"] = false
+		return r, 0
+	}
+	conn := tls.Client(raw, &tls.Config{ServerName: host, MinVersion: tls.VersionTLS13, NextProtos: []string{"h2", "http/1.1"}})
+	defer conn.Close()
+	if err = conn.HandshakeContext(ctx); err != nil {
+		r["error"] = "tls_handshake_failed"
 		return r, 0
 	}
 	latency := time.Since(start)
 	state := conn.ConnectionState()
 	conn.Close()
 	r["latency_ms"], r["tls13"], r["h2"] = latency.Milliseconds(), state.Version == tls.VersionTLS13, state.NegotiatedProtocol == "h2"
-	client := &http.Client{Timeout: 8 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	client := pinnedProbeClient(ips[0])
+	defer client.CloseIdleConnections()
 	cross := false
-	if resp, err := client.Get("https://" + host + "/"); err == nil {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+host+"/", nil)
+	if err != nil {
+		r["error"] = "probe_request_invalid"
+		return r, 0
+	}
+	if resp, err := client.Do(req); err == nil {
 		if loc, e := url.Parse(resp.Header.Get("Location")); e == nil && loc.Host != "" && loc.Hostname() != host {
 			cross = true
 		}
 		resp.Body.Close()
+	} else {
+		r["error"] = "http_probe_failed"
+		return r, latency
 	}
 	r["cross_redirect"] = cross
+	// 候选必须能在这台 VPS 上用 DoH 解析，再满足 TLS 1.3、h2 且不跨域跳转。
 	r["suitable"] = r["tls13"] == true && r["h2"] == true && !cross
 	return r, latency
 }
 
-// cgnat / benchmark 是 Go 的 IsPrivate 不包含、但同样不是公网的段（云厂商元数据 100.100.100.200 在 cgnat 里）。
-var cgnat, benchmark = &net.IPNet{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMask(10, 32)}, &net.IPNet{IP: net.IPv4(198, 18, 0, 0), Mask: net.CIDRMask(15, 32)}
+func pinnedProbeClient(ip string) *http.Client {
+	return pinnedNameClient(ip, "", 8*time.Second)
+}
+
+func pinnedNameClient(ip, serverName string, timeout time.Duration) *http.Client {
+	dialer := &net.Dialer{Timeout: 5 * time.Second}
+	tlsConf := &tls.Config{MinVersion: tls.VersionTLS12}
+	if serverName != "" {
+		tlsConf.ServerName = serverName
+	}
+	return &http.Client{
+		Timeout:       timeout,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		Transport: &http.Transport{
+			Proxy: nil, ForceAttemptHTTP2: true, TLSHandshakeTimeout: timeout, TLSClientConfig: tlsConf,
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				host := ip
+				if host == "" {
+					host, _, _ = net.SplitHostPort(addr)
+				}
+				return publicnet.DialIP(ctx, network, net.JoinHostPort(host, "443"), dialer)
+			},
+		},
+	}
+}
+
+func dohResolve(ctx context.Context, host string) ([]string, error) {
+	// 固定解析器地址：系统 DNS 被污染时仍能做 DoH，也不会把假 IP 当成解析器。
+	var last error
+	for _, ep := range []struct{ ip, name, raw string }{
+		{"1.1.1.1", "cloudflare-dns.com", "https://cloudflare-dns.com/dns-query"},
+		{"8.8.8.8", "dns.google", "https://dns.google/resolve"},
+	} {
+		client := pinnedNameClient(ep.ip, ep.name, 5*time.Second)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, ep.raw+"?name="+url.QueryEscape(host)+"&type=A", nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", "application/dns-json")
+		resp, err := client.Do(req)
+		if err != nil {
+			client.CloseIdleConnections()
+			last = err
+			continue
+		}
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+		resp.Body.Close()
+		client.CloseIdleConnections()
+		var doc struct {
+			Answer []struct {
+				Data string `json:"data"`
+				Type int    `json:"type"`
+			} `json:"Answer"`
+		}
+		if json.Unmarshal(body, &doc) != nil {
+			last = errors.New("doh_unavailable")
+			continue
+		}
+		var ips []string
+		for _, a := range doc.Answer {
+			if a.Type == 1 && net.ParseIP(a.Data) != nil {
+				ips = append(ips, a.Data)
+			}
+		}
+		if len(ips) > 0 {
+			return ips, nil
+		}
+		last = errors.New("doh_empty")
+	}
+	if last == nil {
+		last = errors.New("doh_unavailable")
+	}
+	return nil, last
+}
+
+func dohErrorCode(err error) string {
+	if err == nil {
+		return "doh_unavailable"
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && urlErr.Err != nil {
+		err = urlErr.Err
+	}
+	text := err.Error()
+	switch {
+	case strings.Contains(text, "certificate") || strings.Contains(text, "x509"):
+		return "doh_certificate_invalid"
+	case strings.Contains(text, "public_address"):
+		return "public_address_private"
+	case strings.Contains(text, "public_connection_failed") || strings.Contains(text, "connection refused") || strings.Contains(text, "i/o timeout") || strings.Contains(text, "no such host"):
+		return "doh_unreachable"
+	default:
+		return "doh_unavailable"
+	}
+}
 
 func publicIP(ip net.IP) bool {
-	return !(ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() || cgnat.Contains(ip) || benchmark.Contains(ip) || len(ip) == net.IPv6len && ip[0]&0xfe == 0xfc)
+	addr, ok := netip.AddrFromSlice(ip)
+	return ok && publicnet.Public(addr)
 }

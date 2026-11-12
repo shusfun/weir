@@ -5,6 +5,8 @@ import { useRowAction } from "../lib/action";
 import { proxyURL } from "../lib/proxy-targets";
 import { State } from "./feedback";
 import { useConsoleContext } from "../lib/console-context";
+import { useEffect } from "react";
+import { guideRequest } from "../lib/guide-events";
 
 export interface PendingExit {
   id: string;
@@ -27,6 +29,11 @@ export function PendingExits({ base = "/me", candidate, all = false, gateId, nod
   const action = useRowAction<string>({ refetch: () => list.refetch(), invalidate: [["nodes"], ["chains"], ["exits"], ["proxy"], ["gates"]] });
   const confirm = useConfirm();
   const items = (list.data ?? []).filter((p) => (candidate ? p.id === candidate : !["applied", "discarded"].includes(p.status)) && (!gateId || p.gate_id === gateId) && (!nodeId || p.node_id === nodeId));
+  useEffect(() => {
+    for (const p of list.data ?? []) {
+      if (p.kind === "node.create" && p.status !== "waiting") guideRequest(p.trace_id, "/admin/nodes", "POST", p.status === "applied" ? 200 : 409);
+    }
+  }, [list.data]);
   useConsoleContext({ notices: items.map((p) => `${kinds[p.kind] ?? "出口"}：${labels[p.status] ?? "未知"}，${p.reason}`) });
   if (list.data && !items.length) return null;
   return <InsetGroup title="出口验证任务" description="验证通过后自动应用。等待期间保留原出口，新资源不会进入订阅。">

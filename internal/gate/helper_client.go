@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/shusfun/weir/internal/releasefiles"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -33,6 +34,7 @@ func (h *helperClient) do(ctx context.Context, method, path string, body io.Read
 	for k, v := range header {
 		req.Header.Set(k, v)
 	}
+	req.Header.Set("traceparent", releasefiles.Traceparent(ctx))
 	resp, err := h.http.Do(req)
 	if err != nil {
 		return errors.New("helper unavailable: " + err.Error())
@@ -87,6 +89,23 @@ func (h *helperClient) Apply(ctx context.Context, req ApplyRequest) (ApplyResult
 		return res, nil
 	}
 	return res, err
+}
+
+func (h *helperClient) RepairHost(ctx context.Context, key, value string) (string, error) {
+	body, _ := json.Marshal(map[string]string{"key": key, "value": value})
+	var out struct {
+		OK       bool   `json:"ok"`
+		Previous string `json:"previous"`
+		Error    string `json:"error"`
+	}
+	err := h.do(ctx, "POST", "/host/repair", bytes.NewReader(body), map[string]string{"Content-Type": "application/json"}, &out)
+	if err != nil {
+		return "", err
+	}
+	if out.Error != "" {
+		return "", errors.New(out.Error)
+	}
+	return out.Previous, nil
 }
 
 func (h *helperClient) Restart(ctx context.Context, name string) error {

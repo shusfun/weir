@@ -910,7 +910,6 @@ func parseHTTPSURL(u string, isTLS bool) *js.Object {
 	if params.Str("allowInsecure") == "1" || params.Str("insecure") == "1" {
 		proxy.Set("skip-cert-verify", true)
 	}
-	proxy.Set("udp", false)
 	return proxy
 }
 
@@ -1123,13 +1122,8 @@ func URLsToClashProxies(urls []string, options *js.Object) []*js.Object {
 		if v := opt("enableTfo"); v != nil {
 			proxy.Set("tfo", v)
 		}
-		if v := opt("enableUdp"); v != nil {
-			typ := js.ToLower(js.ToString(js.Or(proxy.Get("type"), "")))
-			if js.Truthy(v) || nativeUDPTypes[typ] {
-				proxy.Set("udp", true)
-			} else {
-				proxy.Set("udp", false)
-			}
+		if v := opt("enableUdp"); v != nil && (js.Truthy(v) || nativeUDPTypes[js.ToLower(js.ToString(js.Or(proxy.Get("type"), "")))]) {
+			proxy.Set("udp", true)
 		}
 		if js.Truthy(opt("skipCertVerify")) {
 			proxy.Set("skip-cert-verify", true)

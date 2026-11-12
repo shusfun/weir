@@ -14,10 +14,13 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/shusfun/weir/internal/buildinfo"
+	"github.com/shusfun/weir/internal/hoststats"
 	"github.com/shusfun/weir/internal/kernelconf"
+	"github.com/shusfun/weir/internal/netbudget"
 	"github.com/shusfun/weir/internal/xray"
 	"github.com/shusfun/weir/packages/contracts"
 )
@@ -31,10 +34,13 @@ type Agent struct {
 	mu     sync.Mutex // 保护 st 与应用过程
 	st     State
 	pids   map[string]int
+	forced map[string]bool
 	// 计量与心跳周期；ReportEvery 为每隔几次计量上报一次中心。测试中可调短。
-	MeterEvery     time.Duration
-	HeartbeatEvery time.Duration
-	ReportEvery    int64
+	MeterEvery         time.Duration
+	HeartbeatEvery     time.Duration
+	HeartbeatFullEvery time.Duration
+	HostSampleEvery    time.Duration
+	ReportEvery        int64
 	// switchTried 是上一次尝试切换中心地址的时间（由 mu 保护）。
 	switchTried time.Time
 	// 实时上报（live.go）：期限与是否在跑，由 liveMu 保护；runCtx 是 Run 的上下文。
@@ -46,10 +52,19 @@ type Agent struct {
 	up updater
 	// 测试替换：replaceFn 代替辅助程序替换程序；extHTTP 是访问 GitHub 的客户端；ghHost 是允许的 GitHub 主机；
 	// uploadBackoff 是上传重试的起始间隔。
-	replaceFn     func(ctx context.Context, version, sum string, data []byte) error
-	extHTTP       *http.Client
-	ghHost        string
-	uploadBackoff time.Duration
+	replaceFn         func(ctx context.Context, version, sum string, data []byte) error
+	extHTTP           *http.Client
+	ghHost            string
+	uploadBackoff     time.Duration
+	meterProtocol     atomic.Int32
+	heartbeatProtocol atomic.Int32
+	heartbeats        heartbeatState
+	reportedEventAt   time.Time
+	workerBudgetMu    sync.RWMutex
+	workerBudget      contracts.WorkerBudget
+	workerPacer       netbudget.Pacer
+	workerObserved    workerObservations
+	downloads         downloadCoordinator
 }
 
 func NewAgent(p Paths) (*Agent, error) {
@@ -62,13 +77,18 @@ func NewAgent(p Paths) (*Agent, error) {
 		return nil, err
 	}
 	return &Agent{P: p, cfg: cfg, center: cc, helper: newHelperClient(p.Socket), st: loadState(filepath.Join(p.Data, "state.json")), pids: map[string]int{},
-		MeterEvery: 10 * time.Second, HeartbeatEvery: 30 * time.Second, ReportEvery: 3}, nil
+		MeterEvery: 10 * time.Second, HeartbeatEvery: 30 * time.Second, HeartbeatFullEvery: contracts.HeartbeatFullEvery, HostSampleEvery: contracts.HostSampleEvery, ReportEvery: 3}, nil
 }
 
 func (a *Agent) statePath() string { return filepath.Join(a.P.Data, "state.json") }
 
 // Run 启动时先按本地已生效配置重建（中心不可达也能继续服务），然后并行运行各循环。
 func (a *Agent) Run(ctx context.Context) error {
+	hostSampler.CertDir = a.P.CertsDir
+	hostSampler.DNS = hoststats.CompareDNS
+	if err := cleanupAbandonedAssetDownloads(filepath.Join(a.P.Data, "assets")); err != nil {
+		return fmt.Errorf("abandoned download cleanup: %w", err)
+	}
 	a.runCtx = ctx
 	a.mu.Lock()
 	if a.st.Config != nil {
@@ -80,8 +100,8 @@ func (a *Agent) Run(ctx context.Context) error {
 	a.mu.Unlock()
 	go a.loop(ctx, a.HeartbeatEvery, a.heartbeat)
 	go a.loop(ctx, a.MeterEvery, a.meter)
-	go a.actionLoop(ctx)
-	a.configLoop(ctx)
+	go a.observeWorkerComponents(ctx)
+	a.workerLoop(ctx)
 	return ctx.Err()
 }
 
@@ -102,9 +122,13 @@ func (a *Agent) configLoop(ctx context.Context) {
 	for ctx.Err() == nil {
 		a.mu.Lock()
 		since := a.st.Applied
+		execSince := int64(0)
+		if a.st.Config != nil {
+			execSince = a.st.Config.ExecutionSeq
+		}
 		a.mu.Unlock()
 		var cfg contracts.GateConfig
-		code, err := a.center.call(ctx, "GET", "/agent/config?since="+strconv.FormatInt(since, 10), nil, &cfg)
+		code, err := a.center.call(ctx, "GET", "/agent/config?since="+strconv.FormatInt(since, 10)+"&exec_since="+strconv.FormatInt(execSince, 10), nil, &cfg)
 		switch {
 		case err != nil:
 			// 409：中心暂时无法编译（例如内核尚未下载），保持当前配置稍后重试。
@@ -117,10 +141,30 @@ func (a *Agent) configLoop(ctx context.Context) {
 			continue
 		case code == 204:
 			continue
+		case cfg.ExecutionOnly:
+			a.mu.Lock()
+			state := a.applyExecution(ctx, cfg)
+			a.mu.Unlock()
+			if _, err = a.center.call(ctx, "POST", "/agent/state", state, nil); err != nil {
+				log.Printf("report execution: %v", err)
+			}
+			continue
+		case cfg.CertOnly:
+			if err = a.ensureCerts(ctx, cfg); err != nil {
+				log.Printf("cert sync: %v", err)
+				sleep(ctx, 10*time.Second)
+				continue
+			}
+			log.Printf("cert sync: revision %d refs %d", cfg.Revision, len(cfg.Certs))
+			if _, err = a.center.call(ctx, "POST", "/agent/state", contracts.GateState{AppliedRevision: a.appliedRevision(), CertSynced: true}, nil); err != nil {
+				log.Printf("report cert sync: %v", err)
+			}
+			continue
 		}
 		// 跟随中心版本只看心跳回复（heartbeat → followCenter），这里不再检查 cfg.Version。
 		a.mu.Lock()
-		state, err := a.applyLocked(ctx, cfg)
+		configCtx := configurationContext(ctx, cfg)
+		state, err := a.applySyncedConfig(configCtx, cfg)
 		a.mu.Unlock()
 		if err != nil {
 			log.Printf("apply revision %d: %v", cfg.Revision, err)
@@ -133,7 +177,7 @@ func (a *Agent) configLoop(ctx context.Context) {
 		} else {
 			log.Printf("revision %d applied", state.AppliedRevision)
 		}
-		if _, err = a.center.call(ctx, "POST", "/agent/state", state, nil); err != nil {
+		if _, err = a.center.call(configCtx, "POST", "/agent/state", state, nil); err != nil {
 			log.Printf("report state: %v", err)
 		}
 		// 配置被拒绝时等一会再取，避免反复应用同一份坏配置；端口冲突时中心会马上换端口发新版本，直接去取（长轮询，不会空转）。
@@ -152,27 +196,45 @@ func sleep(ctx context.Context, d time.Duration) {
 
 // ensureKernels 下载并安装配置要求、本机还没有的内核版本（摘要必须与中心下发的一致）。
 func (a *Agent) ensureKernels(ctx context.Context, cfg contracts.GateConfig) error {
+	_, background := ctx.Value(taskLeaseKey{}).(taskLease)
+	release, err := a.downloads.acquire(ctx, !background)
+	if err != nil {
+		return err
+	}
+	defer release()
 	st, err := a.helper.Status(ctx)
 	if err != nil {
 		return err
 	}
 	for name, k := range cfg.Kernels {
+		if !installable(name) || !safeVer.MatchString(k.Version) {
+			return errors.New("invalid kernel reference")
+		}
 		have := false
 		for _, v := range st.Installed[name] {
 			have = have || v == k.Version
 		}
-		if have {
+		if have && a.installedKernelMatches(name, k) {
 			continue
 		}
-		data, _, err := a.center.download(ctx, "/agent/kernels/"+name+"/"+k.Version, "X-Kernel-SHA256")
+		data, err := a.downloadKernel(ctx, name, k)
 		if err != nil {
 			return fmt.Errorf("download %s %s: %w", name, k.Version, err)
 		}
-		if sumOf(data) != k.SHA256 {
-			return fmt.Errorf("%s %s checksum mismatch", name, k.Version)
-		}
-		if err = a.helper.InstallKernel(ctx, name, k.Version, k.SHA256, data); err != nil {
+		sum := sumOf(data)
+		if err = a.checkExecutionLease(ctx); err != nil {
 			return err
+		}
+		installed := beginTaskStage(ctx, "kernel.install", "gate.ensureKernels")
+		if err = a.helper.InstallKernel(ctx, name, k.Version, sum, data); err != nil {
+			installed(err)
+			return err
+		}
+		installed(nil)
+		if k.Artifact != nil {
+			if err = writeJournal(a.kernelReceiptPath(name, k.Version), kernelReceipt{ArchiveSHA256: k.Artifact.SHA256, BinarySHA256: sum}); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -237,7 +299,7 @@ func (a *Agent) applyLocked(ctx context.Context, cfg contracts.GateConfig) (cont
 		a.st.Baseline = baseline
 		return contracts.GateState{AppliedRevision: a.st.Applied, FailedRevision: cfg.Revision, Error: driverLabel(cfg) + err.Error()}, nil
 	}
-	req := ApplyRequest{Kernels: map[string]string{}, Configs: map[string][]byte{"xray": out.Xray, "sing-box": out.Singbox}, StatsPorts: map[string]int{"xray": cfg.Ports.XrayStats, "sing-box": cfg.Ports.SingboxStats}, Args: out.Args}
+	req := ApplyRequest{Kernels: map[string]string{}, Configs: map[string][]byte{"xray": out.Xray, "sing-box": out.Singbox}, StatsPorts: map[string]int{"xray": cfg.Ports.XrayStats, "sing-box": cfg.Ports.SingboxStats}, Args: out.Args, HotUsers: hotUsers(cfg), ForceRestart: a.forceRestart(cfg, exhausted), TraceID: cfg.TraceID}
 	for name, k := range cfg.Kernels {
 		req.Kernels[name] = k.Version
 	}
@@ -245,7 +307,16 @@ func (a *Agent) applyLocked(ctx context.Context, cfg contracts.GateConfig) (cont
 		req.Ports = append(req.Ports, in.Port)
 	}
 	req.Ports = append(req.Ports, cfg.Ports.XrayStats, cfg.Ports.SingboxStats)
+	if err := a.checkExecutionLease(ctx); err != nil {
+		return contracts.GateState{}, err
+	}
+	applied := beginTaskStage(ctx, "kernel.apply", "gate.applyLocked")
 	res, err := a.helper.Apply(ctx, req)
+	stageErr := err
+	if stageErr == nil && !res.OK {
+		stageErr = errors.New("kernel_apply_rejected")
+	}
+	applied(stageErr)
 	if err != nil {
 		a.st.Baseline = baseline
 		return contracts.GateState{}, err
@@ -262,7 +333,127 @@ func (a *Agent) applyLocked(ctx context.Context, cfg contracts.GateConfig) (cont
 	a.st.Config, a.st.Applied = &copy, cfg.Revision
 	a.st.Signature = signature(cfg, time.Now(), exhausted)
 	_ = a.st.save(a.statePath())
-	return contracts.GateState{AppliedRevision: cfg.Revision}, nil
+	report := &contracts.ApplyReport{Mode: res.Mode, Reason: res.Reason, PID: res.PID, Disconnects: res.Disconnects, Events: res.Events, Revision: cfg.Revision, TraceID: cfg.TraceID}
+	return contracts.GateState{AppliedRevision: cfg.Revision, Apply: report}, nil
+}
+
+func (a *Agent) applyExecution(ctx context.Context, notice contracts.GateConfig) contracts.GateState {
+	if a.st.Config == nil {
+		return contracts.GateState{AppliedRevision: a.st.Applied, ExecutionSeq: notice.ExecutionSeq}
+	}
+	next := *a.st.Config
+	next.Budgets = notice.Budgets
+	next.ExecutionSeq = notice.ExecutionSeq
+	next.ForceDisconnect = notice.ForceDisconnect
+	next.ExecutionOnly = false
+	baseline := a.st.Baseline
+	a.st.advanceBaseline(next)
+	exhausted := a.st.exhausted(next)
+	if signature(next, time.Now(), exhausted) == a.st.Signature {
+		a.st.Config = &next
+		_ = a.st.save(a.statePath())
+		return contracts.GateState{AppliedRevision: a.st.Applied, ExecutionSeq: notice.ExecutionSeq, Apply: &contracts.ApplyReport{Mode: contracts.ApplyUnchanged, Reason: "accounting"}}
+	}
+	state, err := a.applyLocked(ctx, next)
+	state.ExecutionSeq = notice.ExecutionSeq
+	if err != nil || state.FailedRevision != 0 {
+		a.st.Baseline = baseline
+	}
+	if err != nil {
+		state.Error = err.Error()
+		state.FailedRevision = next.Revision
+	}
+	return state
+}
+
+func (a *Agent) appliedRevision() int64 {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.st.Applied
+}
+
+func (a *Agent) freshKernelEvents(events []contracts.KernelEvent) []contracts.KernelEvent {
+	a.mu.Lock()
+	since := a.reportedEventAt
+	a.mu.Unlock()
+	var fresh []contracts.KernelEvent
+	for _, e := range events {
+		if !since.IsZero() && !e.At.After(since) {
+			continue
+		}
+		fresh = append(fresh, e)
+	}
+	if len(fresh) > 40 {
+		fresh = fresh[len(fresh)-40:]
+	}
+	return fresh
+}
+
+func (a *Agent) noteReportedEvents(events []contracts.KernelEvent) {
+	if len(events) == 0 {
+		return
+	}
+	a.mu.Lock()
+	if at := events[len(events)-1].At; at.After(a.reportedEventAt) {
+		a.reportedEventAt = at
+	}
+	a.mu.Unlock()
+}
+
+func hotUsers(cfg contracts.GateConfig) map[string]bool {
+	out := map[string]bool{}
+	for name, text := range cfg.Drivers {
+		d, err := kernelconf.ParseDriver(text)
+		if err == nil && d.Has("handler_users") {
+			out[name] = true
+		}
+	}
+	return out
+}
+
+func (a *Agent) forceRestart(cfg contracts.GateConfig, exhausted map[string]bool) map[string]bool {
+	if cfg.ForceDisconnect != nil && !*cfg.ForceDisconnect {
+		return nil
+	}
+	if a.forced == nil {
+		a.forced = map[string]bool{}
+	}
+	prev := map[string]bool{}
+	if a.st.Config != nil {
+		for _, c := range a.st.Config.Credentials {
+			if c.Internal || c.Revoke != "" || !c.InWindow(time.Now()) {
+				continue
+			}
+			prev[c.StatsKey] = true
+		}
+	}
+	out := map[string]bool{}
+	for _, c := range cfg.Credentials {
+		if c.Internal || !prev[c.StatsKey] {
+			continue
+		}
+		reason := c.Revoke
+		if reason == "" && !c.InWindow(time.Now()) {
+			reason = "expired"
+		}
+		if reason == "" && exhausted[c.UserKey] {
+			reason = "exhausted"
+		}
+		if reason == "" {
+			continue
+		}
+		key := c.StatsKey + ":" + reason
+		if a.forced[key] {
+			continue
+		}
+		a.forced[key] = true
+		for _, in := range cfg.Inbounds {
+			if in.ID == c.InboundID {
+				out[in.Kernel] = true
+			}
+		}
+	}
+	return out
 }
 
 // readCounters 读取两个内核的按用户累计；某内核未运行时跳过。
@@ -324,18 +515,22 @@ func (a *Agent) meter(ctx context.Context) error {
 	if a.ReportEvery > 1 && a.st.Seq%a.ReportEvery != 0 && !restarted {
 		return a.st.save(a.statePath())
 	}
-	rep := contracts.MeterReport{Revision: a.st.Applied, Epoch: a.st.Epoch, Seq: a.st.Seq, Status: "fresh"}
-	if !fresh {
-		rep.Status = "unavailable"
-	}
-	for key, t := range a.st.Totals {
-		rep.Usage = append(rep.Usage, contracts.MeterSample{StatsKey: key, Up: t.Up, Down: t.Down})
-	}
+	rep := a.st.prepareMeter(fresh, a.meterProtocol.Load() == 2)
 	if err := a.st.save(a.statePath()); err != nil {
 		return err
 	}
-	_, err = a.center.call(ctx, "POST", "/agent/meter", rep, nil)
-	return err
+	var ack contracts.MeterAck
+	_, err = a.center.call(ctx, "POST", "/agent/meter", rep, &ack)
+	if err != nil {
+		return err
+	}
+	if rep.Protocol == 2 {
+		if err = a.st.acknowledgeMeter(ack); err != nil {
+			return err
+		}
+		return a.st.save(a.statePath())
+	}
+	return nil
 }
 
 func (a *Agent) heartbeat(ctx context.Context) error {
@@ -362,13 +557,42 @@ func (a *Agent) heartbeat(ctx context.Context) error {
 			hb.Host = &copied
 		}
 		hb.ListeningPorts, hb.Firewall = st.Listening, st.Firewall
+		hb.KernelEvents = a.freshKernelEvents(st.Events)
 		for name := range st.Running {
 			hb.Kernels[name] = st.Active[name]
 		}
 	}
 	var reply contracts.HeartbeatReply
-	if _, err := a.center.call(ctx, "POST", "/agent/heartbeat", hb, &reply); err != nil {
+	now := time.Now()
+	wire := hb
+	if a.heartbeatProtocol.Load() == contracts.HeartbeatProtocol {
+		var err error
+		wire, err = a.heartbeats.prepare(hb, now, a.HeartbeatFullEvery, a.HostSampleEvery)
+		if err != nil {
+			return err
+		}
+	}
+	path := "/agent/heartbeat"
+	if wire.Protocol == contracts.HeartbeatProtocol {
+		path += "/v2"
+	}
+	code, err := a.center.call(ctx, "POST", path, wire, &reply)
+	sentV2 := err == nil && wire.Protocol == contracts.HeartbeatProtocol && code != 404
+	if code == 404 && wire.Protocol == contracts.HeartbeatProtocol {
+		a.heartbeatProtocol.Store(0)
+		a.heartbeats.reset()
+		_, err = a.center.call(ctx, "POST", "/agent/heartbeat", hb, &reply)
+		sentV2 = false
+	}
+	if err != nil {
 		return err
+	}
+	if sentV2 {
+		a.noteReportedEvents(wire.KernelEvents)
+	}
+	if reply.HeartbeatProtocol == contracts.HeartbeatProtocol {
+		a.heartbeatProtocol.Store(contracts.HeartbeatProtocol)
+		a.heartbeats.acknowledge(wire, reply, now)
 	}
 	a.followCenter(ctx, reply.Release)
 	if want := strings.TrimRight(reply.Center, "/"); want != "" && want != hb.Center && !loopbackCenter(hb.Center) {

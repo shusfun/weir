@@ -1,6 +1,7 @@
 package sub
 
 import (
+	"errors"
 	"math"
 	"strings"
 
@@ -202,7 +203,7 @@ func MatchesRegexRules(name any, rules []any) bool {
 		if !ok {
 			continue
 		}
-		re, err := js.NewRegExp(pattern, flags)
+		re, err := js.NewConfigRegExp(pattern, flags)
 		if err != nil {
 			continue
 		}
@@ -311,10 +312,19 @@ func base64EncodeUtf8(s string) string {
 
 // ApplyRegexRename 对应 applyRegexRename；record 非 nil 时会写入 regexGroups（与上游一样就地修改）。
 func ApplyRegexRename(name any, rulesVal any, record *js.Object) string {
+	value, _ := applyRegexRename(name, rulesVal, record, false)
+	return value
+}
+
+func ApplyRegexRenameChecked(name any, rulesVal any, record *js.Object) (string, error) {
+	return applyRegexRename(name, rulesVal, record, true)
+}
+
+func applyRegexRename(name any, rulesVal any, record *js.Object, strict bool) (string, error) {
 	result := strOr(name)
 	rules, ok := rulesVal.(*js.Array)
 	if !ok {
-		return result
+		return result, nil
 	}
 	var regexGroups *js.Object
 	if record != nil {
@@ -334,13 +344,19 @@ func ApplyRegexRename(name any, rulesVal any, record *js.Object) string {
 		if !ok {
 			continue
 		}
-		re, err := js.NewRegExp(pattern, flags)
+		re, err := js.NewConfigRegExp(pattern, flags)
 		if err != nil {
-			continue
+			if !strict {
+				continue
+			}
+			return "", errors.New("rename_invalid_regex")
 		}
-		firstRe, err := js.NewRegExp(pattern, strings.ReplaceAll(flags, "g", ""))
+		firstRe, err := js.NewConfigRegExp(pattern, strings.ReplaceAll(flags, "g", ""))
 		if err != nil {
-			continue
+			if !strict {
+				continue
+			}
+			return "", errors.New("rename_invalid_regex")
 		}
 		if m := firstRe.MatchFirst(result); m != nil {
 			for i := 1; i < len(m.Groups); i++ {
@@ -352,12 +368,15 @@ func ApplyRegexRename(name any, rulesVal any, record *js.Object) string {
 				}
 			}
 		}
-		result = re.Replace(result, replacement)
+		result, err = re.ReplaceBounded(result, replacement, 64<<10)
+		if err != nil {
+			return "", errors.New("rename_output_too_large")
+		}
 	}
 	if record != nil {
 		record.Set("regexGroups", regexGroups)
 	}
-	return js.Trim(result)
+	return js.Trim(result), nil
 }
 
 // sortedGroupNames 按分组出现顺序返回命名分组名（与 match.groups 的属性顺序一致）。
@@ -575,7 +594,19 @@ var reTemplateVar = js.MustRegExp(`\{([a-zA-Z0-9_]+)(?::([a-zA-Z0-9]+))?\}`, "g"
 
 // RenderTemplate 对应 renderTemplate：{key} / {key:modifier} 变量与 {g1} / {g_name} 捕获组变量。
 func RenderTemplate(template any, vars *js.Object, record *js.Object) string {
-	out := reTemplateVar.ReplaceFunc(strOr(template), func(m *js.Match) string {
+	out, _ := RenderTemplateChecked(template, vars, record)
+	return out
+}
+
+func RenderTemplateChecked(template any, vars *js.Object, record *js.Object) (string, error) {
+	text := strOr(template)
+	if len(text) > 64<<10 {
+		return "", errors.New("rename_template_too_large")
+	}
+	if vars == nil {
+		vars = js.NewObject()
+	}
+	value := func(m *js.Match) (string, error) {
 		key := m.Str(1)
 		modifier := m.Group(2)
 		var v any
@@ -589,17 +620,45 @@ func RenderTemplate(template any, vars *js.Object, record *js.Object) string {
 			v = objGet(record.Get("regexGroups"), gKey)
 		}
 		if v == nil {
-			return ""
+			return "", nil
 		}
 		if js.Truthy(modifier) {
+			if key == "index" && reAllDigitsMod.Test(js.ToString(modifier)) && js.ParseInt(js.ToString(modifier), 0) > 64<<10 {
+				return "", errors.New("rename_output_too_large")
+			}
 			v = applyModifier(key, v, js.ToString(modifier), record)
 		}
 		if js.IsNullish(v) {
-			return ""
+			return "", nil
 		}
-		return js.ToString(v)
-	})
-	return js.Trim(out)
+		return js.ToString(v), nil
+	}
+	var out strings.Builder
+	write := func(s string) bool {
+		if len(s) > (64<<10)-out.Len() {
+			return false
+		}
+		out.WriteString(s)
+		return true
+	}
+	pos := 0
+	for _, m := range reTemplateVar.FindAll(text) {
+		if !write(text[pos:m.Index]) {
+			return "", errors.New("rename_output_too_large")
+		}
+		next, err := value(m)
+		if err != nil {
+			return "", err
+		}
+		if !write(next) {
+			return "", errors.New("rename_output_too_large")
+		}
+		pos = m.End
+	}
+	if !write(text[pos:]) {
+		return "", errors.New("rename_output_too_large")
+	}
+	return js.Trim(out.String()), nil
 }
 
 func padIndex(n float64, width any) string {

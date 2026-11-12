@@ -12,6 +12,6 @@ export function useLogo() {
 export function BrandMark({ className }: { className?: string }) {
   const logo = useLogo();
   return <span className={className ?? "block size-8"} aria-label="Weir">
-    {logo.data?.src ? <img src={logo.data.src} alt="" className="block size-full object-contain" /> : <span className="grid size-full place-items-center rounded-[var(--weir-radius)] bg-[var(--weir-accent)] text-sm font-semibold text-white">W</span>}
+    {logo.data?.src ? <img src={logo.data.src} alt="" className="block size-full object-contain" /> : <span className="grid size-full place-items-center rounded-[var(--weir-radius-9)] bg-[var(--weir-pill)] text-body font-extrabold text-[var(--weir-pill-ink)] [corner-shape:squircle]">W</span>}
   </span>;
 }

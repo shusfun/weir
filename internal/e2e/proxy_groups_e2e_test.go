@@ -133,6 +133,9 @@ func TestProxyGroupsRealKernels(t *testing.T) {
 		g := get("/proxies/" + url.PathEscape("PROXY"))
 		return g != nil && g["now"] == "自动选择" && reflect.DeepEqual(g["all"], []any{"自动选择", "主备", "手动", "链式"})
 	})
+	eventually(t, 15*time.Second, "主备订阅成员加载", func() bool {
+		return reflect.DeepEqual(get("/proxies/" + url.PathEscape("主备"))["all"], []any{"主备 · 主备切换", "Primary", "Secondary"})
+	})
 	if g := get("/proxies/" + url.PathEscape("主备")); g["hidden"] != false || g["now"] != "主备 · 主备切换" || !reflect.DeepEqual(g["all"], []any{"主备 · 主备切换", "Primary", "Secondary"}) {
 		t.Fatalf("主备顺序=%v", g)
 	}

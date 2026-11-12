@@ -1,7 +1,8 @@
 {
   "api": {
     "services": [
-      "StatsService"
+      "StatsService",
+      "HandlerService"
     ],
     "tag": "api"
   },
@@ -108,7 +109,8 @@
           "certificates": [
             {
               "certificateFile": "/weir-test-certs/5.crt",
-              "keyFile": "/weir-test-certs/5.key"
+              "keyFile": "/weir-test-certs/5.key",
+              "oneTimeLoading": false
             }
           ],
           "fingerprint": "firefox",

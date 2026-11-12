@@ -4,6 +4,10 @@
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
 Push-Location $repoRoot
+python deploy/export_public.py --check
+if ($LASTEXITCODE) { Pop-Location; throw 'Local packaging requires a clean public source tree; private releases only export source.' }
+$dirty = git status --porcelain
+if ($dirty) { Pop-Location; throw 'Commit all public source changes before packaging.' }
 $Version = (python deploy/version.py check VERSION).Trim()
 if ($LASTEXITCODE) { throw 'VERSION refused' }
 $oldGoos = $env:GOOS; $oldGoarch = $env:GOARCH; $oldCgo = $env:CGO_ENABLED
@@ -18,9 +22,9 @@ try {
  $dirty = git status --porcelain
  if ($dirty) { $revision += '-dirty' }
  $linkFlags = "-s -w -X github.com/shusfun/weir/internal/buildinfo.Version=$Version -X github.com/shusfun/weir/internal/buildinfo.Revision=$revision"
- go build -trimpath -ldflags $linkFlags -o (Join-Path $releaseDir 'weir') './apps/weir'
+ go build -trimpath -buildvcs=false -ldflags $linkFlags -o (Join-Path $releaseDir 'weir') './apps/weir'
  if ($LASTEXITCODE) { throw 'weir compilation failed' }
- Copy-Item deploy/install.sh,deploy/sources.json,deploy/github-update.sh,deploy/release_fetch.py,deploy/version.py,VERSION $releaseDir
+ Copy-Item deploy/install.sh,deploy/sources.json,deploy/version.py,VERSION $releaseDir
  python deploy/package_release.py $Version
  if ($LASTEXITCODE) { throw 'Packaging failed' }
  Get-FileHash (Join-Path $repoRoot "dist/weir-$Version-linux-amd64.tar.gz") -Algorithm SHA256

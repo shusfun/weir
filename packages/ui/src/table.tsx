@@ -33,7 +33,9 @@ function TableRow({ className, ...props }: ComponentProps<"tr">) {
       data-slot="table-row"
       className={cn(
         "border-b border-[var(--weir-line-soft)] transition-colors hover:bg-[var(--weir-fill-4)] data-[state=selected]:bg-[var(--weir-accent-soft)]",
-        pressable && "weir-press-fill cursor-pointer active:bg-[var(--weir-fill-2)]",
+        // 分组行（稿子 .v-grp-h）：凹面底、11px 粗体次要文字、上下各 7
+        "data-[group-row]:bg-[var(--weir-well)] data-[group-row]:hover:bg-[var(--weir-well)] [&[data-group-row]>td]:h-auto [&[data-group-row]>td]:py-[7px] [&[data-group-row]>td]:text-fine [&[data-group-row]>td]:font-bold [&[data-group-row]>td]:tracking-[0.05em] [&[data-group-row]>td]:text-[var(--weir-ink-3)]",
+        pressable && "weir-press-fill cursor-pointer active:bg-[var(--weir-fill)]",
         className,
       )}
       {...props}
@@ -45,7 +47,7 @@ function TableHead({ className, ...props }: ComponentProps<"th">) {
   return (
     <th
       data-slot="table-head"
-      className={cn("weir-engraved h-9 px-3 align-middle font-normal whitespace-nowrap first:pl-4 last:pr-4 [&:has([role=checkbox])]:pr-0", className)}
+      className={cn("h-[41px] px-[15px] align-middle text-fine font-semibold text-[var(--weir-ink-3)] whitespace-nowrap [&:has([role=checkbox])]:pr-0", className)}
       {...props}
     />
   );
@@ -55,7 +57,7 @@ function TableCell({ className, ...props }: ComponentProps<"td">) {
   return (
     <td
       data-slot="table-cell"
-      className={cn("h-11 px-3 py-2 align-middle first:pl-4 last:pr-4 [&:has([role=checkbox])]:pr-0", className)}
+      className={cn("h-[45px] px-[15px] py-[11px] align-middle [&:has([role=checkbox])]:pr-0", className)}
       {...props}
     />
   );

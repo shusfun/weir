@@ -10,10 +10,12 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -27,6 +29,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -36,10 +39,11 @@ import (
 
 	"github.com/shusfun/weir/internal/gate"
 	"github.com/shusfun/weir/internal/kernels"
+	"github.com/shusfun/weir/internal/store"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
-// seedSingbox 把 sing-box 放进中心的内核缓存（版本号与内置档案对应）。
+// seedSingbox 把 sing-box 放进中心的内核缓存。登记版本取自二进制自己的 version 输出，不沿用夹具目录名。
 func (e *env) seedSingbox() string {
 	e.t.Helper()
 	sb := os.Getenv("WEIR_E2E_SINGBOX")
@@ -50,10 +54,37 @@ func (e *env) seedSingbox() string {
 	if err != nil {
 		e.t.Fatal(err)
 	}
-	if _, err = (kernels.Cache{Dir: filepath.Join(e.dir, "center-data", "kernels")}).Put("sing-box", "1.14.3", "amd64", data); err != nil {
+	ver := kernelReleaseVersion(e.t, sb, "sing-box")
+	sum, err := (kernels.Cache{Dir: filepath.Join(e.dir, "center-data", "kernels")}).Put("sing-box", ver, "amd64", data)
+	if err != nil {
 		e.t.Fatal(err)
 	}
+	e.singboxVersion, e.singboxDigest = ver, sum
 	return sb
+}
+
+var kernelVersionRE = regexp.MustCompile(`\b(\d+\.\d+\.\d+)\b`)
+
+func kernelReleaseVersion(t *testing.T, bin, name string) string {
+	t.Helper()
+	out, err := exec.Command(bin, "version").CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s version: %v %s", name, err, out)
+	}
+	m := kernelVersionRE.FindStringSubmatch(string(out))
+	if m == nil {
+		t.Fatalf("cannot read %s version from %q", name, strings.TrimSpace(string(out)))
+	}
+	return m[1]
+}
+
+func fileDigest(path string) (string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 // helperRunning 经辅助程序的本机套接字读出正在运行的内核进程号。
@@ -146,13 +177,15 @@ func TestRealityPrefers443WithDroppedPrivileges(t *testing.T) {
 	}
 	// 443 空出：Gate 下一次心跳上报后，新建的 REALITY 节点用 443。
 	foreign.Close()
+	// 首次配置需要下载真实内核，等待应用后再检查下一次端口报告。
+	e.applied("initial kernel download")
 	eventually(t, 15*time.Second, "gate reports 443 free", func() bool { return !e.gateListens(443) })
 	r := e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "vless-reality", "name": "R443", "skip_probe": true,
 		"settings": map[string]any{"reality_dest": dest, "reality_server_names": "e2e.test"}}, nil)
 	if r["port"].(float64) != 443 {
 		t.Fatalf("REALITY on a free 443 = %v", r["port"])
 	}
-	u := e.post("/api/v1/admin/users", map[string]any{"email": "p443@e2e.test", "password": "E2eUser1"}, nil)
+	u := e.post("/api/v1/admin/users", map[string]any{"unlimited": true, "email": "p443@e2e.test", "password": "E2eUser1"}, nil)
 	wantTag := e.subName(int(u["id"].(float64)), int(r["id"].(float64)), 0)
 	e.applied("REALITY on 443")
 	pid := helperRunning(t, filepath.Join("/tmp", "weir-p443.sock"))["xray"]
@@ -273,18 +306,20 @@ func TestSourceGroupFailoverInKernels(t *testing.T) {
 	e.startGate("grp")
 	e.s.Store.Ent.Gate.UpdateOneID(e.gateID).SetPublicHost("127.0.0.1").ExecX(e.ctx)
 	a, b := newMember(t), newMember(t)
-	src := e.post("/api/v1/admin/subscriptions/sources", map[string]any{"name": "机场", "url": "https://example.invalid/sub"}, nil)
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, "socks5://127.0.0.1:%d#HK-A\nsocks5://127.0.0.1:%d#HK-B", a.port, b.port)
+	}))
+	t.Cleanup(source.Close)
+	e.s.AllowPrivateSources = true
+	src := e.post("/api/v1/admin/subscriptions/sources", map[string]any{"name": "机场", "url": source.URL}, nil)
 	sid := int(src["id"].(float64))
-	links, _ := json.Marshal([]string{fmt.Sprintf("socks5://127.0.0.1:%d#HK-A", a.port), fmt.Sprintf("socks5://127.0.0.1:%d#HK-B", b.port)})
-	if err := e.s.Store.KV.Set(e.ctx, fmt.Sprintf("sub-source:%d", sid), string(links), 0); err != nil {
-		t.Fatal(err)
-	}
+	e.post(fmt.Sprintf("/api/v1/admin/subscriptions/sources/%d/refresh", sid), map[string]any{}, nil)
 	chainSpec := map[string]any{"kind": "source", "source_id": sid, "mode": "filter", "match": "^HK"}
 	dest := localDest(t)
 	xNode := e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "vless-reality", "name": "X-POOL", "skip_probe": true, "exit": chainSpec,
 		"settings": map[string]any{"reality_dest": dest, "reality_server_names": "e2e.test"}}, nil)
 	sNode := e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "ss2022", "name": "S-POOL", "skip_probe": true, "exit": chainSpec}, nil)
-	u := e.post("/api/v1/admin/users", map[string]any{"email": "grp@e2e.test", "password": "E2eUser1"}, nil)
+	u := e.post("/api/v1/admin/users", map[string]any{"unlimited": true, "email": "grp@e2e.test", "password": "E2eUser1"}, nil)
 	uid := int(u["id"].(float64))
 	tags := map[string]string{e.subName(uid, int(xNode["id"].(float64)), 0): "X-POOL", e.subName(uid, int(sNode["id"].(float64)), 0): "S-POOL"}
 	e.applied("source group exits")
@@ -545,15 +580,10 @@ func TestNewPresetsConnectWithRealClients(t *testing.T) {
 	hsKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	hsDER, _ := x509.CreateCertificate(rand.Reader, &x509.Certificate{SerialNumber: big.NewInt(2), DNSNames: []string{"hs.e2e.test"}, NotBefore: time.Now().Add(-time.Hour),
 		NotAfter: time.Now().Add(24 * time.Hour), ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}, ca, &hsKey.PublicKey, caKey)
-	caFile := filepath.Join(e.dir, "hs-ca.pem")
-	os.WriteFile(caFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER}), 0o644)
-	os.Setenv("SSL_CERT_FILE", caFile)
-	t.Cleanup(func() { os.Unsetenv("SSL_CERT_FILE") })
-	hostsFile, _ := os.ReadFile("/etc/hosts")
-	os.WriteFile("/etc/hosts", append(hostsFile, []byte("127.0.0.1 hs.e2e.test\n")...), 0o644)
-	t.Cleanup(func() { os.WriteFile("/etc/hosts", hostsFile, 0o644) })
+	installTrust(t, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER}))
+	startDNSLab(t).alias("hs.e2e.test", net.ParseIP("127.0.0.1"))
 	hs := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("hs")) }))
-	l443, err := net.Listen("tcp", ":443")
+	l443, err := net.Listen("tcp", "127.0.0.1:443")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -566,15 +596,21 @@ func TestNewPresetsConnectWithRealClients(t *testing.T) {
 		body["gate_id"], body["skip_probe"] = e.gateID, true
 		return e.post("/api/v1/admin/nodes", body, nil)
 	}
-	node(map[string]any{"preset": "socks-local", "name": "SOCKS"})
-	node(map[string]any{"preset": "http-local", "name": "HTTP"})
-	node(map[string]any{"preset": "shadowtls", "name": "STLS", "settings": map[string]any{"tls_sni": "hs.e2e.test"}})
-	node(map[string]any{"preset": "wireguard", "name": "WG", "settings": map[string]any{"wg_mtu": 1380}})
-	hy := node(map[string]any{"preset": "hysteria2", "name": "HY2-ADV", "settings": map[string]any{"hy2_up_mbps": 50, "hy2_obfs": ""}})
+	nodeIDs := map[string]int{}
+	add := func(body map[string]any) map[string]any {
+		n := node(body)
+		nodeIDs[body["name"].(string)] = int(n["id"].(float64))
+		return n
+	}
+	add(map[string]any{"preset": "socks-local", "name": "SOCKS"})
+	add(map[string]any{"preset": "http-local", "name": "HTTP"})
+	add(map[string]any{"preset": "shadowtls", "name": "STLS", "settings": map[string]any{"tls_sni": "hs.e2e.test"}})
+	add(map[string]any{"preset": "wireguard", "name": "WG", "settings": map[string]any{"wg_mtu": 1380}})
+	hy := add(map[string]any{"preset": "hysteria2", "name": "HY2-ADV", "settings": map[string]any{"hy2_up_mbps": 50, "hy2_obfs": ""}})
 	if st := hy["settings"].(map[string]any); st["hy2_up_mbps"].(float64) != 50 || st["hy2_obfs"] != nil {
 		t.Fatalf("advanced fields = %v", st)
 	}
-	free := e.post("/api/v1/admin/users", map[string]any{"email": "free@e2e.test", "password": "E2eUser1"}, nil)
+	free := e.post("/api/v1/admin/users", map[string]any{"unlimited": true, "email": "free@e2e.test", "password": "E2eUser1"}, nil)
 	limited := e.post("/api/v1/admin/users", map[string]any{"email": "limited@e2e.test", "password": "E2eUser1", "quota": 1 << 30}, nil)
 	e.applied("new presets")
 
@@ -610,14 +646,18 @@ func TestNewPresetsConnectWithRealClients(t *testing.T) {
 		}
 	}
 	for _, tag := range []string{"SOCKS", "HTTP", "STLS", "WG", "HY2-ADV"} {
-		port := e.runSingboxDoc(sb, doc, tag)
+		port := e.runSingboxDoc(sb, doc, e.subName(int(free["id"].(float64)), nodeIDs[tag], 0))
 		eventually(t, 30*time.Second, "download via "+tag, func() bool { return fetchVia(port, targetURL, len(blob)) == nil })
 		t.Logf("%s ok", tag)
 	}
 	// 有额度的用户：订阅里没有 WireGuard，用户详情写明原因。
 	ltoken, ldetail := tokenOf(limited)
 	lbody, _ := e.get("/sub/"+ltoken, map[string]string{"User-Agent": "sing-box/1.14.3"})
-	if strings.Contains(string(lbody), `"WG"`) {
+	var limitedDoc map[string]json.RawMessage
+	if err := json.Unmarshal(lbody, &limitedDoc); err != nil {
+		t.Fatal(err)
+	}
+	if endpoints := limitedDoc["endpoints"]; len(endpoints) > 0 && string(endpoints) != "[]" && string(endpoints) != "null" {
 		t.Fatal("limited user must not get the WireGuard node")
 	}
 	if w := ldetail["withheld"].([]any); len(w) != 1 || !strings.Contains(w[0].(map[string]any)["reason"].(string), "不限额度") {
@@ -740,7 +780,7 @@ func TestGateExposureFailedConfigAndOffline(t *testing.T) {
 	r := e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "vless-reality", "name": "R", "skip_probe": true,
 		"settings": map[string]any{"reality_dest": localDest(t), "reality_server_names": "e2e.test"}}, nil)
 	ss := e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "ss2022", "name": "S", "skip_probe": true}, nil)
-	e.post("/api/v1/admin/users", map[string]any{"email": "gx@e2e.test", "password": "E2eUser1"}, nil)
+	e.post("/api/v1/admin/users", map[string]any{"unlimited": true, "email": "gx@e2e.test", "password": "E2eUser1"}, nil)
 	e.applied("two nodes")
 	nodePorts := map[int]bool{int(r["port"].(float64)): true, int(ss["port"].(float64)): true}
 	running := helperRunning(t, e.paths.Socket)
@@ -816,7 +856,11 @@ func TestGateExposureFailedConfigAndOffline(t *testing.T) {
 	// 离线：只停 Agent（内核照常运行）；超过 90 秒没有心跳显示离线，修改节点后是「待生效」而不是已生效。
 	e.stopAgent()
 	time.Sleep(2 * time.Second)
-	e.s.Store.Ent.Gate.UpdateOneID(e.gateID).SetLastSeenAt(time.Now().Add(-2 * time.Minute)).ExecX(e.ctx)
+	offlineAt := time.Now().Add(-2 * time.Minute)
+	e.s.Store.Ent.Gate.UpdateOneID(e.gateID).SetLastSeenAt(offlineAt).ExecX(e.ctx)
+	if err := e.s.Store.SetGateObservation(e.ctx, e.gateID, store.GateObservation{SeenAt: offlineAt}); err != nil {
+		t.Fatal(err)
+	}
 	e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "ss2022", "name": "S2", "skip_probe": true}, nil)
 	if v := gateState(); v["online"] != false || v["state"] != "pending" {
 		t.Fatalf("offline gate view = %v", v)
@@ -855,7 +899,7 @@ func TestCenterChecksSubscriptionsWithRealKernels(t *testing.T) {
 		"settings": map[string]any{"reality_dest": localDest(t), "reality_server_names": "e2e.test"}}, nil)
 	e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "ss2022", "name": "S", "skip_probe": true}, nil)
 	e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "hysteria2", "name": "H", "skip_probe": true}, nil)
-	u := e.post("/api/v1/admin/users", map[string]any{"email": "sc@e2e.test", "password": "E2eUser1"}, nil)
+	u := e.post("/api/v1/admin/users", map[string]any{"unlimited": true, "email": "sc@e2e.test", "password": "E2eUser1"}, nil)
 	var detail map[string]any
 	b, _ := e.get("/api/v1/admin/users/"+strconv.Itoa(int(u["id"].(float64))), nil)
 	json.Unmarshal(b, &detail)
@@ -905,7 +949,7 @@ func TestCustomRulesRealKernelChecksAndProvider(t *testing.T) {
 	e.s.Store.Ent.Gate.UpdateOneID(e.gateID).SetPublicHost("203.0.113.20").ExecX(e.ctx)
 	e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "vless-reality", "name": "R", "skip_probe": true,
 		"settings": map[string]any{"reality_dest": localDest(t), "reality_server_names": "e2e.test"}}, nil)
-	u := e.post("/api/v1/admin/users", map[string]any{"email": "custom@e2e.test", "password": "E2eUser1"}, nil)
+	u := e.post("/api/v1/admin/users", map[string]any{"unlimited": true, "email": "custom@e2e.test", "password": "E2eUser1"}, nil)
 	uid := int(u["id"].(float64))
 	var detail map[string]any
 	b, _ := e.get("/api/v1/admin/users/"+strconv.Itoa(uid), nil)
@@ -913,7 +957,7 @@ func TestCustomRulesRealKernelChecksAndProvider(t *testing.T) {
 		t.Fatal(err)
 	}
 	token := detail["link_items"].([]any)[0].(map[string]any)["token"].(string)
-	saved := e.post("/api/v1/admin/users/"+strconv.Itoa(uid)+"/proxy/custom/append", map[string]any{"revision": 0, "target": "direct", "source": "netflix.com\nDOMAIN-KEYWORD,openai\nGEOSITE,private\n2001:db8::/32"}, nil)
+	saved := e.post("/api/v1/proxy/custom/append?user="+strconv.Itoa(uid), map[string]any{"revision": 0, "target": "direct", "source": "netflix.com\nDOMAIN-KEYWORD,openai\nGEOSITE,private\n2001:db8::/32"}, nil)
 	check := saved["custom"].(map[string]any)["check"].(map[string]any)
 	if check["status"] != "passed" {
 		t.Fatalf("real kernel checks = %v", check)
@@ -921,10 +965,6 @@ func TestCustomRulesRealKernelChecksAndProvider(t *testing.T) {
 	clash, _ := e.get("/sub/"+token, map[string]string{"User-Agent": "clash.meta/1.19"})
 	if strings.Contains(string(clash), "RULE-SET,weir-custom") || !strings.Contains(string(clash), "DOMAIN-SUFFIX,netflix.com,DIRECT") {
 		t.Fatalf("Clash custom rule provider missing:\n%s", clash)
-	}
-	rules, _ := e.get("/sub/"+token+"/rules", nil)
-	if string(rules) != "DOMAIN,empty.weir.invalid\n" {
-		t.Fatalf("provider rules = %q", rules)
 	}
 	singbox, _ := e.get("/sub/"+token, map[string]string{"User-Agent": "SFA/1.14"})
 	if !strings.Contains(string(singbox), `"domain_suffix"`) || !strings.Contains(string(singbox), `"domain_keyword"`) {

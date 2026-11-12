@@ -71,7 +71,7 @@ export function UserSessions({ userId, onCurrentRevoked }: { userId?: number; on
     <Card>
       <CardContent>
         <SectionHeader
-          title={self ? "有效登录会话" : "登录会话"}
+          title={self ? "正在登录的设备" : "登录会话"}
           description={self ? "核对来源与登录时间，及时撤销不认识的会话。" : "仅展示此用户的有效会话，撤销不改变节点授权。"}
           actions={
             <div className="actions">
@@ -80,7 +80,7 @@ export function UserSessions({ userId, onCurrentRevoked }: { userId?: number; on
               </Button>
               {self && (
                 <Button variant="destructive" disabled={isBusy() || query.isPending || !!query.error} onClick={() => void revoke("others")}>
-                  撤销其他会话
+                  退出其他设备
                 </Button>
               )}
             </div>

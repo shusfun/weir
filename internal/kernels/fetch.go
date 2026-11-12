@@ -6,11 +6,11 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -62,6 +62,7 @@ var statsRepo = map[string]struct{ repo, asset string }{
 // 直连在前，再经各加速前缀）；摘要始终取自 GitHub API，镜像返回的内容与摘要不一致即丢弃。
 // 下载经 internal/fetch：可续传、可取消、低速换源。
 type Fetcher struct {
+	Query        ghrelease.QueryFunc
 	HTTP         *http.Client
 	API          string // 默认 https://api.github.com
 	DownloadHost string // 默认 github.com；只接受该主机的 https 下载地址
@@ -84,7 +85,7 @@ func (f Fetcher) step(s string) {
 }
 
 func (f Fetcher) gh() ghrelease.Client {
-	return ghrelease.Client{HTTP: f.HTTP, API: f.API, Host: f.DownloadHost, Mirrors: f.Mirrors, Sources: f.Sources}
+	return ghrelease.Client{Query: f.Query, HTTP: f.HTTP, API: f.API, Host: f.DownloadHost, Mirrors: f.Mirrors, Sources: f.Sources}
 }
 
 func (f Fetcher) releases(ctx context.Context, kernel string) ([]ghrelease.Release, error) {
@@ -213,15 +214,22 @@ func fromZip(archive []byte, name string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	var member *zip.File
 	for _, f := range r.File {
-		if path.Base(f.Name) == name && !f.FileInfo().IsDir() {
-			rc, err := f.Open()
-			if err != nil {
-				return nil, err
+		if strings.TrimPrefix(f.Name, "./") == name {
+			if member != nil || !f.Mode().IsRegular() || f.UncompressedSize64 > maxDownload {
+				return nil, errors.New("invalid kernel archive member")
 			}
-			defer rc.Close()
-			return io.ReadAll(io.LimitReader(rc, maxDownload))
+			member = f
 		}
+	}
+	if f := member; f != nil {
+		rc, err := f.Open()
+		if err != nil {
+			return nil, err
+		}
+		defer rc.Close()
+		return readKernelMember(rc)
 	}
 	return nil, fmt.Errorf("%s not found in archive", name)
 }
@@ -232,7 +240,7 @@ func fromGzip(archive []byte) ([]byte, error) {
 		return nil, err
 	}
 	defer r.Close()
-	return io.ReadAll(io.LimitReader(r, maxDownload))
+	return readKernelMember(r)
 }
 
 func fromTarGz(archive []byte, member string) ([]byte, error) {
@@ -241,17 +249,45 @@ func fromTarGz(archive []byte, member string) ([]byte, error) {
 		return nil, err
 	}
 	defer gz.Close()
-	tr := tar.NewReader(gz)
+	limited := &io.LimitedReader{R: gz, N: maxDownload + 1}
+	tr := tar.NewReader(limited)
+	var binary []byte
 	for {
 		h, err := tr.Next()
 		if err == io.EOF {
+			if _, err := io.Copy(io.Discard, limited); err != nil {
+				return nil, err
+			}
+			if limited.N == 0 {
+				return nil, errors.New("kernel archive expansion exceeds limit")
+			}
+			if binary != nil {
+				return binary, nil
+			}
 			return nil, fmt.Errorf("%s not found in archive", member)
 		}
 		if err != nil {
 			return nil, err
 		}
-		if strings.TrimPrefix(h.Name, "./") == member && h.Typeflag == tar.TypeReg {
-			return io.ReadAll(io.LimitReader(tr, maxDownload))
+		if strings.TrimPrefix(h.Name, "./") == member {
+			if binary != nil || h.Typeflag != tar.TypeReg || h.Size < 1 || h.Size > maxDownload {
+				return nil, errors.New("invalid kernel archive member")
+			}
+			binary, err = readKernelMember(tr)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
+}
+
+func readKernelMember(r io.Reader) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(r, maxDownload+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) == 0 || len(body) > maxDownload {
+		return nil, errors.New("kernel member size out of bounds")
+	}
+	return body, nil
 }

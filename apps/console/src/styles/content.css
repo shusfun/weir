@@ -57,3 +57,44 @@
 
 
 .public-guestbook, .guestbook-manager { min-width: 0; }
+
+/* 手机预览可以与列表并排；较宽的预览始终使用整行。 */
+.public-page-board { display: grid; align-items: start; gap: var(--weir-space-4); grid-template-columns: minmax(0, 1fr); }
+.public-page-select { width: calc(100% + var(--weir-button-padding) * 2); margin-inline: calc(-1 * var(--weir-button-padding)); flex-wrap: wrap; justify-content: space-between; text-align: start; white-space: normal; }
+@media (min-width: 1025px) {
+  .public-page-board[data-device="phone"] { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+}
+
+.weir-user-traffic-aside { display: flex; justify-content: end; width: 100%; }
+
+.subscription-guide { display: grid; min-width: 0; gap: var(--weir-gap-29); margin-block: var(--weir-gap-33); }
+.subscription-guide > div:first-child > h2 { margin: 0; font-size: var(--weir-text-title1); line-height: var(--weir-leading-title1); }
+.subscription-guide-eyebrow { margin: 0 0 var(--weir-gap-9); color: var(--weir-accent-text); font-size: var(--weir-text-meta); }
+.subscription-guide-lead { margin: var(--weir-gap-13) 0 0; color: var(--weir-ink-2); }
+.subscription-guide-devices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--weir-gap-13); }
+.subscription-guide-devices button { align-items: start; text-align: start; }
+.subscription-guide-devices small, .subscription-guide-clients > small { color: var(--weir-ink-3); overflow-wrap: anywhere; }
+.subscription-guide-clients, .subscription-guide-results, .subscription-guide-result { display: grid; min-width: 0; gap: var(--weir-gap-17); }
+.subscription-guide-clients [data-slot="segmented"] { flex-wrap: wrap; justify-content: start; max-width: 100%; }
+.subscription-guide-actions { display: flex; flex-wrap: wrap; gap: var(--weir-gap-9); }
+.subscription-guide-qr { display: grid; justify-content: center; padding: var(--weir-gap-17); }
+.subscription-guide-qr svg { max-width: 100%; height: auto; background: var(--weir-qr-paper); padding: var(--weir-gap-13); box-sizing: content-box; }
+@media (max-width: 541px) {
+  .subscription-guide-devices { gap: var(--weir-gap-9); }
+  .subscription-guide-devices button { padding: var(--weir-gap-13); }
+}
+
+.weir-user-detail-columns { display: grid; gap: var(--weir-gap-29); grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1025px) {
+ .weir-user-detail-columns { grid-template-columns: minmax(0, 1fr) minmax(0, 0.61fr); grid-template-rows: auto auto; }
+ .weir-user-detail-columns > div { display: grid; grid-template-rows: subgrid; grid-row: span 2; gap: 0; align-content: start; }
+ .weir-user-detail-columns [data-slot="section-header"] { min-height: var(--weir-tap-sm); }
+}
+
+
+.subscription-import-page { display: grid; width: 100%; max-width: var(--weir-public-width); margin-inline: auto; gap: var(--weir-gap-17); padding: var(--weir-gap-17); }
+
+.account-grant-summary { color: var(--weir-ink-2); overflow-wrap: anywhere; }
+.account-history-entry { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--weir-space-3); width: 100%; }
+
+.stack-tight { display: flex; flex-direction: column; gap: var(--weir-space-1); min-width: 0; }

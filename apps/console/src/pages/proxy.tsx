@@ -6,13 +6,13 @@ import { CustomRulesCard } from "../components/custom-rules";
 import { NodeSummary, ExitSummary } from "../components/node-summary";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "../lib/query";
 import { useNodeChoices } from "../lib/node-choices";
 import {
-  Badge, Button, Card, CardContent, CheckboxField, Chip, ChipLabel, ChoiceCard, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, InsetGroup, InsetRow, InsetRows, Notice,
+  Badge, Button, Card, CardContent, CheckboxField, Chip, ChipLabel, ChoiceBoard, ChoiceCard, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, InsetGroup, InsetRow, InsetRows, Notice, Segmented,
   PageHeader, Radio, RadioGroup, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SkeletonCards, Switch, Tabs, TabsList, TabsPanel, TabsTab,
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useConfirm, type LampTone,
+  TextLink, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useConfirm, type LampTone,
 } from "@weir/ui";
 import { Plus, Route, Trash2 } from "lucide-react";
 import { api, ApiError } from "../api";
@@ -57,8 +57,9 @@ export function ProxyPage({ admin }: { admin: boolean }) {
   });
   const header = (
     <PageHeader
+      size="data"
       title="代理"
-      description="管理客户端选择、全局清单和节点出口。客户端下次更新订阅时生效。"
+      description={proxyLead(view.data)}
       actions={admin ? <div className="flex flex-wrap items-center gap-2"><span>查看用户</span><UserPick value={uid} onChange={(id) => { const p = new URLSearchParams(params); if (id) p.set("user", String(id)); else p.delete("user"); p.delete("proxy_group"); p.delete("new_group"); p.delete("type_exit"); void changeParams(p); }} /></div> : undefined}
     />
   );
@@ -73,6 +74,7 @@ export function ProxyPage({ admin }: { admin: boolean }) {
   return (
     <div className="stack">
       {header}
+      <ProxyBoard view={v} admin={admin} />
       <ProxyMigration base={base} view={v} onSaved={() => view.refetch()} />
       <Tabs value={tab} onValueChange={(value) => { const p = new URLSearchParams(params); p.set("tab", String(value)); p.delete("proxy_group"); p.delete("new_group"); p.delete("type_exit"); void changeParams(p); }}>
         <TabsList className="flex flex-wrap h-auto"><TabsTab value="clients">客户端选择</TabsTab><TabsTab value="rules">全局清单</TabsTab><TabsTab value="nodes">节点与出口</TabsTab></TabsList>
@@ -87,6 +89,63 @@ export function ProxyPage({ admin }: { admin: boolean }) {
       </TabsPanel>
       </Tabs>
       <PendingExits base={base} />
+    </div>
+  );
+}
+
+function proxyLead(view?: ProxyView) {
+  if (!view) return "订阅结构未知。客户端下次更新订阅时生效。";
+  const nodes = view.types.reduce((n, t) => n + t.nodes.length, 0);
+  return <span className="weir-sum"><span>订阅里 <b>{nodes}</b> 个节点</span><span><b>{view.custom.active_count}</b> 条分流</span><span>自动选择：客户端测延迟</span><span>保存后，客户端下次更新订阅时生效</span></span>;
+}
+
+function ProxyBoard({ view, admin }: { view: ProxyView; admin: boolean }) {
+  const [fmt, setFmt] = useState("clash");
+  const groups = view.layout.filter((item) => !item.hidden);
+  const flows = [
+    ...view.custom.entries.filter((entry) => entry.enabled).slice(0, 8).map((entry) => ({ label: entry.value, target: entry.effective_target || entry.target || "未知" })),
+    { label: "局域网与本机", target: "直连" },
+    { label: "国内域名与国内 IP", target: "直连" },
+    { label: "其余流量", target: "PROXY" },
+  ];
+  const body = [
+    "proxy-groups:",
+    ...(groups.length ? groups.slice(0, 8).map((group) => `  ${group.name} ${group.kind}`) : ["  未知"]),
+    `rules: ${view.custom.active_count} 条`,
+    "# 完整订阅正文未知：控制台不代客户端拉取，避免记成一次拉取",
+    `# 格式 ${fmt}`,
+  ].join("\n");
+  return (
+    <div className="grid items-start gap-[var(--weir-gap-29)] lg:grid-cols-[minmax(0,1.61fr)_minmax(0,1fr)]">
+      <div className="stack">
+        <Card className="px-[var(--weir-gap-25)] py-[var(--weir-gap-21)]">
+          <div className="mb-[var(--weir-gap-17)] flex items-center justify-between gap-3"><b>节点类型</b><span className="text-meta text-[var(--weir-ink-3)]">拨下去的类型不进订阅</span></div>
+          {!view.types.length ? <State empty="还没有可用的节点" /> : (
+            <div className="grid gap-[var(--weir-gap-21)] sm:grid-cols-3">
+              {view.types.map((type) => (
+                <div key={type.key} className="flex items-center gap-[var(--weir-gap-15)]">
+                  <span className="weir-lever" data-on={type.enabled || undefined} role="img" aria-label={`${type.label}：${type.enabled ? "在订阅里" : "已从订阅拿掉"}`}><i /></span>
+                  <div className="min-w-0"><b className="block truncate">{type.label}</b><div className="text-fine text-[var(--weir-ink-3)]">{type.nodes.length} 个节点 · {type.enabled ? (type.exit ? "经出口" : "直接从 VPS 出去") : "已拿掉"}</div></div>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="mt-[var(--weir-gap-13)] mb-0 text-fine text-[var(--weir-ink-3)]">开关在下方「节点与出口」里改</p>
+        </Card>
+        <Card className="overflow-hidden p-0">
+          <div className="weir-set-row"><b>流量怎么走</b><TextLink render={<Link to={admin ? "/exits" : "?tab=rules"} />}>{admin ? "在出口与分流里编辑" : "编辑全局清单"}</TextLink></div>
+          {flows.map((flow) => (
+            <div key={flow.label + flow.target} className="weir-set-row"><span>{flow.label}</span><Badge variant="soft" tone={flow.target.includes("TCP") ? "info" : "neutral"}>{flow.target}</Badge></div>
+          ))}
+        </Card>
+      </div>
+      <div>
+        <div className="mb-[var(--weir-gap-13)] flex flex-wrap items-center justify-between gap-2">
+          <b>订阅预览</b>
+          <Segmented aria-label="预览格式" value={fmt} onValueChange={setFmt} options={[["clash", "Clash"], ["stash", "小火箭"], ["singbox", "sing-box"]] as const} />
+        </div>
+        <pre className="weir-paper">{body}</pre>
+      </div>
     </div>
   );
 }

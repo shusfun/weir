@@ -62,13 +62,21 @@ func (s *Server) defaultKernelVersion(ctx context.Context, kernel, arch string) 
 	if list := s.kernelCache().Versions(kernel, arch); len(list) > 0 {
 		return list[0]
 	}
+	if versions, err := s.kernelVersions(ctx, kernel); err == nil && len(versions) > 0 {
+		return versions[0]
+	}
 	return ""
 }
 
 // gateKernels 为 Gate 选定 Xray / sing-box 版本（Gate 锁定的版本优先），并取对应驱动（已展开 extends 的全文）。
-// 需要的内核尚未下载时返回错误：Gate 保持上一份已生效配置，不会收到缺内核的配置。
+// New workers receive pinned archives; only legacy workers require a center
+// binary cache. Missing release metadata keeps the last applied configuration.
 func (s *Server) gateKernels(ctx context.Context, g *ent.Gate, need map[string]bool) (map[string]contracts.Kernel, map[string]string, error) {
 	ks, profiles := map[string]contracts.Kernel{}, map[string]string{}
+	direct, err := s.gateDownloadsKernels(ctx, g.ID)
+	if err != nil {
+		return nil, nil, err
+	}
 	for _, kernel := range []string{"xray", "sing-box", "mihomo"} {
 		if !need[kernel] {
 			continue
@@ -80,7 +88,9 @@ func (s *Server) gateKernels(ctx context.Context, g *ent.Gate, need map[string]b
 		// 没有锁定也没有设置默认时，保持 Gate 正在运行的版本：下载新版本不会悄悄替换正在用的内核
 		// （例如 Xray 26.10 的 REALITY 与 sing-box 1.14 客户端不兼容），换版本必须由管理员明确设置。
 		if run := g.KernelsRunning[kernel]; version == "" && run != "" {
-			if _, _, err := s.kernelCache().Get(kernel, run, g.Arch); err == nil {
+			if direct {
+				version = run
+			} else if _, _, err := s.kernelCache().Get(kernel, run, g.Arch); err == nil {
 				version = run
 			}
 		}
@@ -89,14 +99,23 @@ func (s *Server) gateKernels(ctx context.Context, g *ent.Gate, need map[string]b
 		}
 		if version == "" {
 			// 这台 VPS 的架构还没有任何版本：用中心已有的最新版本（或默认版本）为它补下。
-			if v := s.newestAnyArch(kernel); v != "" {
+			if v := s.newestAnyArch(ctx, kernel); v != "" {
 				s.autoKernelFetch(ctx, kernel, v)
 				return nil, nil, kernelNotReady{Kernel: kernel, Detail: fmt.Sprintf("%s %s（%s）正在下载，完成后自动生效", kernel, v, g.Arch)}
 			}
 			s.autoKernelFetch(ctx, kernel, "")
 			return nil, nil, kernelNotReady{Kernel: kernel, Detail: kernel + " 正在下载最新稳定版，完成后自动实测"}
 		}
-		_, sum, err := s.kernelCache().Get(kernel, version, g.Arch)
+		ref := contracts.Kernel{Version: version}
+		_, ref.SHA256, err = s.kernelCache().Get(kernel, version, g.Arch)
+		if direct {
+			artifact, artifactErr := s.kernelArtifact(ctx, kernel, version, g.Arch)
+			if artifactErr == nil {
+				ref.Artifact, err = &artifact, nil
+			} else if !ent.IsNotFound(artifactErr) {
+				return nil, nil, artifactErr
+			}
+		}
 		if err != nil {
 			s.autoKernelFetch(ctx, kernel, version)
 			return nil, nil, kernelNotReady{Kernel: kernel, Detail: fmt.Sprintf("%s %s（%s）正在下载，完成后自动生效", kernel, version, g.Arch)}
@@ -105,7 +124,7 @@ func (s *Server) gateKernels(ctx context.Context, g *ent.Gate, need map[string]b
 		if err != nil {
 			return nil, nil, err
 		}
-		ks[kernel], profiles[kernel] = contracts.Kernel{Version: version, SHA256: sum}, text
+		ks[kernel], profiles[kernel] = ref, text
 	}
 	return ks, profiles, nil
 }
@@ -122,15 +141,13 @@ func (s *Server) reveal(sealed string) (string, error) {
 	return plain, nil
 }
 
-// newestAnyArch 返回任一架构下已缓存的最新版本（没有则为空）。
-func (s *Server) newestAnyArch(kernel string) string {
-	best := ""
-	for _, arch := range []string{"amd64", "arm64"} {
-		if list := s.kernelCache().Versions(kernel, arch); len(list) > 0 && (best == "" || kernels.CompareVersions(list[0], best) > 0) {
-			best = list[0]
-		}
+// newestAnyArch includes approved manifests and offline binary imports.
+func (s *Server) newestAnyArch(ctx context.Context, kernel string) string {
+	versions, err := s.kernelVersions(ctx, kernel)
+	if err != nil || len(versions) == 0 {
+		return ""
 	}
-	return best
+	return versions[0]
 }
 
 // explicitDefault 只返回管理员明确设置的默认版本（未设置为空）。

@@ -172,7 +172,7 @@ func BuildSafeRegex(patterns []string) *js.RegExp {
 	if len(patterns) == 0 {
 		return nil
 	}
-	re, err := js.NewRegExp(strings.Join(patterns, "|"), "i")
+	re, err := js.NewConfigRegExp(strings.Join(patterns, "|"), "i")
 	if err != nil {
 		return nil
 	}

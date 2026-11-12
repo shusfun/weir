@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,9 @@ import (
 // fakeChecker 是代替 mihomo / sing-box 的脚本：配置里含 BAD 时失败并输出原因。
 func fakeChecker(t *testing.T) string {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("checker fixture is a POSIX executable script; exercised on Linux")
+	}
 	bin := filepath.Join(t.TempDir(), "checker")
 	script := "#!/bin/sh\nfor a; do f=\"$a\"; done\nif grep -q BAD \"$f\"; then echo \"parse error: proxy BAD\" >&2; exit 1; fi\nexit 0\n"
 	if err := os.WriteFile(bin, []byte(script), 0755); err != nil {

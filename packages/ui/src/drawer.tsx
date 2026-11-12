@@ -4,7 +4,7 @@
 import { Drawer as DrawerPrimitive } from "@base-ui/react/drawer";
 import type { ReactNode } from "react";
 import { cn } from "cn";
-import { ScrollArea } from "./scroll-area";
+import { OverlayBody, ActionGroup } from "./overlay-layout";
 
 function Drawer(props: DrawerPrimitive.Root.Props) {
   return <DrawerPrimitive.Root data-slot="drawer" {...props} />;
@@ -38,8 +38,8 @@ function DrawerContent({
             {description && (
               <DrawerPrimitive.Description className="mt-1 text-body text-[var(--weir-ink-3)]">{description}</DrawerPrimitive.Description>
             )}
-            {children && <ScrollArea className="weir-drawer-body">{children}</ScrollArea>}
-            {footer && <div className="weir-drawer-footer">{footer}</div>}
+            {children && <OverlayBody className="weir-drawer-body">{children}</OverlayBody>}
+            {footer && <ActionGroup align="end" className="weir-overlay-footer">{footer}</ActionGroup>}
           </DrawerPrimitive.Content>
         </DrawerPrimitive.Popup>
       </DrawerPrimitive.Viewport>

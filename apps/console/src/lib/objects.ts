@@ -6,7 +6,7 @@
 // - 列表里的对象用 ?focus=类型:编号 滚到并高亮那一行（见 useFocusFromURL）；
 // - 链接、链式代理在所属用户的详情里，先打开用户再高亮；只知道编号时由用户页向中心查归属。
 
-export type ObjectType = "proxy_group" | "center" | "exit" | "route" | "gate" | "node" | "user" | "link" | "chain" | "driver" | "kernel" | "source" | "profile" | "page" | "cert" | "audit";
+export type ObjectType = "account_plan" | "access_code" | "proxy_group" | "center" | "exit" | "route" | "gate" | "node" | "user" | "link" | "chain" | "driver" | "kernel" | "source" | "profile" | "page" | "cert" | "audit";
 
 export interface ObjectRef {
   type: ObjectType;
@@ -19,6 +19,8 @@ export interface ObjectRef {
 }
 
 export const objectLabels: Record<ObjectType, string> = {
+  account_plan: "套餐",
+  access_code: "账户码",
   center: "中心",
   proxy_group: "我的分组",
   exit: "出口",
@@ -53,6 +55,8 @@ export function objectHref(ref: ObjectRef): string {
   const k = encodeURIComponent(objectKey(ref));
   const focus = "focus=" + encodeURIComponent(focusValue(ref));
   switch (ref.type) {
+    case "account_plan": return `/accounts?tab=plans&plan=${k}`;
+    case "access_code": return `/accounts?tab=codes&code=${k}&${focus}`;
     case "proxy_group": {
       const [owner, local] = (ref.key ?? `${ref.owner}:${ref.id}`).split(":");
       return `/proxy?user=${owner}&proxy_group=${local}`;
@@ -63,11 +67,11 @@ export function objectHref(ref: ObjectRef): string {
     case "route":
       return `/exits?${focus}`;
     case "gate":
-      return `/gates?gate=${k}`;
+      return `/gates/${k}`;
     case "node":
-      return `/gates?node=${k}`;
+      return `/nodes/${k}`;
     case "user":
-      return `/users?user=${k}`;
+      return `/users/${k}`;
     case "link":
       // 订阅链接在「订阅链接」里：管理员按所属用户筛选后滚到这条
       return ref.owner ? `/links?user=${ref.owner}&${focus}` : `/links?${focus}`;
@@ -78,11 +82,11 @@ export function objectHref(ref: ObjectRef): string {
     case "kernel":
       return `/kernels?tab=versions&${focus}`;
     case "source":
-      return `/subscriptions?tab=sources&${focus}`;
+      return `/subscriptions/sources/${k}`;
     case "profile":
-      return `/subscriptions?tab=profiles&${focus}`;
+      return `/subscriptions/profiles/${k}`;
     case "page":
-      return `/pages?${focus}`;
+      return `/pages/${k}`;
     case "cert":
       return `/gates?certs=1&${focus}`;
     case "audit":
@@ -94,9 +98,9 @@ export function objectHref(ref: ObjectRef): string {
 export function parseTarget(target: string): ObjectRef | null {
   const group = /^proxy_group:(\d+):(\d+)$/.exec(target);
   if (group) return {type:"proxy_group",key:`${group[1]}:${group[2]}`,owner:Number(group[1])};
-  const m = /^([a-z]+):(\d+)/.exec(target);
+  const m = /^([a-z_]+):(\d+)/.exec(target);
   if (!m) return null;
   const type = m[1] as ObjectType;
-  if (!["exit", "route", "gate", "node", "user", "link", "chain", "source", "profile", "cert"].includes(type)) return null;
+  if (!["account_plan", "access_code", "exit", "route", "gate", "node", "user", "link", "chain", "source", "profile", "cert"].includes(type)) return null;
   return { type, id: Number(m[2]) };
 }

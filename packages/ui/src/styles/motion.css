@@ -201,30 +201,28 @@
   .weir-drawer-handle,
   .weir-sheet-handle {
     flex-shrink: 0;
-    width: 36px;
+    width: var(--weir-space-8);
     height: 5px;
     margin: 0 auto var(--weir-space-3);
     border-radius: var(--weir-radius-full);
     background: var(--weir-ink-4);
   }
   .weir-drawer-content {
+    flex: 1;
+    overflow: hidden;
     display: flex;
     min-height: 0;
     flex-direction: column;
   }
+  .weir-drawer-content > :not(.weir-overlay-body) { flex-shrink: 0; }
   .weir-drawer-body {
+    flex: 1 1 auto;
     min-height: 0;
     margin-top: var(--weir-space-4);
     font-size: var(--weir-text-body);
     line-height: var(--weir-leading-body);
   }
-  .weir-drawer-footer {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: var(--weir-space-2);
-    margin-top: var(--weir-space-4);
-  }
+
 
   /*
    * 液态滑块：--weir-slider-p（0–1）与 --weir-slider-w（轨道像素宽）由组件写入。

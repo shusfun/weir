@@ -41,7 +41,23 @@ export interface ManualNode {
   plus_as_space: boolean;
 }
 
-export interface ProfileSettings {
+export interface RegionOverride {
+  pattern: string;
+  region: string;
+  flags?: string;
+}
+
+export interface RenderingSettings {
+  enable_udp?: boolean;
+  enable_tfo?: boolean;
+  skip_cert_verify?: boolean;
+  dns_mode?: string;
+  custom_dns?: string;
+  region_overrides?: RegionOverride[] | null;
+}
+
+export interface ProfileSettings extends RenderingSettings {
+	engine?: string;
   template?: string;
   rule_level?: string;
   flag_emoji?: boolean;
@@ -60,6 +76,7 @@ export interface Profile {
   all_sources: boolean;
   source_ids: number[] | null;
   node_ids: number[] | null;
+  members: { kind: "source" | "node" | "profile"; id: number }[] | null;
   operators: Operator[] | null;
   settings: ProfileSettings | null;
   expires_at?: string | null;
@@ -84,6 +101,7 @@ export interface CustomTemplate {
 }
 
 export interface SubscriptionSettings {
+	engine?: string;
   flag_emoji: boolean;
   prepend_manual: boolean;
   manual_prefix: string;
@@ -96,6 +114,10 @@ export interface SubscriptionSettings {
   cache_minutes: number;
   skip_cert_verify: boolean;
   enable_udp: boolean;
+  enable_tfo: boolean;
+  dns_mode: string;
+  custom_dns: string;
+  region_overrides: RegionOverride[] | null;
   disguise: boolean;
   filter_include: string;
   filter_exclude: string;

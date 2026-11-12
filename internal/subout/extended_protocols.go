@@ -143,9 +143,13 @@ func extendedClash(p map[string]any, n subscription.ParsedLink, s subscription.S
 			p["version"] = v.Version
 		}
 		for key, value := range map[string]*bool{"reuse": v.Reuse, "tfo": v.TFO, "udp": v.UDP, "ecn": v.ECN} {
-			if value != nil {
-				p[key] = *value
+			if value == nil || key == "udp" && !*value {
+				if key == "udp" && value != nil && !*value {
+					delete(p, "udp")
+				}
+				continue
 			}
+			p[key] = *value
 		}
 		if v.Obfs != "" {
 			obfs := map[string]any{"mode": v.Obfs}

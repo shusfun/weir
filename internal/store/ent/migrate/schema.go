@@ -8,6 +8,56 @@ import (
 )
 
 var (
+	// AccessCodesColumns holds the columns for the "access_codes" table.
+	AccessCodesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "kind", Type: field.TypeEnum, Enums: []string{"invite", "redeem"}},
+		{Name: "digest", Type: field.TypeString, Unique: true, Size: 64},
+		{Name: "plan_id", Type: field.TypeInt, Nullable: true},
+		{Name: "plan_revision", Type: field.TypeInt, Default: 0},
+		{Name: "grant", Type: field.TypeJSON},
+		{Name: "expires_at", Type: field.TypeTime, Nullable: true},
+		{Name: "used_at", Type: field.TypeTime, Nullable: true},
+		{Name: "used_by", Type: field.TypeInt, Nullable: true},
+		{Name: "revoked", Type: field.TypeBool, Default: false},
+		{Name: "created_by", Type: field.TypeInt},
+		{Name: "trace_id", Type: field.TypeString, Size: 32, Default: ""},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// AccessCodesTable holds the schema information for the "access_codes" table.
+	AccessCodesTable = &schema.Table{
+		Name:       "access_codes",
+		Columns:    AccessCodesColumns,
+		PrimaryKey: []*schema.Column{AccessCodesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "accesscode_kind_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{AccessCodesColumns[1], AccessCodesColumns[12]},
+			},
+			{
+				Name:    "accesscode_used_by",
+				Unique:  false,
+				Columns: []*schema.Column{AccessCodesColumns[8]},
+			},
+		},
+	}
+	// AccountPlansColumns holds the columns for the "account_plans" table.
+	AccountPlansColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "name", Type: field.TypeString, Size: 100},
+		{Name: "revision", Type: field.TypeInt, Default: 1},
+		{Name: "enabled", Type: field.TypeBool, Default: true},
+		{Name: "grant", Type: field.TypeJSON},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// AccountPlansTable holds the schema information for the "account_plans" table.
+	AccountPlansTable = &schema.Table{
+		Name:       "account_plans",
+		Columns:    AccountPlansColumns,
+		PrimaryKey: []*schema.Column{AccountPlansColumns[0]},
+	}
 	// AuditsColumns holds the columns for the "audits" table.
 	AuditsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -602,6 +652,7 @@ var (
 		{Name: "all_sources", Type: field.TypeBool, Default: false},
 		{Name: "source_ids", Type: field.TypeJSON, Nullable: true},
 		{Name: "node_ids", Type: field.TypeJSON, Nullable: true},
+		{Name: "members", Type: field.TypeJSON, Nullable: true},
 		{Name: "operators", Type: field.TypeJSON, Nullable: true},
 		{Name: "settings", Type: field.TypeJSON, Nullable: true},
 		{Name: "expires_at", Type: field.TypeTime, Nullable: true},
@@ -620,7 +671,7 @@ var (
 			{
 				Name:    "subprofile_share_token",
 				Unique:  false,
-				Columns: []*schema.Column{SubProfilesColumns[9]},
+				Columns: []*schema.Column{SubProfilesColumns[10]},
 			},
 		},
 	}
@@ -694,11 +745,13 @@ var (
 	UsersColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "email", Type: field.TypeString, Unique: true, Size: 254},
+		{Name: "normalized_email", Type: field.TypeString, Nullable: true, Size: 254},
 		{Name: "name", Type: field.TypeString, Size: 100, Default: ""},
 		{Name: "password_hash", Type: field.TypeString},
 		{Name: "role", Type: field.TypeEnum, Enums: []string{"admin", "user"}, Default: "user"},
 		{Name: "enabled", Type: field.TypeBool, Default: true},
 		{Name: "quota", Type: field.TypeInt64, Default: 0},
+		{Name: "unlimited", Type: field.TypeBool, Default: false},
 		{Name: "used", Type: field.TypeInt64, Default: 0},
 		{Name: "expires_at", Type: field.TypeTime, Nullable: true},
 		{Name: "monthly_reset", Type: field.TypeBool, Default: false},
@@ -721,12 +774,14 @@ var (
 			{
 				Name:    "user_role",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[4]},
+				Columns: []*schema.Column{UsersColumns[5]},
 			},
 		},
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		AccessCodesTable,
+		AccountPlansTable,
 		AuditsTable,
 		BudgetsTable,
 		CertificatesTable,

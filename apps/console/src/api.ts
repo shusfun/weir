@@ -1,7 +1,21 @@
 import { reportError } from "./lib/console-context";
 import { awaitJob, type Job } from "./lib/jobs";
+import { guideTraceId, guideRequest } from "./lib/guide-events";
 
 const messages: Record<string, string> = {
+ system_status_unavailable:"系统状态未能汇总，请重试并核对关联日志。",
+ invalid_turnstile_settings:"请填写有效的 Site Key、Secret 和允许的站点域名。",
+ human_verification_required:"请完成人机验证后重试。",
+ human_verification_invalid:"人机验证已过期、已使用或与当前操作不符，请重新验证。",
+ human_verification_unavailable:"人机验证暂不可用，请稍后重试。",
+ diagnostic_selection_invalid:"请选择 1 至 20 个不同的有效条目。导出只能保留已预览的条目。",
+ diagnostic_item_not_found:"所选条目已不存在，请取消它后重新预览。",
+ diagnostic_preview_expired:"预览已过期或不属于当前管理员，请重新生成。",
+ diagnostic_unavailable:"诊断包未生成或审计未写入，请重试并查看关联记录。",
+ diagnostic_too_large:"所选证据超过大小上限，请减少条目后重试。",
+ diagnostic_rate_limited:"预览生成过于频繁，请稍后再试。",
+ observation_analysis_unavailable:"分析任务记录未保存，请重试并查看中心日志。",
+ observation_analysis_busy:"已有所选观测的人工分析正在进行，请等待或取消该任务后重试。",
  invalid_logo:"请选择不超过 512 KiB、边长不超过 1024 像素的有效 PNG、JPEG 或 GIF 图片。",
  custom_revision_conflict:"清单或分流设置已被其他操作更新，请核对最新列表后重试。",
  custom_entry_not_found:"这条规则已不存在，请刷新清单。",
@@ -49,7 +63,7 @@ const messages: Record<string, string> = {
  cert_in_use:"证书仍被节点使用，请先更换这些节点的证书。",
  invalid_certificate:"证书与私钥不匹配或格式无效。",
  invalid_domain:"请填写证书对应的域名。",
- reality_probe_failed:"VPS 没有找到合适的伪装目标，可手动填写一个支持 TLS 1.3 与 h2 的站点。",
+ reality_probe_failed:"VPS 没有找到合适的伪装目标。候选须能在这台 VPS 上用 DoH 解析，并支持 TLS 1.3 与 h2。也可手动填写。",
  invalid_reality_target:"伪装目标请填写域名，例如 www.microsoft.com。",
  no_free_port:"这台 VPS 没有可用端口。",
  port_in_use:"端口已被其他节点或程序占用。",
@@ -140,6 +154,8 @@ const messages: Record<string, string> = {
  block_not_found:"该封禁已不存在。",
  source_blocked:"你的来源地址已被封禁，请联系管理员。",
  event_not_found:"安全事件不存在。",
+ gate_timeline_unavailable:"无法读取原执行 VPS 的本地环节记录：请确认它在线且支持时间线读取；任务不会改派到其他 VPS。",
+ gate_timeline_invalid:"VPS 返回的环节记录无效，中心已拒绝使用。",
  events_unavailable:"暂时无法读取安全事件，请重试。",
  analysis_running:"已有一个事件正在由 dsh 分析，请稍候。",
  invalid_laya_url:"Laya 地址须为 HTTPS（本机回环地址除外），不能包含账号、查询参数或片段。",
@@ -173,6 +189,8 @@ const messages: Record<string, string> = {
  order_changed:"列表已变化，请刷新后重新排序。",
  profile_not_found:"订阅组不存在。",
  invalid_profile_settings:"订阅组设置包含无效字段。",
+ invalid_profile_members:"订阅组成员无效：检查重复、循环、停用成员及三层深度限制。",
+ profile_in_use:"此订阅组仍被其他组引用，请先移除引用。",
  unknown_source:"所选订阅源不存在。",
  unknown_user:"所选用户不存在。",
  preview_failed:"预览失败。",
@@ -215,6 +233,29 @@ const messages: Record<string, string> = {
  smtp_not_configured:"尚未配置邮件服务。",
  registration_disabled:"未开放自助注册。",
  invalid_email_code:"验证码无效或已过期。",
+ email_code_cooldown:"请等待邮箱发送冷却结束后重试。",
+ email_code_unavailable:"验证码服务暂不可用，请稍后重试。",
+ email_rate_limited:"发信请求已达到限制，请稍后重试。",
+ email_suffix_denied:"此邮箱后缀不允许注册，请使用符合站点要求的邮箱。",
+ email_disposable:"不支持一次性邮箱，请使用长期使用的邮箱。",
+ email_mx_missing:"邮箱域名没有可用的 MX 记录，无法接收邮件。",
+ email_mx_unavailable:"邮箱域名的 DNS 查询失败，请稍后重试。",
+ account_policy_unavailable:"账户策略暂不可用，请稍后重试。",
+ account_policy_invalid:"账户策略无效，请检查配置字段和数值边界。",
+ account_policy_changed:"账户策略已变化，请重新读取后再尝试。",
+ invalid_plan_name:"请填写不超过 100 字节的套餐名称。",
+ invalid_plan_grant:"套餐额度、天数或授权范围无效，请重新核对。",
+ account_plan_changed:"套餐已被修改，请重新读取后再保存。",
+ account_plan_unavailable:"套餐暂时无法保存，请稍后重试。",
+ account_plan_not_available:"套餐不存在或已停用，请重新选择。",
+ invalid_access_code_request:"请核对套餐、生成数量与码到期时间。",
+ access_code_unavailable:"用码服务暂不可用，请稍后重试。",
+ invalid_access_code:"码无效、已使用、已撤销或已过期。",
+ access_code_not_revocable:"该码已使用或不存在，不能撤销。",
+ access_code_cooldown:"用码尝试过多，请等待冷却结束后重试。",
+ redemption_disabled:"管理员未开放兑换入口。",
+ redemption_unavailable:"兑换暂不可用，请稍后核对入账记录再重试。",
+ registration_unavailable:"注册暂不可用，请稍后核对账户状态。",
  invalid_notify_settings:"通知设置无效。",
  notify_failed:"通知发送失败。",
  api_token_limit:"最多 20 个 API 令牌。",
@@ -483,7 +524,7 @@ export function errorFrom(path: string, status: number, data: any): ApiError {
 export const clause = (e: unknown) => (e instanceof Error ? e.message : String(e)).replace(/[。.！!]+$/, "");
 
 // ApiOptions：token 是初始化凭证；onJob 收到转成后台任务的操作（等待行据此显示步骤、日志与取消）。
-export type ApiOptions = { token?: string; onJob?: (j: Job) => void; traceId?: string };
+export type ApiOptions = { token?: string; onJob?: (j: Job) => void; traceId?: string; download?: boolean; passkeyToken?: string; signal?: AbortSignal };
 
 const traceHex = (bytes: number) => Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (v) => v.toString(16).padStart(2, "0")).join("");
 
@@ -505,36 +546,66 @@ export async function api(
   body?: unknown,
   opts?: string | ApiOptions,
 ) {
-  const { token, onJob, traceId } = typeof opts === "string" ? { token: opts } : (opts ?? {});
+  const { token, onJob, traceId, download, passkeyToken, signal } = typeof opts === "string" ? { token: opts } : (opts ?? {});
+  const operationTrace = traceId ?? guideTraceId() ?? traceHex(16);
   let res: Response;
   try {
     res = await fetch("/api/v1" + path, {
       method,
       credentials: "same-origin",
+      signal,
       headers: {
         "Content-Type": "application/json",
-        traceparent: `00-${traceId ?? traceHex(16)}-${traceHex(8)}-01`,
+        traceparent: `00-${operationTrace}-${traceHex(8)}-01`,
         ...(token ? { Authorization: "Bearer " + token } : {}),
+        ...(passkeyToken ? { "X-Passkey-Token": passkeyToken } : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
+    if (signal?.aborted) throw signal.reason ?? new DOMException("请求已取消", "AbortError");
+    guideRequest(operationTrace, path, method, 0);
     throw new ApiError("无法连接控制中心，请检查网络后重试。", "network_unreachable", 0);
+  }
+  if (res.ok && download && res.headers.get("content-type")?.startsWith("application/zip")) {
+    try {
+      const blob = await res.blob();
+      guideRequest(operationTrace, path, method, res.status);
+      return blob;
+    } catch {
+      guideRequest(operationTrace, path, method, 0);
+      throw new ApiError("读取诊断包时连接中断，请重试导出。", "network_interrupted", 0);
+    }
   }
   let text: string;
   try { text = await res.text(); }
-  catch { throw new ApiError("读取中心响应时连接中断，请恢复后核对操作结果。", "network_interrupted", 0); }
+  catch { guideRequest(operationTrace, path, method, 0); throw new ApiError("读取中心响应时连接中断，请恢复后核对操作结果。", "network_interrupted", 0); }
   let data: any = null;
   if (text) {
     try {
       data = JSON.parse(text);
     } catch {
+      guideRequest(operationTrace, path, method, res.ok ? 0 : res.status);
       // 反代错误页等非 JSON 响应：不把 SyntaxError 暴露给用户
       if (res.ok) throw new ApiError("服务返回了无法识别的内容，请刷新后重试。", "invalid_response", res.status);
       throw new ApiError(upstreamMessage(res.status), "upstream_unavailable", res.status);
     }
   }
-  if (!res.ok) throw errorFrom(path, res.status, data);
-  if (res.status === 202 && data?.job?.kind === "action") return settle(path, data.job as Job, onJob);
+  if (!res.ok) { guideRequest(operationTrace, path, method, res.status); throw errorFrom(path, res.status, data); }
+  if (res.status === 202 && data?.job?.kind === "action") {
+    guideRequest(operationTrace, path, method, 202);
+    try {
+      const result = await settle(path, data.job as Job, onJob);
+      guideRequest(operationTrace, path, method, result?.pending ? 202 : 200);
+      return result;
+    } catch (error) {
+      guideRequest(operationTrace, path, method, error instanceof ApiError ? error.status : 0);
+      throw error;
+    }
+  }
+  guideRequest(operationTrace, path, method, data?.pending ? 202 : res.status);
+  if (res.status === 202 && data?.job && operationTrace === guideTraceId()) {
+    void awaitJob(data.job as Job).then(job => guideRequest(operationTrace, path, method, job.status === "done" ? 200 : 409), () => guideRequest(operationTrace, path, method, 0));
+  }
   return data;
 }

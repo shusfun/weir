@@ -20,6 +20,7 @@ function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new
   const [name, setName] = useState(u?.name ?? "");
   const [password, setPassword] = useState("");
   const [quota, setQuota] = useState(initQuota);
+  const [unlimited, setUnlimited] = useState(u?.unlimited ?? false);
   const [unit, setUnit] = useState<Unit>(initUnit);
   const [expiry, setExpiry] = useState(localInput(u?.expires_at));
   const [monthly, setMonthly] = useState(u?.monthly_reset ?? false);
@@ -30,7 +31,7 @@ function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new
   const save = useFormAction(
     () => {
       const plan = {
-        name: name.trim(), quota: fromUnits(quota, unit), expires_at: fromLocalInput(expiry), monthly_reset: monthly,
+        name: name.trim(), quota: fromUnits(quota, unit), unlimited, expires_at: fromLocalInput(expiry), monthly_reset: monthly,
         all_nodes: all || u?.role === "admin", node_ids: all || u?.role === "admin" ? [] : picked, allow_chain: chain, enabled,
       };
       return (isNew
@@ -48,7 +49,7 @@ function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new
     object: u ? { type: "user", name: u.name || u.email, id: u.id } : undefined,
     form: [
       field("email", "邮箱", email), field("name", "备注名", name), field("password", "密码", password, true),
-      field("quota", "额度", quota ? `${quota} ${unit}` : "不限"), field("expires_at", "到期", expiry || "长期"), field("monthly_reset", "按月重置", monthly ? "是" : "否"),
+      field("quota", "额度", unlimited ? "不限" : `${quota} ${unit}`), field("unlimited", "不限额度", unlimited ? "是" : "否"), field("expires_at", "到期", expiry || "长期"), field("monthly_reset", "按月重置", monthly ? "是" : "否"),
       field("all_nodes", "全部节点", all ? "是" : "否"), field("node_ids", "选中的节点", nodes.filter((n) => picked.includes(n.id)).map(nodeTitle).join("、")),
       field("allow_chain", "允许自建链式代理", chain ? "是" : "否"), field("enabled", "启用", enabled ? "是" : "否"),
     ],
@@ -70,10 +71,11 @@ function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new
           <Field label={isNew ? "初始密码（可选）" : "重设密码（可选）"} name="password" hint={isNew ? "留空时自动生成，只显示一次。" : "至少 6 个字符；修改后该用户需重新登录。"}>
             <PasswordInput autoComplete="new-password" minLength={6} maxLength={72} value={password} onChange={(e) => setPassword(e.target.value)} />
           </Field>
+          <SwitchField data-tour="user-plan" label="不限额度" description="关闭时按流量额度执行，0 表示没有可用流量。" checked={unlimited} onCheckedChange={setUnlimited} />
           <FormGrid>
-            <Field label="流量额度" htmlFor="u-quota" name="quota" hint="0 表示不限。">
+            <Field label="流量额度" htmlFor="u-quota" name="quota" hint={unlimited ? "当前不限额度；关闭后使用此额度。" : "0 表示没有可用流量。"}>
               <div className="quota-input">
-                <Input id="u-quota" type="number" min="0" step="any" required value={quota} onChange={(e) => setQuota(e.target.value)} />
+                <Input id="u-quota" type="number" min="0" step="any" required disabled={unlimited} value={quota} onChange={(e) => setQuota(e.target.value)} />
                 <Select value={unit} onValueChange={(v) => setUnit(v as Unit)}>
                   <SelectTrigger aria-label="容量单位"><SelectValue>{unit}</SelectValue></SelectTrigger>
                   <SelectContent>{Object.keys(units).map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
@@ -107,7 +109,7 @@ function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new
           {!isNew && <SwitchField label="账户启用" checked={enabled} onCheckedChange={setEnabled} />}
           <DialogFooter error={save.error}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
-            <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">{isNew ? "创建用户" : "保存"}</Button>
+            <Button data-tour="user-submit" type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">{isNew ? "创建用户" : "保存"}</Button>
           </DialogFooter>
         </Form>
       </DialogContent>

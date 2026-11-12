@@ -2,7 +2,10 @@ package center
 
 import (
 	"bytes"
+	"context"
+	"encoding/base64"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -11,6 +14,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	altcha "github.com/altcha-org/altcha-lib-go/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
@@ -27,6 +31,42 @@ func (tc *testClient) do(method, path string, body any, header map[string]string
 	var r *bytes.Reader
 	if body != nil {
 		b, _ := json.Marshal(body)
+		if method == "POST" {
+			var fields map[string]any
+			_ = json.Unmarshal(b, &fields)
+			if fields != nil {
+				if _, explicit := fields["altcha"]; !explicit {
+					purpose := map[string]string{"/api/v1/auth/register": "register", "/api/v1/auth/verify": "register", "/api/v1/auth/reset": "reset", "/api/v1/auth/email": "email"}[path]
+					if path == "/api/v1/auth/login" {
+						p := tc.do("GET", "/api/v1/public", nil, header)
+						if p.Code == 200 && decode(tc.t, p)["human_login_required"] == true {
+							purpose = "login"
+						}
+					}
+					if purpose != "" {
+						w := tc.do("GET", "/api/v1/auth/human/challenge?purpose="+purpose, nil, header)
+						if w.Code == 200 {
+							issued := time.Now()
+							var ch altcha.Challenge
+							if err := json.Unmarshal(w.Body.Bytes(), &ch); err != nil {
+								tc.t.Fatal(err)
+							}
+							sol, err := altcha.SolveChallenge(altcha.SolveChallengeOptions{Challenge: ch, DeriveKey: altcha.DeriveKeyPBKDF2(), Timeout: 10 * time.Second})
+							if err != nil || sol == nil {
+								tc.t.Fatalf("human fixture solve: %v", err)
+							}
+							proof, _ := json.Marshal(altcha.Payload{Challenge: ch, Solution: *sol})
+							// 最短等待从服务端签发算起。请求本身超过余量时，从客户端发起时刻倒推会早于 NotBefore。
+							if wait := time.Duration(ch.Parameters.Data["minimumSeconds"].(float64))*time.Second - time.Since(issued) + 20*time.Millisecond; wait > 0 {
+								time.Sleep(wait)
+							}
+							fields["altcha"] = base64.StdEncoding.EncodeToString(proof)
+							b, _ = json.Marshal(fields)
+						}
+					}
+				}
+			}
+		}
 		r = bytes.NewReader(b)
 	} else {
 		r = bytes.NewReader(nil)
@@ -87,6 +127,7 @@ func newInstalledServer(t *testing.T) (*Server, *testClient) {
 		t.Fatal(err)
 	}
 	t.Cleanup(s.Close)
+	s.EmailDNS = fixtureEmailDNS{}
 	tc := &testClient{t: t, router: s.Router()}
 	if w := tc.do("POST", "/api/v1/auth/login", map[string]string{"email": "a@b.c", "password": "x"}, nil); w.Code != 503 {
 		t.Fatalf("login before install = %d", w.Code)
@@ -109,6 +150,12 @@ func newInstalledServer(t *testing.T) (*Server, *testClient) {
 		t.Fatalf("config after install = %+v %v", reloaded, err)
 	}
 	return s, tc
+}
+
+type fixtureEmailDNS struct{}
+
+func (fixtureEmailDNS) LookupMX(context.Context, string) ([]*net.MX, error) {
+	return []*net.MX{{Host: "mx.example.test.", Pref: 10}}, nil
 }
 
 func TestInstallLoginSessionsLogout(t *testing.T) {

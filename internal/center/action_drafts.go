@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shusfun/weir/internal/store/ent/resource"
 )
 
 // 草稿：dsh 提交 → 后端用手动操作的同一套校验试运行（不改数据）→ 不通过把原因原样交回 dsh，不打扰管理员；
@@ -32,8 +33,18 @@ func (s *Server) submitActionDraft(ctx context.Context, source, explain string, 
 	if source == "dsh" {
 		_, d.Drawer, _ = s.activeContext(ctx)
 	}
+	if existing, err := s.existingProtectionReceipt(ctx, d); err != nil {
+		return nil, err
+	} else if existing {
+		return d, nil
+	}
 	if err := s.planDraft(ctx, d, false); err != nil {
 		return nil, err
+	}
+	if applied, err := s.tryAutomaticProtection(ctx, d); err != nil {
+		return nil, err
+	} else if applied {
+		return d, nil
 	}
 	d.Status = "passed"
 	if err := s.saveDraft(ctx, d); err != nil {
@@ -44,7 +55,7 @@ func (s *Server) submitActionDraft(ctx context.Context, source, explain string, 
 			s.markEvent(ctx, intArg(st.Args, "event_id"), "drafted", "")
 		}
 	}
-	_, _ = s.Store.Ent.Audit.Create().SetAction("ai.draft").SetTarget(source + " " + d.ID).SetResult("passed").Save(ctx)
+	_, _ = s.Store.Ent.Audit.Create().SetAction("ai.draft").SetTarget(source + " " + d.ID).SetResult("passed").SetDetail(map[string]any{"trace_id": taskTrace(ctx)}).Save(ctx)
 	s.recordDraft(ctx, d, draftPending, "", nil, nil)
 	return d, nil
 }
@@ -125,6 +136,39 @@ func (s *Server) applyActionDraft(c *gin.Context, d *Draft) {
 		}
 	}
 	for k := range before {
+		if k == workerPolicyKey {
+			profile, _, err := s.workerPolicy(ctx)
+			if err == nil {
+				quick.versions[k] = profile.Revision
+			}
+		}
+		if id, ok := strings.CutPrefix(k, "protection-action:"); ok {
+			row, err := s.Store.Ent.Resource.Query().Where(resource.KindEQ(protectionActionKind), resource.KeyEQ(id)).Only(ctx)
+			if err == nil {
+				var action protectionAction
+				if decodeStrict(row.Data, &action) == nil {
+					quick.versions[k] = protectionActionRevision(action)
+				}
+			}
+		}
+		if k == protectionPolicyKey {
+			profile, _, err := s.protectionPolicy(ctx)
+			if err == nil {
+				quick.versions[k] = profile.Revision
+			}
+		}
+		if k == accountPolicyKey {
+			profile, err := s.accountPolicy(ctx)
+			if err == nil {
+				quick.versions[k] = profile.Revision
+			}
+		}
+		if k == "ai-profile" {
+			profile, err := s.aiProfile(ctx)
+			if err == nil {
+				quick.versions[k] = profile.Revision
+			}
+		}
 		if name, ok := strings.CutPrefix(k, "driver:"); ok {
 			quick.versions[k] = driverVersion(ctx, s, name)
 		}
@@ -224,7 +268,35 @@ func (s *Server) applyActionDraft(c *gin.Context, d *Draft) {
 		steps = append(steps, map[string]any{"action": st.Action, "title": st.Title, "args": withoutSecrets(capb.Params, st.Args), "edited": st.Edited})
 	}
 	_, _ = s.Store.Ent.Audit.Create().SetActor(c.GetInt("user_id")).SetAction("ai.apply").SetTarget("dsh 草稿 · 管理员确认 " + d.ID).SetResult("ok").SetIP(c.ClientIP()).
-		SetDetail(map[string]any{"source": d.Source, "explain": d.Explain, "steps": steps}).Save(ctx)
+		SetDetail(map[string]any{"source": d.Source, "explain": d.Explain, "steps": steps, "trace_id": taskTrace(ctx), "request_id": c.GetString("request_id")}).Save(ctx)
+	if d.Source == "analysis" || d.OpsStatus != "" {
+		reason, blocked := s.retestOpsDraft(ctx, d)
+		if blocked {
+			bg := context.WithoutCancel(ctx)
+			var failed []string
+			for j := len(undo) - 1; j >= 0; j-- {
+				if undo[j] != nil {
+					if e := undo[j](bg); e != nil {
+						failed = append(failed, e.Error())
+					}
+				}
+			}
+			d.OpsStatus = "rolled_back"
+			msg := "执行后复测没有改善，已回退：" + reason
+			if len(kept) > 0 {
+				msg += "。无法撤回：" + strings.Join(kept, "、")
+			}
+			if len(failed) > 0 {
+				msg += "。撤回出错：" + strings.Join(failed, "；")
+			}
+			s.recordDraft(bg, d, draftFailed, msg, nil, nil)
+			s.markOpsRecord(bg, d, "rolled_back", msg)
+			failDetail(c, 422, "draft_retest_failed", msg, gin.H{"ops_status": "rolled_back"})
+			return
+		}
+		d.OpsStatus = "applied"
+		s.markOpsRecord(ctx, d, "applied", "已执行，复测有改善")
+	}
 	s.recordDraft(ctx, d, draftApplied, "", x.nodes, x.gates)
-	c.JSON(200, gin.H{"applied": len(d.Steps), "outputs": x.outputs, "node_ids": x.nodes, "gate_ids": x.gates})
+	c.JSON(200, gin.H{"applied": len(d.Steps), "outputs": x.outputs, "node_ids": x.nodes, "gate_ids": x.gates, "ops_status": d.OpsStatus})
 }

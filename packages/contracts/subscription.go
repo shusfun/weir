@@ -2,6 +2,12 @@ package contracts
 
 import "time"
 
+// SubscriptionMember references database IDs; its position is the output order.
+type SubscriptionMember struct {
+	Kind string `json:"kind"`
+	ID   int    `json:"id"`
+}
+
 // ProxyPolicy 是每个用户的客户端选择与有序清单。
 type ProxyPolicy struct {
 	Version            int          `json:"version"`
@@ -93,8 +99,9 @@ type WeirSubscription struct {
 const WeirSubscriptionVersion = 2
 
 type WeirUsage struct {
-	Used  int64 `json:"used"`
-	Quota int64 `json:"quota"` // 0 为不限
+	Used      int64 `json:"used"`
+	Quota     int64 `json:"quota"`
+	Unlimited bool  `json:"unlimited"`
 }
 
 type WeirWindow struct {

@@ -21,14 +21,24 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// 只读适配已核对的 1Panel v2.3.2 格式：不写面板数据库、不重置其他消费者的密钥。
-// API key 格式依据 1Panel v2.3.2 core/utils/encrypt/api_key.go。
-func discoverPanelAuthorization(dbPath string) (PanelConfig, error) {
-	u := url.URL{Scheme: "file", Path: dbPath}
+// sqliteReadOnlyDSN 只打开调用方给出的数据库。Windows 盘符必须写成 file:///C:/...，
+// 否则驱动会把盘符当成主机、反斜杠当成转义，临时夹具和本机路径都会读失败。
+func sqliteReadOnlyDSN(path string) string {
+	p := filepath.ToSlash(path)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	u := url.URL{Scheme: "file", Path: p}
 	q := u.Query()
 	q.Set("mode", "ro")
 	u.RawQuery = q.Encode()
-	db, err := sql.Open("sqlite", u.String())
+	return u.String()
+}
+
+// 只读适配已核对的 1Panel v2.3.2 格式：不写面板数据库、不重置其他消费者的密钥。
+// API key 格式依据 1Panel v2.3.2 core/utils/encrypt/api_key.go。
+func discoverPanelAuthorization(dbPath string) (PanelConfig, error) {
+	db, err := sql.Open("sqlite", sqliteReadOnlyDSN(dbPath))
 	if err != nil {
 		return PanelConfig{}, err
 	}

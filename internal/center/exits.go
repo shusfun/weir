@@ -201,7 +201,7 @@ func (s *Server) refreshExit(ctx context.Context, e *ent.Exit, p *exitProbe) err
 		return err
 	}
 	if e.Kind == entexit.KindSource {
-		if err := s.refreshSourceExit(ctx, exitOwner(e.ID), e.GateID, specOf(e.Source), e.OwnerUserID != nil); err != nil {
+		if err := s.refreshSourceExit(ctx, exitOwner(e.ID), e.GateID, specOf(e.Source), e.OwnerUserID != nil, false); err != nil {
 			return err
 		}
 	}
@@ -282,6 +282,15 @@ func (s *Server) exitResourceView(ctx context.Context, e *ent.Exit) (gin.H, erro
 	}
 	v["place"] = s.exitPlace(ctx, e)
 	v["summary"] = s.exitSummary(ctx, e, "")
+	supported, known := s.exitUDP(ctx, e.ID, map[int]bool{})
+	switch {
+	case !known:
+		v["udp"] = "unknown"
+	case supported:
+		v["udp"] = "supported"
+	default:
+		v["udp"] = "unsupported"
+	}
 	return v, nil
 }
 
@@ -637,6 +646,15 @@ func (s *Server) probeSavedExit(c *gin.Context, admin bool) {
 		return
 	}
 	s.saveExitProbe(ctx, exitOwner(e.ID), p)
+	// 实测结果会改变 UDP 路由。配置正文没变时 Gate 不重启内核。
+	if err = s.SyncAll(ctx); err != nil {
+		failInternal(c, 500, "sync_failed", err)
+		return
+	}
+	if _, err = s.bumpGate(ctx, e.GateID); err != nil {
+		failInternal(c, 500, "sync_failed", err)
+		return
+	}
 	s.audit(c, "exit.probe", exitOwner(e.ID), "ok")
 	c.JSON(200, p)
 }
@@ -659,6 +677,7 @@ func (s *Server) compileExit(ctx context.Context, e *ent.Exit) (contracts.Outbou
 		o.Protocol = string(e.Kind)
 	case entexit.KindSource:
 		o, _ = s.exitFromStore(ctx, exitOwner(e.ID), e.Tag, int64(e.ID))
+		s.stampGroupUDP(ctx, &o)
 	case entexit.KindNode:
 		if e.ExitNodeID == nil {
 			return o, errors.New("出口节点缺失")

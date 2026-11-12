@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "../lib/query";
-import { Badge, Button, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Input, Notice, PasswordInput, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, StatusLamp, Switch, useToast } from "@weir/ui";
+import { Badge, Button, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, DraftRecheck, FlowBoard, HoldButton, Input, Notice, PasswordInput, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, StatusLamp, Step, Steps, Switch, useToast } from "@weir/ui";
 import { api, clause } from "../api";
 import { nodeStatus, type Gate, type NodeItem } from "../lib/core";
 import { ObjectLink } from "./object-link";
@@ -47,6 +47,15 @@ export interface Draft {
   created_at: string;
   steps: Step[] | null;
   danger?: boolean;
+  // Laya 置信度（0–1）；自动起草时由中心写入，没有时为空，页面写未知
+  confidence?: number;
+  gate_id?: number;
+  trace_id?: string;
+  ops_status?: string;
+}
+
+export function confidenceText(d?: Draft | null) {
+  return d?.confidence ? `${Math.round(d.confidence * 100)}%` : null;
 }
 type Edits = Record<string, Record<string, unknown>>;
 
@@ -247,54 +256,63 @@ export function DraftReadFailure() {
 }
 
 export function DraftConfirm() {
-  const toast = useToast();
-  const client = useQueryClient();
   const q = useDrafts();
   const [later, setLater] = useState<string[]>([]);
-  const [edits, setEdits] = useState<Edits>({});
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [selected, setSelected] = useState<Draft | null>(null);
   useEffect(() => {
     const reopen = () => setLater([]);
     window.addEventListener(reopenEvent, reopen);
     return () => window.removeEventListener(reopenEvent, reopen);
   }, []);
-  // 本次要处理的草稿与决定：用 ref 传给请求，避免读到上一次渲染的值
-  const target = useRef<{ draft: Draft; apply: boolean } | null>(null);
+  useEffect(() => {
+    // 列表推送可以重排，已经打开的确认对象必须保持到管理员处理完毕。
+    if (!selected) setSelected((q.data ?? []).find((d) => !later.includes(d.id)) ?? null);
+  }, [q.data, later, selected]);
+  if (!selected) return null;
+  return <DraftDecision key={selected.id} draft={selected} pending={(q.data ?? []).length} close={() => {
+    setLater((ids) => [...ids, selected.id]);
+    setSelected(null);
+  }} />;
+}
+
+function DraftDecision({ draft: d, pending, close }: { draft: Draft; pending: number; close: () => void }) {
+  const toast = useToast();
+  const client = useQueryClient();
+  const [edits, setEdits] = useState<Edits>({});
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const target = useRef<{ apply: boolean } | null>(null);
   const decision = useFormAction(async (track) => {
-    const { draft, apply } = target.current!;
+    const { apply } = target.current!;
     if (apply) {
-      const r = (await api(`/admin/ai/drafts/${draft.id}/apply`, "POST", { edits }, track)) as { outputs?: Outcome["outputs"]; node_ids?: number[]; gate_ids?: number[] };
+      const r = (await api(`/admin/ai/drafts/${d.id}/apply`, "POST", { edits }, track)) as { outputs?: Outcome["outputs"]; node_ids?: number[]; gate_ids?: number[] };
       setOutcome({ nodes: r.node_ids ?? [], gates: r.gate_ids ?? [], outputs: r.outputs ?? [] });
     } else {
-      await api(`/admin/ai/drafts/${draft.id}`, "DELETE");
+      await api(`/admin/ai/drafts/${d.id}`, "DELETE");
       toast("已放弃草稿", { tone: "info" });
     }
     setEdits({});
     await client.invalidateQueries();
   }, {
+    onSuccess: () => { if (!target.current?.apply) close(); },
     wait: () => {
       const t = target.current;
-      const n = t?.draft.steps?.length ?? 0;
+      const n = d.steps?.length ?? 0;
       return t?.apply ? { label: n > 1 ? `正在按顺序执行 ${n} 步` : "正在执行" } : { label: "正在放弃草稿" };
     },
   });
   // 页面感知：正在确认哪份草稿、改过哪些字段（在提前返回之前声明，hook 次数不变）
-  const open = (q.data ?? []).find((x) => !later.includes(x.id));
-  useConsoleContext(open && !outcome ? { dialog: { title: "确认 dsh 草稿", step: `${open.steps?.length ?? 0} 步` }, form: [field("draft", "草稿", open.id), field("edited", "管理员改过的字段", Object.values(edits).reduce((n, e) => n + Object.keys(e).length, 0) + " 个")] } : null);
-  if (outcome) return <DraftOutcome outcome={outcome} close={() => setOutcome(null)} />;
+  useConsoleContext(!outcome ? { dialog: { title: "确认 dsh 草稿", step: `${d.steps?.length ?? 0} 步` }, form: [field("draft", "草稿", d.id), field("edited", "管理员改过的字段", Object.values(edits).reduce((n, e) => n + Object.keys(e).length, 0) + " 个")] } : null);
+  if (outcome) return <DraftOutcome outcome={outcome} close={close} />;
   const busy = decision.busy;
-  // 执行期间中心不再列出这份草稿：窗口留着它，直到结果出来
-  const d = (busy ? target.current?.draft : undefined) ?? (q.data ?? []).find((x) => !later.includes(x.id));
-  if (!d) return null;
   function decide(apply: boolean) {
-    target.current = { draft: d!, apply };
-    void decision.submit();
+    if (target.current) return;
+    target.current = { apply };
+    void decision.submit().finally(() => { target.current = null; });
   }
   const steps = d.steps ?? [];
-  const pending = (q.data ?? []).length;
   const setEdit = (i: number) => (key: string, v: unknown) => setEdits((e) => ({ ...e, [i]: { ...(e[i] ?? {}), [key]: v } }));
   return (
-    <Dialog open onOpenChange={(o) => !o && !busy && setLater((l) => [...l, d.id])}>
+    <Dialog open onOpenChange={(o) => !o && !busy && close()}>
       <DialogContent size="lg" layer="top">
         <DialogTitle className="flex flex-wrap items-center gap-2">
           {steps.length > 1 ? `确认 dsh 草稿 · ${steps.length} 步` : `确认 dsh 草稿 · ${steps[0]?.title ?? ""}`}
@@ -304,6 +322,14 @@ export function DraftConfirm() {
         <DialogDescription>确认之前不会生效；多步草稿按顺序执行，任一步失败，能撤回的全部撤回。要你填写的内容在确认时会真连一次，不通就不生效。<span className="whitespace-nowrap">{minutesLeft(d)} · 编号 <code>{d.id.slice(0, 8)}</code></span></DialogDescription>
         {/* 弹窗正文自己会滚动，这里不另设内层滚动区 */}
         <div className="stack">
+          <FlowBoard label="草稿确认步骤" steps={[
+            { label: "Laya 判断", value: confidenceText(d) ?? "未知", status: d.confidence ? "complete" : "unknown" },
+            { label: "dsh 起草", value: "已起草", status: "complete" },
+            { label: "你确认", value: "待确认", status: "current" },
+            { label: "Laya 复判", value: "尚未复判", caption: "确认后才会复判", status: "upcoming" },
+            { label: "执行与复测", value: "尚未执行", status: "upcoming" },
+          ]} />
+          <DraftRecheck blocked={decision.error.includes("回退") || decision.error.includes("复测")} detail={decision.error} />
           {d.explain && (
             <div className="stack">
               <small className="text-[var(--weir-ink-3)]">dsh 的说明</small>
@@ -314,9 +340,9 @@ export function DraftConfirm() {
           {d.danger && <Notice tone="bad">这份草稿里有不能撤回的危险操作，请核对后再确认。</Notice>}
         </div>
         <DialogFooter error={decision.error} status={decision.wait && <WaitText wait={decision.wait} />}>
-          <Button type="button" variant="ghost" disabled={busy} onClick={() => setLater((l) => [...l, d.id])}>稍后</Button>
+          <Button type="button" variant="ghost" disabled={busy} onClick={close}>稍后</Button>
           <Button type="button" variant="outline" disabled={busy} onClick={() => decide(false)}>放弃</Button>
-          <Button type="button" variant={d.danger ? "destructive" : "default"} disabled={busy} onClick={() => decide(true)} busy={busy} busyText="正在执行…">确认生效</Button>
+          <HoldButton disabled={busy} onHold={() => decide(true)}>按住确认执行</HoldButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

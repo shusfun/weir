@@ -4,13 +4,17 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/shusfun/weir/internal/sub"
 	js "github.com/shusfun/weir/internal/sub/jscompat"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // Source 是机场订阅源（url 以 http 开头的条目）。
@@ -25,6 +29,7 @@ type Source struct {
 	PlusAsSpace   bool
 	NodeCache     bool // 保护性缓存：拉取失败或节点骤减时回退到上次结果
 	KnownNodes    int  // 上次成功的节点数（骤减保护依据）
+	ConfigVersion string
 }
 
 // ManualNode 是手动添加的节点链接。
@@ -53,6 +58,8 @@ type Options struct {
 	FilterInclude    string
 	FilterExclude    string
 	Prepended        []string // 置顶的提示节点（流量 / 到期）
+	Members          []contracts.SubscriptionMember
+	Nested           map[int]string
 }
 
 // Cache 保存订阅源的上次结果（保护性缓存）。
@@ -63,12 +70,15 @@ type Cache interface {
 
 // SourceResult 是单个订阅源本次的结果，供调用方更新节点数与用量。
 type SourceResult struct {
-	SourceID  int
-	Nodes     int
-	FromCache bool
-	UserInfo  string
-	Title     string
-	Error     string
+	SourceID        int
+	Nodes           int
+	FromCache       bool
+	UserInfo        string
+	Title           string
+	Error           string
+	Location        string
+	ConfigVersion   string `json:"-"`
+	processingError error
 }
 
 var realProtocols = []string{"ss://", "ssr://", "vmess://", "vless://", "trojan://", "hysteria://", "hysteria2://", "hy2://", "tuic://", "anytls://", "snell://", "wireguard://", "socks5://", "socks://", "http://", "https://", "naive+https://"}
@@ -107,10 +117,8 @@ var spaces = regexp.MustCompile(`\s`)
 // decodeContent：整体是 Base64 时解码，否则原样返回。
 func decodeContent(text string) string {
 	clean := spaces.ReplaceAllString(text, "")
-	if sub.IsValidBase64(clean) {
-		if b, err := decodeB64(clean); err == nil {
-			return string(b)
-		}
+	if b, err := decodeB64(clean); err == nil && utf8.Valid(b) {
+		return string(b)
 	}
 	return text
 }
@@ -141,15 +149,19 @@ func strs(list []any) []string {
 	return out
 }
 
-func runOperators(nodes []string, ops []any, ua string) []string {
-	if len(ops) == 0 || len(nodes) == 0 {
-		return nodes
+func runOperators(nodes []string, ops []any, ua string) ([]string, error) {
+	if len(ops) == 0 {
+		return nodes, nil
 	}
 	arr, _ := toJS(ops).(*js.Array)
 	if arr == nil {
-		return nodes
+		return nil, errors.New("invalid_operators")
 	}
-	return strs(sub.RunOperatorChain(nodes, arr, sub.OperatorContext{UserAgent: ua}))
+	out, err := sub.RunOperatorChainChecked(nodes, arr, sub.OperatorContext{UserAgent: ua})
+	if err != nil {
+		return nil, err
+	}
+	return strs(out), nil
 }
 
 func filterRules(nodes []string, include, exclude string) []string {
@@ -160,7 +172,7 @@ func filterRules(nodes []string, include, exclude string) []string {
 }
 
 // manualLines 处理手动节点：修正编码 → 自定义名称 → 分组名 / 手动前缀 → 本节点的算子与筛选。
-func manualLines(nodes []ManualNode, o Options) []string {
+func manualLines(nodes []ManualNode, o Options) ([]string, error) {
 	var out []string
 	for _, n := range nodes {
 		raw := strings.TrimSpace(n.URL)
@@ -177,75 +189,14 @@ func manualLines(nodes []ManualNode, o Options) []string {
 		if o.PrependManual {
 			u = sub.PrependNodeName(u, o.ManualPrefix)
 		}
-		lines := filterRules(runOperators([]string{u}, n.Operators, o.UserAgent), n.FilterInclude, n.FilterExclude)
+		processed, err := runOperators([]string{u}, n.Operators, o.UserAgent)
+		if err != nil {
+			return nil, fmt.Errorf("node_rules_invalid[%d]: %w", n.ID, err)
+		}
+		lines := filterRules(processed, n.FilterInclude, n.FilterExclude)
 		out = append(out, lines...)
 	}
-	return out
-}
-
-// fetchSource 拉取并处理一个订阅源；失败、空结果或节点骤减时按保护性缓存回退。
-func fetchSource(ctx context.Context, f Fetcher, cache Cache, s Source, o Options) ([]string, SourceResult) {
-	res := SourceResult{SourceID: s.ID}
-	cached := func() []string {
-		if !s.NodeCache || cache == nil {
-			return nil
-		}
-		nodes, ok := cache.Load(ctx, s.ID)
-		if ok {
-			res.FromCache = true
-		}
-		return nodes
-	}
-	ua := strings.TrimSpace(s.UserAgent)
-	if ua == "" {
-		ua = sub.GetProcessedUserAgent(o.UserAgent, s.URL)
-	}
-	resp, err := f.Get(ctx, s.URL, ua)
-	if err != nil {
-		res.Error = err.Error()
-		return cached(), res
-	}
-	res.UserInfo, res.Title = resp.UserInfo, resp.Title
-	text := decodeContent(string(resp.Body))
-	parsed := sub.ParseNodeList(text, sub.FixOptions{PlusAsSpace: s.PlusAsSpace})
-	if len(parsed) == 0 {
-		if alt := sub.ParseNodeList(decodeContent(base64.StdEncoding.EncodeToString(resp.Body)), sub.FixOptions{PlusAsSpace: s.PlusAsSpace}); len(alt) > 0 {
-			parsed = alt
-		}
-	}
-	nodes := make([]string, 0, len(parsed))
-	for _, p := range parsed {
-		nodes = append(nodes, js.ToString(p.Get("url")))
-	}
-	nodes = filterRules(runOperators(nodes, s.Operators, o.UserAgent), s.FilterInclude, s.FilterExclude)
-	real := 0
-	for _, n := range nodes {
-		if isRealProxyNode(n) {
-			real++
-		}
-	}
-	if suspiciousDrop(s.KnownNodes, real) {
-		res.Error = "node_count_drop_rejected"
-		return cached(), res
-	}
-	if s.NodeCache && cache != nil {
-		if real == 0 {
-			res.Error = "empty_source"
-			return cached(), res
-		}
-		if old, ok := cache.Load(ctx, s.ID); ok && suspiciousDrop(len(old), real) {
-			res.Error, res.FromCache = "node_count_drop_rejected", true
-			return old, res
-		}
-		cache.Store(ctx, s.ID, nodes)
-	}
-	res.Nodes = real
-	if o.PrependSources && s.Name != "" {
-		for i, n := range nodes {
-			nodes[i] = sub.PrependNodeName(n, s.Name)
-		}
-	}
-	return nodes, res
+	return out, nil
 }
 
 // legacyOperators 把旧版 nodeTransform 配置转换为算子链（对应上游 adaptLegacyTransform）。
@@ -304,26 +255,149 @@ func legacyOperators(cfg map[string]any) []any {
 // Combine 生成订阅组的节点列表：手动节点在前，订阅源按顺序并发拉取（最多 3 个同时），
 // 合并去重后依次执行：旗帜处理 → 算子链（组 → 全局默认 → 旧版转换）→ 组与全局筛选 → YAML 安全化。
 func Combine(ctx context.Context, f Fetcher, cache Cache, sources []Source, manual []ManualNode, o Options) (string, []SourceResult) {
+	out, results, _ := CombineBounded(ctx, f, cache, sources, manual, o, 16<<20)
+	return out, results
+}
+
+// CombineBounded enforces an aggregate limit while sources finish and members
+// are expanded, before allocating a joined subscription body.
+func CombineBounded(ctx context.Context, f Fetcher, cache Cache, sources []Source, manual []ManualNode, o Options, maxBytes int) (string, []SourceResult, error) {
+	if maxBytes < 1 || maxBytes > 64<<20 {
+		return "", nil, errors.New("profile_output_limit_invalid")
+	}
+	if err := validateCombination(sources, manual, o); err != nil {
+		return "", nil, err
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	finish := beginStage(ctx, "subscription.combine", 0)
+	combinedError := ""
+	defer func() { finish(combinedError, false) }()
+	fail := func(results []SourceResult) (string, []SourceResult, error) {
+		combinedError = "profile_output_too_large"
+		return "", results, errors.New(combinedError)
+	}
 	if o.ManualPrefix == "" {
 		o.ManualPrefix = "手动节点"
 	}
-	lines := manualLines(manual, o)
+	lines, err := manualLines(manual, o)
+	if err != nil {
+		combinedError = "manual_rules_invalid"
+		return "", nil, err
+	}
+	countBytes := func(lines []string) int {
+		n := 0
+		for _, line := range lines {
+			if len(line) >= maxBytes-n {
+				return maxBytes + 1
+			}
+			n += len(line) + 1
+		}
+		return n
+	}
+	allocated := countBytes(lines)
+	if allocated > maxBytes {
+		return fail(nil)
+	}
 	parts := make([][]string, len(sources))
 	results := make([]SourceResult, len(sources))
 	sem := make(chan struct{}, 3)
 	var wg sync.WaitGroup
+	var budgetMu sync.Mutex
+	overflow := false
 	for i, s := range sources {
 		wg.Add(1)
 		go func(i int, s Source) {
 			defer wg.Done()
-			sem <- struct{}{}
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
 			defer func() { <-sem }()
-			parts[i], results[i] = fetchSource(ctx, f, cache, s, o)
+			nodes, result := fetchSource(ctx, f, cache, s, o)
+			budgetMu.Lock()
+			defer budgetMu.Unlock()
+			results[i] = result
+			if size := countBytes(nodes); size > maxBytes-allocated {
+				overflow = true
+				cancel()
+				return
+			} else {
+				allocated += size
+			}
+			parts[i] = nodes
 		}(i, s)
 	}
 	wg.Wait()
-	for _, p := range parts {
-		lines = append(lines, p...)
+	if overflow {
+		return fail(results)
+	}
+	if err := ctx.Err(); err != nil {
+		combinedError = "cancelled"
+		return "", results, err
+	}
+	for _, result := range results {
+		if result.processingError != nil {
+			combinedError = "source_rules_invalid"
+			return "", results, fmt.Errorf("source_rules_invalid[%d]: %w", result.SourceID, result.processingError)
+		}
+		if result.Error != "" {
+			combinedError = "source_failed"
+		}
+	}
+	assembled := 0
+	appendLines := func(next []string) bool {
+		n := countBytes(next)
+		if n > maxBytes-assembled {
+			return false
+		}
+		assembled += n
+		lines = append(lines, next...)
+		return true
+	}
+	if o.Members != nil {
+		lines = nil
+		sourceParts := map[int][]string{}
+		for i, source := range sources {
+			sourceParts[source.ID] = parts[i]
+		}
+		manualParts := map[int][]string{}
+		for _, node := range manual {
+			part, err := manualLines([]ManualNode{node}, o)
+			if err != nil {
+				combinedError = "manual_rules_invalid"
+				return "", results, err
+			}
+			manualParts[node.ID] = part
+		}
+		for _, member := range o.Members {
+			switch member.Kind {
+			case "source":
+				if !appendLines(sourceParts[member.ID]) {
+					return fail(results)
+				}
+			case "node":
+				if !appendLines(manualParts[member.ID]) {
+					return fail(results)
+				}
+			case "profile":
+				body := strings.TrimSpace(o.Nested[member.ID])
+				if len(body) > maxBytes-assembled {
+					return fail(results)
+				}
+				if !appendLines(strings.Split(body, "\n")) {
+					return fail(results)
+				}
+			}
+		}
+	} else {
+		assembled = countBytes(lines)
+		for _, p := range parts {
+			if !appendLines(p) {
+				return fail(results)
+			}
+		}
 	}
 	seen := map[string]bool{}
 	var current []string
@@ -346,13 +420,22 @@ func Combine(ctx context.Context, f Fetcher, cache Cache, sources []Source, manu
 	if len(ops) == 0 {
 		ops = legacyOperators(o.LegacyTransform)
 	}
-	current = runOperators(current, ops, o.UserAgent)
+	current, err = runOperators(current, ops, o.UserAgent)
+	if err != nil {
+		combinedError = "group_rules_invalid"
+		return "", results, fmt.Errorf("group_rules_invalid: %w", err)
+	}
 	current = filterRules(current, o.FilterInclude, o.FilterExclude)
+	outputBytes := countBytes(o.Prepended)
 	for i, l := range current {
 		current[i] = sub.SanitizeNodeForYaml(l)
 		if o.FlagEmoji {
 			current[i] = sub.AddFlagEmoji(current[i])
 		}
+		if len(current[i])+1 > maxBytes-outputBytes {
+			return fail(results)
+		}
+		outputBytes += len(current[i]) + 1
 	}
 	out := strings.Join(current, "\n")
 	if out != "" {
@@ -361,7 +444,7 @@ func Combine(ctx context.Context, f Fetcher, cache Cache, sources []Source, manu
 	if len(o.Prepended) > 0 {
 		out = strings.Join(o.Prepended, "\n") + "\n" + out
 	}
-	return out, results
+	return out, results, nil
 }
 
 // NoticeNode 生成置顶的提示节点（指向本机、不可连接），客户端里显示为一个节点名称。
@@ -384,5 +467,13 @@ func FormatBytes(n int64) string {
 
 // RunOperators 对一组节点链接执行算子链（管理员预览处理效果用）。
 func RunOperators(nodes []string, ops []any, userAgent string) []string {
+	out, _ := RunOperatorsChecked(nodes, ops, userAgent)
+	return out
+}
+
+func RunOperatorsChecked(nodes []string, ops []any, userAgent string) ([]string, error) {
+	if err := sub.ValidateOperatorPatterns(ops); err != nil {
+		return nil, err
+	}
 	return runOperators(nodes, ops, userAgent)
 }

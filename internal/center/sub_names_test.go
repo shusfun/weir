@@ -61,6 +61,7 @@ func TestSubscriptionInfoLinksUseRemainingAndEffectiveExpiry(t *testing.T) {
 	}
 	l.EndsAt = &userEnd
 	u.Quota = 0
+	u.Unlimited = true
 	u.ExpiresAt = nil
 	l.EndsAt = nil
 	if v := strings.Join(subscriptionInfoLinks(u, l), "\n"); !strings.Contains(v, url.PathEscape("剩余 不限")) || !strings.Contains(v, url.PathEscape("到期 长期有效")) {

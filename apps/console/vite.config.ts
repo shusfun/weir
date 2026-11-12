@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import type { ProxyOptions } from "vite";
 const centerProxy: ProxyOptions = {
-  target: "http://127.0.0.1:19810",
+  target: "http://127.0.0.1:22341",
   configure(proxy) {
     proxy.on("error", (_error, _req, res) => {
       if ("writeHead" in res && !res.headersSent) {
@@ -24,6 +24,9 @@ export default defineConfig({
     },
   },
   server: {
+    host: "127.0.0.1",
+    port: 22340,
+    strictPort: true,
     proxy: {
       "/api": centerProxy,
       // 安装完成后安装页按 /healthz 判断中心是否已切到正常服务

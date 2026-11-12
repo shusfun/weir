@@ -8,6 +8,29 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/gate"
 )
 
+type revisionCauseKey struct{}
+
+type revisionCause struct {
+	Source string
+	Actor  int
+}
+
+// WithRevisionCause 让随后的配置版本推进记下触发来源和操作者。
+func WithRevisionCause(ctx context.Context, source string, actor int) context.Context {
+	if source == "" {
+		source = "system"
+	}
+	return context.WithValue(ctx, revisionCauseKey{}, revisionCause{Source: source, Actor: actor})
+}
+
+func causeFrom(ctx context.Context) revisionCause {
+	c, _ := ctx.Value(revisionCauseKey{}).(revisionCause)
+	if c.Source == "" {
+		c.Source = "system"
+	}
+	return c
+}
+
 func itoa(v int) string { return strconv.Itoa(v) }
 
 // gateWaiters 让等待中的 /agent/config 长轮询在配置版本变化时立即返回。
@@ -42,15 +65,31 @@ func (w *gateWaiters) notify(gid int) {
 
 // bumpGate 让该 Gate 的期望配置版本加一并唤醒等待中的长轮询，返回新版本号。
 func (s *Server) bumpGate(ctx context.Context, gid int) (int64, error) {
-	if err := s.Store.Ent.Gate.UpdateOneID(gid).AddConfigRevision(1).Exec(ctx); err != nil {
+	prev, err := s.Store.Ent.Gate.Get(ctx, gid)
+	if err != nil {
+		return 0, err
+	}
+	old := prev.ConfigRevision
+	if err = s.Store.Ent.Gate.UpdateOneID(gid).AddConfigRevision(1).Exec(ctx); err != nil {
 		return 0, err
 	}
 	g, err := s.Store.Ent.Gate.Query().Where(gate.IDEQ(gid)).Only(ctx)
 	if err != nil {
 		return 0, err
 	}
+	s.recordRevision(ctx, gid, old, g.ConfigRevision)
 	s.waiters.notify(gid)
+	_ = s.Store.Notifications.Publish(ctx, "gate:"+itoa(gid))
 	return g.ConfigRevision, nil
+}
+
+func (s *Server) recordRevision(ctx context.Context, gid int, old, next int64) {
+	if s.Store == nil {
+		return
+	}
+	cause := causeFrom(ctx)
+	detail := map[string]any{"old_revision": old, "new_revision": next, "source": cause.Source, "trace_id": taskTrace(ctx)}
+	_, _ = s.Store.Ent.Audit.Create().SetActor(cause.Actor).SetAction("config.revision").SetTarget("gate:" + itoa(gid)).SetResult("ok").SetDetail(detail).Save(ctx)
 }
 
 // bumpGates 对一组 Gate 去重后逐个加版本。

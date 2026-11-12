@@ -56,6 +56,7 @@ func TestUserNodeSummaryUsesEffectiveExitAndKeepsAdminEndpointPrivate(t *testing
 
 func TestDownstreamChangeInvalidatesExitIPObservation(t *testing.T) {
 	s, admin, g := setupGate(t)
+	followProbeRevisions(t, s)
 	g.serveActions(t, s, nil)
 	g2 := pairFakeGate(t, admin)
 	heartbeat(t, g2, contracts.Heartbeat{Version: "test", Arch: "amd64"})

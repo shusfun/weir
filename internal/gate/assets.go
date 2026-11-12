@@ -64,6 +64,11 @@ func (a *Agent) githubURLs(urls []string) ([]string, error) {
 
 // assetFetch 替中心下载 GitHub 文件：校验后存到 <数据目录>/assets/，再分块上传给中心；临时文件用完即删。
 func (a *Agent) assetFetch(ctx context.Context, p map[string]any) (map[string]any, error) {
+	release, err := a.downloads.acquire(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	var req contracts.AssetFetch
 	if err := convert(p, &req); err != nil {
 		return nil, errors.New("参数无效")

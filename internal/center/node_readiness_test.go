@@ -20,13 +20,13 @@ func TestNodeReadiness(t *testing.T) {
 	check := func(want string) {
 		t.Helper()
 		gate := s.Store.Ent.Gate.GetX(ctx, int(g.id))
-		got, _ := s.nodeReadiness(ctx, n, gate)
+		got, why := s.nodeReadiness(ctx, n, gate)
 		if got != want {
-			t.Fatalf("readiness=%s want %s", got, want)
+			t.Fatalf("readiness=%s want %s (%s) applied=%d revision=%d", got, want, why, gate.AppliedRevision, gate.ConfigRevision)
 		}
 	}
 	check("credentials")
-	mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "reach@example.test", "all_nodes": true}, 200)
+	mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "reach@example.test", "all_nodes": true, "unlimited": true}, 200)
 	check("pending")
 	gate := s.Store.Ent.Gate.GetX(ctx, int(g.id))
 	s.Store.Ent.Gate.UpdateOneID(gate.ID).SetAppliedRevision(gate.ConfigRevision).SetKernelsRunning(map[string]string{}).ExecX(ctx)

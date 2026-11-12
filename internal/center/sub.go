@@ -310,7 +310,11 @@ func (s *Server) serveSub(c *gin.Context) {
 	if end != nil {
 		expire = end.Unix()
 	}
-	c.Header("Subscription-Userinfo", fmt.Sprintf("upload=0; download=%d; total=%d; expire=%d", u.Used, u.Quota, expire))
+	total := u.Quota
+	if u.Unlimited {
+		total = 0
+	}
+	c.Header("Subscription-Userinfo", fmt.Sprintf("upload=0; download=%d; total=%d; expire=%d", u.Used, total, expire))
 	// 整份配置按小时更新（客户端只认小时）；节点列表另按代理页的刷新间隔经 proxy-providers 更新
 	c.Header("Profile-Update-Interval", strconv.Itoa(max(1, (p.Policy.Auto.RefreshMinutes+59)/60)))
 	c.Header("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape("Weir-"+firstNonEmpty(l.Name, "订阅")))
@@ -371,7 +375,7 @@ func (s *Server) weirSubscription(ctx context.Context, u *ent.User, l *ent.Link,
 	plan, items := s.subPlan(ctx, p)
 	start, end := linkWindow(u, l)
 	out := contracts.WeirSubscription{Version: contracts.WeirSubscriptionVersion, Name: firstNonEmpty(l.Name, "订阅"), Generated: time.Now().UTC(),
-		Usage: contracts.WeirUsage{Used: u.Used, Quota: u.Quota}, Window: contracts.WeirWindow{StartsAt: start, EndsAt: end},
+		Usage: contracts.WeirUsage{Used: u.Used, Quota: u.Quota, Unlimited: u.Unlimited}, Window: contracts.WeirWindow{StartsAt: start, EndsAt: end},
 		Refresh: p.Policy.Auto.RefreshMinutes, Auto: p.Policy.Auto, Types: map[string]string{}}
 	used := map[string]bool{subout.GroupProxy: true, subout.GroupAuto: true, "DIRECT": true, "REJECT": true}
 	for _, g := range plan.Groups {
@@ -422,6 +426,6 @@ func (s *Server) subInfo(c *gin.Context) {
 		nodes = append(nodes, gin.H{"name": e.Name, "protocol": e.Protocol, "chain": e.Chained, "available": e.URI != ""})
 	}
 	start, end := linkWindow(u, l)
-	c.JSON(200, gin.H{"name": l.Name, "quota": u.Quota, "used": u.Used, "expires_at": end, "starts_at": start, "state": windowState(u, l, time.Now()), "next_reset": resetHint(u),
+	c.JSON(200, gin.H{"name": l.Name, "quota": u.Quota, "unlimited": u.Unlimited, "used": u.Used, "expires_at": end, "starts_at": start, "state": windowState(u, l, time.Now()), "next_reset": resetHint(u),
 		"formats": subout.Formats, "url": s.siteOrigin(c) + "/sub/" + l.Token, "nodes": nodes})
 }

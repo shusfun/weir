@@ -199,6 +199,9 @@ func AddFlagEmoji(link string) string {
 		if flag == "" {
 			return name
 		}
+		if strings.HasPrefix(name, flag+" ") {
+			return name
+		}
 		return flag + " " + name
 	}
 	if strings.HasPrefix(js.ToLower(link), "ssr://") {

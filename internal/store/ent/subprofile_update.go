@@ -14,6 +14,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/shusfun/weir/internal/store/ent/predicate"
 	"github.com/shusfun/weir/internal/store/ent/subprofile"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // SubProfileUpdate is the builder for updating SubProfile entities.
@@ -104,6 +105,24 @@ func (_u *SubProfileUpdate) AppendNodeIds(v []int) *SubProfileUpdate {
 // ClearNodeIds clears the value of the "node_ids" field.
 func (_u *SubProfileUpdate) ClearNodeIds() *SubProfileUpdate {
 	_u.mutation.ClearNodeIds()
+	return _u
+}
+
+// SetMembers sets the "members" field.
+func (_u *SubProfileUpdate) SetMembers(v []contracts.SubscriptionMember) *SubProfileUpdate {
+	_u.mutation.SetMembers(v)
+	return _u
+}
+
+// AppendMembers appends value to the "members" field.
+func (_u *SubProfileUpdate) AppendMembers(v []contracts.SubscriptionMember) *SubProfileUpdate {
+	_u.mutation.AppendMembers(v)
+	return _u
+}
+
+// ClearMembers clears the value of the "members" field.
+func (_u *SubProfileUpdate) ClearMembers() *SubProfileUpdate {
+	_u.mutation.ClearMembers()
 	return _u
 }
 
@@ -318,6 +337,17 @@ func (_u *SubProfileUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if _u.mutation.NodeIdsCleared() {
 		_spec.ClearField(subprofile.FieldNodeIds, field.TypeJSON)
 	}
+	if value, ok := _u.mutation.Members(); ok {
+		_spec.SetField(subprofile.FieldMembers, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedMembers(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, subprofile.FieldMembers, value)
+		})
+	}
+	if _u.mutation.MembersCleared() {
+		_spec.ClearField(subprofile.FieldMembers, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.Operators(); ok {
 		_spec.SetField(subprofile.FieldOperators, field.TypeJSON, value)
 	}
@@ -457,6 +487,24 @@ func (_u *SubProfileUpdateOne) AppendNodeIds(v []int) *SubProfileUpdateOne {
 // ClearNodeIds clears the value of the "node_ids" field.
 func (_u *SubProfileUpdateOne) ClearNodeIds() *SubProfileUpdateOne {
 	_u.mutation.ClearNodeIds()
+	return _u
+}
+
+// SetMembers sets the "members" field.
+func (_u *SubProfileUpdateOne) SetMembers(v []contracts.SubscriptionMember) *SubProfileUpdateOne {
+	_u.mutation.SetMembers(v)
+	return _u
+}
+
+// AppendMembers appends value to the "members" field.
+func (_u *SubProfileUpdateOne) AppendMembers(v []contracts.SubscriptionMember) *SubProfileUpdateOne {
+	_u.mutation.AppendMembers(v)
+	return _u
+}
+
+// ClearMembers clears the value of the "members" field.
+func (_u *SubProfileUpdateOne) ClearMembers() *SubProfileUpdateOne {
+	_u.mutation.ClearMembers()
 	return _u
 }
 
@@ -700,6 +748,17 @@ func (_u *SubProfileUpdateOne) sqlSave(ctx context.Context) (_node *SubProfile, 
 	}
 	if _u.mutation.NodeIdsCleared() {
 		_spec.ClearField(subprofile.FieldNodeIds, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.Members(); ok {
+		_spec.SetField(subprofile.FieldMembers, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedMembers(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, subprofile.FieldMembers, value)
+		})
+	}
+	if _u.mutation.MembersCleared() {
+		_spec.ClearField(subprofile.FieldMembers, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.Operators(); ok {
 		_spec.SetField(subprofile.FieldOperators, field.TypeJSON, value)

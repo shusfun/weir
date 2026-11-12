@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http/httptest"
@@ -128,6 +129,20 @@ func TestSelfSignedSharedPerGate(t *testing.T) {
 	if ct.Source != certificate.SourceSelfSigned || ct.GateID == nil || *ct.GateID != gid || ct.NotAfter.Before(time.Now().AddDate(9, 0, 0)) {
 		t.Fatalf("self-signed cert = %+v", ct)
 	}
+	if !strings.Contains(ct.LastError, "未取得可信证书") || !strings.Contains(ct.LastError, "1Panel") {
+		t.Fatalf("self-signed fallback reason = %q", ct.LastError)
+	}
+	listed := mustJSON(t, admin, "GET", "/api/v1/admin/certs", nil, 200)
+	found := false
+	for _, item := range listed["items"].([]any) {
+		row := item.(map[string]any)
+		if int(row["id"].(float64)) == ct.ID && strings.Contains(fmt.Sprint(row["last_error"]), "未取得可信证书") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("console cert list missing fallback reason: %v", listed)
+	}
 }
 
 func TestTrojanWithoutAnyCertSourceExplains(t *testing.T) {
@@ -210,14 +225,14 @@ func TestIPCertViaACMEThenExpiryAndRenewal(t *testing.T) {
 		t.Fatalf("cert view = %v", v)
 	}
 
-	// 续签：换上新证书，用到它的 Gate 重新下发。
+	// 续签：只把新证书文件推给用到它的 Gate，不推进配置版本、不重启内核。
 	before := g.config(0).Revision
 	renewed := mustJSON(t, admin, "POST", "/api/v1/admin/certs/"+itoa(cid)+"/renew", nil, 200)
 	if renewed["health"] != "ready" {
 		t.Fatalf("renewed = %v", renewed)
 	}
-	if after := g.config(0); after.Revision == before || after.Certs[0].SHA256 == cfg.Certs[0].SHA256 {
-		t.Fatal("renewal must push the new certificate")
+	if after := g.config(before); !after.CertOnly || after.Revision != before || len(after.Certs) != 1 || after.Certs[0].SHA256 == cfg.Certs[0].SHA256 {
+		t.Fatalf("renewal must push only the new certificate file: cert_only=%v revision=%d->%d", after.CertOnly, before, after.Revision)
 	}
 	if count() != 2 {
 		t.Fatal("renewed certificate nodes must be back in the subscription")

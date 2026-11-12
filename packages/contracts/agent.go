@@ -15,12 +15,15 @@ type PairResult struct {
 
 // Heartbeat 每 30 秒上报一次；ListeningPorts 为本机实际在监听的端口（含其他程序）。
 type Heartbeat struct {
+	Protocol        int               `json:"protocol,omitempty"`
+	Digest          string            `json:"digest,omitempty"`
+	Full            bool              `json:"full,omitempty"`
 	NodeTestVersion int               `json:"node_test_version,omitempty"`
-	Version         string            `json:"version"`
-	Hostname        string            `json:"hostname"`
-	Arch            string            `json:"arch"`
-	ListeningPorts  []ListeningPort   `json:"listening_ports"`
-	Kernels         map[string]string `json:"kernels"` // 实际运行的内核版本；缺失表示未运行
+	Version         string            `json:"version,omitempty"`
+	Hostname        string            `json:"hostname,omitempty"`
+	Arch            string            `json:"arch,omitempty"`
+	ListeningPorts  []ListeningPort   `json:"listening_ports,omitempty"`
+	Kernels         map[string]string `json:"kernels,omitempty"` // 实际运行的内核版本；全量报文中缺失表示未运行
 	Host            *HostSample       `json:"host,omitempty"`
 	Center          string            `json:"center,omitempty"` // Gate 正在连接的中心地址
 	Panel           *PanelStatus      `json:"panel,omitempty"`
@@ -30,6 +33,8 @@ type Heartbeat struct {
 	Firewall *FirewallStatus `json:"firewall,omitempty"`
 	// SelfUpdate 是最近一次自更新失败的原因；更新成功（进程已换成新版本）或已与中心同版本时为空。
 	SelfUpdate *SelfUpdateStatus `json:"self_update,omitempty"`
+	// KernelEvents 是上次心跳之后发生的内核启停。崩溃发生在两次应用之间时也从这里上报。
+	KernelEvents []KernelEvent `json:"kernel_events,omitempty"`
 }
 
 // SelfUpdateStatus 是 Gate 自更新到中心版本的进度或失败原因。State：downloading（Done / Total / Source 为进度）、
@@ -84,9 +89,12 @@ type FirewallStatus struct {
 // HeartbeatReply 是中心对心跳的回复。Center 为中心记录的公共地址；与 Gate 当前连接的不同时，
 // Gate 先用新地址完成设备认证，成功后改用新地址（单机角色经回环连接，不切换）。
 type HeartbeatReply struct {
-	ConfigRevision int64          `json:"config_revision"`
-	Center         string         `json:"center,omitempty"`
-	Release        *ReleaseTarget `json:"release,omitempty"`
+	HeartbeatProtocol int            `json:"heartbeat_protocol,omitempty"`
+	Digest            string         `json:"digest,omitempty"`
+	NeedFull          bool           `json:"need_full,omitempty"`
+	ConfigRevision    int64          `json:"config_revision"`
+	Center            string         `json:"center,omitempty"`
+	Release           *ReleaseTarget `json:"release,omitempty"`
 }
 
 type ListeningPort struct {
@@ -109,6 +117,20 @@ type HostSample struct {
 	NetRxBytes    *uint64                  `json:"net_rx_bytes,omitempty"`
 	NetTxBytes    *uint64                  `json:"net_tx_bytes,omitempty"`
 	UptimeSecs    *uint64                  `json:"uptime_secs,omitempty"`
+	Health        *HealthCheck             `json:"health,omitempty"`
+}
+
+// HealthCheck 的字段都是指针。读不到时省略，控制台显示「未知」，不能写成 0 或正常。
+type HealthCheck struct {
+	DNS         *string  `json:"dns,omitempty"`
+	Congestion  *string  `json:"congestion,omitempty"`
+	UDPBuffer   *int     `json:"udp_buffer,omitempty"`
+	CPUSteal    *float64 `json:"cpu_steal,omitempty"`
+	IPv6        *bool    `json:"ipv6,omitempty"`
+	MTU         *int     `json:"mtu,omitempty"`
+	Conntrack   *float64 `json:"conntrack_free,omitempty"`
+	FileHandles *float64 `json:"file_handles_free,omitempty"`
+	CertDays    *int     `json:"cert_days,omitempty"`
 }
 
 // ProcessSample distinguishes a confirmed stop from an unreadable observation.
@@ -124,11 +146,19 @@ type ProcessSample struct {
 // MeterReport 上报每个凭据自开机以来的累计字节数（单调递增，带纪元以识别内核重启）。
 // 中心按差值记账；累计值回退或纪元变化时只按新纪元重新起算，不重复扣减。
 type MeterReport struct {
+	Protocol int           `json:"protocol,omitempty"`
+	Partial  bool          `json:"partial,omitempty"`
 	Revision int64         `json:"revision"`
 	Epoch    string        `json:"epoch"`
 	Seq      int64         `json:"seq"`
 	Usage    []MeterSample `json:"usage"`
 	Status   string        `json:"status"` // fresh / unavailable
+}
+
+type MeterAck struct {
+	Epoch    string `json:"epoch"`
+	Seq      int64  `json:"seq"`
+	Accepted bool   `json:"accepted"`
 }
 
 type MeterSample struct {
@@ -168,6 +198,8 @@ const (
 	ActionPanelCert = "panel.cert"
 	// ActionAssetFetch 让 Gate 替中心下载一个 GitHub 发布文件并分块上传给中心（见 AssetFetch）。
 	ActionAssetFetch = "asset.fetch"
+	// ActionHostRepair 只允许白名单里的系统参数，执行前备份，复测失败就回退。
+	ActionHostRepair = "host.repair"
 	// ActionSourceProbe 让 Gate 测一个下载来源的速度（见 SourceProbe），用于「GitHub 加速」的测速。
 	ActionSourceProbe = "source.probe"
 )
@@ -175,6 +207,10 @@ const (
 // AssetFetch 是 asset.fetch 的参数。URLs 只能是 github.com 的 https 地址及其镜像地址（Gate 再按 ghrelease 规则检查）；
 // Gate 下载到本机临时文件、按 SHA256 校验通过后，用 PUT /agent/uploads/<UploadID>?offset=N 分块上传
 // （每块不超过 UploadChunk；中心回复已收到的字节数，断开后从那里续传），最后由中心再按 SHA256 校验。
+type AssetFetchResult struct {
+	Size int64 `json:"size"`
+}
+
 type AssetFetch struct {
 	UploadID string   `json:"upload_id"`
 	URLs     []string `json:"urls"`

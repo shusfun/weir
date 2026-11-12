@@ -456,7 +456,16 @@ func (h *Helper) acmeHTTP01(w http.ResponseWriter, r *http.Request) {
 	if req.Seconds <= 0 || req.Seconds > 180 {
 		req.Seconds = 120
 	}
-	ln, err := net.Listen("tcp", ":"+strconv.Itoa(acmePort))
+	h.closeACME()
+	var ln net.Listener
+	var err error
+	for i := 0; i < 20; i++ {
+		ln, err = net.Listen("tcp", ":"+strconv.Itoa(acmePort))
+		if err == nil {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
 	if err != nil {
 		if validPanelIP(req.Host) && baotaHTTPRoot(baotaDefaultConfig, baotaDefaultRoot) == nil {
 			if err := serveBaotaChallenge(baotaDefaultRoot, req.Token, req.KeyAuth, req.Host, req.Seconds); err != nil {
@@ -478,12 +487,30 @@ func (h *Helper) acmeHTTP01(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = io.WriteString(w, req.KeyAuth)
 	})}
+	h.acmeMu.Lock()
+	h.acmeSrv = srv
+	h.acmeMu.Unlock()
 	go func() { _ = srv.Serve(ln) }()
 	go func() {
 		time.Sleep(time.Duration(req.Seconds) * time.Second)
+		h.acmeMu.Lock()
+		if h.acmeSrv == srv {
+			h.acmeSrv = nil
+		}
+		h.acmeMu.Unlock()
 		_ = srv.Close()
 	}()
 	writeJSON(w, 200, ApplyResult{OK: true})
+}
+
+func (h *Helper) closeACME() {
+	h.acmeMu.Lock()
+	srv := h.acmeSrv
+	h.acmeSrv = nil
+	h.acmeMu.Unlock()
+	if srv != nil {
+		_ = srv.Close()
+	}
 }
 
 // installCertFiles 原子写入 <id>.crt / <id>.key，属组设为内核运行账号。

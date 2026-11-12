@@ -13,10 +13,22 @@
 .session-filters > [data-slot=field] { min-width: 180px; flex: 1; }
 .session-list .security-session { gap: var(--weir-space-3); }
 
+.exit-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--weir-gap-21); }
+
 @media (max-width: 1000px) {
-  .security-method-grid { grid-template-columns: 1fr; }
+  .security-method-grid, .exit-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 600px) {
   .session-list .security-session { flex-direction: column; align-items: flex-start; }
   .audit-row > .actions { width: 100%; }
+}
+
+.weir-observe-columns { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: var(--weir-gap-29); margin-top: var(--weir-gap-41); }
+.weir-observe-row { display: flex; align-items: center; justify-content: space-between; gap: var(--weir-gap-13); }
+.weir-observe-row > :last-child { flex-shrink: 0; }
+.weir-observe-row > div { overflow-wrap: anywhere; }
+@media (min-width: 1025px) {
+  .weir-observe-columns { grid-template-columns: minmax(0, 1.61fr) minmax(0, 1fr); grid-template-rows: auto auto; }
+  .weir-observe-columns > div { display: grid; grid-template-rows: subgrid; grid-row: span 2; gap: 0; }
+  .weir-observe-columns [data-slot="section-header"] { min-height: var(--weir-tap); }
 }

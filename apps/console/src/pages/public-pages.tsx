@@ -1,8 +1,8 @@
 // 公开页面：匿名可访问的介绍页（/p/<slug>），展示已分享的订阅组卡片与留言板。
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useState } from "react";
 import { useQuery } from "../lib/query";
-import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, PageHeader, Segmented, SkeletonList, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField, Textarea, Tabs, TabsList, TabsPanel, TabsTab, useToast, useConfirm } from "@weir/ui";
+import { Badge, Button, Card, CardContent, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, PageHeader, PageState, PhoneFrame, Readout, SectionHeader, Segmented, SkeletonList, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField, Textarea, Tabs, TabsList, TabsPanel, TabsTab, useToast, useConfirm } from "@weir/ui";
 import { ArrowUpRight, MessageSquare, Plus, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -50,6 +50,7 @@ export function PublicPagesPage() {
   const q = useQuery({ queryKey: ["public-pages"], queryFn: async () => (await api("/admin/public-pages")).items as PageItem[] });
   const [edit, setEdit] = useState<PageItem | "new" | null>(null);
   const [guestbook, setGuestbook] = useState<PageItem | null>(null);
+  const [preview, setPreview] = useState<number | null>(null);
   const { run, isBusy } = useRowAction<number>({ refetch: q.refetch });
   async function remove(p: PageItem) {
     if (!(await confirm({ title: `删除页面「${p.data.title}」？`, description: "它的留言会一并删除。", confirmText: "删除", tone: "danger" }))) return;
@@ -58,7 +59,7 @@ export function PublicPagesPage() {
   useConsoleContext({ page: "公开页面", tab: distributionSections.find((s) => s.key === tab)?.label, list: tab === "pages" ? { total: q.data?.length ?? 0, items: (q.data ?? []).slice(0, 20).map((p) => ({ type: "page", name: p.data.title, key: p.slug })) } : undefined });
   return (
     <div className="stack">
-      <PageHeader title="公开页面" description="管理匿名介绍页、客户端目录和登录后显示的全局公告。" actions={tab === "pages" ? <Button onClick={() => setEdit("new")}><Plus />新建页面</Button> : undefined} />
+      <PageHeader size="data" title="公开页面" description={tab === "pages" && q.data ? `${q.data.filter((p) => p.data.enabled).length} 个已发布 · ${q.data.filter((p) => !p.data.enabled).length} 个草稿 · 7 天访问未知` : "管理匿名介绍页、客户端目录和登录后显示的全局公告。"} actions={tab === "pages" ? <Button onClick={() => setEdit("new")}><Plus />新建公开页</Button> : undefined} />
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: String(v) }, { replace: true })}>
         <TabsList aria-label="公开页面分区">{distributionSections.map((s) => <TabsTab key={s.key} value={s.key}>{s.label}</TabsTab>)}</TabsList>
         <TabsPanel value="pages" className="stack">
@@ -70,28 +71,9 @@ export function PublicPagesPage() {
           skeleton={<Card><CardContent><SkeletonList rows={3} lines={2} className="stack" rowClassName="flex items-center justify-between gap-2" /></CardContent></Card>}
         />
       ) : q.data.length === 0 ? (
-        <State empty="还没有公开页面" detail="公开页面是不用登录就能看的介绍页，可以展示分享的订阅组和留言板。点上方「新建页面」开始。" />
+        <State empty="还没有公开页面" detail="公开页面是不用登录就能看的介绍页，可以展示分享的订阅组和留言板。点上方「新建公开页」开始。" />
       ) : (
-        <Card>
-          <CardContent>
-            <ul className="stack">
-              {q.data.map((p) => (
-                <li key={p.id} {...dataObject({ type: "page", key: p.slug })} className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="min-w-0">
-                    <strong>{p.data.title}</strong> <Badge variant="soft" tone={p.data.enabled ? "ok" : "neutral"}>{p.data.enabled ? "已发布" : "草稿"}</Badge>
-                    <small className="block text-[var(--weir-ink-3)]">/p/{p.slug} · {p.data.cards?.length ?? 0} 张订阅卡片</small>
-                  </span>
-                  <span className="flex flex-wrap gap-1.5">
-                    {p.data.enabled && <Button size="sm" variant="outline" render={<a href={"/p/" + p.slug} target="_blank" rel="noopener noreferrer" />}>打开<ArrowUpRight /></Button>}
-                    <Button size="sm" variant="outline" onClick={() => setGuestbook(p)}><MessageSquare />留言板</Button>
-                    <Button size="sm" variant="outline" onClick={() => setEdit(p)}>编辑</Button>
-                    <Button size="icon-sm" variant="destructive" aria-label={"删除 " + p.data.title} disabled={isBusy()} busy={isBusy(p.id)} busyText="正在删除" onClick={() => void remove(p)}><Trash2 /></Button>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
+        <PageBoard pages={q.data} selected={q.data.find((p) => p.id === preview) ?? q.data.find((p) => p.data.enabled) ?? q.data[0]} onSelect={setPreview} onEdit={setEdit} onGuestbook={setGuestbook} onRemove={(p) => void remove(p)} busy={isBusy} />
       )}
         </TabsPanel>
         <TabsPanel value="clients" className="stack"><ClientCatalogEditor /></TabsPanel>
@@ -100,6 +82,99 @@ export function PublicPagesPage() {
       {edit && <PageForm value={edit} close={() => setEdit(null)} saved={() => { setEdit(null); toast("已保存", { tone: "ok" }); void q.refetch(); }} />}
       {guestbook && <GuestbookManager page={{ id: guestbook.id, data: { ...guestbook.data } }} close={() => setGuestbook(null)} />}
     </div>
+  );
+}
+
+export function PublicPageDetailView({ id, tab }: { id: string; tab: string }) {
+  const navigate = useNavigate();
+  const confirm = useConfirm();
+  const toast = useToast();
+  const q = useQuery({ queryKey: ["public-pages"], queryFn: async () => (await api("/admin/public-pages")).items as PageItem[] });
+  const [edit, setEdit] = useState(false);
+  const [guestbook, setGuestbook] = useState(false);
+  const { run, isBusy } = useRowAction<number>({ refetch: q.refetch });
+  const item = q.data?.find((p) => p.slug === id || String(p.id) === id);
+  if (q.isPending) return <State loading />;
+  if (q.error) return <State error={q.error} onRetry={() => void q.refetch()} />;
+  if (!item) return <PageState kind="empty" title="没有这个公开页" detail="它可能已被删除，或你没有权限查看。" action={<Link to="/pages">返回公开页面</Link>} />;
+  async function remove() {
+    if (!(await confirm({ title: `删除页面「${item!.data.title}」？`, description: "它的留言会一并删除。", confirmText: "删除", tone: "danger" }))) return;
+    await run(item!.id, () => api("/admin/public-pages/" + item!.id, "DELETE"), "页面已删除", { fail: "删除失败" });
+    navigate("/pages");
+  }
+  const cards = item.data.cards?.length;
+  return (
+    <section className="stack">
+      <div className="flex flex-wrap gap-1.5">
+        {item.data.enabled && <Button size="sm" variant="outline" render={<a href={"/p/" + item.slug} target="_blank" rel="noopener noreferrer" />}>打开<ArrowUpRight /></Button>}
+        <Button size="sm" variant="outline" onClick={() => setGuestbook(true)}><MessageSquare />留言板</Button>
+        <Button size="sm" variant="outline" onClick={() => setEdit(true)}>编辑</Button>
+        <Button size="sm" variant="destructive" disabled={isBusy()} busy={isBusy(item.id)} busyText="正在删除" onClick={() => void remove()}><Trash2 />删除</Button>
+      </div>
+      {tab === "share" ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Readout label="公开地址" value={item.data.enabled ? `/p/${item.slug}` : null} caption={item.data.enabled ? "已发布" : "未发布时没有公开地址"} />
+          <Readout label="允许复制地址与二维码" value={item.data.show_share ? "允许" : "不允许"} />
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Readout label="状态" value={item.data.enabled ? "已发布" : "草稿"} />
+          <Readout label="地址" value={item.slug ? `/p/${item.slug}` : null} />
+          <Readout label="订阅卡片" value={cards ?? null} />
+          <Readout label="标题" value={item.data.title || null} />
+          <Readout label="说明" value={item.data.description || null} />
+          <Readout label="登录入口" value={item.data.show_login ? "显示" : "不显示"} />
+        </div>
+      )}
+      {edit && <PageForm value={item} close={() => setEdit(false)} saved={() => { setEdit(false); toast("已保存", { tone: "ok" }); void q.refetch(); }} />}
+      {guestbook && <GuestbookManager page={{ id: item.id, data: { ...item.data } }} close={() => setGuestbook(false)} />}
+    </section>
+  );
+}
+
+function PageBoard({ pages, selected, onSelect, onEdit, onGuestbook, onRemove, busy }: { pages: PageItem[]; selected: PageItem; onSelect: (id: number) => void; onEdit: (p: PageItem) => void; onGuestbook: (p: PageItem) => void; onRemove: (p: PageItem) => void; busy: (id: number) => boolean }) {
+  const [device, setDevice] = useState("phone");
+  return (
+    <div className="public-page-board" data-device={device}>
+      <div className="stack">
+        {pages.map((p) => (
+          <Card key={p.id} {...dataObject({ type: "page", key: p.slug })} data-selected={p.id === selected.id || undefined}>
+            <CardContent className="stack">
+              <Button variant="ghost" className="public-page-select" aria-pressed={p.id === selected.id} onClick={() => onSelect(p.id)}>
+                <strong>{p.data.title || "未命名"}</strong>
+                <Badge variant="soft" tone={p.data.enabled ? "ok" : "neutral"}>{p.data.enabled ? "已发布" : "草稿"}</Badge>
+              </Button>
+              <small className="text-[var(--weir-ink-3)]">/p/{p.slug} · {p.data.cards?.length ?? 0} 张订阅卡片 · 访问次数未知</small>
+              <span className="flex flex-wrap gap-1.5">
+                <Button size="sm" variant="outline" onClick={() => onEdit(p)}>编辑</Button>
+                {p.data.enabled && <CopyButton size="sm" variant="outline" value={location.origin + "/p/" + p.slug}>复制地址</CopyButton>}
+                <Button size="sm" variant="outline" onClick={() => onGuestbook(p)}><MessageSquare />留言板</Button>
+                {p.data.enabled && <Button size="sm" variant="outline" render={<a href={"/p/" + p.slug} target="_blank" rel="noopener noreferrer" />}>打开<ArrowUpRight /></Button>}
+                <Button size="icon-sm" variant="destructive" aria-label={"删除 " + p.data.title} disabled={busy(p.id)} busy={busy(p.id)} busyText="正在删除" onClick={() => onRemove(p)}><Trash2 /></Button>
+              </span>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <div className="stack">
+        <SectionPreview device={device} setDevice={setDevice} page={selected} />
+      </div>
+    </div>
+  );
+}
+
+function SectionPreview({ page, device, setDevice }: { page: PageItem; device: string; setDevice: (v: string) => void }) {
+  return (
+    <>
+      <SectionHeader title="实时预览" description="保存后，已发布的页面会显示在这里。" />
+      <Segmented aria-label="预览宽度" value={device} onValueChange={setDevice} options={[["phone", "手机"], ["desktop", "电脑"]] as const} />
+      <PhoneFrame
+        title={page.data.title || "公开页预览"}
+        device={device === "desktop" ? "desktop" : "phone"}
+        src={page.data.enabled ? "/p/" + page.slug : null}
+        fallback={<div className="stack"><strong>{page.data.title || "未命名"}</strong><p>{page.data.description || "还没有介绍"}</p><small>草稿没有公开地址，这里只显示已保存的标题和介绍。</small></div>}
+      />
+    </>
   );
 }
 

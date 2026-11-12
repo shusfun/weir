@@ -7,10 +7,16 @@ import {
   Badge,
   PageHeader,
   Pager,
+  Segmented,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
   Button,
   SkeletonList,
   Card,
-  CardContent,
   Select,
   SelectTrigger,
   SelectValue,
@@ -39,6 +45,7 @@ type Audit = {
   result: string;
   ip: string;
   created_at: string;
+  trace_id?: string;
 };
 const resultLabels: Record<string, string> = {
   all: "全部结果",
@@ -53,9 +60,14 @@ export function AuditPage() {
   const [url, setUrl] = useSearchParams();
   const [search, setSearch] = useState(url.get("q") ?? "");
   const [result, setResult] = useState("all");
+  const [range, setRange] = useState<"1" | "7" | "30">("7");
+  const [kind, setKind] = useState<"human" | "all" | "failed" | "restart">("human");
   const [page, setPage] = useState(1);
   const params = new URLSearchParams({ page: String(page), page_size: "20", q: search });
   if (result !== "all") params.set("result", result);
+  if (kind === "failed") params.set("result", "denied");
+  // 热力格：取最近的 500 条在本地按小时聚合；超出时如实标注「只统计最近 500 条」
+  const heat = useQuery({ queryKey: ["audit-heat"], queryFn: () => api("/admin/audit?page=1&page_size=100") as Promise<Items<Audit>> });
   const query = useQuery({
     queryKey: ["audit-directory", params.toString()],
     queryFn: () => api("/admin/audit?" + params) as Promise<Items<Audit>>,
@@ -77,69 +89,86 @@ export function AuditPage() {
   return (
     <div className="stack audit-directory">
       <PageHeader
+        size="data"
         title="操作审计"
-        description="追踪账户、节点、订阅与设置的变更；节点是否生效以 VPS 回报的配置版本为准。"
+        description={heat.data ? (() => {
+          const today = heat.data.items.filter((a) => new Date(a.created_at).toDateString() === new Date().toDateString());
+          const human = today.filter((a) => a.actor > 0);
+          const denied = today.filter((a) => resultCode(a.result) === "denied").length;
+          const restarts = today.filter(restarted).length;
+          return <span className="weir-sum"><span>今天 <b>{human.length}</b> 次人的操作</span>{denied > 0 && <span className="text-[var(--weir-bad-ink)]">{denied} 次被拦下</span>}{restarts > 0 && <span className="text-[var(--weir-warn-ink)]">{restarts} 次重启了内核</span>}<span>{today.length - human.length} 条自动任务已折叠</span></span>;
+        })() : "正在读取审计记录"}
         actions={
           <Button variant="outline" disabled={query.isFetching} onClick={() => query.refetch()}>
             刷新记录
           </Button>
         }
       />
-      <Card className="table-card">
-        <div className="table-toolbar">
-          <SearchInput
-            aria-label="搜索审计记录"
-            placeholder="搜索操作名称、目标或任务编号…"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-          />
-          <Select
-            value={result}
-            onValueChange={(v) => {
-              setResult(String(v));
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="min-w-[130px]" aria-label="筛选审计结果">
-              <SelectValue>{resultLabels[result]}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(resultLabels).map(([key, label]) => (
-                <SelectItem key={key} value={key}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <Card className="px-[21px] py-[17px]">
+        <div className="mb-[11px] flex flex-wrap items-center justify-between gap-3">
+          <span className="text-meta text-[var(--weir-ink-2)]">最近 {range === "1" ? "24 小时" : `${range} 天`} · 每一格是 {range === "30" ? "4 小时" : "1 小时"}，越亮操作越多；有涟漪的是重启了内核</span>
+          <Segmented aria-label="热力范围" value={range} onValueChange={setRange} options={[["1", "今天"], ["7", "7 天"], ["30", "30 天"]] as const} />
         </div>
-        <CardContent>
+        {heat.isPending || heat.error ? <State loading={heat.isPending} error={heat.error} onRetry={() => heat.refetch()} /> : <AuditHeat items={heat.data.items} days={Number(range)} />}
+      </Card>
+      <div className="flex flex-wrap items-center gap-[9px]">
+        <Segmented aria-label="审计范围" value={kind} onValueChange={(v) => { setKind(v); setPage(1); }} options={[["human", "人的操作"], ["all", "含自动任务"], ["failed", "失败与拦下"], ["restart", "重启了内核"]] as const} />
+        <span className="flex-1" />
+        <SearchInput
+          aria-label="搜索审计记录"
+          placeholder="搜索操作名称、目标或任务编号…"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
+        />
+        <Select
+          value={result}
+          onValueChange={(v) => {
+            setResult(String(v));
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="min-w-[130px]" aria-label="筛选审计结果">
+            <SelectValue>{resultLabels[result]}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(resultLabels).map(([key, label]) => (
+              <SelectItem key={key} value={key}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <Card className="table-card overflow-hidden p-0">
           {query.isPending ? (
             <State loading skeleton={<SkeletonList rows={6} lines={3} rowClassName="list-row audit-row" />} />
           ) : query.error ? (
             <State error={query.error} onRetry={() => query.refetch()} />
-          ) : !query.data?.items.length ? (
+          ) : !query.data?.items.filter((a) => kindMatch(a, kind)).length ? (
             <State empty="没有符合条件的操作记录" />
           ) : (
-            query.data.items.map((item) => (
-              <div className="list-row audit-row" key={item.id} {...dataObject({ type: "audit", id: item.id })}>
-                <div>
-                  <strong>{item.action_label}</strong>
-                  <small>
-                    {date(item.created_at)} · {item.actor ? <ObjectLink to={{ type: "user", id: item.actor, name: item.actor_name }} /> : "系统 / 未登录"}
-                    {parseTarget(item.target) ? <> · <AuditTarget item={item} /></> : null}
-                  </small>
-                </div>
-                <div className="actions">
-                  <Badge variant="soft" tone={resultTones[resultCode(item.result)] ?? "neutral"}>
-                    {resultLabels[resultCode(item.result)] ?? item.result}
-                  </Badge>
-                  <Button size="sm" variant="ghost" aria-label={`查看记录 #${item.id}`} onClick={() => openDetail(item)}>详情</Button>
-                </div>
-              </div>
-            ))
+            <Table>
+              <TableHeader><TableRow><TableHead className="w-[91px]">时间</TableHead><TableHead>操作者</TableHead><TableHead>操作</TableHead><TableHead>对象</TableHead><TableHead>结果</TableHead><TableHead>对内核的影响</TableHead><TableHead>trace</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {query.data.items.filter((a) => kindMatch(a, kind)).map((item) => {
+                  const code = resultCode(item.result);
+                  return (
+                    <TableRow key={item.id} {...dataObject({ type: "audit", id: item.id })} onClick={() => openDetail(item)}>
+                      <TableCell className="font-[family-name:var(--weir-mono)]">{new Date(item.created_at).toLocaleTimeString("zh-CN", { hour12: false })}</TableCell>
+                      <TableCell>{item.action.startsWith("ai.") || item.action.startsWith("ops.") ? <Badge variant="soft" tone="info">{item.actor ? "dsh · 管理员确认" : "dsh"}</Badge> : item.actor ? item.actor_name || "未知" : <span className="text-[var(--weir-ink-3)]">系统</span>}</TableCell>
+                      <TableCell>{item.action_label}</TableCell>
+                      <TableCell>{parseTarget(item.target) ? <AuditTarget item={item} /> : <span className="text-[var(--weir-ink-3)]">{item.target_name || "—"}</span>}</TableCell>
+                      <TableCell>{code === "ok" ? <span className="text-meta text-[var(--weir-ink-3)]">成功</span> : <Badge variant="soft" tone={resultTones[code] ?? "neutral"}>{resultLabels[code] ?? item.result}</Badge>}</TableCell>
+                      <TableCell>{restarted(item) ? <Badge variant="soft" tone="warn">重启了内核</Badge> : <span className="text-meta text-[var(--weir-ink-3)]">—</span>}</TableCell>
+                      <TableCell className="font-[family-name:var(--weir-mono)] text-[var(--weir-accent-text)]">{item.trace_id ? `${item.trace_id.slice(0, 4)}…${item.trace_id.slice(-4)}` : <span className="text-[var(--weir-ink-3)]">未知</span>}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           )}
           <Pager
             variant="inline"
@@ -149,7 +178,6 @@ export function AuditPage() {
             busy={query.isFetching}
             onPage={setPage}
           />
-        </CardContent>
       </Card>
       <Dialog open={!!detailId && (!!detail || one.isFetched)} onOpenChange={(v) => !v && closeDetail()}>
         <DialogContent>
@@ -183,6 +211,10 @@ export function AuditPage() {
                   <span>时间</span>
                   <strong>{date(detail.created_at)}</strong>
                 </div>
+                <div>
+                  <span>关联编号</span>
+                  <code className="break-all">{detail.trace_id || "未知"}</code>
+                </div>
               </div>
             </div>
           )}
@@ -196,6 +228,45 @@ export function AuditPage() {
 function AuditTarget({ item }: { item: Audit }) {
   const ref = parseTarget(item.target);
   return ref ? <ObjectLink to={ref}>{item.target_name}</ObjectLink> : <>{item.target_name}</>;
+}
+
+// 只有审计里明确写了重启内核的操作才算「对内核有影响」；其余写 —，不猜。
+function restarted(a: Audit) {
+  return a.action === "gate.kernel.restart" || a.action.endsWith(".restart") || /restart|重启/.test(a.result);
+}
+
+function kindMatch(a: Audit, kind: string) {
+  if (kind === "human") return a.actor > 0 || a.action.startsWith("ai.");
+  if (kind === "restart") return restarted(a);
+  return true;
+}
+
+// 热力格（设计稿 CAudit）：按小时（30 天时按 4 小时）聚合，越亮越多；有重启的格子是黄色带光圈。
+function AuditHeat({ items, days }: { items: Audit[]; days: number }) {
+  const step = days === 30 ? 4 : 1;
+  const cells = Math.min(84, Math.round((days * 24) / step / (days === 7 ? 2 : 1)));
+  const span = (days * 24 * 3600e3) / cells;
+  const end = Date.now();
+  const counts = Array.from({ length: cells }, () => ({ n: 0, restart: false }));
+  for (const a of items) {
+    const t = new Date(a.created_at).getTime();
+    const i = Math.floor((t - (end - days * 24 * 3600e3)) / span);
+    if (i >= 0 && i < cells) {
+      counts[i].n += 1;
+      if (restarted(a)) counts[i].restart = true;
+    }
+  }
+  const max = Math.max(1, ...counts.map((c) => c.n));
+  const labels = [0, 1, 2].map((k) => new Date(end - days * 24 * 3600e3 + (k * days * 24 * 3600e3) / 3)).map((d) => `${d.getMonth() + 1}/${d.getDate()}`);
+  return (
+    <>
+      <div className="weir-heat" style={{ gridTemplateColumns: `repeat(${cells}, minmax(0, 1fr))` }} role="img" aria-label={`最近 ${days} 天的操作分布`}>
+        {counts.map((c, i) => <i key={i} data-restart={c.restart || undefined} style={{ opacity: c.n ? 0.37 + (c.n / max) * 0.63 : undefined }} data-on={c.n ? "" : undefined} />)}
+      </div>
+      <div className="mt-[7px] flex justify-between text-fine text-[var(--weir-ink-3)]">{labels.map((l) => <span key={l}>{l}</span>)}<span>今天</span></div>
+      {items.length >= 100 && <div className="mt-[5px] text-fine text-[var(--weir-ink-3)]">只统计最近 100 条记录，更早的格子可能偏暗</div>}
+    </>
+  );
 }
 
 // 结果可能带附加信息（如「ok chains=0」）：标签看第一个词，完整内容在详情里。

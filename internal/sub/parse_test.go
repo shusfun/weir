@@ -93,7 +93,7 @@ func TestParseParity(t *testing.T) {
 
 	optionSets := []*js.Object{
 		js.NewObject(),
-		js.Obj("enableTfo", true, "enableUdp", false, "skipCertVerify", true, "supportX25519mlkem768", false),
+		js.Obj("enableTfo", true, "skipCertVerify", true, "supportX25519mlkem768", false),
 		js.Obj("enableUdp", true, "addFlagEmoji", false, "supportX25519mlkem768", true),
 	}
 	for i, opts := range optionSets {

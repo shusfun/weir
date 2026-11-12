@@ -212,6 +212,14 @@ func TestDefenseLayaThenDraftThenConfirmedBlock(t *testing.T) {
 		mu.Lock()
 		layaBodies = append(layaBodies, r.URL.Path+" "+r.Header.Get("Authorization")+" "+string(b))
 		mu.Unlock()
+		if strings.Contains(r.URL.Path, "/api/version") {
+			_ = json.NewEncoder(w).Encode(map[string]string{"version": "0.19.0"})
+			return
+		}
+		if strings.Contains(r.URL.Path, "/api/show") {
+			_ = json.NewEncoder(w).Encode(map[string]string{"digest": "2840506e1f978aeb696a6f84af43ecc7fca95754cb63a67bafe6132532d384eb"})
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"answers": map[string]any{"category": map[string]any{"choice": "suspicious", "confidence": 0.9}}})
 	}))
 	defer laya.Close()

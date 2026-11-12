@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -25,6 +26,8 @@ import (
 
 	"github.com/shusfun/weir/internal/hoststats"
 	"github.com/shusfun/weir/internal/kernelconf"
+	"github.com/shusfun/weir/internal/lockfile"
+	"github.com/shusfun/weir/internal/releasefiles"
 )
 
 var helperKernels = []string{"xray", "sing-box"}
@@ -39,12 +42,21 @@ type ApplyRequest struct {
 	Ports      []int             `json:"ports"` // 本次配置需要监听的全部端口，用于冲突检查
 	// Args 是各内核的运行与自检参数（来自驱动；辅助程序再校验一遍）。
 	Args map[string]kernelconf.KernelArgs `json:"args,omitempty"`
+	// HotUsers 表示该内核的驱动声明了用户热更新。ForceRestart 表示撤权后还要重启一次。
+	HotUsers     map[string]bool `json:"hot_users,omitempty"`
+	ForceRestart map[string]bool `json:"force_restart,omitempty"`
+	TraceID      string          `json:"trace_id,omitempty"`
 }
 
 type ApplyResult struct {
-	OK           bool   `json:"ok"`
-	Error        string `json:"error,omitempty"`
-	ConflictPort int    `json:"conflict_port,omitempty"`
+	OK           bool                    `json:"ok"`
+	Error        string                  `json:"error,omitempty"`
+	ConflictPort int                     `json:"conflict_port,omitempty"`
+	Mode         string                  `json:"mode,omitempty"`
+	Reason       string                  `json:"reason,omitempty"`
+	PID          map[string]int          `json:"pid,omitempty"`
+	Disconnects  map[string]*int         `json:"disconnects,omitempty"`
+	Events       []contracts.KernelEvent `json:"events,omitempty"`
 }
 
 type HelperStatus struct {
@@ -55,16 +67,19 @@ type HelperStatus struct {
 	Listening []contracts.ListeningPort `json:"listening"`
 	Certs     map[string]string         `json:"certs"` // 证书 ID → 已安装文件摘要
 	Firewall  *contracts.FirewallStatus `json:"firewall,omitempty"`
+	Events    []contracts.KernelEvent   `json:"events,omitempty"`
 }
 
 // Helper 是以 root 运行的辅助程序。只提供白名单接口，不执行任意命令或任意路径。
 type Helper struct {
-	resourceMu   sync.RWMutex
-	resourceHost *contracts.HostSample
-	P            Paths
-	ProcRoot     string
-	Sup          *Supervisor
-	mu           sync.Mutex
+	laya           layaHelperState
+	resourceMu     sync.RWMutex
+	resourceHost   *contracts.HostSample
+	P              Paths
+	ProcRoot       string
+	Sup            *Supervisor
+	mu             sync.Mutex
+	releaseRestart func()
 	// 1Panel 连接测试与证书刷新的缓存（见 panel.go）。
 	panelMu         sync.Mutex
 	panelChecked    time.Time
@@ -72,13 +87,25 @@ type Helper struct {
 	panelVersion    string
 	panelError      string
 	panelRenewError string
+	// 自己的 HTTP-01 应答。续签时先关掉上一轮，不能把本进程占着的 80 当成其他程序。
+	acmeMu  sync.Mutex
+	acmeSrv *http.Server
 	// 本机防火墙状态的缓存（见 firewall.go）。
 	fwMu sync.Mutex
 	fw   *contracts.FirewallStatus
 	fwAt time.Time
+	// 内核启停事件。读不到 PID 或断连数时字段省略，页面显示未知。
+	eventsMu sync.Mutex
+	events   []contracts.KernelEvent
 }
 
-func NewHelper(p Paths) *Helper { return &Helper{P: p, ProcRoot: "/proc", Sup: NewSupervisor(p)} }
+func NewHelper(p Paths) *Helper {
+	h := &Helper{P: p, ProcRoot: "/proc", Sup: NewSupervisor(p)}
+	h.Sup.onLife = func(name, kind string, pid *int) {
+		h.noteKernel(name, kind, "", kind, pid, nil)
+	}
+	return h
+}
 
 func (h *Helper) pointer(name string) string {
 	b, _ := os.ReadFile(filepath.Join(h.P.KernelsDir, name+".version"))
@@ -113,6 +140,7 @@ func (h *Helper) Handler() http.Handler {
 	mux.HandleFunc("GET /diagnostics", h.diagnostics)
 	mux.HandleFunc("POST /release", h.release)
 	mux.HandleFunc("POST /uninstall", h.uninstall)
+	mux.HandleFunc("POST /laya", h.layaOperation)
 	mux.HandleFunc("POST /panel", h.setPanel)
 	mux.HandleFunc("POST /panel/discover", func(w http.ResponseWriter, r *http.Request) {
 		if err := os.Remove(h.panelPath() + ".disabled"); err != nil && !os.IsNotExist(err) {
@@ -132,7 +160,37 @@ func (h *Helper) Handler() http.Handler {
 	mux.HandleFunc("POST /panel/cert", h.panelCert)
 	mux.HandleFunc("POST /panel/report", h.panelCertsReport)
 	mux.HandleFunc("POST /acme/http01", h.acmeHTTP01)
-	return mux
+	mux.HandleFunc("POST /host/repair", h.hostRepair)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := releasefiles.WithTrace(r.Context(), r.Header.Get("traceparent"))
+		w.Header().Set("traceparent", releasefiles.Traceparent(ctx))
+		started := time.Now()
+		writer := &helperResponse{ResponseWriter: w, status: http.StatusOK}
+		request := r.WithContext(ctx)
+		mux.ServeHTTP(writer, request)
+		// Route patterns exclude query parameters, paths and daemon output.
+		log.Printf("helper operation trace=%s method=%s route=%s status=%d ms=%d", releasefiles.Trace(ctx), r.Method, request.Pattern, writer.status, time.Since(started).Milliseconds())
+	})
+}
+
+type helperResponse struct {
+	http.ResponseWriter
+	status  int
+	written bool
+}
+
+func (w *helperResponse) WriteHeader(status int) {
+	if !w.written {
+		w.status, w.written = status, true
+		w.ResponseWriter.WriteHeader(status)
+	}
+}
+
+func (w *helperResponse) Write(body []byte) (int, error) {
+	if !w.written {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(body)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -155,6 +213,23 @@ func installable(name string) bool {
 func sumOf(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToString(s[:]) }
 
 // setCenter 只改设备配置里的中心地址，设备 ID 与私钥不变；新地址必须是 HTTPS。
+func (h *Helper) hostRepair(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Key   string `json:"key"`
+		Value string `json:"value"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req) != nil {
+		writeJSON(w, 400, ApplyResult{Error: "invalid repair"})
+		return
+	}
+	prev, err := h.repairHost(r.Context(), req.Key, req.Value)
+	if err != nil {
+		writeJSON(w, 422, ApplyResult{Error: err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true, "previous": prev})
+}
+
 func (h *Helper) setCenter(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Center string `json:"center"`
@@ -223,7 +298,7 @@ func (h *Helper) status(w http.ResponseWriter, _ *http.Request) {
 			active[name] = v
 		}
 	}
-	writeJSON(w, 200, HelperStatus{Host: host, Installed: h.installed(), Active: active, Running: h.Sup.Running(), Listening: ports, Certs: h.certs(), Firewall: h.firewall()})
+	writeJSON(w, 200, HelperStatus{Host: host, Installed: h.installed(), Active: active, Running: h.Sup.Running(), Listening: ports, Certs: h.certs(), Firewall: h.firewall(), Events: h.peekKernelEvents()})
 }
 
 // certs 返回已安装证书的摘要，Agent 据此决定是否需要重新下载。
@@ -288,6 +363,7 @@ func (h *Helper) Apply(ctx context.Context, req ApplyRequest) ApplyResult {
 	if err := os.MkdirAll(h.P.CoresDir, 0750); err != nil {
 		return ApplyResult{Error: err.Error()}
 	}
+	res := ApplyResult{OK: true, Mode: contracts.ApplyUnchanged, PID: h.Sup.Running(), Disconnects: map[string]*int{}}
 	for _, name := range helperKernels {
 		cur := h.Sup.config(name)
 		body, want := req.Configs[name], req.Kernels[name]
@@ -302,9 +378,38 @@ func (h *Helper) Apply(ctx context.Context, req ApplyRequest) ApplyResult {
 			return ApplyResult{Error: name + " version missing"}
 		}
 		old := h.pointer(name)
-		if existing, err := os.ReadFile(cur); err == nil && old == want && bytes.Equal(existing, body) {
-			if _, running := h.Sup.Running()[name]; running {
-				continue
+		existing, readErr := os.ReadFile(cur)
+		_, running := h.Sup.Running()[name]
+		if readErr == nil && old == want && bytes.Equal(existing, body) && running {
+			res.Mode = firstMode(res.Mode, contracts.ApplyUnchanged)
+			continue
+		}
+		if readErr == nil && old == want && running && req.HotUsers[name] && name == "xray" {
+			added, removed, only := userDelta(existing, body)
+			if only && (len(added) > 0 || len(removed) > 0) {
+				if err := h.applyUserDelta(ctx, name, req.StatsPorts[name], added, removed); err != nil {
+					res.Reason = name + " 热更新失败，改为重启：" + err.Error()
+				} else if err = writeAtomic(cur, body); err != nil {
+					return ApplyResult{Error: err.Error()}
+				} else {
+					pid := runningPID(h.Sup, name)
+					h.noteKernel(name, "hot_users", req.TraceID, "hot_users", pid, nil)
+					res.Mode = contracts.ApplyHotUsers
+					res.PID = h.Sup.Running()
+					res.Disconnects = map[string]*int{name: nil}
+					if req.ForceRestart[name] {
+						oldPID := runningPID(h.Sup, name)
+						h.noteKernel(name, "stop", req.TraceID, "force_disconnect", oldPID, nil)
+						if err = h.Sup.Start(name); err != nil || !h.healthy(name, req.StatsPorts[name]) {
+							return ApplyResult{Error: name + " 撤权后重启失败：" + errString(err), Mode: contracts.ApplyRestart, Reason: "force_disconnect", Events: h.peekKernelEvents()}
+						}
+						h.noteKernel(name, "start", req.TraceID, "force_disconnect", runningPID(h.Sup, name), nil)
+						res.Mode = contracts.ApplyRestart
+						res.Reason = "force_disconnect"
+						res.PID = h.Sup.Running()
+					}
+					continue
+				}
 			}
 		}
 		// 内核按扩展名识别配置格式，候选文件必须仍以 .json 结尾。
@@ -331,6 +436,15 @@ func (h *Helper) Apply(ctx context.Context, req ApplyRequest) ApplyResult {
 				return ApplyResult{Error: err.Error()}
 			}
 		}
+		oldPID := runningPID(h.Sup, name)
+		if oldPID != nil {
+			h.noteKernel(name, "stop", req.TraceID, "restart", oldPID, nil)
+		}
+		res.Mode = contracts.ApplyRestart
+		if res.Reason == "" {
+			res.Reason = "config_changed"
+		}
+		res.Disconnects[name] = nil
 		if err := h.Sup.Start(name); err != nil || !h.healthy(name, req.StatsPorts[name]) {
 			// 先取日志再停：Stop 会丢掉这个进程的输出，失败原因要写进错误里。
 			logs := h.Sup.Logs(name)
@@ -354,10 +468,24 @@ func (h *Helper) Apply(ctx context.Context, req ApplyRequest) ApplyResult {
 			}
 			// 端口被出站连接的本地端口占着时，应用前的检查（只看监听）发现不了，内核绑定时才失败：
 			// 同样按端口冲突交给中心换一个，不在原端口上一直重试。
-			return ApplyResult{Error: msg, ConflictPort: boundPort(logs, req.Ports)}
+			return ApplyResult{Error: msg, ConflictPort: boundPort(logs, req.Ports), Events: h.peekKernelEvents()}
 		}
+		h.noteKernel(name, "start", req.TraceID, "restart", runningPID(h.Sup, name), nil)
 	}
-	return ApplyResult{OK: true}
+	res.PID = h.Sup.Running()
+	res.Events = h.takeKernelEvents()
+	return res
+}
+
+func runningPID(sup *Supervisor, name string) *int {
+	if sup == nil {
+		return nil
+	}
+	pid, ok := sup.Running()[name]
+	if !ok || pid <= 0 {
+		return nil
+	}
+	return &pid
 }
 
 // shareWithAgent 把文件属组设为内核运行账号，使降权后的内核能读取配置与证书。
@@ -441,42 +569,145 @@ func (h *Helper) diagnostics(w http.ResponseWriter, r *http.Request) {
 
 // release 安装新版本程序到 releases/<版本>，切换 current 并保留 previous，然后重启 Gate 服务。
 func (h *Helper) release(w http.ResponseWriter, r *http.Request) {
+	ctx := releasefiles.WithTrace(r.Context(), r.Header.Get("traceparent"))
+	w.Header().Set("traceparent", releasefiles.Traceparent(ctx))
+	w.Header().Set("X-Trace-Id", releasefiles.Trace(ctx))
 	version, want := r.Header.Get("X-Version"), r.Header.Get("X-SHA256")
-	if !safeVer.MatchString(version) || len(want) != 64 {
+	if !releasefiles.Version(version) || len(want) != 64 {
+		log.Printf("release trace=%s stage=validate error=invalid_release", releasefiles.Trace(ctx))
 		writeJSON(w, 400, ApplyResult{Error: "invalid release"})
 		return
 	}
 	data, err := io.ReadAll(io.LimitReader(r.Body, 256<<20))
 	if err != nil || sumOf(data) != want {
+		log.Printf("release trace=%s version=%s stage=validate error=checksum_mismatch", releasefiles.Trace(ctx), version)
 		writeJSON(w, 422, ApplyResult{Error: "release checksum mismatch"})
 		return
 	}
-	dir := filepath.Join(h.P.Root, "releases", version)
-	if err = os.MkdirAll(dir, 0755); err == nil {
-		if err = os.WriteFile(filepath.Join(dir, "weir.new"), data, 0755); err == nil {
-			err = os.Rename(filepath.Join(dir, "weir.new"), filepath.Join(dir, "weir"))
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	unlock, err := lockfile.TryAcquire(h.releaseLock())
+	if err != nil {
+		writeJSON(w, 409, ApplyResult{Error: err.Error()})
+		return
+	}
+	defer unlock()
+	log.Printf("release trace=%s version=%s stage=install", releasefiles.Trace(ctx), version)
+	if err = h.storeRelease(version, data); err != nil {
+		log.Printf("release trace=%s version=%s stage=install error=%q", releasefiles.Trace(ctx), version, err)
+		writeJSON(w, 500, ApplyResult{Error: err.Error()})
+		return
+	}
+	h.pruneReleases(ctx, version)
+	writeJSON(w, 200, ApplyResult{OK: true})
+	if h.releaseRestart != nil {
+		h.releaseRestart()
+		return
+	}
+	go func() {
+		time.Sleep(time.Second)
+		_ = exec.Command("systemctl", "restart", "--no-block", "weir-helper.service", agentUnit()).Run()
+	}()
+}
+
+func (h *Helper) storeRelease(version string, data []byte) error {
+	if !releasefiles.Version(version) {
+		return errors.New("invalid release")
+	}
+	root, err := releasefiles.Open(h.P.Root)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	if _, e := root.Lstat("current"); e == nil {
+		if _, err = releasefiles.Pointers(h.P.Root); err != nil {
+			return err
 		}
+	} else if !errors.Is(e, os.ErrNotExist) {
+		return e
+	}
+	if st, e := root.Lstat("releases"); e == nil && (!st.IsDir() || st.Mode()&os.ModeSymlink != 0) {
+		return errors.New("unsafe releases directory")
+	}
+	if err = root.MkdirAll("releases", 0755); err != nil {
+		return err
+	}
+	rel := filepath.Join("releases", version)
+	if st, e := root.Lstat(rel); e == nil && (!st.IsDir() || st.Mode()&os.ModeSymlink != 0) {
+		return errors.New("unsafe release directory")
+	}
+	if err = root.MkdirAll(rel, 0755); err != nil {
+		return err
+	}
+	if st, e := root.Lstat(filepath.Join(rel, "weir.new")); e == nil && !st.Mode().IsRegular() {
+		return errors.New("unsafe release staging file")
+	}
+	_ = root.Remove(filepath.Join(rel, "weir.new"))
+	f, err := root.OpenFile(filepath.Join(rel, "weir.new"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0755)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(data)
+	err = errors.Join(err, f.Close())
+	if err == nil {
+		err = root.Rename(filepath.Join(rel, "weir.new"), filepath.Join(rel, "weir"))
 	}
 	if err == nil {
 		current := filepath.Join(h.P.Root, "current")
 		if link, e := os.Readlink(current); e == nil && filepath.Base(link) != version {
+			if _, e = releasefiles.Pointers(h.P.Root); e != nil {
+				return e
+			}
 			_ = os.Remove(filepath.Join(h.P.Root, "previous"))
-			_ = os.Symlink(link, filepath.Join(h.P.Root, "previous"))
+			if e = os.Symlink(link, filepath.Join(h.P.Root, "previous")); e != nil {
+				return e
+			}
 		}
 		_ = os.Remove(current + ".new")
 		if err = os.Symlink(filepath.Join("releases", version), current+".new"); err == nil {
 			err = os.Rename(current+".new", current)
 		}
 	}
+	return err
+}
+
+func (h *Helper) releaseLock() string {
+	if filepath.Clean(h.P.Root) == "/opt/weir" {
+		return "/run/lock/weir-install.lock"
+	}
+	return h.P.Root + ".install.lock"
+}
+
+func (h *Helper) pruneReleases(ctx context.Context, version string) error {
+	stats, err := releasefiles.PruneReleases(h.P.Root, h.ProcRoot)
 	if err != nil {
-		writeJSON(w, 500, ApplyResult{Error: err.Error()})
+		log.Printf("WARN release cleanup trace=%s version=%s %s error=%q", releasefiles.Trace(ctx), version, stats, err)
+	} else {
+		log.Printf("release cleanup trace=%s version=%s %s", releasefiles.Trace(ctx), version, stats)
+	}
+	return err
+}
+
+func (h *Helper) maintainReleases(ctx context.Context) {
+	if h.P.Root == "" {
 		return
 	}
-	writeJSON(w, 200, ApplyResult{OK: true})
-	go func() {
-		time.Sleep(time.Second)
-		_ = exec.Command("systemctl", "restart", "--no-block", "weir-helper.service", agentUnit()).Run()
-	}()
+	ctx = releasefiles.WithTrace(ctx, "")
+	for {
+		unlock, err := lockfile.TryAcquire(h.releaseLock())
+		if err == nil {
+			err = h.pruneReleases(ctx, "startup")
+			unlock()
+			if err == nil {
+				return
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Minute):
+		}
+	}
 }
 
 // agentUnit 是运行 Agent 的服务：单机角色的本机 Gate 在中心进程里运行，其他是独立的 weir-gate。
@@ -516,8 +747,9 @@ func ServeHelper(ctx context.Context, h *Helper) error {
 	h.Boot()
 	resourceCtx, stopResources := context.WithCancel(ctx)
 	defer stopResources()
+	go h.maintainReleases(resourceCtx)
 	go func() {
-		sampler := hoststats.Sampler{ProcRoot: h.ProcRoot}
+		sampler := hoststats.Sampler{ProcRoot: h.ProcRoot, CertDir: h.P.CertsDir, DNS: hoststats.CompareDNS}
 		sampler.Run(resourceCtx, "/", func() map[string]int {
 			pids := h.Sup.Running()
 			for _, name := range helperKernels {

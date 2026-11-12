@@ -28,6 +28,20 @@ func (_c *UserCreate) SetEmail(v string) *UserCreate {
 	return _c
 }
 
+// SetNormalizedEmail sets the "normalized_email" field.
+func (_c *UserCreate) SetNormalizedEmail(v string) *UserCreate {
+	_c.mutation.SetNormalizedEmail(v)
+	return _c
+}
+
+// SetNillableNormalizedEmail sets the "normalized_email" field if the given value is not nil.
+func (_c *UserCreate) SetNillableNormalizedEmail(v *string) *UserCreate {
+	if v != nil {
+		_c.SetNormalizedEmail(*v)
+	}
+	return _c
+}
+
 // SetName sets the "name" field.
 func (_c *UserCreate) SetName(v string) *UserCreate {
 	_c.mutation.SetName(v)
@@ -86,6 +100,20 @@ func (_c *UserCreate) SetQuota(v int64) *UserCreate {
 func (_c *UserCreate) SetNillableQuota(v *int64) *UserCreate {
 	if v != nil {
 		_c.SetQuota(*v)
+	}
+	return _c
+}
+
+// SetUnlimited sets the "unlimited" field.
+func (_c *UserCreate) SetUnlimited(v bool) *UserCreate {
+	_c.mutation.SetUnlimited(v)
+	return _c
+}
+
+// SetNillableUnlimited sets the "unlimited" field if the given value is not nil.
+func (_c *UserCreate) SetNillableUnlimited(v *bool) *UserCreate {
+	if v != nil {
+		_c.SetUnlimited(*v)
 	}
 	return _c
 }
@@ -293,6 +321,10 @@ func (_c *UserCreate) defaults() {
 		v := user.DefaultQuota
 		_c.mutation.SetQuota(v)
 	}
+	if _, ok := _c.mutation.Unlimited(); !ok {
+		v := user.DefaultUnlimited
+		_c.mutation.SetUnlimited(v)
+	}
 	if _, ok := _c.mutation.Used(); !ok {
 		v := user.DefaultUsed
 		_c.mutation.SetUsed(v)
@@ -341,6 +373,11 @@ func (_c *UserCreate) check() error {
 			return &ValidationError{Name: "email", err: fmt.Errorf(`ent: validator failed for field "User.email": %w`, err)}
 		}
 	}
+	if v, ok := _c.mutation.NormalizedEmail(); ok {
+		if err := user.NormalizedEmailValidator(v); err != nil {
+			return &ValidationError{Name: "normalized_email", err: fmt.Errorf(`ent: validator failed for field "User.normalized_email": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.Name(); !ok {
 		return &ValidationError{Name: "name", err: errors.New(`ent: missing required field "User.name"`)}
 	}
@@ -370,6 +407,9 @@ func (_c *UserCreate) check() error {
 		if err := user.QuotaValidator(v); err != nil {
 			return &ValidationError{Name: "quota", err: fmt.Errorf(`ent: validator failed for field "User.quota": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.Unlimited(); !ok {
+		return &ValidationError{Name: "unlimited", err: errors.New(`ent: missing required field "User.unlimited"`)}
 	}
 	if _, ok := _c.mutation.Used(); !ok {
 		return &ValidationError{Name: "used", err: errors.New(`ent: missing required field "User.used"`)}
@@ -434,6 +474,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		_spec.SetField(user.FieldEmail, field.TypeString, value)
 		_node.Email = value
 	}
+	if value, ok := _c.mutation.NormalizedEmail(); ok {
+		_spec.SetField(user.FieldNormalizedEmail, field.TypeString, value)
+		_node.NormalizedEmail = &value
+	}
 	if value, ok := _c.mutation.Name(); ok {
 		_spec.SetField(user.FieldName, field.TypeString, value)
 		_node.Name = value
@@ -453,6 +497,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Quota(); ok {
 		_spec.SetField(user.FieldQuota, field.TypeInt64, value)
 		_node.Quota = value
+	}
+	if value, ok := _c.mutation.Unlimited(); ok {
+		_spec.SetField(user.FieldUnlimited, field.TypeBool, value)
+		_node.Unlimited = value
 	}
 	if value, ok := _c.mutation.Used(); ok {
 		_spec.SetField(user.FieldUsed, field.TypeInt64, value)
@@ -566,6 +614,24 @@ func (u *UserUpsert) UpdateEmail() *UserUpsert {
 	return u
 }
 
+// SetNormalizedEmail sets the "normalized_email" field.
+func (u *UserUpsert) SetNormalizedEmail(v string) *UserUpsert {
+	u.Set(user.FieldNormalizedEmail, v)
+	return u
+}
+
+// UpdateNormalizedEmail sets the "normalized_email" field to the value that was provided on create.
+func (u *UserUpsert) UpdateNormalizedEmail() *UserUpsert {
+	u.SetExcluded(user.FieldNormalizedEmail)
+	return u
+}
+
+// ClearNormalizedEmail clears the value of the "normalized_email" field.
+func (u *UserUpsert) ClearNormalizedEmail() *UserUpsert {
+	u.SetNull(user.FieldNormalizedEmail)
+	return u
+}
+
 // SetName sets the "name" field.
 func (u *UserUpsert) SetName(v string) *UserUpsert {
 	u.Set(user.FieldName, v)
@@ -629,6 +695,18 @@ func (u *UserUpsert) UpdateQuota() *UserUpsert {
 // AddQuota adds v to the "quota" field.
 func (u *UserUpsert) AddQuota(v int64) *UserUpsert {
 	u.Add(user.FieldQuota, v)
+	return u
+}
+
+// SetUnlimited sets the "unlimited" field.
+func (u *UserUpsert) SetUnlimited(v bool) *UserUpsert {
+	u.Set(user.FieldUnlimited, v)
+	return u
+}
+
+// UpdateUnlimited sets the "unlimited" field to the value that was provided on create.
+func (u *UserUpsert) UpdateUnlimited() *UserUpsert {
+	u.SetExcluded(user.FieldUnlimited)
 	return u
 }
 
@@ -853,6 +931,27 @@ func (u *UserUpsertOne) UpdateEmail() *UserUpsertOne {
 	})
 }
 
+// SetNormalizedEmail sets the "normalized_email" field.
+func (u *UserUpsertOne) SetNormalizedEmail(v string) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetNormalizedEmail(v)
+	})
+}
+
+// UpdateNormalizedEmail sets the "normalized_email" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateNormalizedEmail() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateNormalizedEmail()
+	})
+}
+
+// ClearNormalizedEmail clears the value of the "normalized_email" field.
+func (u *UserUpsertOne) ClearNormalizedEmail() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearNormalizedEmail()
+	})
+}
+
 // SetName sets the "name" field.
 func (u *UserUpsertOne) SetName(v string) *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
@@ -927,6 +1026,20 @@ func (u *UserUpsertOne) AddQuota(v int64) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateQuota() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateQuota()
+	})
+}
+
+// SetUnlimited sets the "unlimited" field.
+func (u *UserUpsertOne) SetUnlimited(v bool) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetUnlimited(v)
+	})
+}
+
+// UpdateUnlimited sets the "unlimited" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateUnlimited() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateUnlimited()
 	})
 }
 
@@ -1344,6 +1457,27 @@ func (u *UserUpsertBulk) UpdateEmail() *UserUpsertBulk {
 	})
 }
 
+// SetNormalizedEmail sets the "normalized_email" field.
+func (u *UserUpsertBulk) SetNormalizedEmail(v string) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetNormalizedEmail(v)
+	})
+}
+
+// UpdateNormalizedEmail sets the "normalized_email" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateNormalizedEmail() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateNormalizedEmail()
+	})
+}
+
+// ClearNormalizedEmail clears the value of the "normalized_email" field.
+func (u *UserUpsertBulk) ClearNormalizedEmail() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearNormalizedEmail()
+	})
+}
+
 // SetName sets the "name" field.
 func (u *UserUpsertBulk) SetName(v string) *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
@@ -1418,6 +1552,20 @@ func (u *UserUpsertBulk) AddQuota(v int64) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateQuota() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateQuota()
+	})
+}
+
+// SetUnlimited sets the "unlimited" field.
+func (u *UserUpsertBulk) SetUnlimited(v bool) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetUnlimited(v)
+	})
+}
+
+// UpdateUnlimited sets the "unlimited" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateUnlimited() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateUnlimited()
 	})
 }
 

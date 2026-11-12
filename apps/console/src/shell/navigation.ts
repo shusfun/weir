@@ -4,6 +4,7 @@ import {
   Users,
   Megaphone,
   ScrollText,
+  Activity,
   Settings2,
   Link2,
   ShieldCheck,
@@ -38,11 +39,13 @@ export const navigation: NavItem[] = [
   { key: "kernels", path: "/kernels", label: "内核", icon: Cpu, group: "节点", roles: "admin" },
   { key: "linkmap", path: "/linkmap", label: "链路", icon: Globe2, group: "节点", roles: "admin" },
   { key: "users", path: "/users", label: "用户", icon: Users, group: "用户", roles: "admin" },
+  { key: "accounts", path: "/accounts", label: "套餐与用码", icon: Users, group: "用户", roles: "admin" },
   { key: "proxy", path: "/proxy", label: "代理", icon: Waypoints, group: "用户", roles: "all" },
   { key: "links", path: "/links", label: "订阅链接", icon: Link2, group: "用户", roles: "all" },
   { key: "subscriptions", path: "/subscriptions", label: "订阅源", icon: Rss, group: "订阅源", roles: "admin" },
   { key: "pages", path: "/pages", label: "公开页面", icon: Megaphone, group: "订阅源", roles: "admin" },
   { key: "audit", path: "/ops/audit", label: "操作审计", icon: ScrollText, group: "系统", roles: "admin" },
+  { key: "observe", path: "/ops/observe", label: "运行观测", icon: Activity, group: "系统", roles: "admin" },
   { key: "system", path: "/system", label: "系统设置", icon: Settings2, group: "系统", roles: "admin" },
   { key: "my-linkmap", path: "/my/linkmap", label: "我的链路", icon: Globe2, group: "个人", roles: "user" },
   { key: "security", path: "/security", label: "账户安全", icon: ShieldCheck, group: "个人", roles: "user" },
@@ -74,6 +77,7 @@ export const distributionSections = [
 
 // 系统设置分区（?tab=）
 export const systemSections = [
+  { key: "appearance", label: "外观" },
   { key: "update", label: "版本与下载" },
   { key: "login", label: "登录与安全" },
   { key: "notify", label: "通知" },

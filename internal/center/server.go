@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/shusfun/weir/internal/accountsecurity"
 	"github.com/shusfun/weir/internal/buildinfo"
 	"github.com/shusfun/weir/internal/geoip"
 	"github.com/shusfun/weir/internal/ghrelease"
@@ -30,12 +31,13 @@ import (
 
 // Server 持有中心的配置与存储。初始化完成前 Store 为空，只开放初始化接口。
 type Server struct {
-	resources resourceState
-	Config    Config
-	Path      string
-	Store     *store.Store
-	Crypto    *secrets.AESEncryptor
-	Assets    fs.FS
+	TurnstileHTTP *http.Client
+	resources     resourceState
+	Config        Config
+	Path          string
+	Store         *store.Store
+	Crypto        *secrets.AESEncryptor
+	Assets        fs.FS
 
 	// state 保护 Config / Store 的切换：普通请求持读锁，安装完成的切换持写锁。
 	state     sync.RWMutex
@@ -47,7 +49,8 @@ type Server struct {
 	// AllowPrivateSources 允许订阅源指向内网地址（只用于测试）。
 	AllowPrivateSources bool
 	// Mail 发送邮件；为空时使用 SMTP。
-	Mail Mailer
+	Mail     Mailer
+	EmailDNS accountsecurity.MXResolver
 	// dsh 是托管的 DeepSeek Harness（进程、子域名网关、MCP 工具）。
 	dsh dshHost
 	// GitHub 非空时代替真实的 GitHub（只用于测试）：API 地址、下载主机与 HTTP 客户端。
@@ -80,13 +83,15 @@ type Server struct {
 	reachChecks nodeReachChecks
 	nodeProbes  nodeProbeState
 	// tasks 是周期任务正在失败的项（见 tasks.go），管理员通知据此提示。
-	tasks taskLog
+	tasks         taskLog
+	communication communicationBuffer
+	layaHealth    layaHealthState
+	layaHosting   layaHostingState
 	// kernelDefaultAfter：下载任务编号 → 下载成功后设为默认（内核页「下载并设为默认」）。
 	kernelDefaultAfter sync.Map
-	// relays 是经 VPS 中转下载时等待 Gate 上传的文件（见 gate_relay.go）。
-	relays relayHub
 	// weirRel 缓存与中心同版本的 Weir 发布信息（见 gate_follow.go）。
-	weirRel releaseCache
+	weirRel        releaseCache
+	releaseFilesMu sync.Mutex
 }
 
 func New(c Config, path string, assets fs.FS) (*Server, error) {
@@ -107,7 +112,7 @@ func NewWait(ctx context.Context, c Config, path string, assets fs.FS) (*Server,
 		}
 	}
 	if s.Store != nil {
-		if err := s.cleanupProbeCredentials(ctx, time.Now(), true); err != nil {
+		if err := s.migrateProbeCredentials(ctx); err != nil {
 			s.Store.Close()
 			return nil, err
 		}
@@ -179,6 +184,9 @@ func (s *Server) Close() {
 	s.state.Lock()
 	defer s.state.Unlock()
 	if s.Store != nil {
+		flushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		s.tasks.note("worker-communication-shutdown", s.flushCommunication(flushCtx, time.Now(), true))
+		cancel()
 		s.Store.Close()
 		s.Store = nil
 	}
@@ -186,7 +194,15 @@ func (s *Server) Close() {
 
 // StartBackground 未初始化时监视磁盘配置：终端完成初始化后，运行中的服务自动切换为已安装。
 func (s *Server) StartBackground(ctx context.Context) {
+	go func() {
+		s.releaseFilesMu.Lock()
+		defer s.releaseFilesMu.Unlock()
+		s.pruneReleaseCache(ctx, nil)
+	}()
 	go s.observeResources(ctx)
+	go s.observeLayaHealth(ctx)
+	go s.workerMaintenance(ctx)
+	go s.observationLoop(ctx)
 	if !s.Config.Installed {
 		go s.watchInstallation(ctx)
 	}
@@ -215,13 +231,16 @@ func (s *Server) maintenance(ctx context.Context) {
 					// 各任务互不影响：一项失败不阻止其他项。
 					report.note("admin-all-nodes", s.EnsureAdminsAllNodes(ctx))
 					report.note("reset-usage", s.ResetDueUsage(ctx, now))
+					report.note("account-grant-sync", s.ReconcileAccountGrants(ctx))
 
 					report.note("internal-test-credentials", s.cleanupProbeCredentials(ctx, now, false))
 					report.note("refresh-sources", s.RefreshSources(ctx, now))
 					s.RefreshSourceExits(ctx)
 					report.note("auto-backup", s.AutoBackup(ctx, now))
 					report.note("check-alerts", s.CheckAlerts(ctx, now))
+					report.note("gate-presence-checkpoint", s.CheckpointOfflineGates(ctx, now))
 					report.note("observe-security", s.ObserveSecurity(ctx, now))
+					report.note("automatic-protection-notify", s.retryProtectionNotifications(ctx, now))
 					report.note("reclaim-budgets", s.ReclaimStaleBudgets(ctx, now))
 					report.note("renew-certs", s.RenewCerts(ctx, now))
 					report.note("prune-samples", s.PruneSamples(ctx, now))
@@ -323,15 +342,26 @@ func (s *Server) Router() *gin.Engine {
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("Referrer-Policy", "no-referrer")
 		c.Header("X-Frame-Options", "DENY")
+		ancestors := "'none'"
+		// 已公开页面用于同源管理预览；控制台和接口仍禁止被嵌入。
+		if strings.HasPrefix(c.Request.URL.Path, "/p/") {
+			ancestors = "'self'"
+			c.Header("X-Frame-Options", "SAMEORIGIN")
+		}
 		c.Header("Cache-Control", "no-store")
 		// frame-src 用站点通配，不写具体的 dsh 子域名；是否启用 dsh 都一样，页面看不出 dsh 的存在。
-		csp := "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; frame-src 'self' " + frameSite(c.Request)
+		csp := "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://challenges.cloudflare.com; frame-ancestors " + ancestors + "; frame-src 'self' " + frameSite(c.Request) + " https://challenges.cloudflare.com"
 		c.Header("Content-Security-Policy", csp)
 		if !sameOriginRequest(c.Request) {
 			failure(c, 403, "origin_rejected")
 			return
 		}
-		if s.blocked(c.Request) {
+		blocked, blockErr := s.sourceBlocked(c.Request)
+		if blockErr != nil {
+			failInternal(c, 503, "protection_unavailable", blockErr)
+			return
+		}
+		if blocked {
 			failure(c, 403, "source_blocked")
 			return
 		}
@@ -360,6 +390,7 @@ func (s *Server) Router() *gin.Engine {
 	ready.GET("/ip", func(c *gin.Context) { c.Header("Cache-Control", "no-store"); c.JSON(200, gin.H{"ip": c.ClientIP()}) })
 	ready.GET("/node-test/download", s.nodeTestDownload)
 	ready.POST("/auth/login", s.login)
+	ready.GET("/auth/human/challenge", s.humanChallenge)
 	ready.POST("/auth/mfa", s.completeMFA)
 	auth := ready.Group("")
 	auth.Use(s.authenticate)
@@ -376,6 +407,7 @@ func (s *Server) Router() *gin.Engine {
 	auth.POST("/security/totp/disable", s.disableTOTP)
 	auth.POST("/security/password", s.changePassword)
 	s.sessionRoutes(auth)
+	s.appearanceRoutes(auth)
 	s.passkeyRoutes(ready, auth)
 	admin := auth.Group("/admin")
 	admin.Use(s.auditProxyDenied, requireAdmin)
@@ -383,6 +415,7 @@ func (s *Server) Router() *gin.Engine {
 	admin.DELETE("/settings/logo", s.deleteLogo)
 	s.gateRoutes(ready, auth, admin)
 	s.userRoutes(auth, admin)
+	s.accountPlanRoutes(auth, admin)
 	s.pullRoutes(auth, admin)
 	s.proxyRoutes(auth, admin)
 	s.sshInstallRoutes(admin)
@@ -611,7 +644,7 @@ func createFirstAdmin(ctx context.Context, st *store.Store, email, password stri
 		if exists {
 			return errors.New("existing_installation_restore_config")
 		}
-		admin, err = st.Ent.User.Create().SetEmail(strings.ToLower(email)).SetName("管理员").SetPasswordHash(string(hash)).SetRole(user.RoleAdmin).SetAllNodes(true).Save(ctx)
+		admin, err = st.Ent.User.Create().SetEmail(strings.ToLower(email)).SetName("管理员").SetPasswordHash(string(hash)).SetRole(user.RoleAdmin).SetAllNodes(true).SetUnlimited(true).Save(ctx)
 		if err != nil {
 			return err
 		}

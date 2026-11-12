@@ -4,49 +4,205 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"time"
 
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/credential"
 )
 
-const probeCredentialTTL = 10 * time.Minute
+// 每个节点一条长期内部实测凭据：加密保存，不过期，不计入用户、订阅和额度。
+// 领取和读取不推进配置版本。协议变更和管理员轮换才更换秘密。
 
-// 内部测试授权不依赖用户、订阅或额度。数据库只保存加密秘密，Gate 用到期时间在本地撤销。
-func (s *Server) issueProbeCredential(ctx context.Context, n *ent.Node) (*ent.Credential, func(), error) {
+func (s *Server) probeCredential(ctx context.Context, n *ent.Node) (*ent.Credential, error) {
+	row, err := s.standingProbe(ctx, n.ID)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, errors.New("节点还没有内部实测凭据")
+	}
+	return s.revealProbe(row)
+}
+
+func (s *Server) ensureProbeCredential(ctx context.Context, n *ent.Node) (*ent.Credential, error) {
+	var row *ent.Credential
+	err := s.Store.Lock.Do(ctx, "probe:"+itoa(n.ID), func(ctx context.Context) error {
+		existing, err := s.standingProbe(ctx, n.ID)
+		if err != nil {
+			return err
+		}
+		if existing != nil {
+			row = existing
+			return nil
+		}
+		row, err = s.insertProbe(ctx, n)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.revealProbe(row)
+}
+
+func (s *Server) rotateProbeCredential(ctx context.Context, n *ent.Node) (*ent.Credential, error) {
+	var row *ent.Credential
+	err := s.Store.Lock.Do(ctx, "probe:"+itoa(n.ID), func(ctx context.Context) error {
+		existing, err := s.standingProbe(ctx, n.ID)
+		if err != nil {
+			return err
+		}
+		if existing == nil {
+			row, err = s.insertProbe(ctx, n)
+			return err
+		}
+		row, err = s.rewriteProbe(ctx, existing, n.Protocol)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	if _, err = s.bumpGate(ctx, n.GateID); err != nil {
+		return nil, err
+	}
+	return s.revealProbe(row)
+}
+
+func (s *Server) rewriteProbeSecret(ctx context.Context, n *ent.Node) error {
+	return s.Store.Lock.Do(ctx, "probe:"+itoa(n.ID), func(ctx context.Context) error {
+		existing, err := s.standingProbe(ctx, n.ID)
+		if err != nil {
+			return err
+		}
+		if existing == nil {
+			_, err = s.insertProbe(ctx, n)
+			return err
+		}
+		_, err = s.rewriteProbe(ctx, existing, n.Protocol)
+		return err
+	})
+}
+
+func (s *Server) standingProbe(ctx context.Context, nodeID int) (*ent.Credential, error) {
+	rows, err := s.Store.Ent.Credential.Query().Where(
+		credential.NodeIDEQ(nodeID),
+		credential.PurposeEQ("probe"),
+		credential.ProbeParentIDIsNil(),
+		credential.ExpiresAtIsNil(),
+	).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	keep := rows[0]
+	for _, row := range rows[1:] {
+		if row.ID < keep.ID {
+			keep = row
+		}
+	}
+	for _, row := range rows {
+		if row.ID == keep.ID {
+			continue
+		}
+		if err = s.Store.Ent.Credential.DeleteOneID(row.ID).Exec(ctx); err != nil && !ent.IsNotFound(err) {
+			return nil, err
+		}
+	}
+	return keep, nil
+}
+
+func (s *Server) insertProbe(ctx context.Context, n *ent.Node) (*ent.Credential, error) {
 	id, password := newSecret(n.Protocol)
 	sealedID, err := s.Crypto.Encrypt(id)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	sealedPassword, err := s.Crypto.Encrypt(password)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	expires := time.Now().Add(probeCredentialTTL)
-	c, err := s.Store.Ent.Credential.Create().SetNodeID(n.ID).SetInternal(true).SetPurpose("probe").SetExpiresAt(expires).
-		SetStatsKey("probe-" + randomHex(16)).SetUUID(sealedID).SetPassword(sealedPassword).Save(ctx)
+	return s.Store.Ent.Credential.Create().
+		SetNodeID(n.ID).SetInternal(true).SetPurpose("probe").
+		SetStatsKey("probe-" + randomHex(16)).
+		SetUUID(sealedID).SetPassword(sealedPassword).
+		Save(ctx)
+}
+
+func (s *Server) rewriteProbe(ctx context.Context, row *ent.Credential, protocol string) (*ent.Credential, error) {
+	id, password := newSecret(protocol)
+	sealedID, err := s.Crypto.Encrypt(id)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	revoke := func() {
-		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-		defer cancel()
-		if err := s.Store.Ent.Credential.DeleteOneID(c.ID).Exec(cleanup); err != nil && !ent.IsNotFound(err) {
-			slog.Error("回收内部测试凭据失败", "node", n.ID, "err", redact(err.Error()))
+	sealedPassword, err := s.Crypto.Encrypt(password)
+	if err != nil {
+		return nil, err
+	}
+	return row.Update().SetUUID(sealedID).SetPassword(sealedPassword).Save(ctx)
+}
+
+func (s *Server) revealProbe(row *ent.Credential) (*ent.Credential, error) {
+	if row == nil {
+		return nil, errors.New("节点还没有内部实测凭据")
+	}
+	plain := *row
+	var err error
+	if plain.UUID, err = s.reveal(row.UUID); err != nil {
+		return nil, err
+	}
+	if plain.Password, err = s.reveal(row.Password); err != nil {
+		return nil, err
+	}
+	return &plain, nil
+}
+
+// migrateProbeCredentials 给已有节点补长期凭据，并清掉过期的临时凭据。
+// 新凭据要进入内核配置，所以只在这里推进一次版本。
+func (s *Server) migrateProbeCredentials(ctx context.Context) error {
+	if err := s.cleanupProbeCredentials(ctx, time.Now(), false); err != nil {
+		return err
+	}
+	nodes, err := s.Store.Ent.Node.Query().All(ctx)
+	if err != nil {
+		return err
+	}
+	var gates []int
+	for _, n := range nodes {
+		existed, err := s.standingProbe(ctx, n.ID)
+		if err != nil {
+			return err
 		}
-		if err := s.bumpGates(cleanup, []int{n.GateID}); err != nil {
-			slog.Error("通知撤销内部测试凭据失败", "node", n.ID, "err", redact(err.Error()))
+		if existed != nil {
+			continue
+		}
+		if _, err = s.ensureProbeCredential(ctx, n); err != nil {
+			return err
+		}
+		gates = append(gates, n.GateID)
+	}
+	return s.bumpGates(WithRevisionCause(ctx, "probe.migrate", 0), dedupe(gates))
+}
+
+// cleanupProbeCredentials 只删除过期的临时实测凭据和 WireGuard 检测子凭据。
+// 长期凭据没有到期时间，不在这里删除，也不推进配置版本。
+func (s *Server) cleanupProbeCredentials(ctx context.Context, now time.Time, _ bool) error {
+	rows, err := s.Store.Ent.Credential.Query().Where(credential.Or(
+		credential.ProbeParentIDNotNil(),
+		credential.And(credential.PurposeEQ("probe"), credential.ExpiresAtNotNil(), credential.ExpiresAtLTE(now)),
+	)).All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, c := range rows {
+		if c.Purpose == "probe" && c.ExpiresAt == nil && c.ProbeParentID == nil {
+			continue
+		}
+		if err = s.Store.Ent.Credential.DeleteOne(c).Exec(ctx); err != nil && !ent.IsNotFound(err) {
+			return err
 		}
 	}
-	if err = s.bumpGates(ctx, []int{n.GateID}); err != nil {
-		revoke()
-		return nil, nil, err
-	}
-	plain := *c
-	plain.UUID, plain.Password = id, password
-	return &plain, revoke, nil
+	return nil
 }
 
 func (s *Server) waitProbeApplied(ctx context.Context, n *ent.Node) (*ent.Gate, error) {
@@ -74,31 +230,6 @@ func (s *Server) waitProbeApplied(ctx context.Context, n *ent.Node) (*ent.Gate, 
 	}
 }
 
-func (s *Server) cleanupProbeCredentials(ctx context.Context, now time.Time, all bool) error {
-	q := s.Store.Ent.Credential.Query().Where(credential.Or(credential.PurposeEQ("probe"), credential.ProbeParentIDNotNil()))
-	if !all {
-		q = q.Where(credential.Or(credential.ProbeParentIDNotNil(), credential.ExpiresAtIsNil(), credential.ExpiresAtLTE(now)))
-	}
-	rows, err := q.All(ctx)
-	if err != nil {
-		return err
-	}
-	var gates []int
-	for _, c := range rows {
-		if n, e := s.Store.Ent.Node.Get(ctx, c.NodeID); e == nil {
-			gates = append(gates, n.GateID)
-		}
-		if e := s.Store.Ent.Credential.DeleteOne(c).Exec(ctx); e != nil && !ent.IsNotFound(e) {
-			return e
-		}
-	}
-	if len(gates) > 0 {
-		return s.bumpGates(ctx, dedupe(gates))
-	}
-	return nil
-}
-
-// 只绑定业务配置；测试凭据发放与回收引起的配置版本变化不使结果失效。
 func (s *Server) probeFingerprint(ctx context.Context, n *ent.Node, g *ent.Gate) (string, error) {
 	return s.probePathFingerprint(ctx, n, g, map[int]bool{})
 }

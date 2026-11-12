@@ -3,11 +3,10 @@ import { useId, useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "../lib/query";
 import { QRCodeSVG } from "qrcode.react";
-import { KeyRound, Smartphone, LockKeyhole } from "lucide-react";
 import {
   Badge,
   CodeBlock,
-  IconTile,
+  InsightBanner,
   Notice,
   PageHeader,
   PageState,
@@ -35,34 +34,24 @@ type Action = "totp" | "passkey" | "password" | "disable" | "delete-key";
 type Field = "password" | "code" | "next";
 // 登录方式卡片：图标 + 当前状态 + 标题说明 + 操作
 function SecurityMethod({
-  icon,
   status,
   title,
   description,
   children,
 }: {
-  icon: ReactNode;
   status: ReactNode;
   title: string;
   description: string;
   children: ReactNode;
 }) {
   return (
-    <Card>
-      <CardContent className="grid h-full content-start gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <IconTile size="md">{icon}</IconTile>
-          <Badge variant="soft">{status}</Badge>
-        </div>
-        <SectionHeader
-          level="h3"
-          flush
-          className="[&_p]:min-h-10 max-md:[&_p]:min-h-0"
-          title={title}
-          description={description}
-        />
-        <div className="flex flex-wrap items-center gap-2">{children}</div>
-      </CardContent>
+    <Card className="grid content-start gap-[13px] px-[21px] py-[21px]" aria-label={title}>
+      <div className="flex items-center justify-between gap-3">
+        <b className="text-subheadline">{title}</b>
+        {status}
+      </div>
+      <p className="m-0 text-meta text-[var(--weir-ink-2)]">{description}</p>
+      <div className="flex flex-wrap items-center gap-2">{children}</div>
     </Card>
   );
 }
@@ -162,53 +151,57 @@ export function SecurityPage({ loginRequired }: { loginRequired: () => void }) {
   useConsoleContext({ page: "账户安全", dialog: action ? { title: titles[action] } : undefined, form: action ? [field("password", "当前密码", password, true), field("code", "验证码", code, true), field("next", "新密码", next, true)] : undefined });
   return (
     <div className="stack security-page">
-      <PageHeader title="账户安全" description="管理登录方式与有效会话。设备配对身份与账户二次验证分别管理。" />
+      <PageHeader size="data" title="账户安全" description={account.data ? <span className="weir-sum"><span>通行密钥 <b>{keys.isPending || keys.error ? "未知" : (keys.data?.items.length ?? 0) > 0 ? "已启用" : "未绑定"}</b></span>{account.data.totp_enrolled ? <span>两步验证 <b>已启用</b></span> : <span className="text-[var(--weir-warn-ink)]">两步验证未开启</span>}</span> : "管理登录方式与有效会话。"} />
       {notice && <Notice role="status">{notice}</Notice>}
       {account.isPending ? (
         <State loading />
       ) : account.error ? (
         <State error={account.error} onRetry={() => account.refetch()} />
       ) : (
+        <>
+        {!account.data.totp_enrolled && (
+          <InsightBanner icon="!" laya={false} title="开启两步验证" progress="密码泄露了，别人也登不进来" action={<Button disabled={!policy.data?.totp_enabled} onClick={() => open("totp")}>开启</Button>} />
+        )}
         <div className="security-method-grid">
           <SecurityMethod
-            icon={<LockKeyhole />}
-            status="已设置"
+            status={<span className="text-meta text-[var(--weir-ink-3)]">已设置</span>}
             title="登录密码"
-            description="修改后撤销所有旧会话，重新登录。"
+            description="建议和通行密钥一起使用；修改后其他设备需要重新登录"
           >
-            <Button variant="outline" onClick={() => open("password")}>
+            <Button size="sm" variant="ghost" onClick={() => open("password")}>
               修改密码
             </Button>
           </SecurityMethod>
           <SecurityMethod
-            icon={<Smartphone />}
-            status={account.data?.totp_enrolled ? "已绑定" : "未绑定"}
-            title="身份验证器"
-            description="使用动态验证码登录，恢复码仅展示一次。"
+            status={account.data?.totp_enrolled ? <Badge variant="soft" tone="ok">已开启</Badge> : <Badge variant="soft" tone="warn">未开启</Badge>}
+            title="两步验证"
+            description="验证器 App 的 6 位动态码"
           >
             <Button
-              variant="outline"
+              size="sm"
+              variant="ghost"
+              className="px-0"
               disabled={!account.data?.totp_enrolled && !policy.data?.totp_enabled}
               onClick={() => open(account.data?.totp_enrolled ? "disable" : "totp")}
             >
-              {account.data?.totp_enrolled ? "停用 TOTP" : "设置 TOTP"}
+              {account.data?.totp_enrolled ? "停用" : "开启"}
             </Button>
             {policy.data && !policy.data.totp_enabled && !account.data?.totp_enrolled && (
               <small>管理员尚未开放此方式</small>
             )}
           </SecurityMethod>
           <SecurityMethod
-            icon={<KeyRound />}
-            status={keys.isPending ? "加载中" : keys.error ? "未知" : `${keys.data?.items?.length ?? 0} 个`}
-            title="Passkey"
-            description="使用设备生物识别或安全密钥完成登录。"
+            status={keys.isPending || keys.error ? <span className="text-meta text-[var(--weir-ink-3)]">未知</span> : (keys.data?.items?.length ?? 0) > 0 ? <Badge variant="soft" tone="ok">已启用</Badge> : <span className="text-meta text-[var(--weir-ink-3)]">未绑定</span>}
+            title="通行密钥"
+            description="用设备的指纹、面容或安全密钥登录"
           >
-            <Button variant="outline" disabled={!policy.data?.passkey_enabled} onClick={() => open("passkey")}>
-              绑定 Passkey
+            <Button size="sm" variant="ghost" disabled={!policy.data?.passkey_enabled} onClick={() => open("passkey")}>
+              {(keys.data?.items?.length ?? 0) > 0 ? "再添加一个" : "添加通行密钥"}
             </Button>
             {policy.data && !policy.data.passkey_enabled && <small>管理员尚未开放此方式</small>}
           </SecurityMethod>
         </div>
+        </>
       )}
       {policy.error && <State error={policy.error} onRetry={() => policy.refetch()} />}
       <Card>

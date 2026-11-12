@@ -9,6 +9,30 @@ import (
 	"github.com/shusfun/weir/internal/store/ent"
 )
 
+// The AccessCodeFunc type is an adapter to allow the use of ordinary
+// function as AccessCode mutator.
+type AccessCodeFunc func(context.Context, *ent.AccessCodeMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AccessCodeFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AccessCodeMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AccessCodeMutation", m)
+}
+
+// The AccountPlanFunc type is an adapter to allow the use of ordinary
+// function as AccountPlan mutator.
+type AccountPlanFunc func(context.Context, *ent.AccountPlanMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AccountPlanFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AccountPlanMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AccountPlanMutation", m)
+}
+
 // The AuditFunc type is an adapter to allow the use of ordinary
 // function as Audit mutator.
 type AuditFunc func(context.Context, *ent.AuditMutation) (ent.Value, error)

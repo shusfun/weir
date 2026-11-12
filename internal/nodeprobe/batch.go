@@ -1,6 +1,7 @@
 package nodeprobe
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -21,6 +22,7 @@ type BatchOptions struct {
 	Binary, Target string
 	Run, Check     []string
 	Proxies        []map[string]any
+	PublicOnly     bool
 }
 
 // Batch 一轮共用一个临时 mihomo；每条线路由内核完成协议握手并请求指定地址。
@@ -46,6 +48,19 @@ func Batch(ctx context.Context, o BatchOptions) (map[string]Check, error) {
 	address := net.JoinHostPort("127.0.0.1", fmt.Sprint(port))
 	cfg := map[string]any{"allow-lan": false, "bind-address": "127.0.0.1", "external-controller": address, "secret": secret,
 		"log-level": "warning", "mode": "rule", "proxies": o.Proxies, "rules": []string{"MATCH,REJECT"}}
+	if o.PublicOnly {
+		hosts, err := PublicHosts(ctx, o.Proxies, o.Target)
+		if err != nil { return nil, err }
+		cfg["hosts"] = hosts
+		mixed, err := freePort("tcp")
+		if err != nil {return nil,err}
+		for mixed==port {mixed,err=freePort("tcp");if err!=nil{return nil,err}}
+		cfg["mixed-port"] = mixed
+		names:=make([]string,0,len(o.Proxies))
+		for _,proxy:=range o.Proxies { name,_:=proxy["name"].(string);if name=="" || name=="weir-probe-selection" {return nil,fmt.Errorf("probe_name_invalid")}; names=append(names,name) }
+		cfg["proxy-groups"]=[]any{map[string]any{"name":"weir-probe-selection","type":"select","proxies":names}}
+		cfg["rules"]=[]string{"MATCH,weir-probe-selection"}
+	}
 	body, err := json.Marshal(cfg)
 	if err != nil {
 		return nil, err
@@ -94,6 +109,9 @@ wait:
 	}
 	hc := &http.Client{Timeout: 12 * time.Second, Transport: &http.Transport{Proxy: nil}}
 	defer hc.CloseIdleConnections()
+	if o.PublicOnly {
+		return publicBatch(ctx,o,results,address,secret,cfg["mixed-port"].(int),hc)
+	}
 	for _, proxy := range o.Proxies {
 		name, _ := proxy["name"].(string)
 		query := url.Values{"url": {o.Target}, "timeout": {"8000"}}
@@ -128,6 +146,38 @@ wait:
 		}
 	}
 	return results, nil
+}
+
+func publicBatch(ctx context.Context, o BatchOptions, results map[string]Check, controller, secret string, mixed int, hc *http.Client) (map[string]Check,error) {
+	proxy,_:=url.Parse(fmt.Sprintf("socks5://127.0.0.1:%d",mixed))
+	transport:=&http.Transport{Proxy:http.ProxyURL(proxy),DisableKeepAlives:true}
+	defer transport.CloseIdleConnections()
+	probe:=&http.Client{Timeout:10*time.Second,Transport:transport,CheckRedirect:func(*http.Request,[]*http.Request)error{return http.ErrUseLastResponse}}
+	for _,node:=range o.Proxies {
+		if err:=ctx.Err();err!=nil{return results,err}
+		name,_:=node["name"].(string)
+		body,_:=json.Marshal(map[string]string{"name":name})
+		req,err:=http.NewRequestWithContext(ctx,http.MethodPut,"http://"+controller+"/proxies/weir-probe-selection",bytes.NewReader(body))
+		if err!=nil{return results,err}
+		req.Header.Set("Authorization","Bearer "+secret)
+		req.Header.Set("Content-Type","application/json")
+		resp,err:=hc.Do(req)
+		if err!=nil{return results,fmt.Errorf("probe_selection_failed")}
+		_ = resp.Body.Close()
+		if resp.StatusCode!=http.StatusNoContent{return results,fmt.Errorf("probe_selection_failed")}
+		request,err:=http.NewRequestWithContext(ctx,http.MethodGet,o.Target,nil)
+		if err!=nil{return results,err}
+		started:=time.Now()
+		response,err:=probe.Do(request)
+		check:=Check{Status:"failed"}
+		if err!=nil {check.Why=Diagnostic(err.Error())} else {
+			_,readErr:=io.Copy(io.Discard,io.LimitReader(response.Body,1025))
+			_ = response.Body.Close()
+			if readErr==nil && (response.StatusCode==http.StatusNoContent || response.StatusCode==http.StatusOK) {check.Status="passed";check.LatencyMS=max(1,time.Since(started).Milliseconds())} else {check.Why=fmt.Sprintf("测试端点返回 HTTP %d",response.StatusCode)}
+		}
+		results[name]=check
+	}
+	return results,nil
 }
 
 // 只分类内核实际报告的阶段；超时不推断防火墙或云安全组。

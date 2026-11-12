@@ -100,6 +100,13 @@ func loopbackOrigin(raw string) bool {
 	return strings.EqualFold(u.Hostname(), "localhost") || ip != nil && ip.IsLoopback()
 }
 
+// SetOriginForTest 让隔离验收把实测目标指到本机 HTTPS，并绕过「只能记录当前域名」的页面限制。
+func (s *Server) SetOriginForTest(origin string) {
+	s.origin.Lock()
+	s.origin.value, s.origin.loaded = origin, true
+	s.origin.Unlock()
+}
+
 func (s *Server) getCenterOrigin(c *gin.Context) {
 	ctx := c.Request.Context()
 	origin, current := s.centerOrigin(ctx), requestOrigin(c.Request)

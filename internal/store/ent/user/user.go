@@ -16,6 +16,8 @@ const (
 	FieldID = "id"
 	// FieldEmail holds the string denoting the email field in the database.
 	FieldEmail = "email"
+	// FieldNormalizedEmail holds the string denoting the normalized_email field in the database.
+	FieldNormalizedEmail = "normalized_email"
 	// FieldName holds the string denoting the name field in the database.
 	FieldName = "name"
 	// FieldPasswordHash holds the string denoting the password_hash field in the database.
@@ -26,6 +28,8 @@ const (
 	FieldEnabled = "enabled"
 	// FieldQuota holds the string denoting the quota field in the database.
 	FieldQuota = "quota"
+	// FieldUnlimited holds the string denoting the unlimited field in the database.
+	FieldUnlimited = "unlimited"
 	// FieldUsed holds the string denoting the used field in the database.
 	FieldUsed = "used"
 	// FieldExpiresAt holds the string denoting the expires_at field in the database.
@@ -58,11 +62,13 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldEmail,
+	FieldNormalizedEmail,
 	FieldName,
 	FieldPasswordHash,
 	FieldRole,
 	FieldEnabled,
 	FieldQuota,
+	FieldUnlimited,
 	FieldUsed,
 	FieldExpiresAt,
 	FieldMonthlyReset,
@@ -90,6 +96,8 @@ func ValidColumn(column string) bool {
 var (
 	// EmailValidator is a validator for the "email" field. It is called by the builders before save.
 	EmailValidator func(string) error
+	// NormalizedEmailValidator is a validator for the "normalized_email" field. It is called by the builders before save.
+	NormalizedEmailValidator func(string) error
 	// DefaultName holds the default value on creation for the "name" field.
 	DefaultName string
 	// NameValidator is a validator for the "name" field. It is called by the builders before save.
@@ -100,6 +108,8 @@ var (
 	DefaultQuota int64
 	// QuotaValidator is a validator for the "quota" field. It is called by the builders before save.
 	QuotaValidator func(int64) error
+	// DefaultUnlimited holds the default value on creation for the "unlimited" field.
+	DefaultUnlimited bool
 	// DefaultUsed holds the default value on creation for the "used" field.
 	DefaultUsed int64
 	// UsedValidator is a validator for the "used" field. It is called by the builders before save.
@@ -163,6 +173,11 @@ func ByEmail(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEmail, opts...).ToFunc()
 }
 
+// ByNormalizedEmail orders the results by the normalized_email field.
+func ByNormalizedEmail(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldNormalizedEmail, opts...).ToFunc()
+}
+
 // ByName orders the results by the name field.
 func ByName(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldName, opts...).ToFunc()
@@ -186,6 +201,11 @@ func ByEnabled(opts ...sql.OrderTermOption) OrderOption {
 // ByQuota orders the results by the quota field.
 func ByQuota(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldQuota, opts...).ToFunc()
+}
+
+// ByUnlimited orders the results by the unlimited field.
+func ByUnlimited(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUnlimited, opts...).ToFunc()
 }
 
 // ByUsed orders the results by the used field.

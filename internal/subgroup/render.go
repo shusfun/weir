@@ -39,17 +39,20 @@ func IsINIPath(raw string) bool {
 
 // RenderOptions 对应上游 builtinOptions。
 type RenderOptions struct {
-	FileName       string
-	RuleLevel      string // none / lite / std / full（模板为远程或自定义时为 none）
-	Interval       int
-	SkipCertVerify bool
-	EnableUDP      bool
-	EnableTFO      bool
-	UserAgent      string
-	Query          string // 原始查询串（客户端识别、dns-mode 等）
-	ManagedURL     string
-	DNSMode        string
-	CustomDNS      string
+	Engine          string
+	ExternalTemplate string
+	FileName        string
+	RuleLevel       string // none / lite / std / full（模板为远程或自定义时为 none）
+	Interval        int
+	SkipCertVerify  bool
+	EnableUDP       bool
+	EnableTFO       bool
+	UserAgent       string
+	Query           string // 原始查询串（客户端识别、dns-mode 等）
+	ManagedURL      string
+	DNSMode         string
+	CustomDNS       string
+	RegionOverrides []any
 }
 
 // Formats 是支持的订阅目标格式。
@@ -81,7 +84,7 @@ func (o RenderOptions) object() *js.Object {
 		"userAgent", o.UserAgent, "searchParams", sp, "hiddifyCompatible", sub.IsHiddifyAgent(o.UserAgent),
 		"dnsMode", dns, "fileName", o.FileName, "managedConfigUrl", o.ManagedURL, "interval", float64(interval),
 		"skipCertVerify", o.SkipCertVerify, "enableUdp", o.EnableUDP, "enableTfo", o.EnableTFO, "ruleLevel", level,
-		"regionOverrides", js.Arr(), "isMeta", sub.IsMetaCore(o.UserAgent, sp), "customDnsOverride", o.CustomDNS,
+		"regionOverrides", toJS(o.RegionOverrides), "isMeta", sub.IsMetaCore(o.UserAgent, sp), "customDnsOverride", o.CustomDNS,
 	)
 }
 
@@ -91,19 +94,24 @@ func Render(nodeList, target string, o RenderOptions, t Template) ([]byte, strin
 	if target == "base64" || target == "" || target == "v2ray" || target == "trojan" || target == "nodes" {
 		return []byte(base64.StdEncoding.EncodeToString([]byte(nodeList))), "text/plain; charset=utf-8", nil
 	}
+	if t.INI && t.Text != "" {
+		if err := CheckTemplate("ini", t.Text); err != nil {
+			return nil, "", err
+		}
+	}
 	opts := o.object()
 	content, ok, err := sub.TransformBuiltinSubscription(nodeList, target, opts)
 	if err != nil {
 		return nil, "", err
 	}
 	if !ok {
-		return []byte(base64.StdEncoding.EncodeToString([]byte(nodeList))), "text/plain; charset=utf-8", nil
+		return nil, "", errors.New("unsupported_target")
 	}
 	contentType := "text/plain; charset=utf-8"
 	if t.Text != "" && !js.Truthy(opts.Get("hiddifyCompatible")) {
 		params := js.Obj("nodeList", nodeList, "fileName", o.FileName, "targetFormat", target, "ruleLevel", opts.Get("ruleLevel"),
 			"interval", opts.Get("interval"), "managedConfigUrl", o.ManagedURL, "skipCertVerify", o.SkipCertVerify,
-			"enableUdp", o.EnableUDP, "isMeta", opts.Get("isMeta"), "customDnsOverride", o.CustomDNS, "dnsMode", opts.Get("dnsMode"))
+			"enableUdp", o.EnableUDP, "enableTfo", o.EnableTFO, "regionOverrides", opts.Get("regionOverrides"), "isMeta", opts.Get("isMeta"), "customDnsOverride", o.CustomDNS, "dnsMode", opts.Get("dnsMode"))
 		switch {
 		case t.INI:
 			switch target {
@@ -127,7 +135,11 @@ func Render(nodeList, target string, o RenderOptions, t Template) ([]byte, strin
 		case target == "clash":
 			if c, ok := clashYAMLProfile(t.Text, nodeList, opts); ok {
 				content = c
+			} else {
+				return nil, "", errors.New("invalid_yaml_template")
 			}
+		default:
+			return nil, "", errors.New("template_target_unsupported")
 		}
 	}
 	switch target {
@@ -224,6 +236,9 @@ func CheckTemplate(format, content string) error {
 		return nil
 	}
 	model := sub.ParseIniTemplate(content, js.Obj())
+	if err := sub.ValidateTemplateModelPatterns(model); err != nil {
+		return err
+	}
 	groups, _ := model.Get("groups").(*js.Array)
 	rules, _ := model.Get("rules").(*js.Array)
 	if (groups == nil || groups.Len() == 0) && (rules == nil || rules.Len() == 0) {

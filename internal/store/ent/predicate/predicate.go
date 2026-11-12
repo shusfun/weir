@@ -6,6 +6,12 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// AccessCode is the predicate function for accesscode builders.
+type AccessCode func(*sql.Selector)
+
+// AccountPlan is the predicate function for entaccountplan builders.
+type AccountPlan func(*sql.Selector)
+
 // Audit is the predicate function for audit builders.
 type Audit func(*sql.Selector)
 

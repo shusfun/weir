@@ -5,7 +5,8 @@
 // 点击处展开：press-origin 记下按压点，弹窗从那里展开、收回；chip（标签键）、split-button（分体按钮）、
 // file-picker（选择 / 拖入文件）；copy-field（只读地址框，末尾复制图标）。按压反馈统一为缩小 + 填充色（theme.css）。
 // 任务与对象：job（任务位 JobLine / 任务详情 JobView）、object-link（对象链接、详情窗记在地址栏），只管显示，数据由调用方传入。
-// 样式入口：src/styles/tokens.css（设计变量）、theme.css（Tailwind 映射、按压反馈、触屏命中区）、instruments.css（仪表部件）、
+// 新范式：squircle / glass-folder / dot-matrix / timeline / insight-banner / hold-button / dsh-frame /
+// globe-background / sparkline / metric-strip / health-list / motion-tier。样式入口：src/styles/tokens.css（设计变量）、theme.css（Tailwind 映射、按压反馈、触屏命中区）、instruments.css（仪表部件）、
 // controls.css（开关、分段控件、滚动区）、motion.css（动效部件）。
 export * from "./button";
 export * from "./input";
@@ -65,3 +66,24 @@ export * from "./action-button";
 export * from "./job";
 export * from "./object-link";
 export * from "./text-link";
+export * from "./squircle";
+export * from "./glass-folder";
+export * from "./dot-ring";
+export * from "./object-header";
+export * from "./avatar";
+export * from "./flight-routes";
+export * from "./dot-matrix";
+export * from "./timeline";
+export * from "./insight-banner";
+export * from "./hold-button";
+export * from "./dsh-frame";
+export * from "./globe-background";
+export * from "./sparkline";
+export * from "./metric-strip";
+export * from "./health-list";
+export * from "./motion-tier";
+export * from "./board";
+
+export { TrafficUsage, TrafficRing, trafficReading, type TrafficUsageProps } from "./traffic-usage";
+
+export { OverlayBody, ActionGroup } from "./overlay-layout";

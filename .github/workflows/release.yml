@@ -6,11 +6,11 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Tag to verify
+        description: Public tag to build (select the same tag as workflow ref)
         required: true
         type: string
       dry_run:
-        description: Build without publishing or changing VERSION
+        description: Build without publishing
         required: false
         type: boolean
         default: false
@@ -22,71 +22,87 @@ concurrency:
   group: release-${{ github.repository }}
   cancel-in-progress: false
 
+env:
+  WEIR_OPERATION_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+
 jobs:
   build:
+    if: github.repository == 'shusfun/weir'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      commit: ${{ steps.version.outputs.commit }}
+      tag: ${{ steps.version.outputs.tag }}
       dry_run: ${{ steps.version.outputs.dry_run }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - id: version
-        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RELEASE_REF: ${{ github.ref }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          tag="${{ inputs.tag || github.ref_name }}"
-          python3 deploy/version.py match VERSION "$tag"
+          set -euo pipefail
+          test "$RELEASE_REF" = "refs/tags/$RELEASE_TAG"
+          python3 deploy/release_public.py check --tag "$RELEASE_TAG"
           echo "version=$(python3 deploy/version.py check VERSION)" >> "$GITHUB_OUTPUT"
-          if [ "${{ inputs.dry_run }}" = "true" ]; then echo "dry_run=true" >> "$GITHUB_OUTPUT"; else echo "dry_run=false" >> "$GITHUB_OUTPUT"; fi
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "dry_run=${DRY_RUN:-false}" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@v4
         with:
           version: 10.17.1
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: false
-      - uses: actions/cache/restore@v4
-        id: go-cache
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: release-go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
-          restore-keys: |
-            release-go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum') }}-
-            release-go-${{ runner.os }}-${{ runner.arch }}-
       - run: pnpm install --frozen-lockfile
+      - run: pnpm check
       - run: pnpm build
-      - name: Package linux/amd64 and linux/arm64
-        shell: bash
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
+      - name: Verify committed console assets
+        run: |
+          git diff --exit-code -- apps/weir/static
+          test -z "$(git ls-files --others --exclude-standard apps/weir/static)"
+      - name: Check Go workspace modules
         run: |
           set -euo pipefail
-          revision="$(git rev-parse HEAD)"
-          flags="-s -w -X github.com/shusfun/weir/internal/buildinfo.Version=${VERSION} -X github.com/shusfun/weir/internal/buildinfo.Revision=${revision}"
+          go build ./...
+          go vet ./...
+          go test -timeout=40m ./...
+          for module in packages/dsh packages/laya; do
+            if [ -f "$module/go.mod" ]; then
+              (cd "$module" && go build ./... && go vet ./... && go test ./...)
+            fi
+          done
+      - name: Check deployment scripts
+        run: |
+          set -euo pipefail
+          sh -n deploy/install.sh
+          bash -n deploy/install-online.sh
+          python3 -m unittest discover -s deploy -p '*_test.py'
+      - name: Package linux/amd64 and linux/arm64
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PUBLIC_COMMIT: ${{ steps.version.outputs.commit }}
+        run: |
+          set -euo pipefail
+          flags="-s -w -X github.com/shusfun/weir/internal/buildinfo.Version=${VERSION} -X github.com/shusfun/weir/internal/buildinfo.Revision=${PUBLIC_COMMIT}"
           for arch in amd64 arm64; do
             release="dist/weir-${VERSION}-linux-${arch}"
             mkdir -p "$release"
-            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -ldflags "$flags" -o "$release/weir" ./apps/weir
-            cp deploy/install.sh deploy/sources.json deploy/version.py "$release/"
-            cp VERSION "$release/VERSION"
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -buildvcs=false -ldflags "$flags" -o "$release/weir" ./apps/weir
+            cp deploy/install.sh deploy/sources.json deploy/version.py VERSION "$release/"
           done
           python3 deploy/package_release.py "$VERSION" amd64 arm64
-      - if: steps.go-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ steps.go-cache.outputs.cache-primary-key }}
       - uses: actions/upload-artifact@v4
         with:
           name: weir-linux
@@ -97,60 +113,22 @@ jobs:
 
   publish:
     needs: build
+    if: needs.build.outputs.dry_run != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ needs.build.outputs.commit }}
           fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           name: weir-linux
           path: dist
-      - name: Publish release
-        if: needs.build.outputs.dry_run != 'true'
+      - name: Publish verified public assets
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.build.outputs.version }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          tag="v${VERSION}"
-          test -s "dist/weir-${VERSION}-linux-amd64.tar.gz"
-          test -s "dist/weir-${VERSION}-linux-arm64.tar.gz"
-          test -s dist/checksums.txt
-          notes=".github/release-notes/${tag}.md"
-          test -s "$notes"
-          for heading in '## 概览' '## 主要变化' '## 修复' '## 升级与兼容' '## 验证'; do
-            grep -Fqx "$heading" "$notes"
-          done
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release edit "$tag" --title "$tag" --notes-file "$notes"
-            gh release upload "$tag" "dist/weir-${VERSION}-linux-amd64.tar.gz" "dist/weir-${VERSION}-linux-arm64.tar.gz" dist/checksums.txt --clobber
-          else
-            gh release create "$tag" "dist/weir-${VERSION}-linux-amd64.tar.gz" "dist/weir-${VERSION}-linux-arm64.tar.gz" dist/checksums.txt --title "$tag" --notes-file "$notes" --verify-tag
-          fi
-      - name: Advance patch version
-        if: needs.build.outputs.dry_run != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.build.outputs.version }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          tag="v${VERSION}"
-          gh release view "$tag" --json assets --jq '.assets[].name' | grep -qx "weir-${VERSION}-linux-amd64.tar.gz"
-          current=$(python3 deploy/version.py check VERSION)
-          if [ "$current" != "$VERSION" ]; then
-            echo "default branch VERSION is $current, released $VERSION; not rewriting it"
-            exit 0
-          fi
-          python3 deploy/version.py next VERSION > VERSION.next
-          mv VERSION.next VERSION
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add VERSION
-          git commit -m "chore: advance VERSION to $(cat VERSION) [skip ci]"
-          git push origin "HEAD:${{ github.event.repository.default_branch }}"
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+          PUBLIC_COMMIT: ${{ needs.build.outputs.commit }}
+        run: python3 deploy/release_public.py publish --repository "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG" --commit "$PUBLIC_COMMIT"

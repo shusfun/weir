@@ -285,7 +285,7 @@ func TestRulesAndDNSParity(t *testing.T) {
 	add(oracleCase{Name: "DEFAULT_DNS_CONFIG", Mod: sd, Fn: "DEFAULT_DNS_CONFIG", Go: func() (any, error) { return DefaultDNSConfig(), nil }})
 
 	const rg = "modules/subscription/region-groups.js"
-	overrides := mustJSON(t, `{"regionOverrides": [{"pattern": "IPv6", "region": " 日本 "}, {"pattern": "(bad"}, {"pattern": "socks", "region": "印度", "flags": "gi"}, {"pattern": "socks", "region": "印度", "flags": "gi"}]}`).(*js.Object)
+	overrides := mustJSON(t, `{"regionOverrides": [{"pattern": "IPv6", "region": " 日本 "}, {"pattern": "(bad"}, {"pattern": "socks", "region": "印度", "flags": "i"}, {"pattern": "socks", "region": "印度", "flags": "i"}]}`).(*js.Object)
 	add(oracleCase{Name: "groupNodeLinesByRegion", Mod: rg, Fn: "groupNodeLinesByRegion", Args: []any{objs(proxies), overrides},
 		Go: func() (any, error) { return objs(GroupNodeLinesByRegion(proxies, overrides)), nil }})
 	var lines []*js.Object

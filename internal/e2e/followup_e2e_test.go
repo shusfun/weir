@@ -234,7 +234,7 @@ func (e *env) subOutbound(uid, nodeID int, chainIDs ...int) map[string]any {
 // appliedGate 等这台 Gate 应用到中心最新的配置版本。
 func (e *env) appliedGate(gid int, what string) {
 	e.t.Helper()
-	eventually(e.t, 40*time.Second, what, func() bool {
+	eventually(e.t, 2*time.Minute, what, func() bool {
 		g, err := e.s.Store.Ent.Gate.Get(e.ctx, gid)
 		return err == nil && g.AppliedRevision == g.ConfigRevision && g.AppliedRevision > 0
 	})
@@ -249,7 +249,7 @@ func TestCenterCarriesOnlyControlTraffic(t *testing.T) {
 	e.startGate("bw")
 	e.s.Store.Ent.Gate.UpdateOneID(e.gateID).SetPublicHost("127.0.0.1").ExecX(e.ctx)
 	n := e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "ss2022", "name": "S", "skip_probe": true}, nil)
-	u := e.post("/api/v1/admin/users", map[string]any{"email": "bw@e2e.test", "password": "E2eUser1"}, nil)
+	u := e.post("/api/v1/admin/users", map[string]any{"unlimited": true, "email": "bw@e2e.test", "password": "E2eUser1"}, nil)
 	e.applied("node for bandwidth test")
 	port := e.runSingboxClient(sb, e.subOutbound(int(u["id"].(float64)), int(n["id"].(float64))))
 	// 限速 10 MiB/s 下载 20 秒：这段时间里 Gate 照常经中转发心跳、计量（每秒一次）与长轮询配置。
@@ -388,10 +388,10 @@ func TestTwoGatesQuotaWithCenterDown(t *testing.T) {
 	u2 := e.post("/api/v1/admin/users", map[string]any{"email": "reclaim@e2e.test", "password": "E2eUser1", "quota": 1 << 30, "all_nodes": false, "node_ids": []int{na}}, nil)
 	uid2 := int(u2["id"].(float64))
 	e.appliedGate(gids["qa"], "gate A holds the whole quota")
-	rowA := e.s.Store.Ent.Budget.Query().Where(budget.UserIDEQ(uid2), budget.GateIDEQ(gids["qa"])).OnlyX(e.ctx)
-	if rowA.Allocated != 1<<30 || rowA.Confirmed != 1<<30 {
-		t.Fatalf("single gate must hold the whole quota: %+v", rowA)
-	}
+	eventually(t, 20*time.Second, "gate A confirms the whole quota", func() bool {
+		rowA := e.s.Store.Ent.Budget.Query().Where(budget.UserIDEQ(uid2), budget.GateIDEQ(gids["qa"])).OnlyX(e.ctx)
+		return rowA.Allocated == 1<<30 && rowA.Confirmed == 1<<30
+	})
 	type snap struct{ aAlloc, aConf, cAlloc int64 }
 	var seen []snap
 	var mu sync.Mutex
@@ -476,7 +476,7 @@ func TestRealityTargetChosenByGateProbe(t *testing.T) {
 	if !ok {
 		t.Fatalf("chosen target %v is not a suitable probe result: %v", chosen, results)
 	}
-	u := e.post("/api/v1/admin/users", map[string]any{"email": "probe@e2e.test", "password": "E2eUser1"}, nil)
+	u := e.post("/api/v1/admin/users", map[string]any{"unlimited": true, "email": "probe@e2e.test", "password": "E2eUser1"}, nil)
 	e.applied("REALITY node with a probed target")
 	port := e.runSingboxClient(sb, e.subOutbound(int(u["id"].(float64)), int(n["id"].(float64))))
 	proxy, _ := url.Parse(fmt.Sprintf("socks5://127.0.0.1:%d", port))

@@ -1,13 +1,14 @@
 package center
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,7 +17,6 @@ import (
 
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/passkey"
-	"github.com/shusfun/weir/internal/store/ent/user"
 )
 
 type passkeyUser struct {
@@ -109,33 +109,17 @@ func (s *Server) passLoginBegin(c *gin.Context) {
 	if !s.rate(c, "passkey", 20) || !s.passEnabled(c) {
 		return
 	}
-	var req struct {
-		Email string `json:"email"`
-	}
-	if !bind(c, &req) {
-		return
-	}
-	u, err := s.Store.Ent.User.Query().Where(user.EmailEQ(strings.ToLower(strings.TrimSpace(req.Email))), user.EnabledEQ(true)).Only(c.Request.Context())
-	if err != nil {
-		failure(c, 401, "passkey_unavailable")
-		return
-	}
 	wa, err := s.webAuthn(c.Request)
 	if err != nil {
 		failInternal(c, 500, "passkey_configuration_invalid", err)
 		return
 	}
-	pu, err := s.passUser(c, u)
-	if err != nil {
-		failInternal(c, 503, "query_failed", err)
-		return
-	}
-	options, data, err := wa.BeginLogin(pu)
+	options, data, err := wa.BeginDiscoverableLogin(webauthn.WithUserVerification(protocol.VerificationRequired))
 	if err != nil {
 		failure(c, 401, "passkey_unavailable")
 		return
 	}
-	s.savePassSession(c, u.ID, "login", data, options)
+	s.savePassSession(c, 0, "login", data, options)
 }
 
 func (s *Server) passLoginFinish(c *gin.Context) {
@@ -147,24 +131,33 @@ func (s *Server) passLoginFinish(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	u, err := s.Store.Ent.User.Get(ctx, ses.UserID)
-	if err != nil || !u.Enabled {
-		failure(c, 401, "account_disabled")
-		return
-	}
 	wa, err := s.webAuthn(c.Request)
 	if err != nil {
 		failInternal(c, 500, "passkey_configuration_invalid", err)
 		return
 	}
-	pu, err := s.passUser(c, u)
-	if err != nil {
-		failInternal(c, 503, "query_failed", err)
-		return
-	}
+	var u *ent.User
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
-	credential, err := wa.FinishLogin(pu, ses.Data, c.Request)
-	if err != nil {
+	credential, err := wa.FinishDiscoverableLogin(func(rawID, handle []byte) (webauthn.User, error) {
+		if len(handle) != 8 {
+			return nil, errors.New("invalid passkey user handle")
+		}
+		key, err := s.Store.Ent.Passkey.Query().Where(passkey.CredentialIDEQ(digest(string(rawID)))).Only(ctx)
+		if err != nil {
+			return nil, errors.New("passkey unavailable")
+		}
+		account, err := s.Store.Ent.User.Get(ctx, key.UserID)
+		if err != nil || !account.Enabled {
+			return nil, errors.New("passkey unavailable")
+		}
+		pu, err := s.passUser(c, account)
+		if err != nil || !bytes.Equal(pu.WebAuthnID(), handle) {
+			return nil, errors.New("passkey unavailable")
+		}
+		u = account
+		return pu, nil
+	}, ses.Data, c.Request)
+	if err != nil || u == nil {
 		failure(c, 401, "passkey_verification_failed")
 		return
 	}
@@ -200,7 +193,7 @@ func (s *Server) passRegisterBegin(c *gin.Context) {
 		failInternal(c, 503, "query_failed", err)
 		return
 	}
-	options, data, err := wa.BeginRegistration(pu)
+	options, data, err := wa.BeginRegistration(pu, webauthn.WithResidentKeyRequirement(protocol.ResidentKeyRequirementRequired))
 	if err != nil {
 		failure(c, 400, "passkey_registration_failed")
 		return

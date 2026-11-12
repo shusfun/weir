@@ -16,7 +16,7 @@ export function useManualNodes() {
 const protocolOf = (url: string) => url.split("://")[0]?.toLowerCase() || "?";
 
 // 没填名称时取链接 # 后的备注；备注里有不合法的 % 转义时原样显示，不让整个列表报错。
-function nodeName(n: ManualNode) {
+export function nodeName(n: ManualNode) {
   if (n.name) return n.name;
   const tag = n.url.split("#")[1] ?? "";
   try {

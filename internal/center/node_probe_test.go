@@ -108,20 +108,33 @@ func TestInternalProbeCredentialLifecycle(t *testing.T) {
 	ctx := t.Context()
 	s.Store.Ent.User.Update().SetQuota(1).SetUsed(1).ExecX(ctx)
 	s.Store.Ent.Link.Delete().ExecX(ctx)
-	c, revoke, err := s.issueProbeCredential(ctx, n)
+	before := s.Store.Ent.Gate.GetX(ctx, n.GateID).ConfigRevision
+	c, err := s.ensureProbeCredential(ctx, n)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer revoke()
+	again, err := s.probeCredential(ctx, n)
+	if err != nil || again.ID != c.ID {
+		t.Fatal("同一节点必须复用长期实测凭据")
+	}
+	if s.Store.Ent.Gate.GetX(ctx, n.GateID).ConfigRevision != before {
+		t.Fatal("读取实测凭据不应推进配置版本")
+	}
 	row := s.Store.Ent.Credential.GetX(ctx, c.ID)
-	if !row.Internal || row.UserID != nil || row.LinkID != nil || row.Purpose != "probe" || row.ExpiresAt == nil || row.Password == c.Password {
-		t.Fatal("内部凭据必须独立且加密")
+	if !row.Internal || row.UserID != nil || row.LinkID != nil || row.Purpose != "probe" || row.ExpiresAt != nil || row.Password == c.Password {
+		t.Fatal("内部凭据必须长期、独立且加密")
 	}
 	if err = s.SyncAll(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if !s.Store.Ent.Credential.Query().Where(credential.IDEQ(c.ID)).ExistX(ctx) {
 		t.Fatal("同步误删测试凭据")
+	}
+	if err = s.cleanupProbeCredentials(ctx, time.Now(), true); err != nil {
+		t.Fatal(err)
+	}
+	if !s.Store.Ent.Credential.Query().Where(credential.IDEQ(c.ID)).ExistX(ctx) {
+		t.Fatal("清理任务删除了长期实测凭据")
 	}
 	g := s.Store.Ent.Gate.GetX(ctx, n.GateID)
 	binding, err := s.probeFingerprint(ctx, n, g)
@@ -131,12 +144,11 @@ func TestInternalProbeCredentialLifecycle(t *testing.T) {
 	if err = s.storeNodeTest(ctx, n.ID, nodeTestResult{Status: "passed", Binding: binding}); err != nil {
 		t.Fatal(err)
 	}
-	revoke()
-	if s.Store.Ent.Credential.Query().Where(credential.IDEQ(c.ID)).ExistX(ctx) {
-		t.Fatal("凭据未回收")
+	if _, err = s.rotateProbeCredential(ctx, n); err != nil {
+		t.Fatal(err)
 	}
 	if got := s.loadNodeTest(ctx, n); got == nil || got.Status != "passed" {
-		t.Fatal("凭据回收使结果失效")
+		t.Fatal("轮换实测凭据不应使已有结果失效")
 	}
 	s.Store.Ent.Node.UpdateOne(n).SetPort(n.Port + 1).ExecX(ctx)
 	if got := s.loadNodeTest(ctx, s.Store.Ent.Node.GetX(ctx, n.ID)); got == nil || got.Status != "unknown" {
@@ -197,8 +209,8 @@ func TestDeployedNodeTestDedupTraceAndIsolation(t *testing.T) {
 	if got := s.loadNodeTest(t.Context(), n); got == nil || got.Status != "passed" || calls.Load() != 1 {
 		t.Fatal("定时检查覆盖了完整实测结果")
 	}
-	if s.Store.Ent.Credential.Query().Where(credential.IDEQ(r.CredentialID)).ExistX(t.Context()) {
-		t.Fatal("实测后内部凭据未回收")
+	if !s.Store.Ent.Credential.Query().Where(credential.IDEQ(r.CredentialID), credential.PurposeEQ("probe"), credential.ExpiresAtIsNil()).ExistX(t.Context()) {
+		t.Fatal("实测后长期内部凭据应保留")
 	}
 	s.Store.Ent.Gate.UpdateOneID(n.GateID).AddConfigRevision(1).ExecX(t.Context())
 	if got := s.loadNodeTest(t.Context(), n); got == nil || got.Status != "passed" {

@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   build:
+    if: github.repository == 'shusfun/weir'
     runs-on: ubuntu-latest
     steps:
       - id: v

@@ -29,6 +29,8 @@ func runGate(args []string) int {
 	name := f.String("name", "", "device name (default: hostname)")
 	caFile := f.String("ca-file", "", "optional CA certificate for a center with a private certificate")
 	replace := f.Bool("replace", false, "pair: replace existing identity and reset agent state; stop the agent first")
+	taskFile := f.String("task", "", "cpu task json")
+	resultFile := f.String("result", "", "cpu result json")
 	f.Parse(args)
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -50,6 +52,8 @@ func runGate(args []string) int {
 		err = gate.LocalPair(ctx, p, *center, *tokenFile)
 	case "helper-health":
 		err = gate.HelperHealth(ctx, p)
+	case "cpu-exec":
+		err = gate.RunCPUExec(*taskFile, *resultFile, p)
 	case "version":
 		fmt.Println(buildinfo.GateVersionLine())
 	default:

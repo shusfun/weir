@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -75,7 +76,11 @@ func (s *Server) testNodeWith(ctx context.Context, n *ent.Node, settings map[str
 	if err != nil {
 		return nil, err
 	}
-	if fmt.Sprint(g.Host["node_test_version"]) != "3" {
+	supported, err := s.gateSupportsTask(ctx, g, contracts.ActionNodeTest, 3)
+	if err != nil {
+		return nil, err
+	}
+	if !supported {
 		return nil, errors.New("这台 VPS 尚不支持完整客户端实测，请先升级 Gate 并等待心跳")
 	}
 	kernels, profiles, err := s.gateKernels(ctx, g, map[string]bool{n.Kernel: true, "mihomo": true})
@@ -137,6 +142,16 @@ type Draft struct {
 	Danger    bool              `json:"danger,omitempty"`   // 有危险步骤：确认窗里标出
 	// Drawer 是提交时的 dsh 会话（浏览器标签）：只有同一个会话能撤回。
 	Drawer string `json:"drawer,omitempty"`
+	// 运维草稿：按状态和 VPS 筛选。执行前复判不通过时 OpsStatus 为 blocked，没有强制执行入口。
+	OpsStatus      string  `json:"ops_status,omitempty"`
+	GateID         int     `json:"gate_id,omitempty"`
+	Confidence     float64 `json:"confidence,omitempty"`
+	ConfigRevision int64   `json:"config_revision,omitempty"`
+	TraceID        string  `json:"trace_id,omitempty"`
+	// OpsBefore 是确认后、写入前重新采集的当前状态。执行后复测不能拿旧说明代替它。
+	OpsBefore string `json:"ops_before,omitempty"`
+	// OpsRecord 是系统自动起草时的触发记录（见 ops_auto.go）；确认、放弃、拦下、回退都回写到这条记录。
+	OpsRecord string `json:"ops_record,omitempty"`
 }
 
 func settingsHash(m map[string]any) string {
@@ -205,6 +220,23 @@ func (s *Server) listDrafts(c *gin.Context) {
 	if list == nil {
 		list = []*Draft{}
 	}
+	status, gateID := c.Query("ops_status"), 0
+	if raw := c.Query("gate_id"); raw != "" {
+		gateID, _ = strconv.Atoi(raw)
+	}
+	if status != "" || gateID > 0 {
+		filtered := make([]*Draft, 0, len(list))
+		for _, d := range list {
+			if status != "" && d.OpsStatus != status {
+				continue
+			}
+			if gateID > 0 && d.GateID != gateID {
+				continue
+			}
+			filtered = append(filtered, d)
+		}
+		list = filtered
+	}
 	c.JSON(200, gin.H{"drafts": list})
 }
 
@@ -226,6 +258,7 @@ func (s *Server) discardDraft(c *gin.Context) {
 	}
 	_ = s.Store.KV.Del(ctx, draftPrefix+d.ID)
 	s.notifyConsole("drafts", "")
+	s.markOpsRecord(ctx, d, "discarded", "管理员放弃了草稿")
 	for _, st := range d.Steps {
 		if st.Action == "defense.block" {
 			s.markEvent(ctx, intArg(st.Args, "event_id"), "dismissed", "")
@@ -246,6 +279,18 @@ func (s *Server) applyDraft(c *gin.Context) {
 	if d.Status != "passed" {
 		failure(c, 409, "draft_not_passed")
 		return
+	}
+	if d.Source == "analysis" || d.OpsStatus != "" {
+		reason, blocked := s.rejudgeOpsDraft(c.Request.Context(), d)
+		if blocked {
+			d.OpsStatus = "blocked"
+			_ = s.saveDraft(c.Request.Context(), d)
+			s.markOpsRecord(c.Request.Context(), d, "blocked", reason)
+			failDetail(c, 409, "draft_blocked", reason, gin.H{"ops_status": "blocked"})
+			return
+		}
+		d.OpsStatus = "executing"
+		_ = s.saveDraft(c.Request.Context(), d)
 	}
 	// 确认在后台任务里执行，可能要几分钟：期间同一份草稿不能再确认一次（如刷新页面后确认窗又弹出来）
 	key := draftApplying + d.ID

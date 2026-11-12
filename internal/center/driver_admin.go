@@ -52,18 +52,16 @@ func (s *Server) driverUsage(ctx context.Context, d kernels.Drivers) map[string]
 		return ""
 	}
 	for _, kernel := range kernelconf.Kernels {
-		seen := map[string]bool{}
-		for _, arch := range []string{"amd64", "arm64"} {
-			for _, v := range s.kernelCache().Versions(kernel, arch) {
-				if seen[v] {
-					continue
-				}
-				seen[v] = true
-				if n := pick(kernel, v); n != "" {
-					u := out[n]
-					u.Versions = append(u.Versions, v)
-					out[n] = u
-				}
+		versions, err := s.kernelVersions(ctx, kernel)
+		if err != nil {
+			s.tasks.note("kernel-catalog", err)
+			continue
+		}
+		for _, v := range versions {
+			if n := pick(kernel, v); n != "" {
+				u := out[n]
+				u.Versions = append(u.Versions, v)
+				out[n] = u
 			}
 		}
 	}

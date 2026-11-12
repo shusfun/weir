@@ -1,35 +1,36 @@
-// 来源 codedthemes/uiable button；本地改为 iOS 风格：实心蓝键、浅蓝键（tinted）、透明键，按下缩到 0.97 并叠填充色（.weir-key），松手弹簧回弹。
+// 来源 codedthemes/uiable button；按设计稿改为：墨色胶囊主键、卡片底描边次键、透明键，按下缩到 0.97 并叠填充色（.weir-key），松手弹簧回弹。
 import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { cva, type VariantProps } from "class-variance-authority";
 import { LoaderCircle } from "lucide-react";
 import { cn } from "cn";
 
-// 尺寸：桌面紧凑（默认 32 高、sm 28），触屏（touch:）一律做到 44；xs / icon-xs 视觉保持小，触屏靠 .weir-hit 把命中区扩到 44。
-// 图标与文字的间距只在这里定：lg 8px，其余 6px。页面里不要再给图标加外边距。
+// 文字与图标按钮共用尺寸档位：默认 33、小号 29，触屏至少 45。尺寸与内边距统一由公共样式决定。
 const buttonVariants = cva(
-  "weir-key group/button inline-flex shrink-0 items-center justify-center gap-1.5 rounded-[var(--weir-radius)] font-medium whitespace-nowrap select-none disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "weir-key weir-button group/button inline-flex shrink-0 items-center justify-center rounded-[var(--weir-radius)] font-medium whitespace-nowrap select-none disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-[var(--weir-button-icon)]",
   {
     variants: {
       variant: {
-        default: "weir-key-solid bg-[var(--weir-accent)] text-[var(--weir-accent-ink)] hover:bg-[var(--weir-accent-hi)]",
-        // 浅蓝键（iOS tinted button）：页面里大多数次要操作；和白底的输入框、灰底小胶囊的标签一眼可分
-        outline: "bg-[var(--weir-accent-soft)] text-[var(--weir-accent-soft-ink)] hover:bg-[var(--weir-accent-soft-hi)]",
+        // 主按钮：墨色胶囊加投影（稿子 .v-btn.p），一个区域最多一个
+        default: "weir-key-solid bg-[var(--weir-pill)] text-[var(--weir-pill-ink)] font-semibold shadow-[var(--weir-shadow-pill)] hover:opacity-90",
+        // 次要按钮：卡片底、细描边、顶部高光（稿子 .v-btn）
+        outline: "border border-[var(--weir-line)] bg-[var(--weir-panel)] text-[var(--weir-ink)] font-semibold shadow-[var(--weir-highlight)] hover:bg-[var(--weir-raised)]",
         // 选中态：分段控件同款白色滑块
         secondary: "is-pressed text-[var(--weir-ink)]",
         ghost: "weir-key-ghost text-[var(--weir-ink-2)] hover:text-[var(--weir-ink)]",
-        destructive: "bg-[var(--weir-bad-soft)] text-[var(--weir-bad-ink)] hover:bg-[var(--weir-bad-soft-hi)]",
+        // 危险操作：红色描边、透明底（稿子 .v-btn.d）
+        destructive: "border border-[var(--weir-bad)] bg-transparent text-[var(--weir-bad-ink)] font-semibold hover:bg-[var(--weir-bad-soft)]",
         // 文字链接：按下变淡（iOS 的 plain 按钮），不缩放、不叠填充
-        link: "!bg-transparent px-0 text-[var(--weir-accent-text)] underline-offset-4 after:hidden hover:underline active:!scale-none active:opacity-60",
+        link: "weir-key-link text-[var(--weir-accent-text)] underline-offset-4 hover:underline",
       },
       size: {
-        default: "min-h-8 px-3 py-1 text-body touch:min-h-11 touch:min-w-11 touch:px-4",
-        xs: "weir-hit min-h-7 px-2 text-meta touch:min-h-8 [&_svg:not([class*='size-'])]:size-3.5",
-        sm: "min-h-7 px-3 py-1 text-body touch:min-h-11 touch:min-w-11 [&_svg:not([class*='size-'])]:size-4",
-        lg: "min-h-10 gap-2 px-5 py-2 text-headline font-semibold touch:min-h-12 touch:min-w-12",
-        icon: "size-8 p-0 touch:size-11",
-        "icon-xs": "weir-hit size-7 p-0 touch:size-8 [&_svg:not([class*='size-'])]:size-3.5",
-        "icon-sm": "size-7 p-0 touch:size-11",
-        "icon-lg": "size-10 p-0 touch:size-11",
+        default: "weir-button-default",
+        xs: "weir-button-xs",
+        sm: "weir-button-sm",
+        lg: "weir-button-lg rounded-[var(--weir-radius-17)] font-semibold",
+        icon: "weir-button-default weir-button-icon",
+        "icon-xs": "weir-button-xs weir-button-icon",
+        "icon-sm": "weir-button-sm weir-button-icon",
+        "icon-lg": "weir-button-lg weir-button-icon",
       },
     },
     defaultVariants: { variant: "default", size: "default" },
@@ -67,6 +68,7 @@ function Button({
     <ButtonPrimitive
       data-slot="button"
       data-variant={variant}
+      data-size={size}
       className={cn(buttonVariants({ variant, size, className }))}
       // 以链接等非 <button> 元素渲染时（render={<Link/>}）告知 Base UI，避免丢失按钮语义的警告
       nativeButton={nativeButton ?? !props.render}

@@ -70,6 +70,7 @@ function connect() {
     heardAt = Date.now();
     const n = JSON.parse((e as MessageEvent).data) as { kind: string; key?: string };
     if (n.kind === "drafts") void queryClient.invalidateQueries({ queryKey: ["ai-drafts"] });
+    if (n.kind === "drafts" || n.kind === "ops-records") void queryClient.invalidateQueries({ queryKey: ["ops-records"] });
     if (n.kind === "pairing" || n.kind === "gate") {
       void queryClient.invalidateQueries({ queryKey: ["pairing"] });
       void queryClient.invalidateQueries({ queryKey: ["gates"] });

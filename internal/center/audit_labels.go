@@ -8,6 +8,19 @@ import (
 
 // auditLabels 是审计操作的中文名；没有登记的操作显示原始编码，不猜。
 var auditLabels = map[string]string{
+	"subscription.profile.test":"实测订阅组节点",
+	"gate.config.apply": "VPS 配置应用结果", "subscription.converter.save": "保存外部转换后端",
+	"asset.relay.open": "开始文件兜底中转", "asset.relay.close": "关闭文件兜底中转",
+	"asset.distribute":      "中心文件兜底分发",
+	"defense.laya.discover": "发现已有 Laya", "defense.laya.attach": "确认接入已有 Laya",
+	"laya.host.confirm": "确认中心 Laya 托管", "laya.host.result": "中心 Laya 托管结果",
+	"laya.host.interrupted": "中心 Laya 托管结果未知",
+	"account.plan":          "保存套餐", "account.code.issue": "生成账户码", "account.code.revoke": "撤销账户码", "account.code.redeem": "兑换套餐",
+	"account.grant.sync": "同步套餐授权", "security.access-code-guessing": "用码校验拒绝",
+	"account.policy.apply": "启用账户策略", "account.policy.draft": "预演账户策略",
+	"diagnostic.export": "导出诊断包", "worker.timeline": "读取 VPS 环节记录", "worker.cancel": "取消 VPS 任务",
+	"observation.analyze":  "分析所选观测",
+	"observation.classify": "观察点判断", "observation.dispatch": "观察点调用 dsh",
 	"ai.apply": "确认 dsh 草稿", "ai.discard": "放弃 dsh 草稿", "ai.draft": "dsh 提交草稿", "ai.withdraw": "dsh 撤回草稿", "ai.provider.delete": "删除旧模型配置",
 	"api_token.create": "新建 API 令牌", "api_token.delete": "删除 API 令牌",
 	"auth.email": "修改邮箱", "auth.login": "登录", "auth.passkey.delete": "删除通行密钥", "auth.passkey.enroll": "添加通行密钥", "auth.password.change": "修改密码",
@@ -27,7 +40,7 @@ var auditLabels = map[string]string{
 	"proxy.type_exit": "给类型加出口", "proxy.type_exit_delete": "去掉类型出口", "proxy.update": "修改代理设置", "proxy.custom_rules": "修改自定义清单",
 	"proxy.group.post": "新建我的分组", "proxy.group.put": "修改我的分组", "proxy.group.delete": "删除我的分组", "proxy.denied": "拒绝越权访问代理设置", "proxy.migration.ack": "确认分流目标迁移",
 	"route.delete": "删除分流规则", "route.save": "保存分流规则",
-	"settings.announcement": "修改全局公告", "settings.logo": "修改 Logo", "settings.notify": "修改通知设置", "settings.security": "修改安全设置", "settings.smtp": "修改邮件设置",
+	"settings.announcement": "修改全局公告", "settings.logo": "修改 Logo", "settings.notify": "修改通知设置", "settings.security": "修改安全设置", "settings.smtp": "修改邮件设置", "settings.turnstile": "修改人机验证密钥",
 	"subscription.nodes.import": "导入手动节点", "subscription.profile.delete": "删除订阅组", "subscription.profile.grants": "分配订阅组", "subscription.profile.save": "保存订阅组",
 	"subscription.profile.share": "分享订阅组", "subscription.profile.unshare": "取消分享订阅组", "subscription.settings": "修改订阅默认设置", "subscription.source.delete": "删除订阅源", "subscription.source.save": "保存订阅源",
 	"system.install": "安装系统", "system.rollback": "回退版本", "system.update": "更新版本",
@@ -69,7 +82,7 @@ func (s *Server) auditActorName(ctx context.Context, id int, actors map[int]stri
 }
 
 var auditObjectNames = map[string]string{"gate": "VPS", "node": "节点", "user": "用户", "link": "链接", "chain": "链式代理", "driver": "驱动", "kernel": "内核版本",
-	"source": "订阅源", "profile": "订阅组", "page": "公开页面", "cert": "证书", "audit": "审计记录", "exit": "出口", "route": "分流规则", "proxy_group": "我的分组"}
+	"source": "订阅源", "profile": "订阅组", "page": "公开页面", "cert": "证书", "audit": "审计记录", "exit": "出口", "route": "分流规则", "proxy_group": "我的分组", "account_plan": "套餐", "access_code": "账户码"}
 
 // auditTargetName 把「类型:编号」换成对象名称；对象已删除或不是这种格式时说明 / 原样返回。
 func (s *Server) auditTargetName(ctx context.Context, target string) string {

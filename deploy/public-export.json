@@ -1,0 +1,8 @@
+{
+  "directories": ["apps", "internal", "packages", "deploy", "docs", "third_party", "examples", "ent", "services"],
+  "files": ["README.md", "VERSION", "go.mod", "go.sum", "go.work", "go.work.sum", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".gitignore", ".gitattributes", "LICENSE*", "NOTICE*"],
+  "github": [".github/workflows/ci.yml", ".github/workflows/release.yml", ".github/workflows/sing-box.yml", ".github/release-notes/*"],
+  "private_paths": ["docs/design.html", "docs/implementation.html", "docs/evidence", ".github/workflows/export-public.yml"],
+  "private_directories": [".agents", ".claude", ".codex", ".freebuff", "node_modules", "__pycache__", ".cache", "dist", "coverage"],
+  "private_names": ["AGENTS.md", "CLAUDE.md"]
+}

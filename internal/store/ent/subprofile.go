@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/shusfun/weir/internal/store/ent/subprofile"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // SubProfile is the model entity for the SubProfile schema.
@@ -28,6 +29,8 @@ type SubProfile struct {
 	SourceIds []int `json:"source_ids,omitempty"`
 	// NodeIds holds the value of the "node_ids" field.
 	NodeIds []int `json:"node_ids,omitempty"`
+	// Members holds the value of the "members" field.
+	Members []contracts.SubscriptionMember `json:"members,omitempty"`
 	// Operators holds the value of the "operators" field.
 	Operators []interface{} `json:"operators,omitempty"`
 	// Settings holds the value of the "settings" field.
@@ -52,7 +55,7 @@ func (*SubProfile) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case subprofile.FieldSourceIds, subprofile.FieldNodeIds, subprofile.FieldOperators, subprofile.FieldSettings:
+		case subprofile.FieldSourceIds, subprofile.FieldNodeIds, subprofile.FieldMembers, subprofile.FieldOperators, subprofile.FieldSettings:
 			values[i] = new([]byte)
 		case subprofile.FieldEnabled, subprofile.FieldAllSources:
 			values[i] = new(sql.NullBool)
@@ -115,6 +118,14 @@ func (_m *SubProfile) assignValues(columns []string, values []any) error {
 			} else if value != nil && len(*value) > 0 {
 				if err := json.Unmarshal(*value, &_m.NodeIds); err != nil {
 					return fmt.Errorf("unmarshal field node_ids: %w", err)
+				}
+			}
+		case subprofile.FieldMembers:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field members", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Members); err != nil {
+					return fmt.Errorf("unmarshal field members: %w", err)
 				}
 			}
 		case subprofile.FieldOperators:
@@ -221,6 +232,9 @@ func (_m *SubProfile) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("node_ids=")
 	builder.WriteString(fmt.Sprintf("%v", _m.NodeIds))
+	builder.WriteString(", ")
+	builder.WriteString("members=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Members))
 	builder.WriteString(", ")
 	builder.WriteString("operators=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Operators))

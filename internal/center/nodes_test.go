@@ -26,7 +26,54 @@ func setupGate(t *testing.T) (*Server, *testClient, *fakeGate) {
 	if code, _ := g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 3, Version: "test", Hostname: "hk", Arch: "amd64"}); code != 200 {
 		t.Fatalf("heartbeat = %d", code)
 	}
-	// 模拟 Gate 收到短时内部授权后的应用确认，普通业务配置仍由各测试显式确认。
+	// 长期实测凭据随节点创建进入配置。只确认这一次，后面的业务版本仍由各测试显式确认。
+	// 节点链会再次推进出口节点版本，需要持续确认的测试调用 followProbeRevisions。
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		tick := time.NewTicker(10 * time.Millisecond)
+		defer tick.Stop()
+		seen := map[int]bool{}
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+				rows, err := s.Store.Ent.Credential.Query().Where(credential.PurposeEQ("probe"), credential.ExpiresAtIsNil()).All(ctx)
+				if err != nil {
+					continue
+				}
+				for _, c := range rows {
+					if seen[c.NodeID] {
+						continue
+					}
+					n, err := s.Store.Ent.Node.Get(ctx, c.NodeID)
+					if err != nil {
+						continue
+					}
+					gate, err := s.Store.Ent.Gate.Get(ctx, n.GateID)
+					if err != nil {
+						continue
+					}
+					if gate.AppliedRevision < gate.ConfigRevision {
+						if gate.Update().SetAppliedRevision(gate.ConfigRevision).Exec(ctx) == nil {
+							seen[c.NodeID] = true
+						}
+					}
+				}
+			}
+		}
+	}()
+	t.Cleanup(func() { cancel(); <-done })
+	return s, admin, g
+}
+
+// followProbeRevisions 让假 Gate 持续确认后续版本。节点链会在出口节点上再次推进配置；
+// 只确认第一次时，实测会停在 waitProbeApplied，建节点后台任务因此超时。
+// 不放进 setupGate：就绪测试要观察到「配置已推进、VPS 尚未应用」。
+func followProbeRevisions(t *testing.T, s *Server) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
 	go func() {
@@ -38,28 +85,29 @@ func setupGate(t *testing.T) (*Server, *testClient, *fakeGate) {
 			case <-ctx.Done():
 				return
 			case <-tick.C:
-				rows, err := s.Store.Ent.Credential.Query().Where(credential.PurposeEQ("probe")).All(ctx)
+				rows, err := s.Store.Ent.Credential.Query().Where(credential.PurposeEQ("probe"), credential.ExpiresAtIsNil()).All(ctx)
 				if err != nil {
 					continue
 				}
+				gates := map[int]bool{}
 				for _, c := range rows {
 					n, err := s.Store.Ent.Node.Get(ctx, c.NodeID)
 					if err != nil {
 						continue
 					}
-					gate, err := s.Store.Ent.Gate.Get(ctx, n.GateID)
-					if err != nil {
+					gates[n.GateID] = true
+				}
+				for gid := range gates {
+					gate, err := s.Store.Ent.Gate.Get(ctx, gid)
+					if err != nil || gate.AppliedRevision >= gate.ConfigRevision {
 						continue
 					}
-					if gate.AppliedRevision < gate.ConfigRevision {
-						_ = gate.Update().SetAppliedRevision(gate.ConfigRevision).Exec(ctx)
-					}
+					_ = gate.Update().SetAppliedRevision(gate.ConfigRevision).Exec(ctx)
 				}
 			}
 		}
 	}()
 	t.Cleanup(func() { cancel(); <-done })
-	return s, admin, g
 }
 
 func mustJSON(t *testing.T, tc *testClient, method, path string, body any, want int) map[string]any {
@@ -190,7 +238,7 @@ func TestNodeWizardUsersLinksChainsAndSubscription(t *testing.T) {
 
 	// Gate 下发：每条链接 × 节点一份凭据（这个用户 3 份，管理员的默认链接 3 份），按用户共享额度。
 	cfg := g.config(0)
-	if len(cfg.Inbounds) != 3 || len(cfg.Credentials) != 6 || cfg.Budgets[userKey(uid)].Allocated != 20<<30 {
+	if len(cfg.Inbounds) != 3 || len(cfg.Credentials) != 9 || cfg.Budgets[userKey(uid)].Allocated != 20<<30 {
 		t.Fatalf("gate config inbounds=%d creds=%d budgets=%v meta=%v", len(cfg.Inbounds), len(cfg.Credentials), cfg.Budgets, cfg.Meta)
 	}
 
@@ -261,8 +309,27 @@ func TestNodeWizardUsersLinksChainsAndSubscription(t *testing.T) {
 	}
 }
 
+func TestLaterProbeRevisionIsApplied(t *testing.T) {
+	s, admin, g := setupGate(t)
+	followProbeRevisions(t, s)
+	n := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "ss2022", "skip_probe": true}, 200)
+	node, err := s.Store.Ent.Node.Get(t.Context(), int(n["id"].(float64)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.bumpGate(t.Context(), node.GateID); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	if _, err = s.waitProbeApplied(ctx, node); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestNodeChainThroughAnotherNode(t *testing.T) {
 	s, admin, g := setupGate(t)
+	followProbeRevisions(t, s)
 	g.serveActions(t, s, nil)
 	gid := int(g.id)
 	eg := pairFakeGate(t, admin)

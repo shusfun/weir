@@ -44,6 +44,10 @@
   --text-title--line-height: var(--weir-leading-title);
   --text-display: var(--weir-text-display);
   --text-display--line-height: var(--weir-leading-display);
+  --text-hero: var(--weir-text-hero);
+  --text-hero--line-height: var(--weir-leading-hero);
+  --text-detail: var(--weir-text-detail);
+  --text-detail--line-height: var(--weir-leading-detail);
   --text-large-title: var(--weir-text-large-title);
   --text-large-title--line-height: var(--weir-leading-large-title);
   --text-title1: var(--weir-text-title1);
@@ -58,6 +62,10 @@
   --text-callout--line-height: var(--weir-leading-callout);
   --text-subheadline: var(--weir-text-subheadline);
   --text-subheadline--line-height: var(--weir-leading-subheadline);
+  --text-lead: var(--weir-text-lead);
+  --text-lead--line-height: var(--weir-leading-lead);
+  --text-name: var(--weir-text-name);
+  --text-name--line-height: var(--weir-leading-name);
   --text-footnote: var(--weir-text-footnote);
   --text-footnote--line-height: var(--weir-leading-footnote);
   --text-caption1: var(--weir-text-caption1);
@@ -124,13 +132,14 @@
 }
 
 @layer components {
-  /* 面板：卡片与分组，平整，只有细边框 */
+  /* 面板（稿子 .v-card）：卡片底、细描边、顶部高光与卡片投影 */
   .weir-panel {
     background: var(--weir-panel);
     border: 1px solid var(--weir-line-soft);
-    border-radius: var(--weir-radius-card);
+    border-radius: var(--weir-radius-surface);
+    box-shadow: var(--weir-highlight), var(--weir-shadow-card);
+    corner-shape: squircle;
   }
-  .dark .weir-panel { border-color: transparent; }
   /* 填充底：代码块、计数窗（iOS 的 tertiarySystemFill） */
   .weir-well {
     background: var(--weir-well);
@@ -279,7 +288,7 @@
  * 时长压到 1ms 而不是 0：transitionend / animationend 仍会触发，依赖它们的组件不卡住。
  */
 @media (prefers-reduced-motion: reduce) {
-  :root { --weir-press-scale: 1; }
+  :root { --weir-press-scale: 1; --weir-glow: none; }
   *,
   *::before,
   *::after {
@@ -288,4 +297,19 @@
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* 省电档：与「减少动态效果」一样只留颜色变化。时长用 1ms 而不是 0，避免依赖 transitionend 的组件卡住。 */
+[data-motion="lite"] {
+  --weir-press-scale: 1;
+  --weir-glow: none;
+}
+[data-motion="lite"],
+[data-motion="lite"] *,
+[data-motion="lite"] *::before,
+[data-motion="lite"] *::after {
+  transition-duration: 1ms !important;
+  animation-duration: 1ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
 }

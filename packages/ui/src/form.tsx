@@ -43,6 +43,7 @@ function Form({
           else if (outerRef) outerRef.current = el;
         }}
         data-slot="form"
+        data-tour="form"
         aria-busy={busy || undefined}
         onSubmit={(e) => {
           e.preventDefault();
@@ -50,7 +51,7 @@ function Form({
         }}
         {...props}
       >
-        <fieldset disabled={busy} className={cn("m-0 grid min-w-0 gap-3 border-0 p-0", className)}>
+        <fieldset disabled={busy} className={cn("m-0 grid min-w-0 gap-[var(--weir-space-3)] border-0 p-0", className)}>
           {children}
         </fieldset>
       </form>
@@ -63,7 +64,7 @@ function FormGrid({ cols = 2, className, ...props }: ComponentProps<"div"> & { c
   return (
     <div
       data-slot="form-grid"
-      className={cn("grid min-w-0 gap-3", cols === 2 ? "sm:grid-cols-2" : "sm:grid-cols-2 lg:grid-cols-3", className)}
+      className={cn("grid min-w-0 gap-[var(--weir-space-3)]", cols === 2 ? "sm:grid-cols-2" : "sm:grid-cols-2 lg:grid-cols-3", className)}
       {...props}
     />
   );

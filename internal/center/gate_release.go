@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -16,6 +17,8 @@ import (
 	"github.com/shusfun/weir/internal/buildinfo"
 	"github.com/shusfun/weir/internal/fetch"
 	"github.com/shusfun/weir/internal/ghrelease"
+	"github.com/shusfun/weir/internal/releasefiles"
+	"github.com/shusfun/weir/internal/selfupdate"
 )
 
 // weirRepo 是 Weir 程序的发布仓库；WEIR_GITHUB_REPO 只用于测试。
@@ -32,7 +35,7 @@ func (s *Server) weirGitHub() ghrelease.Client {
 	if s.GitHub != nil {
 		return *s.GitHub
 	}
-	return ghrelease.Client{HTTP: githubHTTP()}
+	return ghrelease.Client{Query: s.queryReleases}
 }
 
 // releaseAssetName 是某版本某架构的发布包文件名。
@@ -61,7 +64,11 @@ func (s *Server) gateProgram(ctx context.Context, arch string) (string, string, 
 		}
 	}
 	id := "gate-release:" + buildinfo.Version + ":" + arch
-	s.jobs.Start(id, "gate-release", "Weir "+buildinfo.Version+"（"+arch+"）", func(bg context.Context, run JobRun) (map[string]any, error) {
+	trace := requestID()
+	if t, ok := ctx.Value(httpTraceKey{}).(httpTrace); ok {
+		trace = t.ID
+	}
+	s.jobs.StartWith(jobSpec{ID: id, Kind: "gate-release", Title: "Weir " + buildinfo.Version + "（" + arch + "）", Trace: trace}, func(bg context.Context, run JobRun) (map[string]any, error) {
 		return nil, s.downloadRelease(bg, run, buildinfo.Version, arch, dir)
 	})
 	wctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
@@ -79,8 +86,14 @@ func (s *Server) gateProgram(ctx context.Context, arch string) (string, string, 
 
 // downloadRelease 下载并校验一个 Weir 发布包，把其中的 weir 与 install.sh 放进 dir。
 func (s *Server) downloadRelease(ctx context.Context, run JobRun, version, arch, dir string) error {
+	s.releaseFilesMu.Lock()
+	defer s.releaseFilesMu.Unlock()
+	s.pruneReleaseCache(ctx, &run)
 	name := releaseAssetName(version, arch)
 	archive := filepath.Join(s.dataDir(), "releases", ".downloads", name)
+	if err := releasefiles.DownloadDir(filepath.Dir(archive), name); err != nil {
+		return err
+	}
 	if err := s.fetchWeirPackage(ctx, run, version, arch, archive); err != nil {
 		return err
 	}
@@ -92,24 +105,84 @@ func (s *Server) downloadRelease(ctx context.Context, run JobRun, version, arch,
 	if err != nil {
 		return err
 	}
-	if err = os.MkdirAll(dir, 0o755); err != nil {
+	root, err := releasefiles.Ensure(dir, 0o755)
+	if err != nil {
 		return err
 	}
+	defer root.Close()
 	for _, f := range []string{"weir", "install.sh"} {
-		if err = os.WriteFile(filepath.Join(dir, f+".new"), files[f], 0o755); err == nil {
-			err = os.Rename(filepath.Join(dir, f+".new"), filepath.Join(dir, f))
-		}
-		if err != nil {
+		if err = writeCachedFile(root, f, files[f], 0o755); err != nil {
 			return err
 		}
 	}
 	sum := sha256.Sum256(files["weir"])
-	if err = os.WriteFile(filepath.Join(dir, "weir.sha256"), []byte(hex.EncodeToString(sum[:])), 0o644); err != nil {
+	if err = writeCachedFile(root, "weir.sha256", []byte(hex.EncodeToString(sum[:])), 0o644); err != nil {
 		return err
 	}
-	_ = os.Remove(archive)
+	if err = os.Remove(archive); err != nil {
+		run.Log("WARN release download cleanup: " + err.Error())
+	}
+	s.pruneReleaseCache(ctx, &run)
 	run.Log("已校验并缓存 " + name)
 	return nil
+}
+
+func writeCachedFile(root *os.Root, name string, data []byte, mode os.FileMode) error {
+	if err := root.Remove(name + ".new"); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	f, err := root.OpenFile(name+".new", os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(data)
+	err = errors.Join(err, f.Close())
+	if err != nil {
+		return err
+	}
+	return root.Rename(name+".new", name)
+}
+
+func (s *Server) pruneReleaseCache(ctx context.Context, run *JobRun) {
+	keep := map[string]bool{buildinfo.Version: true}
+	if previous := selfupdate.Previous(); previous != "" {
+		keep[previous] = true
+	}
+	dir := filepath.Join(s.dataDir(), "releases")
+	stats, err := releasefiles.PruneVersionDirs(dir, keep, nil)
+	archives := map[string]bool{}
+	for version := range keep {
+		for _, arch := range []string{"amd64", "arm64"} {
+			name := releaseAssetName(version, arch)
+			archives[name], archives[name+".part"] = true, true
+		}
+	}
+	downloads, downloadErr := releasefiles.Prune(filepath.Join(dir, ".downloads"), archives, func(name string) bool {
+		return strings.HasPrefix(name, "weir-") && (strings.HasSuffix(name, ".tar.gz") || strings.HasSuffix(name, ".tar.gz.part"))
+	}, nil)
+	stats.Removed += downloads.Removed
+	stats.Bytes += downloads.Bytes
+	err = errors.Join(err, downloadErr)
+	trace := ""
+	if t, ok := ctx.Value(httpTraceKey{}).(httpTrace); ok {
+		trace = t.ID
+	}
+	if trace == "" && run != nil && run.e != nil {
+		run.m.mu.Lock()
+		trace = run.e.job.Trace
+		run.m.mu.Unlock()
+	}
+	if trace == "" {
+		trace = requestID()
+	}
+	message := fmt.Sprintf("release cache cleanup trace=%s version=%s %s", trace, buildinfo.Version, stats)
+	if err != nil {
+		message = fmt.Sprintf("WARN %s error=%q", message, err)
+	}
+	log.Print(message)
+	if run != nil {
+		run.Log(message)
+	}
 }
 
 // fetchWeirPackage 按「GitHub 加速」的来源顺序（含经 VPS 中转）下载 Weir 某版本某架构的发布包到 dest，

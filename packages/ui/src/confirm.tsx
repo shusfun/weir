@@ -4,6 +4,7 @@
 // 需要在应用根部包一层 ConfirmProvider。
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
 import { Button } from "./button";
+import { HoldButton } from "./hold-button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "./dialog";
 import { Field } from "./field";
 import { Form } from "./form";
@@ -80,7 +81,7 @@ function ConfirmProvider({ children }: { children: ReactNode }) {
               )}
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => finish(false)}>{o.cancelText ?? "取消"}</Button>
-                <Button type="submit" variant={danger ? "destructive" : "default"} autoFocus={request.kind === "confirm"}>{o.confirmText ?? "确定"}</Button>
+                {danger ? <HoldButton variant="destructive" size="default" onHold={() => finish(true)}>{o.confirmText ?? "按住确认"}</HoldButton> : <Button type="submit" autoFocus={request.kind === "confirm"}>{o.confirmText ?? "确定"}</Button>}
               </DialogFooter>
             </Form>
           </DialogContent>

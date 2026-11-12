@@ -98,6 +98,7 @@ func (a *Agent) clientProbe(ctx context.Context, p map[string]any) (map[string]a
 	defer cancel()
 	logs := &tailBuffer{}
 	cp := exec.CommandContext(runCtx, filepath.Join(a.P.KernelsDir, "mihomo-"+k.Version), run...)
+	cp.Env = os.Environ()
 	cp.Stdout, cp.Stderr, cp.Dir = logs, logs, dir
 	if err = cp.Start(); err != nil {
 		return nil, err
@@ -131,10 +132,61 @@ func (a *Agent) clientProbe(ctx context.Context, p map[string]any) (map[string]a
 		if json.Unmarshal(body, &echo) == nil && net.ParseIP(echo.IP) != nil {
 			out["exit_ip"] = echo.IP
 		}
+		// 测上游 SOCKS 自己的 UDP 关联。本地 mihomo 端口总是接受关联，不能当成出口能力。
+		if typ, _ := client["type"].(string); typ == "socks5" || typ == "socks" {
+			user, _ := client["username"].(string)
+			pass, _ := client["password"].(string)
+			if udp, ok := socksUDP(runCtx, net.JoinHostPort(host, fmt.Sprint(port)), user, pass); ok {
+				out["udp"] = udp
+			}
+		}
 		return out, nil
 	}
 	diagnostic := maskIPs(lastLines(logs.String(), 20))
 	return map[string]any{"mode": "proxy", "client_log": diagnostic}, fmt.Errorf("经出口连接失败：%v；mihomo：%s", trimProxyError(last), diagnostic)
+}
+
+// socksUDP 对上游 SOCKS5 做一次 UDP 关联。关联被拒绝就是不支持；握手失败则结果未知。
+func socksUDP(ctx context.Context, address, user, pass string) (bool, bool) {
+	dialer := net.Dialer{Timeout: 2 * time.Second}
+	conn, err := dialer.DialContext(ctx, "tcp", address)
+	if err != nil {
+		return false, false
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
+	method := byte(0x00)
+	if user != "" || pass != "" {
+		method = 0x02
+	}
+	if _, err = conn.Write([]byte{0x05, 0x01, method}); err != nil {
+		return false, false
+	}
+	buf := make([]byte, 16)
+	if _, err = io.ReadFull(conn, buf[:2]); err != nil || buf[0] != 0x05 || buf[1] != method {
+		return false, false
+	}
+	if method == 0x02 {
+		ub, pb := []byte(user), []byte(pass)
+		if len(ub) > 255 || len(pb) > 255 {
+			return false, false
+		}
+		msg := append(append([]byte{0x01, byte(len(ub))}, ub...), byte(len(pb)))
+		msg = append(msg, pb...)
+		if _, err = conn.Write(msg); err != nil {
+			return false, false
+		}
+		if _, err = io.ReadFull(conn, buf[:2]); err != nil || buf[1] != 0x00 {
+			return false, false
+		}
+	}
+	if _, err = conn.Write([]byte{0x05, 0x03, 0x00, 0x01, 0, 0, 0, 0, 0, 0}); err != nil {
+		return false, false
+	}
+	if _, err = io.ReadFull(conn, buf[:4]); err != nil {
+		return false, false
+	}
+	return buf[1] == 0x00, true
 }
 
 // trimProxyError 去掉本机代理地址，只留出口那一侧的原因。

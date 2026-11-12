@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/shusfun/weir/internal/db"
+	"github.com/shusfun/weir/internal/publicnet"
 )
 
 const (
@@ -671,12 +672,7 @@ func resolveDialTarget(ctx context.Context, host string, allowPrivate bool) (net
 	return netip.Addr{}, fmt.Errorf("subscription url resolves to private or local address")
 }
 
-func isPublicAddr(addr netip.Addr) bool {
-	if addr.Is4In6() {
-		addr = addr.Unmap()
-	}
-	return addr.IsGlobalUnicast() && !addr.IsPrivate() && !addr.IsLoopback() && !addr.IsLinkLocalUnicast() && !addr.IsLinkLocalMulticast() && !addr.IsMulticast() && !addr.IsUnspecified()
-}
+func isPublicAddr(addr netip.Addr) bool { return publicnet.Public(addr) }
 
 func tryDecodeBase64(s string) (string, bool) {
 	clean := strings.Map(func(r rune) rune {

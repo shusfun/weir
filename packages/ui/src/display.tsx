@@ -180,7 +180,7 @@ function Step({
     // 横向：每步是可点击的标签，当前步点亮为选中色
     // 横向：分段控件同款，当前步是白色滑块；可点（render 为链接）时按下缩小并叠填充色。触屏行高 44
     render && "weir-press",
-    "group-data-[orientation=horizontal]/steps:flex-[1_0_auto] group-data-[orientation=horizontal]/steps:min-h-10 group-data-[orientation=horizontal]/steps:rounded-[calc(var(--weir-radius)-2px)] group-data-[orientation=horizontal]/steps:px-3 group-data-[orientation=horizontal]/steps:py-1 group-data-[orientation=horizontal]/steps:hover:text-[var(--weir-ink)] touch:group-data-[orientation=horizontal]/steps:min-h-11 max-md:group-data-[orientation=horizontal]/steps:px-2",
+    "group-data-[orientation=horizontal]/steps:flex-[1_0_auto] group-data-[orientation=horizontal]/steps:min-h-10 group-data-[orientation=horizontal]/steps:rounded-[var(--weir-radius-9)] group-data-[orientation=horizontal]/steps:px-3 group-data-[orientation=horizontal]/steps:py-1 group-data-[orientation=horizontal]/steps:hover:text-[var(--weir-ink)] touch:group-data-[orientation=horizontal]/steps:min-h-11 max-md:group-data-[orientation=horizontal]/steps:px-2",
     status === "current" &&
       "group-data-[orientation=horizontal]/steps:bg-[var(--weir-key-selected)] group-data-[orientation=horizontal]/steps:shadow-[0_0_0_0.5px_var(--weir-key-selected-ring),0_3px_8px_var(--weir-key-selected-glow)]",
     "focus-visible:outline-offset-[-2px]",

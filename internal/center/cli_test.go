@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -81,6 +82,9 @@ func TestSetupCLICancelWritesNothing(t *testing.T) {
 
 // 菜单的卸载只调用本机安装脚本：取消不调用，确认后按选择传 uninstall / uninstall --purge，卸载后菜单退出。
 func TestOperatorMenuUninstallDelegatesToInstaller(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("installer delegates to a POSIX shell; exercised on Linux")
+	}
 	dir := t.TempDir()
 	record := filepath.Join(dir, "args")
 	script := filepath.Join(dir, "install.sh")

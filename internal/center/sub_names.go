@@ -169,7 +169,7 @@ func (s *Server) renderSubscriptionEntries(ctx context.Context, es []subscriptio
 
 func subscriptionInfoLinks(u *ent.User, l *ent.Link) []string {
 	remaining := "剩余 不限"
-	if u.Quota > 0 {
+	if !u.Unlimited {
 		remaining = fmt.Sprintf("剩余 %.1f GB", float64(max(int64(0), u.Quota-u.Used))/(1<<30))
 	}
 	expiry := "到期 长期有效"

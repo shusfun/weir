@@ -2,6 +2,7 @@ package jscompat
 
 import (
 	"errors"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,6 +22,7 @@ type RegExp struct {
 	Source    string
 	Flags     string
 	re        *regexp2.Regexp
+	re2       *regexp.Regexp
 	Global    bool
 	Sticky    bool
 	unicode   bool
@@ -37,7 +39,7 @@ var ErrRegExpSyntax = errors.New("SyntaxError: invalid regular expression")
 var regexCache sync.Map // key: source + "\x00" + flags
 
 func (r *RegExp) copyFresh() *RegExp {
-	return &RegExp{Source: r.Source, Flags: r.Flags, re: r.re, Global: r.Global, Sticky: r.Sticky, unicode: r.unicode, names: r.names}
+	return &RegExp{Source: r.Source, Flags: r.Flags, re: r.re, re2: r.re2, Global: r.Global, Sticky: r.Sticky, unicode: r.unicode, names: r.names}
 }
 
 // NewRegExp 对应 new RegExp(pattern, flags)；语法或标志非法时返回错误。
@@ -444,6 +446,9 @@ func (r *RegExp) find(sub *subject, start int) *regexp2.Match {
 
 // Exec 对应 RegExp.prototype.exec（遵循 lastIndex 语义），未匹配返回 nil。
 func (r *RegExp) Exec(s string) *Match {
+	if r.re2 != nil {
+		return r.execConfig(s)
+	}
 	sub := r.newSubject(s)
 	start := 0
 	if r.Global || r.Sticky {
@@ -471,6 +476,9 @@ func (r *RegExp) Test(s string) bool { return r.Exec(s) != nil }
 
 // MatchFirst 对应非全局的 String.prototype.match（忽略 lastIndex，从头匹配一次）。
 func (r *RegExp) MatchFirst(s string) *Match {
+	if r.re2 != nil {
+		return r.configMatch(s, r.re2.FindStringSubmatchIndex(s))
+	}
 	sub := r.newSubject(s)
 	m := r.find(sub, 0)
 	if m == nil {
@@ -498,7 +506,16 @@ func (r *RegExp) findAll(sub *subject) []*Match {
 }
 
 // FindAll 返回所有不重叠匹配（与 g 标志下的 matchAll/replace 迭代一致）。
-func (r *RegExp) FindAll(s string) []*Match { return r.findAll(r.newSubject(s)) }
+func (r *RegExp) FindAll(s string) []*Match {
+	if r.re2 != nil {
+		var out []*Match
+		for _, indices := range r.re2.FindAllStringSubmatchIndex(s, -1) {
+			out = append(out, r.configMatch(s, indices))
+		}
+		return out
+	}
+	return r.findAll(r.newSubject(s))
+}
 
 // MatchAllStrings 对应带 g 标志的 String.prototype.match，返回所有整体匹配；无匹配返回 nil。
 func (r *RegExp) MatchAllStrings(s string) []string {
@@ -529,6 +546,23 @@ func (r *RegExp) Replace(s, replacement string) string {
 
 // ReplaceFunc 对应 replace(regex, fn)。
 func (r *RegExp) ReplaceFunc(s string, fn func(*Match) string) string {
+	if r.re2 != nil {
+		limit := 1
+		if r.Global {
+			limit = -1
+			r.LastIndex = 0
+		}
+		var out strings.Builder
+		pos := 0
+		for _, indices := range r.re2.FindAllStringSubmatchIndex(s, limit) {
+			m := r.configMatch(s, indices)
+			out.WriteString(s[pos:m.Index])
+			out.WriteString(fn(m))
+			pos = m.End
+		}
+		out.WriteString(s[pos:])
+		return out.String()
+	}
 	sub := r.newSubject(s)
 	var ms []*Match
 	if r.Global {
@@ -555,10 +589,18 @@ func (r *RegExp) ReplaceFunc(s string, fn func(*Match) string) string {
 
 // expandReplacement 实现 GetSubstitution。
 func expandReplacement(repl string, m *Match) string {
+	out, _ := expandReplacementBounded(repl, m, int(^uint(0)>>1))
+	return out
+}
+
+func expandReplacementBounded(repl string, m *Match, limit int) (string, error) {
 	if strings.IndexByte(repl, '$') < 0 {
-		return repl
+		if len(repl) > limit {
+			return "", ErrRegExpOutputLimit
+		}
+		return repl, nil
 	}
-	var out strings.Builder
+	out := limitedReplacement{limit: limit}
 	n := len(m.Groups) - 1
 	for i := 0; i < len(repl); i++ {
 		c := repl[i]
@@ -615,7 +657,7 @@ func expandReplacement(repl string, m *Match) string {
 			out.WriteByte('$')
 		}
 	}
-	return out.String()
+	return out.String(), out.err
 }
 
 // Split 对应 String.prototype.split(regex, limit)，捕获分组会被插入结果；limit<0 表示不限。

@@ -5,7 +5,8 @@ import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { cn } from "cn";
 import { XIcon } from "lucide-react";
-import { ScrollArea } from "./scroll-area";
+import { OverlayBody, ActionGroup } from "./overlay-layout";
+import { Button } from "./button";
 import type { ReactNode } from "react";
 
 const floating =
@@ -108,6 +109,7 @@ function SheetContent({
   className,
   close,
   finalFocus,
+  footer,
   children,
 }: {
   side?: "left" | "right";
@@ -119,20 +121,22 @@ function SheetContent({
   // 关闭后焦点落点：触发键不是 Sheet 的 Trigger（如在顶栏里单独控制 open）时传入它的 ref
   finalFocus?: DialogPrimitive.Popup.Props["finalFocus"];
   children: ReactNode;
+  footer?: ReactNode;
 }) {
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-[var(--weir-scrim)] transition-opacity duration-[var(--weir-mid)] data-[starting-style]:opacity-0 data-[ending-style]:opacity-0" />
       <DialogPrimitive.Popup
         data-slot="sheet-content"
+        data-tour="dialog"
         finalFocus={finalFocus}
         data-side={side}
         className={cn(
-          "fixed inset-y-0 z-50 flex w-[min(320px,88vw)] flex-col gap-4 overflow-hidden border-[var(--weir-line-soft)] bg-[var(--weir-panel)] p-5 shadow-[0_0_30px_-10px_var(--weir-shade-strong)] outline-none transition-transform duration-[var(--weir-spring-dur)] ease-[var(--weir-spring)] data-[ending-style]:duration-[var(--weir-slow)] data-[ending-style]:ease-[var(--weir-ease-in)] data-[side=left]:left-0 data-[side=left]:border-r data-[side=right]:right-0 data-[side=right]:border-l data-[side=left]:data-[starting-style]:-translate-x-full data-[side=left]:data-[ending-style]:-translate-x-full data-[side=right]:data-[starting-style]:translate-x-full data-[side=right]:data-[ending-style]:translate-x-full",
+          "fixed inset-y-0 z-50 flex w-[min(var(--weir-dialog-sm),var(--weir-sheet-width))] flex-col gap-[var(--weir-space-4)] overflow-hidden border-[var(--weir-line-soft)] bg-[var(--weir-panel)] p-[var(--weir-dialog-padding)] shadow-[0_0_30px_-10px_var(--weir-shade-strong)] outline-none transition-transform duration-[var(--weir-spring-dur)] ease-[var(--weir-spring)] data-[ending-style]:duration-[var(--weir-slow)] data-[ending-style]:ease-[var(--weir-ease-in)] data-[side=left]:left-0 data-[side=left]:border-r data-[side=right]:right-0 data-[side=right]:border-l data-[side=left]:data-[starting-style]:-translate-x-full data-[side=left]:data-[ending-style]:-translate-x-full data-[side=right]:data-[starting-style]:translate-x-full data-[side=right]:data-[ending-style]:translate-x-full",
           className,
         )}
       >
-        <div data-slot="sheet-header" className="flex items-start justify-between gap-3">
+        <div data-slot="sheet-header" className="flex shrink-0 items-start justify-between gap-[var(--weir-space-3)]">
           <div className="min-w-0">
             <DialogPrimitive.Title className="text-dialog font-semibold">{title}</DialogPrimitive.Title>
             {description && (
@@ -142,13 +146,14 @@ function SheetContent({
           {close ?? (
             <DialogPrimitive.Close
               aria-label="关闭"
-              className="weir-key weir-key-ghost inline-flex size-7 shrink-0 items-center justify-center rounded-full text-[var(--weir-ink-3)] touch:size-11"
+              render={<Button variant="ghost" size="icon-sm" />}
             >
-              <XIcon className="size-4" />
+              <XIcon />
             </DialogPrimitive.Close>
           )}
         </div>
-        <ScrollArea className="min-h-0 flex-1" viewportClassName="weir-focus-gutter">{children}</ScrollArea>
+        <OverlayBody className="flex-1">{children}</OverlayBody>
+        {footer && <ActionGroup align="end" className="weir-overlay-footer">{footer}</ActionGroup>}
       </DialogPrimitive.Popup>
     </DialogPrimitive.Portal>
   );

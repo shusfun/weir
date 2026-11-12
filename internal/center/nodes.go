@@ -49,6 +49,9 @@ func (s *Server) nodeRoutes(admin *gin.RouterGroup) {
 	admin.GET("/nodes/:id", s.getNode)
 	admin.PATCH("/nodes/:id", s.updateNode)
 	admin.DELETE("/nodes/:id", s.deleteNode)
+	admin.POST("/nodes/:id/probe-credential", s.rotateNodeProbe)
+	admin.GET("/settings/force-disconnect", s.getForceDisconnect)
+	admin.PUT("/settings/force-disconnect", s.putForceDisconnect)
 	admin.POST("/gates/:id/probe-reality", s.probeReality)
 }
 
@@ -120,11 +123,23 @@ func (s *Server) probeReality(c *gin.Context) {
 		targets = append(targets, t)
 	}
 	res, err := s.gateProbe(c.Request.Context(), g, contracts.ActionRealityProbe, map[string]any{"targets": targets}, 50*time.Second)
-	if err != nil {
-		failDetail(c, 422, "reality_probe_failed", err.Error(), gin.H{"result": res})
+	if err != nil || realityBest(res) == "" {
+		detail := "没有找到合适的伪装目标"
+		if err != nil {
+			detail = err.Error()
+		}
+		failDetail(c, 422, "reality_probe_failed", detail, gin.H{"result": res})
 		return
 	}
 	c.JSON(200, res)
+}
+
+func realityBest(res map[string]any) string {
+	if res == nil {
+		return ""
+	}
+	best, _ := res["best"].(string)
+	return best
 }
 
 func (s *Server) nodeView(ctx context.Context, n *ent.Node) gin.H {
@@ -531,8 +546,13 @@ func (s *Server) createNodeNow(c *gin.Context) {
 			}
 			jobStep(ctx, "正在让 "+g.Name+" 实测候选伪装站点", 50*time.Second)
 			res, err := s.gateProbe(ctx, g, contracts.ActionRealityProbe, map[string]any{"targets": targets}, 50*time.Second)
-			if realityCandidates = suitableTargets(res); err != nil || len(realityCandidates) == 0 {
-				failDetail(c, 422, "reality_probe_failed", fmt.Sprint(err), gin.H{"result": res})
+			realityCandidates = suitableTargets(res)
+			if err != nil || len(realityCandidates) == 0 {
+				detail := "没有找到合适的伪装目标"
+				if err != nil {
+					detail = err.Error()
+				}
+				failDetail(c, 422, "reality_probe_failed", detail, gin.H{"result": res})
 				return
 			}
 		}
@@ -673,7 +693,11 @@ func (s *Server) createNodeNow(c *gin.Context) {
 		}
 		_ = u.Update().SetNodeIds(append(append([]int{}, u.NodeIds...), n.ID)).Exec(ctx)
 	}
-	if err = s.afterNodeChange(ctx, n); err != nil {
+	if _, err = s.ensureProbeCredential(ctx, n); err != nil {
+		failInternal(c, 500, "probe_credential_failed", err)
+		return
+	}
+	if err = s.afterNodeChange(WithRevisionCause(ctx, "node.create", c.GetInt("user_id")), n); err != nil {
 		failInternal(c, 500, "sync_failed", err)
 		return
 	}
@@ -700,7 +724,7 @@ func (s *Server) nodeShares(ctx context.Context, n *ent.Node, uids []int) []gin.
 			continue
 		}
 		item := gin.H{"user_id": u.ID, "email": u.Email, "name": u.Name, "links": []gin.H{}}
-		if n.Protocol == "wireguard" && u.Quota > 0 {
+		if n.Protocol == "wireguard" && !u.Unlimited {
 			item["error"] = "WireGuard 只给不限额度的用户"
 			out = append(out, item)
 			continue
@@ -964,7 +988,13 @@ func (s *Server) updateNodeNow(c *gin.Context) {
 			return
 		}
 	}
-	if err = s.afterNodeChange(ctx, n); err != nil {
+	if n.Protocol != previous.Protocol {
+		if err = s.rewriteProbeSecret(ctx, n); err != nil {
+			failInternal(c, 500, "probe_credential_failed", err)
+			return
+		}
+	}
+	if err = s.afterNodeChange(WithRevisionCause(ctx, "node.update", c.GetInt("user_id")), n); err != nil {
 		failInternal(c, 500, "sync_failed", err)
 		return
 	}
@@ -979,6 +1009,23 @@ func (s *Server) updateNodeNow(c *gin.Context) {
 		go s.checkAfterApplied(context.WithoutCancel(ctx), n.ID, g.ID)
 	}
 	c.JSON(200, s.nodeView(ctx, n))
+}
+
+func (s *Server) rotateNodeProbe(c *gin.Context) {
+	n, ok := s.nodeParam(c)
+	if !ok {
+		return
+	}
+	if dryRun(c, dryResult{Preview: []string{"轮换节点「" + n.Name + "」的内部实测凭据，这个节点的内核会重启一次"}}) {
+		return
+	}
+	ctx := WithRevisionCause(c.Request.Context(), "probe.rotate", c.GetInt("user_id"))
+	if _, err := s.rotateProbeCredential(ctx, n); err != nil {
+		failInternal(c, 500, "probe_credential_failed", err)
+		return
+	}
+	s.audit(c, "node.probe_rotate", "node:"+itoa(n.ID), "ok")
+	c.JSON(200, gin.H{"node_id": n.ID, "rotated": true})
 }
 
 // deleteNode 删除节点及其凭据、路由；被其他节点或用户链式代理当作出口时拒绝（force 时一并删除用户链）。
@@ -1028,7 +1075,7 @@ func (s *Server) deleteNode(c *gin.Context) {
 		return
 	}
 	if err = s.SyncAll(ctx); err == nil {
-		err = s.bumpGates(ctx, []int{n.GateID})
+		err = s.bumpGates(WithRevisionCause(ctx, "node.delete", c.GetInt("user_id")), []int{n.GateID})
 	}
 	if err != nil {
 		failInternal(c, 500, "sync_failed", err)

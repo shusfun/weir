@@ -32,7 +32,7 @@ func TestResourcesBrowserFixture(t *testing.T) {
 	direct := e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "ss2022", "name": "入口直连", "skip_probe": true}, nil)
 	e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "ss2022", "name": "入口链式", "skip_probe": true, "exit": map[string]any{"kind": "socks5", "address": "127.0.0.1", "port": proxyPort, "remark": "出口备注：家庭线路"}}, nil)
 	e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "vless-reality", "name": "入口 Xray", "skip_probe": true, "settings": map[string]any{"reality_dest": localDest(t), "reality_server_names": "e2e.test"}}, nil)
-	u := e.post("/api/v1/admin/users", map[string]any{"email": "resource-user@e2e.test", "password": "ResourceUser2026", "allow_chain": true, "all_nodes": true}, nil)
+	u := e.post("/api/v1/admin/users", map[string]any{"unlimited": true, "email": "resource-user@e2e.test", "password": "ResourceUser2026", "allow_chain": true, "all_nodes": true}, nil)
 	e.applied("entry fixture")
 	entryGate := e.gateID
 	e.startGate("出口 VPS")

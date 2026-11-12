@@ -3,7 +3,10 @@ package center
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
+	"math"
 	"net/url"
 	"strconv"
 	"strings"
@@ -16,7 +19,9 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/setting"
 	"github.com/shusfun/weir/internal/store/ent/subnode"
 	"github.com/shusfun/weir/internal/store/ent/subsource"
+	"github.com/shusfun/weir/internal/sub"
 	"github.com/shusfun/weir/internal/subgroup"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // 订阅源页：订阅源 + 手动节点 → 订阅组（处理链、规则模板）→ 分配给用户或分享。
@@ -39,6 +44,7 @@ func sourceRefreshValue(v any) (int, bool) {
 
 // SubscriptionSettings 是订阅源页的全局默认值（订阅组可逐项覆盖）。
 type SubscriptionSettings struct {
+	Engine           string         `json:"engine"`
 	FlagEmoji        bool           `json:"flag_emoji"`
 	PrependManual    bool           `json:"prepend_manual"`
 	ManualPrefix     string         `json:"manual_prefix"`
@@ -52,6 +58,10 @@ type SubscriptionSettings struct {
 	CacheMinutes     int            `json:"cache_minutes"`
 	SkipCertVerify   bool           `json:"skip_cert_verify"`
 	EnableUDP        bool           `json:"enable_udp"`
+	EnableTFO        bool           `json:"enable_tfo"`
+	DNSMode          string         `json:"dns_mode"`
+	CustomDNS        string         `json:"custom_dns"`
+	RegionOverrides  []any          `json:"region_overrides"`
 	FilterInclude    string         `json:"filter_include"`
 	FilterExclude    string         `json:"filter_exclude"`
 	UpdateInterval   int            `json:"update_interval"`
@@ -63,7 +73,7 @@ type SubscriptionSettings struct {
 
 func defaultSubscriptionSettings() SubscriptionSettings {
 	return SubscriptionSettings{FlagEmoji: true, PrependManual: true, ManualPrefix: "手动节点", PrependSources: true, RuleLevel: "std",
-		TrafficNodes: true, CacheMinutes: 10, EnableUDP: true, UpdateInterval: 24, SourceRefresh: 0}
+		TrafficNodes: true, CacheMinutes: 10, EnableUDP: true, DNSMode: "clean", UpdateInterval: 24, SourceRefresh: 0}
 }
 
 func (s *Server) subscriptionSettings(ctx context.Context) (SubscriptionSettings, error) {
@@ -112,6 +122,10 @@ func (s *Server) subscriptionSettings(ctx context.Context) (SubscriptionSettings
 }
 
 func (s *Server) subscriptionRoutes(r *gin.Engine, auth, admin *gin.RouterGroup) {
+	admin.GET("/subscriptions/converter", s.getConverterSettings)
+	admin.PUT("/subscriptions/converter", s.putConverterSettings)
+	admin.GET("/subscriptions/runs", s.listSubscriptionRuns)
+	admin.GET("/subscriptions/runs/:id", s.getSubscriptionRun)
 	admin.GET("/subscriptions/settings", s.getSubscriptionSettings)
 	admin.PUT("/subscriptions/settings", s.putSubscriptionSettings)
 	admin.GET("/subscriptions/sources", s.listSources)
@@ -131,6 +145,8 @@ func (s *Server) subscriptionRoutes(r *gin.Engine, auth, admin *gin.RouterGroup)
 	admin.PATCH("/subscriptions/profiles/:id", s.saveProfile)
 	admin.DELETE("/subscriptions/profiles/:id", s.deleteProfile)
 	admin.POST("/subscriptions/profiles/:id/preview", s.previewProfile)
+	admin.POST("/subscriptions/profiles/:id/test", s.asJob("实测订阅组节点", "已取消，保留已完成条目", s.testSubscriptionProfile))
+	admin.GET("/subscriptions/profiles/:id/test", s.getSubscriptionProfileTest)
 	admin.POST("/subscriptions/profiles/:id/share", s.shareProfile)
 	admin.DELETE("/subscriptions/profiles/:id/share", s.unshareProfile)
 	admin.PUT("/subscriptions/profiles/:id/grants", s.setGrants)
@@ -157,8 +173,22 @@ func (s *Server) putSubscriptionSettings(c *gin.Context) {
 	if !bind(c, &st) {
 		return
 	}
+	if !validSubscriptionEngine(st.Engine) {
+		failure(c, 400, "invalid_engine")
+		return
+	}
 	if err := checkOperators(st.DefaultOperators); err != nil {
 		failDetail(c, 400, "invalid_operators", err.Error(), nil)
+		return
+	}
+	for _, text := range []string{st.FilterInclude, st.FilterExclude} {
+		if err := sub.ValidateFilterRules(text); err != nil {
+			failDetail(c, 400, "invalid_filter_rules", err.Error(), nil)
+			return
+		}
+	}
+	if err := checkSubscriptionRendering(st.DNSMode, st.CustomDNS, st.RegionOverrides); err != nil {
+		failDetail(c, 400, "invalid_"+subscriptionRenderingField(err), err.Error(), nil)
 		return
 	}
 	if st.CacheMinutes < 0 || st.CacheMinutes > 1440 || st.UpdateInterval < 1 || st.UpdateInterval > 168 || st.SourceRefresh < 0 || st.SourceRefresh > 168 || !validRuleLevel(st.RuleLevel) {
@@ -177,6 +207,7 @@ func (s *Server) putSubscriptionSettings(c *gin.Context) {
 		return
 	}
 	s.audit(c, "subscription.settings", "", "ok")
+	s.invalidateGroups(c.Request.Context())
 	c.JSON(200, st)
 }
 
@@ -208,7 +239,7 @@ func checkOperators(ops []any) error {
 	if len(b) > 256<<10 {
 		return fmt.Errorf("处理链过大")
 	}
-	return nil
+	return sub.ValidateOperatorPatterns(ops)
 }
 
 func idParam(c *gin.Context) (int, bool) {
@@ -240,14 +271,29 @@ func parseUserInfo(raw string) map[string]int64 {
 	out := map[string]int64{}
 	for _, part := range strings.Split(raw, ";") {
 		k, v, ok := strings.Cut(strings.TrimSpace(part), "=")
-		if n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64); ok && err == nil {
-			out[strings.TrimSpace(k)] = n
+		key := strings.TrimSpace(k)
+		if key != "upload" && key != "download" && key != "total" && key != "expire" {
+			continue
+		}
+		if n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64); ok && err == nil && n >= 0 {
+			out[key] = n
 		}
 	}
 	if len(out) == 0 {
 		return nil
 	}
 	return out
+}
+
+// 部分上游只报告额度或期限；缺失传输计数时不能推算剩余流量。
+func sourceTraffic(ui map[string]int64) (int64, int64, bool) {
+	upload, hasUpload := ui["upload"]
+	download, hasDownload := ui["download"]
+	total, hasTotal := ui["total"]
+	if !hasUpload || !hasDownload || !hasTotal || total <= 0 || upload > math.MaxInt64-download {
+		return 0, 0, false
+	}
+	return upload + download, total, true
 }
 
 func (s *Server) listSources(c *gin.Context) {
@@ -261,9 +307,9 @@ func (s *Server) listSources(c *gin.Context) {
 	known := 0
 	for _, it := range items {
 		out = append(out, sourceView(it))
-		if ui := parseUserInfo(it.UserInfo); it.Enabled && !it.ExcludeTraffic && ui != nil && ui["total"] > 0 {
-			used += ui["upload"] + ui["download"]
-			total += ui["total"]
+		if u, t, ok := sourceTraffic(parseUserInfo(it.UserInfo)); it.Enabled && !it.ExcludeTraffic && ok && used <= math.MaxInt64-u && total <= math.MaxInt64-t {
+			used += u
+			total += t
 			known++
 		}
 	}
@@ -271,6 +317,15 @@ func (s *Server) listSources(c *gin.Context) {
 }
 
 func (s *Server) saveSource(c *gin.Context) {
+	if err := s.Store.Lock.Do(c.Request.Context(), "subscription-source:"+c.Param("id"), func(context.Context) error {
+		s.saveSourceLocked(c)
+		return nil
+	}); err != nil {
+		failInternal(c, 503, "save_failed", err)
+	}
+}
+
+func (s *Server) saveSourceLocked(c *gin.Context) {
 	id, ok := idParam(c)
 	if !ok {
 		return
@@ -290,6 +345,9 @@ func (s *Server) saveSource(c *gin.Context) {
 		Remark         *string `json:"remark"`
 	}
 	if !bind(c, &req) {
+		return
+	}
+	if !checkSubscriptionFilters(c, req.FilterInclude, req.FilterExclude) {
 		return
 	}
 	ctx := c.Request.Context()
@@ -392,6 +450,15 @@ func (s *Server) saveSource(c *gin.Context) {
 }
 
 func (s *Server) deleteSource(c *gin.Context) {
+	if err := s.Store.Lock.Do(c.Request.Context(), "subscription-profiles", func(context.Context) error {
+		s.deleteSourceLocked(c)
+		return nil
+	}); err != nil {
+		failInternal(c, 503, "delete_failed", err)
+	}
+}
+
+func (s *Server) deleteSourceLocked(c *gin.Context) {
 	id, ok := idParam(c)
 	if !ok {
 		return
@@ -409,12 +476,25 @@ func (s *Server) deleteSource(c *gin.Context) {
 		dryRun(c, dryResult{Preview: []string{"删除订阅源「" + src.Name + "」，并从所有订阅组里移除"}})
 		return
 	}
-	if err := s.Store.Ent.SubSource.DeleteOneID(id).Exec(ctx); err != nil {
+	tx, err := s.Store.Ent.Tx(ctx)
+	if err != nil {
+		failInternal(c, 503, "delete_failed", err)
+		return
+	}
+	defer tx.Rollback()
+	if err := tx.SubSource.DeleteOneID(id).Exec(ctx); err != nil {
 		failure(c, 404, "source_not_found")
 		return
 	}
+	if err := dropFromProfiles(ctx, tx.Client(), "source_ids", id); err != nil {
+		failInternal(c, 503, "delete_failed", err)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		failInternal(c, 503, "delete_failed", err)
+		return
+	}
 	_ = s.Store.KV.Del(ctx, sourceCacheKey(id))
-	s.dropFromProfiles(ctx, "source_ids", id)
 	s.invalidateGroups(ctx)
 	s.audit(c, "subscription.source.delete", "source:"+itoa(id), "ok")
 	c.Status(204)
@@ -460,47 +540,102 @@ func sourceCacheKey(id int) string { return "sub-source:" + itoa(id) }
 type kvCache struct{ s *Server }
 
 func (k kvCache) Load(ctx context.Context, id int) ([]string, bool) {
-	raw, ok, err := k.s.Store.KV.Get(ctx, sourceCacheKey(id))
+	return k.defaultCache(ctx, id).Load(ctx, id)
+}
+
+func (k kvCache) Store(ctx context.Context, id int, nodes []string) {
+	k.defaultCache(ctx, id).Store(ctx, id, nodes)
+}
+
+func (k kvCache) defaultCache(ctx context.Context, id int) subgroup.Cache {
+	if src, err := k.s.Store.Ent.SubSource.Get(ctx, id); err == nil {
+		source := toSource(src)
+		return k.ForSource(source, subgroup.SourceUserAgent(source, "clash-meta/2.5.0"))
+	}
+	return sourceIdentityCache{k.s, sourceCacheKey(id)}
+}
+
+func (k kvCache) ForSource(source subgroup.Source, ua string) subgroup.Cache {
+	key := sourceCacheKey(source.ID) + ":" + version([]any{source.URL, ua, source.PlusAsSpace})
+	return sourceIdentityCache{k.s, key}
+}
+
+type sourceIdentityCache struct {
+	s   *Server
+	key string
+}
+
+func (k sourceIdentityCache) Load(ctx context.Context, _ int) ([]string, bool) {
+	raw, ok, err := k.s.Store.KV.Get(ctx, k.key)
 	if err != nil || !ok {
 		return nil, false
 	}
 	var nodes []string
-	return nodes, json.Unmarshal([]byte(raw), &nodes) == nil
+	if json.Unmarshal([]byte(raw), &nodes) != nil {
+		return nil, false
+	}
+	return nodes, true
 }
 
-func (k kvCache) Store(ctx context.Context, id int, nodes []string) {
+func (k sourceIdentityCache) Store(ctx context.Context, _ int, nodes []string) {
 	b, _ := json.Marshal(nodes)
-	_ = k.s.Store.KV.Set(ctx, sourceCacheKey(id), string(b), 0)
+	_ = k.s.Store.KV.Set(ctx, k.key, string(b), 14*24*time.Hour)
 }
 
 func toSource(v *ent.SubSource) subgroup.Source {
 	return subgroup.Source{ID: v.ID, Name: v.Name, URL: v.URL, UserAgent: v.UserAgent, FilterInclude: v.FilterInclude, FilterExclude: v.FilterExclude,
-		Operators: v.Operators, PlusAsSpace: v.PlusAsSpace, NodeCache: v.NodeCache, KnownNodes: v.KnownNodes}
+		Operators: v.Operators, PlusAsSpace: v.PlusAsSpace, NodeCache: v.NodeCache, KnownNodes: v.KnownNodes,
+		ConfigVersion: version([]any{v.URL, v.UserAgent, v.PlusAsSpace, v.NodeCache, v.FilterInclude, v.FilterExclude, v.Operators, v.Name})}
 }
 
 // recordResults 保存订阅源本次的节点数、用量、标题与错误。
 func (s *Server) recordResults(ctx context.Context, results []subgroup.SourceResult) {
-	now := time.Now()
 	for _, r := range results {
-		upd := s.Store.Ent.SubSource.UpdateOneID(r.SourceID).SetLastError(r.Error)
-		if r.Error == "" {
-			upd.SetNodeCount(r.Nodes).SetFetchedAt(now)
-			if r.Nodes >= 10 {
-				upd.SetKnownNodes(r.Nodes)
+		started := time.Now().UTC()
+		err := s.Store.Lock.Do(ctx, "subscription-source:"+itoa(r.SourceID), func(ctx context.Context) error {
+			src, err := s.Store.Ent.SubSource.Get(ctx, r.SourceID)
+			if ent.IsNotFound(err) {
+				return nil
 			}
-			if r.UserInfo != "" {
-				upd.SetUserInfo(r.UserInfo)
+			if err != nil {
+				return err
 			}
-			if r.Title != "" {
-				upd.SetTitle(r.Title)
+			if r.ConfigVersion != "" && r.ConfigVersion != toSource(src).ConfigVersion {
+				return nil
 			}
+			return s.recordSourceResult(ctx, r)
+		})
+		stage := subgroup.Stage{SourceID: r.SourceID, Operation: "source.persist", Started: started, Finished: time.Now().UTC()}
+		if err != nil {
+			stage.Error = "source_result_save_failed"
 		}
-		_ = upd.Exec(ctx)
+		recordSubscriptionStage(ctx, 0, stage, "center.recordResults")
+		s.tasks.note("subscription-source-result", err)
 	}
 }
 
+func (s *Server) recordSourceResult(ctx context.Context, r subgroup.SourceResult) error {
+	now := time.Now()
+	upd := s.Store.Ent.SubSource.UpdateOneID(r.SourceID).SetLastError(r.Error)
+	if r.Error == "" {
+		upd.SetNodeCount(r.Nodes).SetKnownNodes(r.Nodes).SetFetchedAt(now)
+		upd.SetUserInfo(r.UserInfo)
+		if r.Title != "" {
+			upd.SetTitle(r.Title)
+		}
+	}
+	if err := upd.Exec(ctx); err != nil {
+		return err
+	}
+	if r.Error != "" && r.Error != "node_count_drop_rejected" {
+		_, err := s.enqueueObservation(ctx, observationInput{Point: "subscription.health", Resource: "source:" + itoa(r.SourceID), Text: r.Error, Origin: "center.recordResults"})
+		s.tasks.note("observation-producer", err)
+	}
+	return nil
+}
+
 func (s *Server) subFetcher() subgroup.Fetcher {
-	return subgroup.Fetcher{AllowPrivate: s.AllowPrivateSources}
+	return subgroup.Fetcher{AllowPrivate: s.AllowPrivateSources, Fetch: s.fetchSubscription}
 }
 
 func (s *Server) refreshSource(c *gin.Context) {
@@ -508,7 +643,7 @@ func (s *Server) refreshSource(c *gin.Context) {
 	if !ok {
 		return
 	}
-	ctx := c.Request.Context()
+	ctx := s.subscriptionContext(c.Request.Context(), 0)
 	src, err := s.Store.Ent.SubSource.Get(ctx, id)
 	if err != nil {
 		failure(c, 404, "source_not_found")
@@ -517,10 +652,16 @@ func (s *Server) refreshSource(c *gin.Context) {
 	if dryRun(c, dryResult{Preview: []string{"重新拉取订阅源「" + src.Name + "」，更新节点缓存与用量"}}) {
 		return
 	}
+	ctx, finish := s.startSubscriptionRun(ctx, 0)
+	defer finish(nil)
 	list, results := subgroup.Combine(ctx, s.subFetcher(), kvCache{s}, []subgroup.Source{toSource(src)}, nil, subgroup.Options{UserAgent: "clash-meta/2.5.0"})
 	s.recordResults(ctx, results)
 	s.invalidateGroups(ctx)
 	src, _ = s.Store.Ent.SubSource.Get(ctx, id)
+	if src == nil {
+		failure(c, 404, "source_not_found")
+		return
+	}
 	nodes := []string{}
 	for _, l := range strings.Split(strings.TrimSpace(list), "\n") {
 		if l != "" {
@@ -528,6 +669,23 @@ func (s *Server) refreshSource(c *gin.Context) {
 		}
 	}
 	c.JSON(200, gin.H{"source": sourceView(src), "result": results[0], "nodes": nodes})
+}
+
+func (s *Server) subscriptionContext(ctx context.Context, profileID int) context.Context {
+	ctx = withTrace(ctx, taskTrace(ctx))
+	return subgroup.WithObserver(ctx, func(ctx context.Context, stage subgroup.Stage) {
+		origin := "subgroup.Combine"
+		if stage.SourceID > 0 {
+			origin = "subgroup.fetchSource"
+		}
+		recordSubscriptionStage(ctx, profileID, stage, origin)
+		outcome := "succeeded"
+		if stage.Error != "" {
+			outcome = "failed"
+		}
+		slog.InfoContext(ctx, "subscription stage", "trace", taskTrace(ctx), "profile", profileID, "source", stage.SourceID,
+			"stage", stage.Operation, "outcome", outcome, "cache_fallback", stage.CacheFallback, "ms", stage.Finished.Sub(stage.Started).Milliseconds())
+	})
 }
 
 // ---- 手动节点 ----
@@ -578,6 +736,9 @@ func (s *Server) saveManualNode(c *gin.Context) {
 		PlusAsSpace   *bool   `json:"plus_as_space"`
 	}
 	if !bind(c, &req) {
+		return
+	}
+	if !checkSubscriptionFilters(c, req.FilterInclude, req.FilterExclude) {
 		return
 	}
 	ctx := c.Request.Context()
@@ -683,6 +844,15 @@ func (s *Server) importManualNodes(c *gin.Context) {
 }
 
 func (s *Server) deleteManualNode(c *gin.Context) {
+	if err := s.Store.Lock.Do(c.Request.Context(), "subscription-profiles", func(context.Context) error {
+		s.deleteManualNodeLocked(c)
+		return nil
+	}); err != nil {
+		failInternal(c, 503, "delete_failed", err)
+	}
+}
+
+func (s *Server) deleteManualNodeLocked(c *gin.Context) {
 	id, ok := idParam(c)
 	if !ok {
 		return
@@ -697,11 +867,24 @@ func (s *Server) deleteManualNode(c *gin.Context) {
 		dryRun(c, dryResult{Preview: []string{"删除手动节点「" + firstNonEmpty(v.Name, "未命名") + "」，并从所有订阅组里移除"}})
 		return
 	}
-	if err := s.Store.Ent.SubNode.DeleteOneID(id).Exec(ctx); err != nil {
+	tx, err := s.Store.Ent.Tx(ctx)
+	if err != nil {
+		failInternal(c, 503, "delete_failed", err)
+		return
+	}
+	defer tx.Rollback()
+	if err := tx.SubNode.DeleteOneID(id).Exec(ctx); err != nil {
 		failure(c, 404, "node_not_found")
 		return
 	}
-	s.dropFromProfiles(ctx, "node_ids", id)
+	if err := dropFromProfiles(ctx, tx.Client(), "node_ids", id); err != nil {
+		failInternal(c, 503, "delete_failed", err)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		failInternal(c, 503, "delete_failed", err)
+		return
+	}
 	s.invalidateGroups(ctx)
 	c.Status(204)
 }
@@ -732,14 +915,29 @@ func (s *Server) renameNodeGroup(c *gin.Context) {
 }
 
 // dropFromProfiles 删除源或节点时同步移出订阅组的引用。
-func (s *Server) dropFromProfiles(ctx context.Context, field string, id int) {
-	profiles, _ := s.Store.Ent.SubProfile.Query().All(ctx)
+func dropFromProfiles(ctx context.Context, db *ent.Client, field string, id int) error {
+	profiles, err := db.SubProfile.Query().All(ctx)
+	if err != nil {
+		return err
+	}
 	for _, p := range profiles {
 		list := p.SourceIds
 		if field == "node_ids" {
 			list = p.NodeIds
 		}
-		if !contains(list, id) {
+		kind := "source"
+		if field == "node_ids" {
+			kind = "node"
+		}
+		members, changed := []contracts.SubscriptionMember{}, false
+		for _, m := range p.Members {
+			if m.Kind == kind && m.ID == id {
+				changed = true
+			} else {
+				members = append(members, m)
+			}
+		}
+		if !contains(list, id) && !changed {
 			continue
 		}
 		kept := []int{}
@@ -748,12 +946,20 @@ func (s *Server) dropFromProfiles(ctx context.Context, field string, id int) {
 				kept = append(kept, v)
 			}
 		}
+		update := p.Update()
+		if p.Members != nil {
+			update.SetMembers(members)
+		}
 		if field == "node_ids" {
-			_ = p.Update().SetNodeIds(kept).Exec(ctx)
+			update.SetNodeIds(kept)
 		} else {
-			_ = p.Update().SetSourceIds(kept).Exec(ctx)
+			update.SetSourceIds(kept)
+		}
+		if err := update.Exec(ctx); err != nil {
+			return err
 		}
 	}
+	return nil
 }
 
 // ---- 规则模板 ----
@@ -905,10 +1111,23 @@ func (s *Server) previewOperators(c *gin.Context) {
 		failure(c, 400, "too_many_nodes")
 		return
 	}
+	ctx, complete := s.startSubscriptionRun(c.Request.Context(), 0)
+	started := time.Now().UTC()
+	var processingError error
+	defer func() {
+		subscriptionStageResult(ctx, 0, "subscription.operators.preview", "center.previewOperators", started, processingError)
+		complete(processingError)
+	}()
 	if err := checkOperators(req.Operators); err != nil {
+		processingError = errors.New("group_rules_invalid")
 		failDetail(c, 400, "invalid_operators", err.Error(), nil)
 		return
 	}
-	out := subgroup.RunOperators(req.Links, req.Operators, "clash-meta/2.5.0")
+	out, err := subgroup.RunOperatorsChecked(req.Links, req.Operators, "clash-meta/2.5.0")
+	if err != nil {
+		processingError = errors.New("group_rules_invalid")
+		failDetail(c, 400, "invalid_operators", err.Error(), nil)
+		return
+	}
 	c.JSON(200, gin.H{"output": strings.Join(out, "\n"), "count": len(out)})
 }

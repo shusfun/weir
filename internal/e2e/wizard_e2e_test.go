@@ -20,8 +20,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/shusfun/weir/internal/kernels"
 )
 
 func (e *env) get(path string, header map[string]string) ([]byte, http.Header) {
@@ -138,30 +136,35 @@ func (e *env) runSingboxClient(bin string, outbound map[string]any) int {
 		e.t.Fatal(err)
 	}
 	e.t.Cleanup(func() { cmd.Process.Kill(); cmd.Wait() })
+	eventually(e.t, 10*time.Second, "sing-box client listener", func() bool {
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), 200*time.Millisecond)
+		if err != nil {
+			return false
+		}
+		conn.Close()
+		return true
+	})
 	return port
 }
 
 // 四步建节点 → 一个窗口建用户 → 订阅 → 真实 sing-box 客户端逐个连接（REALITY / SS2022 / Hysteria2 / TUIC /
 // 节点链经家宽 SOCKS5 / 用户链经另一节点），并核对按用户计量。
 func TestWizardSubscriptionRealClients(t *testing.T) {
-	sb := os.Getenv("WEIR_E2E_SINGBOX")
-	if sb == "" {
-		t.Skip("WEIR_E2E_SINGBOX not set")
-	}
 	e := setup(t)
-	data, err := os.ReadFile(sb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = (kernels.Cache{Dir: filepath.Join(e.dir, "center-data", "kernels")}).Put("sing-box", "1.14.3", "amd64", data); err != nil {
-		t.Fatal(err)
-	}
+	sb := e.seedSingbox()
+	caFile, originPort, _ := e.httpsCenter("wizard.e2e.test")
+	installTrust(t, mustRead(t, caFile))
+	e.s.SetOriginForTest(fmt.Sprintf("https://wizard.e2e.test:%d", originPort))
+	startDNSLab(t).alias("wizard.e2e.test", net.ParseIP("127.0.0.1"))
 	e.startGate("relay")
 	ctx := e.ctx
 	g := e.s.Store.Ent.Gate.GetX(ctx, e.gateID)
-	if g.PublicHost != "127.0.0.1" {
-		e.s.Store.Ent.Gate.UpdateOneID(g.ID).SetPublicHost("127.0.0.1").ExecX(ctx)
+	// 用户链仍走公网地址校验；容器内把测试公网地址绑定到回环，不放宽产品限制。
+	const relayHost = "11.0.0.1"
+	if err := addLoopIP(relayHost); err != nil {
+		t.Fatal(err)
 	}
+	e.s.Store.Ent.Gate.UpdateOneID(g.ID).SetPublicHost(relayHost).ExecX(ctx)
 
 	dest := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("dest")) }))
 	dest.TLS = &tls.Config{MinVersion: tls.VersionTLS13}
@@ -185,7 +188,7 @@ func TestWizardSubscriptionRealClients(t *testing.T) {
 	node(map[string]any{"preset": "ss2022", "name": "HOME", "exit": map[string]any{"kind": "socks5", "address": "127.0.0.1", "port": homePort}})
 	node(map[string]any{"preset": "ss2022", "name": "VIA-R", "exit": map[string]any{"kind": "node", "node_id": reality["id"]}})
 
-	u := e.post("/api/v1/admin/users", map[string]any{"email": "user@e2e.test", "password": "E2eUser1"}, nil)
+	u := e.post("/api/v1/admin/users", map[string]any{"unlimited": true, "email": "user@e2e.test", "password": "E2eUser1"}, nil)
 	uid := int(u["id"].(float64))
 	ch := e.post(fmt.Sprintf("/api/v1/admin/users/%d/chains", uid), map[string]any{"name": "USER-CHAIN", "entry_node_id": hy2["id"], "exit": map[string]any{"kind": "node", "node_id": reality["id"]}, "skip_probe": true}, nil)
 	tags := map[string]string{}
@@ -207,7 +210,7 @@ func TestWizardSubscriptionRealClients(t *testing.T) {
 	var doc struct {
 		Outbounds []map[string]any `json:"outbounds"`
 	}
-	if err = json.Unmarshal(body, &doc); err != nil {
+	if err := json.Unmarshal(body, &doc); err != nil {
 		t.Fatalf("sing-box subscription: %v\n%s", err, body)
 	}
 	blob := bytes.Repeat([]byte("m"), 1<<20)
@@ -253,9 +256,14 @@ func TestWizardSubscriptionRealClients(t *testing.T) {
 		if n["exit"].(map[string]any)["kind"] != "freedom" {
 			continue
 		}
-		res := e.post(fmt.Sprintf("/api/v1/admin/nodes/%d/test", int(n["id"].(float64))), map[string]any{}, nil)
-		if res["stage"] != "connect" || res["bytes"].(float64) != 256<<10 {
-			t.Fatalf("node test %s = %v", n["name"], res)
+		nid := int(n["id"].(float64))
+		deployed := e.post(fmt.Sprintf("/api/v1/admin/nodes/%d/test", nid), map[string]any{}, nil)["test"].(map[string]any)
+		if deployed["external"] != "unknown" || deployed["location"] != "colocated" {
+			t.Fatalf("same-host test claimed external reachability: %v", deployed)
+		}
+		res, err := e.s.TestNodeSettings(ctx, nid, e.s.Store.Ent.Node.GetX(ctx, nid).Settings)
+		if err != nil || res["stage"] != "connect" || res["bytes"] != float64(256<<10) {
+			t.Fatalf("candidate node test %s = %v, %v", n["name"], res, err)
 		}
 		t.Logf("node test %s ok (%v ms)", n["name"], res["latency_ms"])
 	}

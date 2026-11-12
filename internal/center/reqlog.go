@@ -98,6 +98,27 @@ func validTraceHex(s string, n int) bool {
 
 // 成功记录只覆盖需要排查的操作；路由模板不包含令牌。
 func customTraceRoute(route string) bool {
+	if strings.Contains(route, "/account-plans") || strings.Contains(route, "/access-codes") || route == "/api/v1/me/redeem" {
+		return true
+	}
+	if strings.Contains(route, "/settings/turnstile") {
+		return true
+	}
+	if strings.HasPrefix(route, "/api/v1/auth/human/") || route == "/api/v1/auth/login" {
+		return true
+	}
+	if strings.HasPrefix(route, "/api/v1/auth/passkey/") || strings.HasPrefix(route, "/api/v1/security/passkey/") {
+		return true
+	}
+	if strings.Contains(route, "/settings/account-policy") || strings.HasPrefix(route, "/api/v1/admin/ai/drafts/") || route == "/api/v1/auth/email" {
+		return true
+	}
+	if strings.Contains(route, "/public-pages") || route == "/api/v1/pages/:slug/guestbook" || strings.HasPrefix(route, "/api/v1/admin/defense/laya") {
+		return true
+	}
+	if strings.HasPrefix(route, "/api/v1/admin/workers/") {
+		return true
+	}
 	if strings.Contains(route, "/proxy") || strings.Contains(route, "/link-stats") || strings.Contains(route, "/pulls") || strings.Contains(route, "/provider/") || route == "/api/v1/agent/meter" || route == "/api/v1/agent/live" {
 		return true
 	}
