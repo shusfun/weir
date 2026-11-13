@@ -4,7 +4,7 @@ export type GuideStep = { id: string; title: string; text: string; target?: stri
 export type Guide = { id: string; version: number; title: string; steps: GuideStep[] };
 export type GuideIdentity = { id: string; role: "admin" | "user" | "guest" };
 // 未列出的教程为首版。内容变更只提升对应页面、标签或弹窗的版本。
-const versions: Record<string, number> = { "page:/system": 2, "page:/kernels": 2, "page:/kernels:版本": 2, "page:/subscriptions:订阅组": 2, "page:/ops/observe:订阅链路": 3, "page:/users": 2, "dialog:创建用户": 2, "page:/links": 3, "page:/accounts": 2, "page:/accounts:套餐": 2, "page:/accounts:用码": 2, "dialog:新建套餐": 2, "dialog:编辑套餐": 2, "dialog:生成邀请码": 2, "dialog:生成兑换码": 2, "page:/system:登录与安全": 5, "page:/system:AI 与 dsh": 8, "page:/gates": 2, "dialog:新建节点": 2, "dialog:添加 VPS": 2, "getting-started": 2, "page:/ops/audit": 2, "page:/ops/observe": 4, "page:/ops/observe:总览": 3, "page:/ops/observe:安全": 3, "page:/ops/observe:注册兑换": 2, "page:/ops/observe:系统状态": 3, "page:/ops/observe:策略版本": 2 };
+const versions: Record<string, number> = { "page:/system": 2, "page:/kernels": 2, "page:/kernels:版本": 2, "page:/subscriptions:订阅组": 2, "page:/ops/observe:订阅链路": 3, "page:/users": 2, "dialog:创建用户": 2, "page:/links": 3, "page:/accounts": 2, "page:/accounts:套餐": 2, "page:/accounts:用码": 2, "dialog:新建套餐": 2, "dialog:编辑套餐": 2, "dialog:生成邀请码": 2, "dialog:生成兑换码": 2, "page:/system:登录与安全": 5, "page:/system:AI 与 dsh": 8, "page:/gates": 2, "dialog:新建节点": 3, "dialog:添加 VPS": 2, "getting-started": 3, "page:/ops/audit": 2, "page:/ops/observe": 4, "page:/ops/observe:总览": 3, "page:/ops/observe:安全": 3, "page:/ops/observe:注册兑换": 2, "page:/ops/observe:系统状态": 3, "page:/ops/observe:策略版本": 2 };
 const target = (id: string) => `[data-tour="${id}"]`;
 const step = (id: string, title: string, text: string, anchor?: string): GuideStep => ({ id, title, text, target: anchor ? target(anchor) : undefined });
 const overview = (id: string, title: string, text: string, detail: string): Guide => ({ id, version: 1, title, steps: [step("overview", title, text, "page-header"), step("work", "在这里操作", detail, "page-content")] });
@@ -84,7 +84,7 @@ const dialogs: Record<string, GuideStep[]> = {
   "VPS 详情": [step("state", "核对服务器与配置", "查看心跳、配置回执及主机观测；心跳在线不代表每个节点都可用。缺少观测显示未知，请检查真实失败原因。", "dialog")],
   "节点详情": [step("access", "端口与实测", "查看需要放行的 TCP / UDP 端口和本机防火墙。云安全组需要自行核对，再点完整实测查看最终结果。配置已加载和端口可达不等于真实客户端已连通。", "dialog"), step("exit", "出口与凭据", "核对实际出口及用户授权。改出口、端口或凭据后旧实测失效，重新检查；重放教程不会改动节点。", "dialog")],
   "新建节点": [
-    step("preset", "先选 VPS 和协议", "第一次使用选 VLESS + REALITY，出口保留直连。只有一台可用 VPS 时会自动选好；暂不可用的方案会显示原因。", "node-preset"),
+    step("preset", "先选 VPS 和协议", "只有一台可用 VPS 时会自动选好。缺少连接地址时，在本窗口核对识别的 IP 或填写公网 IP／直连域名，点「保存地址并继续」；已填的节点内容保留。地址保存后选择协议，暂不可用的方案会显示原因。", "node-preset"),
     step("advanced", "高级选项可以先不改", "端口可由系统选择。伪装目标留空时，由这台 VPS 用 DoH 解析候选后再选。展开高级可修改具体字段。创建后按结果放行安全组和防火墙端口，不能只看保存成功。", "node-options"),
     { ...step("save", "由你确认创建", "点「创建」保存并下发配置，再由后台队列实测。保存成功后查看应用和实测状态；实测失败保留节点与端口，放行防火墙后重试，不要重复创建。教程不会自动提交。", "node-submit"), wait: { method: "POST", path: "/admin/nodes", exact: true } },
   ],
@@ -104,7 +104,7 @@ export const onboarding: Guide = { id: "getting-started", version: 1, title: "�
   step("prepare", "先准备一台 VPS 和域名", "在 Linux VPS 以 root 运行安装命令；第一次选单机与 SQLite。控制台默认监听 127.0.0.1:19810，用同机反代配置域名和 HTTPS，转发 Host 与 X-Forwarded-Proto。"),
   step("install", "安装与初始化", "安装命令：curl -sSL https://raw.githubusercontent.com/shusfun/weir/main/deploy/install-online.sh | bash。打开 HTTPS 域名，填写初始化凭证，选择存储并创建管理员。凭证过期可在终端运行 weir 重新显示或生成。"),
   { ...step("vps", "确认 VPS 在线", "中心卡可启用本机执行端，中心仍可管理远程 VPS；远程机器用 SSH 或安装命令接入。已有在线 VPS 不必重复安装；只部署 Laya 可跳过节点。", "page-content"), condition: '[data-tour-online="true"]', route: "/gates", action: "打开 VPS 与节点" },
-  { ...step("node", "创建第一个直出节点", "点「新建节点」，选择 VLESS + REALITY，出口保留直连。由你点创建，保存后后台实测；测试失败保留节点和端口，可稍后重试。已有节点可先打开查看，再继续。", "new-node"), condition: '[data-tour-has-nodes="true"]', wait: {method:"POST",path:"/admin/nodes",exact:true}, route: "/gates", action: "打开建节点页面" },
+  { ...step("node", "创建第一个直出节点", "点「新建节点」，缺少连接地址时先在窗口内确认并保存地址，再选择 VLESS + REALITY，出口保留直连。由你点创建，保存后后台实测；测试失败保留节点和端口，可稍后重试。已有节点可先打开查看，再继续。", "new-node"), condition: '[data-tour-has-nodes="true"]', wait: {method:"POST",path:"/admin/nodes",exact:true}, route: "/gates", action: "打开建节点页面" },
   { ...step("check", "核对实际运行结果", "查看 VPS 配置已生效，按创建结果放行云安全组和本机防火墙端口，再运行完整实测。端口能连、配置加载成功、完整代理实测是不同结果。", "page-content"), route: "/gates" },
   { ...step("link", "取得自己的订阅", "打开订阅链接，使用自己的链接或新建一条。手机与电脑可以分别建链接；分享给别人应先在用户页为对方创建账户。", "page-content"), route: "/links", action: "打开订阅链接" },
   { ...step("client", "导入并验证连接", "复制订阅地址到客户端，或打开一键导入页选择客户端。更新订阅、选择节点并启用代理，再测试访问。拉取记录只证明取得配置，不能证明代理连通。", "page-content"), route: "/links" },

@@ -213,7 +213,7 @@ func (s *Server) presetsForGate(ctx context.Context, g *ent.Gate) []GatePreset {
 		item := GatePreset{Preset: p, Available: true}
 		switch {
 		case g.PublicHost == "":
-			item.Available, item.Why = false, "这台 VPS 还没有公网地址，先在 VPS 详情里填写"
+			item.Available, item.Why = false, "请先确认并保存这台 VPS 的节点连接地址"
 		case p.Cert == "required":
 			if !certKnown {
 				certWhy, certKnown = s.certBlocker(ctx, g), true

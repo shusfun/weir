@@ -2,9 +2,11 @@ import { NodeTestControl } from "./node-test";
 // 建节点：一页选 VPS、协议、出口就能创建。伪装、传输参数由内置方案给出，名称、端口、证书与方案字段都在「高级」里；
 // REALITY 目标由 VPS 实测选择；证书由系统按 VPS 准备；这台 VPS 现在用不了的方案标出原因。
 // 保存后显示要放行的端口（对照本机防火墙）与出口实测结果，再给出管理员本人的链接与二维码；谁能用节点在用户页分配。
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
+import { useQuery as useStrictQuery, useQueryClient } from "@tanstack/react-query";
+import { useUnsavedChanges } from "../lib/dirty";
 import { useQuery } from "../lib/query";
-import { Badge, Button, ChoiceCard, Collapsible, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Radio, RadioGroup, Step, Steps, SwitchField } from "@weir/ui";
+import { Badge, Button, ChoiceCard, Collapsible, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Radio, RadioGroup, Step, Steps, SwitchField, useConfirm } from "@weir/ui";
 import { QRCodeSVG } from "qrcode.react";
 import { ExitSelector } from "./exit-selector";
 import { api, ApiError } from "../api";
@@ -33,19 +35,28 @@ interface Share {
 }
 
 // gateId：从某台 VPS 的「＋ 节点」打开时已选好这台 VPS（仍可改）。
-export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGate }: { open: boolean; close: () => void; done: () => void; gates: Gate[]; nodes: NodeItem[]; gateId?: number }) {
-  const [gateId, setGateId] = useState<number | null>(initialGate ?? null);
-  // 选了 VPS 后带上 gate_id，方案会标明这台 VPS 现在能不能用
-  const presets = useQuery({ queryKey: ["presets", gateId ?? 0], queryFn: async () => (await api("/admin/presets" + (gateId ? "?gate_id=" + gateId : ""))).items as Preset[], enabled: open, placeholderData: (prev) => prev });
+type NodeWizardProps = { open: boolean; close: () => void; done: () => void; gates: Gate[]; nodes: NodeItem[]; gateId?: number };
+export function NodeWizard(props: NodeWizardProps) {
+  return props.open ? <NodeWizardForm {...props} /> : null;
+}
+
+function NodeWizardForm({ open, close, done, gates, nodes, gateId: initialGate }: NodeWizardProps) {
+  const active = gates.filter((g) => g.status === "active");
+  const [gateId, setGateId] = useState<number | null>(initialGate ?? (active.length === 1 ? active[0].id : null));
+  const [savedGate, setSavedGate] = useState<Gate | null>(null);
+  const currentGate = active.find((g) => g.id === gateId);
+  const gate = savedGate && currentGate && savedGate.id === currentGate.id && savedGate.config_revision >= currentGate.config_revision ? savedGate : currentGate;
+  const [hostDraft, setHostDraft] = useState<string | null>(null);
+  const host = hostDraft ?? gate?.public_host_hint ?? "";
+  const [traceId] = useState(() => crypto.randomUUID().replaceAll("-", ""));
+  const client = useQueryClient();
+  const confirm = useConfirm();
+  const hostSaving = useRef(false);
+  // 地址是方案可用性的前置条件；刷新失败不能沿用旧成功结果解锁创建。
+  const presets = useStrictQuery({ queryKey: ["presets", gateId ?? 0, gate?.public_host ?? ""], queryFn: async ({ signal }) => (await api("/admin/presets?gate_id=" + gateId, "GET", undefined, { traceId, signal })).items as Preset[], enabled: !!gateId, staleTime: 0 });
   const me = useQuery({ queryKey: ["me-account"], queryFn: () => api("/me") as Promise<{ id: number }>, enabled: open });
   const certs = useCerts();
   const [preset, setPreset] = useState("vless-reality");
-  // 每次打开时用这一次的 VPS（关闭后状态保留在组件里）；只有一台时直接选好
-  useEffect(() => {
-    if (!open) return;
-    const ready = gates.filter((g) => g.status === "active");
-    setGateId(initialGate ?? (ready.length === 1 ? ready[0].id : null));
-  }, [open, initialGate]);
   const [certId, setCertId] = useState(0);
   const [exitId,setExitId]=useState(0);
   const [chain, setChain] = useState<ExitSpec>({ kind: "freedom" });
@@ -57,9 +68,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
   const [shares, setShares] = useState<Share[] | null>(null);
   const [created, setCreated] = useState<NodeItem | null>(null);
   const [candidate, setCandidate] = useState<PendingExit | null>(null);
-  const active = gates.filter((g) => g.status === "active");
   const chosen = presets.data?.find((p) => p.id === preset);
-  const gate = active.find((g) => g.id === gateId);
   const chainExit = new Set((presets.data ?? []).filter((p) => p.chain_exit).map((p) => p.id));
   const exits = nodes.filter((n) => n.enabled && n.gate_id !== gateId && chainExit.has(n.preset));
   const exitFields = exitErrorFields(chain.kind);
@@ -73,7 +82,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
         gate_id: gateId, preset, name: name.trim(), port: Number(port) || 0, cert_id: certId || 0,
         reality_target: target.trim(), ...(exitId ? {exit_id:exitId}:{exit:chain}),
         settings: advanced, user_ids: me.data ? [me.data.id] : [],
-      }, track) as Promise<(NodeItem & { shares?: Share[] }) | { pending: PendingExit }>,
+      }, { ...track, traceId }) as Promise<(NodeItem & { shares?: Share[] }) | { pending: PendingExit }>,
     {
       wait: () => ({ label: `正在 ${gate?.name ?? "VPS"} 上新建 ${chosen?.name ?? ""} 节点` }),
       fields: errorFields,
@@ -89,6 +98,36 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
       },
     },
   );
+  const address = useFormAction(
+    () => api("/admin/gates/" + gateId, "PATCH", { public_host: host.trim() }, { traceId }) as Promise<Gate>,
+    {
+      fields: { invalid_public_host: "public_host", public_host_not_public: "public_host", public_host_unresolved: "public_host", public_host_lookup_failed: "public_host" },
+      onSuccess: async (updated) => {
+        setSavedGate(updated);
+        setHostDraft(null);
+        client.setQueryData<Gate[]>(["gates"], (items) => items?.map((g) => g.id === updated.id ? updated : g));
+        await client.invalidateQueries({ queryKey: ["presets", updated.id] });
+        done();
+      },
+    },
+  );
+  const addressNeeded = !!gate && !gate.public_host;
+  const dirty = !shares && !candidate && (hostDraft !== null || preset !== "vless-reality" || name !== "" || port !== "" || target !== "" || certId !== 0 || exitId !== 0 || chain.kind !== "freedom" || Object.keys(advanced).length > 0);
+  const clearDirty = useUnsavedChanges(dirty);
+  const discard = async () => !dirty || await confirm({ title: "放弃未保存修改？", description: "已保存的公网地址会保留，尚未创建的节点填写内容会丢失。", confirmText: "放弃修改", tone: "danger" });
+  const changeGate = async (id: number) => {
+    if (id === gateId || hostSaving.current || save.busy || !await discard()) return;
+    clearDirty();
+    setHostDraft(null); setSavedGate(null); address.reset(); save.reset();
+    setPreset("vless-reality"); setAdvanced({}); setCertId(0); setChain({ kind: "freedom" }); setExitId(0);
+    setName(""); setPort(""); setTarget(""); setMore(false);
+    setGateId(id);
+  };
+  const saveAddress = async () => {
+    if (hostSaving.current || !host.trim()) return;
+    hostSaving.current = true;
+    try { await address.submit(); } finally { hostSaving.current = false; }
+  };
   const reset = () => {
     setMore(false);
     setChain({ kind: "freedom" });setExitId(0);
@@ -103,12 +142,16 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
     save.reset();
     close();
   };
+  const requestClose = async () => {
+    if (hostSaving.current || (save.busy && !save.detachable)) return;
+    if (save.busy || await discard()) { clearDirty(); save.leave(); reset(); }
+  };
   // 页面感知：向导进行到第几步、未保存的填写内容（SOCKS5 密码只标已填 / 未填）。须在下面显示链接的提前返回之前调用。
   useConsoleContext(open && !shares ? {
     dialog: { title: "新建节点" },
     object: gate ? { type: "gate", name: gate.name, id: gate.id } : undefined,
     form: [
-      field("preset", "协议方案", chosen?.name), field("gate", "VPS", gate?.name), field("chain", "出口", exitKindName[chain.kind]),
+      field("preset", "协议方案", chosen?.name), field("gate", "VPS", gate?.name), field("public_host", "公网地址", gate?.public_host || host), field("chain", "出口", exitKindName[chain.kind]),
       ...(["socks5", "http", "https"].includes(chain.kind) ? [field("chain_address", "代理地址", chain.address), field("chain_port", "代理端口", chain.port), field("chain_password", "代理密码", chain.password, true)] : []),
       ...(chain.kind === "link" ? [field("chain_link", "节点链接", chain.link, true)] : []),
       field("name", "节点名称", name), field("port", "端口", port), field("target", "伪装目标", target),
@@ -135,24 +178,26 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
       </Dialog>
     );
   }
-  const blocked = !chosen || chosen.available === false || active.length === 0 || (!!gate && !gate.public_host) || (chain.kind === "node" && exits.length === 0) || (chain.kind === "source" && (!chain.source_id || !chain.match));
+  const gateReady = !!gate?.public_host;
+  const protocolReady = gateReady && !presets.isPending && !presets.isFetching && !presets.error && !!chosen && chosen.available !== false;
+  const blocked = !protocolReady || address.busy || (chain.kind === "node" && exits.length === 0) || (chain.kind === "source" && (!chain.source_id || !chain.match));
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o && (!save.busy || save.detachable)) { save.leave(); reset(); } }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) void requestClose(); }}>
       <DialogContent size="lg">
         <DialogTitle>新建节点</DialogTitle>
         <Steps orientation="horizontal" aria-label="新建节点">
-          <Step index={0} label="VPS" status={gateId ? "complete" : "current"} />
-          <Step index={1} label="协议" status={!gateId ? "upcoming" : "complete"} />
-          <Step index={2} label="出口" status={gateId ? "current" : "upcoming"} />
+          <Step index={0} label="VPS" status={gateReady ? "complete" : "current"} />
+          <Step index={1} label="协议" status={!gateReady ? "upcoming" : protocolReady ? "complete" : "current"} />
+          <Step index={2} label="出口" status={protocolReady ? "current" : "upcoming"} />
           <Step index={3} label="创建" status="upcoming" />
         </Steps>
         <DialogDescription>创建后显示端口并后台实测，失败保留节点，可放行防火墙后重试；链式出口验证通过后才启用。</DialogDescription>
-        <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
+        <Form busy={save.busy || address.busy} errors={{ ...save.errors, ...address.errors }} onSubmit={() => { if (addressNeeded) void saveAddress(); else if (!blocked) void save.submit(); }}>
           {active.length === 0 ? (
             <State empty="还没有已连接的 VPS" detail="先在列表页添加 VPS 并执行安装命令。" />
           ) : (
             <Field label="VPS" name="gate" required>
-              <Select required value={gateId ? String(gateId) : ""} onValueChange={(v) => setGateId(Number(v))}>
+              <Select required value={gateId ? String(gateId) : ""} onValueChange={(v) => void changeGate(Number(v))}>
                 <SelectTrigger><SelectValue>{gate ? gate.name : "请选择"}</SelectValue></SelectTrigger>
                 <SelectContent>
                   {active.map((g) => (
@@ -163,17 +208,17 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
             </Field>
           )}
           {gate && !gate.online && <Notice tone="warn">这台 VPS 当前离线，无法实测伪装目标与链式代理。</Notice>}
-          {gate && !gate.public_host && (
-            <Notice tone="warn">
-              这台 VPS 还没有公网地址，生成不了节点链接。请先到 <Link className="underline" to={objectHref({ type: "gate", id: gate.id })} onClick={reset}>VPS 详情</Link> 填写{gate.public_host_hint ? `（本机网卡上的公网 IP 是 ${gate.public_host_hint}）` : ""}。
-            </Notice>
+          {addressNeeded && (
+            <Field label="节点连接地址" name="public_host" required data-tour="node-public-host" hint={gate.public_host_hint ? "已填入本机识别的公网 IP，请核对后保存；也可以改为其他公网 IP 或直连域名。" : "填写客户端连接这台 VPS 的公网 IP 或直连域名。保存后可在此继续创建节点。"}>
+              <Input required value={host} onChange={(e) => { setHostDraft(e.target.value); address.reset(); }} placeholder="公网 IP 或域名" />
+            </Field>
           )}
           <Field label="协议" data-tour="node-preset">
             <PresetChoice presets={presets} value={preset} onChange={(v) => { setPreset(v); setAdvanced({}); }} />
           </Field>
           {chosen?.note && <Notice tone="warn">{chosen.note}</Notice>}
           <ExitSelector gateId={gateId ?? 0} exitId={exitId} onExitId={id=>setExitId(id??0)} value={chain} onChange={setChain} admin sourcePath="/admin/chain-sources" nodes={exits} nodeHint="出口需要另一台 VPS 上能作出口的节点（VLESS / VMess / Trojan 方案）。" />
-          <small className="text-[var(--weir-ink-3)]">这里的出口管这个节点的全部流量。按网站分流在 VPS 的「出口与分流」，按协议类型统一加出口在 <Link className="underline" to="/proxy" onClick={reset}>代理</Link>。</small>
+          <small className="text-[var(--weir-ink-3)]">这里的出口管这个节点的全部流量。按网站分流在 VPS 的「出口与分流」，按协议类型统一加出口在 <Link className="underline" to="/proxy">代理</Link>。</small>
           <div data-tour="node-options"><Collapsible key={more ? "more" : "less"} title="高级：名称、端口、证书" defaultOpen={more}>
             <div className="stack">
               <Field label="节点名称" hint="留空时自动命名。">
@@ -207,9 +252,11 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
               )}
             </div>
           </Collapsible></div>
-          <DialogFooter error={save.error} status={save.wait && <WaitText wait={save.wait} />}>
-            <Button type="button" variant="outline" disabled={save.busy} onClick={reset}>取消</Button>
-            <Button data-tour="node-submit" type="submit" disabled={blocked} busy={save.busy} busyText="正在保存并下发…">创建节点</Button>
+          <DialogFooter error={address.error || save.error} status={save.wait && <WaitText wait={save.wait} />}>
+            <Button type="button" variant="outline" disabled={save.busy || address.busy} onClick={() => void requestClose()}>取消</Button>
+            {addressNeeded
+              ? <Button data-tour="node-address-submit" type="submit" disabled={!host.trim()} busy={address.busy} busyText="正在保存地址…">保存地址并继续</Button>
+              : <Button data-tour="node-submit" type="submit" disabled={blocked} busy={save.busy} busyText="正在保存并下发…">创建节点</Button>}
           </DialogFooter>
         </Form>
       </DialogContent>

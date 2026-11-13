@@ -488,9 +488,9 @@ func (s *Server) createNodeNow(c *gin.Context) {
 		return
 	}
 	jobTitle(ctx, "在 "+g.Name+" 上新建 "+p.Name+" 节点")
-	// 没有公网地址时生成不了节点链接：先在 VPS 详情里填好，不建一个用不了的节点。
+	// 连接地址须显式确认保存，网卡探测建议不能直接写进订阅。
 	if g.PublicHost == "" {
-		failDetail(c, 422, "gate_no_public_host", "这台 VPS 还没有公网地址，请先在 VPS 详情里填写（客户端用它连接节点）", gin.H{"hint": publicHostHint(g)})
+		failDetail(c, 422, "gate_no_public_host", "请先确认并保存这台 VPS 的节点连接地址（客户端用它连接节点）", gin.H{"hint": publicHostHint(g)})
 		return
 	}
 	st, err := presetSettings(p)
