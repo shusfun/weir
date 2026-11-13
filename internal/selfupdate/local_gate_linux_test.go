@@ -15,6 +15,9 @@ import (
 
 func localGateFixture(t *testing.T) string {
 	t.Helper()
+	if os.Geteuid() != 0 {
+		t.Skip("requires root-owned installed package; run the privileged selfupdate test binary")
+	}
 	setup(t, "center", false)
 	oldUnits, oldConfig := UnitsDir, LocalGateConfig
 	UnitsDir = filepath.Join(Base, "units")

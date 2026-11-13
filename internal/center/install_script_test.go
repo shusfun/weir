@@ -40,7 +40,7 @@ esac
 				t.Fatal("installer does not suppress the old agent during re-pair")
 			}
 			script := strings.NewReplacer("/opt/weir/current/weir", `"$PAIR"`, "/etc/weir/gate/agent.json", `"$CONFIG"`, "%[1]s", "https://center.example.test").Replace(gateScript[start:])
-			path := write("run.sh", "#!/bin/sh\nset -eu\n"+script)
+			path := write("run.sh", "#!/bin/sh\nset -eu\nlaya=no\n"+script)
 			cmd := exec.Command(sh, path)
 			cmd.Env = append(os.Environ(), "PATH="+root+string(os.PathListSeparator)+os.Getenv("PATH"), "work="+root, "token=test-invite", "CALLS="+log, "CONFIG="+config, "PAIR="+pair, "OUTCOME="+outcome)
 			out, err := cmd.CombinedOutput()

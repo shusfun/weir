@@ -83,6 +83,11 @@ jobs:
               (cd "$module" && go build ./... && go vet ./... && go test ./...)
             fi
           done
+      - name: Check privileged host operations
+        run: |
+          set -euo pipefail
+          go test -c -o "$RUNNER_TEMP/weir-selfupdate.test" ./internal/selfupdate
+          sudo "$RUNNER_TEMP/weir-selfupdate.test" -test.v
       - name: Check deployment scripts
         run: |
           set -euo pipefail
