@@ -9,25 +9,25 @@ import (
 type EmptyTask struct{}
 
 type NodeProbeTask struct {
-	Client NodeTestClient `json:"client"`
-	UDP bool `json:"udp"`
-	Credentials FetchSecrets `json:"credentials"`
-	Kernels map[string]Kernel `json:"kernels"`
-	Drivers map[string]string `json:"drivers"`
+	Client      NodeTestClient    `json:"client"`
+	UDP         bool              `json:"udp"`
+	Credentials FetchSecrets      `json:"credentials"`
+	Kernels     map[string]Kernel `json:"kernels"`
+	Drivers     map[string]string `json:"drivers"`
 }
 
 type SubscriptionProbeTask struct {
-	Proxies []map[string]any `json:"proxies"`
-	Target string `json:"target"`
+	Proxies []map[string]any  `json:"proxies"`
+	Target  string            `json:"target"`
 	Kernels map[string]Kernel `json:"kernels"`
 	Drivers map[string]string `json:"drivers"`
 }
 
 type NodeProbeCheck struct {
-	Status string `json:"status"`
-	Why string `json:"why,omitempty"`
-	LatencyMS int64 `json:"latency_ms,omitempty"`
-	Bytes int64 `json:"bytes,omitempty"`
+	Status    string `json:"status"`
+	Why       string `json:"why,omitempty"`
+	LatencyMS int64  `json:"latency_ms,omitempty"`
+	Bytes     int64  `json:"bytes,omitempty"`
 }
 
 type NodeProbeResult struct {
@@ -143,6 +143,7 @@ type TraceReadResult struct {
 	MissingReason string            `json:"missing_reason,omitempty"`
 }
 type LayaInstallTask struct {
+	WarmupSeconds     int             `json:"warmup_seconds,omitempty"`
 	DeploymentVersion string          `json:"deployment_version"`
 	Manifest          json.RawMessage `json:"manifest"`
 }
@@ -191,7 +192,7 @@ func NewTaskRequest(kind string, version int) (any, error) {
 		return new(PanelConfigureTask), nil
 	case ActionPanelCert:
 		return new(PanelCertificateTask), nil
-	case ActionPanelDiscover, ActionPanelRemove, ActionUninstall, TaskLayaRemove:
+	case ActionPanelDiscover, ActionPanelRemove, ActionUninstall, TaskLayaRemove, TaskLayaPrepare:
 		return new(EmptyTask), nil
 	case ActionACMEHTTP01:
 		return new(ACMETask), nil

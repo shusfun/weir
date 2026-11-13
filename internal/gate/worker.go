@@ -125,7 +125,7 @@ func (a *Agent) workerLoop(ctx context.Context) {
 			a.meterProtocol.Store(0)
 			a.center.gzipPayload.Store(false)
 			// Rollout only: old centers retain their two legacy poll endpoints.
-			go a.actionLoop(ctx)
+			applyWG.Go(func() { a.actionLoop(ctx) })
 			a.configLoop(ctx)
 			return
 		}
@@ -230,7 +230,7 @@ func (a *Agent) executeTask(ctx context.Context, t contracts.Task) {
 			return
 		}
 	}
-	ctx = releasefiles.WithTrace(ctx, "00-"+t.TraceID+"-1111111111111111-01")
+	ctx = releasefiles.WithTraceID(ctx, t.TraceID)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	started := time.Now().UTC()
@@ -342,7 +342,7 @@ func (a *Agent) executeTask(ctx context.Context, t contracts.Task) {
 			result.OK = true
 			_ = json.Unmarshal(raw, &result.Result)
 		}
-	} else if err == nil && (t.Kind == contracts.TaskLayaInstall || t.Kind == contracts.TaskLayaRemove || t.Kind == contracts.TaskLayaClassify) {
+	} else if err == nil && (t.Kind == contracts.TaskLayaPrepare || t.Kind == contracts.TaskLayaInstall || t.Kind == contracts.TaskLayaRemove || t.Kind == contracts.TaskLayaClassify) {
 		raw, e := a.layaTask(ctx, t)
 		err = e
 		if e == nil {

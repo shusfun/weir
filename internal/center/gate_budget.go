@@ -3,6 +3,7 @@ package center
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"sort"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/credential"
 	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/node"
+	"github.com/shusfun/weir/internal/store/ent/user"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -296,10 +298,22 @@ func (s *Server) publishExecutionLocked(ctx context.Context, gid int) error {
 		return err
 	}
 	exec := contracts.GateExecution{Seq: seq, Budgets: map[string]contracts.GateBudget{}}
+	userIDs := make([]int, 0, len(rows))
 	for _, row := range rows {
-		u, err := s.Store.Ent.User.Get(ctx, row.UserID)
-		if err != nil {
-			return err
+		userIDs = append(userIDs, row.UserID)
+	}
+	users, err := s.Store.Ent.User.Query().Where(user.IDIn(userIDs...)).All(ctx)
+	if err != nil {
+		return err
+	}
+	byID := map[int]*ent.User{}
+	for _, u := range users {
+		byID[u.ID] = u
+	}
+	for _, row := range rows {
+		u, ok := byID[row.UserID]
+		if !ok {
+			return fmt.Errorf("budget user %d missing", row.UserID)
 		}
 		item := contracts.GateBudget{Allocated: row.Allocated, Used: row.Used}
 		if u.Unlimited {

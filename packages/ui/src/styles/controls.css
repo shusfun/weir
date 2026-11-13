@@ -1,5 +1,9 @@
 /* 控件：开关、分段控件、计数器、模块卡片、滚动区、拖拽排序。全部只动 transform / opacity / 颜色。 */
 @layer components {
+  .weir-input:autofill {
+    -webkit-text-fill-color: var(--weir-ink);
+    caret-color: var(--weir-ink);
+  }
   /* 滚动容器会裁剪子元素外扩的焦点环：四周留出焦点环宽度再用负外边距抵消，内容位置不变 */
   .weir-focus-gutter {
     margin: calc(var(--weir-focus-gutter) * -1);

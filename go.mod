@@ -1,6 +1,6 @@
 module github.com/shusfun/weir
 
-go 1.25.0
+go 1.26.11
 
 require modernc.org/sqlite v1.52.0
 
@@ -8,22 +8,22 @@ require (
 	github.com/dlclark/regexp2 v1.11.5
 	github.com/google/uuid v1.6.0
 	github.com/oschwald/maxminddb-golang/v2 v2.4.1
-	golang.org/x/crypto v0.54.0
-	golang.org/x/net v0.56.0
-	golang.org/x/term v0.45.0
-	golang.org/x/text v0.40.0
+	golang.org/x/crypto v0.59.0
+	golang.org/x/net v0.62.0
+	golang.org/x/term v0.48.0
+	golang.org/x/text v0.44.0
 )
 
 require (
 	entgo.io/ent v0.14.5
 	github.com/gin-gonic/gin v1.10.1
 	github.com/go-webauthn/webauthn v0.13.4
-	github.com/jackc/pgx/v5 v5.7.6
+	github.com/jackc/pgx/v5 v5.9.2
 	github.com/pquerna/otp v1.4.0
 	github.com/redis/go-redis/v9 v9.7.3
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.47.0
+	golang.org/x/sync v0.25.0
+	golang.org/x/sys v0.50.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -76,7 +76,7 @@ require (
 	github.com/zclconf/go-cty v1.14.4 // indirect
 	github.com/zclconf/go-cty-yaml v1.1.0 // indirect
 	golang.org/x/arch v0.8.0 // indirect
-	golang.org/x/mod v0.37.0 // indirect
+	golang.org/x/mod v0.42.0 // indirect
 	google.golang.org/protobuf v1.34.1 // indirect
 	modernc.org/gc/v3 v3.1.4 // indirect
 	modernc.org/libc v1.73.3 // indirect

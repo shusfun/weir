@@ -447,8 +447,8 @@ func CleanPrefetch(keep string) {
 func role() (string, error) {
 	b, err := os.ReadFile(RoleFile)
 	r := strings.TrimSpace(string(b))
-	if err != nil || r != "standalone" && r != "center" {
-		return "", errors.New("只有装了中心的机器能在面板里自更新")
+	if err != nil || r != "standalone" && r != "center" && r != "gate" {
+		return "", errors.New("无法识别安装角色，请先完成宿主安装")
 	}
 	return r, nil
 }

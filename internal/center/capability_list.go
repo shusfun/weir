@@ -727,7 +727,10 @@ var opReadCaps = []Capability{
 	{Name: "list_profiles", Title: "订阅组", Purpose: "列出订阅组：编号、名称、启用、包含的订阅源与手动节点、输出设置、到期、分配给哪些用户、下载次数。", Kind: "read",
 		read: func(ctx context.Context, s *Server, _ map[string]any) (any, error) {
 			items, err := s.Store.Ent.SubProfile.Query().Order(ent.Asc(subprofile.FieldPosition), ent.Asc(subprofile.FieldID)).All(ctx)
-			return listOf(items, func(v *ent.SubProfile) any { return s.profileView(ctx, v) }), err
+			if err != nil {
+				return nil, err
+			}
+			return s.profileViews(ctx, items)
 		}},
 	{Name: "list_templates", Title: "规则模板", Purpose: "列出规则模板：内置模板（引用写 builtin:编号）与自定义模板（custom:编号，含内容）。", Kind: "read",
 		read: func(ctx context.Context, s *Server, _ map[string]any) (any, error) {

@@ -139,6 +139,7 @@ S.checkType = (scope, tok, col, combos) => {
 
 // 动效：过渡的属性不能是布局属性（width/height/top/left/margin/padding/all 等），时长要等于某个时长变量
 S.checkMotion = (scope, tok, col) => {
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.dataset.motion === "lite";
   const durOk = (ms) => ms === 0 || [...tok.durations].some((d) => Math.abs(d - ms) < 1);
   const durList = [...tok.durations].filter(Boolean).map((d) => d + "ms").join(" / ");
   const toMs = (s) => (s.trim().endsWith("ms") ? parseFloat(s) : parseFloat(s) * 1000);
@@ -149,6 +150,8 @@ S.checkMotion = (scope, tok, col) => {
     props.forEach((p, i) => {
       const d = durs[i % durs.length];
       if (!d || p === "none") return;
+      // The reduced motion stylesheet keeps completion events at 1ms.
+      if (reduced && d <= 1) return;
       // 豁免：折叠区面板按 Base UI 的 --collapsible-panel-height 过渡 height，内容高度未知只能这样展开（design.html#console-visual）
       if (p === "height" && el.matches("[data-slot=collapsible-panel]")) return;
       if (layoutProps.has(p)) col.add("motion", el, "transition-property", p, "只过渡 transform / opacity / 颜色");
@@ -158,6 +161,7 @@ S.checkMotion = (scope, tok, col) => {
       const ad = cs.animationDuration.split(",").map(toMs);
       cs.animationName.split(",").forEach((n, i) => {
         const d = ad[i % ad.length];
+        if (reduced && d <= 1) return;
         if (d && !durOk(d) && cs.animationIterationCount.split(",")[i % cs.animationIterationCount.split(",").length].trim() !== "infinite")
           col.add("motion", el, "animation-duration", `${n.trim()} ${d}ms`, durList);
       });
@@ -165,6 +169,7 @@ S.checkMotion = (scope, tok, col) => {
   }
   // 正在运行的动画：检查关键帧里的属性
   for (const a of document.getAnimations()) {
+    if (reduced && Number(a.effect?.getTiming?.().duration) <= 1) continue;
     const el = a.effect?.target;
     if (!el || !(el instanceof Element) || !scope.contains(el)) continue;
     const frames = a.effect.getKeyframes?.() || [];

@@ -15,7 +15,7 @@ import (
 )
 
 func TestLayaHelperClientPreservesOnlyKnownFailureCodes(t *testing.T) {
-	for _, code := range []string{"laya_container_missing", "laya_container_policy_mismatch", "laya_image_pull_failed", "password=secret"} {
+	for _, code := range []string{"laya_container_missing", "laya_container_policy_mismatch", "laya_image_pull_failed", "laya_resources_unknown", "laya_resources_insufficient", "password=secret"} {
 		t.Run(code, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(422)

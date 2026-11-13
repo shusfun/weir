@@ -358,3 +358,27 @@ func ApplyFilterRules(validNodes []string, sub *js.Object) []string {
 	}
 	return filtered
 }
+
+// ApplyDirectionalFilters gives the two business fields their declared default
+// direction. Explicit legacy keep:/divider rules retain their meaning.
+func ApplyDirectionalFilters(nodes []string, include, exclude string) []string {
+	if strings.TrimSpace(include) != "" {
+		lines := strings.Split(include, "\n")
+		explicit := false
+		for _, line := range lines {
+			if strings.TrimSpace(line) == "---" {
+				explicit = true
+				break
+			}
+		}
+		if !explicit {
+			for i, line := range lines {
+				if strings.TrimSpace(line) != "" && !strings.HasPrefix(strings.ToLower(strings.TrimSpace(line)), "keep:") {
+					lines[i] = "keep:" + line
+				}
+			}
+			include = strings.Join(lines, "\n")
+		}
+	}
+	return ApplyFilterRules(nodes, js.Obj("filterInclude", include, "filterExclude", exclude))
+}

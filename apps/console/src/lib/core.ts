@@ -43,7 +43,7 @@ export interface KernelEvent {
 }
 
 export interface ProcessSample { observed_at: string; state: "running" | "stopped" | "unknown"; cpu_percent?: number; memory_rss?: number; error?: string }
-export interface GateHealth { dns?: string; congestion?: string; udp_buffer?: number; cpu_steal?: number; ipv6?: boolean; mtu?: number; conntrack_free?: number; file_handles_free?: number; cert_days?: number }
+export interface GateHealth { dns?: string; congestion?: string; udp_buffer?: number; cpu_steal?: number; ipv6?: boolean; mtu?: number; conntrack_free?: number; file_handles_free?: number; cert_days?: number; cert_id?: number; cert_expires_at?: string; cert_observed_at?: string }
 export interface GateHost { observed_at?: string; observation_id?: string; cpu_percent?: number; load1?: number; mem_used?: number; mem_total?: number; disk_used?: number; disk_total?: number; net_rx_bytes?: number; net_tx_bytes?: number; uptime_secs?: number; processes?: Record<string, ProcessSample>; health?: GateHealth | null }
 export interface DisplaySummary { name: string; kind: string; region: string }
 export interface NodeChoice { id: number; name: string; display_name?: string; protocol?: string; network?: string; security?: string; gate_id?: number; gate_name?: string; host?: string; port?: number; exit_summary?: DisplaySummary }

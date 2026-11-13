@@ -1,1 +1,0 @@
-import{t,D as s}from"./index-DaRKanyA.js";const a={passed:["通过","ok"],failed:["未通过","bad"],unknown:["未知","neutral"]};function i({check:o}){const[e,n]=a[o.status];return t.jsxs(s,{variant:"soft",tone:n,children:[o.kernel==="mihomo"?"mihomo -t":"sing-box check"," · ",e]})}export{i as S};

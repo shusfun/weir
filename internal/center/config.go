@@ -22,14 +22,16 @@ const DefaultConfigPath = "/etc/weir/center/config.json"
 
 // Config 只配置监听地址与存储；公共地址按每次请求推导。
 type Config struct {
-	Listen        string         `json:"listen"`
-	Store         store.Config   `json:"store"`
-	DataDir       string         `json:"data_dir,omitempty"` // 内核缓存、版本档案覆盖等；默认 /var/lib/weir/center
-	LayaHost      LayaHostConfig `json:"laya_host,omitempty"`
-	EncryptionKey string         `json:"encryption_key"`
-	SetupHash     string         `json:"setup_hash,omitempty"`
-	SetupExpires  time.Time      `json:"setup_expires,omitempty"`
-	Installed     bool           `json:"installed"`
+	Listen        string                     `json:"listen"`
+	Subscriptions SubscriptionInfrastructure `json:"subscriptions,omitempty"`
+	Store         store.Config               `json:"store"`
+	DataDir       string                     `json:"data_dir,omitempty"` // 内核缓存、版本档案覆盖等；默认 /var/lib/weir/center
+	LayaHost      LayaHostConfig             `json:"laya_host,omitempty"`
+	EncryptionKey string                     `json:"encryption_key"`
+	SetupHash     string                     `json:"setup_hash,omitempty"`
+	SetupExpires  time.Time                  `json:"setup_expires,omitempty"`
+	Installed     bool                       `json:"installed"`
+	environment   map[string]infrastructureOverride
 }
 
 func randomToken(n int) string {
@@ -66,10 +68,27 @@ func LoadConfig(path string) (Config, error) {
 	if _, _, err = net.SplitHostPort(c.Listen); err != nil {
 		return c, fmt.Errorf("invalid listen address: %w", err)
 	}
+	if err = c.applyInfrastructureEnvironment(); err != nil {
+		return c, err
+	}
+	if err = c.Subscriptions.validate(); err != nil {
+		return c, err
+	}
+	if c.Installed {
+		if err = c.Store.Validate(); err != nil {
+			return c, err
+		}
+	}
 	return c, nil
 }
 
 func saveConfig(path string, c Config) error {
+	// Runtime overrides must not become file defaults when another setting is saved.
+	for name, target := range c.infrastructureEnvironment() {
+		if override, ok := c.environment[name]; ok && *target == override.effective {
+			*target = override.file
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}

@@ -84,6 +84,9 @@ func (a *Agent) statePath() string { return filepath.Join(a.P.Data, "state.json"
 
 // Run 启动时先按本地已生效配置重建（中心不可达也能继续服务），然后并行运行各循环。
 func (a *Agent) Run(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	var loops sync.WaitGroup
+	defer func() { cancel(); loops.Wait() }()
 	hostSampler.CertDir = a.P.CertsDir
 	hostSampler.DNS = hoststats.CompareDNS
 	if err := cleanupAbandonedAssetDownloads(filepath.Join(a.P.Data, "assets")); err != nil {
@@ -98,9 +101,9 @@ func (a *Agent) Run(ctx context.Context) error {
 	}
 	_ = a.st.save(a.statePath())
 	a.mu.Unlock()
-	go a.loop(ctx, a.HeartbeatEvery, a.heartbeat)
-	go a.loop(ctx, a.MeterEvery, a.meter)
-	go a.observeWorkerComponents(ctx)
+	loops.Go(func() { a.loop(ctx, a.HeartbeatEvery, a.heartbeat) })
+	loops.Go(func() { a.loop(ctx, a.MeterEvery, a.meter) })
+	loops.Go(func() { a.observeWorkerComponents(ctx) })
 	a.workerLoop(ctx)
 	return ctx.Err()
 }
@@ -563,6 +566,25 @@ func (a *Agent) heartbeat(ctx context.Context) error {
 		}
 	}
 	var reply contracts.HeartbeatReply
+	if hb.Host != nil {
+		health := contracts.HealthCheck{}
+		if hb.Host.Health != nil {
+			health = *hb.Host.Health
+		}
+		var ids []int64
+		a.mu.Lock()
+		if a.st.Config != nil {
+			for _, in := range a.st.Config.Inbounds {
+				if in.CertID > 0 {
+					ids = append(ids, in.CertID)
+				}
+			}
+		}
+		a.mu.Unlock()
+		cert := hoststats.ObserveCertificates(a.P.CertsDir, ids, time.Now().UTC())
+		health.CertDays, health.CertID, health.CertExpiresAt, health.CertObservedAt = cert.CertDays, cert.CertID, cert.CertExpiresAt, cert.CertObservedAt
+		hb.Host.Health = &health
+	}
 	now := time.Now()
 	wire := hb
 	if a.heartbeatProtocol.Load() == contracts.HeartbeatProtocol {

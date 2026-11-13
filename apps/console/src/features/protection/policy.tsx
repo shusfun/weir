@@ -1,10 +1,9 @@
-import { useState } from "react";
 import { ActionGroup, Button, Collapsible, Field, Form, FormGrid, Input, Notice, SwitchField, Textarea } from "@weir/ui";
 import { api } from "../../api";
 import { useQuery, queryClient } from "../../lib/query";
 import { useFormAction, useRowAction } from "../../lib/action";
 import { field, useConsoleContext } from "../../lib/console-context";
-import { useUnsavedChanges } from "../../lib/dirty";
+import { useDraft } from "../../lib/dirty";
 import { reopenDrafts } from "../../components/draft-confirm";
 import { State } from "../../components/feedback";
 import { Section } from "../../components/system-settings";
@@ -29,23 +28,23 @@ const lines = (text: string) => text.split(/\r?\n/).map((line) => line.trim()).f
 export function ProtectionPolicyCard() {
   const q = useQuery({ queryKey: ["protection-policy"], queryFn: () => api("/admin/defense/policy") as Promise<Response> });
   if (q.isPending || q.error) return <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} />;
-  return <PolicyForm key={q.data.policy.revision} value={q.data} />;
+  return <PolicyForm value={q.data} />;
 }
 
 function PolicyForm({ value }: { value: Response }) {
 	const history = useQuery({ queryKey: ["protection-policy-history"], queryFn: async () =>
 		(await api("/admin/defense/policy/history")).items as { revision: string; document: Document }[] });
 	const restore = useRowAction<string>();
-  const [site, setSite] = useState(value.policy.document.site);
+  const draft = useDraft(value.policy.document.site);
+  const site = draft.value, setSite = draft.set;
   const effective = { ...value.defaults, ...value.policy.document.external, ...site };
   const set = (patch: Partial<Values>) => setSite((previous) => ({ ...previous, ...patch }));
-  useUnsavedChanges(JSON.stringify(site) !== JSON.stringify(value.policy.document.site));
   const save = useFormAction(() => api("/admin/defense/policy/draft", "POST", {
     text: JSON.stringify({ ...value.policy.document, site }),
   }), {
     ok: "已生成完整差异，管理员确认后生效",
     fields: { protection_policy_invalid: "policy" },
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["ai-drafts"] }); reopenDrafts(); },
+    onSuccess: () => { draft.commit(); void queryClient.invalidateQueries({ queryKey: ["ai-drafts"] }); reopenDrafts(); },
   });
   useConsoleContext({ tab: "自动安全处置", form: [
     field("enabled", "自动收紧", effective.enabled ? "开启" : "关闭"),

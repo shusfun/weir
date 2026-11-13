@@ -1,0 +1,92 @@
+openapi: 3.0.3
+info:
+  title: Weir public guestbook
+  version: 1.0.0
+paths: {}
+components:
+  schemas:
+    RetentionPolicy:
+      type: object
+      additionalProperties: false
+      required: [observation_days, task_days, laya_days, sample_hours, pull_days, audit_days, max_records]
+      properties:
+        observation_days: {type: integer, minimum: 1, maximum: 90}
+        task_days: {type: integer, minimum: 1, maximum: 90}
+        laya_days: {type: integer, minimum: 1, maximum: 90}
+        sample_hours: {type: integer, minimum: 25, maximum: 2160}
+        pull_days: {type: integer, minimum: 30, maximum: 90}
+        audit_days: {type: integer, minimum: 0, maximum: 3650, description: '0 preserves audit history; otherwise at least 30 days.'}
+        max_records: {type: integer, minimum: 100, maximum: 1000000}
+    RetentionDocument:
+      type: object
+      additionalProperties: false
+      required: [policy, revision]
+      properties:
+        policy: {$ref: '#/components/schemas/RetentionPolicy'}
+        revision: {type: string}
+    GuestbookModeration:
+      type: object
+      additionalProperties: false
+      required: [id, revision, action, status, reply]
+      properties:
+        id: {type: integer, minimum: 1}
+        revision: {type: string, minLength: 1}
+        action: {type: string, enum: [publish, hide, status, reply, delete]}
+        status: {type: string, enum: ['', pending, approved]}
+        reply: {type: string, maxLength: 2000}
+    PublicGuestbookConfig:
+      type: object
+      additionalProperties: false
+      required: [enabled, allow_anonymous]
+      properties:
+        enabled: {type: boolean}
+        allow_anonymous: {type: boolean}
+    GuestbookMessage:
+      type: object
+      additionalProperties: false
+      required: [id, nickname, content, type, status, created_at, reply, reply_at]
+      properties:
+        id: {type: integer}
+        nickname: {type: string, maxLength: 60}
+        content: {type: string, maxLength: 2000}
+        type: {type: string}
+        status: {type: string}
+        created_at: {type: string}
+        reply: {type: string}
+        reply_at: {type: string, nullable: true}
+    AdminGuestbookMessage:
+      type: object
+      additionalProperties: false
+      required: [id, nickname, content, type, status, created_at, reply, reply_at, revision, visible]
+      properties:
+        id: { type: integer }
+        nickname: { type: string }
+        content: { type: string }
+        type: { type: string }
+        status: { type: string }
+        created_at: { type: string }
+        reply: { type: string }
+        reply_at: { type: string, nullable: true }
+        revision: { type: string }
+        visible: { type: boolean }
+    AdminGuestbookListing:
+      type: object
+      additionalProperties: false
+      required: [items, page, page_size, total]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AdminGuestbookMessage' } }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+    PublicGuestbookListing:
+      type: object
+      additionalProperties: false
+      required: [items, page, page_size, total, config]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/GuestbookMessage'}
+        page: {type: integer}
+        page_size: {type: integer}
+        total: {type: integer}
+        config: {$ref: '#/components/schemas/PublicGuestbookConfig'}

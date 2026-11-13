@@ -225,11 +225,14 @@ func TestOperationReceiptSurvivesNewStatus(t *testing.T) {
 	}
 }
 
-func TestGateOnlyMachineCannotSelfUpdate(t *testing.T) {
+func TestGateOnlyMachineSelfUpdateKeepsGateRoleAndListenAddress(t *testing.T) {
 	e := setup(t, "gate", false)
 	request(t, Request{ID: "req-00000007", Action: "update", Version: "0.1.14"})
-	if err := Apply(context.Background()); err == nil || len(e.ran) != 0 {
+	if err := Apply(context.Background()); err != nil {
 		t.Fatalf("gate role: err=%v ran=%v", err, e.ran)
+	}
+	if len(e.ran) != 1 || len(e.ran[0]) != 2 || e.ran[0][0] != "gate" || e.ran[0][1] != "127.0.0.1:20000" {
+		t.Fatalf("gate installation args: %v", e.ran)
 	}
 }
 

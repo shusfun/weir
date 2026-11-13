@@ -61,6 +61,21 @@ type Client struct {
 	Observer Observer
 }
 
+// Warmup uses the deployment budget, independently of interactive request limits.
+// It retains the same transport policy and result validation as real inference.
+func (c Client) Warmup(ctx context.Context, input Request, timeout time.Duration) (Response, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	if c.HTTP == nil {
+		c.HTTP = runtimeHTTP(timeout)
+	} else {
+		h := *c.HTTP
+		h.Timeout = timeout
+		c.HTTP = &h
+	}
+	return c.Classify(ctx, input)
+}
+
 func (c Client) Classify(ctx context.Context, input Request) (response Response, err error) {
 	started := time.Now().UTC()
 	defer func() {

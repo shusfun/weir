@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shusfun/weir/internal/selfupdate"
 	"github.com/shusfun/weir/internal/taskqueue"
 	"github.com/shusfun/weir/packages/contracts"
 )
@@ -46,7 +47,12 @@ func (s *Server) getGateLaya(c *gin.Context) {
 		failInternal(c, 503, "laya_hosting_unavailable", err)
 		return
 	}
-	out := gin.H{"gate_id": g.ID, "gate_name": g.Name, "online": gateOnline(g), "colocated": colocated(g), "component": observed, "prepared": observed.ImageDigest != "" && observed.DeploymentVersion != ""}
+	canPrepare, err := s.gateSupportsTask(c.Request.Context(), g, contracts.TaskLayaPrepare, 0)
+	if err != nil {
+		failInternal(c, 503, "capabilities_unavailable", err)
+		return
+	}
+	out := gin.H{"can_prepare": canPrepare, "gate_id": g.ID, "gate_name": g.Name, "online": gateOnline(g), "colocated": colocated(g), "component": observed, "prepared": observed.ImageDigest != "" && observed.DeploymentVersion != ""}
 	if raw, ok, _ := s.Store.KV.Get(c.Request.Context(), "laya-gate-job:"+itoa(g.ID)); ok {
 		var operation layaGateOperation
 		if json.Unmarshal([]byte(raw), &operation) == nil {
@@ -84,7 +90,7 @@ func (s *Server) previewGateLaya(c *gin.Context) {
 	if !bindWorker(c, &req, 4096) {
 		return
 	}
-	if req.Operation != "install" && req.Operation != "remove" {
+	if req.Operation != "install" && req.Operation != "remove" && req.Operation != "prepare" {
 		failure(c, 400, "invalid_operation")
 		return
 	}
@@ -101,11 +107,14 @@ func (s *Server) previewGateLaya(c *gin.Context) {
 		failInternal(c, 503, "laya_hosting_unavailable", err)
 		return
 	}
-	if observed.ImageDigest == "" || observed.DeploymentVersion == "" {
+	if req.Operation != "prepare" && (observed.ImageDigest == "" || observed.DeploymentVersion == "") {
 		failure(c, 409, "laya_approved_deployment_required")
 		return
 	}
 	kind := contracts.TaskLayaInstall
+	if req.Operation == "prepare" {
+		kind = contracts.TaskLayaPrepare
+	}
 	if req.Operation == "remove" {
 		kind = contracts.TaskLayaRemove
 	}
@@ -181,12 +190,19 @@ func (s *Server) confirmGateLaya(c *gin.Context) {
 		if e != nil {
 			return e
 		}
-		if !gateOnline(g) || observed.ImageDigest != p.Digest || observed.DeploymentVersion != p.Version {
+		if !gateOnline(g) || p.Operation != "prepare" && (observed.ImageDigest != p.Digest || observed.DeploymentVersion != p.Version) {
 			failure(c, 409, "laya_deployment_changed")
 			return nil
 		}
 		kind := contracts.TaskLayaInstall
-		var payload any = contracts.LayaInstallTask{DeploymentVersion: p.Version, Manifest: json.RawMessage(jsonText(map[string]string{"image_digest": p.Digest}))}
+		warmup := 0
+		if selfupdate.Compare(g.Version, "0.1.11") >= 0 {
+			warmup = layaWarmupSeconds(s.loadLaya(ctx))
+		}
+		var payload any = contracts.LayaInstallTask{WarmupSeconds: warmup, DeploymentVersion: p.Version, Manifest: json.RawMessage(jsonText(map[string]string{"image_digest": p.Digest}))}
+		if p.Operation == "prepare" {
+			kind, payload = contracts.TaskLayaPrepare, struct{}{}
+		}
 		if p.Operation == "remove" {
 			kind, payload = contracts.TaskLayaRemove, struct{}{}
 		}

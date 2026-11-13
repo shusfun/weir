@@ -4,7 +4,7 @@ export type GuideStep = { id: string; title: string; text: string; target?: stri
 export type Guide = { id: string; version: number; title: string; steps: GuideStep[] };
 export type GuideIdentity = { id: string; role: "admin" | "user" | "guest" };
 // 未列出的教程为首版。内容变更只提升对应页面、标签或弹窗的版本。
-const versions: Record<string, number> = { "page:/system": 2, "page:/kernels": 2, "page:/kernels:版本": 2, "page:/subscriptions:订阅组": 2, "page:/ops/observe:订阅链路": 3, "page:/users": 2, "dialog:创建用户": 2, "page:/links": 3, "page:/accounts": 2, "page:/accounts:套餐": 2, "page:/accounts:用码": 2, "dialog:新建套餐": 2, "dialog:编辑套餐": 2, "dialog:生成邀请码": 2, "dialog:生成兑换码": 2, "page:/system:登录与安全": 5, "page:/system:AI 与 dsh": 8, "page:/gates": 2, "dialog:新建节点": 3, "dialog:添加 VPS": 2, "getting-started": 3, "page:/ops/audit": 2, "page:/ops/observe": 4, "page:/ops/observe:总览": 3, "page:/ops/observe:安全": 3, "page:/ops/observe:注册兑换": 2, "page:/ops/observe:系统状态": 3, "page:/ops/observe:策略版本": 2 };
+const versions: Record<string, number> = { "page:/system": 3, "page:/system:订阅数据与接口": 2, "page:/kernels": 2, "page:/kernels:版本": 2, "page:/subscriptions:订阅组": 2, "page:/ops/observe:订阅链路": 3, "page:/users": 2, "dialog:创建用户": 2, "page:/links": 3, "page:/accounts": 2, "page:/accounts:套餐": 2, "page:/accounts:用码": 2, "dialog:新建套餐": 2, "dialog:编辑套餐": 2, "dialog:生成邀请码": 2, "dialog:生成兑换码": 2, "page:/system:登录与安全": 5, "page:/system:AI 与 dsh": 8, "page:/gates": 2, "dialog:新建节点": 3, "dialog:添加 VPS": 2, "getting-started": 3, "page:/ops/audit": 2, "page:/ops/observe": 4, "page:/ops/observe:总览": 3, "page:/ops/observe:安全": 3, "page:/ops/observe:注册兑换": 2, "page:/ops/observe:系统状态": 3, "page:/ops/observe:策略版本": 2 };
 const target = (id: string) => `[data-tour="${id}"]`;
 const step = (id: string, title: string, text: string, anchor?: string): GuideStep => ({ id, title, text, target: anchor ? target(anchor) : undefined });
 const overview = (id: string, title: string, text: string, detail: string): Guide => ({ id, version: 1, title, steps: [step("overview", title, text, "page-header"), step("work", "在这里操作", detail, "page-content")] });
@@ -53,7 +53,7 @@ const tabs: Record<string, Record<string, [string, string]>> = {
     "安全防御": ["安全防御", "查看防御策略、事件和相关通知。先了解策略影响再修改，异常记录不应直接当作已证实的攻击。"],
     "AI 与 dsh": ["AI 与 dsh", "启用并配置独立地址，检查 dsh 运行状态。Laya 先发现已有实例：读取版本与模型后核对确认接入，不扫描端口；或在中心与指定 VPS 独立部署官方 Docker，无须先创建节点。首次用固定 root 通道或一次性 SSH 核对指纹并准备权限；先预演参数、确认后执行，安装完成或接入已有实例后，先保存停用配置、测试推理，通过后再启用判断。停止和移除保留模型卷，取消后先刷新核对实际状态，活动可预览诊断包。回环实例可以不填 Key，指定 VPS 不会自动改派。外置配置按默认、外部导入、站点覆盖叠加；文件里的 timezone 设置每日汇总时区，criteria 描述三个判断分支，可见置信度下限和 skill 映射决定调用条件。laya_compatibility 设置已验证范围及范围外策略，实际版本未知时后台分析暂停；默认范围外仅保留基础判断。修改与版本恢复都先预演完整差异、管理员确认；不会把节点凭据交给模型。"],
     "节点证书": ["节点证书", "证书用于代理节点，与控制台域名证书不同。按部署环境选择签发或导入方式，检查有效期和续签结果。"],
-    "订阅数据与接口": ["订阅数据与接口", "管理订阅数据备份、WebDAV 和外部接口令牌。先核对备份范围再恢复；令牌只授予需要的访问，不要放到公开页面。"],
+    "订阅数据与接口": ["订阅数据与接口", "管理历史保留策略、订阅数据备份、WebDAV 和外部接口令牌。保留策略保存后分批清理，缩短期限无法恢复已删除历史；审计默认保留，待执行与恢复记录不会按普通历史删除。先核对备份范围再恢复；令牌只授予需要的访问，不要放到公开页面。"],
   },
   "/ops/observe": {
     "总览": ["近期活动与每日汇总", "总览计数由服务端聚合全部保留记录，最近列表最多 200 条；观察点每日汇总由服务端按判定时的站点时区累计。可以只看无需分析的条目，再勾选、预览并人工交给 dsh；历史配置版本保留。内容审核不会调用 dsh。"],

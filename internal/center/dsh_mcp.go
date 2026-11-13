@@ -24,6 +24,8 @@ type mcpServer struct {
 	webToken         string
 	analystToken     string
 	observationToken string
+	listener         net.Listener
+	server           *http.Server
 }
 
 func (s *Server) ensureMCP() (*mcpServer, error) {
@@ -36,11 +38,28 @@ func (s *Server) ensureMCP() (*mcpServer, error) {
 	if err != nil {
 		return nil, err
 	}
-	m := &mcpServer{addr: l.Addr().String(), webToken: randomToken(32), analystToken: randomToken(32), observationToken: randomToken(32)}
+	m := &mcpServer{addr: l.Addr().String(), webToken: randomToken(32), analystToken: randomToken(32), observationToken: randomToken(32), listener: l}
 	srv := &http.Server{Handler: s.mcpHandler(m), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 4 * time.Minute}
-	go func() { _ = srv.Serve(l) }()
+	m.server = srv
+	go func() { _ = srv.Serve(m.listener) }()
 	s.dsh.mcp = m
 	return m, nil
+}
+
+func (s *Server) closeMCP(ctx context.Context) {
+	s.dsh.mu.Lock()
+	m := s.dsh.mcp
+	s.dsh.mcp = nil
+	s.dsh.mu.Unlock()
+	if m == nil {
+		return
+	}
+	if m.server != nil {
+		_ = m.server.Shutdown(ctx)
+	}
+	if m.listener != nil {
+		_ = m.listener.Close()
+	}
 }
 
 type mcpTool struct {

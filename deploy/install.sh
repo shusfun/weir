@@ -31,7 +31,8 @@ if [ "$action" = uninstall ]; then
  purge=${2:-}
  stop_units
  systemctl stop weir-update.service >/dev/null 2>&1 || true
- for unit in $all_units weir-update.service; do rm -f "$units_dir/$unit"; done
+ systemctl disable --now weir-install-recover.service >/dev/null 2>&1 || true
+ for unit in $all_units weir-update.service weir-gate-update@.service weir-laya-prepare.service weir-install-recover.service; do rm -f "$units_dir/$unit"; done
  systemctl daemon-reload
  rm -f /usr/local/bin/weir
  rm -rf "$base" /usr/local/lib/weir
@@ -53,6 +54,11 @@ case "$version" in ''|.|..|*[!a-zA-Z0-9._-]*) echo 'invalid version' >&2; exit 1
 install -d -m 0755 /run/lock
 exec 9>/run/lock/weir-install.lock
 flock -n 9 || { echo 'Another installation is running' >&2; exit 1; }
+# A killed installer cannot run its EXIT trap. Recover its durable snapshot
+# before reading the role or pointers for another installation.
+if [ -f "$base/.install-pending/recover.sh" ]; then
+ sh "$base/.install-pending/recover.sh" --locked
+fi
 
 # 角色只能扩展到单机，不能静默缩小：已装单机时再装 gate 视为升级同一单机。
 if [ -f "$etc/role" ]; then
@@ -125,6 +131,98 @@ done < "$package/SHA256SUMS"
 cp "$package/SHA256SUMS" "$base/releases/$version/SHA256SUMS.new"
 mv -f "$base/releases/$version/SHA256SUMS.new" "$base/releases/$version/SHA256SUMS"
 chmod 0755 "$base/releases/$version/weir" "$base/releases/$version/install.sh"
+# Keep the host service contract as well as the binary pointer. An older
+# binary may not understand a newly installed unit's command or sandbox.
+rollback_dir=$(mktemp -d "$base/.rollback.XXXXXX")
+rollback_units="$all_units weir-update.service weir-gate-update@.service weir-laya-prepare.service weir-xray.service weir-sing-box.service"
+mkdir "$rollback_dir/units"
+for unit in $rollback_units; do
+ if [ -e "$units_dir/$unit" ] || [ -L "$units_dir/$unit" ]; then cp -Pp "$units_dir/$unit" "$rollback_dir/units/$unit"; fi
+ case "$unit" in *@.service) ;; *) if systemctl is-active --quiet "$unit"; then printf '%s\n' "$unit" >> "$rollback_dir/active"; fi;; esac
+ if systemctl is-enabled --quiet "$unit"; then printf '%s\n' "$unit" >> "$rollback_dir/enabled"; fi
+done
+if [ -f "$etc/role" ]; then cp -p "$etc/role" "$rollback_dir/role"; fi
+if [ -f /usr/local/lib/weir/install.sh ]; then cp -p /usr/local/lib/weir/install.sh "$rollback_dir/install.sh"; fi
+printf '%s\n' "$original_current" > "$rollback_dir/current"
+printf '%s\n' "$original_previous" > "$rollback_dir/previous"
+cat > "$rollback_dir/recover.sh" <<'RECOVERY'
+#!/bin/sh
+set -eu
+[ "$(id -u)" = 0 ] || exit 1
+base=/opt/weir
+etc=/etc/weir
+units_dir=/etc/systemd/system
+snapshot=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+case "$snapshot" in "$base"/.rollback.*) ;; *) echo 'Invalid installation recovery snapshot' >&2; exit 1;; esac
+if [ "${1:-}" != --locked ]; then
+ exec 9>/run/lock/weir-install.lock
+ flock -n 9 || { echo 'Another installation is running' >&2; exit 1; }
+fi
+current=$(cat "$snapshot/current")
+previous=$(cat "$snapshot/previous")
+for name in "$current" "$previous"; do
+ case "$name" in *[!a-zA-Z0-9._+-]*|.|..) echo 'Invalid recovery release' >&2; exit 1;; esac
+ if [ -n "$name" ]; then [ -d "$base/releases/$name" ] && [ ! -L "$base/releases/$name" ] || exit 1; fi
+done
+units="weir-center.service weir-dsh.service weir-laya-helper.service weir-gate.service weir-helper.service weir-local-pair.service weir-update.path weir-update.service weir-gate-update@.service weir-laya-prepare.service weir-xray.service weir-sing-box.service"
+for unit in $units; do
+ case "$unit" in weir-update.service|weir-gate-update@.service) ;; *)
+  if [ "${1:-}" = --boot ]; then systemctl disable "$unit" >/dev/null 2>&1 || true
+  else systemctl disable --now "$unit" >/dev/null 2>&1 || true; fi;; esac
+done
+if [ -n "$current" ]; then ln -sfn "releases/$current" "$base/current"; else rm -f "$base/current"; fi
+if [ -n "$previous" ]; then ln -sfn "releases/$previous" "$base/previous"; else rm -f "$base/previous"; fi
+for unit in $units; do
+ rm -f "$units_dir/$unit"
+ if [ -e "$snapshot/units/$unit" ] || [ -L "$snapshot/units/$unit" ]; then cp -Pp "$snapshot/units/$unit" "$units_dir/$unit"; fi
+done
+if [ -f "$snapshot/role" ]; then cp -p "$snapshot/role" "$etc/role"; else rm -f "$etc/role"; fi
+if [ -f "$snapshot/install.sh" ]; then cp -p "$snapshot/install.sh" /usr/local/lib/weir/install.sh; fi
+systemctl daemon-reload
+if [ -f "$snapshot/enabled" ]; then while read -r unit; do systemctl enable "$unit" >/dev/null 2>&1 || true; done < "$snapshot/enabled"; fi
+failed=false
+if [ -f "$snapshot/active" ]; then
+ while read -r unit; do
+  case "$unit" in weir-update.service|weir-gate-update@.service) continue;; esac
+  if [ "${1:-}" = --boot ]; then systemctl --no-block restart "$unit" || failed=true
+  else systemctl restart "$unit" || failed=true; fi
+ done < "$snapshot/active"
+fi
+if [ "$failed" = true ]; then echo "Recovery failed; evidence kept at $snapshot" >&2; exit 1; fi
+printf 'recovered\n' > "$snapshot/status"
+rm -f "$base/.install-pending"
+echo "Recovered interrupted installation; restored ${current:-no previous release}" >&2
+RECOVERY
+chmod 0700 "$rollback_dir/recover.sh"
+cat > "$units_dir/weir-install-recover.service" <<'UNIT'
+[Unit]
+Description=Recover an interrupted Weir installation
+After=local-fs.target
+Before=weir-center.service weir-gate.service weir-helper.service weir-laya-helper.service weir-dsh.service
+ConditionPathExists=/opt/weir/.install-pending/recover.sh
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /opt/weir/.install-pending/recover.sh --boot
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable weir-install-recover.service
+# Publish only a complete snapshot; the root-owned link is the recovery marker.
+ln -sfn "$(basename "$rollback_dir")" "$base/.install-pending"
+sync
+installation_complete=false
+rollback() {
+ trap - EXIT HUP INT TERM
+ sh "$rollback_dir/recover.sh" --locked || echo "Rollback service recovery failed; host evidence kept at $rollback_dir" >&2
+ echo "Startup failed; switched back to ${original_current:-no previous release}" >&2
+ exit 1
+}
+trap '[ "$installation_complete" = true ] || rollback' EXIT
+trap 'exit 1' HUP INT TERM
 stop_units
 if [ -n "$previous" ]; then ln -sfn "releases/$previous" "$base/previous"; fi
 ln -sfn "releases/$version" "$base/current"
@@ -132,20 +230,6 @@ ln -sfn "$base/current/weir" /usr/local/bin/weir
 install -d -m 0755 /usr/local/lib/weir
 install -m 0755 "$package/install.sh" /usr/local/lib/weir/install.sh
 install -d -m 0755 "$etc"
-
-rollback() {
- if [ -n "$original_current" ]; then
-  ln -sfn "releases/$original_current" "$base/current"
-  if [ -n "$original_previous" ]; then ln -sfn "releases/$original_previous" "$base/previous"
-  else rm -f "$base/previous"; fi
-  systemctl daemon-reload
-  for unit in $active; do systemctl restart "$unit" || true; done
-  echo "Startup failed; switched back to $original_current" >&2
- else
-  echo 'Startup failed; no previous version to restore' >&2
- fi
- exit 1
-}
 active=''
 
 # —— 中心 ——
@@ -316,6 +400,8 @@ ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
 ReadWritePaths=/run/weir /etc/weir/gate /opt/weir/cores /opt/weir
+ReadWritePaths=-/run/lock/weir-install.lock
+ExecStartPre=+/usr/bin/touch /run/lock/weir-install.lock
 ReadWritePaths=-/run/ufw.lock
 ExecStartPre=+/usr/bin/touch /run/ufw.lock
 ReadWritePaths=-/www/server/nginx/html/.well-known/acme-challenge
@@ -354,6 +440,30 @@ UNIT
  # 内核由辅助程序作为子进程托管（降权为 weir-gate、崩溃自动重启），不再单独建 systemd 单元。
  rm -f "$units_dir/weir-xray.service" "$units_dir/weir-sing-box.service"
  active="$active weir-helper.service"
+fi
+
+# Gate upgrades execute outside the bounded core helper. Only an official
+# numeric release version can be passed to this fixed root service.
+if [ "$role" = gate ] || [ "$role" = standalone ]; then
+ if [ "$role" = gate ]; then install -d -m 2770 -o root -g weir-gate "$lib/update"; fi
+ cat > "$units_dir/weir-gate-update@.service" <<'UNIT'
+[Unit]
+Description=Weir Gate verified release upgrade %i
+[Service]
+Type=oneshot
+ExecStart=/opt/weir/current/weir self-update --version %i
+TimeoutStartSec=30min
+UMask=0027
+UNIT
+ cat > "$units_dir/weir-laya-prepare.service" <<'UNIT'
+[Unit]
+Description=Weir Gate fixed official Laya preparation
+[Service]
+Type=oneshot
+ExecStart=/opt/weir/current/weir laya prepare gate
+TimeoutStartSec=25min
+UMask=0027
+UNIT
 fi
 
 # —— 单机：本机 Gate 用一次性凭证自动配对；中心只存摘要，配对成功后两边都删除 ——
@@ -441,6 +551,10 @@ prune_releases() {
  done
  echo "release cleanup update=$update_id version=$version removed=$removed bytes=$bytes protected=$protected"
 }
+installation_complete=true
+trap - EXIT HUP INT TERM
+rm -f "$base/.install-pending"
+rm -rf -- "$rollback_dir"
 prune_releases
 
 echo "Installed Weir $version ($role)."

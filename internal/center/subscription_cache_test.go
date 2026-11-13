@@ -156,29 +156,32 @@ func TestSubscriptionGroupCacheIdentityEmptyAndRecovery(t *testing.T) {
 	}
 	first, _ := read("client-a", false)
 	read("client-a", false)
-	if first == "" || calls.Load() != 1 {
+	read("client-a", false)
+	// The first raw publication changes the durable dependency version. Only
+	// a subsequent stable computation may populate the rendered cache.
+	if first == "" || calls.Load() != 2 {
 		t.Fatal("normal cache miss", first, calls.Load())
 	}
 	if !strings.Contains(logs.String(), "trace="+trace) || !strings.Contains(logs.String(), "stage=subscription.source") || !strings.Contains(logs.String(), "stage=subscription.combine") || !strings.Contains(logs.String(), "outcome=hit") {
 		t.Fatal("source, processing and cache stages lost correlation", logs.String())
 	}
 	read("client-b", false)
-	if calls.Load() != 2 {
+	if calls.Load() != 3 {
 		t.Fatal("different user agents shared a group cache")
 	}
 	profile.Settings = map[string]any{"filter_include": "keep:does-not-match"}
 	filtered, _ := read("client-a", false)
-	if filtered != "" || calls.Load() != 3 {
+	if filtered != "" || calls.Load() != 4 {
 		t.Fatal("effective settings absent from cache identity", filtered, calls.Load())
 	}
 	read("client-a", false)
-	if calls.Load() != 3 {
+	if calls.Load() != 4 {
 		t.Fatal("valid empty filtered result was not cached")
 	}
 	profile.Settings = nil
 	source.Update().SetName("new-name").ExecX(ctx)
 	read("client-a", false)
-	if calls.Load() != 4 {
+	if calls.Load() != 5 {
 		t.Fatal("dependency changes reused old group cache")
 	}
 	fail.Store(true)
@@ -189,14 +192,15 @@ func TestSubscriptionGroupCacheIdentityEmptyAndRecovery(t *testing.T) {
 	}
 	fail.Store(false)
 	read("client-a", false)
-	if calls.Load() != 6 {
+	if calls.Load() != 7 {
 		t.Fatal("failed fallback cached as a successful group")
 	}
 	empty.Store(true)
 	s.invalidateGroups(ctx)
 	read("client-a", false)
 	read("client-a", false)
-	if calls.Load() != 7 {
+	read("client-a", false)
+	if calls.Load() != 9 {
 		t.Fatal("valid upstream empty not cached")
 	}
 }

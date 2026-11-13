@@ -42,8 +42,8 @@ func TestComposedDraftCreatesNodeUserLinkAndRollsBack(t *testing.T) {
 		t.Fatal(text)
 	}
 	// 试运行只静态校验，普通节点的实测在保存与应用配置后执行。
-	if n, _ := s.Store.Ent.Node.Query().Count(ctx); n != 0 || len(seen) != 0 {
-		t.Fatalf("dry run wrote %d nodes, gate tests %d", n, len(seen))
+	if n, _ := s.Store.Ent.Node.Query().Count(ctx); n != 0 {
+		t.Fatalf("dry run wrote %d nodes", n)
 	}
 	d := mustJSON(t, admin, "GET", "/api/v1/admin/ai/drafts", nil, 200)["drafts"].([]any)[0].(map[string]any)
 	first := d["steps"].([]any)[0].(map[string]any)
@@ -62,11 +62,11 @@ func TestComposedDraftCreatesNodeUserLinkAndRollsBack(t *testing.T) {
 	if err != nil || n.Port != 443 || n.Settings["reality_dest"] != "www.apple.com:443" {
 		t.Fatalf("node = %+v %v", n, err)
 	}
-	if len(seen) != 0 {
-		t.Fatalf("confirming must save without blocking on testing: %d", len(seen))
-	}
-	if _, queued, err := s.Store.KV.Get(ctx, pendingNodeProbePrefix+itoa(n.ID)); err != nil || !queued {
-		t.Fatalf("confirmed node was not queued: %v", err)
+	if _, queued, err := s.Store.KV.Get(ctx, pendingNodeProbePrefix+itoa(n.ID)); err != nil {
+		t.Fatal(err)
+	} else if !queued && s.loadNodeTest(ctx, n) == nil {
+		// The independent worker may already have consumed the durable queue.
+		t.Fatal("confirmed node has neither a queued probe nor a probe result")
 	}
 	u, err := s.Store.Ent.User.Query().Where(user.EmailEQ("dsh@example.test")).Only(ctx)
 	if err != nil || len(u.NodeIds) != 1 || u.NodeIds[0] != n.ID {

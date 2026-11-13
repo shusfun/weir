@@ -1,4 +1,5 @@
 // 公开页留言：访客投稿（可匿名、可需审核），管理员在页面管理中审核、回复、隐藏与删除；留言设置变更需验证身份。
+import type { components } from "../lib/contracts/public.gen";
 import { useState, type ReactNode } from "react";
 import { useQuery } from "../lib/query";
 import {
@@ -33,25 +34,11 @@ interface Config {
   allow_anonymous: boolean;
   require_audit: boolean;
 }
-interface Message {
-  id: number;
-  nickname: string;
-  content: string;
-  type: string;
-  status: string;
-  created_at: string;
-  reply: string;
-  reply_at: string | null;
-  visible?: boolean;
-  revision?: string;
-}
-interface Listing {
-  items: Message[];
-  page: number;
-  page_size: number;
-  total: number;
-  config: { enabled: boolean; allow_anonymous: boolean };
-}
+type Message = components["schemas"]["AdminGuestbookMessage"];
+type PublicMessage = components["schemas"]["GuestbookMessage"];
+type PublicListing = components["schemas"]["PublicGuestbookListing"];
+type AdminListing = components["schemas"]["AdminGuestbookListing"];
+type Moderation = components["schemas"]["GuestbookModeration"];
 const types: Record<string, string> = { general: "交流", feature: "功能建议", bug: "问题反馈" };
 const statuses: Record<string, string> = { pending: "待审核", approved: "已审核", replied: "已回复" };
 const configFlags = [
@@ -60,7 +47,7 @@ const configFlags = [
   ["require_audit", "新留言需要审核"],
 ] as const;
 
-function Entry({ item, children }: { item: Message; children?: ReactNode }) {
+function Entry({ item, children }: { item: PublicMessage; children?: ReactNode }) {
   return (
     <Card>
       <CardContent className="stack">
@@ -93,7 +80,7 @@ export function PublicGuestbook({ slug }: { slug: string }) {
   const base = "/pages/" + encodeURIComponent(slug) + "/guestbook";
   const q = useQuery({
     queryKey: ["public-guestbook", slug, page],
-    queryFn: () => api(base + "?page=" + page) as Promise<Listing>,
+    queryFn: () => api(base + "?page=" + page) as Promise<PublicListing>,
     retry: false,
     refetchInterval: 30000,
   });
@@ -113,6 +100,8 @@ export function PublicGuestbook({ slug }: { slug: string }) {
         <State loading />
       ) : q.isError ? (
         <State error={q.error} onRetry={() => void q.refetch()} />
+      ) : !q.data.config || typeof q.data.config.allow_anonymous !== "boolean" ? (
+        <State error={new Error("留言配置不可用，请刷新重试。") } onRetry={() => void q.refetch()} />
       ) : (
         <>
           <p>请勿提交密码、订阅地址或其他个人信息。昵称与留言经管理员确认后可向所有访客公开。</p>
@@ -122,8 +111,8 @@ export function PublicGuestbook({ slug }: { slug: string }) {
             </Notice>
           )}
           <Form busy={post.busy} errors={post.errors} onSubmit={() => void post.submit()}>
-            <Field label="昵称（可留空）">
-              <Input maxLength={20} value={nickname} onChange={(e) => setNickname(e.target.value)} />
+            <Field label="昵称" name="nickname" required>
+              <Input required maxLength={60} value={nickname} onChange={(e) => setNickname(e.target.value)} />
             </Field>
             <Field label="留言分类">
               <Select value={type} onValueChange={(v) => setType(v ?? "general")}>
@@ -139,8 +128,8 @@ export function PublicGuestbook({ slug }: { slug: string }) {
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="留言正文" name="content" hint={`${[...content].length} / 500 字`} customError={content && !content.trim() ? "请输入留言正文" : ""}>
-              <Textarea rows={4} maxLength={500} required value={content} onChange={(e) => setContent(e.target.value)} />
+            <Field label="留言正文" name="content" hint={`${[...content].length} / 2000 字`} customError={content && !content.trim() ? "请输入留言正文" : ""}>
+              <Textarea rows={4} maxLength={2000} required value={content} onChange={(e) => setContent(e.target.value)} />
             </Field>
             <div className="actions">
               <Button type="submit" disabled={post.busy} busy={post.busy} busyText="正在提交…">提交留言</Button>
@@ -165,6 +154,14 @@ const modeNames: Record<Exclude<Mode, "">, string> = {
   pending: "改为待审核",
   approved: "标记已审核",
 };
+const moderationActions: Record<Exclude<Mode, "">, Moderation["action"]> = {
+  approve: "publish",
+  hide: "hide",
+  reply: "reply",
+  delete: "delete",
+  pending: "status",
+  approved: "status",
+};
 
 export function GuestbookManager({ page: resource, close }: { page: { id: number; data: Record<string, unknown> }; close: () => void }) {
   const base = "/admin/public-pages/" + resource.id + "/guestbook";
@@ -183,7 +180,7 @@ export function GuestbookManager({ page: resource, close }: { page: { id: number
   });
   const q = useQuery({
     queryKey: ["guestbook-manage", resource.id, page, status, search],
-    queryFn: () => api(base + "/messages?page=" + page + "&status=" + status + "&search=" + encodeURIComponent(search)) as Promise<Listing>,
+    queryFn: () => api(base + "/messages?page=" + page + "&status=" + status + "&search=" + encodeURIComponent(search)) as Promise<AdminListing>,
     refetchOnWindowFocus: false,
     staleTime: 0,
   });
@@ -215,14 +212,16 @@ export function GuestbookManager({ page: resource, close }: { page: { id: number
   });
   const saveMessage = useFormAction(
     () => {
+      if (!mode || !selected) throw new Error("请选择留言操作");
       const statusOnly = mode === "pending" || mode === "approved";
-      return api(base + "/messages", "POST", {
-        id: selected!.id,
-        revision: selected!.revision,
-        action: statusOnly ? "status" : mode,
+      const request: Moderation = {
+        id: selected.id,
+        revision: selected.revision,
+        action: moderationActions[mode],
         status: statusOnly ? mode : "",
         reply: mode === "reply" ? reply : "",
-      });
+      };
+      return api(base + "/messages", "POST", request);
     },
     { fields: { invalid_guestbook: "reply" }, invalidate: [["guestbook-manage", resource.id]], onSuccess: done },
   );

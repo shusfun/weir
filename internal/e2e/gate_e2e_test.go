@@ -75,7 +75,9 @@ func (e *env) post(path string, body any, header map[string]string) map[string]a
 		if !ok {
 			e.t.Fatalf("202 response missing job: %v", out["pending"])
 		}
-		deadline := time.Now().Add(4 * time.Minute)
+		// Deployed probes allow five minutes for the queue and five minutes for
+		// configuration convergence before running the bounded client checks.
+		deadline := time.Now().Add(12 * time.Minute)
 		for time.Now().Before(deadline) {
 			id, _ := job["id"].(string)
 			b, _ := e.get("/api/v1/admin/jobs/"+url.PathEscape(id), nil)
@@ -98,7 +100,7 @@ func (e *env) post(path string, body any, header map[string]string) map[string]a
 			}
 			time.Sleep(200 * time.Millisecond)
 		}
-		e.t.Fatal("action job timed out")
+		e.t.Fatalf("action job timed out: id=%v trace=%v step=%v step_max=%v", job["id"], job["trace"], job["step"], job["step_max"])
 	}
 	if resp.StatusCode >= 300 {
 		e.t.Fatalf("%s = %d %v", path, resp.StatusCode, out)
@@ -148,10 +150,9 @@ func setup(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	srv := httptest.NewServer(s.Router())
-	t.Cleanup(srv.Close)
 	jar, _ := cookiejar.New(nil)
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
+	t.Cleanup(func() { cancel(); s.Close(); srv.Close() })
 	e := &env{t: t, s: s, url: srv.URL, admin: &http.Client{Jar: jar, Timeout: 30 * time.Second}, xray: bin, dir: dir, ctx: ctx}
 	e.post("/api/v1/setup/install", map[string]any{"store": map[string]any{"driver": "sqlite", "sqlite_path": filepath.Join(dir, "center.db")}, "email": "admin@e2e.test", "password": "E2eAdmin1"}, map[string]string{"Authorization": "Bearer " + token})
 	data, err := os.ReadFile(bin)
@@ -184,7 +185,10 @@ func (e *env) startGate(name string) {
 	gd := filepath.Join(e.dir, name)
 	p := gate.Paths{Config: filepath.Join(gd, "agent.json"), Data: filepath.Join(gd, "data"), Socket: filepath.Join("/tmp", "weir-"+name+".sock"),
 		CoresDir: filepath.Join(gd, "cores"), CertsDir: filepath.Join(gd, "certs"), KernelsDir: filepath.Join(gd, "kernels"), Root: filepath.Join(gd, "root"), RunAs: e.runAs}
-	go gate.ServeHelper(e.ctx, gate.NewHelper(p))
+	helperCtx, stopHelper := context.WithCancel(e.ctx)
+	helperDone := make(chan struct{})
+	go func() { defer close(helperDone); _ = gate.ServeHelper(helperCtx, gate.NewHelper(p)) }()
+	e.t.Cleanup(func() { stopHelper(); <-helperDone })
 	eventually(e.t, 5*time.Second, "helper socket", func() bool { _, err := os.Stat(p.Socket); return err == nil })
 	center := e.url
 	if e.gateCenter != "" {
@@ -216,6 +220,7 @@ func (e *env) runAgent() {
 	done := make(chan struct{})
 	e.stopAgent = func() { cancel(); <-done }
 	go func() { defer close(done); a.Run(ctx) }()
+	e.t.Cleanup(e.stopAgent)
 }
 
 func TestGateRePairAfterCenterReset(t *testing.T) {
@@ -289,7 +294,7 @@ func TestGateRealTrafficQuotaAndExpiry(t *testing.T) {
 	direct := e.s.Store.Ent.Exit.Query().Where(entexit.GateIDEQ(g.ID), entexit.TagEQ("direct")).OnlyX(ctx)
 	n := e.s.Store.Ent.Node.Create().SetGateID(g.ID).SetExitID(direct.ID).SetName("香港").SetKernel("xray").SetProtocol("vless").SetPort(port).SetNetwork("tcp").SetSecurity("reality").
 		SetSettings(map[string]any{"reality_dest": dest.Listener.Addr().String(), "reality_server_names": "e2e.test", "reality_private_key": priv, "reality_public_key": pub, "reality_short_id": "a1b2c3d4"}).SaveX(ctx)
-	u := e.s.Store.Ent.User.Create().SetEmail("u@e2e.test").SetPasswordHash("x").SetUnlimited(true).SaveX(ctx)
+	u := e.s.Store.Ent.User.Create().SetEmail("u@e2e.test").SetPasswordHash("x").SetUnlimited(true).SetAllNodes(true).SaveX(ctx)
 	link := e.s.Store.Ent.Link.Create().SetUserID(u.ID).SetToken("e2e-link").SaveX(ctx)
 	uuid := "6f1c2a8e-3b4d-4c5e-9f60-7a8b9c0d1e2f"
 	e.s.Store.Ent.Credential.Create().SetNodeID(n.ID).SetLinkID(link.ID).SetUserID(u.ID).SetStatsKey("c-e2e").SetUUID(uuid).SaveX(ctx)
@@ -340,6 +345,42 @@ func TestGateRealTrafficQuotaAndExpiry(t *testing.T) {
 	eventually(t, 20*time.Second, "metering", func() bool { return e.s.Store.Ent.User.GetX(ctx, u.ID).Used >= int64(len(blob)) })
 	used := e.s.Store.Ent.User.GetX(ctx, u.ID).Used
 	t.Logf("metered %d bytes", used)
+
+	// Keep the original client and secret: subscription rejection alone cannot
+	// prove that a new connection using an already imported credential is denied.
+	if err = e.s.SyncUser(ctx, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	e.applied("authorization projection")
+	patch := func(path string, enabled bool, trace string) {
+		t.Helper()
+		raw, _ := json.Marshal(map[string]any{"enabled": enabled})
+		req, _ := http.NewRequest("PATCH", e.url+path, bytes.NewReader(raw))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("traceparent", "00-"+trace+"-0123456789abcdef-01")
+		resp, err := e.admin.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK || resp.Header.Get("X-Trace-Id") != trace {
+			t.Fatalf("authorization mutation %s: %d %s", path, resp.StatusCode, body)
+		}
+	}
+	for i, path := range []string{fmt.Sprintf("/api/v1/admin/users/%d/links/%d", u.ID, link.ID), fmt.Sprintf("/api/v1/admin/users/%d", u.ID)} {
+		patch(path, false, fmt.Sprintf("%032x", 0x100+i*2))
+		e.applied("authorization revoked")
+		for attempt := 0; attempt < 3; attempt++ {
+			if fetch() == nil {
+				t.Fatalf("disabled resource %s accepted a new connection with the old credential", path)
+			}
+		}
+		patch(path, true, fmt.Sprintf("%032x", 0x101+i*2))
+		e.applied("authorization restored")
+		eventually(t, 20*time.Second, "restored original credential", func() bool { return fetch() == nil })
+	}
+	used = e.s.Store.Ent.User.GetX(ctx, u.ID).Used
 
 	// 额度：只剩 1 MiB，再下载 2 MiB 后 Gate 本地停用该用户，新连接失败。
 	e.s.Store.Ent.User.UpdateOneID(u.ID).SetUnlimited(false).SetQuota(used + 1<<20).ExecX(ctx)

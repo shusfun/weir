@@ -39,6 +39,8 @@ jobs:
           restore-keys: |
             go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum') }}-
             go-${{ runner.os }}-${{ runner.arch }}-
+      - run: go generate ./packages/contracts
+      - run: git diff --exit-code -- packages/contracts/public.gen.go
       - run: go test -timeout=40m ./...
       - if: steps.go-cache.outputs.cache-hit != 'true'
         continue-on-error: true
@@ -63,6 +65,8 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - run: pnpm contracts:generate
+      - run: git diff --exit-code -- apps/console/src/lib/contracts/public.gen.ts
       - run: pnpm check
 
   shell:

@@ -468,7 +468,7 @@ func (s *Server) register(c *gin.Context) {
 			storeCopy := *s.Store
 			storeCopy.Ent = tx.Client()
 			serverCopy := &Server{Store: &storeCopy, Config: s.Config, Crypto: s.Crypto}
-			if _, err = serverCopy.syncUserLocked(ctx, u.ID); err != nil {
+			if _, err = serverCopy.syncUserLockedInTransaction(ctx, u.ID); err != nil {
 				failInternal(c, 503, "registration_unavailable", err)
 				return nil
 			}

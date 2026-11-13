@@ -22,6 +22,7 @@ const (
 	TaskReleaseQuery      = "release.query"
 	TaskExternalConvert   = "subscription.convert"
 	TaskTraceRead         = "trace.read"
+	TaskLayaPrepare       = "laya.prepare"
 	TaskLayaInstall       = "laya.install"
 	TaskLayaRemove        = "laya.remove"
 	TaskLayaClassify      = "laya.classify"

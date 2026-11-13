@@ -396,7 +396,12 @@ func TestTwoGatesQuotaWithCenterDown(t *testing.T) {
 	var seen []snap
 	var mu sync.Mutex
 	stopSnap := make(chan struct{})
+	snapDone := make(chan struct{})
+	var stopSnapshotsOnce sync.Once
+	stopSnapshots := func() { stopSnapshotsOnce.Do(func() { close(stopSnap) }); <-snapDone }
+	t.Cleanup(stopSnapshots)
 	go func() {
+		defer close(snapDone)
 		for {
 			select {
 			case <-stopSnap:
@@ -404,7 +409,14 @@ func TestTwoGatesQuotaWithCenterDown(t *testing.T) {
 			default:
 			}
 			var s snap
-			for _, r := range e.s.Store.Ent.Budget.Query().Where(budget.UserIDEQ(uid2)).AllX(e.ctx) {
+			rows, err := e.s.Store.Ent.Budget.Query().Where(budget.UserIDEQ(uid2)).All(e.ctx)
+			if err != nil {
+				if e.ctx.Err() == nil {
+					t.Errorf("observe budget transfer: %v", err)
+				}
+				return
+			}
+			for _, r := range rows {
 				switch r.GateID {
 				case gids["qa"]:
 					s.aAlloc, s.aConf = r.Allocated, r.Confirmed
@@ -425,7 +437,7 @@ func TestTwoGatesQuotaWithCenterDown(t *testing.T) {
 		r, err := e.s.Store.Ent.Budget.Query().Where(budget.UserIDEQ(uid2), budget.GateIDEQ(gids["qc"])).Only(e.ctx)
 		return err == nil && r.Allocated > 0 && r.Confirmed == r.Allocated
 	})
-	close(stopSnap)
+	stopSnapshots()
 	mu.Lock()
 	defer mu.Unlock()
 	shrunk := false

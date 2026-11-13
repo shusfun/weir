@@ -66,7 +66,7 @@ func (s *Server) testSubscriptionProfile(c *gin.Context) {
 	ctx, finish := s.startSubscriptionRun(c.Request.Context(), id)
 	var runErr error
 	defer func() { finish(runErr) }()
-	generation, _, err := s.Store.KV.Get(ctx, "sub-group-generation")
+	generation, err := s.Store.SubscriptionCacheVersion(ctx)
 	if err != nil {
 		runErr = err
 		failInternal(c, 503, "cache_version_unavailable", err)
@@ -125,7 +125,7 @@ func (s *Server) getSubscriptionProfileTest(c *gin.Context) {
 		failInternal(c, 503, "query_failed", err)
 		return
 	}
-	generation, _, err := s.Store.KV.Get(ctx, "sub-group-generation")
+	generation, err := s.Store.SubscriptionCacheVersion(ctx)
 	if err != nil {
 		failInternal(c, 503, "cache_version_unavailable", err)
 		return

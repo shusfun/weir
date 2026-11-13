@@ -189,7 +189,11 @@ func (w *writer) prepareLaya(ctx context.Context) error {
 	}
 	w.set(func(s *Status) { s.State = "installing" })
 	w.log("准备官方 Laya 固定部署档案")
-	_, err := layahost.Prepare(ctx, "center", func(stage string) {
+	target := "center"
+	if LocalRole() == "gate" {
+		target = "gate"
+	}
+	_, err := layahost.Prepare(ctx, target, func(stage string) {
 		w.set(func(s *Status) { s.Stage = stage })
 		w.log("laya.prepare." + stage)
 	})

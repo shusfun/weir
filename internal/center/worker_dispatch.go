@@ -153,7 +153,7 @@ func (s *Server) dispatchWorkerTask(ctx context.Context, kind string, payload an
 		return out, 0, err
 	}
 	deadline := time.Now().Add(2 * time.Minute)
-	if kind == contracts.TaskLayaInstall {
+	if kind == contracts.TaskLayaInstall || kind == contracts.TaskLayaPrepare {
 		deadline = time.Now().Add(30 * time.Minute)
 	}
 	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
@@ -234,6 +234,35 @@ func networkTaskSource(kind string, payload any) string {
 }
 
 func (s *Server) fetchSubscription(ctx context.Context, raw, ua string) (subgroup.Response, error) {
+	key := digest(raw + "\x00" + ua)
+	started := time.Now().UTC()
+	ch := s.sourceFetches.DoChan(key, func() (any, error) {
+		work, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
+		defer cancel()
+		s.sourceFetchOnce.Do(func() { s.sourceFetchSlots = make(chan struct{}, s.Config.Subscriptions.effective().FetchConcurrency) })
+		select {
+		case s.sourceFetchSlots <- struct{}{}:
+			defer func() { <-s.sourceFetchSlots }()
+		case <-work.Done():
+			return nil, work.Err()
+		}
+		return s.fetchSubscriptionOnce(work, raw, ua)
+	})
+	select {
+	case <-ctx.Done():
+		return subgroup.Response{}, ctx.Err()
+	case result := <-ch:
+		recordSubscriptionStage(ctx, 0, subgroup.Stage{Operation: "subscription.fetch_shared", Started: started, Finished: time.Now().UTC()}, "center.fetchSubscription")
+		if result.Err != nil {
+			return subgroup.Response{}, result.Err
+		}
+		response := result.Val.(subgroup.Response)
+		response.Body = append([]byte(nil), response.Body...)
+		return response, nil
+	}
+}
+
+func (s *Server) fetchSubscriptionOnce(ctx context.Context, raw, ua string) (subgroup.Response, error) {
 	result, gid, err := s.dispatchNetwork(ctx, contracts.TaskSubscriptionFetch, contracts.SubscriptionFetchTask{Credentials: contracts.FetchSecrets{URL: raw}, UserAgent: ua, MaxBytes: 10 << 20}, 0)
 	if err == nil {
 		return subgroup.Response{Body: result.Body, UserInfo: result.UserInfo, Title: result.Title, Location: "gate:" + itoa(gid)}, nil

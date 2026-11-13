@@ -10,7 +10,7 @@ import { OperatorEditor, type Operator } from "./operator-editor";
 import { TemplatePicker, useTemplates } from "./subscription-profiles";
 import { State } from "./feedback";
 import { field, useConsoleContext } from "../lib/console-context";
-import { useUnsavedChanges } from "../lib/dirty";
+import { useDraft } from "../lib/dirty";
 import { RenderingSettingsFields, renderingErrorFields } from "../features/subscriptions/settings/rendering-settings";
 import { ConverterSettingsPanel } from "../features/subscriptions/settings/converter-settings";
 
@@ -99,7 +99,7 @@ function TemplateForm({ value, close, saved }: { value: CustomTemplate | "new"; 
 export function SettingsPanel() {
   const q = useQuery({ queryKey: ["subscription-settings"], queryFn: () => api("/admin/subscriptions/settings") as Promise<SubscriptionSettings> });
   if (q.isPending || q.error) return <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} />;
-  return <section className="stack"><SettingsForm key={JSON.stringify(q.data)} value={q.data} saved={() => q.refetch()} /><ConverterSettingsPanel /></section>;
+  return <section className="stack"><SettingsForm value={q.data} saved={() => q.refetch()} /><ConverterSettingsPanel /></section>;
 }
 
 const switches = [
@@ -112,15 +112,15 @@ const switches = [
 ] as const;
 
 function SettingsForm({ value, saved }: { value: SubscriptionSettings; saved: () => void }) {
-  const [s, setS] = useState<SubscriptionSettings>(value);
-  const [ops, setOps] = useState<Operator[]>(value.default_operators ?? []);
+  const draft = useDraft<SubscriptionSettings>({ ...value, default_operators: value.default_operators ?? [] });
+  const s = draft.value, setS = draft.set;
+  const ops = (s.default_operators ?? []) as Operator[];
+  const setOps = (ops: Operator[]) => setS(previous => ({ ...previous, default_operators: ops }));
   const set = (patch: Partial<SubscriptionSettings>) => setS({ ...s, ...patch });
-  const dirty = JSON.stringify(s) !== JSON.stringify(value) || JSON.stringify(ops) !== JSON.stringify(value.default_operators ?? []);
-  useUnsavedChanges(dirty);
   const save = useFormAction(() => api("/admin/subscriptions/settings", "PUT", { ...s, default_operators: ops }), {
     ok: "已保存",
     fields: { invalid_engine: "engine", invalid_template: "template", ...renderingErrorFields },
-    onSuccess: saved,
+    onSuccess: () => { draft.commit(); saved(); },
   });
   return (
     <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>

@@ -45,7 +45,10 @@ func (s *Server) recordRate(ctx context.Context, cred *ent.Credential, epoch str
 }
 
 func (s *Server) pruneRates(ctx context.Context, now time.Time) error {
-	_, err := s.Store.Ent.RateSample.Delete().Where(ratesample.AtLT(now.Add(-sampleKeep))).Exec(ctx)
+	ids, err := s.Store.Ent.RateSample.Query().Where(ratesample.AtLT(now.Add(-sampleKeep))).Order(ratesample.ByAt()).Limit(s.Config.Store.Maintenance.Effective().RecordBatch).IDs(ctx)
+	if err == nil && len(ids) > 0 {
+		_, err = s.Store.Ent.RateSample.Delete().Where(ratesample.IDIn(ids...), ratesample.AtLT(now.Add(-sampleKeep))).Exec(ctx)
+	}
 	return err
 }
 

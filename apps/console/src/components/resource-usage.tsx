@@ -26,8 +26,9 @@ export function ProcessUsage({ host, names, online = true }: { host?: GateHost |
       const p = age >= -60_000 && age <= 90_000 ? raw : undefined;
       return <div key={name} className="min-w-0">
         <dt className="text-meta text-[var(--weir-ink-3)]">{name === "weir-center" ? "Weir 中心进程" : name}</dt>
-        <dd className="m-0 tabular-nums">{p?.state === "stopped" ? "未运行" : <>CPU {percent(p?.cpu_percent)} · 内存 {size(p?.memory_rss)}{p?.memory_rss != null && h?.mem_total ? `（${percent(p.memory_rss / h.mem_total * 100)}）` : ""}</>}</dd>
-        <small className="block min-h-4 text-[var(--weir-ink-3)]">{p?.error || (!p ? "观测未知" : p.state === "running" && p.cpu_percent == null ? "CPU 等待下一次有效采样" : "")}</small>
+        <dd className="m-0 tabular-nums">{p?.state === "stopped" ? "未运行" : <>CPU {percent(p?.cpu_percent)} · 内存 {size(p?.memory_rss)}{p?.memory_rss != null && h?.mem_total ? `（${percent(p.memory_rss / h.mem_total * 100)}）` : ""}</>}
+          <small className="block min-h-4 text-[var(--weir-ink-3)]">{p?.error || (!p ? "观测未知" : p.state === "running" && p.cpu_percent == null ? "CPU 等待下一次有效采样" : "")}</small>
+        </dd>
       </div>;
     })}
   </dl>;

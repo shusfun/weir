@@ -42,7 +42,7 @@ func (h *helperClient) Laya(ctx context.Context, operation, digest, version stri
 		// daemon stderr must not become activity text.
 		code := "laya_helper_unavailable"
 		switch err.Error() {
-		case "approved_laya_deployment_unavailable", "laya_deployment_policy_mismatch", "laya_container_missing", "laya_container_policy_mismatch", "laya_container_operation_failed", "laya_operation_cancelled", "laya_operation_timeout", "laya_docker_unavailable", "laya_image_pull_failed", "laya_docker_output_limit":
+		case "approved_laya_deployment_unavailable", "laya_deployment_policy_mismatch", "laya_container_missing", "laya_container_policy_mismatch", "laya_container_operation_failed", "laya_operation_cancelled", "laya_operation_timeout", "laya_docker_unavailable", "laya_image_pull_failed", "laya_docker_output_limit", "laya_resources_unknown", "laya_resources_insufficient":
 			code = err.Error()
 		}
 		return nil, layaTaskFailure(code, "gate.layaOperation")

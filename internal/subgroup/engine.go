@@ -168,7 +168,7 @@ func filterRules(nodes []string, include, exclude string) []string {
 	if strings.TrimSpace(include) == "" && strings.TrimSpace(exclude) == "" {
 		return nodes
 	}
-	return sub.ApplyFilterRules(nodes, js.Obj("filterInclude", include, "filterExclude", exclude))
+	return sub.ApplyDirectionalFilters(nodes, include, exclude)
 }
 
 // manualLines 处理手动节点：修正编码 → 自定义名称 → 分组名 / 手动前缀 → 本节点的算子与筛选。

@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/shusfun/weir/internal/store"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/predicate"
 	"github.com/shusfun/weir/internal/store/ent/subgrant"
@@ -78,16 +79,47 @@ func decodeProfileSettings(m map[string]any) (profileSettings, error) {
 	return ps, checkSubscriptionRendering(deref(ps.DNSMode), deref(ps.CustomDNS), regions)
 }
 
-func (s *Server) profileView(ctx context.Context, p *ent.SubProfile) gin.H {
-	grants, _ := s.Store.Ent.SubGrant.Query().Where(subgrant.ProfileIDEQ(p.ID)).All(ctx)
+func (s *Server) profileView(ctx context.Context, p *ent.SubProfile) (gin.H, error) {
+	grants, err := s.Store.Ent.SubGrant.Query().Where(subgrant.ProfileIDEQ(p.ID)).All(ctx)
+	if err != nil {
+		return nil, err
+	}
 	users := make([]int, 0, len(grants))
 	for _, g := range grants {
 		users = append(users, g.UserID)
 	}
+	return profileViewWithUsers(p, users), nil
+}
+
+func profileViewWithUsers(p *ent.SubProfile, users []int) gin.H {
 	v := gin.H{"id": p.ID, "name": p.Name, "enabled": p.Enabled, "all_sources": p.AllSources, "source_ids": p.SourceIds, "node_ids": p.NodeIds,
 		"operators": p.Operators, "settings": p.Settings, "expires_at": p.ExpiresAt, "downloads": p.Downloads, "position": p.Position,
 		"members": p.Members, "user_ids": users, "shared": p.ShareToken != "", "share_expires_at": p.ShareExpiresAt}
 	return v
+}
+
+func (s *Server) profileViews(ctx context.Context, items []*ent.SubProfile) ([]gin.H, error) {
+	ids := make([]int, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	grants, err := s.Store.Ent.SubGrant.Query().Where(subgrant.ProfileIDIn(ids...)).Order(ent.Asc(subgrant.FieldUserID)).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	byProfile := map[int][]int{}
+	for _, grant := range grants {
+		byProfile[grant.ProfileID] = append(byProfile[grant.ProfileID], grant.UserID)
+	}
+	out := make([]gin.H, 0, len(items))
+	for _, item := range items {
+		users := byProfile[item.ID]
+		if users == nil {
+			users = []int{}
+		}
+		out = append(out, profileViewWithUsers(item, users))
+	}
+	return out, nil
 }
 
 func (s *Server) listSubProfiles(c *gin.Context) {
@@ -97,10 +129,12 @@ func (s *Server) listSubProfiles(c *gin.Context) {
 		failInternal(c, 503, "query_failed", err)
 		return
 	}
-	out := make([]gin.H, 0, len(items))
-	for _, it := range items {
-		out = append(out, s.profileView(ctx, it))
+	out, err := s.profileViews(ctx, items)
+	if err != nil {
+		failInternal(c, 503, "query_failed", err)
+		return
 	}
+
 	c.JSON(200, gin.H{"items": out})
 }
 
@@ -275,7 +309,12 @@ func (s *Server) saveProfileLocked(c *gin.Context) {
 	}
 	s.invalidateGroups(ctx)
 	s.audit(c, "subscription.profile.save", "profile:"+itoa(p.ID), "ok")
-	c.JSON(200, s.profileView(ctx, p))
+	view, err := s.profileView(ctx, p)
+	if err != nil {
+		failInternal(c, 503, "query_failed", err)
+		return
+	}
+	c.JSON(200, view)
 }
 
 func (s *Server) deleteProfile(c *gin.Context) {
@@ -511,7 +550,7 @@ func (s *Server) groupNodesAt(ctx context.Context, p *ent.SubProfile, ua string,
 	path[p.ID] = true
 	defer delete(path, p.ID)
 	ctx = s.subscriptionContext(ctx, p.ID)
-	generation, _, generationErr := s.Store.KV.Get(ctx, "sub-group-generation")
+	generation, generationErr := s.Store.SubscriptionCacheVersion(ctx)
 	sources, manual, o, tpl, g, err := s.groupInput(ctx, p, ua)
 	if err != nil {
 		return "", nil, tpl, g, err
@@ -554,12 +593,13 @@ func (s *Server) groupNodesAt(ctx context.Context, p *ent.SubProfile, ua string,
 	}
 	key := "sub-group:" + itoa(p.ID) + ":" + version(struct {
 		Generation string
+		Semantics  string
 		Sources    []subgroup.Source
 		Manual     []subgroup.ManualNode
 		Options    subgroup.Options
 		Template   subgroup.Template
 		Settings   SubscriptionSettings
-	}{generation, dependencies, manual, o, tpl, g})
+	}{generation, "directional-v2", dependencies, manual, o, tpl, g})
 	cacheable := g.CacheMinutes > 0 && generationErr == nil
 	for _, result := range nestedResults {
 		if result.Error != "" {
@@ -592,7 +632,16 @@ func (s *Server) groupNodesAt(ctx context.Context, p *ent.SubProfile, ua string,
 		}
 	}
 	if cacheable {
-		_ = s.Store.KV.Set(ctx, key, list, time.Duration(g.CacheMinutes)*time.Minute)
+		current, err := s.Store.SubscriptionCacheVersion(ctx)
+		if err == nil && current == generation {
+			limits := s.Config.Subscriptions.effective()
+			if len(list) <= limits.CacheItemBytes {
+				err = s.Store.WriteSubscriptionOutputCache(ctx, key, list, time.Duration(g.CacheMinutes)*time.Minute, store.SubscriptionCacheBudget{Bytes: limits.CacheTotalBytes, Entries: limits.CacheEntries})
+				if !errors.Is(err, store.ErrSubscriptionCacheCapacity) {
+					s.tasks.note("subscription-output-cache", err)
+				}
+			}
+		}
 	}
 	return list, results, tpl, g, nil
 }
@@ -600,7 +649,9 @@ func (s *Server) groupNodesAt(ctx context.Context, p *ent.SubProfile, ua string,
 // Generation invalidation also fences an in-flight fetch from repopulating a
 // cache entry after its dependencies changed. Old entries expire by their TTL.
 func (s *Server) invalidateGroups(ctx context.Context) {
-	_, err := s.Store.KV.Incr(ctx, "sub-group-generation", 0)
+	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	err := s.Store.InvalidateSubscriptionCache(cleanup)
 	s.tasks.note("subscription-cache-invalidation", err)
 }
 
@@ -745,7 +796,12 @@ func (s *Server) setGrants(c *gin.Context) {
 	}
 	want := dedupe(req.UserIDs)
 	if len(want) > 0 {
-		if n, _ := s.Store.Ent.User.Query().Where(userIDIn(want)).Count(ctx); n != len(want) {
+		n, err := s.Store.Ent.User.Query().Where(userIDIn(want)).Count(ctx)
+		if err != nil {
+			failInternal(c, 503, "query_failed", err)
+			return
+		}
+		if n != len(want) {
 			failure(c, 400, "unknown_user")
 			return
 		}
@@ -769,25 +825,67 @@ func (s *Server) setGrants(c *gin.Context) {
 		dryRun(c, dryResult{Preview: preview})
 		return
 	}
-	have := map[int]bool{}
-	for _, g := range existing {
-		if !contains(want, g.UserID) {
-			_ = s.Store.Ent.SubGrant.DeleteOne(g).Exec(ctx)
-			continue
-		}
-		have[g.UserID] = true
-	}
-	for _, uid := range want {
-		if !have[uid] {
-			if _, err = s.Store.Ent.SubGrant.Create().SetProfileID(id).SetUserID(uid).SetToken(randomToken(24)).Save(ctx); err != nil {
-				failInternal(c, 500, "save_failed", err)
-				return
-			}
-		}
+	if err = s.replaceProfileGrants(ctx, id, want); err != nil {
+		failInternal(c, 500, "save_failed", err)
+		return
 	}
 	s.audit(c, "subscription.profile.grants", "profile:"+itoa(id), fmt.Sprintf("ok users=%d", len(want)))
 	p, _ := s.Store.Ent.SubProfile.Get(ctx, id)
-	c.JSON(200, s.profileView(ctx, p))
+	view, err := s.profileView(ctx, p)
+	if err != nil {
+		failInternal(c, 503, "query_failed", err)
+		return
+	}
+	c.JSON(200, view)
+}
+
+func (s *Server) replaceProfileGrants(ctx context.Context, id int, want []int) error {
+	return s.Store.Lock.Do(ctx, "subscription-profile-grants:"+itoa(id), func(ctx context.Context) error {
+		tx, err := s.Store.Ent.Tx(ctx)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		if _, err = tx.SubProfile.Get(ctx, id); err != nil {
+			return err
+		}
+		want = dedupe(want)
+		if len(want) > 0 {
+			n, err := tx.User.Query().Where(user.IDIn(want...)).Count(ctx)
+			if err != nil {
+				return err
+			}
+			if n != len(want) {
+				return errors.New("unknown_user")
+			}
+		}
+		existing, err := tx.SubGrant.Query().Where(subgrant.ProfileIDEQ(id)).All(ctx)
+		if err != nil {
+			return err
+		}
+		have := make(map[int]bool, len(existing))
+		wanted := make(map[int]bool, len(want))
+		for _, uid := range want {
+			wanted[uid] = true
+		}
+		for _, grant := range existing {
+			if !wanted[grant.UserID] {
+				if err = tx.SubGrant.DeleteOne(grant).Exec(ctx); err != nil {
+					return err
+				}
+			} else {
+				have[grant.UserID] = true
+			}
+		}
+		for uid := range wanted {
+			if !have[uid] {
+				if _, err = tx.SubGrant.Create().SetProfileID(id).SetUserID(uid).SetToken(randomToken(24)).Save(ctx); err != nil {
+					return err
+				}
+			}
+		}
+		return tx.Commit()
+	})
 }
 
 // myGroups 列出分配给当前用户的订阅组与各自的订阅地址。
@@ -800,9 +898,24 @@ func (s *Server) myGroups(c *gin.Context) {
 		return
 	}
 	out := []gin.H{}
+	ids := make([]int, 0, len(grants))
+	for _, grant := range grants {
+		ids = append(ids, grant.ProfileID)
+	}
+	profiles := map[int]*ent.SubProfile{}
+	if len(ids) > 0 {
+		rows, err := s.Store.Ent.SubProfile.Query().Where(subprofile.IDIn(ids...), subprofile.EnabledEQ(true)).All(ctx)
+		if err != nil {
+			failInternal(c, 503, "query_failed", err)
+			return
+		}
+		for _, row := range rows {
+			profiles[row.ID] = row
+		}
+	}
 	for _, g := range grants {
-		p, err := s.Store.Ent.SubProfile.Get(ctx, g.ProfileID)
-		if err != nil || !p.Enabled {
+		p := profiles[g.ProfileID]
+		if p == nil {
 			continue
 		}
 		out = append(out, gin.H{"id": p.ID, "name": p.Name, "url": s.siteOrigin(c) + "/sub/g/" + g.Token, "expires_at": p.ExpiresAt, "last_used_at": g.LastUsedAt})

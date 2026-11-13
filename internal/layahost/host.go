@@ -4,8 +4,10 @@ package layahost
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"sync"
 
+	"github.com/shusfun/weir/internal/releasefiles"
 	"github.com/shusfun/weir/packages/contracts"
 	"github.com/shusfun/weir/packages/laya"
 )
@@ -29,6 +31,7 @@ type Response struct {
 	Status  laya.DockerStatus `json:"status"`
 	Version string            `json:"version"`
 	Model   string            `json:"model"`
+	Storage *ModelStorage     `json:"storage,omitempty"`
 }
 
 func failure(code, origin string) error { return &contracts.TaskError{Code: code, Origin: origin} }
@@ -52,7 +55,7 @@ type Controller struct {
 func (c *Controller) Operation(ctx context.Context, req Request) (Response, error) {
 	var result Response
 	switch req.Operation {
-	case "ensure", "stop", "remove", "status":
+	case "ensure", "stop", "remove", "status", "model-storage":
 	default:
 		return result, failure("unsupported_laya_operation", "layahost.Controller")
 	}
@@ -75,7 +78,10 @@ func (c *Controller) Operation(ctx context.Context, req Request) (Response, erro
 	if execute == nil {
 		execute = ExecuteDocker
 	}
-	runtime := laya.DockerRuntime{Spec: doc.Spec, Policy: doc.Policy, Execute: execute}
+	ctx = laya.WithTrace(ctx, releasefiles.Trace(ctx))
+	runtime := laya.DockerRuntime{Spec: doc.Spec, Policy: doc.Policy, Execute: execute, Observer: func(ctx context.Context, event laya.Event) {
+		slog.InfoContext(ctx, "laya container stage", "trace", event.TraceID, "stage", event.Operation, "status", event.Status, "code", event.Code, "ms", event.Finished.Sub(event.Started).Milliseconds())
+	}}
 	result.Version, result.Model = doc.Version, doc.Model
 	switch req.Operation {
 	case "ensure":
@@ -88,6 +94,12 @@ func (c *Controller) Operation(ctx context.Context, req Request) (Response, erro
 		result.Status.State = laya.StateStopped
 	case "status":
 		result.Status, err = runtime.Status(ctx)
+	case "model-storage":
+		// Validate container ownership and isolation before inspecting its volume.
+		result.Status, err = runtime.Status(ctx)
+		if err == nil {
+			result.Storage, err = inspectModelStorage(ctx, execute, doc.Spec.ModelVolume)
+		}
 	}
 	return result, normalize(err, result.Status.ErrorCode)
 }

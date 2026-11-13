@@ -3,6 +3,8 @@ package center
 import (
 	"context"
 	"encoding/json"
+	entsql "entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"errors"
 	"regexp"
 	"strconv"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/resource"
+	"github.com/shusfun/weir/packages/contracts"
 )
 
 // 公开页面：匿名可访问的介绍页（/p/<slug>），可展示已分享的订阅组卡片与留言板。
@@ -278,50 +281,82 @@ type guestbookMessage struct {
 	ReplyAt   *time.Time `json:"reply_at"`
 	CreatedAt time.Time  `json:"created_at"`
 	UserID    int        `json:"user_id,omitempty"`
+	Hidden    bool       `json:"hidden,omitempty"`
+}
+
+func (m guestbookMessage) visible() bool {
+	return !m.Hidden && (m.Status == "approved" || m.Status == "replied")
 }
 
 func messageRevision(r *ent.Resource) string { return digest(string(mustJSONBytes(r.Data))) }
 
 func mustJSONBytes(v any) []byte { b, _ := json.Marshal(v); return b }
 
-func messageView(r *ent.Resource, admin bool) gin.H {
-	var m guestbookMessage
-	_ = decodeStrict(r.Data, &m)
-	v := gin.H{"id": r.ID, "nickname": m.Nickname, "content": m.Content, "type": m.Type, "status": m.Status, "reply": m.Reply, "reply_at": m.ReplyAt, "created_at": m.CreatedAt}
-	if admin {
-		v["revision"], v["visible"] = messageRevision(r), m.Status != "pending"
-	}
-	return v
-}
-
 // listMessages 分页列出留言；visibleOnly 时只含已审核 / 已回复的。
-func (s *Server) listMessages(c *gin.Context, pageID int, visibleOnly bool, status, search string) {
+func (s *Server) listMessages(c *gin.Context, pageID int, visibleOnly bool, status, search string, config *contracts.PublicGuestbookConfig) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	if page < 1 || page > 10000 {
 		page = 1
 	}
 	const size = 20
-	rows, err := s.Store.Ent.Resource.Query().Where(resource.KindEQ(kindGuestbook), resource.OwnerIDEQ(pageID)).Order(ent.Desc(resource.FieldID)).All(c.Request.Context())
+	q := s.Store.Ent.Resource.Query().Where(resource.KindEQ(kindGuestbook), resource.OwnerIDEQ(pageID))
+	if visibleOnly {
+		q.Where(func(sel *entsql.Selector) {
+			sel.Where(entsql.Or(sqljson.ValueEQ(resource.FieldData, "approved", sqljson.Path("status")), sqljson.ValueEQ(resource.FieldData, "replied", sqljson.Path("status"))))
+			sel.Where(entsql.Or(entsql.Not(sqljson.HasKey(resource.FieldData, sqljson.Path("hidden"))), sqljson.ValueEQ(resource.FieldData, false, sqljson.Path("hidden"))))
+		})
+	}
+	if status != "" {
+		q.Where(func(sel *entsql.Selector) {
+			sel.Where(sqljson.ValueEQ(resource.FieldData, status, sqljson.Path("status")))
+		})
+	}
+	if search != "" {
+		q.Where(func(sel *entsql.Selector) {
+			sel.Where(entsql.Or(sqljson.StringContains(resource.FieldData, search, sqljson.Path("content")), sqljson.StringContains(resource.FieldData, search, sqljson.Path("nickname"))))
+		})
+	}
+	total, err := q.Clone().Count(c.Request.Context())
 	if err != nil {
 		failInternal(c, 503, "guestbook_unavailable", err)
 		return
 	}
-	var picked []*ent.Resource
+	rows, err := q.Order(ent.Desc(resource.FieldID)).Offset((page - 1) * size).Limit(size).All(c.Request.Context())
+	if err != nil {
+		failInternal(c, 503, "guestbook_unavailable", err)
+		return
+	}
+	adminItems := []contracts.AdminGuestbookMessage{}
+	publicItems := []contracts.GuestbookMessage{}
 	for _, r := range rows {
 		var m guestbookMessage
 		if decodeStrict(r.Data, &m) != nil {
 			continue
 		}
-		if visibleOnly && m.Status == "pending" || status != "" && m.Status != status || search != "" && !strings.Contains(m.Content+m.Nickname, search) {
+		if visibleOnly && !m.visible() {
 			continue
 		}
-		picked = append(picked, r)
+		var replyAt *string
+		if m.ReplyAt != nil {
+			v := m.ReplyAt.Format(time.RFC3339Nano)
+			replyAt = &v
+		}
+		createdAt := m.CreatedAt.Format(time.RFC3339Nano)
+		if visibleOnly {
+			publicItems = append(publicItems, contracts.GuestbookMessage{Id: r.ID, Nickname: m.Nickname, Content: m.Content, Type: m.Type, Status: m.Status, Reply: m.Reply, ReplyAt: replyAt, CreatedAt: createdAt})
+		} else {
+			adminItems = append(adminItems, contracts.AdminGuestbookMessage{Id: r.ID, Nickname: m.Nickname, Content: m.Content, Type: m.Type, Status: m.Status, Reply: m.Reply, ReplyAt: replyAt, CreatedAt: createdAt, Revision: messageRevision(r), Visible: m.visible()})
+		}
 	}
-	items := []gin.H{}
-	for i := (page - 1) * size; i < len(picked) && i < page*size; i++ {
-		items = append(items, messageView(picked[i], !visibleOnly))
+	if visibleOnly {
+		if config == nil {
+			failInternal(c, 503, "guestbook_unavailable", errors.New("missing public guestbook configuration"))
+			return
+		}
+		c.JSON(200, contracts.PublicGuestbookListing{Items: publicItems, Page: page, PageSize: size, Total: total, Config: *config})
+		return
 	}
-	c.JSON(200, gin.H{"items": items, "page": page, "page_size": size, "total": len(picked)})
+	c.JSON(200, contracts.AdminGuestbookListing{Items: adminItems, Page: page, PageSize: size, Total: total})
 }
 
 func (s *Server) publicGuestbook(c *gin.Context) {
@@ -337,7 +372,7 @@ func (s *Server) publicGuestbook(c *gin.Context) {
 		return
 	}
 	c.Header("Cache-Control", "no-store")
-	s.listMessages(c, r.ID, true, "", "")
+	s.listMessages(c, r.ID, true, "", "", &contracts.PublicGuestbookConfig{Enabled: true, AllowAnonymous: d.Guestbook.AllowAnonymous})
 }
 
 var guestbookTypes = []string{"general", "feature", "bug"}
@@ -381,6 +416,7 @@ func (s *Server) submitGuestbook(c *gin.Context) {
 	m := guestbookMessage{Nickname: req.Nickname, Content: req.Content, Type: req.Type, Status: "approved", CreatedAt: time.Now()}
 	if d.Guestbook.RequireAudit {
 		m.Status = "pending"
+		m.Hidden = true
 	}
 	if u != nil {
 		m.UserID = u.ID
@@ -454,7 +490,7 @@ func (s *Server) adminGuestbook(c *gin.Context) {
 	if status == "all" {
 		status = ""
 	}
-	s.listMessages(c, r.ID, false, status, strings.TrimSpace(c.Query("search")))
+	s.listMessages(c, r.ID, false, status, strings.TrimSpace(c.Query("search")), nil)
 }
 
 // moderateGuestbook 审核 / 回复 / 删除；携带留言版本号，留言被其他操作修改时拒绝。
@@ -463,19 +499,17 @@ func (s *Server) moderateGuestbook(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var req struct {
-		ID       int    `json:"id"`
-		Revision string `json:"revision"`
-		Action   string `json:"action"` // status / reply / delete
-		Status   string `json:"status"`
-		Reply    string `json:"reply"`
-	}
+	var req contracts.GuestbookModeration
 	if !bind(c, &req) {
+		return
+	}
+	if req.Id < 1 || req.Revision == "" || !req.Action.Valid() || !req.Status.Valid() {
+		failure(c, 400, "invalid_guestbook")
 		return
 	}
 	ctx := c.Request.Context()
 	err := s.Store.Lock.Do(ctx, "guestbook:"+itoa(page.ID), func(ctx context.Context) error {
-		r, err := s.Store.Ent.Resource.Query().Where(resource.IDEQ(req.ID), resource.KindEQ(kindGuestbook), resource.OwnerIDEQ(page.ID)).Only(ctx)
+		r, err := s.Store.Ent.Resource.Query().Where(resource.IDEQ(req.Id), resource.KindEQ(kindGuestbook), resource.OwnerIDEQ(page.ID)).Only(ctx)
 		if err != nil {
 			return errNotFound
 		}
@@ -489,18 +523,27 @@ func (s *Server) moderateGuestbook(c *gin.Context) {
 		switch req.Action {
 		case "delete":
 			return s.Store.Ent.Resource.DeleteOne(r).Exec(ctx)
+		case "publish":
+			m.Hidden = false
+			if m.Status == "pending" {
+				m.Status = "approved"
+			}
+		case "hide":
+			m.Hidden = true
 		case "status":
-			if !catalogChoice(req.Status, "pending", "approved") {
+			if !catalogChoice(string(req.Status), "pending", "approved") {
 				return errBadRequest
 			}
-			m.Status = req.Status
+			// Changing audit state must not publish content that was hidden.
+			m.Hidden = !m.visible() || req.Status == "pending"
+			m.Status = string(req.Status)
 		case "reply":
 			reply := strings.TrimSpace(req.Reply)
 			if reply == "" || !validText(reply, 2000) {
 				return errBadRequest
 			}
 			now := time.Now()
-			m.Reply, m.ReplyAt, m.Status = reply, &now, "replied"
+			m.Reply, m.ReplyAt, m.Status, m.Hidden = reply, &now, "replied", false
 		default:
 			return errBadRequest
 		}
@@ -516,7 +559,7 @@ func (s *Server) moderateGuestbook(c *gin.Context) {
 	case err != nil:
 		failInternal(c, 503, "guestbook_save_failed", err)
 	default:
-		s.audit(c, "guestbook."+req.Action, "page:"+page.Key, "ok")
+		s.audit(c, "guestbook."+string(req.Action), "page:"+page.Key, "ok")
 		c.JSON(200, gin.H{"ok": true})
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shusfun/weir/internal/store"
 )
 
 // failInternal 返回固定错误码给页面，真实原因交给请求日志（页面上不显示内部错误）。
@@ -32,6 +33,8 @@ func requestLog(c *gin.Context) {
 	c.Header("X-Request-Id", id)
 	c.Header("X-Trace-Id", trace.ID)
 	c.Header("traceparent", trace.parent())
+	ctx, metrics := store.ObserveQueries(c.Request.Context())
+	c.Request = c.Request.WithContext(ctx)
 	start := time.Now()
 	c.Next()
 	status, code := c.Writer.Status(), c.GetString("error_code")
@@ -42,7 +45,7 @@ func requestLog(c *gin.Context) {
 	if route == "" {
 		route = "(未匹配)"
 	}
-	attrs := []any{"id", id, "trace", trace.ID, "span", trace.Span, "method", c.Request.Method, "route", route, "status", status, "ms", time.Since(start).Milliseconds()}
+	attrs := []any{"sql_count", metrics.Count.Load(), "sql_ms", float64(metrics.Nanoseconds.Load()) / 1e6, "lock_wait_ms", float64(metrics.LockNanoseconds.Load()) / 1e6, "id", id, "trace", trace.ID, "span", trace.Span, "method", c.Request.Method, "route", route, "status", status, "ms", time.Since(start).Milliseconds()}
 	if observation := c.GetString("observation_id"); observation != "" {
 		attrs = append(attrs, "observation", observation)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/chain"
@@ -11,6 +12,7 @@ import (
 	entexit "github.com/shusfun/weir/internal/store/ent/exit"
 	"github.com/shusfun/weir/internal/store/ent/link"
 	"github.com/shusfun/weir/internal/store/ent/node"
+	"github.com/shusfun/weir/internal/store/ent/resource"
 )
 
 // 凭据由「期望状态」推导：每条链接 × 它覆盖的每个节点 / 自建链式代理各一份独立凭据。
@@ -53,66 +55,82 @@ func (s *Server) userNodeIDs(ctx context.Context, u *ent.User) (map[int]*ent.Nod
 
 func pendingBumpKey(uid int) string { return "sync-bump:" + itoa(uid) }
 
-func (s *Server) pendingBumps(ctx context.Context, uid int) ([]int, error) {
-	raw, ok, err := s.Store.KV.Get(ctx, pendingBumpKey(uid))
-	if err != nil || !ok || raw == "" {
-		return nil, err
+// The journal is durable business state, not an evictable cache entry.
+func (s *Server) pendingBumps(ctx context.Context, uid int, allowLegacyKV bool) ([]int, error) {
+	row, err := s.Store.Ent.Resource.Query().Where(resource.KindEQ("credential-sync"), resource.KeyEQ(itoa(uid))).Only(ctx)
+	if ent.IsNotFound(err) {
+		if !allowLegacyKV {
+			return nil, nil
+		}
+		raw, ok, e := s.Store.KV.Get(ctx, pendingBumpKey(uid))
+		if e != nil {
+			return nil, e
+		}
+		if !ok {
+			return nil, nil
+		}
+		var ids []int
+		if e = json.Unmarshal([]byte(raw), &ids); e != nil {
+			return nil, e
+		}
+		if e = s.savePendingBumps(ctx, uid, ids); e != nil {
+			return nil, e
+		}
+		return ids, s.Store.KV.Del(ctx, pendingBumpKey(uid))
 	}
-	var ids []int
-	if err = json.Unmarshal([]byte(raw), &ids); err != nil {
-		return nil, err
-	}
-	return ids, nil
-}
-
-func (s *Server) savePendingBumps(ctx context.Context, uid int, ids []int) error {
-	b, err := json.Marshal(ids)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return s.Store.KV.Set(ctx, pendingBumpKey(uid), string(b), 0)
+	var state struct {
+		Gates []int `json:"gates"`
+	}
+	if err = decodeStrict(row.Data, &state); err != nil {
+		return nil, err
+	}
+	return state.Gates, nil
+}
+func (s *Server) savePendingBumps(ctx context.Context, uid int, ids []int) error {
+	data := map[string]any{"gates": dedupe(ids)}
+	return s.Store.Ent.Resource.Create().SetKind("credential-sync").SetKey(itoa(uid)).SetOwnerID(uid).SetData(data).OnConflictColumns(resource.FieldKind, resource.FieldKey).UpdateNewValues().Exec(ctx)
 }
 
-// SyncUser 让该用户的凭据与其套餐、链接、链式代理一致，然后重新分配额度并通知相关 Gate。
-// 凭据先提交，配置版本在锁外推进。推进失败时先把 Gate 记下来：下次即使凭据已经一致，
-// 也要重试推进，不能把还没通知到的 Gate 当成同步完成。
 func (s *Server) SyncUser(ctx context.Context, uid int) error {
-	var gates []int
 	err := s.Store.Lock.Do(ctx, "cred-sync", func(ctx context.Context) error {
 		changed, err := s.syncUserLocked(ctx, uid)
 		if err != nil {
 			return err
 		}
-		pending, err := s.pendingBumps(ctx, uid)
+		pending, err := s.pendingBumps(ctx, uid, true)
 		if err != nil {
 			return err
 		}
-		seen := map[int]bool{}
-		for _, id := range append(changed, pending...) {
-			if id == 0 || seen[id] {
-				continue
-			}
-			seen[id] = true
-			gates = append(gates, id)
+		gates := append(changed, pending...)
+		if len(gates) == 0 {
+			return nil
 		}
-		if len(gates) > 0 {
-			return s.savePendingBumps(ctx, uid, gates)
+		if err = s.savePendingBumps(ctx, uid, gates); err != nil {
+			return err
 		}
-		return nil
+		if err = s.bumpGates(ctx, gates); err != nil {
+			return err
+		}
+		return s.savePendingBumps(ctx, uid, nil)
 	})
 	if err != nil {
-		return err
-	}
-	if err = s.bumpGates(ctx, gates); err != nil {
-		return err
-	}
-	if err = s.Store.KV.Del(ctx, pendingBumpKey(uid)); err != nil {
 		return err
 	}
 	return s.Rebalance(ctx, uid)
 }
 
 func (s *Server) syncUserLocked(ctx context.Context, uid int) ([]int, error) {
+	return s.syncUserLockedWithLegacyJournal(ctx, uid, true)
+}
+
+func (s *Server) syncUserLockedInTransaction(ctx context.Context, uid int) ([]int, error) {
+	return s.syncUserLockedWithLegacyJournal(ctx, uid, false)
+}
+
+func (s *Server) syncUserLockedWithLegacyJournal(ctx context.Context, uid int, allowLegacyKV bool) ([]int, error) {
 	u, err := s.Store.Ent.User.Get(ctx, uid)
 	if err != nil {
 		return nil, err
@@ -121,11 +139,11 @@ func (s *Server) syncUserLocked(ctx context.Context, uid int) ([]int, error) {
 	if err != nil {
 		return nil, err
 	}
-	chains, err := s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(uid)).All(ctx)
+	chains, err := s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(uid)).Order(ent.Asc(chain.FieldID)).All(ctx)
 	if err != nil {
 		return nil, err
 	}
-	links, err := s.Store.Ent.Link.Query().Where(link.UserIDEQ(uid)).All(ctx)
+	links, err := s.Store.Ent.Link.Query().Where(link.UserIDEQ(uid)).Order(ent.Asc(link.FieldID)).All(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +177,89 @@ func (s *Server) syncUserLocked(ctx context.Context, uid int) ([]int, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Allowance changes travel through execution budgets. WireGuard allowance
+	// eligibility is already represented by the desired credential set below.
+	projection := version([]any{u.Enabled, u.ExpiresAt, u.AllowChain, u.AllNodes, u.NodeIds})
+	linkProjection := make([]any, 0, len(links))
+	for _, l := range links {
+		linkProjection = append(linkProjection, []any{l.ID, l.Enabled, l.AllNodes, l.NodeIds, l.ChainIds, l.StartsAt, l.EndsAt})
+	}
+	chainProjection := make([]any, 0, len(chains))
+	for _, ch := range chains {
+		chainProjection = append(chainProjection, []any{ch.ID, ch.Enabled, ch.EntryNodeID, ch.ExitID})
+	}
+	nodeProjection := make([]any, 0, len(nodes))
+	ids := make([]int, 0, len(nodes))
+	for id := range nodes {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+	for _, id := range ids {
+		n := nodes[id]
+		nodeProjection = append(nodeProjection, []any{n.ID, n.GateID, n.Protocol})
+	}
+	projection = version([]any{projection, linkProjection, chainProjection, nodeProjection})
+	stateKey := itoa(uid)
+	previous, stateErr := s.Store.Ent.Resource.Query().Where(resource.KindEQ("credential-projection"), resource.KeyEQ(stateKey)).Only(ctx)
+	if stateErr != nil && !ent.IsNotFound(stateErr) {
+		return nil, stateErr
+	}
+	changedProjection := previous == nil || previous.Data["fingerprint"] != projection
 	touched := map[int]bool{}
+	if changedProjection {
+		for id := range nodes {
+			touched[id] = true
+		}
+		for _, c := range existing {
+			touched[c.NodeID] = true
+		}
+	}
+	// Journal destinations before deleting a credential: interrupted sync must
+	// still revoke the previously installed configuration on its old Gate.
+	pending, err := s.pendingBumps(ctx, uid, allowLegacyKV)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range existing {
+		lid, cid := 0, 0
+		if c.LinkID != nil {
+			lid = *c.LinkID
+		}
+		if c.ChainID != nil {
+			cid = *c.ChainID
+		}
+		if _, wanted := desired[credKey(lid, c.NodeID, cid)]; !wanted || c.ProbeParentID != nil {
+			touched[c.NodeID] = true
+		}
+	}
+	existingKeys := map[string]bool{}
+	for _, c := range existing {
+		lid, cid := 0, 0
+		if c.LinkID != nil {
+			lid = *c.LinkID
+		}
+		if c.ChainID != nil {
+			cid = *c.ChainID
+		}
+		if c.ProbeParentID == nil {
+			existingKeys[credKey(lid, c.NodeID, cid)] = true
+		}
+	}
+	for key, w := range desired {
+		if !existingKeys[key] {
+			touched[w.nodeID] = true
+		}
+	}
+	destinations, err := s.gatesOf(ctx, touched)
+	if err != nil {
+		return nil, err
+	}
+	if err = s.savePendingBumps(ctx, uid, append(pending, destinations...)); err != nil {
+		return nil, err
+	}
+	if !changedProjection {
+		touched = map[int]bool{}
+	}
 	for _, c := range existing {
 		if c.ProbeParentID != nil {
 			if err = s.Store.Ent.Credential.DeleteOne(c).Exec(ctx); err != nil {
@@ -196,6 +296,9 @@ func (s *Server) syncUserLocked(ctx context.Context, uid int) ([]int, error) {
 			return nil, err
 		}
 		touched[w.nodeID] = true
+	}
+	if err = s.Store.Ent.Resource.Create().SetKind("credential-projection").SetKey(stateKey).SetOwnerID(uid).SetData(map[string]any{"fingerprint": projection}).OnConflictColumns(resource.FieldKind, resource.FieldKey).UpdateNewValues().Exec(ctx); err != nil {
+		return nil, err
 	}
 	return s.gatesOf(ctx, touched)
 }
@@ -261,40 +364,55 @@ func (s *Server) syncInternalLocked(ctx context.Context) ([]int, error) {
 	return s.gatesOf(ctx, touched)
 }
 
-// SyncAll 在节点或链式代理变化后同步全部内部凭据与每个普通用户的凭据。
-func (s *Server) SyncAll(ctx context.Context) error {
-	var gates []int
-	var users []int
-	err := s.Store.Lock.Do(ctx, "cred-sync", func(ctx context.Context) error {
-		g, err := s.syncInternalLocked(ctx)
+// reconcileCredentialJournal also covers deleted users whose last revocation
+// was interrupted after their account row was removed.
+func (s *Server) reconcileCredentialJournal(ctx context.Context) error {
+	return s.Store.Lock.Do(ctx, "cred-sync", func(ctx context.Context) error {
+		rows, err := s.Store.Ent.Resource.Query().Where(resource.KindEQ("credential-sync")).Order(ent.Asc(resource.FieldID)).All(ctx)
 		if err != nil {
 			return err
 		}
-		gates = append(gates, g...)
-		ids, err := s.Store.Ent.User.Query().IDs(ctx)
-		if err != nil {
-			return err
-		}
-		for _, uid := range ids {
-			g, err := s.syncUserLocked(ctx, uid)
-			if err != nil {
+		for _, row := range rows {
+			var state struct {
+				Gates []int `json:"gates"`
+			}
+			if err = decodeStrict(row.Data, &state); err != nil {
 				return err
 			}
-			gates = append(gates, g...)
+			if len(state.Gates) == 0 {
+				continue
+			}
+			if err = s.bumpGates(ctx, state.Gates); err != nil {
+				return err
+			}
+			if err = row.Update().SetData(map[string]any{"gates": []int{}}).Exec(ctx); err != nil {
+				return err
+			}
 		}
-		users = ids
 		return nil
+	})
+}
+
+// SyncAll 在节点或链式代理变化后同步全部内部凭据与每个普通用户的凭据。
+func (s *Server) SyncAll(ctx context.Context) error {
+	err := s.Store.Lock.Do(ctx, "cred-sync", func(ctx context.Context) error {
+		gates, err := s.syncInternalLocked(ctx)
+		if err != nil {
+			return err
+		}
+		return s.bumpGates(ctx, gates)
 	})
 	if err != nil {
 		return err
 	}
-	if err = s.bumpGates(ctx, gates); err != nil {
+	ids, err := s.Store.Ent.User.Query().IDs(ctx)
+	if err != nil {
 		return err
 	}
-	for _, uid := range users {
-		if err = s.Rebalance(ctx, uid); err != nil {
+	for _, uid := range ids {
+		if err = s.SyncUser(ctx, uid); err != nil {
 			return err
 		}
 	}
-	return nil
+	return s.reconcileCredentialJournal(ctx)
 }

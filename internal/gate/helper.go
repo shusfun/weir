@@ -141,6 +141,8 @@ func (h *Helper) Handler() http.Handler {
 	mux.HandleFunc("POST /release", h.release)
 	mux.HandleFunc("POST /uninstall", h.uninstall)
 	mux.HandleFunc("POST /laya", h.layaOperation)
+	mux.HandleFunc("POST /laya/prepare", h.prepareLayaHost)
+	mux.HandleFunc("GET /laya/prepare", h.layaPreparationStatus)
 	mux.HandleFunc("POST /panel", h.setPanel)
 	mux.HandleFunc("POST /panel/discover", func(w http.ResponseWriter, r *http.Request) {
 		if err := os.Remove(h.panelPath() + ".disabled"); err != nil && !os.IsNotExist(err) {
@@ -584,6 +586,20 @@ func (h *Helper) release(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 422, ApplyResult{Error: "release checksum mismatch"})
 		return
 	}
+	if filepath.Clean(h.P.Root) == "/opt/weir" {
+		// The helper cannot run the installer inside its filesystem sandbox. The
+		// fixed host unit independently downloads and verifies the official release.
+		if !regexp.MustCompile(`^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,4}$`).MatchString(version) {
+			writeJSON(w, 400, ApplyResult{Error: "invalid release version"})
+			return
+		}
+		if err := exec.CommandContext(ctx, "systemctl", "start", "--no-block", "weir-gate-update@"+version+".service").Run(); err != nil {
+			writeJSON(w, 503, ApplyResult{Error: "host_update_service_unavailable: requires host installer migration"})
+			return
+		}
+		writeJSON(w, 200, ApplyResult{OK: true})
+		return
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	unlock, err := lockfile.TryAcquire(h.releaseLock())
@@ -746,9 +762,10 @@ func ServeHelper(ctx context.Context, h *Helper) error {
 	h.shareWithAgent(h.P.Socket)
 	h.Boot()
 	resourceCtx, stopResources := context.WithCancel(ctx)
-	defer stopResources()
-	go h.maintainReleases(resourceCtx)
-	go func() {
+	var resources sync.WaitGroup
+	defer func() { stopResources(); resources.Wait() }()
+	resources.Go(func() { h.maintainReleases(resourceCtx) })
+	resources.Go(func() {
 		sampler := hoststats.Sampler{ProcRoot: h.ProcRoot, CertDir: h.P.CertsDir, DNS: hoststats.CompareDNS}
 		sampler.Run(resourceCtx, "/", func() map[string]int {
 			pids := h.Sup.Running()
@@ -759,15 +776,15 @@ func ServeHelper(ctx context.Context, h *Helper) error {
 			}
 			return pids
 		}, func(host *contracts.HostSample) { h.resourceMu.Lock(); h.resourceHost = host; h.resourceMu.Unlock() })
-	}()
+	})
 	srv := &http.Server{Handler: h.Handler(), ReadHeaderTimeout: 5 * time.Second}
-	go func() {
-		<-ctx.Done()
+	resources.Go(func() {
+		<-resourceCtx.Done()
 		for _, name := range helperKernels {
 			h.Sup.Stop(name)
 		}
 		_ = srv.Close()
-	}()
+	})
 	if err = srv.Serve(ln); errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}

@@ -122,15 +122,18 @@ type HostSample struct {
 
 // HealthCheck 的字段都是指针。读不到时省略，控制台显示「未知」，不能写成 0 或正常。
 type HealthCheck struct {
-	DNS         *string  `json:"dns,omitempty"`
-	Congestion  *string  `json:"congestion,omitempty"`
-	UDPBuffer   *int     `json:"udp_buffer,omitempty"`
-	CPUSteal    *float64 `json:"cpu_steal,omitempty"`
-	IPv6        *bool    `json:"ipv6,omitempty"`
-	MTU         *int     `json:"mtu,omitempty"`
-	Conntrack   *float64 `json:"conntrack_free,omitempty"`
-	FileHandles *float64 `json:"file_handles_free,omitempty"`
-	CertDays    *int     `json:"cert_days,omitempty"`
+	DNS            *string    `json:"dns,omitempty"`
+	Congestion     *string    `json:"congestion,omitempty"`
+	UDPBuffer      *int       `json:"udp_buffer,omitempty"`
+	CPUSteal       *float64   `json:"cpu_steal,omitempty"`
+	IPv6           *bool      `json:"ipv6,omitempty"`
+	MTU            *int       `json:"mtu,omitempty"`
+	Conntrack      *float64   `json:"conntrack_free,omitempty"`
+	FileHandles    *float64   `json:"file_handles_free,omitempty"`
+	CertDays       *int       `json:"cert_days,omitempty"`
+	CertID         *int64     `json:"cert_id,omitempty"`
+	CertExpiresAt  *time.Time `json:"cert_expires_at,omitempty"`
+	CertObservedAt *time.Time `json:"cert_observed_at,omitempty"`
 }
 
 // ProcessSample distinguishes a confirmed stop from an unreadable observation.

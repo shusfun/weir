@@ -498,6 +498,11 @@ var (
 				Unique:  true,
 				Columns: []*schema.Column{ResourcesColumns[1], ResourcesColumns[2]},
 			},
+			{
+				Name:    "resource_kind_owner_id_id",
+				Unique:  false,
+				Columns: []*schema.Column{ResourcesColumns[1], ResourcesColumns[3], ResourcesColumns[0]},
+			},
 		},
 	}
 	// RoutesColumns holds the columns for the "routes" table.

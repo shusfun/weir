@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -115,8 +116,14 @@ func escapeGlob(s string) string {
 }
 
 // sqliteKV 是单机模式的内置缓存：数据库里一张 kv 表，重启不丢会话。
-// 过期在读取时判断，并在写入时顺带清理。
-type sqliteKV struct{ db *sql.DB }
+// 过期在读取时判断，后台维护按批清理。
+type sqliteKV struct {
+	db        *sql.DB
+	mu        sync.Mutex
+	lastPurge time.Time
+	interval  time.Duration
+	batch     int
+}
 
 func newSQLiteKV(ctx context.Context, db *sql.DB) (*sqliteKV, error) {
 	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL, expires_at INTEGER NOT NULL DEFAULT 0)`); err != nil {
@@ -125,7 +132,7 @@ func newSQLiteKV(ctx context.Context, db *sql.DB) (*sqliteKV, error) {
 	if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS kv_expires ON kv(expires_at) WHERE expires_at > 0`); err != nil {
 		return nil, err
 	}
-	return &sqliteKV{db}, nil
+	return &sqliteKV{db: db}, nil
 }
 
 func expiry(ttl time.Duration) int64 {
@@ -148,7 +155,6 @@ func (s *sqliteKV) Get(ctx context.Context, key string) (string, bool, error) {
 
 func (s *sqliteKV) Set(ctx context.Context, key, value string, ttl time.Duration) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO kv(key, value, expires_at) VALUES(?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at`, key, value, expiry(ttl))
-	s.purge(ctx)
 	return err
 }
 
@@ -203,7 +209,7 @@ RETURNING CAST(value AS INTEGER)`, key, delta, expiry(ttl), now, delta, now).Sca
 }
 
 func (s *sqliteKV) Keys(ctx context.Context, prefix string, limit int) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT key FROM kv WHERE substr(key, 1, ?) = ? AND `+liveRow+` ORDER BY key LIMIT ?`, len(prefix), prefix, time.Now().UnixMilli(), limit+1)
+	rows, err := s.db.QueryContext(ctx, `SELECT key FROM kv WHERE key >= ? AND key < ? AND `+liveRow+` ORDER BY key LIMIT ?`, prefix, prefix+"\U0010ffff", time.Now().UnixMilli(), limit+1)
 	if err != nil {
 		return nil, err
 	}
@@ -224,6 +230,22 @@ func (s *sqliteKV) Keys(ctx context.Context, prefix string, limit int) ([]string
 
 func (s *sqliteKV) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
 
-func (s *sqliteKV) purge(ctx context.Context) {
-	_, _ = s.db.ExecContext(ctx, `DELETE FROM kv WHERE expires_at > 0 AND expires_at <= ?`, time.Now().UnixMilli())
+func (s *sqliteKV) purge(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	interval, batch := s.interval, s.batch
+	if interval == 0 {
+		interval = time.Minute
+	}
+	if batch == 0 {
+		batch = 500
+	}
+	if time.Since(s.lastPurge) < interval {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, `DELETE FROM kv WHERE key IN (SELECT key FROM kv WHERE expires_at > 0 AND expires_at <= ? ORDER BY expires_at LIMIT ?)`, time.Now().UnixMilli(), batch)
+	if err == nil {
+		s.lastPurge = time.Now()
+	}
+	return err
 }

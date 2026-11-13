@@ -1,5 +1,6 @@
 // 全局公告：登录用户与匿名公开页分别选择受众；编辑区校验通过后直接保存。
-import { useEffect, useState } from "react";
+import { useState, type SetStateAction } from "react";
+import { useDraft } from "../lib/dirty";
 import { useQuery } from "../lib/query";
 import {
   Field,
@@ -80,11 +81,10 @@ export function GlobalAnnouncement({ audience }: { audience: "authenticated" | "
 }
 export function AnnouncementEditor() {
   const q = useQuery({ queryKey: ["announcement-admin"], queryFn: () => api("/admin/announcement") as Promise<Document>, refetchOnWindowFocus: false });
-  const [draft, setDraft] = useState(initial);
+  const editor = useDraft({ announcement: q.data?.announcement ?? initial, revision: q.data?.revision ?? "" });
+  const draft = editor.value.announcement;
+  const setDraft = (value: SetStateAction<Announcement>) => editor.set(previous => ({ ...previous, announcement: typeof value === "function" ? value(previous.announcement) : value }));
   const [notice, setNotice] = useState("");
-  useEffect(() => {
-    if (q.data) setDraft(q.data.announcement);
-  }, [q.data?.revision]);
   const html = draft.content_format === "html";
   const preview = useQuery({
     queryKey: ["announcement-markup-preview", draft.content, draft.content_format],
@@ -93,11 +93,11 @@ export function AnnouncementEditor() {
     retry: false,
     refetchOnWindowFocus: false,
   });
-  const save = useFormAction(() => api("/admin/announcement", "PUT", { announcement: draft, revision: q.data!.revision }), {
+  const save = useFormAction(() => api("/admin/announcement", "PUT", { announcement: draft, revision: editor.value.revision }), {
     invalidate: [["announcement-admin"], ["global-announcement"]],
-    onSuccess: () => setNotice(draft.enabled ? "公告已发布，仅向选定受众显示。" : "公告已撤下，草稿已保留。"),
+    onSuccess: () => { editor.commit(); setNotice(draft.enabled ? "公告已发布，仅向选定受众显示。" : "公告已撤下，草稿已保留。"); },
   });
-  const dirty = !!q.data && JSON.stringify(draft) !== JSON.stringify(q.data.announcement);
+  const dirty = editor.changed;
   const change = (p: Partial<Announcement>) => {
     setDraft((v) => ({ ...v, ...p }));
     setNotice("");

@@ -58,3 +58,21 @@ func TestObservationRetentionKeepsActiveWorkAndBoundsHistory(t *testing.T) {
 		t.Fatal("unbounded retention accepted")
 	}
 }
+
+func TestRetentionBatchCountsAttemptsInsteadOfTasks(t *testing.T) {
+	q := queue(t)
+	q.PruneBatch = 2
+	ctx := t.Context()
+	for i := 1; i <= 5; i++ {
+		if _, err := q.DB.ExecContext(ctx, `INSERT INTO worker_attempts(task_id,attempt,gate_id,started_at,outcome) VALUES('orphan',$1,1,1,'failed')`, i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := q.PruneObservations(ctx, time.Now(), 14*24*time.Hour, 100); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := q.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM worker_attempts`).Scan(&count); err != nil || count != 3 {
+		t.Fatalf("unbounded attempt cleanup: count=%d err=%v", count, err)
+	}
+}

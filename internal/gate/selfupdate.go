@@ -2,6 +2,7 @@ package gate
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -178,12 +179,41 @@ func (a *Agent) selfUpdate(ctx context.Context, rel contracts.ReleaseTarget) err
 		return fail(strings.Join(reasons, "；"))
 	}
 	a.setUpdateStatus(&contracts.SelfUpdateStatus{Version: version, State: "replacing", At: time.Now().UTC()})
+	started := time.Now()
 	if err := a.replace(ctx, version, sumOf(data), data); err != nil {
 		return fail("替换程序失败：" + err.Error())
 	}
+	if filepath.Clean(a.P.Root) == "/opt/weir" {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			var st struct {
+				Version string    `json:"version"`
+				State   string    `json:"state"`
+				Error   string    `json:"error"`
+				Started time.Time `json:"started_at"`
+			}
+			body, _ := os.ReadFile("/var/lib/weir/update/status.json")
+			if json.Unmarshal(body, &st) == nil && st.Version == version && !st.Started.Before(started.Add(-time.Second)) {
+				if st.State == "failed" {
+					return fail("宿主升级失败：" + st.Error)
+				}
+				if st.State == "done" {
+					break
+				}
+			}
+			select {
+			case <-ctx.Done():
+				return fail("等待宿主升级结果中断")
+			case <-ticker.C:
+			}
+		}
+	}
 	a.cleanupUpdateDownloads(ctx, version, nil)
 	log.Printf("self update trace=%s version=%s stage=done", releasefiles.Trace(ctx), version)
-	a.setUpdateStatus(nil)
+	if filepath.Clean(a.P.Root) != "/opt/weir" {
+		a.setUpdateStatus(nil)
+	}
 	return nil
 }
 

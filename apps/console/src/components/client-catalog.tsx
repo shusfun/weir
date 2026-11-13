@@ -1,5 +1,6 @@
 // 客户端目录：下载入口、平台、格式与显示顺序。编辑只改本地草稿，点保存一次发布。
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import { useDraft } from "../lib/dirty";
 import { useQuery } from "../lib/query";
 import {
   SortableList,
@@ -80,24 +81,23 @@ export function ClientCatalogEditor() {
   const confirmRemove = useConfirm();
   const q = useQuery({ queryKey: ["client-catalog-admin"], queryFn: () => client.catalog(true), refetchOnWindowFocus: false });
   const [search, setSearch] = useState("");
-  const [items, setItems] = useState<CatalogClient[]>([]);
+  const draft = useDraft({ clients: q.data?.clients ?? [] as CatalogClient[], revision: q.data?.revision ?? "" });
+  const items = draft.value.clients;
+  const setItems = (clients: CatalogClient[]) => draft.set(previous => ({ ...previous, clients }));
   const [editor, setEditor] = useState<CatalogClient | null>(null);
   // 这次保存是否恢复默认目录：用 ref 传给请求，点按钮后立即提交时读不到还没生效的 state
   const reset = useRef(false);
   const [notice, setNotice] = useState("");
-  useEffect(() => {
-    if (q.data) setItems(q.data.clients);
-  }, [q.data?.revision]);
-  const save = useFormAction(() => api("/admin/clients", "PUT", { clients: items, revision: q.data!.revision, reset: reset.current }), {
+  const save = useFormAction(() => api("/admin/clients", "PUT", { clients: items, revision: draft.value.revision, reset: reset.current }), {
     invalidate: [["client-catalog-admin"], ["client-catalog"]],
-    onSuccess: () => setNotice(reset.current ? "已恢复默认客户端目录。" : "客户端目录已保存；用户仅显示启用项。"),
+    onSuccess: () => { draft.commit(); setNotice(reset.current ? "已恢复默认客户端目录。" : "客户端目录已保存；用户仅显示启用项。"); },
   });
   const submit = async (resetting: boolean) => {
     if (resetting && !(await confirmRemove({ title: "恢复默认客户端目录？", description: "覆盖当前目录及顺序，用户授权保持。", confirmText: "恢复默认" }))) return;
     reset.current = resetting;
     void save.submit();
   };
-  const dirty = !!q.data && JSON.stringify(items) !== JSON.stringify(q.data.clients);
+  const dirty = draft.changed;
   const visible = items.filter((v) => matches(v, search));
   // 一行目录项；reorder 是排序按钮（搜索时不排序，传 null）
   const row = (v: (typeof items)[number], reorder: ReactNode) => (

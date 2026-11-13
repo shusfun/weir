@@ -150,7 +150,7 @@ func ExecuteDocker(ctx context.Context, args []string) ([]byte, error) {
 		}
 		return nil, failure("laya_container_operation_failed", "layahost.ExecuteDocker")
 	}
-	if len(args) > 0 && args[0] != "inspect" && !(len(args) > 1 && args[0] == "image" && args[1] == "inspect") {
+	if len(args) > 0 && args[0] != "inspect" && !(len(args) > 1 && (args[0] == "image" || args[0] == "volume") && args[1] == "inspect") {
 		return json.RawMessage(`{}`), nil
 	}
 	return stdout.Bytes(), nil

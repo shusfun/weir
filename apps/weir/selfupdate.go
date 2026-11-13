@@ -41,6 +41,11 @@ func runSelfUpdate(args []string) int {
 			fs.Usage()
 			return 2
 		}
+		if selfupdate.LocalRole() == "gate" {
+			if err := os.MkdirAll(selfupdate.Dir, 0750); err != nil {
+				return fatal(err)
+			}
+		}
 		if err := selfupdate.WriteRequest(req); err != nil {
 			return fatal(err)
 		}

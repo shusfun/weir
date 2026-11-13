@@ -73,7 +73,7 @@
 }
 .published-actions button:first-child {
   background: var(--public-fill);
-  color: var(--weir-accent-ink);
+  color: var(--weir-public-fill-ink);
 }
 .published-section-title {
   display: flex;

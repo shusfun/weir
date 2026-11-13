@@ -4,7 +4,7 @@ import { api } from "../../../api";
 import { useQuery } from "../../../lib/query";
 import { useFormAction } from "../../../lib/action";
 import { field, useConsoleContext } from "../../../lib/console-context";
-import { useUnsavedChanges } from "../../../lib/dirty";
+import { useDraft, useUnsavedChanges } from "../../../lib/dirty";
 import { State } from "../../../components/feedback";
 
 interface ConverterSettings {
@@ -18,21 +18,22 @@ interface ConverterSettings {
 export function ConverterSettingsPanel() {
   const q = useQuery({ queryKey: ["subscription-converter"], queryFn: () => api("/admin/subscriptions/converter") as Promise<ConverterSettings> });
   return <Collapsible title="外部转换后端">
-    {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : <ConverterForm key={JSON.stringify(q.data)} value={q.data} saved={() => void q.refetch()} />}
+    {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : <ConverterForm value={q.data} saved={() => void q.refetch()} />}
   </Collapsible>;
 }
 
 function ConverterForm({ value, saved }: { value: ConverterSettings; saved: () => void }) {
-  const [cfg, setCfg] = useState(value);
+  const draft = useDraft(value);
+  const cfg = draft.value, setCfg = draft.set;
   const [authorization, setAuthorization] = useState("");
   const [clear, setClear] = useState(false);
   const change = (patch: Partial<ConverterSettings>) => setCfg((old) => ({ ...old, ...patch }));
-  useUnsavedChanges(JSON.stringify(cfg) !== JSON.stringify(value) || authorization !== "" || clear);
+  useUnsavedChanges(authorization !== "" || clear);
   useConsoleContext({ tab: "外部转换", form: [field("endpoint", "转换后端", cfg.endpoint), field("authorization", "后端授权值", "", true)] });
   const save = useFormAction(() => api("/admin/subscriptions/converter", "PUT", {
     enabled: cfg.enabled, endpoint: cfg.endpoint.trim(), preferred_gate_id: cfg.preferred_gate_id,
     max_bytes: cfg.max_bytes, authorization, clear_authorization: clear,
-  }), { ok: "已保存外部转换后端", fields: { converter_endpoint_invalid: "endpoint", converter_gate_invalid: "preferred_gate_id", converter_settings_invalid: "max_bytes" }, onSuccess: saved });
+  }), { ok: "已保存外部转换后端", fields: { converter_endpoint_invalid: "endpoint", converter_gate_invalid: "preferred_gate_id", converter_settings_invalid: "max_bytes" }, onSuccess: () => { draft.commit(); setAuthorization(""); setClear(false); saved(); } });
   return <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
     <SwitchField label="启用外部转换" checked={cfg.enabled} onCheckedChange={(enabled) => change({ enabled })} />
     {cfg.enabled && <>

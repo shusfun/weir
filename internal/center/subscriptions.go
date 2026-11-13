@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/shusfun/weir/internal/store"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/ruletemplate"
 	"github.com/shusfun/weir/internal/store/ent/setting"
@@ -536,7 +537,7 @@ func (s *Server) orderSources(c *gin.Context) {
 
 func sourceCacheKey(id int) string { return "sub-source:" + itoa(id) }
 
-// kvCache 是订阅源的保护性缓存（不过期，直到源被修改或删除）。
+// kvCache 按源与 UA 隔离，受基础配置的单项大小和生命周期限制。
 type kvCache struct{ s *Server }
 
 func (k kvCache) Load(ctx context.Context, id int) ([]string, bool) {
@@ -567,7 +568,7 @@ type sourceIdentityCache struct {
 
 func (k sourceIdentityCache) Load(ctx context.Context, _ int) ([]string, bool) {
 	raw, ok, err := k.s.Store.KV.Get(ctx, k.key)
-	if err != nil || !ok {
+	if err != nil || !ok || len(raw) > k.s.Config.Subscriptions.effective().CacheItemBytes {
 		return nil, false
 	}
 	var nodes []string
@@ -579,7 +580,14 @@ func (k sourceIdentityCache) Load(ctx context.Context, _ int) ([]string, bool) {
 
 func (k sourceIdentityCache) Store(ctx context.Context, _ int, nodes []string) {
 	b, _ := json.Marshal(nodes)
-	_ = k.s.Store.KV.Set(ctx, k.key, string(b), 14*24*time.Hour)
+	limits := k.s.Config.Subscriptions.effective()
+	if len(b) > limits.CacheItemBytes {
+		return
+	}
+	err := k.s.Store.WriteSubscriptionCacheBounded(ctx, k.key, string(b), time.Duration(limits.RawCacheHours)*time.Hour, store.SubscriptionCacheBudget{Bytes: limits.CacheTotalBytes, Entries: limits.CacheEntries})
+	if !errors.Is(err, store.ErrSubscriptionCacheCapacity) {
+		k.s.tasks.note("subscription-raw-cache", err)
+	}
 }
 
 func toSource(v *ent.SubSource) subgroup.Source {

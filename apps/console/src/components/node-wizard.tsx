@@ -282,7 +282,7 @@ function CreatedAccess({ node }: { node: NodeItem }) {
 }
 
 // AdvancedFields 按方案给出的字段说明渲染；只记改过的字段，留空即用默认值。
-function AdvancedFields({ fields, value, onChange }: { fields: PresetField[]; value: Record<string, string | number | boolean>; onChange: (v: Record<string, string | number | boolean>) => void }) {
+export function AdvancedFields({ fields, value, onChange }: { fields: PresetField[]; value: Record<string, string | number | boolean>; onChange: (v: Record<string, string | number | boolean>) => void }) {
   const set = (key: string, v: string | number | boolean | undefined) => {
     const next = { ...value };
     if (v === undefined || v === "") delete next[key];

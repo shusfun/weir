@@ -12,20 +12,28 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/shusfun/weir/packages/contracts"
 )
 
+var cpuHierarchyMu sync.Mutex
+
 // isolateCPU 在本进程已被委托的 cgroup 子树里准备限额。
 // 正式安装给 weir-gate / weir-center 设置 Delegate=cpu，进程不能、也不去创建根上的 /sys/fs/cgroup/weir-tasks。
 func isolateCPU(_ context.Context, budget contracts.WorkerBudget) (string, error) {
+	cpuHierarchyMu.Lock()
+	defer cpuHierarchyMu.Unlock()
 	if budget.CPUMaxPercent <= 0 {
 		budget.CPUMaxPercent = 20
 	}
 	parent, err := ownCgroup()
 	if err != nil {
 		return "", err
+	}
+	if filepath.Base(parent) == "weir-manager" {
+		parent = filepath.Dir(parent)
 	}
 	if _, err = os.Stat(filepath.Join(parent, "cgroup.controllers")); err != nil {
 		return "", &contracts.TaskError{Code: "cpu_cgroup_unavailable", Origin: "gate.isolateCPU"}
@@ -37,15 +45,37 @@ func isolateCPU(_ context.Context, budget contracts.WorkerBudget) (string, error
 	if !strings.Contains(string(controllers), "cpu") {
 		return "", &contracts.TaskError{Code: "cpu_controller_missing", Origin: "gate.isolateCPU"}
 	}
-	dir := filepath.Join(parent, "weir-tasks")
-	if err = os.MkdirAll(dir, 0755); err != nil {
+	// cgroup v2 forbids enabling a domain controller while the parent contains
+	// processes. Move the service into its own leaf before enabling CPU below it.
+	manager := filepath.Join(parent, "weir-manager")
+	if err = os.MkdirAll(manager, 0755); err != nil {
+		return "", cpuIOError("manager", err)
+	}
+	if err = writeCgroup(filepath.Join(manager, "cgroup.procs"), strconv.Itoa(os.Getpid())); err != nil {
+		return "", cpuIOError("delegate_process", err)
+	}
+	if err = writeCgroup(filepath.Join(parent, "cgroup.subtree_control"), "+cpu"); err != nil {
+		return "", cpuIOError("enable_controller", err)
+	}
+	dir, err := os.MkdirTemp(parent, "weir-task-")
+	if err != nil {
 		return "", cpuIOError("mkdir", err)
 	}
 	quota := budget.CPUMaxPercent * 1000
-	if err = os.WriteFile(filepath.Join(dir, "cpu.max"), []byte(strconv.Itoa(quota)+" 100000\n"), 0644); err != nil {
+	if err = writeCgroup(filepath.Join(dir, "cpu.max"), strconv.Itoa(quota)+" 100000\n"); err != nil {
+		_ = os.Remove(dir)
 		return "", cpuIOError("cpu.max", err)
 	}
 	return dir, nil
+}
+
+func writeCgroup(path, value string) error {
+	f, err := os.OpenFile(path, os.O_WRONLY, 0)
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString(value)
+	return errors.Join(err, f.Close())
 }
 
 func ownCgroup() (string, error) {
@@ -78,6 +108,7 @@ func runCPUChild(ctx context.Context, paths Paths, budget contracts.WorkerBudget
 	if err != nil {
 		return nil, err
 	}
+	defer os.Remove(dir)
 	bin, err := os.Executable()
 	if err != nil {
 		return nil, err
@@ -118,7 +149,7 @@ func JoinCPUGroup() error {
 	if dir == "" {
 		return &contracts.TaskError{Code: "cpu_cgroup_unavailable", Origin: "gate.JoinCPUGroup"}
 	}
-	if err := os.WriteFile(filepath.Join(dir, "cgroup.procs"), []byte(strconv.Itoa(os.Getpid())+"\n"), 0644); err != nil {
+	if err := writeCgroup(filepath.Join(dir, "cgroup.procs"), strconv.Itoa(os.Getpid())+"\n"); err != nil {
 		return cpuIOError("join", err)
 	}
 	return nil

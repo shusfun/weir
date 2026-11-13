@@ -21,6 +21,12 @@ func (s *Server) validateLayaDeploymentResult(ctx context.Context, record taskqu
 	if err != nil || len(image) != 32 || !strings.HasPrefix(result.ImageDigest, "sha256:") || result.Version == "" || len(result.Version) > 100 || result.Model != laya.DefaultModel || result.ModelDigest != laya.ModelManifestSHA256 {
 		return errors.New("invalid laya deployment metadata")
 	}
+	if record.Task.Kind == contracts.TaskLayaPrepare {
+		if result.State != "prepared" || result.Version != laya.OllayaVersion {
+			return errors.New("invalid laya preparation state")
+		}
+		return nil
+	}
 	if record.Task.Kind == contracts.TaskLayaRemove {
 		if result.State != "removed" {
 			return errors.New("invalid laya removal state")

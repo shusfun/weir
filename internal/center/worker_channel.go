@@ -230,7 +230,7 @@ func (s *Server) agentTaskUpdate(c *gin.Context) {
 					return
 				}
 			}
-			if r.Task.Kind == contracts.TaskLayaInstall || r.Task.Kind == contracts.TaskLayaRemove {
+			if r.Task.Kind == contracts.TaskLayaPrepare || r.Task.Kind == contracts.TaskLayaInstall || r.Task.Kind == contracts.TaskLayaRemove {
 				if e = s.validateLayaDeploymentResult(ctx, r, u.Result); e != nil {
 					failure(c, 400, "invalid_laya_result")
 					return
@@ -295,7 +295,7 @@ func (s *Server) projectLegacyTask(ctx context.Context, id string) error {
 		return err
 	}
 	if r.LegacyID == 0 {
-		if r.Task.Kind == contracts.TaskLayaInstall || r.Task.Kind == contracts.TaskLayaRemove {
+		if r.Task.Kind == contracts.TaskLayaPrepare || r.Task.Kind == contracts.TaskLayaInstall || r.Task.Kind == contracts.TaskLayaRemove {
 			return s.auditGateLayaTask(ctx, r)
 		}
 		return nil
@@ -440,8 +440,14 @@ func (s *Server) workerMaintenance(ctx context.Context) {
 			s.state.RLock()
 			if s.Store != nil {
 				if time.Since(lastPrune) >= time.Minute {
-					s.tasks.note("worker-retention", s.Store.Tasks.PruneObservations(ctx, time.Now(), 14*24*time.Hour, 1_000_000))
-					s.tasks.note("observation-analysis-retention", s.pruneObservationAnalyses(ctx, time.Now(), 14*24*time.Hour, 1_000_000))
+					doc, policyErr := s.retentionPolicy(ctx)
+					s.tasks.note("retention-policy", policyErr)
+					if policyErr == nil {
+						s.tasks.note("worker-retention", s.Store.Tasks.PruneObservations(ctx, time.Now(), time.Duration(doc.Policy.TaskDays)*24*time.Hour, doc.Policy.MaxRecords))
+						s.tasks.note("observation-analysis-retention", s.pruneObservationAnalyses(ctx, time.Now(), time.Duration(doc.Policy.ObservationDays)*24*time.Hour, doc.Policy.MaxRecords))
+						s.tasks.note("audit-retention", s.pruneAudit(ctx, time.Now(), doc.Policy))
+					}
+					s.tasks.note("subscription-cache-retention", s.Store.PruneSubscriptionCacheReservations(ctx,s.Config.Store.Maintenance.Effective().RecordBatch))
 					s.tasks.note("laya-host-retention", s.maintainLayaHosting(ctx, time.Now()))
 					s.tasks.note("asset-relay-retention", s.pruneRelaySessions(ctx, time.Now()))
 					cacheCtx, cancelCache := context.WithTimeout(ctx, time.Second)
@@ -467,7 +473,7 @@ func (s *Server) workerMaintenance(ctx context.Context) {
 					rs, e := s.Store.Tasks.List(ctx, 500)
 					if e == nil {
 						for _, r := range rs {
-							if r.LegacyID != 0 || r.Task.Kind == contracts.TaskLayaInstall || r.Task.Kind == contracts.TaskLayaRemove {
+							if r.LegacyID != 0 || r.Task.Kind == contracts.TaskLayaPrepare || r.Task.Kind == contracts.TaskLayaInstall || r.Task.Kind == contracts.TaskLayaRemove {
 								_ = s.projectLegacyTask(ctx, r.Task.ID)
 							}
 						}

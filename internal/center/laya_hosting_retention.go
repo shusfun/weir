@@ -11,6 +11,10 @@ import (
 )
 
 func (s *Server) maintainLayaHosting(ctx context.Context, now time.Time) error {
+	doc, err := s.retentionPolicy(ctx)
+	if err != nil {
+		return err
+	}
 	return s.Store.Lock.Do(ctx, "laya-host-retention", func(ctx context.Context) error {
 		rows, err := s.Store.Ent.Resource.Query().Where(resource.KindEQ(layaOperationKind), resource.CreatedAtLT(now.Add(-31*time.Minute)), func(selector *entsql.Selector) {
 			selector.Where(sqljson.ValueEQ(resource.FieldData, "running", sqljson.Path("status")))
@@ -42,17 +46,19 @@ func (s *Server) maintainLayaHosting(ctx context.Context, now time.Time) error {
 				return err
 			}
 		}
-		if _, err = s.Store.Ent.Resource.Delete().Where(resource.KindEQ(layaOperationKind), resource.CreatedAtLT(now.Add(-14*24*time.Hour))).Exec(ctx); err != nil {
+		terminal := func(sel *entsql.Selector) {
+			sel.Where(sqljson.ValueIn(resource.FieldData, []any{"succeeded", "failed", "unknown"}, sqljson.Path("status")))
+		}
+		if err = s.pruneResources(ctx, resource.KindEQ(layaOperationKind), terminal, resource.CreatedAtLT(now.Add(-time.Duration(doc.Policy.LayaDays)*24*time.Hour))); err != nil {
 			return err
 		}
-		last, err := s.Store.Ent.Resource.Query().Where(resource.KindEQ(layaOperationKind)).Order(ent.Desc(resource.FieldID)).Offset(1_000_000).First(ctx)
+		last, err := s.Store.Ent.Resource.Query().Where(resource.KindEQ(layaOperationKind), terminal).Order(ent.Desc(resource.FieldID)).Offset(doc.Policy.MaxRecords).First(ctx)
 		if ent.IsNotFound(err) {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		_, err = s.Store.Ent.Resource.Delete().Where(resource.KindEQ(layaOperationKind), resource.IDLTE(last.ID), resource.CreatedAtLT(now.Add(-time.Hour))).Exec(ctx)
-		return err
+		return s.pruneResources(ctx, resource.KindEQ(layaOperationKind), terminal, resource.IDLTE(last.ID), resource.CreatedAtLT(now.Add(-time.Hour)))
 	})
 }

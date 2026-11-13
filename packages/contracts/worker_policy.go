@@ -34,7 +34,7 @@ func CPUHeavy(kind string) bool {
 
 func LargeDownload(kind string) bool {
 	switch kind {
-	case ActionAssetFetch, ActionReleaseReplace, TaskLayaInstall, TaskCoreInstall:
+	case ActionAssetFetch, ActionReleaseReplace, TaskLayaPrepare, TaskLayaInstall, TaskCoreInstall:
 		return true
 	}
 	return false

@@ -59,7 +59,15 @@ func (s *Server) PruneSamples(ctx context.Context, now time.Time) error {
 	if ok, err := s.Store.KV.SetNX(ctx, "sample-prune", "1", 10*time.Minute); err != nil || !ok {
 		return err
 	}
-	_, err := s.Store.Ent.Sample.Delete().Where(sample.AtLT(now.Add(-sampleKeep))).Exec(ctx)
+	doc, err := s.retentionPolicy(ctx)
+	if err != nil {
+		return err
+	}
+	cutoff := now.Add(-time.Duration(doc.Policy.SampleHours)*time.Hour)
+	ids, err := s.Store.Ent.Sample.Query().Where(sample.AtLT(cutoff)).Order(sample.ByAt()).Limit(s.Config.Store.Maintenance.Effective().RecordBatch).IDs(ctx)
+	if err == nil && len(ids) > 0 {
+		_, err = s.Store.Ent.Sample.Delete().Where(sample.IDIn(ids...), sample.AtLT(cutoff)).Exec(ctx)
+	}
 	if perr := s.prunePulls(ctx, now); err == nil {
 		err = perr
 	}
@@ -67,7 +75,13 @@ func (s *Server) PruneSamples(ctx context.Context, now time.Time) error {
 		err = rerr
 	}
 	// 链路页每 30 秒续一次实时上报：这类动作只在当时有用，一小时后删掉，不留在动作记录里。
-	_, _ = s.Store.Ent.GateAction.Delete().Where(gateaction.KindEQ(contracts.ActionLiveStart), gateaction.CreatedAtLT(now.Add(-time.Hour))).Exec(ctx)
+	actions, aerr := s.Store.Ent.GateAction.Query().Where(gateaction.KindEQ(contracts.ActionLiveStart), gateaction.CreatedAtLT(now.Add(-time.Hour))).Limit(s.Config.Store.Maintenance.Effective().RecordBatch).IDs(ctx)
+	if aerr == nil && len(actions) > 0 {
+		_, aerr = s.Store.Ent.GateAction.Delete().Where(gateaction.IDIn(actions...)).Exec(ctx)
+	}
+	if err == nil {
+		err = aerr
+	}
 	return err
 }
 

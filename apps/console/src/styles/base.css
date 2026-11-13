@@ -35,7 +35,9 @@ button {
 }
 a {
   color: inherit;
+  transition: opacity var(--weir-fast) var(--weir-ease);
 }
+a:active { opacity: var(--weir-press-opacity); }
 h1,
 h2,
 h3 {

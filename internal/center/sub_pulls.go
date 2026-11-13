@@ -7,10 +7,12 @@ import (
 	"strings"
 	"time"
 
+	"entgo.io/ent/dialect/sql"
 	"github.com/gin-gonic/gin"
 
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/link"
+	"github.com/shusfun/weir/internal/store/ent/predicate"
 	"github.com/shusfun/weir/internal/store/ent/subpull"
 	"github.com/shusfun/weir/internal/store/ent/user"
 )
@@ -60,7 +62,15 @@ func (s *Server) recordPull(c *gin.Context, l *ent.Link, target, status string) 
 }
 
 func (s *Server) prunePulls(ctx context.Context, now time.Time) error {
-	_, err := s.Store.Ent.SubPull.Delete().Where(subpull.AtLT(now.Add(-pullKeep))).Exec(ctx)
+	doc, err := s.retentionPolicy(ctx)
+	if err != nil {
+		return err
+	}
+	cutoff := now.Add(-time.Duration(doc.Policy.PullDays) * 24 * time.Hour)
+	ids, err := s.Store.Ent.SubPull.Query().Where(subpull.AtLT(cutoff)).Order(subpull.ByAt()).Limit(s.Config.Store.Maintenance.Effective().RecordBatch).IDs(ctx)
+	if err == nil && len(ids) > 0 {
+		_, err = s.Store.Ent.SubPull.Delete().Where(subpull.IDIn(ids...), subpull.AtLT(cutoff)).Exec(ctx)
+	}
 	return err
 }
 
@@ -105,34 +115,27 @@ func (s *Server) collectLinkStats(ctx context.Context, uid int, withSource bool)
 	}
 	now := time.Now()
 	day, month := now.Add(-24*time.Hour), now.Add(-pullKeep)
+	lq := s.Store.Ent.Link.Query().Order(ent.Asc(link.FieldUserID), ent.Asc(link.FieldID))
+	if uid > 0 {
+		lq.Where(link.UserIDEQ(uid))
+	}
+	links, err := lq.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	byUser := make(map[int][]*ent.Link)
+	for _, l := range links {
+		byUser[l.UserID] = append(byUser[l.UserID], l)
+	}
+	stats, err := s.aggregateLinkPulls(ctx, uid, month, day)
+	if err != nil {
+		return nil, err
+	}
 	out := []gin.H{}
 	for _, u := range users {
-		links, err := s.Store.Ent.Link.Query().Where(link.UserIDEQ(u.ID)).Order(ent.Asc(link.FieldID)).All(ctx)
-		if err != nil {
-			return nil, err
-		}
-		for _, l := range links {
-			pulls, err := s.Store.Ent.SubPull.Query().Where(subpull.LinkIDEQ(l.ID), subpull.AtGTE(month)).Order(ent.Desc(subpull.FieldAt)).All(ctx)
-			if err != nil {
-				return nil, err
-			}
-			counts := map[string]int{}
-			ips := map[string]bool{}
-			last24, refused := 0, 0
-			for _, p := range pulls {
-				if p.At.After(day) {
-					last24++
-				}
-				if p.Status != "ok" {
-					refused++
-				}
-				counts[firstNonEmpty(clientName(p.UserAgent), "未识别")]++
-				ips[p.IP] = true
-			}
-			clients := make([]clientCount, 0, len(counts))
-			for name, n := range counts {
-				clients = append(clients, clientCount{name, n})
-			}
+		for _, l := range byUser[u.ID] {
+			stat := stats[l.ID]
+			clients := stat.clients
 			sort.Slice(clients, func(i, j int) bool {
 				if clients[i].Count != clients[j].Count {
 					return clients[i].Count > clients[j].Count
@@ -142,17 +145,111 @@ func (s *Server) collectLinkStats(ctx context.Context, uid int, withSource bool)
 			start, end := linkWindow(u, l)
 			v := gin.H{"id": l.ID, "name": l.Name, "user_id": u.ID, "user": firstNonEmpty(u.Name, u.Email), "enabled": l.Enabled,
 				"state": windowState(u, l, now), "starts_at": start, "ends_at": end, "used": l.Used,
-				"pulls_24h": last24, "pulls_30d": len(pulls), "refused_30d": refused, "sources_30d": len(ips), "clients": clients, "last_used_at": l.LastUsedAt}
-			if len(pulls) > 0 {
+				"pulls_24h": stat.day, "pulls_30d": stat.total, "refused_30d": stat.refused, "sources_30d": stat.sources, "clients": clients, "last_used_at": l.LastUsedAt}
+			if clients == nil {
+				v["clients"] = []clientCount{}
+			}
+			if stat.last != nil {
 				if withSource {
-					v["last_pull"] = s.pullView(ctx, pulls[0])
+					v["last_pull"] = s.pullView(ctx, stat.last)
 				} else {
-					p := pulls[0]
+					p := stat.last
 					v["last_pull"] = gin.H{"at": p.At, "target": p.Target, "client": clientName(p.UserAgent), "status": p.Status}
 				}
 			}
 			out = append(out, v)
 		}
+	}
+	return out, nil
+}
+
+type linkPullAggregate struct {
+	total, day, refused, sources int
+	clients                      []clientCount
+	last                         *ent.SubPull
+}
+
+// Aggregate on the database so the result never materializes a month's raw
+// pull history. The number of queries is independent of users and links.
+func (s *Server) aggregateLinkPulls(ctx context.Context, uid int, month, day time.Time) (map[int]linkPullAggregate, error) {
+	where := []predicate.SubPull{subpull.AtGTE(month)}
+	if uid > 0 {
+		where = append(where, subpull.UserIDEQ(uid))
+	}
+	var totals []struct {
+		LinkID  int `json:"link_id"`
+		Total   int `json:"total"`
+		Refused int `json:"refused"`
+		Sources int `json:"sources"`
+	}
+	err := s.Store.Ent.SubPull.Query().Where(where...).GroupBy(subpull.FieldLinkID).Aggregate(
+		ent.As(ent.Count(), "total"),
+		func(sel *sql.Selector) string {
+			return sql.As("SUM(CASE WHEN "+sel.C(subpull.FieldStatus)+" <> 'ok' THEN 1 ELSE 0 END)", "refused")
+		},
+		func(sel *sql.Selector) string { return sql.As("COUNT(DISTINCT "+sel.C(subpull.FieldIP)+")", "sources") },
+	).Scan(ctx, &totals)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[int]linkPullAggregate, len(totals))
+	for _, row := range totals {
+		out[row.LinkID] = linkPullAggregate{total: row.Total, refused: row.Refused, sources: row.Sources}
+	}
+	var days []struct {
+		LinkID int `json:"link_id"`
+		Count  int `json:"count"`
+	}
+	if err = s.Store.Ent.SubPull.Query().Where(where...).Where(subpull.AtGT(day)).GroupBy(subpull.FieldLinkID).Aggregate(ent.Count()).Scan(ctx, &days); err != nil {
+		return nil, err
+	}
+	for _, row := range days {
+		v := out[row.LinkID]
+		v.day = row.Count
+		out[row.LinkID] = v
+	}
+	// Keep the same ordered UA recognition as the public detail projection,
+	// including historical rows whose stored client label is absent or stale.
+	var clients []struct {
+		LinkID int    `json:"link_id"`
+		Name   string `json:"name"`
+		Count  int    `json:"count"`
+	}
+	clientExpression := "CASE"
+	literal := func(v string) string { return "'" + strings.ReplaceAll(v, "'", "''") + "'" }
+	for _, pair := range clientNames {
+		clientExpression += " WHEN LOWER(user_agent) LIKE " + literal("%"+pair[0]+"%") + " THEN " + literal(pair[1])
+	}
+	clientExpression += " ELSE '未识别' END"
+	if err = s.Store.Ent.SubPull.Query().Where(where...).GroupBy(subpull.FieldLinkID).Aggregate(
+		func(sel *sql.Selector) string {
+			sel.Select(sel.C(subpull.FieldLinkID), sql.As(clientExpression, "name"), sql.As(sql.Count("*"), "count"))
+			sel.GroupBy(clientExpression)
+			return ""
+		},
+	).Scan(ctx, &clients); err != nil {
+		return nil, err
+	}
+	for _, row := range clients {
+		v := out[row.LinkID]
+		v.clients = append(v.clients, clientCount{row.Name, row.Count})
+		out[row.LinkID] = v
+	}
+	latest, err := s.Store.Ent.SubPull.Query().Where(where...).Where(func(sel *sql.Selector) {
+		newer := sql.Table(subpull.Table).As("newer")
+		sel.Where(sql.NotExists(sql.Select(newer.C(subpull.FieldID)).From(newer).Where(sql.And(
+			sql.ColumnsEQ(newer.C(subpull.FieldLinkID), sel.C(subpull.FieldLinkID)),
+			sql.Or(sql.ColumnsGT(newer.C(subpull.FieldAt), sel.C(subpull.FieldAt)), sql.And(
+				sql.ColumnsEQ(newer.C(subpull.FieldAt), sel.C(subpull.FieldAt)), sql.ColumnsGT(newer.C(subpull.FieldID), sel.C(subpull.FieldID)))),
+		))))
+	}).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range latest {
+		v := out[row.LinkID]
+		v.last = row
+		out[row.LinkID] = v
 	}
 	return out, nil
 }

@@ -10,7 +10,7 @@ import { ActionsWait } from "./wait";
 import { saveBlob } from "../lib/download";
 import { date } from "../lib/models";
 import { State } from "./feedback";
-import { useUnsavedChanges } from "../lib/dirty";
+import { useDraft, useUnsavedChanges } from "../lib/dirty";
 
 export type ReauthValue = { password: string; code: string };
 export const emptyReauth: ReauthValue = { password: "", code: "" };
@@ -59,14 +59,12 @@ export function SecurityCard() {
   const smtp = useQuery({ queryKey: ["smtp-settings"], queryFn: () => api("/admin/settings/smtp") as Promise<{ configured: boolean }> });
   const me = useQuery({ queryKey: ["me"], queryFn: () => api("/me") as Promise<{ totp_enrolled?: boolean }> });
   const confirm = useConfirm();
-  const [draft, setDraft] = useState<Record<string, boolean> | null>(null);
-  const v = draft ?? q.data;
-  const dirty = !!q.data && !!draft && JSON.stringify(draft) !== JSON.stringify(q.data);
-  useUnsavedChanges(dirty);
+  const draft = useDraft<Record<string, boolean>>(q.data ?? {});
+  const v = draft.value, dirty = draft.changed;
   const save = useFormAction(() => api("/admin/settings/security", "PUT", v), {
     ok: "已保存",
     onSuccess: () => {
-      setDraft(null);
+      draft.commit();
       void q.refetch();
     },
   });
@@ -82,13 +80,13 @@ export function SecurityCard() {
               const detail = k === "email_verification" && disabled ? (!smtp.data?.configured ? "需要先配置邮件服务。" : "需要先允许自助注册。") : k === "totp_enabled" ? "关闭后，已绑定用户仍可使用现有 TOTP，不能再绑定新设备。" : k === "passkey_enabled" ? "关闭后不能绑定或使用通行密钥登录。开启时，浏览器会在邮箱框提供本站可发现密钥。" : description;
               return <SwitchField placement="end" key={k} label={label} description={detail || undefined} disabled={disabled} checked={!!v[k]} onCheckedChange={async (on) => {
                 if (k === "require_admin_mfa" && on && !me.data?.totp_enrolled && !(await confirm({ title: "当前管理员还没有绑定 TOTP", description: "保存后管理员需要先完成二次验证设置，未完成前不能继续管理后台。", confirmText: "继续" }))) return;
-                setDraft({ ...v, [k]: on });
+                draft.set({ ...v, [k]: on });
               }} />;
             })}
           </div>
           <div className="actions">
             <Button type="submit" disabled={save.busy || !dirty} busy={save.busy} busyText="正在保存…">保存</Button>
-            {dirty && <Button type="button" variant="ghost" disabled={save.busy} onClick={() => setDraft(null)}>放弃修改</Button>}
+            {dirty && <Button type="button" variant="ghost" disabled={save.busy} onClick={draft.reset}>放弃修改</Button>}
           </div>
           {save.error && <Notice tone="bad">{save.error}</Notice>}
         </Form>
@@ -111,12 +109,10 @@ export function SMTPCard() {
 }
 
 function SMTPForm({ value, saved }: { value: SMTPView; saved: () => void }) {
-  const [f, setF] = useState({ host: value.host, port: String(value.port || 465), username: value.username, password: "", from: value.from, from_name: value.from_name, use_tls: value.use_tls || !value.host });
-  useEffect(() => setF({ host: value.host, port: String(value.port || 465), username: value.username, password: "", from: value.from, from_name: value.from_name, use_tls: value.use_tls || !value.host }), [value]);
-  const set = (p: Partial<typeof f>) => setF({ ...f, ...p });
-  const dirty = f.host !== value.host || f.port !== String(value.port || 465) || f.username !== value.username || f.password !== "" || f.from !== value.from || f.from_name !== value.from_name || f.use_tls !== value.use_tls;
-  useUnsavedChanges(dirty);
-  const save = useFormAction(() => api("/admin/settings/smtp", "PUT", { ...f, port: Number(f.port) || 0 }), { ok: "已保存", onSuccess: saved });
+  const draft = useDraft({ host: value.host, port: String(value.port || 465), username: value.username, password: "", from: value.from, from_name: value.from_name, use_tls: value.use_tls || !value.host });
+  const f = draft.value, setF = draft.set, dirty = draft.changed;
+  const set = (p: Partial<typeof f>) => setF(previous => ({ ...previous, ...p }));
+  const save = useFormAction(() => api("/admin/settings/smtp", "PUT", { ...f, port: Number(f.port) || 0 }), { ok: "已保存", onSuccess: () => { draft.commit(); saved(); } });
   const { run, isBusy, waitFor } = useRowAction();
   return (
     <Section title="邮件服务" description={value.configured ? "已配置，可发送找回密码与注册验证邮件。" : "未配置：登录页不提供找回密码。"}>
@@ -163,12 +159,10 @@ export function NotifyCard() {
 }
 
 function NotifyForm({ value, saved }: { value: NotifyView; saved: () => void }) {
-  const [f, setF] = useState({ ...value, bot_token: "" });
-  useEffect(() => setF({ ...value, bot_token: "" }), [value]);
-  const set = (p: Partial<typeof f>) => setF({ ...f, ...p });
-  const dirty = f.enabled !== value.enabled || f.chat_id !== value.chat_id || f.api_base !== value.api_base || f.gate_offline !== value.gate_offline || f.user_quota_percent !== value.user_quota_percent || f.user_expiry_days !== value.user_expiry_days || f.source_expiry_days !== value.source_expiry_days || f.bot_token !== "";
-  useUnsavedChanges(dirty);
-  const save = useFormAction(() => api("/admin/settings/notify", "PUT", f), { ok: "已保存", onSuccess: saved });
+  const draft = useDraft({ ...value, bot_token: "" });
+  const f = draft.value, setF = draft.set, dirty = draft.changed;
+  const set = (p: Partial<typeof f>) => setF(previous => ({ ...previous, ...p }));
+  const save = useFormAction(() => api("/admin/settings/notify", "PUT", f), { ok: "已保存", onSuccess: () => { draft.commit(); saved(); } });
   const { run, isBusy, waitFor } = useRowAction();
   const num = (k: "user_quota_percent" | "user_expiry_days" | "source_expiry_days", label: string, hint: string, max?: number) => (
     <Field label={label} hint={hint} customError={String(f[k]) === "" ? "请输入数值" : max !== undefined && Number(f[k]) > max ? `不能大于 ${max}` : ""}>
@@ -285,19 +279,18 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
   const confirm = useConfirm();
   // 从 WebDAV 导入备份单独一个表单，要求当前密码；保存设置不需要
   const restoreForm = useRef<HTMLFormElement>(null);
-  const [f, setF] = useState({ url: value.url, username: value.username, password: "", keep: String(value.keep), auto: value.auto, hours: String(value.hours) });
+  const draft=useDraft({url:value.url,username:value.username,password:"",keep:String(value.keep),auto:value.auto,hours:String(value.hours)});
+ const f=draft.value,setF=draft.set;
   const [re, setRe] = useState(emptyReauth);
   const [files, setFiles] = useState<WebdavFile[] | null>(null);
   const [stats, setStats] = useState<ImportStats | null>(null);
-  const [baseline, setBaseline] = useState(JSON.stringify(f));
-  const dirty = baseline !== JSON.stringify(f);
-  useUnsavedChanges(dirty);
+  const dirty=draft.changed;
   const [revision, setRevision] = useState("");
   const set = (p: Partial<typeof f>) => { setF({ ...f, ...p }); setFiles(null); setRevision(""); };
   const save = useFormAction(() => api("/admin/backup/webdav", "PUT", { ...f, keep: Number(f.keep) || 10, hours: Number(f.hours) || 24 }), {
     ok: "已保存",
     fields: { invalid_webdav_url: "url" },
-    onSuccess: () => { const clean = { ...f, password: "" }; setF(clean); setBaseline(JSON.stringify(clean)); setFiles(null); setRevision(""); saved(); },
+    onSuccess: () => { const clean = { ...f, password: "" }; draft.commit(clean); setFiles(null); setRevision(""); saved(); },
   });
   // 要导入的文件：用 ref 传给请求，避免读到上一次渲染的值；state 只用于按钮文案
   const target = useRef("");

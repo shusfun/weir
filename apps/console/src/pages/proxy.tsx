@@ -137,7 +137,7 @@ function ProxyBoard({ view, admin }: { view: ProxyView; admin: boolean }) {
           <b>订阅预览</b>
           <Segmented aria-label="预览格式" value={fmt} onValueChange={setFmt} options={[["clash", "Clash"], ["base64", "小火箭"], ["singbox", "sing-box"]] as const} />
         </div>
-        {preview.isPending || preview.error ? <State loading={preview.isPending} error={preview.error} onRetry={() => preview.refetch()} /> : <><small>链接：{preview.data.link_name || "默认链接"} · 预览不计入拉取统计</small><pre className="weir-paper max-h-[621px] overflow-auto">{preview.data.body}</pre></>}
+        {preview.isPending || preview.error ? <State loading={preview.isPending} error={preview.error} onRetry={() => preview.refetch()} /> : <><small>链接：{preview.data.link_name || "默认链接"} · 预览不计入拉取统计</small><pre tabIndex={0} role="region" aria-label="代理配置预览" className="weir-paper max-h-[621px] overflow-auto">{preview.data.body}</pre></>}
       </div>
     </div>
   );

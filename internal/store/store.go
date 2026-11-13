@@ -31,26 +31,37 @@ const (
 
 // Config 由初始化向导写入中心配置文件。
 type Config struct {
-	Driver     string         `json:"driver"`
-	SQLitePath string         `json:"sqlite_path,omitempty"`
-	Postgres   PostgresConfig `json:"postgres,omitempty"`
-	Redis      RedisConfig    `json:"redis,omitempty"`
+	Driver      string            `json:"driver"`
+	SQLitePath  string            `json:"sqlite_path,omitempty"`
+	Postgres    PostgresConfig    `json:"postgres,omitempty"`
+	Redis       RedisConfig       `json:"redis,omitempty"`
+	Maintenance MaintenanceConfig `json:"maintenance,omitempty"`
 }
 
 type PostgresConfig struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	User     string `json:"user"`
-	Password string `json:"password"`
-	Database string `json:"database"`
-	SSLMode  string `json:"ssl_mode"`
+	Host               string     `json:"host"`
+	Port               int        `json:"port"`
+	User               string     `json:"user"`
+	Password           string     `json:"password"`
+	Database           string     `json:"database"`
+	SSLMode            string     `json:"ssl_mode"`
+	Pool               PoolConfig `json:"pool,omitempty"`
+	LockPool           PoolConfig `json:"lock_pool,omitempty"`
+	StatementTimeoutMS int        `json:"statement_timeout_ms,omitempty"`
+	LockTimeoutMS      int        `json:"lock_timeout_ms,omitempty"`
 }
 
 type RedisConfig struct {
-	Address  string `json:"address"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	TLS      bool   `json:"tls"`
+	Address        string `json:"address"`
+	Username       string `json:"username"`
+	Password       string `json:"password"`
+	TLS            bool   `json:"tls"`
+	PoolSize       int    `json:"pool_size,omitempty"`
+	MinIdleConns   int    `json:"min_idle_conns,omitempty"`
+	DialTimeoutMS  int    `json:"dial_timeout_ms,omitempty"`
+	ReadTimeoutMS  int    `json:"read_timeout_ms,omitempty"`
+	WriteTimeoutMS int    `json:"write_timeout_ms,omitempty"`
+	PoolTimeoutMS  int    `json:"pool_timeout_ms,omitempty"`
 }
 
 // Store 是中心持有的全部存储句柄。
@@ -64,9 +75,30 @@ type Store struct {
 	Tasks         *taskqueue.Queue
 	Notifications *Notifications
 	closer        func() error
+	redis         *redis.Client
 }
 
 func (c Config) Validate() error {
+	if err := c.Postgres.Pool.validate(); err != nil {
+		return err
+	}
+	if err := c.Postgres.LockPool.validate(); err != nil {
+		return err
+	}
+	if c.Postgres.StatementTimeoutMS < 0 || c.Postgres.StatementTimeoutMS > 3600000 || c.Postgres.LockTimeoutMS < 0 || c.Postgres.LockTimeoutMS > 3600000 {
+		return errors.New("invalid PostgreSQL timeout")
+	}
+	if c.Maintenance.KVBatch < 0 || c.Maintenance.KVBatch > 10000 || c.Maintenance.RecordBatch < 0 || c.Maintenance.RecordBatch > 10000 || c.Maintenance.KVIntervalSeconds < 0 || c.Maintenance.KVIntervalSeconds > 86400 {
+		return errors.New("invalid maintenance limits")
+	}
+	if c.Redis.PoolSize < 0 || c.Redis.PoolSize > 256 || c.Redis.MinIdleConns < 0 || c.Redis.MinIdleConns > 256 || c.Redis.PoolSize > 0 && c.Redis.MinIdleConns > c.Redis.PoolSize {
+		return errors.New("invalid Redis pool limits")
+	}
+	for _, ms := range []int{c.Redis.DialTimeoutMS, c.Redis.ReadTimeoutMS, c.Redis.WriteTimeoutMS, c.Redis.PoolTimeoutMS} {
+		if ms < 0 || ms > 300000 {
+			return errors.New("invalid Redis timeout")
+		}
+	}
 	switch c.Driver {
 	case DriverSQLite:
 		if c.SQLitePath == "" || !filepath.IsAbs(c.SQLitePath) {
@@ -98,7 +130,12 @@ func Open(ctx context.Context, c Config) (*Store, error) {
 		s, err = openPostgres(ctx, c)
 	}
 	if err == nil {
+		s.Tasks.PruneBatch = c.Maintenance.Effective().RecordBatch
 		s.observeGateReads()
+		if kv, ok := s.KV.(*sqliteKV); ok {
+			kv.interval = time.Duration(c.Maintenance.KVIntervalSeconds) * time.Second
+			kv.batch = c.Maintenance.KVBatch
+		}
 	}
 	return s, err
 }
@@ -235,26 +272,12 @@ func openSQLite(ctx context.Context, path string) (*Store, error) {
 	}
 	// SQLite 单写者：一个连接即可避免 SQLITE_BUSY，读写都经由同一连接串行。
 	db.SetMaxOpenConns(1)
-	if err = migrateUserQuota(ctx, db, DriverSQLite); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("migrate user allowance: %w", err)
-	}
-	client := ent.NewClient(ent.Driver(entsql.OpenDB(dialect.SQLite, db)))
+	client := ent.NewClient(ent.Driver(measuredDriver{entsql.OpenDB(dialect.SQLite, db)}))
 	s := &Store{Driver: DriverSQLite, DB: db, Ent: client, Lock: newLocalLocker(), Transient: &memoryTransient{}, closer: db.Close}
-	if err = client.Schema.Create(ctx); err != nil {
-		s.Close()
-		return nil, fmt.Errorf("create schema: %w", err)
-	}
-	kv, err := newSQLiteKV(ctx, db)
-	if err != nil {
+	s.Tasks = &taskqueue.Queue{DB: db, Lock: s.Lock}
+	if err = s.migrate(ctx, path); err != nil {
 		s.Close()
 		return nil, err
-	}
-	s.KV = kv
-	s.Tasks = &taskqueue.Queue{DB: db, Lock: s.Lock}
-	if err = s.Tasks.Migrate(ctx); err != nil {
-		s.Close()
-		return nil, fmt.Errorf("create worker schema: %w", err)
 	}
 	s.Notifications, _ = newNotifications(context.Background(), nil)
 	return s, nil
@@ -268,10 +291,14 @@ func openPostgres(ctx context.Context, c Config) (*Store, error) {
 	// 只使用独立的 weir schema，不触碰共享实例中的其他数据。
 	pc.RuntimeParams["search_path"] = "weir"
 	pc.RuntimeParams["application_name"] = "weir"
+	if c.Postgres.StatementTimeoutMS > 0 {
+		pc.RuntimeParams["statement_timeout"] = fmt.Sprint(c.Postgres.StatementTimeoutMS)
+	}
+	if c.Postgres.LockTimeoutMS > 0 {
+		pc.RuntimeParams["lock_timeout"] = fmt.Sprint(c.Postgres.LockTimeoutMS)
+	}
 	db := stdlib.OpenDB(*pc)
-	db.SetMaxOpenConns(8)
-	db.SetMaxIdleConns(2)
-	db.SetConnMaxLifetime(30 * time.Minute)
+	c.Postgres.Pool.apply(db)
 	ping, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	if err = db.PingContext(ping); err != nil {
@@ -282,31 +309,22 @@ func openPostgres(ctx context.Context, c Config) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("create weir schema: %w", err)
 	}
-	if err = migrateUserQuota(ctx, db, DriverPostgres); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("migrate user allowance: %w", err)
-	}
-	client := ent.NewClient(ent.Driver(entsql.OpenDB(dialect.Postgres, db)))
+	client := ent.NewClient(ent.Driver(measuredDriver{entsql.OpenDB(dialect.Postgres, db)}))
 	rdb := newRedisClient(c.Redis)
 	// Session locks must not consume the business pool. Otherwise independent
 	// lock owners can occupy every slot and all wait on their own transactions.
 	lockDB := stdlib.OpenDB(*pc)
-	lockDB.SetMaxOpenConns(8)
-	lockDB.SetMaxIdleConns(2)
-	lockDB.SetConnMaxLifetime(30 * time.Minute)
+	c.Postgres.LockPool.apply(lockDB)
 	s := &Store{Driver: DriverPostgres, DB: db, Ent: client, KV: redisKV{rdb}, Transient: redisKV{rdb}, Lock: pgLocker{lockDB}, closer: func() error { return errors.Join(lockDB.Close(), rdb.Close(), db.Close()) }}
-	if err = client.Schema.Create(ctx); err != nil {
-		s.Close()
-		return nil, fmt.Errorf("create schema: %w", err)
-	}
+	s.redis = rdb
 	if err = s.KV.Ping(ping); err != nil {
 		s.Close()
 		return nil, fmt.Errorf("%w: %w", ErrRedisUnavailable, err)
 	}
 	s.Tasks = &taskqueue.Queue{DB: db, Lock: s.Lock}
-	if err = s.Tasks.Migrate(ctx); err != nil {
+	if err = s.migrate(ctx, ""); err != nil {
 		s.Close()
-		return nil, fmt.Errorf("create worker schema: %w", err)
+		return nil, err
 	}
 	s.Notifications, err = newNotifications(context.Background(), rdb)
 	if err != nil {
@@ -318,6 +336,19 @@ func openPostgres(ctx context.Context, c Config) (*Store, error) {
 
 func newRedisClient(c RedisConfig) *redis.Client {
 	opts := &redis.Options{Addr: c.Address, Username: c.Username, Password: c.Password, DialTimeout: 5 * time.Second, ReadTimeout: 3 * time.Second, WriteTimeout: 3 * time.Second}
+	opts.PoolSize, opts.MinIdleConns = c.PoolSize, c.MinIdleConns
+	if c.DialTimeoutMS > 0 {
+		opts.DialTimeout = time.Duration(c.DialTimeoutMS) * time.Millisecond
+	}
+	if c.ReadTimeoutMS > 0 {
+		opts.ReadTimeout = time.Duration(c.ReadTimeoutMS) * time.Millisecond
+	}
+	if c.WriteTimeoutMS > 0 {
+		opts.WriteTimeout = time.Duration(c.WriteTimeoutMS) * time.Millisecond
+	}
+	if c.PoolTimeoutMS > 0 {
+		opts.PoolTimeout = time.Duration(c.PoolTimeoutMS) * time.Millisecond
+	}
 	if c.TLS {
 		opts.TLSConfig = redisTLS()
 	}

@@ -2,8 +2,6 @@
 import { PageHeader, Tabs, TabsList, TabsPanel, TabsTab } from "@weir/ui";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
-import { useConfirm } from "@weir/ui";
-import { hasUnsavedChanges } from "../lib/dirty";
 import { GitHubSourcesCard } from "../components/github-sources";
 import { LayaCard } from "../components/defense";
 import { DshSettingsCard } from "../components/dsh";
@@ -16,13 +14,13 @@ import { LogoSettings } from "../components/logo-settings";
 import { AIProfileCard } from "../components/ai-profile";
 import { AccountPolicyCard } from "../components/account-policy";
 import { TurnstileSettings } from "../components/turnstile-settings";
+import { RetentionSettings } from "../components/retention-settings";
 import { ProtectionPolicyCard } from "../features/protection/policy";
 import { AppearancePanel } from "../components/appearance-panel";
 
 export function SystemPage() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
-  const confirm = useConfirm();
   const rawTab = params.get("tab");
   useEffect(() => {
     if (rawTab === "distribution") navigate("/pages?tab=clients", { replace: true });
@@ -33,7 +31,7 @@ export function SystemPage() {
   return (
     <div className="stack">
       <PageHeader size="data" title="系统设置" description="先选这台浏览器的外观，再管理版本来源、登录安全、通知、防御、AI 服务、节点证书与订阅数据。" />
-      <Tabs value={tab} onValueChange={async (v) => { if (v === tab || !hasUnsavedChanges() || await confirm({ title: "放弃未保存修改？", description: "切换分区会丢失当前表单中的修改。", confirmText: "放弃修改", tone: "danger" })) setParams({ tab: String(v) }, { replace: true }); }}>
+      <Tabs value={tab} onValueChange={(v) => { if (v !== tab) setParams({ tab: String(v) }, { replace: true }); }}>
         <TabsList aria-label="系统设置分区">
           {systemSections.map((s) => <TabsTab key={s.key} value={s.key}>{s.label}</TabsTab>)}
         </TabsList>
@@ -58,7 +56,7 @@ export function SystemPage() {
         </TabsPanel>
         <TabsPanel value="ai" className="stack"><DshSettingsCard /><LayaCard /><AIProfileCard /></TabsPanel>
         <TabsPanel value="certs" className="stack"><NodeCertCard /></TabsPanel>
-        <TabsPanel value="data" className="stack"><BackupCard /><APITokensCard /></TabsPanel>
+        <TabsPanel value="data" className="stack"><RetentionSettings /><BackupCard /><APITokensCard /></TabsPanel>
       </Tabs>
     </div>
   );

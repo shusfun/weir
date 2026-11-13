@@ -17,6 +17,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/shusfun/weir/internal/accountsecurity"
 	"github.com/shusfun/weir/internal/buildinfo"
@@ -31,13 +32,16 @@ import (
 
 // Server 持有中心的配置与存储。初始化完成前 Store 为空，只开放初始化接口。
 type Server struct {
-	TurnstileHTTP *http.Client
-	resources     resourceState
-	Config        Config
-	Path          string
-	Store         *store.Store
-	Crypto        *secrets.AESEncryptor
-	Assets        fs.FS
+	sourceFetches    singleflight.Group
+	sourceFetchOnce  sync.Once
+	sourceFetchSlots chan struct{}
+	TurnstileHTTP    *http.Client
+	resources        resourceState
+	Config           Config
+	Path             string
+	Store            *store.Store
+	Crypto           *secrets.AESEncryptor
+	Assets           fs.FS
 
 	// state 保护 Config / Store 的切换：普通请求持读锁，安装完成的切换持写锁。
 	state     sync.RWMutex
@@ -181,6 +185,9 @@ func (s *Server) Close() {
 	// 先结束长连接与还能取消的后台任务：它们不持有 state 锁之外的东西，但可能还在用存储
 	s.events.close()
 	s.jobs.Shutdown(5 * time.Second)
+	mcpCtx, cancelMCP := context.WithTimeout(context.Background(), 5*time.Second)
+	s.closeMCP(mcpCtx)
+	cancelMCP()
 	s.state.Lock()
 	defer s.state.Unlock()
 	if s.Store != nil {
@@ -225,6 +232,7 @@ func (s *Server) maintenance(ctx context.Context) {
 			if ready {
 				err := s.Store.Lock.Do(ctx, "maintenance", func(ctx context.Context) error {
 					now := time.Now()
+					report.note("expired-kv", s.Store.Maintain(ctx))
 					for _, kernel := range kernels.Names {
 						s.ensureKernelDefault(ctx, kernel)
 					}
@@ -232,6 +240,7 @@ func (s *Server) maintenance(ctx context.Context) {
 					report.note("admin-all-nodes", s.EnsureAdminsAllNodes(ctx))
 					report.note("reset-usage", s.ResetDueUsage(ctx, now))
 					report.note("account-grant-sync", s.ReconcileAccountGrants(ctx))
+					report.note("credential-reconcile", s.SyncAll(ctx))
 
 					report.note("internal-test-credentials", s.cleanupProbeCredentials(ctx, now, false))
 					report.note("refresh-sources", s.RefreshSources(ctx, now))
@@ -411,6 +420,8 @@ func (s *Server) Router() *gin.Engine {
 	s.passkeyRoutes(ready, auth)
 	admin := auth.Group("/admin")
 	admin.Use(s.auditProxyDenied, requireAdmin)
+	admin.GET("/infrastructure", s.infrastructureStatus)
+	s.retentionPolicyRoutes(admin)
 	admin.PUT("/settings/logo", s.putLogo)
 	admin.DELETE("/settings/logo", s.deleteLogo)
 	s.gateRoutes(ready, auth, admin)

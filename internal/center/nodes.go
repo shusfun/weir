@@ -118,11 +118,7 @@ func (s *Server) probeReality(c *gin.Context) {
 	if !ok {
 		return
 	}
-	targets := make([]any, 0, len(realityTargets))
-	for _, t := range realityTargets {
-		targets = append(targets, t)
-	}
-	res, err := s.gateProbe(c.Request.Context(), g, contracts.ActionRealityProbe, map[string]any{"targets": targets}, 50*time.Second)
+	res, err := s.probeRealityTargets(c.Request.Context(), g)
 	if err != nil || realityBest(res) == "" {
 		detail := "没有找到合适的伪装目标"
 		if err != nil {
@@ -132,6 +128,14 @@ func (s *Server) probeReality(c *gin.Context) {
 		return
 	}
 	c.JSON(200, res)
+}
+
+func (s *Server) probeRealityTargets(ctx context.Context, g *ent.Gate) (map[string]any, error) {
+	targets := make([]any, 0, len(realityTargets))
+	for _, target := range realityTargets {
+		targets = append(targets, target)
+	}
+	return s.gateProbe(ctx, g, contracts.ActionRealityProbe, map[string]any{"targets": targets}, 50*time.Second)
 }
 
 func realityBest(res map[string]any) string {
@@ -543,7 +547,21 @@ func (s *Server) createNodeNow(c *gin.Context) {
 	if p.Security == "reality" && nodeSetting(st, "reality_dest") == "" {
 		target := strings.TrimSpace(req.RealityTarget)
 		if target == "" {
-			target = realityTargets[0]
+			if req.SkipProbe {
+				target = realityTargets[0]
+			} else {
+				jobStep(ctx, "正在从这台 VPS 实测伪装目标", 0)
+				result, probeErr := s.probeRealityTargets(ctx, g)
+				target = realityBest(result)
+				if probeErr != nil || target == "" {
+					detail := "没有找到合适的伪装目标，请手动选择后重试"
+					if probeErr != nil {
+						detail = probeErr.Error()
+					}
+					failDetail(c, 422, "reality_probe_failed", detail, gin.H{"result": result})
+					return
+				}
+			}
 		}
 		if !probeHostPattern(target) {
 			failure(c, 400, "invalid_reality_target")
@@ -770,14 +788,15 @@ func (s *Server) updateNodeNow(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Name      *string        `json:"name"`
-		Enabled   *bool          `json:"enabled"`
-		Port      *int           `json:"port"`
-		CertID    *int           `json:"cert_id"`
-		Settings  map[string]any `json:"settings"`
-		ExitID    *int           `json:"exit_id"`
-		Exit      *ExitSpec      `json:"exit"`
-		SkipProbe bool           `json:"skip_probe"`
+		Name          *string        `json:"name"`
+		Enabled       *bool          `json:"enabled"`
+		Port          *int           `json:"port"`
+		CertID        *int           `json:"cert_id"`
+		Settings      map[string]any `json:"settings"`
+		ExitID        *int           `json:"exit_id"`
+		Exit          *ExitSpec      `json:"exit"`
+		RealityTarget *string        `json:"reality_target"`
+		SkipProbe     bool           `json:"skip_probe"`
 	}
 	if !bind(c, &req) {
 		return
@@ -820,6 +839,21 @@ func (s *Server) updateNodeNow(c *gin.Context) {
 		} else {
 			st[k] = v
 		}
+	}
+	if req.RealityTarget != nil {
+		target := strings.TrimSpace(*req.RealityTarget)
+		if n.Security != "reality" || !probeHostPattern(target) {
+			failure(c, 400, "invalid_reality_target")
+			return
+		}
+		if target != nodeSetting(st, "reality_server_names") && !c.GetBool(dryRunKey) {
+			res, probeErr := s.gateProbe(ctx, g, contracts.ActionRealityProbe, map[string]any{"targets": []any{target}}, 50*time.Second)
+			if probeErr != nil || realityBest(res) != target {
+				failDetail(c, 422, "reality_probe_failed", "VPS 未能验证所选伪装目标", nil)
+				return
+			}
+		}
+		st["reality_dest"], st["reality_server_names"] = target+":443", target
 	}
 	if req.CertID != nil {
 		if *req.CertID == 0 {

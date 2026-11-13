@@ -56,8 +56,11 @@ func TestLayaHostingPreviewCannotMutateAndApprovalCannotDrift(t *testing.T) {
 	if w = admin.do("POST", "/api/v1/admin/defense/laya/hosting/preview", map[string]any{"operation": "ensure", "args": []string{"--privileged"}}, nil); w.Code != 400 {
 		t.Fatal("arbitrary container arguments accepted")
 	}
-	if w = admin.do("POST", "/api/v1/admin/defense/laya/hosting/preview", map[string]string{"operation": "ensure"}, nil); w.Code != 409 || !strings.Contains(w.Body.String(), "laya_resources_unknown") {
-		t.Fatalf("missing resources became available: %d %s", w.Code, w.Body.String())
+	if err := s.layaHostResources(doc, laya.StateStopped); err == nil || err.Error() != "laya_resources_unknown" {
+		t.Fatalf("missing resources became available: %v", err)
+	}
+	if w = admin.do("POST", "/api/v1/admin/defense/laya/hosting/preview", map[string]string{"operation": "ensure"}, nil); w.Code != 200 {
+		t.Fatalf("running instance charged twice for memory: %d %s", w.Code, w.Body.String())
 	}
 }
 
@@ -162,5 +165,49 @@ func TestLayaHostingInterruptedResultsRemainUnknownWithoutReplaying(t *testing.T
 	row, err := s.Store.Ent.Resource.Query().Where(resource.KindEQ(layaOperationKind), resource.KeyEQ(s.layaHostKey(op.ID))).Only(t.Context())
 	if err != nil || decodeStrict(row.Data, &op) != nil || op.Status != "unknown" || op.Code != "laya_operation_interrupted" || op.FinishedAt != nil {
 		t.Fatalf("recovery outcome: %+v %v", op, err)
+	}
+}
+
+func TestLayaHostingRetryChecksIncrementalStorageAndPreservesExistingContainer(t *testing.T) {
+	for _, storage := range []*layahost.ModelStorage{nil, {RequiredBytes: 10, AvailableBytes: 9}} {
+		s, admin := newInstalledServer(t)
+		doc := approvedCenterLaya()
+		s.layaHosting.load = func() (layahost.Deployment, error) { return doc, nil }
+		var mu sync.Mutex
+		var calls []string
+		s.layaHosting.operate = func(_ context.Context, req layahost.Request) (layahost.Response, error) {
+			mu.Lock()
+			calls = append(calls, req.Operation)
+			mu.Unlock()
+			return layahost.Response{Version: doc.Version, Model: doc.Model, Status: laya.DockerStatus{State: laya.StateRunning, Endpoint: "http://127.0.0.1:11435"}, Storage: storage}, nil
+		}
+		p := hostingPreview(t, admin, "ensure")
+		const trace = "0123456789abcdef0123456789abcdef"
+		w := admin.do("POST", "/api/v1/admin/defense/laya/hosting/"+p.ID+"/confirm", nil, map[string]string{"traceparent": "00-" + trace + "-1111111111111111-01"})
+		if w.Code != 202 {
+			t.Fatalf("confirm: %d %s", w.Code, w.Body.String())
+		}
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		_, ok := s.jobs.Wait(ctx, "laya:"+p.ID)
+		cancel()
+		if !ok {
+			t.Fatal("job not completed")
+		}
+		row, err := s.Store.Ent.Resource.Query().Where(resource.KindEQ(layaOperationKind), resource.KeyEQ(s.layaHostKey(p.ID))).Only(t.Context())
+		var op layaHostOperation
+		want := "laya_resources_insufficient"
+		if storage == nil {
+			want = "laya_resources_unknown"
+		}
+		if err != nil || decodeStrict(row.Data, &op) != nil || op.Status != "failed" || op.Code != want || op.TraceID != trace || op.Stage != "model.resources" {
+			t.Fatalf("result: %+v %v", op, err)
+		}
+		mu.Lock()
+		for _, call := range calls {
+			if call != "status" && call != "ensure" && call != "model-storage" {
+				t.Errorf("existing container mutated on resource failure: %s", call)
+			}
+		}
+		mu.Unlock()
 	}
 }

@@ -387,12 +387,13 @@ func (s *Server) unblock(c *gin.Context) {
 
 // layaSettings 保存在设置键 laya 下，Key 加密保存、只写不读。
 type layaSettings struct {
-	Mode    string `json:"mode,omitempty"`
-	GateID  int    `json:"gate_id,omitempty"`
-	Enabled bool   `json:"enabled"`
-	URL     string `json:"url"`
-	Model   string `json:"model"`
-	Key     string `json:"key"`
+	Mode          string `json:"mode,omitempty"`
+	GateID        int    `json:"gate_id,omitempty"`
+	Enabled       bool   `json:"enabled"`
+	URL           string `json:"url"`
+	Model         string `json:"model"`
+	Key           string `json:"key"`
+	WarmupSeconds int    `json:"warmup_seconds,omitempty"`
 }
 
 func (s *Server) loadLaya(ctx context.Context) layaSettings {
@@ -435,22 +436,24 @@ func (s *Server) getLaya(c *gin.Context) {
 		failInternal(c, 503, "laya_configuration_unavailable", err)
 		return
 	}
-	c.JSON(200, gin.H{"enabled": l.Enabled, "verified": verified, "mode": l.Mode, "gate_id": l.GateID, "url": l.URL, "model": l.Model, "key_set": l.Key != "", "compatibility": s.currentLayaCompatibility(c.Request.Context(), l)})
+	c.JSON(200, gin.H{"enabled": l.Enabled, "verified": verified, "mode": l.Mode, "gate_id": l.GateID, "url": l.URL, "model": l.Model, "key_set": l.Key != "", "warmup_seconds": layaWarmupSeconds(l), "compatibility": s.currentLayaCompatibility(c.Request.Context(), l)})
 }
 
 func layaVerificationKey(l layaSettings) string {
 	l.Enabled = false
+	l.WarmupSeconds = 0
 	return "laya-verified:" + digest(jsonText(l))
 }
 
 func (s *Server) putLaya(c *gin.Context) {
 	var req struct {
-		Mode    string `json:"mode"`
-		GateID  int    `json:"gate_id"`
-		Enabled bool   `json:"enabled"`
-		URL     string `json:"url"`
-		Model   string `json:"model"`
-		Key     string `json:"key"`
+		Mode          string `json:"mode"`
+		GateID        int    `json:"gate_id"`
+		Enabled       bool   `json:"enabled"`
+		URL           string `json:"url"`
+		Model         string `json:"model"`
+		Key           string `json:"key"`
+		WarmupSeconds int    `json:"warmup_seconds,omitempty"`
 	}
 	if !bind(c, &req) {
 		return
@@ -461,7 +464,11 @@ func (s *Server) putLaya(c *gin.Context) {
 		failInternal(c, 503, "laya_configuration_unavailable", err)
 		return
 	}
-	l := layaSettings{Mode: req.Mode, GateID: req.GateID, Enabled: req.Enabled, URL: strings.TrimSpace(req.URL), Model: strings.TrimSpace(req.Model), Key: old.Key}
+	if req.WarmupSeconds < 0 || req.WarmupSeconds > 1800 || req.WarmupSeconds > 0 && req.WarmupSeconds < 30 {
+		failure(c, 400, "invalid_laya_settings")
+		return
+	}
+	l := layaSettings{Mode: req.Mode, GateID: req.GateID, Enabled: req.Enabled, URL: strings.TrimSpace(req.URL), Model: strings.TrimSpace(req.Model), Key: old.Key, WarmupSeconds: req.WarmupSeconds}
 	if l.Mode == "" {
 		l.Mode = "center"
 	}
@@ -756,4 +763,11 @@ func (s *Server) classifyConfigured(ctx context.Context, l layaSettings, event s
 		verdict.Code = "insufficient_evidence"
 	}
 	return verdict, nil
+}
+
+func layaWarmupSeconds(l layaSettings) int {
+	if l.WarmupSeconds == 0 {
+		return 300
+	}
+	return l.WarmupSeconds
 }

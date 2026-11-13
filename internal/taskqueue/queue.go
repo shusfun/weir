@@ -5,9 +5,11 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/shusfun/weir/packages/contracts"
@@ -22,8 +24,9 @@ type Locker interface {
 	Do(context.Context, string, func(context.Context) error) error
 }
 type Queue struct {
-	DB   *sql.DB
-	Lock Locker
+	DB         *sql.DB
+	Lock       Locker
+	PruneBatch int
 }
 
 type Request struct {
@@ -53,57 +56,69 @@ type Record struct {
 
 // Bodies are encrypted by the host. Dispatch metadata contains no task inputs.
 func (q *Queue) Migrate(ctx context.Context) error {
-	return q.Lock.Do(ctx, "worker-schema", func(ctx context.Context) error {
-		for _, s := range []string{
-			`CREATE TABLE IF NOT EXISTS worker_capabilities (gate_id BIGINT PRIMARY KEY,hash TEXT NOT NULL,document TEXT NOT NULL)`,
-			`CREATE TABLE IF NOT EXISTS worker_tasks (id TEXT PRIMARY KEY, kind TEXT NOT NULL, version INTEGER NOT NULL, trace_id TEXT NOT NULL, idem TEXT NOT NULL UNIQUE, payload_hash TEXT NOT NULL, body TEXT NOT NULL, requirements TEXT NOT NULL, candidates TEXT NOT NULL, deadline BIGINT NOT NULL, created_at BIGINT NOT NULL, status TEXT NOT NULL, gate_id BIGINT NOT NULL DEFAULT 0, attempt INTEGER NOT NULL DEFAULT 0, lease_token TEXT NOT NULL DEFAULT '', lease_until BIGINT NOT NULL DEFAULT 0, result TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT '', legacy_id BIGINT NOT NULL DEFAULT 0)`,
-			`CREATE INDEX IF NOT EXISTS worker_tasks_dispatch ON worker_tasks(status, created_at)`,
-			`CREATE INDEX IF NOT EXISTS worker_tasks_gate ON worker_tasks(gate_id, status)`,
-			`CREATE INDEX IF NOT EXISTS worker_tasks_legacy ON worker_tasks(legacy_id)`,
-			`CREATE TABLE IF NOT EXISTS worker_attempts (task_id TEXT NOT NULL, attempt INTEGER NOT NULL, gate_id BIGINT NOT NULL, started_at BIGINT NOT NULL, finished_at BIGINT NOT NULL DEFAULT 0, outcome TEXT NOT NULL, PRIMARY KEY(task_id, attempt))`,
-			`CREATE INDEX IF NOT EXISTS worker_attempts_window ON worker_attempts(started_at,gate_id)`,
-			`CREATE TABLE IF NOT EXISTS worker_activity (id TEXT PRIMARY KEY, task_id TEXT NOT NULL, gate_id BIGINT NOT NULL, attempt INTEGER NOT NULL, at BIGINT NOT NULL, reason TEXT NOT NULL)`,
-			`CREATE INDEX IF NOT EXISTS worker_activity_task ON worker_activity(task_id, at)`,
-			`CREATE TABLE IF NOT EXISTS worker_communication (bucket BIGINT NOT NULL,gate_id BIGINT NOT NULL,route TEXT NOT NULL,requests BIGINT NOT NULL,received BIGINT NOT NULL,sent BIGINT NOT NULL,errors BIGINT NOT NULL,PRIMARY KEY(bucket,gate_id,route))`,
-		} {
-			if _, err := q.DB.ExecContext(ctx, s); err != nil {
-				return err
-			}
-		}
-		rows, err := q.DB.QueryContext(ctx, `SELECT candidate_at FROM worker_tasks LIMIT 0`)
-		if err == nil {
-			if err = rows.Close(); err != nil {
-				return err
-			}
-		} else {
-			if _, err = q.DB.ExecContext(ctx, `ALTER TABLE worker_tasks ADD COLUMN candidate_at BIGINT NOT NULL DEFAULT 0`); err != nil {
-				return err
-			}
-		}
-		rows, err = q.DB.QueryContext(ctx, `SELECT progress FROM worker_tasks LIMIT 0`)
-		if err == nil {
-			err = rows.Close()
-		} else {
-			_, err = q.DB.ExecContext(ctx, `ALTER TABLE worker_tasks ADD COLUMN progress TEXT NOT NULL DEFAULT ''`)
-		}
-		if err != nil {
+	return q.Lock.Do(ctx, "worker-schema", q.MigrateWithHostLock)
+}
+
+// MigrateWithHostLock is used by the center's combined startup migration while
+// it holds its database-wide schema lock. It does not acquire another session.
+func (q *Queue) MigrateWithHostLock(ctx context.Context) error {
+	for _, s := range []string{
+		`CREATE TABLE IF NOT EXISTS worker_capabilities (gate_id BIGINT PRIMARY KEY,hash TEXT NOT NULL,document TEXT NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS worker_tasks (id TEXT PRIMARY KEY, kind TEXT NOT NULL, version INTEGER NOT NULL, trace_id TEXT NOT NULL, idem TEXT NOT NULL UNIQUE, payload_hash TEXT NOT NULL, body TEXT NOT NULL, requirements TEXT NOT NULL, candidates TEXT NOT NULL, deadline BIGINT NOT NULL, created_at BIGINT NOT NULL, status TEXT NOT NULL, gate_id BIGINT NOT NULL DEFAULT 0, attempt INTEGER NOT NULL DEFAULT 0, lease_token TEXT NOT NULL DEFAULT '', lease_until BIGINT NOT NULL DEFAULT 0, result TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT '', legacy_id BIGINT NOT NULL DEFAULT 0)`,
+		`CREATE INDEX IF NOT EXISTS worker_tasks_dispatch ON worker_tasks(status, created_at)`,
+		`CREATE INDEX IF NOT EXISTS worker_tasks_gate ON worker_tasks(gate_id, status)`,
+		`CREATE INDEX IF NOT EXISTS worker_tasks_legacy ON worker_tasks(legacy_id)`,
+		`CREATE TABLE IF NOT EXISTS worker_attempts (task_id TEXT NOT NULL, attempt INTEGER NOT NULL, gate_id BIGINT NOT NULL, started_at BIGINT NOT NULL, finished_at BIGINT NOT NULL DEFAULT 0, outcome TEXT NOT NULL, PRIMARY KEY(task_id, attempt))`,
+		`CREATE INDEX IF NOT EXISTS worker_attempts_window ON worker_attempts(started_at,gate_id)`,
+		`CREATE TABLE IF NOT EXISTS worker_activity (id TEXT PRIMARY KEY, task_id TEXT NOT NULL, gate_id BIGINT NOT NULL, attempt INTEGER NOT NULL, at BIGINT NOT NULL, reason TEXT NOT NULL)`,
+		`CREATE INDEX IF NOT EXISTS worker_activity_task ON worker_activity(task_id, at)`,
+		`CREATE TABLE IF NOT EXISTS worker_communication (bucket BIGINT NOT NULL,gate_id BIGINT NOT NULL,route TEXT NOT NULL,requests BIGINT NOT NULL,received BIGINT NOT NULL,sent BIGINT NOT NULL,errors BIGINT NOT NULL,PRIMARY KEY(bucket,gate_id,route))`,
+	} {
+		if _, err := q.DB.ExecContext(ctx, s); err != nil {
 			return err
 		}
-		rows, err = q.DB.QueryContext(ctx, `SELECT result_bytes FROM worker_attempts LIMIT 0`)
-		if err == nil {
-			err = rows.Close()
-		} else {
-			_, err = q.DB.ExecContext(ctx, `ALTER TABLE worker_attempts ADD COLUMN result_bytes BIGINT`)
-		}
-		if err != nil {
+	}
+	rows, err := q.DB.QueryContext(ctx, `SELECT candidate_at FROM worker_tasks LIMIT 0`)
+	if err == nil {
+		if err = rows.Close(); err != nil {
 			return err
 		}
-		if _, err = q.DB.ExecContext(ctx, `UPDATE worker_attempts SET outcome='failed' WHERE outcome='pending' AND finished_at>0`); err != nil {
+	} else {
+		if _, err = q.DB.ExecContext(ctx, `ALTER TABLE worker_tasks ADD COLUMN candidate_at BIGINT NOT NULL DEFAULT 0`); err != nil {
 			return err
 		}
-		_, err = q.DB.ExecContext(ctx, `UPDATE worker_tasks SET candidate_at=created_at WHERE candidate_at=0`)
+	}
+	rows, err = q.DB.QueryContext(ctx, `SELECT progress FROM worker_tasks LIMIT 0`)
+	if err == nil {
+		err = rows.Close()
+	} else {
+		_, err = q.DB.ExecContext(ctx, `ALTER TABLE worker_tasks ADD COLUMN progress TEXT NOT NULL DEFAULT ''`)
+	}
+	if err != nil {
 		return err
-	})
+	}
+	rows, err = q.DB.QueryContext(ctx, `SELECT result_bytes FROM worker_attempts LIMIT 0`)
+	if err == nil {
+		err = rows.Close()
+	} else {
+		_, err = q.DB.ExecContext(ctx, `ALTER TABLE worker_attempts ADD COLUMN result_bytes BIGINT`)
+	}
+	if err != nil {
+		return err
+	}
+	if _, err = q.DB.ExecContext(ctx, `UPDATE worker_attempts SET outcome='failed' WHERE outcome='pending' AND finished_at>0`); err != nil {
+		return err
+	}
+	_, err = q.DB.ExecContext(ctx, `UPDATE worker_tasks SET candidate_at=created_at WHERE candidate_at=0`)
+	return err
+}
+
+//go:embed queue.go
+var workerSchemaSource string
+
+func MigrationChecksum() string {
+	sum := sha256.Sum256([]byte(strings.ReplaceAll(workerSchemaSource, "\r\n", "\n")))
+	return hex.EncodeToString(sum[:])
 }
 
 func token() string {
@@ -238,7 +253,7 @@ func (q *Queue) Claim(ctx context.Context, gate int, caps contracts.CapabilityDo
 			return nil
 		}
 		var downloads int
-		if err := q.DB.QueryRowContext(ctx, `SELECT count(*) FROM worker_tasks WHERE gate_id=$1 AND status IN ('leased','cancelling') AND kind IN ($2,$3,$4,$5)`, gate, contracts.ActionAssetFetch, contracts.ActionReleaseReplace, contracts.TaskLayaInstall, contracts.TaskCoreInstall).Scan(&downloads); err != nil {
+		if err := q.DB.QueryRowContext(ctx, `SELECT count(*) FROM worker_tasks WHERE gate_id=$1 AND status IN ('leased','cancelling') AND kind IN ($2,$3,$4,$5,$6)`, gate, contracts.ActionAssetFetch, contracts.ActionReleaseReplace, contracts.TaskLayaInstall, contracts.TaskCoreInstall, contracts.TaskLayaPrepare).Scan(&downloads); err != nil {
 			return err
 		}
 		rows, e := q.DB.QueryContext(ctx, `SELECT `+columns+` FROM worker_tasks WHERE status='pending' AND deadline>$1 ORDER BY created_at,id LIMIT 100`, now.UnixMilli())

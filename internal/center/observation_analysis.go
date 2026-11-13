@@ -154,7 +154,7 @@ func (s *Server) pruneObservationAnalyses(ctx context.Context, now time.Time, re
 		return errors.New("invalid observation retention policy")
 	}
 	return s.Store.Lock.Do(ctx, "observation-analysis-retention", func(ctx context.Context) error {
-		if _, err := s.Store.Ent.Resource.Delete().Where(resource.KindEQ(observationAnalysisKind), resource.CreatedAtLT(now.Add(-retention))).Exec(ctx); err != nil {
+		if err := s.pruneResources(ctx, resource.KindEQ(observationAnalysisKind), resource.CreatedAtLT(now.Add(-retention))); err != nil {
 			return err
 		}
 		// Select the first row beyond the retained window; delete through its ID
@@ -166,8 +166,7 @@ func (s *Server) pruneObservationAnalyses(ctx context.Context, now time.Time, re
 		if err != nil {
 			return err
 		}
-		_, err = s.Store.Ent.Resource.Delete().Where(resource.KindEQ(observationAnalysisKind), resource.IDLTE(row.ID), resource.CreatedAtLT(now.Add(-6*time.Minute))).Exec(ctx)
-		return err
+		return s.pruneResources(ctx, resource.KindEQ(observationAnalysisKind), resource.IDLTE(row.ID), resource.CreatedAtLT(now.Add(-6*time.Minute)))
 	})
 }
 

@@ -1,10 +1,9 @@
-import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ActionGroup, Button, Collapsible, Field, Form, Notice, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea } from "@weir/ui";
 import { api } from "../api";
 import { useQuery } from "../lib/query";
 import { useFormAction, useRowAction } from "../lib/action";
-import { useUnsavedChanges } from "../lib/dirty";
+import { useDraft } from "../lib/dirty";
 import { reopenDrafts } from "./draft-confirm";
 import { State } from "./feedback";
 import { Section } from "./system-settings";
@@ -22,13 +21,12 @@ export function AIProfileCard() {
   const queryClient = useQueryClient();
   const q = useQuery({ queryKey: ["ai-profile"], queryFn: () => api("/admin/ai/profile") as Promise<ProfileView> });
   const history = useQuery({ queryKey: ["ai-profile-history"], queryFn: () => api("/admin/ai/profile/history") as Promise<{ items: History[] }> });
-  const [draft, setDraft] = useState<string | null>(null);
-  const text = draft ?? (q.data ? JSON.stringify(q.data.document, null, 2) : "");
-  useUnsavedChanges(draft !== null);
-  useConsoleContext({ notices: ["AI 外置配置，修改必须完整预演并由管理员确认。"], form: [{ key: "ai_profile_document", label: "待提交的配置文件", secret: true, filled: draft !== null }] });
+  const draft = useDraft(q.data ? JSON.stringify(q.data.document, null, 2) : "");
+  const text = draft.value;
+  useConsoleContext({ notices: ["AI 外置配置，修改必须完整预演并由管理员确认。"], form: [{ key: "ai_profile_document", label: "待提交的配置文件", secret: true, filled: draft.changed }] });
   const saved = () => { void queryClient.invalidateQueries({ queryKey: ["ai-drafts"] }); reopenDrafts(); };
   const submit = useFormAction(() => api("/admin/ai/profile/draft", "POST", { text }), {
-    ok: "已提交草稿，确认后才生效", fields: { ai_profile_invalid: "text" }, onSuccess: () => { setDraft(null); saved(); },
+    ok: "已提交草稿，确认后才生效", fields: { ai_profile_invalid: "text" }, onSuccess: () => { draft.reset(); saved(); },
   });
   const rollback = useRowAction<string>();
   return <Section title="AI 外置配置" description="指令、插件、skills 和判断配置按内置默认、外部导入、站点覆盖叠加。每次修改均先预演，再由管理员确认完整差异。">
@@ -42,12 +40,12 @@ export function AIProfileCard() {
       <Notice>观察点由程序登记；配置不能新增采集入口。公开内容判断不会调用 dsh。配置已启用不代表对应流程已经采集或检测。</Notice>
       <Form busy={submit.busy} errors={submit.errors} onSubmit={() => void submit.submit()}>
         <Field label="版本化配置文件（JSON）" name="text" required hint="timezone 使用 IANA 时区；criteria 说明各答案的判断标准；laya_compatibility 设置已验证版本范围和范围外策略（base_only 或 reject）。不要放入密钥或订阅令牌。">
-          <Textarea mono rows={12} required spellCheck={false} value={text} onChange={(e) => setDraft(e.target.value)} />
+          <Textarea mono rows={12} required spellCheck={false} value={text} onChange={(e) => draft.set(e.target.value)} />
         </Field>
         <ActionGroup>
           <Button type="submit" busy={submit.busy} busyText="正在预演…">预演并提交草稿</Button>
-          <Button type="button" variant="outline" onClick={() => setDraft(JSON.stringify({ ...q.data.document, site: q.data.effective }, null, 2))}>以生效配置编辑站点层</Button>
-          <Button type="button" variant="ghost" disabled={draft === null} onClick={() => setDraft(null)}>放弃编辑</Button>
+          <Button type="button" variant="outline" onClick={() => draft.set(JSON.stringify({ ...q.data.document, site: q.data.effective }, null, 2))}>以生效配置编辑站点层</Button>
+          <Button type="button" variant="ghost" disabled={!draft.changed} onClick={draft.reset}>放弃编辑</Button>
         </ActionGroup>
         {submit.error && <Notice tone="bad">{submit.error}</Notice>}
       </Form>

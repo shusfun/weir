@@ -25,6 +25,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/passkey"
 	"github.com/shusfun/weir/internal/store/ent/recoverycode"
+	"github.com/shusfun/weir/internal/store/ent/subgrant"
 	"github.com/shusfun/weir/internal/store/ent/user"
 )
 
@@ -399,27 +400,54 @@ func (s *Server) deleteUser(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	gates, _ := s.userGates(ctx, u.ID)
-	var err error
-	for _, del := range []func() error{
-		func() error {
-			_, e := s.Store.Ent.Credential.Delete().Where(credential.UserIDEQ(u.ID)).Exec(ctx)
-			return e
-		},
-		func() error { _, e := s.Store.Ent.Link.Delete().Where(link.UserIDEQ(u.ID)).Exec(ctx); return e },
-		func() error { _, e := s.Store.Ent.Chain.Delete().Where(chain.UserIDEQ(u.ID)).Exec(ctx); return e },
-		func() error { _, e := s.Store.Ent.Budget.Delete().Where(budget.UserIDEQ(u.ID)).Exec(ctx); return e },
-		func() error { _, e := s.Store.Ent.Passkey.Delete().Where(passkey.UserIDEQ(u.ID)).Exec(ctx); return e },
-		func() error {
-			_, e := s.Store.Ent.RecoveryCode.Delete().Where(recoverycode.UserIDEQ(u.ID)).Exec(ctx)
-			return e
-		},
-		func() error { return s.Store.Ent.User.DeleteOne(u).Exec(ctx) },
-	} {
-		if err = del(); err != nil {
-			failInternal(c, 500, "delete_failed", err)
-			return
+	var gates []int
+	err := s.Store.Lock.Do(ctx, "cred-sync", func(ctx context.Context) error {
+		var err error
+		gates, err = s.userGates(ctx, u.ID)
+		if err != nil {
+			return err
 		}
+		// Migrate the old KV journal before opening SQLite's single writer.
+		pending, e := s.pendingBumps(ctx, u.ID, true)
+		if e != nil {
+			return e
+		}
+		tx, err := s.Store.Ent.Tx(ctx)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		storeCopy := *s.Store
+		storeCopy.Ent = tx.Client()
+		server := &Server{Store: &storeCopy}
+		if err = server.savePendingBumps(ctx, u.ID, append(pending, gates...)); err != nil {
+			return err
+		}
+		for _, del := range []func() error{
+			func() error {
+				_, e := tx.Credential.Delete().Where(credential.UserIDEQ(u.ID)).Exec(ctx)
+				return e
+			},
+			func() error { _, e := tx.Link.Delete().Where(link.UserIDEQ(u.ID)).Exec(ctx); return e },
+			func() error { _, e := tx.Chain.Delete().Where(chain.UserIDEQ(u.ID)).Exec(ctx); return e },
+			func() error { _, e := tx.Budget.Delete().Where(budget.UserIDEQ(u.ID)).Exec(ctx); return e },
+			func() error { _, e := tx.SubGrant.Delete().Where(subgrant.UserIDEQ(u.ID)).Exec(ctx); return e },
+			func() error { _, e := tx.Passkey.Delete().Where(passkey.UserIDEQ(u.ID)).Exec(ctx); return e },
+			func() error {
+				_, e := tx.RecoveryCode.Delete().Where(recoverycode.UserIDEQ(u.ID)).Exec(ctx)
+				return e
+			},
+			func() error { return tx.User.DeleteOneID(u.ID).Exec(ctx) },
+		} {
+			if err = del(); err != nil {
+				return err
+			}
+		}
+		return tx.Commit()
+	})
+	if err != nil {
+		failInternal(c, 503, "delete_failed", err)
+		return
 	}
 	s.dropSessions(ctx, u.ID)
 	// 用户链的内部出口凭据随之失效。

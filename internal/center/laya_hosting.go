@@ -230,7 +230,7 @@ func (s *Server) previewLayaHosting(c *gin.Context) {
 		before = laya.StateStopped
 	}
 	if req.Operation == "ensure" {
-		if err = s.layaHostResources(doc); err != nil {
+		if err = s.layaHostResources(doc, status.Status.State); err != nil {
 			failure(c, 409, err.Error())
 			return
 		}
@@ -248,22 +248,23 @@ func (s *Server) previewLayaHosting(c *gin.Context) {
 	c.JSON(200, p)
 }
 
-func (s *Server) layaHostResources(doc layahost.Deployment) error {
+func (s *Server) layaHostResources(doc layahost.Deployment, state laya.RuntimeState) error {
 	model := laya.FixedManifest()
 	if doc.Spec.MemoryBytes < uint64(model.MinimumMemory) {
 		return errors.New("laya_model_policy_mismatch")
 	}
+	if state == laya.StateRunning {
+		return nil
+	}
 	s.resources.RLock()
 	host := snapshotHost(s.resources.host, time.Now())
 	s.resources.RUnlock()
-	if host == nil || host.MemTotal == nil || host.MemUsed == nil || host.DiskTotal == nil || host.DiskUsed == nil {
+	if host == nil || host.MemTotal == nil || host.MemUsed == nil {
 		return errors.New("laya_resources_unknown")
 	}
-	var disk uint64
-	for _, file := range model.Files {
-		disk += uint64(file.Size)
-	}
-	if *host.MemUsed > *host.MemTotal || *host.DiskUsed > *host.DiskTotal || *host.MemTotal-*host.MemUsed < uint64(model.MinimumMemory) || *host.DiskTotal-*host.DiskUsed < disk {
+	// The model lives on Docker's volume filesystem, which may differ from
+	// the center's data disk. Check its incremental capacity via the helper.
+	if *host.MemUsed > *host.MemTotal || *host.MemTotal-*host.MemUsed < uint64(model.MinimumMemory) {
 		return errors.New("laya_resources_insufficient")
 	}
 	return nil
@@ -317,7 +318,11 @@ func (s *Server) confirmLayaHosting(c *gin.Context) {
 			return errors.New("laya_deployment_changed")
 		}
 		if p.Operation == "ensure" {
-			if err = s.layaHostResources(doc); err != nil {
+			status, statusErr := s.layaHostCall(ctx, doc, "status")
+			if statusErr != nil && layahost.ErrorCode(statusErr) != "laya_container_missing" {
+				return statusErr
+			}
+			if err = s.layaHostResources(doc, status.Status.State); err != nil {
 				return err
 			}
 		}
@@ -401,10 +406,15 @@ func (s *Server) runLayaHosting(ctx context.Context, doc layahost.Deployment, op
 		}
 		// Only a container created by this attempt may be stopped on failure.
 		// Never stop an already running instance because a model call failed.
-		_, beforeErr := s.layaHostCall(ctx, doc, "status")
+		before, beforeErr := s.layaHostCall(ctx, doc, "status")
 		created := layahost.ErrorCode(beforeErr) == "laya_container_missing"
 		if beforeErr != nil && !created {
 			return beforeErr
+		}
+		if op.Operation == "ensure" {
+			if err = s.layaHostResources(doc, before.Status.State); err != nil {
+				return err
+			}
 		}
 		var status layahost.Response
 		run.Step("执行已批准的容器操作")
@@ -440,6 +450,22 @@ func (s *Server) runLayaHosting(ctx context.Context, doc layahost.Deployment, op
 		transport.Proxy = nil
 		defer transport.CloseIdleConnections()
 		client := laya.Client{BaseURL: endpoint, HTTP: &http.Client{Transport: transport, Timeout: 30 * time.Minute}}
+		err = stage("model.resources", "layahost.modelStorage", func() error {
+			storage, err := s.layaHostCall(ctx, doc, "model-storage")
+			if err != nil {
+				return err
+			}
+			if storage.Storage == nil {
+				return errors.New("laya_resources_unknown")
+			}
+			if storage.Storage.AvailableBytes < storage.Storage.RequiredBytes {
+				return errors.New("laya_resources_insufficient")
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
 		run.Step("下载并校验官方固定模型")
 		err = stage("model.install", "laya.Client.PrepareModel", func() error {
 			return client.PrepareModel(laya.WithTrace(ctx, op.TraceID), laya.FixedManifest(), func(p laya.ModelProgress) { run.Stage(p.Stage) })
@@ -449,9 +475,7 @@ func (s *Server) runLayaHosting(ctx context.Context, doc layahost.Deployment, op
 		}
 		run.Step("检查官方模型推理")
 		err = stage("model.health", "laya.Client.Classify", func() error {
-			inference, cancel := context.WithTimeout(ctx, 10*time.Second)
-			defer cancel()
-			_, err := client.Classify(laya.WithTrace(inference, op.TraceID), laya.Request{Model: doc.Model + "@sha256:" + laya.ModelManifestSHA256, State: "The service is answering a synthetic health check.", Questions: map[string]laya.Question{"health": {Type: laya.AnswerChoice, Criteria: map[string]string{"ready": "The service answered the health check.", "unknown": "The service state is unclear."}}}})
+			_, err := client.Warmup(laya.WithTrace(ctx, op.TraceID), laya.Request{Model: doc.Model + "@sha256:" + laya.ModelManifestSHA256, State: "The service is answering a synthetic health check.", Questions: map[string]laya.Question{"health": {Type: laya.AnswerChoice, Criteria: map[string]string{"ready": "The service answered the health check.", "unknown": "The service state is unclear."}}}}, time.Duration(layaWarmupSeconds(s.loadLaya(ctx)))*time.Second)
 			return err
 		})
 		completed = err == nil

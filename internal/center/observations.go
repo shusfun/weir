@@ -257,17 +257,23 @@ func observedObservation(r observationRecord, now time.Time) observationRecord {
 }
 
 func (s *Server) pruneTextObservations(ctx context.Context, now time.Time) error {
-	for _, kind := range []string{observationKind, observationPendingKind, observationDailyKind, subscriptionRunKind} {
-		if _, err := s.Store.Ent.Resource.Delete().Where(resource.KindEQ(kind), resource.CreatedAtLT(now.Add(-14*24*time.Hour))).Exec(ctx); err != nil {
+	doc, err := s.retentionPolicy(ctx)
+	if err != nil {
+		return err
+	}
+	// Pending observations are recovery records, not disposable history. The
+	// enqueue capacity bounds them until processing can finalize them.
+	for _, kind := range []string{observationKind, observationDailyKind, subscriptionRunKind} {
+		if err := s.pruneResources(ctx, resource.KindEQ(kind), resource.CreatedAtLT(now.Add(-time.Duration(doc.Policy.ObservationDays)*24*time.Hour))); err != nil {
 			return err
 		}
 	}
-	row, err := s.Store.Ent.Resource.Query().Where(resource.KindIn(observationKind, observationPendingKind, subscriptionRunKind)).Order(ent.Desc(resource.FieldID)).Offset(1_000_000).First(ctx)
+	row, err := s.Store.Ent.Resource.Query().Where(resource.KindIn(observationKind, subscriptionRunKind)).Order(ent.Desc(resource.FieldID)).Offset(doc.Policy.MaxRecords).First(ctx)
 	if ent.IsNotFound(err) {
 		return nil
 	}
 	if err == nil {
-		_, err = s.Store.Ent.Resource.Delete().Where(resource.KindIn(observationKind, observationPendingKind, subscriptionRunKind), resource.IDLTE(row.ID), resource.CreatedAtLT(now.Add(-10*time.Minute))).Exec(ctx)
+		err = s.pruneResources(ctx, resource.KindIn(observationKind, subscriptionRunKind), resource.IDLTE(row.ID), resource.CreatedAtLT(now.Add(-10*time.Minute)))
 	}
 	return err
 }

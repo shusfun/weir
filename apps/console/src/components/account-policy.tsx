@@ -1,10 +1,9 @@
-import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ActionGroup, Button, Collapsible, Field, Form, Notice, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea } from "@weir/ui";
 import { api } from "../api";
 import { useQuery } from "../lib/query";
 import { useFormAction, useRowAction } from "../lib/action";
-import { useUnsavedChanges } from "../lib/dirty";
+import { useDraft } from "../lib/dirty";
 import { useConsoleContext } from "../lib/console-context";
 import { reopenDrafts } from "./draft-confirm";
 import { State } from "./feedback";
@@ -30,13 +29,12 @@ export function AccountPolicyCard() {
   const client = useQueryClient();
   const q = useQuery({ queryKey: ["account-policy"], queryFn: () => api("/admin/settings/account-policy") as Promise<View> });
   const history = useQuery({ queryKey: ["account-policy-history"], queryFn: () => api("/admin/settings/account-policy/history") as Promise<{ items: Version[] }> });
-  const [draft, setDraft] = useState<string | null>(null);
-  const text = draft ?? (q.data ? JSON.stringify(q.data.document, null, 2) : "");
-  useUnsavedChanges(draft !== null);
-  useConsoleContext({ notices: ["账户发码策略按三层覆盖，所有修改需管理员确认；配置不能改变原子计数和失败拒绝机制。"], form: [{ key: "account_policy", label: "待提交的账户策略", secret: true, filled: draft !== null }] });
+  const draft = useDraft(q.data ? JSON.stringify(q.data.document, null, 2) : "");
+  const text = draft.value;
+  useConsoleContext({ notices: ["账户发码策略按三层覆盖，所有修改需管理员确认；配置不能改变原子计数和失败拒绝机制。"], form: [{ key: "account_policy", label: "待提交的账户策略", secret: true, filled: draft.changed }] });
   const submitted = () => { void client.invalidateQueries({ queryKey: ["ai-drafts"] }); reopenDrafts(); };
   const submit = useFormAction(() => api("/admin/settings/account-policy/draft", "POST", { text }), {
-    ok: "已提交草稿，确认后才生效", fields: { account_policy_invalid: "text" }, onSuccess: () => { setDraft(null); submitted(); },
+    ok: "已提交草稿，确认后才生效", fields: { account_policy_invalid: "text" }, onSuccess: () => { draft.reset(); submitted(); },
   });
   const rollback = useRowAction<string>();
   return <Section title="账户验证与发信策略" description="内置默认 → 外部导入 → 站点覆盖；版本化配置即时生效，支持预演和恢复。">
@@ -50,12 +48,12 @@ export function AccountPolicyCard() {
       <Notice>注册、发码和密码重置默认使用本地 ALTCHA；配置密钥后，可将 human_provider 改为 turnstile。登录连续失败后始终用本地 ALTCHA。挑战按操作和 IP 绑定、仅可使用一次；服务端检查最短填写时间和蜜罐，验证故障时拒绝操作。</Notice>
       <Form busy={submit.busy} errors={submit.errors} onSubmit={() => void submit.submit()}>
         <Field label="账户策略文件（JSON）" name="text" required hint="删除 site 中的字段以恢复继承；external 用于导入外部配置。只接受已登记字段、名单及边界内的数值，不接受密钥或可执行内容。">
-          <Textarea mono rows={8} required spellCheck={false} value={text} onChange={(e) => setDraft(e.target.value)} />
+          <Textarea mono rows={8} required spellCheck={false} value={text} onChange={(e) => draft.set(e.target.value)} />
         </Field>
         <ActionGroup>
           <Button type="submit" busy={submit.busy} busyText="正在预演…">预演账户策略</Button>
-          <Button type="button" variant="outline" onClick={() => setDraft(JSON.stringify({ ...q.data.document, site: q.data.effective }, null, 2))}>以生效策略编辑站点层</Button>
-          <Button type="button" variant="ghost" disabled={draft === null} onClick={() => setDraft(null)}>放弃编辑</Button>
+          <Button type="button" variant="outline" onClick={() => draft.set(JSON.stringify({ ...q.data.document, site: q.data.effective }, null, 2))}>以生效策略编辑站点层</Button>
+          <Button type="button" variant="ghost" disabled={!draft.changed} onClick={draft.reset}>放弃编辑</Button>
         </ActionGroup>
         {submit.error && <Notice tone="bad">{submit.error}</Notice>}
       </Form>

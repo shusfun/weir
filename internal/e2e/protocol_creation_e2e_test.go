@@ -35,7 +35,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// 从实际创建入口验收，不跳过创建前实测；TLS 使用显式信任的隔离测试 CA。
+// 从实际创建入口验收排队与配置应用，随后使用真实客户端验证业务完成；
+// TLS 使用显式信任的隔离测试 CA。
 func TestAllPresetsCreationAndTraffic(t *testing.T) {
 	sb := os.Getenv("WEIR_E2E_SINGBOX")
 	if sb == "" {
@@ -75,6 +76,7 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 	u := e.post("/api/v1/admin/users", map[string]any{"email": "protocols@e2e.test", "all_nodes": true, "quota": 0}, nil)
 	presets := []string{"vless-reality", "vless-ws-tls", "vmess-ws-tls", "trojan-tls", "ss2022", "hysteria2", "tuic", "shadowtls", "wireguard", "socks-local", "http-local"}
 	nodeIDs := map[string]int{}
+	realityDestination := localTLS(t)
 	for _, preset := range presets {
 		t.Run(preset, func(t *testing.T) {
 			parent := e.t
@@ -86,14 +88,17 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 				}
 			}
 			body := map[string]any{"gate_id": e.gateID, "preset": preset, "name": preset}
+			if preset == "vless-reality" {
+				body["settings"] = map[string]any{"reality_dest": realityDestination, "reality_server_names": "e2e.test"}
+			}
 			if preset == "vless-ws-tls" || preset == "vmess-ws-tls" || preset == "trojan-tls" {
 				body["cert_id"] = cert["id"]
 			}
 			created := e.post("/api/v1/admin/nodes", body, nil)
 			nodeIDs[preset] = int(created["id"].(float64))
 			tested, ok := created["tested"].(map[string]any)
-			if !ok || tested["done"] != true || tested["stage"] != "connect" {
-				t.Fatalf("creation was not tested: %v", tested)
+			if !ok || tested["done"] != false || tested["pending"] != true || tested["status"] != "unknown" {
+				t.Fatalf("creation did not expose pending verification: %v", tested)
 			}
 			e.applied(preset)
 			if preset == "vless-reality" {

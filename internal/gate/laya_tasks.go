@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
+	"github.com/shusfun/weir/internal/layahost"
 	"github.com/shusfun/weir/packages/contracts"
 	"github.com/shusfun/weir/packages/laya"
 )
@@ -28,9 +31,45 @@ func (a *Agent) layaHelperOperation(ctx context.Context, operation string, doc l
 	return raw, err
 }
 
-func (a *Agent) layaTask(ctx context.Context, task contracts.Task) (json.RawMessage, error) {
+func (a *Agent) layaTask(ctx context.Context, task contracts.Task) (output json.RawMessage, taskErr error) {
 	if runtime.GOOS != "linux" || (runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64") {
 		return nil, layaTaskFailure("laya_hosting_unsupported", "gate.layaTask")
+	}
+	if task.Kind == contracts.TaskLayaPrepare {
+		if err := a.checkExecutionLease(ctx); err != nil {
+			return nil, err
+		}
+		finish := beginTaskStage(ctx, "laya.host.prepare", "gate.prepareLayaHost")
+		defer func() { finish(taskErr) }()
+		var result map[string]any
+		if err := a.helper.call(ctx, "POST", "/laya/prepare", struct{}{}, &result); err != nil {
+			return nil, layaTaskFailure("laya_preparation_unavailable", "gate.prepareLayaHost")
+		}
+		tick := time.NewTicker(time.Second)
+		defer tick.Stop()
+		for {
+			var state struct {
+				State string `json:"state"`
+			}
+			if err := a.helper.call(ctx, "GET", "/laya/prepare", nil, &state); err != nil {
+				return nil, layaTaskFailure("laya_preparation_unavailable", "gate.prepareLayaHost")
+			}
+			if state.State == "failed" {
+				return nil, layaTaskFailure("laya_preparation_failed", "gate.prepareLayaHost")
+			}
+			if state.State == "done" {
+				doc, e := readLayaDeployment(filepath.Join(a.P.Root, "laya"))
+				if e != nil {
+					return nil, layaTaskFailure("laya_approved_deployment_required", "gate.prepareLayaHost")
+				}
+				return json.Marshal(contracts.LayaDeploymentResult{State: "prepared", Version: doc.Version, Model: doc.Model, ImageDigest: doc.Spec.Digest, ModelDigest: laya.ModelManifestSHA256})
+			}
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-tick.C:
+			}
+		}
 	}
 	doc, err := readLayaDeployment(filepath.Join(a.P.Root, "laya"))
 	if err != nil {
@@ -44,7 +83,7 @@ func (a *Agent) layaTask(ctx context.Context, task contracts.Task) (json.RawMess
 		}
 		defer release()
 		var req contracts.LayaInstallTask
-		if contracts.DecodeStrict(task.Payload, &req, contracts.MaxTaskPayload) != nil {
+		if contracts.DecodeStrict(task.Payload, &req, contracts.MaxTaskPayload) != nil || req.WarmupSeconds < 0 || req.WarmupSeconds > 1800 || req.WarmupSeconds > 0 && req.WarmupSeconds < 30 {
 			return nil, layaTaskFailure("laya_install_invalid", "gate.layaTask")
 		}
 		var manifest struct {
@@ -57,22 +96,24 @@ func (a *Agent) layaTask(ctx context.Context, task contracts.Task) (json.RawMess
 		if doc.Model != model.Name || doc.Spec.MemoryBytes < uint64(model.MinimumMemory) {
 			return nil, layaTaskFailure("laya_model_policy_mismatch", "gate.layaTask")
 		}
-		resources := sampleWorkerResources()
-		var disk uint64
-		for _, file := range model.Files {
-			disk += uint64(file.Size)
-		}
-		if resources.AvailableMemory == nil || resources.AvailableDisk == nil {
-			return nil, layaTaskFailure("laya_resources_unknown", "gate.sampleWorkerResources")
-		}
-		if *resources.AvailableMemory < uint64(model.MinimumMemory) || *resources.AvailableDisk < disk {
-			return nil, layaTaskFailure("laya_resources_insufficient", "gate.layaTask")
-		}
-		_, beforeErr := a.layaHelperOperation(ctx, "status", doc)
+		beforeRaw, beforeErr := a.layaHelperOperation(ctx, "status", doc)
 		var beforeDetail *contracts.TaskError
 		created := errors.As(beforeErr, &beforeDetail) && beforeDetail.Code == "laya_container_missing"
 		if beforeErr != nil && !created {
 			return nil, beforeErr
+		}
+		var before struct {
+			Status laya.DockerStatus `json:"status"`
+		}
+		if beforeErr == nil && json.Unmarshal(beforeRaw, &before) != nil {
+			return nil, layaTaskFailure("laya_status_invalid", "gate.layaTask")
+		}
+		resources := sampleWorkerResources()
+		if (created || before.Status.State != laya.StateRunning) && resources.AvailableMemory == nil {
+			return nil, layaTaskFailure("laya_resources_unknown", "gate.sampleWorkerResources")
+		}
+		if (created || before.Status.State != laya.StateRunning) && *resources.AvailableMemory < uint64(model.MinimumMemory) {
+			return nil, layaTaskFailure("laya_resources_insufficient", "gate.layaTask")
 		}
 		raw, err := a.layaHelperOperation(ctx, "ensure", doc)
 		if err != nil {
@@ -91,6 +132,17 @@ func (a *Agent) layaTask(ctx context.Context, task contracts.Task) (json.RawMess
 			return nil, err
 		}
 		client := laya.Client{BaseURL: endpoint, Observer: layaTaskObserver(ctx)}
+		storageRaw, err := a.layaHelperOperation(ctx, "model-storage", doc)
+		if err != nil {
+			return nil, err
+		}
+		var storage layahost.Response
+		if json.Unmarshal(storageRaw, &storage) != nil || storage.Storage == nil {
+			return nil, layaTaskFailure("laya_resources_unknown", "gate.layaTask")
+		}
+		if storage.Storage.AvailableBytes < storage.Storage.RequiredBytes {
+			return nil, layaTaskFailure("laya_resources_insufficient", "gate.layaTask")
+		}
 		if err = client.PrepareModel(laya.WithTrace(ctx, task.TraceID), model, nil); err != nil {
 			var detail *laya.APIError
 			if errors.As(err, &detail) {
@@ -98,11 +150,17 @@ func (a *Agent) layaTask(ctx context.Context, task contracts.Task) (json.RawMess
 			}
 			return nil, err
 		}
-		_, err = client.Classify(laya.WithTrace(ctx, task.TraceID), laya.Request{
+		warmup := req.WarmupSeconds
+		if warmup == 0 {
+			warmup = 300
+		}
+		finishWarmup := beginTaskStage(ctx, "laya.model.warmup", "laya.Client.Warmup")
+		_, err = client.Warmup(laya.WithTrace(ctx, task.TraceID), laya.Request{
 			Model:     model.Name + "@sha256:" + laya.ModelManifestSHA256,
 			State:     "The service has started and is answering a health check.",
 			Questions: map[string]laya.Question{"health": {Type: laya.AnswerChoice, Criteria: map[string]string{"ready": "The service is ready.", "unknown": "The service state is unclear."}}},
-		})
+		}, time.Duration(warmup)*time.Second)
+		finishWarmup(err)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
@@ -197,6 +255,9 @@ func (a *Agent) workerCapabilities() contracts.CapabilityDocument {
 		caps.Components[name] = component
 	}
 	if runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64") {
+		if unit, e := os.ReadFile("/etc/systemd/system/weir-laya-prepare.service"); e == nil && strings.Contains(string(unit), "ExecStart=/opt/weir/current/weir laya prepare gate") {
+			caps.Tasks[contracts.TaskLayaPrepare] = contracts.TaskVersion
+		}
 		if doc, err := readLayaDeployment(filepath.Join(a.P.Root, "laya")); err == nil && doc.Schema == 1 && doc.Spec.Validate(doc.Policy) == nil {
 			for _, kind := range []string{contracts.TaskLayaInstall, contracts.TaskLayaRemove, contracts.TaskLayaClassify} {
 				caps.Tasks[kind] = contracts.TaskVersion

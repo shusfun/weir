@@ -2,8 +2,10 @@
 import hashlib
 import os
 import pathlib
+import signal
 import subprocess
 import tempfile
+import time
 import unittest
 
 if os.name == "posix":
@@ -83,6 +85,18 @@ class InstallCleanupTests(unittest.TestCase):
         self.install("1.3.0")
         self.assertEqual(sorted(p.name for p in (self.base / "releases").iterdir()), ["1.1.0", "1.3.0"])
 
+    def test_failed_upgrade_restores_host_units_and_installer(self):
+        self.install("1.0.0")
+        unit = self.root / "etc/systemd/system/weir-helper.service"
+        original = unit.read_bytes() + b"\n# previous host contract\n"
+        unit.write_bytes(original)
+        installer = self.root / "usr/local/lib/weir/install.sh"
+        previous_installer = installer.read_bytes()
+        self.install("1.1.0", ok=False, FAIL_SERVICE="1")
+        self.assertEqual(unit.read_bytes(), original)
+        self.assertEqual(installer.read_bytes(), previous_installer)
+        self.assertEqual((self.root / "etc/weir/role").read_text().strip(), "gate")
+
     def test_in_use_release_is_preserved_until_next_install(self):
         self.install("1.0.0")
         process = subprocess.Popen(["sleep", "60"], cwd=self.base / "releases/1.0.0")
@@ -95,6 +109,39 @@ class InstallCleanupTests(unittest.TestCase):
             process.wait(timeout=10)
         self.install("1.2.0")
         self.assertFalse((self.base / "releases/1.0.0").exists())
+
+    def test_killed_installer_recovers_durable_host_snapshot(self):
+        self.install("1.0.0")
+        unit = self.root / "etc/systemd/system/weir-helper.service"
+        original = unit.read_bytes() + b"\n# original host contract\n"
+        unit.write_bytes(original)
+        ready = self.root / "paused"
+        systemctl = self.root / "bin/systemctl"
+        systemctl.write_text('#!/bin/sh\ncase "$*" in *restart*) if [ -n "${PAUSE_FILE:-}" ]; then touch "$PAUSE_FILE"; sleep 60; fi;; esac\nexit 0\n', encoding="utf-8")
+        p = self.package("1.1.0")
+        proc = subprocess.Popen(["sh", str(p / "install.sh"), "gate"], env=dict(self.env, PAUSE_FILE=str(ready)), start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            deadline = time.monotonic() + 15
+            while not ready.exists() and time.monotonic() < deadline:
+                if proc.poll() is not None:
+                    self.fail("installer exited before crash injection")
+                time.sleep(0.02)
+            self.assertTrue(ready.exists(), "installer did not reach service activation")
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait(timeout=5)
+            pending = self.base / ".install-pending"
+            self.assertTrue((pending / "recover.sh").is_file())
+            self.assertEqual(self.pointers()[0], "releases/1.1.0")
+            result = subprocess.run(["sh", str(pending / "recover.sh"), "--boot"], env=self.env, text=True, capture_output=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(self.pointers(), ("releases/1.0.0", None))
+            self.assertEqual(unit.read_bytes(), original)
+            self.assertFalse(pending.exists())
+            self.install("1.2.0")
+        finally:
+            if proc.poll() is None:
+                os.killpg(proc.pid, signal.SIGKILL)
+                proc.wait(timeout=5)
 
     def test_symlink_release_and_manifest_escape_are_rejected(self):
         self.install("1.0.0")

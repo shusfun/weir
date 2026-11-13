@@ -22,5 +22,5 @@ func (Resource) Fields() []ent.Field {
 }
 
 func (Resource) Indexes() []ent.Index {
-	return []ent.Index{index.Fields("kind", "key").Unique()}
+	return []ent.Index{index.Fields("kind", "key").Unique(), index.Fields("kind", "owner_id", "id")}
 }

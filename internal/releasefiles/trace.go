@@ -9,6 +9,13 @@ import (
 
 type traceKey struct{}
 
+// WithTraceID resumes a durable operation without inventing a shared span.
+func WithTraceID(ctx context.Context, id string) context.Context {
+	var span [8]byte
+	_, _ = rand.Read(span[:])
+	return WithTrace(ctx, "00-"+id+"-"+hex.EncodeToString(span[:])+"-01")
+}
+
 func WithTrace(ctx context.Context, parent string) context.Context {
 	parts := strings.Split(parent, "-")
 	id := ""

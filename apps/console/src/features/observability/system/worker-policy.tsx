@@ -1,9 +1,8 @@
-import { useState } from "react";
 import { ActionGroup, Button, Collapsible, Field, Form, FormGrid, Input, Notice } from "@weir/ui";
 import { api } from "../../../api";
 import { useQuery, queryClient } from "../../../lib/query";
 import { useFormAction, useRowAction } from "../../../lib/action";
-import { useUnsavedChanges } from "../../../lib/dirty";
+import { useDraft } from "../../../lib/dirty";
 import { field, useConsoleContext } from "../../../lib/console-context";
 import { reopenDrafts } from "../../../components/draft-confirm";
 import { State } from "../../../components/feedback";
@@ -17,7 +16,7 @@ export function WorkerPolicy() {
   const history = useQuery({ queryKey: ["worker-policy-history"], queryFn: async () => (await api("/admin/workers/policy/history")).items as {revision:string; document:Policy["document"]; created_at:string}[] });
   const restore = useRowAction<string>();
   return <Collapsible title="VPS 后台任务预算">
-    {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : <BudgetForm key={q.data.revision} value={q.data} />}
+    {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : <BudgetForm value={q.data} />}
     <Collapsible title="任务预算版本">
       {history.isPending || history.error ? <State loading={history.isPending} error={history.error} onRetry={()=>history.refetch()} /> : history.data.length===0 ? <State empty="尚无已确认的预算修改" /> : history.data.map(version=><ActionGroup key={version.revision}>
         <span className="min-w-0 break-all font-mono text-meta">{date(version.created_at)} · {version.revision}</span>
@@ -31,14 +30,13 @@ export function WorkerPolicy() {
 }
 
 function BudgetForm({ value }: { value: Policy }) {
-  const [budget, setBudget] = useState(value.effective);
-  const changed = JSON.stringify(budget) !== JSON.stringify(value.effective);
-  useUnsavedChanges(changed);
+  const draft = useDraft(value.effective);
+  const budget = draft.value, setBudget = draft.set, changed = draft.changed;
   useConsoleContext({ form: [field("concurrency", "VPS 后台并发", budget.concurrency), field("bandwidth_bytes_per_second", "后台收发正文预算", budget.bandwidth_bytes_per_second)] });
   const save = useFormAction(() => api("/admin/workers/policy/draft", "POST", {
     text: JSON.stringify({ ...value.document, site: { ...value.document.site, ...budget } }),
   }), { ok: "预算差异已生成，管理员确认后生效", fields: { worker_policy_invalid: "budget" },
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["ai-drafts"] }); reopenDrafts(); } });
+    onSuccess: () => { draft.commit(); void queryClient.invalidateQueries({ queryKey: ["ai-drafts"] }); reopenDrafts(); } });
   return <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
     <Notice>默认后台单并发，大文件始终单并发。带宽限制按每台 VPS 的后台 HTTP 正文收发合计计算；配置同步、心跳和计量独立运行。</Notice>
     <FormGrid>

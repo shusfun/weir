@@ -24,6 +24,7 @@ func lockKey(name string) int64 {
 }
 
 func (l pgLocker) Do(ctx context.Context, name string, fn func(ctx context.Context) error) error {
+	started := time.Now()
 	key := lockKey(name)
 	var conn *sql.Conn
 	for {
@@ -52,6 +53,7 @@ func (l pgLocker) Do(ctx context.Context, name string, fn func(ctx context.Conte
 		case <-timer.C:
 		}
 	}
+	recordLock(ctx, started)
 	defer func() {
 		release, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -75,25 +77,41 @@ func discardLockConn(conn *sql.Conn) {
 
 type localLocker struct {
 	mu    sync.Mutex
-	locks map[string]chan struct{}
+	locks map[string]*localLock
 }
 
-func newLocalLocker() *localLocker { return &localLocker{locks: map[string]chan struct{}{}} }
+type localLock struct {
+	slot  chan struct{}
+	users int
+}
+
+func newLocalLocker() *localLocker { return &localLocker{locks: map[string]*localLock{}} }
 
 func (l *localLocker) Do(ctx context.Context, name string, fn func(ctx context.Context) error) error {
 	l.mu.Lock()
 	m, ok := l.locks[name]
 	if !ok {
-		m = make(chan struct{}, 1)
+		m = &localLock{slot: make(chan struct{}, 1)}
 		l.locks[name] = m
 	}
+	m.users++
 	l.mu.Unlock()
+	defer func() {
+		l.mu.Lock()
+		m.users--
+		if m.users == 0 {
+			delete(l.locks, name)
+		}
+		l.mu.Unlock()
+	}()
+	started := time.Now()
 	select {
-	case m <- struct{}{}:
+	case m.slot <- struct{}{}:
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-	defer func() { <-m }()
+	recordLock(ctx, started)
+	defer func() { <-m.slot }()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
