@@ -278,28 +278,7 @@ func (s *Server) serveSub(c *gin.Context) {
 		failDetail(c, 422, "subscription_no_nodes", "没有可输出的代理节点", nil)
 		return
 	}
-	var body []byte
-	contentType := "application/json"
-	if target == "weir" {
-		body, err = json.Marshal(s.weirSubscription(ctx, u, l, p))
-	} else {
-		plan, items := s.subPlan(ctx, p)
-		if target == "base64" {
-			info := []subout.Item{}
-			for _, link := range subscriptionInfoLinks(u, l) {
-				info = append(info, subout.Item{Link: link})
-			}
-			items = append(info, items...)
-		}
-		origin := s.siteOrigin(c)
-		switch target {
-		case "clash", "mihomo":
-			plan.Providers = func(key string) string { return origin + "/sub/" + l.Token + "/provider/" + url.PathEscape(key) }
-		case "surge":
-			plan.ManagedURL = origin + "/sub/" + l.Token + "?target=surge"
-		}
-		body, contentType, err = subout.RenderPlan(items, target, plan)
-	}
+	body, contentType, err := s.renderSubscription(c, u, l, p, target)
 	if err != nil {
 		s.recordPull(c, l, target, "failed")
 		failDetail(c, 422, "format_conversion_failed", err.Error(), nil)
@@ -428,4 +407,76 @@ func (s *Server) subInfo(c *gin.Context) {
 	start, end := linkWindow(u, l)
 	c.JSON(200, gin.H{"name": l.Name, "quota": u.Quota, "unlimited": u.Unlimited, "used": u.Used, "expires_at": end, "starts_at": start, "state": windowState(u, l, time.Now()), "next_reset": resetHint(u),
 		"formats": subout.Formats, "url": s.siteOrigin(c) + "/sub/" + l.Token, "nodes": nodes})
+}
+
+// Preview and client output share rendering; only the client route records a pull.
+func (s *Server) renderSubscription(c *gin.Context, u *ent.User, l *ent.Link, p planned, target string) ([]byte, string, error) {
+	ctx := c.Request.Context()
+	var err error
+	var body []byte
+	contentType := "application/json"
+	if target == "weir" {
+		body, err = json.Marshal(s.weirSubscription(ctx, u, l, p))
+	} else {
+		plan, items := s.subPlan(ctx, p)
+		if target == "base64" {
+			info := []subout.Item{}
+			for _, link := range subscriptionInfoLinks(u, l) {
+				info = append(info, subout.Item{Link: link})
+			}
+			items = append(info, items...)
+		}
+		origin := s.siteOrigin(c)
+		switch target {
+		case "clash", "mihomo":
+			plan.Providers = func(key string) string { return origin + "/sub/" + l.Token + "/provider/" + url.PathEscape(key) }
+		case "surge":
+			plan.ManagedURL = origin + "/sub/" + l.Token + "?target=surge"
+		}
+		body, contentType, err = subout.RenderPlan(items, target, plan)
+	}
+	return body, contentType, err
+}
+
+func (s *Server) previewSubscription(c *gin.Context) {
+	u, ok := s.proxySubject(c, false)
+	if !ok {
+		return
+	}
+	id, _ := strconv.Atoi(c.Query("link_id"))
+	q := s.Store.Ent.Link.Query().Where(link.UserIDEQ(u.ID))
+	if id > 0 {
+		q.Where(link.IDEQ(id))
+	}
+	l, err := q.Order(ent.Asc(link.FieldID)).First(c.Request.Context())
+	if ent.IsNotFound(err) {
+		failure(c, 404, "subscription_not_found")
+		return
+	}
+	if err != nil {
+		failInternal(c, 503, "query_failed", err)
+		return
+	}
+	target := c.DefaultQuery("target", "clash")
+	entries, err := s.linkEntries(c.Request.Context(), u, l)
+	if err != nil {
+		failInternal(c, 503, "subscription_unavailable", err)
+		return
+	}
+	p, err := s.planEntries(c.Request.Context(), u, entries, true)
+	if err != nil {
+		failInternal(c, 503, "subscription_unavailable", err)
+		return
+	}
+	if len(p.Entries) == 0 {
+		failure(c, 422, "subscription_no_nodes")
+		return
+	}
+	body, contentType, err := s.renderSubscription(c, u, l, p, target)
+	if err != nil {
+		failure(c, 422, "format_conversion_failed")
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(200, gin.H{"body": string(body), "content_type": contentType, "link_id": l.ID, "link_name": l.Name, "target": target})
 }

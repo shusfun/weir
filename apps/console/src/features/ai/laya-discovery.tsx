@@ -13,7 +13,7 @@ export function LayaDiscovery({ url, model, apiKey, onAttached }: { url: string;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  useConsoleContext({ notices: ["发现已有 Laya 实例；不扫描端口、不安装或替换服务。确认后才保存并启用接入。"], ...(selected ? { dialog: { title: "确认接入已有 Laya" } } : {}) });
+  useConsoleContext({ notices: ["发现已有 Laya 实例；不扫描端口、不安装或替换服务。确认后保存为停用配置，推理测试通过后再启用。"], ...(selected ? { dialog: { title: "确认接入已有 Laya" } } : {}) });
   async function discover(defaults: boolean) {
     setBusy(true); setError(""); setNotice(""); setItems(null);
     try { const data = await api("/admin/defense/laya/discover", "POST", defaults ? {} : { url, model, key: apiKey }); setItems(data.items as Instance[]); }
@@ -25,7 +25,7 @@ export function LayaDiscovery({ url, model, apiKey, onAttached }: { url: string;
     setBusy(true); setError("");
     try {
       await api(`/admin/defense/laya/attach/${selected.preview_id}`, "POST");
-      setSelected(null); setItems(null); setNotice("已保存并启用接入；后台分析继续受兼容档案和总开关限制。"); onAttached();
+      setSelected(null); setItems(null); setNotice("已保存接入配置；请测试推理，通过后再启用判断。"); onAttached();
       await Promise.all([client.invalidateQueries({ queryKey: ["laya"] }), client.invalidateQueries({ queryKey: ["observe-system-health"] })]);
     } catch (e) { setError(e instanceof Error ? e.message : "接入失败，请重新发现并核对实例"); }
     finally { setBusy(false); }
@@ -48,8 +48,8 @@ export function LayaDiscovery({ url, model, apiKey, onAttached }: { url: string;
       {error && !selected && <Notice tone="bad">{error}</Notice>}
     </div>
     <Dialog open={selected !== null} onOpenChange={(open) => { if (!open && !busy) { setSelected(null); setError(""); } }}>
-      <DialogContent><DialogHeader><DialogTitle>确认接入已有 Laya</DialogTitle><DialogDescription>确认会保存此地址、模型和 API Key，并启用判断；不会安装或替换运行时。</DialogDescription></DialogHeader>
-        {selected && <div className="stack"><p className="break-all">地址：{selected.url}</p><p>实际版本：{selected.runtime_version ?? "未知"} · 模型：{selected.model}</p><p className="break-all">模型摘要：{selected.model_digest ?? "未知"}</p><Notice>已验证范围：{selected.compatibility?.verified_range ?? "未知"}。{selected.compatibility?.enable_background ? "版本符合兼容档案。" : selected.compatibility?.reason ?? "后台分析暂停。"} 推理尚未检测，可在接入后手动测试。</Notice></div>}
+      <DialogContent><DialogHeader><DialogTitle>确认接入已有 Laya</DialogTitle><DialogDescription>确认会保存此地址、模型和 API Key，判断保持停用；推理测试通过后再启用。</DialogDescription></DialogHeader>
+        {selected && <div className="stack"><p className="break-all">地址：{selected.url}</p><p>实际版本：{selected.runtime_version ?? "未知"} · 模型：{selected.model}</p><p className="break-all">模型摘要：{selected.model_digest ?? "未知"}</p><Notice>已验证范围：{selected.compatibility?.verified_range ?? "未知"}。{selected.compatibility?.enable_background ? "版本符合兼容档案。" : selected.compatibility?.reason ?? "后台分析暂停。"} 推理尚未检测，保存后须先测试，再启用判断。</Notice></div>}
         <DialogFooter error={error}><Button type="button" variant="ghost" disabled={busy} onClick={() => { setSelected(null); setError(""); }}>取消</Button><Button type="button" busy={busy} busyText="正在确认接入…" disabled={busy || !selected?.preview_id} onClick={() => void attach()}>确认接入</Button></DialogFooter>
       </DialogContent>
     </Dialog>

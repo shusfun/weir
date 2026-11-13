@@ -67,6 +67,13 @@ export function GatesPage() {
     if (gate) navigate(`/gates/${gate}`, { replace: true });
     else if (node) navigate(`/nodes/${node}`, { replace: true });
   }, [params, navigate]);
+  useEffect(() => {
+    const id = Number(params.get("new"));
+    const editId = Number(params.get("edit"));
+    if (id > 0 && gates.data?.some(g => g.id === id)) setWizard(id);
+    if (editId > 0) { const target = gates.data?.find(g => g.id === editId); if (target) setEdit(target); }
+  }, [params, gates.data]);
+  const clearAction = () => setParams(p => { p.delete("new"); p.delete("edit"); return p; }, { replace: true });
   const detailParam = useDialogParam("gate", gates.data, !gates.isFetching);
   const nodeParam = useDialogParam("node", nodes.data, !nodes.isFetching);
   const detail = detailParam.current;
@@ -117,11 +124,11 @@ export function GatesPage() {
       {detail && <GateDetail gate={detail} nodes={nodes.data ?? []} close={detailParam.close} />}
       {nodeParam.current && <NodeDetail node={nodeParam.current} gate={gateOf(nodeParam.current)} nodes={nodes.data ?? []} close={nodeParam.close} changed={() => void refresh()} />}
 
-      {edit && <GateEdit gate={edit} close={() => setEdit(null)} saved={() => { setEdit(null); toast("已保存", { tone: "ok" }); void refresh(); }} />}
+      {edit && <GateEdit gate={edit} close={() => { setEdit(null); clearAction(); }} saved={() => { setEdit(null); clearAction(); toast("已保存", { tone: "ok" }); void refresh(); }} />}
       <NodeWizard
         open={wizard !== null}
         gateId={typeof wizard === "number" ? wizard : undefined}
-        close={() => setWizard(null)}
+        close={() => { setWizard(null); clearAction(); }}
         done={() => { toast("节点已创建", { tone: "ok" }); void refresh(); }}
         gates={gates.data ?? []}
         nodes={nodes.data ?? []}

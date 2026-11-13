@@ -89,9 +89,9 @@ export function OpsOverview() {
   const normal = (observations.data ?? []).filter((o) => o.verdict?.outcome === "not_needed");
   const shown = (observations.data ?? []).filter((o) => o.verdict?.outcome !== "not_needed").slice(0, 4);
   // 进度环：一件事的五步里走到了第几步；有待确认的草稿就在第 3 步（等你确认）
-  const done = drafts.isPending ? null : pending.length > 0 ? 2 : recordList.some((r) => r.status === "drafting") ? 1 : recordList.some((r) => r.status === "judging") ? 0 : 5;
+  const done = drafts.isPending ? null : pending.length > 0 ? 2 : recordList.some((r) => r.status === "drafting") ? 1 : recordList.some((r) => r.status === "judging") ? 0 : null;
   const title = drafts.isPending ? "运行观测" : pending.length > 0 ? <>{pending.length} 份草稿<br />等你确认</> : "没有要你确认的事";
-  const lead = observations.isPending ? "正在读取 Laya 的判断。" : observations.error ? "Laya 的判断读取失败，结果未知。" : `Laya 今天看了 ${today.length} 条观测，${needed.length} 条需要处理，已经自动交给 dsh 起草。其余的你不用管。`;
+  const lead = observations.isPending ? "正在读取 Laya 的判断。" : observations.error ? "Laya 的判断读取失败，结果未知。" : `最近取得的观测中，今天 ${today.length} 条，${needed.length} 条判断需要处理。是否已起草或执行，请查看对应记录。`;
   const recordOf = (d: Draft) => recordList.find((r) => r.draft_id === d.id);
   const stack = column === "pending" ? [] : (column === "blocked" ? blocked : applied).slice(0, 5);
   return (
@@ -102,7 +102,7 @@ export function OpsOverview() {
           <h1 className="m-0 text-hero font-bold tracking-[-0.035em]">{title}</h1>
           <p className="mt-[13px] mb-0 max-w-[521px] text-lead text-[var(--weir-ink-2)]">{lead}</p>
         </div>
-        <DotRing className="max-lg:hidden" done={done} total={5} caption="处理进度" label={pending.length > 0 ? "等你确认" : done === 5 ? "都处理完了" : "处理中"} />
+        <DotRing className="max-lg:hidden" done={done} total={5} caption="处理进度" label={pending.length > 0 ? "等你确认" : done == null ? "处理状态未知" : "处理中"} />
       </section>
       <section className="weir-observe-columns">
         <div>
@@ -143,7 +143,7 @@ export function OpsOverview() {
           )}
         </div>
       </section>
-      <p className="m-0 text-meta text-[var(--weir-ink-3)]">更新于 {date(new Date().toISOString())}</p>
+      <p className="m-0 text-meta text-[var(--weir-ink-3)]">数据更新于 {observations.dataUpdatedAt ? date(new Date(observations.dataUpdatedAt).toISOString()) : "未知"}</p>
     </>
   );
 }

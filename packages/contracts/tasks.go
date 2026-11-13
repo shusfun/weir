@@ -130,12 +130,14 @@ type WorkerResources struct {
 // ComponentObservation is a bounded runtime observation, separate from stable
 // capabilities. A running process does not imply a successful inference.
 type ComponentObservation struct {
-	State      string    `json:"state"`
-	Code       string    `json:"code,omitempty"`
-	ObservedAt time.Time `json:"observed_at"`
-	Version    string    `json:"version,omitempty"`
-	Model      string    `json:"model,omitempty"`
-	Digest     string    `json:"digest,omitempty"`
+	ImageDigest       string    `json:"image_digest,omitempty"`
+	DeploymentVersion string    `json:"deployment_version,omitempty"`
+	State             string    `json:"state"`
+	Code              string    `json:"code,omitempty"`
+	ObservedAt        time.Time `json:"observed_at"`
+	Version           string    `json:"version,omitempty"`
+	Model             string    `json:"model,omitempty"`
+	Digest            string    `json:"digest,omitempty"`
 }
 
 func (o ComponentObservation) Validate() error {
@@ -144,7 +146,7 @@ func (o ComponentObservation) Validate() error {
 	default:
 		return errors.New("invalid component state")
 	}
-	if o.ObservedAt.IsZero() || len(o.Version) > 100 || len(o.Model) > 100 || len(o.Digest) > 200 || o.Code != "" && !taskErrorCode.MatchString(o.Code) {
+	if o.ObservedAt.IsZero() || len(o.ImageDigest) > 100 || len(o.DeploymentVersion) > 100 || len(o.Version) > 100 || len(o.Model) > 100 || len(o.Digest) > 200 || o.Code != "" && !taskErrorCode.MatchString(o.Code) {
 		return errors.New("invalid component observation")
 	}
 	return nil

@@ -728,6 +728,78 @@ func TestStandaloneLocalGateInCenterProcess(t *testing.T) {
 		}
 	}
 	t.Logf("local gate online inside center pid %d (helper pid %d)", centerProc.Process.Pid, helper.Process.Pid)
+	identities := map[string][]byte{}
+	identities[agent], err = os.ReadFile(agent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"remote-b", "remote-c"} {
+		root := filepath.Join(dir, name)
+		p := gate.Paths{Config: filepath.Join(root, "agent.json"), Data: filepath.Join(root, "data"), Socket: filepath.Join(root, "helper.sock"), KernelsDir: filepath.Join(root, "kernels"), CoresDir: filepath.Join(root, "cores"), CertsDir: filepath.Join(root, "certs"), Root: root}
+		code, invite := call(t, admin, "POST", base+"/api/v1/admin/gates/invite", map[string]string{"name": name})
+		if code != 201 {
+			t.Fatalf("remote invite = %d", code)
+		}
+		if err := gate.Pair(ctx, p, base, invite["token"].(string), name, "", false); err != nil {
+			t.Fatal(err)
+		}
+		identities[p.Config], err = os.ReadFile(p.Config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h := gate.NewHelper(p)
+		go func() { _ = gate.ServeHelper(ctx, h) }()
+		a, err := gate.NewAgent(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		a.HeartbeatEvery, a.MeterEvery, a.ReportEvery = time.Second, time.Second, 1
+		go func() { _ = a.Run(ctx) }()
+	}
+	freshAfter := time.Time{}
+	allOnline := func() bool {
+		_, v := call(t, admin, "GET", base+"/api/v1/admin/gates", nil)
+		items, _ := v["items"].([]any)
+		if len(items) != 3 {
+			return false
+		}
+		for _, item := range items {
+			g := item.(map[string]any)
+			if g["online"] != true || g["applied_revision"] != g["config_revision"] {
+				return false
+			}
+			seen, _ := time.Parse(time.RFC3339Nano, fmt.Sprint(g["last_seen_at"]))
+			if !seen.After(freshAfter) {
+				return false
+			}
+		}
+		return true
+	}
+	eventually(t, 45*time.Second, "local Gate and two remote Gates apply configurations", allOnline)
+	if err := centerProc.Process.Signal(os.Interrupt); err != nil {
+		t.Fatal(err)
+	}
+	if err := centerProc.Wait(); err != nil {
+		t.Fatalf("center shutdown: %v", err)
+	}
+	freshAfter = time.Now()
+	centerProc = start("center", "--config", cfg, "--serve", "--listen", "127.0.0.1:19899", "--local-gate", agent)
+	eventually(t, 15*time.Second, "center restarts", func() bool {
+		r, err := http.Get(base + "/healthz")
+		if err != nil {
+			return false
+		}
+		defer r.Body.Close()
+		return r.StatusCode == 200
+	})
+	eventually(t, 45*time.Second, "all three Gates survive center restart", allOnline)
+	for path, before := range identities {
+		after, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(before, after) {
+			t.Fatal("device identity changed across center restart")
+		}
+	}
+	t.Logf("center pid %d manages local Gate and two remote Gates; all three identities retained", centerProc.Process.Pid)
 }
 
 // listenSockets 读出容器里处于监听的 TCP 套接字：地址是否回环、端口与所属进程。

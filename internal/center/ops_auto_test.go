@@ -49,7 +49,7 @@ func waitOpsRecord(t *testing.T, admin *testClient, done func(map[string]any) bo
 func TestOpsAutoDraftsAfterKernelCrash(t *testing.T) {
 	s, admin := newInstalledServer(t)
 	laya := opsLaya(t, "suspicious")
-	mustJSON(t, admin, "PUT", "/api/v1/admin/defense/laya", map[string]any{"enabled": true, "url": laya.URL, "model": "observer"}, 200)
+	saveVerifiedLayaFixture(t, s, admin, map[string]any{"url": laya.URL, "model": "observer"})
 	g := pairFakeGate(t, admin)
 	var runs atomic.Int32
 	s.dsh.jobRunner = func(ctx context.Context, req dsh.JobRequest) (dsh.JobResult, error) {
@@ -94,7 +94,7 @@ func TestOpsAutoDraftsAfterKernelCrash(t *testing.T) {
 func TestOpsAutoSkipsWhenLayaSaysNotNeeded(t *testing.T) {
 	s, admin := newInstalledServer(t)
 	laya := opsLaya(t, "normal")
-	mustJSON(t, admin, "PUT", "/api/v1/admin/defense/laya", map[string]any{"enabled": true, "url": laya.URL, "model": "observer"}, 200)
+	saveVerifiedLayaFixture(t, s, admin, map[string]any{"url": laya.URL, "model": "observer"})
 	g := pairFakeGate(t, admin)
 	s.dsh.jobRunner = func(context.Context, dsh.JobRequest) (dsh.JobResult, error) {
 		t.Error("dsh must not run when Laya says not needed")

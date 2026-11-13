@@ -209,7 +209,7 @@ function NotifyForm({ value, saved }: { value: NotifyView; saved: () => void }) 
   );
 }
 
-interface WebdavView { url: string; username: string; password_set: boolean; keep: number; auto: boolean; hours: number; last_run_at?: string | null; last_error?: string }
+interface WebdavView { revision: string; url: string; username: string; password_set: boolean; keep: number; auto: boolean; hours: number; last_run_at?: string | null; last_error?: string }
 interface WebdavFile { name: string; size: number; modified?: string }
 interface ImportStats { sources: number; nodes: number; profiles: number; templates: number; skipped: string[] | null }
 
@@ -289,18 +289,22 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
   const [re, setRe] = useState(emptyReauth);
   const [files, setFiles] = useState<WebdavFile[] | null>(null);
   const [stats, setStats] = useState<ImportStats | null>(null);
-  const set = (p: Partial<typeof f>) => setF({ ...f, ...p });
+  const [baseline, setBaseline] = useState(JSON.stringify(f));
+  const dirty = baseline !== JSON.stringify(f);
+  useUnsavedChanges(dirty);
+  const [revision, setRevision] = useState("");
+  const set = (p: Partial<typeof f>) => { setF({ ...f, ...p }); setFiles(null); setRevision(""); };
   const save = useFormAction(() => api("/admin/backup/webdav", "PUT", { ...f, keep: Number(f.keep) || 10, hours: Number(f.hours) || 24 }), {
     ok: "已保存",
     fields: { invalid_webdav_url: "url" },
-    onSuccess: saved,
+    onSuccess: () => { const clean = { ...f, password: "" }; setF(clean); setBaseline(JSON.stringify(clean)); setFiles(null); setRevision(""); saved(); },
   });
   // 要导入的文件：用 ref 传给请求，避免读到上一次渲染的值；state 只用于按钮文案
   const target = useRef("");
   const [restoring, setRestoring] = useState("");
-  const restore = useReauthAction(() => api("/admin/backup/webdav/restore", "POST", { file: target.current, ...re }) as Promise<ImportStats>, { ok: "导入完成", onSuccess: setStats });
+  const restore = useReauthAction(() => api("/admin/backup/webdav/restore", "POST", { file: target.current, revision, ...re }) as Promise<ImportStats>, { ok: "导入完成", onSuccess: setStats });
   const { run, isBusy, waitFor } = useRowAction();
-  const busy = save.busy || restore.busy;
+  const busy = save.busy || restore.busy || isBusy();
   return (
     <>
       <Form busy={busy} errors={save.errors} onSubmit={() => void save.submit()}>
@@ -323,18 +327,19 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
         <div className="actions">
           <Button type="submit" disabled={busy} busy={save.busy} busyText="正在保存…">保存</Button>
           {value.url && (
-            <Button type="button" variant="outline" disabled={isBusy()} busy={isBusy("run")} busyText="正在备份…" onClick={() => void run("run", (track) => api("/admin/backup/webdav/run", "POST", {}, track), "备份已上传", { wait: { label: "正在上传备份到 WebDAV", max: 30 } }).then((ok) => ok && saved())}>
+            <Button type="button" variant="outline" disabled={busy || dirty} busy={isBusy("run")} busyText="正在备份…" onClick={() => void run("run", (track) => api("/admin/backup/webdav/run", "POST", {}, track), "备份已上传", { wait: { label: "正在上传备份到 WebDAV", max: 30 } }).then((ok) => ok && saved())}>
               立即备份
             </Button>
           )}
           {value.url && (
-            <Button type="button" variant="outline" disabled={isBusy()} busy={isBusy("files")} busyText="正在读取…" onClick={() => void run("files", async () => setFiles((await api("/admin/backup/webdav/files")).files), undefined, { wait: { label: "正在读取 WebDAV 目录", max: 30 } })}>
+            <Button type="button" variant="outline" disabled={busy || dirty} busy={isBusy("files")} busyText="正在读取…" onClick={() => void run("files", async () => { const result = await api("/admin/backup/webdav/files"); setFiles(result.files); setRevision(result.revision); }, undefined, { wait: { label: "正在读取 WebDAV 目录", max: 30 } })}>
               查看备份
             </Button>
           )}
           <ActionsWait wait={waitFor("run") || waitFor("files")} />
         </div>
       </Form>
+      {dirty && <Notice>配置有未保存修改，请先保存再备份、读取目录或恢复。</Notice>}
       {files &&
         (files.length === 0 ? (
           <State empty="目录里还没有备份" />
@@ -349,7 +354,7 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={busy}
+                    disabled={busy || dirty || !revision}
                     onClick={async () => {
                       // 导入需要当前密码：未填写时在密码栏下提示，不弹确认框
                       if (!restoreForm.current?.reportValidity()) return;

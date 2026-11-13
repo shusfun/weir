@@ -28,20 +28,20 @@ type nodeProbeState struct {
 }
 
 type nodeTestResult struct {
-	Status       string          `json:"status"`
-	Why          string          `json:"why,omitempty"`
-	TCP          nodeprobe.Check `json:"tcp"`
-	UDP          nodeprobe.Check `json:"udp"`
-	At           time.Time       `json:"at"`
-	JobID        string          `json:"job_id"`
-	TraceID      string          `json:"trace_id"`
-	Location     string          `json:"location"` // center / colocated
-	ExecutionGateID int          `json:"execution_gate_id,omitempty"`
-	External     string          `json:"external"` // passed / failed / unknown
-	UserID       int             `json:"user_id,omitempty"`
-	LinkID       int             `json:"link_id,omitempty"`
-	CredentialID int             `json:"credential_id,omitempty"`
-	Binding      string          `json:"-"`
+	Status          string          `json:"status"`
+	Why             string          `json:"why,omitempty"`
+	TCP             nodeprobe.Check `json:"tcp"`
+	UDP             nodeprobe.Check `json:"udp"`
+	At              time.Time       `json:"at"`
+	JobID           string          `json:"job_id"`
+	TraceID         string          `json:"trace_id"`
+	Location        string          `json:"location"` // center / colocated
+	ExecutionGateID int             `json:"execution_gate_id,omitempty"`
+	External        string          `json:"external"` // passed / failed / unknown
+	UserID          int             `json:"user_id,omitempty"`
+	LinkID          int             `json:"link_id,omitempty"`
+	CredentialID    int             `json:"credential_id,omitempty"`
+	Binding         string          `json:"-"`
 }
 
 type storedNodeTest struct {
@@ -63,12 +63,15 @@ func (s *Server) nodeTestJob(id int) (Job, bool) {
 // A fixed path keeps the bearer credential out of proxy access logs.
 func (s *Server) nodeTestDownload(c *gin.Context) {
 	token := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
-	if validTraceHex(token,48) {
-		_,found,err:=s.Store.KV.GetDel(c.Request.Context(),"node-probe-grant:"+digest(token))
-		if err!=nil {failure(c,503,"probe_grant_unavailable");return}
+	if validTraceHex(token, 48) {
+		_, found, err := s.Store.KV.GetDel(c.Request.Context(), "node-probe-grant:"+digest(token))
+		if err != nil {
+			failure(c, 503, "probe_grant_unavailable")
+			return
+		}
 		if found {
-			c.Header("Cache-Control","no-store")
-			c.Data(http.StatusOK,"application/octet-stream",nodeprobe.Payload(token))
+			c.Header("Cache-Control", "no-store")
+			c.Data(http.StatusOK, "application/octet-stream", nodeprobe.Payload(token))
 			return
 		}
 	}
@@ -100,11 +103,17 @@ func (s *Server) probeGrant() (string, func()) {
 	return token, func() { s.nodeProbes.Lock(); delete(s.nodeProbes.targets, token); s.nodeProbes.Unlock() }
 }
 
-func (s *Server) issueProbeGrant(ctx context.Context) (string,func(),error) {
-	token:=randomHex(24)
-	key:="node-probe-grant:"+digest(token)
-	if err:=s.Store.KV.Set(ctx,key,"1",3*time.Minute);err!=nil {return "",func(){},err}
-	return token,func(){cleanup,cancel:=context.WithTimeout(context.WithoutCancel(ctx),3*time.Second);defer cancel();_ = s.Store.KV.Del(cleanup,key)},nil
+func (s *Server) issueProbeGrant(ctx context.Context) (string, func(), error) {
+	token := randomHex(24)
+	key := "node-probe-grant:" + digest(token)
+	if err := s.Store.KV.Set(ctx, key, "1", 3*time.Minute); err != nil {
+		return "", func() {}, err
+	}
+	return token, func() {
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+		defer cancel()
+		_ = s.Store.KV.Del(cleanup, key)
+	}, nil
 }
 
 func (s *Server) probeSlots() chan struct{} {
@@ -125,15 +134,31 @@ func (s *Server) startDeployedNodeTest(c *gin.Context) {
 		failDetail(c, 422, "node_test_failed", "节点已停用", nil)
 		return
 	}
-	var execution struct {GateID int `json:"gate_id"`}
-	if c.Request.ContentLength != 0 && !bindWorker(c,&execution,4096) {return}
-	if execution.GateID<0 {failure(c,400,"invalid_gate_id");return}
-	if execution.GateID>0 {
-		g,err:=s.Store.Ent.Gate.Get(c.Request.Context(),execution.GateID)
-		if err!=nil || !gateOnline(g) {failure(c,422,"probe_gate_unavailable");return}
-		supported,err:=s.gateSupportsTask(c.Request.Context(),g,contracts.TaskNodeProbe,0)
-		if err!=nil {failInternal(c,503,"capabilities_unavailable",err);return}
-		if !supported {failure(c,409,"agent_upgrade_required");return}
+	var execution struct {
+		GateID int `json:"gate_id"`
+	}
+	if c.Request.ContentLength != 0 && !bindWorker(c, &execution, 4096) {
+		return
+	}
+	if execution.GateID < 0 {
+		failure(c, 400, "invalid_gate_id")
+		return
+	}
+	if execution.GateID > 0 {
+		g, err := s.Store.Ent.Gate.Get(c.Request.Context(), execution.GateID)
+		if err != nil || !gateOnline(g) {
+			failure(c, 422, "probe_gate_unavailable")
+			return
+		}
+		supported, err := s.gateSupportsTask(c.Request.Context(), g, contracts.TaskNodeProbe, 0)
+		if err != nil {
+			failInternal(c, 503, "capabilities_unavailable", err)
+			return
+		}
+		if !supported {
+			failure(c, 409, "agent_upgrade_required")
+			return
+		}
 	}
 	id, actor, ip := n.ID, c.GetInt("user_id"), c.ClientIP()
 	ht, _ := c.Request.Context().Value(httpTraceKey{}).(httpTrace)
@@ -148,15 +173,37 @@ func (s *Server) startDeployedNodeTest(c *gin.Context) {
 		s.nodeProbes.jobs = map[int]string{}
 	}
 	jobID := nodeTestJobID(id) + ":" + randomHex(6)
+	gate, err := s.Store.Ent.Gate.Get(c.Request.Context(), n.GateID)
+	if err != nil {
+		s.nodeProbes.Unlock()
+		failure(c, 404, "gate_not_found")
+		return
+	}
+	binding, err := s.probeFingerprint(c.Request.Context(), n, gate)
+	if err != nil {
+		s.nodeProbes.Unlock()
+		failInternal(c, 503, "probe_unavailable", err)
+		return
+	}
+	if ht.ID == "" {
+		ht = newHTTPTrace(request)
+	}
+	queued := pendingNodeProbe{NodeID: id, Actor: actor, Binding: binding, Trace: ht, Deployed: true, ExecutionGateID: execution.GateID}
+	queuedJSON, _ := json.Marshal(queued)
+	if err := s.Store.KV.Set(c.Request.Context(), pendingNodeProbePrefix+itoa(id), string(queuedJSON), 0); err != nil {
+		s.nodeProbes.Unlock()
+		failInternal(c, 503, "probe_queue_unavailable", err)
+		return
+	}
 	s.nodeProbes.jobs[id] = jobID
 	j := s.jobs.StartWith(jobSpec{ID: jobID, Kind: "action", Title: "实测节点「" + n.Name + "」", Owner: actor, Trace: ht.ID, CancelMsg: "节点测试已取消"},
 		func(ctx context.Context, job JobRun) (map[string]any, error) {
-			ctx=context.WithValue(ctx,nodeProbeExecutionKey{},execution.GateID)
+			ctx = context.WithValue(ctx, nodeProbeExecutionKey{}, execution.GateID)
 			ctx = context.WithValue(withTrace(ctx, request), httpTraceKey{}, ht)
 			ctx = context.WithValue(ctx, jobCtxKey{}, &job)
 			s.state.RLock()
 			defer s.state.RUnlock()
-			initial := nodeTestResult{Status: "running", JobID: jobID, TraceID: ht.ID, At: time.Now().UTC(), TCP: nodeprobe.Check{Status: "unknown"}, UDP: nodeprobe.Check{Status: "unknown"}, External: "unknown"}
+			initial := nodeTestResult{Status: "running", JobID: jobID, TraceID: ht.ID, At: time.Now().UTC(), Binding: binding, TCP: nodeprobe.Check{Status: "unknown"}, UDP: nodeprobe.Check{Status: "unknown"}, External: "unknown"}
 			if err := s.storeNodeTest(ctx, id, initial); err != nil {
 				return nil, err
 			}
@@ -171,15 +218,16 @@ func (s *Server) startDeployedNodeTest(c *gin.Context) {
 				r.TCP, r.UDP = nodeprobe.Check{Status: "unknown"}, nodeprobe.Check{Status: "unknown"}
 			}
 			r.At = time.Now().UTC()
+			r.Binding = binding
 			if err := s.storeNodeTest(cleanup, id, r); err != nil {
-				r.Status, r.Why, r.External, r.Binding = "unknown", "业务配置已变化，本次结果已失效", "unknown", ""
+				r.Status, r.Why, r.External = "unknown", "业务配置已变化或结果保存失败，本次结果未知", "unknown"
 				r.TCP, r.UDP = nodeprobe.Check{Status: "unknown"}, nodeprobe.Check{Status: "unknown"}
-				if saveErr := s.storeNodeTest(cleanup, id, r); saveErr != nil {
-					slog.Error("node test result", "trace", ht.ID, "node", id, "err", redact(saveErr.Error()))
-				}
+				slog.Error("node test result", "trace", ht.ID, "node", id, "err", redact(err.Error()))
+			} else if err := s.clearPendingNodeProbe(cleanup, pendingNodeProbePrefix+itoa(id), string(queuedJSON)); err != nil {
+				slog.Error("node test queue receipt", "trace", ht.ID, "node", id, "err", redact(err.Error()))
 			}
 			_, auditErr := s.Store.Ent.Audit.Create().SetActor(actor).SetAction("node.test").SetTarget("node:" + itoa(id)).SetResult(r.Status).SetIP(ip).
-				SetDetail(map[string]any{"trace_id": ht.ID, "request_id": request, "job_id": r.JobID, "user_id": r.UserID, "link_id": r.LinkID, "location":r.Location,"execution_gate_id":r.ExecutionGateID,"tcp": r.TCP.Status, "udp": r.UDP.Status}).Save(cleanup)
+				SetDetail(map[string]any{"trace_id": ht.ID, "request_id": request, "job_id": r.JobID, "user_id": r.UserID, "link_id": r.LinkID, "location": r.Location, "execution_gate_id": r.ExecutionGateID, "tcp": r.TCP.Status, "udp": r.UDP.Status}).Save(cleanup)
 			if auditErr != nil {
 				slog.Error("node test audit", "trace", ht.ID, "node", id, "err", redact(auditErr.Error()))
 			}
@@ -261,17 +309,22 @@ func (s *Server) runDeployedNodeTestNow(ctx context.Context, id, actor int, job 
 	executionCtx := ctx
 	ht, _ := ctx.Value(httpTraceKey{}).(httpTrace)
 	r = nodeTestResult{Status: "unknown", TCP: nodeprobe.Check{Status: "unknown"}, UDP: nodeprobe.Check{Status: "unknown"}, JobID: job.e.job.ID, TraceID: ht.ID, Location: "center", External: "unknown"}
-	executorID,_:=ctx.Value(nodeProbeExecutionKey{}).(int)
-	if executorID>0 {r.Location="gate";r.ExecutionGateID=executorID}
+	executorID, _ := ctx.Value(nodeProbeExecutionKey{}).(int)
+	if executorID > 0 {
+		r.Location = "gate"
+		r.ExecutionGateID = executorID
+	}
 	job.StepFor("正在排队等待节点测试", 5*time.Minute)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	var bin string
 	var driver kernelconf.Driver
 	var err error
-	if executorID==0 {
-		bin,driver,err=deployedProbeBinary(s,ctx)
-		if err!=nil {return r,err}
+	if executorID == 0 {
+		bin, driver, err = deployedProbeBinary(s, ctx)
+		if err != nil {
+			return r, err
+		}
 	}
 	origin := s.centerOrigin(ctx)
 	if !strings.HasPrefix(origin, "https://") {
@@ -286,16 +339,16 @@ func (s *Server) runDeployedNodeTestNow(ctx context.Context, id, actor int, job 
 	if err != nil {
 		return r, err
 	}
-	if executorID==0 && colocated(g) {
+	if executorID == 0 && colocated(g) {
 		r.Location = "colocated"
 	}
 	if !n.Enabled || g.Status != "active" || g.LastSeenAt == nil || time.Since(*g.LastSeenAt) > 90*time.Second {
 		return r, errors.New("节点已停用或 VPS 离线／已撤销")
 	}
-	if executorID==0 && colocated(g) {
+	if executorID == 0 && colocated(g) {
 		return r, errors.New("中心与这台 VPS 在同一台机器上，无法验证外部连接")
 	}
-	if executorID==0 && !externalProbeSupported() {
+	if executorID == 0 && !externalProbeSupported() {
 		return r, errors.New("中心不是 Linux amd64／arm64，无法执行外部实测")
 	}
 	selected, err := s.probeCredential(ctx, n)
@@ -350,7 +403,9 @@ func (s *Server) runDeployedNodeTestNow(ctx context.Context, id, actor int, job 
 		return r, err
 	}
 	token, revoke, err := s.issueProbeGrant(executionCtx)
-	if err!=nil{return r,err}
+	if err != nil {
+		return r, err
+	}
 	defer revoke()
 	// 等待配置的 ctx 到这里结束。出口查询必须用还活着的 executionCtx，
 	// 取消后的查询失败会被当成「未知」，于是照常发 UDP，把「出口不支持」测成超时。
@@ -361,20 +416,28 @@ func (s *Server) runDeployedNodeTestNow(ctx context.Context, id, actor int, job 
 	}
 	var res nodeprobe.Result
 	var probeErr error
-	probeTarget:=strings.TrimRight(origin,"/")+"/api/v1/node-test/download"
-	if executorID>0 {
-		executor,e:=s.Store.Ent.Gate.Get(executionCtx,executorID)
-		if e!=nil {return r,e}
-		kernels,drivers,e:=s.gateKernels(executionCtx,executor,map[string]bool{"mihomo":true})
-		if e!=nil{return r,e}
-		request:=contracts.NodeProbeTask{Client:client,UDP:udp,Credentials:contracts.FetchSecrets{URL:probeTarget,Authorization:token},Kernels:kernels,Drivers:drivers}
-		job.StepFor("正在指定 VPS 上实测已部署节点",2*time.Minute)
-		raw,_,e:=s.dispatchWorkerTask(executionCtx,contracts.TaskNodeProbe,request,contracts.TaskRequirements{TargetGateID:executorID},[]int{executorID})
-		if e!=nil{return r,e}
-		if e=contracts.DecodeStrict(raw,&res,64<<10);e!=nil{return r,e}
-		res.TCP.Why,res.UDP.Why=probeReasonText(res.TCP.Why),probeReasonText(res.UDP.Why)
+	probeTarget := strings.TrimRight(origin, "/") + "/api/v1/node-test/download"
+	if executorID > 0 {
+		executor, e := s.Store.Ent.Gate.Get(executionCtx, executorID)
+		if e != nil {
+			return r, e
+		}
+		kernels, drivers, e := s.gateKernels(executionCtx, executor, map[string]bool{"mihomo": true})
+		if e != nil {
+			return r, e
+		}
+		request := contracts.NodeProbeTask{Client: client, UDP: udp, Credentials: contracts.FetchSecrets{URL: probeTarget, Authorization: token}, Kernels: kernels, Drivers: drivers}
+		job.StepFor("正在指定 VPS 上实测已部署节点", 2*time.Minute)
+		raw, _, e := s.dispatchWorkerTask(executionCtx, contracts.TaskNodeProbe, request, contracts.TaskRequirements{TargetGateID: executorID}, []int{executorID})
+		if e != nil {
+			return r, e
+		}
+		if e = contracts.DecodeStrict(raw, &res, 64<<10); e != nil {
+			return r, e
+		}
+		res.TCP.Why, res.UDP.Why = probeReasonText(res.TCP.Why), probeReasonText(res.UDP.Why)
 	} else {
-		res,probeErr=deployedNodeProbe(executionCtx,nodeprobe.Options{Binary:bin,Run:driver.Run,Check:driver.Check,Client:client,UDP:udp,Target:probeTarget,Token:token,Traceparent:ht.parent(),Step:func(step string){job.StepFor(step,60*time.Second)}})
+		res, probeErr = deployedNodeProbe(executionCtx, nodeprobe.Options{Binary: bin, Run: driver.Run, Check: driver.Check, Client: client, UDP: udp, Target: probeTarget, Token: token, Traceparent: ht.parent(), Step: func(step string) { job.StepFor(step, 60*time.Second) }})
 	}
 	r.TCP, r.UDP = res.TCP, res.UDP
 	if supported, known := s.nodeUDP(executionCtx, n); known && !supported {
@@ -409,24 +472,28 @@ func (s *Server) runDeployedNodeTestNow(ctx context.Context, id, actor int, job 
 			r.Why = clean(probeErr.Error())
 		}
 	}
-	if r.Location != "colocated" && executorID!=g.ID {
+	if r.Location != "colocated" && executorID != g.ID {
 		r.External = r.Status
 	}
-	if executorID==g.ID {r.Why="在节点所在 VPS 上实测，外部可达性未知。"+r.Why}
+	if executorID == g.ID {
+		r.Why = "在节点所在 VPS 上实测，外部可达性未知。" + r.Why
+	}
 	return r, nil
 }
 
 func (s *Server) storeNodeTest(ctx context.Context, id int, r nodeTestResult) error {
+	s.nodeProbes.Lock()
+	defer s.nodeProbes.Unlock()
+	n, err := s.Store.Ent.Node.Get(ctx, id)
+	if err != nil {
+		return err
+	}
 	if r.Binding == "" {
 		b, err := json.Marshal(storedNodeTest{Result: r})
 		if err != nil {
 			return err
 		}
 		return s.Store.KV.Set(ctx, nodeTestKey(id), string(b), 24*time.Hour)
-	}
-	n, err := s.Store.Ent.Node.Get(ctx, id)
-	if err != nil {
-		return err
 	}
 	g, err := s.Store.Ent.Gate.Get(ctx, n.GateID)
 	if err != nil {

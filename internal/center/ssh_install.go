@@ -188,6 +188,8 @@ func (s *Server) sshInstall(c *gin.Context) {
 	var req struct {
 		sshTarget
 		Name        string `json:"name"`
+		GateID      int    `json:"gate_id"`
+		PrepareLaya bool   `json:"prepare_laya"`
 		Fingerprint string `json:"fingerprint"`
 	}
 	if !bind(c, &req) {
@@ -218,25 +220,58 @@ func (s *Server) sshInstall(c *gin.Context) {
 		failure(c, 409, "center_origin_required")
 		return
 	}
-	token, err := s.newInvite(c.Request.Context(), name)
-	if err != nil {
-		failInternal(c, 503, "invite_unavailable", err)
-		return
+
+	token := ""
+	var existingKey string
+	if req.GateID > 0 {
+		g, e := s.Store.Ent.Gate.Get(c.Request.Context(), req.GateID)
+		if e != nil || g.Status != "active" || colocated(g) || !req.PrepareLaya {
+			failure(c, 409, "invalid_laya_target")
+			return
+		}
+		existingKey = g.PublicKey
+	} else {
+		token, err = s.newInvite(c.Request.Context(), name)
+		if err != nil {
+			failInternal(c, 503, "invite_unavailable", err)
+			return
+		}
 	}
 	s.audit(c, "gate.ssh_install", name+" @ "+t.Host, "started")
-	// 安装命令与「复制命令」相同；凭证只作为参数传入。WEIR_NONINTERACTIVE 让安装脚本不提问。
 	env := ""
 	if m := s.installMirrors(c.Request.Context()); m != "" {
 		env = "WEIR_GITHUB_MIRRORS=" + shellQuote(m) + " "
 	}
-	script := "curl -fsSL " + shellQuote(origin+"/install/gate.sh") + " | " + env + "WEIR_NONINTERACTIVE=1 sh -s -- --token " + shellQuote(token)
+	script := "curl -fsSL " + shellQuote(origin+"/install/gate.sh") + " | " + env + "WEIR_NONINTERACTIVE=1 sh -s --"
+	if req.GateID > 0 {
+		script += " --gate-id " + shellQuote(strconv.Itoa(req.GateID)) + " --public-key " + shellQuote(existingKey)
+	} else {
+		script += " --token " + shellQuote(token)
+		if req.PrepareLaya {
+			script += " --laya"
+		}
+	}
 	host, port, user, password, keyed := t.Host, t.Port, t.User, t.Password, strings.TrimSpace(t.PrivateKey) != ""
 	expected := req.Fingerprint
-	job := s.jobs.StartWith(jobSpec{ID: "gate-ssh:" + randomHex(6), Kind: "gate-ssh", Title: "安装 Gate「" + name + "」（" + host + "）", Trace: c.GetString("request_id"), CancelMsg: "已取消安装"}, func(bg context.Context, run JobRun) (map[string]any, error) {
-		ctx, cancel := context.WithTimeout(bg, sshInstallTimeout)
+	trace := taskTrace(c.Request.Context())
+	actor := c.GetInt("user_id")
+	script = "export WEIR_TRACEPARENT=" + shellQuote("00-"+trace+"-"+randomHex(8)+"-01") + "\n" + script
+	job := s.jobs.StartWith(jobSpec{ID: "gate-ssh:" + randomHex(6), Kind: "gate-ssh", Owner: actor, Title: "安装 Gate「" + name + "」（" + host + "）", Trace: trace, CancelMsg: "已取消安装"}, func(bg context.Context, run JobRun) (result map[string]any, operationErr error) {
+		ctx, cancel := context.WithTimeout(bg, 30*time.Minute)
 		defer cancel()
+		defer func() {
+			cleanup, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer stop()
+			status := "ok"
+			if operationErr != nil {
+				status = "failed"
+			}
+			_, _ = s.Store.Ent.Audit.Create().SetActor(actor).SetAction("gate.ssh_install").SetTarget("gate:" + itoa(req.GateID)).SetResult(status).SetDetail(map[string]any{"trace_id": trace, "job_id": run.e.job.ID, "prepare_laya": req.PrepareLaya}).Save(cleanup)
+		}()
 		mask := func(line string) string {
-			line = strings.ReplaceAll(line, token, "••••")
+			if token != "" {
+				line = strings.ReplaceAll(line, token, "••••")
+			}
 			if password != "" {
 				line = strings.ReplaceAll(line, password, "••••")
 			}
@@ -303,7 +338,7 @@ func (s *Server) sshInstall(c *gin.Context) {
 		<-done
 		if err != nil {
 			if ctx.Err() != nil {
-				return nil, errors.New("安装超过 15 分钟没有结束，已中止")
+				return nil, errors.New("安装超过 30 分钟没有结束，已中止")
 			}
 			var exit *ssh.ExitError
 			if errors.As(err, &exit) {
@@ -316,6 +351,9 @@ func (s *Server) sshInstall(c *gin.Context) {
 			return nil, errors.New(mask(err.Error()))
 		}
 		run.Step("安装完成，等待 VPS 连上中心")
+		if req.GateID > 0 {
+			return map[string]any{"gate_id": req.GateID, "laya_prepared": true}, nil
+		}
 		gid, err := s.waitPaired(ctx, token)
 		if err != nil {
 			return nil, err

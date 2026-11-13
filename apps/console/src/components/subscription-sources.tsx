@@ -1,3 +1,4 @@
+import { useFormGuard } from "../lib/dirty";
 // 订阅源：机场订阅地址。中心拉取时只连公网地址；保护性缓存在上游失败或节点骤减时保留上次结果。
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -120,8 +121,8 @@ export function SourceDetail({ id }: { id: string }) {
   }, undefined, { wait: { label: "正在拉取订阅源" } });
   async function remove() {
     if (!(await confirm({ title: `删除订阅源「${source.name || source.url}」？`, description: "订阅组中的引用会一并移除。", confirmText: "删除", tone: "danger" }))) return;
-    await run("del:" + source.id, () => api("/admin/subscriptions/sources/" + source.id, "DELETE"), "订阅源已删除");
-    navigate("/subscriptions?tab=sources");
+    const removed = await run("del:" + source.id, () => api("/admin/subscriptions/sources/" + source.id, "DELETE"), "订阅源已删除");
+    if (removed) navigate("/subscriptions?tab=sources");
   }
   return (
     <section className="stack">
@@ -168,6 +169,7 @@ function SourceForm({ value, close, saved }: { value: Source | "new"; close: () 
   });
   const [ops, setOps] = useState<Operator[]>(s?.operators ?? []);
   const set = (patch: Partial<typeof form>) => setForm({ ...form, ...patch });
+  const guard = useFormGuard({ form, ops }, close);
   const save = useFormAction(
     () => {
       const body = { ...form, operators: ops };
@@ -175,7 +177,7 @@ function SourceForm({ value, close, saved }: { value: Source | "new"; close: () 
     },
     {
       fields: { invalid_source_url: "url", source_url_credentials: "url", source_url_private: "url", invalid_user_agent: "user_agent" },
-      onSuccess: saved,
+      onSuccess: () => { guard.commit(); saved(); },
     },
   );
   const text = (key: "name" | "url" | "user_agent" | "website" | "remark", label: string, hint?: string) => (
@@ -185,7 +187,7 @@ function SourceForm({ value, close, saved }: { value: Source | "new"; close: () 
   );
   useConsoleContext({ dialog: { title: s ? "编辑订阅源" : "添加订阅源" }, object: s ? { type: "source", name: s.name, id: s.id } : undefined, form: Object.entries(form).map(([k, v]) => field(k, k, typeof v === "object" ? JSON.stringify(v) : v, k === "url")) });
   return (
-    <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
+    <Dialog open onOpenChange={(o) => !o && !save.busy && void guard.close()}>
       <DialogContent size="lg">
         <DialogTitle>{s ? "编辑订阅源" : "添加订阅源"}</DialogTitle>
         <DialogDescription>更改地址、UA 或「+ 视为空格」后会清除旧缓存与用量记录；网站和备注只作记录，中心不会访问。</DialogDescription>
@@ -208,7 +210,7 @@ function SourceForm({ value, close, saved }: { value: Source | "new"; close: () 
             <OperatorEditor value={ops} change={setOps} />
           </Collapsible>
           <DialogFooter error={save.error}>
-            <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
+            <Button type="button" variant="outline" disabled={save.busy} onClick={() => { if (!save.busy) void guard.close(); }}>取消</Button>
             <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           </DialogFooter>
         </Form>

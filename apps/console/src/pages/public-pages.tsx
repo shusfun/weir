@@ -1,3 +1,4 @@
+import { useFormGuard } from "../lib/dirty";
 // 公开页面：匿名可访问的介绍页（/p/<slug>），展示已分享的订阅组卡片与留言板。
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useState } from "react";
@@ -99,8 +100,8 @@ export function PublicPageDetailView({ id, tab }: { id: string; tab: string }) {
   if (!item) return <PageState kind="empty" title="没有这个公开页" detail="它可能已被删除，或你没有权限查看。" action={<Link to="/pages">返回公开页面</Link>} />;
   async function remove() {
     if (!(await confirm({ title: `删除页面「${item!.data.title}」？`, description: "它的留言会一并删除。", confirmText: "删除", tone: "danger" }))) return;
-    await run(item!.id, () => api("/admin/public-pages/" + item!.id, "DELETE"), "页面已删除", { fail: "删除失败" });
-    navigate("/pages");
+    const removed = await run(item!.id, () => api("/admin/public-pages/" + item!.id, "DELETE"), "页面已删除", { fail: "删除失败" });
+    if (removed) navigate("/pages");
   }
   const cards = item.data.cards?.length;
   return (
@@ -193,14 +194,15 @@ function PageForm({ value, close, saved }: { value: PageItem | "new"; close: () 
   const set = (patch: Partial<PageData>) => setD({ ...d, ...patch });
   const cards = d.cards ?? [];
   const setCard = (i: number, patch: Partial<PageCard>) => set({ cards: cards.map((c, n) => (n === i ? { ...c, ...patch } : c)) });
+  const guard = useFormGuard({ slug, d }, close);
   const save = useFormAction(() => (p ? api("/admin/public-pages/" + p.id, "PATCH", { data: d }) : api("/admin/public-pages", "POST", { slug: slug.trim(), data: d })), {
     fields: { invalid_slug: "slug", slug_taken: "slug" },
-    onSuccess: saved,
+    onSuccess: () => { guard.commit(); saved(); },
   });
   const shared = (profiles.data ?? []).filter((x) => x.shared);
   useConsoleContext({ dialog: { title: p ? "编辑页面" : "新建页面" }, object: p ? { type: "page", name: p.data.title, key: p.slug } : undefined, form: [field("slug", "地址名", slug), field("title", "标题", d.title), field("enabled", "发布", d.enabled ? "是" : "否"), field("cards", "订阅卡片", String(d.cards?.length ?? 0))] });
   return (
-    <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
+    <Dialog open onOpenChange={(o) => !o && !save.busy && void guard.close()}>
       <DialogContent size="lg">
         <DialogTitle>{p ? "编辑页面" : "新建页面"}</DialogTitle>
         <DialogDescription>页面任何人都能访问，请不要填写私人信息。订阅卡片只显示仍在分享期内的订阅组，下载时再次核对。</DialogDescription>
@@ -250,7 +252,7 @@ function PageForm({ value, close, saved }: { value: PageItem | "new"; close: () 
             {(profiles.data ?? []).length > 0 && shared.length === 0 && <small className="text-[var(--weir-ink-3)]">当前没有已分享的订阅组；先分享订阅组，卡片才会显示：<Link className="weir-hit relative text-[var(--weir-accent-text)] underline-offset-4 transition-opacity hover:underline active:opacity-60" to="/subscriptions?tab=profiles" target="_blank">在新标签页打开「订阅源 → 订阅组」</Link>。</small>}
           </fieldset>
           <DialogFooter error={save.error}>
-            <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
+            <Button type="button" variant="outline" disabled={save.busy} onClick={() => { if (!save.busy) void guard.close(); }}>取消</Button>
             <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           </DialogFooter>
         </Form>

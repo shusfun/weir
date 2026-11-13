@@ -248,7 +248,7 @@ func (s *Server) validateTraceReadResult(ctx context.Context, record taskqueue.R
 	}
 	for _, item := range result.Records {
 		id, decodeErr := hex.DecodeString(item.TaskID)
-		if decodeErr != nil || len(id) != 24 || item.TraceID != request.TraceID || (!contracts.KnownTask(item.Kind) && item.Kind!="config.apply") || item.Attempt < 1 || item.Stage == "" || len(item.Stage) > 100 || len(item.Origin) == 0 || len(item.Origin) > 256 || len(item.ErrorCode) > 100 || item.Started.IsZero() || item.Finished.Before(item.Started) {
+		if decodeErr != nil || len(id) != 24 || item.TraceID != request.TraceID || (!contracts.KnownTask(item.Kind) && item.Kind != "config.apply") || item.Attempt < 1 || item.Stage == "" || len(item.Stage) > 100 || len(item.Origin) == 0 || len(item.Origin) > 256 || len(item.ErrorCode) > 100 || item.Started.IsZero() || item.Finished.Before(item.Started) {
 			return errors.New("trace_record_invalid")
 		}
 		switch item.Outcome {

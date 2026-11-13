@@ -3,6 +3,27 @@ import { awaitJob, type Job } from "./lib/jobs";
 import { guideTraceId, guideRequest } from "./lib/guide-events";
 
 const messages: Record<string, string> = {
+ local_gate_unavailable:"本机执行端当前不能启用，请核对设备身份和安装状态。",
+ local_gate_preflight_failed:"当前发布包校验或 systemd 预检未通过，请先修复安装环境。",
+ local_gate_preview_expired:"本机执行端预检已过期或配置已变化，请重新预检。",
+ local_gate_enable_failed:"本机执行端启用请求未受理，请核对宿主操作记录后重试。",
+ local_gate_enable_failed_restored:"启用失败，原服务配置与角色已恢复，可重新预检后重试。",
+ local_gate_enable_failed_recovery_incomplete:"启用失败且服务恢复未完成，请检查宿主操作记录与服务状态。",
+ host_operation_busy:"已有宿主操作正在执行，请等待原操作结束。",
+ host_preview_expired:"操作预览已过期，请重新预览确认。",
+ laya_preparation_unavailable:"当前环境无法准备 Laya 部署权限，请检查安装器与宿主操作通道。",
+ laya_operation_in_progress:"这台 VPS 已有 Laya 操作进行中，请等待其结束。",
+ laya_deployment_changed:"VPS 离线或批准镜像版本已变化，请重新预览。",
+ laya_approved_deployment_required:"尚未准备 Laya 部署权限，请先通过一次性 SSH 核对主机指纹并准备。",
+ laya_hosting_unavailable:"Laya 部署状态暂不可用，请查看原操作记录后重试。",
+ laya_resources_insufficient:"主机可用内存或磁盘不足，无法部署固定模型。",
+ laya_resources_unknown:"主机资源尚未采集，无法确认模型部署条件。",
+ laya_docker_unavailable:"Docker 服务未就绪，请先准备部署权限。",
+ laya_docker_install_failed:"Docker 安装失败，请检查软件源和主机网络后重试。",
+ laya_docker_required:"这台主机需要先安装 Docker，当前系统不支持自动安装。",
+ laya_use_center_hosting:"这是中心本机执行端，请在 AI 设置中部署中心 Laya。",
+ webdav_configuration_changed:"WebDAV 配置已变化，请重新读取当前目录后再恢复。",
+ task_record_unavailable:"任务记录暂不可用，实际结果未知，请刷新核对。",
  system_status_unavailable:"系统状态未能汇总，请重试并核对关联日志。",
  invalid_turnstile_settings:"请填写有效的 Site Key、Secret 和允许的站点域名。",
  human_verification_required:"请完成人机验证后重试。",
@@ -160,6 +181,7 @@ const messages: Record<string, string> = {
  analysis_running:"已有一个事件正在由 dsh 分析，请稍候。",
  invalid_laya_url:"Laya 地址须为 HTTPS（本机回环地址除外），不能包含账号、查询参数或片段。",
  laya_unavailable:"Laya 服务不可用或响应无效，规则防线照常运行。",
+ laya_verification_required:"请先停用并保存接入配置，测试通过后再启用 Laya 判断。",
  dsh_not_enabled:"尚未启用 dsh，请先在系统设置中填写 dsh 子域名并启用。",
  dsh_not_running:"dsh 没有在运行，请到系统设置查看状态。",
  dsh_not_installed:"该 dsh 版本尚未下载。",
@@ -509,10 +531,14 @@ function joinMessage(base: string, detail: string) {
 }
 
 // errorFrom 把中心的错误响应换成 ApiError（同步返回与后台任务的结果共用）。
+export function errorMessage(code: string): string {
+  return messages[code] ?? `操作失败（${code}），请检查输入与服务状态后重试。`;
+}
+
 export function errorFrom(path: string, status: number, data: any): ApiError {
   if (status >= 500 && (!data?.error?.code || data.error.code === "upstream_unavailable")) return new ApiError(upstreamMessage(status), "upstream_unavailable", status);
   const code = String(data?.error?.code ?? "http_" + status);
-  const base = messages[code] ?? `操作失败（${code}），请检查输入与服务状态后重试。`;
+  const base = errorMessage(code);
   const message = joinMessage(base, data?.error?.detail ? String(data.error.detail) : "");
   // 页面感知：dsh 能看到最近一次失败提示（上报 / 轮询本身的失败不算）。
   if (!path.startsWith("/admin/dsh/context") && !path.startsWith("/admin/dsh/navigation")) reportError(code, message);

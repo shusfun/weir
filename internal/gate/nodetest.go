@@ -79,7 +79,23 @@ func (t *tailBuffer) String() string {
 // 按订阅里的出站连接它，经代理下载 256 KiB 并核对长度。不改动正在运行的内核与配置。
 // payload.config 是只含一个入站与一份测试凭据的 GateConfig（端口为 0，由这里分配）；
 // payload.client 保留订阅客户端的完整依赖图与目标标签，由这里改成临时本机端点。
-func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any, error) {
+func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (result map[string]any, failure error) {
+	stage := "prepare"
+	finish := beginTaskStage(ctx, "node.test."+stage, "gate.nodeTest")
+	next := func(name string) {
+		finish(nil)
+		stage = name
+		finish = beginTaskStage(ctx, "node.test."+stage, "gate.nodeTest")
+	}
+	defer func() {
+		if failure != nil {
+			if result == nil {
+				result = map[string]any{"stage": stage}
+			}
+			failure = &contracts.TaskError{Code: "node_test_" + stage + "_failed", Origin: "gate.nodeTest"}
+		}
+		finish(failure)
+	}()
 	var cfg contracts.GateConfig
 	raw, _ := json.Marshal(p["config"])
 	if err := json.Unmarshal(raw, &cfg); err != nil || len(cfg.Inbounds) != 1 {
@@ -93,12 +109,15 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 	if _, ok := cfg.Kernels["mihomo"]; !ok {
 		return nil, errors.New("mihomo 测试内核未就绪")
 	}
+	next("kernels")
 	if err := a.ensureKernels(ctx, cfg); err != nil {
 		return nil, err
 	}
+	next("certificates")
 	if err := a.ensureCerts(ctx, cfg); err != nil {
 		return nil, err
 	}
+	next("ports")
 	port, err := freeLoopbackPort()
 	if err != nil {
 		return nil, err
@@ -110,10 +129,12 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 	if cfg.Ports.SingboxStats, err = freeLoopbackPort(port, cfg.Ports.XrayStats); err != nil {
 		return nil, err
 	}
+	next("build")
 	out, err := kernelconf.Build(cfg, kernelconf.Options{CertDir: a.P.CertsDir, Now: time.Now()})
 	if err != nil {
 		return map[string]any{"stage": "build"}, fmt.Errorf("生成配置失败：%w", err)
 	}
+	next("files")
 	dir, err := os.MkdirTemp("", "weir-test-")
 	if err != nil {
 		return nil, err
@@ -137,6 +158,7 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 	if err != nil {
 		return nil, err
 	}
+	next("check")
 	check := exec.CommandContext(ctx, bin(kernel), test...)
 	check.Env = kernelEnv(kernel)
 	if b, err := check.CombinedOutput(); err != nil {
@@ -148,6 +170,7 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 	sp := exec.CommandContext(runCtx, bin(kernel), run...)
 	sp.Env = kernelEnv(kernel)
 	sp.Stdout, sp.Stderr = serverLog, serverLog
+	next("start")
 	if err = sp.Start(); err != nil {
 		return nil, err
 	}
@@ -157,6 +180,7 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 	if err != nil {
 		return nil, err
 	}
+	next("client_build")
 	if err := client.Loopback(port); err != nil {
 		return map[string]any{"stage": "client_build"}, err
 	}
@@ -175,6 +199,7 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 		return nil, err
 	}
 	run, test = append(run, "-d", dir), append(test, "-d", dir)
+	next("client_check")
 	if b, err := exec.CommandContext(runCtx, bin("mihomo"), test...).CombinedOutput(); err != nil {
 		return map[string]any{"stage": "client_check", "log": maskIPs(lastLines(string(b), 20))}, errors.New("客户端内核自检未通过")
 	}
@@ -205,12 +230,12 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 	hc := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{Proxy: http.ProxyURL(proxy), DisableKeepAlives: true}}
 	start := time.Now()
 	var last error
-	stage := "connect"
+	next("connect")
 	for time.Since(start) < 25*time.Second {
 		begin := time.Now()
 		resp, err := hc.Get(target.URL)
 		if err == nil {
-			stage = "download"
+			next("download")
 			n, cerr := io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
 			if cerr == nil && n == int64(len(blob)) {
@@ -222,7 +247,7 @@ func (a *Agent) nodeTest(ctx context.Context, p map[string]any) (map[string]any,
 		time.Sleep(500 * time.Millisecond)
 	}
 	if strings.Contains(clientLog.String(), "FATAL") || strings.Contains(serverLog.String(), "FATAL") {
-		stage = "start"
+		next("start")
 	}
 	return map[string]any{"stage": stage, "server_log": maskIPs(lastLines(serverLog.String(), 20)), "client_log": maskIPs(lastLines(clientLog.String(), 20))}, fmt.Errorf("经候选配置连接失败：%v", last)
 }

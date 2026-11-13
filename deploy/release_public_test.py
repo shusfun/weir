@@ -5,7 +5,7 @@ import unittest
 from unittest import mock
 
 from public_test_support import NOTES
-from release_public import asset_names, marker, parse_checksums, publish, remote_assets, verify_remote
+from release_public import asset_names, find_release, marker, parse_checksums, publish, remote_assets, verify_remote
 
 
 class ReleaseTests(unittest.TestCase):
@@ -30,6 +30,17 @@ class ReleaseTests(unittest.TestCase):
     def test_remote_checksums_and_github_digests_agree(self):
         with mock.patch("release_public.gh", side_effect=self.api):
             verify_remote("fixture/public", self.tag, self.commit, self.digests)
+
+    def test_draft_omitted_by_tag_endpoint_is_found_in_paginated_listing(self):
+        self.release["draft"] = True
+        first = [{"tag_name": f"v0.0.{i}"} for i in range(100)]
+        with mock.patch("release_public.gh", side_effect=[None, first, [self.release]]) as api:
+            self.assertEqual(find_release("fixture/public", self.tag)["id"], 7)
+            self.assertEqual(api.call_args_list[-1].args[1], "repos/fixture/public/releases?per_page=100&page=2")
+
+    def test_missing_release_returns_none(self):
+        with mock.patch("release_public.gh", side_effect=[None, []]):
+            self.assertIsNone(find_release("fixture/public", self.tag))
 
     def test_missing_digest_is_unknown_and_refused(self):
         self.release["assets"][0]["digest"] = None

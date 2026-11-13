@@ -308,7 +308,7 @@ func (s *Server) diagnosticEntry(ctx context.Context, item diagnostic.Selection)
 		if r.Verdict != nil {
 			e.Evidence["answer"] = map[string]any{"category": r.Verdict.Category, "confidence": r.Verdict.Confidence, "threshold": r.Verdict.Threshold, "code": r.Verdict.Code, "attempts": r.Verdict.Attempts, "execution": r.Verdict.Execution, "gate_id": r.Verdict.GateID}
 			e.ExternalData["question"] = diagnostic.Text(r.Verdict.Question)
- e.ExternalData["model_metadata"] = diagnostic.Text(jsonText(map[string]string{"configured_model": r.Verdict.Model, "model_version": r.Verdict.ModelVersion, "runtime_version": r.Verdict.RuntimeVersion}))
+			e.ExternalData["model_metadata"] = diagnostic.Text(jsonText(map[string]string{"configured_model": r.Verdict.Model, "model_version": r.Verdict.ModelVersion, "runtime_version": r.Verdict.RuntimeVersion}))
 		}
 		if location, ok := diagnosticSources[r.Origin]; ok {
 			e.Evidence["source_location"] = location
@@ -333,7 +333,7 @@ func (s *Server) diagnosticEntry(ctx context.Context, item diagnostic.Selection)
 		e.Title, e.Expected, e.Actual = "人工分析活动", "分析完成并记录证据与审批边界", a.Status
 		e.Evidence = map[string]any{"analysis_id": a.ID, "trace_id": a.TraceID, "snapshot_id": a.SnapshotID, "snapshot_trace_id": a.SnapshotTraceID, "actor": a.Actor, "items": a.Items, "profile_version": a.ProfileVersion, "created_at": a.CreatedAt, "finished_at": a.FinishedAt, "deadline": a.Deadline, "code": a.Code}
 		e.ExternalData["dsh_version"] = diagnostic.Text(a.DSHVersion)
- e.ExternalData["conclusion"] = diagnostic.Text(a.ExternalData.Conclusion)
+		e.ExternalData["conclusion"] = diagnostic.Text(a.ExternalData.Conclusion)
 		e.ExternalData["tool_calls"] = diagnostic.Text(jsonText(a.ToolCalls))
 		e.Limitations = append(e.Limitations, "只有宿主取得的分析结果；模型与第三方内部不可观测。分析成功不代表其建议已经生效。")
 		e.Reproduction = regression("go test ./internal/center -run '^TestObservationAnalysis' -count=1", "模拟 dsh 的脱敏、幂等、取消与活动回归，不重放模型输出")
@@ -430,8 +430,8 @@ func (s *Server) diagnosticEntry(ctx context.Context, item diagnostic.Selection)
 		l, d := s.loadLaya(ctx), s.dshSettings(ctx)
 		e.Evidence = map[string]any{"revision": v.Revision, "observations": observations, "laya": map[string]any{"enabled": l.Enabled, "mode": l.Mode, "gate_id": l.GateID, "observed_model_version": "unknown"}, "dsh": map[string]any{"enabled": d.Enabled, "auto_analyze": d.AutoAnalyze, "observed_version": "unknown"}}
 		e.ExternalData["configured_model"] = diagnostic.Text(l.Model)
- e.ExternalData["configured_dsh_version"] = diagnostic.Text(d.Version)
- e.Limitations = append(e.Limitations, "仅导出判断设置；指令、skills 原文、插件文件和 Key 不导出。期望版本不代表实际运行版本。")
+		e.ExternalData["configured_dsh_version"] = diagnostic.Text(d.Version)
+		e.Limitations = append(e.Limitations, "仅导出判断设置；指令、skills 原文、插件文件和 Key 不导出。期望版本不代表实际运行版本。")
 		e.Reproduction = regression("go test ./internal/center -run '^TestAIProfile' -count=1", "配置解析、预演和审批回归")
 	case "account-policy":
 		v, err := s.accountPolicy(ctx)

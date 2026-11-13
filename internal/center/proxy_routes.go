@@ -22,6 +22,7 @@ import (
 // 代理接口统一按登录账号与 user 查询参数解析归属。
 func (s *Server) proxyRoutes(auth, admin *gin.RouterGroup) {
 	s.pendingExitRoutes(auth)
+	auth.GET("/proxy/preview", s.previewSubscription)
 	auth.GET("/proxy", func(c *gin.Context) { s.getProxy(c, false) })
 	auth.POST("/proxy/groups", func(c *gin.Context) { s.writeProxyGroup(c, false) })
 	auth.PUT("/proxy/groups/:group", func(c *gin.Context) { s.writeProxyGroup(c, false) })
@@ -245,8 +246,8 @@ func (s *Server) proxyView(ctx context.Context, u *ent.User) (gin.H, error) {
 		presets = append(presets, gin.H{"key": rc.Key, "label": rc.Label, "domains": rc.Domains})
 	}
 	pol.Custom = contracts.CustomRules{}
-	return gin.H{"policy": pol, "custom": custom, "types": items, "layout": layout, "presets": presets, "ranking": ranking, "allow_chain": u.AllowChain,
-		"min_refresh": contracts.MinRefreshMinutes, "groups": groups, "lines": lines, "user_id": u.ID}, nil
+	return gin.H{"user_id": u.ID, "policy": pol, "custom": custom, "types": items, "layout": layout, "presets": presets, "ranking": ranking, "allow_chain": u.AllowChain,
+		"min_refresh": contracts.MinRefreshMinutes, "groups": groups, "lines": lines}, nil
 }
 
 // chainExitView 是类型出口的显示内容（与链式代理列表一致：密码给本人与管理员看原文）。

@@ -391,7 +391,7 @@ func (a *Agent) executeTask(ctx context.Context, t contracts.Task) {
 		if t.Kind == contracts.ActionNodeTest {
 			if stage, ok := result.Result["stage"].(string); ok {
 				switch stage {
-				case "build", "check", "client_build", "client_check", "target", "connect", "start":
+				case "prepare", "kernels", "certificates", "ports", "files", "build", "check", "client_build", "client_check", "target", "connect", "download", "start":
 					code, origin = "node_test_"+stage+"_failed", "gate.nodeTest"
 				}
 			}

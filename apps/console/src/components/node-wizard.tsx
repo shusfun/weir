@@ -1,3 +1,4 @@
+import { NodeTestControl } from "./node-test";
 // 建节点：一页选 VPS、协议、出口就能创建。伪装、传输参数由内置方案给出，名称、端口、证书与方案字段都在「高级」里；
 // REALITY 目标由 VPS 实测选择；证书由系统按 VPS 准备；这台 VPS 现在用不了的方案标出原因。
 // 保存后显示要放行的端口（对照本机防火墙）与出口实测结果，再给出管理员本人的链接与二维码；谁能用节点在用户页分配。
@@ -74,7 +75,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
         settings: advanced, user_ids: me.data ? [me.data.id] : [],
       }, track) as Promise<(NodeItem & { shares?: Share[] }) | { pending: PendingExit }>,
     {
-      wait: () => ({ label: `正在 ${gate?.name ?? "VPS"} 上新建 ${chosen?.name ?? ""} 节点并实测` }),
+      wait: () => ({ label: `正在 ${gate?.name ?? "VPS"} 上新建 ${chosen?.name ?? ""} 节点` }),
       fields: errorFields,
       onError: (e) => {
         const f = e instanceof ApiError ? errorFields[e.code] : undefined;
@@ -140,12 +141,12 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
       <DialogContent size="lg">
         <DialogTitle>新建节点</DialogTitle>
         <Steps orientation="horizontal" aria-label="新建节点">
-          <Step index={1} label="VPS" status={gateId ? "complete" : "current"} />
-          <Step index={2} label="协议" status={!gateId ? "upcoming" : "complete"} />
-          <Step index={3} label="出口" status={gateId ? "current" : "upcoming"} />
-          <Step index={4} label="创建" status="upcoming" />
+          <Step index={0} label="VPS" status={gateId ? "complete" : "current"} />
+          <Step index={1} label="协议" status={!gateId ? "upcoming" : "complete"} />
+          <Step index={2} label="出口" status={gateId ? "current" : "upcoming"} />
+          <Step index={3} label="创建" status="upcoming" />
         </Steps>
-        <DialogDescription>选好 VPS 和协议即可创建。mihomo 尚未下载时先保存普通节点，下载完成后自动实测；链式出口验证通过后才启用。</DialogDescription>
+        <DialogDescription>创建后显示端口并后台实测，失败保留节点，可放行防火墙后重试；链式出口验证通过后才启用。</DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
           {active.length === 0 ? (
             <State empty="还没有已连接的 VPS" detail="先在列表页添加 VPS 并执行安装命令。" />
@@ -208,7 +209,7 @@ export function NodeWizard({ open, close, done, gates, nodes, gateId: initialGat
           </Collapsible></div>
           <DialogFooter error={save.error} status={save.wait && <WaitText wait={save.wait} />}>
             <Button type="button" variant="outline" disabled={save.busy} onClick={reset}>取消</Button>
-            <Button data-tour="node-submit" type="submit" disabled={blocked} busy={save.busy} busyText="正在实测并保存…">创建节点</Button>
+            <Button data-tour="node-submit" type="submit" disabled={blocked} busy={save.busy} busyText="正在保存并下发…">创建节点</Button>
           </DialogFooter>
         </Form>
       </DialogContent>
@@ -225,12 +226,12 @@ function CreatedAccess({ node }: { node: NodeItem }) {
     queryKey: ["node", node.id, "reach"],
     queryFn: () => api("/admin/nodes/" + node.id) as Promise<NodeItem>,
     initialData: node,
-    refetchInterval: (query) => (checked(query.state.data) || Date.now() - since > 100_000 ? false : 2000),
+    refetchInterval: (query) => (checked(query.state.data) && query.state.data?.test?.status !== "pending" || Date.now() - since > 100_000 ? false : 2000),
   });
   const n = q.data ?? node;
   const done = checked(n);
   const reach = n.readiness?.state === "credentials" ? { status: "unknown" as const, why: n.readiness.why } : done ? n.reach : { status: "unknown" as const, why: Date.now() - since > 100_000 ? n.readiness?.why || "100 秒内没有得到检查结果，稍后在节点详情里查看" : "正在检查：等 VPS 应用新配置后从中心连接一次" };
-  return <NodeAccess ports={n.ports} reach={reach} />;
+  return <div className="stack"><Notice tone="ok">节点已保存，端口 {n.port}。配置{n.application?.state === "applied" ? "已应用" : n.application?.state === "failed" ? "应用失败" : "待应用"}，实测会在后台进行。</Notice>{n.warnings?.map(w => <Notice key={w} tone="warn">{w}</Notice>)}<NodeAccess ports={n.ports} reach={reach} /><NodeTestControl node={n} detail /></div>;
 }
 
 // AdvancedFields 按方案给出的字段说明渲染；只记改过的字段，留空即用默认值。

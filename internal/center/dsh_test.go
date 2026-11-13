@@ -225,13 +225,14 @@ func TestDefenseLayaThenDraftThenConfirmedBlock(t *testing.T) {
 	defer laya.Close()
 
 	mustJSON(t, admin, "PUT", "/api/v1/admin/defense/laya", map[string]any{"enabled": true, "url": "http://example.com", "model": "observer", "key": "laya-key"}, 400)
-	view := mustJSON(t, admin, "PUT", "/api/v1/admin/defense/laya", map[string]any{"enabled": true, "url": laya.URL, "model": "observer", "key": "laya-key"}, 200)
+	view := mustJSON(t, admin, "PUT", "/api/v1/admin/defense/laya", map[string]any{"enabled": false, "url": laya.URL, "model": "observer", "key": "laya-key"}, 200)
 	if strings.Contains(mustString(view), "laya-key") || view["key_set"] != true {
 		t.Fatalf("laya view = %v", view)
 	}
 	if v := mustJSON(t, admin, "POST", "/api/v1/admin/defense/laya/test", nil, 200); v["verdict"].(map[string]any)["category"] != "suspicious" {
 		t.Fatalf("test = %v", v)
 	}
+	mustJSON(t, admin, "PUT", "/api/v1/admin/defense/laya", map[string]any{"enabled": true, "url": laya.URL, "model": "observer"}, 200)
 
 	// 同一来源连续登录失败：规则产生安全事件。
 	attacker := &testClient{t: t, router: s.Router()}

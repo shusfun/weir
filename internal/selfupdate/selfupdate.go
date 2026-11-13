@@ -76,6 +76,7 @@ type Request struct {
 	Action  string             `json:"action"`
 	Version string             `json:"version,omitempty"`
 	Sources []ghrelease.Source `json:"sources,omitempty"`
+	TraceID string             `json:"trace_id,omitempty"`
 }
 
 // maxSources 与中心「GitHub 加速」的上限一致。
@@ -88,6 +89,8 @@ func PrefetchName(version, arch string) string {
 
 // Status 是 root 写回的进度。
 type Status struct {
+	Stage    string          `json:"stage,omitempty"`
+	TraceID  string          `json:"trace_id,omitempty"`
 	ID       string          `json:"id"`
 	Action   string          `json:"action"`
 	From     string          `json:"from"`
@@ -102,10 +105,20 @@ type Status struct {
 
 // Valid 检查请求：中心不可信，只接受固定的动作与版本号格式。
 func (r Request) Valid() error {
+	if r.TraceID != "" {
+		b, e := hex.DecodeString(r.TraceID)
+		if e != nil || len(b) != 16 {
+			return errors.New("关联编号无效")
+		}
+	}
 	if len(r.ID) < 8 || len(r.ID) > 64 || strings.ContainsAny(r.ID, "/\\ \n") {
 		return errors.New("请求编号无效")
 	}
 	switch r.Action {
+	case "enable-local-gate", "prepare-laya":
+		if r.Version != "" || len(r.Sources) > 0 {
+			return errors.New("固定宿主动作不接受版本与来源")
+		}
 	case "update":
 		if !safeVersion.MatchString(r.Version) {
 			return errors.New("版本号无效")
@@ -163,7 +176,7 @@ func Previous() string {
 	return v
 }
 
-// Apply 读取并执行请求（以 root 运行）。请求文件读后即删；结果写进 status.json。
+// Apply 读取并执行请求（以 root 运行）。执行结束后消费请求；结果保留在操作回执中。
 func Apply(ctx context.Context) error {
 	path := filepath.Join(Dir, "request.json")
 	st, err := os.Lstat(path)
@@ -180,10 +193,10 @@ func Apply(ctx context.Context) error {
 	}
 	defer unlock()
 	data, err := os.ReadFile(path)
-	_ = os.Remove(path)
 	if err != nil {
 		return err
 	}
+	defer os.Remove(path)
 	var req Request
 	if err = json.Unmarshal(data, &req); err != nil {
 		return errors.New("请求格式无效")
@@ -193,13 +206,22 @@ func Apply(ctx context.Context) error {
 	if req.Action == "rollback" {
 		state = "installing"
 	}
-	w := &writer{st: Status{ID: req.ID, Action: req.Action, From: buildinfo.Version, Version: req.Version, State: state, Started: time.Now().UTC(), Logs: []string{}}}
+	w := &writer{st: Status{ID: req.ID, Action: req.Action, TraceID: req.TraceID, From: buildinfo.Version, Version: req.Version, State: state, Started: time.Now().UTC(), Logs: []string{}}}
 	if err = req.Valid(); err != nil {
 		w.fail(err)
 		return err
 	}
+	w.set(func(st *Status) {})
 	ctx = context.WithValue(ctx, updateIDKey{}, req.ID)
+	if req.TraceID != "" {
+		ctx = releasefiles.WithTrace(ctx, "00-"+req.TraceID+"-"+randomSpan()+"-01")
+	}
+	w.log("开始固定操作 " + req.Action + " operation=" + req.ID + " trace=" + req.TraceID)
 	switch req.Action {
+	case "enable-local-gate":
+		err = w.enableLocalGate(ctx)
+	case "prepare-laya":
+		err = w.prepareLaya(ctx)
 	case "update":
 		err = w.update(ctx, req.Version, req.Sources)
 	case "rollback":
@@ -222,10 +244,14 @@ type writer struct {
 
 func (w *writer) set(f func(*Status)) {
 	w.mu.Lock()
+	defer w.mu.Unlock()
 	f(&w.st)
 	b, _ := json.Marshal(w.st)
-	w.mu.Unlock()
 	_ = writeStatus(b)
+	// Keep the receipt addressable after another root operation starts.
+	if w.st.ID != "" && !strings.ContainsAny(w.st.ID, "/\\ \n") {
+		_ = writeOperation(w.st.ID, b)
+	}
 }
 
 func (w *writer) log(s string) {
@@ -276,16 +302,63 @@ func writeStatus(b []byte) error {
 func ReadStatus() (Status, bool) {
 	var st Status
 	b, err := os.ReadFile(filepath.Join(Dir, "status.json"))
-	if err != nil || json.Unmarshal(b, &st) != nil {
+	valid := err == nil && json.Unmarshal(b, &st) == nil
+	var req Request
+	pending, err := os.ReadFile(filepath.Join(Dir, "request.json"))
+	if err == nil && json.Unmarshal(pending, &req) == nil && req.Valid() == nil && (!valid || st.ID != req.ID) {
+		return Status{ID: req.ID, Action: req.Action, TraceID: req.TraceID, State: "queued", Logs: []string{}}, true
+	}
+	return st, valid
+}
+
+func writeOperation(id string, b []byte) error {
+	f, err := os.CreateTemp(Dir, ".operation-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if err = f.Chmod(0640); err == nil {
+		_, err = f.Write(b)
+	}
+	e := f.Close()
+	if err == nil {
+		err = e
+	}
+	if err == nil {
+		err = os.Rename(f.Name(), filepath.Join(Dir, "operation-"+id+".json"))
+	}
+	return err
+}
+
+func ReadOperation(id string) (Status, bool) {
+	if (Request{ID: id, Action: "prepare-laya"}).Valid() != nil {
 		return Status{}, false
 	}
-	return st, true
+	var st Status
+	b, e := os.ReadFile(filepath.Join(Dir, "operation-"+id+".json"))
+	if e == nil && json.Unmarshal(b, &st) == nil && st.ID == id {
+		return st, true
+	}
+	b, e = os.ReadFile(filepath.Join(Dir, "request.json"))
+	var req Request
+	if e == nil && json.Unmarshal(b, &req) == nil && req.ID == id {
+		return Status{ID: id, Action: req.Action, TraceID: req.TraceID, State: "queued", Logs: []string{}}, true
+	}
+	return Status{}, false
 }
 
 // WriteRequest 写入请求（中心调用）；已有未处理的请求时拒绝。
 func WriteRequest(r Request) error {
 	if err := r.Valid(); err != nil {
 		return err
+	}
+	unlock, err := lockfile.TryAcquire(filepath.Join(Dir, "request.lock"))
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if st, ok := ReadStatus(); ok && st.Finished == nil && st.State != "failed" && st.State != "done" {
+		return errors.New("已有宿主操作正在执行")
 	}
 	path := filepath.Join(Dir, "request.json")
 	if _, err := os.Lstat(path); err == nil {
@@ -299,6 +372,8 @@ func WriteRequest(r Request) error {
 	}
 	return os.Rename(tmp, path)
 }
+
+func randomSpan() string { var b [8]byte; _, _ = rand.Read(b[:]); return hex.EncodeToString(b[:]) }
 
 // Handoff 是中心交给 root 之前留下的记录：哪次更新、预下载的日志与实际来源。只有中心读写。
 type Handoff struct {

@@ -1,3 +1,4 @@
+import { useFormGuard } from "../lib/dirty";
 // 订阅组：选订阅源与手动节点（或全部），配处理链与规则模板；预览、分配给用户、匿名分享。
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -132,8 +133,8 @@ export function ProfileDetail({ id, tab }: { id: string; tab: string }) {
   if (!item) return <PageState kind="empty" title="没有这个订阅组" detail="它可能已被删除，或你没有权限查看。" action={<Link to="/subscriptions?tab=profiles">返回订阅组</Link>} />;
   async function remove() {
     if (!(await confirm({ title: `删除订阅组「${item!.name}」？`, description: "分配给用户的地址与分享地址都会失效。", confirmText: "删除", tone: "danger" }))) return;
-    await run(item!.id, () => api("/admin/subscriptions/profiles/" + item!.id, "DELETE"), "订阅组已删除");
-    navigate("/subscriptions?tab=profiles");
+    const removed = await run(item!.id, () => api("/admin/subscriptions/profiles/" + item!.id, "DELETE"), "订阅组已删除");
+    if (removed) navigate("/subscriptions?tab=profiles");
   }
   const members = item.members?.length ?? ((item.source_ids?.length ?? 0) + (item.node_ids?.length ?? 0));
   return (
@@ -190,16 +191,17 @@ function ProfileForm({ value, close, saved }: { value: Profile | "new"; close: (
     for (const k of Object.keys(patch) as (keyof ProfileSettings)[]) if (patch[k] === undefined) delete next[k];
     setSettings(next);
   };
+  const guard = useFormGuard({ name, enabled, all, members, settings, ops, expiry }, close);
   const save = useFormAction(
     () => {
       const body = { name: name.trim(), enabled, all_sources: all, members: all ? null : members, settings, operators: ops, expires_at: fromLocalInput(expiry) };
       return p ? api("/admin/subscriptions/profiles/" + p.id, "PATCH", body) : api("/admin/subscriptions/profiles", "POST", body);
     },
-    { fields: { invalid_template: "template", invalid_profile_members: "members", ...renderingErrorFields }, onSuccess: saved },
+    { fields: { invalid_template: "template", invalid_profile_members: "members", ...renderingErrorFields }, onSuccess: () => { guard.commit(); saved(); } },
   );
   useConsoleContext({ dialog: { title: p ? "编辑订阅组" : "新建订阅组" }, object: p ? { type: "profile", name: p.name, id: p.id } : undefined, form: [field("name", "名称", name), field("enabled", "启用", enabled ? "是" : "否"), field("all_sources", "全部订阅源", all ? "是" : "否"), field("members", "有序成员", members.map(memberName).join("、")), field("expires_at", "到期", expiry || "长期")] });
   return (
-    <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
+    <Dialog open onOpenChange={(o) => !o && !save.busy && void guard.close()}>
       <DialogContent size="xl">
         <DialogTitle>{p ? "编辑订阅组" : "新建订阅组"}</DialogTitle>
         <DialogDescription>勾选订阅源、手动节点或其他订阅组，再拖动调整顺序；子组最多嵌套三层。未单独设置的项沿用默认设置。</DialogDescription>
@@ -265,7 +267,7 @@ function ProfileForm({ value, close, saved }: { value: Profile | "new"; close: (
           </Collapsible>
           {p && <SwitchField label="启用" checked={enabled} onCheckedChange={setEnabled} />}
           <DialogFooter error={save.error}>
-            <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
+            <Button type="button" variant="outline" disabled={save.busy} onClick={() => { if (!save.busy) void guard.close(); }}>取消</Button>
             <Button type="submit" disabled={save.busy || (!all && (loadingMembers || !!membersError))} busy={save.busy} busyText="正在保存…">保存</Button>
           </DialogFooter>
         </Form>

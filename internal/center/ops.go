@@ -19,6 +19,7 @@ import (
 
 func (s *Server) opsRoutes(admin *gin.RouterGroup) {
 	admin.GET("/audit", s.listAudit)
+	admin.GET("/audit/summary", s.auditSummary)
 	admin.GET("/ops/records", s.listOpsRecords)
 	admin.POST("/gates/:id/host/repair", s.repairGateHost)
 	admin.POST("/gates/:id/kernels/:kernel/diagnostics", s.gateKernelAction(contracts.ActionDiagnostics))
@@ -36,6 +37,18 @@ func (s *Server) listAudit(c *gin.Context) {
 		size = 20
 	}
 	q := s.Store.Ent.Audit.Query()
+	switch c.Query("kind") {
+	case "", "all":
+	case "human":
+		q.Where(audit.Or(audit.ActorGT(0), audit.ActionHasPrefix("ai.")))
+	case "failed":
+		q.Where(audit.Or(audit.ResultIn("failed", "denied"), audit.ResultHasPrefix("failed "), audit.ResultHasPrefix("denied ")))
+	case "restart":
+		q.Where(auditRestartPredicate())
+	default:
+		failure(c, 400, "invalid_query")
+		return
+	}
 	if scope := c.Query("scope"); scope != "" {
 		if scope != "accounts" {
 			failure(c, 400, "invalid_query")

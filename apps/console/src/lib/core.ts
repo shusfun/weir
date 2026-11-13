@@ -92,7 +92,7 @@ export interface NodeTestCheck {
   bytes?: number;
 }
 export interface NodeTest {
-  status: "running" | "passed" | "failed" | "unknown";
+  status: "pending" | "running" | "passed" | "failed" | "unknown";
   why?: string;
   tcp: NodeTestCheck;
   udp: NodeTestCheck;
@@ -188,6 +188,8 @@ export interface NodeItem extends NodeChoice {
   ports?: PortNeed[];
   reach?: Reach;
   test?: NodeTest;
+  application?: { state: string; revision: number; applied_revision: number };
+  warnings?: string[];
   // 全部用户直连这个节点时的下载速率
   rate?: RateStat;
   rate_error?: string;
@@ -498,3 +500,7 @@ export interface ExitItem extends ExitSpec {
 }
 export interface ExitKindInfo {kind:ExitKind;label:string;group:string;description:string;admin_only:boolean}
 export interface ExitList {items:ExitItem[];kinds:ExitKindInfo[]}
+
+export function linkNeedsAttention(link: Pick<LinkItem, "enabled" | "state">, stats?: Pick<LinkStats, "refused_30d">) {
+ return !link.enabled || link.state === "expired" || (stats?.refused_30d ?? 0) > 0;
+}

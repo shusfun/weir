@@ -13,7 +13,7 @@ import (
 )
 
 // 声明式能力：dsh 把建节点、建用户、建链接拼成一份草稿；试运行调用同一个处理函数但不写入，
-// 实测只做一次，确认时按试运行定下的端口保存；任一步失败已执行的步骤撤回。
+// 确认时按试运行定下的端口保存并排队实测；任一步失败已执行的步骤撤回。
 func TestComposedDraftCreatesNodeUserLinkAndRollsBack(t *testing.T) {
 	s, admin, g := setupGate(t)
 	m, _ := s.ensureMCP()
@@ -41,8 +41,8 @@ func TestComposedDraftCreatesNodeUserLinkAndRollsBack(t *testing.T) {
 	if isErr {
 		t.Fatal(text)
 	}
-	// 试运行没有写入任何数据，只在 VPS 上实测了一次。
-	if n, _ := s.Store.Ent.Node.Query().Count(ctx); n != 0 || len(seen) != 1 {
+	// 试运行只静态校验，普通节点的实测在保存与应用配置后执行。
+	if n, _ := s.Store.Ent.Node.Query().Count(ctx); n != 0 || len(seen) != 0 {
 		t.Fatalf("dry run wrote %d nodes, gate tests %d", n, len(seen))
 	}
 	d := mustJSON(t, admin, "GET", "/api/v1/admin/ai/drafts", nil, 200)["drafts"].([]any)[0].(map[string]any)
@@ -54,7 +54,7 @@ func TestComposedDraftCreatesNodeUserLinkAndRollsBack(t *testing.T) {
 		}
 	}
 	// REALITY 自动选中 443 时不写回（手动端口要 ≥ 1024），确认时再次选中。
-	if port != 0 || first["result"] == nil || !strings.Contains(first["title"].(string), "HK-REALITY") || !strings.Contains(mustString(first["preview"]), "443") {
+	if port != 0 || !strings.Contains(first["title"].(string), "HK-REALITY") || !strings.Contains(mustString(first["preview"]), "443") {
 		t.Fatalf("node step = %v", first)
 	}
 	mustJSON(t, admin, "POST", "/api/v1/admin/ai/drafts/"+d["id"].(string)+"/apply", nil, 200)
@@ -62,8 +62,11 @@ func TestComposedDraftCreatesNodeUserLinkAndRollsBack(t *testing.T) {
 	if err != nil || n.Port != 443 || n.Settings["reality_dest"] != "www.apple.com:443" {
 		t.Fatalf("node = %+v %v", n, err)
 	}
-	if len(seen) != 1 {
-		t.Fatalf("confirming a tested draft must not test again: %d", len(seen))
+	if len(seen) != 0 {
+		t.Fatalf("confirming must save without blocking on testing: %d", len(seen))
+	}
+	if _, queued, err := s.Store.KV.Get(ctx, pendingNodeProbePrefix+itoa(n.ID)); err != nil || !queued {
+		t.Fatalf("confirmed node was not queued: %v", err)
 	}
 	u, err := s.Store.Ent.User.Query().Where(user.EmailEQ("dsh@example.test")).Only(ctx)
 	if err != nil || len(u.NodeIds) != 1 || u.NodeIds[0] != n.ID {

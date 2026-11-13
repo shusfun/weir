@@ -8,8 +8,8 @@ import (
 
 // auditLabels 是审计操作的中文名；没有登记的操作显示原始编码，不猜。
 var auditLabels = map[string]string{
-	"subscription.profile.test":"实测订阅组节点",
-	"gate.config.apply": "VPS 配置应用结果", "subscription.converter.save": "保存外部转换后端",
+	"subscription.profile.test": "实测订阅组节点",
+	"gate.config.apply":         "VPS 配置应用结果", "subscription.converter.save": "保存外部转换后端",
 	"asset.relay.open": "开始文件兜底中转", "asset.relay.close": "关闭文件兜底中转",
 	"asset.distribute":      "中心文件兜底分发",
 	"defense.laya.discover": "发现已有 Laya", "defense.laya.attach": "确认接入已有 Laya",

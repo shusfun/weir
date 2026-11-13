@@ -41,6 +41,25 @@ def marker(commit):
     return f"<!-- weir-source: {commit} -->"
 
 
+def find_release(repository, tag):
+    release = gh("api", f"repos/{repository}/releases/tags/{tag}", missing_ok=True)
+    if release is not None:
+        return release
+    # GitHub's tag endpoint can omit unpublished drafts. Authenticated release
+    # listing includes them; retain their identity instead of creating a second.
+    page = 1
+    while True:
+        releases = gh("api", f"repos/{repository}/releases?per_page=100&page={page}")
+        matches = [r for r in releases if r["tag_name"] == tag]
+        if len(matches) > 1:
+            raise ValueError("multiple releases match the requested tag")
+        if matches:
+            return matches[0]
+        if len(releases) < 100:
+            return None
+        page += 1
+
+
 def verify_tag(repository, tag, commit):
     target = gh("api", f"repos/{repository}/git/ref/tags/{tag}")["object"]
     for _ in range(4):
@@ -86,7 +105,9 @@ def parse_checksums(data, tag):
 
 def verify_remote(repository, tag, commit, expected=None, allow_draft=False):
     verify_tag(repository, tag, commit)
-    release = gh("api", f"repos/{repository}/releases/tags/{tag}")
+    release = find_release(repository, tag)
+    if release is None:
+        raise ValueError("release not found")
     verify_metadata(release, tag, commit, allow_draft)
     assets = remote_assets(release)
     if set(assets) != set(asset_names(tag)):
@@ -114,7 +135,7 @@ def publish(repository, tag, commit, directory):
         expected = {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in paths.items()}
         if parse_checksums(paths["checksums.txt"].read_bytes(), tag) != {name: expected[name] for name in asset_names(tag)[:-1]}:
             raise ValueError("local archives do not match checksums.txt")
-        release = gh("api", f"repos/{repository}/releases/tags/{tag}", missing_ok=True)
+        release = find_release(repository, tag)
         if release is not None:
             verify_metadata(release, tag, commit, allow_draft=True)
             if not release["draft"]:
@@ -126,7 +147,9 @@ def publish(repository, tag, commit, directory):
                 notes_path.write_text(notes.rstrip() + "\n\n" + marker(commit) + "\n", encoding="utf-8")
                 gh("release", "create", tag, "--repo", repository, "--draft", "--title", tag,
                    "--notes-file", str(notes_path), "--verify-tag", "--target", commit, binary=True)
-            release = gh("api", f"repos/{repository}/releases/tags/{tag}")
+            release = find_release(repository, tag)
+            if release is None:
+                raise ValueError("created release draft not found")
             verify_metadata(release, tag, commit, allow_draft=True)
         uploaded = remote_assets(release)
         if set(uploaded) - set(expected):

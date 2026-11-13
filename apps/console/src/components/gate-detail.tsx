@@ -1,4 +1,5 @@
 import { PendingExits } from "./pending-exits";
+import { GateLayaHosting } from "../features/ai/laya-gate-hosting";
 
 function KernelTimeline({ events }: { events?: KernelEvent[] }) {
   if (!events) return <small>断线记录未知</small>;
@@ -83,6 +84,7 @@ export function GateDetail({ gate, nodes, close, layout = "sheet" }: { gate: Gat
         <div className={layout === "page" ? "stack" : "stack p-4"}>
           <GateUpdateLine gate={gate} />
           <PendingExits all gateId={gate.id} />
+          <GateLayaHosting gateId={gate.id} host={gate.public_host} />
 
           <Tabs value={tab} onValueChange={v => setTab(String(v))}>
             <TabsList aria-label="VPS 详情">

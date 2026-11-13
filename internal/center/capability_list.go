@@ -424,10 +424,10 @@ var opDraftCaps = []Capability{
 			cfg, err := s.converterSettings(ctx)
 			return map[string]any{"enabled": cfg.Enabled, "endpoint": cfg.Endpoint, "preferred_gate_id": cfg.PreferredGate, "max_bytes": cfg.MaxBytes}, err
 		}}},
-	{Name: "node.create", Title: "新建节点", Purpose: "在一台 VPS 上按协议方案新建节点，与手动「新建节点」同一流程：分配端口、准备证书、REALITY 由 VPS 实测伪装目标，保存前在这台 VPS 上用真实内核实测连接；试运行通过才弹窗，确认后按试运行定下的端口与伪装目标保存。",
+	{Name: "node.create", Title: "新建节点", Purpose: "在一台 VPS 上按协议方案新建节点，与手动「新建节点」同一流程：试运行校验参数、端口与安全边界，确认后保存并下发，再排队用真实内核实测。失败保留节点和端口，可调整防火墙后重试；链式出口仍须先验证通过。",
 		Kind: "draft", Risk: "normal", Object: "node", Creates: true, Params: nodeCreateParams,
 		op: &opSpec{kind: "create", method: "POST", handler: h(func(s *Server) gin.HandlerFunc { return s.createNode }), path: noPath, body: nodeCreateBody,
-			probe: true, undo: "node.delete", idKey: "node_id", title: nodeCreateTitle, needs: nodeCreateNeeds, secrets: nodeCreateSecrets}},
+			undo: "node.delete", idKey: "node_id", title: nodeCreateTitle, needs: nodeCreateNeeds, secrets: nodeCreateSecrets}},
 	{Name: "node.delete", Title: "删除节点", Purpose: "删除节点及其用户凭据与分流规则；已导入客户端的这个节点随即失效。被其他节点当作出口时拒绝；被用户自建链式代理当作出口时要 force 才一并删除。不能撤回，只能是最后一步。",
 		Kind: "draft", Risk: "danger", Object: "node", Last: true,
 		Params: []Param{{Key: "node_id", Label: "节点", Kind: "ref", Ref: "node", Required: true}, {Key: "force", Label: "一并删除依赖它的用户链式代理", Kind: "bool"}},

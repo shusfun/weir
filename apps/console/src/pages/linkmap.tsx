@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 // 链路页（设计稿 ALinkmap）：大字结论下是一条条链路卡（用户 → 入口 VPS → 出口，点线亮度随实时速率）；背景地球画出航线。
 // 平面地图与详情、全部路径表折叠在下面（键盘与读屏用表格）。管理员看全部，可按用户、VPS 筛选；普通用户只看自己的。
 import { useSearchParams } from "react-router-dom";
@@ -13,6 +14,8 @@ export function LinkMapPage({ admin }: { admin: boolean }) {
   const { map: m, error, store, reload } = useLinkMap(admin);
   const [params, setParams] = useSearchParams();
   const selected = params.get("sel");
+  const [detailOpen, setDetailOpen] = useState(!!selected);
+  useEffect(() => { if (selected) setDetailOpen(true); }, [selected]);
   const user = params.get("user") ? Number(params.get("user")) : undefined;
   const gate = params.get("gate") ? Number(params.get("gate")) : undefined;
   const set = (patch: Record<string, string | undefined>) => {
@@ -32,7 +35,7 @@ export function LinkMapPage({ admin }: { admin: boolean }) {
     <PageHeader
       size="hero"
       eyebrow={admin ? "链路" : "我的链路"}
-      title={m ? (() => { const active = m.paths.filter((p) => !store.stale(p.gate_id) && (store.smooth(store.paths.get(p.id)) ?? 0) > 0).length; return active > 0 ? <>{active} 条链路<br />正在使用</> : <>{m.paths.length} 条链路<br />此刻没有流量</>; })() : (admin ? "链路" : "我的链路")}
+      title={m ? (() => { const paths = m.paths.filter(p => (user === undefined || p.user_id === user) && (gate === undefined || p.gate_id === gate)); const unknown = paths.some(p => store.stale(p.gate_id) || store.smooth(store.paths.get(p.id)) == null); const active = paths.filter((p) => !store.stale(p.gate_id) && (store.smooth(store.paths.get(p.id)) ?? 0) > 0).length; return active > 0 ? <>{active} 条链路<br />正在使用</> : <>{paths.length} 条链路<br />{unknown ? "实时流量未知" : "此刻没有流量"}</>; })() : (admin ? "链路" : "我的链路")}
       description="背景的地球显示此刻的节点和链路。下面每一条是一个用户经入口 VPS 到出口的链路，从左到右：用户 → VPS → 出口。"
     />
   );
@@ -95,7 +98,7 @@ export function LinkMapPage({ admin }: { admin: boolean }) {
         </div>
       )}
       <p className="m-0 text-fine text-[var(--weir-ink-3)]">位置按 IP 估算，只对管理员显示；普通用户只看到自己的链路，背景地球也只显示自己能用的节点。{m.geo.ready ? " IP 定位数据来自 DB-IP（CC BY 4.0）。" : ` IP 定位：${m.geo.error ?? "未就绪"}。`}</p>
-      <Collapsible title="平面地图与详情">
+      <Collapsible title="平面地图与详情" open={detailOpen} onOpenChange={setDetailOpen}>
       {/* 宽屏：详情不参与行高（contain:size），高度跟左边的地图一列一样、内部滚动；选中别的对象时地图与下面的列表不移动 */}
       <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="stack gap-2 min-w-0">

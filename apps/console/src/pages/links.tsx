@@ -1,3 +1,4 @@
+import { linkNeedsAttention } from "../lib/core";
 import { ClientDistribution } from "../components/client-distribution";
 // 订阅链接：管理员与普通用户共用一页。默认看自己的额度、订阅链接与拉取统计；管理员可切到某个用户（?user=编号）或全部用户（?user=all）。
 // 操作平铺在每条链接卡片上；换地址、换凭据、删除在编辑弹窗里；最近 30 天的拉取按客户端、来源汇总。
@@ -65,7 +66,7 @@ export function LinksPage({ admin }: { admin: boolean }) {
       {header}
       <div className="flex flex-wrap items-center gap-[9px]">
         <Input className="w-[261px] max-w-full" aria-label="搜索设备或用户" placeholder="搜索设备或用户" value={query} onChange={(e) => setQuery(e.target.value)} />
-        <Segmented aria-label="链接筛选" value={attention} onValueChange={setAttention} options={[["all", `全部 ${stats.data?.length ?? ""}`.trim()], ["care", `需要注意 ${(stats.data ?? []).filter((s) => s.enabled && s.pulls_24h === 0).length}`], ["off", `已停用 ${(stats.data ?? []).filter((s) => !s.enabled).length}`]] as const} />
+        <Segmented aria-label="链接筛选" value={attention} onValueChange={setAttention} options={[["all", `全部 ${stats.data?.length ?? ""}`.trim()], ["care", `需要注意 ${(stats.data ?? []).filter((s) => linkNeedsAttention(s, s)).length}`], ["off", `已停用 ${(stats.data ?? []).filter((s) => !s.enabled).length}`]] as const} />
       </div>
       {scope ? <AdminLinks user={userParam} stats={byLink} query={query} attention={attention} /> : <MyLinks admin={admin} stats={byLink} query={query} attention={attention} />}
       <RecentPulls stats={stats.data} />

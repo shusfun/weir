@@ -52,7 +52,7 @@ func TestLayaDiscoveryRequiresConfirmationAndKeepsSecretsEncrypted(t *testing.T)
 		t.Fatalf("attach: %d %s", w.Code, w.Body.String())
 	}
 	configured, _, err := s.readLayaSettings(t.Context())
-	if err != nil || !configured.Enabled || configured.URL != upstream.URL || configured.Key == "fixture-secret" {
+	if err != nil || configured.Enabled || configured.URL != upstream.URL || configured.Key == "fixture-secret" {
 		t.Fatalf("attachment: %+v err=%v", configured, err)
 	}
 	if key, err := s.reveal(configured.Key); err != nil || key != "fixture-secret" {

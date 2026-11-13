@@ -49,7 +49,7 @@ func TestObservationsRegisteredOutcomesDailyAndContentBoundary(t *testing.T) {
 		fmt.Fprintf(w, `{"answers":{"category":{"choice":%q,"confidence":0.9}}}`, choice)
 	}))
 	defer model.Close()
-	mustJSON(t, admin, "PUT", "/api/v1/admin/defense/laya", map[string]any{"enabled": true, "url": model.URL, "model": "fixture"}, 200)
+	saveVerifiedLayaFixture(t, s, admin, map[string]any{"url": model.URL, "model": "fixture"})
 	if err := s.saveDSHSettings(t.Context(), DSHSettings{AutoAnalyze: true}); err != nil {
 		t.Fatal(err)
 	}

@@ -101,20 +101,13 @@ function proxyLead(view?: ProxyView) {
 
 function ProxyBoard({ view, admin }: { view: ProxyView; admin: boolean }) {
   const [fmt, setFmt] = useState("clash");
-  const groups = view.layout.filter((item) => !item.hidden);
+  const preview = useQuery({ queryKey: ["proxy-preview", view, fmt], queryFn: () => api(`/proxy/preview?user=${view.user_id}&target=${fmt}`) as Promise<{ body: string; link_name: string }> });
   const flows = [
     ...view.custom.entries.filter((entry) => entry.enabled).slice(0, 8).map((entry) => ({ label: entry.value, target: entry.effective_target || entry.target || "未知" })),
     { label: "局域网与本机", target: "直连" },
     { label: "国内域名与国内 IP", target: "直连" },
     { label: "其余流量", target: "PROXY" },
   ];
-  const body = [
-    "proxy-groups:",
-    ...(groups.length ? groups.slice(0, 8).map((group) => `  ${group.name} ${group.kind}`) : ["  未知"]),
-    `rules: ${view.custom.active_count} 条`,
-    "# 完整订阅正文未知：控制台不代客户端拉取，避免记成一次拉取",
-    `# 格式 ${fmt}`,
-  ].join("\n");
   return (
     <div className="grid items-start gap-[var(--weir-gap-29)] lg:grid-cols-[minmax(0,1.61fr)_minmax(0,1fr)]">
       <div className="stack">
@@ -142,9 +135,9 @@ function ProxyBoard({ view, admin }: { view: ProxyView; admin: boolean }) {
       <div>
         <div className="mb-[var(--weir-gap-13)] flex flex-wrap items-center justify-between gap-2">
           <b>订阅预览</b>
-          <Segmented aria-label="预览格式" value={fmt} onValueChange={setFmt} options={[["clash", "Clash"], ["stash", "小火箭"], ["singbox", "sing-box"]] as const} />
+          <Segmented aria-label="预览格式" value={fmt} onValueChange={setFmt} options={[["clash", "Clash"], ["base64", "小火箭"], ["singbox", "sing-box"]] as const} />
         </div>
-        <pre className="weir-paper">{body}</pre>
+        {preview.isPending || preview.error ? <State loading={preview.isPending} error={preview.error} onRetry={() => preview.refetch()} /> : <><small>链接：{preview.data.link_name || "默认链接"} · 预览不计入拉取统计</small><pre className="weir-paper max-h-[621px] overflow-auto">{preview.data.body}</pre></>}
       </div>
     </div>
   );

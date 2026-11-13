@@ -153,6 +153,9 @@ func (s *Server) dispatchWorkerTask(ctx context.Context, kind string, payload an
 		return out, 0, err
 	}
 	deadline := time.Now().Add(2 * time.Minute)
+	if kind == contracts.TaskLayaInstall {
+		deadline = time.Now().Add(30 * time.Minute)
+	}
 	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
 		deadline = d
 	}

@@ -124,7 +124,7 @@ func (s *Server) discoverLaya(c *gin.Context) {
 			failure(c, 400, "invalid_laya_url")
 			return
 		}
-		configured := layaSettings{Mode: "center", Enabled: true, URL: address, Model: model, Key: strings.TrimSpace(req.Key)}
+		configured := layaSettings{Mode: "center", URL: address, Model: model, Key: strings.TrimSpace(req.Key)}
 		if configured.Key == "" && old.Mode == "center" && address == old.URL && old.Key != "" {
 			configured.Key, err = s.reveal(old.Key)
 			if err != nil {
@@ -191,6 +191,7 @@ func (s *Server) attachLaya(c *gin.Context) {
 			return errors.New("laya_instance_changed")
 		}
 		configured := p.Configured
+		configured.Enabled = false
 		if configured.Key != "" {
 			configured.Key, err = s.Crypto.Encrypt(configured.Key)
 			if err != nil {

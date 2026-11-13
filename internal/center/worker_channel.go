@@ -295,6 +295,9 @@ func (s *Server) projectLegacyTask(ctx context.Context, id string) error {
 		return err
 	}
 	if r.LegacyID == 0 {
+		if r.Task.Kind == contracts.TaskLayaInstall || r.Task.Kind == contracts.TaskLayaRemove {
+			return s.auditGateLayaTask(ctx, r)
+		}
 		return nil
 	}
 	if r.Status != "succeeded" && r.Status != "failed" && r.Status != "expired" && r.Status != "unknown" && r.Status != "cancelled" {
@@ -464,7 +467,7 @@ func (s *Server) workerMaintenance(ctx context.Context) {
 					rs, e := s.Store.Tasks.List(ctx, 500)
 					if e == nil {
 						for _, r := range rs {
-							if r.LegacyID != 0 {
+							if r.LegacyID != 0 || r.Task.Kind == contracts.TaskLayaInstall || r.Task.Kind == contracts.TaskLayaRemove {
 								_ = s.projectLegacyTask(ctx, r.Task.ID)
 							}
 						}

@@ -89,6 +89,23 @@ func trustedDirectoryPath(dir string) error {
 	}
 }
 
+func TrustedDirectory(dir string) error { return trustedDirectoryPath(dir) }
+
+func TrustedFile(path string) error {
+	if err := trustedDirectoryPath(filepath.Dir(path)); err != nil {
+		return err
+	}
+	i, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	st, ok := i.Sys().(*syscall.Stat_t)
+	if !ok || st.Uid != 0 || !i.Mode().IsRegular() || i.Mode().Perm()&0022 != 0 {
+		return errors.New("untrusted file")
+	}
+	return nil
+}
+
 type boundedDockerOutput struct {
 	bytes.Buffer
 	exceeded bool
@@ -133,7 +150,7 @@ func ExecuteDocker(ctx context.Context, args []string) ([]byte, error) {
 		}
 		return nil, failure("laya_container_operation_failed", "layahost.ExecuteDocker")
 	}
-	if len(args) > 0 && args[0] != "inspect" {
+	if len(args) > 0 && args[0] != "inspect" && !(len(args) > 1 && args[0] == "image" && args[1] == "inspect") {
 		return json.RawMessage(`{}`), nil
 	}
 	return stdout.Bytes(), nil

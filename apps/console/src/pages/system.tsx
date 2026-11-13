@@ -1,6 +1,6 @@
 // 系统设置：按分区用标签页组织，分区记在地址栏 ?tab=。
 import { PageHeader, Tabs, TabsList, TabsPanel, TabsTab } from "@weir/ui";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { useConfirm } from "@weir/ui";
 import { hasUnsavedChanges } from "../lib/dirty";
@@ -53,10 +53,10 @@ export function SystemPage() {
           <NotifyCard />
         </TabsPanel>
         <TabsPanel value="defense" className="stack">
-          <LayaCard />
+          <p>前往 <Link to="/system?tab=ai">AI 服务设置</Link> 部署和配置 Laya；基础防御不依赖模型。</p>
           <ProtectionPolicyCard />
         </TabsPanel>
-        <TabsPanel value="ai" className="stack"><DshSettingsCard /><AIProfileCard /></TabsPanel>
+        <TabsPanel value="ai" className="stack"><DshSettingsCard /><LayaCard /><AIProfileCard /></TabsPanel>
         <TabsPanel value="certs" className="stack"><NodeCertCard /></TabsPanel>
         <TabsPanel value="data" className="stack"><BackupCard /><APITokensCard /></TabsPanel>
       </Tabs>

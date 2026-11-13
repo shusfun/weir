@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/shusfun/weir/internal/layahost"
 	"github.com/shusfun/weir/internal/releasefiles"
+	"github.com/shusfun/weir/internal/selfupdate"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/resource"
 	"github.com/shusfun/weir/packages/contracts"
@@ -136,6 +137,11 @@ func (s *Server) layaHostCall(ctx context.Context, doc layahost.Deployment, oper
 }
 
 func (s *Server) layaHostingRoutes(admin *gin.RouterGroup) {
+	admin.POST("/defense/laya/prepare/preview", s.previewLayaPreparation)
+	admin.POST("/defense/laya/prepare/:id/confirm", s.confirmLayaPreparation)
+	admin.GET("/gates/:id/laya", s.getGateLaya)
+	admin.POST("/gates/:id/laya/preview", s.previewGateLaya)
+	admin.POST("/gates/:id/laya/:preview/confirm", s.confirmGateLaya)
 	admin.GET("/defense/laya/hosting", s.getLayaHosting)
 	admin.POST("/defense/laya/hosting/preview", s.previewLayaHosting)
 	admin.POST("/defense/laya/hosting/:id/confirm", s.confirmLayaHosting)
@@ -149,7 +155,11 @@ func (s *Server) getLayaHosting(c *gin.Context) {
 		if runtime.GOOS != "linux" {
 			code = "laya_hosting_unsupported"
 		}
-		c.JSON(200, gin.H{"available": false, "state": "unknown", "code": code})
+		out := gin.H{"available": false, "state": "unknown", "code": code, "can_prepare": selfUpdateBlocker() == ""}
+		if st, ok := selfupdate.ReadStatus(); ok && st.Action == "prepare-laya" {
+			out["preparation"] = st
+		}
+		c.JSON(200, out)
 		return
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)

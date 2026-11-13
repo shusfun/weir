@@ -1,10 +1,11 @@
+import { hasUnsavedChanges, useUnsavedChanges } from "../lib/dirty";
 // 添加 VPS：两种方式。「SSH 一次装好」：填登录信息 → 核对主机指纹 → 中心登录上去执行安装命令，实时看日志，装完自动上线；
 // 「复制命令」：生成一次性配对命令（1 小时有效），自己在 VPS 上以 root 执行。登录密码与私钥只用于这一次安装，不保存。
 import { useId, useState } from "react";
 import { useQuery } from "../lib/query";
 import {
-  Button, CodeBlock, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, FilePicker, Form, Input, Notice, PasswordInput, Segmented, Step, Steps,
-  Tabs, TabsList, TabsPanel, TabsTab, Textarea,
+  Button, CheckboxField, CodeBlock, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, FilePicker, Form, Input, Notice, PasswordInput, Segmented, Step, Steps,
+  Tabs, TabsList, TabsPanel, TabsTab, Textarea, useConfirm,
 } from "@weir/ui";
 import { ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -28,20 +29,22 @@ function keyProblem(key: string) {
 }
 
 export function InviteGate({ open, close, done }: { open: boolean; close: () => void; done: () => void }) {
+  const confirm = useConfirm();
+  const requestClose = async () => {if (!hasUnsavedChanges() || await confirm({title:"放弃未保存的安装信息？",confirmText:"放弃修改"})) close();};
   const [mode, setMode] = useState<Mode>("ssh");
   const [name, setName] = useState("");
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && close()}>
+    <Dialog open={open} onOpenChange={(o) => !o && void requestClose()}>
       <DialogContent size="lg">
         <DialogTitle>添加 VPS</DialogTitle>
-        <DialogDescription>装好后 VPS 主动连中心，之后建节点、改配置都在这里操作，不用再登录 VPS。</DialogDescription>
-        <Tabs data-tour="vps-install" value={mode} onValueChange={(v) => setMode(v as Mode)}>
+        <DialogDescription>装好后 VPS 主动连接中心。可以只安装 Laya，也可以创建节点，不要求先建节点。</DialogDescription>
+        <Tabs data-tour="vps-install" value={mode} onValueChange={async (v) => {if (!hasUnsavedChanges() || await confirm({title:"切换安装方式并放弃当前填写？",confirmText:"切换"})) setMode(v as Mode);}}>
           <TabsList aria-label="安装方式">
             <TabsTab value="ssh">SSH 一次装好</TabsTab>
             <TabsTab value="command">复制安装命令</TabsTab>
           </TabsList>
-          <TabsPanel value="ssh">{open && <SSHInstall name={name} setName={setName} close={close} done={done} />}</TabsPanel>
-          <TabsPanel value="command">{open && <CommandInstall name={name} setName={setName} close={close} done={done} />}</TabsPanel>
+          <TabsPanel value="ssh">{open && mode === "ssh" && <SSHInstall name={name} setName={setName} close={() => void requestClose()} done={done} />}</TabsPanel>
+          <TabsPanel value="command">{open && mode === "command" && <CommandInstall name={name} setName={setName} close={() => void requestClose()} done={done} />}</TabsPanel>
         </Tabs>
       </DialogContent>
     </Dialog>
@@ -57,8 +60,10 @@ function NameField({ name, setName }: { name: string; setName: (v: string) => vo
 }
 
 // SSHInstall：填写 → 核对指纹 → 安装中 / 结果。三步在同一个位置切换，按钮不移动。
-function SSHInstall({ name, setName, close, done }: { name: string; setName: (v: string) => void; close: () => void; done: () => void }) {
-  const [host, setHost] = useState("");
+export function SSHInstall({ name, setName, close, done, gateId = 0, initialHost = "" }: { name: string; setName: (v: string) => void; close: () => void; done: () => void; gateId?: number; initialHost?: string }) {
+  const [host, setHost] = useState(initialHost);
+  const [initialName] = useState(name);
+  const [prepareLaya, setPrepareLaya] = useState(gateId > 0);
   const [port, setPort] = useState("22");
   const [user, setUser] = useState("root");
   const [auth, setAuth] = useState<"password" | "key">("password");
@@ -77,7 +82,7 @@ function SSHInstall({ name, setName, close, done }: { name: string; setName: (v:
     onSuccess: setProbe,
     wait: () => ({ label: `正在从中心连接 ${host.trim()}:${Number(port) || 22} 并读取主机指纹`, max: 15 }),
   });
-  const install = useFormAction(() => api("/admin/gates/ssh/install", "POST", { ...target(), name: name.trim(), fingerprint: probe?.fingerprint }) as Promise<{ job: Job }>, {
+  const install = useFormAction(() => api("/admin/gates/ssh/install", "POST", { ...target(), name: name.trim(), fingerprint: probe?.fingerprint, gate_id: gateId, prepare_laya: prepareLaya }) as Promise<{ job: Job }>, {
     fields: { invalid_ssh_key: "key", ssh_key_passphrase_required: "passphrase", ssh_auth_required: auth === "password" ? "password" : "key", invalid_name: "name" },
     onSuccess: (r) => setJob(r.job),
   });
@@ -86,14 +91,15 @@ function SSHInstall({ name, setName, close, done }: { name: string; setName: (v:
     form: [field("name", "名称", name), field("host", "地址", host), field("port", "SSH 端口", port), field("user", "用户名", user), field("auth", "登录方式", auth === "password" ? "密码" : "私钥"),
       field("password", "登录密码", password, true), field("private_key", "私钥", key, true)],
   });
+  useUnsavedChanges(!job && Boolean(name !== initialName || host !== initialHost || port !== "22" || user !== "root" || prepareLaya !== (gateId > 0) || password || key || passphrase));
   const restart = () => { setJob(null); setResult(null); setProbe(null); install.reset(); check.reset(); };
-  const step = job ? 3 : probe ? 2 : 1;
+  const step = result?.status === "done" ? 4 : job ? 3 : probe ? 2 : 1;
   const steps = (
     <Steps orientation="horizontal" aria-label="添加 VPS">
-      <Step index={1} label="连接方式" status={step > 1 ? "complete" : "current"} />
-      <Step index={2} label="SSH 登录" status={step > 2 ? "complete" : step === 2 ? "current" : "upcoming"} />
-      <Step index={3} label="安装与上线" status={step > 3 ? "complete" : step === 3 ? "current" : "upcoming"} />
-      <Step index={4} label="建第一个节点" status="upcoming" caption="装好后在 VPS 页新建" />
+      <Step index={0} label="连接方式" status={step > 1 ? "complete" : "current"} />
+      <Step index={1} label="SSH 登录" status={step > 2 ? "complete" : step === 2 ? "current" : "upcoming"} />
+      <Step index={2} label="安装与上线" status={step > 3 ? "complete" : step === 3 ? "current" : "upcoming"} />
+      <Step index={3} label="选择用途" status={step === 4 ? "current" : "upcoming"} caption="可安装 Laya、创建节点或稍后配置" />
     </Steps>
   );
   if (job) {
@@ -102,8 +108,8 @@ function SSHInstall({ name, setName, close, done }: { name: string; setName: (v:
       <div className="stack">
         {steps}
         <JobByID id={job.id} initial={job} openLogs onFinish={(j) => { setResult(j); if (j.status === "done") done(); }} />
-        {result?.status === "done" && <Notice tone="ok">已安装并上线。{gid ? <Link className="underline" to={objectHref({ type: "gate", id: gid })} onClick={close}>打开这台 VPS</Link> : null}，点「＋ 协议」建节点。</Notice>}
-        {result && result.status !== "done" && <Notice tone="warn">没有装好：{result.error}。可以改登录信息后重试，或换「复制安装命令」自己执行。</Notice>}
+        {result?.status === "done" && <Notice tone="ok">执行端已就绪。{gid ? <Link className="underline" to={objectHref({ type: "gate", id: gid })} onClick={close}>打开这台 VPS</Link> : null}。可以安装 Laya，也可以创建节点。</Notice>}
+        {result && result.status !== "done" && <Notice tone="warn">操作未完成：{result.error}。可以改登录信息后重试，或换「复制安装命令」自己执行。</Notice>}
         <DialogFooter>
           {result && result.status !== "done" && <Button variant="outline" onClick={restart}>重新填写</Button>}
           <Button variant={result ? "default" : "outline"} onClick={close}>{result ? "完成" : "在后台继续"}</Button>
@@ -130,7 +136,7 @@ function SSHInstall({ name, setName, close, done }: { name: string; setName: (v:
   return (
     <Form id={formId} busy={check.busy} errors={check.errors} onSubmit={() => void check.submit()}>
       {steps}
-      <NameField name={name} setName={setName} />
+      {gateId ? <Notice>只准备「{name}」的 Laya 部署权限；先核对设备身份，不重新配对。SSH 信息只用于本次操作。</Notice> : <><NameField name={name} setName={setName} /><CheckboxField label="同时准备 Laya 部署（可不创建节点）" checked={prepareLaya} onCheckedChange={setPrepareLaya}/></>}
       <div className="grid gap-3 sm:grid-cols-[1fr_96px_140px]">
         <Field label="VPS 地址" name="host" required hint="公网 IP 或域名。">
           <Input required value={host} placeholder="203.0.113.10" onChange={(e) => setHost(e.target.value)} autoComplete="off" />
@@ -237,7 +243,7 @@ function PairingProgress({ digest, command, close, done }: { digest: string; com
   if (st === "online")
     return (
       <Notice tone="ok" role="status">
-        「{q.data?.name}」已上线。<Link className="underline" to={objectHref({ type: "gate", id: q.data!.gate_id! })} onClick={() => { done(); close(); }}>打开这台 VPS</Link>，点「＋ 协议」建节点。
+        「{q.data?.name}」已上线。<Link className="underline" to={objectHref({ type: "gate", id: q.data!.gate_id! })} onClick={() => { done(); close(); }}>打开这台 VPS</Link>。可以安装 Laya，也可以创建节点。
       </Notice>
     );
   if (st === "expired") return <Notice tone="warn" role="status">这条命令已过期或已经用掉，没有配出 VPS。点「重新生成」换一条。</Notice>;

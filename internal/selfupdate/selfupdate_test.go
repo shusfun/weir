@@ -157,6 +157,74 @@ func TestRejectsBadRequests(t *testing.T) {
 	}
 }
 
+func TestFixedHostActionsAcceptNoCallerControlledArguments(t *testing.T) {
+	for _, action := range []string{"enable-local-gate", "prepare-laya"} {
+		r := Request{ID: "fixed-op-0001", Action: action, TraceID: strings.Repeat("a", 32)}
+		if err := r.Valid(); err != nil {
+			t.Fatalf("%s rejected: %v", action, err)
+		}
+		r.Version = "0.1.14"
+		if err := r.Valid(); err == nil {
+			t.Fatalf("%s accepted a version", action)
+		}
+		r.Version = ""
+		r.Sources = []ghrelease.Source{{Kind: "direct"}}
+		if err := r.Valid(); err == nil {
+			t.Fatalf("%s accepted sources", action)
+		}
+	}
+	if err := (Request{ID: "fixed-op-0001", Action: "prepare-laya", TraceID: "not-a-trace"}).Valid(); err == nil {
+		t.Fatal("accepted malformed trace id")
+	}
+}
+
+func TestApplyConsumesMalformedRequest(t *testing.T) {
+	setup(t, "center", false)
+	path := filepath.Join(Dir, "request.json")
+	if err := os.WriteFile(path, []byte("{"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := Apply(context.Background()); err == nil {
+		t.Fatal("malformed request must fail")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("malformed request was not consumed: %v", err)
+	}
+}
+
+func TestPendingHostOperationSurvivesPageReload(t *testing.T) {
+	setup(t, "center", false)
+	previous := &writer{st: Status{ID: "previous-operation", Action: "prepare-laya", State: "done"}}
+	previous.finish()
+	request := Request{ID: "pending-operation", Action: "enable-local-gate", TraceID: strings.Repeat("b", 32)}
+	if err := WriteRequest(request); err != nil {
+		t.Fatal(err)
+	}
+	state, ok := ReadStatus()
+	if !ok || state.ID != request.ID || state.State != "queued" || state.TraceID != request.TraceID {
+		t.Fatal(state, ok)
+	}
+	started := &writer{st: Status{ID: request.ID, Action: request.Action, State: "installing"}}
+	started.log("started")
+	if state, ok := ReadStatus(); !ok || state.State != "installing" {
+		t.Fatal(state, ok)
+	}
+}
+
+func TestOperationReceiptSurvivesNewStatus(t *testing.T) {
+	setup(t, "center", false)
+	first := &writer{st: Status{ID: "local-operation-0001", Action: "enable-local-gate", State: "installing"}}
+	first.log("starting")
+	if got, ok := ReadOperation(first.st.ID); !ok || got.State != "installing" {
+		t.Fatalf("first operation receipt: %+v, %v", got, ok)
+	}
+	second := &writer{st: Status{ID: "laya-operation-0001", Action: "prepare-laya", State: "installing"}}
+	second.log("starting")
+	if got, ok := ReadOperation(first.st.ID); !ok || got.State != "installing" {
+		t.Fatalf("receipt overwritten by later status: %+v, %v", got, ok)
+	}
+}
+
 func TestGateOnlyMachineCannotSelfUpdate(t *testing.T) {
 	e := setup(t, "gate", false)
 	request(t, Request{ID: "req-00000007", Action: "update", Version: "0.1.14"})

@@ -23,7 +23,7 @@ func TestLayaGateUsesBoundLeasedTaskAndValidatesAnswer(t *testing.T) {
 	if code != 200 || json.Unmarshal(body, &first) != nil || first.Config == nil {
 		t.Fatalf("poll: %d %s", code, body)
 	}
-	view := mustJSON(t, admin, "PUT", "/api/v1/admin/defense/laya", map[string]any{"enabled": true, "mode": "gate", "gate_id": g.id, "model": "laya:multilingual"}, 200)
+	view := saveVerifiedLayaFixture(t, s, admin, map[string]any{"mode": "gate", "gate_id": g.id, "model": "laya:multilingual"})
 	if view["key_set"] != false {
 		t.Fatal("Gate requires a center API key")
 	}
@@ -96,7 +96,7 @@ func TestLayaClassifyStopsWhenSnapshotDropsRuntime(t *testing.T) {
 	if code, body := g.call("POST", "/api/v1/agent/poll", contracts.AgentPoll{Protocol: 2, Capabilities: &caps, Resources: contracts.WorkerResources{Concurrency: 1}}); code != 200 {
 		t.Fatalf("poll: %d %s", code, body)
 	}
-	mustJSON(t, admin, "PUT", "/api/v1/admin/defense/laya", map[string]any{"enabled": true, "mode": "gate", "gate_id": g.id, "model": "laya:multilingual"}, 200)
+	saveVerifiedLayaFixture(t, s, admin, map[string]any{"mode": "gate", "gate_id": g.id, "model": "laya:multilingual"})
 	settings, ok := s.layaConfig(t.Context())
 	if !ok {
 		t.Fatal("Gate config unavailable")
@@ -196,7 +196,7 @@ func TestLayaDeploymentResultMustMatchApprovedVersionAndDigests(t *testing.T) {
 
 func TestLayaCenterLoopbackDoesNotRequireAPIKey(t *testing.T) {
 	s, admin := newInstalledServer(t)
-	mustJSON(t, admin, "PUT", "/api/v1/admin/defense/laya", map[string]any{"enabled": true, "url": "http://127.0.0.1:11435", "model": "laya:multilingual"}, 200)
+	saveVerifiedLayaFixture(t, s, admin, map[string]any{"url": "http://127.0.0.1:11435", "model": "laya:multilingual"})
 	if _, ok := s.layaConfig(t.Context()); !ok {
 		t.Fatal("official local instance unnecessarily requires API key")
 	}

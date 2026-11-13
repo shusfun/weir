@@ -31,11 +31,17 @@ const gateScript = `#!/bin/sh
 # Weir Gate 一键安装：下载与中心同版本的程序，安装 Gate 角色，并用一次性凭证配对。
 set -eu
 token=''
+laya=no
+gate_id=''
+public_key=''
 while [ $# -gt 0 ]; do
- case "$1" in --token) token=$2; shift 2;; *) shift;; esac
+ case "$1" in --token) token=$2; shift 2;; --laya) laya=yes; shift;; --gate-id) gate_id=$2; shift 2;; --public-key) public_key=$2; shift 2;; *) echo invalid_argument >&2;exit 2;; esac
 done
-[ -n "$token" ] || { echo 'usage: sh gate.sh --token TOKEN' >&2; exit 2; }
+[ -n "$token" ] || [ -n "$gate_id" ] || { echo 'usage: sh gate.sh --token TOKEN' >&2; exit 2; }
 [ "$(id -u)" = 0 ] || { echo 'root required' >&2; exit 1; }
+if [ -f /etc/weir/role ]; then
+ case "$(cat /etc/weir/role)" in center|standalone) echo 'This host runs a center. Enable its local execution agent in the console; remote Gate installation cannot replace its identity.' >&2; exit 1;; esac
+fi
 case "$(uname -m)" in x86_64|amd64) arch=amd64;; aarch64|arm64) arch=arm64;; *) echo 'unsupported architecture' >&2; exit 1;; esac
 work=$(mktemp -d /tmp/weir-gate-XXXXXX)
 trap 'rm -rf "$work"' EXIT
@@ -70,6 +76,15 @@ else
  curl -fsSL "%[1]s/install/gate.tar.gz?arch=$arch" -o "$work/gate.tar.gz"
  tar -xzf "$work/gate.tar.gz" -C "$work"
 fi
+chmod 0755 "$work/weir"
+if [ -n "$gate_id" ]; then
+ # Check the existing identity using this verified program before changing services.
+ "$work/weir" laya prepare gate --gate-id "$gate_id" --public-key "$public_key" --center '%[1]s'
+ sh "$work/install.sh" gate
+ systemctl restart weir-gate.service
+ echo 'Laya host prepared; existing device identity preserved.'
+ exit 0
+fi
 WEIR_GATE_PAIRING=1 sh "$work/install.sh" gate
 systemctl stop weir-gate.service
 if ! /opt/weir/current/weir gate pair --replace --center '%[1]s' --token "$token" --config /etc/weir/gate/agent.json; then
@@ -80,6 +95,7 @@ if ! /opt/weir/current/weir gate pair --replace --center '%[1]s' --token "$token
  fi
  exit 1
 fi
+if [ "$laya" = yes ]; then /opt/weir/current/weir laya prepare gate; fi
 systemctl enable weir-gate.service
 systemctl restart weir-gate.service
 echo 'Gate paired; it will appear online in the center within a minute.'

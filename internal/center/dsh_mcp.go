@@ -361,7 +361,9 @@ func (s *Server) callTool(ctx context.Context, source, name string, raw json.Raw
 		if d.Status == "auto_applied" {
 			return fmt.Sprintf("宿主已按自动安全护栏临时生效：%s。记录 %s，管理员可以撤销；到期自动失效。", strings.Join(titles, "；"), d.ID), false
 		}
-		if d.Status=="auto_receipt" {return fmt.Sprintf("该任务已有安全处置记录 %s，本次没有新增或重新生效任何修改。当前是否生效以观测面板为准；撤销、到期或总开关变化不会被重复提交恢复。",d.ID),false}
+		if d.Status == "auto_receipt" {
+			return fmt.Sprintf("该任务已有安全处置记录 %s，本次没有新增或重新生效任何修改。当前是否生效以观测面板为准；撤销、到期或总开关变化不会被重复提交恢复。", d.ID), false
+		}
 		return fmt.Sprintf("试运行通过，已弹窗请管理员确认（草稿编号 %s，只用于 withdraw_draft；对管理员用标题称呼它，不要报编号）：%s。在管理员确认前不会生效；结果下一轮从 get_console_context 的 drafts 读取。", d.ID, strings.Join(titles, "；")), false
 	}
 	c, ok := findCap(source, name)

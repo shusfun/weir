@@ -65,9 +65,11 @@ export function AuditPage() {
   const [page, setPage] = useState(1);
   const params = new URLSearchParams({ page: String(page), page_size: "20", q: search });
   if (result !== "all") params.set("result", result);
-  if (kind === "failed") params.set("result", "denied");
-  // 热力格：取最近的 500 条在本地按小时聚合；超出时如实标注「只统计最近 500 条」
-  const heat = useQuery({ queryKey: ["audit-heat"], queryFn: () => api("/admin/audit?page=1&page_size=100") as Promise<Items<Audit>> });
+  params.set("kind", kind);
+  const heat = useQuery({ queryKey: ["audit-heat", range], queryFn: () => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return api(`/admin/audit/summary?days=${range}&today_from=${encodeURIComponent(today.toISOString())}`) as Promise<AuditSummary>;
+  } });
   const query = useQuery({
     queryKey: ["audit-directory", params.toString()],
     queryFn: () => api("/admin/audit?" + params) as Promise<Items<Audit>>,
@@ -83,7 +85,7 @@ export function AuditPage() {
   const closeDetail = () => setUrl((p) => { p.delete("audit"); return p; }, { replace: true });
   useConsoleContext({
     page: "操作审计",
-    list: { filters: { 搜索: search, 结果: resultLabels[result] ?? result }, total: query.data?.total ?? 0, items: (query.data?.items ?? []).slice(0, 20).map((a) => ({ type: "audit", name: a.action, id: a.id })) },
+    list: { filters: { 范围: kind, 搜索: search, 结果: resultLabels[result] ?? result }, total: query.data?.total ?? 0, items: (query.data?.items ?? []).slice(0, 20).map((a) => ({ type: "audit", name: a.action, id: a.id })) },
   });
   useConsoleContext(detail ? { object: { type: "audit", name: detail.action, id: detail.id }, dialog: { title: "审计记录 #" + detail.id }, form: [field("target", "目标", detail.target), field("result", "结果", detail.result)] } : null);
   return (
@@ -92,14 +94,11 @@ export function AuditPage() {
         size="data"
         title="操作审计"
         description={heat.data ? (() => {
-          const today = heat.data.items.filter((a) => new Date(a.created_at).toDateString() === new Date().toDateString());
-          const human = today.filter((a) => a.actor > 0);
-          const denied = today.filter((a) => resultCode(a.result) === "denied").length;
-          const restarts = today.filter(restarted).length;
-          return <span className="weir-sum"><span>今天 <b>{human.length}</b> 次人的操作</span>{denied > 0 && <span className="text-[var(--weir-bad-ink)]">{denied} 次被拦下</span>}{restarts > 0 && <span className="text-[var(--weir-warn-ink)]">{restarts} 次重启了内核</span>}<span>{today.length - human.length} 条自动任务已折叠</span></span>;
+          const { human, automatic, failed, restarts } = heat.data.today;
+          return <span className="weir-sum"><span>今天 <b>{human}</b> 次人的操作</span>{failed > 0 && <span className="text-[var(--weir-bad-ink)]">{failed} 次失败或被拦下</span>}{restarts > 0 && <span>{restarts} 次重启了内核</span>}<span>{automatic} 条自动任务</span></span>;
         })() : "正在读取审计记录"}
         actions={
-          <Button variant="outline" disabled={query.isFetching} onClick={() => query.refetch()}>
+          <Button variant="outline" disabled={query.isFetching} onClick={() => { void query.refetch(); void heat.refetch(); }}>
             刷新记录
           </Button>
         }
@@ -109,7 +108,7 @@ export function AuditPage() {
           <span className="text-meta text-[var(--weir-ink-2)]">最近 {range === "1" ? "24 小时" : `${range} 天`} · 每一格是 {range === "30" ? "4 小时" : "1 小时"}，越亮操作越多；有涟漪的是重启了内核</span>
           <Segmented aria-label="热力范围" value={range} onValueChange={setRange} options={[["1", "今天"], ["7", "7 天"], ["30", "30 天"]] as const} />
         </div>
-        {heat.isPending || heat.error ? <State loading={heat.isPending} error={heat.error} onRetry={() => heat.refetch()} /> : <AuditHeat items={heat.data.items} days={Number(range)} />}
+        {heat.isPending || heat.error ? <State loading={heat.isPending} error={heat.error} onRetry={() => heat.refetch()} /> : <AuditHeat summary={heat.data} days={Number(range)} />}
       </Card>
       <div className="flex flex-wrap items-center gap-[9px]">
         <Segmented aria-label="审计范围" value={kind} onValueChange={(v) => { setKind(v); setPage(1); }} options={[["human", "人的操作"], ["all", "含自动任务"], ["failed", "失败与拦下"], ["restart", "重启了内核"]] as const} />
@@ -147,13 +146,13 @@ export function AuditPage() {
             <State loading skeleton={<SkeletonList rows={6} lines={3} rowClassName="list-row audit-row" />} />
           ) : query.error ? (
             <State error={query.error} onRetry={() => query.refetch()} />
-          ) : !query.data?.items.filter((a) => kindMatch(a, kind)).length ? (
+          ) : !query.data?.items.length ? (
             <State empty="没有符合条件的操作记录" />
           ) : (
             <Table>
               <TableHeader><TableRow><TableHead className="w-[91px]">时间</TableHead><TableHead>操作者</TableHead><TableHead>操作</TableHead><TableHead>对象</TableHead><TableHead>结果</TableHead><TableHead>对内核的影响</TableHead><TableHead>trace</TableHead></TableRow></TableHeader>
               <TableBody>
-                {query.data.items.filter((a) => kindMatch(a, kind)).map((item) => {
+                {query.data.items.map((item) => {
                   const code = resultCode(item.result);
                   return (
                     <TableRow key={item.id} {...dataObject({ type: "audit", id: item.id })} onClick={() => openDetail(item)}>
@@ -235,38 +234,13 @@ function restarted(a: Audit) {
   return a.action === "gate.kernel.restart" || a.action.endsWith(".restart") || /restart|重启/.test(a.result);
 }
 
-function kindMatch(a: Audit, kind: string) {
-  if (kind === "human") return a.actor > 0 || a.action.startsWith("ai.");
-  if (kind === "restart") return restarted(a);
-  return true;
-}
+type AuditSummary = { from: string; to: string; today: { human: number; automatic: number; failed: number; restarts: number }; buckets: { at: string; total: number; restarts: number }[] };
 
-// 热力格（设计稿 CAudit）：按小时（30 天时按 4 小时）聚合，越亮越多；有重启的格子是黄色带光圈。
-function AuditHeat({ items, days }: { items: Audit[]; days: number }) {
-  const step = days === 30 ? 4 : 1;
-  const cells = Math.min(84, Math.round((days * 24) / step / (days === 7 ? 2 : 1)));
-  const span = (days * 24 * 3600e3) / cells;
-  const end = Date.now();
-  const counts = Array.from({ length: cells }, () => ({ n: 0, restart: false }));
-  for (const a of items) {
-    const t = new Date(a.created_at).getTime();
-    const i = Math.floor((t - (end - days * 24 * 3600e3)) / span);
-    if (i >= 0 && i < cells) {
-      counts[i].n += 1;
-      if (restarted(a)) counts[i].restart = true;
-    }
-  }
-  const max = Math.max(1, ...counts.map((c) => c.n));
-  const labels = [0, 1, 2].map((k) => new Date(end - days * 24 * 3600e3 + (k * days * 24 * 3600e3) / 3)).map((d) => `${d.getMonth() + 1}/${d.getDate()}`);
-  return (
-    <>
-      <div className="weir-heat" style={{ gridTemplateColumns: `repeat(${cells}, minmax(0, 1fr))` }} role="img" aria-label={`最近 ${days} 天的操作分布`}>
-        {counts.map((c, i) => <i key={i} data-restart={c.restart || undefined} style={{ opacity: c.n ? 0.37 + (c.n / max) * 0.63 : undefined }} data-on={c.n ? "" : undefined} />)}
-      </div>
-      <div className="mt-[7px] flex justify-between text-fine text-[var(--weir-ink-3)]">{labels.map((l) => <span key={l}>{l}</span>)}<span>今天</span></div>
-      {items.length >= 100 && <div className="mt-[5px] text-fine text-[var(--weir-ink-3)]">只统计最近 100 条记录，更早的格子可能偏暗</div>}
-    </>
-  );
+function AuditHeat({ summary, days }: { summary: AuditSummary; days: number }) {
+  const max = Math.max(1, ...summary.buckets.map(c => c.total));
+  return <><div className="weir-heat" style={{ gridTemplateColumns: `repeat(${summary.buckets.length}, minmax(0, 1fr))` }} role="img" aria-label={`最近 ${days} 天的完整操作分布`}>
+    {summary.buckets.map(c => <i key={c.at} title={`${date(c.at)} · ${c.total} 次操作 · ${c.restarts} 次重启`} data-restart={c.restarts > 0 || undefined} style={{ opacity: c.total ? 0.37 + c.total / max * 0.63 : undefined }} data-on={c.total ? "" : undefined} />)}
+  </div><div className="mt-[7px] flex justify-between text-fine text-[var(--weir-ink-3)]"><span>{date(summary.from)}</span><span>{date(summary.to)}</span></div></>;
 }
 
 // 结果可能带附加信息（如「ok chains=0」）：标签看第一个词，完整内容在详情里。

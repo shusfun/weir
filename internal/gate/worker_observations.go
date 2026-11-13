@@ -44,7 +44,7 @@ func (a *Agent) observeWorkerComponents(ctx context.Context) {
 		}
 		components := map[string]contracts.ComponentObservation{}
 		if doc, err := readLayaDeployment(filepath.Join(a.P.Root, "laya")); err == nil && a.helper != nil {
-			observed := contracts.ComponentObservation{State: "unknown", Code: "runtime_status_unavailable", ObservedAt: time.Now().UTC()}
+			observed := contracts.ComponentObservation{State: "unknown", Code: "runtime_status_unavailable", ObservedAt: time.Now().UTC(), ImageDigest: doc.Spec.Digest, DeploymentVersion: doc.Version}
 			probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			raw, err := a.helper.Laya(probeCtx, "status", doc.Spec.Digest, doc.Version)
 			if err == nil {

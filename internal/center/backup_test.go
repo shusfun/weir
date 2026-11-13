@@ -109,12 +109,14 @@ func TestSubscriptionBackupImportExportAndWebdav(t *testing.T) {
 	files["weir-subscriptions-00000000-000000.json"] = []byte(upstreamBackup) // 更旧的一份
 	mu.Unlock()
 	mustJSON(t, admin, "POST", "/api/v1/admin/backup/webdav/run", nil, 200)
-	list := mustJSON(t, admin, "GET", "/api/v1/admin/backup/webdav/files", nil, 200)["files"].([]any)
+	listing := mustJSON(t, admin, "GET", "/api/v1/admin/backup/webdav/files", nil, 200)
+	list := listing["files"].([]any)
 	if len(list) != 1 {
 		t.Fatalf("keep=1 must prune old backups: %v", list)
 	}
 	mustJSON(t, admin, "POST", "/api/v1/admin/backup/webdav/restore", map[string]any{"file": "../etc/passwd", "password": "Passw0rd"}, 400)
-	res := mustJSON(t, admin, "POST", "/api/v1/admin/backup/webdav/restore", map[string]any{"file": list[0].(map[string]any)["name"], "password": "Passw0rd"}, 200)
+	mustJSON(t, admin, "POST", "/api/v1/admin/backup/webdav/restore", map[string]any{"file": list[0].(map[string]any)["name"], "password": "Passw0rd", "revision": "stale"}, 409)
+	res := mustJSON(t, admin, "POST", "/api/v1/admin/backup/webdav/restore", map[string]any{"file": list[0].(map[string]any)["name"], "password": "Passw0rd", "revision": listing["revision"]}, 200)
 	if res["profiles"].(float64) != 2 {
 		t.Fatalf("restore = %v", res)
 	}

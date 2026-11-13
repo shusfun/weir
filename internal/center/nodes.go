@@ -157,6 +157,14 @@ func (s *Server) nodeView(ctx context.Context, n *ent.Node) gin.H {
 		view["exit"], _ = s.exitResourceView(ctx, e)
 	}
 	if g != nil {
+		applied := "applied"
+		if g.AppliedRevision < g.ConfigRevision {
+			applied = "pending"
+		}
+		if g.FailedRevision > 0 && g.FailedRevision >= g.ConfigRevision {
+			applied = "failed"
+		}
+		view["application"] = gin.H{"state": applied, "revision": g.ConfigRevision, "applied_revision": g.AppliedRevision}
 		state, why := s.nodeReadiness(ctx, n, g)
 		view["readiness"] = gin.H{"state": state, "why": why}
 		view["gate_name"], view["host"] = g.Name, g.PublicHost
@@ -530,39 +538,18 @@ func (s *Server) createNodeNow(c *gin.Context) {
 		}
 		certID, st["tls_sni"] = &ct.ID, sni
 	}
-	// REALITY 目标：手动填写的只用它；否则按 VPS 实测的合适站点从快到慢，保存前的真实连接测试不通就换下一个。
-	var realityCandidates []string
+	// Reachability is observed after saving; an unopened inbound port must not
+	// prevent the administrator from obtaining its configuration.
 	if p.Security == "reality" && nodeSetting(st, "reality_dest") == "" {
 		target := strings.TrimSpace(req.RealityTarget)
-		switch {
-		case target != "":
-			realityCandidates = []string{target}
-		case req.SkipProbe:
-			realityCandidates = []string{realityTargets[0]}
-		default:
-			targets := make([]any, 0, len(realityTargets))
-			for _, t := range realityTargets {
-				targets = append(targets, t)
-			}
-			jobStep(ctx, "正在让 "+g.Name+" 实测候选伪装站点", 50*time.Second)
-			res, err := s.gateProbe(ctx, g, contracts.ActionRealityProbe, map[string]any{"targets": targets}, 50*time.Second)
-			realityCandidates = suitableTargets(res)
-			if err != nil || len(realityCandidates) == 0 {
-				detail := "没有找到合适的伪装目标"
-				if err != nil {
-					detail = err.Error()
-				}
-				failDetail(c, 422, "reality_probe_failed", detail, gin.H{"result": res})
-				return
-			}
+		if target == "" {
+			target = realityTargets[0]
 		}
-		for _, t := range realityCandidates {
-			if !probeHostPattern(t) {
-				failure(c, 400, "invalid_reality_target")
-				return
-			}
+		if !probeHostPattern(target) {
+			failure(c, 400, "invalid_reality_target")
+			return
 		}
-		st["reality_dest"], st["reality_server_names"] = realityCandidates[0]+":443", realityCandidates[0]
+		st["reality_dest"], st["reality_server_names"] = target+":443", target
 	}
 	autoPort := req.Port == 0
 	if autoPort {
@@ -590,43 +577,7 @@ func (s *Server) createNodeNow(c *gin.Context) {
 	if name == "" {
 		name = fmt.Sprintf("%s %s", g.Name, p.Name)
 	}
-	// 保存前由 VPS 用这份参数实测真实连接（内核自检 + 本机回环下载）；
-	// 例如 REALITY 目标在该网络下握手不通时直接拒绝，而不是建出一个连不上的节点。
-	tested := gin.H{"done": false}
-	if !req.SkipProbe {
-		candidate := &ent.Node{GateID: g.ID, Kernel: p.Kernel, Protocol: p.Protocol, Port: req.Port, Network: p.Network, Security: p.Security, Settings: st, CertID: certID}
-		tries := realityCandidates
-		if len(tries) == 0 {
-			tries = []string{""}
-		} else if len(tries) > 3 {
-			tries = tries[:3]
-		}
-		var res map[string]any
-		var failed []string
-		for i, t := range tries {
-			if t != "" {
-				st["reality_dest"], st["reality_server_names"] = t+":443", t
-				jobStep(ctx, fmt.Sprintf("正在准备内核并实测节点（伪装站点 %s，第 %d/%d 个）", t, i+1, len(tries)), nodeTestTimeout)
-			} else {
-				jobStep(ctx, "正在准备内核并实测节点（"+g.Name+"）", nodeTestTimeout)
-			}
-			if res, err = s.testNode(ctx, candidate, st); err == nil {
-				break
-			}
-			if missingMihomo(err) {
-				break
-			}
-			failed = append(failed, strings.TrimSpace(t+" "+err.Error()))
-		}
-		if missingMihomo(err) {
-			tested = gin.H{"done": false, "pending": true, "status": "unknown", "why": "未执行：mihomo 正在下载，完成后自动实测"}
-		} else if err != nil {
-			failDetail(c, 422, "node_test_failed", strings.Join(failed, "；"), gin.H{"result": res})
-			return
-		} else {
-			tested = gin.H{"done": true, "latency_ms": res["latency_ms"], "skipped_targets": failed, "stage": res["stage"]}
-		}
-	}
+	tested := gin.H{"done": false, "pending": !req.SkipProbe, "status": "unknown", "why": "已保存后等待配置应用与后台实测"}
 	if c.GetBool(dryRunKey) {
 		r := dryResult{Pin: map[string]any{"port": req.Port}, Preview: []string{fmt.Sprintf("在 %s 上新建 %s 节点「%s」，端口 %d", g.Name, p.Name, name, req.Port)}}
 		// 自动选中的 443 不能作为手动端口写回（手动端口要 ≥ 1024）：确认时它仍空闲就再次选中，否则换一个随机端口。
@@ -634,13 +585,9 @@ func (s *Server) createNodeNow(c *gin.Context) {
 			delete(r.Pin, "port")
 			r.Preview[0] += "（确认时 443 已被占用就自动换一个端口）"
 		}
-		if len(realityCandidates) > 0 {
+		if p.Security == "reality" {
 			r.Pin["reality_target"] = nodeSetting(st, "reality_server_names")
-			if strings.TrimSpace(req.RealityTarget) == "" {
-				r.Preview = append(r.Preview, "伪装目标 "+nodeSetting(st, "reality_server_names")+"（这台 VPS 实测候选站点后选中）")
-			} else {
-				r.Preview = append(r.Preview, "伪装目标 "+nodeSetting(st, "reality_server_names"))
-			}
+			r.Preview = append(r.Preview, "伪装目标 "+nodeSetting(st, "reality_server_names"))
 		}
 		if tested["done"] == true {
 			r.Result = map[string]any{"latency_ms": tested["latency_ms"], "stage": tested["stage"]}
@@ -678,13 +625,12 @@ func (s *Server) createNodeNow(c *gin.Context) {
 		failInternal(c, 409, "node_conflict", err)
 		return
 	}
+	warnings := []string{}
 	if newExit || probe != nil {
 		if err = s.refreshExit(ctx, selected, probe); err != nil {
-			failInternal(c, 500, "source_exit_failed", err)
-			return
+			warnings = append(warnings, "出口观测尚未更新，请在节点详情核对")
 		}
 	}
-
 	// 请求里指定的用户：没有「全部节点」的用户把这个节点加进可用节点（「全部节点」的用户本来就有）。
 	for _, uid := range dedupe(req.UserIDs) {
 		u, err := s.Store.Ent.User.Get(ctx, uid)
@@ -694,23 +640,22 @@ func (s *Server) createNodeNow(c *gin.Context) {
 		_ = u.Update().SetNodeIds(append(append([]int{}, u.NodeIds...), n.ID)).Exec(ctx)
 	}
 	if _, err = s.ensureProbeCredential(ctx, n); err != nil {
-		failInternal(c, 500, "probe_credential_failed", err)
-		return
+		warnings = append(warnings, "内部实测凭据待准备")
 	}
 	if err = s.afterNodeChange(WithRevisionCause(ctx, "node.create", c.GetInt("user_id")), n); err != nil {
-		failInternal(c, 500, "sync_failed", err)
-		return
+		warnings = append(warnings, "配置尚未下发，请重试应用")
 	}
-	if tested["pending"] == true {
-		if err := s.queueNodeProbe(ctx, n, c.GetInt("user_id")); err != nil {
-			failInternal(c, 500, "save_failed", err)
-			return
+	if !req.SkipProbe {
+		if err = s.queueNodeProbe(ctx, n, c.GetInt("user_id")); err != nil {
+			warnings = append(warnings, "实测排队失败，请在节点详情重试")
 		}
 	}
 	go s.checkAfterApplied(context.WithoutCancel(ctx), n.ID, g.ID)
 	s.audit(c, "node.create", "node:"+itoa(n.ID), "ok")
 	view := s.nodeView(ctx, n)
 	view["tested"] = tested
+	view["saved"] = true
+	view["warnings"] = warnings
 	view["shares"] = s.nodeShares(ctx, n, req.UserIDs)
 	c.JSON(200, view)
 }
@@ -994,21 +939,23 @@ func (s *Server) updateNodeNow(c *gin.Context) {
 			return
 		}
 	}
+	warnings := []string{}
 	if err = s.afterNodeChange(WithRevisionCause(ctx, "node.update", c.GetInt("user_id")), n); err != nil {
-		failInternal(c, 500, "sync_failed", err)
-		return
+		warnings = append(warnings, "配置尚未下发，请在节点详情重试应用")
 	}
 	s.audit(c, "node.update", "node:"+itoa(n.ID), "ok")
 	if n.Port != previous.Port || n.ExitID != previous.ExitID || n.Enabled != previous.Enabled || !reflect.DeepEqual(n.Settings, previous.Settings) || !reflect.DeepEqual(n.CertID, previous.CertID) {
-		if _, _, e := s.gateKernels(ctx, g, map[string]bool{"mihomo": true}); e != nil && missingMihomo(e) {
-			if e = s.queueNodeProbe(ctx, n, c.GetInt("user_id")); e != nil {
-				failInternal(c, 500, "save_failed", e)
-				return
+		if n.Enabled && !req.SkipProbe {
+			if e := s.queueNodeProbe(ctx, n, c.GetInt("user_id")); e != nil {
+				warnings = append(warnings, "实测排队失败，请在节点详情重试")
 			}
 		}
 		go s.checkAfterApplied(context.WithoutCancel(ctx), n.ID, g.ID)
 	}
-	c.JSON(200, s.nodeView(ctx, n))
+	view := s.nodeView(ctx, n)
+	view["saved"] = true
+	view["warnings"] = warnings
+	c.JSON(200, view)
 }
 
 func (s *Server) rotateNodeProbe(c *gin.Context) {
@@ -1072,6 +1019,18 @@ func (s *Server) deleteNode(c *gin.Context) {
 	}
 	if err != nil {
 		failInternal(c, 500, "delete_failed", err)
+		return
+	}
+	s.nodeProbes.Lock()
+	if jobID := s.nodeProbes.jobs[n.ID]; jobID != "" {
+		_ = s.jobs.Cancel(jobViewer{admin: true}, jobID)
+		delete(s.nodeProbes.jobs, n.ID)
+	}
+	queueErr := s.Store.KV.Del(ctx, pendingNodeProbePrefix+itoa(n.ID))
+	resultErr := s.Store.KV.Del(ctx, nodeTestKey(n.ID))
+	s.nodeProbes.Unlock()
+	if queueErr != nil || resultErr != nil {
+		failInternal(c, 503, "probe_cleanup_failed", errors.Join(queueErr, resultErr))
 		return
 	}
 	if err = s.SyncAll(ctx); err == nil {

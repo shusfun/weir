@@ -13,6 +13,10 @@ import (
 )
 
 func (s *Server) gateAdminRoutes(admin *gin.RouterGroup) {
+	admin.GET("/center/local-gate", s.getLocalGate)
+	admin.GET("/center/operations/:operation", s.getHostOperation)
+	admin.POST("/center/local-gate/preview", s.previewLocalGate)
+	admin.POST("/center/local-gate/:id/confirm", s.confirmLocalGate)
 	admin.GET("/gates", s.listGates)
 	admin.POST("/gates/invite", s.inviteGate)
 	admin.GET("/gates/pairing/:digest", s.pairingStatus)

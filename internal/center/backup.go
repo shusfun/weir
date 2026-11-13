@@ -481,8 +481,12 @@ func (s *Server) saveWebdav(ctx context.Context, cfg WebdavConfig) error {
 	return s.Store.Ent.Setting.Create().SetKey(webdavKey).SetValue(toMap(cfg)).OnConflictColumns(setting.FieldKey).UpdateNewValues().Exec(ctx)
 }
 
+func webdavRevision(cfg WebdavConfig) string {
+	return digest(cfg.URL + "\x00" + cfg.Username + "\x00" + cfg.Password)
+}
+
 func webdavView(cfg WebdavConfig) gin.H {
-	return gin.H{"url": cfg.URL, "username": cfg.Username, "password_set": cfg.Password != "", "keep": cfg.Keep, "auto": cfg.Auto, "hours": cfg.Hours, "last_run_at": cfg.LastRunAt, "last_error": cfg.LastError}
+	return gin.H{"revision": webdavRevision(cfg), "url": cfg.URL, "username": cfg.Username, "password_set": cfg.Password != "", "keep": cfg.Keep, "auto": cfg.Auto, "hours": cfg.Hours, "last_run_at": cfg.LastRunAt, "last_error": cfg.LastError}
 }
 
 func (s *Server) getWebdav(c *gin.Context) {
@@ -668,7 +672,7 @@ func (s *Server) listWebdav(c *gin.Context) {
 		failDetail(c, 502, "webdav_failed", err.Error(), nil)
 		return
 	}
-	c.JSON(200, gin.H{"files": files})
+	c.JSON(200, gin.H{"files": files, "revision": webdavRevision(cfg)})
 }
 
 var backupName = regexp.MustCompile(`^weir-subscriptions-[0-9A-Za-z_.-]{1,64}\.json$`)
@@ -676,6 +680,7 @@ var backupName = regexp.MustCompile(`^weir-subscriptions-[0-9A-Za-z_.-]{1,64}\.j
 func (s *Server) restoreWebdav(c *gin.Context) {
 	var req struct {
 		File     string `json:"file"`
+		Revision string `json:"revision"`
 		Password string `json:"password"`
 		Code     string `json:"code"`
 	}
@@ -690,6 +695,10 @@ func (s *Server) restoreWebdav(c *gin.Context) {
 	cfg, err := s.webdavConfig(ctx)
 	if err != nil {
 		failInternal(c, 503, "settings_unavailable", err)
+		return
+	}
+	if req.Revision == "" || req.Revision != webdavRevision(cfg) {
+		failure(c, 409, "webdav_configuration_changed")
 		return
 	}
 	resp, err := s.webdavRequest(ctx, cfg, "GET", req.File, nil, nil)

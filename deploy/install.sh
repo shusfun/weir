@@ -316,6 +316,8 @@ ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
 ReadWritePaths=/run/weir /etc/weir/gate /opt/weir/cores /opt/weir
+ReadWritePaths=-/run/ufw.lock
+ExecStartPre=+/usr/bin/touch /run/ufw.lock
 ReadWritePaths=-/www/server/nginx/html/.well-known/acme-challenge
 ReadWritePaths=-/etc/resolv.conf -/etc/systemd/resolved.conf.d -/run/systemd/resolve
 [Install]

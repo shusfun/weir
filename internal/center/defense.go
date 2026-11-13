@@ -430,7 +430,17 @@ func (s *Server) getLaya(c *gin.Context) {
 		failInternal(c, 503, "laya_configuration_unavailable", err)
 		return
 	}
-	c.JSON(200, gin.H{"enabled": l.Enabled, "mode": l.Mode, "gate_id": l.GateID, "url": l.URL, "model": l.Model, "key_set": l.Key != "", "compatibility": s.currentLayaCompatibility(c.Request.Context(), l)})
+	_, verified, err := s.Store.KV.Get(c.Request.Context(), layaVerificationKey(l))
+	if err != nil {
+		failInternal(c, 503, "laya_configuration_unavailable", err)
+		return
+	}
+	c.JSON(200, gin.H{"enabled": l.Enabled, "verified": verified, "mode": l.Mode, "gate_id": l.GateID, "url": l.URL, "model": l.Model, "key_set": l.Key != "", "compatibility": s.currentLayaCompatibility(c.Request.Context(), l)})
+}
+
+func layaVerificationKey(l layaSettings) string {
+	l.Enabled = false
+	return "laya-verified:" + digest(jsonText(l))
 }
 
 func (s *Server) putLaya(c *gin.Context) {
@@ -497,9 +507,21 @@ func (s *Server) putLaya(c *gin.Context) {
 		if current != revision {
 			return errors.New("laya_configuration_changed")
 		}
+		if l.Enabled && (!old.Enabled || layaVerificationKey(l) != layaVerificationKey(old)) {
+			if layaVerificationKey(l) != layaVerificationKey(old) {
+				return errors.New("laya_verification_required")
+			}
+			_, verified, err := s.Store.KV.Get(ctx, layaVerificationKey(l))
+			if err != nil {
+				return err
+			}
+			if !verified {
+				return errors.New("laya_verification_required")
+			}
+		}
 		return s.Store.Ent.Setting.Create().SetKey("laya").SetValue(value).OnConflictColumns(setting.FieldKey).UpdateNewValues().Exec(ctx)
 	}); err != nil {
-		if err.Error() == "laya_configuration_changed" {
+		if err.Error() == "laya_configuration_changed" || err.Error() == "laya_verification_required" {
 			failure(c, 409, err.Error())
 			return
 		}
@@ -523,17 +545,40 @@ func (s *Server) deleteLaya(c *gin.Context) {
 }
 
 func (s *Server) testLaya(c *gin.Context) {
-	l, ok := s.layaConfig(c.Request.Context())
-	if !ok {
-		failure(c, 409, "laya_not_enabled")
+	l, _, err := s.readLayaSettings(c.Request.Context())
+	if err != nil {
+		failInternal(c, 503, "laya_configuration_unavailable", err)
 		return
+	}
+	if l.Mode == "gate" && l.GateID < 1 || l.Mode != "gate" && l.URL == "" || l.Model == "" {
+		failure(c, 409, "invalid_laya_settings")
+		return
+	}
+	verificationKey := layaVerificationKey(l)
+	if l.Key != "" && l.Mode != "gate" {
+		l.Key, err = s.reveal(l.Key)
+		if err != nil {
+			failInternal(c, 503, "laya_credentials_unavailable", err)
+			return
+		}
 	}
 	v, err := s.classify(c.Request.Context(), l, "Synthetic test event: repeated-login-failure; scope: authentication; failed logins from the same source within 10 minutes: 12")
 	if err != nil {
+		_ = s.Store.KV.Del(c.Request.Context(), verificationKey)
 		failDetail(c, 502, "laya_unavailable", err.Error(), nil)
 		return
 	}
-	s.audit(c, "defense.laya.test", "", "ok")
+	result := "unknown"
+	if v.Category != "unknown" && v.Outcome != "unknown" {
+		if err = s.Store.KV.Set(c.Request.Context(), verificationKey, taskTrace(c.Request.Context()), 24*time.Hour); err != nil {
+			failInternal(c, 503, "save_failed", err)
+			return
+		}
+		result = "ok"
+	} else {
+		_ = s.Store.KV.Del(c.Request.Context(), verificationKey)
+	}
+	s.audit(c, "defense.laya.test", "", result)
 	c.JSON(200, gin.H{"verdict": v})
 }
 

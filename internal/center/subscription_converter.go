@@ -14,8 +14,8 @@ import (
 	"github.com/shusfun/weir/internal/publicnet"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/setting"
-	"github.com/shusfun/weir/internal/subgroup"
 	js "github.com/shusfun/weir/internal/sub/jscompat"
+	"github.com/shusfun/weir/internal/subgroup"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -110,7 +110,9 @@ func (s *Server) putConverterSettings(c *gin.Context) {
 
 func (s *Server) convertGroup(ctx context.Context, profile int, list, target string, options subgroup.RenderOptions) (body []byte, contentType string, err error) {
 	started := time.Now().UTC()
-	defer func() { subscriptionStageResult(ctx, profile, "subscription.convert", "center.convertGroup", started, err) }()
+	defer func() {
+		subscriptionStageResult(ctx, profile, "subscription.convert", "center.convertGroup", started, err)
+	}()
 	cfg, err := s.converterSettings(ctx)
 	if err != nil {
 		return nil, "", errors.New("converter_settings_unavailable")
@@ -170,4 +172,6 @@ func validateConvertedOutput(target string, body []byte) error {
 	return nil
 }
 
-func validSubscriptionEngine(engine string) bool { return engine == "" || engine == "builtin" || engine == "external" }
+func validSubscriptionEngine(engine string) bool {
+	return engine == "" || engine == "builtin" || engine == "external"
+}

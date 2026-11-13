@@ -20,7 +20,7 @@ import type { NodeItem, UserItem, Withheld } from "../lib/core";
 function careLabel(u: UserItem): string | null {
   if (!u.enabled) return "已停用";
   const left = u.expires_at ? Math.ceil((new Date(u.expires_at).getTime() - Date.now()) / 86400e3) : null;
-  if (left != null && left < 0) return "已到期";
+  if (u.expires_at && new Date(u.expires_at).getTime() <= Date.now()) return "已到期";
   if (left != null && left < 7) return `${left} 天后到期`;
   if (!u.unlimited && u.quota > 0 && u.used / u.quota >= 0.9) return `流量 ${Math.round((u.used / u.quota) * 100)}%`;
   return null;
@@ -68,7 +68,7 @@ export function UsersPage() {
   const navigate = useNavigate();
   useEffect(() => {
     const id = params.get("user");
-    if (id) navigate(`/users/${id}`, { replace: true });
+    if (id) navigate(`/users/${id}?${new URLSearchParams([...params].filter(([key]) => key !== "user"))}`, { replace: true });
   }, [params, navigate]);
   const toast = useToast();
   useEffect(() => {

@@ -1,3 +1,4 @@
+import { useFormGuard } from "../lib/dirty";
 import { NodeSummary, nodeTitle } from "./node-summary";
 // 一个窗口建 / 改用户：账号、额度、周期、按月重置、节点范围、是否允许自建链式代理。
 import { useState } from "react";
@@ -28,6 +29,7 @@ function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new
   const [picked, setPicked] = useState<number[]>(u?.node_ids ?? []);
   const [chain, setChain] = useState(u?.allow_chain ?? true);
   const [enabled, setEnabled] = useState(u?.enabled ?? true);
+  const guard = useFormGuard({ email, name, password, quota, unlimited, unit, expiry, monthly, all, picked, chain, enabled }, close);
   const save = useFormAction(
     () => {
       const plan = {
@@ -40,7 +42,7 @@ function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new
     },
     {
       fields: { invalid_email: "email", email_taken: "email", weak_password: "password", invalid_password: "password", invalid_quota: "quota", invalid_expires_at: "expiry" },
-      onSuccess: saved,
+      onSuccess: (u) => { guard.commit(); saved(u); },
     },
   );
   // 页面感知：填到哪里（密码只标已填 / 未填），dsh 可以接着这张表拼出草稿
@@ -55,7 +57,7 @@ function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new
     ],
   });
   return (
-    <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
+    <Dialog open onOpenChange={(o) => !o && !save.busy && void guard.close()}>
       <DialogContent size="md">
         <DialogTitle>{isNew ? "创建用户" : "编辑用户"}</DialogTitle>
         <DialogDescription>{isNew ? "保存后自动生成一条包含所选节点的订阅链接。" : "修改后相关 VPS 会在数秒内应用新的套餐。"}</DialogDescription>
@@ -108,7 +110,7 @@ function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new
           <SwitchField label="允许用户自建链式代理" checked={chain} onCheckedChange={setChain} />
           {!isNew && <SwitchField label="账户启用" checked={enabled} onCheckedChange={setEnabled} />}
           <DialogFooter error={save.error}>
-            <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
+            <Button type="button" variant="outline" disabled={save.busy} onClick={() => { if (!save.busy) void guard.close(); }}>取消</Button>
             <Button data-tour="user-submit" type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">{isNew ? "创建用户" : "保存"}</Button>
           </DialogFooter>
         </Form>

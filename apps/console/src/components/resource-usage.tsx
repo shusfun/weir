@@ -8,6 +8,7 @@ import { useConsoleContext } from "../lib/console-context";
 import { State } from "./feedback";
 import { HistoryCharts } from "./history-charts";
 import { ObjectLink, dataObject } from "./object-link";
+import { LocalGateControl } from "./local-gate";
 
 const percent = (v?: number) => v == null ? "未知" : `${v.toFixed(1)}%`;
 const size = (v?: number) => v == null ? "未知" : bytes(v);
@@ -48,6 +49,7 @@ export function CenterResources() {
   return <>
     <Card {...dataObject({type: "center", id: 1})}><CardContent className="stack min-h-48">
       <SectionHeader title={<ObjectLink to={{type: "center", id: 1, name: "中心"}} />} description="整机与 Weir 进程占用" actions={<Button size="sm" variant="outline" onClick={() => setOpen(true)}>详情</Button>} />
+      <LocalGateControl />
       {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : <>
         <HostUsage host={q.data.host} /><ProcessUsage host={q.data.host} names={["weir-center"]} />
         <small className="text-[var(--weir-ink-3)]">采样 {date(q.data.host?.observed_at)} · CPU 按整机总算力计算</small>

@@ -1,3 +1,4 @@
+import { linkNeedsAttention } from "../lib/core";
 import { ClientDistribution } from "./client-distribution";
 import { NodeSummary, ExitSummary, nodeTitle } from "./node-summary";
 import type { NodeChoice } from "../lib/core";
@@ -179,7 +180,7 @@ function linkVisible(l: LinkItem, stats: LinkStats | undefined, query: string, a
   const text = `${l.name ?? ""} ${stats?.user ?? ""}`.toLowerCase();
   if (query && !text.includes(query.trim().toLowerCase())) return false;
   if (attention === "off") return !l.enabled;
-  if (attention === "care") return !l.enabled || l.state === "expired" || (stats?.refused_30d ?? 0) > 0;
+  if (attention === "care") return linkNeedsAttention(l, stats);
   return true;
 }
 

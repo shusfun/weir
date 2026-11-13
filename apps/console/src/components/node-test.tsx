@@ -59,7 +59,7 @@ export function NodeTestControl({ node, gate, detail = false }: { node: NodeItem
         title={disabledReason || "实测节点"} aria-label={`实测节点 ${node.name}`} onClick={() => void t.run()}>{detail ? <><FlaskConical />实测</> : <FlaskConical />}</Button>
       <div className={"grid min-h-24 min-w-0 flex-1 content-center text-meta " + tone} role="status" aria-live="polite" aria-atomic="true">
         {detail && <ProbeLocation value={executionGate} change={setExecutionGate} disabled={t.busy} />}
-        <span className="block truncate">{t.busy ? "正在实测…" : t.error ? "实测未完成" : !r ? "尚未实测" : r.status === "passed" ? "实测通过" : r.status === "failed" ? "实测失败" : "实测未知"}
+        <span className="block truncate">{t.busy ? "正在实测…" : t.error ? "实测未完成" : !r ? "尚未实测" : r.status === "pending" ? "已保存 · 待实测" : r.status === "passed" ? "实测通过" : r.status === "failed" ? "实测失败" : "实测未知"}
           {!t.busy && r && ` · TCP ${checkText(r.tcp)} · UDP ${r.udp.status === "not_applicable" && r.udp.why ? r.udp.why : checkText(r.udp)}`}</span>
         <span className="block truncate text-[var(--weir-ink-3)]">{t.busy ? t.step || "正在提交，等候中心任务" : r ? `${date(r.at)} · ${r.location === "gate" ? `VPS ${r.execution_gate_id ?? "未知"}` : r.location === "colocated" ? "同机实测，外部可达性未知" : "中心"}` : "点击图标测试真实连接"}</span>
         <span className="block h-12 overflow-y-auto whitespace-pre-wrap break-words text-[var(--weir-ink-3)]">{t.error || r?.why || disabledReason || "使用短时内部凭据实测，不计用户用量或速度样本"}</span>

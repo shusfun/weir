@@ -183,6 +183,14 @@ func TestDeployedNodeTestDedupTraceAndIsolation(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("probe not started")
 	}
+	if raw, ok, err := s.Store.KV.Get(t.Context(), pendingNodeProbePrefix+itoa(n.ID)); err != nil || !ok {
+		t.Fatal("running probe is not durable", err)
+	} else {
+		var pending pendingNodeProbe
+		if json.Unmarshal([]byte(raw), &pending) != nil || pending.Binding == "" || pending.Trace.ID != j.Trace {
+			t.Fatal("running probe receipt is incomplete", raw)
+		}
+	}
 	duplicate := startNodeTest(t, admin, n.ID)
 	if duplicate.ID != j.ID {
 		t.Fatal("duplicate test started")
@@ -192,6 +200,9 @@ func TestDeployedNodeTestDedupTraceAndIsolation(t *testing.T) {
 	}
 	close(release)
 	r := finishNodeTest(t, s, j)
+	if _, ok, err := s.Store.KV.Get(t.Context(), pendingNodeProbePrefix+itoa(n.ID)); err != nil || ok {
+		t.Fatal("finished probe remains queued", err)
+	}
 	if r.Status != "passed" || calls.Load() != 1 || r.TraceID != "123456789012345678901234567890ab" {
 		t.Fatalf("result: %+v", r)
 	}
