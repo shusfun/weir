@@ -19,6 +19,13 @@ interface Info {
   next_reset?: string | null;
   url: string;
   nodes: { name: string; protocol: string; chain: boolean; available: boolean }[];
+  compatibility: {
+    target: string;
+    included_nodes: number;
+    excluded_nodes: { name: string; protocol?: string; reason: string }[];
+    affected_groups: { name: string; removed: boolean; reason: string }[];
+    affected_rules: { name?: string; reason: string }[];
+  }[];
 }
 
 export function SubPage() {
@@ -50,6 +57,29 @@ export function SubPage() {
         </CardContent>
       </Card>
       <SubscriptionGuide items={[...new Set(importClients.map((c) => c.target))].map((target) => ({ title, target, url: withTarget(d.url, target) }))} />
+      {d.compatibility.some((report) => report.excluded_nodes.length || report.affected_groups.length || report.affected_rules.length) && (
+        <Card>
+          <CardContent className="stack">
+            <h2 className="text-base font-semibold">客户端兼容情况</h2>
+            <p className="text-body text-[var(--weir-ink-2)]">部分客户端无法无损表达所有节点或规则。导入仍会包含兼容部分。</p>
+            <ul className="grid gap-3">
+              {d.compatibility.filter((report) => report.excluded_nodes.length || report.affected_groups.length || report.affected_rules.length).map((report) => (
+                <li key={report.target} className="stack">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="soft" tone="warn">{report.target}</Badge>
+                    <span className="text-body">可导入 {report.included_nodes} 个节点，遗漏 {report.excluded_nodes.length} 个</span>
+                  </div>
+                  <ul className="grid gap-1 text-body text-[var(--weir-ink-2)]">
+                    {report.excluded_nodes.map((node, i) => <li key={`${node.name}-${i}`}>{node.name}：{node.reason}</li>)}
+                    {report.affected_groups.map((group, i) => <li key={`${group.name}-${i}`}>分组「{group.name}」：{group.reason}</li>)}
+                    {report.affected_rules.map((rule, i) => <li key={`${rule.name ?? "rule"}-${i}`}>规则{rule.name ? `「${rule.name}」` : ""}：{rule.reason}</li>)}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <CardContent className="stack">
           <h2 className="text-base font-semibold">节点（{d.nodes.length}）</h2>

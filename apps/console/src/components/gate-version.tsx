@@ -11,6 +11,13 @@ export function gateLags(g: Gate) {
   return !!g.version && !!g.center_version && g.version !== g.center_version;
 }
 
+function legacyReadonlyInstallLock(g: Gate) {
+  const error = g.self_update?.error?.toLowerCase() ?? "";
+  const lock = error.includes("install.lock") || error.includes("install lock") || error.includes("安装锁");
+  const readonly = error.includes("read-only") || error.includes("readonly") || error.includes("只读");
+  return g.version === "0.1.7" && lock && readonly;
+}
+
 export function GateVersion({ gate: g }: { gate: Gate }) {
   if (!g.version) return <Badge variant="soft" tone="neutral">Gate 版本未知</Badge>;
   if (!gateLags(g)) return <Badge variant="soft" tone="neutral" title="与中心版本相同">Gate {g.version}</Badge>;
@@ -20,6 +27,7 @@ export function GateVersion({ gate: g }: { gate: Gate }) {
 // updateText：自更新这一行写什么。tone 决定颜色；进度百分比在总大小未知时改写已下载多少
 function updateText(g: Gate): [string, "bad" | "muted"] | null {
   const su = g.self_update;
+  if (legacyReadonlyInstallLock(g)) return ["旧版 Gate 的安装锁位于只读文件系统，面板重试无法修复；需从主机面板运行官方安装器完成迁移。", "bad"];
   if (su?.state === "downloading") {
     return [`正在下载 ${su.version} · ${transferText({ done: su.done ?? 0, total: su.total, speed: su.speed, source: su.source })}`, "muted"];
   }
@@ -39,7 +47,7 @@ export function GateUpdateLine({ gate: g }: { gate: Gate }) {
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
       {working && <span className="w-24 shrink-0"><Progress value={g.self_update?.state === "downloading" && g.self_update.total ? Math.round(((g.self_update.done ?? 0) / g.self_update.total) * 100) : null} aria-label="VPS 自更新进度" /></span>}
       <p className={"min-w-0 grow basis-0 text-body " + (text[1] === "bad" ? "text-[var(--weir-bad-ink)]" : "text-[var(--weir-ink-3)]")}>{text[0]}</p>
-      {gateLags(g) && (
+      {gateLags(g) && !legacyReadonlyInstallLock(g) && (
         <Button
           size="xs"
           variant="outline"

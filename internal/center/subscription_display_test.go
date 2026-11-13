@@ -205,5 +205,15 @@ func TestSubscriptionNamesReachEveryFormatAndRefresh(t *testing.T) {
 		if name := info["nodes"].([]any)[0].(map[string]any)["name"]; name != "[直连] "+remark {
 			t.Fatalf("preview=%v", name)
 		}
+		reports, ok := info["compatibility"].([]any)
+		if !ok || len(reports) != len(subout.Formats) || strings.Contains(mustString(info), "client-test-password") {
+			t.Fatalf("compatibility report missing or contains credentials: %v", info["compatibility"])
+		}
+		for _, raw := range reports {
+			report := raw.(map[string]any)
+			if report["included_nodes"] != float64(1) || len(report["excluded_nodes"].([]any)) != 0 {
+				t.Fatalf("unexpected compatibility report: %+v", report)
+			}
+		}
 	}
 }

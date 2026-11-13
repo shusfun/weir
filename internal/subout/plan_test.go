@@ -171,6 +171,50 @@ func TestManualGroupVisibleInFormats(t *testing.T) {
 	}
 }
 
+func TestRenderPlanDetailedFiltersIncompatibleNodesAndReferences(t *testing.T) {
+	p := &Plan{
+		Groups: []contracts.ProxyGroup{
+			{ID: 1, Name: "mixed", Kind: "select", Members: []string{"node:1", "node:2"}},
+			{ID: 2, Name: "unsupported-only", Kind: "select", Members: []string{"node:2"}},
+		},
+		Custom: []Rule{{ID: "custom-1", Kind: "domain", Values: []string{"blocked.example"}, Target: "node:2", Label: "blocked"}},
+	}
+	items := []Item{
+		{Link: "trojan://pass@203.0.113.1:443?sni=example.com#ok", Ref: "node:1", Auto: true, Direct: true},
+		{Link: "vless://id@203.0.113.2:443?security=reality&pbk=key&sid=abcd#no", Ref: "node:2", Auto: true, Direct: true},
+	}
+	body, _, report, err := RenderPlanDetailed(items, "surge", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.IncludedNodes != 1 || len(report.ExcludedNodes) != 1 || report.ExcludedNodes[0].Ref != "node:2" || report.ExcludedNodes[0].Name != "no" {
+		t.Fatalf("node report = %+v", report)
+	}
+	if len(report.AffectedGroups) != 2 || report.AffectedGroups[0].Removed || !report.AffectedGroups[1].Removed {
+		t.Fatalf("group impacts = %+v", report.AffectedGroups)
+	}
+	if len(report.AffectedRules) != 1 || report.AffectedRules[0].ID != "custom-1" {
+		t.Fatalf("rule impacts = %+v", report.AffectedRules)
+	}
+	if strings.Contains(string(body), "203.0.113.2") || strings.Contains(string(body), "unsupported-only") || strings.Contains(string(body), "blocked.example") {
+		t.Fatalf("filtered reference leaked into output: %s", body)
+	}
+}
+
+func TestRenderPlanDetailedFailsWhenNoNodeIsCompatible(t *testing.T) {
+	items := []Item{{Link: "vless://id@203.0.113.2:443?security=reality&pbk=key&sid=abcd#no", Ref: "node:2"}}
+	_, _, report, err := RenderPlanDetailed(items, "surge", &Plan{})
+	if err == nil || !strings.Contains(err.Error(), "no compatible nodes") || report.IncludedNodes != 0 || len(report.ExcludedNodes) != 1 {
+		t.Fatalf("report=%+v err=%v", report, err)
+	}
+}
+
+func TestRenderDetailedRejectsEmptyBase64(t *testing.T) {
+	if body, _, report, err := RenderDetailed(nil, "base64"); err == nil || len(body) != 0 || report.IncludedNodes != 0 {
+		t.Fatalf("empty base64 body=%q report=%+v err=%v", body, report, err)
+	}
+}
+
 func TestEmptyPlanPreviewHasArrayMembers(t *testing.T) {
 	groups, _ := (&Plan{}).Layout(nil, nil)
 	b, err := json.Marshal(groups)

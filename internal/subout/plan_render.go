@@ -18,58 +18,48 @@ const urlTestSec = 60
 
 // RenderPlan 按计划输出带分组与分流的订阅；plan 为空时与 Render 相同。
 func RenderPlan(items []Item, target string, plan *Plan) ([]byte, string, error) {
+	body, contentType, _, err := RenderPlanDetailed(items, target, plan)
+	return body, contentType, err
+}
+
+// RenderPlanDetailed renders the compatible node subset and returns safe omission details.
+func RenderPlanDetailed(items []Item, target string, plan *Plan) ([]byte, string, CompatibilityReport, error) {
+	report := emptyReport(target)
+	if !knownTarget(target) {
+		return nil, "", report, fmt.Errorf("unsupported target %q", target)
+	}
 	if plan == nil {
-		return Render(linksOf(items), target)
+		return RenderDetailed(linksOf(items), target)
 	}
-	original := items
-	items = itemsForTarget(items, target)
+	items, report = compatibleItems(items, target)
+	filtered := FilterPlanForCompatibility(plan, &report)
 	if len(items) == 0 {
-		return nil, "", fmt.Errorf("%s：没有可输出的代理节点", target)
-	}
-	for _, g := range plan.Groups {
-		for _, ref := range g.Members {
-			before, after := false, false
-			for _, it := range original {
-				before = before || it.Ref == ref
-			}
-			for _, it := range items {
-				after = after || it.Ref == ref
-			}
-			if before && !after {
-				return nil, "", fmt.Errorf("%s：分组「%s」的成员 %s 无法表达", target, g.Name, ref)
-			}
-		}
-	}
-	for _, r := range plan.Custom {
-		for _, it := range original {
-			if r.Target == it.Ref && !slices.ContainsFunc(items, func(other Item) bool { return other.Ref == it.Ref }) {
-				return nil, "", fmt.Errorf("%s：清单引用的线路 %s 无法表达", target, r.Target)
-			}
-		}
+		return nil, "", report, fmt.Errorf("no compatible nodes for %s", report.Target)
 	}
 	names := make([]string, len(items))
 	for i := range names {
 		names[i] = fmt.Sprintf("node-%d", i)
 	}
-	if len(plan.layout(names, items).Groups[0].Members) == 0 {
-		return nil, "", fmt.Errorf("%s：PROXY 没有可输出成员", target)
+	if len(filtered.layout(names, items).Groups[0].Members) == 0 {
+		return nil, "", report, fmt.Errorf("%s：PROXY 没有可输出成员", target)
 	}
 	switch target {
 	case "clash", "mihomo":
-		b, err := clashPlan(items, plan)
-		return b, "application/yaml; charset=utf-8", err
+		b, err := clashPlan(items, filtered)
+		return b, "application/yaml; charset=utf-8", report, err
 	case "singbox", "sing-box":
-		b, err := singboxPlan(items, plan)
-		return b, "application/json", err
+		b, err := singboxPlan(items, filtered)
+		return b, "application/json", report, err
 	case "surge", "loon", "quanx":
-		b, err := iniPlan(items, target, plan)
-		return b, "text/plain; charset=utf-8", err
+		b, err := iniPlan(items, target, filtered)
+		return b, "text/plain; charset=utf-8", report, err
 	case "egern":
-		b, err := egernPlan(items, plan)
-		return b, "application/yaml; charset=utf-8", err
+		b, err := egernPlan(items, filtered)
+		return b, "application/yaml; charset=utf-8", report, err
 	}
 	// 通用链接列表（v2rayN 等）表达不了分组：按计划里的顺序给出节点
-	return Render(linksOf(items), target)
+	b, contentType, err := renderRaw(linksOf(items), target)
+	return b, contentType, report, err
 }
 
 // ClashProvider 先为全部节点统一分配名称，再按用途截取，避免子集里的重名编号漂移。
@@ -115,17 +105,84 @@ func ClashProvider(items []Item, plan *Plan, key string) ([]byte, error) {
 }
 
 func itemsForTarget(items []Item, target string) []Item {
-	keep := map[string]bool{}
-	for _, l := range forTarget(linksOf(items), target) {
-		keep[l] = true
+	kept, _ := compatibleItems(items, target)
+	return kept
+}
+
+func compatibleItems(items []Item, target string) ([]Item, CompatibilityReport) {
+	report := emptyReport(target)
+	kept := make([]Item, 0, len(items))
+	for i, item := range items {
+		if _, _, err := renderRaw([]string{item.Link}, target); err != nil {
+			ref := item.Ref
+			if ref == "" {
+				ref = fmt.Sprintf("node:%d", i+1)
+			}
+			report.ExcludedNodes = append(report.ExcludedNodes, exclusionFor(item.Link, ref, err))
+			continue
+		}
+		kept = append(kept, item)
 	}
-	out := make([]Item, 0, len(items))
-	for _, it := range items {
-		if keep[it.Link] {
-			out = append(out, it)
+	report.IncludedNodes = len(kept)
+	return kept, report
+}
+
+// FilterPlanForCompatibility removes references recorded in report from a plan and records their impacts.
+func FilterPlanForCompatibility(plan *Plan, report *CompatibilityReport) *Plan {
+	filtered := *plan
+	excluded := make(map[string]bool, len(report.ExcludedNodes))
+	for _, node := range report.ExcludedNodes {
+		excluded[node.Ref] = true
+	}
+	filtered.Groups = make([]contracts.ProxyGroup, 0, len(plan.Groups))
+	for _, group := range plan.Groups {
+		members := make([]string, 0, len(group.Members))
+		removed := false
+		for _, ref := range group.Members {
+			if excluded[ref] {
+				removed = true
+				continue
+			}
+			members = append(members, ref)
+		}
+		if removed {
+			removedGroup := len(members) == 0
+			reason := "已移除不兼容节点"
+			if removedGroup {
+				reason = "组内没有可导入节点，已移除该组"
+			}
+			report.AffectedGroups = append(report.AffectedGroups, GroupImpact{ID: group.ID, Name: group.Name, Removed: removedGroup, Reason: reason})
+		}
+		if len(members) == 0 {
+			continue
+		}
+		group.Members = members
+		filtered.Groups = append(filtered.Groups, group)
+	}
+	filtered.HiddenLines = make([]string, 0, len(plan.HiddenLines))
+	for _, ref := range plan.HiddenLines {
+		if !excluded[ref] {
+			filtered.HiddenLines = append(filtered.HiddenLines, ref)
 		}
 	}
-	return out
+	filterRules := func(rules []Rule) []Rule {
+		out := make([]Rule, 0, len(rules))
+		for _, rule := range rules {
+			if excluded[rule.Target] {
+				name := rule.Label
+				if name == "" {
+					name = rule.ID
+				}
+				report.AffectedRules = append(report.AffectedRules, RuleImpact{ID: rule.ID, Name: name, Reason: "引用不兼容节点，已移除该规则"})
+				continue
+			}
+			out = append(out, rule)
+		}
+		return out
+	}
+	filtered.Custom = filterRules(plan.Custom)
+	filtered.Rules = filterRules(plan.Rules)
+	return &filtered
 }
 
 func reservedNames(plan *Plan, extra ...string) map[string]bool {

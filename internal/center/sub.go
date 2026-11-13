@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/url"
 	"strconv"
@@ -278,12 +279,18 @@ func (s *Server) serveSub(c *gin.Context) {
 		failDetail(c, 422, "subscription_no_nodes", "没有可输出的代理节点", nil)
 		return
 	}
-	body, contentType, err := s.renderSubscription(c, u, l, p, target)
+	body, contentType, report, err := s.renderSubscriptionDetailed(c, u, l, p, target)
+	s.addUnavailableCompatibility(ctx, &report, entries, p, target)
+	if target == "base64" {
+		report.IncludedNodes = max(0, len(p.Entries)-len(report.ExcludedNodes))
+	}
 	if err != nil {
+		recordSubscriptionCompatibility(withTrace(ctx, c.GetString("request_id")), report)
 		s.recordPull(c, l, target, "failed")
 		failDetail(c, 422, "format_conversion_failed", err.Error(), nil)
 		return
 	}
+	recordSubscriptionCompatibility(withTrace(ctx, c.GetString("request_id")), report)
 	_, end := linkWindow(u, l)
 	expire := int64(0)
 	if end != nil {
@@ -404,19 +411,27 @@ func (s *Server) subInfo(c *gin.Context) {
 	for _, e := range entries {
 		nodes = append(nodes, gin.H{"name": e.Name, "protocol": e.Protocol, "chain": e.Chained, "available": e.URI != ""})
 	}
+	compatibility := s.subscriptionCompatibility(c, u, l, entries)
 	start, end := linkWindow(u, l)
 	c.JSON(200, gin.H{"name": l.Name, "quota": u.Quota, "unlimited": u.Unlimited, "used": u.Used, "expires_at": end, "starts_at": start, "state": windowState(u, l, time.Now()), "next_reset": resetHint(u),
-		"formats": subout.Formats, "url": s.siteOrigin(c) + "/sub/" + l.Token, "nodes": nodes})
+		"formats": subout.Formats, "url": s.siteOrigin(c) + "/sub/" + l.Token, "nodes": nodes, "compatibility": compatibility})
 }
 
 // Preview and client output share rendering; only the client route records a pull.
 func (s *Server) renderSubscription(c *gin.Context, u *ent.User, l *ent.Link, p planned, target string) ([]byte, string, error) {
+	body, contentType, _, err := s.renderSubscriptionDetailed(c, u, l, p, target)
+	return body, contentType, err
+}
+
+func (s *Server) renderSubscriptionDetailed(c *gin.Context, u *ent.User, l *ent.Link, p planned, target string) ([]byte, string, subout.CompatibilityReport, error) {
 	ctx := c.Request.Context()
 	var err error
 	var body []byte
 	contentType := "application/json"
+	report := subout.CompatibilityReport{Target: target, ExcludedNodes: []subout.NodeExclusion{}, AffectedGroups: []subout.GroupImpact{}, AffectedRules: []subout.RuleImpact{}}
 	if target == "weir" {
 		body, err = json.Marshal(s.weirSubscription(ctx, u, l, p))
+		report.IncludedNodes = len(p.Entries)
 	} else {
 		plan, items := s.subPlan(ctx, p)
 		if target == "base64" {
@@ -433,9 +448,75 @@ func (s *Server) renderSubscription(c *gin.Context, u *ent.User, l *ent.Link, p 
 		case "surge":
 			plan.ManagedURL = origin + "/sub/" + l.Token + "?target=surge"
 		}
-		body, contentType, err = subout.RenderPlan(items, target, plan)
+		body, contentType, report, err = subout.RenderPlanDetailed(items, target, plan)
+		if target == "base64" {
+			report.IncludedNodes = max(0, len(p.Entries)-len(report.ExcludedNodes))
+		}
 	}
-	return body, contentType, err
+	return body, contentType, report, err
+}
+
+func (s *Server) subscriptionCompatibility(c *gin.Context, u *ent.User, l *ent.Link, entries []Entry) []subout.CompatibilityReport {
+	plannedEntries := planned{Policy: loadPolicy(u)}
+	var unavailable []Entry
+	for _, entry := range entries {
+		if entry.URI == "" {
+			unavailable = append(unavailable, entry)
+			continue
+		}
+		plannedEntries.Entries = append(plannedEntries.Entries, entry)
+		plannedEntries.Ranked = append(plannedEntries.Ranked, rankedEntry{Auto: true})
+	}
+	plan, items := s.subPlan(c.Request.Context(), plannedEntries)
+	reports := make([]subout.CompatibilityReport, 0, len(subout.Formats))
+	for _, target := range subout.Formats {
+		targetItems := items
+		if target == "base64" {
+			info := []subout.Item{}
+			for _, link := range subscriptionInfoLinks(u, l) {
+				info = append(info, subout.Item{Link: link})
+			}
+			targetItems = append(info, items...)
+		}
+		_, _, report, _ := subout.RenderPlanDetailed(targetItems, target, plan)
+		s.addUnavailableCompatibility(c.Request.Context(), &report, unavailable, plannedEntries, target)
+		if target == "base64" {
+			report.IncludedNodes = max(0, len(entries)-len(report.ExcludedNodes))
+		}
+		reports = append(reports, report)
+	}
+	return reports
+}
+
+func (s *Server) addUnavailableCompatibility(ctx context.Context, report *subout.CompatibilityReport, entries []Entry, p planned, target string) {
+	for _, entry := range entries {
+		if entry.URI != "" {
+			continue
+		}
+		report.ExcludedNodes = append(report.ExcludedNodes, subout.NodeExclusion{
+			Ref: entry.Ref, Name: entry.Name, Protocol: entry.Protocol,
+			ReasonCode: "node_unavailable", Reason: "当前节点无法生成订阅链接",
+		})
+	}
+	if target == "base64" || len(report.ExcludedNodes) == 0 {
+		return
+	}
+	plan, _ := s.subPlan(ctx, p)
+	report.AffectedGroups = nil
+	report.AffectedRules = nil
+	subout.FilterPlanForCompatibility(plan, report)
+}
+
+func recordSubscriptionCompatibility(ctx context.Context, report subout.CompatibilityReport) {
+	if len(report.ExcludedNodes) == 0 && len(report.AffectedGroups) == 0 && len(report.AffectedRules) == 0 {
+		return
+	}
+	counts := map[string]int{}
+	for _, node := range report.ExcludedNodes {
+		counts[node.ReasonCode]++
+	}
+	slog.InfoContext(ctx, "subscription conversion", "trace", taskTrace(ctx), "target", report.Target,
+		"included", report.IncludedNodes, "excluded", len(report.ExcludedNodes), "groups", len(report.AffectedGroups), "rules", len(report.AffectedRules), "reasons", counts)
 }
 
 func (s *Server) previewSubscription(c *gin.Context) {
