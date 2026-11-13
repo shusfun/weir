@@ -1,7 +1,7 @@
 // 浏览器打开订阅地址时的一键导入页：不需要登录，只显示本链接的用量、到期与节点名称（不含凭据）。
 import { useQuery } from "../lib/query";
 import { useParams } from "react-router-dom";
-import { Badge, Card, CardContent, CopyField, Meter, PageHeader, Readout } from "@weir/ui";
+import { Badge, Card, CardContent, CopyField, Meter, PageHeader, Readout, SectionHeader } from "@weir/ui";
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "../api";
 import { SubscriptionGuide } from "../components/subscription-guide";
@@ -38,6 +38,10 @@ export function SubPage() {
       </main>
     );
   const d = info.data;
+  const compatibility = (d.compatibility ?? []).map((report) => ({ ...report,
+    excluded_nodes: report.excluded_nodes ?? [], affected_groups: report.affected_groups ?? [], affected_rules: report.affected_rules ?? [],
+  }));
+  const affected = compatibility.filter((report) => report.included_nodes === 0 || report.excluded_nodes.length || report.affected_groups.length || report.affected_rules.length);
   const title = "Weir" + (d.name ? " · " + d.name : "");
   return (
     <main className="subscription-import-page">
@@ -56,14 +60,12 @@ export function SubPage() {
           <div className="qr-code justify-self-center"><QRCodeSVG value={d.url} size={168} title="订阅二维码" /></div>
         </CardContent>
       </Card>
-      <SubscriptionGuide items={[...new Set(importClients.map((c) => c.target))].map((target) => ({ title, target, url: withTarget(d.url, target) }))} />
-      {d.compatibility.some((report) => report.excluded_nodes.length || report.affected_groups.length || report.affected_rules.length) && (
+      {affected.length > 0 && (
         <Card>
           <CardContent className="stack">
-            <h2 className="text-base font-semibold">客户端兼容情况</h2>
-            <p className="text-body text-[var(--weir-ink-2)]">部分客户端无法无损表达所有节点或规则。导入仍会包含兼容部分。</p>
+            <SectionHeader title="客户端兼容情况" description="仅导入目标客户端支持的节点；没有兼容节点的格式暂不可导入。" />
             <ul className="grid gap-3">
-              {d.compatibility.filter((report) => report.excluded_nodes.length || report.affected_groups.length || report.affected_rules.length).map((report) => (
+              {affected.map((report) => (
                 <li key={report.target} className="stack">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="soft" tone="warn">{report.target}</Badge>
@@ -80,6 +82,7 @@ export function SubPage() {
           </CardContent>
         </Card>
       )}
+      <SubscriptionGuide items={[...new Set(importClients.map((c) => c.target))].map((target) => ({ title, target, url: withTarget(d.url, target), unavailableReason: compatibility.find((report) => report.target === target)?.included_nodes === 0 ? "此格式没有兼容节点，请选择其他客户端或联系管理员。" : undefined }))} />
       <Card>
         <CardContent className="stack">
           <h2 className="text-base font-semibold">节点（{d.nodes.length}）</h2>

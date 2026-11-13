@@ -55,6 +55,10 @@ def main(argv):
            "-e", "WEIR_E2E_XRAY=/cores/xray", "-e", "WEIR_E2E_SINGBOX=/cores/sing-box", "-e", "WEIR_E2E_BINARY=/t/weir"]
     if os.environ.get("WEIR_E2E_NETWORK"):
         cmd += ["--network", os.environ["WEIR_E2E_NETWORK"], "-e", "WEIR_E2E_PUBLIC_NETWORK=1"]
+    if os.environ.get("WEIR_E2E_SUBSCRIPTION_DIR"):
+        fixture = pathlib.Path(os.environ["WEIR_E2E_SUBSCRIPTION_DIR"]).resolve(strict=True)
+        cmd += ["-v", f"{fixture}:/subscription", "-e", "WEIR_E2E_SUBSCRIPTION_DIR=/subscription",
+                "-e", "WEIR_E2E_PROBE_URL=" + os.environ.get("WEIR_E2E_PROBE_URL", "")]
     if MIHOMO.is_file():
         cmd += ["-v", f"{MIHOMO}:/cores/mihomo:ro", "-e", "WEIR_E2E_MIHOMO=/cores/mihomo"]
     if GEOIP.is_file():

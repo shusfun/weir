@@ -4,7 +4,7 @@ import { ArrowUpRight, Monitor, Smartphone } from "lucide-react";
 import { Badge, Button, Card, CardContent, ChoiceCard, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, IconTile, Notice, SectionHeader, Segmented } from "@weir/ui";
 import { importClients } from "../lib/import-clients";
 
-export type GuideSubscription = { title: string; target: string; url: string; expiresAt?: number };
+export type GuideSubscription = { title: string; target: string; url: string; expiresAt?: number; unavailableReason?: string };
 const devices = [["ios", "iPhone / iPad", "iOS"], ["android", "Android", "Android"], ["desktop", "电脑", "Windows · macOS · Linux"]] as const;
 type Device = typeof devices[number][0];
 
@@ -36,7 +36,7 @@ export function SubscriptionGuide({ items }: { items: GuideSubscription[] }) {
         const url = new URL(item.url, location.origin).href;
         return <Card key={item.url} size="lg"><CardContent className="subscription-guide-result">
           <SectionHeader flush title={item.title} description={item.expiresAt ? `有效期至 ${new Date(item.expiresAt * 1000).toLocaleString()}` : "选择客户端后添加订阅"} actions={<Badge variant="soft" tone={expired ? "warn" : "info"}>{expired ? "已到期" : item.target}</Badge>} />
-          {expired ? <Notice tone="warn">此订阅已到期，请联系发布者更新。</Notice> : <>
+          {expired ? <Notice tone="warn">此订阅已到期，请联系发布者更新。</Notice> : item.unavailableReason ? <Notice tone="warn">{item.unavailableReason}</Notice> : <>
             <CopyField label="订阅地址" value={url} />
             <div className="subscription-guide-actions">
               {client && <Button render={<a href={client.href(url, item.title)} />}>导入 {client.name}<ArrowUpRight /></Button>}

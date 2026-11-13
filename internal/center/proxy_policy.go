@@ -158,6 +158,18 @@ func (s *Server) subPlan(ctx context.Context, p planned) (*subout.Plan, []subout
 		items[i] = subout.Item{Link: e.URI, Type: e.Type, Ref: e.Ref, Auto: p.Ranked[i].Auto, Direct: !e.Chained}
 	}
 	plan := &subout.Plan{Groups: p.Policy.Groups, HiddenLines: p.Policy.HiddenLines, IntervalSec: p.Policy.Auto.RefreshMinutes * 60, UpdateSec: p.Policy.Auto.RefreshMinutes * 60, TestURL: subout.SubscriptionProbeURL}
+	available := make(map[string]bool, len(p.Entries))
+	for _, e := range p.Entries {
+		available[e.Ref] = true
+	}
+	for _, e := range p.Source {
+		if !available[e.Ref] {
+			plan.ExcludedNodes = append(plan.ExcludedNodes, subout.NodeExclusion{
+				Ref: e.Ref, Name: e.Name, Protocol: e.Protocol,
+				ReasonCode: "node_unavailable", Reason: "节点当前不可用或已在代理设置中停用",
+			})
+		}
+	}
 	custom := p.Policy.Custom
 	for _, e := range custom.Entries {
 		if e.Enabled {

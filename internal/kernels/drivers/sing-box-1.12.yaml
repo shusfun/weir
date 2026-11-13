@@ -30,7 +30,7 @@ presets:
     network: udp
     security: tls
     cert: self_signed_ok
-    settings: {hy2_obfs: salamander, hy2_obfs_password: "$gen:hex24"}
+    settings: {hy2_obfs: "", hy2_obfs_password: "$gen:hex24"}
     fields:
       - {key: hy2_up_mbps, label: 上行带宽, kind: number, unit: Mbps, hint: 留空不限}
       - {key: hy2_down_mbps, label: 下行带宽, kind: number, unit: Mbps, hint: 留空不限}

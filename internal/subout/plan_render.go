@@ -28,13 +28,17 @@ func RenderPlanDetailed(items []Item, target string, plan *Plan) ([]byte, string
 	if !knownTarget(target) {
 		return nil, "", report, fmt.Errorf("unsupported target %q", target)
 	}
-	if plan == nil {
-		return RenderDetailed(linksOf(items), target)
-	}
 	items, report = compatibleItems(items, target)
+	if plan != nil {
+		report.ExcludedNodes = append(report.ExcludedNodes, plan.ExcludedNodes...)
+	}
 	filtered := FilterPlanForCompatibility(plan, &report)
 	if len(items) == 0 {
 		return nil, "", report, fmt.Errorf("no compatible nodes for %s", report.Target)
+	}
+	if plan == nil || target == "" || target == "base64" {
+		b, contentType, err := renderRaw(linksOf(items), target)
+		return b, contentType, report, err
 	}
 	names := make([]string, len(items))
 	for i := range names {
@@ -64,7 +68,15 @@ func RenderPlanDetailed(items []Item, target string, plan *Plan) ([]byte, string
 
 // ClashProvider 先为全部节点统一分配名称，再按用途截取，避免子集里的重名编号漂移。
 func ClashProvider(items []Item, plan *Plan, key string) ([]byte, error) {
-	items = itemsForTarget(items, "clash")
+	var report CompatibilityReport
+	items, report = compatibleItems(items, "clash")
+	if plan != nil {
+		report.ExcludedNodes = append(report.ExcludedNodes, plan.ExcludedNodes...)
+	}
+	plan = FilterPlanForCompatibility(plan, &report)
+	if plan == nil {
+		plan = &Plan{}
+	}
 	proxies, names, err := clashProxies(linksOf(items), reservedNames(plan))
 	if err != nil {
 		return nil, err
@@ -113,7 +125,7 @@ func compatibleItems(items []Item, target string) ([]Item, CompatibilityReport) 
 	report := emptyReport(target)
 	kept := make([]Item, 0, len(items))
 	for i, item := range items {
-		if _, _, err := renderRaw([]string{item.Link}, target); err != nil {
+		if err := validateTargetLink(item.Link, target); err != nil {
 			ref := item.Ref
 			if ref == "" {
 				ref = fmt.Sprintf("node:%d", i+1)
@@ -129,7 +141,15 @@ func compatibleItems(items []Item, target string) ([]Item, CompatibilityReport) 
 
 // FilterPlanForCompatibility removes references recorded in report from a plan and records their impacts.
 func FilterPlanForCompatibility(plan *Plan, report *CompatibilityReport) *Plan {
+	report.AffectedGroups = []GroupImpact{}
+	report.AffectedRules = []RuleImpact{}
+	if plan == nil {
+		return nil
+	}
 	filtered := *plan
+	if report.Target == "base64" || report.Target == "" {
+		return &filtered
+	}
 	excluded := make(map[string]bool, len(report.ExcludedNodes))
 	for _, node := range report.ExcludedNodes {
 		excluded[node.Ref] = true
@@ -154,6 +174,8 @@ func FilterPlanForCompatibility(plan *Plan, report *CompatibilityReport) *Plan {
 			report.AffectedGroups = append(report.AffectedGroups, GroupImpact{ID: group.ID, Name: group.Name, Removed: removedGroup, Reason: reason})
 		}
 		if len(members) == 0 {
+			excluded[fmt.Sprintf("group:%d", group.ID)] = true
+			excluded[fmt.Sprintf("group:%d:auto", group.ID)] = true
 			continue
 		}
 		group.Members = members
@@ -173,7 +195,7 @@ func FilterPlanForCompatibility(plan *Plan, report *CompatibilityReport) *Plan {
 				if name == "" {
 					name = rule.ID
 				}
-				report.AffectedRules = append(report.AffectedRules, RuleImpact{ID: rule.ID, Name: name, Reason: "引用不兼容节点，已移除该规则"})
+				report.AffectedRules = append(report.AffectedRules, RuleImpact{ID: rule.ID, Name: name, Reason: "引用不可用节点或分组，已移除该规则"})
 				continue
 			}
 			out = append(out, rule)

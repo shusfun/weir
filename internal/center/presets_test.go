@@ -20,7 +20,7 @@ func TestNewPresetsAdvancedFieldsAndChosenUsers(t *testing.T) {
 
 	// 高级字段：只能改方案列出的字段。
 	mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": gid, "preset": "trojan-tls", "settings": map[string]any{"reality_private_key": "x"}, "skip_probe": true}, 400)
-	hy := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": gid, "preset": "hysteria2", "settings": map[string]any{"hy2_up_mbps": 100, "hy2_obfs": ""}, "skip_probe": true, "user_ids": ids}, 200)
+	hy := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": gid, "preset": "hysteria2", "settings": map[string]any{"hy2_up_mbps": 100}, "skip_probe": true, "user_ids": ids}, 200)
 	if st := hy["settings"].(map[string]any); st["hy2_up_mbps"].(float64) != 100 || st["hy2_obfs"] != nil || st["hy2_obfs_password"] != nil {
 		t.Fatalf("hysteria2 advanced = %v", st)
 	}

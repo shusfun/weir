@@ -10,15 +10,16 @@ import (
 
 // Plan 让全部格式、匹配预览与结构化订阅使用同一份分组和规则。
 type Plan struct {
-	Groups      []contracts.ProxyGroup
-	HiddenLines []string
-	Rules       []Rule
-	TestURL     string
-	IntervalSec int
-	Providers   func(key string) string
-	ManagedURL  string
-	UpdateSec   int
-	Custom      []Rule
+	ExcludedNodes []NodeExclusion
+	Groups        []contracts.ProxyGroup
+	HiddenLines   []string
+	Rules         []Rule
+	TestURL       string
+	IntervalSec   int
+	Providers     func(key string) string
+	ManagedURL    string
+	UpdateSec     int
+	Custom        []Rule
 }
 
 const CustomRuleSetSec = 300

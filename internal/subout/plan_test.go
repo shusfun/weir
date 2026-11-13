@@ -177,11 +177,11 @@ func TestRenderPlanDetailedFiltersIncompatibleNodesAndReferences(t *testing.T) {
 			{ID: 1, Name: "mixed", Kind: "select", Members: []string{"node:1", "node:2"}},
 			{ID: 2, Name: "unsupported-only", Kind: "select", Members: []string{"node:2"}},
 		},
-		Custom: []Rule{{ID: "custom-1", Kind: "domain", Values: []string{"blocked.example"}, Target: "node:2", Label: "blocked"}},
+		Custom: []Rule{{ID: "custom-1", Kind: "domain", Values: []string{"blocked.example"}, Target: "node:2", Label: "blocked"}, {ID: "group-rule", Kind: "domain", Values: []string{"group.example"}, Target: "group:2"}},
 	}
 	items := []Item{
 		{Link: "trojan://pass@203.0.113.1:443?sni=example.com#ok", Ref: "node:1", Auto: true, Direct: true},
-		{Link: "vless://id@203.0.113.2:443?security=reality&pbk=key&sid=abcd#no", Ref: "node:2", Auto: true, Direct: true},
+		{Link: "vless://id@203.0.113.2:443?security=reality&pbk=key&sid=abcd&fp=firefox#no", Ref: "node:2", Auto: true, Direct: true},
 	}
 	body, _, report, err := RenderPlanDetailed(items, "surge", p)
 	if err != nil {
@@ -193,7 +193,7 @@ func TestRenderPlanDetailedFiltersIncompatibleNodesAndReferences(t *testing.T) {
 	if len(report.AffectedGroups) != 2 || report.AffectedGroups[0].Removed || !report.AffectedGroups[1].Removed {
 		t.Fatalf("group impacts = %+v", report.AffectedGroups)
 	}
-	if len(report.AffectedRules) != 1 || report.AffectedRules[0].ID != "custom-1" {
+	if len(report.AffectedRules) != 2 || report.AffectedRules[0].ID != "custom-1" {
 		t.Fatalf("rule impacts = %+v", report.AffectedRules)
 	}
 	if strings.Contains(string(body), "203.0.113.2") || strings.Contains(string(body), "unsupported-only") || strings.Contains(string(body), "blocked.example") {
@@ -202,7 +202,7 @@ func TestRenderPlanDetailedFiltersIncompatibleNodesAndReferences(t *testing.T) {
 }
 
 func TestRenderPlanDetailedFailsWhenNoNodeIsCompatible(t *testing.T) {
-	items := []Item{{Link: "vless://id@203.0.113.2:443?security=reality&pbk=key&sid=abcd#no", Ref: "node:2"}}
+	items := []Item{{Link: "vless://id@203.0.113.2:443?security=reality&pbk=key&sid=abcd&fp=firefox#no", Ref: "node:2"}}
 	_, _, report, err := RenderPlanDetailed(items, "surge", &Plan{})
 	if err == nil || !strings.Contains(err.Error(), "no compatible nodes") || report.IncludedNodes != 0 || len(report.ExcludedNodes) != 1 {
 		t.Fatalf("report=%+v err=%v", report, err)

@@ -5,10 +5,17 @@ import unittest
 from unittest import mock
 
 from public_test_support import NOTES
-from release_public import asset_names, find_release, marker, parse_checksums, publish, remote_assets, verify_remote
+from release_public import asset_names, create_draft, find_release, marker, parse_checksums, publish, remote_assets, verify_remote
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_create_uses_response_without_eventually_consistent_listing(self):
+        self.release["draft"] = True
+        with mock.patch("release_public.gh", return_value=self.release) as api:
+            self.assertEqual(create_draft("fixture/public", self.tag, self.commit, NOTES)["id"], 7)
+            api.assert_called_once()
+            self.assertEqual(api.call_args.args[:4], ("api", "repos/fixture/public/releases", "--method", "POST"))
+
     def setUp(self):
         self.tag, self.commit = "v1.0.0", "a" * 40
         self.contents = {name: ("fixture " + name).encode() for name in asset_names(self.tag)[:-1]}

@@ -70,13 +70,13 @@ func iniNodes(links []string, target string, used map[string]bool) (lines, names
 		if err = json.Unmarshal([]byte(n.SettingsJSON), &s); err != nil {
 			return nil, nil, nil, err
 		}
-		if !supportedSubscriptionSettings(n.Protocol, s) || s.Network == "grpc" || s.SPKI != "" || s.CertificatePin != "" || s.Obfs != "" || s.CongestionControl != "" || s.ZeroRTT {
+		if !supportedSubscriptionSettings(n.Protocol, s) || s.Network == "grpc" && !(target == "surge" && n.Protocol == "vless" && (s.TLS || s.Reality)) || (s.SPKI != "" || s.CertificatePin != "") && !(target == "surge" && s.CertificatePin != "") || s.Obfs != "" || s.CongestionControl != "" || s.ZeroRTT {
 			return nil, nil, nil, fmt.Errorf("unsupported INI protocol fields")
 		}
-		if s.Fingerprint != "" && target != "loon" || len(s.ALPN) > 1 || len(s.ALPN) > 0 && target != "loon" || s.Reality && target != "loon" {
+		if s.Fingerprint != "" && target != "loon" || len(s.ALPN) > 1 && target != "surge" || len(s.ALPN) > 0 && target == "quanx" || s.Reality && target != "loon" && !(target == "surge" && n.Protocol == "vless") {
 			return nil, nil, nil, fmt.Errorf("unsupported INI TLS fields")
 		}
-		if s.Flow != "" && target != "loon" {
+		if s.Flow != "" && target != "loon" && !(target == "surge" && n.Protocol == "vless") {
 			return nil, nil, nil, fmt.Errorf("unsupported INI flow")
 		}
 		if strings.ContainsAny(n.Address, "\r\n,;#[] ") {
@@ -188,8 +188,8 @@ func iniNodes(links []string, target string, used map[string]bool) (lines, names
 				kind = "Shadowsocks"
 			}
 		}
-		if kind == "vless" && target == "surge" {
-			return nil, nil, nil, fmt.Errorf("Surge does not support VLESS")
+		if kind == "tuic" && target == "surge" {
+			kind = "tuic-v5"
 		}
 		if kind == "http" || kind == "socks5" {
 			if target == "loon" {
@@ -206,6 +206,26 @@ func iniNodes(links []string, target string, used map[string]bool) (lines, names
 		parts = []string{name + " = " + kind, n.Address, strconv.Itoa(n.Port)}
 		if target == "surge" {
 			switch n.Protocol {
+			case "vless":
+				parts = append(parts, "username="+user)
+				if s.TLS && !s.Reality {
+					parts = append(parts, "tls=true")
+				}
+				if s.Reality {
+					parts = append(parts, "reality-public-key="+pbk, "reality-short-id="+sid)
+				}
+				if flow != "" {
+					parts = append(parts, "flow="+flow)
+				}
+				if s.Network == "grpc" {
+					service, e := iniValue(s.ServiceName)
+					if e != nil {
+						return nil, nil, nil, e
+					}
+					parts = append(parts, "grpc=true", "grpc-service-name="+service)
+				}
+			case "tuic":
+				parts = append(parts, "uuid="+user, "password="+password)
 			case "shadowsocks":
 				parts = append(parts, "encrypt-method="+method, "password="+password, "udp-relay=true")
 			case "vmess":
@@ -285,12 +305,19 @@ func iniNodes(links []string, target string, used map[string]bool) (lines, names
 		if s.AllowInsecure {
 			parts = append(parts, "skip-cert-verify=true")
 		}
-		if len(s.ALPN) == 1 {
-			alpn, e := iniValue(s.ALPN[0])
+		if len(s.ALPN) > 0 {
+			alpn, e := iniValue(strings.Join(s.ALPN, ","))
 			if e != nil {
 				return nil, nil, nil, e
 			}
 			parts = append(parts, "alpn="+alpn)
+		}
+		if s.CertificatePin != "" {
+			pin := strings.ReplaceAll(s.CertificatePin, ":", "")
+			if len(pin) != 64 || strings.IndexFunc(pin, func(r rune) bool { return !strings.ContainsRune("0123456789abcdefABCDEF", r) }) >= 0 {
+				return nil, nil, nil, fmt.Errorf("invalid certificate fingerprint")
+			}
+			parts = append(parts, "server-cert-fingerprint-sha256="+strings.ToLower(pin))
 		}
 		if fp != "" {
 			parts = append(parts, "client-fingerprint="+fp)

@@ -183,6 +183,7 @@ func rankEntries(in rankInput) []rankedEntry {
 
 // planned 保留线路的稳定顺序，Ranked 与 Entries 一一对应。
 type planned struct {
+	Source  []Entry
 	Entries []Entry
 	Ranked  []rankedEntry
 	Policy  contracts.ProxyPolicy
@@ -196,7 +197,7 @@ func (s *Server) planEntries(ctx context.Context, u *ent.User, entries []Entry, 
 	}
 	pol := loadPolicy(u)
 	if !u.Enabled {
-		return planned{Policy: pol}, nil
+		return planned{Policy: pol, Source: entries}, nil
 	}
 	authorized, err := s.userNodeIDs(ctx, u)
 	if err != nil {
@@ -284,7 +285,7 @@ func (s *Server) planEntries(ctx context.Context, u *ent.User, entries []Entry, 
 		in.rates = append(in.rates, pathRate(own, all, e.NodeID, e.ChainID))
 	}
 	ranked := rankEntries(in)
-	p := planned{Policy: pol}
+	p := planned{Policy: pol, Source: entries}
 	for i, entry := range kept {
 		ranked[i].Auto = !entry.Chained && ranked[i].Health.Status != "down"
 		p.Entries = append(p.Entries, entry)

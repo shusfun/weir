@@ -8,6 +8,7 @@ import (
 
 	"github.com/shusfun/weir/internal/subout"
 	"github.com/shusfun/weir/internal/subscription"
+	"github.com/shusfun/weir/packages/contracts"
 	"gopkg.in/yaml.v3"
 )
 
@@ -214,6 +215,46 @@ func TestSubscriptionNamesReachEveryFormatAndRefresh(t *testing.T) {
 			if report["included_nodes"] != float64(1) || len(report["excluded_nodes"].([]any)) != 0 {
 				t.Fatalf("unexpected compatibility report: %+v", report)
 			}
+		}
+	}
+}
+
+func TestSubscriptionCompatibilityUsesEffectivePolicy(t *testing.T) {
+	s, admin, g := setupGate(t)
+	n := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "hysteria2", "name": "compatibility-fixture", "skip_probe": true}, 200)
+	links := mustJSON(t, admin, "GET", "/api/v1/me/links", nil, 200)["items"].([]any)
+	linkID := int(links[0].(map[string]any)["id"].(float64))
+	l := s.Store.Ent.Link.GetX(t.Context(), linkID)
+	u := s.Store.Ent.User.GetX(t.Context(), l.UserID)
+	for _, disabled := range []bool{false, true, false} {
+		policy := loadPolicy(u)
+		policy.Groups = []contracts.ProxyGroup{{ID: 1, Name: "fixture", Kind: "select", Members: []string{"node:" + itoa(int(n["id"].(float64)))}}}
+		policy.Disabled = nil
+		if disabled {
+			policy.Disabled = []string{"hysteria2"}
+		}
+		u = u.Update().SetProxyPolicy(policyMap(policy)).SaveX(t.Context())
+		info := mustJSON(t, admin, "GET", "/api/v1/sub-info/"+l.Token, nil, 200)
+		for _, raw := range info["compatibility"].([]any) {
+			report := raw.(map[string]any)
+			for _, key := range []string{"excluded_nodes", "affected_groups", "affected_rules"} {
+				if _, ok := report[key].([]any); !ok {
+					t.Fatalf("%s is not array: %+v", key, report)
+				}
+			}
+			response := admin.do("GET", "/sub/"+l.Token+"?target="+report["target"].(string), nil, nil)
+			if disabled && (report["included_nodes"] != float64(0) || response.Code != 422) {
+				t.Fatalf("disabled: %+v status=%d", report, response.Code)
+			}
+			if !disabled && (report["included_nodes"].(float64) > 0) != (response.Code == 200) {
+				t.Fatalf("info/output differ: %+v status=%d", report, response.Code)
+			}
+			if response.Header().Get("X-Trace-Id") == "" {
+				t.Fatal("missing request trace")
+			}
+		}
+		if strings.Contains(mustString(info), "pinSHA256") || strings.Contains(mustString(info), "hysteria2://") {
+			t.Fatal("compatibility leaked link settings")
 		}
 	}
 }

@@ -130,7 +130,7 @@ function resolveGuide(path: string, context: CtxLayer, identity: GuideIdentity):
   }
   if (context.page === "初始化") return { id: "setup", version: 1, title: "安装初始化", steps: [onboarding.steps[0], onboarding.steps[1], step("setup", "完成初始化", "依次验证初始化凭证、选择存储、创建管理员。新手默认 SQLite 即可；如果库里已有账户，应恢复原配置，不能重新初始化。", "auth-content")] };
   if (identity.role === "guest" && !path.startsWith("/sub/") && !path.startsWith("/p/")) return { id: `auth:${context.tab ?? "login"}`, version: 4, title: "登录与账户", steps: [step("login", "登录自己的账户", "输入邮箱和密码；支持条件式界面且存有本站通行密钥时，邮箱框会提供密钥登录。需要二次验证时输入自己的验证码。邮件未配置时不显示找回密码。注册要求邀请码时请向管理员索取；发验证码先校验邀请，注册成功才占用。初始套餐与默认链接一并创建；没有套餐的新用户默认没有流量。需要邮箱验证时在注册表单发码、填码；允许的后缀会列在表单中。注册、发码、重置密码及连续登录失败后要求人机验证；过期后按提示重试。", "auth-content"), step("prepare", "还没安装？", onboarding.steps[0].text + " " + onboarding.steps[1].text)] };
-  if (path.startsWith("/sub/")) return { id: "public-import", version: 2, title: "导入订阅", steps: [step("import", "选择自己的客户端", "先选设备，再选兼容客户端，安装后使用页面的复制或一键导入操作。地址和二维码包含订阅凭证，不要公开。", "public-content"), step("verify", "更新并测试", "在客户端更新订阅、选择节点并启用代理，实际访问核对连接。若页面不可用，请登录控制台的订阅链接页，或联系管理员。", "public-content")] };
+  if (path.startsWith("/sub/")) return { id: "public-import", version: 3, title: "导入订阅", steps: [step("import", "选择自己的客户端", "先查看客户端兼容情况：页面按格式列出遗漏的节点、分组和规则。有兼容节点仍可导入，没有兼容节点的格式会说明原因。再选设备和客户端，安装后使用复制或一键导入。地址和二维码包含订阅凭证，不要公开。", "public-content"), step("verify", "更新并测试", "在客户端更新订阅、选择节点并启用代理，实际访问核对连接。若页面不可用，请登录控制台的订阅链接页，或联系管理员。", "public-content")] };
   if (path.startsWith("/p/")) return { id: "public-page", version: 2, title: "公开页面", steps: [step("browse", "浏览公开内容", "这里由管理员发布内容。有订阅时先选设备和客户端，再导入、复制或下载；只显示兼容已发布格式的客户端。使用明确公开的分享入口；你的控制台账号和管理权限不会因此公开。", "public-content")] };
   const info = pages[path];
   if (!info) return null;

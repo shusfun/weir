@@ -72,7 +72,7 @@ func RenderDetailed(links []string, target string) ([]byte, string, Compatibilit
 	}
 	kept := make([]string, 0, len(links))
 	for i, link := range links {
-		if _, _, err := renderRaw([]string{link}, target); err != nil {
+		if err := validateTargetLink(link, target); err != nil {
 			report.ExcludedNodes = append(report.ExcludedNodes, exclusionFor(link, fmt.Sprintf("node:%d", i+1), err))
 			continue
 		}
@@ -84,6 +84,22 @@ func RenderDetailed(links []string, target string) ([]byte, string, Compatibilit
 	}
 	body, contentType, err := renderRaw(kept, target)
 	return body, contentType, report, err
+}
+
+func validateTargetLink(link, target string) error {
+	if strings.TrimSpace(link) == "" || strings.ContainsAny(link, "\r\n") {
+		return fmt.Errorf("invalid node link")
+	}
+	// Generic subscriptions preserve protocols understood by the receiving client.
+	if target == "" || target == "base64" {
+		return nil
+	}
+	parsed, err := subscription.ParseLinks([]string{link})
+	if err != nil || len(parsed.Nodes) != 1 || len(parsed.Skipped) != 0 {
+		return fmt.Errorf("invalid node link")
+	}
+	_, _, err = renderRaw([]string{link}, target)
+	return err
 }
 
 func knownTarget(target string) bool {

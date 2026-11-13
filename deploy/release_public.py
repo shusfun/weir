@@ -73,6 +73,20 @@ def verify_tag(repository, tag, commit):
     raise ValueError("unsupported public tag target")
 
 
+def create_draft(repository, tag, commit, notes):
+    # Use the creation response: GitHub's tag/list indexes may lag a successful POST.
+    with tempfile.TemporaryDirectory() as temp:
+        payload = pathlib.Path(temp) / "release.json"
+        payload.write_text(json.dumps({"tag_name": tag, "target_commitish": commit, "name": tag,
+                                      "body": notes.rstrip() + "\n\n" + marker(commit) + "\n",
+                                      "draft": True, "prerelease": False}), encoding="utf-8")
+        release = gh("api", f"repos/{repository}/releases", "--method", "POST", "--input", str(payload))
+    verify_metadata(release, tag, commit, allow_draft=True)
+    if not release.get("id") or not release["draft"]:
+        raise ValueError("release creation did not return a draft")
+    return release
+
+
 def verify_metadata(release, tag, commit, allow_draft=False):
     if release["tag_name"] != tag or release["prerelease"] or (release["draft"] and not allow_draft):
         raise ValueError("release is not the expected stable public release")
@@ -142,15 +156,7 @@ def publish(repository, tag, commit, directory):
                 verify_remote(repository, tag, commit, expected)
                 return
         else:
-            with tempfile.TemporaryDirectory() as temp:
-                notes_path = pathlib.Path(temp) / "notes.md"
-                notes_path.write_text(notes.rstrip() + "\n\n" + marker(commit) + "\n", encoding="utf-8")
-                gh("release", "create", tag, "--repo", repository, "--draft", "--title", tag,
-                   "--notes-file", str(notes_path), "--verify-tag", "--target", commit, binary=True)
-            release = find_release(repository, tag)
-            if release is None:
-                raise ValueError("created release draft not found")
-            verify_metadata(release, tag, commit, allow_draft=True)
+            release = create_draft(repository, tag, commit, notes)
         uploaded = remote_assets(release)
         if set(uploaded) - set(expected):
             raise ValueError("unexpected assets in the release draft")

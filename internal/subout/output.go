@@ -47,6 +47,9 @@ func clashProxies(links []string, usedNames map[string]bool) ([]map[string]any, 
 		if !supportedSubscriptionSettings(n.Protocol, settings) {
 			return nil, nil, fmt.Errorf("unsupported transport")
 		}
+		if settings.SPKI != "" && settings.CertificatePin == "" {
+			return nil, nil, fmt.Errorf("unsupported SPKI-only pin for Clash")
+		}
 		name := n.Remark
 		if name == "" {
 			name = fmt.Sprintf("Node-%d", i+1)
