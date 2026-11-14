@@ -87,3 +87,5 @@ export * from "./board";
 export { TrafficUsage, TrafficRing, trafficReading, type TrafficUsageProps } from "./traffic-usage";
 
 export { OverlayBody, ActionGroup } from "./overlay-layout";
+
+export { ThemeIcon } from "./theme-icon";

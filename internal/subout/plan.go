@@ -37,6 +37,8 @@ const SubscriptionProbeURL = "http://www.gstatic.com/generate_204"
 
 // Ref 对应节点默认线路或用户自建链式线路；名称变化不改变引用。
 type Item struct {
+	// nil means the exit capability has not been established.
+	UDP    *bool
 	Link   string
 	Type   string
 	Ref    string

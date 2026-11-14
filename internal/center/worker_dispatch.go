@@ -153,6 +153,11 @@ func (s *Server) dispatchWorkerTask(ctx context.Context, kind string, payload an
 		return out, 0, err
 	}
 	deadline := time.Now().Add(2 * time.Minute)
+	if kind == contracts.TaskLayaClassify {
+		if d, ok := ctx.Deadline(); ok {
+			deadline = d
+		}
+	}
 	if kind == contracts.TaskLayaInstall || kind == contracts.TaskLayaPrepare {
 		deadline = time.Now().Add(30 * time.Minute)
 	}
@@ -168,10 +173,42 @@ func (s *Server) dispatchWorkerTask(ctx context.Context, kind string, payload an
 	defer check.Stop()
 	wake, unsubscribe := s.Store.Notifications.Subscribe("task:" + r.Task.ID)
 	defer unsubscribe()
+	lastStage := ""
+	leased := false
+	timeoutError := func() error {
+		if kind == contracts.TaskLayaClassify {
+			code := "queue_timeout"
+			if leased {
+				code = "inference_timeout"
+			}
+			return &contracts.TaskError{Code: code, Origin: "center.dispatchWorkerTask"}
+		}
+		return context.DeadlineExceeded
+	}
 	for {
 		current, e := s.Store.Tasks.Get(ctx, r.Task.ID)
 		if e != nil {
+			if ctx.Err() != nil {
+				_ = s.Store.Tasks.Cancel(context.WithoutCancel(ctx), r.Task.ID)
+				if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+					return out, 0, timeoutError()
+				}
+			}
 			return out, 0, e
+		}
+		if kind == contracts.TaskLayaClassify {
+			stage := "等待 VPS 领取 Laya 任务"
+			if current.Status == "leased" {
+				leased = true
+				stage = "VPS 执行 Laya 推理"
+				if current.Progress != nil && current.Progress.Stage != "" {
+					stage = current.Progress.Stage
+				}
+			}
+			if stage != lastStage {
+				jobStep(ctx, stage, time.Until(deadline))
+				lastStage = stage
+			}
 		}
 		switch current.Status {
 		case "succeeded":
@@ -181,6 +218,9 @@ func (s *Server) dispatchWorkerTask(ctx context.Context, kind string, payload an
 			}
 			return json.RawMessage(body), current.GateID, nil
 		case "failed", "expired", "cancelled", "unknown":
+			if current.Status == "expired" {
+				return out, current.GateID, timeoutError()
+			}
 			if kind == contracts.TaskReleaseQuery && current.Error != nil {
 				switch current.Error.Code {
 				case "release_not_found":
@@ -197,10 +237,13 @@ func (s *Server) dispatchWorkerTask(ctx context.Context, kind string, payload an
 		select {
 		case <-ctx.Done():
 			_ = s.Store.Tasks.Cancel(context.WithoutCancel(ctx), r.Task.ID)
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return out, 0, timeoutError()
+			}
 			return out, 0, ctx.Err()
 		case <-time.After(time.Until(deadline)):
 			_ = s.Store.Tasks.Cancel(context.WithoutCancel(ctx), r.Task.ID)
-			return out, 0, errors.New("network_task_timeout")
+			return out, 0, timeoutError()
 		case <-wake:
 		case <-check.C:
 		}

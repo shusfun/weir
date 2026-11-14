@@ -4,13 +4,13 @@ export type GuideStep = { id: string; title: string; text: string; target?: stri
 export type Guide = { id: string; version: number; title: string; steps: GuideStep[] };
 export type GuideIdentity = { id: string; role: "admin" | "user" | "guest" };
 // 未列出的教程为首版。内容变更只提升对应页面、标签或弹窗的版本。
-const versions: Record<string, number> = { "page:/system": 3, "page:/system:订阅数据与接口": 2, "page:/kernels": 2, "page:/kernels:版本": 2, "page:/subscriptions:订阅组": 2, "page:/ops/observe:订阅链路": 3, "page:/users": 2, "dialog:创建用户": 2, "page:/links": 3, "page:/accounts": 2, "page:/accounts:套餐": 2, "page:/accounts:用码": 2, "dialog:新建套餐": 2, "dialog:编辑套餐": 2, "dialog:生成邀请码": 2, "dialog:生成兑换码": 2, "page:/system:登录与安全": 5, "page:/system:AI 与 dsh": 8, "page:/gates": 2, "dialog:新建节点": 3, "dialog:添加 VPS": 2, "getting-started": 3, "page:/ops/audit": 2, "page:/ops/observe": 4, "page:/ops/observe:总览": 3, "page:/ops/observe:安全": 3, "page:/ops/observe:注册兑换": 2, "page:/ops/observe:系统状态": 3, "page:/ops/observe:策略版本": 2 };
+const versions: Record<string, number> = { "page:/system": 3, "page:/system:订阅数据与接口": 2, "page:/kernels": 2, "page:/kernels:版本": 2, "page:/subscriptions:订阅组": 2, "page:/ops/observe:订阅链路": 3, "page:/users": 2, "dialog:创建用户": 2, "page:/links": 3, "page:/accounts": 2, "page:/accounts:套餐": 2, "page:/accounts:用码": 2, "dialog:新建套餐": 2, "dialog:编辑套餐": 2, "dialog:生成邀请码": 2, "dialog:生成兑换码": 2, "page:/system:登录与安全": 5, "page:/system:AI 与 dsh": 9, "page:/gates": 3, "dialog:新建节点": 3, "dialog:添加 VPS": 2, "getting-started": 3, "page:/ops/audit": 2, "page:/ops/observe": 4, "page:/ops/observe:总览": 3, "page:/ops/observe:安全": 3, "page:/ops/observe:注册兑换": 2, "page:/ops/observe:系统状态": 3, "page:/ops/observe:策略版本": 2 };
 const target = (id: string) => `[data-tour="${id}"]`;
 const step = (id: string, title: string, text: string, anchor?: string): GuideStep => ({ id, title, text, target: anchor ? target(anchor) : undefined });
 const overview = (id: string, title: string, text: string, detail: string): Guide => ({ id, version: 1, title, steps: [step("overview", title, text, "page-header"), step("work", "在这里操作", detail, "page-content")] });
 
 const pages: Record<string, [string, string, string]> = {
-  "/gates": ["VPS 与节点", "VPS 是运行代理的服务器，节点是它提供的一种连接方式。中心负责管理，代理流量直接到 VPS。", "中心卡可启用本机执行端，仍可管理远程 VPS。VPS 上线后可只部署 Laya，无须创建节点；普通节点先保存与下发，再后台实测，失败保留节点和端口。"],
+  "/gates": ["VPS 与节点", "VPS 是运行代理的服务器，节点是它提供的一种连接方式。中心负责管理，代理流量直接到 VPS。", "点击 VPS 文件夹原位展开全部节点与 Laya，支持新增、编辑、删除；箭头进入详情，详情提供相同操作。中心卡可启用本机执行端，仍可管理远程 VPS。VPS 上线后可只部署 Laya，无须创建节点；普通节点先保存与下发，再后台实测，失败保留节点和端口。"],
   "/exits": ["出口与分流", "出口决定流量从哪里出去，分流决定哪些网站使用哪个出口。先选入口 VPS，再维护它可用的出口。", "可使用直连、代理、单条节点或订阅源节点。先实测，再引用到节点或规则；共享出口修改会影响全部引用，删除前先解除引用。"],
   "/users": ["用户", "为朋友创建账户时，一次设好节点范围、额度和到期时间。保存后会自动创建一条订阅链接。", "点用户查看链接、用量和套餐。不限制流量需显式打开「不限额度」；关闭时 0 为没有流量。未填写到期时间表示长期；手机和电脑可用不同链接，共用用户额度。"],
   "/accounts": ["套餐与用码", "流量、节点和有效期按需填写，可单独配置。用码页统一管理邀请码与兑换码，生成时选择类型。", "邀请码用于注册，可不附带套餐；兑换码必须引用启用的套餐。明文仅生成时提供一次，请立即复制或导出。后续编辑套餐不改变已经签发的码。"],
@@ -51,7 +51,7 @@ const tabs: Record<string, Record<string, [string, string]>> = {
     "登录与安全": ["登录与安全", "设置注册、邮箱验证和管理员二次验证策略。验证码、发信、邮箱后缀及别名规则按内置、外部、站点叠加。修改 JSON 后预演完整差异，管理员确认才生效，可从历史预演恢复。invite_required 控制注册必须邀请码，redeem_enabled 控制兑换入口；套餐与码在「套餐与用码」管理。@域名精确匹配，*.域名仅匹配子域名；黑名单优先。注册与发码检查一次性邮箱和 MX，DNS 故障时拒绝。别名用于防重复注册，登录和收信保留原地址。发码按 UTC 小时计数，用码失败按身份和 IP 锁定。通行密钥由浏览器在邮箱框提供，关闭后不能登录或绑定。邮件未配置时不提供找回密码。"],
     "通知": ["通知", "按需要配置邮件或 Telegram 通知，并使用测试操作核对送达；保存设置不等于已经送达。"],
     "安全防御": ["安全防御", "查看防御策略、事件和相关通知。先了解策略影响再修改，异常记录不应直接当作已证实的攻击。"],
-    "AI 与 dsh": ["AI 与 dsh", "启用并配置独立地址，检查 dsh 运行状态。Laya 先发现已有实例：读取版本与模型后核对确认接入，不扫描端口；或在中心与指定 VPS 独立部署官方 Docker，无须先创建节点。首次用固定 root 通道或一次性 SSH 核对指纹并准备权限；先预演参数、确认后执行，安装完成或接入已有实例后，先保存停用配置、测试推理，通过后再启用判断。停止和移除保留模型卷，取消后先刷新核对实际状态，活动可预览诊断包。回环实例可以不填 Key，指定 VPS 不会自动改派。外置配置按默认、外部导入、站点覆盖叠加；文件里的 timezone 设置每日汇总时区，criteria 描述三个判断分支，可见置信度下限和 skill 映射决定调用条件。laya_compatibility 设置已验证范围及范围外策略，实际版本未知时后台分析暂停；默认范围外仅保留基础判断。修改与版本恢复都先预演完整差异、管理员确认；不会把节点凭据交给模型。"],
+    "AI 与 dsh": ["AI 与 dsh", "启用并配置独立地址，检查 dsh 运行状态。Laya 先发现已有实例：读取版本与模型后核对确认接入，不扫描端口；或在中心与指定 VPS 独立部署官方 Docker，无须先创建节点。首次用固定 root 通道或一次性 SSH 核对指纹并准备权限；先预演参数、确认后执行，安装完成或接入已有实例后，先保存停用配置、测试推理，通过后再启用判断。手动测试显示排队与推理阶段，可取消；使用预热时限（默认 300 秒），重复点击复用进行中的任务。停止和移除保留模型卷，取消后先刷新核对实际状态，活动可预览诊断包。回环实例可以不填 Key，指定 VPS 不会自动改派。外置配置按默认、外部导入、站点覆盖叠加；文件里的 timezone 设置每日汇总时区，criteria 描述三个判断分支，可见置信度下限和 skill 映射决定调用条件。laya_compatibility 设置已验证范围及范围外策略，实际版本未知时后台分析暂停；默认范围外仅保留基础判断。修改与版本恢复都先预演完整差异、管理员确认；不会把节点凭据交给模型。"],
     "节点证书": ["节点证书", "证书用于代理节点，与控制台域名证书不同。按部署环境选择签发或导入方式，检查有效期和续签结果。"],
     "订阅数据与接口": ["订阅数据与接口", "管理历史保留策略、订阅数据备份、WebDAV 和外部接口令牌。保留策略保存后分批清理，缩短期限无法恢复已删除历史；审计默认保留，待执行与恢复记录不会按普通历史删除。先核对备份范围再恢复；令牌只授予需要的访问，不要放到公开页面。"],
   },

@@ -155,7 +155,7 @@ func (s *Server) subPlan(ctx context.Context, p planned) (*subout.Plan, []subout
 	p.Policy = migrateProxyTargets(p.Policy)
 	items := make([]subout.Item, len(p.Entries))
 	for i, e := range p.Entries {
-		items[i] = subout.Item{Link: e.URI, Type: e.Type, Ref: e.Ref, Auto: p.Ranked[i].Auto, Direct: !e.Chained}
+		items[i] = subout.Item{Link: e.URI, Type: e.Type, Ref: e.Ref, Auto: p.Ranked[i].Auto, Direct: !e.Chained, UDP: e.UDP}
 	}
 	plan := &subout.Plan{Groups: p.Policy.Groups, HiddenLines: p.Policy.HiddenLines, IntervalSec: p.Policy.Auto.RefreshMinutes * 60, UpdateSec: p.Policy.Auto.RefreshMinutes * 60, TestURL: subout.SubscriptionProbeURL}
 	available := make(map[string]bool, len(p.Entries))

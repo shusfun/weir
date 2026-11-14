@@ -37,7 +37,8 @@ export const isAwaited = (id: string) => awaited.has(id);
 export function awaitJob(first: Job, onUpdate?: (j: Job) => void): Promise<Job> {
   awaited.add(first.id);
   const key = jobKey(first.id);
-  if (!queryClient.getQueryData(key)) queryClient.setQueryData(key, first);
+  const previous = queryClient.getQueryData<Job>(key);
+  if (!previous || previous.started_at !== first.started_at) queryClient.setQueryData(key, first);
   const observer = new QueryObserver<Job>(queryClient, { queryKey: key, queryFn: () => fetchJob(first.id), refetchInterval: jobRefetch, retry: jobRetry });
   return new Promise((resolve, reject) => {
     let unsub = () => {};

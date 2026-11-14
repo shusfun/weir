@@ -35,6 +35,9 @@ function GlassFolder({
   href,
   onClick,
   className,
+  expanded,
+  controls,
+  observations = true,
 }: {
   name: ReactNode;
   /** 不传就不显示地址行；传 null 显示未知 */
@@ -57,6 +60,9 @@ function GlassFolder({
   href?: string;
   onClick?: () => void;
   className?: string;
+  expanded?: boolean;
+  controls?: string;
+  observations?: boolean;
 }) {
   const shown = files.slice(0, 3);
   const known = typeof cpu === "number" && Number.isFinite(cpu);
@@ -87,11 +93,11 @@ function GlassFolder({
         </span>
         <span className="weir-folder-foot">
           <span className="min-w-0">
-            <span className="weir-folder-dots" role="img" aria-label={known ? `CPU ${Math.round(cpu)}%` : "CPU：未知"}>
+            {observations && <span className="weir-folder-dots" role="img" aria-label={known ? `CPU ${Math.round(cpu)}%` : "CPU：未知"}>
               {Array.from({ length: 42 }, (_, i) => (
                 <i key={i} data-on={known && i < on ? (cpu >= 80 ? "warn" : "accent") : undefined} data-unknown={!known || undefined} />
               ))}
-            </span>
+            </span>}
             {caption && <span className="weir-folder-caption">{caption}</span>}
           </span>
           {metricLabel && (
@@ -117,7 +123,7 @@ function GlassFolder({
   }
   if (onClick) {
     return (
-      <button type="button" data-slot="glass-folder" className={cls} onClick={onClick}>
+      <button type="button" data-slot="glass-folder" className={cls} onClick={onClick} aria-expanded={expanded} aria-controls={controls}>
         {body}
       </button>
     );

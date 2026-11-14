@@ -30,7 +30,7 @@ interface LayaView {
 
 type Verdict = { verdict: { category: string; confidence: number } };
 
-export function LayaCard() {
+export function LayaCard({ hosting = true }: { hosting?: boolean }) {
   const q = useQuery({ queryKey: ["laya"], queryFn: () => api("/admin/defense/laya") as Promise<LayaView> });
   const draft = useDraft({ mode: q.data?.mode ?? "center", gate_id: q.data?.gate_id ?? 0, enabled: q.data?.enabled ?? false, url: q.data?.url ?? "", model: q.data?.model ?? "", warmup_seconds: q.data?.warmup_seconds ?? 300 });
   const setDraft = draft.set;
@@ -50,10 +50,10 @@ export function LayaCard() {
   });
   const { run, isBusy, waitFor } = useRowAction();
   const test = () =>
-    run("test", async () => {const result=await api("/admin/defense/laya/test", "POST"); void q.refetch(); return result;}, (r) => {
+    run("test", async (track) => {const result=await api("/admin/defense/laya/test-async", "POST", undefined, track); void q.refetch(); return result;}, (r) => {
       const { verdict } = r as Verdict;
       return `${verdict.category === "unknown" ? "Laya 判断未知" : "Laya 测试通过"}：合成事件判为「${verdicts[verdict.category] ?? verdict.category}」`;
-    }, { detail: (r) => (r as Verdict).verdict.category === "unknown" ? "判断未知，请查看活动记录" : `置信度 ${Math.round((r as Verdict).verdict.confidence * 100)}%`, fail: "Laya 测试未通过", wait: { label: "正在请 Laya 判断一条合成事件", max: 17 } });
+    }, { detail: (r) => (r as Verdict).verdict.category === "unknown" ? "判断未知，请查看活动记录" : `置信度 ${Math.round((r as Verdict).verdict.confidence * 100)}%`, fail: "Laya 测试未通过", wait: { label: "正在请 Laya 判断一条合成事件", max: v?.warmup_seconds ?? 300 } });
   return (
     <Section title="Laya 安全观察" description="接入官方 ollaya 原生接口。中心可直连已有实例；VPS 模式通过任务通道在指定 VPS 上判断，离线时显示未知。判断问题与可见置信度由 AI 外置配置管理。">
       {q.isPending || q.error || !v ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : (
@@ -66,7 +66,7 @@ export function LayaCard() {
           <FormGrid>
             <Field label="推理位置" name="mode"><Select value={v.mode ?? "center"} onValueChange={(mode) => setDraft({ ...v, enabled: false, mode: mode as "center" | "gate" })}><SelectTrigger aria-label="推理位置"><SelectValue>{v.mode === "gate" ? "指定 VPS" : "中心接入或托管"}</SelectValue></SelectTrigger><SelectContent><SelectItem value="center">中心接入或托管</SelectItem><SelectItem value="gate">指定 VPS</SelectItem></SelectContent></Select></Field>
             <Field label="模型" name="model" required><Input required placeholder="laya:multilingual" value={v.model} onChange={(e) => setDraft({ ...v, enabled: false, model: e.target.value })} /></Field>
-          <Field label="部署预热时限（秒）" name="warmup_seconds" hint="30 至 1800 秒，默认 300 秒；普通推理仍使用短超时。"><Input required type="number" min={30} max={1800} value={v.warmup_seconds??300} onChange={e=>setDraft({...v,warmup_seconds:Number(e.target.value)})}/></Field>
+          <Field label="预热与手动测试时限（秒）" name="warmup_seconds" hint="30 至 1800 秒，默认 300 秒；手动测试包含排队与推理，后台判断仍使用短超时。"><Input required type="number" min={30} max={1800} value={v.warmup_seconds??300} onChange={e=>setDraft({...v,warmup_seconds:Number(e.target.value)})}/></Field>
           </FormGrid>
           {v.mode === "gate" ? <>
             {gates.isPending || gates.error ? <State loading={gates.isPending} error={gates.error} onRetry={() => gates.refetch()} /> : <Field label="执行 VPS" name="gate_id" required hint="目标需完成 Laya 部署批准与模型安装；不会改派到其他 VPS。"><Select value={v.gate_id ? String(v.gate_id) : ""} onValueChange={(id) => setDraft({ ...v, enabled: false, gate_id: Number(id) })}><SelectTrigger aria-label="执行 VPS"><SelectValue placeholder="选择 VPS">{gates.data?.find(g => g.id === v.gate_id)?.name ?? "选择 VPS"}</SelectValue></SelectTrigger><SelectContent>{gates.data.map((g) => <SelectItem key={g.id} value={String(g.id)}>{g.name}{!g.online && "（离线）"}</SelectItem>)}</SelectContent></Select></Field>}
@@ -83,7 +83,7 @@ export function LayaCard() {
             <ActionsWait wait={waitFor("test")} />
           </div>
           {save.error && <Notice tone="bad">{save.error}</Notice>}
-          {v.mode !== "gate" ? <><LayaDiscovery url={v.url} model={v.model} apiKey={key} onAttached={() => { draft.reset(); setKey(""); void q.refetch(); }} /><LayaHosting onUse={(url, model) => setDraft({ ...v, url, model, enabled:false })} /></> : v.gate_id ? <GateLayaHosting key={v.gate_id} gateId={v.gate_id} onUse={()=>setDraft({...v,enabled:false})}/> : null}
+          {hosting && (v.mode !== "gate" ? <><LayaDiscovery url={v.url} model={v.model} apiKey={key} onAttached={() => { draft.reset(); setKey(""); void q.refetch(); }} /><LayaHosting onUse={(url, model) => setDraft({ ...v, url, model, enabled:false })} /></> : v.gate_id ? <GateLayaHosting key={v.gate_id} gateId={v.gate_id} onUse={()=>setDraft({...v,enabled:false})}/> : null)}
           <OpsRecords />
         </Form>
       )}

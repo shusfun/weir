@@ -42,6 +42,7 @@ type CompatibilityReport struct {
 	ExcludedNodes  []NodeExclusion `json:"excluded_nodes"`
 	AffectedGroups []GroupImpact   `json:"affected_groups"`
 	AffectedRules  []RuleImpact    `json:"affected_rules"`
+	Warnings       []RuleImpact    `json:"warnings,omitempty"`
 }
 
 func emptyReport(target string) CompatibilityReport {

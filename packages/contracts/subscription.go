@@ -122,7 +122,8 @@ type WeirNode struct {
 	RateBps     int64  `json:"rate_bps,omitempty"`
 	RateMinutes int    `json:"rate_minutes,omitempty"`
 	RateFrom    string `json:"rate_from,omitempty"`
-	Auto        bool   `json:"auto"` // 是否在「自动选择」组里
+	Auto        bool   `json:"auto"`          // 是否在「自动选择」组里
+	UDP         *bool  `json:"udp,omitempty"` // nil means the exit capability has not been measured.
 }
 
 type WeirGroup struct {

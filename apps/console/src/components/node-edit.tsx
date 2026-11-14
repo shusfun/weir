@@ -25,7 +25,7 @@ export function NodeEdit({node,nodes,close}:{node:NodeItem;nodes:NodeItem[];clos
   const fields=presets.data?.find(p=>p.id===node.preset)?.fields ?? [];
   const save=useFormAction(async track=>api(`/admin/nodes/${node.id}`,"PATCH",{name:name.trim(),port:Number(port),settings,...(node.security==="reality"?{reality_target:target.trim()}:{}),...(exitId?{exit_id:exitId}:{exit})},track),{
     fields:{invalid_reality_target:"target",reality_probe_failed:"target",invalid_name:"name",invalid_port:"port",port_in_use:"port",exit_not_allowed:"exit_id",...exitErrorFields(exit.kind)},
-    onSuccess:(updated:NodeItem | {pending:PendingExit})=>{if (!("pending" in updated)) client.setQueryData<NodeItem[]>(["nodes"],old=>old?.map(n=>n.id===updated.id?updated:n));void client.invalidateQueries({queryKey:["gates"]});void client.invalidateQueries({queryKey:["pending-exits"]});guard.commit();close();},
+    onSuccess:(updated:NodeItem | {pending:PendingExit})=>{if (!("pending" in updated)) client.setQueryData<NodeItem[]>(["nodes"],old=>old?.map(n=>n.id===updated.id?updated:n));void client.invalidateQueries({queryKey:["gates"]});void client.invalidateQueries({queryKey:["topology"]});void client.invalidateQueries({queryKey:["pending-exits"]});guard.commit();close();},
   });
   const guard=useFormGuard({name,port,exitId,exit,settings,target},close,save.busy);
   useConsoleContext({object:{type:"node",id:node.id,name:node.name},dialog:{title:"编辑节点"}});

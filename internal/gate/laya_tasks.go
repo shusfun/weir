@@ -196,23 +196,42 @@ func (a *Agent) layaTask(ctx context.Context, task contracts.Task) (output json.
 		if req.ExpectedRuntimeVersion == "" || len(req.ExpectedRuntimeVersion) > 100 {
 			return nil, layaTaskFailure("laya_runtime_version_unknown", "gate.layaTask")
 		}
+		finishVersion := beginTaskStage(ctx, "laya.configuration.check", "laya.Client.RuntimeVersion")
 		actualVersion, versionErr := client.RuntimeVersion(laya.WithTrace(ctx, task.TraceID))
+		if versionErr == nil && actualVersion != req.ExpectedRuntimeVersion {
+			versionErr = layaTaskFailure("laya_runtime_version_changed", "laya.Client.RuntimeVersion")
+		}
+		finishVersion(versionErr)
 		if versionErr != nil || actualVersion != req.ExpectedRuntimeVersion {
 			return nil, layaTaskFailure("laya_runtime_version_changed", "laya.Client.RuntimeVersion")
 		}
+		finishModel := beginTaskStage(ctx, "laya.model.prepare", "laya.Client.ShowModel")
 		installed, modelErr := client.ShowModel(laya.WithTrace(ctx, task.TraceID), doc.Model+"@sha256:"+laya.ModelManifestSHA256)
-		if modelErr != nil || installed.Digest != laya.ModelManifestSHA256 {
-			return nil, layaTaskFailure("laya_model_digest_mismatch", "laya.Client.ShowModel")
+		if modelErr != nil {
+			finishModel(modelErr)
+			return nil, layaTaskFailure("model_not_ready", "laya.Client.ShowModel")
 		}
+		if installed.Digest != laya.ModelManifestSHA256 {
+			err := layaTaskFailure("laya_model_digest_mismatch", "laya.Client.ShowModel")
+			finishModel(err)
+			return nil, err
+		}
+		finishModel(nil)
 		if model == laya.DefaultModel {
 			model += "@sha256:" + laya.ModelManifestSHA256
 		}
-		response, err := client.Classify(laya.WithTrace(ctx, task.TraceID), laya.Request{Model: model, State: req.State, Questions: questions})
+		finishInference := beginTaskStage(ctx, "laya.model.inference", "laya.Client.Classify")
+		remaining := time.Until(task.Deadline)
+		if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < remaining {
+			remaining = time.Until(deadline)
+		}
+		response, err := client.Warmup(laya.WithTrace(ctx, task.TraceID), laya.Request{Model: model, State: req.State, Questions: questions}, remaining)
+		finishInference(err)
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return nil, err
 			}
-			return nil, layaTaskFailure("laya_classification_failed", "laya.Client.Classify")
+			return nil, layaTaskFailure(laya.FailureCode(err), "laya.Client.Classify")
 		}
 		if after, err := client.RuntimeVersion(laya.WithTrace(ctx, task.TraceID)); err != nil || after != actualVersion {
 			return nil, layaTaskFailure("laya_runtime_version_changed", "laya.Client.RuntimeVersion")

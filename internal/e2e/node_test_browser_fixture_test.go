@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -130,6 +131,12 @@ func TestNodeTestBrowserFixture(t *testing.T) {
 	proxy := &httputil.ReverseProxy{Rewrite: func(r *httputil.ProxyRequest) { r.SetURL(upstream); r.Out.Host = r.In.Host }}
 	srv := &http.Server{Addr: ":19810", Handler: proxy, ReadHeaderTimeout: 5 * time.Second}
 	t.Cleanup(func() { _ = srv.Close() })
+	seconds, _ := strconv.Atoi(os.Getenv("WEIR_E2E_BROWSER_SECONDS"))
+	if seconds < 1 || seconds > 3600 {
+		seconds = 900
+	}
+	timer := time.AfterFunc(time.Duration(seconds)*time.Second, func() { _ = srv.Close() })
+	defer timer.Stop()
 	t.Log("node browser fixture ready on :19810", e.dir)
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		t.Fatal(err)

@@ -121,7 +121,7 @@ func (s *Server) releaseTarget(ctx context.Context, arch string, wait bool) *con
 
 // heartbeatRelease 决定心跳回复里要不要带 Release：版本相同、或单机的本机 Gate（在中心进程里运行，随中心一起更新）不带。
 func (s *Server) heartbeatRelease(ctx context.Context, g *ent.Gate, version string) *contracts.ReleaseTarget {
-	if version == buildinfo.Version || colocated(g) {
+	if s.Config.GateUpdatesPaused || version == buildinfo.Version || colocated(g) {
 		return nil
 	}
 	return s.releaseTarget(ctx, g.Arch, false)

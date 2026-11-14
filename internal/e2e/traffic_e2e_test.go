@@ -18,6 +18,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"gopkg.in/yaml.v3"
 	"io"
 	"math/big"
 	"net"
@@ -218,10 +219,29 @@ func TestUDPExitRealKernels(t *testing.T) {
 		if !udpRejectVisible(err, elapsed) || echo.count.Load() != before {
 			t.Fatalf("HTTP exit did not reject UDP visibly: err=%v elapsed=%s echo %d→%d", err, elapsed, before, echo.count.Load())
 		}
-		body, _ := e.get("/sub/"+e.userToken(uid), map[string]string{"User-Agent": "clash.meta"})
-		if bytes.Contains(body, []byte("udp=false")) || bytes.Contains(body, []byte(`"udp": false`)) || bytes.Contains(body, []byte(`"udp":false`)) {
-			t.Fatal("subscription used udp=false to block traffic")
+		body, _ := e.get("/sub/"+e.userToken(uid)+"/provider/single", map[string]string{"User-Agent": "clash.meta"})
+		var provider struct {
+			Proxies []struct {
+				Port int   `yaml:"port"`
+				UDP  *bool `yaml:"udp"`
+			} `yaml:"proxies"`
 		}
+		if err := yaml.Unmarshal(body, &provider); err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, proxy := range provider.Proxies {
+			if proxy.Port == int(httpNode["port"].(float64)) {
+				found = true
+				if proxy.UDP == nil || *proxy.UDP {
+					t.Fatal("HTTP exit capability lost in provider")
+				}
+			}
+		}
+		if !found {
+			t.Fatal("HTTP node missing from provider")
+		}
+
 	})
 	t.Run("socks-measured", func(t *testing.T) {
 		bindSub(e, t)

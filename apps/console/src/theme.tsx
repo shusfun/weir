@@ -1,15 +1,14 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Button } from "@weir/ui";
-import { Sun, Moon, Monitor } from "lucide-react";
+import { Button, ThemeIcon } from "@weir/ui";
 
 export const themeStorageKey = "weir-theme";
 export type ThemeMode = "light" | "dark" | "system";
 
 // 单个图标按钮循环切换：浅色 → 深色 → 跟随系统
 const modes = {
-  light: { icon: Sun, label: "浅色", next: "dark" },
-  dark: { icon: Moon, label: "深色", next: "system" },
-  system: { icon: Monitor, label: "跟随系统", next: "light" },
+  light: { label: "浅色", next: "dark" },
+  dark: { label: "深色", next: "system" },
+  system: { label: "跟随系统", next: "light" },
 } as const;
 
 export function readTheme(): ThemeMode {
@@ -34,15 +33,8 @@ export function applyTheme(theme: ThemeMode) {
   activeTheme = theme;
   const dark = theme === "dark" || (theme === "system" && systemIsDark());
   const root = document.documentElement;
-  // 切换主题时颜色立即到位，不走按钮、输入框上的颜色过渡（见 theme.css 的 .weir-theme-switching）
-  const switching = root.classList.contains("dark") !== dark;
-  if (switching) root.classList.add("weir-theme-switching");
   root.classList.toggle("dark", dark);
-  if (switching) {
-    // 先在关掉过渡的状态下算一次样式，新颜色直接生效，再恢复过渡
-    void document.body?.offsetHeight;
-    setTimeout(() => root.classList.remove("weir-theme-switching"), 0);
-  }
+
   root.dataset.theme = theme;
   root.style.colorScheme = dark ? "dark" : "light";
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? themeColors.dark : themeColors.light);
@@ -80,12 +72,11 @@ export function ThemeControl({ withLabel = false }: { withLabel?: boolean }) {
   }, [theme]);
   const current = modes[theme];
   const next = modes[current.next];
-  const Icon = current.icon;
   return (
     <Button
       type="button"
       variant={withLabel ? "outline" : "ghost"}
-      size={withLabel ? "default" : "icon-sm"}
+      size="icon-sm"
       aria-label={`界面主题：${current.label}，点击切换为${next.label}`}
       title={`主题：${current.label}（点击切换为${next.label}）`}
       onClick={() => {
@@ -99,8 +90,7 @@ export function ThemeControl({ withLabel = false }: { withLabel?: boolean }) {
         void import("./appearance").then(({ pushAccountAppearance, readAppearance }) => pushAccountAppearance({ ...readAppearance(), theme: current.next }));
       }}
     >
-      <Icon />
-      {withLabel && <span>主题：{current.label}</span>}
+      <ThemeIcon mode={theme} />
     </Button>
   );
 }

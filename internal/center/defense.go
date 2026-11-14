@@ -97,6 +97,7 @@ func (s *Server) defenseRoutes(admin *gin.RouterGroup) {
 	admin.PUT("/defense/laya", s.putLaya)
 	admin.DELETE("/defense/laya", s.deleteLaya)
 	admin.POST("/defense/laya/test", s.testLaya)
+	admin.POST("/defense/laya/test-async", s.testLayaAsync)
 }
 
 func (s *Server) saveEvent(ctx context.Context, e *SecurityEvent) error {
@@ -552,7 +553,7 @@ func (s *Server) deleteLaya(c *gin.Context) {
 }
 
 func (s *Server) testLaya(c *gin.Context) {
-	l, _, err := s.readLayaSettings(c.Request.Context())
+	l, revision, err := s.readLayaSettings(c.Request.Context())
 	if err != nil {
 		failInternal(c, 503, "laya_configuration_unavailable", err)
 		return
@@ -562,6 +563,10 @@ func (s *Server) testLaya(c *gin.Context) {
 		return
 	}
 	verificationKey := layaVerificationKey(l)
+	if expected, ok := c.Request.Context().Value(layaTestRevisionKey{}).(string); ok && expected != revision {
+		failure(c, 409, "laya_configuration_changed")
+		return
+	}
 	if l.Key != "" && l.Mode != "gate" {
 		l.Key, err = s.reveal(l.Key)
 		if err != nil {
@@ -569,21 +574,54 @@ func (s *Server) testLaya(c *gin.Context) {
 			return
 		}
 	}
-	v, err := s.classify(c.Request.Context(), l, "Synthetic test event: repeated-login-failure; scope: authentication; failed logins from the same source within 10 minutes: 12")
+	ctx, cancel := context.WithTimeout(context.WithValue(c.Request.Context(), layaTestRevisionKey{}, revision), time.Duration(layaWarmupSeconds(l))*time.Second)
+	defer cancel()
+	c.Request = c.Request.WithContext(ctx)
+	v, err := s.classify(ctx, l, "Synthetic test event: repeated-login-failure; scope: authentication; failed logins from the same source within 10 minutes: 12")
 	if err != nil {
-		_ = s.Store.KV.Del(c.Request.Context(), verificationKey)
-		failDetail(c, 502, "laya_unavailable", err.Error(), nil)
+		// An unsuccessful or cancelled test must not invalidate a newer result.
+		code := "laya_unavailable"
+		if v != nil && v.Code != "" {
+			code = "laya_test_" + v.Code
+		}
+		failDetail(c, 502, code, redact(err.Error()), nil)
 		return
 	}
 	result := "unknown"
 	if v.Category != "unknown" && v.Outcome != "unknown" {
-		if err = s.Store.KV.Set(c.Request.Context(), verificationKey, taskTrace(c.Request.Context()), 24*time.Hour); err != nil {
+		if err = s.Store.Lock.Do(c.Request.Context(), "ai-profile", func(ctx context.Context) error {
+			return s.Store.Lock.Do(ctx, "laya-settings", func(ctx context.Context) error {
+				_, current, e := s.readLayaSettings(ctx)
+				if e != nil {
+					return e
+				}
+				if current != revision {
+					return errors.New("laya_configuration_changed")
+				}
+				profile, e := s.aiProfile(ctx)
+				if e != nil {
+					return e
+				}
+				if profile.Revision != v.ProfileVersion {
+					return errors.New("laya_configuration_changed")
+				}
+				if e := ctx.Err(); e != nil {
+					return e
+				}
+				if !jobCommitCtx(ctx) {
+					return context.Canceled
+				}
+				return s.Store.KV.Set(ctx, verificationKey, taskTrace(ctx), 24*time.Hour)
+			})
+		}); err != nil {
+			if err.Error() == "laya_configuration_changed" {
+				failure(c, 409, err.Error())
+				return
+			}
 			failInternal(c, 503, "save_failed", err)
 			return
 		}
 		result = "ok"
-	} else {
-		_ = s.Store.KV.Del(c.Request.Context(), verificationKey)
 	}
 	s.audit(c, "defense.laya.test", "", result)
 	c.JSON(200, gin.H{"verdict": v})
@@ -618,6 +656,9 @@ func (s *Server) classify(ctx context.Context, l layaSettings, event string) (*V
 	if err != nil {
 		return nil, err
 	}
+	if expected, ok := ctx.Value(layaTestProfileKey{}).(string); ok && expected != profile.Revision {
+		return nil, errors.New("laya_configuration_changed")
+	}
 	cfg := profile.Effective.Observations["security"]
 	return s.classifyConfigured(ctx, l, event, cfg, profile.Revision, *profile.Effective.LayaCompatibility)
 }
@@ -636,8 +677,14 @@ func (s *Server) classifyConfigured(ctx context.Context, l layaSettings, event s
 		verdict.Code = "invalid_endpoint"
 		return verdict, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 17*time.Second)
+	budget, attempts := 17*time.Second, 2
+	manual, _ := ctx.Value(layaTestRevisionKey{}).(string)
+	if manual != "" {
+		budget, attempts = time.Duration(layaWarmupSeconds(l))*time.Second, 1
+	}
+	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
+	jobStep(ctx, "核对 Laya 配置与版本", budget)
 	client := laya.Client{BaseURL: endpoint, APIKey: l.Key, Observer: func(ctx context.Context, e laya.Event) {
 		slog.InfoContext(ctx, "laya operation", "trace", traceOf(ctx), "operation", e.Operation, "status", e.Status,
 			"code", e.Code, "ms", e.Finished.Sub(e.Started).Milliseconds())
@@ -658,9 +705,13 @@ func (s *Server) classifyConfigured(ctx context.Context, l layaSettings, event s
 	}
 	if err != nil || !status.EnableBase {
 		verdict.Code = status.Code
-		return verdict, errors.New(status.Code)
+		if err != nil && l.Mode != "gate" {
+			verdict.Code = "service_unreachable"
+		}
+		return verdict, errors.New(verdict.Code)
 	}
 	if l.Mode != "gate" {
+		jobStep(ctx, "检查模型准备状态", budget)
 		modelCtx, modelCancel := context.WithTimeout(ctx, 3*time.Second)
 		model, modelErr := client.ShowModel(laya.WithTrace(modelCtx, taskTrace(ctx)), l.Model)
 		modelCancel()
@@ -686,20 +737,32 @@ func (s *Server) classifyConfigured(ctx context.Context, l layaSettings, event s
 		request.Model += "@sha256:" + laya.ModelManifestSHA256
 	}
 	var doc laya.Response
-	for attempt := 0; attempt < 2; attempt++ {
+	for attempt := 0; attempt < attempts; attempt++ {
 		if ctx.Err() != nil {
 			err = ctx.Err()
 			break
 		}
 		verdict.Attempts++
-		attemptCtx, attemptCancel := context.WithTimeout(ctx, 8*time.Second)
+		attemptBudget := 8 * time.Second
+		if manual != "" {
+			if deadline, ok := ctx.Deadline(); ok {
+				attemptBudget = time.Until(deadline)
+			}
+		}
+		attemptCtx, attemptCancel := context.WithTimeout(ctx, attemptBudget)
+		jobStep(ctx, "等待模型推理", attemptBudget)
 		if l.Mode == "gate" {
 			doc, err = s.classifyOnGate(attemptCtx, l.GateID, request, runtimeVersion)
 		} else {
-			doc, err = client.Classify(laya.WithTrace(attemptCtx, taskTrace(ctx)), request)
+			if manual != "" {
+				doc, err = client.Warmup(laya.WithTrace(attemptCtx, taskTrace(ctx)), request, attemptBudget)
+			} else {
+				doc, err = client.Classify(laya.WithTrace(attemptCtx, taskTrace(ctx)), request)
+			}
 		}
 		attemptCancel()
 		if err == nil {
+			jobStep(ctx, "校验推理响应", budget)
 			v := doc.Answers["category"]
 			if v.Confidence == nil || (v.Choice != "normal" && v.Choice != "suspicious" && v.Choice != "unknown") {
 				err = errors.New("Laya 响应无效")
@@ -710,16 +773,22 @@ func (s *Server) classifyConfigured(ctx context.Context, l layaSettings, event s
 		}
 	}
 	if err != nil {
-		verdict.Code = "classification_failed"
+		verdict.Code = laya.FailureCode(err)
 		var taskFailure *contracts.TaskError
 		if errors.As(err, &taskFailure) && taskFailure.Code == "laya_runtime_version_changed" {
 			verdict.Code = "laya_runtime_version_changed"
 			status.EnableBackground = false
 		}
+		if errors.As(err, &taskFailure) {
+			verdict.Code = taskFailure.Code
+		}
+		if strings.Contains(err.Error(), "invalid") || strings.Contains(err.Error(), "响应无效") {
+			verdict.Code = "invalid_response"
+		}
 		if errors.Is(ctx.Err(), context.Canceled) {
 			verdict.Code = "cancelled"
-		} else if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			verdict.Code = "timeout"
+		} else if errors.Is(ctx.Err(), context.DeadlineExceeded) && !errors.As(err, &taskFailure) {
+			verdict.Code = "inference_timeout"
 		}
 		return verdict, err
 	}

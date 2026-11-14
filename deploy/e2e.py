@@ -53,6 +53,10 @@ def main(argv):
     cmd = ["docker", "run", "--rm", "--cap-add", "NET_ADMIN", "--cap-add", "NET_RAW", "--dns", "1.1.1.1", "--dns", "8.8.8.8",
            "-v", f"{OUT}:/t", "-v", f"{XRAY}:/cores/xray:ro", "-v", f"{SINGBOX}:/cores/sing-box:ro",
            "-e", "WEIR_E2E_XRAY=/cores/xray", "-e", "WEIR_E2E_SINGBOX=/cores/sing-box", "-e", "WEIR_E2E_BINARY=/t/weir"]
+    if os.environ.get("WEIR_E2E_NODE_BROWSER") == "1":
+        cmd += ["-p", "127.0.0.1:22341:19810", "-v", f"{ROOT / 'apps/weir/static'}:/console:ro",
+                "-e", "WEIR_E2E_NODE_BROWSER=1", "-e", "WEIR_E2E_CONSOLE=/console",
+                "-e", "WEIR_E2E_BROWSER_SECONDS=" + os.environ.get("WEIR_E2E_BROWSER_SECONDS", "900")]
     if os.environ.get("WEIR_E2E_NETWORK"):
         cmd += ["--network", os.environ["WEIR_E2E_NETWORK"], "-e", "WEIR_E2E_PUBLIC_NETWORK=1"]
     if os.environ.get("WEIR_E2E_SUBSCRIPTION_DIR"):

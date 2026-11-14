@@ -3,6 +3,7 @@ import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { cva, type VariantProps } from "class-variance-authority";
 import { LoaderCircle } from "lucide-react";
 import { cn } from "cn";
+import { Tooltip } from "./tooltip";
 
 // 文字与图标按钮共用尺寸档位：默认 33、小号 29，触屏至少 45。尺寸与内边距统一由公共样式决定。
 const buttonVariants = cva(
@@ -64,7 +65,7 @@ function Button({
         <span className={cn(!busy && "invisible")} aria-hidden={!busy || undefined}>{busyText}</span>
       </span>
     );
-  return (
+  const button = (
     <ButtonPrimitive
       data-slot="button"
       data-variant={variant}
@@ -79,6 +80,7 @@ function Button({
       {label}
     </ButtonPrimitive>
   );
+  return iconOnly && props.title ? <Tooltip content={props.title} side="bottom">{button}</Tooltip> : button;
 }
 
 export { Button, buttonVariants };

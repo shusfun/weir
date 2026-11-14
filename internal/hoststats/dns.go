@@ -17,7 +17,7 @@ import (
 	"github.com/shusfun/weir/internal/publicnet"
 )
 
-// CompareDNS 用系统 DNS 和 DoH 对照同一个公网名字。对不上记为污染；任一侧读不到则未知。
+// CompareDNS compares resolver answers; CDN geolocation can legitimately differ.
 func CompareDNS(ctx context.Context) (string, bool) {
 	const name = "www.microsoft.com"
 	system, err := net.DefaultResolver.LookupNetIP(ctx, "ip4", name)
@@ -28,13 +28,25 @@ func CompareDNS(ctx context.Context) (string, bool) {
 	if err != nil || len(doh) == 0 {
 		return "", false
 	}
+	return compareDNSAnswers(system, doh)
+}
+
+func compareDNSAnswers(system, doh []netip.Addr) (string, bool) {
+	if len(system) == 0 || len(doh) == 0 {
+		return "", false
+	}
 	known := map[string]bool{}
 	for _, ip := range doh {
 		known[ip.String()] = true
 	}
 	for _, ip := range system {
-		if !publicnet.Public(ip) || !known[ip.String()] {
+		if !publicnet.Public(ip) {
 			return "polluted", true
+		}
+	}
+	for _, ip := range system {
+		if !known[ip.String()] {
+			return "answers_differ", true
 		}
 	}
 	return "clean", true

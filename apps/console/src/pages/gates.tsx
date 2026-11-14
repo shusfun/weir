@@ -1,3 +1,5 @@
+import { GateManagement } from "../components/gate-management";
+import { GateLayaHosting } from "../features/ai/laya-gate-hosting";
 // VPS 与节点：每台 VPS 一张卡片，最上面是在不在线，直接显示主机观测；它上面的每个节点一行，点开看细节；
 // 「＋ 协议」直接在这台 VPS 上建节点。VPS 用 SSH 一次装好，或复制安装命令自己执行。
 import { Fragment, useState, useMemo, useCallback, useRef } from "react";
@@ -77,7 +79,8 @@ export function GatesPage() {
   const detailParam = useDialogParam("gate", gates.data, !gates.isFetching);
   const nodeParam = useDialogParam("node", nodes.data, !nodes.isFetching);
   const detail = detailParam.current;
-  const openGate=useCallback((g:Gate)=>navigate(`/gates/${g.id}`),[navigate]);
+  const expanded = Number(params.get("expand"));
+  const openGate = (g: Gate) => setParams(p => { if (expanded === g.id) p.delete("expand"); else p.set("expand", String(g.id)); return p; });
   const openNode=useCallback((n:NodeItem)=>navigate(`/nodes/${n.id}`),[navigate]);
   const previousGroups=useRef(new Map<number,NodeItem[]>());
   const grouped=useMemo(()=>{
@@ -153,7 +156,7 @@ export function GatesPage() {
         { label: "此刻总速率", value: null, unit: "B/s" },
         { label: "24 小时内核重启", value: null },
       ]} />
-      <SectionHeader className="mt-[33px]" title="VPS" actions={<span className="text-meta text-[var(--weir-ink-3)]">点开文件夹进入详情</span>} />
+      <SectionHeader className="mt-[33px]" title="VPS" actions={<span className="text-meta text-[var(--weir-ink-3)]">点开文件夹管理节点与 Laya</span>} />
       <div className="grid gap-[21px] md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {gates.data.map((g, i) => {
           const folderNodes = grouped.get(g.id) ?? emptyNodes;
@@ -161,7 +164,7 @@ export function GatesPage() {
           const cpu = g.host?.cpu_percent;
           const steal = g.host?.health?.cpu_steal;
           const caption = [cpu == null ? "CPU 未知" : `CPU ${Math.round(cpu)}%`, steal != null && steal >= 5 ? `steal ${Math.round(steal)}%` : null, `${folderNodes.length} 个节点`].filter(Boolean).join(" · ");
-          return <GlassFolder key={g.id} hue={(i % 2) as 0 | 1} name={g.name} address={g.public_host || null} status={gateFolderStatus(g, tone)} cpu={cpu} caption={caption} metric={null} metricUnit="ms" metricLabel="国内延迟" onClick={() => openGate(g)} files={folderNodes.slice(0, 3).map((n) => ({ id: String(n.id), title: protocolNames[n.protocol] ?? n.name, meta: n.port ? String(n.port) + (n.network === "udp" ? "/udp" : "") : null, tone: nodeStatus(n, g)[1] }))} />;
+          return <section key={g.id} className={expanded === g.id ? "weir-expanded-folder stack" : "stack"}><GlassFolder expanded={expanded === g.id} controls={`gate-content-${g.id}`} hue={(i % 2) as 0 | 1} name={g.name} address={g.public_host || null} status={gateFolderStatus(g, tone)} cpu={cpu} caption={caption} metric={null} metricUnit="ms" metricLabel="国内延迟" onClick={() => openGate(g)} files={folderNodes.slice(0, 3).map((n) => ({ id: String(n.id), title: protocolNames[n.protocol] ?? n.name, meta: n.port ? String(n.port) + (n.network === "udp" ? "/udp" : "") : null, tone: nodeStatus(n, g)[1] }))} />{expanded === g.id && <div id={`gate-content-${g.id}`} className="stack"><GateManagement gate={g} nodes={nodes.data} details /><GateLayaHosting gateId={g.id} host={g.public_host} /></div>}</section>;
         })}
         <FolderSlot title="添加 VPS" caption="用 SSH 一次装好" onClick={() => setInvite(true)} />
       </div>

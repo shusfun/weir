@@ -3,6 +3,14 @@ import { awaitJob, type Job } from "./lib/jobs";
 import { guideTraceId, guideRequest } from "./lib/guide-events";
 
 const messages: Record<string, string> = {
+ laya_test_queue_timeout:"排队超时，VPS 未在测试预算内领取任务。规则防线继续运行。",
+ laya_test_inference_timeout:"模型推理超时，请核对主机资源和预热时限后重试。",
+ laya_test_service_unreachable:"Laya 服务不可达，请核对部署状态与推理位置。",
+ laya_test_model_not_ready:"模型尚未就绪，请检查模型准备记录后重试。",
+ laya_test_resources_insufficient:"Laya 报告资源不足，请检查主机可用资源。",
+ laya_test_invalid_response:"Laya 返回了无效响应，请检查版本与模型状态。",
+ laya_test_cancelled:"测试已取消，规则防线继续运行。",
+
  local_gate_unavailable:"本机执行端当前不能启用，请核对设备身份和安装状态。",
  local_gate_preflight_failed:"当前发布包校验或 systemd 预检未通过，请先修复安装环境。",
  local_gate_preview_expired:"本机执行端预检已过期或配置已变化，请重新预检。",

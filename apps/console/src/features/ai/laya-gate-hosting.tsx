@@ -1,3 +1,6 @@
+import { lazy, Suspense } from "react";
+const LayaCard = lazy(() => import("../../components/defense").then(module => ({default: module.LayaCard})));
+import { Settings2 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Badge, Button, Collapsible, Dialog, DialogContent, DialogDescription, DialogTitle, Notice, useConfirm } from "@weir/ui";
@@ -13,6 +16,7 @@ import { useConsoleContext } from "../../lib/console-context";
 type Hosting = { gate_name:string; online:boolean; colocated:boolean; prepared:boolean;can_prepare?:boolean; component:{state:string; code?:string; version?:string; model?:string};job?:Job; operation?:{status:string;task_id?:string;code?:string;stage?:string} };
 export function GateLayaHosting({gateId,host="",onUse}:{gateId:number;host?:string;onUse?:()=>void}) {
  const q=useQuery({queryKey:["gate-laya",gateId],queryFn:()=>api(`/admin/gates/${gateId}/laya`) as Promise<Hosting>,enabled:gateId>0,refetchInterval:5000});
+ const [settings,setSettings]=useState(false);
  const confirm=useConfirm();const [ssh,setSSH]=useState(false);const [busy,setBusy]=useState(false);const [error,setError]=useState("");
  useConsoleContext({ object: {type:"gate", id:gateId, name:q.data?.gate_name || "VPS"}, ...(ssh ? {dialog:{title:"准备 Laya 部署权限"}} : {}) });
  const running=!!q.data && (q.data.job?.status==="running" || ["pending","leased","cancelling"].includes(q.data.operation?.status || ""));
@@ -27,6 +31,7 @@ export function GateLayaHosting({gateId,host="",onUse}:{gateId:number;host?:stri
  if (!gateId) return null;
  return <Collapsible title="Laya 组件（允许零节点）">
   {q.isPending||q.error||!q.data?<State loading={q.isPending} error={q.error} onRetry={()=>q.refetch()}/>:<div className="stack">
+   <div className="actions"><Button size="icon" variant="outline" title="接入设置与测试" aria-label="Laya 接入设置与测试" onClick={()=>setSettings(true)}><Settings2 /></Button></div>
    {q.data.colocated ? <Notice>本机执行端随中心运行。<Link className="underline" to="/system?tab=ai">在 AI 设置中部署中心 Laya</Link>。</Notice> : <>
     <div className="flex flex-wrap gap-2"><span>{q.data.gate_name}</span><Badge variant="status" tone={q.data.component.state==="available"?"ok":"neutral"}>{q.data.component.state==="available"?"模型可用":q.data.prepared?"部署权限已准备，运行状态待验证":"尚未准备部署权限"}</Badge></div>
     <small>{!q.data.online?"VPS 离线，当前状态未知":q.data.component.code||"模型版本："+(q.data.component.version||"未知")}</small>
@@ -37,6 +42,7 @@ export function GateLayaHosting({gateId,host="",onUse}:{gateId:number;host?:stri
    </>}
   </div>}
   {error&&<Notice tone="bad">{error}</Notice>}
+  <Dialog open={settings} onOpenChange={async v=>{if(v || !hasUnsavedChanges() || await confirm({title:"放弃未保存的 Laya 配置？",confirmText:"放弃修改"}))setSettings(v);}}><DialogContent size="lg"><DialogTitle>Laya 接入设置与测试</DialogTitle><DialogDescription>修改当前推理位置及允许的参数。保存并测试通过后才能启用后台分析。</DialogDescription>{settings&&<Suspense fallback={<State loading />}><LayaCard hosting={false}/></Suspense>}</DialogContent></Dialog>
   <Dialog open={ssh} onOpenChange={v=>!v&&void closeSSH()}><DialogContent size="lg"><DialogTitle>准备 {q.data?.gate_name} 的 Laya 部署</DialogTitle><DialogDescription>核对 SSH 主机指纹和既有 Gate 身份，保留设备配置。</DialogDescription>{ssh&&<SSHInstall gateId={gateId} initialHost={host} name={q.data?.gate_name||`VPS ${gateId}`} setName={()=>{}} close={()=>void closeSSH()} done={()=>void q.refetch()}/>}</DialogContent></Dialog>
  </Collapsible>;
 }

@@ -44,6 +44,7 @@ type Entry struct {
 	Password string `json:"password,omitempty"`
 	URI      string `json:"uri"`
 	Error    string `json:"error,omitempty"`
+	UDP      *bool  `json:"udp,omitempty"`
 }
 
 // certPins 返回证书指纹（Clash / Hysteria2 链接用 DER 十六进制）与 SPKI 摘要（sing-box 用 base64）。
@@ -375,7 +376,7 @@ func (s *Server) weirSubscription(ctx context.Context, u *ent.User, l *ent.Link,
 		used[name], names[i] = true, name
 		r := p.Ranked[i]
 		health := map[string]string{"ok": "ok", "down": "degraded"}[r.Health.Status]
-		node := contracts.WeirNode{Ref: e.Ref, Name: name, Type: e.Type, URI: e.URI, Rank: r.Rank, Health: firstNonEmpty(health, "unknown"), Auto: r.Auto}
+		node := contracts.WeirNode{Ref: e.Ref, Name: name, Type: e.Type, URI: e.URI, Rank: r.Rank, Health: firstNonEmpty(health, "unknown"), Auto: r.Auto, UDP: e.UDP}
 		if r.Rate.known() {
 			node.RateBps, node.RateMinutes, node.RateFrom = int64(r.Rate.P90), r.Rate.Minutes, r.Rate.From
 		}
@@ -470,7 +471,7 @@ func (s *Server) subscriptionCompatibility(c *gin.Context, u *ent.User, l *ent.L
 }
 
 func recordSubscriptionCompatibility(ctx context.Context, report subout.CompatibilityReport) {
-	if len(report.ExcludedNodes) == 0 && len(report.AffectedGroups) == 0 && len(report.AffectedRules) == 0 {
+	if len(report.ExcludedNodes) == 0 && len(report.AffectedGroups) == 0 && len(report.AffectedRules) == 0 && len(report.Warnings) == 0 {
 		return
 	}
 	counts := map[string]int{}
@@ -478,7 +479,7 @@ func recordSubscriptionCompatibility(ctx context.Context, report subout.Compatib
 		counts[node.ReasonCode]++
 	}
 	slog.InfoContext(ctx, "subscription conversion", "trace", taskTrace(ctx), "target", report.Target,
-		"included", report.IncludedNodes, "excluded", len(report.ExcludedNodes), "groups", len(report.AffectedGroups), "rules", len(report.AffectedRules), "reasons", counts)
+		"included", report.IncludedNodes, "excluded", len(report.ExcludedNodes), "groups", len(report.AffectedGroups), "rules", len(report.AffectedRules), "warnings", len(report.Warnings), "reasons", counts)
 }
 
 func (s *Server) previewSubscription(c *gin.Context) {

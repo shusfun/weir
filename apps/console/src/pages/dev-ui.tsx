@@ -1,3 +1,4 @@
+import { ThemeControl } from "../theme";
 // 动效样例页：只在开发环境注册（app.tsx 路由与 navigation.ts 菜单都在 import.meta.env.DEV 分支里），生产构建不包含。
 // 在控制台外壳里打开（侧边栏「开发 → 动效样例」），主题切换用顶栏的。
 // 逐条展示 @weir/ui 的 13 种交互反馈，以及表单（校验、确认框、单选、折叠）的写法，用于验收手感与亮暗主题、窄屏、键盘、减少动态效果下的表现。
@@ -147,7 +148,8 @@ export function DevUiPage() {
       links={[{ from: "sh", to: "la", tone: "info" }]}
     />
     <div className="weir-above-globe stack">
-        <PageHeader title="动效样例" description="@weir/ui 的交互反馈。右下角地球用的是样例坐标，不是线上节点；登录页不要传入真实节点。手机宽度不渲染地球。" />
+        <ThemeControl />
+      <PageHeader title="动效样例" description="@weir/ui 的交互反馈。右下角地球用的是样例坐标，不是线上节点；登录页不要传入真实节点。手机宽度不渲染地球。" />
       <Card variant="inset"><CardHeader title="公共卡片标题" description="标题和说明共用边线，操作区独立。" actions={<Button variant="outline">操作</Button>} /><CardContent className="stack"><ActionGroup><Button>主要操作</Button><CopyButton variant="outline" value="Weir UI">复制示例</CopyButton><Button variant="ghost">次要操作</Button></ActionGroup><ActionGroup><Badge>强调标签</Badge><Badge variant="soft" tone="neutral">中性标签</Badge></ActionGroup></CardContent></Card>
 
         <Card size="lg">

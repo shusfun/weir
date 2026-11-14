@@ -115,6 +115,9 @@ func (s *Server) selectSubscriptionEntries(ctx context.Context, u *ent.User, l *
 			e.Ref = "chain:" + itoa(e.ChainID)
 		}
 		e.exit = ex
+		if supported, known := s.exitUDP(ctx, eid, map[int]bool{}); known {
+			e.UDP = &supported
+		}
 		e.Chained = ex.Kind != "freedom"
 		out = append(out, e)
 	}

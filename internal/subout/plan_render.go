@@ -29,6 +29,13 @@ func RenderPlanDetailed(items []Item, target string, plan *Plan) ([]byte, string
 		return nil, "", report, fmt.Errorf("unsupported target %q", target)
 	}
 	items, report = compatibleItems(items, target)
+	if target == "" || target == "base64" || target == "egern" {
+		for _, item := range items {
+			if item.UDP != nil && !*item.UDP {
+				report.Warnings = append(report.Warnings, RuleImpact{ID: item.Ref, Name: "UDP 限制", Reason: "该线路出口不支持 UDP；此格式未映射逐节点 UDP 限制，请在客户端关闭该线路 UDP。"})
+			}
+		}
+	}
 	if plan != nil {
 		report.ExcludedNodes = append(report.ExcludedNodes, plan.ExcludedNodes...)
 	}
@@ -38,6 +45,9 @@ func RenderPlanDetailed(items []Item, target string, plan *Plan) ([]byte, string
 	}
 	if plan == nil || target == "" || target == "base64" {
 		b, contentType, err := renderRaw(linksOf(items), target)
+		if err == nil {
+			b, err = applyUDPBody(b, items, target)
+		}
 		return b, contentType, report, err
 	}
 	names := make([]string, len(items))
@@ -81,6 +91,7 @@ func ClashProvider(items []Item, plan *Plan, key string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	applyClashUDP(proxies, items)
 	lay := plan.layout(names, items)
 	if len(lay.Groups[0].Members) == 0 {
 		return nil, fmt.Errorf("PROXY 没有可输出成员")
@@ -241,6 +252,7 @@ func clashPlan(items []Item, plan *Plan) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	applyClashUDP(proxies, items)
 	lay := plan.layout(names, items)
 	cfg := map[string]any{"mixed-port": 7890, "mode": "rule"}
 	if len(lay.Groups[0].Members) == 0 {
@@ -319,6 +331,7 @@ func singboxPlan(items []Item, plan *Plan) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	applySingboxUDP(out, names, items)
 	lay := plan.layout(names, items)
 	tag := func(policy string) string {
 		if policy == "DIRECT" {
@@ -393,6 +406,7 @@ func iniPlan(items []Item, target string, plan *Plan) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	applyINIUDP(lines, items)
 	lay := plan.layout(names, items)
 	if target == "quanx" {
 		return quanxPlan(lines, lay, plan)

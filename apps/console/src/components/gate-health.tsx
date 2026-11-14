@@ -12,7 +12,7 @@ export function healthItems(health?: GateHealth | null): Item[] {
   const h = health ?? {};
   const pct = (v?: number) => v == null ? "" : `${Math.round(v * 100)}%`;
   return [
-    item("dns", "系统 DNS", h.dns === "clean" || h.dns === "polluted", h.dns === "polluted" ? "bad" : "ok", h.dns === "polluted" ? "被污染" : "正常", h.dns === "polluted" ? "查常用站点拿到假地址，经这台直连的网站可能打不开" : "解析结果与公共 DNS 一致"),
+    h.dns === "answers_differ" ? { id: "dns", name: "系统 DNS", status: "unknown", label: "未知", detail: "不同解析器返回不同公网地址，可能是 CDN 调度；仅凭地址差异不能判定污染。" } : item("dns", "系统 DNS", h.dns === "clean" || h.dns === "polluted", h.dns === "polluted" ? "bad" : "ok", h.dns === "polluted" ? "被污染" : "正常", h.dns === "polluted" ? "查常用站点拿到假地址，经这台直连的网站可能打不开" : "解析结果与公共 DNS 一致"),
     item("congestion", "拥塞控制", typeof h.congestion === "string" && h.congestion !== "", "ok", "正常", h.congestion),
     item("steal", "宿主机 CPU 抢占", typeof h.cpu_steal === "number", h.cpu_steal != null && h.cpu_steal >= 10 ? "warn" : "ok", h.cpu_steal != null && h.cpu_steal >= 10 ? "被抢占" : "正常", h.cpu_steal == null ? "" : `steal ${h.cpu_steal.toFixed(1)}%`),
     item("cert", "证书", typeof h.cert_days === "number", h.cert_days != null && h.cert_days <= 3 ? "bad" : h.cert_days != null && h.cert_days <= 14 ? "warn" : "ok", h.cert_days != null && h.cert_days < 0 ? "已过期" : h.cert_days != null && h.cert_days <= 3 ? "即将过期" : "正常", h.cert_days == null ? "" : h.cert_days < 0 ? `已过期 ${-h.cert_days} 天` : `${h.cert_days} 天后到期`),

@@ -22,16 +22,17 @@ const DefaultConfigPath = "/etc/weir/center/config.json"
 
 // Config 只配置监听地址与存储；公共地址按每次请求推导。
 type Config struct {
-	Listen        string                     `json:"listen"`
-	Subscriptions SubscriptionInfrastructure `json:"subscriptions,omitempty"`
-	Store         store.Config               `json:"store"`
-	DataDir       string                     `json:"data_dir,omitempty"` // 内核缓存、版本档案覆盖等；默认 /var/lib/weir/center
-	LayaHost      LayaHostConfig             `json:"laya_host,omitempty"`
-	EncryptionKey string                     `json:"encryption_key"`
-	SetupHash     string                     `json:"setup_hash,omitempty"`
-	SetupExpires  time.Time                  `json:"setup_expires,omitempty"`
-	Installed     bool                       `json:"installed"`
-	environment   map[string]infrastructureOverride
+	Listen            string                     `json:"listen"`
+	Subscriptions     SubscriptionInfrastructure `json:"subscriptions,omitempty"`
+	Store             store.Config               `json:"store"`
+	DataDir           string                     `json:"data_dir,omitempty"` // 内核缓存、版本档案覆盖等；默认 /var/lib/weir/center
+	LayaHost          LayaHostConfig             `json:"laya_host,omitempty"`
+	EncryptionKey     string                     `json:"encryption_key"`
+	SetupHash         string                     `json:"setup_hash,omitempty"`
+	SetupExpires      time.Time                  `json:"setup_expires,omitempty"`
+	Installed         bool                       `json:"installed"`
+	GateUpdatesPaused bool                       `json:"gate_updates_paused,omitempty"`
+	environment       map[string]infrastructureOverride
 }
 
 func randomToken(n int) string {

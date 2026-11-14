@@ -1,3 +1,4 @@
+import { GateManagement } from "./gate-management";
 import { PendingExits } from "./pending-exits";
 import { GateLayaHosting } from "../features/ai/laya-gate-hosting";
 
@@ -164,15 +165,7 @@ export function GateDetail({ gate, nodes, close, layout = "sheet" }: { gate: Gat
             </TabsPanel>
             <TabsPanel value="nodes" className="stack">
           <SectionHeader title="节点与出口" description="入口节点 → 出口。" actions={<Button size="sm" variant="outline" onClick={() => navigate(`/exits?gate=${gate.id}`)}>出口与分流</Button>} />
-          {mine.length === 0 ? <small>这台 VPS 还没有节点。</small> : (
-            <ul className="stack">{mine.map((n) => (
-              <li key={n.id} className="stack gap-1 text-body">
-                <span><NodeSummary node={n} />{!n.enabled && <Badge variant="soft" tone="warn">停用</Badge>}</span>
-                {n.exit.kind !== "freedom" && <small className="text-[var(--weir-ink-3)]">{probeText(n.exit.probe)}</small>}
-                <NodeAccess ports={n.ports} reach={n.reach} />
-              </li>
-            ))}</ul>
-          )}
+          <GateManagement gate={gate} nodes={nodes} />
           <SectionHeader title="关系图" description="用户 → 入口节点 → 路由（用户自建链式代理、分流规则）→ 出口（只读）；点击跳到对应用户、节点、VPS、订阅源或出口与分流。" />
           <GateTopology gateId={gate.id} />
             </TabsPanel>
@@ -186,7 +179,7 @@ export function GateDetail({ gate, nodes, close, layout = "sheet" }: { gate: Gat
         <ObjectHeader
           back={<Link to="/gates">VPS 与节点</Link>}
           crumb={gate.name}
-          actions={<><Button variant="outline" onClick={() => navigate(`/gates?edit=${gate.id}`)}>编辑</Button><Button onClick={() => navigate(`/gates?new=${gate.id}`)}>新建节点</Button></>}
+          actions={<Button variant="outline" onClick={() => setTab("nodes")}>管理节点与 VPS</Button>}
           tone={gate.status !== "active" ? "off" : !gate.online ? "bad" : gate.state === "failed" ? "bad" : gate.state === "pending" ? "warn" : "ok"}
           status={`${gate.status !== "active" ? "已撤销" : gate.online ? "在线" : "离线"} · ${gate.last_seen_at ? relativeTime(gate.last_seen_at) + "心跳" : "心跳未知"} · Gate ${gate.version || "版本未知"}`}
           title={gate.name}

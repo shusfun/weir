@@ -1,7 +1,7 @@
 // Weir 浮层：菜单、气泡、提示、侧边面板。浮层是圆角 12 的抬高面板，从触发处按轻快弹簧放大并淡入，退场只淡出；不使用模糊。
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
-import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
+import { Tooltip, TooltipProvider } from "./tooltip";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { cn } from "cn";
 import { XIcon } from "lucide-react";
@@ -68,31 +68,6 @@ function PopoverContent({
         <PopoverPrimitive.Popup data-slot="popover-content" className={cn(floating, "w-80 p-0", className)} {...props} />
       </PopoverPrimitive.Positioner>
     </PopoverPrimitive.Portal>
-  );
-}
-
-const TooltipProvider = TooltipPrimitive.Provider;
-
-function Tooltip({
-  content,
-  children,
-  side = "right",
-}: {
-  content: ReactNode;
-  children: TooltipPrimitive.Trigger.Props["render"];
-  side?: "top" | "right" | "bottom" | "left";
-}) {
-  return (
-    <TooltipPrimitive.Root>
-      <TooltipPrimitive.Trigger render={children} />
-      <TooltipPrimitive.Portal>
-        <TooltipPrimitive.Positioner side={side} sideOffset={8} className="z-50">
-          <TooltipPrimitive.Popup className="rounded-[var(--weir-radius-sm)] bg-[var(--weir-ink)] px-2 py-1 text-meta text-[var(--weir-panel)] shadow-[0_4px_12px_-4px_var(--weir-shade-strong)] transition-opacity duration-[var(--weir-fast)] data-[starting-style]:opacity-0 data-[ending-style]:opacity-0">
-            {content}
-          </TooltipPrimitive.Popup>
-        </TooltipPrimitive.Positioner>
-      </TooltipPrimitive.Portal>
-    </TooltipPrimitive.Root>
   );
 }
 

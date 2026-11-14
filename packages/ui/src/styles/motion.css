@@ -464,3 +464,37 @@
   from { opacity: 0; translate: 0 -4px; }
   to { opacity: 1; translate: 0 0; }
 }
+
+@layer components {
+  .weir-theme-icon path { transition: d var(--weir-mid) var(--weir-ease); }
+  .weir-button svg { transition: translate var(--weir-fast) var(--weir-ease), scale var(--weir-fast) var(--weir-ease); }
+  .weir-button:not(:disabled):is(:hover, :focus-visible) svg { translate: 0 -1px; scale: 1.09; }
+  .weir-button:not(:disabled):active svg { translate: 0 1px; scale: .93; }
+  .weir-expanded-folder { grid-column: 1 / -1; padding: var(--weir-space-5); border: 1px solid var(--weir-line); border-radius: var(--weir-radius-card); background: var(--weir-panel); }
+  .weir-expanded-folder > .weir-folder { width: min(100%, var(--weir-folder-expanded-max)); }
+  .weir-node-folders { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--weir-node-folder-min)), 1fr)); gap: var(--weir-space-5); }
+  .weir-folder-front { transform-origin: center bottom; transition: transform var(--weir-mid) var(--weir-ease); }
+  button.weir-folder:is(:hover, :focus-visible) .weir-folder-front { transform: perspective(var(--weir-folder-perspective)) rotateX(-5deg); }
+  button.weir-folder[aria-expanded="true"] .weir-folder-front { transform: perspective(var(--weir-folder-perspective)) rotateX(-15deg); }
+  button.weir-folder:active .weir-folder-front { transform: perspective(var(--weir-folder-perspective)) rotateX(-9deg); }
+  button.weir-folder:focus-visible .weir-folder-file { transform: rotate(var(--tilt, 0deg)) translateY(-5px); }
+  button.weir-folder-compact { cursor: pointer; }
+  [data-motion="lite"] .weir-button:not(:disabled):is(:hover, :focus-visible, :active) svg { translate: none; scale: none; }
+  [data-motion="lite"] button.weir-folder .weir-folder-front { transform: none; }
+  [data-motion="lite"] button.weir-folder .weir-folder-file { transform: rotate(var(--tilt, 0deg)); }
+  [data-motion="lite"] button.weir-folder:is(:hover, :focus-visible, [aria-expanded="true"]) { outline: 1px solid var(--weir-focus); }
+  @media (prefers-reduced-motion: reduce) {
+    .weir-button:not(:disabled):is(:hover, :focus-visible, :active) svg { translate: none; scale: none; }
+    button.weir-folder .weir-folder-front { transform: none; }
+    button.weir-folder .weir-folder-file { transform: rotate(var(--tilt, 0deg)); }
+    button.weir-folder:is(:hover, :focus-visible, [aria-expanded="true"]) { outline: 1px solid var(--weir-focus); }
+  }
+}
+
+@layer components {
+  [data-slot="collapsible-trigger"] svg { transition: rotate var(--weir-mid) var(--weir-ease), scale var(--weir-fast) var(--weir-ease); }
+  [data-slot="collapsible-trigger"]:is(:hover, :focus-visible) svg { scale: 1.13; }
+  [data-slot="collapsible-trigger"]:active svg { scale: .93; }
+  [data-motion="lite"] [data-slot="collapsible-trigger"]:is(:hover, :focus-visible, :active) svg { scale: none; }
+  @media (prefers-reduced-motion: reduce) { [data-slot="collapsible-trigger"]:is(:hover, :focus-visible, :active) svg { scale: none; } }
+}

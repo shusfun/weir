@@ -363,6 +363,9 @@
   --weir-pill: var(--weir-swatch-day-pill);
   --weir-pill-ink: var(--weir-swatch-day-pill-ink);
   --weir-folder-h: 301px;
+  --weir-node-folder-min: 251px;
+  --weir-folder-expanded-max: 541px;
+  --weir-folder-perspective: 751px;
   /* 材质用到的中性色：纸片投影、拨杆凹槽、按住确认的进度、墨色条上的描边（稿子取值，两种主题相同） */
   --weir-shade-paper: rgb(0 0 0 / 0.15);
   --weir-shade-well: rgb(0 0 0 / 0.29);

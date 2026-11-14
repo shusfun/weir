@@ -24,6 +24,7 @@ interface Info {
     included_nodes: number;
     excluded_nodes: { name: string; protocol?: string; reason: string }[];
     affected_groups: { name: string; removed: boolean; reason: string }[];
+    warnings?: { name?: string; reason: string }[];
     affected_rules: { name?: string; reason: string }[];
   }[];
 }
@@ -39,9 +40,9 @@ export function SubPage() {
     );
   const d = info.data;
   const compatibility = (d.compatibility ?? []).map((report) => ({ ...report,
-    excluded_nodes: report.excluded_nodes ?? [], affected_groups: report.affected_groups ?? [], affected_rules: report.affected_rules ?? [],
+    excluded_nodes: report.excluded_nodes ?? [], affected_groups: report.affected_groups ?? [], affected_rules: report.affected_rules ?? [], warnings: report.warnings ?? [],
   }));
-  const affected = compatibility.filter((report) => report.included_nodes === 0 || report.excluded_nodes.length || report.affected_groups.length || report.affected_rules.length);
+  const affected = compatibility.filter((report) => report.included_nodes === 0 || report.excluded_nodes.length || report.affected_groups.length || report.affected_rules.length || report.warnings.length);
   const title = "Weir" + (d.name ? " · " + d.name : "");
   return (
     <main className="subscription-import-page">
@@ -74,6 +75,7 @@ export function SubPage() {
                   <ul className="grid gap-1 text-body text-[var(--weir-ink-2)]">
                     {report.excluded_nodes.map((node, i) => <li key={`${node.name}-${i}`}>{node.name}：{node.reason}</li>)}
                     {report.affected_groups.map((group, i) => <li key={`${group.name}-${i}`}>分组「{group.name}」：{group.reason}</li>)}
+                    {report.warnings.map((warning, i) => <li key={`warning-${i}`}>{warning.name}：{warning.reason}</li>)}
                     {report.affected_rules.map((rule, i) => <li key={`${rule.name ?? "rule"}-${i}`}>规则{rule.name ? `「${rule.name}」` : ""}：{rule.reason}</li>)}
                   </ul>
                 </li>

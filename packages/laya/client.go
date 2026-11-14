@@ -84,7 +84,7 @@ func (c Client) Classify(ctx context.Context, input Request) (response Response,
 		}
 		status, code := "succeeded", ""
 		if err != nil {
-			status, code = "failed", "decision_failed"
+			status, code = "failed", FailureCode(err)
 		}
 		if errors.Is(ctx.Err(), context.Canceled) {
 			status, code = "cancelled", "context_cancelled"
@@ -128,6 +128,16 @@ func (c Client) Classify(ctx context.Context, input Request) (response Response,
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		var failure struct {
+			Code string `json:"code"`
+		}
+		_ = json.NewDecoder(io.LimitReader(resp.Body, 16<<10)).Decode(&failure)
+		switch strings.ToLower(failure.Code) {
+		case "resources_insufficient", "out_of_memory", "insufficient_memory":
+			return response, &APIError{Code: "resources_insufficient", HTTPStatus: resp.StatusCode}
+		case "model_not_ready", "model_not_found", "operation_in_progress":
+			return response, &APIError{Code: "model_not_ready", HTTPStatus: resp.StatusCode}
+		}
 		return response, fmt.Errorf("laya returned HTTP %d", resp.StatusCode)
 	}
 	raw, readErr := io.ReadAll(io.LimitReader(resp.Body, (256<<10)+1))

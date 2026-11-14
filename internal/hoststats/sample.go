@@ -208,7 +208,8 @@ func (s *Sampler) RefreshDNS(ctx context.Context) {
 	cancel()
 	s.mu.Lock()
 	s.dnsAt = time.Now()
-	if ok && (status == "clean" || status == "polluted") {
+	s.dnsValue = nil
+	if ok && (status == "clean" || status == "polluted" || status == "answers_differ") {
 		s.dnsValue = &status
 	}
 	s.mu.Unlock()
