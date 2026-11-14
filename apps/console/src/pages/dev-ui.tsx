@@ -71,6 +71,7 @@ import {
   DotMatrix,
   DshFrame,
   FolderSlot,
+  FolderGrid,
   GlassFolder,
   GlobeBackground,
   HealthList,
@@ -393,6 +394,7 @@ function MaterialDemos() {
   const [picked, setPicked] = useState("甲");
   const [dsh, setDsh] = useState(false);
   const [trace, setTrace] = useState(false);
+  const [folder, setFolder] = useState<string | null>(null);
   useEffect(() => {
     const prev = document.documentElement.dataset.motion;
     return () => {
@@ -445,7 +447,8 @@ function MaterialDemos() {
         <p className="m-0 text-body">当前定位：{picked}</p>
       </Demo>
 
-      <Demo index={19} title="玻璃文件夹与超椭圆" description="整块可点。地址缺失显示未知。前板只在完整档磨砂。">
+      <Demo index={19} title="玻璃文件夹与超椭圆" description="整块可点。打开与收起回到同一锚点，可连续反向点击或按 Escape。省电档静态切换。">
+        <FolderGrid expandedId={folder} onExpandedChange={setFolder} items={["甲", "乙"].map(id => ({ id, label: id, folder: open => <GlassFolder name={`文件夹 ${id}`} observations={false} expanded={open} controls={`folder-content-${id}`} files={[]} onClick={() => setFolder(open ? null : id)} />, content: <Notice>文件夹 {id} 的内容。点击收起图标回到原位。</Notice> }))} />
         <GlassFolder
           name="样例 VPS"
           address={null}

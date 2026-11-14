@@ -68,6 +68,7 @@ export * from "./object-link";
 export * from "./text-link";
 export * from "./squircle";
 export * from "./glass-folder";
+export * from "./folder-grid";
 export * from "./dot-ring";
 export * from "./object-header";
 export * from "./avatar";

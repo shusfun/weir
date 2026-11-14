@@ -470,8 +470,20 @@
   .weir-button svg { transition: translate var(--weir-fast) var(--weir-ease), scale var(--weir-fast) var(--weir-ease); }
   .weir-button:not(:disabled):is(:hover, :focus-visible) svg { translate: 0 -1px; scale: 1.09; }
   .weir-button:not(:disabled):active svg { translate: 0 1px; scale: .93; }
-  .weir-expanded-folder { grid-column: 1 / -1; padding: var(--weir-space-5); border: 1px solid var(--weir-line); border-radius: var(--weir-radius-card); background: var(--weir-panel); }
-  .weir-expanded-folder > .weir-folder { width: min(100%, var(--weir-folder-expanded-max)); }
+  .weir-folder-grid { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; align-content: start; gap: var(--weir-space-5); isolation: isolate; overflow-anchor: none; }
+  .weir-folder-cell { position: relative; min-width: 0; transform-origin: top left; }
+  .weir-folder-cell[data-expanded] { grid-column: 1 / -1; padding: var(--weir-space-5); }
+  .weir-folder-cell:is([data-phase="opening"], [data-phase="closing"]) { z-index: 1; }
+  .weir-folder-trigger { position: relative; transform-origin: top left; }
+  .weir-folder-cell[data-expanded] > .weir-folder-trigger { max-width: min(100%, var(--weir-folder-expanded-max)); }
+  .weir-folder-surface { position: absolute; inset: 0; border: 1px solid var(--weir-line); border-radius: var(--weir-radius-card); background: var(--weir-panel); transform-origin: top left; pointer-events: none; opacity: 0; }
+  .weir-folder-cell[data-expanded] > .weir-folder-surface { opacity: 1; }
+  .weir-folder-content { position: relative; margin-top: var(--weir-space-5); transform-origin: top center; }
+  .weir-folder-cell[data-phase="closing"] > .weir-folder-content { position: absolute; margin-top: 0; opacity: 0; pointer-events: none; }
+  .weir-folder-close { display: flex; justify-content: end; }
+  @media (min-width: 48rem) { .weir-folder-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (min-width: 80rem) { .weir-folder-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (min-width: 96rem) { .weir-folder-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
   .weir-node-folders { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--weir-node-folder-min)), 1fr)); gap: var(--weir-space-5); }
   .weir-folder-front { transform-origin: center bottom; transition: transform var(--weir-mid) var(--weir-ease); }
   button.weir-folder:is(:hover, :focus-visible) .weir-folder-front { transform: perspective(var(--weir-folder-perspective)) rotateX(-5deg); }

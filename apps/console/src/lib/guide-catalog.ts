@@ -4,13 +4,13 @@ export type GuideStep = { id: string; title: string; text: string; target?: stri
 export type Guide = { id: string; version: number; title: string; steps: GuideStep[] };
 export type GuideIdentity = { id: string; role: "admin" | "user" | "guest" };
 // 未列出的教程为首版。内容变更只提升对应页面、标签或弹窗的版本。
-const versions: Record<string, number> = { "page:/system": 3, "page:/system:订阅数据与接口": 2, "page:/kernels": 2, "page:/kernels:版本": 2, "page:/subscriptions:订阅组": 2, "page:/ops/observe:订阅链路": 3, "page:/users": 2, "dialog:创建用户": 2, "page:/links": 3, "page:/accounts": 2, "page:/accounts:套餐": 2, "page:/accounts:用码": 2, "dialog:新建套餐": 2, "dialog:编辑套餐": 2, "dialog:生成邀请码": 2, "dialog:生成兑换码": 2, "page:/system:登录与安全": 5, "page:/system:AI 与 dsh": 9, "page:/gates": 3, "dialog:新建节点": 3, "dialog:添加 VPS": 2, "getting-started": 3, "page:/ops/audit": 2, "page:/ops/observe": 4, "page:/ops/observe:总览": 3, "page:/ops/observe:安全": 3, "page:/ops/observe:注册兑换": 2, "page:/ops/observe:系统状态": 3, "page:/ops/observe:策略版本": 2 };
+const versions: Record<string, number> = { "page:/system": 3, "page:/system:订阅数据与接口": 2, "page:/kernels": 2, "page:/kernels:版本": 2, "page:/subscriptions:订阅组": 2, "page:/ops/observe:订阅链路": 3, "page:/users": 2, "dialog:创建用户": 2, "page:/links": 3, "page:/accounts": 2, "page:/accounts:套餐": 2, "page:/accounts:用码": 2, "dialog:新建套餐": 2, "dialog:编辑套餐": 2, "dialog:生成邀请码": 2, "dialog:生成兑换码": 2, "page:/system:登录与安全": 5, "page:/system:AI 与 dsh": 9, "page:/gates": 4, "dialog:新建节点": 3, "dialog:添加 VPS": 2, "getting-started": 3, "page:/ops/audit": 2, "page:/ops/observe": 4, "page:/ops/observe:总览": 3, "page:/ops/observe:安全": 3, "page:/ops/observe:注册兑换": 2, "page:/ops/observe:系统状态": 3, "page:/ops/observe:策略版本": 2 };
 const target = (id: string) => `[data-tour="${id}"]`;
 const step = (id: string, title: string, text: string, anchor?: string): GuideStep => ({ id, title, text, target: anchor ? target(anchor) : undefined });
 const overview = (id: string, title: string, text: string, detail: string): Guide => ({ id, version: 1, title, steps: [step("overview", title, text, "page-header"), step("work", "在这里操作", detail, "page-content")] });
 
 const pages: Record<string, [string, string, string]> = {
-  "/gates": ["VPS 与节点", "VPS 是运行代理的服务器，节点是它提供的一种连接方式。中心负责管理，代理流量直接到 VPS。", "点击 VPS 文件夹原位展开全部节点与 Laya，支持新增、编辑、删除；箭头进入详情，详情提供相同操作。中心卡可启用本机执行端，仍可管理远程 VPS。VPS 上线后可只部署 Laya，无须创建节点；普通节点先保存与下发，再后台实测，失败保留节点和端口。"],
+  "/gates": ["VPS 与节点", "VPS 是运行代理的服务器，节点是它提供的一种连接方式。中心负责管理，代理流量直接到 VPS。", "点击 VPS 文件夹原位展开全部节点与 Laya，支持新增、编辑、删除；再次点击文件夹、收起图标或按 Escape 缩回原位，弹窗优先处理 Escape；箭头进入详情，详情提供相同操作。中心卡可启用本机执行端，仍可管理远程 VPS。VPS 上线后可只部署 Laya，无须创建节点；普通节点先保存与下发，再后台实测，失败保留节点和端口。"],
   "/exits": ["出口与分流", "出口决定流量从哪里出去，分流决定哪些网站使用哪个出口。先选入口 VPS，再维护它可用的出口。", "可使用直连、代理、单条节点或订阅源节点。先实测，再引用到节点或规则；共享出口修改会影响全部引用，删除前先解除引用。"],
   "/users": ["用户", "为朋友创建账户时，一次设好节点范围、额度和到期时间。保存后会自动创建一条订阅链接。", "点用户查看链接、用量和套餐。不限制流量需显式打开「不限额度」；关闭时 0 为没有流量。未填写到期时间表示长期；手机和电脑可用不同链接，共用用户额度。"],
   "/accounts": ["套餐与用码", "流量、节点和有效期按需填写，可单独配置。用码页统一管理邀请码与兑换码，生成时选择类型。", "邀请码用于注册，可不附带套餐；兑换码必须引用启用的套餐。明文仅生成时提供一次，请立即复制或导出。后续编辑套餐不改变已经签发的码。"],

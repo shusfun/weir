@@ -1,3 +1,4 @@
+import { recordFolderMotion } from "../lib/folder-motion";
 import { GateManagement } from "../components/gate-management";
 import { GateLayaHosting } from "../features/ai/laya-gate-hosting";
 // VPS 与节点：每台 VPS 一张卡片，最上面是在不在线，直接显示主机观测；它上面的每个节点一行，点开看细节；
@@ -7,7 +8,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect } from "react";
 import { useQuery } from "../lib/query";
 import {
-  Badge, Button, Card, CardContent, Chip, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FolderSlot, GlassFolder, Input,
+  Badge, Button, Card, CardContent, Chip, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FolderGrid, FolderSlot, GlassFolder, Input,
   InsightBanner, MetricStrip, Notice, PageHeader, Readout, SectionHeader, SkeletonCards, StatusLamp, SwitchField, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useToast, useConfirm, type FolderStatus, type LampTone,
 } from "@weir/ui";
 import { Pencil, Plus, Route, Server, Sparkles, Trash2 } from "lucide-react";
@@ -80,7 +81,7 @@ export function GatesPage() {
   const nodeParam = useDialogParam("node", nodes.data, !nodes.isFetching);
   const detail = detailParam.current;
   const expanded = Number(params.get("expand"));
-  const openGate = (g: Gate) => setParams(p => { if (expanded === g.id) p.delete("expand"); else p.set("expand", String(g.id)); return p; });
+  const setExpanded = (id: string | null) => setParams(p => { if (id) p.set("expand", id); else p.delete("expand"); return p; });
   const openNode=useCallback((n:NodeItem)=>navigate(`/nodes/${n.id}`),[navigate]);
   const previousGroups=useRef(new Map<number,NodeItem[]>());
   const grouped=useMemo(()=>{
@@ -157,17 +158,19 @@ export function GatesPage() {
         { label: "24 小时内核重启", value: null },
       ]} />
       <SectionHeader className="mt-[33px]" title="VPS" actions={<span className="text-meta text-[var(--weir-ink-3)]">点开文件夹管理节点与 Laya</span>} />
-      <div className="grid gap-[21px] md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-        {gates.data.map((g, i) => {
+      <FolderGrid expandedId={expanded ? String(expanded) : null} onExpandedChange={setExpanded} onMotion={recordFolderMotion} items={gates.data.map((g, i) => {
           const folderNodes = grouped.get(g.id) ?? emptyNodes;
           const tone: LampTone = g.status !== "active" ? "off" : !g.online || g.state === "failed" ? "bad" : g.state === "pending" ? "warn" : "ok";
           const cpu = g.host?.cpu_percent;
           const steal = g.host?.health?.cpu_steal;
           const caption = [cpu == null ? "CPU 未知" : `CPU ${Math.round(cpu)}%`, steal != null && steal >= 5 ? `steal ${Math.round(steal)}%` : null, `${folderNodes.length} 个节点`].filter(Boolean).join(" · ");
-          return <section key={g.id} className={expanded === g.id ? "weir-expanded-folder stack" : "stack"}><GlassFolder expanded={expanded === g.id} controls={`gate-content-${g.id}`} hue={(i % 2) as 0 | 1} name={g.name} address={g.public_host || null} status={gateFolderStatus(g, tone)} cpu={cpu} caption={caption} metric={null} metricUnit="ms" metricLabel="国内延迟" onClick={() => openGate(g)} files={folderNodes.slice(0, 3).map((n) => ({ id: String(n.id), title: protocolNames[n.protocol] ?? n.name, meta: n.port ? String(n.port) + (n.network === "udp" ? "/udp" : "") : null, tone: nodeStatus(n, g)[1] }))} />{expanded === g.id && <div id={`gate-content-${g.id}`} className="stack"><GateManagement gate={g} nodes={nodes.data} details /><GateLayaHosting gateId={g.id} host={g.public_host} /></div>}</section>;
-        })}
+          return { id: String(g.id), label: g.name,
+            folder: (open: boolean) => <GlassFolder expanded={open} controls={`folder-content-${g.id}`} hue={(i % 2) as 0 | 1} name={g.name} address={g.public_host || null} status={gateFolderStatus(g, tone)} cpu={cpu} caption={caption} metric={null} metricUnit="ms" metricLabel="国内延迟" onClick={() => setExpanded(open ? null : String(g.id))} files={folderNodes.slice(0, 3).map((n) => ({ id: String(n.id), title: protocolNames[n.protocol] ?? n.name, meta: n.port ? String(n.port) + (n.network === "udp" ? "/udp" : "") : null, tone: nodeStatus(n, g)[1] }))} />,
+            content: <><GateManagement gate={g} nodes={nodes.data} details /><GateLayaHosting gateId={g.id} host={g.public_host} /></> };
+
+        })}>
         <FolderSlot title="添加 VPS" caption="用 SSH 一次装好" onClick={() => setInvite(true)} />
-      </div>
+      </FolderGrid>
       <GateNodeTable gates={gates.data} nodes={nodes.data} openNode={openNode} />
       <GettingStarted gates={gates.data} nodes={nodes.data} addGate={() => setInvite(true)} addNode={() => setWizard("any")} />
       <SectionHeader className="mt-[33px]" title="中心" />
