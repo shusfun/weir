@@ -28,10 +28,8 @@ func (q *Queue) WorkerInventory(ctx context.Context) (map[int]WorkerSnapshot, er
 		if err := rows.Scan(&id, &raw, &snapshot.Active); err != nil {
 			return nil, err
 		}
-		if err := contracts.DecodeStrict([]byte(raw), &snapshot.Capabilities, 256<<10); err != nil {
-			return nil, err
-		}
-		if err := snapshot.Capabilities.Validate(); err != nil {
+		snapshot.Capabilities, err = decodeCapabilities(raw)
+		if err != nil {
 			return nil, err
 		}
 		out[id] = snapshot

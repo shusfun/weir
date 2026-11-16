@@ -51,18 +51,25 @@ func (s *Server) agentPoll(c *gin.Context) {
 		return
 	}
 	if req.Capabilities != nil {
-		if err := req.Capabilities.Validate(); err != nil {
+		validated := operationStage(ctx, "worker.capabilities.validate", "gate_id", g.ID)
+		err := req.Capabilities.Validate()
+		validated(err)
+		if err != nil {
 			failure(c, 400, "invalid_worker_payload")
 			return
 		}
-		if err := s.Store.Lock.Do(ctx, "gate-capabilities:"+itoa(g.ID), func(ctx context.Context) error {
+		if err := s.Store.Lock.Do(ctx, "gate-capabilities:"+itoa(g.ID), func(ctx context.Context) (err error) {
 			previous, err := s.Store.Tasks.Capabilities(ctx, g.ID)
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			invalid := errors.Is(err, taskqueue.ErrInvalidCapabilities)
+			finished := operationStage(ctx, "worker.capabilities.refresh", "gate_id", g.ID, "previous_invalid", invalid)
+			defer func() { finished(err) }()
+			if err != nil && !errors.Is(err, sql.ErrNoRows) && !invalid {
 				return err
 			}
-			if previous.ConfigFeatures[contracts.ConfigDomainObservation] != req.Capabilities.ConfigFeatures[contracts.ConfigDomainObservation] {
+			if invalid || previous.ConfigFeatures[contracts.ConfigDomainObservation] != req.Capabilities.ConfigFeatures[contracts.ConfigDomainObservation] {
 				// Advance first: a failed capability write can safely retry, whereas
 				// publishing the capability first could permanently skip deployment.
+				// An invalid cache has no trustworthy features to compare.
 				if _, err := s.bumpGate(ctx, g.ID); err != nil {
 					return err
 				}

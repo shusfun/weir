@@ -6,9 +6,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/shusfun/weir/packages/contracts"
 )
+
+// ErrInvalidCapabilities identifies an unusable cached document, not a storage
+// failure. A freshly validated report may replace it without trusting its fields.
+var ErrInvalidCapabilities = errors.New("invalid cached worker capabilities")
 
 func (q *Queue) SetCapabilities(ctx context.Context, gate int, c contracts.CapabilityDocument) error {
 	if gate <= 0 {
@@ -34,9 +39,17 @@ func (q *Queue) Capabilities(ctx context.Context, gate int) (c contracts.Capabil
 	if err != nil {
 		return c, err
 	}
-	err = contracts.DecodeStrict([]byte(raw), &c, 256<<10)
+	return decodeCapabilities(raw)
+}
+
+func decodeCapabilities(raw string) (contracts.CapabilityDocument, error) {
+	var c contracts.CapabilityDocument
+	err := contracts.DecodeStrict([]byte(raw), &c, 256<<10)
 	if err == nil {
 		err = c.Validate()
 	}
-	return c, err
+	if err != nil {
+		return contracts.CapabilityDocument{}, fmt.Errorf("%w: %w", ErrInvalidCapabilities, err)
+	}
+	return c, nil
 }
