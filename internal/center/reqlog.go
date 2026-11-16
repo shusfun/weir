@@ -103,6 +103,9 @@ func validTraceHex(s string, n int) bool {
 
 // 成功记录只覆盖需要排查的操作；路由模板不包含令牌。
 func customTraceRoute(route string) bool {
+	if strings.HasPrefix(route, "/api/v1/admin/system/update") {
+		return true
+	}
 	if strings.Contains(route, "/backup/") || strings.Contains(route, "/subscriptions/") || strings.HasPrefix(route, "/sub/g/") {
 		return true
 	}

@@ -4,7 +4,7 @@ export type GuideStep = { id: string; title: string; text: string; target?: stri
 export type Guide = { id: string; version: number; title: string; steps: GuideStep[] };
 export type GuideIdentity = { id: string; role: "admin" | "user" | "guest" };
 // 未列出的教程为首版。内容变更只提升对应页面、标签或弹窗的版本。
-const versions: Record<string, number> = { "page:/rules": 2, "page:/exits": 3, "page:/system": 5, "page:/system:数据": 3, "page:/kernels": 2, "page:/kernels:版本": 2, "page:/subscriptions:订阅组": 3, "page:/pages": 2, "page:/ops/observe:订阅链路": 3, "page:/users": 4, "dialog:创建用户": 2, "page:/links": 4, "page:/accounts": 2, "page:/accounts:套餐": 2, "page:/accounts:用码": 2, "dialog:新建套餐": 2, "dialog:编辑套餐": 2, "dialog:生成邀请码": 2, "dialog:生成兑换码": 2, "page:/system:登录与注册": 6, "page:/system:AI 与 dsh": 9, "page:/gates": 12, "dialog:新建节点": 3, "dialog:添加 VPS": 2, "getting-started": 3, "page:/ops/audit": 2, "page:/ops/observe": 4, "page:/ops/observe:总览": 3, "page:/ops/observe:安全": 3, "page:/ops/observe:注册兑换": 2, "page:/ops/observe:系统状态": 3, "page:/ops/observe:策略版本": 2 };
+const versions: Record<string, number> = { "page:/rules": 2, "page:/exits": 3, "page:/system": 5, "page:/system:数据": 3, "page:/kernels": 2, "page:/kernels:版本": 2, "page:/subscriptions:订阅组": 3, "page:/pages": 2, "page:/ops/observe:订阅链路": 3, "page:/users": 4, "dialog:创建用户": 2, "page:/links": 4, "page:/accounts": 2, "page:/accounts:套餐": 2, "page:/accounts:用码": 2, "dialog:新建套餐": 2, "dialog:编辑套餐": 2, "dialog:生成邀请码": 2, "dialog:生成兑换码": 2, "page:/system:版本与更新": 2, "page:/system:登录与注册": 6, "page:/system:AI 与 dsh": 9, "page:/gates": 12, "dialog:新建节点": 3, "dialog:添加 VPS": 2, "getting-started": 3, "page:/ops/audit": 2, "page:/ops/observe": 4, "page:/ops/observe:总览": 3, "page:/ops/observe:安全": 3, "page:/ops/observe:注册兑换": 2, "page:/ops/observe:系统状态": 3, "page:/ops/observe:策略版本": 2 };
 const target = (id: string) => `[data-tour="${id}"]`;
 const step = (id: string, title: string, text: string, anchor?: string): GuideStep => ({ id, title, text, target: anchor ? target(anchor) : undefined });
 const overview = (id: string, title: string, text: string, detail: string): Guide => ({ id, version: 1, title, steps: [step("overview", title, text, "page-header"), step("work", "在这里操作", detail, "page-content")] });
@@ -52,7 +52,7 @@ const tabs: Record<string, Record<string, [string, string]>> = {
     "默认设置": ["默认设置", "设置订阅处理、命名和输出的默认选项；订阅组可覆盖 DNS、TFO 与地区规则。转换只在本机执行；旧外部转换配置显示待修正，需明确改用内置转换；不支持的格式、模板或设置会报错。修改后检查预览，再让客户端更新。"],
   },
   "/system": {
-    "版本与更新": ["版本与更新", "查看版本与 GitHub 加速来源。升级前阅读说明，确认后查看任务和日志；Gate 会跟随中心版本，失败要查看具体回执。"],
+    "版本与更新": ["版本与更新", "中心启动后及每 15 分钟检查正式版；设置首页和顶栏会提示，可立即重新检查。直接更新到最新有效版本，无需安装中间已作废的版本。检查失败或过期时先查看详情并重试；安装仍需确认，Gate 随后跟随中心版本。"],
     "登录与注册": ["登录与注册", "设置注册、邮箱验证和管理员二次验证策略。开关在设置页立即生效。验证码、发信、邮箱后缀及别名规则按内置、外部、站点叠加。修改 JSON 后预演完整差异，管理员确认才生效，可从历史预演恢复。invite_required 控制注册必须邀请码，redeem_enabled 控制兑换入口；套餐与码在「套餐与用码」管理。@域名精确匹配，*.域名仅匹配子域名；黑名单优先。注册与发码检查一次性邮箱和 MX，DNS 故障时拒绝。别名用于防重复注册，登录和收信保留原地址。发码按 UTC 小时计数，用码失败按身份和 IP 锁定。通行密钥由浏览器在邮箱框提供，关闭后不能登录或绑定。邮件未配置时不提供找回密码。"],
     "通知": ["通知", "按需要配置邮件或 Telegram 通知，并使用测试操作核对送达；保存设置不等于已经送达。"],
     "防御": ["防御", "查看防御策略、事件和相关通知。先了解策略影响再修改，异常记录不应直接当作已证实的攻击。"],

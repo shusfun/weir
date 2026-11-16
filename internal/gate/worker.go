@@ -71,10 +71,10 @@ func (w *workerRunner) start(ctx context.Context, task contracts.Task, run func(
 func workerCapabilities() contracts.CapabilityDocument {
 	tasks := map[string]int{}
 	for _, kind := range []string{contracts.TaskSubscriptionFetch, contracts.TaskReleaseQuery, contracts.TaskTraceRead, contracts.TaskCoreInstall, contracts.TaskNodeProbe, contracts.TaskNodeProbeXray, contracts.TaskSubscriptionProbe} {
-		tasks[kind] = 1
+		tasks[kind] = contracts.TaskSchemaVersion(kind)
 	}
 	for _, kind := range []string{contracts.ActionAssetFetch, contracts.ActionSourceProbe, contracts.ActionNodeTest, contracts.ActionOutboundProbe, contracts.ActionChainProbe, contracts.ActionRealityProbe, contracts.ActionPanelConfigure, contracts.ActionPanelCert, contracts.ActionPanelDiscover, contracts.ActionPanelRemove, contracts.ActionACMEHTTP01, contracts.ActionDiagnostics, contracts.ActionCoreRestart, contracts.ActionHostRepair, contracts.ActionLiveStart, contracts.ActionReleaseReplace, contracts.ActionUninstall} {
-		tasks[kind] = contracts.TaskVersion
+		tasks[kind] = contracts.TaskSchemaVersion(kind)
 	}
 	features := map[string]int{}
 	features[contracts.ConfigOutboundBridges] = 1

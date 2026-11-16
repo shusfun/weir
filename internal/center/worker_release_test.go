@@ -16,8 +16,11 @@ func TestReleaseMetadataUsesWorkerAndRejectsForgedOwnership(t *testing.T) {
 	s, admin := newInstalledServer(t)
 	g := pairFakeGate(t, admin)
 	heartbeat(t, g, contracts.Heartbeat{Version: "test", Arch: "amd64"})
+	if _, err := s.Store.DB.ExecContext(t.Context(), `UPDATE worker_capabilities SET hash='invalid',document=$1 WHERE gate_id=$2`, `{"protocol":2,"tasks":{"subscription.convert":1}}`, int(g.id)); err != nil {
+		t.Fatal(err)
+	}
 	now := time.Now().UTC()
-	caps := contracts.CapabilityDocument{Sources: map[string]bool{"github": true}, Protocol: 2, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.TaskCoreInstall: contracts.TaskVersion, contracts.TaskReleaseQuery: 1}}
+	caps := contracts.CapabilityDocument{Sources: map[string]bool{"github": true}, Protocol: 2, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.TaskCoreInstall: contracts.TaskVersion, contracts.TaskReleaseQuery: contracts.TaskSchemaVersion(contracts.TaskReleaseQuery)}}
 	code, body := g.call("POST", "/api/v1/agent/poll", contracts.AgentPoll{Protocol: 2, Capabilities: &caps, Resources: contracts.WorkerResources{Concurrency: 1, SourcesObservedAt: &now}})
 	var first contracts.AgentPollReply
 	if err := json.Unmarshal(body, &first); err != nil || code != 200 || first.Config == nil {
@@ -32,7 +35,7 @@ func TestReleaseMetadataUsesWorkerAndRejectsForgedOwnership(t *testing.T) {
 	}
 	done := make(chan response, 1)
 	go func() {
-		rs, err := s.weirGitHub().List(withTrace(ctx, trace), "owner/repo", 2)
+		rs, err := s.weirGitHub().ListPage(withTrace(ctx, trace), "owner/repo", 2, 3)
 		done <- response{rs, err}
 	}()
 	code, body = g.call("POST", "/api/v1/agent/poll", contracts.AgentPoll{Protocol: 2, ConfigRevision: first.Config.Revision, Resources: contracts.WorkerResources{Concurrency: 1, SourcesObservedAt: &now}})
@@ -41,6 +44,10 @@ func TestReleaseMetadataUsesWorkerAndRejectsForgedOwnership(t *testing.T) {
 		t.Fatalf("poll: %d %s %v", code, body, err)
 	}
 	task := next.Tasks[0]
+	var query contracts.ReleaseQueryTask
+	if err := json.Unmarshal(task.Payload, &query); err != nil || query.Page != 3 || task.Version != 2 {
+		t.Fatalf("pagination contract: %+v %v", task, err)
+	}
 	if task.TraceID != trace || task.Kind != contracts.TaskReleaseQuery {
 		t.Fatalf("task=%+v", task)
 	}

@@ -4,11 +4,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
-	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -24,54 +22,11 @@ import (
 
 // weirRelease 是可以更新或切回的一个 Weir 版本。
 type weirRelease struct {
+	Unavailable string    `json:"unavailable,omitempty"`
 	Version     string    `json:"version"`
 	PublishedAt time.Time `json:"published_at"`
 	Notes       string    `json:"notes"`
 	URL         string    `json:"url"`
-}
-
-const updateCacheKey = "update-check"
-
-// weirReleases 列出 GitHub 上 MinVersion 以后的正式版本（新到旧），结果缓存 20 分钟。
-func (s *Server) weirReleases(ctx context.Context, force bool) ([]weirRelease, error) {
-	if !force && s.Store != nil {
-		if raw, ok, _ := s.Store.KV.Get(ctx, updateCacheKey); ok {
-			var out []weirRelease
-			if json.Unmarshal([]byte(raw), &out) == nil {
-				return out, nil
-			}
-		}
-	}
-	if s.Store != nil && !force {
-		if msg, ok, _ := s.Store.KV.Get(ctx, updateCacheKey+":error"); ok {
-			return nil, errors.New(msg)
-		}
-	}
-	list, err := s.weirGitHub().List(ctx, weirRepo(), 50)
-	if err != nil {
-		if s.Store != nil {
-			_ = s.Store.KV.Set(ctx, updateCacheKey+":error", err.Error(), 10*time.Minute)
-		}
-		return nil, err
-	}
-	out := []weirRelease{}
-	for _, r := range list {
-		v := strings.TrimPrefix(r.Tag, "v")
-		if r.Draft || r.Prerelease || !strings.HasPrefix(r.Tag, "v") {
-			continue
-		}
-		if _, ok := buildinfo.ParseScheme(v); !ok || selfupdate.Compare(v, selfupdate.MinVersion) < 0 {
-			continue
-		}
-		out = append(out, weirRelease{Version: v, PublishedAt: r.Published, Notes: r.Body, URL: r.HTMLURL})
-	}
-	sort.Slice(out, func(i, j int) bool { return selfupdate.Compare(out[i].Version, out[j].Version) > 0 })
-	if s.Store != nil {
-		if b, err := json.Marshal(out); err == nil {
-			_ = s.Store.KV.Set(ctx, updateCacheKey, string(b), 20*time.Minute)
-		}
-	}
-	return out, nil
 }
 
 // selfUpdateBlocker 返回不能在面板里自更新的原因；能更新时为空。
@@ -97,6 +52,7 @@ func selfUpdateBlocker() string {
 func (s *Server) selfUpdateRoutes(admin *gin.RouterGroup) {
 	admin.GET("/system/update", s.getSelfUpdate)
 	admin.GET("/system/update/status", s.getSelfUpdateStatus)
+	admin.POST("/system/update/check", s.postUpdateCheck)
 	admin.POST("/system/update", s.postSelfUpdate)
 }
 
@@ -239,7 +195,9 @@ func (s *Server) currentUpdateRun(now time.Time) *updateRun {
 
 // updateBase 是不访问 GitHub 就能知道的部分。
 func (s *Server) updateBase() gin.H {
-	return gin.H{"current": buildinfo.Version, "blocker": selfUpdateBlocker(), "previous": selfupdate.Previous()}
+	out := s.updateCheckView()
+	out["current"], out["blocker"], out["previous"] = buildinfo.Version, selfUpdateBlocker(), selfupdate.Previous()
+	return out
 }
 
 // getSelfUpdateStatus 给页面轮询：本机版本与这次更新的进度。
@@ -251,51 +209,26 @@ func (s *Server) getSelfUpdateStatus(c *gin.Context) {
 	c.JSON(200, out)
 }
 
-// getSelfUpdate 读 GitHub 上的版本（有缓存，force=1 时强制重读）。
-func (s *Server) getSelfUpdate(c *gin.Context) {
-	out := s.updateBase()
-	list, err := s.weirReleases(c.Request.Context(), c.Query("force") == "1")
-	if err != nil {
-		out["check_error"] = err.Error()
-		c.JSON(200, out)
-		return
-	}
-	var older []weirRelease
-	for _, r := range list {
-		if buildinfo.Release() && selfupdate.Compare(r.Version, buildinfo.Version) < 0 && len(older) < 3 {
-			older = append(older, r)
-		}
-	}
-	if len(list) > 0 {
-		out["latest"] = list[0]
-		out["has_update"] = buildinfo.Release() && selfupdate.Compare(list[0].Version, buildinfo.Version) > 0
-	}
-	if older == nil {
-		older = []weirRelease{}
-	}
-	out["older"] = older
-	c.JSON(200, out)
-}
+// getSelfUpdate reads the same local snapshot as progress polling.
+func (s *Server) getSelfUpdate(c *gin.Context) { c.JSON(200, s.updateBase()) }
 
-// releaseKnown 判断版本在不在 GitHub 的正式版本里：先看缓存，查不到再读一次 GitHub。提交更新不必等网络，
-// root 执行时还会自己核对版本与摘要。
-func (s *Server) releaseKnown(ctx context.Context, version string) (bool, error) {
-	has := func(list []weirRelease) bool {
-		for _, r := range list {
-			if r.Version == version {
-				return true
-			}
-		}
-		return false
+// Installation authorization always revalidates the exact target, even on a cache hit.
+func (s *Server) releaseKnown(ctx context.Context, version string) (found bool, err error) {
+	finish := operationStage(ctx, "update.target.verify", "version", version)
+	defer func() { finish(err) }()
+	if _, ok := buildinfo.ParseScheme(version); !ok || selfupdate.Compare(version, selfupdate.MinVersion) < 0 {
+		return false, nil
 	}
-	if list, err := s.weirReleases(ctx, false); err == nil && has(list) {
-		return true, nil
+	slog.Info("update.target verify", "trace", traceOf(ctx), "version", version)
+	rel, err := s.weirGitHub().Tag(ctx, weirRepo(), "v"+version)
+	if err == nil {
+		err = selfupdate.ValidateRelease(rel, version)
 	}
-	list, err := s.weirReleases(ctx, true)
 	if err != nil {
+		_, _ = s.beginUpdateCheck(traceOf(ctx), "target-unavailable")
 		return false, err
 	}
-	return has(list), nil
+	return true, nil
 }
 
 // postSelfUpdate 写入更新请求：更新到某个正式版本（含最近 3 个旧版本），或切回本机保留的上一版本。
@@ -373,12 +306,13 @@ func (s *Server) postSelfUpdate(c *gin.Context) {
 		return
 	}
 	sources := ghrelease.HTTPOnly(set.Sources)
-	if err := (selfupdate.Request{ID: id, Action: "update", Version: version, Sources: sources}).Valid(); err != nil {
+	trace := taskTrace(c.Request.Context())
+	if err := (selfupdate.Request{ID: id, Action: "update", Version: version, Sources: sources, TraceID: trace}).Valid(); err != nil {
 		failDetail(c, 409, "self_update_rejected", err.Error(), nil)
 		return
 	}
 	s.audit(c, "system.update", buildinfo.Version+" → "+target, "ok")
-	job := s.startSelfUpdate(id, version, sources)
+	job := s.startSelfUpdate(id, version, sources, trace)
 	c.JSON(202, gin.H{"id": id, "job": job})
 }
 
@@ -387,8 +321,8 @@ const selfUpdateJob = "self-update"
 
 // startSelfUpdate 先按「GitHub 加速」的来源顺序（含经 VPS 中转）把发布包预下载到自更新目录（进度在任务里），
 // 再写请求交给 root。预下载失败不阻止更新：root 会按直连与镜像自己下载（root 不经 VPS），失败原因写进日志。
-func (s *Server) startSelfUpdate(id, version string, sources []ghrelease.Source) Job {
-	return s.jobs.Start(selfUpdateJob, "self-update", "更新 Weir 到 "+version, func(ctx context.Context, run JobRun) (map[string]any, error) {
+func (s *Server) startSelfUpdate(id, version string, sources []ghrelease.Source, trace string) Job {
+	return s.jobs.StartWith(jobSpec{ID: selfUpdateJob, Kind: "self-update", Title: "更新 Weir 到 " + version, Trace: trace}, func(ctx context.Context, run JobRun) (map[string]any, error) {
 		run.SetOutput(map[string]any{"version": version})
 		started := time.Now().UTC()
 		name := selfupdate.PrefetchName(version, centerArch())
@@ -413,7 +347,7 @@ func (s *Server) startSelfUpdate(id, version string, sources []ghrelease.Source)
 		if err := selfupdate.WriteHandoff(h); err != nil {
 			return nil, err
 		}
-		if err := selfupdate.WriteRequest(selfupdate.Request{ID: id, Action: "update", Version: version, Sources: sources}); err != nil {
+		if err := selfupdate.WriteRequest(selfupdate.Request{ID: id, Action: "update", Version: version, Sources: sources, TraceID: trace}); err != nil {
 			return nil, err
 		}
 		return map[string]any{"id": id}, nil

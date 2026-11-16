@@ -41,7 +41,7 @@ export function NoticesButton() {
         nav("/kernels");
       }, `开始下载 ${a.kernel} ${a.version}`);
     setOpen(false);
-    nav(a.kind === "update" ? "/system?tab=update" : a.to ?? "/");
+    nav(a.kind === "update" ? "/system?setting=update" : a.to ?? "/");
   };
   return (
     <Popover open={open} onOpenChange={setOpen}>

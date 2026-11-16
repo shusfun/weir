@@ -207,16 +207,22 @@ func (s *Server) notices(ctx context.Context) []Notice {
 	if st, ok := selfupdate.ReadStatus(); ok && st.State == "failed" && st.Finished != nil && time.Since(*st.Finished) < 7*24*time.Hour {
 		out = append(out, Notice{ID: "update-failed:" + st.ID, Level: "warn", Title: "上次更新没有成功", Detail: st.Error, Action: &NoticeAction{Kind: "update", Label: "查看"}})
 	}
-	var list []weirRelease
-	err := s.githubOnce(ctx, "weir-releases", func(bg context.Context) error {
-		var e error
-		list, e = s.weirReleases(bg, false)
-		return e
-	})
-	if err == nil && len(list) > 0 && buildinfo.Release() && selfupdate.Compare(list[0].Version, buildinfo.Version) > 0 {
-		out = append(out, Notice{ID: "weir-update:" + list[0].Version, Level: "info", Title: "Weir 有新版本 " + list[0].Version, Detail: "当前 " + buildinfo.Version + "。", Action: &NoticeAction{Kind: "update", Label: "查看并更新"}})
-	} else if err != nil && err != errChecking {
-		out = append(out, Notice{ID: "github-unreachable:" + time.Now().UTC().Format("2006-01-02"), Level: "warn", Title: "连不上 GitHub", Detail: "无法检查新版本，内核下载会依次尝试镜像。" + err.Error()})
+	check := s.updateCheckSnapshot()
+	for _, r := range check.Releases {
+		if r.Unavailable != "" {
+			continue
+		}
+		if buildinfo.Release() && selfupdate.Compare(r.Version, buildinfo.Version) > 0 {
+			detail := "当前 " + buildinfo.Version + "。"
+			if check.Stale {
+				detail += "检查结果已过期，请重新检查。"
+			}
+			out = append(out, Notice{ID: "weir-update:" + r.Version, Level: "info", Title: "Weir 有新版本 " + r.Version, Detail: detail, Action: &NoticeAction{Kind: "update", Label: "查看并更新"}})
+		}
+		break
+	}
+	if check.Error != "" {
+		out = append(out, Notice{ID: "weir-update-check", Level: "warn", Title: "版本检查失败", Detail: check.Error, Action: &NoticeAction{Kind: "update", Label: "查看并重试"}})
 	}
 	out = append(out, s.tasks.notices()...)
 	if free, ok := diskFree(s.dataDir()); ok && free < 1<<30 {

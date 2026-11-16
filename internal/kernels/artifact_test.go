@@ -36,7 +36,7 @@ func artifactFor(kernel, version, arch string, body []byte) contracts.KernelArti
 
 func TestArtifactResolverDoesNotDownloadAndPinsExactRelease(t *testing.T) {
 	queries := 0
-	f := Fetcher{Query: func(ctx context.Context, repo, tag string, count int) ([]ghrelease.Release, error) {
+	f := Fetcher{Query: func(ctx context.Context, repo, tag string, count, page int) ([]ghrelease.Release, error) {
 		queries++
 		if repo != "XTLS/Xray-core" || tag != "v26.3.27" || count != 0 {
 			t.Fatalf("unexpected metadata query: %s %s %d", repo, tag, count)

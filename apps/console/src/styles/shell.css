@@ -393,6 +393,21 @@
   .topbar-title > span {
     display: block;
   }
+  .topbar-title {
+    flex: 1;
+  }
+  .topbar .command-trigger {
+    min-width: var(--weir-tap-touch);
+    flex: 0 0 var(--weir-tap-touch);
+    justify-content: center;
+  }
+  .topbar-tools .guide-trigger {
+    width: var(--weir-tap-touch);
+    padding-inline: 0;
+  }
+  .topbar-tools .guide-trigger > span:not(.guide-update-dot) {
+    display: none;
+  }
   .shell-main [data-slot="page-header"] {
     min-height: 0;
   }

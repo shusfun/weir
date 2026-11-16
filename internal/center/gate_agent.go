@@ -216,7 +216,7 @@ func (s *Server) enqueueAction(ctx context.Context, gid int, kind string, payloa
 	if err != nil {
 		return nil, err
 	}
-	if caps.Tasks[kind] != contracts.TaskVersion {
+	if caps.Tasks[kind] != contracts.TaskSchemaVersion(kind) {
 		return nil, errNoWorker
 	}
 	return s.enqueueWorkerTask(ctx, gid, kind, payload, ttl)

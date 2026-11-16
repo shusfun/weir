@@ -60,7 +60,8 @@ type Server struct {
 	// GitHub 非空时代替真实的 GitHub（只用于测试）：API 地址、下载主机与 HTTP 客户端。
 	GitHub *ghrelease.Client
 	// jobs 是内核、dsh 下载等后台任务。
-	jobs jobManager
+	jobs    jobManager
+	updates updateChecker
 	// ghCalls 是正在后台进行的 GitHub 查询（通知列表用，见 notices.go）。
 	ghMu    sync.Mutex
 	ghCalls map[string]chan error
@@ -182,6 +183,7 @@ func openInstalled(ctx context.Context, c Config) (*store.Store, error) {
 }
 
 func (s *Server) Close() {
+	s.stopUpdateChecks()
 	// 先结束长连接与还能取消的后台任务：它们不持有 state 锁之外的东西，但可能还在用存储
 	s.events.close()
 	s.jobs.Shutdown(5 * time.Second)
@@ -201,6 +203,7 @@ func (s *Server) Close() {
 
 // StartBackground 未初始化时监视磁盘配置：终端完成初始化后，运行中的服务自动切换为已安装。
 func (s *Server) StartBackground(ctx context.Context) {
+	s.startUpdateChecks(ctx, updateCheckInterval)
 	go func() {
 		s.releaseFilesMu.Lock()
 		defer s.releaseFilesMu.Unlock()

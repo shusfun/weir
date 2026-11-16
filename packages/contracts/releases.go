@@ -11,6 +11,7 @@ import (
 
 type ReleaseAsset struct {
 	Name      string `json:"name"`
+	State     string `json:"state"`
 	URL       string `json:"browser_download_url"`
 	Digest    string `json:"digest"`
 	Size      int64  `json:"size"`
@@ -35,7 +36,7 @@ var releaseRepoSegment = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}$`
 
 func (q ReleaseQueryTask) Validate() error {
 	parts := strings.Split(q.Repository, "/")
-	if len(parts) != 2 || !releaseRepoSegment.MatchString(parts[0]) || !releaseRepoSegment.MatchString(parts[1]) || q.PerPage < 0 || q.PerPage > 100 || q.PerPage > 0 && q.Tag != "" || len(q.Tag) > 200 || strings.ContainsAny(q.Tag, "\r\n\x00") || q.MaxBytes < 1 || q.MaxBytes > 10<<20 {
+	if len(parts) != 2 || !releaseRepoSegment.MatchString(parts[0]) || !releaseRepoSegment.MatchString(parts[1]) || q.Page < 0 || q.Page > 1000 || q.Page > 0 && q.PerPage == 0 || q.PerPage < 0 || q.PerPage > 100 || q.PerPage > 0 && q.Tag != "" || len(q.Tag) > 200 || strings.ContainsAny(q.Tag, "\r\n\x00") || q.MaxBytes < 1 || q.MaxBytes > 10<<20 {
 		return errors.New("release_query_invalid")
 	}
 	return nil

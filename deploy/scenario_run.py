@@ -1,4 +1,5 @@
 """Run bounded commands and retain correlated, independently reviewable results."""
+import argparse
 import datetime
 import hashlib
 import json
@@ -207,3 +208,22 @@ class ScenarioRun:
         (self.path / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
         print(f"{self.end_marker} run_id={self.id} status={report['status']} report={self.path / 'report.json'}", flush=True)
         return False
+
+
+def main(argv=None, factory=ScenarioRun):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--name", required=True)
+    parser.add_argument("--timeout", type=int, default=1800)
+    parser.add_argument("command", nargs=argparse.REMAINDER)
+    args = parser.parse_args(argv)
+    command = args.command[1:] if args.command[:1] == ["--"] else args.command
+    if not command or args.timeout <= 0 or not re.fullmatch(r"[a-zA-Z0-9_-]+", args.name):
+        parser.error("A safe step name, command and positive timeout are required")
+    root = pathlib.Path(__file__).resolve().parent.parent
+    with factory(root, root / "dist" / "checks") as run:
+        run.run(args.name, command, timeout=args.timeout)
+    return run.exit_code
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

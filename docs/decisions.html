@@ -33,6 +33,7 @@
 <tr><td><a href="#d0024">0024</a></td><td>统一节点引用与增量迁移边界</td><td>存储、节点、订阅</td><td><span class="tag">已取代</span></td><td>2026-11-14</td></tr>
 <tr><td><a href="#d0025">0025</a></td><td>未稳定阶段的接口演进与数据保留</td><td>契约、存储、节点、订阅</td><td><span class="tag pass">已接受</span></td><td>2026-11-15</td></tr>
 <tr><td><a href="#d0026">0026</a></td><td>受限浏览器测试服务与自有 VPS 加密 UDP 中转</td><td>实测、Gate、链式</td><td><span class="tag pass">已接受</span></td><td>2026-11-15</td></tr>
+<tr><td><a href="#d0027">0027</a></td><td>更新发现与直接跨版本升级</td><td>自更新、发布</td><td><span class="tag">已接受</span></td><td>2026-11-16</td></tr>
 </tbody></table></div></section>
 
 <section><h2>记录</h2>
@@ -252,4 +253,12 @@
 <dt>flows</dt><dd>browser.test.configure、browser.test.create、browser.test.measure、browser.test.finish、proxy.uot.probe、proxy.uot.cleanup</dd>
 <dt>依据</dt><dd>用户确认并要求实施的“ADR 与原型剩余工作全量收尾计划”第 4、5 节。</dd>
 </dl></div>
-</section></main></body></html>
+</section><div class="card" id="d0027"><h3>0027 更新发现与直接跨版本升级 <span class="tag">已接受</span></h3><dl>
+<dt>日期</dt><dd>2026-11-16</dd><dt>flows</dt><dd>update.check、system.update</dd>
+<dt>背景</dt><dd>发布可能被作废或删除，页面访问触发的缓存检查会延迟发现新版本。</dd>
+<dt>决定</dt><dd>中心启动后及每 15 分钟自动检查，仅检查正式且产物完整的发布，不自动安装。设置首页、顶栏、通知和弹窗共用检查快照，失败标明过期和真实原因。按版本号选择最新有效发布，支持直接跨版本升级；中间版本缺失不阻塞升级。安装前重新核对目标，已撤下则停止。新版本承担必要的增量迁移，保留身份、节点、凭据及配置。</dd>
+<dt>放弃的方案</dt><dd>不要求逐版安装，不自动恢复已作废的发布，不在目标失效后擅自换成另一版本安装。</dd>
+<dt>影响</dt><dd>手动检查异步执行并去重，状态轮询不等待 GitHub；安装保持管理员确认。分页与附件状态查询要求 Gate 支持当前查询能力，不支持时明确报错。</dd>
+<dt>依据</dt><dd>用户确认「作废了这个版本，然后会发新版本……直接支持到新版本就行」，并要求实施更新检查、首层提示与跨版本升级计划。</dd>
+</dl></div>
+</main></body></html>

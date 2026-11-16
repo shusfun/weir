@@ -1,7 +1,7 @@
 /* 通用布局：所有页面共享。间距只用 --weir-space-*（4 的倍数）。 */
 .stack { display: grid; gap: var(--weir-space-4); min-width: 0; }
 .settings-board { display: grid; gap: var(--weir-space-4); min-width: 0; }
-.settings-index { display: flex; gap: var(--weir-space-2); min-width: max-content; overflow-x: auto; }
+.settings-index { display: flex; gap: var(--weir-space-2); min-width: 0; overflow-x: auto; }
 .settings-index a { white-space: nowrap; color: var(--weir-ink-2); text-decoration: none; }
 .settings-index a:hover, .settings-index a:focus-visible { color: var(--weir-ink); }
 .settings-value { width: 100%; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }

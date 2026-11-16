@@ -490,8 +490,8 @@ func (w *writer) update(ctx context.Context, version string, sources []ghrelease
 	if err != nil {
 		return err
 	}
-	if rel.Draft || rel.Prerelease {
-		return errors.New("只能更新到正式版本")
+	if err := ValidateRelease(rel, version); err != nil {
+		return err
 	}
 	name := fmt.Sprintf("weir-%s-linux-%s.tar.gz", version, arch)
 	asset, ok := rel.Asset(name)

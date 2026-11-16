@@ -4,10 +4,28 @@ import subprocess
 import tempfile
 import unittest
 
-from scenario_run import ScenarioRun, go_test_results, matched_subtest
+from scenario_run import ScenarioRun, go_test_results, matched_subtest, main
 
 
 class ScenarioRunTests(unittest.TestCase):
+    def test_command_entry_preserves_arguments_and_failed_report(self):
+        with tempfile.TemporaryDirectory() as d:
+            seen = []
+            def execute(command, **kwargs):
+                seen.append((command, kwargs["timeout"]))
+                return subprocess.CompletedProcess(command, 7, b"remote failure", b"")
+            def factory(root, output):
+                return ScenarioRun(d, pathlib.Path(d) / "runs", execute, snapshot=lambda: {})
+            self.assertEqual(main(["--name", "upgrade", "--timeout", "99", "--", "ssh", "host", "weir self-update --version 1.2.3"], factory), 1)
+            self.assertEqual(seen, [(["ssh", "host", "weir self-update --version 1.2.3"], 99)])
+            report = json.loads(next((pathlib.Path(d) / "runs").glob("*/report.json")).read_text())
+            self.assertEqual(report["steps"][0]["exit_code"], 7)
+
+    def test_command_entry_rejects_invalid_inputs(self):
+        for args in (["--name", "../bad", "echo"], ["--name", "test"], ["--name", "test", "--timeout", "0", "echo"]):
+            with self.assertRaises(SystemExit):
+                main(args)
+
     def test_selected_descendant_requires_its_own_pass(self):
         self.assertFalse(matched_subtest('TestNative', 'udp', ['/TestNative']))
         self.assertFalse(matched_subtest('TestNative', 'udp', ['/TestNative/tcp']))

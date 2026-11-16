@@ -2,7 +2,9 @@ package ghrelease
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -68,5 +70,50 @@ func TestLatestAndProbe(t *testing.T) {
 	}
 	if p = Probe(context.Background(), srv.Client(), srv.URL+"/missing", 100, 5*time.Second); p.Err == nil || !strings.Contains(p.Err.Error(), "404") {
 		t.Fatalf("probe 404 = %+v", p)
+	}
+}
+
+func TestListAllPaginatesAndRejectsPartialResults(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		t.Run(fmt.Sprint(fail), func(t *testing.T) {
+			var pages []string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				page := r.URL.Query().Get("page")
+				pages = append(pages, page)
+				if page == "2" && fail {
+					w.WriteHeader(429)
+					return
+				}
+				list := []Release{}
+				if page == "1" {
+					for i := 0; i < 100; i++ {
+						list = append(list, Release{Tag: fmt.Sprintf("v0.1.%d", i)})
+					}
+				} else {
+					list = append(list, Release{Tag: "v1.0.0"})
+				}
+				json.NewEncoder(w).Encode(list)
+			}))
+			defer srv.Close()
+			list, err := (Client{API: srv.URL, HTTP: srv.Client()}).ListAll(t.Context(), "a/b")
+			if fail {
+				if err == nil || list != nil {
+					t.Fatal("partial result accepted")
+				}
+			} else if err != nil || len(list) != 101 || list[100].Tag != "v1.0.0" {
+				t.Fatalf("list=%d err=%v", len(list), err)
+			}
+			if strings.Join(pages, ",") != "1,2" {
+				t.Fatalf("pages=%v", pages)
+			}
+		})
+	}
+}
+
+func TestSHA256RejectsMalformedOfficialDigest(t *testing.T) {
+	for _, d := range []string{strings.Repeat("a", 64), "sha256:" + strings.Repeat("z", 64), "sha256:abcd"} {
+		if (Asset{Digest: d}).SHA256() != "" {
+			t.Fatalf("accepted %q", d)
+		}
 	}
 }

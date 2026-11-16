@@ -386,7 +386,7 @@ func (s *Server) enqueueWorkerTask(ctx context.Context, gid int, kind string, pa
 	if err != nil {
 		return nil, err
 	}
-	if err = contracts.ValidateTaskPayload(kind, contracts.TaskVersion, raw); err != nil {
+	if err = contracts.ValidateTaskPayload(kind, contracts.TaskSchemaVersion(kind), raw); err != nil {
 		return nil, err
 	}
 	sealed, err := s.Crypto.Encrypt(string(raw))

@@ -231,14 +231,17 @@ func (c CapabilityDocument) Validate() error {
 		}
 	}
 	for k, v := range c.Tasks {
-		if v != TaskVersion || !KnownTask(k) {
+		if v < 1 || v > TaskSchemaVersion(k) || !KnownTask(k) {
 			return fmt.Errorf("unsupported task capability: %s", k)
 		}
 	}
 	return nil
 }
 
-func KnownTask(kind string) bool { _, err := NewTaskRequest(kind, TaskVersion); return err == nil }
+func KnownTask(kind string) bool {
+	_, err := NewTaskRequest(kind, TaskSchemaVersion(kind))
+	return err == nil
+}
 
 // Relocatable only applies to work without effects tied to a particular VPS.
 func Relocatable(kind string) bool {
@@ -270,4 +273,13 @@ func ValidateTaskPayload(kind string, version int, raw json.RawMessage) error {
 		}
 	}
 	return validateTaskRequest(v)
+}
+
+// TaskSchemaVersion prevents dispatching paginated release queries to workers
+// that cannot return upload state or understand the page field.
+func TaskSchemaVersion(kind string) int {
+	if kind == TaskReleaseQuery {
+		return 2
+	}
+	return TaskVersion
 }

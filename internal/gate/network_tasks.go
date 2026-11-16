@@ -107,7 +107,7 @@ func executeReleaseQuery(ctx context.Context, q contracts.ReleaseQueryTask, clie
 	var releases []ghrelease.Release
 	var err error
 	if q.PerPage > 0 {
-		releases, err = gh.List(ctx, q.Repository, q.PerPage)
+		releases, err = gh.ListPage(ctx, q.Repository, q.PerPage, q.Page)
 	} else {
 		var release ghrelease.Release
 		if q.Tag != "" {

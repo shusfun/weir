@@ -5,6 +5,22 @@ import (
 	"time"
 )
 
+func TestReleasePaginationRequiresCurrentTaskVersion(t *testing.T) {
+	c := CapabilityDocument{Protocol: AgentProtocol, Version: "0.1.16", Arch: "amd64", Tasks: map[string]int{TaskReleaseQuery: 1}}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	p := TaskRequirements{}
+	r := WorkerResources{Concurrency: 1}
+	if p.Matches(1, TaskReleaseQuery, TaskSchemaVersion(TaskReleaseQuery), c, r) {
+		t.Fatal("worker without pagination was selected")
+	}
+	c.Tasks[TaskReleaseQuery] = 2
+	if !p.Matches(1, TaskReleaseQuery, TaskSchemaVersion(TaskReleaseQuery), c, r) {
+		t.Fatal("current worker was rejected")
+	}
+}
+
 func TestTaskRequirementsRejectUnknownAndInsufficientResources(t *testing.T) {
 	mem, disk := uint64(4096), uint64(8192)
 	now := time.Now().UTC()

@@ -53,7 +53,7 @@ func (s *Server) workerCandidatesFor(ctx context.Context, kind string, requireme
 		if e != nil {
 			return nil, e
 		}
-		if caps.Tasks[kind] == contracts.TaskVersion {
+		if caps.Tasks[kind] == contracts.TaskSchemaVersion(kind) {
 			var active int
 			if e = s.Store.DB.QueryRowContext(ctx, `SELECT count(*) FROM worker_tasks WHERE gate_id=$1 AND status IN ('leased','cancelling')`, g.ID).Scan(&active); e != nil {
 				return nil, e
@@ -68,7 +68,7 @@ func (s *Server) workerCandidatesFor(ctx context.Context, kind string, requireme
 				load = resource.Resources.Load
 				resources = resource.Resources
 			}
-			if !requirements.Matches(g.ID, kind, contracts.TaskVersion, caps, resources) {
+			if !requirements.Matches(g.ID, kind, contracts.TaskSchemaVersion(kind), caps, resources) {
 				continue
 			}
 			ranked = append(ranked, candidate{g.ID, load, active})
@@ -360,8 +360,10 @@ func (s *Server) validateNetworkResult(ctx context.Context, r taskqueue.Record, 
 	return nil
 }
 
-func (s *Server) queryReleases(ctx context.Context, repo, tag string, perPage int) ([]ghrelease.Release, error) {
-	query := contracts.ReleaseQueryTask{Repository: repo, Tag: tag, PerPage: perPage, MaxBytes: 8 << 20}
+func (s *Server) queryReleases(ctx context.Context, repo, tag string, perPage, page int) (out []ghrelease.Release, err error) {
+	finish := operationStage(ctx, "update.releases.query", "repository", repo, "page", page)
+	defer func() { finish(err) }()
+	query := contracts.ReleaseQueryTask{Repository: repo, Tag: tag, PerPage: perPage, Page: page, MaxBytes: 8 << 20}
 	if err := query.Validate(); err != nil {
 		return nil, err
 	}

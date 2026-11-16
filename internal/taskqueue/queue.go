@@ -136,7 +136,7 @@ func (q *Queue) Enqueue(ctx context.Context, req Request, encrypted string, now 
 	if req.Key == "" || len(req.Key) > 256 || len(req.TraceID) > 64 || !req.Deadline.After(now) || !contracts.KnownTask(req.Kind) || len(req.Candidates) == 0 || len(req.Candidates) > 1024 || encrypted == "" {
 		return r, errors.New("invalid task request")
 	}
-	if err = contracts.ValidateTaskPayload(req.Kind, contracts.TaskVersion, req.Payload); err != nil {
+	if err = contracts.ValidateTaskPayload(req.Kind, contracts.TaskSchemaVersion(req.Kind), req.Payload); err != nil {
 		return r, err
 	}
 	seen := map[int]bool{}
@@ -173,7 +173,7 @@ func (q *Queue) Enqueue(ctx context.Context, req Request, encrypted string, now 
 			return e
 		}
 		defer tx.Rollback()
-		_, e = tx.ExecContext(ctx, `INSERT INTO worker_tasks(id,kind,version,trace_id,idem,payload_hash,body,requirements,candidates,deadline,created_at,status,legacy_id,candidate_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending',$12,$11)`, id, req.Kind, contracts.TaskVersion, req.TraceID, req.Key, wantHash, encrypted, string(reqJSON), string(candidates), req.Deadline.UnixMilli(), now.UnixMilli(), req.LegacyID)
+		_, e = tx.ExecContext(ctx, `INSERT INTO worker_tasks(id,kind,version,trace_id,idem,payload_hash,body,requirements,candidates,deadline,created_at,status,legacy_id,candidate_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending',$12,$11)`, id, req.Kind, contracts.TaskSchemaVersion(req.Kind), req.TraceID, req.Key, wantHash, encrypted, string(reqJSON), string(candidates), req.Deadline.UnixMilli(), now.UnixMilli(), req.LegacyID)
 		if e != nil {
 			return e
 		}

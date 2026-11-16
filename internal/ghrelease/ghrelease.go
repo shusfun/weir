@@ -4,6 +4,7 @@ package ghrelease
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 // Asset 是发布里的一个文件。
 type Asset struct {
 	Name      string `json:"name"`
+	State     string `json:"state"`
 	URL       string `json:"browser_download_url"`
 	Digest    string `json:"digest"` // "sha256:<hex>"；旧发布可能没有
 	Size      int64  `json:"size"`
@@ -26,8 +28,11 @@ type Asset struct {
 
 // SHA256 返回官方摘要；没有时为空。
 func (a Asset) SHA256() string {
-	if d := strings.TrimPrefix(a.Digest, "sha256:"); len(d) == 64 {
-		return d
+	if strings.HasPrefix(a.Digest, "sha256:") {
+		d := strings.TrimPrefix(a.Digest, "sha256:")
+		if raw, err := hex.DecodeString(d); err == nil && len(raw) == 32 {
+			return strings.ToLower(d)
+		}
 	}
 	return ""
 }
@@ -56,7 +61,7 @@ func (r Release) Asset(name string) (Asset, bool) {
 
 // Client 访问 GitHub API。API 默认 https://api.github.com；Host 是允许的下载主机，默认 github.com。
 // Sources 是按优先级排好的下载来源；为空时用 Mirrors（直连在前，再经各镜像）。
-type QueryFunc func(context.Context, string, string, int) ([]Release, error)
+type QueryFunc func(context.Context, string, string, int, int) ([]Release, error)
 
 type Client struct {
 	// Query lets the control plane delegate metadata retrieval to a worker.
@@ -93,15 +98,49 @@ func (c Client) api() string {
 
 // List 列出仓库最近的发布（新到旧，最多 perPage 个），含草稿与预发布，由调用方筛选。
 func (c Client) List(ctx context.Context, repo string, perPage int) ([]Release, error) {
+	return c.ListPage(ctx, repo, perPage, 1)
+}
+
+// ListPage retrieves one bounded page; callers must not treat a partial listing as complete.
+func (c Client) ListPage(ctx context.Context, repo string, perPage, page int) ([]Release, error) {
 	if perPage <= 0 || perPage > 100 {
 		perPage = 50
 	}
+	if page < 1 {
+		page = 1
+	}
 	if c.Query != nil {
-		return c.Query(ctx, repo, "", perPage)
+		return c.Query(ctx, repo, "", perPage, page)
 	}
 	var out []Release
-	err := c.getJSON(ctx, fmt.Sprintf("%s/repos/%s/releases?per_page=%d", c.api(), repo, perPage), &out)
+	err := c.getJSON(ctx, fmt.Sprintf("%s/repos/%s/releases?per_page=%d&page=%d", c.api(), repo, perPage, page), &out)
 	return out, err
+}
+
+// ListAll fails closed if pagination cannot finish within the caller's deadline.
+func (c Client) ListAll(ctx context.Context, repo string) ([]Release, error) {
+	out := []Release{}
+	seen := map[string]bool{}
+	for page := 1; page <= 1000; page++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		list, err := c.ListPage(ctx, repo, 100, page)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range list {
+			if seen[r.Tag] {
+				return nil, errors.New("发布列表在分页期间发生变化，请重试")
+			}
+			seen[r.Tag] = true
+			out = append(out, r)
+		}
+		if len(list) < 100 {
+			return out, nil
+		}
+	}
+	return nil, errors.New("发布列表超出分页上限")
 }
 
 // Tag 读取指定标签的发布。
@@ -134,7 +173,7 @@ func (c Client) Latest(ctx context.Context, repo string) (Release, *url.URL, err
 }
 
 func (c Client) queryOne(ctx context.Context, repo, tag string) (Release, error) {
-	rs, err := c.Query(ctx, repo, tag, 0)
+	rs, err := c.Query(ctx, repo, tag, 0, 0)
 	if err != nil {
 		return Release{}, err
 	}

@@ -1,3 +1,4 @@
+import { useUpdateStatus, updateSummary } from "../components/update-watcher";
 // 设置页的行：开关立刻保存，要填的项显示当前值并打开原有弹窗。
 import { useState } from "react";
 import { Notice, SwitchField, useConfirm } from "@weir/ui";
@@ -67,10 +68,10 @@ export function AppearanceRows({ open }: { open: Open }) {
 }
 
 export function UpdateRows({ open }: { open: Open }) {
-  const status = useQuery({ queryKey: ["self-update-status"], queryFn: () => api("/admin/system/update/status") as Promise<{ current?: string }> });
+  const status = useUpdateStatus();
   const sources = useQuery({ queryKey: ["github-sources-admin"], queryFn: () => api("/admin/github-sources") as Promise<{ sources?: unknown[] }> });
   return <>
-    <ValueRow label="当前版本" value={text(status.isPending, status.error, status.data?.current || "未知")} onOpen={() => open("update")} />
+    <ValueRow label="当前版本" value={`${status.data?.current || "未知"} · ${updateSummary(status.data, !!status.error)}`} onOpen={() => open("update")} />
     <ValueRow label="下载来源" value={text(sources.isPending, sources.error, sources.data?.sources ? `${sources.data.sources.length} 项` : "未知")} onOpen={() => open("github")} />
   </>;
 }

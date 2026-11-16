@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shusfun/weir/internal/buildinfo"
 	"github.com/shusfun/weir/internal/ghrelease"
 )
 
@@ -44,6 +45,9 @@ type env struct {
 
 // setup 准备临时目录、假 GitHub 与记录安装参数的安装器。tamper 为真时下载内容与摘要不一致。
 func setup(t *testing.T, roleName string, tamper bool) *env {
+	return setupVersion(t, roleName, tamper, "0.1.14")
+}
+func setupVersion(t *testing.T, roleName string, tamper bool, version string) *env {
 	root := t.TempDir()
 	Dir, WorkDir, Base = filepath.Join(root, "update"), filepath.Join(root, "work"), filepath.Join(root, "opt")
 	RoleFile, CenterCfg = filepath.Join(root, "role"), filepath.Join(root, "config.json")
@@ -54,15 +58,19 @@ func setup(t *testing.T, roleName string, tamper bool) *env {
 		_ = os.WriteFile(RoleFile, []byte(roleName+"\n"), 0o644)
 	}
 	_ = os.WriteFile(CenterCfg, []byte(`{"listen":"127.0.0.1:20000"}`), 0o600)
-	name := "weir-0.1.14-linux-" + runtime.GOARCH + ".tar.gz"
-	body := pkg(t, map[string]string{"weir": "new", "install.sh": "#!/bin/sh\n", "SHA256SUMS": "x", "VERSION": "0.1.14\n"})
+	name := PrefetchName(version, runtime.GOARCH)
+	body := pkg(t, map[string]string{"weir": "new", "install.sh": "#!/bin/sh\n", "SHA256SUMS": "x", "VERSION": version + "\n"})
 	sum := sha256.Sum256(body)
 	e := &env{body: body}
 	var srv *httptest.Server
 	srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/repos/shusfun/weir/releases/tags/v0.1.14":
-			_ = json.NewEncoder(w).Encode(map[string]any{"tag_name": "v0.1.14", "assets": []map[string]any{{"name": name, "browser_download_url": srv.URL + "/dl/" + name, "digest": "sha256:" + hex.EncodeToString(sum[:])}}})
+		case "/repos/shusfun/weir/releases/tags/v" + version:
+			assets := []map[string]any{}
+			for _, assetName := range []string{PrefetchName(version, "amd64"), PrefetchName(version, "arm64"), "checksums.txt"} {
+				assets = append(assets, map[string]any{"name": assetName, "browser_download_url": srv.URL + "/dl/" + assetName, "digest": "sha256:" + hex.EncodeToString(sum[:]), "state": "uploaded", "size": len(body)})
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"tag_name": "v" + version, "assets": assets})
 		case "/dl/" + name:
 			e.downloads++
 			if tamper {
@@ -315,5 +323,42 @@ func TestRequestSources(t *testing.T) {
 	st, _ := ReadStatus()
 	if logs := strings.Join(st.Logs, "\n"); e.downloads != 1 || !strings.Contains(logs, "127.0.0.1:1") || !strings.Contains(logs, "改用 "+e.host) {
 		t.Fatalf("downloads=%d logs=%s", e.downloads, logs)
+	}
+}
+
+func TestUpdateDirectlySkipsWithdrawnVersion(t *testing.T) {
+	old := buildinfo.Version
+	buildinfo.Version = "0.1.16"
+	defer func() { buildinfo.Version = old }()
+	e := setupVersion(t, "center", false, "0.1.18")
+	request(t, Request{ID: "skip-version-18", Action: "update", Version: "0.1.18"})
+	if err := Apply(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.ran) != 1 || e.downloads != 1 {
+		t.Fatalf("must install target exactly once: %+v", e)
+	}
+	st, _ := ReadStatus()
+	if st.Version != "0.1.18" || st.State != "done" {
+		t.Fatalf("status=%+v", st)
+	}
+}
+
+func TestUpdateRejectsWithdrawnAssetsBeforeDownload(t *testing.T) {
+	e := setupVersion(t, "center", false, "0.1.18")
+	original := GitHub
+	GitHub = func() ghrelease.Client {
+		c := original()
+		c.Query = func(context.Context, string, string, int, int) ([]ghrelease.Release, error) {
+			return []ghrelease.Release{{Tag: "v0.1.18"}}, nil
+		}
+		return c
+	}
+	request(t, Request{ID: "withdrawn-v18", Action: "update", Version: "0.1.18"})
+	if err := Apply(t.Context()); err == nil {
+		t.Fatal("withdrawn release installed")
+	}
+	if len(e.ran) != 0 || e.downloads != 0 {
+		t.Fatal("downloaded or installed withdrawn release")
 	}
 }

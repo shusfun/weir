@@ -3,7 +3,6 @@
 // 整个过程在这里合成一条记录（useUpdateStatus），和其他后台任务同样显示；版本变了由 UpdateWatcher 刷新页面。
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useQuery } from "../lib/query";
 import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Form, InsetRow, InsetRows, JobPlaceholder, JobView, Notice } from "@weir/ui";
 import { api } from "../api";
 import { date } from "../lib/models";
@@ -11,30 +10,24 @@ import { State } from "./feedback";
 import { Section } from "./system-settings";
 import { useFormAction, useRowAction } from "../lib/action";
 import { useConsoleContext } from "../lib/console-context";
-import { updateStatusKey, useUpdateStatus, type UpdateRun } from "./update-watcher";
-
-interface Release { version: string; published_at: string; notes: string; url: string }
-interface Releases { latest?: Release; has_update?: boolean; older?: Release[]; check_error?: string }
+import { updateStatusKey, useUpdateStatus, updateSummary, type UpdateRun } from "./update-watcher";
 
 const phaseText: Record<UpdateRun["phase"], string> = { prefetch: "预下载", waiting: "等更新服务接手", downloading: "下载", installing: "安装", done: "完成", failed: "失败", cancelled: "已取消" };
 
-const releasesKey = ["self-update-releases"];
 
 export function UpdateCard() {
   const client = useQueryClient();
   const status = useUpdateStatus();
-  // 版本列表单独读：GitHub 慢或连不上时，进度照常显示
-  const releases = useQuery({ queryKey: releasesKey, queryFn: () => api("/admin/system/update") as Promise<Releases>, retry: 1 });
   const { run: act, isBusy } = useRowAction<string>();
   const [target, setTarget] = useState<{ action: "update" | "rollback"; version?: string } | null>(null);
   const view = status.data;
   const run = view?.run;
   const running = run?.status === "running";
-  const rel = releases.data;
+  const rel = view;
   // 中心重启期间状态接口读不到：保留最后的进度，只说明在等
   const waitingCenter = running && !!status.error;
-  useConsoleContext({ notices: [view ? `当前版本 ${view.current}${rel?.has_update && rel.latest ? `，可更新到 ${rel.latest.version}` : ""}` : "版本未知", ...(running && run ? [`正在${run.action === "rollback" ? "切回" : "更新"}：${phaseText[run.phase]}`] : []), ...(rel?.check_error ? ["无法读取 GitHub 发布：" + rel.check_error] : [])] });
-  const recheck = () => act("check", async () => { client.setQueryData(releasesKey, await api("/admin/system/update?force=1")); }, undefined, { fail: "检查失败" });
+  useConsoleContext({ notices: [view ? `当前版本 ${view.current}${rel?.has_update && rel.latest ? `，可更新到 ${rel.latest.version}` : ""}` : "版本未知", ...(running && run ? [`正在${run.action === "rollback" ? "切回" : "更新"}：${phaseText[run.phase]}`] : []), ...(rel?.check.error ? ["无法读取 GitHub 发布：" + rel.check.error] : [])] });
+  const recheck = () => act("check", async () => { await api("/admin/system/update/check", "POST"); await client.invalidateQueries({ queryKey: updateStatusKey }); await client.invalidateQueries({ queryKey: ["notices"] }); }, undefined, { fail: "检查失败" });
   const started = () => { setTarget(null); void client.invalidateQueries({ queryKey: updateStatusKey }); };
   const blocked = !!view?.blocker || running;
   const older = (rel?.older ?? []).filter((r) => r.version !== view?.previous);
@@ -45,11 +38,14 @@ export function UpdateCard() {
           <InsetRow className="stack">
             <div className="flex flex-wrap items-center gap-2">
               <span>当前版本 <code>{view.current}</code></span>
-              {rel?.latest && (rel.has_update ? <Badge variant="soft" tone="warn">有新版本 {rel.latest.version}</Badge> : <Badge variant="soft" tone="ok">已是最新</Badge>)}
-              {releases.isPending && <small className="text-[var(--weir-ink-3)]">正在读取 GitHub 发布…</small>}
-              <Button className="ml-auto" size="sm" variant="outline" disabled={isBusy()} busy={isBusy("check")} busyText="正在检查…" onClick={() => void recheck()}>重新检查</Button>
+              <Badge variant="status" tone={status.error || view.check.error ? "warn" : view.update_status === "current" ? "ok" : "neutral"}>{updateSummary(view, !!status.error)}</Badge>
+              <Button className="ml-auto" size="sm" variant="outline" disabled={isBusy() || view.check.checking} busy={isBusy("check") || view.check.checking} busyText="正在检查…" onClick={() => void recheck()}>重新检查</Button>
             </div>
-            {(rel?.check_error || releases.error) && <Notice tone="warn">无法读取 GitHub 发布：{rel?.check_error ?? (releases.error as Error).message}</Notice>}
+            <small className="text-[var(--weir-ink-3)]">最近检查：{checkDate(view.check.checked_at)} · 最近成功：{checkDate(view.check.succeeded_at)} · 下次检查：{checkDate(view.check.next_check_at)}</small>
+            <small className="text-[var(--weir-ink-3)]">最新有效版本：{view.latest?.version ?? "未知"}</small>
+            {view.check.stale && <Notice tone="warn">检查结果未知或已过期，历史版本信息仅供参考，请重新检查。</Notice>}
+            {(view.check.error || status.error) && <Collapsible title="错误详情"><CodeBlock>{view.check.error || status.error?.message || "未知"}</CodeBlock></Collapsible>}
+            {view.unavailable.length > 0 && <Collapsible title={`不可用的发布（${view.unavailable.length}）`}><CodeBlock>{view.unavailable.map((r) => `${r.version}：${r.unavailable}`).join("\n")}</CodeBlock></Collapsible>}
             {view.blocker && <Notice tone="info">{view.blocker}。</Notice>}
           </InsetRow>
           <InsetRow>
@@ -72,9 +68,9 @@ export function UpdateCard() {
             </InsetRow>
           )}
           {((rel?.latest && rel.has_update) || view.previous || older.length > 0) && <InsetRow className="actions">
-            {rel?.latest && rel.has_update && <Button disabled={blocked} onClick={() => setTarget({ action: "update", version: rel.latest!.version })}>更新到 {rel.latest.version}</Button>}
+            {rel?.latest && rel.has_update && <Button disabled={blocked || view.check.stale} onClick={() => setTarget({ action: "update", version: rel.latest!.version })}>更新到 {rel.latest.version}</Button>}
             {view.previous && <Button variant="outline" disabled={blocked} onClick={() => setTarget({ action: "rollback" })}>切回上一版本 {view.previous}</Button>}
-            {older.map((r) => <Button key={r.version} variant="outline" disabled={blocked} onClick={() => setTarget({ action: "update", version: r.version })}>重装 {r.version}</Button>)}
+            {older.map((r) => <Button key={r.version} variant="outline" disabled={blocked || view.check.stale} onClick={() => setTarget({ action: "update", version: r.version })}>重装 {r.version}</Button>)}
           </InsetRow>}
         </InsetRows>
       )}
@@ -92,7 +88,7 @@ function ConfirmUpdate({ target, current, previous, close, started }: { target: 
       <DialogContent>
         <DialogTitle>{target.action === "rollback" ? `切回 ${to}？` : `更新到 ${to}？`}</DialogTitle>
         <DialogDescription>
-          当前 {current}。安装时服务会重启，控制台短暂不可用；新版本启动失败会自动切回 {current}。Gate 之后从中心自更新到同一版本。
+          {current} → {to}。直接安装目标版本，无需逐版更新。安装时服务会重启，控制台短暂不可用；安装器会尝试恢复上一版本；若已执行存储迁移，回退还需升级前的数据备份。Gate 之后从中心自更新到同一版本。
         </DialogDescription>
         <Form busy={go.busy} errors={go.errors} onSubmit={() => void go.submit()}>
           <DialogFooter error={go.error}>
@@ -104,3 +100,5 @@ function ConfirmUpdate({ target, current, previous, close, started }: { target: 
     </Dialog>
   );
 }
+
+function checkDate(value: string) { return !value || value.startsWith("0001-") ? "未知" : date(value); }

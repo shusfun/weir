@@ -106,6 +106,7 @@ type SubscriptionFetchResult struct {
 	Title       string `json:"title,omitempty"`
 }
 type ReleaseQueryTask struct {
+	Page       int    `json:"page,omitempty"`
 	Repository string `json:"repository"`
 	Tag        string `json:"tag,omitempty"`
 	PerPage    int    `json:"per_page,omitempty"` // >0 lists releases; zero queries a tag or latest
@@ -162,7 +163,7 @@ type DecisionQuestion struct {
 }
 
 func NewTaskRequest(kind string, version int) (any, error) {
-	if version != TaskVersion {
+	if version != TaskSchemaVersion(kind) {
 		return nil, errors.New("unsupported task version")
 	}
 	switch kind {

@@ -16,7 +16,7 @@ func TestMigrationRecoveryAndVersionGuard(t *testing.T) {
 			ctx := t.Context()
 			u := s.Ent.User.Create().SetEmail("migration@example.test").SetPasswordHash("unchanged").SetQuota(1234).SaveX(ctx)
 			// An interrupted idempotent stage resumes through Atlas on startup.
-			if _, err := s.DB.ExecContext(ctx, `UPDATE schema_migrations SET status='running',stage='workers'`); err != nil {
+			if _, err := s.DB.ExecContext(ctx, `UPDATE schema_migrations SET version='2026111301',checksum='previous-release',status='running',stage='workers'`); err != nil {
 				t.Fatal(err)
 			}
 			if err := s.migrate(ctx, ""); err != nil {
@@ -33,7 +33,7 @@ func TestMigrationRecoveryAndVersionGuard(t *testing.T) {
 			if err := s.DB.QueryRowContext(ctx, `SELECT status FROM schema_migrations WHERE version=$1`, schemaVersion).Scan(&status); err != nil || status != "applied" {
 				t.Fatalf("status %s %v", status, err)
 			}
-			if _, err := s.DB.ExecContext(ctx, `UPDATE schema_migrations SET version='9999999999'`); err != nil {
+			if _, err := s.DB.ExecContext(ctx, `UPDATE schema_migrations SET version='9999999999' WHERE version=$1`, schemaVersion); err != nil {
 				t.Fatal(err)
 			}
 			if err := s.migrate(context.Background(), ""); err == nil {
