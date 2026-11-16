@@ -57,9 +57,14 @@ func TestUserNodeSummaryUsesEffectiveExitAndKeepsAdminEndpointPrivate(t *testing
 func TestDownstreamChangeInvalidatesExitIPObservation(t *testing.T) {
 	s, admin, g := setupGate(t)
 	followProbeRevisions(t, s)
-	g.serveActions(t, s, nil)
 	g2 := pairFakeGate(t, admin)
 	heartbeat(t, g2, contracts.Heartbeat{Version: "test", Arch: "amd64"})
+	for _, gid := range []int{int(g.id), int(g2.id)} {
+		if err := s.Store.Tasks.SetCapabilities(t.Context(), gid, contracts.CapabilityDocument{Protocol: contracts.AgentProtocol, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.ActionChainProbe: 1, contracts.TaskCoreInstall: contracts.TaskVersion}, ConfigFeatures: map[string]int{contracts.ConfigUoT: 1, contracts.ConfigOutboundBridges: 1}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	serveUoTProbeTasks(t, g)
 	makeNode := func(gid int, name string, exit any) map[string]any {
 		return mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": gid, "preset": "vless-reality", "name": name, "skip_probe": true, "exit": exit}, 200)
 	}

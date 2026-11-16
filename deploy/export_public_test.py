@@ -27,6 +27,15 @@ class ExportTests(GitFixture):
         self.assertFalse((exported / ".git").exists())
         self.assertEqual(manifest(files), manifest(dict(reversed(list(files.items())))))
 
+    def test_html_private_links_are_stripped_before_link_check(self):
+        write(self.source, "docs/decisions.html",
+              "<p>public</p>\n<!-- private-only:start -->\n<a href=\"design.html\">private</a>\n<!-- private-only:end -->\n<a href=\"images/demo.png\">image</a>\n")
+        commit(self.source)
+        _, files = snapshot(self.source)
+        text = files["docs/decisions.html"][1]
+        self.assertNotIn(b"design.html", text)
+        self.assertIn(b"images/demo.png", text)
+
     def test_unknown_top_level_requires_review(self):
         write(self.source, "unreviewed/file.txt", "new data")
         commit(self.source)

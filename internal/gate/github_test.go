@@ -109,8 +109,8 @@ func TestFollowCenterUpdatesFromGitHub(t *testing.T) {
 	var mu sync.Mutex
 	a := testAgent(t, gh, func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.URL.Path == "/api/v1/agent/heartbeat":
-			_ = json.NewEncoder(w).Encode(contracts.HeartbeatReply{Release: &contracts.ReleaseTarget{Version: "1.2.3", SHA256: sumOf(pkg), URLs: []string{gh.URL + "/m/" + direct, direct}}})
+		case r.URL.Path == "/api/v1/agent/heartbeat/v2":
+			_ = json.NewEncoder(w).Encode(contracts.HeartbeatReply{HeartbeatProtocol: contracts.HeartbeatProtocol, Release: &contracts.ReleaseTarget{Version: "1.2.3", SHA256: sumOf(pkg), URLs: []string{gh.URL + "/m/" + direct, direct}}})
 		case strings.HasPrefix(r.URL.Path, "/api/v1/agent/release/"):
 			mu.Lock()
 			centerHits++
@@ -161,11 +161,11 @@ func TestSelfUpdateFallbackAndBackoff(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 		switch {
-		case r.URL.Path == "/api/v1/agent/heartbeat":
+		case r.URL.Path == "/api/v1/agent/heartbeat/v2":
 			var hb contracts.Heartbeat
 			_ = json.NewDecoder(r.Body).Decode(&hb)
 			beats = append(beats, hb)
-			_ = json.NewEncoder(w).Encode(contracts.HeartbeatReply{Release: &contracts.ReleaseTarget{Version: "1.2.3", SHA256: strings.Repeat("a", 64), URLs: []string{gh.URL + "/o/r/x.tar.gz"}}})
+			_ = json.NewEncoder(w).Encode(contracts.HeartbeatReply{HeartbeatProtocol: contracts.HeartbeatProtocol, Release: &contracts.ReleaseTarget{Version: "1.2.3", SHA256: strings.Repeat("a", 64), URLs: []string{gh.URL + "/o/r/x.tar.gz"}}})
 		case r.URL.Path == "/api/v1/agent/release/1.2.3":
 			centerHits++
 			if !centerOK {

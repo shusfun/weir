@@ -35,6 +35,8 @@ const (
 )
 
 func (s *Server) userRoutes(auth, admin *gin.RouterGroup) {
+	s.catalogRoutes(auth, admin)
+	s.usageRoutes(auth, admin)
 	admin.GET("/users", s.listUsers)
 	admin.POST("/users", s.createUser)
 	admin.GET("/users/:uid", s.getUser)
@@ -350,11 +352,13 @@ func (s *Server) updateUser(c *gin.Context) {
 		failure(c, 400, "admin_all_nodes")
 		return
 	}
-	upd := u.Update()
-	if err := s.applyPlan(ctx, upd.Mutation(), req.planRequest); err != nil {
+	// Validate before opening the transaction; the mutation is rebuilt from the
+	// current row inside it, so concurrent renewals cannot use an obsolete expiry.
+	if err := s.applyPlan(ctx, u.Update().Mutation(), req.planRequest); err != nil {
 		failure(c, 400, err.Error())
 		return
 	}
+	passwordHash := ""
 	if req.Password != "" {
 		if !validAccountPassword(req.Password) {
 			failure(c, 400, "weak_password")
@@ -365,9 +369,9 @@ func (s *Server) updateUser(c *gin.Context) {
 			failInternal(c, 500, "hash_failed", err)
 			return
 		}
-		upd.SetPasswordHash(string(hash))
+		passwordHash = string(hash)
 	}
-	u, err := upd.Save(ctx)
+	u, renewal, err := s.updateUserPlan(ctx, u.ID, req.planRequest, passwordHash)
 	if err != nil {
 		failInternal(c, 500, "update_failed", err)
 		return
@@ -380,7 +384,9 @@ func (s *Server) updateUser(c *gin.Context) {
 		return
 	}
 	s.audit(c, "user.update", "user:"+itoa(u.ID), "ok")
-	c.JSON(200, s.adminUserView(ctx, u))
+	out := s.adminUserView(ctx, u)
+	out["renewal"] = renewal
+	c.JSON(200, out)
 }
 
 func (s *Server) dropSessions(ctx context.Context, uid int) {
@@ -630,6 +636,11 @@ func (s *Server) linkViews(c *gin.Context, u *ent.User, withCreds bool) ([]gin.H
 			return nil, err
 		}
 		v["nodes"] = len(entries)
+		refs, err := s.linkCatalogRefs(ctx, u.ID, l.ID)
+		if err != nil {
+			return nil, err
+		}
+		v["catalog_refs"] = refs
 		if withCreds {
 			v["entries"] = entries
 		}
@@ -652,13 +663,14 @@ func (s *Server) listLinks(c *gin.Context, admin bool) {
 }
 
 type linkRequest struct {
-	Name     *string         `json:"name"`
-	AllNodes *bool           `json:"all_nodes"`
-	NodeIDs  *[]int          `json:"node_ids"`
-	ChainIDs *[]int          `json:"chain_ids"`
-	Enabled  *bool           `json:"enabled"`
-	StartsAt json.RawMessage `json:"starts_at"`
-	EndsAt   json.RawMessage `json:"ends_at"`
+	CatalogRefs *[]string       `json:"catalog_refs"`
+	Name        *string         `json:"name"`
+	AllNodes    *bool           `json:"all_nodes"`
+	NodeIDs     *[]int          `json:"node_ids"`
+	ChainIDs    *[]int          `json:"chain_ids"`
+	Enabled     *bool           `json:"enabled"`
+	StartsAt    json.RawMessage `json:"starts_at"`
+	EndsAt      json.RawMessage `json:"ends_at"`
 }
 
 // applyLink 只接受该用户自己可用的节点与自己的链式代理。cur 是修改前的链接（新建时为空），
@@ -743,18 +755,9 @@ func (s *Server) createLink(c *gin.Context, admin bool) {
 		return
 	}
 	ctx := c.Request.Context()
-	if n, _ := s.Store.Ent.Link.Query().Where(link.UserIDEQ(u.ID)).Count(ctx); n >= maxLinks {
-		failure(c, 409, "link_limit")
-		return
-	}
-	create := s.Store.Ent.Link.Create().SetUserID(u.ID).SetToken(linkToken())
-	if err := s.applyLink(ctx, u, nil, create.Mutation(), req); err != nil {
-		failure(c, 400, err.Error())
-		return
-	}
-	l, err := create.Save(ctx)
+	l, err := s.saveLink(ctx, u.ID, 0, req)
 	if err != nil {
-		failInternal(c, 500, "create_failed", err)
+		linkSaveFailure(c, err)
 		return
 	}
 	if err = s.SyncUser(ctx, u.ID); err != nil {
@@ -802,8 +805,8 @@ func (s *Server) updateLink(c *gin.Context, admin bool) {
 	if dryRun(c, dryResult{Preview: []string{"订阅地址不变；客户端下次更新订阅时拿到新内容"}}) {
 		return
 	}
-	if _, err := upd.Save(ctx); err != nil {
-		failInternal(c, 500, "update_failed", err)
+	if _, err := s.saveLink(ctx, u.ID, l.ID, req); err != nil {
+		linkSaveFailure(c, err)
 		return
 	}
 	if err := s.SyncUser(ctx, u.ID); err != nil {
@@ -935,7 +938,7 @@ func publicAddr(ip net.IP) bool {
 
 // checkUserChain 校验用户自建链：入口必须是该用户可用的节点；出口可以是 SOCKS5 / HTTP(S) 代理、单条节点链接、
 // 分给他的订阅组里的节点或他可用的另一节点，只允许公网地址，不接受订阅地址；由入口 Gate 实测出口可用后才保存。
-func (s *Server) checkUserChain(ctx context.Context, u *ent.User, req chainRequest, admin bool) (*ent.Node, *exitProbe, error) {
+func (s *Server) checkUserChain(ctx context.Context, u *ent.User, req *chainRequest, admin bool) (*ent.Node, *exitProbe, error) {
 	nodes, err := s.userNodeIDs(ctx, u)
 	if err != nil {
 		return nil, nil, err
@@ -952,7 +955,7 @@ func (s *Server) checkUserChain(ctx context.Context, u *ent.User, req chainReque
 	if req.Exit.Kind != "" {
 		spec = &req.Exit
 	}
-	_, _, probe, err := s.validateExitSelection(ctx, g, entry.ID, &u.ID, req.ExitID, spec, false, admin, entry.Kernel)
+	_, _, probe, err := s.validateExitSelection(ctx, g, entry.ID, &u.ID, req.ExitID, spec, admin && req.SkipProbe, admin, entry.Kernel)
 	return entry, probe, err
 }
 
@@ -980,7 +983,7 @@ func (s *Server) createChainNow(c *gin.Context, admin bool) {
 		return
 	}
 	jobTitle(ctx, "新建链式代理「"+name+"」")
-	entry, probe, err := s.checkUserChain(ctx, u, req, admin)
+	entry, probe, err := s.checkUserChain(ctx, u, &req, admin)
 	if err != nil {
 		if s.deferExitChange(c, err) {
 			return
@@ -1142,7 +1145,7 @@ func (s *Server) updateChainNow(c *gin.Context, admin bool) {
 			check.ExitID = 0
 			check.Exit = *req.Exit
 		}
-		entry, probe, err = s.checkUserChain(ctx, u, check, admin)
+		entry, probe, err = s.checkUserChain(ctx, u, &check, admin)
 		if err != nil {
 			if s.deferExitChange(c, err) {
 				return
@@ -1150,6 +1153,9 @@ func (s *Server) updateChainNow(c *gin.Context, admin bool) {
 			s.audit(c, "chain.update", "chain:"+itoa(ch.ID), "failed")
 			failErr(c, 422, err)
 			return
+		}
+		if req.Exit != nil {
+			*req.Exit = check.Exit
 		}
 	} else if enabled {
 		ex, err := s.Store.Ent.Exit.Get(ctx, eid)

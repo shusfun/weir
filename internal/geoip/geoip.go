@@ -103,6 +103,28 @@ func (d *DB) Status() Status {
 	return d.status
 }
 
+// CountryNetworks exports public country prefixes; connection classification
+// stays on the Gate and never sends destination addresses to the center.
+func (d *DB) CountryNetworks(country string) ([]netip.Prefix, Status, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	if d.city == nil {
+		return nil, d.status, errors.New("IP 定位数据还没有下载")
+	}
+	var prefixes []netip.Prefix
+	for result := range d.city.Networks() {
+		var rec cityRecord
+		if err := result.Decode(&rec); err != nil {
+			return nil, d.status, err
+		}
+		if rec.Country.ISOCode == country {
+			prefix := result.Prefix()
+			prefixes = append(prefixes, prefix)
+		}
+	}
+	return prefixes, d.status, nil
+}
+
 type cityRecord struct {
 	City struct {
 		Names map[string]string `maxminddb:"names"`

@@ -66,7 +66,7 @@ func TestHeartbeatSnapshotSamplingAcknowledgementAndRecovery(t *testing.T) {
 	}
 }
 
-func TestHeartbeatV2FallbackNeverSendsDeltaToLegacyHandler(t *testing.T) {
+func TestHeartbeatRejectsMissingCurrentEndpoint(t *testing.T) {
 	var paths []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, r.URL.Path)
@@ -74,14 +74,7 @@ func TestHeartbeatV2FallbackNeverSendsDeltaToLegacyHandler(t *testing.T) {
 			w.WriteHeader(404)
 			return
 		}
-		var h contracts.Heartbeat
-		if err := json.NewDecoder(r.Body).Decode(&h); err != nil {
-			t.Error(err)
-		}
-		if h.Protocol != 0 || h.Version == "" || h.Arch == "" {
-			t.Error("legacy handler received a delta")
-		}
-		_ = json.NewEncoder(w).Encode(contracts.HeartbeatReply{})
+		t.Error("unexpected alternate endpoint")
 	}))
 	defer srv.Close()
 	helper := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -89,11 +82,10 @@ func TestHeartbeatV2FallbackNeverSendsDeltaToLegacyHandler(t *testing.T) {
 	}))
 	defer helper.Close()
 	a := &Agent{center: &centerClient{center: srv.URL, http: srv.Client(), token: "test", until: time.Now().Add(time.Hour)}, helper: &helperClient{http: &http.Client{Transport: helperTestTransport{url: helper.URL, base: http.DefaultTransport}}}}
-	a.heartbeatProtocol.Store(2)
-	if err := a.heartbeat(t.Context()); err != nil {
-		t.Fatal(err)
+	if err := a.heartbeat(t.Context()); err == nil {
+		t.Fatal("missing endpoint accepted")
 	}
-	if strings.Join(paths, ",") != "/api/v1/agent/heartbeat/v2,/api/v1/agent/heartbeat" || a.heartbeatProtocol.Load() != 0 {
+	if strings.Join(paths, ",") != "/api/v1/agent/heartbeat/v2" {
 		t.Fatalf("unsafe downgrade: %v", paths)
 	}
 }

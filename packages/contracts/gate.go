@@ -10,19 +10,23 @@ import (
 // GateConfig 是中心下发给某台 Gate 的完整期望配置。Gate 只按版本号整份应用，
 // 用同一程序内的构建器生成内核配置；中心离线时仍可据此在本地剔除到期 / 超额凭据。
 type GateConfig struct {
-	TraceID     string                `json:"trace_id,omitempty"`
-	Revision    int64                 `json:"revision"`
-	Version     string                `json:"version"` // 中心程序版本；与 Gate 不一致时 Gate 先自更新
-	Kernels     map[string]Kernel     `json:"kernels"` // "xray" / "sing-box"
-	Drivers     map[string]string     `json:"drivers"` // 内核 → 驱动 YAML（已按锁定版本选好、展开 extends）
-	Ports       PortPlan              `json:"ports"`
-	Inbounds    []Inbound             `json:"inbounds"`
-	Outbounds   []Outbound            `json:"outbounds"`
-	Routes      []Route               `json:"routes"`
-	Credentials []Credential          `json:"credentials"`
-	Certs       []CertRef             `json:"certs"`
-	Budgets     map[string]GateBudget `json:"budgets"` // 用户键 → 本 Gate 可用额度
-	Meta        map[string]string     `json:"meta,omitempty"`
+	TraceID     string                        `json:"trace_id,omitempty"`
+	Revision    int64                         `json:"revision"`
+	Version     string                        `json:"version"` // 中心程序版本；与 Gate 不一致时 Gate 先自更新
+	Kernels     map[string]Kernel             `json:"kernels"` // "xray" / "sing-box"
+	Drivers     map[string]string             `json:"drivers"` // 内核 → 驱动 YAML（已按锁定版本选好、展开 extends）
+	Ports       PortPlan                      `json:"ports"`
+	Inbounds    []Inbound                     `json:"inbounds"`
+	Outbounds   []Outbound                    `json:"outbounds"`
+	Routes      []Route                       `json:"routes"`
+	Credentials []Credential                  `json:"credentials"`
+	Certs       []CertRef                     `json:"certs"`
+	Budgets     map[string]GateBudget         `json:"budgets"` // 用户键 → 本 Gate 可用额度
+	Meta        map[string]string             `json:"meta,omitempty"`
+	Firewall    *FirewallPlan                 `json:"firewall,omitempty"`
+	Bridges     []OutboundBridge              `json:"bridges,omitempty"`
+	Observers   map[string]ConnectionObserver `json:"observers,omitempty"`
+	BrowserTest *BrowserTestPlan              `json:"browser_test,omitempty"`
 	// ExecutionOnly 为真时，这份正文只携带额度等执行状态，不能当作内核配置应用。
 	// CertOnly 为真时只同步证书文件，不应用内核配置、不推进已应用版本。
 	ExecutionOnly   bool  `json:"execution_only,omitempty"`
@@ -60,6 +64,7 @@ type Inbound struct {
 
 // Outbound 是出口：直连、家宽 SOCKS5、另一台 Gate 或其他协议。
 type Outbound struct {
+	RuleID   int64          `json:"rule_id,omitempty"`
 	ID       int64          `json:"id"`
 	Tag      string         `json:"tag"`
 	Protocol string         `json:"protocol"`
@@ -68,10 +73,28 @@ type Outbound struct {
 	Username string         `json:"username,omitempty"`
 	Password string         `json:"password,omitempty"`
 	Settings map[string]any `json:"settings,omitempty"`
+	// Client is the locally converted mihomo proxy. ClientOnly prevents native
+	// rendering from discarding parameters that its driver cannot express.
+	Client     map[string]any `json:"client,omitempty"`
+	ClientOnly bool           `json:"client_only,omitempty"`
 	// Members 非空表示这是「一组」出口（Protocol 为 group）：全部成员都下发，由内核按延迟自动选、出故障自动切换
 	// （Xray balancer + observatory，sing-box urltest）。成员的 ID / Tag 由生成器分配。
 	Members []Outbound `json:"members,omitempty"`
 }
+
+// OutboundBridge is an authenticated, loopback-only SOCKS handoff. The original
+// outbound remains the target; a failed handoff must never select direct.
+type OutboundBridge struct {
+	FromKernel  string `json:"from_kernel"`
+	OutboundTag string `json:"outbound_tag"`
+	Kernel      string `json:"kernel"`
+	Port        int    `json:"port"`
+	Username    string `json:"username"`
+	Password    string `json:"password"`
+}
+
+const ConfigOutboundBridges = "outbound-bridges"
+const ConfigUoT = "udp-over-tcp"
 
 // MaxGroupMembers 是「一组」出口的成员上限。
 const MaxGroupMembers = 50

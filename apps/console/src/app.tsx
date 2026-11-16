@@ -38,6 +38,8 @@ class LoadBoundary extends Component<{ children: ReactNode }, { error: Error | n
   }
 }
 const ExitsPage = page(() => import("./pages/exits"), "ExitsPage");
+const OverviewPage = page(() => import("./pages/overview"), "OverviewPage");
+const MyNodesPage = page(() => import("./pages/my-nodes"), "MyNodesPage");
 const GatesPage = page(() => import("./pages/gates"), "GatesPage");
 const SubscriptionsPage = page(() => import("./pages/subscriptions"), "SubscriptionsPage");
 const PublicPagesPage = page(() => import("./pages/public-pages"), "PublicPagesPage");
@@ -63,9 +65,16 @@ const SetupPage = page(() => import("./pages/setup"), "SetupPage");
 const PublicPage = page(() => import("./pages/public-page"), "PublicPage");
 // 动效样例页只在开发环境存在：生产构建里 import.meta.env.DEV 为 false，这个分支和页面一起被剔除
 const DevUiPage = import.meta.env.DEV ? page(() => import("./pages/dev-ui"), "DevUiPage") : null;
+// 交互整理原型：同样只在开发环境；不接接口、不需要登录
+const ProtoApp = import.meta.env.DEV ? page(() => import("./proto"), "ProtoApp") : null;
 
 // 控制台各页面：导航时按路径找到要预先准备的代码
 const consolePages: Record<string, Loader> = {
+  "/overview": OverviewPage.loader,
+  "/my/nodes": MyNodesPage.loader,
+  "/proxies": ExitsPage.loader,
+  "/rules": ExitsPage.loader,
+  "/groups": SubscriptionsPage.loader,
   "/gates": GatesPage.loader,
   "/exits": ExitsPage.loader,
   "/users": UsersPage.loader,
@@ -143,7 +152,7 @@ function Console() {
     return <><GuideIdentitySync id="anonymous" role="guest" /><GuideButton standalone /><div data-tour="auth-content"><Suspense fallback={<div className="auth">{loading("正在加载账户页面…")}</div>}>{status === "setup" ? <SetupPage done={boot} /> : <LoginPage done={boot} />}</Suspense></div></>;
 
   const admin = me.role === "admin";
-  const home = admin ? "/gates" : "/links";
+  const home = admin ? "/overview" : "/my/nodes";
   const guard = (node: ReactNode) => (admin ? node : <Navigate to="/links" replace />);
   return (
     <Workspace admin={admin} email={me.email ?? ""} onLogout={logout}>
@@ -158,6 +167,11 @@ function Console() {
           <Suspense fallback={loading("正在加载页面…")}>
             <Routes location={location}>
               <Route path="/" element={<Navigate to={home} replace />} />
+              <Route path="/overview" element={guard(<OverviewPage />)} />
+              <Route path="/my/nodes" element={<MyNodesPage />} />
+              <Route path="/proxies" element={guard(<ExitsPage view="proxies" />)} />
+              <Route path="/rules" element={guard(<ExitsPage view="rules" />)} />
+              <Route path="/groups" element={guard(<SubscriptionsPage groups />)} />
               <Route path="/exits" element={admin ? <ExitsPage /> : <Navigate to="/proxy" replace />} />
               <Route path="/gates" element={guard(<GatesPage />)} />
               <Route path="/gates/:id" element={guard(<GateDetailPage />)} />
@@ -204,6 +218,8 @@ export default function Application() {
 
 function Routed() {
   const { pathname } = useLocation();
+  if (ProtoApp && pathname.startsWith("/dev/proto"))
+    return <Suspense fallback={loading("正在加载原型…")}><ProtoApp /></Suspense>;
   if (pathname.startsWith("/sub/"))
     return (
       <Suspense fallback={loading("正在加载订阅…")}>

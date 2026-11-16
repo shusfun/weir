@@ -83,9 +83,15 @@ func (s *Server) kernelVersions(ctx context.Context, kernel string) ([]string, e
 func (s *Server) gateDownloadsKernels(ctx context.Context, id int) (bool, error) {
 	caps, err := s.Store.Tasks.Capabilities(ctx, id)
 	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
+		return false, errors.New("VPS 尚未声明当前内核安装任务能力")
 	}
-	return err == nil && caps.Tasks[contracts.TaskCoreInstall] == contracts.TaskVersion, err
+	if err != nil {
+		return false, err
+	}
+	if caps.Protocol != contracts.AgentProtocol || caps.Tasks[contracts.TaskCoreInstall] != contracts.TaskVersion {
+		return false, errors.New("VPS 不支持当前内核安装任务契约，请更新 Gate")
+	}
+	return true, nil
 }
 
 func (s *Server) kernelBinaryRequired(ctx context.Context, kernel, arch string) (bool, error) {
@@ -100,12 +106,8 @@ func (s *Server) kernelBinaryRequired(ctx context.Context, kernel, arch string) 
 		if g.Arch != arch {
 			continue
 		}
-		capable, err := s.gateDownloadsKernels(ctx, g.ID)
-		if err != nil {
+		if _, err := s.gateDownloadsKernels(ctx, g.ID); err != nil {
 			return false, err
-		}
-		if !capable {
-			return true, nil
 		}
 	}
 	return false, nil

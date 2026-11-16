@@ -1,35 +1,27 @@
 // 用户：一个窗口建用户与套餐；详情中查看 / 管理其订阅链接（含凭据原文）与自建链式代理。
+import { useQueryClient } from "@tanstack/react-query";
 import { Fragment, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "../lib/query";
-import { Avatar, Badge, BulkBar, Button, Card, Checkbox, DotCrowd, TrafficUsage, Input, PageHeader, SectionHeader, Segmented, Sheet, SheetContent, SkeletonTable, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, CopyButton, Notice, useToast, useConfirm } from "@weir/ui";
-import { Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Avatar, Badge, BulkBar, Button, Card, Checkbox, DotCrowd, TrafficUsage, Input, PageHeader, SectionHeader, Segmented, Dialog, DialogContent, DialogTitle, DialogDescription, SkeletonTable, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, CopyButton, Notice, useToast, useConfirm } from "@weir/ui";
+import { ChevronRight, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { api, clause } from "../api";
 import { useRowAction } from "../lib/action";
 import { State } from "../components/feedback";
 import { UserForm } from "../components/user-form";
-import { HistoryCharts } from "../components/history-charts";
-import { ChainPanel, LinkPanel, type NodeOption } from "../components/link-panel";
+import { UserDetailView } from "../components/user-detail-view";
 import { bytes, date } from "../lib/models";
 import { useConsoleContext } from "../lib/console-context";
-import { dataObject, useDialogParam } from "../components/object-link";
+import { ObjectLink, dataObject, useDialogParam } from "../components/object-link";
 import { objectHref, type ObjectRef } from "../lib/objects";
-import type { NodeItem, UserItem, Withheld } from "../lib/core";
+import { objectStatus, type NodeItem, type UserItem, type Withheld } from "../lib/core";
 
-// 状态标签：需要处理时写最要紧的原因（稿子「3 天后到期」「流量 95%」）
 function careLabel(u: UserItem): string | null {
-  if (!u.enabled) return "已停用";
-  const left = u.expires_at ? Math.ceil((new Date(u.expires_at).getTime() - Date.now()) / 86400e3) : null;
-  if (u.expires_at && new Date(u.expires_at).getTime() <= Date.now()) return "已到期";
-  if (left != null && left < 7) return `${left} 天后到期`;
-  if (!u.unlimited && u.quota > 0 && u.used / u.quota >= 0.9) return `流量 ${Math.round((u.used / u.quota) * 100)}%`;
-  return null;
+  return u.object_state?.status === "ok" ? null : objectStatus(u.object_state)[0];
 }
 
 function needsCare(u: UserItem) {
-  const soon = u.expires_at ? new Date(u.expires_at).getTime() - Date.now() < 7 * 86400e3 : false;
-  const heavy = !u.unlimited && u.quota > 0 && u.used / u.quota >= 0.9;
-  return !u.enabled || soon || heavy;
+  return u.object_state?.status !== "ok";
 }
 
 async function bulkExtend(ids: number[], users: UserItem[], act: (key: string, run: () => Promise<unknown>, ok: string) => Promise<unknown>) {
@@ -50,6 +42,7 @@ async function bulkDisable(ids: number[], act: (key: string, run: () => Promise<
 }
 
 export function UsersPage() {
+  const client = useQueryClient();
   const confirm = useConfirm();
   const users = useQuery({ queryKey: ["users"], queryFn: async () => (await api("/admin/users")).items as UserItem[] });
   const nodes = useQuery({ queryKey: ["nodes"], queryFn: async () => (await api("/admin/nodes")).items as NodeItem[] });
@@ -62,14 +55,10 @@ export function UsersPage() {
   const { run: act, isBusy } = useRowAction<string>({ refetch: users.refetch });
   // 地址栏：?user=编号 是这个用户的详情（对象链接、dsh 的界面导航）；?link= / ?chain= 只知道编号时，
   // 先向中心查它属于哪个用户，再打开那个用户并高亮这一项。
-  const detailParam = useDialogParam("user", users.data, !users.isFetching);
+  const detailParam = useDialogParam("user", users.data, users.isSuccess);
   const detail = detailParam.current;
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  useEffect(() => {
-    const id = params.get("user");
-    if (id) navigate(`/users/${id}?${new URLSearchParams([...params].filter(([key]) => key !== "user"))}`, { replace: true });
-  }, [params, navigate]);
   const toast = useToast();
   useEffect(() => {
     for (const type of ["link", "chain"] as const) {
@@ -86,8 +75,8 @@ export function UsersPage() {
   useConsoleContext({ page: "用户", list: { total: users.data?.length ?? 0, items: (users.data ?? []).slice(0, 20).map((u) => ({ type: "user", name: u.name || u.email, id: u.id })) } });
   useConsoleContext(detail ? { object: { type: "user", name: detail.name || detail.email, id: detail.id }, dialog: { title: "用户详情" } } : null);
   const list = users.data ?? [];
-  const soon = list.filter((u) => u.enabled && u.expires_at && new Date(u.expires_at).getTime() - Date.now() < 7 * 86400e3).length;
-  const heavy = list.filter((u) => !u.unlimited && u.quota > 0 && u.used / u.quota >= 0.9).length;
+  const soon = list.filter((u) => ["即将到期", "已到期"].includes(u.object_state?.label || "")).length;
+  const heavy = list.filter((u) => ["临近额度", "额度已用完"].includes(u.object_state?.label || "")).length;
   const total = list.reduce((sum, u) => sum + u.used, 0);
   const header = (
     <PageHeader
@@ -96,30 +85,28 @@ export function UsersPage() {
         <span className="weir-sum">
           <span><b>{list.length}</b> 个用户</span>
           <span><b>{list.filter((u) => u.enabled).length}</b> 个启用</span>
-          {soon > 0 && <span className="text-[var(--weir-warn-ink)]">{soon} 个 7 天内到期</span>}
-          {heavy > 0 && <span className="text-[var(--weir-warn-ink)]">{heavy} 个流量超过 90%</span>}
+          {soon > 0 && <span className="text-[var(--weir-warn-ink)]">{soon} 个需要续期</span>}
+          {heavy > 0 && <span className="text-[var(--weir-warn-ink)]">{heavy} 个额度需处理</span>}
           <span>本月共 {bytes(total)}</span>
         </span>
       ) : "正在读取用户"}
       actions={<Button onClick={() => setForm("new")}>新建用户</Button>}
     />
   );
-  const optionsFor = (u: UserItem): NodeOption[] =>
-    (nodes.data ?? []).filter((n) => n.enabled && (u.all_nodes || (u.node_ids ?? []).includes(n.id)));
   return (
     <div className="stack">
       {header}
       {users.data && users.data.length > 0 && (
-        <Card className="px-[25px] py-[21px]">
-          <div className="mb-[13px] flex flex-wrap items-center justify-between gap-3">
+        <Card className="px-[var(--weir-gap-25)] py-[var(--weir-gap-21)]">
+          <div className="mb-[var(--weir-gap-13)] flex flex-wrap items-center justify-between gap-3">
             <span className="text-meta text-[var(--weir-ink-2)]">全部用户 · 点越大本月流量越多，黄色是需要处理的</span>
-            <span className="weir-legend"><span><i data-tone="ok" />正常</span><span><i data-tone="warn" />需要处理</span><span><i data-tone="off" />已停用</span></span>
+            <span className="weir-legend"><span><i data-tone="ok" />可使用</span><span><i data-tone="warn" />需要处理</span><span><i data-tone="off" />已停用</span></span>
           </div>
-          <DotCrowd label="全部用户 · 点越大本月流量越多，黄色是需要处理的" onSelect={(id) => navigate(`/users/${id}`)} members={users.data.map((u) => ({ id: String(u.id), name: u.name || u.email, weight: Number.isFinite(u.used) ? u.used / Math.max(1, ...list.map((v) => Number.isFinite(v.used) ? v.used : 0)) : null, tone: !u.enabled ? "off" : needsCare(u) ? "warn" : "ok" }))} />
+          <DotCrowd label="全部用户 · 点越大本月流量越多，状态由中心提供" onSelect={(id) => detailParam.open(Number(id))} members={users.data.map((u) => ({ id: String(u.id), name: u.name || u.email, weight: Number.isFinite(u.used) ? u.used / Math.max(1, ...list.map((v) => Number.isFinite(v.used) ? v.used : 0)) : null, tone: objectStatus(u.object_state)[1] }))} />
         </Card>
       )}
       {users.data && users.data.length > 0 && (
-        <div className="flex flex-wrap items-center gap-[9px]">
+        <div className="flex flex-wrap items-center gap-[var(--weir-gap-9)]">
           <Input className="w-[301px] max-w-full" aria-label="搜索邮箱、名称或备注" placeholder="搜索邮箱、名称或备注" value={query} onChange={(e) => setQuery(e.target.value)} />
           <Segmented aria-label="分组" value={groupBy} onValueChange={setGroupBy} options={[["status", "按状态分组"], ["seen", "最近在线"], ["traffic", "流量"]] as const} />
           {groupBy === "seen" && <small className="text-[var(--weir-ink-3)]">最近在线未知，仍按状态排列</small>}
@@ -156,14 +143,14 @@ export function UsersPage() {
               <TableBody>
                 {[...users.data].filter((u) => `${u.email} ${u.name ?? ""}`.toLowerCase().includes(query.trim().toLowerCase())).sort((a, b) => groupBy === "traffic" ? b.used - a.used : Number(needsCare(b)) - Number(needsCare(a))).map((u, i, list) => (
                   <Fragment key={u.id}>
-                  {groupBy === "status" && (i === 0 || needsCare(list[i - 1]) !== needsCare(u)) && <TableRow data-group-row=""><TableCell colSpan={8}>{needsCare(u) ? `需要处理 · ${list.filter(needsCare).length}` : <>正常 · {list.filter((item) => !needsCare(item)).length} <button type="button" className="ml-[9px] font-semibold text-[var(--weir-accent-text)] active:opacity-60 touch:min-h-11 touch:min-w-11" onClick={() => setShowNormal((v) => !v)}>{showNormal ? "收起" : "展开"}</button></>}</TableCell></TableRow>}
+                  {groupBy === "status" && (i === 0 || needsCare(list[i - 1]) !== needsCare(u)) && <TableRow data-group-row=""><TableCell colSpan={8}>{needsCare(u) ? `需要处理 · ${list.filter(needsCare).length}` : <>正常 · {list.filter((item) => !needsCare(item)).length} <Button size="icon-sm" variant="ghost" className="ml-[var(--weir-gap-9)]" aria-expanded={showNormal} aria-label={showNormal ? "收起正常用户" : "展开正常用户"} title={showNormal ? "收起正常用户" : "展开正常用户"} onClick={() => setShowNormal((v) => !v)}><ChevronRight className={`transition-[rotate] duration-[var(--weir-spring-dur)] ease-[var(--weir-spring)] ${showNormal ? "rotate-90" : "rotate-0"}`} /></Button></>}</TableCell></TableRow>}
                   {(!needsCare(u) && !showNormal) ? null : <TableRow data-state={picked.includes(u.id) ? "selected" : undefined} {...dataObject({ type: "user", id: u.id })}>
                     <TableCell><Checkbox aria-label={"选择 " + u.email} checked={picked.includes(u.id)} onCheckedChange={(on) => setPicked((ids) => on ? [...ids, u.id] : ids.filter((id) => id !== u.id))} /></TableCell>
                     <TableCell>
-                      <span className="flex items-center gap-[9px]">
+                      <span className="flex items-center gap-[var(--weir-gap-9)]">
                         <Avatar name={u.name || u.email} />
                         <span className="min-w-0">
-                          <button type="button" className="block max-w-full truncate text-left font-bold text-[var(--weir-ink)] active:opacity-60 touch:min-h-11" onClick={() => navigate(`/users/${u.id}`)}>{u.name || u.email.split("@")[0]}</button>
+                          <ObjectLink className="block max-w-full truncate text-left font-bold" to={{ type: "user", id: u.id, name: u.name || u.email }}>{u.name || u.email.split("@")[0]}</ObjectLink>
                           <small className="block truncate text-fine text-[var(--weir-ink-3)]">{u.email}{u.role === "admin" ? " · 管理员" : ""}</small>
                         </span>
                       </span>
@@ -175,9 +162,9 @@ export function UsersPage() {
                     <TableCell className="font-[family-name:var(--weir-mono)]">{u.links}</TableCell>
                     <TableCell className="whitespace-nowrap">
                       <span className={careLabel(u)?.includes("到期") ? "font-[family-name:var(--weir-mono)] text-[var(--weir-warn-ink)]" : "font-[family-name:var(--weir-mono)]"}>{u.expires_at ? date(u.expires_at) : "长期"}</span>
-                      <span className="ml-[5px] text-meta text-[var(--weir-ink-3)]">{u.expires_at ? "到期" : u.monthly_reset ? "每月重置" : ""}</span>
+                      <span className="ml-[var(--weir-gap-5)] text-meta text-[var(--weir-ink-3)]">{u.expires_at ? "到期" : u.monthly_reset ? "每月重置" : ""}</span>
                     </TableCell>
-                    <TableCell>{careLabel(u) ? <Badge variant="soft" tone={u.enabled ? "warn" : "neutral"}>{careLabel(u)}</Badge> : <span className="text-meta text-[var(--weir-ink-3)]">正常</span>}</TableCell>
+                    <TableCell>{careLabel(u) ? <Badge variant="soft" tone={objectStatus(u.object_state)[1] === "bad" ? "bad" : objectStatus(u.object_state)[1] === "warn" ? "warn" : "neutral"}>{careLabel(u)}</Badge> : <span className="text-meta text-[var(--weir-ink-3)]">可使用</span>}</TableCell>
                     <TableCell>
                       <span className="flex flex-nowrap justify-end gap-1.5">
                         <Button size="sm" variant="ghost" onClick={() => setForm(u)}>编辑</Button>
@@ -198,16 +185,17 @@ export function UsersPage() {
         close={() => setForm(null)}
         saved={(u) => {
           // 新建后直接打开详情：订阅链接与二维码就在那里，一次性密码也显示在顶部。
+          client.setQueryData<UserItem[]>(["users"], old => old ? [...old.filter(item => item.id !== u.id), u] : [u]);
           void users.refetch();
           if (form === "new") {
             setCreated(u);
-            navigate(`/users/${u.id}?tab=links`);
+            navigate(`/users?user=${u.id}&detail_tab=links`);
           }
           setForm(null);
           toast("已保存", { tone: "ok" });
         }}
       />
-      <Sheet
+      <Dialog
         open={!!detail}
         onOpenChange={(o) => {
           if (!o) {
@@ -217,8 +205,10 @@ export function UsersPage() {
         }}
       >
         {detail && (
-          <SheetContent side="right" title={detail.name || detail.email} description={`${detail.email} · ${bytes(detail.used)} / ${detail.unlimited ? "不限" : bytes(detail.quota)}`} className="w-full sm:max-w-[640px]">
-            <div className="stack p-4">
+          <DialogContent size="xl">
+            <DialogTitle>{detail.name || detail.email}</DialogTitle>
+            <DialogDescription>{objectStatus(detail.object_state)[2]}</DialogDescription>
+            <div className="stack">
               {created?.id === detail.id && (
                 <Notice role="status" tone="ok">
                   已创建 {created.email}，默认链接已生成，导入下面的地址或扫描二维码即可使用。
@@ -230,14 +220,11 @@ export function UsersPage() {
                 </Notice>
               )}
               <WithheldNotice userId={detail.id} />
-              <SectionHeader title="流量" description="最近 1 / 6 / 24 小时，按 VPS 上报的计数；缺失的时段显示为未知。" />
-              <HistoryCharts path={`/admin/users/${detail.id}/history`} />
-              <LinkPanel base={`/admin/users/${detail.id}`} planEnds={detail.expires_at} showCredentials inlineQr={created?.id === detail.id} />
-              <ChainPanel base={`/admin/users/${detail.id}`} admin />
+              <UserDetailView key={detail.id} user={detail} users={users.data ?? []} inlineQr={created?.id === detail.id} />
             </div>
-          </SheetContent>
+          </DialogContent>
         )}
-      </Sheet>
+      </Dialog>
     </div>
   );
 }

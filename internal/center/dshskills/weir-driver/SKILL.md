@@ -16,7 +16,7 @@ description: 管理员要支持新的 Xray / sing-box / mihomo 版本、内核�
 5. `submit_draft` 提交 `driver.save`。被拒时按返回的原因改：解析错误、样例配置生成失败、内核检查失败的输出、VPS 实测失败。
 6. 以下情况回答「需要 Weir 发版」，不要硬写驱动：全新的协议；需要新的统计方式；需要新的节点链接或订阅格式；引擎没有提供需要的变量。
 
-mihomo 驱动仅用于临时客户端实测与中心 Clash 订阅检查，不提供服务端方案；无 presets 时检查最小客户端配置。Xray 与 sing-box 保留节点服务端和服务端出站，sing-box 也用于中心 sing-box 订阅检查。三者以独立程序调用，mihomo 不参与常驻配置应用或开机恢复。
+mihomo 驱动用于临时客户端实测、中心 Clash 订阅检查和 Gate 的认证回环辅助出站，不提供公网服务端方案；无 presets 时检查最小客户端配置。Xray 与 sing-box 提供公网节点服务端，sing-box 也用于回环辅助出站与中心订阅检查。辅助内核按固定版本参与配置应用、健康检查、回滚和开机恢复，三者以独立程序调用。
 
 ## 格式
 
@@ -39,8 +39,14 @@ mihomo 驱动仅用于临时客户端实测与中心 Clash 订阅检查，不提
 - `{$merge: [对象, …]}` 合并对象。
 - 表达式：路径、字面量、`== != < <= > >=`、`in`、`not`、`and`、`or`、括号；过滤器 `default(x)`、`trim`、`lower`、`int`、`split`（逗号）、`rules`（逗号 / 换行）、`lines`、`cidr`、`join(sep)`、`list`、`map(key)`、`where(key, v)`、`len`、`first(a, b)`、`flat`。
 
-变量：`inbounds`（ib：节点参数 + tag、stats_tag、clients）、`outbounds`（ob：tag、protocol、address、port、username、password、group、s.出口设置：security、network、sni、fingerprint、alpn、public_key、short_id、path、host、service_name、mode（XHTTP 模式）、flow、method 等）、`routes`（r：outbound、balancer、inbound、user、domain、ip、protocol）、`groups`、`stats`（统计端口）、`probe`。凭据只能引用，不能生成。
+变量：`inbounds`（ib：节点参数 + tag、stats_tag、clients）、`outbounds`（ob：tag、protocol、address、port、username、password、group、s.出口设置：security、network、sni、fingerprint、alpn、public_key、short_id、path、host、service_name、mode（XHTTP 模式）、flow、method 等）、`routes`（r：outbound、balancer、inbound、user、domain、ip、protocol）、`groups`、`stats`（统计端口）、`probe`。`hosted-outbounds` 驱动另接收 `bridges`（bridge：tag、port、username、password、target；mihomo 另有规范化的 client），只允许认证回环监听，出口和认证不得改写，mihomo 默认规则必须拒绝。凭据只能引用，不能生成。
 
 ## 引擎强制检查（写错也绕不过）
 
 统计 / API 只监听回环且用分配的端口；入站只能监听分配给节点的端口；证书只能在托管目录；不能写日志文件；sing-box 的 experimental 只允许 v2ray_api。
+
+`native-connections` 驱动可接收 `observer.listen` 和 `observer.secret`，只开启中心分配的认证回环观测 API。不得改写地址、端口、认证或启用额外控制器设置；未分配时必须省略 API。
+
+sing-box 开启观测时在业务规则前使用原生 `sniff` 动作采集 HTTP/TLS/QUIC 域名，不设置 `override_destination`，不改写原目标。原生 API 缺失目标 IP 或用户身份时保持部分覆盖与未知，不通过额外 DNS 查询猜测连接实际目的地。
+
+`udp-over-tcp` 声明 sing-box 原生 Shadowsocks UoT v2。`ob.s.udp_over_tcp` 只允许 Shadowsocks 出站，开启时必须输出 `udp_over_tcp: {enabled: true, version: 2}`；内部入站的 `ib.tcp_only` 必须只监听 TCP，供认证后的 UoT 还原 UDP。没有能力声明的驱动明确拒绝，不能忽略参数。

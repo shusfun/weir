@@ -34,11 +34,13 @@ import (
 func (s *Server) backupRoutes(admin *gin.RouterGroup) {
 	admin.GET("/backup/export", s.exportBackup)
 	admin.POST("/backup/import", s.importBackup)
+	admin.POST("/backup/import/preview", s.previewBackup)
 	admin.GET("/backup/webdav", s.getWebdav)
 	admin.PUT("/backup/webdav", s.putWebdav)
 	admin.POST("/backup/webdav/run", s.asJob("立即备份到 WebDAV", "已取消；WebDAV 上可能留下一个没传完的文件", s.runWebdav))
 	admin.GET("/backup/webdav/files", s.listWebdav)
 	admin.POST("/backup/webdav/restore", s.restoreWebdav)
+	admin.POST("/backup/webdav/restore/preview", s.restoreWebdav)
 }
 
 type backupFile struct {
@@ -111,7 +113,11 @@ func (s *Server) ImportSubscriptions(ctx context.Context, raw []byte) (ImportSta
 	return st, err
 }
 
-func (s *Server) importSubscriptionsLocked(ctx context.Context, raw []byte) (ImportStats, error) {
+func (s *Server) importSubscriptionsLocked(ctx context.Context, raw []byte, controls ...*restoreControl) (ImportStats, error) {
+	control := &restoreControl{}
+	if len(controls) > 0 {
+		control = controls[0]
+	}
 	var st ImportStats
 	var b backupFile
 	if err := json.Unmarshal(raw, &b); err != nil {
@@ -132,6 +138,14 @@ func (s *Server) importSubscriptionsLocked(ctx context.Context, raw []byte) (Imp
 		return st, err
 	}
 	defer tx.Rollback()
+	revision, err := tx.LockSubscriptionRevision(ctx)
+	if err != nil {
+		return st, err
+	}
+	if control.Revision != "" && control.Revision != revision {
+		return st, errBackupPreviewStale
+	}
+	control.Revision = revision
 	sources, nodes := map[string]int{}, map[string]int{}
 	srcPos, _ := tx.SubSource.Query().Count(ctx)
 	nodePos, _ := tx.SubNode.Query().Count(ctx)
@@ -146,7 +160,7 @@ func (s *Server) importSubscriptionsLocked(ctx context.Context, raw []byte) (Imp
 		switch {
 		case strings.HasPrefix(strings.ToLower(u), "http://") || strings.HasPrefix(strings.ToLower(u), "https://"):
 			if _, err := subgroup.CheckURL(u); err != nil && !(s.AllowPrivateSources && err.Error() == "source_url_private") {
-				st.Skipped = append(st.Skipped, fmt.Sprintf("%s：订阅地址不安全（%s）", firstNonEmpty(name, u), err.Error()))
+				st.Skipped = append(st.Skipped, fmt.Sprintf("%s：订阅地址不安全（%s）", firstNonEmpty(name, id, "未命名订阅"), err.Error()))
 				continue
 			}
 			ua := str(it, "customUserAgent")
@@ -323,6 +337,14 @@ func (s *Server) importSubscriptionsLocked(ctx context.Context, raw []byte) (Imp
 	if err := validateProfileGraph(rows); err != nil {
 		return st, err
 	}
+	if control.Preview {
+		return st, tx.Rollback()
+	}
+	if control.Receipt != "" {
+		if _, err = tx.Resource.Create().SetKind("backup-import").SetKey(control.Receipt).SetData(map[string]any{"trace_id": taskTrace(ctx)}).Save(ctx); err != nil {
+			return st, err
+		}
+	}
 	if err = tx.Commit(); err != nil {
 		return st, err
 	}
@@ -428,9 +450,10 @@ func (s *Server) exportBackup(c *gin.Context) {
 func (s *Server) importBackup(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<20)
 	var req struct {
-		Content  string `json:"content"`
-		Password string `json:"password"`
-		Code     string `json:"code"`
+		Content      string `json:"content"`
+		PreviewToken string `json:"preview_token"`
+		Password     string `json:"password"`
+		Code         string `json:"code"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		failure(c, 400, "invalid_request")
@@ -439,9 +462,9 @@ func (s *Server) importBackup(c *gin.Context) {
 	if !s.reauth(c, req.Password, req.Code) {
 		return
 	}
-	stats, err := s.ImportSubscriptions(c.Request.Context(), []byte(req.Content))
+	stats, err := s.confirmBackup(c.Request.Context(), c.GetInt("user_id"), []byte(req.Content), req.PreviewToken, "local")
 	if err != nil {
-		failDetail(c, 400, "import_failed", err.Error(), nil)
+		backupFailure(c, err)
 		return
 	}
 	s.audit(c, "backup.import", "", fmt.Sprintf("ok sources=%d nodes=%d profiles=%d templates=%d skipped=%d", stats.Sources, stats.Nodes, stats.Profiles, stats.Templates, len(stats.Skipped)))
@@ -679,12 +702,16 @@ var backupName = regexp.MustCompile(`^weir-subscriptions-[0-9A-Za-z_.-]{1,64}\.j
 
 func (s *Server) restoreWebdav(c *gin.Context) {
 	var req struct {
-		File     string `json:"file"`
-		Revision string `json:"revision"`
-		Password string `json:"password"`
-		Code     string `json:"code"`
+		File         string `json:"file"`
+		Revision     string `json:"revision"`
+		Password     string `json:"password"`
+		Code         string `json:"code"`
+		PreviewToken string `json:"preview_token"`
 	}
-	if !bind(c, &req) || !s.reauth(c, req.Password, req.Code) {
+	if !bind(c, &req) {
+		return
+	}
+	if !strings.HasSuffix(c.FullPath(), "/preview") && !s.reauth(c, req.Password, req.Code) {
 		return
 	}
 	if !backupName.MatchString(req.File) {
@@ -711,14 +738,23 @@ func (s *Server) restoreWebdav(c *gin.Context) {
 		failDetail(c, 502, "webdav_failed", fmt.Sprintf("webdav_http_%d", resp.StatusCode), nil)
 		return
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, (16<<20)+1))
 	if err != nil {
 		failInternal(c, 502, "webdav_failed", err)
 		return
 	}
-	stats, err := s.ImportSubscriptions(ctx, data)
+	if len(data) > 16<<20 {
+		failure(c, 413, "backup_too_large")
+		return
+	}
+	origin := "webdav:" + req.Revision + ":" + req.File
+	if strings.HasSuffix(c.FullPath(), "/preview") {
+		s.respondBackupPreview(c, data, origin)
+		return
+	}
+	stats, err := s.confirmBackup(ctx, c.GetInt("user_id"), data, req.PreviewToken, origin)
 	if err != nil {
-		failDetail(c, 400, "import_failed", err.Error(), nil)
+		backupFailure(c, err)
 		return
 	}
 	s.audit(c, "backup.webdav.restore", req.File, "ok")

@@ -1,6 +1,9 @@
 package subscription
 
-import "testing"
+import (
+	"encoding/base64"
+	"testing"
+)
 
 func TestInventoryIdentityPreservesTransport(t *testing.T) {
 	a := "vless://test@example.com:443?security=tls&sni=a.example&type=ws&path=%2Fone#first"
@@ -17,5 +20,19 @@ func TestInventoryIdentityPreservesTransport(t *testing.T) {
 		if InventoryIdentity(a) == InventoryIdentity(other) {
 			t.Fatal("connection options lost")
 		}
+	}
+}
+
+func TestSSRInventoryIdentityIgnoresOnlyDisplayMetadata(t *testing.T) {
+	enc := func(s string) string { return base64.RawURLEncoding.EncodeToString([]byte(s)) }
+	link := func(password, obfs, name string) string {
+		return "ssr://" + enc("example.test:443:origin:aes-256-cfb:plain:"+enc(password)+"/?obfsparam="+enc(obfs)+"&remarks="+enc(name)+"&group="+enc(name))
+	}
+	id := InventoryIdentity(link("secret", "host.test", "first"))
+	if InventoryIdentity(link("secret", "host.test", "renamed")) != id {
+		t.Fatal("SSR display name changed identity")
+	}
+	if InventoryIdentity(link("other", "host.test", "first")) == id || InventoryIdentity(link("secret", "other.test", "first")) == id {
+		t.Fatal("SSR connection parameter lost")
 	}
 }

@@ -755,8 +755,16 @@ func (l *dnsLab) alias(name string, ip net.IP) {
 func (l *dnsLab) aliasIP(name string) (net.IP, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	ip, ok := l.aliases[strings.TrimSuffix(name, ".")]
-	return ip, ok
+	name = strings.TrimSuffix(name, ".")
+	if ip, ok := l.aliases[name]; ok {
+		return ip, true
+	}
+	for suffix, ip := range l.aliases {
+		if strings.HasPrefix(suffix, ".") && strings.HasSuffix(name, suffix) {
+			return ip, true
+		}
+	}
+	return nil, false
 }
 
 func (l *dnsLab) unique(prefix string) string {
@@ -1346,7 +1354,7 @@ func waitListen(t *testing.T, port int) {
 	}
 }
 
-func socks5UDP(proxyPort int, dest string, payload []byte, timeout time.Duration) ([]byte, time.Duration, error) {
+func socks5UDP(proxyPort int, dest string, payload []byte, timeout time.Duration, auth ...string) ([]byte, time.Duration, error) {
 	start := time.Now()
 	conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(proxyPort)), timeout)
 	if err != nil {
@@ -1354,12 +1362,27 @@ func socks5UDP(proxyPort int, dest string, payload []byte, timeout time.Duration
 	}
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(timeout))
-	if _, err = conn.Write([]byte{5, 1, 0}); err != nil {
+	method := byte(0)
+	if len(auth) == 2 {
+		method = 2
+	}
+	if _, err = conn.Write([]byte{5, 1, method}); err != nil {
 		return nil, time.Since(start), err
 	}
 	buf := make([]byte, 16)
-	if _, err = io.ReadFull(conn, buf[:2]); err != nil || buf[1] != 0 {
+	if _, err = io.ReadFull(conn, buf[:2]); err != nil || buf[1] != method {
 		return nil, time.Since(start), fmt.Errorf("socks greeting: %v", err)
+	}
+	if method == 2 {
+		packet := append([]byte{1, byte(len(auth[0]))}, []byte(auth[0])...)
+		packet = append(packet, byte(len(auth[1])))
+		packet = append(packet, []byte(auth[1])...)
+		if _, err = conn.Write(packet); err != nil {
+			return nil, time.Since(start), err
+		}
+		if _, err = io.ReadFull(conn, buf[:2]); err != nil || buf[0] != 1 || buf[1] != 0 {
+			return nil, time.Since(start), fmt.Errorf("socks authentication rejected: %v", err)
+		}
 	}
 	if _, err = conn.Write([]byte{5, 3, 0, 1, 0, 0, 0, 0, 0, 0}); err != nil {
 		return nil, time.Since(start), err

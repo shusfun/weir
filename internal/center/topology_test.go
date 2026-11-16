@@ -53,7 +53,13 @@ func TestGateTopologyUsersNodesRoutesExits(t *testing.T) {
 	mustJSON(t, admin, "PATCH", "/api/v1/admin/users/"+uid, map[string]any{"allow_chain": true}, 200)
 	ch := mustJSON(t, admin, "POST", "/api/v1/admin/users/"+uid+"/chains", map[string]any{"name": "家里", "entry_node_id": n["id"], "exit": map[string]any{"kind": "socks5", "address": "203.0.113.5", "port": 1080}, "skip_probe": true}, 200)
 	eg := pairFakeGate(t, admin)
-	eg.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 3, Version: "test", Arch: "amd64"})
+	eg.sendHeartbeat(contracts.Heartbeat{NodeTestVersion: 3, Version: "test", Arch: "amd64"})
+	for _, gate := range []*fakeGate{g, eg} {
+		if err := s.Store.Tasks.SetCapabilities(t.Context(), int(gate.id), contracts.CapabilityDocument{Protocol: contracts.AgentProtocol, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.TaskCoreInstall: contracts.TaskVersion, contracts.ActionChainProbe: 1}, ConfigFeatures: map[string]int{contracts.ConfigUoT: 1, contracts.ConfigOutboundBridges: 1}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	serveUoTProbeTasks(t, g)
 	rx := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(eg.id), "preset": "vless-reality", "skip_probe": true}, 200)
 	via := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "ss2022", "skip_probe": true, "exit": map[string]any{"kind": "node", "node_id": rx["id"]}}, 200)
 	xid := exitOwner(int(via["exit_id"].(float64)))

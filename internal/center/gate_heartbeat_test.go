@@ -26,7 +26,7 @@ func TestHeartbeatV2AvoidsUnchangedBusinessWritesAndKeepsPresence(t *testing.T) 
 	full.Digest, _ = contracts.HeartbeatDigest(full)
 	call := func(h contracts.Heartbeat) contracts.HeartbeatReply {
 		t.Helper()
-		code, body := g.call("POST", "/api/v1/agent/heartbeat", h)
+		code, body := g.call("POST", "/api/v1/agent/heartbeat/v2", h)
 		var reply contracts.HeartbeatReply
 		if code != 200 || json.Unmarshal(body, &reply) != nil {
 			t.Fatalf("heartbeat: %d %s", code, body)
@@ -91,12 +91,12 @@ func TestHeartbeatV2AvoidsUnchangedBusinessWritesAndKeepsPresence(t *testing.T) 
 	}
 	bad := full
 	bad.Hostname = "forged"
-	if code, _ := g.call("POST", "/api/v1/agent/heartbeat", bad); code != 400 {
+	if code, _ := g.call("POST", "/api/v1/agent/heartbeat/v2", bad); code != 400 {
 		t.Fatalf("forged digest accepted: %d", code)
 	}
 	bad = light
 	bad.Version = "hidden-change"
-	if code, _ := g.call("POST", "/api/v1/agent/heartbeat", bad); code != 400 {
+	if code, _ := g.call("POST", "/api/v1/agent/heartbeat/v2", bad); code != 400 {
 		t.Fatalf("partial snapshot mutation accepted: %d", code)
 	}
 }

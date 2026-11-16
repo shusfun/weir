@@ -51,7 +51,7 @@ func TestWorkerTaskTimelineReadsOnlyFromOriginalGate(t *testing.T) {
 	s, admin := newInstalledServer(t)
 	g := pairFakeGate(t, admin)
 	heartbeat(t, g, contracts.Heartbeat{Version: "test", Arch: "amd64"})
-	caps := contracts.CapabilityDocument{Protocol: contracts.AgentProtocol, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.ActionCoreRestart: 1, contracts.TaskTraceRead: 1}}
+	caps := contracts.CapabilityDocument{Protocol: contracts.AgentProtocol, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.TaskCoreInstall: contracts.TaskVersion, contracts.ActionCoreRestart: 1, contracts.TaskTraceRead: 1}}
 	code, body := g.call("POST", "/api/v1/agent/poll", contracts.AgentPoll{Protocol: contracts.AgentProtocol, Capabilities: &caps, Resources: contracts.WorkerResources{Concurrency: 1}})
 	var first contracts.AgentPollReply
 	if code != 200 || json.Unmarshal(body, &first) != nil {

@@ -160,11 +160,7 @@ func (s *Server) relayFetch(ctx context.Context, gid int, req contracts.AssetFet
 		}
 		if time.Since(session.CreatedAt) > relayPickup {
 			task, lookupErr := s.Store.Tasks.Legacy(ctx, session.ActionID)
-			if errors.Is(lookupErr, sql.ErrNoRows) {
-				if action.Status == gateaction.StatusPending {
-					return errors.New("VPS 没有领取中转任务")
-				}
-			} else if lookupErr != nil {
+			if lookupErr != nil {
 				return lookupErr
 			} else if task.Status == "pending" {
 				return errors.New("VPS 没有领取中转任务")
@@ -182,8 +178,7 @@ func (s *Server) relayFetch(ctx context.Context, gid int, req contracts.AssetFet
 	}
 }
 
-// Leased workers carry their current attempt on each upload request. Legacy
-// callers are accepted only while this session has no new-protocol task.
+// Uploads belong to the currently leased attempt, including resumed chunks.
 func (s *Server) relayCaller(c *gin.Context) (relaySession, error) {
 	session, err := s.loadRelay(c.Request.Context(), c.Param("id"), gateFrom(c).ID)
 	if err != nil {
@@ -195,14 +190,7 @@ func (s *Server) relayCaller(c *gin.Context) (relaySession, error) {
 func (s *Server) checkRelayLease(ctx context.Context, session relaySession, id, attemptText, token string) error {
 	task, err := s.Store.Tasks.Legacy(ctx, session.ActionID)
 	if errors.Is(err, sql.ErrNoRows) {
-		action, e := s.Store.Ent.GateAction.Get(ctx, session.ActionID)
-		if e != nil {
-			return e
-		}
-		if action.GateID != session.GateID || action.Status != gateaction.StatusRunning || !time.Now().Before(action.ExpiresAt) {
-			return errors.New("task_lease_lost")
-		}
-		return nil
+		return errors.New("task_lease_lost")
 	}
 	if err != nil {
 		return err

@@ -16,8 +16,11 @@ func (a *Agent) probeTask(ctx context.Context, task contracts.Task) (json.RawMes
 	var cfg contracts.GateConfig
 	var node contracts.NodeProbeTask
 	var batch contracts.SubscriptionProbeTask
-	if task.Kind == contracts.TaskNodeProbe {
+	if task.Kind == contracts.TaskNodeProbe || task.Kind == contracts.TaskNodeProbeXray {
 		if err := contracts.DecodeStrict(task.Payload, &node, contracts.MaxTaskPayload); err != nil {
+			return nil, err
+		}
+		if err := contracts.ValidateTaskPayload(task.Kind, task.Version, task.Payload); err != nil {
 			return nil, err
 		}
 		cfg.Kernels, cfg.Drivers = node.Kernels, node.Drivers
@@ -27,21 +30,25 @@ func (a *Agent) probeTask(ctx context.Context, task contracts.Task) (json.RawMes
 		}
 		cfg.Kernels, cfg.Drivers = batch.Kernels, batch.Drivers
 	}
-	k, ok := cfg.Kernels["mihomo"]
+	kernel := "mihomo"
+	if task.Kind == contracts.TaskNodeProbeXray {
+		kernel = "xray"
+	}
+	k, ok := cfg.Kernels[kernel]
 	if !ok || len(cfg.Kernels) != 1 {
 		return nil, errors.New("probe_kernel_missing")
 	}
 	if err := a.ensureKernels(ctx, cfg); err != nil {
 		return nil, err
 	}
-	d, err := kernelconf.DriverFor(cfg, "mihomo")
+	d, err := kernelconf.DriverFor(cfg, kernel)
 	if err != nil || d == nil {
 		return nil, errors.New("probe_driver_invalid")
 	}
 	finish := beginTaskStage(ctx, "node.probe", "gate.probeTask")
 	defer func() { finish(err) }()
-	bin := filepath.Join(a.P.KernelsDir, "mihomo-"+k.Version)
-	if task.Kind == contracts.TaskNodeProbe {
+	bin := filepath.Join(a.P.KernelsDir, kernel+"-"+k.Version)
+	if task.Kind == contracts.TaskNodeProbe || task.Kind == contracts.TaskNodeProbeXray {
 		result, e := nodeprobe.Run(ctx, nodeprobe.Options{Binary: bin, Run: d.Run, Check: d.Check, Client: node.Client, UDP: node.UDP, Target: node.Credentials.URL, Token: node.Credentials.Authorization, PublicOnly: true})
 		// A failed connectivity check is a valid result, distinct from a failed
 		// worker execution. Raw child-process output never crosses this boundary.

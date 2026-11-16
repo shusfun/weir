@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/shusfun/weir/internal/buildinfo"
 	"github.com/shusfun/weir/internal/fetch"
 	"github.com/shusfun/weir/internal/ghrelease"
+	"github.com/shusfun/weir/internal/store"
 	"github.com/shusfun/weir/internal/store/ent/resource"
 	"github.com/shusfun/weir/packages/contracts"
 )
@@ -27,7 +29,9 @@ import (
 func (g *fakeGate) rawCall(method, path string, body []byte) (int, []byte) {
 	req := httptest.NewRequest(method, "https://example.com"+path, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/octet-stream")
-	req.Header.Set("Authorization", "Bearer "+g.bearer)
+	for key, value := range g.requestHeaders(path) {
+		req.Header.Set(key, value)
+	}
 	w := httptest.NewRecorder()
 	g.c.router.ServeHTTP(w, req)
 	return w.Code, w.Body.Bytes()
@@ -35,7 +39,7 @@ func (g *fakeGate) rawCall(method, path string, body []byte) (int, []byte) {
 
 func (g *fakeGate) heartbeat(version string) contracts.HeartbeatReply {
 	g.t.Helper()
-	code, body := g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{Version: version, Hostname: "hk", Arch: "amd64"})
+	code, body := g.sendHeartbeat(contracts.Heartbeat{Version: version, Hostname: "hk", Arch: "amd64"})
 	if code != 200 {
 		g.t.Fatalf("heartbeat = %d %s", code, body)
 	}
@@ -49,7 +53,7 @@ func (g *fakeGate) nextAction(kind string) contracts.Action {
 	g.t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		code, body := g.call("GET", "/api/v1/agent/actions", nil)
+		code, body := g.pollActions()
 		if code != 200 {
 			g.t.Fatalf("actions = %d %s", code, body)
 		}
@@ -67,7 +71,7 @@ func (g *fakeGate) nextAction(kind string) contracts.Action {
 
 func (g *fakeGate) finish(a contracts.Action, ok bool, msg string, result map[string]any) {
 	g.t.Helper()
-	if code, body := g.call("POST", "/api/v1/agent/actions/"+itoa(int(a.ID)), contracts.ActionResult{ID: a.ID, OK: ok, Error: msg, Result: result}); code != 200 {
+	if code, body := g.finishTask(int(a.ID), contracts.ActionResult{ID: a.ID, OK: ok, Error: msg, Result: result}); code != 204 {
 		g.t.Fatalf("action result = %d %s", code, body)
 	}
 }
@@ -164,8 +168,13 @@ func TestRelayUploadOwnershipAndResume(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "asset.part")
 	var progress atomic.Int64
 	done := make(chan error, 1)
+	transferCtx, cancelTransfer := context.WithCancel(t.Context())
+	var transfers sync.WaitGroup
+	t.Cleanup(func() { cancelTransfer(); transfers.Wait() })
+	transfers.Add(1)
 	go func() {
-		done <- s.relayFetch(context.Background(), int(g.id), contracts.AssetFetch{URLs: []string{"https://github.com/a/b/releases/download/v1/x"}, SHA256: hex.EncodeToString(sum[:]), Size: int64(len(content)), MaxSize: 1 << 20}, dest, fetch.Reporter{Progress: func(d, _, _ int64) { progress.Store(d) }})
+		defer transfers.Done()
+		done <- s.relayFetch(transferCtx, int(g.id), contracts.AssetFetch{URLs: []string{"https://github.com/a/b/releases/download/v1/x"}, SHA256: hex.EncodeToString(sum[:]), Size: int64(len(content)), MaxSize: 1 << 20}, dest, fetch.Reporter{Progress: func(d, _, _ int64) { progress.Store(d) }})
 	}()
 	a := g.nextAction(contracts.ActionAssetFetch)
 	id, _ := a.Payload["upload_id"].(string)
@@ -212,18 +221,23 @@ func TestRelayUploadOwnershipAndResume(t *testing.T) {
 		t.Fatalf("closed upload = %d", code)
 	}
 
-	// Gate 报失败：立刻返回它的原因
+	// Gate 报失败：只投影安全错误码，不传播远端任意文本。
+	transfers.Add(1)
 	go func() {
-		done <- s.relayFetch(context.Background(), int(g.id), contracts.AssetFetch{URLs: []string{"https://github.com/a/b/x"}, SHA256: hex.EncodeToString(sum[:])}, dest, fetch.Reporter{})
+		defer transfers.Done()
+		done <- s.relayFetch(transferCtx, int(g.id), contracts.AssetFetch{URLs: []string{"https://github.com/a/b/x"}, SHA256: hex.EncodeToString(sum[:])}, dest, fetch.Reporter{})
 	}()
 	g.finish(g.nextAction(contracts.ActionAssetFetch), false, "下载失败：github.com 返回 HTTP 403", nil)
-	if err := <-done; err == nil || !strings.Contains(err.Error(), "HTTP 403") {
+	if err := <-done; err == nil || !strings.Contains(err.Error(), "action_failed") {
 		t.Fatalf("failure reason = %v", err)
 	}
 	// Gate 离线：不下发，直接报错
 	old := time.Now().Add(-time.Hour)
-	_ = s.Store.Ent.Gate.UpdateOneID(int(g.id)).SetLastSeenAt(old).Exec(context.Background())
-	if err := s.relayFetch(context.Background(), int(g.id), contracts.AssetFetch{SHA256: hex.EncodeToString(sum[:])}, dest, fetch.Reporter{}); err == nil || !strings.Contains(err.Error(), "离线") {
+	s.Store.Ent.Gate.UpdateOneID(int(g.id)).SetLastSeenAt(old).ExecX(t.Context())
+	if err := s.Store.SetGateObservation(t.Context(), int(g.id), store.GateObservation{SeenAt: old}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.relayFetch(transferCtx, int(g.id), contracts.AssetFetch{SHA256: hex.EncodeToString(sum[:])}, dest, fetch.Reporter{}); err == nil || !strings.Contains(err.Error(), "离线") {
 		t.Fatalf("offline = %v", err)
 	}
 }
@@ -281,7 +295,7 @@ func TestWeirPackageViaGateRelay(t *testing.T) {
 	if code, b := g.rawCall("PUT", "/api/v1/agent/uploads/"+a.Payload["upload_id"].(string)+"?offset=0", body); code != 200 {
 		t.Fatalf("upload = %d %s", code, b)
 	}
-	g.finish(a, true, "", nil)
+	g.finish(a, true, "", map[string]any{"size": len(body)})
 	j, _ := s.jobs.Wait(context.Background(), job.ID)
 	if j.Status != jobDone {
 		t.Fatalf("job = %+v", j)
@@ -322,7 +336,7 @@ func TestHeartbeatReleaseAndManualUpdate(t *testing.T) {
 		t.Fatalf("release = %+v", rel)
 	}
 	// 存下的 self_update 带上进度字段
-	code, _ := g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{Version: "0.1.19", Arch: "amd64", SelfUpdate: &contracts.SelfUpdateStatus{Version: "0.1.20", State: "downloading", Done: 10, Total: 100, Source: "m.example", At: time.Now()}})
+	code, _ := g.sendHeartbeat(contracts.Heartbeat{Version: "0.1.19", Arch: "amd64", SelfUpdate: &contracts.SelfUpdateStatus{Version: "0.1.20", State: "downloading", Done: 10, Total: 100, Source: "m.example", At: time.Now()}})
 	gv := mustJSON(t, admin, "GET", "/api/v1/admin/gates/"+itoa(int(g.id)), nil, 200)
 	su, _ := gv["self_update"].(map[string]any)
 	if code != 200 || su["state"] != "downloading" || su["source"] != "m.example" || su["total"] != float64(100) {
@@ -337,13 +351,17 @@ func TestHeartbeatReleaseAndManualUpdate(t *testing.T) {
 
 	// 单机的本机 Gate（经回环连中心）随中心一起更新
 	_ = s.Store.Ent.Gate.UpdateOneID(int(g.id)).SetCenterURL("http://127.0.0.1:19810").Exec(context.Background())
-	code, body := g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{Version: "0.1.19", Arch: "amd64", Center: "http://127.0.0.1:19810"})
+	code, body := g.sendHeartbeat(contracts.Heartbeat{Version: "0.1.19", Arch: "amd64", Center: "http://127.0.0.1:19810"})
 	var hr contracts.HeartbeatReply
 	_ = json.Unmarshal(body, &hr)
 	if code != 200 || hr.Release != nil {
 		t.Fatalf("colocated release = %+v", hr.Release)
 	}
-	_ = s.Store.Ent.Gate.UpdateOneID(int(g.id)).SetCenterURL("").SetLastSeenAt(time.Now().Add(-time.Hour)).Exec(context.Background())
+	oldSeen := time.Now().Add(-time.Hour)
+	s.Store.Ent.Gate.UpdateOneID(int(g.id)).SetCenterURL("").SetLastSeenAt(oldSeen).ExecX(t.Context())
+	if err := s.Store.SetGateObservation(t.Context(), int(g.id), store.GateObservation{SeenAt: oldSeen}); err != nil {
+		t.Fatal(err)
+	}
 	if w := admin.do("POST", "/api/v1/admin/gates/"+itoa(int(g.id))+"/update", nil, nil); w.Code != 409 || !strings.Contains(w.Body.String(), "gate_offline") {
 		t.Fatalf("offline = %d %s", w.Code, w.Body.String())
 	}

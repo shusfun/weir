@@ -3,17 +3,23 @@
 // busy 时整张表单禁用；errors 按字段 name 分发到对应 Field（服务端返回的字段错误），用户改动该字段后自动隐藏；
 // 服务端字段错误返回后聚焦第一个出错的字段（提交期间表单禁用，焦点已丢失）。
 // 弹窗里的 <Form> 与 <form> 一样：DialogFooter 里的提交按钮自动关联到它。
-import { createContext, useContext, useEffect, useMemo, useRef, type ComponentProps, type FormEvent, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useMemo, useRef, type ComponentProps, type FormEvent, type ReactNode } from "react";
 import { cn } from "cn";
 
-type FormContextValue = { errors: Partial<Record<string, ReactNode>> };
+type FormContextValue = { id: string; busy: boolean; errors: Partial<Record<string, ReactNode>> };
 const FormContext = createContext<FormContextValue | null>(null);
 
 function useFormContext() {
   return useContext(FormContext);
 }
 
+// A nested dialog owns a separate form scope, even when rendered inside a form.
+function FormBoundary({ children }: { children: ReactNode }) {
+  return <FormContext.Provider value={null}>{children}</FormContext.Provider>;
+}
+
 function Form({
+  id,
   busy = false,
   errors,
   onSubmit,
@@ -26,7 +32,9 @@ function Form({
   errors?: Partial<Record<string, ReactNode>>;
   onSubmit?: (e: FormEvent<HTMLFormElement>) => void;
 }) {
-  const value = useMemo(() => ({ errors: errors ?? {} }), [errors]);
+  const generatedId = useId();
+  const formId = id ?? generatedId;
+  const value = useMemo(() => ({ id: formId, busy, errors: errors ?? {} }), [formId, busy, errors]);
   const ref = useRef<HTMLFormElement>(null);
   const hasErrors = !!errors && Object.values(errors).some(Boolean);
   // Field 的布局副作用先于此处执行，出错的控件已带 aria-invalid。
@@ -37,6 +45,7 @@ function Form({
   return (
     <FormContext.Provider value={value}>
       <form
+        id={formId}
         ref={(el) => {
           ref.current = el;
           if (typeof outerRef === "function") outerRef(el);
@@ -70,4 +79,4 @@ function FormGrid({ cols = 2, className, ...props }: ComponentProps<"div"> & { c
   );
 }
 
-export { Form, FormGrid, useFormContext };
+export { Form, FormGrid, FormBoundary, useFormContext };

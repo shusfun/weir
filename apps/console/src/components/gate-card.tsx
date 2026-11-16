@@ -29,7 +29,7 @@ import { NodeWizard } from "./node-wizard";
 import { date } from "../lib/models";
 import { rateText } from "../lib/linkmap";
 import { field, useConsoleContext } from "../lib/console-context";
-import { nodeStatus, protocolNames, relativeTime, type Gate, type NodeItem } from "../lib/core";
+import { objectStatus, nodeStatus, protocolNames, relativeTime, type Gate, type NodeItem } from "../lib/core";
 import { GettingStarted } from "./getting-started";
 
 
@@ -44,11 +44,8 @@ const stateText: Record<Gate["state"], [string, "ok" | "warn" | "bad" | "off"]> 
 
 // gateStatus：在线 = 有心跳且配置已生效；离线、待生效、应用失败都写明。
 function gateStatus(g: Gate): [string, LampTone] {
-  if (g.status === "revoked") return ["已撤销", "off"];
-  if (!g.online) return ["离线", "bad"];
-  if (g.state === "failed") return ["在线 · 配置应用失败", "bad"];
-  if (g.state === "pending") return ["在线 · 配置待生效", "warn"];
-  return ["在线", "ok"];
+  const [label, tone] = objectStatus(g.object_state);
+  return [label, tone];
 }
 
 export function protocolLabel(n: NodeItem) {

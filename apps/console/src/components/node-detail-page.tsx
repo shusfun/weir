@@ -7,6 +7,7 @@ import { exitKindName, probeText } from "./chain-exit";
 import { NodeAccess } from "./node-access";
 import { NodeTestControl } from "./node-test";
 import { PendingExits } from "./pending-exits";
+import { UsageRanking } from "./usage-ranking";
 import { nodeStatus, protocolNames, type Gate, type NodeItem, type NodeTestCheck } from "../lib/core";
 import { rateText } from "../lib/linkmap";
 
@@ -29,12 +30,12 @@ function TestCard({ node }: { node: NodeItem }) {
     return { x: 190 + Math.cos(a) * (19 + k * 23), y: 55 + Math.sin(a) * (9 + k * 9), o: 0.9 - k * 0.15 };
   })).flat();
   return (
-    <Card className="px-[21px] py-[21px]">
+    <Card className="px-[var(--weir-gap-21)] py-[var(--weir-gap-21)]">
       <div className="flex items-center justify-between gap-3">
         <b>最近实测</b>
         <span className="font-[family-name:var(--weir-mono)] text-fine text-[var(--weir-ink-3)]">{t ? `${new Date(t.at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })} · ${t.location === "gate" ? "VPS" : "中心"} · mihomo` : "还没有实测"}</span>
       </div>
-      <svg viewBox="0 0 381 111" className="my-[13px] block h-[111px] w-full" aria-hidden>
+      <svg viewBox="0 0 381 111" className="my-[var(--weir-gap-13)] block h-[111px] w-full" aria-hidden>
         {dots.map((d, i) => <circle key={i} cx={d.x} cy={d.y} r={1.5} opacity={t?.status === "passed" ? d.o : d.o * 0.37} fill={t?.status === "failed" ? "var(--weir-bad)" : "var(--weir-dot-line)"} />)}
       </svg>
       <div className="grid grid-cols-3 gap-3">
@@ -56,10 +57,10 @@ function Segment({ index, kind, title, sub, tone }: { index: number; kind: strin
   );
 }
 
-export function NodeDetailPage({ node: n, gate: g, onEdit, onToggle, onDelete, busy }: { node: NodeItem; gate?: Gate; onEdit: () => void; onToggle: (enabled: boolean) => void; onDelete: () => void; busy: boolean }) {
+export function NodeDetailPage({ node: n, gate: g, onEdit, onToggle, onDelete, busy, tabKey = "tab" }: { node: NodeItem; gate?: Gate; onEdit: () => void; onToggle: (enabled: boolean) => void; onDelete: () => void; busy: boolean; tabKey?: string }) {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
-  const tab = params.get("tab") || "chain";
+  const tab = params.get(tabKey) || "chain";
   const [label, tone] = nodeStatus(n, g);
   const tcpOnly = n.exit?.udp === "unsupported";
   const tags = [protocolNames[n.protocol] ?? n.protocol, securityNames[n.security], String(n.port)].filter(Boolean);
@@ -68,21 +69,22 @@ export function NodeDetailPage({ node: n, gate: g, onEdit, onToggle, onDelete, b
     <div className="stack">
       <ObjectHeader
         back={<Link to="/gates">VPS 与节点</Link>}
-        crumb={<><Link className="text-[var(--weir-accent-text)] no-underline" to={`/gates/${n.gate_id}`}>{g?.name ?? "未知 VPS"}</Link><span className="mx-[7px] font-normal text-[var(--weir-ink-3)]">/</span>{n.name}</>}
-        actions={<><Button variant="outline" onClick={onEdit}>编辑</Button><Button onClick={() => setParams((p) => { p.set("tab", "chain"); return p; }, { replace: true })}>实测</Button></>}
+        crumb={<><Link className="text-[var(--weir-accent-text)] no-underline" to={`/gates/${n.gate_id}`}>{g?.name ?? "未知 VPS"}</Link><span className="mx-[var(--weir-gap-7)] font-normal text-[var(--weir-ink-3)]">/</span>{n.name}</>}
+        actions={<><Button variant="outline" onClick={onEdit}>编辑</Button><Button onClick={() => setParams((p) => { p.set(tabKey, "chain"); return p; }, { replace: true })}>实测</Button></>}
         tone={tone}
-        status={[label === "在线" ? "可用" : label, tcpOnly ? "仅 TCP" : null, g ? `生效配置 r${g.applied_revision}` : null].filter(Boolean).join(" · ")}
+        status={[label, tcpOnly ? "仅 TCP" : null, g ? `生效配置 r${g.applied_revision}` : null].filter(Boolean).join(" · ")}
         title={n.name}
         meta={<span className="weir-tags">{tags.map((t) => <span key={t}>{t}</span>)}</span>}
-        banner={<p className="m-0 max-w-[521px] text-lead text-[var(--weir-ink-2)]">客户端经 {g?.name ?? "未知 VPS"} 进来，{exitName === "直连" ? "直接出去" : `再从${exitName}出去`}。{tcpOnly ? "这个出口传不了 UDP，Weir 会让客户端直接改走 TCP。" : ""}</p>}
+        banner={<p className="m-0 max-w-[521px] text-lead text-[var(--weir-ink-2)]">客户端经 {g?.name ?? "未知 VPS"} 进来，{exitName === "直连" ? "直接出去" : `再从${exitName}出去`}。{tcpOnly ? "这条路径仅提供 TCP，服务端拒绝 UDP 请求。" : ""}</p>}
         aside={<TestCard node={n} />}
       />
-      <Tabs value={tab} onValueChange={(v) => setParams((p) => { p.set("tab", String(v)); return p; }, { replace: true })}>
+      <Tabs value={tab} onValueChange={(v) => setParams((p) => { p.set(tabKey, String(v)); return p; }, { replace: true })}>
         <TabsList aria-label="节点详情">
           <TabsTab value="chain">链路</TabsTab>
           <TabsTab value="credentials">凭据 {n.credentials}</TabsTab>
           <TabsTab value="exit">出口</TabsTab>
           <TabsTab value="ports">端口与防火墙</TabsTab>
+          <TabsTab value="traffic">用量</TabsTab>
           <TabsTab value="log">记录</TabsTab>
         </TabsList>
         <TabsPanel value="chain" className="stack">
@@ -95,8 +97,8 @@ export function NodeDetailPage({ node: n, gate: g, onEdit, onToggle, onDelete, b
           </div>
           <Card className="overflow-hidden p-0">
             <div className="weir-set-row"><div><b>伪装目标</b><div className="text-meta text-[var(--weir-ink-3)]">{String(n.settings?.reality_dest ?? n.settings?.tls_sni ?? "未知")}</div></div><Button size="sm" variant="ghost" onClick={onEdit}>换一个</Button></div>
-            <div className="weir-set-row"><div><b>实测</b><div className="text-meta text-[var(--weir-ink-3)]">长期内部凭据，实测时不改配置、不重启内核</div></div><div className="w-[341px] max-w-full"><NodeTestControl node={n} gate={g} /></div></div>
-            <div className="weir-set-row"><div><b>UDP 处理</b><div className="text-meta text-[var(--weir-ink-3)]">{tcpOnly ? "服务端直接拒绝，客户端立刻改走 TCP" : n.exit?.udp === "supported" ? "出口支持 UDP" : "出口的 UDP 支持未知"}</div></div>{tcpOnly ? <Badge variant="soft" tone="neutral">仅 TCP</Badge> : null}</div>
+            <div className="weir-set-row"><div><b>实测</b><div className="text-meta text-[var(--weir-ink-3)]">短期内部凭据；不扣用户额度，配置变化后结果失效</div></div><div className="w-[341px] max-w-full"><NodeTestControl node={n} gate={g} /></div></div>
+            <div className="weir-set-row"><div><b>UDP 处理</b><div className="text-meta text-[var(--weir-ink-3)]">{tcpOnly ? "服务端拒绝 UDP，不退回入口直出" : n.exit?.udp === "supported" ? "出口支持 UDP" : "出口的 UDP 支持未知"}</div></div>{tcpOnly ? <Badge variant="soft" tone="neutral">仅 TCP</Badge> : null}</div>
             <div className="weir-set-row"><div><b>启用</b><div className="text-meta text-[var(--weir-ink-3)]">停用后这个节点不在任何订阅里，VPS 上也不再监听</div></div><SwitchField label="启用" className="[&_label]:sr-only" checked={n.enabled} disabled={busy} onCheckedChange={onToggle} /></div>
           </Card>
         </TabsPanel>
@@ -110,6 +112,7 @@ export function NodeDetailPage({ node: n, gate: g, onEdit, onToggle, onDelete, b
           <div><Button variant="outline" onClick={() => navigate(`/exits?gate=${n.gate_id}`)}>去出口与分流</Button></div>
         </TabsPanel>
         <TabsPanel value="ports" className="stack"><NodeAccess ports={n.ports} reach={n.reach} /></TabsPanel>
+        <TabsPanel value="traffic" className="stack"><UsageRanking path={`/admin/nodes/${n.id}/usage`} byUser /></TabsPanel>
         <TabsPanel value="log" className="stack">
           <p className="m-0 text-body text-[var(--weir-ink-2)]">这个节点的操作记录在 <Link to={`/ops/audit?q=node:${n.id}`}>操作审计</Link>。</p>
           <div><Button variant="destructive" disabled={busy} onClick={onDelete}>删除节点</Button></div>

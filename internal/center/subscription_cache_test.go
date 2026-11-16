@@ -79,8 +79,8 @@ func TestSubscriptionRawIdentityAndEmptyBaseline(t *testing.T) {
 	// This test changes the effective UA only in memory; the real result fence
 	// accepts the source snapshot, while the raw cache stays UA-specific.
 	s.recordResults(ctx, []subgroup.SourceResult{r})
-	if got := s.Store.Ent.SubSource.GetX(ctx, src.ID); got.KnownNodes != 0 || got.NodeCount != 0 {
-		t.Fatal("empty result retained the old baseline", got.KnownNodes)
+	if got := s.Store.Ent.SubSource.GetX(ctx, src.ID); got.KnownNodes != 12 || r.Error != "source_empty_rejected" || !r.FromCache {
+		t.Fatal("empty result replaced the old baseline", got.KnownNodes, r)
 	}
 	empty = false
 	if body, r := read(a); body == "" || r.Error != "" || r.FromCache {
@@ -200,8 +200,8 @@ func TestSubscriptionGroupCacheIdentityEmptyAndRecovery(t *testing.T) {
 	read("client-a", false)
 	read("client-a", false)
 	read("client-a", false)
-	if calls.Load() != 9 {
-		t.Fatal("valid upstream empty not cached")
+	if calls.Load() != 10 {
+		t.Fatal("rejected empty response was cached as success", calls.Load())
 	}
 }
 

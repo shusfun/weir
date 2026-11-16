@@ -26,7 +26,7 @@ func (p WorkerBudget) Validate() error {
 
 func CPUHeavy(kind string) bool {
 	switch kind {
-	case TaskLayaClassify, TaskExternalConvert:
+	case TaskLayaClassify:
 		return true
 	}
 	return false

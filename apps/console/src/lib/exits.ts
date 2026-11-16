@@ -12,5 +12,5 @@ export function useExitCatalog(admin: boolean, gateId?: number) {
 }
 export function exitTitle(e: ExitItem) { return e.summary?.name || e.remark || "地区未知"; }
 export function exitInput(e: ExitItem): ExitSpec {
-  return { kind:e.kind, remark:e.remark, address:e.address, port:e.port, username:e.username, password:e.password, link:e.link, node_id:e.node_id, ...e.source };
+  return { kind:e.kind, remark:e.remark, address:e.address, port:e.port, username:e.username, password:e.password, link:e.link, node_id:e.node_id, identity:e.identity, insecure_identities:e.insecure_identities, ...e.source };
 }

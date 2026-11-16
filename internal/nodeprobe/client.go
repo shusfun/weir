@@ -1,4 +1,4 @@
-// Package nodeprobe 用短时 mihomo 客户端实测已部署节点。
+// Package nodeprobe 用短时独立内核客户端实测已部署节点。
 package nodeprobe
 
 import (
@@ -74,12 +74,15 @@ func (t *tail) String() string {
 	return terminalEscape.ReplaceAllString(string(t.b), "")
 }
 
-func args(template []string, path string) []string {
+func args(template []string, path string, dataDir ...bool) []string {
 	out := append([]string(nil), template...)
 	for i := range out {
 		out[i] = strings.ReplaceAll(out[i], "{config}", path)
 	}
-	return append(out, "-d", filepath.Dir(path))
+	if len(dataDir) == 0 || dataDir[0] {
+		return append(out, "-d", filepath.Dir(path))
+	}
+	return out
 }
 
 func freePort(network string) (int, error) {
@@ -105,6 +108,10 @@ func Run(ctx context.Context, o Options) (Result, error) {
 	if o.UDP {
 		r.UDP = Check{Status: "unknown"}
 	}
+	if err := o.Client.Validate(); err != nil {
+		return r, err
+	}
+	xray := o.Client.XHTTP != nil
 	step := func(s string) {
 		if o.Step != nil {
 			o.Step(s)
@@ -120,6 +127,7 @@ func Run(ctx context.Context, o Options) (Result, error) {
 		return r, err
 	}
 	var tunnels []any
+	var udpInbounds []any
 	servers := o.UDPServers
 	if len(servers) == 0 {
 		servers = []string{"1.1.1.1:53", "8.8.8.8:53"}
@@ -140,16 +148,39 @@ func Run(ctx context.Context, o Options) (Result, error) {
 				return r, err
 			}
 			udpPorts = append(udpPorts, p)
-			tunnels = append(tunnels, map[string]any{"network": []string{"udp"}, "address": net.JoinHostPort("127.0.0.1", fmt.Sprint(p)), "target": net.JoinHostPort(host, fmt.Sprint(targetPort)), "proxy": o.Client.Target})
+			if xray {
+				udpInbounds = append(udpInbounds, map[string]any{"listen": "127.0.0.1", "port": p, "protocol": "dokodemo-door", "settings": map[string]any{"address": host, "port": targetPort, "network": "udp"}})
+			} else {
+				tunnels = append(tunnels, map[string]any{"network": []string{"udp"}, "address": net.JoinHostPort("127.0.0.1", fmt.Sprint(p)), "target": net.JoinHostPort(host, fmt.Sprint(targetPort)), "proxy": o.Client.Target})
+			}
 		}
 	}
 	cfg := o.Client.Config(socks)
+	setHosts := func(hosts map[string]any) {
+		if xray {
+			cfg["dns"] = map[string]any{"hosts": hosts}
+		} else {
+			cfg["hosts"] = hosts
+		}
+	}
 	if o.PublicOnly {
-		hosts, err := PublicHosts(ctx, o.Client.Proxies, o.Target)
+		proxies := o.Client.Proxies
+		if xray {
+			proxies = []map[string]any{{"server": o.Client.XHTTP.Server, "port": o.Client.XHTTP.Port}}
+		}
+		hosts, err := PublicHosts(ctx, proxies, o.Target)
 		if err != nil {
 			return r, err
 		}
-		cfg["hosts"] = hosts
+		setHosts(hosts)
+		if xray {
+			// Pin the dialled endpoint after public-address validation while
+			// retaining the original TLS name and XHTTP Host.
+			if ips, ok := hosts[o.Client.XHTTP.Server].([]string); ok && len(ips) > 0 {
+				out := cfg["outbounds"].([]any)[0].(map[string]any)
+				out["settings"].(map[string]any)["vnext"].([]any)[0].(map[string]any)["address"] = ips[0]
+			}
+		}
 	}
 	// 测试端点使用中心的解析结果，避免临时内核忽略系统 hosts；连接和 TLS 仍完整经过待测节点。
 	endpoint, err := url.Parse(o.Target)
@@ -161,10 +192,13 @@ func Run(ctx context.Context, o Options) (Result, error) {
 		if err != nil {
 			return r, fmt.Errorf("无法解析测试端点：%w", err)
 		}
-		cfg["hosts"] = map[string]any{endpoint.Hostname(): addresses}
+		setHosts(map[string]any{endpoint.Hostname(): addresses})
 	}
 	if len(tunnels) > 0 {
 		cfg["tunnels"] = tunnels
+	}
+	if len(udpInbounds) > 0 {
+		cfg["inbounds"] = append(cfg["inbounds"].([]any), udpInbounds...)
 	}
 	body, err := json.Marshal(cfg)
 	if err != nil {
@@ -179,7 +213,7 @@ func Run(ctx context.Context, o Options) (Result, error) {
 	defer cancel()
 	checkCtx, stopCheck := context.WithTimeout(ctx, 10*time.Second)
 	log := &tail{}
-	check := exec.CommandContext(checkCtx, o.Binary, args(o.Check, path)...)
+	check := exec.CommandContext(checkCtx, o.Binary, args(o.Check, path, !xray)...)
 	check.Stdout, check.Stderr, check.Dir = log, log, dir
 	err = check.Run()
 	stopCheck()
@@ -187,7 +221,7 @@ func Run(ctx context.Context, o Options) (Result, error) {
 		return r, fmt.Errorf("测试客户端自检失败：%s", log.String())
 	}
 	log = &tail{}
-	cmd := exec.CommandContext(ctx, o.Binary, args(o.Run, path)...)
+	cmd := exec.CommandContext(ctx, o.Binary, args(o.Run, path, !xray)...)
 	cmd.Stdout, cmd.Stderr, cmd.Dir = log, log, dir
 	if err = cmd.Start(); err != nil {
 		return r, fmt.Errorf("测试客户端启动失败：%w", err)

@@ -21,7 +21,7 @@ func (g *fakeGate) serveNodeTests(t *testing.T, fail int, seen *[]map[string]any
 				return
 			default:
 			}
-			code, body := g.call("GET", "/api/v1/agent/actions", nil)
+			code, body := g.pollActions()
 			if code != 200 {
 				time.Sleep(50 * time.Millisecond)
 				continue
@@ -44,7 +44,7 @@ func (g *fakeGate) serveNodeTests(t *testing.T, fail int, seen *[]map[string]any
 					}
 					count++
 				}
-				g.call("POST", "/api/v1/agent/actions/"+itoa(int(a.ID)), res)
+				g.finishTask(int(a.ID), res)
 			}
 		}
 	}()

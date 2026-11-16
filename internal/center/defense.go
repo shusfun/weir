@@ -19,6 +19,7 @@ import (
 
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/audit"
+	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/resource"
 	"github.com/shusfun/weir/internal/store/ent/setting"
 )
@@ -514,6 +515,12 @@ func (s *Server) putLaya(c *gin.Context) {
 		}
 		if current != revision {
 			return errors.New("laya_configuration_changed")
+		}
+		if l.Mode == "gate" {
+			g, err := s.Store.Ent.Gate.Get(ctx, l.GateID)
+			if err != nil || g.Status != gate.StatusActive {
+				return errors.New("laya_configuration_changed")
+			}
 		}
 		if l.Enabled && (!old.Enabled || layaVerificationKey(l) != layaVerificationKey(old)) {
 			if layaVerificationKey(l) != layaVerificationKey(old) {

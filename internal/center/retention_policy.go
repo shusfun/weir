@@ -69,6 +69,9 @@ func (s *Server) retentionPolicyRoutes(admin *gin.RouterGroup) {
 			failure(c, 422, "retention_policy_invalid")
 			return
 		}
+		if dryRun(c, dryResult{Preview: []string{"保存数据保留策略；已有记录按新期限在后续维护中清理，取消则保持当前策略"}}) {
+			return
+		}
 		err := s.Store.Lock.Do(c.Request.Context(), retentionPolicyKey, func(ctx context.Context) error {
 			old, err := s.retentionPolicy(ctx)
 			if err != nil {

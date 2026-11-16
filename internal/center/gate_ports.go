@@ -8,6 +8,7 @@ import (
 
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/node"
+	"github.com/shusfun/weir/internal/store/ent/resource"
 )
 
 const (
@@ -20,19 +21,67 @@ var reservedPorts = map[int]bool{22: true, 80: true, 443: true, 8080: true, 8443
 
 // gateOwnPorts 是本项目在该 Gate 上已分配的端口（节点入站 + 统计端口）。
 func (s *Server) gateOwnPorts(ctx context.Context, g *ent.Gate) (map[int]bool, error) {
+	return s.gateOwnPortsDB(ctx, s.Store.Ent, g)
+}
+
+func (s *Server) gateOwnPortsDB(ctx context.Context, db *ent.Client, g *ent.Gate) (map[int]bool, error) {
 	own := map[int]bool{}
-	nodes, err := s.Store.Ent.Node.Query().Where(node.GateIDEQ(g.ID)).All(ctx)
+	nodes, err := db.Node.Query().Where(node.GateIDEQ(g.ID)).All(ctx)
 	if err != nil {
 		return nil, err
 	}
 	for _, n := range nodes {
 		own[n.Port] = true
 	}
+	managed, err := s.gateManagedPortsDB(ctx, db, g)
+	if err != nil {
+		return nil, err
+	}
+	for port := range managed {
+		own[port] = true
+	}
+	return own, nil
+}
+
+func (s *Server) gateManagedPortsDB(ctx context.Context, db *ent.Client, g *ent.Gate) (map[int]bool, error) {
+	own := map[int]bool{}
 	if g.XrayStatsPort > 0 {
 		own[g.XrayStatsPort] = true
 	}
 	if g.SingboxStatsPort > 0 {
 		own[g.SingboxStatsPort] = true
+	}
+	_, bridges, err := s.loadOutboundBridges(ctx, db, g.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, b := range bridges {
+		own[b.Port] = true
+	}
+	_, observers, err := s.loadDomainObservers(ctx, db, g.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, o := range observers {
+		own[o.Port] = true
+	}
+	probe, err := readBrowserConfig(ctx, db, g.ID)
+	if err != nil {
+		return nil, err
+	}
+	if probe != nil {
+		own[probe.Plan.Port], own[probe.Plan.RTCPort] = true, true
+	}
+	rows, err := db.Resource.Query().Where(resource.KindEQ(uotResourceKind), resource.OwnerIDEQ(g.ID)).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		p, err := decodeUoT(row)
+		if err != nil {
+			return nil, err
+		}
+		own[p.Port] = true
 	}
 	return own, nil
 }
@@ -109,7 +158,19 @@ func (s *Server) allocateNodePort(ctx context.Context, g *ent.Gate, reality bool
 
 // ensureStatsPorts 为 Gate 分配两个只监听回环的统计端口；已分配且未与其他程序冲突时保持不变。
 func (s *Server) ensureStatsPorts(ctx context.Context, g *ent.Gate) (*ent.Gate, error) {
-	own, err := s.gateOwnPorts(ctx, g)
+	tx, err := s.Store.Ent.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if err = lockActiveGates(ctx, tx.Client(), g.ID); err != nil {
+		return nil, err
+	}
+	g, err = tx.Gate.Get(ctx, g.ID)
+	if err != nil {
+		return nil, err
+	}
+	own, err := s.gateOwnPortsDB(ctx, tx.Client(), g)
 	if err != nil {
 		return nil, err
 	}
@@ -127,19 +188,108 @@ func (s *Server) ensureStatsPorts(ctx context.Context, g *ent.Gate) (*ent.Gate, 
 		}
 	}
 	if xp == g.XrayStatsPort && sp == g.SingboxStatsPort {
-		return g, nil
+		if err = tx.Commit(); err != nil {
+			return nil, err
+		}
+		return g.Unwrap(), nil
 	}
-	return g.Update().SetXrayStatsPort(xp).SetSingboxStatsPort(sp).AddConfigRevision(1).Save(ctx)
+	g, err = tx.Gate.UpdateOneID(g.ID).SetXrayStatsPort(xp).SetSingboxStatsPort(sp).AddConfigRevision(1).Save(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return g.Unwrap(), nil
 }
 
 // resolvePortConflict 在 Gate 报告某端口被其他程序占用时，给占用它的节点或统计端口换一个端口。
 func (s *Server) resolvePortConflict(ctx context.Context, g *ent.Gate, port int) error {
-	own, err := s.gateOwnPorts(ctx, g)
+	tx, err := s.Store.Ent.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err = lockActiveGates(ctx, tx.Client(), g.ID); err != nil {
+		return err
+	}
+	current, err := tx.Gate.Get(ctx, g.ID)
+	if err != nil {
+		return err
+	}
+	if err = s.resolvePortConflictDB(ctx, tx.Client(), current, port); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Server) resolvePortConflictDB(ctx context.Context, db *ent.Client, g *ent.Gate, port int) error {
+	own, err := s.gateOwnPortsDB(ctx, db, g)
 	if err != nil {
 		return err
 	}
 	taken := foreignPorts(g, own)
 	taken[port] = true
+	uotRows, err := db.Resource.Query().Where(resource.KindEQ(uotResourceKind), resource.OwnerIDEQ(g.ID)).All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, row := range uotRows {
+		p, err := decodeUoT(row)
+		if err != nil {
+			return err
+		}
+		if p.Port != port {
+			continue
+		}
+		if p.Port, err = pickPort(own, taken); err != nil {
+			return err
+		}
+		p.Ready, p.ReceiverRevision = false, g.ConfigRevision+1
+		if err = db.Resource.UpdateOneID(row.ID).SetData(toMap(p)).Exec(ctx); err != nil {
+			return err
+		}
+		if err = db.Gate.UpdateOneID(p.EntryID).AddConfigRevision(1).Exec(ctx); err != nil {
+			return err
+		}
+		return db.Gate.UpdateOneID(g.ID).AddConfigRevision(1).Exec(ctx)
+	}
+	observerRow, observers, err := s.loadDomainObservers(ctx, db, g.ID)
+	if err != nil {
+		return err
+	}
+	for engine, o := range observers {
+		if o.Port != port {
+			continue
+		}
+		if o.Port, err = pickPort(own, taken); err != nil {
+			return err
+		}
+		observers[engine] = o
+		if err = s.saveDomainObservers(ctx, db, g.ID, observerRow, observers); err != nil {
+			return err
+		}
+		return db.Gate.UpdateOneID(g.ID).AddConfigRevision(1).Exec(ctx)
+	}
+	row, bridges, err := s.loadOutboundBridges(ctx, db, g.ID)
+	if err != nil {
+		return err
+	}
+	for i := range bridges {
+		if bridges[i].Port != port {
+			continue
+		}
+		next, err := pickPort(own, taken)
+		if err != nil {
+			return err
+		}
+		bridges[i].Port = next
+		if err := s.saveOutboundBridges(ctx, db, g.ID, row, bridges); err != nil {
+			return err
+		}
+		_, err = db.Gate.UpdateOneID(g.ID).AddConfigRevision(1).Save(ctx)
+		return err
+	}
 	if g.XrayStatsPort == port || g.SingboxStatsPort == port {
 		next, err := pickPort(own, taken)
 		if err != nil {
@@ -154,7 +304,7 @@ func (s *Server) resolvePortConflict(ctx context.Context, g *ent.Gate, port int)
 		_, err = update.Save(ctx)
 		return err
 	}
-	n, err := s.Store.Ent.Node.Query().Where(node.GateIDEQ(g.ID), node.PortEQ(port)).Only(ctx)
+	n, err := db.Node.Query().Where(node.GateIDEQ(g.ID), node.PortEQ(port)).Only(ctx)
 	if err != nil {
 		return err
 	}
@@ -165,6 +315,6 @@ func (s *Server) resolvePortConflict(ctx context.Context, g *ent.Gate, port int)
 	if _, err = n.Update().SetPort(next).Save(ctx); err != nil {
 		return err
 	}
-	_, err = s.bumpGate(ctx, g.ID)
+	_, err = db.Gate.UpdateOneID(g.ID).AddConfigRevision(1).Save(ctx)
 	return err
 }

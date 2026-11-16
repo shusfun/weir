@@ -54,8 +54,8 @@ func (g *fakeGate) serveChainProbes(unreachable string, stop chan struct{}) {
 				return
 			default:
 			}
-			_, _ = g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 3, Version: "test", Hostname: "hk", Arch: "amd64"})
-			code, body := g.call("GET", "/api/v1/agent/actions", nil)
+			_, _ = g.sendHeartbeat(contracts.Heartbeat{NodeTestVersion: 3, Version: "test", Hostname: "hk", Arch: "amd64"})
+			code, body := g.pollActions()
 			if code != 200 {
 				time.Sleep(50 * time.Millisecond)
 				continue
@@ -67,7 +67,7 @@ func (g *fakeGate) serveChainProbes(unreachable string, stop chan struct{}) {
 				if a.Payload["address"] == unreachable {
 					res = contracts.ActionResult{Error: "chain_probe_failed: 连接出口超时"}
 				}
-				g.call("POST", "/api/v1/agent/actions/"+itoa(int(a.ID)), res)
+				g.finishTask(int(a.ID), res)
 			}
 			time.Sleep(20 * time.Millisecond)
 		}
@@ -245,9 +245,9 @@ func TestAcceptanceUserIsolationAuditAndSubscriptions(t *testing.T) {
 	mustJSON(t, ac, "POST", "/api/v1/me/links", map[string]any{"all_nodes": false, "node_ids": []int{id2}}, 400)
 	mustJSON(t, ac, "POST", "/api/v1/me/chains", map[string]any{"name": "x", "entry_node_id": id2, "exit": map[string]any{"kind": "socks5", "address": "203.0.113.5", "port": 1080}}, 422)
 
-	// ACL-02：管理员看到 alice 的完整订阅地址与出口密码原文，并可停用、重置、删除。
+	// ACL-02：详情默认脱敏，管理员显式揭示凭据后才看到原文。
 	detail = mustJSON(t, admin, "GET", "/api/v1/admin/users/"+itoa(aid), nil, 200)
-	if items := detail["chain_items"].([]any); len(items) != 1 || items[0].(map[string]any)["exit"].(map[string]any)["password"] != "home-secret" {
+	if items := detail["chain_items"].([]any); len(items) != 1 || items[0].(map[string]any)["exit"].(map[string]any)["has_password"] != true || items[0].(map[string]any)["exit"].(map[string]any)["password"] != nil {
 		t.Fatalf("admin chain view = %v", detail["chain_items"])
 	}
 	rotated := mustJSON(t, admin, "POST", "/api/v1/admin/users/"+itoa(aid)+"/links/"+lid+"/rotate", nil, 200)

@@ -58,7 +58,7 @@ func validateTaskRequest(value any) error {
 	valid := true
 	switch req := value.(type) {
 	case *NodeProbeTask:
-		valid = taskURL(req.Credentials.URL) && taskHeader(req.Credentials.Authorization, 256) && len(req.Client.Proxies) == 1 && req.Client.Target != "" && taskKernelRefs(req.Kernels)
+		valid = taskURL(req.Credentials.URL) && taskHeader(req.Credentials.Authorization, 256) && req.Client.Validate() == nil && taskKernelRefs(req.Kernels)
 	case *SubscriptionProbeTask:
 		valid = taskURL(req.Target) && len(req.Proxies) > 0 && len(req.Proxies) <= 200 && taskKernelRefs(req.Kernels)
 	case *EmptyTask:
@@ -96,11 +96,13 @@ func validateTaskRequest(value any) error {
 	case *NodeTestTask:
 		valid = len(req.Config.Inbounds) == 1 && taskKernelRefs(req.Config.Kernels) && req.Client.Target != "" && len(req.Client.Target) <= 256 && len(req.Client.Proxies) == 1
 	case *OutboundProbeTask:
-		valid = req.Address != "" && len(req.Address) <= 253 && !strings.ContainsAny(req.Address, "/\\\x00\r\n") && req.Port > 0 && req.Port <= 65535 && taskURL(req.Target) && taskKernelRefs(req.Kernels) && len(req.Client) > 0 && !bytes.Equal(bytes.TrimSpace(req.Client), []byte("null"))
+		valid = req.Address != "" && len(req.Address) <= 253 && !strings.ContainsAny(req.Address, "/\\\x00\r\n") && req.Port > 0 && req.Port <= 65535 && taskURL(req.Target) && taskKernelRefs(req.Kernels) && (req.Native != nil || len(req.Client) > 0 && !bytes.Equal(bytes.TrimSpace(req.Client), []byte("null")))
+		if req.Native != nil {
+			o := req.Native
+			valid = valid && o.Protocol == "shadowsocks" && o.Address == req.Address && o.Port == req.Port && o.Username == "2022-blake3-aes-128-gcm" && o.Settings["udp_over_tcp"] == true && len(o.Password) <= 128 && len(o.Client) == 0 && len(o.Members) == 0
+		}
 	case *SubscriptionFetchTask:
 		valid = taskNetworkInput(req.Credentials, req.MaxBytes) && taskHeader(req.UserAgent, 1024)
-	case *ExternalConvertTask:
-		valid = taskURLBound(req.Credentials.URL, 64<<10) && taskHeader(req.Credentials.Authorization, 8192) && req.MaxBytes > 0 && req.MaxBytes <= 10<<20 && len(req.Content) <= 768<<10 && taskHeader(req.ContentType, 256) && (req.Method == "" || req.Method == "POST" || req.Method == "GET" && len(req.Content) == 0)
 	case *TraceReadTask:
 		trace, err := hex.DecodeString(req.TraceID)
 		valid = err == nil && len(trace) == 16 && req.TraceID != strings.Repeat("0", 32) && req.After >= 0 && req.Limit >= 1 && req.Limit <= 200

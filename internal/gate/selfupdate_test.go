@@ -37,13 +37,13 @@ func TestSelfUpdateFailureIsReportedInHeartbeat(t *testing.T) {
 				return
 			}
 			_ = json.NewEncoder(w).Encode(map[string]string{"token": "t-1"})
-		case "/api/v1/agent/heartbeat":
+		case "/api/v1/agent/heartbeat/v2":
 			var hb contracts.Heartbeat
 			_ = json.NewDecoder(r.Body).Decode(&hb)
 			mu.Lock()
 			beats = append(beats, hb)
 			mu.Unlock()
-			_ = json.NewEncoder(w).Encode(contracts.HeartbeatReply{})
+			_ = json.NewEncoder(w).Encode(contracts.HeartbeatReply{HeartbeatProtocol: contracts.HeartbeatProtocol})
 		default:
 			// 中心没有这个平台的程序
 			w.WriteHeader(404)

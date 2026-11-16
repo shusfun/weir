@@ -18,3 +18,21 @@ func TestPublicPreviewAllowsOnlySameOriginPublicDocuments(t *testing.T) {
 		}
 	}
 }
+
+func TestConsolePolicyAllowsHTTPSBrowserTestsWithoutOpeningScripts(t *testing.T) {
+	_, admin := newInstalledServer(t)
+	policy := admin.do("GET", "/gates", nil, nil).Header().Get("Content-Security-Policy")
+	directives := map[string]string{}
+	for _, directive := range strings.Split(policy, ";") {
+		parts := strings.Fields(directive)
+		if len(parts) > 0 {
+			directives[parts[0]] = strings.Join(parts[1:], " ")
+		}
+	}
+	if directives["connect-src"] != "'self' https:" {
+		t.Fatalf("Gate HTTPS endpoints blocked or insecure connections allowed: %s", policy)
+	}
+	if directives["script-src"] != "'self' https://challenges.cloudflare.com" || directives["default-src"] != "'self'" || directives["font-src"] != "'self' data:" {
+		t.Fatalf("unrelated content restrictions changed: %s", policy)
+	}
+}

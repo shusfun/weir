@@ -31,6 +31,7 @@ import (
 	"github.com/shusfun/weir/internal/gate"
 	"github.com/shusfun/weir/internal/kernels"
 	"github.com/shusfun/weir/internal/nodeprobe"
+	"github.com/shusfun/weir/internal/store/ent/credential"
 	"github.com/shusfun/weir/packages/contracts"
 	"gopkg.in/yaml.v3"
 )
@@ -63,18 +64,34 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("SSL_CERT_FILE", rootPath)
-	leaf := &x509.Certificate{SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: "127.0.0.1"}, DNSNames: []string{"node-center.e2e.test"}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+	// Keep DNS payload tests and the ShadowTLS handshake inside this container.
+	// Public resolver reachability is not part of a protocol regression test.
+	dns := startDNSLab(t)
+	dns.alias("handshake.e2e.test", net.ParseIP("127.0.0.1"))
+	// nodeprobe uses random names under example.com. Answer them locally too;
+	// forwarding these queries would make UDP checks depend on public DNS.
+	dns.alias(".example.com", net.ParseIP("192.0.2.1"))
+	leaf := &x509.Certificate{SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: "127.0.0.1"}, DNSNames: []string{"node-center.e2e.test", "handshake.e2e.test"}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
 	der, err = x509.CreateCertificate(rand.Reader, leaf, ca, &key.PublicKey, key)
 	if err != nil {
 		t.Fatal(err)
 	}
 	certPEM := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})) + string(root)
 	kd, _ := x509.MarshalECPrivateKey(key)
+	handshake := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("handshake")) }))
+	_ = handshake.Listener.Close()
+	handshake.Listener, err = net.Listen("tcp", "127.0.0.1:443")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handshake.TLS = &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}}}
+	handshake.StartTLS()
+	t.Cleanup(handshake.Close)
 	cert := e.post("/api/v1/admin/certs", map[string]any{"name": "isolated test certificate", "domain": "127.0.0.1", "cert_pem": certPEM, "key_pem": string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kd}))}, nil)
 	e.startGate("protocols")
 	e.s.Store.Ent.Gate.UpdateOneID(e.gateID).SetPublicHost("127.0.0.1").ExecX(e.ctx)
 	u := e.post("/api/v1/admin/users", map[string]any{"email": "protocols@e2e.test", "all_nodes": true, "quota": 0}, nil)
-	presets := []string{"vless-reality", "vless-ws-tls", "vmess-ws-tls", "trojan-tls", "ss2022", "hysteria2", "tuic", "shadowtls", "wireguard", "socks-local", "http-local"}
+	presets := []string{"vless-reality", "vless-xhttp-tls", "vless-ws-tls", "vless-grpc-tls", "vmess-ws-tls", "trojan-tls", "ss2022", "hysteria2", "tuic", "anytls", "shadowtls", "wireguard", "socks-local", "http-local"}
 	nodeIDs := map[string]int{}
 	realityDestination := localTLS(t)
 	for _, preset := range presets {
@@ -91,7 +108,10 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 			if preset == "vless-reality" {
 				body["settings"] = map[string]any{"reality_dest": realityDestination, "reality_server_names": "e2e.test"}
 			}
-			if preset == "vless-ws-tls" || preset == "vmess-ws-tls" || preset == "trojan-tls" {
+			if preset == "shadowtls" {
+				body["settings"] = map[string]any{"tls_sni": "handshake.e2e.test"}
+			}
+			if preset == "vless-xhttp-tls" || preset == "vless-ws-tls" || preset == "vless-grpc-tls" || preset == "vmess-ws-tls" || preset == "trojan-tls" || preset == "anytls" {
 				body["cert_id"] = cert["id"]
 			}
 			created := e.post("/api/v1/admin/nodes", body, nil)
@@ -144,7 +164,7 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 		}
 	}
 	for _, preset := range presets {
-		if preset != "wireguard" && !names[tags[preset]] {
+		if preset != "wireguard" && preset != "vless-xhttp-tls" && !names[tags[preset]] {
 			t.Errorf("subscription missing %s", preset)
 		}
 	}
@@ -172,6 +192,7 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 	if host == "" {
 		t.Fatal("non-loopback test target required for WireGuard")
 	}
+	dns.alias("node-center.e2e.test", net.ParseIP(host))
 	_ = target.Listener.Close()
 	target.Listener, err = net.Listen("tcp", net.JoinHostPort(host, "0"))
 	if err != nil {
@@ -271,6 +292,22 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 			defer func() { e.t = parent }()
 			r := e.post(fmt.Sprintf("/api/v1/admin/nodes/%d/test", nodeIDs[preset]), map[string]any{}, nil)["test"].(map[string]any)
 			if r["status"] != "passed" {
+				transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+					return (&net.Dialer{}).DialContext(ctx, "unix", e.paths.Socket)
+				}}
+				defer transport.CloseIdleConnections()
+				client := &http.Client{Transport: transport, Timeout: 3 * time.Second}
+				for _, kernel := range []string{"xray", "sing-box"} {
+					resp, err := client.Get("http://helper/diagnostics?name=" + kernel)
+					if err != nil {
+						t.Logf("%s diagnostics: %v", kernel, err)
+						continue
+					}
+					var diagnostic map[string]any
+					_ = json.NewDecoder(resp.Body).Decode(&diagnostic)
+					_ = resp.Body.Close()
+					t.Logf("%s diagnostics for trace %v: %v", kernel, r["trace_id"], diagnostic)
+				}
 				t.Fatalf("deployed test: %+v", r)
 			}
 			want := "passed"
@@ -283,6 +320,11 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 		})
 	}
 	for _, preset := range presets {
+		// XHTTP is exercised by the deployed native Xray client above;
+		// mihomo does not implement this transport.
+		if preset == "vless-xhttp-tls" {
+			continue
+		}
 		t.Run("traffic-"+preset, func(t *testing.T) {
 			port := freePort(t)
 			cfg := (contracts.NodeTestClient{Proxies: mhDoc.Proxies, Target: tags[preset]}).Config(port)
@@ -331,6 +373,27 @@ func TestAllPresetsCreationAndTraffic(t *testing.T) {
 	probeTarget.StartTLS()
 	defer probeTarget.Close()
 	probeURL := "https://" + net.JoinHostPort(host, fmt.Sprint(probeTarget.Listener.Addr().(*net.TCPAddr).Port))
+	t.Run("xhttp-native-no-direct-fallback", func(t *testing.T) {
+		n := e.s.Store.Ent.Node.GetX(e.ctx, nodeIDs["vless-xhttp-tls"])
+		cr := e.s.Store.Ent.Credential.Query().Where(credential.NodeIDEQ(n.ID), credential.InternalEQ(true), credential.PurposeEQ("probe")).OnlyX(e.ctx)
+		id, err := e.s.Crypto.Decrypt(cr.UUID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		client := contracts.NodeTestClient{Target: "node-test", XHTTP: &contracts.XHTTPProbeClient{Server: "127.0.0.1", Port: n.Port, UUID: id, SNI: "127.0.0.1", Host: "127.0.0.1", Path: fmt.Sprint(n.Settings["xhttp_path"]), Mode: fmt.Sprint(n.Settings["xhttp_mode"])}}
+		probe := func(c contracts.NodeTestClient, timeout time.Duration) (nodeprobe.Result, error) {
+			ctx, cancel := context.WithTimeout(t.Context(), timeout)
+			defer cancel()
+			return nodeprobe.Run(ctx, nodeprobe.Options{Binary: e.xray, Run: []string{"run", "-config", "{config}"}, Check: []string{"run", "-test", "-config", "{config}"}, Client: c, Target: probeURL, Token: "isolated-probe", UDP: true})
+		}
+		if r, err := probe(client, 30*time.Second); err != nil || r.TCP.Status != "passed" || r.UDP.Status != "passed" {
+			t.Fatalf("native XHTTP: %+v %v", r, err)
+		}
+		client.XHTTP.UUID = "00000000-0000-4000-8000-000000000001"
+		if r, _ := probe(client, 8*time.Second); r.TCP.Status == "passed" || r.UDP.Status == "passed" {
+			t.Fatal("wrong credentials escaped through a direct route")
+		}
+	})
 	runProbe := func(t *testing.T, outbound map[string]any, udp bool) nodeprobe.Result {
 		t.Helper()
 		ctx, cancel := context.WithTimeout(t.Context(), 40*time.Second)

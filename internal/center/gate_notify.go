@@ -33,7 +33,7 @@ func causeFrom(ctx context.Context) revisionCause {
 
 func itoa(v int) string { return strconv.Itoa(v) }
 
-// gateWaiters 让等待中的 /agent/config 长轮询在配置版本变化时立即返回。
+// gateWaiters 在配置版本变化时唤醒当前任务通道的配置投递。
 // 中心是单进程，进程内通知即可；进程重启后 Gate 会重新长轮询。
 type gateWaiters struct {
 	mu sync.Mutex

@@ -131,7 +131,7 @@ func (s *Server) githubOnce(ctx context.Context, key string, run func(context.Co
 
 // notices 计算当前要处理的问题。
 func (s *Server) notices(ctx context.Context) []Notice {
-	var out []Notice
+	out := s.gateTrafficNotices(ctx)
 	d := s.drivers(ctx)
 	// 通知列表要快：访问 GitHub 的查询在后台进行，这里最多等 10 秒；没等到就写「正在查询」，不当成失败。
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)

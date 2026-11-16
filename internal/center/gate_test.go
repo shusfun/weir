@@ -7,7 +7,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,11 +19,14 @@ import (
 )
 
 type fakeGate struct {
-	t      *testing.T
-	c      *testClient
-	id     int64
-	priv   ed25519.PrivateKey
-	bearer string
+	t            *testing.T
+	c            *testClient
+	id           int64
+	priv         ed25519.PrivateKey
+	bearer       string
+	mu           sync.Mutex
+	tasks        map[int]contracts.Task
+	executionSeq int64
 }
 
 // pairFakeGate 走真实流程：管理员生成邀请 → Gate 用一次性凭证配对 → 签名挑战换取访问令牌。
@@ -52,6 +57,15 @@ func pairWithToken(t *testing.T, admin *testClient, token string) *fakeGate {
 		t.Fatalf("pair token reused = %d", w.Code)
 	}
 	g.auth()
+	tasks := map[string]int{}
+	for _, kind := range []string{contracts.TaskCoreInstall, contracts.ActionAssetFetch, contracts.ActionSourceProbe, contracts.ActionNodeTest, contracts.ActionOutboundProbe, contracts.ActionChainProbe, contracts.ActionRealityProbe, contracts.ActionPanelConfigure, contracts.ActionPanelCert, contracts.ActionPanelDiscover, contracts.ActionPanelRemove, contracts.ActionACMEHTTP01, contracts.ActionDiagnostics, contracts.ActionCoreRestart, contracts.ActionHostRepair, contracts.ActionLiveStart, contracts.ActionReleaseReplace, contracts.ActionUninstall} {
+		tasks[kind] = contracts.TaskVersion
+	}
+	caps := contracts.CapabilityDocument{Protocol: contracts.AgentProtocol, Version: "test", Arch: "amd64", Tasks: tasks}
+	code, raw := g.call("POST", "/api/v1/agent/poll", contracts.AgentPoll{Protocol: contracts.AgentProtocol, ConfigRevision: -1, Capabilities: &caps, Resources: contracts.WorkerResources{Concurrency: 1}})
+	if code != 200 {
+		t.Fatalf("capability registration: %d %s", code, raw)
+	}
 	return g
 }
 
@@ -66,18 +80,37 @@ func (g *fakeGate) auth() {
 }
 
 func (g *fakeGate) call(method, path string, body any) (int, []byte) {
-	w := g.c.do(method, path, body, map[string]string{"Authorization": "Bearer " + g.bearer})
+	w := g.c.do(method, path, body, g.requestHeaders(path))
 	return w.Code, w.Body.Bytes()
+}
+
+func (g *fakeGate) requestHeaders(path string) map[string]string {
+	headers := map[string]string{"Authorization": "Bearer " + g.bearer}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for _, task := range g.tasks {
+		var request contracts.AssetFetch
+		if task.Kind == contracts.ActionAssetFetch && json.Unmarshal(task.Payload, &request) == nil && strings.HasPrefix(path, "/api/v1/agent/uploads/"+request.UploadID) {
+			headers["X-Weir-Task-ID"] = task.ID
+			headers["X-Weir-Task-Attempt"] = strconv.Itoa(task.Attempt)
+			headers["X-Weir-Task-Lease"] = task.LeaseToken
+		}
+	}
+	return headers
 }
 
 func (g *fakeGate) config(since int64) contracts.GateConfig {
 	g.t.Helper()
-	code, body := g.call("GET", "/api/v1/agent/config?since="+itoa(int(since)), nil)
+	code, body := g.call("POST", "/api/v1/agent/poll", contracts.AgentPoll{Protocol: contracts.AgentProtocol, ConfigRevision: since, ExecutionSeq: g.executionSeq, Resources: contracts.WorkerResources{Concurrency: 1}})
 	if code != 200 {
 		g.t.Fatalf("config = %d %s", code, body)
 	}
-	var cfg contracts.GateConfig
-	json.Unmarshal(body, &cfg)
+	var reply contracts.AgentPollReply
+	if err := json.Unmarshal(body, &reply); err != nil || reply.Config == nil {
+		g.t.Fatalf("missing configuration: %s", body)
+	}
+	cfg := *reply.Config
+	g.executionSeq = cfg.ExecutionSeq
 	return cfg
 }
 
@@ -88,7 +121,7 @@ func TestGatePairConfigMeterAndRevoke(t *testing.T) {
 		t.Fatal(err)
 	}
 	g := pairFakeGate(t, admin)
-	if code, _ := g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 3, Version: "test", Hostname: "hk", Arch: "amd64", ListeningPorts: []contracts.ListeningPort{{Port: 54321, Proto: "tcp", Process: "x-ui"}}}); code != 200 {
+	if code, _ := g.sendHeartbeat(contracts.Heartbeat{NodeTestVersion: 3, Version: "test", Hostname: "hk", Arch: "amd64", ListeningPorts: []contracts.ListeningPort{{Port: 54321, Proto: "tcp", Process: "x-ui"}}}); code != 200 {
 		t.Fatalf("heartbeat = %d", code)
 	}
 	gate, _ := s.Store.Ent.Gate.Get(ctx, int(g.id))
@@ -150,7 +183,7 @@ func TestGatePairConfigMeterAndRevoke(t *testing.T) {
 		t.Fatal("state")
 	}
 	// 记账：同纪元重复上报不重复扣减；纪元变化从零起算。
-	report := contracts.MeterReport{Epoch: "e1", Seq: 1, Usage: []contracts.MeterSample{{StatsKey: "c-u1", Up: 300, Down: 700}}}
+	report := contracts.MeterReport{Protocol: 2, Epoch: "e1", Seq: 1, Usage: []contracts.MeterSample{{StatsKey: "c-u1", Up: 300, Down: 700}}}
 	for i := 0; i < 2; i++ {
 		if code, _ := g.call("POST", "/api/v1/agent/meter", report); code != 200 {
 			t.Fatal("meter")
@@ -209,7 +242,7 @@ func TestGatePairConfigMeterAndRevoke(t *testing.T) {
 	if w := admin.do("POST", "/api/v1/admin/gates/"+itoa(int(g.id))+"/revoke", nil, nil); w.Code != 200 {
 		t.Fatalf("revoke = %d", w.Code)
 	}
-	if code, _ := g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{}); code != http.StatusUnauthorized {
+	if code, _ := g.sendHeartbeat(contracts.Heartbeat{}); code != http.StatusForbidden {
 		t.Fatalf("revoked gate still accepted: %d", code)
 	}
 	_ = ent.IsNotFound
@@ -228,11 +261,82 @@ func TestGateAuthRejectsBadSignatureAndReplay(t *testing.T) {
 	if w := g.c.do("POST", "/api/v1/agent/auth", map[string]any{"gate_id": g.id, "challenge": ch, "signature": good}, nil); w.Code != 401 {
 		t.Fatalf("challenge reused after a failed attempt = %d", w.Code)
 	}
-	if code, _ := g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{Arch: "amd64"}); code != 200 {
+	if code, _ := g.sendHeartbeat(contracts.Heartbeat{Arch: "amd64"}); code != 200 {
 		t.Fatalf("valid token rejected: %d", code)
 	}
 	g.bearer = "forged"
-	if code, _ := g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{}); code != 401 {
+	if code, _ := g.sendHeartbeat(contracts.Heartbeat{}); code != 401 {
 		t.Fatalf("forged token = %d", code)
 	}
+}
+
+func (g *fakeGate) sendHeartbeat(h contracts.Heartbeat) (int, []byte) {
+	if h.Version == "" {
+		h.Version = "test"
+	}
+	if h.Arch == "" {
+		h.Arch = "amd64"
+	}
+	h.Protocol, h.Full = contracts.HeartbeatProtocol, true
+	h.Digest, _ = contracts.HeartbeatDigest(h)
+	return g.call("POST", "/api/v1/agent/heartbeat/v2", h)
+}
+
+func (g *fakeGate) pollActions() (int, []byte) {
+	code, raw := g.call("POST", "/api/v1/agent/poll", contracts.AgentPoll{Protocol: contracts.AgentProtocol, ConfigRevision: -1, Resources: contracts.WorkerResources{Concurrency: 1}})
+	if code != 200 {
+		return code, raw
+	}
+	var reply contracts.AgentPollReply
+	if err := json.Unmarshal(raw, &reply); err != nil {
+		g.t.Error(err)
+		return 500, nil
+	}
+	actions := []contracts.Action{}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.tasks == nil {
+		g.tasks = map[int]contracts.Task{}
+	}
+	for _, task := range reply.Tasks {
+		id, err := strconv.Atoi(strings.TrimPrefix(task.IdempotencyKey, "legacy:"))
+		if err != nil {
+			g.t.Errorf("operation key: %s", task.IdempotencyKey)
+			continue
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(task.Payload, &payload); err != nil {
+			g.t.Error(err)
+			continue
+		}
+		g.tasks[id] = task
+		actions = append(actions, contracts.Action{ID: int64(id), Kind: task.Kind, Payload: payload, ExpiresAt: task.Deadline})
+	}
+	body, _ := json.Marshal(actions)
+	return code, body
+}
+
+func (g *fakeGate) finishTask(id int, result contracts.ActionResult) (int, []byte) {
+	g.mu.Lock()
+	task, ok := g.tasks[id]
+	g.mu.Unlock()
+	if !ok {
+		g.t.Errorf("unleased operation: %d", id)
+		return 409, nil
+	}
+	if result.Result == nil {
+		result.Result = map[string]any{}
+	}
+	body, _ := json.Marshal(result.Result)
+	update := contracts.TaskUpdate{Attempt: task.Attempt, LeaseToken: task.LeaseToken, Result: body}
+	if !result.OK {
+		code := result.Error
+		if (&contracts.TaskError{Code: code, Origin: "fixture"}).Validate() != nil {
+			code = "action_failed"
+		}
+		update.Error = &contracts.TaskError{Code: code, Origin: "fixture"}
+		update.Result = nil
+	}
+	code, raw := g.call("POST", "/api/v1/agent/tasks/"+task.ID+"/result", update)
+	return code, raw
 }

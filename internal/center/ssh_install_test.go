@@ -128,7 +128,7 @@ func TestSSHInstallGate(t *testing.T) {
 		}
 		g.id = res.GateID
 		g.auth()
-		g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{Version: "test", Hostname: "vps", Arch: "amd64"})
+		g.sendHeartbeat(contracts.Heartbeat{Version: "test", Hostname: "vps", Arch: "amd64"})
 		return 0
 	})
 	target := map[string]any{"host": "203.0.113.20", "port": 22, "user": "root", "password": password}

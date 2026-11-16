@@ -1,4 +1,5 @@
 import { GateManagement } from "./gate-management";
+import { GateTraffic } from "./gate-traffic";
 import { PendingExits } from "./pending-exits";
 import { GateLayaHosting } from "../features/ai/laya-gate-hosting";
 
@@ -16,10 +17,10 @@ function KernelTimeline({ events }: { events?: KernelEvent[] }) {
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useState } from "react";
 import { useQuery } from "../lib/query";
-import { Badge, Button, Card, Field, GlassFolder, HealthRing, InsightBanner, Notice, ObjectHeader, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Sheet, SheetContent, Tabs, TabsList, TabsPanel, TabsTab, Timeline, TimelineItem, useConfirm } from "@weir/ui";
+import { Badge, Button, Card, Dialog, DialogContent, DialogTitle, DialogDescription, Field, GlassFolder, HealthRing, InsightBanner, Notice, ObjectHeader, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Sheet, SheetContent, Tabs, TabsList, TabsPanel, TabsTab, Timeline, TimelineItem, useConfirm } from "@weir/ui";
 import { GateHealthList, healthItems } from "./gate-health";
 import { confidenceText, reopenDrafts, useDrafts } from "./draft-confirm";
-import { protocolNames, relativeTime } from "../lib/core";
+import { objectStatus, protocolNames, relativeTime } from "../lib/core";
 import { api } from "../api";
 import { useRowAction } from "../lib/action";
 import { GateUpdateLine, gateLags } from "./gate-version";
@@ -51,13 +52,10 @@ export const size = (v: unknown) => (typeof v === "number" ? bytes(v) : unknown)
 const uptime = (v: unknown) => (typeof v === "number" ? `${Math.floor(v / 86400)} 天 ${Math.floor((v % 86400) / 3600)} 小时` : unknown);
 
 export function GateDetail({ gate, nodes, close, layout = "sheet" }: { gate: Gate & { listening_ports?: Port[]; kernel_pins?: Record<string, string>; xray_stats_port?: number; singbox_stats_port?: number }; nodes: NodeItem[]; close: () => void; layout?: "sheet" | "page" }) {
-  const [localTab, setLocalTab] = useState("overview");
   const [params, setParams] = useSearchParams();
-  const tab = layout === "page" ? params.get("tab") || "overview" : localTab;
-  const setTab = (value: string) => {
-    if (layout === "page") setParams((p) => { p.set("tab", value); return p; }, { replace: true });
-    else setLocalTab(value);
-  };
+  const tabKey = layout === "page" ? "tab" : "detail_tab";
+  const tab = params.get(tabKey) || "overview";
+  const setTab = (value: string) => setParams(p => { p.set(tabKey, value); return p; }, { replace: true });
   useConsoleContext({ dialog: { title: "VPS 详情", step: ({ overview: "概览", nodes: "节点与出口", kernels: "内核", certs: "证书", health: "体检", timeline: "断线时间线" } as Record<string, string>)[tab] } });
   const drafts = useDrafts();
   const confirm = useConfirm();
@@ -84,8 +82,9 @@ export function GateDetail({ gate, nodes, close, layout = "sheet" }: { gate: Gat
     <>
         <div className={layout === "page" ? "stack" : "stack p-4"}>
           <GateUpdateLine gate={gate} />
+          <GateTraffic gateID={gate.id} />
           <PendingExits all gateId={gate.id} />
-          <GateLayaHosting gateId={gate.id} host={gate.public_host} />
+          <GateLayaHosting gateId={gate.id} />
 
           <Tabs value={tab} onValueChange={v => setTab(String(v))}>
             <TabsList aria-label="VPS 详情">
@@ -97,10 +96,10 @@ export function GateDetail({ gate, nodes, close, layout = "sheet" }: { gate: Gat
               <TabsTab value="timeline">断线时间线</TabsTab>
             </TabsList>
             <TabsPanel value="health">
-              <div className="grid items-start gap-[29px] lg:grid-cols-[301px_minmax(0,1fr)]">
-                <Card className="flex flex-col items-center p-[21px] text-center">
+              <div className="grid items-start gap-[var(--weir-gap-29)] lg:grid-cols-[301px_minmax(0,1fr)]">
+                <Card className="flex flex-col items-center p-[var(--weir-gap-21)] text-center">
                   <HealthRing segments={healthItems(h.health).map((i) => (i.status === "bad" ? "bad" : i.status === "warn" ? "warn" : i.status === "unknown" && i.label === "未知" ? "unknown" : "ok"))} title={`${healthItems(h.health).length} 项`} caption={(() => { const n = healthItems(h.health).filter((i) => i.status === "bad" || i.status === "warn").length; return n ? `${n} 项需要处理` : "没有需要处理的项"; })()} />
-                  <p className="mt-[9px] mb-0 text-meta text-[var(--weir-ink-3)]">每次心跳随主机观测上报，不改系统、不重启内核</p>
+                  <p className="mt-[var(--weir-gap-9)] mb-0 text-meta text-[var(--weir-ink-3)]">每次心跳随主机观测上报，不改系统、不重启内核</p>
                 </Card>
                 <Card className="overflow-hidden p-0"><GateHealthList health={h.health} /></Card>
               </div>
@@ -109,7 +108,7 @@ export function GateDetail({ gate, nodes, close, layout = "sheet" }: { gate: Gat
               <KernelTimeline events={gate.kernel_events} />
             </TabsPanel>
             <TabsPanel value="overview" className="stack">
-          <SectionHeader title="主机" description="由 VPS 读取本机 /proc 与磁盘信息上报；网卡总量可能包含虚拟网卡，不作为用户计费依据。" />
+          <SectionHeader flush title="主机" description="由 VPS 读取本机 /proc 与磁盘信息上报；网卡总量可能包含虚拟网卡，不作为用户计费依据。" />
           <dl className="grid grid-cols-2 gap-2 text-body">
             <dt>CPU</dt><dd>{pct(h.cpu_percent)}</dd>
             <dt>负载</dt><dd>{typeof h.load1 === "number" ? h.load1.toFixed(2) : unknown}</dd>
@@ -118,19 +117,19 @@ export function GateDetail({ gate, nodes, close, layout = "sheet" }: { gate: Gat
             <dt>网卡累计</dt><dd>↓ {size(h.net_rx_bytes)} · ↑ {size(h.net_tx_bytes)}</dd>
             <dt>运行时间</dt><dd>{uptime(h.uptime_secs)}</dd>
           </dl>
-          <SectionHeader title="流量与主机曲线" description="最近 1 / 6 / 24 小时；VPS 离线或读取失败的时段显示为未知，不补零。" />
+          <SectionHeader flush title="流量与主机曲线" description="最近 1 / 6 / 24 小时；VPS 离线或读取失败的时段显示为未知，不补零。" />
           <HistoryCharts path={`/admin/gates/${gate.id}/history`} host />
-          <SectionHeader title="本机防火墙" description="只读：节点端口没有放行时在节点上提示，Weir 不改防火墙规则；云厂商的安全组读不到。" />
+          <SectionHeader flush title="本机防火墙" description={fw?.managed_version ? "随配置管理带 Weir 标记的节点端口规则；失败恢复本次改动。云安全组需在厂商控制台处理。" : "此 Gate 尚不支持自动管理节点端口，请升级后重试；云安全组需在厂商控制台处理。"} />
           <small>
-            {!fw ? unknown : fw.error ? `${fw.tool}：读取失败（${fw.error}）` : fw.tool === "freedom" ? "没有检测到防火墙" : !fw.active ? `${fw.tool} 未启用（全部放行）` : `${fw.tool} 已启用，放行 ${fw.rules?.length ? fw.rules.join("、") : "无端口"}`}
+            {!fw ? unknown : fw.error ? `${fw.tool}：读取失败（${fw.error}）` : fw.tool === "none" ? "没有检测到防火墙" : !fw.active ? `${fw.tool} 未启用（全部放行）` : `${fw.tool} 已启用，放行 ${fw.rules?.length ? fw.rules.join("、") : "无端口"}`}
           </small>
-          <SectionHeader title="其他程序占用的端口" description="建节点时自动避开这些端口。" />
+          <SectionHeader flush title="其他程序占用的端口" description="建节点时自动避开这些端口。" />
           {foreign.length === 0 ? <small>{gate.listening_ports ? "没有" : unknown}</small> : (
             <div className="flex flex-wrap gap-1.5">{foreign.map((p) => <Badge key={p.proto + p.port} variant="soft" tone="neutral">{p.port}/{p.proto}{p.process ? ` ${p.process}` : ""}</Badge>)}</div>
           )}
             </TabsPanel>
             <TabsPanel value="kernels" className="stack">
-          <SectionHeader title="内核" description="可为这台 VPS 锁定版本；不锁定时使用默认版本。" />
+          <SectionHeader flush title="内核" description="可为这台 VPS 锁定版本；不锁定时使用默认版本。" />
           {kernels.isPending || kernels.error ? <State loading={kernels.isPending} error={kernels.error} onRetry={() => void kernels.refetch()} /> : (["xray", "sing-box"] as const).map((k) => {
             const cached = (kernels.data[k]?.versions ?? []).filter((v) => v.arches[gate.arch] && v.driver).map((v) => v.version);
             return (
@@ -164,9 +163,9 @@ export function GateDetail({ gate, nodes, close, layout = "sheet" }: { gate: Gat
           <GateCerts gate={gate} />
             </TabsPanel>
             <TabsPanel value="nodes" className="stack">
-          <SectionHeader title="节点与出口" description="入口节点 → 出口。" actions={<Button size="sm" variant="outline" onClick={() => navigate(`/exits?gate=${gate.id}`)}>出口与分流</Button>} />
+          <SectionHeader flush title="节点与出口" description="入口节点 → 出口。" actions={<Button size="sm" variant="outline" onClick={() => navigate(`/exits?gate=${gate.id}`)}>出口与分流</Button>} />
           <GateManagement gate={gate} nodes={nodes} />
-          <SectionHeader title="关系图" description="用户 → 入口节点 → 路由（用户自建链式代理、分流规则）→ 出口（只读）；点击跳到对应用户、节点、VPS、订阅源或出口与分流。" />
+          <SectionHeader flush title="关系图" description="用户 → 入口节点 → 路由（用户自建链式代理、分流规则）→ 出口（只读）；点击跳到对应用户、节点、VPS、订阅源或出口与分流。" />
           <GateTopology gateId={gate.id} />
             </TabsPanel>
           </Tabs>
@@ -180,8 +179,8 @@ export function GateDetail({ gate, nodes, close, layout = "sheet" }: { gate: Gat
           back={<Link to="/gates">VPS 与节点</Link>}
           crumb={gate.name}
           actions={<Button variant="outline" onClick={() => setTab("nodes")}>管理节点与 VPS</Button>}
-          tone={gate.status !== "active" ? "off" : !gate.online ? "bad" : gate.state === "failed" ? "bad" : gate.state === "pending" ? "warn" : "ok"}
-          status={`${gate.status !== "active" ? "已撤销" : gate.online ? "在线" : "离线"} · ${gate.last_seen_at ? relativeTime(gate.last_seen_at) + "心跳" : "心跳未知"} · Gate ${gate.version || "版本未知"}`}
+          tone={objectStatus(gate.object_state)[1]}
+          status={`${objectStatus(gate.object_state)[0]} · ${gate.last_seen_at ? relativeTime(gate.last_seen_at) + "心跳" : "心跳未知"} · Gate ${gate.version || "版本未知"}`}
           title={gate.name}
           meta={[gate.public_host || "等待上报地址", gate.arch || "架构未知"].join(" · ")}
           banner={gateDraft && <InsightBanner title={gateDraft.steps?.[0]?.title || gateDraft.explain || "有待确认的草稿"} confidence={confidenceText(gateDraft)} progress={`影响这台的 ${mine.length} 个节点 · 草稿已生成`} action={<Button onClick={reopenDrafts}>去确认</Button>} />}
@@ -192,10 +191,12 @@ export function GateDetail({ gate, nodes, close, layout = "sheet" }: { gate: Gat
     );
   }
   return (
-    <Sheet open onOpenChange={(o) => !o && close()}>
-      <SheetContent side="right" title={gate.name} description={`${gate.public_host || "等待上报地址"} · ${gate.arch} · Gate ${gate.version || "版本未知"}${gateLags(gate) ? `（未跟上中心 ${gate.center_version}）` : ""} · 最近心跳 ${date(gate.last_seen_at)}`} className="w-full sm:max-w-[640px]">
+    <Dialog open onOpenChange={(o) => !o && close()}>
+      <DialogContent size="xl">
+        <DialogTitle>{gate.name}</DialogTitle>
+        <DialogDescription>{gate.object_state?.reason || "当前状态未知"} · 最近心跳 {date(gate.last_seen_at)}</DialogDescription>
         {body}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

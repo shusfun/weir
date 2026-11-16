@@ -221,7 +221,7 @@ func (s *Server) validateCustomEntries(c *gin.Context, u *ent.User, base contrac
 }
 
 // 内核检查在锁外执行；提交时验证同一份基础设置，锁内重读避免与分类设置相互覆盖。
-func (s *Server) writeCustomEntries(c *gin.Context, u *ent.User, revision *int, entries []contracts.CustomEntry, source string, parsed *customResult) {
+func (s *Server) writeCustomEntries(c *gin.Context, u *ent.User, revision *int, entries []contracts.CustomEntry, source string, parsed *customResult, onCommit ...func(context.Context, *ent.Client) error) {
 	ctx := c.Request.Context()
 	base := loadPolicy(u)
 	if revision == nil || *revision != base.Revision {
@@ -273,8 +273,29 @@ func (s *Server) writeCustomEntries(c *gin.Context, u *ent.User, revision *int, 
 			pol.Custom.Entries = entries
 			pol.Custom.Pending = nil
 		}
-		u, err = latest.Update().SetProxyPolicy(policyMap(pol)).Save(ctx)
-		return err
+		if len(onCommit) == 0 || check.Status == "failed" {
+			u, err = latest.Update().SetProxyPolicy(policyMap(pol)).Save(ctx)
+			return err
+		}
+		tx, err := s.Store.Ent.Tx(ctx)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		updated, err := tx.User.UpdateOneID(u.ID).SetProxyPolicy(policyMap(pol)).Save(ctx)
+		if err != nil {
+			return err
+		}
+		for _, commit := range onCommit {
+			if err = commit(ctx, tx.Client()); err != nil {
+				return err
+			}
+		}
+		if err = tx.Commit(); err != nil {
+			return err
+		}
+		u = updated.Unwrap()
+		return nil
 	})
 	if errors.Is(err, conflict) {
 		failure(c, 409, "custom_revision_conflict")

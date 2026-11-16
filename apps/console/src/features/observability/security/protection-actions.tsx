@@ -36,7 +36,7 @@ export function ProtectionActions({ pick }: { pick?: (id:string,name:string)=>Re
     await action.run(item.id, () => api(`/admin/defense/automatic/${item.id}/revoke`, "POST"), "已撤销");
   };
   return <section className="stack" data-tour="automatic-protection">
-    <SectionHeader title="安全处置与自动操作" description="显示最近 24 小时临时处置及永久策略。滚动一小时次数包含已撤销的自动操作。" />
+    <SectionHeader flush title="安全处置与自动操作" description="显示最近 24 小时临时处置及永久策略。滚动一小时次数包含已撤销的自动操作。" />
     {guard.isPending || guard.error ? <State loading={guard.isPending} error={guard.error} onRetry={() => guard.refetch()} /> : (
       <Notice>自动收紧{guard.data.policy.effective.enabled ? "已开启" : "已关闭"} ·
         滚动一小时 {guard.data.hourly_used} / {guard.data.hourly_limit} 次 ·

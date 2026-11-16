@@ -1,7 +1,9 @@
 package center
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,7 +11,12 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/resource"
 )
 
 const upstreamBackup = `{
@@ -31,7 +38,7 @@ const upstreamBackup = `{
 func TestSubscriptionBackupImportExportAndWebdav(t *testing.T) {
 	s, admin := newInstalledServer(t)
 	mustJSON(t, admin, "POST", "/api/v1/admin/backup/import", map[string]any{"content": upstreamBackup, "password": "wrong"}, 401)
-	st := mustJSON(t, admin, "POST", "/api/v1/admin/backup/import", map[string]any{"content": upstreamBackup, "password": "Passw0rd"}, 200)
+	st := importPreviewedBackup(t, admin, upstreamBackup)
 	if st["sources"].(float64) != 1 || st["nodes"].(float64) != 1 || st["profiles"].(float64) != 1 || st["templates"].(float64) != 1 || len(st["skipped"].([]any)) != 2 {
 		t.Fatalf("import stats = %v", st)
 	}
@@ -44,14 +51,14 @@ func TestSubscriptionBackupImportExportAndWebdav(t *testing.T) {
 	if len(p.SourceIds) != 1 || len(p.NodeIds) != 1 || p.ExpiresAt == nil || p.Settings["template"] != "builtin:clash_acl4ssr_lite" || p.Settings["prepend_manual"] != false || p.Settings["rule_level"] != "lite" {
 		t.Fatalf("profile = %+v", p)
 	}
-	mustJSON(t, admin, "POST", "/api/v1/admin/backup/import", map[string]any{"content": "{}", "password": "Passw0rd"}, 400)
+	mustJSON(t, admin, "POST", "/api/v1/admin/backup/import/preview", map[string]any{"content": "{}"}, 400)
 
 	// 导出后再导入：数量翻倍（导入只新增），订阅组引用指向新建的源与节点。
 	w := admin.do("GET", "/api/v1/admin/backup/export", nil, nil)
 	if w.Code != 200 || !strings.Contains(w.Header().Get("Content-Disposition"), "weir-subscriptions-") {
 		t.Fatalf("export = %d", w.Code)
 	}
-	again := mustJSON(t, admin, "POST", "/api/v1/admin/backup/import", map[string]any{"content": w.Body.String(), "password": "Passw0rd"}, 200)
+	again := importPreviewedBackup(t, admin, w.Body.String())
 	if again["sources"].(float64) != 1 || again["nodes"].(float64) != 1 || again["profiles"].(float64) != 1 || again["templates"].(float64) != 1 {
 		t.Fatalf("re-import = %v", again)
 	}
@@ -116,9 +123,109 @@ func TestSubscriptionBackupImportExportAndWebdav(t *testing.T) {
 	}
 	mustJSON(t, admin, "POST", "/api/v1/admin/backup/webdav/restore", map[string]any{"file": "../etc/passwd", "password": "Passw0rd"}, 400)
 	mustJSON(t, admin, "POST", "/api/v1/admin/backup/webdav/restore", map[string]any{"file": list[0].(map[string]any)["name"], "password": "Passw0rd", "revision": "stale"}, 409)
-	res := mustJSON(t, admin, "POST", "/api/v1/admin/backup/webdav/restore", map[string]any{"file": list[0].(map[string]any)["name"], "password": "Passw0rd", "revision": listing["revision"]}, 200)
+	preview := mustJSON(t, admin, "POST", "/api/v1/admin/backup/webdav/restore/preview", map[string]any{"file": list[0].(map[string]any)["name"], "revision": listing["revision"]}, 200)
+	res := mustJSON(t, admin, "POST", "/api/v1/admin/backup/webdav/restore", map[string]any{"file": list[0].(map[string]any)["name"], "password": "Passw0rd", "revision": listing["revision"], "preview_token": preview["preview_token"]}, 200)
 	if res["profiles"].(float64) != 2 {
 		t.Fatalf("restore = %v", res)
 	}
 	_ = json.Valid
+}
+
+func importPreviewedBackup(t *testing.T, admin *testClient, content string) map[string]any {
+	t.Helper()
+	preview := mustJSON(t, admin, "POST", "/api/v1/admin/backup/import/preview", map[string]any{"content": content}, 200)
+	return mustJSON(t, admin, "POST", "/api/v1/admin/backup/import", map[string]any{"content": content, "preview_token": preview["preview_token"], "password": "Passw0rd"}, 200)
+}
+
+func TestBackupPreviewBindingAndStaleness(t *testing.T) {
+	s, admin := newInstalledServer(t)
+	ctx := t.Context()
+	mustJSON(t, admin, "POST", "/api/v1/admin/backup/import", map[string]any{"content": upstreamBackup, "password": "Passw0rd"}, 409)
+	preview := mustJSON(t, admin, "POST", "/api/v1/admin/backup/import/preview", map[string]any{"content": upstreamBackup}, 200)
+	if s.Store.Ent.SubSource.Query().CountX(ctx) != 0 || s.Store.Ent.SubProfile.Query().CountX(ctx) != 0 {
+		t.Fatal("preview wrote data")
+	}
+	request := map[string]any{"content": upstreamBackup + " ", "preview_token": preview["preview_token"], "password": "Passw0rd"}
+	mustJSON(t, admin, "POST", "/api/v1/admin/backup/import", request, 409)
+	request["content"] = upstreamBackup
+	s.Store.Ent.SubNode.Create().SetName("changed").SetURL("trojan://p@node.example:443").SaveX(ctx)
+	mustJSON(t, admin, "POST", "/api/v1/admin/backup/import", request, 409)
+	preview = mustJSON(t, admin, "POST", "/api/v1/admin/backup/import/preview", map[string]any{"content": upstreamBackup}, 200)
+	request["preview_token"] = preview["preview_token"]
+	mustJSON(t, admin, "POST", "/api/v1/admin/backup/import", request, 200)
+	mustJSON(t, admin, "POST", "/api/v1/admin/backup/import", request, 409)
+}
+
+func TestBackupPreviewActorOriginAndExpiry(t *testing.T) {
+	s, admin := newInstalledServer(t)
+	preview := mustJSON(t, admin, "POST", "/api/v1/admin/backup/import/preview", map[string]any{"content": upstreamBackup}, 200)
+	token := preview["preview_token"].(string)
+	plain, err := s.Crypto.Decrypt(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var claim backupPreviewClaim
+	if err := json.Unmarshal([]byte(plain), &claim); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name, origin string
+		actor        int
+	}{{"another actor", "local", claim.Actor + 1}, {"another origin", "webdav:changed", claim.Actor}} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := s.confirmBackup(t.Context(), test.actor, []byte(upstreamBackup), token, test.origin); !errors.Is(err, errBackupPreviewStale) {
+				t.Fatalf("binding rejection = %v", err)
+			}
+		})
+	}
+	claim.Expires = time.Now().Add(-time.Second)
+	raw, err := json.Marshal(claim)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expired, err := s.Crypto.Encrypt(string(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.confirmBackup(t.Context(), claim.Actor, []byte(upstreamBackup), expired, "local"); !errors.Is(err, errBackupPreviewStale) {
+		t.Fatalf("expired preview rejection = %v", err)
+	}
+	if s.Store.Ent.SubSource.Query().CountX(t.Context()) != 0 {
+		t.Fatal("rejected preview changed data")
+	}
+}
+
+func TestBackupFailureRollsBackDataAndReceipt(t *testing.T) {
+	for _, stage := range []string{"profile", "receipt"} {
+		t.Run(stage, func(t *testing.T) {
+			s, admin := newInstalledServer(t)
+			preview := mustJSON(t, admin, "POST", "/api/v1/admin/backup/import/preview", map[string]any{"content": upstreamBackup}, 200)
+			var armed atomic.Bool
+			injected := errors.New("isolated restore write failure")
+			hook := func(next ent.Mutator) ent.Mutator {
+				return ent.MutateFunc(func(ctx context.Context, mutation ent.Mutation) (ent.Value, error) {
+					kind, _ := mutation.Field("kind")
+					if armed.Load() && (stage == "profile" || kind == "backup-import") {
+						return nil, injected
+					}
+					return next.Mutate(ctx, mutation)
+				})
+			}
+			if stage == "profile" {
+				s.Store.Ent.SubProfile.Use(hook)
+			} else {
+				s.Store.Ent.Resource.Use(hook)
+			}
+			request := map[string]any{"content": upstreamBackup, "preview_token": preview["preview_token"], "password": "Passw0rd"}
+			armed.Store(true)
+			mustJSON(t, admin, "POST", "/api/v1/admin/backup/import", request, 400)
+			ctx := t.Context()
+			if s.Store.Ent.SubSource.Query().CountX(ctx) != 0 || s.Store.Ent.SubNode.Query().CountX(ctx) != 0 || s.Store.Ent.RuleTemplate.Query().CountX(ctx) != 0 || s.Store.Ent.SubProfile.Query().CountX(ctx) != 0 || s.Store.Ent.Resource.Query().Where(resource.KindEQ("backup-import")).CountX(ctx) != 0 {
+				t.Fatal("failed restore left partial data or consumed its receipt")
+			}
+			armed.Store(false)
+			mustJSON(t, admin, "POST", "/api/v1/admin/backup/import", request, 200)
+			mustJSON(t, admin, "POST", "/api/v1/admin/backup/import", request, 409)
+		})
+	}
 }

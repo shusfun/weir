@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -23,7 +24,7 @@ import (
 )
 
 // 订阅源里的节点作出口（分流规则的出口、建节点的出口、用户自建链式代理共用）：
-//   - 单个节点：名称完全一致；
+//   - 单个节点：稳定连接身份，名称只用于旧数据首次绑定；
 //   - 一组：名称正则筛选，全部成员都下发给 Gate，由内核按延迟自动选、出故障自动切换（中心不替内核挑节点），最多 50 个；
 //     内核版本不支持时保存报错，不悄悄退回单个节点。
 // 订阅源刷新后成员随之更新；刷新失败或一时没有匹配时保留上一次可用的；从没解析成功过时丢弃流量，不改成直连。
@@ -31,10 +32,12 @@ import (
 // 能作出口的协议与参数由 linkOutbound 决定；匹配到但不能作出口的节点跳过并写明原因。
 
 type sourceSpec struct {
-	SourceID  int    `json:"source_id,omitempty"`
-	ProfileID int    `json:"profile_id,omitempty"`
-	Mode      string `json:"mode"`
-	Match     string `json:"match"`
+	SourceID           int      `json:"source_id,omitempty"`
+	ProfileID          int      `json:"profile_id,omitempty"`
+	Mode               string   `json:"mode"`
+	Match              string   `json:"match"`
+	Identity           string   `json:"identity,omitempty"`
+	InsecureIdentities []string `json:"insecure_identities,omitempty"`
 }
 
 // measuredSocksUDP 把已经实测过的同一 SOCKS5 地址结果用到分组成员上。没测过保持未知，不当成支持。
@@ -69,8 +72,13 @@ func (sp sourceSpec) check() error {
 	if (sp.SourceID > 0) == (sp.ProfileID > 0) {
 		return errors.New("请选择一个订阅源或订阅组")
 	}
-	if sp.Mode != "node" && sp.Mode != "filter" || strings.TrimSpace(sp.Match) == "" || len(sp.Match) > 200 {
+	if sp.Mode != "node" && sp.Mode != "filter" || strings.TrimSpace(sp.Match) == "" && sp.Identity == "" || len(sp.Match) > 200 || len(sp.InsecureIdentities) > contracts.MaxGroupMembers || sp.Identity != "" && (sp.Mode != "node" || !validSourceIdentity(sp.Identity)) {
 		return errors.New("请选择单个节点或按名称筛选一组，并填写名称")
+	}
+	for _, id := range sp.InsecureIdentities {
+		if !validSourceIdentity(id) {
+			return errors.New("证书确认的节点身份无效")
+		}
 	}
 	if sp.Mode == "filter" {
 		if _, err := regexp.Compile(sp.Match); err != nil {
@@ -104,6 +112,10 @@ func (s *Server) specLinks(ctx context.Context, sp sourceSpec) ([]string, error)
 // publicOnly 为真（用户自建）时只接受公网地址的节点；kernels 是会用到这个出口的内核（入口节点的，或这台 VPS 上的全部），
 // 有一个内核连不上的成员跳过并写明原因（否则整份 Gate 配置会被拒绝）。
 func (s *Server) resolveSpec(ctx context.Context, g *ent.Gate, kernels []string, sp sourceSpec, publicOnly bool) (resolvedExit, error) {
+	sp, err := s.bindSourceIdentity(ctx, sp)
+	if err != nil {
+		return resolvedExit{}, err
+	}
 	links, err := s.specLinks(ctx, sp)
 	if err != nil {
 		return resolvedExit{}, err
@@ -118,15 +130,21 @@ func (s *Server) resolveSpec(ctx context.Context, g *ent.Gate, kernels []string,
 	parsed, _ := subscription.ParseLinks(links)
 	var ex resolvedExit
 	var members []contracts.Outbound
+	seen := map[string]bool{}
 	for _, n := range parsed.Nodes {
-		if sp.Mode == "filter" && !re.MatchString(n.Remark) || sp.Mode != "filter" && n.Remark != sp.Match {
+		if sp.Mode == "filter" && !re.MatchString(n.Remark) || sp.Mode != "filter" && (sp.Identity != "" && subscription.InventoryIdentity(n.RawLink) != sp.Identity || sp.Identity == "" && n.Remark != sp.Match) {
 			continue
 		}
+		identity := subscription.InventoryIdentity(n.RawLink)
+		if seen[identity] {
+			continue
+		}
+		seen[identity] = true
 		if publicOnly && (literalPrivate(n.Address) || strings.EqualFold(n.Address, "localhost")) {
 			ex.Skipped = append(ex.Skipped, n.Remark+"：不是公网地址")
 			continue
 		}
-		o, err := linkOutbound(n)
+		o, err := confirmedLinkOutbound(n, sp.InsecureIdentities)
 		if err == nil {
 			err = allowed(o)
 		}
@@ -169,6 +187,16 @@ func (s *Server) resolveSpec(ctx context.Context, g *ent.Gate, kernels []string,
 
 // outboundFilter 返回一个检查：这些内核能否作客户端连接某个出口。读不到驱动时不过滤（编译 Gate 配置时会如实报错）。
 func (s *Server) outboundFilter(ctx context.Context, g *ent.Gate, kernels []string) func(contracts.Outbound) error {
+	if g != nil && s.bridgeSupport(ctx, g) {
+		return func(o contracts.Outbound) error {
+			for _, kernel := range kernels {
+				if _, err := s.outboundExecutor(ctx, g, kernel, o); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}
 	var drivers []kernelconf.Driver
 	if g != nil && len(kernels) > 0 {
 		need := map[string]bool{}
@@ -231,6 +259,10 @@ type storedExit struct {
 // probe 为真时（定时刷新用户出口）成员变化后先经 Gate 实测：订阅源里的域名可能已改指内网，字面检查拦不住。
 // 实测不过保留上一次可用的出口，和保存时的规则一致。保存路径已经实测过，传 false。
 func (s *Server) refreshSourceExit(ctx context.Context, owner string, gid int, sp sourceSpec, publicOnly, probe bool) error {
+	sp, err := s.bindStoredSourceIdentity(ctx, owner, gid, sp)
+	if err != nil {
+		return err
+	}
 	g, err := s.Store.Ent.Gate.Get(ctx, gid)
 	if err != nil {
 		return err
@@ -246,7 +278,7 @@ func (s *Server) refreshSourceExit(ctx context.Context, owner string, gid int, s
 	prev, _ := s.loadExit(ctx, owner)
 	a, _ := json.Marshal(ex.Outbound)
 	b, _ := json.Marshal(prev.Outbound)
-	if string(a) == string(b) && len(ex.Skipped) == len(prev.Skipped) {
+	if string(a) == string(b) && slices.Equal(ex.Skipped, prev.Skipped) && slices.Equal(ex.Names, prev.Names) {
 		return nil
 	}
 	var measured *exitProbe
@@ -397,6 +429,25 @@ func (s *Server) grantedProfiles(ctx context.Context, uid int) (map[int]bool, er
 	return out, nil
 }
 
+func (s *Server) checkSourceAccess(ctx context.Context, sp sourceSpec, cc chainCtx) error {
+	if err := sp.check(); err != nil {
+		return fmt.Errorf("invalid_chain: %v", err)
+	}
+	if sp.SourceID > 0 && !cc.admin {
+		return errors.New("exit_not_allowed: 只能选择分配给你的订阅组里的节点")
+	}
+	if sp.ProfileID > 0 && cc.userID > 0 {
+		granted, err := s.grantedProfiles(ctx, cc.userID)
+		if err != nil {
+			return err
+		}
+		if !granted[sp.ProfileID] {
+			return errors.New("exit_not_allowed: 这个订阅组没有分配给该用户")
+		}
+	}
+	return nil
+}
+
 // RefreshSourceExits 在订阅源刷新后更新全部订阅源节点出口（维护任务每分钟调用；失败的保持上一次）。
 func (s *Server) RefreshSourceExits(ctx context.Context) {
 	es, err := s.Store.Ent.Exit.Query().Where(entexit.KindEQ(entexit.KindSource), entexit.EnabledEQ(true)).All(ctx)
@@ -415,20 +466,18 @@ func (s *Server) RefreshSourceExits(ctx context.Context) {
 func (s *Server) chainSources(c *gin.Context, admin bool) {
 	ctx := c.Request.Context()
 	type option struct {
-		Kind  string   `json:"kind"` // source / profile
-		ID    int      `json:"id"`
-		Name  string   `json:"name"`
-		Nodes []string `json:"nodes"`
+		Kind  string             `json:"kind"` // source / profile
+		ID    int                `json:"id"`
+		Name  string             `json:"name"`
+		Nodes []string           `json:"nodes"`
+		Items []sourceNodeChoice `json:"node_items"`
 	}
-	names := func(links []string) []string {
-		out := []string{}
-		parsed, _ := subscription.ParseLinks(links)
-		for _, n := range parsed.Nodes {
-			if _, err := linkOutbound(n); err == nil {
-				out = append(out, n.Remark)
-			}
+	choice := func(kind string, id int, name string, links []string) option {
+		v := option{Kind: kind, ID: id, Name: name, Nodes: []string{}, Items: sourceNodeChoices(links)}
+		for _, item := range v.Items {
+			v.Nodes = append(v.Nodes, item.Name)
 		}
-		return out
+		return v
 	}
 	out := []option{}
 	uid := 0
@@ -449,7 +498,7 @@ func (s *Server) chainSources(c *gin.Context, admin bool) {
 		}
 		for _, src := range srcs {
 			links, _ := kvCache{s}.Load(ctx, src.ID)
-			out = append(out, option{Kind: "source", ID: src.ID, Name: firstNonEmpty(src.Name, src.URL), Nodes: names(links)})
+			out = append(out, choice("source", src.ID, firstNonEmpty(src.Name, "订阅源 #"+itoa(src.ID)), links))
 		}
 		c.JSON(200, gin.H{"items": out})
 		return
@@ -465,7 +514,7 @@ func (s *Server) chainSources(c *gin.Context, admin bool) {
 			continue
 		}
 		links, _ := s.specLinks(ctx, sourceSpec{ProfileID: id})
-		out = append(out, option{Kind: "profile", ID: id, Name: p.Name, Nodes: names(links)})
+		out = append(out, choice("profile", id, p.Name, links))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	c.JSON(200, gin.H{"items": out})

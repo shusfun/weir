@@ -250,7 +250,7 @@ func (s *Server) proxyView(ctx context.Context, u *ent.User) (gin.H, error) {
 		"min_refresh": contracts.MinRefreshMinutes, "groups": groups, "lines": lines}, nil
 }
 
-// chainExitView 是类型出口的显示内容（与链式代理列表一致：密码给本人与管理员看原文）。
+// chainExitView 与出口目录使用同一脱敏视图。
 func (s *Server) chainExitView(ctx context.Context, ch *ent.Chain) gin.H {
 	e, err := s.Store.Ent.Exit.Get(ctx, ch.ExitID)
 	if err != nil {
@@ -432,7 +432,7 @@ func (s *Server) putTypeExitNow(c *gin.Context, admin bool) {
 		}
 		// 每个节点经出口的实测在 checkUserChain 里报步骤，这里给它加上是第几个节点
 		pctx := jobPrefix(ctx, fmt.Sprintf("第 %d/%d 个节点（%s）· ", i+1, len(t.nodes), n.Name))
-		_, probe, err := s.checkUserChain(pctx, u, chainRequest{EntryNodeID: n.ID, Exit: req.Exit}, admin)
+		_, probe, err := s.checkUserChain(pctx, u, &chainRequest{EntryNodeID: n.ID, Exit: req.Exit}, admin)
 		if err != nil {
 			var verification exitVerificationError
 			if errors.As(err, &verification) {

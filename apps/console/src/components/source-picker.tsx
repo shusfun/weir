@@ -1,8 +1,8 @@
-// 订阅源里的节点作出口：单个节点（名称完全一致），或按名称正则筛选一组（全部成员下发，由内核自动选择与切换，最多 50 个）。
+// 单个节点以连接身份引用，分组按名称正则筛选，全部成员由内核自动切换。
 // 管理员可选任意订阅源；用户自建只能选分配给他的订阅组里出现的节点（由接口决定给哪些选项）。
 import { Link } from "react-router-dom";
 import { useQuery } from "../lib/query";
-import { Badge, Field, Input, Notice, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@weir/ui";
+import { Badge, CheckboxField, Field, Input, Notice, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@weir/ui";
 import { api } from "../api";
 import { State } from "./feedback";
 
@@ -11,22 +11,26 @@ export interface SourceChoice {
   profile_id?: number;
   mode?: "node" | "filter";
   match?: string;
+  identity?: string;
+  insecure_identities?: string[];
 }
+interface SourceNode { identity: string; name: string; requires_confirmation: boolean }
 interface Option {
   kind: "source" | "profile";
   id: number;
   name: string;
   nodes: string[];
+  node_items: SourceNode[];
 }
 
 const maxMembers = 50;
 
-function matches(nodes: string[], mode: string | undefined, match: string | undefined) {
-  if (!match) return [];
-  if (mode !== "filter") return nodes.filter((n) => n === match);
+function matches(nodes: SourceNode[], mode: string, value: SourceChoice) {
+  if (mode !== "filter") return nodes.filter(n => value.identity ? n.identity === value.identity : n.name === value.match);
+  if (!value.match) return [];
   try {
-    const re = new RegExp(match);
-    return nodes.filter((n) => re.test(n));
+    const re = new RegExp(value.match);
+    return nodes.filter((n) => re.test(n.name));
   } catch {
     return null;
   }
@@ -46,10 +50,10 @@ export function SourcePicker({ path, value, onChange }: { path: string; value: S
   }
   const chosen = options.find((o) => (o.kind === "source" ? o.id === value.source_id : o.id === value.profile_id));
   const mode = value.mode ?? "filter";
-  const hit = chosen ? matches(chosen.nodes, mode, value.match) : [];
+  const hit = chosen ? matches(chosen.node_items, mode, value) : [];
   const select = (id: string) => {
     const o = options.find((x) => `${x.kind}:${x.id}` === id);
-    if (o) onChange({ ...value, source_id: o.kind === "source" ? o.id : undefined, profile_id: o.kind === "profile" ? o.id : undefined, match: "" });
+    if (o) onChange({ ...value, source_id: o.kind === "source" ? o.id : 0, profile_id: o.kind === "profile" ? o.id : 0, match: "", identity: "", insecure_identities: [] });
   };
   return (
     <>
@@ -60,27 +64,28 @@ export function SourcePicker({ path, value, onChange }: { path: string; value: S
         </Select>
       </Field>
       <Field label="选择方式">
-        <Segmented aria-label="选择方式" value={mode} onValueChange={(m) => onChange({ ...value, mode: m, match: "" })} options={[["filter", "按名称筛选一组"], ["node", "单个节点"]] as const} />
+        <Segmented aria-label="选择方式" value={mode} onValueChange={(m) => onChange({ ...value, mode: m, match: "", identity: "", insecure_identities: [] })} options={[["filter", "按名称筛选一组"], ["node", "单个节点"]] as const} />
       </Field>
       {mode === "node" ? (
         <Field label="节点" name="match" required>
-          <Select required value={value.match ?? ""} onValueChange={(v) => onChange({ ...value, mode, match: String(v) })}>
-            <SelectTrigger><SelectValue>{value.match || "请选择"}</SelectValue></SelectTrigger>
-            <SelectContent>{(chosen?.nodes ?? []).map((n) => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
+          <Select required value={value.identity || (hit?.length === 1 ? hit[0].identity : "")} onValueChange={(v) => { const n = chosen?.node_items.find(n => n.identity === v); if (n) onChange({ ...value, mode, match: n.name, identity: n.identity, insecure_identities: [] }); }}>
+            <SelectTrigger><SelectValue>{hit?.[0]?.name || value.match || "请选择"}</SelectValue></SelectTrigger>
+            <SelectContent>{(chosen?.node_items ?? []).map(n => <SelectItem key={n.identity} value={n.identity}>{n.name}{chosen!.node_items.filter(other => other.name === n.name).length > 1 ? ` · ${n.identity.slice(0,7)}` : ""}</SelectItem>)}</SelectContent>
           </Select>
         </Field>
       ) : (
         <Field label="名称筛选（正则）" name="match" required hint="例如 ^HK 或 香港|HK" customError={hit === null ? "不是有效的正则" : hit.length > maxMembers ? `匹配到 ${hit.length} 个，一组最多 ${maxMembers} 个，请收紧条件` : ""}>
-          <Input required value={value.match ?? ""} onChange={(e) => onChange({ ...value, mode, match: e.target.value })} />
+          <Input required value={value.match ?? ""} onChange={(e) => onChange({ ...value, mode, match: e.target.value, identity: "" })} />
         </Field>
       )}
       {chosen && hit && hit.length > 0 && hit.length <= maxMembers && (
         <Notice role="status">
           {mode === "filter" ? `这一组有 ${hit.length} 个节点，全部下发给 VPS，由内核按延迟自动选、出故障自动切换：` : "使用节点："}
-          <span className="mt-1 flex flex-wrap gap-1">{hit.slice(0, 12).map((n) => <Badge key={n} variant="soft" tone="neutral">{n}</Badge>)}{hit.length > 12 && <small>等 {hit.length} 个</small>}</span>
+          <span className="mt-1 flex flex-wrap gap-1">{hit.slice(0, 12).map(n => <Badge key={n.identity} variant="soft" tone="neutral">{n.name}</Badge>)}{hit.length > 12 && <small>等 {hit.length} 个</small>}</span>
         </Notice>
       )}
-      {chosen && value.match && hit && hit.length === 0 && <Notice tone="warn">现在没有匹配的节点（支持 VLESS / VMess / Trojan / SOCKS5 / HTTP）。</Notice>}
+      {chosen && (value.match || value.identity) && hit && hit.length === 0 && <Notice tone="warn">选中的连接身份当前不可用。改名不会影响引用，其他同名节点不会替代它。</Notice>}
+      {hit && hit.length <= maxMembers && hit.filter(n => n.requires_confirmation).map(n => <CheckboxField key={n.identity} label={`确认「${n.name}」跳过证书校验`} description="无法验证远端身份。只确认这条连接；未确认的分组成员不会参与出口。" checked={(value.insecure_identities ?? []).includes(n.identity)} onCheckedChange={checked => onChange({...value, insecure_identities: checked ? [...new Set([...(value.insecure_identities ?? []), n.identity])] : (value.insecure_identities ?? []).filter(id => id !== n.identity)})} />)}
     </>
   );
 }

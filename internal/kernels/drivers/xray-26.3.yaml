@@ -5,5 +5,31 @@ extends: xray-1.8
 min_version: 26.3.27
 max_version: 26.10.16
 notes: 26.3.27 起移除 allowInsecure。
+presets:
+  - id: vless-xhttp-tls
+    order: 21
+    name: VLESS + XHTTP + TLS
+    summary: XHTTP 传输，需要可信证书与兼容客户端
+    protocol: vless
+    network: xhttp
+    security: tls
+    cert: required
+    chain_exit: true
+    settings: {xhttp_path: "/$gen:hex12", xhttp_mode: auto, tls_alpn: "h2,http/1.1"}
+    fields:
+      - {key: xhttp_path, label: XHTTP 路径, kind: text, hint: 以 / 开头}
+      - {key: xhttp_mode, label: 传输模式, kind: select, options: [[auto, 自动], [packet-up, packet-up], [stream-up, stream-up], [stream-one, stream-one]]}
+  - id: vless-grpc-tls
+    order: 22
+    name: VLESS + gRPC + TLS
+    summary: HTTP/2 gRPC 传输，需要可信证书
+    protocol: vless
+    network: grpc
+    security: tls
+    cert: required
+    chain_exit: true
+    settings: {grpc_service_name: "$gen:hex12", tls_alpn: h2}
+    fields:
+      - {key: grpc_service_name, label: gRPC 服务名, kind: text}
 strip:
   - outbounds.*.streamSettings.tlsSettings.allowInsecure

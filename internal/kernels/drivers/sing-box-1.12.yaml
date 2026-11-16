@@ -4,15 +4,25 @@ kernel: sing-box
 name: sing-box-1.12
 min_version: 1.12.0
 notes: 按用户统计流量需要 with_v2ray_api，由本项目 CI 跟随上游标签编译。
-protocols: [hysteria2, tuic, shadowsocks, shadowtls, wireguard]
+protocols: [hysteria2, tuic, shadowsocks, shadowtls, wireguard, anytls]
 networks: [tcp, udp]
 securities: [tls]
 outbound_networks: [tcp, ws, grpc, httpupgrade]
-features: [urltest]
+features: [urltest, hosted-outbounds, native-connections, udp-over-tcp]
 run: [run, -c, "{config}"]
 check: [check, -c, "{config}"]
 
 presets:
+  - id: anytls
+    order: 75
+    name: AnyTLS
+    summary: 基于 TLS 的会话复用协议，需要可信证书与支持 AnyTLS 的客户端
+    protocol: anytls
+    network: tcp
+    security: tls
+    cert: required
+    chain_exit: true
+    settings: {}
   - id: ss2022
     order: 50
     name: Shadowsocks 2022
@@ -76,6 +86,9 @@ templates:
   root:
     log: {level: warn}
     inbounds:
+      - $each: "${bridges}"
+        $as: bridge
+        $do: {$use: inbound.bridge}
       - $each: "${inbounds}"
         $as: ib
         $do:
@@ -95,9 +108,12 @@ templates:
           $then: {type: urltest, tag: "${ob.tag}", outbounds: "${ob.group}", url: "${probe.url}", interval: "${probe.interval}"}
           $else: {$use: "outbound.${ob.protocol}"}
     route?:
-      $if: "routes"
+      $if: "routes or observer.listen != ''"
       $then:
         rules:
+          # Observe the native host without replacing the original destination.
+          - $if: "observer.listen != ''"
+            $then: {action: sniff, sniffer: [http, tls, quic]}
           - $each: "${routes}"
             $as: r
             $do:
@@ -108,6 +124,11 @@ templates:
               ip_cidr?: "${r.ip | rules}"
               protocol?: "${r.protocol | rules}"
     experimental:
+      clash_api:
+        $if: "observer.listen != ''"
+        $then:
+          external_controller: "${observer.listen}"
+          secret: "${observer.secret}"
       v2ray_api:
         listen: "127.0.0.1:${stats}"
         stats:
@@ -116,13 +137,13 @@ templates:
             - $each: "${inbounds}"
               $as: ib
               $do:
-                $if: "ib.protocol in ['hysteria2', 'tuic', 'shadowsocks', 'shadowtls']"
+                $if: "ib.protocol in ['hysteria2', 'tuic', 'shadowsocks', 'shadowtls', 'anytls']"
                 $then: "${ib.stats_tag}"
           users?:
             - $each: "${inbounds}"
               $as: ib
               $do:
-                $if: "ib.protocol in ['hysteria2', 'tuic', 'shadowsocks', 'shadowtls']"
+                $if: "ib.protocol in ['hysteria2', 'tuic', 'shadowsocks', 'shadowtls', 'anytls']"
                 $then: {$use: stats.users, $spread: true}
           # 按出口计量（链路页的出口速率、一组里当前有流量的成员）。
           outbounds?:
@@ -136,6 +157,20 @@ templates:
       $do: "${c.stats_name}"
 
   # —— 入站 ——
+  inbound.anytls:
+    type: anytls
+    tag: "${ib.stats_tag}"
+    listen: 0.0.0.0
+    listen_port: "${ib.port}"
+    users:
+      - $each: "${ib.clients}"
+        $as: c
+        $do: {name: "${c.stats_name}", password: "${c.password}"}
+    tls:
+      enabled: true
+      certificate_path: "${ib.tls_cert_file}"
+      key_path: "${ib.tls_key_file}"
+
   inbound.hysteria2:
     type: hysteria2
     tag: "${ib.stats_tag}"
@@ -183,6 +218,9 @@ templates:
       server_name?: "${ib.tls_sni}"
       alpn: "${ib.tls_alpn | split | default(['h3'])}"
   inbound.shadowsocks:
+    network?:
+      $if: "ib.tcp_only"
+      $then: tcp
     type: shadowsocks
     tag: "${ib.stats_tag}"
     listen: 0.0.0.0
@@ -250,6 +288,13 @@ templates:
           $if: "c.wg_public"
           $then: {public_key: "${c.wg_public}", allowed_ips: ["${c.wg_address}"]}
 
+  inbound.bridge:
+    type: socks
+    tag: "${bridge.tag}"
+    listen: 127.0.0.1
+    listen_port: "${bridge.port}"
+    users: [{username: "${bridge.username}", password: "${bridge.password}"}]
+
   # —— 出口 ——
   outbound.freedom: {type: direct, tag: "${ob.tag}"}
   outbound.blackhole: {type: block, tag: "${ob.tag}"}
@@ -277,6 +322,9 @@ templates:
   outbound.shadowsocks:
     $merge:
       - {type: shadowsocks, tag: "${ob.tag}", "server?": "${ob.address}", "server_port?": "${ob.port}", "method?": "${ob.username | trim | first(ob.s.method | trim, 'aes-128-gcm')}", "password?": "${ob.password}"}
+      - udp_over_tcp?:
+          $if: "ob.s.udp_over_tcp"
+          $then: {enabled: true, version: 2}
       - $use: oextra
   outbound.hysteria2: &managedOut
     $merge:

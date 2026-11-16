@@ -141,6 +141,7 @@ type Inbound struct {
 	RealityPublicKey      string   `json:"reality_public_key"`
 	SSMethod              string   `json:"ss_method"`
 	SSPassword            string   `json:"ss_password"`
+	TCPOnly               bool     `json:"tcp_only,omitempty"`
 	TLSCertFile           string   `json:"tls_cert_file"`
 	CertificateID         int64    `json:"certificate_id,omitempty"`
 	TLSKeyFile            string   `json:"tls_key_file"`
@@ -303,6 +304,7 @@ func (c Client) PasswordValue() string {
 }
 
 type OutboundSettings struct {
+	UDPOverTCP         bool     `json:"udp_over_tcp,omitempty"`
 	Obfs               string   `json:"obfs,omitempty"`
 	ObfsPassword       string   `json:"obfs_password,omitempty"`
 	CongestionControl  string   `json:"congestion_control,omitempty"`

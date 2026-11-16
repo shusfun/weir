@@ -1,4 +1,4 @@
-import { Button, Card, CardContent, SectionHeader, Sheet, SheetContent } from "@weir/ui";
+import { Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogTitle, SectionHeader } from "@weir/ui";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "../lib/query";
 import { api } from "../api";
@@ -49,18 +49,20 @@ export function CenterResources() {
   useConsoleContext(open ? { page: "VPS 与节点", object: { type: "center", id: 1, name: "中心" }, dialog: { title: "中心运行状态" } } : null);
   return <>
     <Card {...dataObject({type: "center", id: 1})}><CardContent className="stack min-h-48">
-      <SectionHeader title={<ObjectLink to={{type: "center", id: 1, name: "中心"}} />} description="整机与 Weir 进程占用" actions={<Button size="sm" variant="outline" onClick={() => setOpen(true)}>详情</Button>} />
+      <SectionHeader flush title={<ObjectLink to={{type: "center", id: 1, name: "中心"}} />} description="整机与 Weir 进程占用" actions={<Button size="sm" variant="outline" onClick={() => setOpen(true)}>详情</Button>} />
       <LocalGateControl />
       {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : <>
         <HostUsage host={q.data.host} /><ProcessUsage host={q.data.host} names={["weir-center"]} />
         <small className="text-[var(--weir-ink-3)]">采样 {date(q.data.host?.observed_at)} · CPU 按整机总算力计算</small>
       </>}
     </CardContent></Card>
-    <Sheet open={open} onOpenChange={setOpen}><SheetContent side="right" title="中心运行状态" description="每 10 秒采样；历史保留 25 小时，缺失处留空。" className="w-full sm:max-w-[640px]">
-      <div className="stack p-4">
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent size="lg">
+      <DialogTitle>中心运行状态</DialogTitle>
+      <DialogDescription>每 10 秒采样；历史保留 25 小时，缺失处留空。</DialogDescription>
+      <div className="stack">
         {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : <><HostUsage host={q.data?.host} /><ProcessUsage host={q.data?.host} names={["weir-center"]} /></>}
         <HistoryCharts path="/admin/center/resources/history" host traffic={false} processes={["weir-center"]} />
       </div>
-    </SheetContent></Sheet>
+    </DialogContent></Dialog>
   </>;
 }

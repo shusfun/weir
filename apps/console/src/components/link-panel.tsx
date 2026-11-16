@@ -61,6 +61,7 @@ import { fromLocalInput, localInput, type ChainItem, type ExitSpec, type LinkIte
 import { ExitFields, exitErrorFields, exitKindName, probeText } from "./chain-exit";
 import { ExitSelector } from "./exit-selector";
 import { State } from "./feedback";
+import type { CatalogNode } from "./node-catalog";
 
 export interface NodeOption extends NodeChoice { gate_id: number }
 
@@ -131,7 +132,7 @@ export function LinkPanel({
   };
   return (
     <section className="stack">
-      <SectionHeader
+      <SectionHeader flush
         title={title}
         description={description}
         actions={
@@ -381,12 +382,14 @@ function LinkForm({
   const [all, setAll] = useState(l?.all_nodes ?? true);
   const [picked, setPicked] = useState<number[]>(l?.node_ids ?? []);
   const [pickedChains, setPickedChains] = useState<number[]>(l?.chain_ids ?? []);
+  const [pickedCatalog, setPickedCatalog] = useState<string[]>(l?.catalog_refs ?? []);
+  const catalog = useQuery({ queryKey: ["node-catalog", base], queryFn: async () => (await api(`${base}/node-catalog`)).items as CatalogNode[] });
   const [enabled, setEnabled] = useState(l?.enabled ?? true);
   const [start, setStart] = useState(localInput(l?.starts_at));
   const [end, setEnd] = useState(localInput(l?.ends_at));
   const save = useFormAction(
     () => {
-      const body = { name: name.trim(), all_nodes: all, node_ids: all ? [] : picked, chain_ids: all ? [] : pickedChains, enabled, starts_at: fromLocalInput(start), ends_at: fromLocalInput(end) };
+      const body = { name: name.trim(), all_nodes: all, node_ids: all ? [] : picked, chain_ids: all ? [] : pickedChains, catalog_refs: all ? [] : pickedCatalog, enabled, starts_at: fromLocalInput(start), ends_at: fromLocalInput(end) };
       return l ? api(`${base}/links/${l.id}`, "PATCH", body) : api(base + "/links", "POST", body);
     },
     { fields: { link_window_order: "ends_at", link_window_exceeds_plan: "ends_at", invalid_link_window: "starts_at" }, onSuccess: saved },
@@ -443,6 +446,10 @@ function LinkForm({
                   ))}
                 </fieldset>
               )}
+              <fieldset className="grid gap-2">
+                <legend className="mb-1 text-meta font-medium text-[var(--weir-ink-2)]">机场与手动节点</legend>
+                {catalog.isPending || catalog.error ? <State loading={catalog.isPending} error={catalog.error} onRetry={() => catalog.refetch()} /> : catalog.data.filter((item) => (item.kind === "source" || item.kind === "manual") && item.selected && item.authorized).map((item) => <CheckboxField key={item.ref} label={item.name || item.ref} description={item.state.reason} checked={pickedCatalog.includes(item.ref)} onCheckedChange={(on) => setPickedCatalog((old) => on ? [...old, item.ref] : old.filter((ref) => ref !== item.ref))} />)}
+              </fieldset>
             </>
           )}
           {l && <SwitchField label="启用" checked={enabled} onCheckedChange={setEnabled} />}

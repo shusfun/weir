@@ -4,7 +4,9 @@ import (
 	"context"
 
 	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/chain"
 	entexit "github.com/shusfun/weir/internal/store/ent/exit"
+	"github.com/shusfun/weir/internal/store/ent/route"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -37,13 +39,58 @@ func typeUDP(s *Server, ctx context.Context, nodes []*ent.Node) string {
 	}
 }
 
-// nodeUDP 沿出口链判断这个节点能不能承载 UDP。
-// known 为假表示还没有实测，调用方应显示「未知」，不能当成支持或不支持。
+// A node-wide decision must include credential-specific routes; otherwise a
+// TCP-only default would disable UDP on a user's working chain as well.
 func (s *Server) nodeUDP(ctx context.Context, n *ent.Node) (supported, known bool) {
+	if n != nil && (n.Protocol == "http" || n.Protocol == "shadowtls") {
+		return false, true
+	}
+	return s.nodeRouteUDP(ctx, n, nil, true, map[int]bool{})
+}
+
+// uid nil includes all users for a node-wide summary; uid 0 is the internal
+// transport identity, which does not match administrator rules for a user.
+func (s *Server) nodeRouteUDP(ctx context.Context, n *ent.Node, uid *int, includeChains bool, seen map[int]bool) (bool, bool) {
 	if n == nil || n.ExitID == 0 {
 		return false, false
 	}
-	return s.exitUDP(ctx, n.ExitID, map[int]bool{})
+	ids := map[int]bool{n.ExitID: true}
+	rules, err := s.Store.Ent.Route.Query().Where(route.GateIDEQ(n.GateID), route.EnabledEQ(true), route.Or(route.NodeIDIsNil(), route.NodeIDEQ(n.ID))).All(ctx)
+	if err != nil {
+		return false, false
+	}
+	for _, r := range rules {
+		if r.UserID != nil && uid != nil && *r.UserID != *uid {
+			continue
+		}
+		e, err := s.Store.Ent.Exit.Get(ctx, r.ExitID)
+		if err != nil {
+			return false, false
+		}
+		// Intentional destination blocking applies to TCP too; it is not a
+		// transport capability limit on otherwise usable destinations.
+		if e.Kind != entexit.KindBlackhole {
+			ids[r.ExitID] = true
+		}
+	}
+	if includeChains {
+		chains, err := s.Store.Ent.Chain.Query().Where(chain.EntryNodeIDEQ(n.ID), chain.EnabledEQ(true)).All(ctx)
+		if err != nil {
+			return false, false
+		}
+		for _, ch := range chains {
+			ids[ch.ExitID] = true
+		}
+	}
+	first, support := true, false
+	for id := range ids {
+		v, known := s.exitUDP(ctx, id, seen)
+		if !known || !first && v != support {
+			return false, false
+		}
+		first, support = false, v
+	}
+	return support, true
 }
 
 func (s *Server) exitUDP(ctx context.Context, id int, seen map[int]bool) (bool, bool) {
@@ -51,8 +98,9 @@ func (s *Server) exitUDP(ctx context.Context, id int, seen map[int]bool) (bool, 
 		return false, false
 	}
 	seen[id] = true
+	defer delete(seen, id)
 	e, err := s.Store.Ent.Exit.Get(ctx, id)
-	if err != nil {
+	if err != nil || !e.Enabled {
 		return false, false
 	}
 	switch e.Kind {
@@ -72,6 +120,9 @@ func (s *Server) exitUDP(ctx context.Context, id int, seen map[int]bool) (bool, 
 		}
 		return groupExitUDP(stored.Outbound)
 	case entexit.KindNode:
+		if _, err := s.uotOutbound(ctx, e); err != nil {
+			return false, false
+		}
 		if e.ExitNodeID == nil {
 			return false, false
 		}
@@ -79,7 +130,8 @@ func (s *Server) exitUDP(ctx context.Context, id int, seen map[int]bool) (bool, 
 		if err != nil {
 			return false, false
 		}
-		return s.exitUDP(ctx, next.ExitID, seen)
+		internalUser := 0
+		return s.nodeRouteUDP(ctx, next, &internalUser, false, seen)
 	default:
 		p, ok := s.loadExitProbe(ctx, exitOwner(e.ID))
 		var measured *bool

@@ -10,7 +10,7 @@ import { useFormAction, useRowAction } from "../lib/action";
 import { State } from "../components/feedback";
 import { GuestbookManager } from "../components/guestbook";
 import type { Profile } from "../lib/subscriptions";
-import { dataObject } from "../components/object-link";
+import { dataObject, ObjectLink, useStringDialogParam } from "../components/object-link";
 import { field, useConsoleContext } from "../lib/console-context";
 import { distributionSections } from "../shell/navigation";
 import { ClientCatalogEditor } from "../components/client-catalog";
@@ -46,6 +46,7 @@ const targets = [["clash", "Clash"], ["singbox", "sing-box"], ["surge", "Surge"]
 export function PublicPagesPage() {
   const [params, setParams] = useSearchParams();
   const tab = distributionSections.some((s) => s.key === params.get("tab")) ? params.get("tab")! : distributionSections[0].key;
+  const detail = useStringDialogParam("page");
   const confirm = useConfirm();
   const toast = useToast();
   const q = useQuery({ queryKey: ["public-pages"], queryFn: async () => (await api("/admin/public-pages")).items as PageItem[] });
@@ -80,6 +81,7 @@ export function PublicPagesPage() {
         <TabsPanel value="clients" className="stack"><ClientCatalogEditor /></TabsPanel>
         <TabsPanel value="announcements" className="stack"><AnnouncementEditor /></TabsPanel>
       </Tabs>
+      {detail.value && <Dialog open onOpenChange={o => !o && detail.close()}><DialogContent size="xl"><DialogTitle>公开页面</DialogTitle><DialogDescription>管理页面内容、分享与留言。</DialogDescription><Segmented aria-label="公开页详情分区" value={params.get("detail_tab") || "content"} onValueChange={value => setParams(p => { p.set("detail_tab", value); return p; }, { replace: true })} options={[["content", "内容"], ["share", "分享"]]} /><PublicPageDetailView key={detail.value} id={detail.value} tab={params.get("detail_tab") || "content"} /></DialogContent></Dialog>}
       {edit && <PageForm value={edit} close={() => setEdit(null)} saved={() => { setEdit(null); toast("已保存", { tone: "ok" }); void q.refetch(); }} />}
       {guestbook && <GuestbookManager page={{ id: guestbook.id, data: { ...guestbook.data } }} close={() => setGuestbook(null)} />}
     </div>
@@ -95,6 +97,7 @@ export function PublicPageDetailView({ id, tab }: { id: string; tab: string }) {
   const [guestbook, setGuestbook] = useState(false);
   const { run, isBusy } = useRowAction<number>({ refetch: q.refetch });
   const item = q.data?.find((p) => p.slug === id || String(p.id) === id);
+  useConsoleContext({ object: item ? { type: "page", key: item.slug, name: item.data.title } : undefined, dialog: { title: "公开页详情" } });
   if (q.isPending) return <State loading />;
   if (q.error) return <State error={q.error} onRetry={() => void q.refetch()} />;
   if (!item) return <PageState kind="empty" title="没有这个公开页" detail="它可能已被删除，或你没有权限查看。" action={<Link to="/pages">返回公开页面</Link>} />;
@@ -147,6 +150,7 @@ function PageBoard({ pages, selected, onSelect, onEdit, onGuestbook, onRemove, b
               </Button>
               <small className="text-[var(--weir-ink-3)]">/p/{p.slug} · {p.data.cards?.length ?? 0} 张订阅卡片 · 访问次数未知</small>
               <span className="flex flex-wrap gap-1.5">
+                <ObjectLink to={{ type: "page", key: p.slug, name: p.data.title }}>详情与分享</ObjectLink>
                 <Button size="sm" variant="outline" onClick={() => onEdit(p)}>编辑</Button>
                 {p.data.enabled && <CopyButton size="sm" variant="outline" value={location.origin + "/p/" + p.slug}>复制地址</CopyButton>}
                 <Button size="sm" variant="outline" onClick={() => onGuestbook(p)}><MessageSquare />留言板</Button>

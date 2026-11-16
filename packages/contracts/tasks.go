@@ -20,7 +20,6 @@ const (
 	MaxTaskResult         = 16 << 20
 	TaskSubscriptionFetch = "subscription.fetch"
 	TaskReleaseQuery      = "release.query"
-	TaskExternalConvert   = "subscription.convert"
 	TaskTraceRead         = "trace.read"
 	TaskLayaPrepare       = "laya.prepare"
 	TaskLayaInstall       = "laya.install"
@@ -28,6 +27,7 @@ const (
 	TaskLayaClassify      = "laya.classify"
 	TaskCoreInstall       = "core.install"
 	TaskNodeProbe         = "node.probe"
+	TaskNodeProbeXray     = "node.probe.xray"
 	TaskSubscriptionProbe = "subscription.probe"
 )
 
@@ -112,6 +112,7 @@ type CapabilityDocument struct {
 	BandwidthBytesPerSecond *uint64                        `json:"bandwidth_bytes_per_second,omitempty"`
 	Sources                 map[string]bool                `json:"sources,omitempty"`
 	Components              map[string]ComponentCapability `json:"components,omitempty"`
+	ConfigFeatures          map[string]int                 `json:"config_features,omitempty"`
 }
 
 type ComponentCapability struct {
@@ -242,7 +243,7 @@ func KnownTask(kind string) bool { _, err := NewTaskRequest(kind, TaskVersion); 
 // Relocatable only applies to work without effects tied to a particular VPS.
 func Relocatable(kind string) bool {
 	switch kind {
-	case TaskSubscriptionFetch, TaskReleaseQuery, TaskExternalConvert, ActionSourceProbe:
+	case TaskSubscriptionFetch, TaskReleaseQuery, ActionSourceProbe:
 		return true
 	default:
 		return false
@@ -259,6 +260,14 @@ func ValidateTaskPayload(kind string, version int, raw json.RawMessage) error {
 	}
 	if err := DecodeStrict(raw, v, MaxTaskPayload); err != nil {
 		return err
+	}
+	if req, ok := v.(*NodeProbeTask); ok {
+		if (kind == TaskNodeProbeXray) != (req.Client.XHTTP != nil) || len(req.Kernels) != 1 {
+			return errors.New("probe_kernel_invalid")
+		}
+		if _, ok := req.Kernels[req.Client.Kernel()]; !ok {
+			return errors.New("probe_kernel_invalid")
+		}
 	}
 	return validateTaskRequest(v)
 }

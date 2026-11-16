@@ -1,0 +1,255 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Weir · 决策记录</title><style>
+:root{font:14px/1.7 system-ui,'Microsoft YaHei',sans-serif;color:#182334;background:#f5f6f8}*{box-sizing:border-box}body{margin:0}main{max-width:1180px;padding:40px 24px;margin:auto}header{border-bottom:1px solid #dce3ed;padding-bottom:24px}h1{font-size:32px;letter-spacing:-1px;margin:8px 0}h2{font-size:21px;margin:32px 0 12px}h3{margin:0 0 10px}p{color:#637085;margin:6px 0}a{color:#315cdd}.eyebrow{color:#315cdd;letter-spacing:2px;font-size:11px;font-weight:700}.card,.table{background:white;border:1px solid #dce3ed;border-radius:12px;padding:20px}.card{margin:14px 0}.table{padding:0;overflow:auto}table{width:100%;border-collapse:collapse;min-width:650px}th,td{text-align:left;vertical-align:top;border-bottom:1px solid #e5eaf1;padding:12px 16px}th{background:#edf2ff;font-size:12px}tr:last-child td{border:0}.tag{display:inline-block;white-space:nowrap;border:1px solid #dce3ed;border-radius:5px;padding:2px 7px;font-size:11px;color:#637085}.pass{background:#edf8f3;color:#17795c}.partial{background:#fff8e9;color:#98600b}dl{margin:0;display:grid;grid-template-columns:96px 1fr;gap:8px 16px}dt{color:#637085;font-weight:600}dd{margin:0}dd ul{margin:0;padding-left:18px}code{font-family:Consolas,monospace;font-size:12px;background:#edf2ff;padding:2px 5px;border-radius:4px}.note{padding:14px 18px;background:#edf2ff;border-left:3px solid #315cdd;margin:20px 0}nav{display:flex;flex-wrap:wrap;gap:18px;margin-top:18px}button{font:inherit;cursor:pointer;padding:8px 14px;border:1px solid #ced7e3;border-radius:7px;background:white}@media(max-width:760px){main{padding:24px 14px}h1{font-size:27px}dl{grid-template-columns:1fr;gap:2px 0}dt{margin-top:8px}}@media print{button,nav{display:none}main{max-width:none;padding:0}.card{break-inside:avoid}}
+</style></head><body><main><header><div class="eyebrow">WEIR / DECISIONS</div><h1>决策记录</h1><p>记有长期影响的决定：定了什么、为什么、放弃了什么。产品当前怎么工作以本仓库代码为准。
+</p><nav><a href="#index">索引</a>
+<button onclick="print()">打印</button></nav></header>
+
+<div class="note"><b>怎么用</b>：改动相关模块前先查这里。「已接受」的决定要遵守；新要求与它冲突时先指出，由用户决定保留还是取代。已接受的条目不改正文，决定变了就新增一条，并把旧条目标为「已取代」。编号递增、不复用。只有用户确认过的才标「已接受」，其余标「待确认」。</div>
+
+<section id="index"><h2>索引</h2><div class="table"><table><thead><tr><th>编号</th><th>决定</th><th>范围</th><th>状态</th><th>日期</th></tr></thead><tbody>
+<tr><td><a href="#d0001">0001</a></td><td>订阅按客户端输出兼容部分，并说明遗漏</td><td>订阅输出</td><td><span class="tag pass">已接受</span></td><td>2026-11-13</td></tr>
+<tr><td><a href="#d0002">0002</a></td><td>Hysteria2 新建节点默认不带混淆</td><td>节点</td><td><span class="tag pass">已接受</span></td><td>2026-11-13</td></tr>
+<tr><td><a href="#d0003">0003</a></td><td>不做 Hysteria2 端口跳跃，Gate 保持只读防火墙</td><td>节点、Gate</td><td><span class="tag">已取代（0011）</span></td><td>2026-11-13</td></tr>
+<tr><td><a href="#d0004">0004</a></td><td>不吸收外部订阅转换</td><td>订阅管理</td><td><span class="tag pass">已接受</span></td><td>2026-11-13</td></tr>
+<tr><td><a href="#d0005">0005</a></td><td>撤销 VPS 即停止服务，记录可删除</td><td>VPS</td><td><span class="tag pass">已接受</span></td><td>2026-11-13</td></tr>
+<tr><td><a href="#d0006">0006</a></td><td>用户续期联动链接有效期</td><td>用户、链接</td><td><span class="tag pass">已接受</span></td><td>2026-11-13</td></tr>
+<tr><td><a href="#d0007">0007</a></td><td>订阅到期统一返回 403</td><td>订阅输出</td><td><span class="tag pass">已接受</span></td><td>2026-11-13</td></tr>
+<tr><td><a href="#d0008">0008</a></td><td>订阅源异常空结果不覆盖旧缓存</td><td>订阅管理</td><td><span class="tag pass">已接受</span></td><td>2026-11-13</td></tr>
+<tr><td><a href="#d0009">0009</a></td><td>备份导入先预览再写入</td><td>备份</td><td><span class="tag pass">已接受</span></td><td>2026-11-13</td></tr>
+<tr><td><a href="#d0010">0010</a></td><td>链式节点的流量只走链式，UDP 能力写进订阅下发，服务端兜底</td><td>节点、落地、订阅输出</td><td><span class="tag pass">已接受</span></td><td>2026-11-14</td></tr>
+<tr><td><a href="#d0011">0011</a></td><td>Gate 管理 Weir 节点端口的本机防火墙</td><td>Gate、节点</td><td><span class="tag pass">已接受</span></td><td>2026-11-14</td></tr>
+<tr><td><a href="#d0012">0012</a></td><td>测试分两段，「你 → VPS」由用户浏览器实测</td><td>实测、Gate</td><td><span class="tag">已取代</span></td><td>2026-11-14</td></tr>
+<tr><td><a href="#d0013">0013</a></td><td>中心统一节点库：所有来源的节点在一处管理和分配</td><td>节点、订阅管理、用户</td><td><span class="tag pass">已接受</span></td><td>2026-11-14</td></tr>
+<tr><td><a href="#d0014">0014</a></td><td>节点、代理、规则、订阅各管一件事；用户的链式就是多一个节点</td><td>节点、代理、规则、订阅</td><td><span class="tag pass">已接受</span></td><td>2026-11-14</td></tr>
+<tr><td><a href="#d0015">0015</a></td><td>控制台统一骨架：保留视觉、压平层级、常用操作放到对象上</td><td>控制台</td><td><span class="tag pass">已接受</span></td><td>2026-11-14</td></tr>
+<tr><td><a href="#d0016">0016</a></td><td>对象状态由后端给出唯一结论，原因与下一步用中文</td><td>中心、控制台</td><td><span class="tag pass">已接受</span></td><td>2026-11-14</td></tr>
+<tr><td><a href="#d0017">0017</a></td><td>系统设置改为卡片，管理员账户安全并入</td><td>控制台</td><td><span class="tag">已取代（0022）</span></td><td>2026-11-14</td></tr>
+<tr><td><a href="#d0018">0018</a></td><td>补齐落地与入站的协议缺口</td><td>内核、落地、节点</td><td><span class="tag pass">已接受</span></td><td>2026-11-14</td></tr>
+<tr><td><a href="#d0019">0019</a></td><td>统计「国内网站误判走代理」并据此补订阅的直连规则</td><td>Gate、规则、订阅输出</td><td><span class="tag">已取代（0023）</span></td><td>2026-11-14</td></tr>
+<tr><td><a href="#d0020">0020</a></td><td>VPS 记录供应商的月流量额度与重置日</td><td>VPS、Gate</td><td><span class="tag pass">已接受</span></td><td>2026-11-14</td></tr>
+<tr><td><a href="#d0021">0021</a></td><td>节点与用户的用量统计、用户操作记录给管理员看</td><td>节点、用户、审计</td><td><span class="tag pass">已接受</span></td><td>2026-11-14</td></tr>
+<tr><td><a href="#d0022">0022</a></td><td>系统设置一页分组列表，现有设置项全部保留</td><td>控制台</td><td><span class="tag pass">已接受</span></td><td>2026-11-14</td></tr>
+<tr><td><a href="#d0023">0023</a></td><td>国内域名优化使用原生观测，明确覆盖边界</td><td>Gate、规则、统计</td><td><span class="tag pass">已接受</span></td><td>2026-11-14</td></tr>
+<tr><td><a href="#d0024">0024</a></td><td>统一节点引用与增量迁移边界</td><td>存储、节点、订阅</td><td><span class="tag">已取代</span></td><td>2026-11-14</td></tr>
+<tr><td><a href="#d0025">0025</a></td><td>未稳定阶段的接口演进与数据保留</td><td>契约、存储、节点、订阅</td><td><span class="tag pass">已接受</span></td><td>2026-11-15</td></tr>
+<tr><td><a href="#d0026">0026</a></td><td>受限浏览器测试服务与自有 VPS 加密 UDP 中转</td><td>实测、Gate、链式</td><td><span class="tag pass">已接受</span></td><td>2026-11-15</td></tr>
+</tbody></table></div></section>
+
+<section><h2>记录</h2>
+
+<div class="card" id="d0001"><h3>0001 订阅按客户端输出兼容部分，并说明遗漏 <span class="tag pass">已接受</span></h3><dl>
+<dt>背景</dt><dd>各客户端能表达的协议和字段不同。此前只要有一个节点无法转换成所选格式，整份订阅就返回失败，用户连能用的节点也拿不到。</dd>
+<dt>决定</dt><dd>除 base64 外的所有格式（Clash / mihomo、sing-box、Surge、Loon、Quantumult X、Egern）都按目标逐个节点判断：能无损表达的字段补齐映射；不能表达的节点只排除它自己。排除后同步移除它在分组里的成员位置、因此变空的分组，以及依赖它的规则，不留悬空引用。订阅信息接口按目标返回被排除的节点、受影响的分组与规则及原因，订阅页据此提示，用户仍可继续导入兼容部分。兼容节点为零时返回明确错误。提示内容不含节点凭据。</dd>
+<dt>放弃的方案</dt><dd><ul><li>任一节点失败则整份失败：一个节点拖垮全部，用户无从得知是哪个节点。</li><li>静默丢弃不兼容节点：用户不知道订阅少了什么，违反「失败要暴露真实原因」。</li></ul></dd>
+<dt>影响</dt><dd>同一条订阅链接在不同客户端下节点数可能不同，订阅页必须说明差异。已有的静默丢弃（如 ShadowTLS、没有链接的条目）并入同一套提示。已有订阅链接与凭据保持有效。</dd>
+<dt>依据</dt><dd>0.1.11 验收中多个格式整份失败；用户于 2026-11-13 确认采用「兼容部分可导入、页面明确提示遗漏」。</dd>
+</dl></div>
+
+<div class="card" id="d0002"><h3>0002 Hysteria2 新建节点默认不带混淆 <span class="tag pass">已接受</span></h3><dl>
+<dt>背景</dt><dd>Hysteria2 的内置方案默认带 salamander 混淆。混淆只在 QUIC 被封锁或限速的网络里才需要，而部分客户端格式无法表达它，带混淆的节点在这些客户端上只能被排除。</dd>
+<dt>决定</dt><dd>新建 Hysteria2 节点默认不带混淆。混淆保留为高级选项，开启时在节点设置里标明哪些客户端将无法使用该节点。项目处于初期，不为旧数据保留兼容处理。各客户端是否支持混淆以其官方文档为准：能表达的补映射，确实不能表达的才按 <a href="#d0001">0001</a> 排除。</dd>
+<dt>放弃的方案</dt><dd><ul><li>保留默认混淆、在订阅里排除并提示：默认配置就让一批客户端用不了，代价落在多数不需要混淆的场景上。</li></ul></dd>
+<dt>影响</dt><dd>默认节点的客户端覆盖面变大；需要抗封锁的场景由管理员手动开启混淆。</dd>
+<dt>依据</dt><dd>用户于 2026-11-13 说明「不考虑迁移问题，现在还在初期阶段」，并确认按建议处理。</dd>
+</dl></div>
+
+<div class="card" id="d0003"><h3>0003 不做 Hysteria2 端口跳跃，Gate 保持只读防火墙 <span class="tag">已取代</span></h3><dl>
+<dt>取代</dt><dd>已被 <a href="#d0011">0011</a> 取代。</dd>
+<dt>背景</dt><dd>节点上有端口跳跃设置，值会保存，但内核配置和订阅都没有使用它，等于静默无效。Hysteria2 服务端只监听一个 UDP 端口，端口跳跃需要在宿主上把一段端口范围转发到监听端口并在防火墙放行整段范围；Gate 目前只读取防火墙状态，不写任何规则。</dd>
+<dt>决定</dt><dd>移除 Weir 自有节点的端口跳跃设置。Gate 继续只读防火墙：检测并提示需要放行的端口，由管理员自己放行。订阅源带来的外部节点不归 Weir 管理服务端，其链接里的端口跳跃参数正常输出到支持它的格式，不因此判为不可用。</dd>
+<dt>放弃的方案</dt><dd><ul><li>现在实现端口跳跃：Gate 要新增改写宿主防火墙与转发规则的特权动作，还要处理多种防火墙工具、重启后持久化、删节点时清理、与面板自带防火墙管理的冲突。这是需要单独设计的功能，不属于缺陷修复。</li><li>保留设置项但不生效：继续误导。</li></ul></dd>
+<dt>影响</dt><dd>Weir 自有的 Hysteria2 节点只有单端口。以后要做端口跳跃，需新增一条决定取代本条，并先确定 Gate 写防火墙的边界。</dd>
+<dt>依据</dt><dd>用户于 2026-11-13 问「那开了防火墙的机器咋办」，讨论后确认按建议处理。</dd>
+</dl></div>
+
+<div class="card" id="d0004"><h3>0004 不吸收外部订阅转换 <span class="tag pass">已接受</span></h3><dl>
+<dt>背景</dt><dd>产品基线写明不吸收外部订阅转换（subconverter），因为要把含节点凭据的订阅交给第三方处理。代码里却存在一条外部转换路径，两者不一致。</dd>
+<dt>决定</dt><dd>维持基线：所有订阅格式由本地 Go 输出，删除外部转换路径。删除前先核对它服务的场景是否已被本地输出覆盖；有覆盖不了的场景，先向用户说明，再决定补本地输出还是另作处理。</dd>
+<dt>放弃的方案</dt><dd><ul><li>保留外部转换并改基线承认它：节点凭据会离开中心交给第三方，即使页面有提示也与安全底线的方向相反。</li></ul></dd>
+<dt>影响</dt><dd>订阅管理不再有外部转换后端的设置；本地缺少的格式需要在本地补齐。</dd>
+<dt>依据</dt><dd>design.html「上游吸收」表；用户于 2026-11-13 确认按建议处理。</dd>
+</dl></div>
+
+<div class="card" id="d0005"><h3>0005 撤销 VPS 即停止服务，记录可删除 <span class="tag pass">已接受</span></h3><dl>
+<dt>背景</dt><dd>撤销 VPS 的设备身份后，中心拒绝它领取配置，但它托管的内核会继续按最后一份配置运行。已撤销的记录、配对中途失败留下的记录在控制台里无法删除。</dd>
+<dt>决定</dt><dd>撤销即停止服务：Gate 得知自己被撤销后停掉托管的内核。已撤销的 VPS 和从未连上中心的 VPS 记录可以在控制台删除，删除时一并清理其节点及相关引用，并在确认窗里列出影响。</dd>
+<dt>放弃的方案</dt><dd><ul><li>撤销只拒绝领取配置：管理员以为已停用，实际节点仍在对外服务，凭据也仍可用。</li></ul></dd>
+<dt>影响</dt><dd>撤销是有实际后果的操作，确认提示要写明节点会停止。Gate 与中心失联时无法得知撤销，这种情况下服务不会自动停止，页面按「未知」显示。</dd>
+<dt>依据</dt><dd>用户于 2026-11-13 确认按建议处理。</dd>
+</dl></div>
+
+<div class="card" id="d0006"><h3>0006 用户续期联动链接有效期 <span class="tag pass">已接受</span></h3><dl>
+<dt>背景</dt><dd>链接是否有效取用户有效期与链接生效时间的交集。给用户续期只改用户的到期时间，链接的结束时间保留旧值，续期后链接仍被拒绝，需要逐条手改。</dd>
+<dt>决定</dt><dd>用户续期时，结束时间等于用户旧到期时间的链接随之顺延到新的到期时间；单独设了更早结束时间的链接不动。交集语义不变。</dd>
+<dt>放弃的方案</dt><dd><ul><li>续期后逐条手改链接：续期本意就是让用户继续用，多出的步骤没有价值。</li><li>所有链接一律顺延：会覆盖管理员特意给某条链接设的更短期限。</li></ul></dd>
+<dt>影响</dt><dd>续期的结果里要说明哪些链接被顺延、哪些保持原样。</dd>
+<dt>依据</dt><dd>用户于 2026-11-13 确认按建议处理。</dd>
+</dl></div>
+
+<div class="card" id="d0007"><h3>0007 订阅到期统一返回 403 <span class="tag pass">已接受</span></h3><dl>
+<dt>背景</dt><dd>两条订阅路径到期后的行为不同：<code>/sub/:token</code> 返回 403；<code>/sub/g/:token</code> 返回 200，并给出一个「已到期」的提示节点，客户端会用它覆盖原有配置。</dd>
+<dt>决定</dt><dd>两条路径到期后都返回 403，不输出提示节点。到期说明放在订阅页。</dd>
+<dt>放弃的方案</dt><dd><ul><li>统一为 200 加提示节点：客户端把提示节点当作有效配置替换掉原有内容，属于用占位结果冒充成功。</li></ul></dd>
+<dt>影响</dt><dd>到期后客户端更新失败、保留旧配置；用户需要打开订阅页才能看到到期原因。</dd>
+<dt>依据</dt><dd>项目规则「不用占位结果冒充成功」；用户于 2026-11-13 确认按建议处理。</dd>
+</dl></div>
+
+<div class="card" id="d0008"><h3>0008 订阅源异常空结果不覆盖旧缓存 <span class="tag pass">已接受</span></h3><dl>
+<dt>背景</dt><dd>订阅源刷新后解析出 0 个真实节点时，被当作合法空结果覆盖缓存。上游到期或维护时常只返回提示节点，这会清空整个源的节点，并让引用它们的出口失效。</dd>
+<dt>决定</dt><dd>刷新后真实节点为 0、而上一次有节点时，保留旧缓存，把该源标为异常并显示上游返回了什么。管理员确认上游确实已清空时，可以手动接受空结果。首次拉取就为空的源不属于这种情况。</dd>
+<dt>放弃的方案</dt><dd><ul><li>空结果一律覆盖旧缓存：把上游的临时状态变成本地的数据丢失，且连带影响出口。</li><li>空结果一律忽略：上游确实清空时本地永远对不上。</li></ul></dd>
+<dt>影响</dt><dd>异常期间用的是旧节点，页面要标明数据的时间和异常状态，不显示为正常。</dd>
+<dt>依据</dt><dd>用户于 2026-11-13 确认按建议处理。</dd>
+</dl></div>
+
+<div class="card" id="d0009"><h3>0009 备份导入先预览再写入 <span class="tag pass">已接受</span></h3><dl>
+<dt>背景</dt><dd>导入备份时直接写入，结果只给出数量，不区分新增与覆盖，管理员在执行前看不到会改动什么。</dd>
+<dt>决定</dt><dd>导入分两步：先解析并显示各类对象将新增多少、覆盖多少，管理员确认后才写入。导出页说明备份文件里包含哪些敏感内容。</dd>
+<dt>放弃的方案</dt><dd><ul><li>直接写入：覆盖现有数据是难以撤回的操作，不应没有确认。</li></ul></dd>
+<dt>影响</dt><dd>导入多一步确认；预览与实际写入之间数据有变化时要重新预览。</dd>
+<dt>依据</dt><dd>用户于 2026-11-13 确认按建议处理。</dd>
+</dl></div>
+
+<div class="card" id="d0010"><h3>0010 链式节点的流量只走链式，UDP 能力写进订阅下发，服务端兜底 <span class="tag pass">已接受</span></h3><dl>
+<dt>背景</dt><dd>落地只支持 TCP（如 HTTP 代理）时，现在由服务端用路由拒绝 UDP，订阅里不写 udp=false（design.html「UDP 按出口判断」）。客户端事先不知道节点不支持 UDP，要试过才退回 TCP，分组与自动选择也无法据此挑选。</dd>
+<dt>决定</dt><dd><ul><li>配了落地的节点，所有流量只走这条链，不从入口 VPS 直接出去。</li><li>沿整条链得出 UDP 能力：完整（落地是自己的 VPS、能在 TCP 里带 UDP 的协议节点、实测支持 UDP 的 SOCKS5）、仅 TCP（HTTP 代理、不支持 UDP 的 SOCKS5）、未知。自己的 VPS 之间用 UDP over TCP 传，到落地 VPS 再还原。</li><li>能力写进每种订阅格式：Clash / mihomo <code>udp</code>、Surge 与 Quantumult X <code>udp-relay</code>、Loon <code>udp</code>、sing-box <code>network: tcp</code>；格式表达不了时按 0001 说明。</li><li>服务端继续拒绝不能承载的 UDP，覆盖客户端尚未更新订阅、或客户端不认该字段的情况。</li><li>新建节点时按所选落地的 UDP 能力推荐入站协议；落地仅 TCP 时提示 Hysteria2 / TUIC 的 UDP 优势用不上。</li></ul></dd>
+<dt>放弃的方案</dt><dd><ul><li>UDP 从入口 VPS 直接出去：违背配置链式的目的，出口 IP 不一致。</li><li>只靠服务端拒绝、订阅不写：客户端要试过才知道，分组选不对。</li></ul></dd>
+<dt>影响</dt><dd>design.html「UDP 按出口判断」一段随实现改写。落地 UDP 能力变化后，客户端要等下次更新订阅才知道，期间由服务端兜底。</dd>
+<dt>依据</dt><dd>用户于 2026-11-14 说「配置了链式这个节点就必须是链式的，不然配链式干叼，但是可以转换呀」「配了链式的看链式支持去设置vps的类型下发给客户端呀」。</dd>
+</dl></div>
+
+<div class="card" id="d0011"><h3>0011 Gate 管理 Weir 节点端口的本机防火墙 <span class="tag pass">已接受</span></h3><dl>
+<dt>取代</dt><dd><a href="#d0003">0003</a> 中「Gate 保持只读防火墙」。端口跳跃仍未实现，要做时另起一条。</dd>
+<dt>背景</dt><dd>管理员装了 Gate 就是为了不再登录 VPS，但节点端口仍要自己上去放行，Weir 只提示「未放行」。Gate 的辅助程序本来以 root 运行。</dd>
+<dt>决定</dt><dd><ul><li>建节点、改端口时，Gate 在应用配置的同时放行该节点需要的端口与协议；删节点、换端口时撤掉旧规则。已有但未放行的节点，在状态旁给「放行」动作。</li><li>只经白名单动作执行，只处理 ufw、firewalld、iptables，规则持久化，并带 <code>weir</code> 标记，只增删带标记的规则，不碰其他规则。</li><li>防火墙读不懂（如 INPUT 跳到自定义链）时不写，写明原因。</li><li>结果写入节点状态与审计。云厂商安全组 Gate 改不了：本机已放行而外部实测连不上时，明确提示去安全组放行哪些端口。</li></ul></dd>
+<dt>放弃的方案</dt><dd><ul><li>继续只读、由管理员登录放行：与装 Gate 的目的相反。</li><li>开放任意命令：违反「Agent 只执行白名单动作，不提供任意 Shell」。</li></ul></dd>
+<dt>影响</dt><dd>Gate 新增写防火墙的白名单动作，要处理三种工具、重启后持久化和删除清理。宝塔等面板的防火墙底层多为 ufw / firewalld，规则在面板里可见。接入云厂商 API 管安全组另行决定。</dd>
+<dt>依据</dt><dd>用户于 2026-11-14 说「我既然做了gate，还给了密码，就是代表我不想去登vps呀」。</dd>
+</dl></div>
+
+<div class="card" id="d0012"><h3>0012 测试分两段，「你 → VPS」由用户浏览器实测 <span class="tag">已取代</span></h3><dl>
+<dt>取代</dt><dd>已被 <a href="#d0026">0026</a> 取代。</dd>
+<dt>背景</dt><dd>现在的实测都在中心或 Gate 上做，「国内延迟」一类从管理员所在网络出发的指标只能显示未知，也分不清问题出在哪一段。</dd>
+<dt>决定</dt><dd><ul><li>浏览器测「你 → VPS」：延迟与下载（fetch 测试端点）、UDP 可达与 QUIC 是否受限（WebRTC 或 WebTransport）、订阅地址能否拉到。</li><li>中心（mihomo）与 Gate 继续测协议是否可用和「VPS → 落地」。页面把两段结果放在一起，指出断在哪一段。</li><li>Gate 的测试端点只返回测试数据、不执行任何动作，用中心签发的短期令牌并限速，不构成公网管理接口。</li></ul></dd>
+<dt>放弃的方案</dt><dd><ul><li>只在服务端测：测不到管理员实际的网络。</li></ul></dd>
+<dt>影响</dt><dd>浏览器不会说代理协议，只能测到 VPS 这一段的网络。测试端点的端口、证书与令牌格式实现前另行确定。</dd>
+<dt>依据</dt><dd>用户于 2026-11-14 说「还有各种测试，也该利用用户浏览器呀」。</dd>
+</dl></div>
+
+<div class="card" id="d0013"><h3>0013 中心统一节点库：所有来源的节点在一处管理和分配 <span class="tag pass">已接受</span></h3><dl>
+<dt>背景</dt><dd>自建 VPS 上的节点、订阅源拉来的节点和用户自建的链式分在 VPS、订阅源、代理几处，订阅源页只是把拉来的节点展示一遍，没有和「给谁用」连起来。</dd>
+<dt>决定</dt><dd><ul><li>管理员的「节点」页列出中心拥有的全部节点，按来源分组：自建 VPS、某个订阅源、某个用户的链式节点。</li><li>分给哪些用户在节点与用户两处都能改，结果一致。自建节点另有协议、端口、证书等设置。</li><li>订阅源只管来源：添加、刷新、拉取状态和挑选节点，选用的节点进节点库。</li><li>订阅组、规则模板等现有能力保留，归到「订阅」分组。</li></ul></dd>
+<dt>放弃的方案</dt><dd><ul><li>维持按来源分页：同一件事要在多个页面之间来回。</li></ul></dd>
+<dt>影响</dt><dd>中心要提供汇总各来源节点的接口；节点组件要能区分同名节点（协议、来源 / VPS、端口、内核、状态）。</dd>
+<dt>依据</dt><dd>用户于 2026-11-14 说「感觉要有一个全部现在中心拥有节点进行管理给哪个用户使用连贯起来」，并在讨论分工后说「按这些改原型，决策也补上」。</dd>
+</dl></div>
+
+<div class="card" id="d0014"><h3>0014 节点、代理、规则、订阅各管一件事；用户的链式就是多一个节点 <span class="tag pass">已接受</span></h3><dl>
+<dt>背景</dt><dd>节点编辑、代理页、出口与分流、节点的「节点与出口」都能设置出口；链式代理、落地、订阅混在一起，概念多、入口散。核对代码：链式不占新端口，是入口节点上多发一份凭据（<code>credKey</code> 按链接 × 节点 × 链式），按凭据路由到出口；<code>Chain</code>、<code>Exit</code>、<code>Credential</code> 都记录了所属用户。</dd>
+<dt>决定</dt><dd><ul><li><b>节点</b>：节点归节点。用户用自己的代理建链式，得到的就是他多出来的一个节点（「入口节点 → 代理」），和分给他的节点一起列在「我的节点」。</li><li><b>代理</b>：代理归代理。系统代理（管理员给节点和规则用）与各用户的代理在一处管理，按归属分组；同一地址合并显示并写明挂在哪几台 VPS。保存前由 VPS 实测，凭据加密存储：用户只看到地址与用户名，管理员可切换明文 / 密文，切明文记审计。</li><li><b>规则</b>：只管谁走哪个代理（按节点、按 VPS、按网站），带实际流量与速率。</li><li><b>订阅</b>：每个人只管自己的订阅，从「我的节点」里挑。管理员看别人的订阅在用户详情里。</li></ul></dd>
+<dt>放弃的方案</dt><dd><ul><li>出口、分流、链式合并为一个「落地」概念（本条早先的草案）：概念仍然混在一起。</li><li>订阅页里给节点选「经过代理」：链式变成订阅的附属，没法在别的订阅里复用。</li><li>管理员在订阅页切换用户视角：用户的东西应在用户详情里看。</li></ul></dd>
+<dt>影响</dt><dd>数据结构不用改，主要改界面与接口组织；代理列表要按「地址 + 归属」合并多台 VPS 上的同一代理。</dd>
+<dt>依据</dt><dd>用户于 2026-11-14 说「订阅是管理自己的订阅的呀，链式就是管理一堆proxy的才对吧」「节点归节点，用户创建了链式等于就是多一个节点。proxy管理是proxy管理」「用户看到的就是自己保存的会加密存储，但管理是能够看到全部然后还能切明文和密文」。</dd>
+</dl></div>
+
+<div class="card" id="d0015"><h3>0015 控制台统一骨架：保留视觉、压平层级、常用操作放到对象上 <span class="tag pass">已接受</span></h3><dl>
+<dt>背景</dt><dd>各页布局各不相同，常用操作藏在文件夹、详情页标签、编辑弹窗和折叠里；点对象直接进编辑。视觉本身用户认可。</dd>
+<dt>决定</dt><dd><ul><li>保留现有交互组件（VPS 文件夹、用户点阵、订阅票据、流程条、长按确认、链路图、背景地球），只压平层级。</li><li>管理员导航分组：概览；线路（节点、代理、规则、内核）；用户（用户、套餐与用码）；订阅（我的订阅、订阅源、订阅组与模板、公开页面）；运维（运行观测、操作审计）；系统（设置）。普通用户：我的节点、我的代理、我的订阅、账户安全。</li><li>页面上方是服务状态与工具栏，下面是对象视图。对象行直接显示状态与原因，常用操作放在行上。</li><li>VPS 文件夹展开后，协议用信息优先的紧凑行，不再套一层文件夹。</li><li>对象详情用弹窗（窄屏自动变底部抽屉），不用侧边抽屉；详情里可直接操作，用户的「编辑」和「详情」合一。</li><li>每天要看的内容默认展开，折叠只给低频设置。</li><li>节点在所有地方用现有 <code>Chip</code> / <code>ChipLabel</code> 显示和选择，不另写组件。</li></ul></dd>
+<dt>放弃的方案</dt><dd><ul><li>只改单个页面：结构问题会反复出现。</li><li>全部收进一个粘贴入口：功能被压缩，用户明确反对。</li><li>换成朴素表格：丢掉用户认可的交互与视觉。</li></ul></dd>
+<dt>影响</dt><dd>weir-ui 规范里「详情用页面」要改为「详情用弹窗，复杂对象可展开为页面」；教程锚点与 README 截图随之更新。</dd>
+<dt>依据</dt><dd>用户于 2026-11-14 说「现在weir的设计是好看的，但就是套太多层了的问题」「我说的是有条理，操作方便」「我做的炫酷交互你全砍了」；用户在完整落地计划中明确接受 0015，按开发环境 <code>/dev/proto</code> 落地，并保留现有功能与视觉。</dd>
+</dl></div>
+
+<div class="card" id="d0016"><h3>0016 对象状态由后端给出唯一结论，原因与下一步用中文 <span class="tag pass">已接受</span></h3><dl>
+<dt>背景</dt><dd>同一节点在卡片、VPS 详情、节点详情上分别显示「连不上」「在线」「可用」；证书在证书页「正常」、体检里「即将过期」；实测失败直接显示 <code>node_test_download_failed</code>。</dd>
+<dt>决定</dt><dd>VPS、节点、落地、订阅源、用户各由后端给出一个状态结论、一句中文原因和可执行的下一步动作；所有页面只显示这个结论，不在前端各自推算。内部代码与原始日志只放进详情。</dd>
+<dt>放弃的方案</dt><dd><ul><li>前端各页自行判断：已经造成互相矛盾。</li></ul></dd>
+<dt>影响</dt><dd>后端要统一状态计算与错误码到中文的映射；观测数据缺失时结论为「未知」。</dd>
+<dt>依据</dt><dd>2026-11-14 用户在完整落地计划中明确接受 0016，要求缺数据、过期观测与部分覆盖分别表达。</dd>
+</dl></div>
+
+<div class="card" id="d0017"><h3>0017 系统设置改为卡片，管理员账户安全并入 <span class="tag">已取代</span></h3><dl>
+<dt>取代</dt><dd>已被 <a href="#d0022">0022</a> 取代。</dd>
+<dt>背景</dt><dd>系统设置要逐个标签切换才能看到各项状态；管理员的密码、两步验证、会话要从头像菜单进入。</dd>
+<dt>决定</dt><dd>系统设置一页用卡片展示各项当前状态，常用开关直接放在卡片上、点了即生效，需要填细节时才弹窗。管理员账户安全作为其中一组卡片。普通用户仍从头像进入自己的账户安全。</dd>
+<dt>放弃的方案</dt><dd><ul><li>保留分区标签：看一眼全局状态要切很多次。</li></ul></dd>
+<dt>影响</dt><dd>设置项的保存方式统一为即时生效或弹窗提交两种，不再混用。</dd>
+<dt>依据</dt><dd>用户于 2026-11-14 说「设置页面也是，不应该是先用卡片给用户看，快捷操作直接放卡片上，点了就改，如果需要详情弹窗操作不就行了」「管理员的账户安全也要点头像才能进去，那不就是系统设置的东西来的么」。</dd>
+</dl></div>
+
+<div class="card" id="d0018"><h3>0018 补齐落地与入站的协议缺口 <span class="tag pass">已接受</span></h3><dl>
+<dt>背景</dt><dd>按 2026-11-14 的代码核对：Xray 驱动只有 socks、http、vmess、vless、trojan、shadowsocks 出站，Xray 上的节点不能以 Hysteria2 / TUIC / AnyTLS 节点为落地；sing-box 出站没有 xhttp；要求跳过证书校验或用证书指纹的节点不能作落地；WireGuard、ShadowTLS、Snell、SSR 节点不能作落地；入站没有 AnyTLS，Xray 声明了 xhttp、grpc 但没有对应方案。</dd>
+<dt>决定</dt><dd><ul><li>补齐 AnyTLS 入站与 VLESS XHTTP、gRPC 方案，出站纳入 AnyTLS、XHTTP、gRPC、WireGuard、ShadowTLS、Snell、SSR。</li><li>由驱动声明原生能力：优先当前入站内核，无法表达时转给同机 sing-box，再由 mihomo 承接剩余出站。辅助进程只监听回环，公网入站继续由 Xray、sing-box 承担。</li><li>支持证书指纹；跳过证书校验必须显式确认并标出。按实际二进制版本检查参数与协议能力，不支持的组合明确拒绝。</li><li>按整条路径表达 UDP 完整、仅 TCP、未知；自有 VPS 间支持 UDP over TCP，任何故障都不得回退入口直出。Hysteria2 端口跳跃不纳入。</li></ul></dd>
+<dt>放弃的方案</dt><dd>无。</dd>
+<dt>影响</dt><dd>涉及驱动、模板与落地转换，按内核驱动规范改动并跑 e2e。</dd>
+<dt>依据</dt><dd>用户于 2026-11-14 明确要求接受 0018，纳入上述协议及跨内核落地。</dd>
+</dl></div>
+
+<div class="card" id="d0019"><h3>0019 统计「国内网站误判走代理」并据此补订阅的直连规则 <span class="tag">已取代</span></h3><dl>
+<dt>取代</dt><dd>已被 <a href="#d0023">0023</a> 取代。</dd>
+<dt>背景</dt><dd>客户端规则把国内网站判成走代理时，流量白白绕一圈并消耗 VPS 流量。现在 Gate 只按凭据统计流量，不知道访问目标；中心有 IP 地理库（<code>internal/geoip</code>），订阅有自定义规则，两者没打通。</dd>
+<dt>决定</dt><dd><ul><li>Gate 让内核开启嗅探，只统计「目标在国内、却经代理出去」的流量，按域名聚合计数。</li><li>采集边界：只收国内目标；只记域名，不记 URL 与海外目标；按天聚合，原始明细不落盘；只给管理员看，默认不按用户拆开，只显示涉及的人数。</li><li>中心在「规则」页列出疑似误判的域名，附流量、人数与主要经过的节点；管理员确认后写进订阅的直连规则，客户端下次更新订阅生效，之后可回看这些域名的代理流量是否下降。</li></ul></dd>
+<dt>放弃的方案</dt><dd><ul><li>采集全部访问目标：超出省流量这个目的，敏感面太大。</li><li>服务端把国内流量直接从 VPS 放行：流量已经绕到 VPS，省不了；该走直连的应在客户端分流。</li></ul></dd>
+<dt>影响</dt><dd>内核模板要加嗅探与国内目标的统计标签；中心要按天聚合并定保留期限（随历史保留策略）。</dd>
+<dt>依据</dt><dd>用户于 2026-11-14 说「主要就是要优化下发给客户端的国内网站这些的误判，没必要浪费流量去经过代理」，并说「按这些改原型，决策也补上」。</dd>
+</dl></div>
+
+<div class="card" id="d0020"><h3>0020 VPS 记录供应商的月流量额度与重置日 <span class="tag pass">已接受</span></h3><dl>
+<dt>背景</dt><dd>VPS 没有地方填供应商给的总流量和刷新日期。Gate 已经读网卡计数（<code>/proc/net/dev</code>，<code>hoststats</code> 的 <code>NetRxBytes</code> / <code>NetTxBytes</code>），中心没有累计成周期用量。</dd>
+<dt>决定</dt><dd><ul><li>VPS 增加：每月额度、计费方式（双向合计 / 只算出站 / 取较大一方）、重置日、本周期用量校准值。</li><li>Gate 按网卡计数累计本周期用量（内核或机器重启后接着累计），VPS 列表与详情显示「已用 / 额度 · 几天后重置」。</li><li>到 80% 提醒；快用完时可选只提醒，或把这台 VPS 的节点在订阅里往后排。未填额度时只显示本周期用量。</li></ul></dd>
+<dt>放弃的方案</dt><dd><ul><li>接各家供应商 API 读用量：接口各不相同，先用网卡计数加手动校准。</li></ul></dd>
+<dt>影响</dt><dd>中心要持久化周期用量并处理重置日；和 0019 配合，流量紧张时优先看误判走代理的流量。</dd>
+<dt>依据</dt><dd>用户于 2026-11-14 说「vps也没有地方去设置供应商给的总流量和刷新日期」。</dd>
+</dl></div>
+
+<div class="card" id="d0021"><h3>0021 节点与用户的用量统计、用户操作记录给管理员看 <span class="tag pass">已接受</span></h3><dl>
+<dt>背景</dt><dd>节点页看不到节点的统计；管理员看用户时看不到他的操作和用得最多的节点，没法据此优化。Gate 每 30 秒上报每份凭据的累计流量，凭据对应用户 × 链接 × 节点 × 链式；中心已按「用户 × 节点（× 链式）」算出 24 小时 P90 速率。</dd>
+<dt>决定</dt><dd><ul><li>节点行显示 24 小时流量、速率 P90、在用用户数与用得最多的用户；节点详情显示各用户用量。</li><li>用户详情显示：节点用量排行（含他的链式节点）、订阅与代理、按这个用户筛出的操作记录（来自操作审计）。</li><li>规则每条显示实际流量与速率；同一节点经代理明显慢于直连时给出建议。缺数据显示「未知」。</li></ul></dd>
+<dt>放弃的方案</dt><dd>无。</dd>
+<dt>影响</dt><dd>只用现有凭据统计和审计，不新增采集；中心要提供按节点、按用户的聚合接口。</dd>
+<dt>依据</dt><dd>用户于 2026-11-14 说「管理员看用户也能看到用户的所有操作，哪个节点用得最多，这样去做优化呀，节点页面也看不到节点的统计数据」。</dd>
+</dl></div>
+
+<div class="card" id="d0022"><h3>0022 系统设置一页分组列表，现有设置项全部保留 <span class="tag pass">已接受</span></h3><dl>
+<dt>取代</dt><dd><a href="#d0017">0017</a>。</dd>
+<dt>背景</dt><dd>0017 的卡片排列删掉了大量现有设置项，卡片样式也不好看；分区标签要逐个切换。</dd>
+<dt>决定</dt><dd>系统设置一页排完，左侧是分区索引（锚点）。分区：我的账户（管理员自己的密码、两步验证、通行密钥、会话，放在最前）、外观、版本与更新、登录与注册、通知、防御、AI 与 dsh、证书、数据。每个分区是一组列表行：开关点了即生效，要填的项显示当前值并在弹窗里改。现有每一个设置项都保留。运行观测与操作审计是单独的页面。</dd>
+<dt>放弃的方案</dt><dd><ul><li>一项一张卡片：丑，且删掉了设置项。</li><li>分区标签：看全局状态要切很多次。</li></ul></dd>
+<dt>影响</dt><dd>现有各设置卡片的表单内容原样放进弹窗；普通用户仍从头像进入自己的账户安全。</dd>
+<dt>依据</dt><dd>用户于 2026-11-14 说「设置页面被大砍特砍了这样不对，一个一个卡片也太丑了」「观测和操作审计就挪出来了呀」。</dd>
+</dl></div>
+
+<div class="card" id="d0023"><h3>0023 国内域名优化使用原生观测，明确覆盖边界 <span class="tag pass">已接受</span></h3><dl>
+<dt>取代</dt><dd><a href="#d0019">0019</a>。</dd>
+<dt>背景</dt><dd>各内核原生连接接口提供的字段与覆盖范围不同，连接快照可能遗漏短连接，无法据此提供完整的域名账单。</dd>
+<dt>决定</dt><dd><ul><li>Gate 在内存中筛选国内目标，仅上报域名日聚合、已观测字节、涉及人数与主要节点；海外目标、URL 与连接原文不持久化。</li><li>sing-box、mihomo 显示已观测流量及覆盖状态；Xray 无法提供的域名字节显示未知。机场直用流量也显示未知，不混入 Gate 计量。</li><li>中心提供候选排行、忽略、管理员确认加入订阅直连规则及生效后的趋势比较。观测只用于优化，不参与用户额度扣费，不将流量下降全部归因于规则变化。</li></ul></dd>
+<dt>放弃的方案</dt><dd>不新增全流量中转层，不维护内核源码补丁，不持久化全量连接明细。</dd>
+<dt>影响</dt><dd>覆盖状态与观测时间是统计结果的一部分；业务计费仍使用凭据累计计数。</dd>
+<dt>依据</dt><dd>用户于 2026-11-14 在完整落地计划中确认原生观测边界。</dd>
+</dl></div>
+<div class="card" id="d0024"><h3>0024 统一节点引用与增量迁移边界 <span class="tag">已取代</span></h3><dl>
+<dt>取代</dt><dd>已被 <a href="#d0025">0025</a> 取代；节点目录、授权与数据保留约束由新条目承接。</dd>
+<dt>背景</dt><dd>自有节点、机场、手动节点与用户链式需要统一选用和授权，同时必须保留现有业务数据。</dd>
+<dt>决定</dt><dd><ul><li>统一目录使用带来源类型的稳定引用，保留 Node、Chain、Exit 的职责；订阅源节点身份不依赖显示名称，消失后保留不可用引用。</li><li>机场可直接分配订阅，也可作自有 VPS 的落地；链式入口只能选择用户已获授权的自有 VPS 节点。本人链式不能因管理员可见而转授他人。</li><li>节点页和用户详情使用同一授权服务，订阅选择始终与当前授权取交集。</li><li>迁移保留对象 ID、节点凭据、订阅令牌及现有配置；旧 Gate 明确展示不支持的新能力，不接收无法理解的配置。</li></ul></dd>
+<dt>放弃的方案</dt><dd>不按名称合并源节点，不允许机场作为链式入口，不通过重建用户或轮换凭据迁移。</dd>
+<dt>影响</dt><dd>新增目录与授权数据采取增量存储，订阅组嵌套、处理链、模板、自动选择、自定义规则及公开页面继续保留。</dd>
+<dt>依据</dt><dd>用户于 2026-11-14 的完整落地计划。</dd>
+</dl></div>
+<div class="card" id="d0025"><h3>0025 未稳定阶段的接口演进与数据保留 <span class="tag pass">已接受</span></h3><dl>
+<dt>取代</dt><dd><a href="#d0024">0024</a>。调整旧安装兼容边界，保留其节点目录、授权与增量迁移要求。</dd>
+<dt>背景</dt><dd>Weir 尚未稳定，当前不存在需要兼容的旧安装；以旧安装为由维护重复实现或提供迁移入口会误导用户，但已有业务数据仍须保护。</dd>
+<dt>决定</dt><dd><ul><li>内部 API、中心与 Gate 协议、组件及配置结构变化时，同步更新全部生产方、消费方和调用方，删除被取代的实现，不维护无依据的历史兼容分支、双轨实现或静默回退。</li><li>数据采用增量迁移，保留对象 ID、节点凭据、订阅令牌及现有配置，不通过重建用户或轮换凭据迁移。</li><li>统一节点目录继续使用带来源类型的稳定引用，保留 Node、Chain、Exit 的职责；源节点身份不依赖名称，消失后保留不可用引用。</li><li>机场可直接分配订阅或作自有 VPS 的落地；链式入口仅限用户已获授权的自有 VPS 节点，本人链式不因管理员可见而转授他人。</li><li>节点页与用户详情共用授权服务，订阅选择与当前授权取交集；保留订阅组嵌套、处理链、模板、自动选择、自定义规则及公开页面。</li><li>外部客户端、内核与 dsh 的真实版本、协议和安全能力限制仍须校验；不支持的组合明确拒绝，不把离线、能力缺失或配置错误推断为旧安装。</li></ul></dd>
+<dt>放弃的方案</dt><dd>为不存在的旧安装保留旧接口与重复实现；以项目未稳定为由删除已有数据；取消外部协议与实际能力校验。</dd>
+<dt>影响</dt><dd>接口演进需要同步修改相关调用方；用户可感知的破坏性变更和迁移要求写入现有安装、升级或产品文档。</dd>
+<dt>依据</dt><dd>用户于 2026-11-15 明确说明「不存在旧安装」「我们的项目也还未稳定呀」，并要求参考 DeepSeek Harness 的 AGENTS.md 更新项目规则；数据保留沿用此前确认的完整落地计划。</dd>
+</dl></div>
+<div class="card" id="d0026"><h3>0026 受限浏览器测试服务与自有 VPS 加密 UDP 中转 <span class="tag pass">已接受</span></h3><dl>
+<dt>取代</dt><dd><a href="#d0012">0012</a>；同时细化 0018 的自有 VPS 中转边界。</dd>
+<dt>背景</dt><dd>浏览器路径与代理路径的测量能力不同，测试端点需要明确权限、证书、流量和生命周期限制。</dd>
+<dt>决定</dt><dd>使用 Pion WebRTC 和 quic-go/WebTransport 实现独立的 HTTPS、UDP 和 QUIC 测试服务，固定依赖版本，复用托管证书、端口与防火墙。短期令牌绑定用户、VPS、用途、会话和累计流量上限；普通用户只测试已授权节点所在 VPS。服务只产生或回显数据，不转发任意目标或执行管理操作。取消、撤销、过期及服务重启终止旧会话。WebRTC 不使用 TURN/TCP 成功冒充 UDP。自有 VPS 间使用 sing-box 原生 UoT，经加密 TCP 和专用内部凭据承载；机场不作为链式入口，无须配合 UoT。沿完整路径计算 UDP 能力，故障不得回退直出。</dd>
+<dt>放弃的方案</dt><dd>由服务端测量冒充用户浏览器路径；以配置生成成功冒充连通；使用全流量中转层或内核源码补丁。</dd>
+<dt>影响</dt><dd>页面分别表达浏览器到 VPS 与 VPS 到落地。证书、浏览器能力和网络条件不足时显示限制，不能据此直接断言代理协议可用或运营商限速。</dd>
+<dt>flows</dt><dd>browser.test.configure、browser.test.create、browser.test.measure、browser.test.finish、proxy.uot.probe、proxy.uot.cleanup</dd>
+<dt>依据</dt><dd>用户确认并要求实施的“ADR 与原型剩余工作全量收尾计划”第 4、5 节。</dd>
+</dl></div>
+</section></main></body></html>

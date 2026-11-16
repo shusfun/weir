@@ -69,11 +69,12 @@ func (s *Supervisor) SetArgs(name string, a kernelconf.KernelArgs) error {
 
 // proc 是一个被托管的内核进程。
 type proc struct {
-	name    string
-	cmd     *exec.Cmd
-	done    chan struct{}
-	stopped bool
-	logs    []string
+	instance string
+	name     string
+	cmd      *exec.Cmd
+	done     chan struct{}
+	stopped  bool
+	logs     []string
 }
 
 // Supervisor 以子进程托管内核：崩溃后按退避重启；停止时不再拉起；保留最近 200 行输出供诊断。
@@ -135,6 +136,7 @@ func (s *Supervisor) keep(pr *proc, bin string, started chan<- error) {
 		if err == nil {
 			s.mu.Lock()
 			pr.cmd = cmd
+			pr.instance = newEpoch()
 			s.mu.Unlock()
 		}
 		if first {
@@ -213,6 +215,20 @@ func (s *Supervisor) Running() map[string]int {
 	for name, pr := range s.procs {
 		if pr.cmd != nil && pr.cmd.Process != nil && pr.cmd.ProcessState == nil {
 			out[name] = pr.cmd.Process.Pid
+		}
+	}
+	return out
+}
+
+// Instances change on every actual process start, including crash recovery and
+// host reboot. Unlike PIDs they cannot accidentally reuse a persisted baseline.
+func (s *Supervisor) Instances() map[string]string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := map[string]string{}
+	for name, pr := range s.procs {
+		if pr.cmd != nil && pr.cmd.Process != nil && !pr.stopped {
+			out[name] = pr.instance
 		}
 	}
 	return out

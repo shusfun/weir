@@ -418,12 +418,6 @@ func forceQuery(args map[string]any) url.Values {
 }
 
 var opDraftCaps = []Capability{
-	{Name: "subscription.converter.update", Title: "修改外部转换后端", Purpose: "配置可信的 subconverter 兼容端点；节点及连接凭据会交给该后端，授权值只由管理员填写，必须确认后生效。", Kind: "draft", Risk: "danger", Last: true,
-		Params: []Param{{Key: "enabled", Label: "启用", Kind: "bool"}, {Key: "endpoint", Label: "完整转换端点", Kind: "string", Hint: "HTTPS /sub 端点，不带查询参数"}, {Key: "preferred_gate_id", Label: "优先 VPS ID", Kind: "int", Min: num(0)}, {Key: "max_bytes", Label: "最大输出字节", Kind: "int", Min: num(1024), Max: num(10 << 20)}, {Key: "authorization", Label: "Authorization", Kind: "string", Secret: true, Hint: "留空保留；仅管理员填写"}, {Key: "clear_authorization", Label: "移除授权值", Kind: "bool"}},
-		op: &opSpec{kind: "update", method: "PUT", handler: h(func(s *Server) gin.HandlerFunc { return s.putConverterSettings }), path: noPath, full: true, noUndo: true, load: func(ctx context.Context, s *Server, _ map[string]any) (map[string]any, error) {
-			cfg, err := s.converterSettings(ctx)
-			return map[string]any{"enabled": cfg.Enabled, "endpoint": cfg.Endpoint, "preferred_gate_id": cfg.PreferredGate, "max_bytes": cfg.MaxBytes}, err
-		}}},
 	{Name: "node.create", Title: "新建节点", Purpose: "在一台 VPS 上按协议方案新建节点，与手动「新建节点」同一流程：试运行校验参数、端口与安全边界，确认后保存并下发，再排队用真实内核实测。失败保留节点和端口，可调整防火墙后重试；链式出口仍须先验证通过。",
 		Kind: "draft", Risk: "normal", Object: "node", Creates: true, Params: nodeCreateParams,
 		op: &opSpec{kind: "create", method: "POST", handler: h(func(s *Server) gin.HandlerFunc { return s.createNode }), path: noPath, body: nodeCreateBody,
@@ -570,6 +564,25 @@ func listOf[T any](items []T, view func(T) any) []any {
 }
 
 var opReadCaps = []Capability{
+	{Name: "list_domain_candidates", Title: "国内域名优化候选", Purpose: "近 30 天原生连接快照的已观测流量、日趋势、主要节点及覆盖状态；人数为识别下限，不参与额度扣费。可供管理员在控制台核对并加入订阅直连规则。", Kind: "read",
+		Params: []Param{{Key: "gate_id", Label: "VPS", Kind: "ref", Ref: "gate"}},
+		read: func(ctx context.Context, s *Server, args map[string]any) (any, error) {
+			q := url.Values{}
+			if id := intArg(args, "gate_id"); id > 0 {
+				q.Set("gate", itoa(id))
+			}
+			return s.readVia(ctx, s.listDomainCandidates, "GET", nil, q, nil)
+		}},
+	{Name: "get_gate_traffic", Title: "VPS 供应商用量", Purpose: "读取 VPS 网卡周期用量、供应商额度、重置日期与覆盖状态；与用户计费分开，缺观测保持未知。", Kind: "read",
+		Params: []Param{{Key: "gate_id", Label: "VPS", Kind: "ref", Ref: "gate", Required: true}},
+		read: func(ctx context.Context, s *Server, args map[string]any) (any, error) {
+			return s.readVia(ctx, s.getGateTraffic, "GET", pathOf("id", itoa(intArg(args, "gate_id"))), nil, nil)
+		}},
+	{Name: "get_node_usage", Title: "节点用量排行", Purpose: "读取近 30 天已观测的节点与用户用量，内部中转不重复扣费；机场直用未知，断线补报记到收到当天。", Kind: "read",
+		Params: []Param{{Key: "node_id", Label: "节点", Kind: "ref", Ref: "node", Required: true}},
+		read: func(ctx context.Context, s *Server, args map[string]any) (any, error) {
+			return s.readVia(ctx, s.getNodeUsage, "GET", pathOf("id", itoa(intArg(args, "node_id"))), nil, nil)
+		}},
 	{Name: "list_presets", Title: "协议方案", Purpose: "列出建节点可选的协议方案（就是「新建节点」第 1 步的选项）：编号、名称、说明、内核、协议、传输、安全（reality / tls / none）、是否需要证书、能否作出口，以及「高级」里可以改的字段。给 gate_id 时还返回这台 VPS 现在能不能用（available）及原因（why），先看这个再选方案，不要逐个提交草稿试错。推荐协议前先读，不要凭印象。", Kind: "read",
 		Params: []Param{{Key: "gate_id", Label: "VPS", Kind: "ref", Ref: "gate"}},
 		read: func(ctx context.Context, s *Server, args map[string]any) (any, error) {
@@ -702,9 +715,6 @@ var opReadCaps = []Capability{
 				if err != nil {
 					return map[string]any{"id": o.ID, "error": "出口状态未知"}
 				}
-				v["has_password"] = v["password"] != nil && v["password"] != ""
-				delete(v, "password")
-				delete(v, "link")
 				return v
 			}), err
 		}},
@@ -717,7 +727,7 @@ var opReadCaps = []Capability{
 	{Name: "list_sources", Title: "订阅源", Purpose: "列出订阅源：编号、名称、启用、订阅地址（只留主机）、筛选、节点数、上游用量与到期、最近一次拉取的时间与错误。", Kind: "read",
 		read: func(ctx context.Context, s *Server, _ map[string]any) (any, error) {
 			items, err := s.Store.Ent.SubSource.Query().Order(ent.Asc(subsource.FieldPosition), ent.Asc(subsource.FieldID)).All(ctx)
-			return listOf(items, func(v *ent.SubSource) any { return sourceView(v) }), err
+			return listOf(items, func(v *ent.SubSource) any { return s.subscriptionSourceView(ctx, v) }), err
 		}},
 	{Name: "list_manual_nodes", Title: "手动节点", Purpose: "列出手动节点：编号、名称、协议与主机（链接里的密码不给）、分组、是否启用。", Kind: "read",
 		read: func(ctx context.Context, s *Server, _ map[string]any) (any, error) {

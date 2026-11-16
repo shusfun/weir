@@ -12,7 +12,7 @@ func (s *Server) validateProbeResult(ctx context.Context, record taskqueue.Recor
 	valid := func(c contracts.NodeProbeCheck, udp bool) bool {
 		return (c.Status == "passed" || c.Status == "failed" || c.Status == "unknown" || udp && c.Status == "not_applicable") && c.LatencyMS >= 0 && c.LatencyMS <= 300000 && c.Bytes >= 0 && c.Bytes <= 256<<10 && (c.Why == "" || c.Why == "probe_certificate_failed" || c.Why == "probe_authentication_failed" || c.Why == "probe_port_refused" || c.Why == "probe_timeout" || c.Why == "probe_address_rejected" || c.Why == "probe_connection_failed" || c.Why == "probe_execution_failed")
 	}
-	if record.Task.Kind == contracts.TaskNodeProbe {
+	if record.Task.Kind == contracts.TaskNodeProbe || record.Task.Kind == contracts.TaskNodeProbeXray {
 		var result contracts.NodeProbeResult
 		if contracts.DecodeStrict(raw, &result, 64<<10) != nil || !valid(result.TCP, false) || !valid(result.UDP, true) {
 			return errors.New("probe_result_invalid")

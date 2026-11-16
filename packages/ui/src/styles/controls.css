@@ -329,6 +329,31 @@ html:has(.weir-page-scroll) body {
 .weir-overlay-body { min-height: 0; min-width: 0; }
 .weir-action-group { display: flex; flex-wrap: wrap; align-items: center; gap: var(--weir-space-2); }
 .weir-action-group[data-align="end"] { justify-content: flex-end; }
+.weir-action-group[data-wrap="false"] { flex-wrap: nowrap; flex-shrink: 0; }
+.weir-action-group[data-wrap="false"] > .weir-button { flex-shrink: 0; }
 .weir-overlay-footer { flex-shrink: 0; border-top: 1px solid var(--weir-line-soft); padding-top: var(--weir-space-4); margin-top: var(--weir-space-4); }
 
 .weir-overlay-body[data-gutter="stable"] { margin-inline-end: calc(-1 * var(--weir-scrollbar-gutter)); }
+
+[data-slot="collapsible"][data-variant="section"] { border-top: 1px solid var(--weir-line-soft); }
+.weir-collapsible-section-trigger {
+  width: 100%; min-height: var(--weir-tap-touch); gap: var(--weir-space-3);
+  padding: var(--weir-space-3); color: var(--weir-ink);
+  transition: background-color var(--weir-fast) var(--weir-ease);
+}
+.weir-collapsible-section-trigger:is(:hover, :focus-visible) { background-color: var(--weir-fill-3); }
+.weir-collapsible-section-trigger:active { background-color: var(--weir-fill-2); }
+.weir-collapsible-section-trigger [data-slot="collapsible-title"] { flex: 1; font-weight: 600; overflow-wrap: anywhere; }
+.weir-collapsible-section-trigger [data-slot="collapsible-summary"] {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right;
+  color: var(--weir-ink-3); font-size: var(--weir-text-meta); line-height: var(--weir-leading-meta);
+}
+.weir-collapsible-section-trigger [data-slot="collapsible-chevron"] {
+  order: 1; width: var(--weir-icon); height: var(--weir-icon); color: var(--weir-ink-3);
+  transition: rotate var(--weir-mid) var(--weir-ease), scale var(--weir-fast) var(--weir-ease);
+}
+.weir-collapsible-section-body { display: grid; gap: var(--weir-space-2); padding: 0 var(--weir-space-3) var(--weir-space-3); min-width: 0; }
+[data-motion="lite"] [data-slot="collapsible"][data-variant="section"] :is([data-slot="collapsible-panel"], [data-slot="collapsible-chevron"]) { transition-property: none; }
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="collapsible"][data-variant="section"] :is([data-slot="collapsible-panel"], [data-slot="collapsible-chevron"]) { transition-property: none; }
+}

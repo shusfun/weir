@@ -3,6 +3,7 @@ package subgroup
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/shusfun/weir/internal/sub"
 )
@@ -35,7 +36,7 @@ func rawNodeCount(nodes []string) int {
 }
 
 func fetchSource(ctx context.Context, f Fetcher, cache Cache, s Source, o Options) ([]string, SourceResult) {
-	res := SourceResult{SourceID: s.ID, ConfigVersion: s.ConfigVersion}
+	res := SourceResult{SourceID: s.ID, ConfigVersion: s.ConfigVersion, Started: time.Now()}
 	process := func(raw []string) []string {
 		nodes, err := processSource(raw, s, o)
 		if err != nil {
@@ -79,15 +80,26 @@ func fetchSource(ctx context.Context, f Fetcher, cache Cache, s Source, o Option
 		return fallback, res
 	}
 	real := rawNodeCount(nodes)
-	// A successful empty response is meaningful; only non-empty sharp drops can use protection.
+	// An upstream 200 with no usable proxies can be an expired account or outage.
+	// Do not replace the last good snapshot until the operator accepts the impact.
+	if real == 0 && !s.AcceptEmpty {
+		res.Error = "source_empty_rejected"
+		if cache != nil {
+			if old, ok := cache.Load(ctx, s.ID); ok {
+				res.FromCache, res.Nodes = true, rawNodeCount(old)
+				return process(old), res
+			}
+		}
+		return nil, res
+	}
 	if s.NodeCache && real > 0 && suspiciousDrop(s.KnownNodes, real) {
 		res.Error = "node_count_drop_rejected"
 		if fallback, ok := cached(); ok {
 			return fallback, res
 		}
 	}
-	if s.NodeCache && cache != nil {
-		if old, ok := cache.Load(ctx, s.ID); real > 0 && ok && suspiciousDrop(rawNodeCount(old), real) {
+	if cache != nil {
+		if old, ok := cache.Load(ctx, s.ID); s.NodeCache && real > 0 && ok && suspiciousDrop(rawNodeCount(old), real) {
 			res.Error, res.FromCache, res.Nodes = "node_count_drop_rejected", true, rawNodeCount(old)
 			processed := process(old)
 			return processed, res
@@ -95,6 +107,7 @@ func fetchSource(ctx context.Context, f Fetcher, cache Cache, s Source, o Option
 		cache.Store(ctx, s.ID, nodes)
 	}
 	res.Nodes = real
+	res.RawNodes = append([]string{}, nodes...)
 	processed := process(nodes)
 	return processed, res
 }

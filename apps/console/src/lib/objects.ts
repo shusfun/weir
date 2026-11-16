@@ -64,29 +64,30 @@ export function objectHref(ref: ObjectRef): string {
     case "center":
       return "/gates?center=1";
     case "exit":
+      return `/proxies?exit=${k}`;
     case "route":
-      return `/exits?${focus}`;
+      return `/rules?${focus}`;
     case "gate":
-      return `/gates/${k}`;
+      return `/gates?gate=${k}`;
     case "node":
-      return `/nodes/${k}`;
+      return `/gates?node=${k}`;
     case "user":
-      return `/users/${k}`;
+      return `/users?user=${k}`;
     case "link":
       // 订阅链接在「订阅链接」里：管理员按所属用户筛选后滚到这条
       return ref.owner ? `/links?user=${ref.owner}&${focus}` : `/links?${focus}`;
     case "chain":
-      return ref.owner ? `/users/${ref.owner}?tab=chains&${focus}` : `/users?${ref.type}=${k}`;
+      return ref.owner ? `/users?user=${ref.owner}&detail_tab=chains&${focus}` : `/users?${ref.type}=${k}`;
     case "driver":
       return `/kernels?tab=drivers&driver=${k}`;
     case "kernel":
       return `/kernels?tab=versions&${focus}`;
     case "source":
-      return `/subscriptions/sources/${k}`;
+      return `/subscriptions?tab=sources&source=${k}`;
     case "profile":
-      return `/subscriptions/profiles/${k}`;
+      return `/subscriptions?tab=profiles&profile_detail=${k}`;
     case "page":
-      return `/pages/${k}`;
+      return `/pages?tab=pages&page=${k}`;
     case "cert":
       return `/gates?certs=1&${focus}`;
     case "audit":

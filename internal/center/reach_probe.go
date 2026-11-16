@@ -45,7 +45,7 @@ func (s *Server) checkReachabilitiesNow(ctx context.Context, ids []int) {
 	}
 	var candidates []candidate
 	var proxies []map[string]any
-	bin, driver, binaryErr := deployedProbeBinary(s, ctx)
+	bin, driver, binaryErr := deployedProbeBinary(s, ctx, "mihomo")
 	for _, id := range ids {
 		n, err := s.Store.Ent.Node.Get(ctx, id)
 		if err != nil || !n.Enabled {
@@ -95,6 +95,10 @@ func (s *Server) checkReachabilitiesNow(ctx context.Context, ids []int) {
 			client, err := nodeClient(link)
 			if err != nil {
 				c.result.Why = safeCheckOutput(err.Error())
+				break
+			}
+			if client.XHTTP != nil {
+				c.result.Why = "XHTTP 不支持 mihomo 批量延迟测试，请使用节点实测"
 				break
 			}
 			c.proxy = client.Proxies[0]

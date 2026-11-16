@@ -36,20 +36,6 @@ func executeNetworkTask(ctx context.Context, t contracts.Task, client *http.Clie
 			return nil, e
 		}
 		rawURL, ua, authorization, limit = r.Credentials.URL, r.UserAgent, r.Credentials.Authorization, r.MaxBytes
-	case contracts.TaskExternalConvert:
-		var r contracts.ExternalConvertTask
-		if e := contracts.DecodeStrict(t.Payload, &r, contracts.MaxTaskPayload); e != nil {
-			return nil, e
-		}
-		rawURL, authorization, limit = r.Credentials.URL, r.Credentials.Authorization, r.MaxBytes
-		content, contentType = r.Content, r.ContentType
-		method = http.MethodPost
-		if r.Method != "" {
-			method = r.Method
-		}
-		if method != http.MethodGet && method != http.MethodPost || method == http.MethodGet && len(content) > 0 {
-			return nil, errors.New("network_method_invalid")
-		}
 	case contracts.TaskReleaseQuery:
 		var r contracts.ReleaseQueryTask
 		if e := contracts.DecodeStrict(t.Payload, &r, contracts.MaxTaskPayload); e != nil {

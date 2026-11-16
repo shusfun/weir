@@ -8,9 +8,11 @@ import (
 
 // auditLabels 是审计操作的中文名；没有登记的操作显示原始编码，不猜。
 var auditLabels = map[string]string{
+	"domain.ignore":             "修改国内域名候选",
+	"exit.credentials.reveal":   "查看代理凭据",
 	"subscription.profile.test": "实测订阅组节点",
-	"gate.config.apply":         "VPS 配置应用结果", "subscription.converter.save": "保存外部转换后端",
-	"asset.relay.open": "开始文件兜底中转", "asset.relay.close": "关闭文件兜底中转",
+	"gate.config.apply":         "VPS 配置应用结果",
+	"asset.relay.open":          "开始文件兜底中转", "asset.relay.close": "关闭文件兜底中转",
 	"asset.distribute":      "中心文件兜底分发",
 	"defense.laya.discover": "发现已有 Laya", "defense.laya.attach": "确认接入已有 Laya",
 	"laya.host.confirm": "确认中心 Laya 托管", "laya.host.result": "中心 Laya 托管结果",
@@ -32,7 +34,7 @@ var auditLabels = map[string]string{
 	"driver.restore": "恢复驱动", "driver.rollback": "回退驱动", "driver.save": "保存驱动",
 	"dsh.fetch": "下载 dsh", "dsh.open": "打开 dsh", "dsh.probe": "dsh 实测", "dsh.remove": "删除 dsh 版本", "dsh.restart": "重启 dsh", "dsh.settings": "修改 dsh 设置", "dsh.version": "切换 dsh 版本",
 	"gate.invite": "生成 VPS 安装命令", "gate.kernel.restart": "重启内核", "gate.pair": "VPS 接入", "gate.panel.discover": "检测面板", "gate.panel.remove": "移除面板授权", "gate.panel.set": "设置面板授权",
-	"gate.revoke": "撤销 VPS", "gate.ssh_install": "SSH 安装 VPS", "gate.update": "修改 VPS", "guestbook.config": "修改留言板设置",
+	"gate.revoke": "撤销 VPS", "gate.delete": "删除 VPS", "gate.ssh_install": "SSH 安装 VPS", "gate.update": "修改 VPS", "guestbook.config": "修改留言板设置",
 	"job.cancel": "取消任务", "kernel.defaults": "修改默认内核版本", "kernel.fetch": "下载内核", "kernel.remove": "删除内核版本",
 	"link.create": "新建订阅链接", "link.delete": "删除订阅链接", "link.rotate": "更换订阅地址", "link.update": "修改订阅链接",
 	"node.create": "新建节点", "node.delete": "删除节点", "node.update": "修改节点", "node.test": "实测节点",

@@ -245,18 +245,20 @@ S.resetScroll = () => {
 S.runStatic = ({ checks, popupOnly, narrow }) => {
   const scope = S.scopeRoot(popupOnly);
   if (!scope) return { missing: true };
-  const tok = S.tokens();
+  const has = (c) => checks.includes(c);
+  // Geometry-only scans do not need hundreds of temporary color/length probes.
+  const tok = checks.some(c => ["tokens", "type", "motion"].includes(c)) ? S.tokens() : { dark: document.documentElement.classList.contains("dark"), names: [], sizes: [], durations: [], radii: [] };
   const col = S.collector();
   const stats = { elements: 0, gradients: 0, inlineLinks: 0, tapTargets: 0, occluded: 0, contrastChecked: 0, contrastUnknown: 0 };
   const combos = {};
-  const has = (c) => checks.includes(c);
   if (has("tokens")) S.checkTokens(scope, tok, col, stats);
   if (has("type")) S.checkType(scope, tok, col, combos);
   if (has("tap") && narrow) S.checkTap(scope, col, stats);
   if (has("contrast")) S.checkContrast(scope, col, stats);
   if (has("motion")) S.checkMotion(scope, tok, col);
   let overflow = null;
-  if (has("overflow") && narrow) overflow = S.checkOverflow(scope, col);
+  if (has("overflow")) overflow = S.checkOverflow(scope, col);
+  if (has("spacing")) S.checkSpacing(scope, col);
   if (has("scroll")) S.checkScroll(scope, col);
   return { items: col.list(), stats, combos, overflow, dark: tok.dark, tokenCount: tok.names.length, typeTokens: tok.sizes.length, durations: [...tok.durations], radii: [...tok.radii] };
 };

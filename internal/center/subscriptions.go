@@ -123,8 +123,6 @@ func (s *Server) subscriptionSettings(ctx context.Context) (SubscriptionSettings
 }
 
 func (s *Server) subscriptionRoutes(r *gin.Engine, auth, admin *gin.RouterGroup) {
-	admin.GET("/subscriptions/converter", s.getConverterSettings)
-	admin.PUT("/subscriptions/converter", s.putConverterSettings)
 	admin.GET("/subscriptions/runs", s.listSubscriptionRuns)
 	admin.GET("/subscriptions/runs/:id", s.getSubscriptionRun)
 	admin.GET("/subscriptions/settings", s.getSubscriptionSettings)
@@ -174,7 +172,7 @@ func (s *Server) putSubscriptionSettings(c *gin.Context) {
 	if !bind(c, &st) {
 		return
 	}
-	if !validSubscriptionEngine(st.Engine) {
+	if !validSubscriptionEngine(st.Engine) || st.Engine == "external" {
 		failure(c, 400, "invalid_engine")
 		return
 	}
@@ -257,11 +255,16 @@ func idParam(c *gin.Context) (int, bool) {
 
 // ---- 订阅源 ----
 
-func sourceView(v *ent.SubSource) gin.H {
+func (s *Server) subscriptionSourceView(ctx context.Context, v *ent.SubSource) gin.H {
+	settings, err := s.subscriptionSettings(ctx)
+	state := sourceObjectState(v, settings.SourceRefresh)
+	if err != nil && state.Status == "partial" {
+		state.Status, state.Label, state.Reason = "unknown", "未知", "无法读取刷新周期，缓存时效未知"
+	}
 	return gin.H{"id": v.ID, "name": v.Name, "url": v.URL, "enabled": v.Enabled, "user_agent": v.UserAgent, "filter_include": v.FilterInclude,
 		"filter_exclude": v.FilterExclude, "operators": v.Operators, "plus_as_space": v.PlusAsSpace, "node_cache": v.NodeCache,
 		"exclude_traffic": v.ExcludeTraffic, "website": v.Website, "remark": v.Remark, "position": v.Position, "node_count": v.NodeCount,
-		"user_info": parseUserInfo(v.UserInfo), "title": v.Title, "last_error": v.LastError, "fetched_at": v.FetchedAt}
+		"user_info": parseUserInfo(v.UserInfo), "title": v.Title, "last_error": v.LastError, "fetched_at": v.FetchedAt, "object_state": state}
 }
 
 // parseUserInfo 解析 Subscription-Userinfo；缺失为 nil（页面显示「未知」，不当作 0）。
@@ -307,7 +310,7 @@ func (s *Server) listSources(c *gin.Context) {
 	var used, total int64
 	known := 0
 	for _, it := range items {
-		out = append(out, sourceView(it))
+		out = append(out, s.subscriptionSourceView(c.Request.Context(), it))
 		if u, t, ok := sourceTraffic(parseUserInfo(it.UserInfo)); it.Enabled && !it.ExcludeTraffic && ok && used <= math.MaxInt64-u && total <= math.MaxInt64-t {
 			used += u
 			total += t
@@ -447,7 +450,7 @@ func (s *Server) saveSourceLocked(c *gin.Context) {
 	}
 	s.invalidateGroups(ctx)
 	s.audit(c, "subscription.source.save", "source:"+itoa(saved.ID), "ok")
-	c.JSON(200, sourceView(saved))
+	c.JSON(200, s.subscriptionSourceView(c.Request.Context(), saved))
 }
 
 func (s *Server) deleteSource(c *gin.Context) {
@@ -611,6 +614,15 @@ func (s *Server) recordResults(ctx context.Context, results []subgroup.SourceRes
 			if r.ConfigVersion != "" && r.ConfigVersion != toSource(src).ConfigVersion {
 				return nil
 			}
+			if !r.Started.IsZero() {
+				last, ok, err := s.catalogRefreshStarted(ctx, r.SourceID)
+				if err != nil {
+					return err
+				}
+				if ok && !r.Started.After(last) {
+					return nil
+				}
+			}
 			return s.recordSourceResult(ctx, r)
 		})
 		stage := subgroup.Stage{SourceID: r.SourceID, Operation: "source.persist", Started: started, Finished: time.Now().UTC()}
@@ -623,6 +635,11 @@ func (s *Server) recordResults(ctx context.Context, results []subgroup.SourceRes
 }
 
 func (s *Server) recordSourceResult(ctx context.Context, r subgroup.SourceResult) error {
+	if r.Error == "" && r.RawNodes != nil {
+		if err := s.syncSourceCatalog(ctx, r.SourceID, r.RawNodes); err != nil {
+			return err
+		}
+	}
 	now := time.Now()
 	upd := s.Store.Ent.SubSource.UpdateOneID(r.SourceID).SetLastError(r.Error)
 	if r.Error == "" {
@@ -634,6 +651,11 @@ func (s *Server) recordSourceResult(ctx context.Context, r subgroup.SourceResult
 	}
 	if err := upd.Exec(ctx); err != nil {
 		return err
+	}
+	if !r.Started.IsZero() {
+		if err := s.saveCatalogRefreshStarted(ctx, r.SourceID, r.Started); err != nil {
+			return err
+		}
 	}
 	if r.Error != "" && r.Error != "node_count_drop_rejected" {
 		_, err := s.enqueueObservation(ctx, observationInput{Point: "subscription.health", Resource: "source:" + itoa(r.SourceID), Text: r.Error, Origin: "center.recordResults"})
@@ -676,7 +698,7 @@ func (s *Server) refreshSource(c *gin.Context) {
 			nodes = append(nodes, l)
 		}
 	}
-	c.JSON(200, gin.H{"source": sourceView(src), "result": results[0], "nodes": nodes})
+	c.JSON(200, gin.H{"source": s.subscriptionSourceView(c.Request.Context(), src), "result": results[0], "nodes": nodes})
 }
 
 func (s *Server) subscriptionContext(ctx context.Context, profileID int) context.Context {

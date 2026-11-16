@@ -131,20 +131,13 @@ func subscriptionStageCode(raw string) string {
 	if raw == "" {
 		return ""
 	}
-	if strings.HasPrefix(raw, "converter_") {
-		for _, code := range []string{"converter_endpoint_invalid", "converter_target_unsupported", "converter_settings_unsupported", "converter_template_unsupported", "converter_template_required", "converter_input_invalid", "converter_protocol_unsupported", "converter_empty_input", "converter_input_too_large", "converter_settings_unavailable", "converter_not_configured", "converter_secret_unavailable", "converter_request_failed", "converter_result_invalid"} {
-			if raw == code {
-				return raw
-			}
-		}
-	}
 	for _, code := range []string{"source_rules_invalid", "manual_rules_invalid", "group_rules_invalid"} {
 		if raw == code || strings.HasPrefix(raw, code+":") || strings.HasPrefix(raw, code+"[") {
 			return code
 		}
 	}
 	switch raw {
-	case "source_result_save_failed", "source_content_invalid", "source_no_supported_nodes", "node_count_drop_rejected", "source_failed", "profile_member_inactive", "profile_graph_invalid", "profile_expansion_exceeded", "unknown_profile",
+	case "source_empty_rejected", "source_result_save_failed", "source_content_invalid", "source_no_supported_nodes", "node_count_drop_rejected", "source_failed", "profile_member_inactive", "profile_graph_invalid", "profile_expansion_exceeded", "unknown_profile",
 		"unsupported_target", "invalid_yaml_template", "template_target_unsupported", "empty_output", "format_conversion_failed", "response_write_failed", "profile_output_too_large":
 		return raw
 	case context.Canceled.Error():

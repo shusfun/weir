@@ -60,7 +60,7 @@ export function DriversPanel() {
   return (
     <Card>
       <CardContent className="stack">
-        <SectionHeader
+        <SectionHeader flush
           title="内核驱动"
           description="每个内核版本怎么运行、支持哪些协议、建节点的方案、怎么生成配置，都写在驱动里；新版本用 extends 继承上一版本、只写变化。引擎强制检查统计端口只监听回环、证书只用托管目录，驱动写错也绕不过。"
           actions={
@@ -177,7 +177,7 @@ function DriverDialog({ name, close, changed }: { name: string; close: () => voi
             <Collapsible title="展开 extends 后的全文">
               <pre className="max-h-80 overflow-auto rounded-[var(--weir-radius)] bg-[var(--weir-well)] p-2 text-meta">{q.data.resolved || "（无法展开）"}</pre>
             </Collapsible>
-            <SectionHeader title="历史" description={q.data.history.length === 0 ? "还没有保存过，当前是内置版本。" : "每次保存都是新版本；退回也会先检查。"} />
+            <SectionHeader flush title="历史" description={q.data.history.length === 0 ? "还没有保存过，当前是内置版本。" : "每次保存都是新版本；退回也会先检查。"} />
             {q.data.history.map((h) => (
               <Collapsible key={h.revision} variant="card" title={<span className="flex flex-wrap items-center gap-2"><code>#{h.revision}</code>{h.restored && <Badge variant="soft" tone="neutral">恢复内置</Badge>}{h.disabled && <Badge variant="soft" tone="bad">停用</Badge>}{h.source === "dsh" && <Badge variant="soft" tone="neutral">dsh 草稿</Badge>}<small className="text-[var(--weir-ink-3)]">{date(h.at)}{h.note ? " · " + h.note : ""}</small></span>}>
                 <div className="stack">

@@ -8,7 +8,7 @@ export function OverlayBody({ className, viewportClassName, ...props }: Omit<Com
   return <ScrollArea gutter="stable" className={cn("weir-overlay-body", className)} viewportClassName={cn("weir-focus-gutter", viewportClassName)} {...props} />;
 }
 
-// Action groups wrap as a unit; individual buttons retain their size contract.
-export function ActionGroup({ className, align = "start", ...props }: ComponentProps<"div"> & { align?: "start" | "end" }) {
-  return <div data-slot="action-group" data-align={align} className={cn("weir-action-group", className)} {...props} />;
+// Compact object actions stay together; their parent can move the entire group to a new row.
+export function ActionGroup({ className, align = "start", wrap = true, ...props }: ComponentProps<"div"> & { align?: "start" | "end"; wrap?: boolean }) {
+  return <div data-slot="action-group" data-align={align} data-wrap={wrap} className={cn("weir-action-group", className)} {...props} />;
 }

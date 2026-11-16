@@ -3,16 +3,11 @@ package center
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
-	"encoding/json"
-	"errors"
 	"io"
 	"log/slog"
 	"net"
 	"os"
-	"reflect"
-	"strconv"
 	"sync"
 	"time"
 
@@ -31,16 +26,14 @@ func (s *Server) gateRoutes(ready, auth, admin *gin.RouterGroup) {
 	a := ready.Group("/agent")
 	a.Use(s.agentAuth)
 	a.Use(s.agentCommunication)
-	a.GET("/config", s.agentConfig)
 	a.POST("/state", s.agentState)
-	a.POST("/heartbeat", s.agentHeartbeat)
 	a.POST("/heartbeat/v2", s.agentHeartbeat)
 	a.POST("/meter", s.agentMeter)
+	a.GET("/country-networks", s.agentCountryNetworks)
 	a.POST("/live", s.agentLive)
-	a.GET("/actions", s.agentActions)
+	a.POST("/browser-tests", s.agentBrowserTests)
 	a.POST("/poll", s.agentPoll)
 	a.POST("/tasks/:id/:operation", s.agentTaskUpdate)
-	a.POST("/actions/:id", s.agentActionResult)
 	a.GET("/kernels/:kernel/:version", s.agentKernel)
 	a.GET("/kernel-assets/:kernel/:version", s.agentKernelArchive)
 	a.GET("/release/:version", s.agentRelease)
@@ -51,6 +44,7 @@ func (s *Server) gateRoutes(ready, auth, admin *gin.RouterGroup) {
 	a.POST("/uploads/:id/progress", s.agentUploadProgress)
 	a.POST("/self-update", s.agentSelfUpdate)
 	s.gateAdminRoutes(admin)
+	s.browserTestRoutes(auth, admin)
 	s.workerObservationRoutes(admin)
 	s.certRoutes(admin)
 	s.nodeCertRoutes(admin)
@@ -58,77 +52,8 @@ func (s *Server) gateRoutes(ready, auth, admin *gin.RouterGroup) {
 	s.exitRoutes(auth, admin)
 	s.aiRoutes(admin)
 	s.routingRoutes(admin)
+	s.domainRoutes(admin)
 	s.kernelAdminRoutes(admin)
-}
-
-// agentConfig 长轮询：版本与 since 不同时立即返回完整配置，否则最多等 25 秒后返回 204。
-// 编译失败（例如内核尚未下载）返回 409 与原因，Gate 保持上一份已生效配置并稍后重试。
-func (s *Server) agentConfig(c *gin.Context) {
-	g := gateFrom(c)
-	since, _ := strconv.ParseInt(c.Query("since"), 10, 64)
-	ctx := c.Request.Context()
-	timeout := time.NewTimer(25 * time.Second)
-	defer timeout.Stop()
-	for {
-		wait := s.waiters.wait(g.ID) // 先订阅再读取，避免错过两者之间的版本变化
-		cur, err := s.Store.Ent.Gate.Get(ctx, g.ID)
-		if err != nil {
-			failInternal(c, 503, "config_unavailable", err)
-			return
-		}
-		execSince, execErr := strconv.ParseInt(c.Query("exec_since"), 10, 64)
-		if c.Query("exec_since") != "" && execErr == nil && cur.ConfigRevision == since {
-			exec, err := s.loadExecution(ctx, g.ID)
-			if err != nil {
-				failInternal(c, 503, "execution_unavailable", err)
-				return
-			}
-			if exec.Seq != 0 && exec.Seq != execSince {
-				cfg, err := s.compileGateConfig(ctx, cur)
-				if err != nil {
-					failInternal(c, 503, "execution_unavailable", err)
-					return
-				}
-				cfg.ExecutionOnly = true
-				cfg.ExecutionSeq = exec.Seq
-				cfg.Budgets = exec.Budgets
-				cfg.ForceDisconnect = exec.ForceDisconnect
-				c.JSON(200, cfg)
-				return
-			}
-		}
-		if raw, ok, err := s.Store.KV.Get(ctx, certPushKey(g.ID)); err != nil {
-			failInternal(c, 503, "cert_sync_unavailable", err)
-			return
-		} else if ok && raw != "" && cur.ConfigRevision == since {
-			cfg, err := s.compileGateConfig(ctx, cur)
-			if err != nil {
-				failInternal(c, 503, "cert_sync_unavailable", err)
-				return
-			}
-			cfg.CertOnly = true
-			c.JSON(200, cfg)
-			return
-		}
-		if cur.ConfigRevision != since {
-			cfg, err := s.compileGateConfig(ctx, cur)
-			if err != nil {
-				_ = s.Store.Ent.Gate.UpdateOneID(g.ID).SetLastError(err.Error()).Exec(ctx)
-				c.AbortWithStatusJSON(409, gin.H{"error": gin.H{"code": "config_unavailable", "message": err.Error()}})
-				return
-			}
-			c.JSON(200, cfg)
-			return
-		}
-		select {
-		case <-wait:
-		case <-timeout.C:
-			c.Status(204)
-			return
-		case <-ctx.Done():
-			return
-		}
-	}
 }
 
 // agentState 记录应用结果；新版本生效后确认对应额度，释放的额度分给其他 Gate。
@@ -175,6 +100,12 @@ func (s *Server) agentState(c *gin.Context) {
 	if st.ExecutionSeq > 0 && st.FailedRevision == 0 && st.Error == "" {
 		if err = s.confirmExecution(ctx, g.ID, st.ExecutionSeq); err != nil {
 			failInternal(c, 500, "save_failed", err)
+			return
+		}
+	}
+	if st.AppliedRevision > 0 && st.FailedRevision == 0 && st.ConflictPort == 0 && st.Error == "" {
+		if err = s.acknowledgeUoT(ctx, g.ID, st.AppliedRevision); err != nil {
+			failInternal(c, 500, "uot_ack_failed", err)
 			return
 		}
 	}
@@ -260,77 +191,10 @@ func (s *Server) agentHeartbeat(c *gin.Context) {
 	if !bindWorker(c, &hb, contracts.MaxTaskPayload) {
 		return
 	}
-	if hb.Protocol != 0 {
-		s.agentHeartbeatV2(c, hb)
-		return
-	}
-	g, ctx := gateFrom(c), c.Request.Context()
-	ports := make([]map[string]any, 0, len(hb.ListeningPorts))
-	for _, p := range hb.ListeningPorts {
-		ports = append(ports, map[string]any{"port": p.Port, "proto": p.Proto, "process": p.Process})
-	}
-	observationsChanged := !reflect.DeepEqual(g.ListeningPorts, ports) || !reflect.DeepEqual(g.KernelsRunning, hb.Kernels)
-	arch := hb.Arch
-	if arch != "amd64" && arch != "arm64" {
-		arch = g.Arch
-	}
-	upd := g.Update().SetVersion(hb.Version).SetHostname(hb.Hostname).SetArch(arch).SetListeningPorts(ports).SetKernelsRunning(hb.Kernels).SetLastSeenAt(time.Now())
-	host := map[string]any{}
-	if hb.Host != nil {
-		c.Set("observation_id", hb.Host.ObservationID)
-		b, _ := json.Marshal(hb.Host)
-		_ = json.Unmarshal(b, &host)
-	}
-	host["node_test_version"] = hb.NodeTestVersion
-	upd.SetHost(host)
-	if len(hb.Center) <= 255 {
-		upd.SetCenterURL(hb.Center)
-	}
-	// 自更新的进度或失败原因：这次没有就清空（已更新成功或已与中心同版本）。
-	if su := hb.SelfUpdate; validSelfUpdate(su) {
-		upd.SetSelfUpdate(selfUpdateFields(su))
-	} else {
-		upd.ClearSelfUpdate()
-	}
-	// 防火墙：这次没读到时清空（显示「未知」），不沿用旧的结果。
-	if fw := hb.Firewall; fw != nil && len(fw.Rules) <= 500 {
-		upd.SetFirewall(map[string]any{"tool": fw.Tool, "active": fw.Active, "rules": fw.Rules, "error": fw.Error, "at": time.Now().UTC()})
-	} else {
-		upd.ClearFirewall()
-	}
-	if g.PublicHost == "" {
-		if ip := publicAddress(c.ClientIP()); ip != "" {
-			upd.SetPublicHost(ip)
-		}
-	}
-	first := g.LastSeenAt == nil
-	g, err := upd.Save(ctx)
-	if err != nil {
-		failInternal(c, 500, "save_failed", err)
-		return
-	}
-	if first {
-		// 第一次心跳：「复制安装命令」的配对进度据此显示「已上线」
-		s.notifyConsole("gate", itoa(g.ID))
-	}
-	s.absorbPanelReport(ctx, g, hb)
-	if observationsChanged && g.AppliedRevision >= g.ConfigRevision {
-		s.refreshGateReachability(g.ID)
-	}
-	s.recordHost(ctx, g.ID, hb.Host, time.Now())
-	before := g.ConfigRevision
-	if g, err = s.ensureStatsPorts(ctx, g); err != nil {
-		failInternal(c, 500, "port_allocation_failed", err)
-		return
-	}
-	if g.ConfigRevision != before {
-		s.waiters.notify(g.ID)
-		_ = s.Store.Notifications.Publish(ctx, "gate:"+itoa(g.ID))
-	}
-	c.JSON(200, contracts.HeartbeatReply{HeartbeatProtocol: contracts.HeartbeatProtocol, ConfigRevision: g.ConfigRevision, Center: s.centerOrigin(ctx), Release: s.heartbeatRelease(ctx, g, hb.Version)})
+	s.agentHeartbeatV2(c, hb)
 }
 
-// validUpdateState：旧版 Gate 不报 state（只报失败原因），按空值接受。
+// 空状态表示当前没有更新操作。
 func validUpdateState(v string) bool {
 	return v == "" || v == "downloading" || v == "replacing" || v == "failed"
 }
@@ -346,102 +210,16 @@ func unexpiredActions(items []*ent.GateAction, now time.Time) []*ent.GateAction 
 	return out
 }
 
-// agentActions 长轮询待执行动作；过期的动作标记为已过期，不再下发。
-func (s *Server) agentActions(c *gin.Context) {
-	g, ctx := gateFrom(c), c.Request.Context()
-	timeout := time.NewTimer(25 * time.Second)
-	defer timeout.Stop()
-	for {
-		wait := s.actionWaiters.wait(g.ID)
-		// SQLite 按字符串比较时间，UTC 与本地时区会对不上。过期与否在读出后用绝对时间判断。
-		items, err := s.Store.Ent.GateAction.Query().Where(gateaction.GateIDEQ(g.ID), gateaction.StatusEQ(gateaction.StatusPending)).Order(ent.Asc(gateaction.FieldID)).Limit(10).All(ctx)
-		if err != nil {
-			failInternal(c, 503, "actions_unavailable", err)
-			return
-		}
-		items = unexpiredActions(items, time.Now())
-		if len(items) > 0 {
-			out := make([]contracts.Action, 0, len(items))
-			err = s.Store.Lock.Do(ctx, "legacy-actions:"+itoa(g.ID), func(ctx context.Context) error {
-				if _, e := s.Store.Tasks.Capabilities(ctx, g.ID); e == nil {
-					return nil
-				} else if !errors.Is(e, sql.ErrNoRows) {
-					return e
-				}
-				for _, a := range items {
-					n, e := s.Store.Ent.GateAction.Update().Where(gateaction.IDEQ(a.ID), gateaction.StatusEQ(gateaction.StatusPending)).SetStatus(gateaction.StatusRunning).Save(ctx)
-					if e != nil {
-						return e
-					}
-					if n != 1 {
-						continue
-					}
-					out = append(out, contracts.Action{ID: int64(a.ID), Kind: a.Kind, Payload: a.Payload, ExpiresAt: a.ExpiresAt})
-				}
-				return nil
-			})
-			if err != nil {
-				failInternal(c, 503, "actions_unavailable", err)
-				return
-			}
-			c.JSON(200, out)
-			return
-		}
-		select {
-		case <-wait:
-		case <-timeout.C:
-			c.JSON(200, []contracts.Action{})
-			return
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-func (s *Server) agentActionResult(c *gin.Context) {
-	var res contracts.ActionResult
-	if !bind(c, &res) {
-		return
-	}
-	id, err := strconv.Atoi(c.Param("id"))
-	g, ctx := gateFrom(c), c.Request.Context()
-	a, qerr := s.Store.Ent.GateAction.Query().Where(gateaction.IDEQ(id), gateaction.GateIDEQ(g.ID)).Only(ctx)
-	if err != nil || qerr != nil {
-		failure(c, 404, "action_not_found")
-		return
-	}
-	if _, queued := a.Payload["protocol"]; queued {
-		failure(c, 409, "task_lease_required")
-		return
-	}
-	if a.Status == gateaction.StatusDone || a.Status == gateaction.StatusFailed {
-		c.JSON(200, gin.H{"ok": true})
-		return
-	}
-	status := gateaction.StatusDone
-	if !res.OK {
-		status = gateaction.StatusFailed
-	}
-	if _, err = a.Update().SetStatus(status).SetResult(res.Result).SetError(res.Error).SetFinishedAt(time.Now()).Save(ctx); err != nil {
-		failInternal(c, 500, "save_failed", err)
-		return
-	}
-	s.actionDone.notify(a.ID)
-	c.JSON(200, gin.H{"ok": true})
-}
-
-// enqueueAction 下发一次性动作并唤醒 Gate 的动作长轮询。
+// enqueueAction retains the operation ID while the leased task is its only execution path.
 func (s *Server) enqueueAction(ctx context.Context, gid int, kind string, payload map[string]any, ttl time.Duration) (*ent.GateAction, error) {
-	if _, err := s.Store.Tasks.Capabilities(ctx, gid); err == nil {
-		return s.enqueueWorkerTask(ctx, gid, kind, payload, ttl)
-	} else if !errors.Is(err, sql.ErrNoRows) {
+	caps, err := s.Store.Tasks.Capabilities(ctx, gid)
+	if err != nil {
 		return nil, err
 	}
-	a, err := s.Store.Ent.GateAction.Create().SetGateID(gid).SetKind(kind).SetPayload(payload).SetExpiresAt(time.Now().Add(ttl)).Save(ctx)
-	if err == nil {
-		s.actionWaiters.notify(gid)
+	if caps.Tasks[kind] != contracts.TaskVersion {
+		return nil, errNoWorker
 	}
-	return a, err
+	return s.enqueueWorkerTask(ctx, gid, kind, payload, ttl)
 }
 
 // waitAction 等待动作完成（探测类动作在请求内同步返回结果），超时返回当前状态。

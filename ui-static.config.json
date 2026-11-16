@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "sources": ["apps/console/src", "packages/ui/src"],
+  "scopeLabels": [
+    {"pattern": "apps/console/src/proto/*", "label": "example"},
+    {"pattern": "apps/console/src/pages/dev-*", "label": "example"},
+    {"pattern": "packages/ui/*", "label": "library"}
+  ],
+  "spacingTokens": ["--weir-gap-*", "--weir-space-*"],
+  "components": [
+    {
+      "role": "button", "module": "@weir/ui", "file": "packages/ui/src/button.tsx", "export": "Button",
+      "sizeProp": "size", "defaultSize": "default", "sizeMap": {"icon": "default", "icon-xs": "xs", "icon-sm": "sm", "icon-lg": "lg"},
+      "variantProp": "variant", "ignoreVariants": ["link"],
+      "cssTargets": [".weir-button"], "heightVariables": ["--weir-button-height"],
+      "definedIn": ["packages/ui/src/button.tsx", "packages/ui/src/styles/controls.css"]
+    },
+    {"role": "group", "module": "@weir/ui", "export": "ActionGroup", "wrapProp": "wrap", "defaultWrap": true},
+    {"role": "heading", "module": "@weir/ui", "export": "SectionHeader", "flushProp": "flush", "sizeProp": "size", "defaultSize": "default", "bottomMargins": {"default": "mb-4", "sm": "mb-1"}},
+    {"role": "panel", "module": "@weir/ui", "export": "Collapsible", "variantProp": "variant", "panels": {"section": {"trigger": ".weir-collapsible-section-trigger", "body": ".weir-collapsible-section-body"}}}
+  ]
+}

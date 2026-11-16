@@ -10,7 +10,7 @@ import (
 
 func TestMeterPendingReportSurvivesLossRestartAndOnlyAdvancesOnExactAck(t *testing.T) {
 	st := State{Epoch: "epoch1", Seq: 10, Applied: 2, Totals: map[string]Counter{"a": {Up: 100}, "b": {Down: 200}}}
-	first := st.prepareMeter(true, true)
+	first := st.prepareMeter(true)
 	if first.Partial || first.Protocol != 2 || len(first.Usage) != 2 {
 		t.Fatalf("first=%+v", first)
 	}
@@ -21,7 +21,7 @@ func TestMeterPendingReportSurvivesLossRestartAndOnlyAdvancesOnExactAck(t *testi
 	restored := loadState(path)
 	restored.Totals["a"] = Counter{Up: 150}
 	restored.Seq++
-	got := restored.prepareMeter(true, true)
+	got := restored.prepareMeter(true)
 	one, _ := json.Marshal(first)
 	two, _ := json.Marshal(got)
 	if string(one) != string(two) {
@@ -35,7 +35,7 @@ func TestMeterPendingReportSurvivesLossRestartAndOnlyAdvancesOnExactAck(t *testi
 	if err := restored.acknowledgeMeter(contracts.MeterAck{Epoch: first.Epoch, Seq: first.Seq, Accepted: true}); err != nil {
 		t.Fatal(err)
 	}
-	changed := restored.prepareMeter(true, true)
+	changed := restored.prepareMeter(true)
 	if !changed.Partial || len(changed.Usage) != 1 || changed.Usage[0].StatsKey != "a" || changed.Usage[0].Up != 150 {
 		t.Fatalf("changes=%+v", changed)
 	}
@@ -43,7 +43,7 @@ func TestMeterPendingReportSurvivesLossRestartAndOnlyAdvancesOnExactAck(t *testi
 		t.Fatal(err)
 	}
 	restored.Seq++
-	empty := restored.prepareMeter(true, true)
+	empty := restored.prepareMeter(true)
 	if len(empty.Usage) != 0 || !empty.Partial {
 		t.Fatalf("idle=%+v", empty)
 	}
@@ -52,7 +52,7 @@ func TestMeterPendingReportSurvivesLossRestartAndOnlyAdvancesOnExactAck(t *testi
 	}
 	restored.Epoch = "epoch2"
 	restored.Seq = 1
-	newEpoch := restored.prepareMeter(true, true)
+	newEpoch := restored.prepareMeter(true)
 	if newEpoch.Partial || len(newEpoch.Usage) != 2 {
 		t.Fatalf("new epoch lacks full baseline: %+v", newEpoch)
 	}
@@ -71,7 +71,7 @@ func TestMeterRawCounterRestartAndRollbackRemainCumulative(t *testing.T) {
 
 func TestMeterEmptyAcknowledgementSurvivesRestart(t *testing.T) {
 	st := State{Epoch: "idle", Seq: 1, Totals: map[string]Counter{}}
-	first := st.prepareMeter(true, true)
+	first := st.prepareMeter(true)
 	if err := st.acknowledgeMeter(contracts.MeterAck{Epoch: first.Epoch, Seq: first.Seq, Accepted: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestMeterEmptyAcknowledgementSurvivesRestart(t *testing.T) {
 	st = loadState(path)
 	st.Seq++
 	st.Totals["first-user"] = Counter{Down: 42}
-	report := st.prepareMeter(true, true)
+	report := st.prepareMeter(true)
 	if !report.Partial || len(report.Usage) != 1 {
 		t.Fatalf("first activity after restart = %+v", report)
 	}

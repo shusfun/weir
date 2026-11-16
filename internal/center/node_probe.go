@@ -17,6 +17,7 @@ import (
 	"github.com/shusfun/weir/internal/nodeprobe"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/subout"
+	"github.com/shusfun/weir/internal/subscription"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -150,7 +151,11 @@ func (s *Server) startDeployedNodeTest(c *gin.Context) {
 			failure(c, 422, "probe_gate_unavailable")
 			return
 		}
-		supported, err := s.gateSupportsTask(c.Request.Context(), g, contracts.TaskNodeProbe, 0)
+		kind := contracts.TaskNodeProbe
+		if n.Network == "xhttp" {
+			kind = contracts.TaskNodeProbeXray
+		}
+		supported, err := s.gateSupportsTask(c.Request.Context(), g, kind)
 		if err != nil {
 			failInternal(c, 503, "capabilities_unavailable", err)
 			return
@@ -163,28 +168,42 @@ func (s *Server) startDeployedNodeTest(c *gin.Context) {
 	id, actor, ip := n.ID, c.GetInt("user_id"), c.ClientIP()
 	ht, _ := c.Request.Context().Value(httpTraceKey{}).(httpTrace)
 	request := c.GetString("request_id")
-	s.nodeProbes.Lock()
-	if current, ok := s.jobs.Get(s.nodeProbes.jobs[id]); ok && current.Status == jobRunning {
-		s.nodeProbes.Unlock()
-		c.JSON(202, gin.H{"job": current})
-		return
-	}
-	if s.nodeProbes.jobs == nil {
-		s.nodeProbes.jobs = map[int]string{}
-	}
-	jobID := nodeTestJobID(id) + ":" + randomHex(6)
 	gate, err := s.Store.Ent.Gate.Get(c.Request.Context(), n.GateID)
 	if err != nil {
-		s.nodeProbes.Unlock()
 		failure(c, 404, "gate_not_found")
 		return
 	}
 	binding, err := s.probeFingerprint(c.Request.Context(), n, gate)
 	if err != nil {
-		s.nodeProbes.Unlock()
 		failInternal(c, 503, "probe_unavailable", err)
 		return
 	}
+	s.nodeProbes.Lock()
+	if current, ok := s.jobs.Get(s.nodeProbes.jobs[id]); ok && current.Status == jobRunning {
+		raw, exists, err := s.Store.KV.Get(c.Request.Context(), pendingNodeProbePrefix+itoa(id))
+		var pending pendingNodeProbe
+		if err != nil {
+			s.nodeProbes.Unlock()
+			failInternal(c, 503, "probe_queue_unavailable", err)
+			return
+		}
+		if !exists || json.Unmarshal([]byte(raw), &pending) != nil || pending.Binding == binding {
+			s.nodeProbes.Unlock()
+			c.JSON(202, gin.H{"job": current})
+			return
+		}
+		// An old task cannot validate the current path. Cancel it before queuing
+		// the replacement; fingerprint checks prevent its result overwriting ours.
+		if err := s.jobs.Cancel(viewerOf(c), current.ID); err != nil && err != errJobNotRunning {
+			s.nodeProbes.Unlock()
+			failDetail(c, 409, "probe_busy", "旧配置的实测正在结束，请稍后重试", nil)
+			return
+		}
+	}
+	if s.nodeProbes.jobs == nil {
+		s.nodeProbes.jobs = map[int]string{}
+	}
+	jobID := nodeTestJobID(id) + ":" + randomHex(6)
 	if ht.ID == "" {
 		ht = newHTTPTrace(request)
 	}
@@ -254,6 +273,34 @@ func (s *Server) startDeployedNodeTest(c *gin.Context) {
 }
 
 func nodeClient(link string) (contracts.NodeTestClient, error) {
+	parsed, err := subscription.ParseLinks([]string{link})
+	if err != nil {
+		return contracts.NodeTestClient{}, err
+	}
+	if len(parsed.Nodes) != 1 {
+		return contracts.NodeTestClient{}, errors.New("测试客户端无法解析节点链接")
+	}
+	n := parsed.Nodes[0]
+	var settings subscription.Settings
+	if err = json.Unmarshal([]byte(n.SettingsJSON), &settings); err != nil {
+		return contracts.NodeTestClient{}, err
+	}
+	if settings.Network == "xhttp" {
+		if n.Protocol != "vless" || !settings.TLS || settings.Reality || settings.Flow != "" || settings.AllowInsecure || settings.SPKI != "" || settings.CertificatePin != "" || len(settings.UnsupportedFields) != 0 || settings.PublicKey != "" || settings.ShortID != "" || settings.ServiceName != "" || settings.Obfs != "" || settings.ObfsPassword != "" || settings.CongestionControl != "" || settings.ZeroRTT {
+			return contracts.NodeTestClient{}, errors.New("XHTTP 实测不支持此安全参数组合，未忽略任何参数")
+		}
+		if settings.Path == "" {
+			settings.Path = "/"
+		}
+		if settings.Mode == "" {
+			settings.Mode = "auto"
+		}
+		if settings.Host == "" {
+			settings.Host = n.Address
+		}
+		client := contracts.NodeTestClient{Target: "node-test", XHTTP: &contracts.XHTTPProbeClient{Server: n.Address, Port: n.Port, UUID: n.Username, SNI: settings.SNI, Host: settings.Host, Path: settings.Path, Mode: settings.Mode, Fingerprint: settings.Fingerprint, ALPN: settings.ALPN}}
+		return client, client.Validate()
+	}
 	proxy, err := subout.ClashProxy(link)
 	if err != nil {
 		return contracts.NodeTestClient{}, err
@@ -274,12 +321,12 @@ var externalProbeSupported = func() bool {
 
 // Tests replace execution, not credential selection or result invalidation.
 var deployedNodeProbe = nodeprobe.Run
-var deployedProbeBinary = func(s *Server, ctx context.Context) (string, kernelconf.Driver, error) {
-	bin, version, err := defaultSubCheckBinary(s, ctx, "mihomo")
+var deployedProbeBinary = func(s *Server, ctx context.Context, kernel string) (string, kernelconf.Driver, error) {
+	bin, version, err := defaultSubCheckBinary(s, ctx, kernel)
 	if err != nil {
 		return "", kernelconf.Driver{}, err
 	}
-	d, _, err := s.drivers(ctx).Select("mihomo", version)
+	d, _, err := s.drivers(ctx).Select(kernel, version)
 	return bin, d, err
 }
 
@@ -306,6 +353,14 @@ func (s *Server) runDeployedNodeTest(ctx context.Context, id, actor int, job Job
 }
 
 func (s *Server) runDeployedNodeTestNow(ctx context.Context, id, actor int, job JobRun) (r nodeTestResult, resultErr error) {
+	finish := operationStage(ctx, "node.probe.execute", "node_id", id, "actor_id", actor)
+	defer func() {
+		traceErr := resultErr
+		if traceErr == nil && r.Status != "passed" {
+			traceErr = errors.New("node probe " + r.Status)
+		}
+		finish(traceErr)
+	}()
 	executionCtx := ctx
 	ht, _ := ctx.Value(httpTraceKey{}).(httpTrace)
 	r = nodeTestResult{Status: "unknown", TCP: nodeprobe.Check{Status: "unknown"}, UDP: nodeprobe.Check{Status: "unknown"}, JobID: job.e.job.ID, TraceID: ht.ID, Location: "center", External: "unknown"}
@@ -317,15 +372,6 @@ func (s *Server) runDeployedNodeTestNow(ctx context.Context, id, actor int, job 
 	job.StepFor("正在排队等待节点测试", 5*time.Minute)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	var bin string
-	var driver kernelconf.Driver
-	var err error
-	if executorID == 0 {
-		bin, driver, err = deployedProbeBinary(s, ctx)
-		if err != nil {
-			return r, err
-		}
-	}
 	origin := s.centerOrigin(ctx)
 	if !strings.HasPrefix(origin, "https://") {
 		return r, errors.New("中心尚未记录 HTTPS 公共地址，无法准备下载测试端点")
@@ -402,6 +448,14 @@ func (s *Server) runDeployedNodeTestNow(ctx context.Context, id, actor int, job 
 	if err != nil {
 		return r, err
 	}
+	var bin string
+	var driver kernelconf.Driver
+	if executorID == 0 {
+		bin, driver, err = deployedProbeBinary(s, ctx, client.Kernel())
+		if err != nil {
+			return r, err
+		}
+	}
 	token, revoke, err := s.issueProbeGrant(executionCtx)
 	if err != nil {
 		return r, err
@@ -422,13 +476,24 @@ func (s *Server) runDeployedNodeTestNow(ctx context.Context, id, actor int, job 
 		if e != nil {
 			return r, e
 		}
-		kernels, drivers, e := s.gateKernels(executionCtx, executor, map[string]bool{"mihomo": true})
+		kind := contracts.TaskNodeProbe
+		if client.XHTTP != nil {
+			kind = contracts.TaskNodeProbeXray
+		}
+		supported, e := s.gateSupportsTask(executionCtx, executor, kind)
+		if e != nil {
+			return r, e
+		}
+		if !supported {
+			return r, errors.New("指定 VPS 不支持此实测能力，请升级 Gate")
+		}
+		kernels, drivers, e := s.gateKernels(executionCtx, executor, map[string]bool{client.Kernel(): true})
 		if e != nil {
 			return r, e
 		}
 		request := contracts.NodeProbeTask{Client: client, UDP: udp, Credentials: contracts.FetchSecrets{URL: probeTarget, Authorization: token}, Kernels: kernels, Drivers: drivers}
 		job.StepFor("正在指定 VPS 上实测已部署节点", 2*time.Minute)
-		raw, _, e := s.dispatchWorkerTask(executionCtx, contracts.TaskNodeProbe, request, contracts.TaskRequirements{TargetGateID: executorID}, []int{executorID})
+		raw, _, e := s.dispatchWorkerTask(executionCtx, kind, request, contracts.TaskRequirements{TargetGateID: executorID}, []int{executorID})
 		if e != nil {
 			return r, e
 		}

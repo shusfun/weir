@@ -3,6 +3,7 @@
 // 省电档前板改实底，不做 backdrop-filter。色调按 hue 在两套稿子配色之间取，同一台 VPS 每次一样。
 import { type CSSProperties, type ReactNode } from "react";
 import { cn } from "cn";
+import { Plus } from "lucide-react";
 import { Badge } from "./badge";
 import { StatusLamp, type LampTone } from "./lamp";
 
@@ -139,7 +140,7 @@ function GlassFolder({
 function FolderSlot({ title, caption, onClick, className }: { title: ReactNode; caption?: ReactNode; onClick: () => void; className?: string }) {
   return (
     <button type="button" data-slot="folder-slot" className={cn("weir-folder-slot", className)} onClick={onClick}>
-      <span className="weir-folder-slot-plus" aria-hidden>+</span>
+      <Plus className="weir-folder-slot-plus" aria-hidden />
       <b>{title}</b>
       {caption && <span>{caption}</span>}
     </button>

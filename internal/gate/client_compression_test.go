@@ -48,7 +48,7 @@ func TestClientCompressesOnlyNegotiatedLargeWorkerPayloads(t *testing.T) {
 			t.Fatalf("negotiation: %q %d", encoding, len(received))
 		}
 	}
-	resp, err := c.raw(context.Background(), srv.Client(), "POST", "/agent/heartbeat", body, false)
+	resp, err := c.raw(context.Background(), srv.Client(), "POST", "/agent/heartbeat/v2", body, false)
 	if err != nil {
 		t.Fatal(err)
 	}

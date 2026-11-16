@@ -30,7 +30,7 @@ function PageHeader({
     <header data-tour="page-header" data-slot="page-header" data-size={size} className={cn("flex min-h-[calc(var(--weir-leading-title)+var(--weir-space-1)+var(--weir-leading-body))] flex-wrap items-start justify-between gap-x-6 gap-y-3", className)}>
       {/* 标题区至少留 16em（容器更窄时取满宽）：放不下操作区时操作区整体换到下一行，标题不会被挤成一字一行 */}
       <div className="min-w-[min(100%,16em)] flex-1">
-        {eyebrow && <div data-slot="page-eyebrow" className="mb-[9px] text-fine font-bold tracking-[0.09em] text-[var(--weir-ink-3)]">{eyebrow}</div>}
+        {eyebrow && <div data-slot="page-eyebrow" className="mb-[var(--weir-gap-9)] text-fine font-bold tracking-[0.09em] text-[var(--weir-ink-3)]">{eyebrow}</div>}
         <h1 data-slot="page-title" className={cn("m-0 text-[var(--weir-ink)]", titleClass)}>{title}</h1>
         {description && <p className={cn("mb-0", leadClass)}>{description}</p>}
       </div>

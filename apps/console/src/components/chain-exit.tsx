@@ -1,8 +1,10 @@
 import { NodeSummary } from "./node-summary";
+import { useEffect, useState } from "react";
+import { api } from "../api";
 import type { NodeChoice } from "../lib/core";
 // 链式代理出口的填写：建节点第 ③ 步（管理员）与用户自建链式代理共用。
 // 代理文本由用户点击解析；节点链接只接受单个节点，订阅地址会被拒绝。
-import { Field, FormGrid, Input, Notice, PasswordInput, ChoiceCard, Radio, RadioGroup, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea } from "@weir/ui";
+import { CheckboxField, Field, FormGrid, Input, Notice, PasswordInput, ChoiceCard, Radio, RadioGroup, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea } from "@weir/ui";
 import type { ExitSpec, ExitKind, ExitProbe } from "../lib/core";
 import { parseExitText, type ProxyKind } from "../lib/exit-parse";
 import { useExitCatalog } from "../lib/exits";
@@ -34,6 +36,7 @@ export function exitErrorFields(kind: ExitKind): Record<string, string> {
 // probeText 说明实测结果：按协议真连时给出实际出口 IP 与延迟；只测了端口时如实写明。
 export function probeText(p?: ExitProbe | null) {
   if (!p) return "还没有实测";
+  if (!p.ok) return p.error ? `实测失败：${p.error}` : "实测失败：原因未知";
   const parts = [p.mode === "proxy" ? "已按协议实测" : "只测了端口"];
   if (p.exit_ip) parts.push("出口 IP " + p.exit_ip);
   if (p.latency_ms !== undefined) parts.push(p.latency_ms + " ms");
@@ -41,13 +44,14 @@ export function probeText(p?: ExitProbe | null) {
   return parts.join(" · ");
 }
 
-export function ExitFields({ value, onChange, admin, sourcePath, nodes, nodeHint }: {
+export function ExitFields({ value, onChange, admin, sourcePath, nodes, nodeHint, savedSecrets }: {
   value: ExitSpec;
   onChange: (v: ExitSpec) => void;
   admin: boolean;
   sourcePath: string;
   nodes: NodeChoice[];
   nodeHint: string;
+  savedSecrets?: { password?: boolean; link?: boolean };
 }) {
   const top = topOf(value.kind);
   const set = (patch: Partial<ExitSpec>) => onChange({ ...value, ...patch });
@@ -64,8 +68,8 @@ export function ExitFields({ value, onChange, admin, sourcePath, nodes, nodeHint
       {top !== "freedom" && <Field label="备注（可选）" name="remark" hint="会显示在订阅的节点名里"><Input maxLength={100} value={value.remark ?? ""} onChange={e=>set({remark:e.target.value})}/></Field>}
       {top === "freedom" && <p className="text-[var(--weir-ink-3)]">流量从这台 VPS 直接访问目标网站。</p>}
       {top === "source" && <SourcePicker path={sourcePath} value={value} onChange={(v) => onChange({ ...value, ...v, kind: "source" })} />}
-      {top === "proxy" && <ProxyFields value={value} set={set} />}
-      {top === "link" && <LinkField value={value.link ?? ""} onChange={(link) => set({ link })} />}
+      {top === "proxy" && <ProxyFields value={value} set={set} savedPassword={savedSecrets?.password} />}
+      {top === "link" && <LinkField value={value.link ?? ""} onChange={(link) => set({ link, insecure_identities: [] })} confirmations={value.insecure_identities ?? []} onConfirm={(insecure_identities) => set({insecure_identities})} saved={savedSecrets?.link && value.link === undefined} />}
       {top === "node" &&
         (nodes.length === 0 ? (
           <State empty="没有可作出口的节点" detail={nodeHint} />
@@ -86,7 +90,7 @@ export function ExitFields({ value, onChange, admin, sourcePath, nodes, nodeHint
   );
 }
 
-function ProxyFields({ value, set }: { value: ExitSpec; set: (p: Partial<ExitSpec>) => void }) {
+function ProxyFields({ value, set, savedPassword }: { value: ExitSpec; set: (p: Partial<ExitSpec>) => void; savedPassword?: boolean }) {
   return (
     <>
       <ProxyPaste onApply={p => set({ kind: p.kind, address: p.address, port: p.port, username: p.username ?? "", password: p.password ?? "" })} />
@@ -101,20 +105,37 @@ function ProxyFields({ value, set }: { value: ExitSpec; set: (p: Partial<ExitSpe
         <Field label="用户名（可选）" name="username">
           <Input autoComplete="off" value={value.username ?? ""} onChange={(e) => set({ username: e.target.value })} />
         </Field>
-        <Field label="密码（可选）" name="password">
-          <PasswordInput autoComplete="new-password" value={value.password ?? ""} onChange={(e) => set({ password: e.target.value })} />
+        <Field label="密码（可选）" name="password" hint={savedPassword ? "已保存密码；不修改则保留，输入后清空则删除" : undefined}>
+          <PasswordInput autoComplete="new-password" placeholder={savedPassword ? "已保存" : undefined} value={value.password ?? ""} onChange={(e) => set({ password: e.target.value })} />
         </Field>
       </FormGrid>
     </>
   );
 }
 
-function LinkField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function LinkField({ value, onChange, saved, confirmations, onConfirm }: { value: string; onChange: (v: string) => void; saved?: boolean; confirmations: string[]; onConfirm: (ids: string[]) => void }) {
+  const [preview, setPreview] = useState<{link: string; identity: string; requires_confirmation: boolean} | null>(null);
+  const [failure, setFailure] = useState<{link: string; message: string} | null>(null);
+  useEffect(() => {
+    if (!value.trim()) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      api("/me/exit-link-preview", "POST", {link: value}, {signal: controller.signal}).then(result => {
+        if (!controller.signal.aborted) { setPreview({...result, link: value}); setFailure(null); }
+      }).catch(error => {
+        if (!controller.signal.aborted) setFailure({link: value, message: error instanceof Error ? error.message : "节点参数暂时无法检查"});
+      });
+    }, 350);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [value]);
   const r = value.trim() ? parseExitText(value) : null;
   const hint = r?.type === "subscription" ? "这是订阅地址，不能作出口；请粘贴其中一个节点的链接" : r?.type === "proxy" ? "这是代理地址，请改选「代理」" : r?.type === "error" && r.message !== "内容为空" ? r.message : "";
   return (
-    <Field label="节点链接" name="link" required customError={hint} hint="一个节点的链接：vless:// vmess:// trojan:// ss:// hysteria2:// tuic:// anytls://。跳过证书校验或只用证书指纹的节点不能作出口。">
-      <Textarea required rows={3} spellCheck={false} className="font-mono text-meta" value={value} onChange={(e) => onChange(e.target.value.trim())} />
+    <>
+    <Field label="节点链接" name="link" required={!saved} customError={hint || (failure?.link === value ? failure.message : "")} hint={saved ? "已保存节点链接；不填写则保留原链接" : "粘贴一个节点的链接。完整协议与安全参数由中心检查，再由入口 VPS 实测。"}>
+      <Textarea required={!saved} rows={3} spellCheck={false} className="font-mono text-meta" value={value} placeholder={saved ? "已保存" : undefined} onChange={(e) => onChange(e.target.value.trim())} />
     </Field>
+    {preview?.link === value && preview.requires_confirmation && <CheckboxField label="我确认这个节点跳过证书校验" description="无法验证远端身份。确认仅适用于这条节点；连接凭据或安全参数变化后需要重新确认。" checked={confirmations.includes(preview.identity)} onCheckedChange={checked => onConfirm(checked ? [preview.identity] : [])} />}
+    </>
   );
 }

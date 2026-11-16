@@ -140,6 +140,20 @@ func setup(t *testing.T) *env {
 	cfg, _ := center.LoadConfig(path)
 	cfg.DataDir = filepath.Join(dir, "center-data")
 	seedSubscriptionGeoIP(t, filepath.Join(cfg.DataDir, "subcheck", "mihomo"))
+	// The observer reads the center's country database, independently of mihomo.
+	if source := os.Getenv("WEIR_E2E_GEOIP"); source != "" {
+		data, err := os.ReadFile(source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		dir := filepath.Join(cfg.DataDir, "geoip")
+		if err = os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err = os.WriteFile(filepath.Join(dir, "dbip-city-lite.mmdb"), data, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	token, err := center.Initialize(path, cfg)
 	if err != nil {
 		t.Fatal(err)

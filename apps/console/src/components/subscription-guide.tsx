@@ -26,7 +26,7 @@ export function SubscriptionGuide({ items }: { items: GuideSubscription[] }) {
       </ChoiceCard>)}
     </div>
     <div className="subscription-guide-clients">
-      <SectionHeader title="选择客户端" description="仅列出支持这些订阅格式的客户端。电脑选项包含不同桌面系统，请核对下方支持范围。" />
+      <SectionHeader flush title="选择客户端" description="仅列出支持这些订阅格式的客户端。电脑选项包含不同桌面系统，请核对下方支持范围。" />
       {client ? <Segmented aria-label="选择客户端" value={client.name} onValueChange={setSelected} options={clients.map((c) => [c.name, c.name] as const)} /> : <Notice>当前没有适配此设备的一键导入方式，可下载配置或复制地址后手动添加。</Notice>}
       {client && <small>{client.name} · {client.platforms}</small>}
     </div>

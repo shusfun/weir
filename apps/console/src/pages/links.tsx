@@ -64,7 +64,7 @@ export function LinksPage({ admin }: { admin: boolean }) {
   return (
     <div className="stack">
       {header}
-      <div className="flex flex-wrap items-center gap-[9px]">
+      <div className="flex flex-wrap items-center gap-[var(--weir-gap-9)]">
         <Input className="w-[261px] max-w-full" aria-label="搜索设备或用户" placeholder="搜索设备或用户" value={query} onChange={(e) => setQuery(e.target.value)} />
         <Segmented aria-label="链接筛选" value={attention} onValueChange={setAttention} options={[["all", `全部 ${stats.data?.length ?? ""}`.trim()], ["care", `需要注意 ${(stats.data ?? []).filter((s) => linkNeedsAttention(s, s)).length}`], ["off", `已停用 ${(stats.data ?? []).filter((s) => !s.enabled).length}`]] as const} />
       </div>
@@ -79,7 +79,7 @@ function RecentPulls({ stats }: { stats?: LinkStats[] }) {
   const rows = (stats ?? []).filter((s) => s.last_pull);
   return (
     <section className="stack">
-      <SectionHeader className="mt-[25px]" title="最近拉取" actions={<span className="text-meta text-[var(--weir-ink-3)]">来源只对管理员显示</span>} />
+      <SectionHeader flush className="mt-[var(--weir-gap-25)]" title="最近拉取" actions={<span className="text-meta text-[var(--weir-ink-3)]">来源只对管理员显示</span>} />
       {!stats ? <State loading /> : rows.length === 0 ? <State empty="还没有拉取记录" /> : (
         <Card className="overflow-hidden p-0">
           {rows.slice(0, 8).map((s) => (

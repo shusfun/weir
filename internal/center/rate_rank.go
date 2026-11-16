@@ -143,11 +143,12 @@ func pathRate(own map[string]rateStat, all map[int]rateStat, nodeID, chainID int
 
 // rankedEntry 保存展示名次和节点状况，与订阅成员顺序一一对应。
 type rankedEntry struct {
-	Index  int
-	Health nodeHealth
-	Rate   rateStat
-	Rank   int
-	Auto   bool
+	Index         int
+	Health        nodeHealth
+	Rate          rateStat
+	Rank          int
+	Auto          bool
+	Deprioritized bool
 }
 
 // rankInput 是展示名次所需的线路、状况与速率。
@@ -206,6 +207,7 @@ func (s *Server) planEntries(ctx context.Context, u *ent.User, entries []Entry, 
 	in := rankInput{}
 	var kept []Entry
 	gates := map[int]*ent.Gate{}
+	entryGates := map[string]int{}
 	var nodeIDs []int
 	for _, e := range entries {
 		if e.URI != "" {
@@ -220,8 +222,28 @@ func (s *Server) planEntries(ctx context.Context, u *ent.User, entries []Entry, 
 	if err != nil {
 		return planned{}, err
 	}
+	catalog, err := s.nodeCatalog(ctx, u, false)
+	if err != nil {
+		return planned{}, err
+	}
+	external := map[string]catalogNode{}
+	for _, item := range catalog {
+		if item.Kind == "source" || item.Kind == "manual" {
+			external[item.Ref] = item
+		}
+	}
 	for _, e := range entries {
 		if e.URI == "" {
+			continue
+		}
+		if item, ok := external[e.Ref]; ok {
+			if !item.Authorized || !item.Selected || item.State.Status == "unavailable" || item.State.Status == "disabled" || item.URI != e.URI || slices.Contains(pol.Disabled, e.Type) {
+				continue
+			}
+			kept = append(kept, e)
+			in.keys = append(in.keys, e.Ref)
+			in.health = append(in.health, nodeHealth{Status: "unknown", Why: "机场直用路径未观测"})
+			in.rates = append(in.rates, rateStat{})
 			continue
 		}
 		n, err := s.Store.Ent.Node.Get(ctx, e.NodeID)
@@ -281,17 +303,28 @@ func (s *Server) planEntries(ctx context.Context, u *ent.User, entries []Entry, 
 		}
 		kept = append(kept, e)
 		in.keys = append(in.keys, rankKey(e))
+		entryGates[e.Ref] = n.GateID
 		in.health = append(in.health, h)
 		in.rates = append(in.rates, pathRate(own, all, e.NodeID, e.ChainID))
 	}
 	ranked := rankEntries(in)
+	priorities, err := s.gateCapacityPriorities(ctx, gates)
+	if err != nil {
+		return planned{}, err
+	}
 	p := planned{Policy: pol, Source: entries}
 	for i, entry := range kept {
 		ranked[i].Auto = !entry.Chained && ranked[i].Health.Status != "down"
+		ranked[i].Deprioritized = priorities[entryGates[entry.Ref]]
 		p.Entries = append(p.Entries, entry)
 		p.Ranked = append(p.Ranked, ranked[i])
 	}
 	return p, nil
 }
 
-func rankKey(e Entry) string { return pathKey(e.NodeID, e.ChainID) }
+func rankKey(e Entry) string {
+	if e.NodeID == 0 {
+		return e.Ref
+	}
+	return pathKey(e.NodeID, e.ChainID)
+}

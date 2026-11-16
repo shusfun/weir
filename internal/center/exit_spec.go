@@ -2,6 +2,8 @@ package center
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,7 +14,6 @@ import (
 	"time"
 
 	"github.com/shusfun/weir/internal/db"
-	"github.com/shusfun/weir/internal/kernelconf"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/subout"
 	"github.com/shusfun/weir/internal/subscription"
@@ -80,6 +81,10 @@ func subscriptionURL(raw string) bool {
 
 // linkOutbound 把一条节点链接转成出口；表达不了的参数明确报错，不悄悄丢掉。
 func linkOutbound(n subscription.ParsedLink) (contracts.Outbound, error) {
+	return confirmedLinkOutbound(n, nil)
+}
+
+func confirmedLinkOutbound(n subscription.ParsedLink, confirmations []string) (contracts.Outbound, error) {
 	var s subscription.Settings
 	if n.SettingsJSON != "" {
 		if err := json.Unmarshal([]byte(n.SettingsJSON), &s); err != nil {
@@ -89,20 +94,14 @@ func linkOutbound(n subscription.ParsedLink) (contracts.Outbound, error) {
 	switch {
 	case len(s.UnsupportedFields) > 0:
 		return contracts.Outbound{}, fmt.Errorf("含有出口不支持的参数 %s", strings.Join(s.UnsupportedFields, "、"))
-	case s.ShadowTLS != nil:
-		return contracts.Outbound{}, errors.New("ShadowTLS 节点不能作出口")
-	case s.Snell != nil || s.WireGuard != nil || n.Protocol == "snell" || n.Protocol == "wireguard":
-		return contracts.Outbound{}, fmt.Errorf("%s 节点不能作出口", n.Protocol)
 	case s.VmessUnsupported:
 		return contracts.Outbound{}, errors.New("VMess 参数不受支持（如 alterId 不为 0）")
-	case s.AllowInsecure:
-		return contracts.Outbound{}, errors.New("这个节点要求跳过证书校验，出口不跳过证书校验")
-	case s.CertificatePin != "" || s.SPKI != "":
-		return contracts.Outbound{}, errors.New("这个节点用证书指纹代替证书校验，出口不支持")
+	case s.AllowInsecure && !confirmedIdentity(n.RawLink, confirmations):
+		return contracts.Outbound{}, errors.New("这个节点要求跳过证书校验，请针对这条节点显式确认")
 	}
 	o := contracts.Outbound{Address: n.Address, Port: n.Port, Username: n.Username, Password: n.Password}
 	switch n.Protocol {
-	case "vless", "vmess", "trojan", "shadowsocks", "hysteria2", "tuic", "anytls":
+	case "vless", "vmess", "trojan", "shadowsocks", "hysteria2", "tuic", "anytls", "wireguard", "snell", "ssr":
 		o.Protocol = n.Protocol
 	case "socks5":
 		o.Protocol = "socks"
@@ -113,6 +112,29 @@ func linkOutbound(n subscription.ParsedLink) (contracts.Outbound, error) {
 		}
 	default:
 		return contracts.Outbound{}, fmt.Errorf("%s 节点不能作出口", n.Protocol)
+	}
+	if n.RawLink != "" {
+		o.Client, _ = clientOutbound(n.RawLink)
+		delete(o.Client, "name")
+	}
+	if s.CertificatePin != "" {
+		pin, err := hex.DecodeString(strings.ReplaceAll(s.CertificatePin, ":", ""))
+		if err != nil || len(pin) != 32 {
+			return contracts.Outbound{}, errors.New("证书指纹必须为 SHA256 摘要")
+		}
+	}
+	if s.SPKI != "" {
+		pin, err := base64.StdEncoding.DecodeString(s.SPKI)
+		if err != nil || len(pin) != 32 {
+			return contracts.Outbound{}, errors.New("证书公钥指纹必须为 SHA256 摘要")
+		}
+	}
+	if s.AllowInsecure || s.Snell != nil || s.WireGuard != nil || s.ShadowTLS != nil || s.CertificatePin != "" || s.SPKI != "" || n.Protocol == "ssr" {
+		if len(o.Client) == 0 {
+			return contracts.Outbound{}, errors.New("辅助内核不能表达此节点的完整参数")
+		}
+		o.ClientOnly = true
+		return o, nil
 	}
 	if o.Protocol == "shadowsocks" {
 		o.Username, s.Method = strings.TrimSpace(s.Method), ""
@@ -141,8 +163,12 @@ func linkOutbound(n subscription.ParsedLink) (contracts.Outbound, error) {
 
 // parseExitLink 解析单条节点链接作出口。订阅地址不接受：出口只能是一个确定的节点。
 func parseExitLink(raw string) (contracts.Outbound, string, error) {
+	return parseConfirmedExitLink(raw, nil)
+}
+
+func parseConfirmedExitLink(raw string, confirmations []string) (contracts.Outbound, string, error) {
 	raw = strings.TrimSpace(raw)
-	if raw == "" || len(raw) > 4096 || strings.ContainsAny(raw, "\r\n") {
+	if raw == "" || len(raw) > 16384 || strings.ContainsAny(raw, "\r\n") {
 		return contracts.Outbound{}, "", errors.New("请粘贴一条节点链接")
 	}
 	if subscriptionURL(raw) {
@@ -150,9 +176,9 @@ func parseExitLink(raw string) (contracts.Outbound, string, error) {
 	}
 	n, err := subscription.ParseLink(raw)
 	if err != nil {
-		return contracts.Outbound{}, "", errors.New("无法识别的节点链接（支持 vless / vmess / trojan / ss / hysteria2 / tuic / anytls / socks5 / http）")
+		return contracts.Outbound{}, "", errors.New("无法识别的节点链接（支持 VLESS、VMess、Trojan、SS、SSR、Hysteria2、TUIC、AnyTLS、WireGuard、Snell、SOCKS5、HTTP）")
 	}
-	o, err := linkOutbound(n)
+	o, err := confirmedLinkOutbound(n, confirmations)
 	if err != nil {
 		return contracts.Outbound{}, "", err
 	}
@@ -164,17 +190,8 @@ func (s *Server) checkOutboundKernel(ctx context.Context, entry *ent.Gate, kerne
 	if kernel == "" {
 		return nil
 	}
-	_, profiles, err := s.gateKernels(ctx, entry, map[string]bool{kernel: true})
-	if err != nil {
-		return fmt.Errorf("无法确认入口内核能否连接这个出口：%v", err)
-	}
-	d, err := kernelconf.ParseDriver(profiles[kernel])
-	if err != nil {
-		return err
-	}
 	for _, m := range members {
-		network, _ := m.Settings["network"].(string)
-		if err := d.OutboundAllows(db.NormalizeOutboundProtocol(m.Protocol), network); err != nil {
+		if _, err := s.outboundExecutor(ctx, entry, kernel, m); err != nil {
 			return err
 		}
 	}
@@ -226,35 +243,12 @@ func (s *Server) loadExitProbe(ctx context.Context, owner string) (exitProbe, bo
 
 // probeExit 不把端口可达当作协议实测成功。
 func (s *Server) probeExit(ctx context.Context, entry *ent.Gate, ex resolvedExit, publicOnly bool) (*exitProbe, error) {
+	if ex.TestNodeID != 0 {
+		return s.probeUoT(ctx, entry, ex.TestNodeID, publicOnly)
+	}
 	kernels, profiles, err := s.gateKernels(ctx, entry, map[string]bool{"mihomo": true})
 	if err != nil {
 		return nil, err
-	}
-	if ex.TestNodeID != 0 {
-		n, err := s.Store.Ent.Node.Get(ctx, ex.TestNodeID)
-		if err != nil {
-			return nil, err
-		}
-		credential, err := s.probeCredential(ctx, n)
-		if err != nil {
-			return nil, err
-		}
-		g, err := s.waitProbeApplied(ctx, n)
-		if err != nil {
-			return nil, err
-		}
-		var cert *ent.Certificate
-		if n.CertID != nil {
-			cert, err = s.Store.Ent.Certificate.Get(ctx, *n.CertID)
-			if err != nil {
-				return nil, err
-			}
-		}
-		link, err := shareLink(n, g.PublicHost, credential, "exit-test", cert)
-		if err != nil {
-			return nil, err
-		}
-		ex.Links = []string{link}
 	}
 	members := ex.members()
 	var last error

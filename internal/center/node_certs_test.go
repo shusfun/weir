@@ -19,6 +19,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/audit"
 	"github.com/shusfun/weir/internal/store/ent/certificate"
+	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -44,7 +45,7 @@ func (g *fakeGate) serveActions(t *testing.T, s *Server, handlers map[string]fun
 	stop, done := make(chan struct{}), make(chan struct{})
 	t.Cleanup(func() {
 		close(stop)
-		_, _ = s.enqueueAction(context.Background(), int(g.id), "test.stop", nil, time.Minute)
+		s.actionWaiters.notify(int(g.id))
 		<-done
 	})
 	go func() {
@@ -55,7 +56,7 @@ func (g *fakeGate) serveActions(t *testing.T, s *Server, handlers map[string]fun
 				return
 			default:
 			}
-			code, body := g.call("GET", "/api/v1/agent/actions", nil)
+			code, body := g.pollActions()
 			if code != 200 {
 				time.Sleep(20 * time.Millisecond)
 				continue
@@ -67,7 +68,7 @@ func (g *fakeGate) serveActions(t *testing.T, s *Server, handlers map[string]fun
 				if h := handlers[a.Kind]; h != nil {
 					res = h(a)
 				}
-				g.call("POST", "/api/v1/agent/actions/"+itoa(int(a.ID)), res)
+				g.finishTask(int(a.ID), res)
 			}
 		}
 	}()
@@ -85,7 +86,7 @@ func heartbeat(t *testing.T, g *fakeGate, hb contracts.Heartbeat) {
 	t.Helper()
 	hb.Version, hb.Arch = "test", "amd64"
 	hb.NodeTestVersion = 3
-	if code, body := g.call("POST", "/api/v1/agent/heartbeat", hb); code != 200 {
+	if code, body := g.sendHeartbeat(hb); code != 200 {
 		t.Fatalf("heartbeat = %d %s", code, body)
 	}
 }
@@ -373,4 +374,85 @@ func TestRenewDueAtTwoThirds(t *testing.T) {
 	if certHealth(c, now) != "unknown" {
 		t.Fatal("missing expiry must be unknown, not ready")
 	}
+}
+
+func TestCertificateResultFencesChangedBindingAndRevision(t *testing.T) {
+	for _, change := range []string{"detach", "revoke", "delete", "renew", "source"} {
+		t.Run(change, func(t *testing.T) {
+			s, _, fg := setupGate(t)
+			ctx := t.Context()
+			gid := int(fg.id)
+			old := s.Store.Ent.Certificate.Create().SetName("in-flight").SetDomain("192.0.2.1").SetSource(certificate.SourceAcme).SetGateID(gid).SetCertPem("original").SetKeyPem("sealed").SaveX(ctx)
+			switch change {
+			case "detach":
+				s.Store.Ent.Certificate.UpdateOneID(old.ID).ClearGateID().SetStatus(certificate.StatusFailed).SetLastError("VPS 已删除").ExecX(ctx)
+			case "revoke":
+				s.Store.Ent.Gate.UpdateOneID(gid).SetStatus(gate.StatusRevoked).ExecX(ctx)
+			case "delete":
+				s.Store.Ent.Certificate.DeleteOneID(old.ID).ExecX(ctx)
+			case "renew":
+				s.Store.Ent.Certificate.UpdateOneID(old.ID).SetCertPem("newer").ExecX(ctx)
+			case "source":
+				s.Store.Ent.Certificate.UpdateOneID(old.ID).SetSource(certificate.SourceUpload).ExecX(ctx)
+			}
+			for _, status := range []certificate.Status{certificate.StatusReady, certificate.StatusFailed} {
+				err := s.updateIssuedCertificate(ctx, old, func(u *ent.CertificateUpdate) { u.SetStatus(status).SetCertPem("late-result") })
+				if !errors.Is(err, errCertificateChanged) {
+					t.Fatalf("%s accepted stale result: %v", status, err)
+				}
+			}
+			if ct, err := s.Store.Ent.Certificate.Get(ctx, old.ID); err == nil && ct.CertPem == "late-result" {
+				t.Fatal("stale result overwrote certificate")
+			}
+		})
+	}
+}
+
+func TestCertificateIssuanceRejectsRemovedDevice(t *testing.T) {
+	s, _, fg := setupGate(t)
+	ctx := t.Context()
+	gid := int(fg.id)
+	certPEM, keyPEM, err := selfSigned("192.0.2.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Store.Ent.Gate.UpdateOneID(gid).SetStatus(gate.StatusRevoked).ExecX(ctx)
+	if _, err := s.storeCert(ctx, "late-issued", "192.0.2.1", certificate.SourceAcme, &gid, certPEM, keyPEM); !errors.Is(err, errCertificateChanged) {
+		t.Fatalf("late-issued certificate stored: %v", err)
+	}
+	if s.Store.Ent.Certificate.Query().Where(certificate.NameEQ("late-issued")).ExistX(ctx) {
+		t.Fatal("certificate references revoked device")
+	}
+}
+
+func TestCertificateResultAcceptsCurrentRevision(t *testing.T) {
+	s, _, fg := setupGate(t)
+	ctx := t.Context()
+	old := s.Store.Ent.Certificate.Create().SetName("current").SetDomain("192.0.2.1").SetSource(certificate.SourceAcme).SetGateID(int(fg.id)).SetCertPem("original").SetKeyPem("sealed").SaveX(ctx)
+	old = s.Store.Ent.Certificate.GetX(ctx, old.ID)
+	if err := s.updateIssuedCertificate(ctx, old, func(u *ent.CertificateUpdate) { u.SetCertPem("renewed") }); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Store.Ent.Certificate.GetX(ctx, old.ID); got.CertPem != "renewed" {
+		t.Fatal("current issuance was not saved")
+	}
+	if err := s.updateIssuedCertificate(ctx, old, func(u *ent.CertificateUpdate) { u.SetCertPem("late") }); !errors.Is(err, errCertificateChanged) {
+		t.Fatalf("accepted replaced revision: %v", err)
+	}
+}
+
+func TestUploadedCertificateRejectsMismatchedName(t *testing.T) {
+	s, admin := newInstalledServer(t)
+	certPEM, keyPEM, err := selfSigned("right.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := map[string]any{"name": "mismatch", "domain": "wrong.example", "cert_pem": certPEM, "key_pem": keyPEM}
+	if w := admin.do("POST", "/api/v1/admin/certs", body, nil); w.Code != 400 || !strings.Contains(w.Body.String(), "certificate_name_mismatch") {
+		t.Fatal("mismatched name accepted", w.Code, w.Body)
+	}
+	mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "cert-user@example.test", "password": "Passw0rd"}, 200)
+	user := login(t, s, "cert-user@example.test", "Passw0rd")
+	mustJSON(t, user, "POST", "/api/v1/admin/certs", body, 403)
+	mustJSON(t, admin, "POST", "/api/v1/admin/certs", map[string]any{"name": "match", "domain": "right.example", "cert_pem": certPEM, "key_pem": keyPEM}, 200)
 }

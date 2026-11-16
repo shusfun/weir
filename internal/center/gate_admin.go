@@ -1,6 +1,7 @@
 package center
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +25,10 @@ func (s *Server) gateAdminRoutes(admin *gin.RouterGroup) {
 	admin.GET("/gates/:id/topology", s.gateTopology)
 	admin.PATCH("/gates/:id", s.updateGate)
 	admin.POST("/gates/:id/revoke", s.revokeGate)
+	admin.POST("/gates/:id/delete-preview", s.previewGateDeletion)
+	admin.DELETE("/gates/:id", s.deleteGate)
+	admin.GET("/gates/:id/traffic", s.getGateTraffic)
+	admin.PUT("/gates/:id/traffic", s.putGateTraffic)
 	admin.POST("/gates/:id/update", s.updateGateRelease)
 	admin.GET("/gates/:id/config", s.previewGateConfig)
 }
@@ -41,7 +46,8 @@ func gateView(g *ent.Gate) gin.H {
 		state = "pending"
 	}
 	return gin.H{
-		"id": g.ID, "name": g.Name, "status": g.Status, "online": online, "last_seen_at": g.LastSeenAt,
+		"object_state": gateObjectState(g),
+		"id":           g.ID, "name": g.Name, "status": g.Status, "online": online, "last_seen_at": g.LastSeenAt,
 		"public_host": g.PublicHost, "version": g.Version, "hostname": g.Hostname, "arch": g.Arch,
 		"config_revision": g.ConfigRevision, "applied_revision": g.AppliedRevision, "state": state,
 		"last_error": g.LastError, "kernels_running": g.KernelsRunning, "kernel_pins": g.KernelPins,
@@ -218,7 +224,11 @@ func (s *Server) revokeGate(c *gin.Context) {
 	if !ok {
 		return
 	}
-	g, err := g.Update().SetStatus(gate.StatusRevoked).Save(c.Request.Context())
+	err := s.Store.Lock.Do(c.Request.Context(), "gate-network:"+itoa(g.ID), func(ctx context.Context) error {
+		var err error
+		g, err = s.Store.Ent.Gate.UpdateOneID(g.ID).SetStatus(gate.StatusRevoked).Save(ctx)
+		return err
+	})
 	if err != nil {
 		failInternal(c, 500, "save_failed", err)
 		return

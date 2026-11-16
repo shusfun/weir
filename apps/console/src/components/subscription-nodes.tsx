@@ -42,7 +42,7 @@ export function NodesPanel() {
   const groups = q.data ? Object.keys(q.data.groups).sort((a, b) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b, "zh-CN"))) : [];
   return (
     <section className="stack">
-      <SectionHeader title="手动节点" description="单独添加的节点链接，可加入任意订阅组。" actions={<>
+      <SectionHeader flush title="手动节点" description="单独添加的节点链接，可加入任意订阅组。" actions={<>
         <Button size="sm" variant="outline" onClick={() => setImporting(true)}><Upload />批量导入</Button>
         <Button size="sm" onClick={() => setEdit("new")}><Plus />添加节点</Button>
       </>} />

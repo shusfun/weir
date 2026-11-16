@@ -10,6 +10,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/route"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func (s *Server) routingRoutes(admin *gin.RouterGroup) {
@@ -71,8 +72,15 @@ func (s *Server) listRoutes(c *gin.Context) {
 		return
 	}
 	out := make([]gin.H, 0, len(items))
+	usage, err := s.ruleUsageViews(c.Request.Context(), g, items, time.Now().UTC())
+	if err != nil {
+		failInternal(c, 503, "query_failed", err)
+		return
+	}
 	for _, r := range items {
-		out = append(out, routeView(r))
+		v := routeView(r)
+		v["usage"] = usage[r.ID]
+		out = append(out, v)
 	}
 	c.JSON(200, gin.H{"items": out})
 }

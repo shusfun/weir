@@ -26,6 +26,7 @@ import (
 // centerClient 封装与中心的通信：用设备私钥签名一次性挑战换取 15 分钟访问令牌，过期或 401 时自动重新认证。
 // 中心地址可在运行中切换（见 Agent.switchCenter），由 mu 保护。
 type centerClient struct {
+	revoked     atomic.Bool
 	gzipPayload atomic.Bool
 	cfg         Config
 	http        *http.Client
@@ -146,7 +147,7 @@ func (c *centerClient) raw(ctx context.Context, client *http.Client, method, pat
 // call 发送请求并把 2xx 响应解码到 out；204 视为成功但无内容。
 func (c *centerClient) call(ctx context.Context, method, path string, body, out any) (int, error) {
 	client := c.http
-	if path == "/agent/poll" || path == "/agent/config" || len(path) > 13 && path[:14] == "/agent/config?" || path == "/agent/actions" {
+	if path == "/agent/poll" {
 		client = c.long
 	}
 	resp, err := c.raw(ctx, client, method, path, body, true)
@@ -155,7 +156,11 @@ func (c *centerClient) call(ctx context.Context, method, path string, body, out 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return resp.StatusCode, centerError(resp)
+		err := centerError(resp)
+		if errors.Is(err, errGateRevoked) {
+			c.revoked.Store(true)
+		}
+		return resp.StatusCode, err
 	}
 	if out != nil && resp.StatusCode != 204 {
 		return resp.StatusCode, json.NewDecoder(io.LimitReader(resp.Body, 16<<20)).Decode(out)
@@ -173,10 +178,14 @@ type rawBody struct {
 func centerError(resp *http.Response) error {
 	var e struct {
 		Error struct {
+			Code    string `json:"code"`
 			Message string `json:"message"`
 		} `json:"error"`
 	}
 	_ = json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(&e)
+	if resp.StatusCode == http.StatusForbidden && e.Error.Code == "gate_revoked" {
+		return errGateRevoked
+	}
 	if e.Error.Message != "" {
 		return errors.New(e.Error.Message)
 	}
@@ -244,6 +253,9 @@ func (c *centerClient) bearer(ctx context.Context) (string, error) {
 		Challenge string `json:"challenge"`
 	}
 	if err = c.plain(ctx, "/agent/challenge", map[string]int64{"gate_id": c.cfg.GateID}, &ch); err != nil {
+		if errors.Is(err, errGateRevoked) {
+			c.revoked.Store(true)
+		}
 		return "", err
 	}
 	sig := base64.StdEncoding.EncodeToString(ed25519.Sign(ed25519.PrivateKey(priv), []byte(ch.Challenge)))
@@ -251,6 +263,9 @@ func (c *centerClient) bearer(ctx context.Context) (string, error) {
 		Token string `json:"token"`
 	}
 	if err = c.plain(ctx, "/agent/auth", map[string]any{"gate_id": c.cfg.GateID, "challenge": ch.Challenge, "signature": sig}, &res); err != nil {
+		if errors.Is(err, errGateRevoked) {
+			c.revoked.Store(true)
+		}
 		return "", err
 	}
 	c.mu.Lock()
@@ -266,7 +281,7 @@ func (c *centerClient) plain(ctx context.Context, path string, body, out any) er
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return statusError{resp.StatusCode}
+		return centerError(resp)
 	}
 	return json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(out)
 }

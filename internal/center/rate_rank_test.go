@@ -53,7 +53,7 @@ func TestMeterRecordsRate(t *testing.T) {
 	cred := s.Store.Ent.Credential.Query().Where(credential.UserIDEQ(uid), credential.NodeIDEQ(nid)).OnlyX(ctx)
 	report := func(seq int64, epoch string, down int64) {
 		t.Helper()
-		if code, body := g.call("POST", "/api/v1/agent/meter", contracts.MeterReport{Revision: 1, Epoch: epoch, Seq: seq, Status: "fresh",
+		if code, body := g.call("POST", "/api/v1/agent/meter", contracts.MeterReport{Protocol: 2, Revision: 1, Epoch: epoch, Seq: seq, Status: "fresh",
 			Usage: []contracts.MeterSample{{StatsKey: cred.StatsKey, Down: down}}}); code != 200 {
 			t.Fatalf("meter = %d %s", code, body)
 		}

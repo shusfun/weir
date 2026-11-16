@@ -77,6 +77,7 @@ type NodeTestTask struct {
 	Client NodeTestClient `json:"client"`
 }
 type OutboundProbeTask struct {
+	Native     *Outbound         `json:"native,omitempty"`
 	Address    string            `json:"address"`
 	Port       int               `json:"port"`
 	PublicOnly bool              `json:"public_only"`
@@ -109,13 +110,6 @@ type ReleaseQueryTask struct {
 	Tag        string `json:"tag,omitempty"`
 	PerPage    int    `json:"per_page,omitempty"` // >0 lists releases; zero queries a tag or latest
 	MaxBytes   int64  `json:"max_bytes"`
-}
-type ExternalConvertTask struct {
-	Credentials FetchSecrets `json:"credentials"`
-	Method      string       `json:"method,omitempty"`
-	Content     []byte       `json:"content"`
-	ContentType string       `json:"content_type"`
-	MaxBytes    int64        `json:"max_bytes"`
 }
 type TraceReadTask struct {
 	TraceID string `json:"trace_id"`
@@ -172,7 +166,7 @@ func NewTaskRequest(kind string, version int) (any, error) {
 		return nil, errors.New("unsupported task version")
 	}
 	switch kind {
-	case TaskNodeProbe:
+	case TaskNodeProbe, TaskNodeProbeXray:
 		return new(NodeProbeTask), nil
 	case TaskSubscriptionProbe:
 		return new(SubscriptionProbeTask), nil
@@ -208,8 +202,6 @@ func NewTaskRequest(kind string, version int) (any, error) {
 		return new(SubscriptionFetchTask), nil
 	case TaskReleaseQuery:
 		return new(ReleaseQueryTask), nil
-	case TaskExternalConvert:
-		return new(ExternalConvertTask), nil
 	case TaskTraceRead:
 		return new(TraceReadTask), nil
 	case TaskLayaInstall:

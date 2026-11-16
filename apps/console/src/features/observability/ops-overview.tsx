@@ -50,20 +50,20 @@ function DraftCard({ d, record, gateName }: { d: Draft; record?: OpsRecord; gate
           <div className="font-[family-name:var(--weir-mono)] text-meta text-[var(--weir-ink-3)]">
             {record?.gate ?? gateName ?? "未知 VPS"} · {shortTime(d.created_at)} · trace {(d.trace_id || record?.trace_id || "未知").slice(0, 4)}…{(d.trace_id || record?.trace_id || "").slice(-4)}
           </div>
-          <div className="mt-[5px] text-title3 font-bold leading-[29px]">{step?.title ?? "草稿"}</div>
+          <div className="mt-[var(--weir-gap-5)] text-title3 font-bold leading-[29px]">{step?.title ?? "草稿"}</div>
         </div>
         <Badge variant="soft" tone="info">待你确认</Badge>
       </div>
-      <p className="mt-[13px] mb-0 text-lead text-[var(--weir-ink-2)]">{d.explain || "没有说明"}</p>
-      <FlowBoard className="mt-[25px]" label="草稿步骤" steps={[
+      <p className="mt-[var(--weir-gap-13)] mb-0 text-lead text-[var(--weir-ink-2)]">{d.explain || "没有说明"}</p>
+      <FlowBoard className="mt-[var(--weir-gap-25)]" label="草稿步骤" steps={[
         { label: "Laya 判断", value: confidenceText(d) ?? "未知", status: d.confidence ? "complete" : "unknown" },
         { label: "dsh 起草", value: d.source === "analysis" ? "后台分析" : "对话", status: "complete" },
         { label: "你确认", value: "现在", status: "current" },
         { label: "Laya 复判", value: "执行前", status: "upcoming" },
         { label: "执行与复测", value: "变差就回退", status: "upcoming" },
       ]} />
-      {error && <p className="mt-[13px] mb-0 text-meta text-[var(--weir-bad-ink)]">{error}</p>}
-      <div className="mt-[25px] flex flex-wrap items-center justify-between gap-3">
+      {error && <p className="mt-[var(--weir-gap-13)] mb-0 text-meta text-[var(--weir-bad-ink)]">{error}</p>}
+      <div className="mt-[var(--weir-gap-25)] flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-1">
           <Button variant="ghost" onClick={reopenDrafts}>查看详情</Button>
           <Button variant="ghost" disabled={busy} onClick={() => void decide(false)}>驳回</Button>
@@ -96,11 +96,11 @@ export function OpsOverview() {
   const stack = column === "pending" ? [] : (column === "blocked" ? blocked : applied).slice(0, 5);
   return (
     <>
-      <section className="grid items-center gap-[41px] lg:grid-cols-[minmax(0,1fr)_381px]">
+      <section className="grid items-center gap-[var(--weir-gap-41)] lg:grid-cols-[minmax(0,1fr)_381px]">
         <div>
-          <div className="mb-[9px] text-fine font-bold tracking-[0.09em] text-[var(--weir-ink-3)]">运行观测</div>
+          <div className="mb-[var(--weir-gap-9)] text-fine font-bold tracking-[0.09em] text-[var(--weir-ink-3)]">运行观测</div>
           <h1 className="m-0 text-hero font-bold tracking-[-0.035em]">{title}</h1>
-          <p className="mt-[13px] mb-0 max-w-[521px] text-lead text-[var(--weir-ink-2)]">{lead}</p>
+          <p className="mt-[var(--weir-gap-13)] mb-0 max-w-[521px] text-lead text-[var(--weir-ink-2)]">{lead}</p>
         </div>
         <DotRing className="max-lg:hidden" done={done} total={5} caption="处理进度" label={pending.length > 0 ? "等你确认" : done == null ? "处理状态未知" : "处理中"} />
       </section>

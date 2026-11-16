@@ -134,10 +134,11 @@ func waitJob(t *testing.T, admin *testClient, id string) map[string]any {
 
 func TestKernelJobsArchesRecommendationAndNotices(t *testing.T) {
 	s, admin, g := setupGate(t)
+	ctx := t.Context()
 	downloads := fakeReleases(t, s)
 	// 再接入一台 arm64 的 VPS：需要的架构变成 amd64 + arm64，内核页不再选架构。
 	g2 := pairFakeGate(t, admin)
-	if code, _ := g2.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{Version: "test", Hostname: "arm", Arch: "arm64"}); code != 200 {
+	if code, _ := g2.sendHeartbeat(contracts.Heartbeat{Version: "test", Hostname: "arm", Arch: "arm64"}); code != 200 {
 		t.Fatalf("heartbeat = %d", code)
 	}
 	_ = g
@@ -171,8 +172,9 @@ func TestKernelJobsArchesRecommendationAndNotices(t *testing.T) {
 		t.Fatalf("job = %v", done)
 	}
 	for _, arch := range []string{"amd64", "arm64"} {
-		if _, _, err := s.kernelCache().Get("xray", "25.1.30", arch); err != nil {
-			t.Fatalf("%s not cached: %v", arch, err)
+		artifact, err := s.kernelArtifact(ctx, "xray", "25.1.30", arch)
+		if err != nil || artifact.Validate("xray", "25.1.30", arch) != nil {
+			t.Fatalf("%s release artifact not prepared: %+v %v", arch, artifact, err)
 		}
 	}
 	notices = mustJSON(t, admin, "GET", "/api/v1/admin/notices", nil, 200)["notices"].([]any)

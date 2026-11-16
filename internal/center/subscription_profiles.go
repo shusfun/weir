@@ -256,6 +256,10 @@ func (s *Server) saveProfileLocked(c *gin.Context) {
 		m.SetOperators(*req.Operators)
 	}
 	if req.Settings != nil {
+		if (*req.Settings)["engine"] == "external" {
+			failure(c, 400, "external_conversion_removed")
+			return
+		}
 		ps, err := decodeProfileSettings(*req.Settings)
 		if err != nil {
 			code := "invalid_profile_settings"
@@ -716,7 +720,7 @@ func (s *Server) renderGroup(ctx context.Context, p *ent.SubProfile, list, targe
 	var contentType string
 	var err error
 	if options.Engine == "external" {
-		body, contentType, err = s.convertGroup(ctx, p.ID, list, target, options)
+		err = errors.New("external_conversion_removed")
 	} else {
 		body, contentType, err = subgroup.Render(list, target, options, tpl)
 	}
@@ -924,7 +928,7 @@ func (s *Server) myGroups(c *gin.Context) {
 }
 
 // serveGroup 输出订阅组：令牌是用户的分配令牌或匿名分享令牌。用户停用 / 到期、分享撤下 / 过期都拒绝；
-// 订阅组本身到期时只返回一个「订阅已到期」提示节点。
+// 订阅组到期同样返回 403，不生成看似可用的占位节点。
 func (s *Server) serveGroup(c *gin.Context) {
 	if !s.Config.Installed || s.Store == nil {
 		failure(c, 503, "setup_required")
@@ -951,10 +955,11 @@ func (s *Server) serveGroup(c *gin.Context) {
 			failure(c, 404, "subscription_not_found")
 			return
 		}
+		c.Request = c.Request.WithContext(context.WithValue(ctx, catalogSubjectKey{}, u))
 		_ = g.Update().SetLastUsedAt(time.Now()).Exec(ctx)
 	} else if sp, err := s.Store.Ent.SubProfile.Query().Where(subprofile.ShareTokenEQ(digest(token))).Only(ctx); err == nil {
 		if sp.ShareExpiresAt == nil || time.Now().After(*sp.ShareExpiresAt) {
-			failure(c, 404, "subscription_not_found")
+			failure(c, 403, "subscription_inactive")
 			return
 		}
 		p = sp
@@ -972,6 +977,10 @@ func (s *Server) writeGroup(c *gin.Context, p *ent.SubProfile, forced string) {
 		failure(c, 404, "subscription_not_found")
 		return
 	}
+	if p.ExpiresAt != nil && !time.Now().Before(*p.ExpiresAt) {
+		failure(c, 403, "subscription_inactive")
+		return
+	}
 	ctx, finish := s.startSubscriptionRun(ctx, p.ID)
 	var runErr error
 	defer func() { finish(runErr) }()
@@ -983,10 +992,7 @@ func (s *Server) writeGroup(c *gin.Context, p *ent.SubProfile, forced string) {
 	var list string
 	var g SubscriptionSettings
 	var tpl subgroup.Template
-	if p.ExpiresAt != nil && time.Now().After(*p.ExpiresAt) {
-		list = subgroup.NoticeNode("您的订阅已到期") + "\n"
-		g, _ = s.subscriptionSettings(ctx)
-	} else {
+	{
 		var err error
 		if list, _, tpl, g, err = s.groupNodes(ctx, p, ua, c.Query("refresh") != ""); err != nil {
 			runErr = err
@@ -995,6 +1001,13 @@ func (s *Server) writeGroup(c *gin.Context, p *ent.SubProfile, forced string) {
 		}
 	}
 	managed := s.siteOrigin(c) + c.Request.URL.Path
+	var filterErr error
+	list, filterErr = s.filterCatalogGroup(ctx, list)
+	if filterErr != nil {
+		runErr = filterErr
+		failure(c, 403, "subscription_no_authorized_nodes")
+		return
+	}
 	body, ct, err := s.renderGroup(ctx, p, list, target, s.renderOptions(p, g, ua, c.Request.URL.RawQuery, managed), tpl)
 	if err != nil {
 		runErr = err

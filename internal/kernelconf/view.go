@@ -28,14 +28,22 @@ type view struct {
 	Outbounds []map[string]any
 	Routes    []map[string]any
 	Groups    []map[string]any
+	Bridges   []map[string]any
+	Observer  map[string]any
 }
 
 func (v view) vars(stats int) map[string]any {
+	observer := v.Observer
+	if observer == nil {
+		observer = map[string]any{"listen": "", "secret": ""}
+	}
 	return map[string]any{
+		"observer":  observer,
 		"inbounds":  toAny(v.Inbounds),
 		"outbounds": toAny(v.Outbounds),
 		"routes":    toAny(v.Routes),
 		"groups":    toAny(v.Groups),
+		"bridges":   toAny(v.Bridges),
 		"stats":     stats,
 		"probe":     map[string]any{"url": contracts.GroupProbeURL, "interval": contracts.GroupProbeEvery},
 	}
@@ -176,7 +184,7 @@ func outboundSettings(ob db.Outbound, kernel string) (map[string]any, error) {
 		"path": s.Path, "host": s.Host, "service_name": s.ServiceName, "mode": s.Mode, "allow_insecure": s.AllowInsecure,
 		"trusted_certificate": s.TrustedCertificate, "spki": s.SPKI, "flow": strings.TrimSpace(s.Flow), "method": s.Method,
 		"obfs": s.Obfs, "obfs_password": s.ObfsPassword, "congestion_control": s.CongestionControl, "zero_rtt": s.ZeroRTT,
-		"shadowtls_version": s.ShadowTLSVersion,
+		"shadowtls_version": s.ShadowTLSVersion, "udp_over_tcp": s.UDPOverTCP,
 	}, nil
 }
 

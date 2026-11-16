@@ -10,7 +10,6 @@ type diagnosticSource struct {
 var diagnosticSources = map[string]diagnosticSource{
 	"gate.probeTask":                {"internal/gate/probe_tasks.go", "probeTask"},
 	"center.probeSubscriptionNodes": {"internal/center/subscription_probe.go", "probeSubscriptionNodes"},
-	"center.convertGroup":           {"internal/center/subscription_converter.go", "convertGroup"},
 	"gate.applySyncedConfig":        {"internal/gate/config_stages.go", "applySyncedConfig"},
 	"gate.applyLocked":              {"internal/gate/agent.go", "applyLocked"},
 	"gate.ensureKernels":            {"internal/gate/agent.go", "ensureKernels"},

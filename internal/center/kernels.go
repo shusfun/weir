@@ -69,11 +69,10 @@ func (s *Server) defaultKernelVersion(ctx context.Context, kernel, arch string) 
 }
 
 // gateKernels 为 Gate 选定 Xray / sing-box 版本（Gate 锁定的版本优先），并取对应驱动（已展开 extends 的全文）。
-// New workers receive pinned archives; only legacy workers require a center
-// binary cache. Missing release metadata keeps the last applied configuration.
+// Gate 必须声明当前安装能力；离线导入的中心缓存仍可作为固定摘要来源。
 func (s *Server) gateKernels(ctx context.Context, g *ent.Gate, need map[string]bool) (map[string]contracts.Kernel, map[string]string, error) {
 	ks, profiles := map[string]contracts.Kernel{}, map[string]string{}
-	direct, err := s.gateDownloadsKernels(ctx, g.ID)
+	_, err := s.gateDownloadsKernels(ctx, g.ID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -88,11 +87,7 @@ func (s *Server) gateKernels(ctx context.Context, g *ent.Gate, need map[string]b
 		// 没有锁定也没有设置默认时，保持 Gate 正在运行的版本：下载新版本不会悄悄替换正在用的内核
 		// （例如 Xray 26.10 的 REALITY 与 sing-box 1.14 客户端不兼容），换版本必须由管理员明确设置。
 		if run := g.KernelsRunning[kernel]; version == "" && run != "" {
-			if direct {
-				version = run
-			} else if _, _, err := s.kernelCache().Get(kernel, run, g.Arch); err == nil {
-				version = run
-			}
+			version = run
 		}
 		if version == "" {
 			version = s.defaultKernelVersion(ctx, kernel, g.Arch)
@@ -108,13 +103,11 @@ func (s *Server) gateKernels(ctx context.Context, g *ent.Gate, need map[string]b
 		}
 		ref := contracts.Kernel{Version: version}
 		_, ref.SHA256, err = s.kernelCache().Get(kernel, version, g.Arch)
-		if direct {
-			artifact, artifactErr := s.kernelArtifact(ctx, kernel, version, g.Arch)
-			if artifactErr == nil {
-				ref.Artifact, err = &artifact, nil
-			} else if !ent.IsNotFound(artifactErr) {
-				return nil, nil, artifactErr
-			}
+		artifact, artifactErr := s.kernelArtifact(ctx, kernel, version, g.Arch)
+		if artifactErr == nil {
+			ref.Artifact, err = &artifact, nil
+		} else if !ent.IsNotFound(artifactErr) {
+			return nil, nil, artifactErr
 		}
 		if err != nil {
 			s.autoKernelFetch(ctx, kernel, version)

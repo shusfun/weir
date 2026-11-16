@@ -17,13 +17,13 @@ import (
 func setupGate(t *testing.T) (*Server, *testClient, *fakeGate) {
 	t.Helper()
 	s, admin := newInstalledServer(t)
-	for _, k := range [][2]string{{"xray", "26.3.27"}, {"sing-box", "1.12.4"}, {"mihomo", "1.19.33"}} {
+	for _, k := range [][2]string{{"xray", "26.3.27"}, {"sing-box", "1.12.4"}, {"sing-box", "1.14.4"}, {"mihomo", "1.19.33"}} {
 		if _, err := s.kernelCache().Put(k[0], k[1], "amd64", []byte(k[0]+"-binary")); err != nil {
 			t.Fatal(err)
 		}
 	}
 	g := pairFakeGate(t, admin)
-	if code, _ := g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 3, Version: "test", Hostname: "hk", Arch: "amd64"}); code != 200 {
+	if code, _ := g.sendHeartbeat(contracts.Heartbeat{NodeTestVersion: 3, Version: "test", Hostname: "hk", Arch: "amd64"}); code != 200 {
 		t.Fatalf("heartbeat = %d", code)
 	}
 	// 长期实测凭据随节点创建进入配置。只确认这一次，后面的业务版本仍由各测试显式确认。
@@ -259,14 +259,17 @@ func TestNodeWizardUsersLinksChainsAndSubscription(t *testing.T) {
 	mustJSON(t, alice, "POST", "/api/v1/me/chains", map[string]any{"name": "家宽", "entry_node_id": reality["id"], "exit": map[string]any{"kind": "socks5", "address": "192.168.1.2", "port": 1080}}, 422)
 	// 普通用户不能跳过实测：Gate 离线时直接失败（不会等待探测超时）。
 	s.Store.Ent.Gate.UpdateOneID(gid).ClearLastSeenAt().ExecX(ctx)
+	if err := s.Store.Transient.Del(ctx, "gate-observation:"+itoa(gid)); err != nil {
+		t.Fatal(err)
+	}
 	if w := alice.do("POST", "/api/v1/me/chains", map[string]any{"name": "家宽", "entry_node_id": reality["id"], "exit": map[string]any{"kind": "socks5", "address": "203.0.113.5", "port": 1080}, "skip_probe": true}, nil); w.Code != 202 || !strings.Contains(w.Body.String(), "gate_offline") {
 		t.Fatalf("user chain without probe = %d %s", w.Code, w.Body.String())
 	}
 	s.Store.Ent.Gate.UpdateOneID(gid).SetLastSeenAt(time.Now()).ExecX(ctx)
 	g.serveActions(t, s, nil)
 	ch := mustJSON(t, admin, "POST", "/api/v1/admin/users/"+itoa(uid)+"/chains", map[string]any{"name": "家宽", "entry_node_id": reality["id"], "exit": map[string]any{"kind": "socks5", "address": "203.0.113.5", "port": 1080, "username": "u", "password": "p"}, "skip_probe": true}, 200)
-	if ch["exit"].(map[string]any)["password"] != "p" {
-		t.Fatalf("admin must see chain password: %v", ch)
+	if ch["exit"].(map[string]any)["password"] != nil || ch["exit"].(map[string]any)["has_password"] != true {
+		t.Fatalf("chain must use redacted exit view: %v", ch)
 	}
 	cfg = g.config(0)
 	var chainRoute bool
@@ -330,10 +333,15 @@ func TestLaterProbeRevisionIsApplied(t *testing.T) {
 func TestNodeChainThroughAnotherNode(t *testing.T) {
 	s, admin, g := setupGate(t)
 	followProbeRevisions(t, s)
-	g.serveActions(t, s, nil)
 	gid := int(g.id)
 	eg := pairFakeGate(t, admin)
-	eg.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{NodeTestVersion: 3, Version: "test", Hostname: "exit", Arch: "amd64"})
+	eg.sendHeartbeat(contracts.Heartbeat{NodeTestVersion: 3, Version: "test", Hostname: "exit", Arch: "amd64"})
+	for _, id := range []int{gid, int(eg.id)} {
+		if err := s.Store.Tasks.SetCapabilities(t.Context(), id, contracts.CapabilityDocument{Protocol: contracts.AgentProtocol, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.ActionChainProbe: 1, contracts.TaskCoreInstall: contracts.TaskVersion}, ConfigFeatures: map[string]int{contracts.ConfigUoT: 1, contracts.ConfigOutboundBridges: 1}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	serveUoTProbeTasks(t, g)
 	exit := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(eg.id), "preset": "vless-reality", "skip_probe": true}, 200)
 	entry := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": gid, "preset": "ss2022", "skip_probe": true, "exit": map[string]any{"kind": "node", "node_id": exit["id"]}}, 200)
 	eid := int(entry["exit_id"].(float64))
@@ -376,7 +384,7 @@ func TestNextReset(t *testing.T) {
 func TestCreateNodeWithoutKernelReportsKernelUnavailable(t *testing.T) {
 	_, admin := newInstalledServer(t)
 	g := pairFakeGate(t, admin)
-	if code, _ := g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{Version: "test", Hostname: "hk", Arch: "amd64"}); code != 200 {
+	if code, _ := g.sendHeartbeat(contracts.Heartbeat{Version: "test", Hostname: "hk", Arch: "amd64"}); code != 200 {
 		t.Fatalf("heartbeat = %d", code)
 	}
 	w := admin.do("POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "vless-reality", "skip_probe": true}, nil)

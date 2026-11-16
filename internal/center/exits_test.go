@@ -109,7 +109,7 @@ func TestNodeNeedsPublicHostAndShowsPorts(t *testing.T) {
 	mustJSON(t, admin, "PATCH", "/api/v1/admin/gates/"+gid, map[string]any{"public_host": "203.0.113.40"}, 200)
 	n := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "ss2022", "skip_probe": true}, 200)
 	port := int(n["port"].(float64))
-	g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{Version: "test", Arch: "amd64", Firewall: &contracts.FirewallStatus{Tool: "ufw", Active: true, Rules: []string{itoa(port) + "/tcp"}}})
+	g.sendHeartbeat(contracts.Heartbeat{Version: "test", Arch: "amd64", Firewall: &contracts.FirewallStatus{Tool: "ufw", Active: true, Rules: []string{itoa(port) + "/tcp"}}})
 	n = mustJSON(t, admin, "GET", "/api/v1/admin/nodes/"+itoa(int(n["id"].(float64))), nil, 200)
 	got := map[string]string{}
 	for _, p := range n["ports"].([]any) {
@@ -119,7 +119,7 @@ func TestNodeNeedsPublicHostAndShowsPorts(t *testing.T) {
 	if got["tcp"] != "open" || got["udp"] != "blocked" {
 		t.Fatalf("ports = %v", n["ports"])
 	}
-	g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{Version: "test", Arch: "amd64"})
+	g.sendHeartbeat(contracts.Heartbeat{Version: "test", Arch: "amd64"})
 	n = mustJSON(t, admin, "GET", "/api/v1/admin/nodes/"+itoa(int(n["id"].(float64))), nil, 200)
 	if p := n["ports"].([]any)[0].(map[string]any); p["firewall"] != "unknown" {
 		t.Fatalf("missing firewall report must be unknown: %v", p)

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/shusfun/weir/internal/sub"
@@ -29,6 +30,7 @@ type Source struct {
 	PlusAsSpace   bool
 	NodeCache     bool // 保护性缓存：拉取失败或节点骤减时回退到上次结果
 	KnownNodes    int  // 上次成功的节点数（骤减保护依据）
+	AcceptEmpty   bool // 仅在操作者核对影响后允许覆盖为零节点
 	ConfigVersion string
 }
 
@@ -70,6 +72,7 @@ type Cache interface {
 
 // SourceResult 是单个订阅源本次的结果，供调用方更新节点数与用量。
 type SourceResult struct {
+	RawNodes        []string `json:"-"`
 	SourceID        int
 	Nodes           int
 	FromCache       bool
@@ -77,7 +80,8 @@ type SourceResult struct {
 	Title           string
 	Error           string
 	Location        string
-	ConfigVersion   string `json:"-"`
+	ConfigVersion   string    `json:"-"`
+	Started         time.Time `json:"-"`
 	processingError error
 }
 

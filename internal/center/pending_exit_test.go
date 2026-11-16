@@ -19,7 +19,7 @@ func TestPendingExitEncryptionAtomicApplyAndRevocation(t *testing.T) {
 	g.serveActions(t, s, map[string]func(contracts.Action) contracts.ActionResult{
 		contracts.ActionChainProbe: func(contracts.Action) contracts.ActionResult {
 			if fail.Load() {
-				return contracts.ActionResult{Error: "协议握手失败"}
+				return contracts.ActionResult{Error: "exit_probe_connect_failed"}
 			}
 			return contracts.ActionResult{OK: true}
 		},
@@ -52,6 +52,9 @@ func TestPendingExitEncryptionAtomicApplyAndRevocation(t *testing.T) {
 				t.Fatalf("候选未保存：%d %s", w.Code, w.Body)
 			}
 			pview := decode(t, w)["pending"].(map[string]any)
+			if reason, ok := pview["reason"].(string); !ok || !strings.Contains(reason, "经出口访问中心回显端点失败，请检查协议、凭据、证书和网络路径") || strings.Contains(reason, "exit_probe_") {
+				t.Fatalf("missing actionable probe reason: %v", pview["reason"])
+			}
 			id := pview["id"].(string)
 			p, err := s.readPendingExit(ctx, id)
 			if err != nil {

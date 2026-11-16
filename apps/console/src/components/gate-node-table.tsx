@@ -15,7 +15,6 @@ function udpOf(n: NodeItem): { text: string; pill?: boolean } {
   const check = n.test?.udp?.status;
   if (check === "passed") return { text: "通过" };
   if (check === "failed") return { text: "未通过", pill: true };
-  if (n.network === "tcp" && !["hysteria2", "tuic", "wireguard", "shadowsocks"].includes(n.protocol)) return { text: "不支持" };
   return { text: "未知" };
 }
 
@@ -32,12 +31,12 @@ export function GateNodeTable({ gates, nodes, openNode }: { gates: Gate[]; nodes
   const shown = filter === "attention" ? attention : filter === "tcp" ? tcp : rows;
   const groups = [
     { key: "attention", title: "需要注意", list: shown.filter((r) => r.attention) },
-    { key: "ok", title: "正常", list: shown.filter((r) => !r.attention) },
+    { key: "ok", title: "其他节点", list: shown.filter((r) => !r.attention) },
   ].filter((g) => g.list.length > 0);
   return (
     <>
-      <SectionHeader
-        className="mt-[33px]"
+      <SectionHeader flush
+        className="mt-[var(--weir-gap-33)]"
         title="节点"
         actions={<Segmented aria-label="筛选节点" value={filter} onValueChange={setFilter} options={[["all", `全部 ${rows.length}`], ["attention", `需要注意 ${attention.length}`], ["tcp", `仅 TCP ${tcp.length}`]]} />}
       />
@@ -60,7 +59,7 @@ export function GateNodeTable({ gates, nodes, openNode }: { gates: Gate[]; nodes
                       <small className="block font-[family-name:var(--weir-mono)] text-fine text-[var(--weir-ink-3)]">{g?.name ?? "未知"} · {n.port ? `${n.port}${n.network === "udp" ? "/udp" : ""}` : "未知"}</small>
                     </TableCell>
                     <TableCell>
-                      <span className="inline-flex flex-wrap gap-[5px]">
+                      <span className="inline-flex flex-wrap gap-[var(--weir-gap-5)]">
                         <Badge variant="tag">{protocolNames[n.protocol] ?? n.protocol}</Badge>
                         {securityNames[n.security] && <Badge variant="tag">{securityNames[n.security]}</Badge>}
                       </span>

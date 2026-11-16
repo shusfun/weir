@@ -64,7 +64,7 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
   const drawerTrigger = useRef<HTMLButtonElement>(null);
   const [palette, setPalette] = useState(false);
   const [globe, setGlobe] = useState(readGlobe);
-  const current = currentNav(location.pathname);
+  const current = currentNav(location.pathname, admin);
 
   useEffect(() => {
     try {
@@ -141,7 +141,7 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
       <div className="shell" data-collapsed={collapsed}>
         {globe && <GlobeBackground nodes={globeNodes} links={globeLinks} />}
         <aside className="rail">
-          <NavLink to={admin ? "/gates" : "/links"} className="rail-brand weir-press" aria-label="Weir 首页">
+          <NavLink to={admin ? "/overview" : "/my/nodes"} className="rail-brand weir-press" aria-label="Weir 首页">
             <BrandMark className="rail-mark" />
             <strong>Weir</strong>
           </NavLink>
@@ -151,7 +151,7 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
           <div className="rail-foot">
             {collapsed ? (
               <Tooltip content="展开导航">
-                <Button className="rail-collapse justify-center px-0" variant="ghost" size="sm" aria-label="展开导航" onClick={() => setCollapsed(false)}><PanelLeftOpen /></Button>
+                <Button className="rail-collapse" variant="ghost" size="icon-sm" title="展开导航" aria-label="展开导航" onClick={() => setCollapsed(false)}><PanelLeftOpen /></Button>
               </Tooltip>
             ) : (
               <Button className="rail-collapse justify-start" variant="ghost" size="sm" onClick={() => setCollapsed(true)}><PanelLeftClose /><span>收起导航</span></Button>

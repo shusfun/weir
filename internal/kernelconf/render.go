@@ -28,6 +28,7 @@ type Options struct {
 type Output struct {
 	Xray    []byte
 	Singbox []byte
+	Mihomo  []byte
 	Args    map[string]KernelArgs
 }
 
@@ -63,6 +64,10 @@ func Build(cfg contracts.GateConfig, opt Options) (Output, error) {
 	if err != nil {
 		return out, err
 	}
+	bridges, err := bridgeViews(cfg)
+	if err != nil {
+		return out, err
+	}
 	inbounds, tagToID, keyToCred, err := toInbounds(cfg, opt)
 	if err != nil {
 		return out, err
@@ -93,12 +98,28 @@ func Build(cfg contracts.GateConfig, opt Options) (Output, error) {
 	for _, in := range cfg.Inbounds {
 		ports[in.Port] = true
 	}
+	for _, b := range bridges {
+		ports[b.plan.Port] = true
+	}
+	for engine, o := range cfg.Observers {
+		if engine != "sing-box" && engine != "mihomo" {
+			return out, errors.New("unknown observer engine")
+		}
+		if ports[o.Port] || o.Port == cfg.Ports.XrayStats || o.Port == cfg.Ports.SingboxStats {
+			return out, errors.New("native observer port conflict")
+		}
+		ports[o.Port] = true
+	}
 	for _, k := range []struct {
 		name string
 		list []db.Inbound
 	}{{"xray", xrayIn}, {"sing-box", singIn}} {
 		kernel, list := k.name, k.list
-		if len(list) == 0 {
+		helper := false
+		for _, b := range bridges {
+			helper = helper || (kernel == "sing-box" && b.plan.Kernel == kernel)
+		}
+		if len(list) == 0 && !helper {
 			continue
 		}
 		d, err := DriverFor(cfg, kernel)
@@ -109,6 +130,9 @@ func Build(cfg contracts.GateConfig, opt Options) (Output, error) {
 			return out, fmt.Errorf("%s 没有驱动，无法生成配置", kernel)
 		}
 		for _, in := range list {
+			if in.TCPOnly && (kernel != "sing-box" || in.Protocol != "shadowsocks" || !d.Has("udp-over-tcp")) {
+				return out, errors.New("TCP-only internal inbound unsupported by driver")
+			}
 			if err := d.Allows(in.Protocol, in.Network, in.Security); err != nil {
 				return out, fmt.Errorf("inbound %d: %w", in.ID, err)
 			}
@@ -120,7 +144,11 @@ func Build(cfg contracts.GateConfig, opt Options) (Output, error) {
 		if stats <= 0 {
 			return out, fmt.Errorf("%s stats port not allocated", kernel)
 		}
-		if len(groups) > 0 {
+		kernelGroups := groups
+		if len(list) == 0 {
+			kernelGroups = nil
+		}
+		if len(kernelGroups) > 0 {
 			need := []string{"balancer", "observatory"}
 			if kernel == "sing-box" {
 				need = []string{"urltest"}
@@ -131,13 +159,48 @@ func Build(cfg contracts.GateConfig, opt Options) (Output, error) {
 				}
 			}
 		}
-		v, err := buildView(kernel, list, outbounds, routes, groups)
+		kernelOutbounds := outbounds
+		if len(bridges) > 0 {
+			kernelOutbounds, _, err = toOutbounds(bridgedConfig(cfg, kernel, bridges))
+			if err != nil {
+				return out, err
+			}
+		}
+		// No public sing-box inbound means only the explicit helper routes apply.
+		kernelRoutes := routes
+		if len(list) == 0 {
+			kernelRoutes = nil
+			kernelOutbounds = outbounds[:1]
+		}
+		for _, o := range kernelOutbounds {
+			if db.ParseOutboundSettings(o.SettingsJSON).UDPOverTCP && (kernel != "sing-box" || !d.Has("udp-over-tcp")) {
+				return out, errors.New("UDP over TCP unsupported by driver")
+			}
+		}
+		v, err := buildView(kernel, list, kernelOutbounds, kernelRoutes, kernelGroups)
+		if err != nil {
+			return out, err
+		}
+		if kernel == "sing-box" {
+			if err = appendSingboxBridges(&v, bridges); err != nil {
+				return out, err
+			}
+		}
+		v.Observer, err = observerVars(*d, cfg.Observers[kernel])
 		if err != nil {
 			return out, err
 		}
 		body, err := render(*d, v, stats, ports, opt)
 		if err != nil {
 			return out, err
+		}
+		if err = validateObserverPlan(body, kernel, cfg.Observers[kernel]); err != nil {
+			return out, err
+		}
+		if kernel == "sing-box" && helper {
+			if err = validateBridgeListeners(body, bridges); err != nil {
+				return out, err
+			}
 		}
 		if cfg.Meta != nil && cfg.Meta["dns"] == "doh" {
 			version := ""
@@ -160,6 +223,14 @@ func Build(cfg contracts.GateConfig, opt Options) (Output, error) {
 			out.Singbox = body
 		}
 		out.Args[kernel] = KernelArgs{Run: d.Run, Check: d.Check}
+	}
+	var args KernelArgs
+	out.Mihomo, args, err = renderMihomoBridges(cfg, bridges, opt)
+	if err != nil {
+		return out, err
+	}
+	if len(out.Mihomo) > 0 {
+		out.Args["mihomo"] = args
 	}
 	return out, nil
 }
@@ -221,6 +292,8 @@ func enforce(kernel string, tree any, stats int, ports map[int]bool, certDir str
 	}
 	inbounds, _ := root["inbounds"].([]any)
 	switch kernel {
+	case "mihomo":
+		return validateMihomoBridgeConfig(root, ports)
 	case "xray":
 		if log, ok := root["log"].(map[string]any); ok {
 			for _, k := range []string{"access", "error"} {
@@ -290,8 +363,17 @@ func enforce(kernel string, tree any, stats int, ports map[int]bool, certDir str
 		}
 		exp, _ := root["experimental"].(map[string]any)
 		for k := range exp {
-			if k != "v2ray_api" {
-				return fmt.Errorf("experimental 只允许 v2ray_api，不允许 %s", k)
+			if k != "v2ray_api" && k != "clash_api" {
+				return fmt.Errorf("experimental 不允许 %s", k)
+			}
+		}
+		if clash, ok := exp["clash_api"]; ok {
+			api, _ := clash.(map[string]any)
+			if len(api) != 2 {
+				return errors.New("native observer permits only controller and secret")
+			}
+			if err := validateObserverAddress(api["external_controller"], api["secret"], ports); err != nil {
+				return err
 			}
 		}
 		api, _ := exp["v2ray_api"].(map[string]any)
@@ -425,6 +507,7 @@ func expandGroups(cfg contracts.GateConfig) (contracts.GateConfig, []group, erro
 		outs = append(outs, contracts.Outbound{ID: o.ID, Tag: o.Tag, Protocol: "blackhole"})
 		g := group{id: o.ID}
 		for i, m := range o.Members {
+			m.RuleID = o.RuleID
 			m.ID, m.Tag = next, fmt.Sprintf("%s-m%d", o.Tag, i+1)
 			next++
 			outs = append(outs, m)

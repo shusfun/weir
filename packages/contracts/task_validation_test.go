@@ -17,7 +17,6 @@ func TestTaskPayloadRejectsSemanticBoundsBeforeDispatch(t *testing.T) {
 		{ActionACMEHTTP01, `{"token":"token","key_auth":"other.thumbprint","seconds":150,"host":"example.org"}`},
 		{ActionAssetFetch, `{"upload_id":"../credential","urls":["https://github.com/a/b"],"sha256":"` + strings.Repeat("a", 64) + `","size":1,"max_size":1}`},
 		{TaskSubscriptionFetch, `{"credentials":{"url":"https://user:secret@example.org"},"max_bytes":100}`},
-		{TaskExternalConvert, `{"credentials":{"url":"https://example.org"},"content":"","content_type":"text/plain\r\nX-Secret: bad","max_bytes":100}`},
 		{TaskTraceRead, `{"trace_id":"` + strings.Repeat("0", 32) + `","limit":10}`},
 		{TaskLayaClassify, `{"model":"laya:multilingual","state":"text","questions":{"decision":{"type":"shell"}}}`},
 	} {

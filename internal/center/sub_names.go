@@ -115,7 +115,14 @@ func (s *Server) selectSubscriptionEntries(ctx context.Context, u *ent.User, l *
 			e.Ref = "chain:" + itoa(e.ChainID)
 		}
 		e.exit = ex
-		if supported, known := s.exitUDP(ctx, eid, map[int]bool{}); known {
+		supported, known := s.exitUDP(ctx, eid, map[int]bool{})
+		if e.chain == nil {
+			supported, known = s.nodeRouteUDP(ctx, n, &u.ID, false, map[int]bool{})
+		}
+		if n.Protocol == "http" || n.Protocol == "shadowtls" {
+			supported, known = false, true
+		}
+		if known {
 			e.UDP = &supported
 		}
 		e.Chained = ex.Kind != "freedom"

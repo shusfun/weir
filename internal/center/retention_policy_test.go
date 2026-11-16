@@ -30,6 +30,15 @@ func TestRetentionPolicyValidationConflictAndAudit(t *testing.T) {
 	if s.Store.Ent.Audit.Query().Where(audit.ActionEQ("settings.retention")).CountX(t.Context()) != 1 {
 		t.Fatal("policy save must have one atomic audit record")
 	}
+	preview := current
+	preview["policy"].(map[string]any)["audit_days"] = 60
+	mustJSON(t, admin, "PUT", path+"?dryRun=true", preview, 200)
+	if again := mustJSON(t, admin, "GET", path, nil, 200); again["revision"] != current["revision"] {
+		t.Fatal("retention preview wrote the policy")
+	}
+	mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "retention-user@example.test", "password": "Passw0rd"}, 200)
+	user := login(t, s, "retention-user@example.test", "Passw0rd")
+	mustJSON(t, user, "PUT", path, current, 403)
 }
 
 func TestAuditRetentionDefaultPreservesAndPrunesBoundedBatch(t *testing.T) {

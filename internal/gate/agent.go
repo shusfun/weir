@@ -14,13 +14,13 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/shusfun/weir/internal/buildinfo"
 	"github.com/shusfun/weir/internal/hoststats"
 	"github.com/shusfun/weir/internal/kernelconf"
 	"github.com/shusfun/weir/internal/netbudget"
+	"github.com/shusfun/weir/internal/releasefiles"
 	"github.com/shusfun/weir/internal/xray"
 	"github.com/shusfun/weir/packages/contracts"
 )
@@ -52,19 +52,18 @@ type Agent struct {
 	up updater
 	// 测试替换：replaceFn 代替辅助程序替换程序；extHTTP 是访问 GitHub 的客户端；ghHost 是允许的 GitHub 主机；
 	// uploadBackoff 是上传重试的起始间隔。
-	replaceFn         func(ctx context.Context, version, sum string, data []byte) error
-	extHTTP           *http.Client
-	ghHost            string
-	uploadBackoff     time.Duration
-	meterProtocol     atomic.Int32
-	heartbeatProtocol atomic.Int32
-	heartbeats        heartbeatState
-	reportedEventAt   time.Time
-	workerBudgetMu    sync.RWMutex
-	workerBudget      contracts.WorkerBudget
-	workerPacer       netbudget.Pacer
-	workerObserved    workerObservations
-	downloads         downloadCoordinator
+	replaceFn       func(ctx context.Context, version, sum string, data []byte) error
+	extHTTP         *http.Client
+	ghHost          string
+	uploadBackoff   time.Duration
+	heartbeats      heartbeatState
+	reportedEventAt time.Time
+	workerBudgetMu  sync.RWMutex
+	workerBudget    contracts.WorkerBudget
+	workerPacer     netbudget.Pacer
+	workerObserved  workerObservations
+	downloads       downloadCoordinator
+	domains         domainCollector
 }
 
 func NewAgent(p Paths) (*Agent, error) {
@@ -93,6 +92,12 @@ func (a *Agent) Run(ctx context.Context) error {
 		return fmt.Errorf("abandoned download cleanup: %w", err)
 	}
 	a.runCtx = ctx
+	if a.st.Revoked {
+		if err := a.helper.Disable(ctx); err != nil {
+			return err
+		}
+		return errGateRevoked
+	}
 	a.mu.Lock()
 	if a.st.Config != nil {
 		if _, err := a.applyLocked(ctx, *a.st.Config); err != nil {
@@ -101,10 +106,32 @@ func (a *Agent) Run(ctx context.Context) error {
 	}
 	_ = a.st.save(a.statePath())
 	a.mu.Unlock()
+	loops.Go(func() {
+		a.loop(ctx, time.Second, func(ctx context.Context) error {
+			if !a.center.revoked.Load() {
+				return nil
+			}
+			// Persist both sides: the root helper must not boot old configuration
+			// even if the unprivileged agent has not started after a reboot.
+			a.mu.Lock()
+			a.st.Revoked = true
+			err := a.st.save(a.statePath())
+			a.mu.Unlock()
+			disableErr := a.helper.Disable(ctx)
+			if err != nil || disableErr != nil {
+				return errors.Join(err, disableErr)
+			}
+			cancel()
+			return nil
+		})
+	})
 	loops.Go(func() { a.loop(ctx, a.HeartbeatEvery, a.heartbeat) })
 	loops.Go(func() { a.loop(ctx, a.MeterEvery, a.meter) })
 	loops.Go(func() { a.observeWorkerComponents(ctx) })
 	a.workerLoop(ctx)
+	if a.center.revoked.Load() {
+		return errGateRevoked
+	}
 	return ctx.Err()
 }
 
@@ -117,75 +144,6 @@ func (a *Agent) loop(ctx context.Context, every time.Duration, fn func(context.C
 		case <-ctx.Done():
 			return
 		case <-time.After(every):
-		}
-	}
-}
-
-func (a *Agent) configLoop(ctx context.Context) {
-	for ctx.Err() == nil {
-		a.mu.Lock()
-		since := a.st.Applied
-		execSince := int64(0)
-		if a.st.Config != nil {
-			execSince = a.st.Config.ExecutionSeq
-		}
-		a.mu.Unlock()
-		var cfg contracts.GateConfig
-		code, err := a.center.call(ctx, "GET", "/agent/config?since="+strconv.FormatInt(since, 10)+"&exec_since="+strconv.FormatInt(execSince, 10), nil, &cfg)
-		switch {
-		case err != nil:
-			// 409：中心暂时无法编译（例如内核尚未下载），保持当前配置稍后重试。
-			wait := 5 * time.Second
-			if code == 409 {
-				wait = 30 * time.Second
-			}
-			log.Printf("config: %v", err)
-			sleep(ctx, wait)
-			continue
-		case code == 204:
-			continue
-		case cfg.ExecutionOnly:
-			a.mu.Lock()
-			state := a.applyExecution(ctx, cfg)
-			a.mu.Unlock()
-			if _, err = a.center.call(ctx, "POST", "/agent/state", state, nil); err != nil {
-				log.Printf("report execution: %v", err)
-			}
-			continue
-		case cfg.CertOnly:
-			if err = a.ensureCerts(ctx, cfg); err != nil {
-				log.Printf("cert sync: %v", err)
-				sleep(ctx, 10*time.Second)
-				continue
-			}
-			log.Printf("cert sync: revision %d refs %d", cfg.Revision, len(cfg.Certs))
-			if _, err = a.center.call(ctx, "POST", "/agent/state", contracts.GateState{AppliedRevision: a.appliedRevision(), CertSynced: true}, nil); err != nil {
-				log.Printf("report cert sync: %v", err)
-			}
-			continue
-		}
-		// 跟随中心版本只看心跳回复（heartbeat → followCenter），这里不再检查 cfg.Version。
-		a.mu.Lock()
-		configCtx := configurationContext(ctx, cfg)
-		state, err := a.applySyncedConfig(configCtx, cfg)
-		a.mu.Unlock()
-		if err != nil {
-			log.Printf("apply revision %d: %v", cfg.Revision, err)
-			sleep(ctx, 10*time.Second)
-			continue
-		}
-		// 中心的配置版本号，两边的日志按它对上。
-		if state.FailedRevision == cfg.Revision {
-			log.Printf("revision %d rejected, keeping %d: %s", cfg.Revision, state.AppliedRevision, state.Error)
-		} else {
-			log.Printf("revision %d applied", state.AppliedRevision)
-		}
-		if _, err = a.center.call(configCtx, "POST", "/agent/state", state, nil); err != nil {
-			log.Printf("report state: %v", err)
-		}
-		// 配置被拒绝时等一会再取，避免反复应用同一份坏配置；端口冲突时中心会马上换端口发新版本，直接去取（长轮询，不会空转）。
-		if state.FailedRevision != 0 && state.ConflictPort == 0 {
-			sleep(ctx, 30*time.Second)
 		}
 	}
 }
@@ -285,6 +243,9 @@ func (a *Agent) ensureCerts(ctx context.Context, cfg contracts.GateConfig) error
 // applyLocked 生成内核配置并交给辅助程序应用；调用方持有 a.mu。
 // 返回 err 表示暂时性问题（稍后重试）；配置本身被拒绝时 err 为空、FailedRevision 非零。
 func (a *Agent) applyLocked(ctx context.Context, cfg contracts.GateConfig) (contracts.GateState, error) {
+	if a.st.Revoked || a.center.revoked.Load() {
+		return contracts.GateState{}, errGateRevoked
+	}
 	if err := a.ensureKernels(ctx, cfg); err != nil {
 		return contracts.GateState{}, err
 	}
@@ -302,7 +263,9 @@ func (a *Agent) applyLocked(ctx context.Context, cfg contracts.GateConfig) (cont
 		a.st.Baseline = baseline
 		return contracts.GateState{AppliedRevision: a.st.Applied, FailedRevision: cfg.Revision, Error: driverLabel(cfg) + err.Error()}, nil
 	}
-	req := ApplyRequest{Kernels: map[string]string{}, Configs: map[string][]byte{"xray": out.Xray, "sing-box": out.Singbox}, StatsPorts: map[string]int{"xray": cfg.Ports.XrayStats, "sing-box": cfg.Ports.SingboxStats}, Args: out.Args, HotUsers: hotUsers(cfg), ForceRestart: a.forceRestart(cfg, exhausted), TraceID: cfg.TraceID}
+	req := ApplyRequest{Kernels: map[string]string{}, Configs: map[string][]byte{"xray": out.Xray, "sing-box": out.Singbox, "mihomo": out.Mihomo}, StatsPorts: map[string]int{"xray": cfg.Ports.XrayStats, "sing-box": cfg.Ports.SingboxStats}, HealthPorts: map[string][]int{"xray": {cfg.Ports.XrayStats}, "sing-box": {cfg.Ports.SingboxStats}}, Args: out.Args, HotUsers: hotUsers(cfg), ForceRestart: a.forceRestart(cfg, exhausted), TraceID: cfg.TraceID}
+	req.Firewall = cfg.Firewall
+	req.BrowserTest = cfg.BrowserTest
 	for name, k := range cfg.Kernels {
 		req.Kernels[name] = k.Version
 	}
@@ -310,6 +273,14 @@ func (a *Agent) applyLocked(ctx context.Context, cfg contracts.GateConfig) (cont
 		req.Ports = append(req.Ports, in.Port)
 	}
 	req.Ports = append(req.Ports, cfg.Ports.XrayStats, cfg.Ports.SingboxStats)
+	for _, bridge := range cfg.Bridges {
+		req.Ports = append(req.Ports, bridge.Port)
+		req.HealthPorts[bridge.Kernel] = append(req.HealthPorts[bridge.Kernel], bridge.Port)
+	}
+	for engine, observer := range cfg.Observers {
+		req.Ports = append(req.Ports, observer.Port)
+		req.HealthPorts[engine] = append(req.HealthPorts[engine], observer.Port)
+	}
 	if err := a.checkExecutionLease(ctx); err != nil {
 		return contracts.GateState{}, err
 	}
@@ -460,8 +431,10 @@ func (a *Agent) forceRestart(cfg contracts.GateConfig, exhausted map[string]bool
 }
 
 // readCounters 读取两个内核的按用户累计；某内核未运行时跳过。
-func readCounters(ctx context.Context, cfg contracts.GateConfig) (map[string]Counter, bool) {
-	raw, ok := map[string]Counter{}, true
+func readCounters(ctx context.Context, cfg contracts.GateConfig) (map[string]map[string]Counter, map[string]map[int64]Counter, bool) {
+	raw, ok := map[string]map[string]Counter{}, true
+	rules := map[string]map[int64]Counter{}
+	names := kernelconf.RuleOutboundNames(cfg)
 	for name, spec := range map[string][2]string{"xray": {"xray", "xray.app.stats.command.StatsService"}, "sing-box": {"singbox", "v2ray.core.app.stats.command.StatsService"}} {
 		port := cfg.Ports.XrayStats
 		if name == "sing-box" {
@@ -475,50 +448,72 @@ func readCounters(ctx context.Context, cfg contracts.GateConfig) (map[string]Cou
 			ok = false
 			continue
 		}
-		stats, err := client.QueryAllStats(ctx)
+		stats, err := client.QueryTrafficStats(ctx)
 		client.Close()
 		if err != nil {
 			ok = false
 			continue
 		}
-		for key, s := range stats {
-			raw[key] = Counter{Up: s.Uplink, Down: s.Downlink}
+		raw[name] = map[string]Counter{}
+		rules[name] = map[int64]Counter{}
+		for _, id := range names[name] {
+			rules[name][id] = Counter{}
+		}
+		for _, s := range stats {
+			if s.ScopeType == "client" {
+				raw[name][s.ScopeKey] = Counter{Up: s.Uplink, Down: s.Downlink}
+			} else if s.ScopeType == "outbound" {
+				if id := names[name][s.ScopeKey]; id > 0 {
+					v := rules[name][id]
+					v.Up += s.Uplink
+					v.Down += s.Downlink
+					rules[name][id] = v
+				}
+			}
 		}
 	}
-	return raw, ok
+	return raw, rules, ok
 }
 
 // meter 每 10 秒读取计数；用户集合因到期 / 额度变化时在本地重建配置；约每 30 秒上报中心。
 func (a *Agent) meter(ctx context.Context) error {
+	ctx = releasefiles.WithTrace(ctx, "")
 	st, err := a.helper.Status(ctx)
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.st.Config == nil {
+	if a.st.Config == nil || a.st.Revoked || a.center.revoked.Load() {
 		return nil
 	}
-	cfg := *a.st.Config
-	raw, fresh := readCounters(ctx, cfg)
-	restarted := false
-	if err == nil {
-		for name, pid := range st.Running {
-			if prev, ok := a.pids[name]; ok && prev != pid {
-				restarted = true
-			}
-			a.pids[name] = pid
-		}
+	if a.st.PendingMeter == nil || a.st.MeterTrace == "" {
+		a.st.MeterTrace = releasefiles.Trace(ctx)
 	}
-	a.st.absorb(raw, restarted)
+	ctx = releasefiles.WithTrace(ctx, a.st.MeterTrace)
+	cfg := *a.st.Config
+	raw, ruleRaw, fresh := readCounters(ctx, cfg)
+	a.st.markRulesUnavailable(kernelconf.RuleOutboundNames(cfg))
+	restarted := false
+	for name, counters := range raw {
+		if err != nil || st.Running[name] == 0 {
+			fresh = false
+			continue
+		}
+		// Commit the baseline only after this engine was successfully observed.
+		changed := a.st.absorbKernel(name, st.Running[name], st.Instances[name], counters)
+		a.st.absorbRules(name, ruleRaw[name], changed, time.Now().UTC())
+		restarted = restarted || changed
+	}
 	exhausted := a.st.exhausted(cfg)
 	if sig := signature(cfg, time.Now(), exhausted); sig != a.st.Signature {
 		if state, err := a.applyLocked(ctx, cfg); err != nil || state.FailedRevision != 0 {
 			log.Printf("local enforcement rebuild: %v %s", err, state.Error)
 		}
 	}
+	a.collectDomains(ctx, cfg)
 	a.st.Seq++
 	if a.ReportEvery > 1 && a.st.Seq%a.ReportEvery != 0 && !restarted {
 		return a.st.save(a.statePath())
 	}
-	rep := a.st.prepareMeter(fresh, a.meterProtocol.Load() == 2)
+	rep := a.st.prepareMeter(fresh)
 	if err := a.st.save(a.statePath()); err != nil {
 		return err
 	}
@@ -527,13 +522,10 @@ func (a *Agent) meter(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if rep.Protocol == 2 {
-		if err = a.st.acknowledgeMeter(ack); err != nil {
-			return err
-		}
-		return a.st.save(a.statePath())
+	if err = a.st.acknowledgeMeter(ack); err != nil {
+		return err
 	}
-	return nil
+	return a.st.save(a.statePath())
 }
 
 func (a *Agent) heartbeat(ctx context.Context) error {
@@ -558,6 +550,11 @@ func (a *Agent) heartbeat(ctx context.Context) error {
 		if st.Host != nil {
 			copied := *st.Host
 			hb.Host = &copied
+		}
+		if st.BrowserTest != nil {
+			if _, err := a.center.call(ctx, "POST", "/agent/browser-tests", st.BrowserTest, nil); err != nil {
+				log.Printf("browser test observation: %v", err)
+			}
 		}
 		hb.ListeningPorts, hb.Firewall = st.Listening, st.Firewall
 		hb.KernelEvents = a.freshKernelEvents(st.Events)
@@ -586,36 +583,18 @@ func (a *Agent) heartbeat(ctx context.Context) error {
 		hb.Host.Health = &health
 	}
 	now := time.Now()
-	wire := hb
-	if a.heartbeatProtocol.Load() == contracts.HeartbeatProtocol {
-		var err error
-		wire, err = a.heartbeats.prepare(hb, now, a.HeartbeatFullEvery, a.HostSampleEvery)
-		if err != nil {
-			return err
-		}
-	}
-	path := "/agent/heartbeat"
-	if wire.Protocol == contracts.HeartbeatProtocol {
-		path += "/v2"
-	}
-	code, err := a.center.call(ctx, "POST", path, wire, &reply)
-	sentV2 := err == nil && wire.Protocol == contracts.HeartbeatProtocol && code != 404
-	if code == 404 && wire.Protocol == contracts.HeartbeatProtocol {
-		a.heartbeatProtocol.Store(0)
-		a.heartbeats.reset()
-		_, err = a.center.call(ctx, "POST", "/agent/heartbeat", hb, &reply)
-		sentV2 = false
-	}
+	wire, err := a.heartbeats.prepare(hb, now, a.HeartbeatFullEvery, a.HostSampleEvery)
 	if err != nil {
 		return err
 	}
-	if sentV2 {
-		a.noteReportedEvents(wire.KernelEvents)
+	if _, err = a.center.call(ctx, "POST", "/agent/heartbeat/v2", wire, &reply); err != nil {
+		return err
 	}
-	if reply.HeartbeatProtocol == contracts.HeartbeatProtocol {
-		a.heartbeatProtocol.Store(contracts.HeartbeatProtocol)
-		a.heartbeats.acknowledge(wire, reply, now)
+	if reply.HeartbeatProtocol != contracts.HeartbeatProtocol {
+		return errors.New("unsupported heartbeat protocol")
 	}
+	a.noteReportedEvents(wire.KernelEvents)
+	a.heartbeats.acknowledge(wire, reply, now)
 	a.followCenter(ctx, reply.Release)
 	if want := strings.TrimRight(reply.Center, "/"); want != "" && want != hb.Center && !loopbackCenter(hb.Center) {
 		return a.switchCenter(ctx, want)
@@ -666,34 +645,6 @@ func loopbackCenter(raw string) bool {
 	}
 	ip := net.ParseIP(u.Hostname())
 	return strings.EqualFold(u.Hostname(), "localhost") || ip != nil && ip.IsLoopback()
-}
-
-func (a *Agent) actionLoop(ctx context.Context) {
-	for ctx.Err() == nil {
-		var actions []contracts.Action
-		if _, err := a.center.call(ctx, "GET", "/agent/actions", nil, &actions); err != nil {
-			sleep(ctx, 5*time.Second)
-			continue
-		}
-		for _, act := range actions {
-			// 下载、上传、测速与自更新耗时长，各自在后台跑，不堵住后面的动作；其余动作按顺序执行。
-			if asyncActions[act.Kind] {
-				go a.finishAction(ctx, act)
-			} else {
-				a.finishAction(ctx, act)
-			}
-		}
-	}
-}
-
-var asyncActions = map[string]bool{contracts.ActionReleaseReplace: true, contracts.ActionAssetFetch: true, contracts.ActionSourceProbe: true}
-
-func (a *Agent) finishAction(ctx context.Context, act contracts.Action) {
-	res := a.runAction(ctx, act)
-	res.ID = act.ID
-	if _, err := a.center.call(ctx, "POST", "/agent/actions/"+strconv.FormatInt(act.ID, 10), res, nil); err != nil {
-		log.Printf("action %d result: %v", act.ID, err)
-	}
 }
 
 var errUnknownAction = errors.New("action not allowed")

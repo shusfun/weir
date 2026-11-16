@@ -42,3 +42,32 @@ func TestGateKernelManifestDoesNotRequireCenterBinary(t *testing.T) {
 		t.Fatal("manifest-only version cannot become default", err)
 	}
 }
+
+func TestKernelConfigurationRejectsUnsupportedInstallContract(t *testing.T) {
+	s, admin := newInstalledServer(t)
+	g := pairFakeGate(t, admin)
+	row := s.Store.Ent.Gate.GetX(t.Context(), int(g.id))
+	for _, test := range []struct {
+		name string
+		caps contracts.CapabilityDocument
+	}{
+		{"missing install task", contracts.CapabilityDocument{Protocol: contracts.AgentProtocol, Version: "test", Arch: "amd64", Tasks: map[string]int{}}},
+		{"wrong task version", contracts.CapabilityDocument{Protocol: contracts.AgentProtocol, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.TaskCoreInstall: contracts.TaskVersion + 1}}},
+		{"wrong protocol", contracts.CapabilityDocument{Protocol: contracts.AgentProtocol + 1, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.TaskCoreInstall: contracts.TaskVersion}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if test.caps.Validate() != nil {
+				if err := s.Store.Tasks.SetCapabilities(t.Context(), row.ID, test.caps); err == nil {
+					t.Fatal("unsupported capability document was persisted")
+				}
+				return
+			}
+			if err := s.Store.Tasks.SetCapabilities(t.Context(), row.ID, test.caps); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := s.gateKernels(t.Context(), row, map[string]bool{"xray": true}); err == nil || !strings.Contains(err.Error(), "契约") {
+				t.Fatalf("unsupported Gate contract was not rejected: %v", err)
+			}
+		})
+	}
+}

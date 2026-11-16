@@ -59,7 +59,7 @@ func validHeartbeatV2(h contracts.Heartbeat) bool {
 }
 
 func validHeartbeatHost(h *contracts.HostSample, now time.Time) bool {
-	if h.ObservedAt.IsZero() || now.Sub(h.ObservedAt) > 90*time.Second || h.ObservedAt.After(now.Add(time.Minute)) || len(h.Processes) > 32 || len(h.ObservationID) > 32 {
+	if h.ObservedAt.IsZero() || now.Sub(h.ObservedAt) > 90*time.Second || h.ObservedAt.After(now.Add(time.Minute)) || len(h.Processes) > 32 || len(h.ObservationID) > 32 || len(h.BootID) > 64 {
 		return false
 	}
 	finite := func(v *float64, max float64) bool {
@@ -106,7 +106,7 @@ func firewallFields(f *contracts.FirewallStatus) map[string]any {
 	}
 	rules := append([]string(nil), f.Rules...)
 	sort.Strings(rules)
-	return map[string]any{"tool": f.Tool, "active": f.Active, "rules": rules, "error": f.Error}
+	return map[string]any{"tool": f.Tool, "active": f.Active, "rules": rules, "error": f.Error, "managed_version": f.ManagedVersion}
 }
 
 // saveHeartbeatSnapshot updates only changed business observations. Host
@@ -180,12 +180,6 @@ func (s *Server) saveHeartbeatSnapshot(ctx context.Context, g *ent.Gate, h contr
 		}
 		changed = true
 	}
-	// This rollout field remains available to old node-test callers. Resource
-	// samples are supplied from transient state by the store read adapter.
-	if jsonText(g.Host["node_test_version"]) != jsonText(h.NodeTestVersion) {
-		upd.SetHost(map[string]any{"node_test_version": h.NodeTestVersion})
-		changed = true
-	}
 	if !changed {
 		return g, observationsChanged, nil
 	}
@@ -242,14 +236,16 @@ func (s *Server) agentHeartbeatV2(c *gin.Context, h contracts.Heartbeat) {
 			if changed && g.AppliedRevision >= g.ConfigRevision {
 				s.refreshGateReachability(g.ID)
 			}
-			before := g.ConfigRevision
-			g, err = s.ensureStatsPorts(ctx, g)
-			if err != nil {
-				return err
-			}
-			if g.ConfigRevision != before {
-				s.waiters.notify(g.ID)
-				_ = s.Store.Notifications.Publish(ctx, "gate:"+itoa(g.ID))
+			if changed || g.XrayStatsPort == 0 || g.SingboxStatsPort == 0 {
+				before := g.ConfigRevision
+				g, err = s.ensureStatsPorts(ctx, g)
+				if err != nil {
+					return err
+				}
+				if g.ConfigRevision != before {
+					s.waiters.notify(g.ID)
+					_ = s.Store.Notifications.Publish(ctx, "gate:"+itoa(g.ID))
+				}
 			}
 			observed.Digest = h.Digest
 		}
@@ -262,10 +258,12 @@ func (s *Server) agentHeartbeatV2(c *gin.Context, h contracts.Heartbeat) {
 			if err = json.Unmarshal(b, &host); err != nil {
 				return err
 			}
-			host["node_test_version"] = g.Host["node_test_version"]
 			observed.Host = host
 			c.Set("observation_id", h.Host.ObservationID)
 			s.recordHost(ctx, g.ID, h.Host, now)
+			if err = s.recordGateNetwork(ctx, g.ID, h.Host, now); err != nil {
+				return err
+			}
 		}
 		observed.SeenAt = now
 		if err = s.Store.SetGateObservation(ctx, g.ID, *observed); err != nil {

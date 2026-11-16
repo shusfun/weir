@@ -20,7 +20,7 @@ import { createPortal } from "react-dom";
 
 // shadcn
 import { Button } from "./button";
-import { Form } from "./form";
+import { Form, FormBoundary, useFormContext } from "./form";
 
 // third-party
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
@@ -232,7 +232,7 @@ function DialogLayer({
   return (
     <>
       <DialogOverlay depth={depth} className={layer === "top" ? "z-[57]" : undefined} />
-      <DialogSlotContext.Provider value={slots}>
+      <FormBoundary><DialogSlotContext.Provider value={slots}>
       <DialogPrimitive.Popup
         ref={setPopup}
         data-slot="dialog-content"
@@ -281,7 +281,7 @@ function DialogLayer({
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>
-      </DialogSlotContext.Provider>
+      </DialogSlotContext.Provider></FormBoundary>
     </>
   );
 }
@@ -311,7 +311,7 @@ function DialogFooter({
   status?: ReactNode;
 }) {
   const slot = useContext(DialogSlotContext);
-  const formId = slot?.formId ?? null;
+  const formId = useFormContext()?.id ?? slot?.formId ?? null;
   const actions = formId
     ? Children.map(children, (child) => {
         if (!isValidElement(child)) return child;

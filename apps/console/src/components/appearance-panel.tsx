@@ -76,7 +76,7 @@ export function AppearancePanel() {
         <Button type="button" variant="ghost" disabled={!dirty || busy} onClick={() => setDraft(saved)}>撤销</Button>
         <Button type="button" disabled={!dirty} busy={busy} busyText="正在保存" onClick={() => void commit(draft)}>保存</Button>
       </div>
-      <SectionHeader title="主题" description="以后会加入更多主题" />
+      <SectionHeader flush title="主题" description="以后会加入更多主题" />
       <ChoiceBoard label="主题">
         {themes.map(([key, label, caption]) => (
           <ChoiceCard key={key} selected={draft.theme === key} render={<button type="button" aria-pressed={draft.theme === key} />} onClick={() => setDraft({ ...draft, theme: key })}>
@@ -86,7 +86,7 @@ export function AppearancePanel() {
           </ChoiceCard>
         ))}
       </ChoiceBoard>
-      <SectionHeader title="动效" description="电脑卡的时候选「省电」，显卡占用会明显下降" />
+      <SectionHeader flush title="动效" description="电脑卡的时候选「省电」，显卡占用会明显下降" />
       <ChoiceBoard label="动效">
         {motions.map(([key, label, caption]) => (
           <ChoiceCard key={key} selected={draft.motion === key} render={<button type="button" aria-pressed={draft.motion === key} />} onClick={() => setDraft({ ...draft, motion: key })}>

@@ -1,14 +1,46 @@
 kernel: mihomo
 name: mihomo-1
 min_version: 1.19.0
-notes: 仅用于订阅检查和临时客户端实测，不提供服务端入站。
-protocols: [vless, vmess, trojan, shadowsocks, hysteria2, tuic, shadowtls, socks, http, wireguard, anytls]
+notes: 订阅检查、临时客户端实测和回环辅助出站；不提供公网服务端入站。
+protocols: [vless, vmess, trojan, shadowsocks, hysteria2, tuic, shadowtls, socks, http, wireguard, anytls, snell, ssr]
+outbound_networks: [tcp, ws, grpc]
+features: [hosted-outbounds, native-connections]
 run: [-f, "{config}"]
 check: [-t, -f, "{config}"]
 templates:
   root:
+    external-controller?: "${observer.listen}"
+    secret?: "${observer.secret}"
     mode: rule
     allow-lan: false
     bind-address: 127.0.0.1
-    proxies: []
-    rules: []
+    listeners:
+      - $each: "${bridges}"
+        $as: bridge
+        $do:
+          name: "${bridge.tag}"
+          type: socks
+          listen: 127.0.0.1
+          port: "${bridge.port}"
+          udp: true
+          users: [{username: "${bridge.username}", password: "${bridge.password}"}]
+          proxy: "${bridge.target}"
+    proxies:
+      - $each: "${bridges}"
+        $as: bridge
+        $do: "${bridge.client}"
+    rules: ["MATCH,REJECT"]
+  outbound.vless: {}
+  outbound.vmess: {}
+  outbound.trojan: {}
+  outbound.shadowsocks: {}
+  outbound.hysteria2: {}
+  outbound.tuic: {}
+  outbound.shadowtls: {}
+  outbound.socks: {}
+  outbound.http: {}
+  outbound.https: {}
+  outbound.wireguard: {}
+  outbound.anytls: {}
+  outbound.snell: {}
+  outbound.ssr: {}

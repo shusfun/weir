@@ -1,7 +1,15 @@
 // 新中心接口的类型与通用换算（Gate、节点、用户、链接、链式代理、订阅）。
 import type { LampTone } from "@weir/ui";
 
+export interface ObjectState { status: string; label?: string; reason: string; observed_at?: string | null; next: string[] }
+export function objectStatus(state?: ObjectState): [string, Exclude<LampTone, "active">, string] {
+  if (!state) return ["未知", "unknown", "中心尚未提供状态结论"];
+  const tone: Record<string, Exclude<LampTone, "active">> = { ok: "ok", partial: "warn", failed: "bad", warning: "warn", pending: "warn", stale: "warn", disabled: "off", revoked: "off", unavailable: "off" };
+  return [state.label || "未知", tone[state.status] || "unknown", state.reason];
+}
+
 export interface Gate {
+	object_state?: ObjectState;
   id: number;
   name: string;
   status: "active" | "revoked";
@@ -17,7 +25,7 @@ export interface Gate {
   // Gate 上报的 1Panel 状态；缺失表示还没有上报（未知）。
   panel?: { kind?: string; http01_webroot?: boolean; detected?: boolean; configured?: boolean; version?: string; error?: string } | null;
   // 本机防火墙（ufw / firewalld / iptables / none）；缺失表示这次没读到（未知）。
-  firewall?: { tool: string; active: boolean; rules?: string[]; error?: string } | null;
+  firewall?: { tool: string; active: boolean; rules?: string[]; error?: string; managed_version?: number } | null;
   // 单机安装时建议的公网地址（本机网卡上的公网 IP）；colocated：中心与这台 VPS 在同一台机器上。
   public_host_hint?: string;
   colocated?: boolean;
@@ -68,6 +76,8 @@ export interface ExitProbe {
   latency_ms?: number;
   exit_ip?: string;
   note?: string;
+  error?: string;
+  udp?: boolean;
   at: string;
 }
 
@@ -148,6 +158,8 @@ export interface ExitSpec {
   profile_id?: number;
   mode?: "node" | "filter";
   match?: string;
+  identity?: string;
+  insecure_identities?: string[];
 }
 
 // SourceResolved 是订阅源出口当前用的节点（一组时为全部成员）；resolved 为空表示还没解析成功。
@@ -167,6 +179,7 @@ export interface Withheld {
 }
 
 export interface NodeItem extends NodeChoice {
+	object_state?: ObjectState;
   id: number;
   gate_id: number;
   gate_name?: string;
@@ -228,6 +241,7 @@ export interface Entry {
 }
 
 export interface LinkItem {
+	 catalog_refs?: string[];
   id: number;
   name: string;
   token: string;
@@ -404,6 +418,7 @@ export interface ChainItem {
 }
 
 export interface UserItem {
+	object_state?: ObjectState;
   id: number;
   email: string;
   name: string;
@@ -461,22 +476,11 @@ export const protocolNames: Record<string, string> = {
   shadowsocks: "Shadowsocks 2022",
   hysteria2: "Hysteria2",
   tuic: "TUIC",
+  anytls: "AnyTLS",
 };
 
-export function nodeStatus(n: NodeItem, g?: Gate): [string, LampTone, string] {
-  if (!n.enabled) return ["已停用", "off", "节点已停用，不在订阅里"];
-  if (!g || g.status === "revoked") return ["离线", "bad", "VPS 已撤销"];
-  if (!g.online) return ["离线", "bad", "VPS 离线"];
-  if (g.state === "failed") return ["待生效", "bad", "VPS 配置应用失败，仍在用上一份配置：" + g.last_error];
-  if (g.state === "pending") return ["待生效", "warn", "配置正在下发到 VPS"];
-  if (n.readiness && n.readiness.state !== "ready") {
-    const label = ({ credentials: "待分配", pending: "待生效", kernel: "内核未运行", listener: "未监听", unknown: "未知" } as Record<string, string>)[n.readiness.state] ?? "未知";
-    return [label, n.readiness.state === "credentials" || n.readiness.state === "pending" ? "warn" : "unknown", n.readiness.why];
-  }
-  if ((n.ports ?? []).some((p) => p.firewall === "blocked")) return ["未放行", "bad", (n.ports ?? []).find((p) => p.firewall === "blocked")?.why ?? "本机防火墙没有放行端口"];
-  if (n.reach?.status === "failed") return ["连不上", "bad", (n.reach.why ?? "中心从外部连不上") + "。这是中心的连接结果，节点是否真的不可用以客户端实测为准"];
-  if (n.reach?.status === "ok") return ["在线", "ok", n.reach.latency_ms ? `中心 TCP 连接用了 ${n.reach.latency_ms} ms；协议连接以客户端实测为准` : "中心 TCP 端口可达；协议连接以客户端实测为准"];
-  return ["未知", "unknown", n.reach?.why ?? "还没有外部连接结果"];
+export function nodeStatus(n: NodeItem, _g?: Gate): [string, LampTone, string] {
+  return objectStatus(n.object_state);
 }
 
 // relativeTime：「30 秒前」「5 分钟前」；没有时间时为「未知时间」，不当成刚刚。
@@ -492,14 +496,17 @@ export function relativeTime(value?: string | null) {
 
 export interface ExitReference { type: "node" | "chain" | "route"; id: number; name: string; owner?: number; enabled: boolean }
 export interface ExitItem extends ExitSpec {
+ object_state?: ObjectState;
+ has_password?: boolean; has_link?: boolean;
  summary?: DisplaySummary;
  id: number; gate_id: number; owner_user_id: number | null; tag: string; label: string; enabled: boolean; policy_type: string;
  references: ExitReference[]; probe?: ExitProbe; udp?: "supported" | "unsupported" | "unknown";
- source?: {source_id?:number;profile_id?:number;mode?:"node"|"filter";match?:string};
+ source?: {source_id?:number;profile_id?:number;mode?:"node"|"filter";match?:string;identity?:string;insecure_identities?:string[]};
  resolved?: SourceResolved; place?: {known:boolean;country?:string;city?:string;ip?:string;why?:string};
 }
 export interface ExitKindInfo {kind:ExitKind;label:string;group:string;description:string;admin_only:boolean}
-export interface ExitList {items:ExitItem[];kinds:ExitKindInfo[]}
+export interface ExitDirectoryItem {id:number;owner_user_id:number|null;address:string;port:number;kind:ExitKind;conflict:boolean;reason:string;deployments:ExitItem[]}
+export interface ExitList {items:ExitItem[];kinds:ExitKindInfo[];directory:ExitDirectoryItem[]}
 
 export function linkNeedsAttention(link: Pick<LinkItem, "enabled" | "state">, stats?: Pick<LinkStats, "refused_30d">) {
  return !link.enabled || link.state === "expired" || (stats?.refused_30d ?? 0) > 0;

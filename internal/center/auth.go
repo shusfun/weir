@@ -122,7 +122,8 @@ func (s *Server) failedLoginEvent(c *gin.Context, email string) bool {
 
 func userView(u *ent.User) gin.H {
 	return gin.H{
-		"id": u.ID, "email": u.Email, "name": u.Name, "role": u.Role, "enabled": u.Enabled,
+		"object_state": userObjectState(u),
+		"id":           u.ID, "email": u.Email, "name": u.Name, "role": u.Role, "enabled": u.Enabled,
 		"quota": u.Quota, "unlimited": u.Unlimited, "used": u.Used, "expires_at": u.ExpiresAt, "monthly_reset": u.MonthlyReset,
 		"all_nodes": u.AllNodes, "allow_chain": u.AllowChain, "totp_enrolled": u.TotpSecret != "",
 		"email_verified": true, "created_at": u.CreatedAt,

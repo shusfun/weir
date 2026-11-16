@@ -115,4 +115,22 @@ func TestDiscoverablePasskeySignedLoginAndWrongUserHandle(t *testing.T) {
 	if w.Code != 401 || disabled.cookie != nil {
 		t.Fatal("disabled account used passkey", w.Code, w.Body)
 	}
+	s.Store.Ent.User.UpdateOneID(u.ID).SetEnabled(true).ExecX(t.Context())
+	owner := login(t, s, "Admin@Example.test", "Passw0rd")
+	keys := mustJSON(t, owner, "GET", "/api/v1/security/passkeys", nil, 200)
+	items := keys["items"].([]any)
+	if len(items) != 1 {
+		t.Fatal("registered passkey missing", keys)
+	}
+	id := int(items[0].(map[string]any)["id"].(float64))
+	if w = owner.do("DELETE", "/api/v1/security/passkeys/"+itoa(id), map[string]any{"password": "wrong"}, nil); w.Code != 401 {
+		t.Fatal("wrong password deleted passkey", w.Code, w.Body)
+	}
+	mustJSON(t, owner, "DELETE", "/api/v1/security/passkeys/"+itoa(id), map[string]any{"password": "Passw0rd"}, 200)
+	fresh := &testClient{t: t, router: s.Router()}
+	v = mustJSON(t, fresh, "POST", "/api/v1/auth/passkey/begin", map[string]any{}, 200)
+	w = fresh.do("POST", "/api/v1/auth/passkey/finish", a.assertion(t, challengeOf(v), u.ID, 4), map[string]string{"X-Passkey-Token": v["token"].(string)})
+	if w.Code != 401 || fresh.cookie != nil {
+		t.Fatal("deleted passkey still logged in", w.Code, w.Body)
+	}
 }

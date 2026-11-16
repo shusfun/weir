@@ -55,6 +55,7 @@ type ParseResult struct {
 }
 
 type Settings struct {
+	SSR               *SSRSettings       `json:"ssr,omitempty"`
 	Snell             *SnellSettings     `json:"snell,omitempty"`
 	WireGuard         *WireGuardSettings `json:"wireguard,omitempty"`
 	Security          string             `json:"security,omitempty"`
@@ -287,6 +288,8 @@ func ParseLink(raw string) (ParsedLink, error) {
 		return parseURLLink(raw, "trojan")
 	case strings.HasPrefix(lower, "ss://"):
 		return parseSSLink(raw)
+	case strings.HasPrefix(lower, "ssr://"):
+		return parseSSRLink(raw)
 	case strings.HasPrefix(lower, "vmess://"):
 		return parseVMessLink(raw)
 	case strings.HasPrefix(lower, "hysteria2://"), strings.HasPrefix(lower, "hy2://"):

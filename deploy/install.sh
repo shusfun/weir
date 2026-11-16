@@ -386,7 +386,7 @@ if [ "$has_gate" = true ]; then
  cat > "$units_dir/weir-helper.service" <<'UNIT'
 [Unit]
 Description=Weir bounded core helper
-After=network-online.target
+After=network-online.target ufw.service firewalld.service netfilter-persistent.service
 StartLimitIntervalSec=0
 [Service]
 Group=weir-gate
@@ -404,6 +404,8 @@ ReadWritePaths=-/run/lock/weir-install.lock
 ExecStartPre=+/usr/bin/touch /run/lock/weir-install.lock
 ReadWritePaths=-/run/ufw.lock
 ExecStartPre=+/usr/bin/touch /run/ufw.lock
+ReadWritePaths=-/run/xtables.lock -/etc/ufw -/var/lib/ufw
+ExecStartPre=+/usr/bin/touch /run/xtables.lock
 ReadWritePaths=-/www/server/nginx/html/.well-known/acme-challenge
 ReadWritePaths=-/etc/resolv.conf -/etc/systemd/resolved.conf.d -/run/systemd/resolve
 [Install]

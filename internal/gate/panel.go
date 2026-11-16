@@ -514,7 +514,7 @@ func (h *Helper) closeACME() {
 }
 
 // installCertFiles 原子写入 <id>.crt / <id>.key，属组设为内核运行账号。
-func (h *Helper) installCertFiles(id int, certPEM, keyPEM string) error {
+func (h *Helper) installCertFiles(id int, certPEM, keyPEM string) (result error) {
 	pair, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))
 	if err != nil {
 		return errors.New("证书与私钥不匹配")
@@ -523,18 +523,57 @@ func (h *Helper) installCertFiles(id int, certPEM, keyPEM string) error {
 	if err != nil || time.Now().Before(cert.NotBefore) || !time.Now().Before(cert.NotAfter) {
 		return errors.New("证书不在有效期内")
 	}
-	if err := os.MkdirAll(h.P.CertsDir, 0750); err != nil {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.disabled() {
+		return errGateRevoked
+	}
+	if h.probePlan != nil && h.probePlan.CertID == int64(id) {
+		if err = cert.VerifyHostname(h.probePlan.Host); err != nil {
+			return errors.New("更新证书与测试域名不匹配")
+		}
+	}
+	if err = os.MkdirAll(h.P.CertsDir, 0750); err != nil {
 		return err
 	}
-	for ext, data := range map[string]string{"crt": certPEM, "key": keyPEM} {
+	var before []appliedFile
+	for _, ext := range []string{"crt", "key"} {
 		path := filepath.Join(h.P.CertsDir, fmt.Sprintf("%d.%s", id, ext))
-		if err := os.WriteFile(path+".new", []byte(data), 0640); err != nil {
+		body, err := os.ReadFile(path)
+		if err != nil && !os.IsNotExist(err) {
 			return err
 		}
-		h.shareWithAgent(path + ".new")
-		if err := os.Rename(path+".new", path); err != nil {
+		before = append(before, appliedFile{path: path, body: body, exists: err == nil})
+	}
+	previous := h.probePlan
+	defer func() {
+		if result == nil {
+			return
+		}
+		var rollback []error
+		for _, f := range before {
+			if f.exists {
+				rollback = append(rollback, writeAtomic(f.path, f.body))
+			} else {
+				err := os.Remove(f.path)
+				if err != nil && !os.IsNotExist(err) {
+					rollback = append(rollback, err)
+				}
+			}
+		}
+		if previous != nil && previous.CertID == int64(id) {
+			rollback = append(rollback, h.applyBrowserTest(previous))
+		}
+		result = errors.Join(result, errors.Join(rollback...))
+	}()
+	for i, data := range []string{certPEM, keyPEM} {
+		if err = writeAtomic(before[i].path, []byte(data)); err != nil {
 			return err
 		}
+		h.shareWithAgent(before[i].path)
+	}
+	if previous != nil && previous.CertID == int64(id) {
+		return h.applyBrowserTest(previous)
 	}
 	return nil
 }

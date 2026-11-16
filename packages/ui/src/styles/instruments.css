@@ -324,8 +324,8 @@
   .weir-folder-compact .weir-folder-front { height: 57%; }
   .weir-folder-slot {
     display: flex;
-    height: calc(var(--weir-folder-h) - 23px);
-    margin-top: 23px;
+    width: 100%;
+    height: var(--weir-folder-h);
     flex-direction: column;
     align-items: center;
     justify-content: center;
@@ -339,8 +339,10 @@
     corner-shape: squircle;
   }
   .weir-folder-slot b { color: var(--weir-ink-2); }
-  .weir-folder-slot-plus { font-size: var(--weir-text-title1); line-height: 29px; }
-  .weir-folder-slot:hover { border-color: var(--weir-input-line-hi); color: var(--weir-ink-2); }
+  .weir-folder-slot-plus { width: var(--weir-gap-29); height: var(--weir-gap-29); transition: transform var(--weir-fast) var(--weir-ease); }
+  .weir-folder-slot:is(:hover, :focus-visible) { border-color: var(--weir-input-line-hi); color: var(--weir-ink-2); }
+  .weir-folder-slot:is(:hover, :focus-visible) .weir-folder-slot-plus { transform: translateY(calc(-1 * var(--weir-gap-3))); }
+  .weir-folder-slot:active .weir-folder-slot-plus { transform: translateY(var(--weir-gap-3)); }
 
   .weir-dot-block { display: grid; gap: var(--weir-gap-7); }
   .weir-dot-label {
@@ -551,6 +553,9 @@
   /* 卡片里的一行（稿子 .v-set） */
   .weir-set-row { display: flex; min-height: var(--weir-draft-peek-height); align-items: center; justify-content: space-between; gap: var(--weir-gap-17); padding: var(--weir-gap-13) var(--weir-gap-21); }
   .weir-set-row + .weir-set-row { border-top: 1px solid var(--weir-line-soft); }
+  .weir-node-management-row { flex-wrap: wrap; padding: var(--weir-space-2) 0; }
+  .weir-node-management-summary { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .weir-node-management-wait { flex-basis: 100%; min-width: 0; }
   /* 草稿叠放（稿子运行观测）：后面两份只露出一条，当前那份浮在最上 */
   .weir-draft-stack { position: relative; padding-top: 0; }
   .weir-draft-peek { position: absolute; top: 0; left: var(--weir-gap-29); right: var(--weir-gap-29); display: flex; height: var(--weir-draft-peek-height); justify-content: space-between; padding: var(--weir-gap-13) var(--weir-gap-21); border: 1px solid var(--weir-line-soft); border-radius: var(--weir-radius-surface); background: var(--weir-well); color: var(--weir-ink-3); font-size: var(--weir-text-meta); corner-shape: squircle; }
@@ -796,7 +801,7 @@
 
 @media (max-width: 767.98px) {
   .weir-insight { align-items: flex-start; flex-wrap: wrap; }
-  .weir-folder { height: calc(var(--weir-folder-h) * 0.8); }
+  .weir-folder, .weir-folder-slot { height: var(--weir-folder-mobile-h); }
 }
 
 .weir-draft-stack[data-count="2"] { padding-top: var(--weir-gap-13); }

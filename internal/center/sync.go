@@ -361,7 +361,12 @@ func (s *Server) syncInternalLocked(ctx context.Context) ([]int, error) {
 		}
 		touched[exitID] = true
 	}
-	return s.gatesOf(ctx, touched)
+	gates, err := s.gatesOf(ctx, touched)
+	if err != nil {
+		return nil, err
+	}
+	uotGates, err := s.syncUoT(ctx, es)
+	return append(gates, uotGates...), err
 }
 
 // reconcileCredentialJournal also covers deleted users whose last revocation

@@ -42,11 +42,11 @@ func TestSourceMalformedContentPreservesCacheAndKnownEmpty(t *testing.T) {
 		body = empty
 		cache := &memCache{m: map[int][]string{1: {good}}}
 		nodes, result := fetchSource(t.Context(), f, cache, Source{ID: 1, URL: "https://source.example", NodeCache: true, KnownNodes: 12}, Options{})
-		if result.Error != "" || result.FromCache || len(nodes) != 0 {
-			t.Fatalf("valid empty rejected: %q %+v", empty, result)
+		if result.Error != "source_empty_rejected" || !result.FromCache || len(nodes) != 1 {
+			t.Fatalf("empty response replaced good data: %q %+v", empty, result)
 		}
-		if saved, ok := cache.Load(t.Context(), 1); !ok || len(saved) != 0 {
-			t.Fatal("old raw nodes survived a valid empty response")
+		if saved, ok := cache.Load(t.Context(), 1); !ok || len(saved) != 1 {
+			t.Fatal("empty response erased the old cache")
 		}
 	}
 }
@@ -87,8 +87,13 @@ func TestRawCacheReappliesRulesAndAcceptsEmpty(t *testing.T) {
 	fail = false
 	body = ""
 	nodes, r = fetchSource(ctx, f, cache, src, Options{})
-	if len(nodes) != 0 || r.FromCache || r.Error != "" {
+	if len(nodes) != 1 || !r.FromCache || r.Error != "source_empty_rejected" {
 		t.Fatalf("empty: %v %+v", nodes, r)
+	}
+	src.AcceptEmpty = true
+	nodes, r = fetchSource(ctx, f, cache, src, Options{})
+	if len(nodes) != 0 || r.Error != "" {
+		t.Fatalf("confirmed empty: %+v", r)
 	}
 	src.NodeCache = false
 	body = trojan(1, "small")

@@ -62,7 +62,7 @@ func stubDeployedProbe(t *testing.T, run func(context.Context, nodeprobe.Options
 		return results, nil
 	}
 	deployedNodeProbe = run
-	deployedProbeBinary = func(*Server, context.Context) (string, kernelconf.Driver, error) {
+	deployedProbeBinary = func(*Server, context.Context, string) (string, kernelconf.Driver, error) {
 		return "test-mihomo", kernelconf.Driver{Run: []string{"-f", "{config}"}, Check: []string{"-t", "-f", "{config}"}}, nil
 	}
 	t.Cleanup(func() {
@@ -83,6 +83,37 @@ func startNodeTest(t *testing.T, admin *testClient, id int) Job {
 		t.Fatal(err)
 	}
 	return body.Job
+}
+
+func TestDeployedNodeTestReplacesStaleRunningTask(t *testing.T) {
+	s, admin, n := readyDeployedNode(t, "ss2022")
+	stubDeployedProbe(t, func(ctx context.Context, o nodeprobe.Options) (nodeprobe.Result, error) {
+		return nodeprobe.Result{TCP: nodeprobe.Check{Status: "passed"}, UDP: nodeprobe.Check{Status: "passed"}}, nil
+	})
+	old := s.jobs.StartWith(jobSpec{ID: "stale-running-probe", Owner: 1}, func(ctx context.Context, _ JobRun) (map[string]any, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+	s.nodeProbes.Lock()
+	if s.nodeProbes.jobs == nil {
+		s.nodeProbes.jobs = map[int]string{}
+	}
+	s.nodeProbes.jobs[n.ID] = old.ID
+	s.nodeProbes.Unlock()
+	raw, _ := json.Marshal(pendingNodeProbe{NodeID: n.ID, Binding: "previous-configuration", Deployed: true})
+	if err := s.Store.KV.Set(t.Context(), pendingNodeProbePrefix+itoa(n.ID), string(raw), 0); err != nil {
+		t.Fatal(err)
+	}
+	next := startNodeTest(t, admin, n.ID)
+	if next.ID == old.ID {
+		t.Fatal("returned obsolete job for new configuration")
+	}
+	if r := finishNodeTest(t, s, next); r.Status != "passed" {
+		t.Fatalf("replacement probe: %+v", r)
+	}
+	if j, ok := s.jobs.Get(old.ID); !ok || j.Status != jobCancelled {
+		t.Fatalf("obsolete task not cancelled: %+v", j)
+	}
 }
 
 func finishNodeTest(t *testing.T, s *Server, j Job) nodeTestResult {

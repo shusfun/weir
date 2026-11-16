@@ -4,6 +4,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { LoaderCircle } from "lucide-react";
 import { cn } from "cn";
 import { Tooltip } from "./tooltip";
+import { useFormContext } from "./form";
 
 // 文字与图标按钮共用尺寸档位：默认 33、小号 29，触屏至少 45。尺寸与内边距统一由公共样式决定。
 const buttonVariants = cva(
@@ -52,6 +53,7 @@ function Button({
   children,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants> & { busy?: boolean; busyText?: string }) {
+  const form = useFormContext();
   const iconOnly = typeof size === "string" && size.startsWith("icon");
   const label =
     busy === undefined ? children : iconOnly ? (
@@ -73,9 +75,10 @@ function Button({
       className={cn(buttonVariants({ variant, size, className }))}
       // 以链接等非 <button> 元素渲染时（render={<Link/>}）告知 Base UI，避免丢失按钮语义的警告
       nativeButton={nativeButton ?? !props.render}
-      disabled={disabled || busy}
+      disabled={disabled || busy || (props.type === "submit" && form?.busy)}
       aria-busy={busy || undefined}
       {...props}
+      form={props.form ?? (props.type === "submit" ? form?.id : undefined)}
     >
       {label}
     </ButtonPrimitive>

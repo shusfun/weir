@@ -21,7 +21,7 @@ func TestGateActionBoundToTargetDevice(t *testing.T) {
 	if _, err = s.enqueueAction(t.Context(), int(b.id), contracts.ActionDiagnostics, map[string]any{"kernel": "xray"}, time.Minute); err != nil {
 		t.Fatal(err)
 	}
-	code, body := b.call("GET", "/api/v1/agent/actions", nil)
+	code, body := b.pollActions()
 	var list []contracts.Action
 	if json.Unmarshal(body, &list) != nil || len(list) == 0 {
 		t.Fatalf("own action not delivered: %d %s", code, body)
@@ -34,7 +34,7 @@ func TestGateActionBoundToTargetDevice(t *testing.T) {
 	if code, _ := b.call("POST", "/api/v1/agent/actions/"+itoa(action.ID), contracts.ActionResult{OK: true}); code != 404 {
 		t.Fatalf("other gate reported the result: %d", code)
 	}
-	if got, _ := s.Store.Ent.GateAction.Get(t.Context(), action.ID); got.Status != "pending" {
+	if got, _ := s.Store.Ent.GateAction.Get(t.Context(), action.ID); got.Status != "running" {
 		t.Fatalf("action status changed by wrong gate: %s", got.Status)
 	}
 }

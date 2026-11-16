@@ -14,7 +14,7 @@ import (
 func TestWorkerPollDeliversCertReplacementWithoutRevisionBump(t *testing.T) {
 	s, admin := newInstalledServer(t)
 	g := pairFakeGate(t, admin)
-	caps := contracts.CapabilityDocument{Protocol: 2, Version: "test", Arch: "amd64"}
+	caps := contracts.CapabilityDocument{Protocol: 2, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.TaskCoreInstall: contracts.TaskVersion}}
 	code, body := g.call("POST", "/api/v1/agent/poll", contracts.AgentPoll{Protocol: 2, Capabilities: &caps, Resources: contracts.WorkerResources{Concurrency: 1}})
 	if code != 200 {
 		t.Fatalf("poll: %d %s", code, body)
@@ -36,7 +36,7 @@ func TestWorkerPollDeliversCertReplacementWithoutRevisionBump(t *testing.T) {
 func TestWorkerPollDeliversExecutionWithoutRevisionBump(t *testing.T) {
 	s, admin := newInstalledServer(t)
 	g := pairFakeGate(t, admin)
-	caps := contracts.CapabilityDocument{Protocol: 2, Version: "test", Arch: "amd64"}
+	caps := contracts.CapabilityDocument{Protocol: 2, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.TaskCoreInstall: contracts.TaskVersion}}
 	code, body := g.call("POST", "/api/v1/agent/poll", contracts.AgentPoll{Protocol: 2, Capabilities: &caps, Resources: contracts.WorkerResources{Concurrency: 1}})
 	var first contracts.AgentPollReply
 	if json.Unmarshal(body, &first) != nil || code != 200 || first.Config == nil {
@@ -82,7 +82,7 @@ func TestWorkerChannelConfigurationTaskAndLease(t *testing.T) {
 	s, admin := newInstalledServer(t)
 	g := pairFakeGate(t, admin)
 	ctx := context.Background()
-	caps := contracts.CapabilityDocument{Protocol: 2, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.ActionLiveStart: 1}}
+	caps := contracts.CapabilityDocument{Protocol: 2, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.TaskCoreInstall: contracts.TaskVersion, contracts.ActionLiveStart: 1}}
 	code, body := g.call("POST", "/api/v1/agent/poll", contracts.AgentPoll{Protocol: 2, Capabilities: &caps, Resources: contracts.WorkerResources{Concurrency: 1}})
 	if code != 200 {
 		t.Fatalf("poll: %d %s", code, body)
@@ -119,7 +119,7 @@ func TestWorkerChannelConfigurationTaskAndLease(t *testing.T) {
 	other := pairFakeGate(t, admin)
 	u.LeaseToken = task.LeaseToken
 	code, _ = g.call("POST", "/api/v1/agent/actions/"+itoa(a.ID), contracts.ActionResult{OK: true})
-	if code != 409 {
+	if code != 404 {
 		t.Fatalf("legacy endpoint bypassed lease: %d", code)
 	}
 	code, _ = other.call("POST", "/api/v1/agent/tasks/"+task.ID+"/result", u)
@@ -143,7 +143,7 @@ func TestWorkerChannelConfigurationTaskAndLease(t *testing.T) {
 	}
 }
 
-func TestWorkerUpgradeMigratesPendingAndAcknowledgesCancellation(t *testing.T) {
+func TestWorkerAcknowledgesCancellation(t *testing.T) {
 	s, admin := newInstalledServer(t)
 	g := pairFakeGate(t, admin)
 	ctx := context.Background()
@@ -151,7 +151,7 @@ func TestWorkerUpgradeMigratesPendingAndAcknowledgesCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	caps := contracts.CapabilityDocument{Protocol: 2, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.ActionPanelConfigure: 1}}
+	caps := contracts.CapabilityDocument{Protocol: 2, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.TaskCoreInstall: contracts.TaskVersion, contracts.ActionPanelConfigure: 1}}
 	code, body := g.call("POST", "/api/v1/agent/poll", contracts.AgentPoll{Protocol: 2, Capabilities: &caps, Resources: contracts.WorkerResources{Concurrency: 1}})
 	var reply contracts.AgentPollReply
 	if err = json.Unmarshal(body, &reply); err != nil || code != 200 || len(reply.Tasks) != 1 {
@@ -164,9 +164,6 @@ func TestWorkerUpgradeMigratesPendingAndAcknowledgesCancellation(t *testing.T) {
 	stored, _ := s.Store.Ent.GateAction.Get(ctx, a.ID)
 	if stored.Status != gateaction.StatusRunning || len(stored.Payload) != 1 {
 		t.Fatalf("legacy row: %+v", stored)
-	}
-	if err = s.migratePendingActions(ctx, int(g.id)); err != nil {
-		t.Fatal(err)
 	}
 	rs, err := s.Store.Tasks.List(ctx, 10)
 	if err != nil || len(rs) != 1 {

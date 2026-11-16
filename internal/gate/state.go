@@ -22,33 +22,62 @@ type Counter struct {
 
 // State 是 Agent 的本地状态，原子写入 <Data>/state.json。中心离线时依靠它继续执行额度与到期。
 type State struct {
-	PendingMeter      *contracts.MeterReport `json:"pending_meter,omitempty"`
-	AcknowledgedEpoch string                 `json:"acknowledged_epoch,omitempty"`
-	Acknowledged      map[string]Counter     `json:"acknowledged,omitempty"`
-	Config            *contracts.GateConfig  `json:"config,omitempty"` // 最后一份成功应用的配置
-	Applied           int64                  `json:"applied"`
-	Epoch             string                 `json:"epoch"` // 本地计量纪元；状态丢失时换新，中心据此从零起算
-	Seq               int64                  `json:"seq"`
-	Totals            map[string]Counter     `json:"totals"`   // 本纪元内各凭据累计（单调递增）
-	Last              map[string]Counter     `json:"last"`     // 上一次的内核原始读数
-	Baseline          map[string]int64       `json:"baseline"` // 收到配置时各用户的本地累计
-	Signature         string                 `json:"signature"`
+	CoreLast          map[string]map[string]Counter          `json:"core_last,omitempty"`
+	MeterTrace        string                                 `json:"meter_trace,omitempty"`
+	Domains           map[string]contracts.DomainObservation `json:"domains,omitempty"`
+	DomainCoverage    map[string]contracts.DomainCoverage    `json:"domain_coverage,omitempty"`
+	RuleCounters      map[string]RuleCounter                 `json:"rule_counters,omitempty"`
+	CoreInstances     map[string]string                      `json:"core_instances,omitempty"`
+	Revoked           bool                                   `json:"revoked,omitempty"`
+	CorePIDs          map[string]int                         `json:"core_pids,omitempty"`
+	PendingMeter      *contracts.MeterReport                 `json:"pending_meter,omitempty"`
+	AcknowledgedEpoch string                                 `json:"acknowledged_epoch,omitempty"`
+	Acknowledged      map[string]Counter                     `json:"acknowledged,omitempty"`
+	Config            *contracts.GateConfig                  `json:"config,omitempty"` // 最后一份成功应用的配置
+	Applied           int64                                  `json:"applied"`
+	Epoch             string                                 `json:"epoch"` // 本地计量纪元；状态丢失时换新，中心据此从零起算
+	Seq               int64                                  `json:"seq"`
+	Totals            map[string]Counter                     `json:"totals"`   // 本纪元内各凭据累计（单调递增）
+	Last              map[string]Counter                     `json:"last"`     // 上一次的内核原始读数
+	Baseline          map[string]int64                       `json:"baseline"` // 收到配置时各用户的本地累计
+	Signature         string                                 `json:"signature"`
+}
+
+func (st *State) absorbKernel(name string, pid int, instance string, raw map[string]Counter) bool {
+	if st.CorePIDs == nil {
+		st.CorePIDs = map[string]int{}
+	}
+	if st.CoreInstances == nil {
+		st.CoreInstances = map[string]string{}
+	}
+	previous := st.CorePIDs[name]
+	changed := previous != 0 && previous != pid
+	if prior := st.CoreInstances[name]; prior != "" && instance != "" {
+		changed = prior != instance
+	}
+	if st.CoreLast == nil {
+		st.CoreLast = map[string]map[string]Counter{}
+	}
+	if st.CoreLast[name] == nil {
+		st.CoreLast[name] = map[string]Counter{}
+	}
+	st.absorbInto(raw, changed, st.CoreLast[name])
+	st.CorePIDs[name] = pid
+	st.CoreInstances[name] = instance
+	return changed
 }
 
 // A report remains immutable until the center acknowledges its exact epoch
 // and sequence. Baselines survive restarts alongside the pending report.
-func (st *State) prepareMeter(fresh, partialSupported bool) contracts.MeterReport {
+func (st *State) prepareMeter(fresh bool) contracts.MeterReport {
 	if st.PendingMeter != nil {
 		return *st.PendingMeter
 	}
-	rep := contracts.MeterReport{Revision: st.Applied, Epoch: st.Epoch, Seq: st.Seq, Status: "fresh"}
+	rep := contracts.MeterReport{Protocol: 2, Revision: st.Applied, Epoch: st.Epoch, Seq: st.Seq, Status: "fresh"}
 	if !fresh {
 		rep.Status = "unavailable"
 	}
-	if partialSupported {
-		rep.Protocol = 2
-		rep.Partial = st.AcknowledgedEpoch == st.Epoch
-	}
+	rep.Partial = st.AcknowledgedEpoch == st.Epoch
 	for key, total := range st.Totals {
 		previous, ok := st.Acknowledged[key]
 		if rep.Partial && ok && previous == total {
@@ -56,10 +85,18 @@ func (st *State) prepareMeter(fresh, partialSupported bool) contracts.MeterRepor
 		}
 		rep.Usage = append(rep.Usage, contracts.MeterSample{StatsKey: key, Up: total.Up, Down: total.Down})
 	}
-	sort.Slice(rep.Usage, func(i, j int) bool { return rep.Usage[i].StatsKey < rep.Usage[j].StatsKey })
-	if rep.Protocol == 2 {
-		st.PendingMeter = &rep
+	for _, row := range st.RuleCounters {
+		rep.Rules = append(rep.Rules, row.Sample)
 	}
+	st.domainReport(&rep)
+	sort.Slice(rep.Rules, func(i, j int) bool {
+		if rep.Rules[i].Engine == rep.Rules[j].Engine {
+			return rep.Rules[i].RuleID < rep.Rules[j].RuleID
+		}
+		return rep.Rules[i].Engine < rep.Rules[j].Engine
+	})
+	sort.Slice(rep.Usage, func(i, j int) bool { return rep.Usage[i].StatsKey < rep.Usage[j].StatsKey })
+	st.PendingMeter = &rep
 	return rep
 }
 
@@ -91,13 +128,34 @@ func loadState(path string) State {
 		_ = json.Unmarshal(b, &st)
 	}
 	if st.Epoch == "" {
-		st = State{Epoch: newEpoch()}
+		st = State{Epoch: newEpoch(), Revoked: st.Revoked}
 	}
 	if st.Totals == nil {
 		st.Totals = map[string]Counter{}
 	}
 	if st.Last == nil {
 		st.Last = map[string]Counter{}
+	}
+	if st.CoreLast == nil {
+		st.CoreLast = map[string]map[string]Counter{}
+		if st.Config != nil {
+			engines := map[int64]string{}
+			for _, in := range st.Config.Inbounds {
+				engines[in.ID] = in.Kernel
+			}
+			for _, c := range st.Config.Credentials {
+				engine := engines[c.InboundID]
+				if engine == "" {
+					continue
+				}
+				if st.CoreLast[engine] == nil {
+					st.CoreLast[engine] = map[string]Counter{}
+				}
+				if last, ok := st.Last[c.StatsKey]; ok {
+					st.CoreLast[engine][c.StatsKey] = last
+				}
+			}
+		}
 	}
 	if st.Baseline == nil {
 		st.Baseline = map[string]int64{}
@@ -122,8 +180,11 @@ func (st *State) save(path string) error {
 // absorb 把内核原始累计读数并入本地累计。restarted 为真（内核 PID 变化）或读数回退时，
 // 说明内核已重启、计数从零开始，新读数整份计入。
 func (st *State) absorb(raw map[string]Counter, restarted bool) {
+	st.absorbInto(raw, restarted, st.Last)
+}
+func (st *State) absorbInto(raw map[string]Counter, restarted bool, baseline map[string]Counter) {
 	for key, r := range raw {
-		last, tot := st.Last[key], st.Totals[key]
+		last, tot := baseline[key], st.Totals[key]
 		if restarted || r.Up < last.Up || r.Down < last.Down {
 			tot.Up += r.Up
 			tot.Down += r.Down
@@ -131,7 +192,7 @@ func (st *State) absorb(raw map[string]Counter, restarted bool) {
 			tot.Up += r.Up - last.Up
 			tot.Down += r.Down - last.Down
 		}
-		st.Totals[key], st.Last[key] = tot, r
+		st.Totals[key], baseline[key] = tot, r
 	}
 }
 

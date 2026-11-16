@@ -43,6 +43,9 @@ func (s *Sampler) Sample(disk string, pids map[string]int) *contracts.HostSample
 	}
 	now := time.Now().UTC()
 	h := &contracts.HostSample{ObservedAt: now, Processes: map[string]contracts.ProcessSample{}, Health: readHealth(root)}
+	if b, err := os.ReadFile(filepath.Join(root, "sys/kernel/random/boot_id")); err == nil {
+		h.BootID = strings.TrimSpace(string(b))
+	}
 	if h.Health != nil && s.CertDir != "" {
 		if days, ok := certRemainingDays(s.CertDir, now); ok {
 			h.Health.CertDays = &days

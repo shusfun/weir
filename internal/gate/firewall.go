@@ -4,13 +4,14 @@ import (
 	"context"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/shusfun/weir/packages/contracts"
 )
 
-// 本机防火墙（只读）：辅助程序以 root 运行固定的查询命令，判断节点端口有没有放行，在控制台提示；不改防火墙规则。
+// 本机防火墙观测；标记规则的管理见 firewall_manage.go。
 // 依次看 ufw、firewalld、iptables；都没有时为 none。读不懂的规则（跳到自定义链等）不猜，标为读取失败。
 
 var (
@@ -32,6 +33,9 @@ func (h *Helper) firewall() *contracts.FirewallStatus {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	h.fw, h.fwAt = detectFirewall(ctx, runFirewallCmd), time.Now()
+	if runtime.GOOS == "linux" {
+		h.fw.ManagedVersion = 1
+	}
 	return h.fw
 }
 

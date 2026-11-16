@@ -9,17 +9,16 @@ import { useQuery } from "../../lib/query";
 import type { Job } from "../../lib/jobs";
 import { State } from "../../components/feedback";
 import { JobByID } from "../../components/job";
-import { SSHInstall } from "../../components/invite-gate";
+import type { ObjectState } from "../../lib/core";
 import { hasUnsavedChanges } from "../../lib/dirty";
 import { useConsoleContext } from "../../lib/console-context";
 
-type Hosting = { gate_name:string; online:boolean; colocated:boolean; prepared:boolean;can_prepare?:boolean; component:{state:string; code?:string; version?:string; model?:string};job?:Job; operation?:{status:string;task_id?:string;code?:string;stage?:string} };
-export function GateLayaHosting({gateId,host="",onUse}:{gateId:number;host?:string;onUse?:()=>void}) {
+type Hosting = { gate_name:string; online:boolean; colocated:boolean; prepared:boolean;can_prepare:boolean; object_state:ObjectState; component:{state:string; code?:string; version?:string; model?:string};job?:Job; operation?:{status:string;task_id?:string;code?:string;stage?:string} };
+export function GateLayaHosting({gateId,onUse}:{gateId:number;onUse?:()=>void}) {
  const q=useQuery({queryKey:["gate-laya",gateId],queryFn:()=>api(`/admin/gates/${gateId}/laya`) as Promise<Hosting>,enabled:gateId>0,refetchInterval:5000});
  const [settings,setSettings]=useState(false);
- const confirm=useConfirm();const [ssh,setSSH]=useState(false);const [busy,setBusy]=useState(false);const [error,setError]=useState("");
- useConsoleContext({ object: {type:"gate", id:gateId, name:q.data?.gate_name || "VPS"}, ...(ssh ? {dialog:{title:"准备 Laya 部署权限"}} : {}) });
- const running=!!q.data && (q.data.job?.status==="running" || ["pending","leased","cancelling"].includes(q.data.operation?.status || ""));
+ const confirm=useConfirm();const [busy,setBusy]=useState(false);const [error,setError]=useState("");
+ useConsoleContext({ object: {type:"gate", id:gateId, name:q.data?.gate_name || "VPS"} });
  async function operate(operation:"prepare"|"install"|"remove") {
   setBusy(true);setError("");try {
    const p=await api(`/admin/gates/${gateId}/laya/preview`,"POST",{operation});
@@ -27,15 +26,17 @@ export function GateLayaHosting({gateId,host="",onUse}:{gateId:number;host?:stri
    await api(`/admin/gates/${gateId}/laya/${p.id}/confirm`,"POST");void q.refetch();
   }catch(e){setError(e instanceof Error?e.message:"操作未完成");}finally{setBusy(false);}
  }
- async function closeSSH() {if (!hasUnsavedChanges() || await confirm({title:"放弃未保存的 SSH 信息？",confirmText:"放弃修改"}))setSSH(false);}
  if (!gateId) return null;
- return <Collapsible title="Laya 组件（允许零节点）">
+ const summary=q.isPending?"读取中…":q.error?"读取失败":q.data?.object_state.label ?? "状态未知";
+ const allowed=(action:string)=>q.data?.object_state.next.includes(action) ?? false;
+ return <Collapsible variant="section" title="Laya 组件" summary={summary}>
+  <p className="text-meta text-[var(--weir-ink-3)]">可独立部署 Laya，无须先创建节点。</p>
   {q.isPending||q.error||!q.data?<State loading={q.isPending} error={q.error} onRetry={()=>q.refetch()}/>:<div className="stack">
    <div className="actions"><Button size="icon" variant="outline" title="接入设置与测试" aria-label="Laya 接入设置与测试" onClick={()=>setSettings(true)}><Settings2 /></Button></div>
    {q.data.colocated ? <Notice>本机执行端随中心运行。<Link className="underline" to="/system?tab=ai">在 AI 设置中部署中心 Laya</Link>。</Notice> : <>
-    <div className="flex flex-wrap gap-2"><span>{q.data.gate_name}</span><Badge variant="status" tone={q.data.component.state==="available"?"ok":"neutral"}>{q.data.component.state==="available"?"模型可用":q.data.prepared?"部署权限已准备，运行状态待验证":"尚未准备部署权限"}</Badge></div>
-    <small>{!q.data.online?"VPS 离线，当前状态未知":q.data.component.code||"模型版本："+(q.data.component.version||"未知")}</small>
-    <div className="actions">{q.data.can_prepare?<Button variant="outline" disabled={busy||running||!q.data.online} onClick={()=>void operate("prepare")}>通过 VPS 准备权限</Button>:<Button variant="outline" disabled={busy||running} onClick={()=>setSSH(true)}>旧安装：一次性 SSH 迁移</Button>}<Button disabled={busy||!q.data.prepared||!q.data.online||running} busy={busy} onClick={()=>void operate("install")}>安装或重试 Laya</Button><Button variant="outline" disabled={busy||!q.data.prepared||!q.data.online||running} onClick={()=>void operate("remove")}>移除容器</Button>{onUse&&<Button variant="ghost" disabled={!q.data.online||q.data.component.state!=="available"} onClick={onUse}>填入推理位置</Button>}</div>
+    <div className="flex flex-wrap gap-2"><span>{q.data.gate_name}</span><Badge variant="status" tone={q.data.object_state.status==="ok"?"ok":"neutral"}>{q.data.object_state.label}</Badge></div>
+    <small>{q.data.object_state.reason}</small>
+    <div className="actions"><Button variant="outline" disabled={busy||!allowed("prepare")} onClick={()=>void operate("prepare")}>准备部署权限</Button><Button disabled={busy||!allowed("install")} busy={busy} onClick={()=>void operate("install")}>安装或重试 Laya</Button><Button variant="outline" disabled={busy||!allowed("remove")} onClick={()=>void operate("remove")}>移除容器</Button>{onUse&&<Button variant="ghost" disabled={!allowed("use")} onClick={onUse}>填入推理位置</Button>}</div>
     <Notice>准备 → 安装与模型下载 → 验证。端口只监听回环；移除保留模型卷。安装完成后保存接入配置、验证，再由管理员启用。</Notice>
     {q.data.job && <JobByID key={q.data.job.id} id={q.data.job.id} initial={q.data.job} openLogs onFinish={()=>void q.refetch()}/>}
     {!q.data.job && q.data.operation && <Notice tone={q.data.operation.status==="succeeded"?"ok":["failed","expired"].includes(q.data.operation.status)?"bad":"info"}>{({pending:"等待执行端领取",leased:"安装与验证进行中",cancelling:"正在取消",succeeded:"操作完成",failed:"操作失败，可重试",expired:"操作超时，请核对后重试",cancelled:"已取消",unknown:"结果未知，请刷新核对"} as Record<string,string>)[q.data.operation.status] || "状态未知"} · {q.data.operation.stage||q.data.operation.code||q.data.operation.task_id}</Notice>}
@@ -43,6 +44,5 @@ export function GateLayaHosting({gateId,host="",onUse}:{gateId:number;host?:stri
   </div>}
   {error&&<Notice tone="bad">{error}</Notice>}
   <Dialog open={settings} onOpenChange={async v=>{if(v || !hasUnsavedChanges() || await confirm({title:"放弃未保存的 Laya 配置？",confirmText:"放弃修改"}))setSettings(v);}}><DialogContent size="lg"><DialogTitle>Laya 接入设置与测试</DialogTitle><DialogDescription>修改当前推理位置及允许的参数。保存并测试通过后才能启用后台分析。</DialogDescription>{settings&&<Suspense fallback={<State loading />}><LayaCard hosting={false}/></Suspense>}</DialogContent></Dialog>
-  <Dialog open={ssh} onOpenChange={v=>!v&&void closeSSH()}><DialogContent size="lg"><DialogTitle>准备 {q.data?.gate_name} 的 Laya 部署</DialogTitle><DialogDescription>核对 SSH 主机指纹和既有 Gate 身份，保留设备配置。</DialogDescription>{ssh&&<SSHInstall gateId={gateId} initialHost={host} name={q.data?.gate_name||`VPS ${gateId}`} setName={()=>{}} close={()=>void closeSSH()} done={()=>void q.refetch()}/>}</DialogContent></Dialog>
  </Collapsible>;
 }

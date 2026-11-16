@@ -260,8 +260,6 @@ func networkTaskSource(kind string, payload any) string {
 	switch request := payload.(type) {
 	case contracts.SubscriptionFetchTask:
 		raw = request.Credentials.URL
-	case contracts.ExternalConvertTask:
-		raw = request.Credentials.URL
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -332,12 +330,6 @@ func (s *Server) validateNetworkResult(ctx context.Context, r taskqueue.Record, 
 	switch r.Task.Kind {
 	case contracts.TaskSubscriptionFetch:
 		var req contracts.SubscriptionFetchTask
-		if err = json.Unmarshal([]byte(body), &req); err != nil {
-			return err
-		}
-		limit = req.MaxBytes
-	case contracts.TaskExternalConvert:
-		var req contracts.ExternalConvertTask
 		if err = json.Unmarshal([]byte(body), &req); err != nil {
 			return err
 		}

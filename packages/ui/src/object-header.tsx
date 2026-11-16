@@ -42,17 +42,17 @@ function ObjectHeader({
           <span aria-hidden>/</span>
           <b>{crumb}</b>
         </nav>
-        {actions && <div className="flex flex-wrap items-center gap-[9px]">{actions}</div>}
+        {actions && <div className="flex flex-wrap items-center gap-[var(--weir-gap-9)]">{actions}</div>}
       </div>
       <div className={cn("weir-object-hero", aside && "has-aside")}>
         <div className="min-w-0">
-          <div className="flex items-center gap-[9px] text-meta text-[var(--weir-ink-2)]">
+          <div className="flex items-center gap-[var(--weir-gap-9)] text-meta text-[var(--weir-ink-2)]">
             <StatusLamp tone={tone} />
             <span>{status}</span>
           </div>
-          <h1 data-slot="page-title" className="m-0 mt-[9px] text-detail font-bold tracking-[-0.03em] text-[var(--weir-ink)]">{title}</h1>
-          {meta && <div className="mt-[5px] font-[family-name:var(--weir-mono)] text-meta text-[var(--weir-ink-3)]">{meta}</div>}
-          {banner && <div className="mt-[21px]">{banner}</div>}
+          <h1 data-slot="page-title" className="m-0 mt-[var(--weir-gap-9)] text-detail font-bold tracking-[-0.03em] text-[var(--weir-ink)]">{title}</h1>
+          {meta && <div className="mt-[var(--weir-gap-5)] font-[family-name:var(--weir-mono)] text-meta text-[var(--weir-ink-3)]">{meta}</div>}
+          {banner && <div className="mt-[var(--weir-gap-21)]">{banner}</div>}
         </div>
         {aside && <div className="weir-object-aside">{aside}</div>}
       </div>

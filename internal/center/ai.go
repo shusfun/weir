@@ -76,7 +76,7 @@ func (s *Server) testNodeWith(ctx context.Context, n *ent.Node, settings map[str
 	if err != nil {
 		return nil, err
 	}
-	supported, err := s.gateSupportsTask(ctx, g, contracts.ActionNodeTest, 3)
+	supported, err := s.gateSupportsTask(ctx, g, contracts.ActionNodeTest)
 	if err != nil {
 		return nil, err
 	}

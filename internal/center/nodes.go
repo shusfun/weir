@@ -66,14 +66,16 @@ type ExitSpec struct {
 	Link     string `json:"link,omitempty"` // link：一条节点链接（不接受订阅地址）
 	NodeID   int    `json:"node_id"`
 	// source：管理员用 source_id（任意订阅源），用户自建用 profile_id（分配给他的订阅组）；mode node / filter，match 名称或正则。
-	SourceID  int    `json:"source_id,omitempty"`
-	ProfileID int    `json:"profile_id,omitempty"`
-	Mode      string `json:"mode,omitempty"`
-	Match     string `json:"match,omitempty"`
+	SourceID           int      `json:"source_id,omitempty"`
+	ProfileID          int      `json:"profile_id,omitempty"`
+	Mode               string   `json:"mode,omitempty"`
+	Match              string   `json:"match,omitempty"`
+	Identity           string   `json:"identity,omitempty"`
+	InsecureIdentities []string `json:"insecure_identities,omitempty"`
 }
 
 func (c ExitSpec) source() sourceSpec {
-	return sourceSpec{SourceID: c.SourceID, ProfileID: c.ProfileID, Mode: c.Mode, Match: strings.TrimSpace(c.Match)}
+	return sourceSpec{SourceID: c.SourceID, ProfileID: c.ProfileID, Mode: c.Mode, Match: strings.TrimSpace(c.Match), Identity: c.Identity, InsecureIdentities: c.InsecureIdentities}
 }
 
 // chainCtx 是校验链式代理出口时的上下文：入口节点用的内核（判断能否自动切换）、
@@ -151,7 +153,8 @@ func (s *Server) nodeView(ctx context.Context, n *ent.Node) gin.H {
 	choice := s.nodeChoice(ctx, n, g, nil)
 	creds, _ := s.Store.Ent.Credential.Query().Where(credential.NodeIDEQ(n.ID), credential.InternalEQ(false), credential.ProbeParentIDIsNil()).Count(ctx)
 	view := gin.H{
-		"id": n.ID, "gate_id": n.GateID, "name": n.Name, "preset": n.Preset, "kernel": n.Kernel, "protocol": n.Protocol,
+		"object_state": s.nodeObjectState(ctx, n, g),
+		"id":           n.ID, "gate_id": n.GateID, "name": n.Name, "preset": n.Preset, "kernel": n.Kernel, "protocol": n.Protocol,
 		"port": n.Port, "network": n.Network, "security": n.Security, "settings": n.Settings, "cert_id": n.CertID,
 		"enabled": n.Enabled, "credentials": creds, "created_at": n.CreatedAt,
 		"exit_id": n.ExitID,
@@ -234,7 +237,11 @@ func (s *Server) checkPort(ctx context.Context, g *ent.Gate, port, self int) err
 	if port < 1024 || port > 65535 {
 		return errors.New("invalid_port")
 	}
-	nodes, err := s.Store.Ent.Node.Query().Where(node.GateIDEQ(g.ID), node.PortEQ(port)).All(ctx)
+	return s.checkPortDB(ctx, s.Store.Ent, g, port, self)
+}
+
+func (s *Server) checkPortDB(ctx context.Context, db *ent.Client, g *ent.Gate, port, self int) error {
+	nodes, err := db.Node.Query().Where(node.GateIDEQ(g.ID), node.PortEQ(port)).All(ctx)
 	if err != nil {
 		return err
 	}
@@ -243,7 +250,14 @@ func (s *Server) checkPort(ctx context.Context, g *ent.Gate, port, self int) err
 			return errors.New("port_in_use")
 		}
 	}
-	own, err := s.gateOwnPorts(ctx, g)
+	managed, err := s.gateManagedPortsDB(ctx, db, g)
+	if err != nil {
+		return err
+	}
+	if managed[port] {
+		return errors.New("port_in_use")
+	}
+	own, err := s.gateOwnPortsDB(ctx, db, g)
 	if err != nil {
 		return err
 	}
@@ -266,7 +280,7 @@ func (s *Server) resolveExitSpec(ctx context.Context, self int, spec ExitSpec, p
 		o := proxyExit(spec.Kind, spec.Address, spec.Port, spec.Username, spec.Password)
 		return resolvedExit{Outbound: o, Links: []string{proxyLink(spec.Kind, spec.Address, spec.Port, spec.Username, spec.Password)}}, nil
 	case "link":
-		o, name, err := parseExitLink(spec.Link)
+		o, name, err := parseConfirmedExitLink(spec.Link, spec.InsecureIdentities)
 		if err != nil {
 			return resolvedExit{}, fmt.Errorf("invalid_link: %v", err)
 		}
@@ -276,23 +290,12 @@ func (s *Server) resolveExitSpec(ctx context.Context, self int, spec ExitSpec, p
 		return resolvedExit{Outbound: o, Names: []string{name}, Links: []string{strings.TrimSpace(spec.Link)}}, nil
 	case "source":
 		sp := spec.source()
-		if err := sp.check(); err != nil {
-			return resolvedExit{}, fmt.Errorf("invalid_chain: %v", err)
-		}
-		if sp.SourceID > 0 && !cc.admin {
-			return resolvedExit{}, errors.New("exit_not_allowed: 只能选择分配给你的订阅组里的节点")
+		if err := s.checkSourceAccess(ctx, sp, cc); err != nil {
+			return resolvedExit{}, err
 		}
 		if sp.SourceID > 0 {
 			if _, err := s.Store.Ent.SubSource.Get(ctx, sp.SourceID); err != nil {
 				return resolvedExit{}, errors.New("source_not_found")
-			}
-		} else if cc.userID > 0 {
-			granted, err := s.grantedProfiles(ctx, cc.userID)
-			if err != nil {
-				return resolvedExit{}, err
-			}
-			if !granted[sp.ProfileID] {
-				return resolvedExit{}, errors.New("exit_not_allowed: 这个订阅组没有分配给该用户")
 			}
 		}
 		var kernels []string
@@ -321,8 +324,8 @@ func (s *Server) resolveExitSpec(ctx context.Context, self int, spec ExitSpec, p
 		if cc.gate != nil && cc.gate.ID == exit.GateID {
 			return resolvedExit{}, errors.New("exit_same_gate")
 		}
-		if p, ok := s.presetByID(ctx, exit.Preset); ok && !p.ChainExit {
-			return resolvedExit{}, errors.New("chain_exit_unsupported")
+		if cc.gate == nil || !s.uotCapability(ctx, cc.gate.ID) || !s.uotCapability(ctx, exit.GateID) {
+			return resolvedExit{}, errors.New("链路两端必须支持原生 UDP over TCP")
 		}
 		// 出口节点自身也走链时可能成环：最多追 8 跳。
 		seen := map[int]bool{}
@@ -348,11 +351,7 @@ func (s *Server) resolveExitSpec(ctx context.Context, self int, spec ExitSpec, p
 		if err != nil || eg.PublicHost == "" {
 			return resolvedExit{}, errors.New("chain_exit_no_address")
 		}
-		// 先用占位凭据校验协议参数，实测阶段另外签发并下发短时内部凭据。
-		o, err := nodeExit("", exit, eg.PublicHost, &ent.Credential{UUID: "00000000-0000-4000-8000-000000000000", Password: "probe"})
-		if err != nil {
-			return resolvedExit{}, errors.New("chain_exit_unsupported")
-		}
+		o := contracts.Outbound{Protocol: "shadowsocks", Address: eg.PublicHost, Port: exit.Port, Username: uotMethod, Password: "probe", Settings: map[string]any{"udp_over_tcp": true}}
 		return resolvedExit{Outbound: o, Names: []string{exit.Name}, TestNodeID: exit.ID}, nil
 	}
 	return resolvedExit{}, errors.New("invalid_chain")
@@ -396,7 +395,7 @@ func (s *Server) seal(plain string) (string, error) {
 }
 
 // editableSettings 是高级编辑可改的入站字段；身份、证书文件路径与客户端列表由系统管理。
-var lockedSettings = map[string]bool{"id": true, "uuid": true, "remark": true, "protocol": true, "core": true, "port": true, "network": true, "security": true, "enabled": true, "clients": true, "tls_cert_file": true, "tls_key_file": true, "certificate_id": true}
+var lockedSettings = map[string]bool{"id": true, "uuid": true, "remark": true, "protocol": true, "core": true, "port": true, "network": true, "security": true, "enabled": true, "clients": true, "tls_cert_file": true, "tls_key_file": true, "certificate_id": true, "tcp_only": true}
 
 // checkSettings 拒绝未知或系统管理的字段，并用构建器实际生成一次，确保保存后的节点能下发。
 // 已下载该内核时按 Gate 实际使用的版本档案检查（协议 / 传输 / 安全层是否受支持）。
@@ -628,6 +627,18 @@ func (s *Server) createNodeNow(c *gin.Context) {
 	}
 	defer tx.Rollback()
 	newExit := selected == nil
+	if err = lockActiveGates(ctx, tx.Client(), g.ID); err != nil {
+		failInternal(c, 409, "gate_not_active", err)
+		return
+	}
+	currentGate, err := tx.Gate.Get(ctx, g.ID)
+	if err == nil {
+		err = s.checkPortDB(ctx, tx.Client(), currentGate, req.Port, 0)
+	}
+	if err != nil {
+		failInternal(c, 409, "node_conflict", err)
+		return
+	}
 	if selected == nil {
 		selected, err = s.persistExit(ctx, tx.Client(), g.ID, nil, "", spec, nil)
 	}
@@ -808,17 +819,12 @@ func (s *Server) updateNodeNow(c *gin.Context) {
 		return
 	}
 	previous := n
-	upd := n.Update()
 	if req.Name != nil {
 		name := strings.TrimSpace(*req.Name)
 		if name == "" || len(name) > 100 {
 			failure(c, 400, "invalid_name")
 			return
 		}
-		upd.SetName(name)
-	}
-	if req.Enabled != nil {
-		upd.SetEnabled(*req.Enabled)
 	}
 	port := n.Port
 	if req.Port != nil && *req.Port != n.Port {
@@ -827,7 +833,6 @@ func (s *Server) updateNodeNow(c *gin.Context) {
 			return
 		}
 		port = *req.Port
-		upd.SetPort(port)
 	}
 	st := map[string]any{}
 	for k, v := range n.Settings {
@@ -861,14 +866,12 @@ func (s *Server) updateNodeNow(c *gin.Context) {
 				failure(c, 400, "cert_required")
 				return
 			}
-			upd.ClearCertID()
 		} else {
 			ct, err := s.Store.Ent.Certificate.Get(ctx, *req.CertID)
 			if err != nil {
 				failure(c, 404, "cert_not_found")
 				return
 			}
-			upd.SetCertID(ct.ID)
 			st["tls_sni"] = ct.Domain
 		}
 	}
@@ -876,7 +879,6 @@ func (s *Server) updateNodeNow(c *gin.Context) {
 		failSettings(c, err)
 		return
 	}
-	upd.SetSettings(st)
 	var selected *ent.Exit
 	var spec ExitSpec
 	var probe *exitProbe
@@ -915,52 +917,61 @@ func (s *Server) updateNodeNow(c *gin.Context) {
 	if !jobCommit(c) {
 		return
 	}
-	if selected != nil || req.Exit != nil || req.ExitID != nil {
-		tx, e := s.Store.Ent.Tx(ctx)
-		if e != nil {
-			failInternal(c, 500, "save_failed", e)
-			return
-		}
-		defer tx.Rollback()
-		newExit := selected == nil
-		if selected == nil {
-			selected, err = s.persistExit(ctx, tx.Client(), g.ID, nil, "", spec, nil)
-		}
-		if err == nil {
-			upd.Mutation().SetExitID(selected.ID)
-		}
-		if err == nil {
-			m := tx.Node.UpdateOneID(n.ID).SetName(n.Name).SetPort(port).SetSettings(st).SetExitID(selected.ID)
-			if req.Name != nil {
-				m.SetName(strings.TrimSpace(*req.Name))
-			}
-			if req.Enabled != nil {
-				m.SetEnabled(*req.Enabled)
-			}
-			if req.CertID != nil && *req.CertID > 0 {
-				m.SetCertID(*req.CertID)
-			} else if req.CertID != nil {
-				m.ClearCertID()
-			}
-			n, err = m.Save(ctx)
-		}
-		if err == nil {
-			err = tx.Commit()
-		}
-		if err != nil {
-			failInternal(c, 500, "save_failed", err)
-			return
-		}
-		if newExit || probe != nil {
-			if err = s.refreshExit(ctx, selected, probe); err != nil {
-				failInternal(c, 500, "source_exit_failed", err)
-				return
-			}
-		}
-	} else if n, err = upd.Save(ctx); err != nil {
-		failure(c, 409, "node_conflict")
+	tx, err := s.Store.Ent.Tx(ctx)
+	if err != nil {
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
+	defer tx.Rollback()
+	if err = lockActiveGates(ctx, tx.Client(), g.ID); err == nil {
+		var current *ent.Gate
+		current, err = tx.Gate.Get(ctx, g.ID)
+		if err == nil {
+			err = s.checkPortDB(ctx, tx.Client(), current, port, n.ID)
+		}
+	}
+	if err != nil {
+		failInternal(c, 409, "node_conflict", err)
+		return
+	}
+	exitChanged := selected != nil || req.Exit != nil || req.ExitID != nil
+	newExit := exitChanged && selected == nil
+	exitID := n.ExitID
+	if newExit {
+		selected, err = s.persistExit(ctx, tx.Client(), g.ID, nil, "", spec, nil)
+	}
+	if err == nil && exitChanged {
+		exitID = selected.ID
+	}
+	if err == nil {
+		m := tx.Node.UpdateOneID(n.ID).SetPort(port).SetSettings(st).SetExitID(exitID)
+		if req.Name != nil {
+			m.SetName(strings.TrimSpace(*req.Name))
+		}
+		if req.Enabled != nil {
+			m.SetEnabled(*req.Enabled)
+		}
+		if req.CertID != nil && *req.CertID > 0 {
+			m.SetCertID(*req.CertID)
+		} else if req.CertID != nil {
+			m.ClearCertID()
+		}
+		n, err = m.Save(ctx)
+	}
+	if err == nil {
+		err = tx.Commit()
+	}
+	if err != nil {
+		failInternal(c, 409, "node_conflict", err)
+		return
+	}
+	if newExit || probe != nil {
+		if err = s.refreshExit(ctx, selected, probe); err != nil {
+			failInternal(c, 500, "source_exit_failed", err)
+			return
+		}
+	}
+
 	if n.Port != previous.Port || n.ExitID != previous.ExitID || n.Enabled != previous.Enabled || !reflect.DeepEqual(n.Settings, previous.Settings) || !reflect.DeepEqual(n.CertID, previous.CertID) {
 		if err = s.invalidateDependentExitProbes(ctx, n.ID); err != nil {
 			failInternal(c, 500, "save_failed", err)

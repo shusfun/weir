@@ -81,18 +81,18 @@ def strip_private(data):
         marker = line.strip()
         if marker == START:
             if inside:
-                raise ValueError("nested private README block")
+                raise ValueError("nested private-only block")
             inside = True
         elif marker == END:
             if not inside:
-                raise ValueError("unmatched private README end")
+                raise ValueError("unmatched private-only end")
             inside = False
         elif "private-only:" in line:
-            raise ValueError("invalid private README marker")
+            raise ValueError("invalid private-only marker")
         elif not inside:
             result.append(line)
     if inside:
-        raise ValueError("unclosed private README block")
+        raise ValueError("unclosed private-only block")
     return "".join(result).encode("utf-8")
 
 
@@ -146,10 +146,10 @@ def snapshot(repo, ref="HEAD", strict=False):
                 continue
             if mode not in {"100644", "100755"}:
                 raise ValueError("source symlinks are unsupported: " + name)
-            if name == "README.md":
+            if pathlib.PurePosixPath(name).suffix.lower() in {".md", ".html"}:
                 transformed = strip_private(data)
                 if strict and transformed != data:
-                    raise ValueError("private README content in public source")
+                    raise ValueError("private-only content in public source: " + name)
                 data = transformed
             files[name] = (mode, data)
     with stage("check-links"):

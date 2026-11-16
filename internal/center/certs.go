@@ -1,6 +1,7 @@
 package center
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -23,6 +24,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/certificate"
 	"github.com/shusfun/weir/internal/store/ent/node"
+	"github.com/shusfun/weir/internal/store/ent/resource"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -138,6 +140,9 @@ func (s *Server) saveCert(c *gin.Context, name, domain string, self bool, certPE
 	if err != nil {
 		return nil, errors.New("invalid_certificate")
 	}
+	if err = x.VerifyHostname(domain); err != nil {
+		return nil, errors.New("certificate_name_mismatch")
+	}
 	sealed, err := s.Crypto.Encrypt(keyPEM)
 	if err != nil {
 		return nil, errors.New("encrypt_failed")
@@ -157,14 +162,51 @@ func (s *Server) deleteCert(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	if n, _ := s.Store.Ent.Node.Query().Where(node.CertIDEQ(id)).Count(ctx); n > 0 {
+	inUse := errors.New("certificate in use")
+	err = s.Store.Lock.Do(ctx, "certificate:"+itoa(id), func(ctx context.Context) error {
+		tx, err := s.Store.Ent.Tx(ctx)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		used, err := tx.Node.Query().Where(node.CertIDEQ(id)).Exist(ctx)
+		if err != nil {
+			return err
+		}
+		if used {
+			return inUse
+		}
+		configs, err := tx.Resource.Query().Where(resource.KindEQ(browserConfigKind)).All(ctx)
+		if err != nil {
+			return err
+		}
+		for _, row := range configs {
+			var config browserConfig
+			if err = decodeResource(row, &config); err != nil {
+				return err
+			}
+			if config.Plan.CertID == int64(id) {
+				return inUse
+			}
+		}
+		if err = tx.Certificate.DeleteOneID(id).Exec(ctx); err != nil {
+			return err
+		}
+		return tx.Commit()
+	})
+	if errors.Is(err, inUse) {
 		failure(c, 409, "cert_in_use")
 		return
 	}
-	if err = s.Store.Ent.Certificate.DeleteOneID(id).Exec(ctx); err != nil {
+	if ent.IsNotFound(err) {
 		failure(c, 404, "cert_not_found")
 		return
 	}
+	if err != nil {
+		failInternal(c, 503, "delete_failed", err)
+		return
+	}
+
 	s.audit(c, "cert.delete", "cert:"+strconv.Itoa(id), "ok")
 	c.Status(204)
 }
@@ -179,7 +221,12 @@ func (s *Server) agentCert(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	if n, _ := s.Store.Ent.Node.Query().Where(node.GateIDEQ(g.ID), node.CertIDEQ(id)).Count(ctx); n == 0 {
-		if _, granted, _ := s.Store.KV.Get(ctx, fmt.Sprintf("cert-grant:%d:%d", g.ID, id)); !granted {
+		probe, err := readBrowserConfig(ctx, s.Store.Ent, g.ID)
+		if err != nil {
+			failInternal(c, 503, "cert_unreadable", err)
+			return
+		}
+		if _, granted, _ := s.Store.KV.Get(ctx, fmt.Sprintf("cert-grant:%d:%d", g.ID, id)); !granted && (probe == nil || probe.Plan.CertID != int64(id)) {
 			failure(c, 404, "cert_not_found")
 			return
 		}

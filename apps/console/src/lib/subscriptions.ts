@@ -1,5 +1,6 @@
 // 订阅源页的接口类型：订阅源、手动节点、订阅组、规则模板与全局设置。
 import type { Operator } from "../components/operator-editor";
+import type { ObjectState } from "./core";
 
 export interface UserInfo {
   upload?: number;
@@ -9,6 +10,7 @@ export interface UserInfo {
 }
 
 export interface Source {
+	object_state?: ObjectState;
   id: number;
   name: string;
   url: string;

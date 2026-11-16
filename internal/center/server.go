@@ -359,7 +359,9 @@ func (s *Server) Router() *gin.Engine {
 		}
 		c.Header("Cache-Control", "no-store")
 		// frame-src 用站点通配，不写具体的 dsh 子域名；是否启用 dsh 都一样，页面看不出 dsh 的存在。
-		csp := "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://challenges.cloudflare.com; frame-ancestors " + ancestors + "; frame-src 'self' " + frameSite(c.Request) + " https://challenges.cloudflare.com"
+		// VPS 测试端点由管理员动态配置，SPA 也可在当前文档里启用新端点。
+		// 只放行 HTTPS 连接；具体端点、用途与授权仍由中心签发的测试会话限定。
+		csp := "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https:; frame-ancestors " + ancestors + "; frame-src 'self' " + frameSite(c.Request) + " https://challenges.cloudflare.com"
 		c.Header("Content-Security-Policy", csp)
 		if !sameOriginRequest(c.Request) {
 			failure(c, 403, "origin_rejected")

@@ -72,6 +72,7 @@ func (s *Server) exitSpec(e *ent.Exit) (ExitSpec, error) {
 	}
 	sp := specOf(e.Source)
 	spec.SourceID, spec.ProfileID, spec.Mode, spec.Match = sp.SourceID, sp.ProfileID, sp.Mode, sp.Match
+	spec.Identity, spec.InsecureIdentities = sp.Identity, sp.InsecureIdentities
 	return spec, nil
 }
 
@@ -85,6 +86,17 @@ func (s *Server) directExit(ctx context.Context, db *ent.Client, gid int) (*ent.
 
 // persistExit 只负责持久化；调用方先校验、实测，再在同一事务中绑定引用。
 func (s *Server) persistExit(ctx context.Context, db *ent.Client, gid int, owner *int, policy string, spec ExitSpec, old *ent.Exit) (*ent.Exit, error) {
+	gateIDs := []int{gid}
+	if spec.Kind == "node" {
+		n, err := db.Node.Get(ctx, spec.NodeID)
+		if err != nil {
+			return nil, err
+		}
+		gateIDs = append(gateIDs, n.GateID)
+	}
+	if err := lockActiveGates(ctx, db, gateIDs...); err != nil {
+		return nil, err
+	}
 	spec.Remark = strings.TrimSpace(spec.Remark)
 	if utf8.RuneCountInString(spec.Remark) > 100 {
 		return nil, errors.New("invalid_remark")
@@ -93,7 +105,7 @@ func (s *Server) persistExit(ctx context.Context, db *ent.Client, gid int, owner
 		return s.directExit(ctx, db, gid)
 	}
 	if spec.Kind == "link" {
-		ob, remark, err := parseExitLink(spec.Link)
+		ob, remark, err := parseConfirmedExitLink(spec.Link, spec.InsecureIdentities)
 		if err != nil {
 			return nil, err
 		}
@@ -127,7 +139,12 @@ func (s *Server) persistExit(ctx context.Context, db *ent.Client, gid int, owner
 		m.ClearExitNodeID()
 	}
 	if spec.Kind == "source" {
+		if spec.Mode == "node" && !validSourceIdentity(spec.Identity) {
+			return nil, errors.New("请先确认订阅节点身份")
+		}
 		m.SetSource(spec.source().toMap())
+	} else if spec.Kind == "link" {
+		m.SetSource(map[string]any{"insecure_identities": validConfirmations(spec.Link, spec.InsecureIdentities)})
 	} else {
 		m.ClearSource()
 	}
@@ -192,7 +209,20 @@ func (s *Server) validateExitSelection(ctx context.Context, g *ent.Gate, self in
 	if owner != nil {
 		cc.userID = *owner
 	}
+	if v.Kind == "source" {
+		if err := s.checkSourceAccess(ctx, v.source(), cc); err != nil {
+			return nil, v, nil, err
+		}
+		bound, e := s.bindSourceIdentity(ctx, v.source())
+		if e != nil {
+			return nil, v, nil, fmt.Errorf("invalid_chain: %v", e)
+		}
+		v.Identity = bound.Identity
+	}
 	p, err := s.validateExitSpec(ctx, g, self, v, owner != nil, !skip, cc)
+	if err == nil && spec != nil {
+		*spec = v
+	}
 	return e, v, p, err
 }
 
@@ -267,6 +297,9 @@ func (s *Server) exitResourceView(ctx context.Context, e *ent.Exit) (gin.H, erro
 	raw, _ := json.Marshal(spec)
 	v := gin.H{}
 	_ = json.Unmarshal(raw, &v)
+	v["has_password"], v["has_link"] = spec.Password != "", spec.Link != ""
+	delete(v, "password")
+	delete(v, "link")
 	v["id"], v["gate_id"], v["owner_user_id"], v["tag"], v["enabled"], v["policy_type"], v["created_at"] = e.ID, e.GateID, e.OwnerUserID, e.Tag, e.Enabled, e.PolicyType, e.CreatedAt
 	v["label"] = exitKindLabel(string(e.Kind))
 	v["references"], err = s.exitReferences(ctx, e.ID)
@@ -281,6 +314,9 @@ func (s *Server) exitResourceView(ctx context.Context, e *ent.Exit) (gin.H, erro
 		v["probe"] = p
 	}
 	v["place"] = s.exitPlace(ctx, e)
+	g, _ := s.Store.Ent.Gate.Get(ctx, e.GateID)
+	p, hasProbe := s.loadExitProbe(ctx, exitOwner(e.ID))
+	v["object_state"] = exitObjectState(e, g, p, hasProbe)
 	v["summary"] = s.exitSummary(ctx, e, "")
 	supported, known := s.exitUDP(ctx, e.ID, map[int]bool{})
 	switch {
@@ -295,6 +331,8 @@ func (s *Server) exitResourceView(ctx context.Context, e *ent.Exit) (gin.H, erro
 }
 
 func (s *Server) exitRoutes(auth, admin *gin.RouterGroup) {
+	auth.POST("/me/exit-link-preview", s.previewExitLink)
+	admin.POST("/exits/:eid/credentials", s.revealExitCredentials)
 	for _, entry := range []struct {
 		g     *gin.RouterGroup
 		base  string
@@ -363,7 +401,12 @@ func (s *Server) listExits(c *gin.Context, admin bool) {
 			kinds = append(kinds, k)
 		}
 	}
-	c.JSON(200, gin.H{"items": items, "kinds": kinds})
+	directory, err := s.exitDirectory(ctx, es, items)
+	if err != nil {
+		failInternal(c, 503, "query_failed", err)
+		return
+	}
+	c.JSON(200, gin.H{"items": items, "kinds": kinds, "directory": directory})
 }
 
 func (s *Server) saveExitNow(c *gin.Context, admin bool) {
@@ -465,6 +508,14 @@ func (s *Server) saveExitNow(c *gin.Context, admin bool) {
 				return
 			}
 		}
+	}
+	if old != nil && spec.Kind == "source" && spec.Mode == "node" && spec.Identity == "" && reflect.DeepEqual(spec.source(), specOf(old.Source)) {
+		bound, e := s.bindStoredSourceIdentity(ctx, exitOwner(old.ID), gid, spec.source())
+		if e != nil {
+			failDetail(c, 422, "invalid_chain", e.Error(), nil)
+			return
+		}
+		spec.Identity = bound.Identity
 	}
 	changed := true
 	if old != nil {
@@ -682,7 +733,13 @@ func (s *Server) compileExit(ctx context.Context, e *ent.Exit) (contracts.Outbou
 		if e.ExitNodeID == nil {
 			return o, errors.New("出口节点缺失")
 		}
-		o, err = s.exitFor(ctx, e.Tag, *e.ExitNodeID, exitCredentialKey(e.ID))
+		o, err = s.uotOutbound(ctx, e)
+	case entexit.KindLink:
+		var spec ExitSpec
+		spec, err = s.exitSpec(e)
+		if err == nil {
+			o, _, err = parseConfirmedExitLink(spec.Link, spec.InsecureIdentities)
+		}
 	default:
 		o, err = s.fixedExit(string(e.Kind), e.Address, e.Port, e.Username, e.Password, e.Link)
 	}

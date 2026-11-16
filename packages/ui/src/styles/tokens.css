@@ -363,6 +363,7 @@
   --weir-pill: var(--weir-swatch-day-pill);
   --weir-pill-ink: var(--weir-swatch-day-pill-ink);
   --weir-folder-h: 301px;
+  --weir-folder-mobile-h: 241px;
   --weir-node-folder-min: 251px;
   --weir-folder-expanded-max: 541px;
   --weir-folder-perspective: 751px;

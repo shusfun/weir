@@ -121,6 +121,17 @@ const photos = ["#2f4bd0", "#30a46c", "#e5484d", "#f5a524", "#8e4ec6"].map((colo
 
 const cards = ["订阅源", "手动节点", "订阅组", "分发", "公开页"].map((name, i) => ({ id: i, name }));
 
+function LongDialogForm({ onContinue }: { onContinue: () => void }) {
+  return <Form onSubmit={onContinue}>
+    <Button variant="outline" onClick={onContinue}>打开二级弹窗</Button>
+    {Array.from({ length: 18 }, (_, i) => <Field key={i} label={`示例字段 ${i + 1}`}><Input defaultValue={`内容 ${i + 1}`} /></Field>)}
+    <ScrollArea orientation="both" gutter="stable" className="h-[calc(var(--weir-gap-41)*3)]">
+      <div className="w-max whitespace-pre p-[var(--weir-space-2)] font-mono">{Array.from({ length: 12 }, (_, i) => `示例 ${i + 1}：${"横向内容 ".repeat(20)}`).join("\n")}</div>
+    </ScrollArea>
+    <DialogFooter><Button type="submit">检查并继续</Button></DialogFooter>
+  </Form>;
+}
+
 export function DevUiPage() {
   const toast = useToast();
   const burst = useBurst();
@@ -334,14 +345,7 @@ export function DevUiPage() {
               <DialogContent size="lg">
                 <DialogTitle>长表单与固定底栏</DialogTitle>
                 <DialogDescription>正文独立滚动，轨道与字段、焦点环分别占位。</DialogDescription>
-                <Form onSubmit={() => setNestedDialog(true)}>
-                  <Button variant="outline" onClick={() => setNestedDialog(true)}>打开二级弹窗</Button>
-                  {Array.from({ length: 18 }, (_, i) => <Field key={i} label={`示例字段 ${i + 1}`}><Input defaultValue={`内容 ${i + 1}`} /></Field>)}
-                  <ScrollArea orientation="both" gutter="stable" className="h-[calc(var(--weir-gap-41)*3)]">
-                    <div className="w-max whitespace-pre p-[var(--weir-space-2)] font-mono">{Array.from({ length: 12 }, (_, i) => `示例 ${i + 1}：${"横向内容 ".repeat(20)}`).join("\n")}</div>
-                  </ScrollArea>
-                  <DialogFooter><Button type="submit">检查并继续</Button></DialogFooter>
-                </Form>
+                <LongDialogForm onContinue={() => setNestedDialog(true)} />
                 <Dialog open={nestedDialog} onOpenChange={setNestedDialog}>
                   <DialogContent><DialogTitle>二级确认</DialogTitle><DialogDescription>关闭后回到长表单原来的滚动位置。</DialogDescription><DialogFooter><Button onClick={() => setNestedDialog(false)}>返回表单</Button></DialogFooter></DialogContent>
                 </Dialog>
@@ -447,8 +451,8 @@ function MaterialDemos() {
         <p className="m-0 text-body">当前定位：{picked}</p>
       </Demo>
 
-      <Demo index={19} title="玻璃文件夹与超椭圆" description="整块可点。打开与收起回到同一锚点，可连续反向点击或按 Escape。省电档静态切换。">
-        <FolderGrid expandedId={folder} onExpandedChange={setFolder} items={["甲", "乙"].map(id => ({ id, label: id, folder: open => <GlassFolder name={`文件夹 ${id}`} observations={false} expanded={open} controls={`folder-content-${id}`} files={[]} onClick={() => setFolder(open ? null : id)} />, content: <Notice>文件夹 {id} 的内容。点击收起图标回到原位。</Notice> }))} />
+      <Demo index={19} title="玻璃文件夹与超椭圆" description="新增卡片与文件夹同宽同高。打开与收起回到同一锚点，可连续反向点击或按 Escape。省电档在前盖上静态高亮，键盘保留焦点环。">
+        <FolderGrid expandedId={folder} onExpandedChange={setFolder} items={["甲", "乙"].map(id => ({ id, label: id, folder: open => <GlassFolder name={`文件夹 ${id}`} observations={false} expanded={open} controls={`folder-content-${id}`} files={[]} onClick={() => setFolder(open ? null : id)} />, content: <Notice>文件夹 {id} 的内容。点击收起图标回到原位。</Notice> }))}><FolderSlot title="添加 VPS" caption="用 SSH 一次装好" onClick={() => toast("打开添加 VPS")} /></FolderGrid>
         <GlassFolder
           name="样例 VPS"
           address={null}
@@ -462,7 +466,6 @@ function MaterialDemos() {
           onClick={() => toast("打开样例详情")}
         />
         <GlassFolder name="另一台" hue={1} address="203.0.113.9" cpu={null} caption="CPU 未知 · 0 个节点" files={[]} />
-        <FolderSlot title="添加 VPS" caption="用 SSH 一次装好" onClick={() => toast("打开添加 VPS")} />
         <Squircle path className="px-[var(--weir-space-4)] py-[var(--weir-space-3)]">
           <strong>路径超椭圆</strong>
           <p className="m-0 text-meta text-[var(--weir-ink-3)]">描边和投影跟着路径。</p>
@@ -583,6 +586,13 @@ function FormDemo() {
         </Field>
         <Collapsible title="高级选项">
           <Notice>折叠区内容。展开 / 收起有高度过渡。</Notice>
+        </Collapsible>
+        <Collapsible variant="section" title="分区折叠" summary="状态未知 · 等待有效观测">
+          <p>整行展开，标题与正文对齐。长摘要省略，完整说明放在正文中；省电档直接切换。</p>
+          <ActionGroup wrap={false}>
+            <Button type="button" variant="outline" onClick={() => toast("已打开设置样例")}>设置</Button>
+            <Button type="button" variant="outline" onClick={() => toast("已打开详情样例")}>详情</Button>
+          </ActionGroup>
         </Collapsible>
         <div className="actions">
           <Button type="submit">提交</Button>

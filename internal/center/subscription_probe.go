@@ -202,7 +202,7 @@ func (s *Server) probeSubscriptionNodes(ctx context.Context, gateID int, list st
 				results[key] = check
 			}
 		} else {
-			bin, driver, e := deployedProbeBinary(s, ctx)
+			bin, driver, e := deployedProbeBinary(s, ctx, "mihomo")
 			if e != nil {
 				return out, e
 			}

@@ -48,7 +48,41 @@ func (e exitVerificationError) Error() string { return e.err.Error() }
 func (e exitVerificationError) Unwrap() error { return e.err }
 
 func (p pendingExit) view() gin.H {
-	return gin.H{"id": p.ID, "kind": p.Kind, "user_id": p.Subject, "revision": p.Revision, "status": p.Status, "reason": p.Reason, "trace_id": p.Trace, "at": p.At, "params": p.Params, "gate_id": p.GateID, "node_id": p.NodeID, "exit_id": p.ExitID}
+	return gin.H{"id": p.ID, "kind": p.Kind, "user_id": p.Subject, "revision": p.Revision, "status": p.Status, "reason": exitVerificationReason(p.Reason), "trace_id": p.Trace, "at": p.At, "params": p.Params, "gate_id": p.GateID, "node_id": p.NodeID, "exit_id": p.ExitID}
+}
+
+func exitVerificationReason(reason string) (message string) {
+	code := reason
+	if prefix, suffix, ok := strings.Cut(reason, "chain_probe_failed: "); ok {
+		code = suffix
+		defer func() {
+			if message != reason {
+				message = prefix + message
+			}
+		}()
+	}
+	switch code {
+	case "exit_probe_prepare_failed":
+		return "出口测试参数无效，请检查出口地址和测试端点"
+	case "exit_probe_dns_failed":
+		return "入口 VPS 无法解析出口地址，请检查域名和 DNS"
+	case "exit_probe_public_address_failed":
+		return "出口地址不是公网地址，不能作为用户链式出口"
+	case "exit_probe_kernels_failed":
+		return "入口 VPS 的测试内核或驱动未准备完成"
+	case "exit_probe_config_failed":
+		return "出口测试配置生成失败，请检查协议参数和内核能力"
+	case "exit_probe_check_failed":
+		return "实际内核拒绝了出口测试配置，请检查协议参数"
+	case "exit_probe_start_failed":
+		return "入口 VPS 无法启动出口测试内核"
+	case "exit_probe_connect_failed":
+		return "经出口访问中心回显端点失败，请检查协议、凭据、证书和网络路径"
+	case "task_execution_failed":
+		return "VPS 执行验证失败，未提供可识别的阶段；请通过关联任务查看详情"
+	default:
+		return reason
+	}
 }
 
 func (s *Server) savePendingExit(ctx context.Context, p pendingExit) error {
@@ -106,7 +140,16 @@ func (s *Server) exitChangeBinding(ctx context.Context, p pendingExit) (string, 
 		req.Exit = &flat
 	}
 	if req.Exit != nil && req.Exit.Kind == "source" {
-		links, e := s.specLinks(ctx, req.Exit.source())
+		cc := chainCtx{admin: p.Admin}
+		if strings.HasPrefix(p.Kind, "chain.") || p.Subject != p.Actor || !p.Admin {
+			cc.userID = p.Subject
+		}
+		// Fingerprints must not resolve a source before the actor's access is checked.
+		var links []string
+		e := s.checkSourceAccess(ctx, req.Exit.source(), cc)
+		if e == nil {
+			links, e = s.specLinks(ctx, req.Exit.source())
+		}
 		if e != nil {
 			// 字段错误由业务处理器返回；缺少缓存的状态也参与指纹，恢复后旧候选不能生效。
 			v = append(v, "source-unavailable", e.Error())

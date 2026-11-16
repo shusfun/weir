@@ -12,7 +12,6 @@ import { State } from "./feedback";
 import { field, useConsoleContext } from "../lib/console-context";
 import { useDraft } from "../lib/dirty";
 import { RenderingSettingsFields, renderingErrorFields } from "../features/subscriptions/settings/rendering-settings";
-import { ConverterSettingsPanel } from "../features/subscriptions/settings/converter-settings";
 
 export function TemplatesPanel() {
   const confirm = useConfirm();
@@ -27,7 +26,7 @@ export function TemplatesPanel() {
   useConsoleContext({ tab: "输出模板" });
   return (
     <section className="stack">
-      <SectionHeader title="规则模板" description="决定策略组与分流规则。内置模板可直接使用；也可以粘贴 ini 模板或完整的 Clash YAML 配置。" actions={<Button size="sm" onClick={() => setEdit("new")}><Plus />新建模板</Button>} />
+      <SectionHeader flush title="规则模板" description="决定策略组与分流规则。内置模板可直接使用；也可以粘贴 ini 模板或完整的 Clash YAML 配置。" actions={<Button size="sm" onClick={() => setEdit("new")}><Plus />新建模板</Button>} />
       {t.isPending || t.error ? (
         <State loading={t.isPending} error={t.error} onRetry={() => t.refetch()} />
       ) : (
@@ -99,7 +98,7 @@ function TemplateForm({ value, close, saved }: { value: CustomTemplate | "new"; 
 export function SettingsPanel() {
   const q = useQuery({ queryKey: ["subscription-settings"], queryFn: () => api("/admin/subscriptions/settings") as Promise<SubscriptionSettings> });
   if (q.isPending || q.error) return <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} />;
-  return <section className="stack"><SettingsForm value={q.data} saved={() => q.refetch()} /><ConverterSettingsPanel /></section>;
+  return <section className="stack"><SettingsForm value={q.data} saved={() => q.refetch()} /></section>;
 }
 
 const switches = [
@@ -124,7 +123,7 @@ function SettingsForm({ value, saved }: { value: SubscriptionSettings; saved: ()
   });
   return (
     <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
-      <Field name="engine" label="默认转换引擎"><Segmented aria-label="默认转换引擎" value={s.engine || "builtin"} onValueChange={(engine) => set({ engine })} options={[["builtin", "内置"], ["external", "外部"]] as const} /></Field>
+      <Field name="engine" label="转换方式"><span>内置转换</span>{s.engine === "external" && <Notice tone="warn">外部转换已移除，当前配置待修正。<Button type="button" variant="outline" onClick={() => set({ engine: "builtin" })}>改用内置转换</Button></Notice>}</Field>
       <SectionHeader title="默认设置" description="订阅组未单独设置的项使用这里的值。" />
       <FormGrid>
         <Field label="默认规则模板" name="template"><TemplatePicker value={s.template} onChange={(v) => set({ template: v ?? "" })} /></Field>

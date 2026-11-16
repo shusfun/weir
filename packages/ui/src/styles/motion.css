@@ -494,12 +494,14 @@
   [data-motion="lite"] .weir-button:not(:disabled):is(:hover, :focus-visible, :active) svg { translate: none; scale: none; }
   [data-motion="lite"] button.weir-folder .weir-folder-front { transform: none; }
   [data-motion="lite"] button.weir-folder .weir-folder-file { transform: rotate(var(--tilt, 0deg)); }
-  [data-motion="lite"] button.weir-folder:is(:hover, :focus-visible, [aria-expanded="true"]) { outline: 1px solid var(--weir-focus); }
+  [data-motion="lite"] button.weir-folder:is(:hover, :focus-visible, [aria-expanded="true"]) .weir-folder-front { border-color: var(--weir-focus); }
+  [data-motion="lite"] .weir-folder-slot .weir-folder-slot-plus { transform: none; }
   @media (prefers-reduced-motion: reduce) {
     .weir-button:not(:disabled):is(:hover, :focus-visible, :active) svg { translate: none; scale: none; }
     button.weir-folder .weir-folder-front { transform: none; }
     button.weir-folder .weir-folder-file { transform: rotate(var(--tilt, 0deg)); }
-    button.weir-folder:is(:hover, :focus-visible, [aria-expanded="true"]) { outline: 1px solid var(--weir-focus); }
+    button.weir-folder:is(:hover, :focus-visible, [aria-expanded="true"]) .weir-folder-front { border-color: var(--weir-focus); }
+    .weir-folder-slot .weir-folder-slot-plus { transform: none; }
   }
 }
 

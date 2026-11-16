@@ -70,13 +70,21 @@ func (w *workerRunner) start(ctx context.Context, task contracts.Task, run func(
 
 func workerCapabilities() contracts.CapabilityDocument {
 	tasks := map[string]int{}
-	for _, kind := range []string{contracts.TaskSubscriptionFetch, contracts.TaskReleaseQuery, contracts.TaskExternalConvert, contracts.TaskTraceRead, contracts.TaskCoreInstall, contracts.TaskNodeProbe, contracts.TaskSubscriptionProbe} {
+	for _, kind := range []string{contracts.TaskSubscriptionFetch, contracts.TaskReleaseQuery, contracts.TaskTraceRead, contracts.TaskCoreInstall, contracts.TaskNodeProbe, contracts.TaskNodeProbeXray, contracts.TaskSubscriptionProbe} {
 		tasks[kind] = 1
 	}
 	for _, kind := range []string{contracts.ActionAssetFetch, contracts.ActionSourceProbe, contracts.ActionNodeTest, contracts.ActionOutboundProbe, contracts.ActionChainProbe, contracts.ActionRealityProbe, contracts.ActionPanelConfigure, contracts.ActionPanelCert, contracts.ActionPanelDiscover, contracts.ActionPanelRemove, contracts.ActionACMEHTTP01, contracts.ActionDiagnostics, contracts.ActionCoreRestart, contracts.ActionHostRepair, contracts.ActionLiveStart, contracts.ActionReleaseReplace, contracts.ActionUninstall} {
 		tasks[kind] = contracts.TaskVersion
 	}
-	return contracts.CapabilityDocument{Protocol: contracts.AgentProtocol, Version: buildinfo.Version, Arch: runtime.GOARCH, OS: runtime.GOOS, Tasks: tasks}
+	features := map[string]int{}
+	features[contracts.ConfigOutboundBridges] = 1
+	features[contracts.ConfigDomainObservation] = 1
+	features[contracts.ConfigBrowserTest] = 1
+	features[contracts.ConfigUoT] = 1
+	if runtime.GOOS == "linux" {
+		features[contracts.ConfigFirewall] = 1
+	}
+	return contracts.CapabilityDocument{Protocol: contracts.AgentProtocol, Version: buildinfo.Version, Arch: runtime.GOARCH, OS: runtime.GOOS, Tasks: tasks, ConfigFeatures: features}
 }
 
 func (a *Agent) workerLoop(ctx context.Context) {
@@ -120,15 +128,7 @@ func (a *Agent) workerLoop(ctx context.Context) {
 		}
 		var reply contracts.AgentPollReply
 		code, err := a.center.call(ctx, "POST", "/agent/poll", req, &reply)
-		if code == 404 {
-			a.heartbeatProtocol.Store(0)
-			a.meterProtocol.Store(0)
-			a.center.gzipPayload.Store(false)
-			// Rollout only: old centers retain their two legacy poll endpoints.
-			applyWG.Go(func() { a.actionLoop(ctx) })
-			a.configLoop(ctx)
-			return
-		}
+
 		if err != nil {
 			if code == 409 {
 				sendCaps = true
@@ -136,7 +136,7 @@ func (a *Agent) workerLoop(ctx context.Context) {
 			sleep(ctx, 5*time.Second)
 			continue
 		}
-		if reply.Protocol != contracts.AgentProtocol {
+		if reply.Protocol != contracts.AgentProtocol || reply.MeterProtocol != 2 || reply.HeartbeatProtocol != contracts.HeartbeatProtocol {
 			log.Printf("worker: unsupported protocol")
 			sleep(ctx, 5*time.Second)
 			continue
@@ -151,10 +151,6 @@ func (a *Agent) workerLoop(ctx context.Context) {
 		w.mu.Lock()
 		w.budget = a.currentWorkerBudget()
 		w.mu.Unlock()
-		a.meterProtocol.Store(int32(reply.MeterProtocol))
-		if reply.HeartbeatProtocol == contracts.HeartbeatProtocol {
-			a.heartbeatProtocol.Store(contracts.HeartbeatProtocol)
-		}
 		a.center.gzipPayload.Store(slices.Contains(reply.PayloadEncodings, "gzip"))
 		sendCaps = false
 		for _, id := range reply.Cancel {
@@ -335,7 +331,7 @@ func (a *Agent) executeTask(ctx context.Context, t contracts.Task) {
 				result.OK = true
 			}
 		}
-	} else if err == nil && (t.Kind == contracts.TaskNodeProbe || t.Kind == contracts.TaskSubscriptionProbe) {
+	} else if err == nil && (t.Kind == contracts.TaskNodeProbe || t.Kind == contracts.TaskNodeProbeXray || t.Kind == contracts.TaskSubscriptionProbe) {
 		raw, e := a.probeTask(ctx, t)
 		err = e
 		if e == nil {
@@ -351,7 +347,7 @@ func (a *Agent) executeTask(ctx context.Context, t contracts.Task) {
 		} else {
 			result.Error = "laya_task_failed"
 		}
-	} else if err == nil && (t.Kind == contracts.TaskSubscriptionFetch || t.Kind == contracts.TaskReleaseQuery || t.Kind == contracts.TaskExternalConvert) {
+	} else if err == nil && (t.Kind == contracts.TaskSubscriptionFetch || t.Kind == contracts.TaskReleaseQuery) {
 		raw, e := a.networkTask(ctx, t)
 		if e == nil {
 			result.OK = true
@@ -377,7 +373,7 @@ func (a *Agent) executeTask(ctx context.Context, t contracts.Task) {
 		if result.Error != "" {
 			log.Printf("task execution failed kind=%s err=%s", t.Kind, trimTaskErr(result.Error))
 		}
-		if t.Kind == contracts.TaskSubscriptionFetch || t.Kind == contracts.TaskReleaseQuery || t.Kind == contracts.TaskExternalConvert {
+		if t.Kind == contracts.TaskSubscriptionFetch || t.Kind == contracts.TaskReleaseQuery {
 			code, origin = result.Error, "gate.executeNetworkTask"
 		} else if result.Error != "" {
 			if candidate := (&contracts.TaskError{Code: result.Error, Origin: origin}); candidate.Validate() == nil {
@@ -395,6 +391,9 @@ func (a *Agent) executeTask(ctx context.Context, t contracts.Task) {
 					code, origin = "node_test_"+stage+"_failed", "gate.nodeTest"
 				}
 			}
+		}
+		if t.Kind == contracts.ActionChainProbe || t.Kind == contracts.ActionOutboundProbe {
+			origin = "gate.clientProbe"
 		}
 		if errors.Is(ctx.Err(), context.Canceled) {
 			code = "task_cancelled"

@@ -32,7 +32,7 @@ func TestDriverAdminSaveHistoryRollbackRestore(t *testing.T) {
 	edited := strings.Replace(base, "notes: 26.3.27 起移除 allowInsecure。", "notes: 改过。", 1)
 	saved := mustJSON(t, admin, "PUT", "/api/v1/admin/drivers/xray-26.3", map[string]any{"text": edited, "note": "test"}, 200)
 	check := saved["check"].(map[string]any)
-	if saved["revision"].(float64) != 1 || check["state"] == "failed" || len(check["samples"].([]any)) != 6 {
+	if saved["revision"].(float64) != 1 || check["state"] == "failed" || len(check["samples"].([]any)) != 8 {
 		t.Fatalf("save = %v", saved)
 	}
 	d, _, err := s.drivers(t.Context()).Resolve("xray-26.3")
@@ -81,7 +81,7 @@ func TestDriverAdminSaveHistoryRollbackRestore(t *testing.T) {
 	}
 	// 方案来自驱动：节点向导看到的就是驱动里的方案。
 	items := mustJSON(t, admin, "GET", "/api/v1/admin/presets", nil, 200)["items"].([]any)
-	if len(items) != 11 || items[0].(map[string]any)["id"] != "vless-reality" || items[0].(map[string]any)["kernel"] != "xray" {
+	if len(items) != 14 || items[0].(map[string]any)["id"] != "vless-reality" || items[0].(map[string]any)["kernel"] != "xray" {
 		t.Fatalf("presets = %v", items)
 	}
 }

@@ -24,6 +24,15 @@ func InventoryIdentity(raw string) string {
 				}
 			}
 		}
+	} else if strings.HasPrefix(canonical, "ssr://") {
+		if body, err := decodeSSR(strings.TrimPrefix(canonical, "ssr://")); err == nil {
+			endpoint, query, _ := strings.Cut(body, "/?")
+			if q, err := url.ParseQuery(query); err == nil {
+				q.Del("remarks")
+				q.Del("group")
+				canonical = "ssr://" + endpoint + "/?" + q.Encode()
+			}
+		}
 	} else if u, err := url.Parse(canonical); err == nil {
 		u.Fragment = ""
 		u.RawFragment = ""

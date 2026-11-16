@@ -125,19 +125,19 @@ function Ticket({
   return (
     <article data-slot="ticket" className={cn("weir-ticket", className)}>
       <div className="weir-ticket-main">
-        <div className="flex items-center justify-between gap-[9px]">
+        <div className="flex items-center justify-between gap-[var(--weir-gap-9)]">
           <b className="truncate text-headline">{name}</b>
-          <span className="flex shrink-0 items-center gap-[5px] text-fine text-[var(--weir-ink-3)]">
+          <span className="flex shrink-0 items-center gap-[var(--weir-gap-5)] text-fine text-[var(--weir-ink-3)]">
             <span className="weir-lamp" data-size="sm" data-tone={tone} />
             {last ?? "未拉取"}
           </span>
         </div>
-        {meta && <div className="mt-[3px] truncate text-fine text-[var(--weir-ink-3)]">{meta}</div>}
+        {meta && <div className="mt-[var(--weir-gap-3)] truncate text-fine text-[var(--weir-ink-3)]">{meta}</div>}
         <div className="weir-ticket-url">{url ?? "地址未知"}</div>
         <div className="weir-ticket-days" role="img" aria-label={days ? "最近 21 天的拉取" : "最近 21 天的拉取：未知"}>
           {Array.from({ length: 21 }, (_, k) => <i key={k} data-day={days ? days[k] ?? "none" : "unknown"} />)}
         </div>
-        <div className="mt-[5px] text-fine text-[var(--weir-ink-3)]">{note}</div>
+        <div className="mt-[var(--weir-gap-5)] text-fine text-[var(--weir-ink-3)]">{note}</div>
         {actions && <div className="weir-ticket-actions">{actions}</div>}
       </div>
       <div className="weir-ticket-stub">

@@ -16,6 +16,7 @@ import { openDsh } from "../components/dsh";
 import { ObjectLink, dataObject, useDialogParam } from "../components/object-link";
 import { exitKindName, probeText } from "../components/chain-exit";
 import { NodeAccess } from "../components/node-access";
+import { ExternalNodeCatalog } from "../components/node-catalog";
 import { CenterResources } from "../components/resource-usage";
 import { GateCard } from "../components/gate-card";
 import { NodeDetail } from "../components/node-detail";
@@ -24,13 +25,9 @@ const emptyNodes:NodeItem[]=[];
 
 // 文件夹右上角的状态标签：只在有事时出现，写最要紧的一件（稿子「DNS 被污染」「宿主机抢 CPU」）。
 function gateFolderStatus(g: Gate, tone: LampTone): FolderStatus | null {
-  if (g.status !== "active") return { tone: "neutral", text: "已撤销" };
-  if (!g.online) return { tone: "bad", text: "离线" };
-  if (g.state === "failed") return { tone: "bad", text: "配置应用失败" };
-  if (g.host?.health?.dns === "polluted") return { tone: "bad", text: "DNS 被污染" };
-  if ((g.host?.health?.cpu_steal ?? 0) >= 10) return { tone: "warn", text: "宿主机抢 CPU" };
-  if (tone === "warn") return { tone: "warn", text: "待生效" };
-  return null;
+  const [label, stateTone] = objectStatus(g.object_state);
+  if (stateTone === "ok") return null;
+  return { tone: stateTone === "bad" ? "bad" : stateTone === "warn" ? "warn" : "neutral", text: label };
 }
 import { GateDetail, pct, size } from "../components/gate-detail";
 import { api } from "../api";
@@ -44,7 +41,7 @@ import { NodeWizard } from "../components/node-wizard";
 import { date } from "../lib/models";
 import { rateText } from "../lib/linkmap";
 import { field, useConsoleContext } from "../lib/console-context";
-import { nodeStatus, protocolNames, relativeTime, type Gate, type NodeItem } from "../lib/core";
+import { objectStatus, nodeStatus, protocolNames, relativeTime, type Gate, type NodeItem } from "../lib/core";
 import { GettingStarted } from "../components/getting-started";
 import { GateNodeTable } from "../components/gate-node-table";
 import { confidenceText, reopenDrafts, useDrafts } from "../components/draft-confirm";
@@ -65,24 +62,18 @@ export function GatesPage() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   useEffect(() => {
-    const gate = params.get("gate");
-    const node = params.get("node");
-    if (gate) navigate(`/gates/${gate}`, { replace: true });
-    else if (node) navigate(`/nodes/${node}`, { replace: true });
-  }, [params, navigate]);
-  useEffect(() => {
     const id = Number(params.get("new"));
     const editId = Number(params.get("edit"));
     if (id > 0 && gates.data?.some(g => g.id === id)) setWizard(id);
     if (editId > 0) { const target = gates.data?.find(g => g.id === editId); if (target) setEdit(target); }
   }, [params, gates.data]);
   const clearAction = () => setParams(p => { p.delete("new"); p.delete("edit"); return p; }, { replace: true });
-  const detailParam = useDialogParam("gate", gates.data, !gates.isFetching);
-  const nodeParam = useDialogParam("node", nodes.data, !nodes.isFetching);
+  const detailParam = useDialogParam("gate", gates.data, gates.isSuccess);
+  const nodeParam = useDialogParam("node", nodes.data, nodes.isSuccess);
   const detail = detailParam.current;
   const expanded = Number(params.get("expand"));
   const setExpanded = (id: string | null) => setParams(p => { if (id) p.set("expand", id); else p.delete("expand"); return p; });
-  const openNode=useCallback((n:NodeItem)=>navigate(`/nodes/${n.id}`),[navigate]);
+  const openNode=useCallback((n:NodeItem)=>nodeParam.open(n),[nodeParam]);
   const previousGroups=useRef(new Map<number,NodeItem[]>());
   const grouped=useMemo(()=>{
     const groups=new Map<number,NodeItem[]>();
@@ -151,13 +142,13 @@ export function GatesPage() {
   return (
     <div className="stack" data-tour-online={gates.data.some(g => g.status === "active" && g.online)} data-tour-has-nodes={nodes.data.length > 0}>
       {header}
-      {drafts.data && drafts.data.length > 0 && <InsightBanner className="mt-[25px]" title={drafts.data[0].steps?.[0]?.title || drafts.data[0].explain || "有待确认的草稿"} confidence={confidenceText(drafts.data[0])} progress={`${drafts.data[0].source === "analysis" ? "dsh 已起草" : "dsh 对话起草"} · 待你确认`} more={Math.max(0, drafts.data.length - 1)} action={<Button onClick={reopenDrafts}>去确认</Button>} />}
+      {drafts.data && drafts.data.length > 0 && <InsightBanner className="mt-[var(--weir-gap-25)]" title={drafts.data[0].steps?.[0]?.title || drafts.data[0].explain || "有待确认的草稿"} confidence={confidenceText(drafts.data[0])} progress={`${drafts.data[0].source === "analysis" ? "dsh 已起草" : "dsh 对话起草"} · 待你确认`} more={Math.max(0, drafts.data.length - 1)} action={<Button onClick={reopenDrafts}>去确认</Button>} />}
       <MetricStrip items={[
         { label: "可用节点", value: nodes.data ? `${nodes.data.filter((n) => nodeStatus(n, gates.data.find((g) => g.id === n.gate_id))[1] === "ok").length} / ${nodes.data.length}` : null },
         { label: "此刻总速率", value: null, unit: "B/s" },
         { label: "24 小时内核重启", value: null },
       ]} />
-      <SectionHeader className="mt-[33px]" title="VPS" actions={<span className="text-meta text-[var(--weir-ink-3)]">点开文件夹管理节点与 Laya</span>} />
+      <SectionHeader flush className="mt-[var(--weir-gap-33)]" title="VPS" actions={<span className="text-meta text-[var(--weir-ink-3)]">点开文件夹管理节点与 Laya</span>} />
       <FolderGrid expandedId={expanded ? String(expanded) : null} onExpandedChange={setExpanded} onMotion={recordFolderMotion} items={gates.data.map((g, i) => {
           const folderNodes = grouped.get(g.id) ?? emptyNodes;
           const tone: LampTone = g.status !== "active" ? "off" : !g.online || g.state === "failed" ? "bad" : g.state === "pending" ? "warn" : "ok";
@@ -166,14 +157,15 @@ export function GatesPage() {
           const caption = [cpu == null ? "CPU 未知" : `CPU ${Math.round(cpu)}%`, steal != null && steal >= 5 ? `steal ${Math.round(steal)}%` : null, `${folderNodes.length} 个节点`].filter(Boolean).join(" · ");
           return { id: String(g.id), label: g.name,
             folder: (open: boolean) => <GlassFolder expanded={open} controls={`folder-content-${g.id}`} hue={(i % 2) as 0 | 1} name={g.name} address={g.public_host || null} status={gateFolderStatus(g, tone)} cpu={cpu} caption={caption} metric={null} metricUnit="ms" metricLabel="国内延迟" onClick={() => setExpanded(open ? null : String(g.id))} files={folderNodes.slice(0, 3).map((n) => ({ id: String(n.id), title: protocolNames[n.protocol] ?? n.name, meta: n.port ? String(n.port) + (n.network === "udp" ? "/udp" : "") : null, tone: nodeStatus(n, g)[1] }))} />,
-            content: <><GateManagement gate={g} nodes={nodes.data} details /><GateLayaHosting gateId={g.id} host={g.public_host} /></> };
+            content: <><GateManagement gate={g} nodes={nodes.data} details /><GateLayaHosting gateId={g.id} /></> };
 
         })}>
         <FolderSlot title="添加 VPS" caption="用 SSH 一次装好" onClick={() => setInvite(true)} />
       </FolderGrid>
       <GateNodeTable gates={gates.data} nodes={nodes.data} openNode={openNode} />
+      <ExternalNodeCatalog />
       <GettingStarted gates={gates.data} nodes={nodes.data} addGate={() => setInvite(true)} addNode={() => setWizard("any")} />
-      <SectionHeader className="mt-[33px]" title="中心" />
+      <SectionHeader flush className="mt-[var(--weir-gap-33)]" title="中心" />
       <CenterResources />
       {dialogs}
     </div>

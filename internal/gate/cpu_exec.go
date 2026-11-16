@@ -14,8 +14,6 @@ func (a *Agent) runCPUTask(ctx context.Context, task contracts.Task) (json.RawMe
 	switch task.Kind {
 	case contracts.TaskLayaClassify:
 		return a.layaTask(ctx, task)
-	case contracts.TaskExternalConvert:
-		return a.networkTask(ctx, task)
 	default:
 		return nil, errors.New("not a cpu task")
 	}

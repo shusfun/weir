@@ -11,11 +11,11 @@ import { date } from "../lib/models";
 import { fromLocalInput, localInput, type UserItem } from "../lib/core";
 import { ruleLevels, type BuiltinTemplate, type CustomTemplate, type Profile, type ProfileSettings } from "../lib/subscriptions";
 import { OperatorEditor, type Operator } from "./operator-editor";
-import { useSources } from "./subscription-sources";
+import { useSources } from "../lib/subscription-sources";
 import { useManualNodes, nodeName } from "./subscription-nodes";
 import { State } from "./feedback";
 import { SubCheckBadge } from "./sub-check";
-import { dataObject, useDialogParam } from "./object-link";
+import { dataObject, ObjectLink, useDialogParam } from "./object-link";
 import { field, useConsoleContext } from "../lib/console-context";
 import { RenderingSettingsFields, renderingErrorFields } from "../features/subscriptions/settings/rendering-settings";
 import { ProfileProbe } from "../features/subscriptions/probes/profile-probe";
@@ -54,6 +54,7 @@ export function ProfilesPanel() {
   const toast = useToast();
   const q = useQuery({ queryKey: ["subscription-profiles"], queryFn: async () => (await api("/admin/subscriptions/profiles")).items as Profile[] });
   const [params, setParams] = useSearchParams();
+  const detail = useDialogParam("profile_detail", q.data, q.isSuccess);
   const editParam = useDialogParam("profile", q.data, !q.isFetching && !q.error);
   const edit = params.get("create") === "profile" ? "new" : editParam.current;
   const setEdit = (value: Profile | "new" | null) => setParams((next) => {
@@ -75,7 +76,7 @@ export function ProfilesPanel() {
   useConsoleContext({ tab: "订阅组", list: { total: q.data?.length ?? 0, items: (q.data ?? []).slice(0, 20).map((p) => ({ type: "profile", name: p.name, id: p.id })) } });
   return (
     <section className="stack">
-      <SectionHeader title="订阅组" description="把订阅源与手动节点组合成一份订阅；可分配给用户（各自独立地址）或匿名分享。外部节点的流量不计入用户额度。" actions={<Button size="sm" onClick={() => setEdit("new")}><Plus />新建订阅组</Button>} />
+      <SectionHeader flush title="订阅组" description="把订阅源与手动节点组合成一份订阅；可分配给用户（各自独立地址）或匿名分享。外部节点的流量不计入用户额度。" actions={<Button size="sm" onClick={() => setEdit("new")}><Plus />新建订阅组</Button>} />
       {q.isPending || q.error ? (
         <State
           loading={q.isPending}
@@ -90,7 +91,7 @@ export function ProfilesPanel() {
           {q.data.map((p) => (
             <li key={p.id} {...dataObject({ type: "profile", id: p.id })} className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3">
               <span className="min-w-0">
-                <strong>{p.name}</strong> {!p.enabled && <Badge variant="soft" tone="warn">停用</Badge>} {p.shared && <Badge variant="soft" tone="ok">已分享</Badge>}
+                <strong><ObjectLink to={{ type: "profile", id: p.id, name: p.name }} /></strong> {!p.enabled && <Badge variant="soft" tone="warn">停用</Badge>} {p.shared && <Badge variant="soft" tone="ok">已分享</Badge>}
                 <small className="block text-[var(--weir-ink-3)]">
                   {p.all_sources ? "全部订阅源与手动节点" : p.members ? `${p.members.length} 个有序成员（含 ${p.members.filter((m) => m.kind === "profile").length} 个子组）` : `${p.source_ids?.length ?? 0} 个订阅源 · ${p.node_ids?.length ?? 0} 个手动节点`} · {p.user_ids.length} 个用户 · 下载 {p.downloads} 次{p.expires_at ? ` · 到期 ${date(p.expires_at)}` : ""}
                 </small>
@@ -107,6 +108,7 @@ export function ProfilesPanel() {
           ))}
         </ul>
       )}
+      {detail.current && <Dialog open onOpenChange={o => !o && detail.close()}><DialogContent size="xl"><DialogTitle>{detail.current.name}</DialogTitle><DialogDescription>管理订阅组的预览、实测、分配与分享。</DialogDescription><ProfileDetail key={detail.current.id} id={String(detail.current.id)} tab={params.get("detail_tab") || "overview"} /></DialogContent></Dialog>}
       {edit && <ProfileForm value={edit} close={() => setEdit(null)} saved={() => { setEdit(null); done("已保存"); }} />}
       {preview && <ProfilePreview profile={preview} close={() => setPreview(null)} />}
       {probe && <ProfileProbe profile={probe} close={() => setProbe(null)} />}
@@ -128,6 +130,7 @@ export function ProfileDetail({ id, tab }: { id: string; tab: string }) {
   const [grants, setGrants] = useState(false);
   const { run, isBusy } = useRowAction<number>({ refetch: q.refetch });
   const item = q.data?.find((p) => String(p.id) === id);
+  useConsoleContext({ object: item ? { type: "profile", id: item.id, name: item.name } : undefined, dialog: { title: "订阅组详情" } });
   if (q.isPending) return <State loading />;
   if (q.error) return <State error={q.error} onRetry={() => void q.refetch()} />;
   if (!item) return <PageState kind="empty" title="没有这个订阅组" detail="它可能已被删除，或你没有权限查看。" action={<Link to="/subscriptions?tab=profiles">返回订阅组</Link>} />;
@@ -141,12 +144,13 @@ export function ProfileDetail({ id, tab }: { id: string; tab: string }) {
     <section className="stack">
       <div className="flex flex-wrap gap-1.5">
         <Button size="sm" variant="outline" onClick={() => setPreview(true)}><Eye />预览</Button>
+        <Button size="sm" variant="outline" onClick={() => setParams(p => { p.set("detail_tab", "probe"); return p; }, { replace: true })}>实测</Button>
         <Button size="sm" variant="outline" onClick={() => setGrants(true)}><Users />用户</Button>
         <Button size="sm" variant="outline" onClick={() => setShare(true)}><Share2 />分享</Button>
         <Button size="sm" variant="outline" onClick={() => setEdit(true)}>编辑</Button>
         <Button size="sm" variant="destructive" disabled={isBusy()} busy={isBusy(item.id)} busyText="正在删除" onClick={() => void remove()}><Trash2 />删除</Button>
       </div>
-      {tab === "probe" ? <ProfileProbe profile={item} close={() => setParams((p) => { p.set("tab", "overview"); return p; }, { replace: true })} /> : (
+      {tab === "probe" ? <ProfileProbe profile={item} close={() => setParams((p) => { p.set("detail_tab", "overview"); return p; }, { replace: true })} /> : (
         <div className="grid gap-3 sm:grid-cols-3">
           <Readout label="状态" value={item.enabled ? "启用" : "已停用"} />
           <Readout label="成员" value={item.all_sources ? "全部订阅源与手动节点" : members} />
@@ -208,7 +212,7 @@ function ProfileForm({ value, close, saved }: { value: Profile | "new"; close: (
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
           <FormGrid>
             <Field label="名称" name="name" required hint="也是客户端里显示的配置名。"><Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} /></Field>
-            <Field label="到期时间（可选）" hint="到期后只输出一个「订阅已到期」提示节点。"><Input type="datetime-local" value={expiry} onChange={(e) => setExpiry(e.target.value)} /></Field>
+            <Field label="到期时间（可选）" hint="到期后拒绝下载并返回 403，请先续期。"><Input type="datetime-local" value={expiry} onChange={(e) => setExpiry(e.target.value)} /></Field>
           </FormGrid>
           <SwitchField label="包含全部已启用的订阅源与手动节点" checked={all} onCheckedChange={setAll} />
           {!all && (loadingMembers || membersError) && <State loading={loadingMembers} error={membersError} onRetry={()=>{ void sources.refetch(); void nodes.refetch(); void profiles.refetch(); }} />}
@@ -250,7 +254,7 @@ function ProfileForm({ value, close, saved }: { value: Profile | "new"; close: (
                 options={[["__inherit", "默认"], ...ruleLevels] as const} />
             </Field>
           </FormGrid>
-          <Field label="转换引擎" name="engine"><Segmented aria-label="转换引擎" value={settings.engine ?? "__inherit"} onValueChange={(v) => setS({ engine: v === "__inherit" ? undefined : v })} options={[["__inherit", "默认"], ["builtin", "内置"], ["external", "外部"]] as const} /></Field>
+          <Field label="转换引擎" name="engine">{settings.engine === "external" && <Notice tone="warn">外部转换已移除；请明确选择内置转换或继承默认值后保存。</Notice>}<Segmented aria-label="转换引擎" value={settings.engine ?? "__inherit"} onValueChange={(v) => setS({ engine: v === "__inherit" ? undefined : v })} options={[["__inherit", "默认"], ["builtin", "内置"]] as const} /></Field>
           <Field label="只保留（每行一条）"><Textarea rows={2} value={settings.filter_include ?? ""} onChange={(e) => setS({ filter_include: e.target.value || undefined })} /></Field>
           <Field label="排除（每行一条）"><Textarea rows={2} value={settings.filter_exclude ?? ""} onChange={(e) => setS({ filter_exclude: e.target.value || undefined })} /></Field>
           <FormGrid>

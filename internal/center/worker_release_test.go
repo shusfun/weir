@@ -17,7 +17,7 @@ func TestReleaseMetadataUsesWorkerAndRejectsForgedOwnership(t *testing.T) {
 	g := pairFakeGate(t, admin)
 	heartbeat(t, g, contracts.Heartbeat{Version: "test", Arch: "amd64"})
 	now := time.Now().UTC()
-	caps := contracts.CapabilityDocument{Sources: map[string]bool{"github": true}, Protocol: 2, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.TaskReleaseQuery: 1}}
+	caps := contracts.CapabilityDocument{Sources: map[string]bool{"github": true}, Protocol: 2, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.TaskCoreInstall: contracts.TaskVersion, contracts.TaskReleaseQuery: 1}}
 	code, body := g.call("POST", "/api/v1/agent/poll", contracts.AgentPoll{Protocol: 2, Capabilities: &caps, Resources: contracts.WorkerResources{Concurrency: 1, SourcesObservedAt: &now}})
 	var first contracts.AgentPollReply
 	if err := json.Unmarshal(body, &first); err != nil || code != 200 || first.Config == nil {

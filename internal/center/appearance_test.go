@@ -4,7 +4,7 @@ import "testing"
 
 // 外观偏好跟着账号保存，只接受可选值，按账号隔离。
 func TestAppearanceFollowsAccount(t *testing.T) {
-	_, admin := newInstalledServer(t)
+	s, admin := newInstalledServer(t)
 	if r := mustJSON(t, admin, "GET", "/api/v1/me/appearance", nil, 200); r["saved"] != false {
 		t.Fatalf("fresh account = %v", r)
 	}
@@ -22,5 +22,11 @@ func TestAppearanceFollowsAccount(t *testing.T) {
 	admin.cookie = nil
 	if w := admin.do("GET", "/api/v1/me/appearance", nil, nil); w.Code != 401 {
 		t.Fatal("appearance readable without session", w.Code)
+	}
+	again := login(t, s, "Admin@Example.test", "Passw0rd")
+	r = mustJSON(t, again, "GET", "/api/v1/me/appearance", nil, 200)
+	a, _ = r["appearance"].(map[string]any)
+	if r["saved"] != true || a["motion"] != "lite" || a["theme"] != "dark" {
+		t.Fatal("new session lost appearance", r)
 	}
 }

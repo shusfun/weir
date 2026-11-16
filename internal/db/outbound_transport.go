@@ -54,6 +54,9 @@ func ManagedOutboundSettings(out Outbound) (OutboundSettings, error) {
 		}
 	}
 	protocol := NormalizeOutboundProtocol(out.Protocol)
+	if s.UDPOverTCP && protocol != "shadowsocks" {
+		return s, errors.New("UDP over TCP requires Shadowsocks")
+	}
 	if protocol == "hysteria2" || protocol == "tuic" || protocol == "anytls" || protocol == "shadowtls" {
 		return managedSingboxSettings(protocol, s)
 	}

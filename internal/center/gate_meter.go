@@ -46,6 +46,7 @@ func (s *Server) agentMeter(c *gin.Context) {
 	}
 	var affected map[int]bool
 	accepted := true
+	finish := operationStage(ctx, "traffic.report", "gate_id", g.ID, "sequence", rep.Seq)
 	err := s.Store.Lock.Do(ctx, "meter:"+itoa(g.ID), func(ctx context.Context) error {
 		cur, err := s.Store.Ent.Gate.Get(ctx, g.ID)
 		if err != nil {
@@ -73,6 +74,7 @@ func (s *Server) agentMeter(c *gin.Context) {
 		}
 		return nil
 	})
+	finish(err)
 	if err != nil {
 		if errors.Is(err, errMeterBaseline) {
 			failure(c, 409, "meter_full_baseline_required")
@@ -95,8 +97,22 @@ func (s *Server) agentMeter(c *gin.Context) {
 var errMeterBaseline = errors.New("meter full baseline required")
 
 func validMeterReport(rep contracts.MeterReport) bool {
-	if rep.Epoch == "" || len(rep.Epoch) > 100 || rep.Seq < 0 || (rep.Protocol != 0 && rep.Protocol != 2) || rep.Partial && rep.Protocol != 2 || len(rep.Usage) > 100000 || (rep.Status != "fresh" && rep.Status != "unavailable" && rep.Status != "") {
+	if !validDomainReport(rep, time.Now()) {
 		return false
+	}
+	if rep.Epoch == "" || len(rep.Epoch) > 100 || rep.Seq < 0 || rep.Protocol != 2 || len(rep.Usage) > 100000 || (rep.Status != "fresh" && rep.Status != "unavailable" && rep.Status != "") {
+		return false
+	}
+	if len(rep.Rules) > 20000 {
+		return false
+	}
+	rules := map[string]bool{}
+	for _, r := range rep.Rules {
+		key := r.Engine + ":" + itoa(int(r.RuleID))
+		if r.RuleID <= 0 || (r.Engine != "xray" && r.Engine != "sing-box") || rules[key] || r.Up < 0 || r.Down < 0 || r.Up > math.MaxInt64-r.Down || r.ObservedAt.IsZero() || r.ObservedAt.After(time.Now().Add(5*time.Minute)) || (r.Status != "fresh" && r.Status != "unavailable") {
+			return false
+		}
+		rules[key] = true
 	}
 	seen := map[string]bool{}
 	for _, sample := range rep.Usage {
@@ -138,6 +154,12 @@ func (s *Server) applyMeter(ctx context.Context, g *ent.Gate, rep contracts.Mete
 	daily := map[int]int64{}
 	affected, err := worker.applyMeterRows(ctx, g, rep, daily)
 	if err != nil {
+		return nil, err
+	}
+	if err = worker.applyRuleMeter(ctx, g, rep, time.Now().UTC()); err != nil {
+		return nil, err
+	}
+	if err = worker.applyDomainObservations(ctx, g, rep, time.Now().UTC()); err != nil {
 		return nil, err
 	}
 	if err = tx.Gate.UpdateOneID(g.ID).SetMeterEpoch(rep.Epoch).SetMeterSeq(rep.Seq).Exec(ctx); err != nil {
@@ -196,6 +218,11 @@ func (s *Server) applyMeterRows(ctx context.Context, g *ent.Gate, rep contracts.
 		if delta > 0 {
 			// 按天累计（中心本地日期），链路页显示每条路径今天的流量；内部凭据也记，用于出口一侧的连线。
 			daily[cred.ID] += delta
+		}
+		if fresh || delta > 0 {
+			if err = s.recordDailyUsage(ctx, cred, g.ID, delta, now); err != nil {
+				return nil, err
+			}
 		}
 		if cred.Internal || cred.UserID == nil {
 			continue

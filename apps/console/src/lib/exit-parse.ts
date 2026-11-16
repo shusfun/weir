@@ -10,7 +10,7 @@ export interface ParsedProxy {
 export type Parsed = { type: "proxy"; proxy: ParsedProxy; notice: string } | { type: "link"; link: string } | { type: "subscription" } | { type: "error"; message: string };
 const error = (message: string): Parsed => ({ type: "error", message });
 const schemes: Record<string, ProxyKind> = { socks5: "socks5", socks5h: "socks5", socks: "socks5", http: "http", https: "https" };
-const linkSchemes = ["vless", "vmess", "trojan", "ss", "hysteria2", "hy2", "tuic", "anytls"];
+const linkSchemes = ["vless", "vmess", "trojan", "ss", "ssr", "hysteria2", "hy2", "tuic", "anytls", "wireguard", "snell"];
 function host(s: string) { return /^\[[0-9a-f:.]+\]$/i.test(s) || /^[^\s:/@?#\[\]，,；;]+$/.test(s); }
 function splitHost(s: string) {
   const m = s.match(/^(\[[0-9a-f:.]+\]|[^:\s\[\]]+):(\d{1,5})$/i);

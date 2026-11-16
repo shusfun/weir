@@ -2,6 +2,7 @@ package center
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -50,18 +51,31 @@ func (s *Server) agentPoll(c *gin.Context) {
 		return
 	}
 	if req.Capabilities != nil {
-		if err := s.Store.Tasks.SetCapabilities(ctx, g.ID, *req.Capabilities); err != nil {
-			failure(c, 400, "invalid_capabilities")
+		if err := req.Capabilities.Validate(); err != nil {
+			failure(c, 400, "invalid_worker_payload")
+			return
+		}
+		if err := s.Store.Lock.Do(ctx, "gate-capabilities:"+itoa(g.ID), func(ctx context.Context) error {
+			previous, err := s.Store.Tasks.Capabilities(ctx, g.ID)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+			if previous.ConfigFeatures[contracts.ConfigDomainObservation] != req.Capabilities.ConfigFeatures[contracts.ConfigDomainObservation] {
+				// Advance first: a failed capability write can safely retry, whereas
+				// publishing the capability first could permanently skip deployment.
+				if _, err := s.bumpGate(ctx, g.ID); err != nil {
+					return err
+				}
+			}
+			return s.Store.Tasks.SetCapabilities(ctx, g.ID, *req.Capabilities)
+		}); err != nil {
+			failInternal(c, 503, "capabilities_update_failed", err)
 			return
 		}
 	}
 	caps, err := s.Store.Tasks.Capabilities(ctx, g.ID)
 	if err != nil {
 		failure(c, 409, "capabilities_required")
-		return
-	}
-	if err := s.migratePendingActions(ctx, g.ID); err != nil {
-		failInternal(c, 503, "task_migration_failed", err)
 		return
 	}
 	wake, unsubscribe := s.Store.Notifications.Subscribe("gate:" + itoa(g.ID))
@@ -206,7 +220,7 @@ func (s *Server) agentTaskUpdate(c *gin.Context) {
 				failure(c, 400, "invalid_task_result")
 				return
 			}
-			if r.Task.Kind == contracts.TaskSubscriptionFetch || r.Task.Kind == contracts.TaskExternalConvert || r.Task.Kind == contracts.TaskReleaseQuery {
+			if r.Task.Kind == contracts.TaskSubscriptionFetch || r.Task.Kind == contracts.TaskReleaseQuery {
 				if e = s.validateNetworkResult(ctx, r, u.Result); e != nil {
 					failure(c, 400, "invalid_network_result")
 					return
@@ -242,7 +256,7 @@ func (s *Server) agentTaskUpdate(c *gin.Context) {
 					return
 				}
 			}
-			if r.Task.Kind == contracts.TaskNodeProbe || r.Task.Kind == contracts.TaskSubscriptionProbe {
+			if r.Task.Kind == contracts.TaskNodeProbe || r.Task.Kind == contracts.TaskNodeProbeXray || r.Task.Kind == contracts.TaskSubscriptionProbe {
 				if e = s.validateProbeResult(ctx, r, u.Result); e != nil {
 					failure(c, 400, "invalid_probe_result")
 					return
@@ -287,8 +301,8 @@ func (s *Server) agentTaskUpdate(c *gin.Context) {
 	failInternal(c, 503, "task_update_failed", err)
 }
 
-// During rollout legacy HTTP callers await GateAction rows. They are a view of
-// the durable queue for protocol 2 workers, never a second delivery source.
+// GateAction rows retain stable business operation IDs. They project durable
+// task results and are never a second delivery source.
 func (s *Server) projectLegacyTask(ctx context.Context, id string) error {
 	r, err := s.Store.Tasks.Get(ctx, id)
 	if err != nil {
@@ -372,7 +386,7 @@ func (s *Server) enqueueWorkerTask(ctx context.Context, gid int, kind string, pa
 	if err != nil {
 		return nil, err
 	}
-	// The compatibility row intentionally contains no credentials or task body.
+	// The operation row keeps its stable ID and never contains the task body or credentials.
 	a, err := s.Store.Ent.GateAction.Create().SetGateID(gid).SetKind(kind).SetPayload(map[string]any{"protocol": contracts.AgentProtocol}).SetStatus(gateaction.StatusRunning).SetExpiresAt(time.Now().Add(ttl)).Save(ctx)
 	if err != nil {
 		return nil, err
@@ -385,47 +399,6 @@ func (s *Server) enqueueWorkerTask(ctx context.Context, gid int, kind string, pa
 	_ = s.Store.Notifications.Publish(ctx, "gate:"+itoa(gid))
 	s.actionWaiters.notify(gid)
 	return a, nil
-}
-
-func (s *Server) migratePendingActions(ctx context.Context, gid int) error {
-	return s.Store.Lock.Do(ctx, "legacy-actions:"+itoa(gid), func(ctx context.Context) error {
-		items, err := s.Store.Ent.GateAction.Query().Where(gateaction.GateIDEQ(gid), gateaction.StatusEQ(gateaction.StatusPending)).Order(ent.Asc(gateaction.FieldID)).Limit(100).All(ctx)
-		items = unexpiredActions(items, time.Now())
-		if err != nil {
-			return err
-		}
-		for _, a := range items {
-			payload := a.Payload
-			if payload == nil {
-				payload = map[string]any{}
-			}
-			raw, err := json.Marshal(payload)
-			if err == nil {
-				err = contracts.ValidateTaskPayload(a.Kind, contracts.TaskVersion, raw)
-			}
-			if err != nil {
-				if e := s.Store.Ent.GateAction.UpdateOneID(a.ID).SetStatus(gateaction.StatusFailed).SetError("task_schema_invalid").SetFinishedAt(time.Now()).Exec(ctx); e != nil {
-					return e
-				}
-				s.actionDone.notify(a.ID)
-				continue
-			}
-			sealed, err := s.Crypto.Encrypt(string(raw))
-			if err != nil {
-				return err
-			}
-			_, err = s.Store.Tasks.Enqueue(ctx, taskqueue.Request{Kind: a.Kind, TraceID: taskTrace(ctx), Key: "legacy:" + itoa(a.ID), Payload: raw, Requirements: contracts.TaskRequirements{TargetGateID: gid}, Candidates: []int{gid}, Deadline: a.ExpiresAt, LegacyID: a.ID}, sealed, time.Now())
-			if err != nil {
-				return err
-			}
-			// Once capabilities exist, the old delivery endpoint cannot claim
-			// these rows. An interrupted migration resumes with the same key.
-			if err = s.Store.Ent.GateAction.UpdateOneID(a.ID).SetStatus(gateaction.StatusRunning).SetPayload(map[string]any{"protocol": contracts.AgentProtocol}).Exec(ctx); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
 }
 
 func (s *Server) workerMaintenance(ctx context.Context) {
@@ -447,7 +420,7 @@ func (s *Server) workerMaintenance(ctx context.Context) {
 						s.tasks.note("observation-analysis-retention", s.pruneObservationAnalyses(ctx, time.Now(), time.Duration(doc.Policy.ObservationDays)*24*time.Hour, doc.Policy.MaxRecords))
 						s.tasks.note("audit-retention", s.pruneAudit(ctx, time.Now(), doc.Policy))
 					}
-					s.tasks.note("subscription-cache-retention", s.Store.PruneSubscriptionCacheReservations(ctx,s.Config.Store.Maintenance.Effective().RecordBatch))
+					s.tasks.note("subscription-cache-retention", s.Store.PruneSubscriptionCacheReservations(ctx, s.Config.Store.Maintenance.Effective().RecordBatch))
 					s.tasks.note("laya-host-retention", s.maintainLayaHosting(ctx, time.Now()))
 					s.tasks.note("asset-relay-retention", s.pruneRelaySessions(ctx, time.Now()))
 					cacheCtx, cancelCache := context.WithTimeout(ctx, time.Second)

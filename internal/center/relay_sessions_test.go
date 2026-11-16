@@ -131,9 +131,6 @@ func TestRelayUploadRequiresTheCurrentWorkerLease(t *testing.T) {
 	if err = s.Store.Tasks.SetCapabilities(t.Context(), int(g.id), caps); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.migratePendingActions(t.Context(), int(g.id)); err != nil {
-		t.Fatal(err)
-	}
 	claimed, err := s.Store.Tasks.Claim(t.Context(), int(g.id), caps, contracts.WorkerResources{Concurrency: 1}, time.Now())
 	if err != nil || len(claimed) != 1 {
 		t.Fatalf("claim: %+v %v", claimed, err)

@@ -45,7 +45,7 @@ function SecurityMethod({
   children: ReactNode;
 }) {
   return (
-    <Card className="grid content-start gap-[13px] px-[21px] py-[21px]" aria-label={title}>
+    <Card className="grid content-start gap-[var(--weir-gap-13)] px-[var(--weir-gap-21)] py-[var(--weir-gap-21)]" aria-label={title}>
       <div className="flex items-center justify-between gap-3">
         <b className="text-subheadline">{title}</b>
         {status}
@@ -180,7 +180,6 @@ export function SecurityPage({ loginRequired }: { loginRequired: () => void }) {
             <Button
               size="sm"
               variant="ghost"
-              className="px-0"
               disabled={!account.data?.totp_enrolled && !policy.data?.totp_enabled}
               onClick={() => open(account.data?.totp_enrolled ? "disable" : "totp")}
             >

@@ -24,28 +24,33 @@ import (
 
 	"github.com/shusfun/weir/packages/contracts"
 
+	"github.com/shusfun/weir/internal/browsertest"
 	"github.com/shusfun/weir/internal/hoststats"
 	"github.com/shusfun/weir/internal/kernelconf"
 	"github.com/shusfun/weir/internal/lockfile"
 	"github.com/shusfun/weir/internal/releasefiles"
 )
 
-var helperKernels = []string{"xray", "sing-box"}
+// Dependencies start before their consumers; reverse this order when stopping.
+var helperKernels = []string{"mihomo", "sing-box", "xray"}
 var installableKernels = []string{"xray", "sing-box", "mihomo"}
 var safeVer = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$`)
 
 // ApplyRequest 是 Agent 交给辅助程序的一次整体应用：每个内核的版本与配置（nil 表示停止该内核）。
 type ApplyRequest struct {
-	Kernels    map[string]string `json:"kernels"`
-	Configs    map[string][]byte `json:"configs"`
-	StatsPorts map[string]int    `json:"stats_ports"`
-	Ports      []int             `json:"ports"` // 本次配置需要监听的全部端口，用于冲突检查
+	Kernels     map[string]string `json:"kernels"`
+	Configs     map[string][]byte `json:"configs"`
+	StatsPorts  map[string]int    `json:"stats_ports"`
+	HealthPorts map[string][]int  `json:"health_ports,omitempty"`
+	Ports       []int             `json:"ports"` // 本次配置需要监听的全部端口，用于冲突检查
 	// Args 是各内核的运行与自检参数（来自驱动；辅助程序再校验一遍）。
 	Args map[string]kernelconf.KernelArgs `json:"args,omitempty"`
 	// HotUsers 表示该内核的驱动声明了用户热更新。ForceRestart 表示撤权后还要重启一次。
-	HotUsers     map[string]bool `json:"hot_users,omitempty"`
-	ForceRestart map[string]bool `json:"force_restart,omitempty"`
-	TraceID      string          `json:"trace_id,omitempty"`
+	HotUsers     map[string]bool            `json:"hot_users,omitempty"`
+	ForceRestart map[string]bool            `json:"force_restart,omitempty"`
+	TraceID      string                     `json:"trace_id,omitempty"`
+	Firewall     *contracts.FirewallPlan    `json:"firewall,omitempty"`
+	BrowserTest  *contracts.BrowserTestPlan `json:"browser_test,omitempty"`
 }
 
 type ApplyResult struct {
@@ -60,26 +65,31 @@ type ApplyResult struct {
 }
 
 type HelperStatus struct {
-	Host      *contracts.HostSample     `json:"host,omitempty"`
-	Installed map[string][]string       `json:"installed"`
-	Active    map[string]string         `json:"active"`
-	Running   map[string]int            `json:"running"`
-	Listening []contracts.ListeningPort `json:"listening"`
-	Certs     map[string]string         `json:"certs"` // 证书 ID → 已安装文件摘要
-	Firewall  *contracts.FirewallStatus `json:"firewall,omitempty"`
-	Events    []contracts.KernelEvent   `json:"events,omitempty"`
+	Instances   map[string]string                 `json:"instances,omitempty"`
+	Host        *contracts.HostSample             `json:"host,omitempty"`
+	Installed   map[string][]string               `json:"installed"`
+	Active      map[string]string                 `json:"active"`
+	Running     map[string]int                    `json:"running"`
+	Listening   []contracts.ListeningPort         `json:"listening"`
+	Certs       map[string]string                 `json:"certs"` // 证书 ID → 已安装文件摘要
+	Firewall    *contracts.FirewallStatus         `json:"firewall,omitempty"`
+	Events      []contracts.KernelEvent           `json:"events,omitempty"`
+	BrowserTest *contracts.BrowserTestObservation `json:"browser_test,omitempty"`
 }
 
 // Helper 是以 root 运行的辅助程序。只提供白名单接口，不执行任意命令或任意路径。
 type Helper struct {
-	laya           layaHelperState
-	resourceMu     sync.RWMutex
-	resourceHost   *contracts.HostSample
-	P              Paths
-	ProcRoot       string
-	Sup            *Supervisor
-	mu             sync.Mutex
-	releaseRestart func()
+	probe            *browsertest.Server
+	probePlan        *contracts.BrowserTestPlan
+	probeCertificate string
+	laya             layaHelperState
+	resourceMu       sync.RWMutex
+	resourceHost     *contracts.HostSample
+	P                Paths
+	ProcRoot         string
+	Sup              *Supervisor
+	mu               sync.Mutex
+	releaseRestart   func()
 	// 1Panel 连接测试与证书刷新的缓存（见 panel.go）。
 	panelMu         sync.Mutex
 	panelChecked    time.Time
@@ -91,9 +101,10 @@ type Helper struct {
 	acmeMu  sync.Mutex
 	acmeSrv *http.Server
 	// 本机防火墙状态的缓存（见 firewall.go）。
-	fwMu sync.Mutex
-	fw   *contracts.FirewallStatus
-	fwAt time.Time
+	fwMu         sync.Mutex
+	fw           *contracts.FirewallStatus
+	fwAt         time.Time
+	firewallExec firewallRunner
 	// 内核启停事件。读不到 PID 或断连数时字段省略，页面显示未知。
 	eventsMu sync.Mutex
 	events   []contracts.KernelEvent
@@ -122,9 +133,25 @@ func (h *Helper) setPointer(name, version string) error {
 
 // Boot 在辅助程序启动时按磁盘上已生效的配置拉起内核（Agent 未连上中心也能继续服务）。
 func (h *Helper) Boot() {
+	if h.disabled() {
+		return
+	}
+	if err := h.bootFirewall(); err != nil {
+		log.Printf("firewall boot failed, managed kernels remain stopped: %v", err)
+		return
+	}
 	for _, name := range helperKernels {
 		if _, err := os.Stat(h.Sup.config(name)); err == nil && h.pointer(name) != "" {
-			_ = h.Sup.Start(name)
+			if err := h.Sup.Start(name); err != nil {
+				log.Printf("kernel boot failed: %s", name)
+				h.stopManagedKernels()
+				return
+			}
+			if ports := h.savedAuxiliaryHealth(name); len(ports) > 0 && !h.healthyPorts(name, ports) {
+				log.Printf("auxiliary kernel boot health failed: %s", name)
+				h.stopManagedKernels()
+				return
+			}
 		}
 	}
 }
@@ -133,6 +160,7 @@ func (h *Helper) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /kernel", h.installKernel)
 	mux.HandleFunc("POST /apply", h.apply)
+	mux.HandleFunc("POST /disable", h.disable)
 	mux.HandleFunc("GET /status", h.status)
 	mux.HandleFunc("POST /restart", h.restart)
 	mux.HandleFunc("POST /cert", h.cert)
@@ -201,7 +229,7 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-func known(name string) bool { return name == "xray" || name == "sing-box" }
+func known(name string) bool { return name == "xray" || name == "sing-box" || name == "mihomo" }
 
 func installable(name string) bool {
 	for _, kernel := range installableKernels {
@@ -290,6 +318,8 @@ func (h *Helper) installed() map[string][]string {
 }
 
 func (h *Helper) status(w http.ResponseWriter, _ *http.Request) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.resourceMu.RLock()
 	host := h.resourceHost
 	h.resourceMu.RUnlock()
@@ -300,7 +330,7 @@ func (h *Helper) status(w http.ResponseWriter, _ *http.Request) {
 			active[name] = v
 		}
 	}
-	writeJSON(w, 200, HelperStatus{Host: host, Installed: h.installed(), Active: active, Running: h.Sup.Running(), Listening: ports, Certs: h.certs(), Firewall: h.firewall(), Events: h.peekKernelEvents()})
+	writeJSON(w, 200, HelperStatus{BrowserTest: h.browserTestObservation(), Host: host, Installed: h.installed(), Active: active, Running: h.Sup.Running(), Instances: h.Sup.Instances(), Listening: ports, Certs: h.certs(), Firewall: h.firewall(), Events: h.peekKernelEvents()})
 }
 
 // certs 返回已安装证书的摘要，Agent 据此决定是否需要重新下载。
@@ -323,17 +353,72 @@ func (h *Helper) certs() map[string]string {
 
 // healthy 等待内核进程存活且统计端口可连接（最多 8 秒）。
 func (h *Helper) healthy(name string, port int) bool {
+	return h.healthyPorts(name, []int{port})
+}
+
+func (h *Helper) healthyPorts(name string, ports []int) bool {
 	deadline := time.Now().Add(8 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, ok := h.Sup.Running()[name]; ok && port > 0 {
-			if c, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 300*time.Millisecond); err == nil {
+		if _, ok := h.Sup.Running()[name]; ok && len(ports) > 0 {
+			ready := true
+			for _, port := range ports {
+				if port <= 0 {
+					ready = false
+					break
+				}
+				c, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 300*time.Millisecond)
+				if err != nil {
+					ready = false
+					break
+				}
 				c.Close()
+			}
+			if ready {
 				return true
 			}
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
 	return false
+}
+
+func (h *Helper) requestHealthy(name string, req ApplyRequest) bool {
+	ports := req.HealthPorts[name]
+	if len(ports) == 0 {
+		ports = []int{req.StatsPorts[name]}
+	}
+	return h.healthyPorts(name, ports)
+}
+
+func (h *Helper) stopManagedKernels() {
+	for i := len(helperKernels) - 1; i >= 0; i-- {
+		h.Sup.Stop(helperKernels[i])
+	}
+}
+
+func (h *Helper) savedAuxiliaryHealth(name string) []int {
+	body, _ := os.ReadFile(h.Sup.config(name))
+	var doc map[string]any
+	if json.Unmarshal(body, &doc) != nil {
+		return nil
+	}
+	var ports []int
+	key, portKey := "inbounds", "listen_port"
+	if name == "mihomo" {
+		key, portKey = "listeners", "port"
+	}
+	items, _ := doc[key].([]any)
+	for _, raw := range items {
+		in, _ := raw.(map[string]any)
+		tag, _ := in["tag"].(string)
+		if name != "mihomo" && !strings.HasPrefix(tag, "weir-bridge-") {
+			continue
+		}
+		if p, ok := in[portKey].(float64); ok && p > 0 {
+			ports = append(ports, int(p))
+		}
+	}
+	return ports
 }
 
 func (h *Helper) apply(w http.ResponseWriter, r *http.Request) {
@@ -350,10 +435,13 @@ func (h *Helper) apply(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, code, res)
 }
 
-// Apply 逐个内核：冲突检查 → 自检（候选文件 + 目标版本）→ 切换 → 健康检查；失败回滚到上一份配置与版本。
-func (h *Helper) Apply(ctx context.Context, req ApplyRequest) ApplyResult {
+// Apply 先自检整批配置，再应用端口与内核；任一成员失败时恢复整批配置与版本。
+func (h *Helper) Apply(ctx context.Context, req ApplyRequest) (result ApplyResult) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.disabled() {
+		return ApplyResult{Error: errGateRevoked.Error()}
+	}
 	_, pids := listening(h.ProcRoot)
 	ours := map[int]bool{}
 	for _, pid := range h.Sup.Running() {
@@ -365,14 +453,68 @@ func (h *Helper) Apply(ctx context.Context, req ApplyRequest) ApplyResult {
 	if err := os.MkdirAll(h.P.CoresDir, 0750); err != nil {
 		return ApplyResult{Error: err.Error()}
 	}
+	// Validate every member before opening ports or changing a running member.
+	for _, name := range helperKernels {
+		body := req.Configs[name]
+		if body == nil {
+			continue
+		}
+		if !safeVer.MatchString(req.Kernels[name]) {
+			return ApplyResult{Error: name + " version missing"}
+		}
+		if current, err := os.ReadFile(h.Sup.config(name)); err == nil && bytes.Equal(current, body) && h.pointer(name) == req.Kernels[name] && h.Sup.Running()[name] > 0 {
+			continue
+		}
+		cand := strings.TrimSuffix(h.Sup.config(name), ".json") + ".preflight.json"
+		if err := os.WriteFile(cand, body, 0640); err != nil {
+			return ApplyResult{Error: err.Error()}
+		}
+		h.shareWithAgent(cand)
+		err := h.Sup.Test(ctx, name, req.Kernels[name], cand, req.Args[name])
+		_ = os.Remove(cand)
+		if err != nil {
+			return ApplyResult{Error: err.Error()}
+		}
+	}
+	before, err := h.snapshotKernels()
+	if err != nil {
+		return ApplyResult{Error: err.Error()}
+	}
+	undoFirewall, err := h.prepareFirewall(ctx, req.Firewall)
+	if err != nil {
+		return ApplyResult{Error: err.Error()}
+	}
+	touched := map[string]bool{}
+	previousProbe := h.probePlan
+	probeTouched := false
+	defer func() {
+		if result.OK {
+			return
+		}
+		var probeErr error
+		if probeTouched {
+			probeErr = h.applyBrowserTest(previousProbe)
+		}
+		kernelErr := h.restoreKernels(before, touched)
+		firewallErr := undoFirewall()
+		if rollbackErr := errors.Join(kernelErr, firewallErr, probeErr); rollbackErr != nil {
+			result.Error += "；整体回滚未完成：" + rollbackErr.Error()
+		} else if len(touched) > 0 {
+			result.Error += "；已恢复本批配置与防火墙规则"
+		}
+		result.PID = h.Sup.Running()
+	}()
 	res := ApplyResult{OK: true, Mode: contracts.ApplyUnchanged, PID: h.Sup.Running(), Disconnects: map[string]*int{}}
 	for _, name := range helperKernels {
 		cur := h.Sup.config(name)
 		body, want := req.Configs[name], req.Kernels[name]
 		if body == nil {
 			if _, err := os.Stat(cur); err == nil {
+				touched[name] = true
 				h.Sup.Stop(name)
-				_ = os.Rename(cur, cur+".prev")
+				if err := os.Rename(cur, cur+".prev"); err != nil {
+					return ApplyResult{Error: err.Error()}
+				}
 			}
 			continue
 		}
@@ -383,9 +525,13 @@ func (h *Helper) Apply(ctx context.Context, req ApplyRequest) ApplyResult {
 		existing, readErr := os.ReadFile(cur)
 		_, running := h.Sup.Running()[name]
 		if readErr == nil && old == want && bytes.Equal(existing, body) && running {
+			if !h.requestHealthy(name, req) {
+				return ApplyResult{Error: name + " 健康检查未通过"}
+			}
 			res.Mode = firstMode(res.Mode, contracts.ApplyUnchanged)
 			continue
 		}
+		touched[name] = true
 		if readErr == nil && old == want && running && req.HotUsers[name] && name == "xray" {
 			added, removed, only := userDelta(existing, body)
 			if only && (len(added) > 0 || len(removed) > 0) {
@@ -402,7 +548,7 @@ func (h *Helper) Apply(ctx context.Context, req ApplyRequest) ApplyResult {
 					if req.ForceRestart[name] {
 						oldPID := runningPID(h.Sup, name)
 						h.noteKernel(name, "stop", req.TraceID, "force_disconnect", oldPID, nil)
-						if err = h.Sup.Start(name); err != nil || !h.healthy(name, req.StatsPorts[name]) {
+						if err = h.Sup.Start(name); err != nil || !h.requestHealthy(name, req) {
 							return ApplyResult{Error: name + " 撤权后重启失败：" + errString(err), Mode: contracts.ApplyRestart, Reason: "force_disconnect", Events: h.peekKernelEvents()}
 						}
 						h.noteKernel(name, "start", req.TraceID, "force_disconnect", runningPID(h.Sup, name), nil)
@@ -420,19 +566,19 @@ func (h *Helper) Apply(ctx context.Context, req ApplyRequest) ApplyResult {
 			return ApplyResult{Error: err.Error()}
 		}
 		h.shareWithAgent(cand)
-		oldArgs := h.Sup.args(name)
-		if err := h.Sup.Test(ctx, name, want, cand, req.Args[name]); err != nil {
-			_ = os.Remove(cand)
-			return ApplyResult{Error: err.Error()}
-		}
 		_, hadPrev := os.Stat(cur)
 		if hadPrev == nil {
-			_ = os.Rename(cur, cur+".prev")
+			if err := os.Rename(cur, cur+".prev"); err != nil {
+				_ = os.Remove(cand)
+				return ApplyResult{Error: err.Error()}
+			}
 		}
 		if err := os.Rename(cand, cur); err != nil {
 			return ApplyResult{Error: err.Error()}
 		}
-		_ = h.setPointer(name, want)
+		if err := h.setPointer(name, want); err != nil {
+			return ApplyResult{Error: err.Error()}
+		}
 		if a := req.Args[name]; len(a.Run) > 0 {
 			if err := h.Sup.SetArgs(name, a); err != nil {
 				return ApplyResult{Error: err.Error()}
@@ -447,22 +593,10 @@ func (h *Helper) Apply(ctx context.Context, req ApplyRequest) ApplyResult {
 			res.Reason = "config_changed"
 		}
 		res.Disconnects[name] = nil
-		if err := h.Sup.Start(name); err != nil || !h.healthy(name, req.StatsPorts[name]) {
+		if err := h.Sup.Start(name); err != nil || !h.requestHealthy(name, req) {
 			// 先取日志再停：Stop 会丢掉这个进程的输出，失败原因要写进错误里。
 			logs := h.Sup.Logs(name)
-			h.Sup.Stop(name)
-			if len(oldArgs.Run) > 0 {
-				_ = h.Sup.SetArgs(name, oldArgs)
-			}
-			if hadPrev == nil {
-				_ = os.Rename(cur+".prev", cur)
-				_ = h.setPointer(name, old)
-				_ = h.Sup.Start(name)
-			} else {
-				_ = os.Remove(cur)
-				_ = h.setPointer(name, old)
-			}
-			msg := name + " 启动后健康检查未通过，已回滚"
+			msg := name + " 启动后健康检查未通过"
 			if len(logs) > 0 {
 				msg += "：" + logs[len(logs)-1]
 			} else if p := req.StatsPorts[name]; p > 0 {
@@ -473,6 +607,13 @@ func (h *Helper) Apply(ctx context.Context, req ApplyRequest) ApplyResult {
 			return ApplyResult{Error: msg, ConflictPort: boundPort(logs, req.Ports), Events: h.peekKernelEvents()}
 		}
 		h.noteKernel(name, "start", req.TraceID, "restart", runningPID(h.Sup, name), nil)
+	}
+	probeTouched = true
+	if err := h.applyBrowserTest(req.BrowserTest); err != nil {
+		return ApplyResult{Error: "浏览器测试服务应用失败：" + err.Error()}
+	}
+	if err := h.persistFirewall(req.Firewall); err != nil {
+		return ApplyResult{Error: "防火墙状态保存失败：" + err.Error()}
 	}
 	res.PID = h.Sup.Running()
 	res.Events = h.takeKernelEvents()
@@ -502,6 +643,12 @@ func (h *Helper) shareWithAgent(path string) {
 }
 
 func (h *Helper) restart(w http.ResponseWriter, r *http.Request) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.disabled() {
+		writeJSON(w, 403, ApplyResult{Error: errGateRevoked.Error()})
+		return
+	}
 	name := r.URL.Query().Get("name")
 	if !known(name) {
 		writeJSON(w, 400, ApplyResult{Error: "unknown kernel"})
@@ -780,6 +927,9 @@ func ServeHelper(ctx context.Context, h *Helper) error {
 	srv := &http.Server{Handler: h.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	resources.Go(func() {
 		<-resourceCtx.Done()
+		h.mu.Lock()
+		h.closeBrowserTest()
+		h.mu.Unlock()
 		for _, name := range helperKernels {
 			h.Sup.Stop(name)
 		}

@@ -206,6 +206,18 @@ function NotifyForm({ value, saved }: { value: NotifyView; saved: () => void }) 
 interface WebdavView { revision: string; url: string; username: string; password_set: boolean; keep: number; auto: boolean; hours: number; last_run_at?: string | null; last_error?: string }
 interface WebdavFile { name: string; size: number; modified?: string }
 interface ImportStats { sources: number; nodes: number; profiles: number; templates: number; skipped: string[] | null }
+interface BackupPreview { preview_token: string; digest: string; expires_at: string; added: ImportStats; overwritten: number; deleted: number }
+
+function BackupPreviewNotice({ value }: { value: BackupPreview }) {
+  const s = value.added;
+  return <Notice>
+    将新增 {s.sources} 个订阅源、{s.nodes} 个手动节点、{s.profiles} 个订阅组、{s.templates} 个模板。
+    覆盖 {value.overwritten} 项，删除 {value.deleted} 项。现有对象与订阅地址保持不变。
+    <br />预览有效至 {date(value.expires_at)}；数据或文件变化后需要重新预览。
+    <br />文件摘要：<code className="break-all">{value.digest}</code>
+    {!!s.skipped?.length && <><br />跳过 {s.skipped.length} 项：{s.skipped.join("；")}</>}
+  </Notice>;
+}
 
 export function BackupCard() {
   const q = useQuery({ queryKey: ["webdav"], queryFn: () => api("/admin/backup/webdav") as Promise<WebdavView> });
@@ -239,18 +251,26 @@ async function exportBackup() {
 }
 
 function ImportExport() {
+  const confirm = useConfirm();
   const [content, setContent] = useState("");
   const [fileError, setFileError] = useState("");
   const [re, setRe] = useState(emptyReauth);
   const [stats, setStats] = useState<ImportStats | null>(null);
-  const save = useReauthAction(() => api("/admin/backup/import", "POST", { content, ...re }) as Promise<ImportStats>, {
+  const [preview, setPreview] = useState<BackupPreview | null>(null);
+  const parse = useFormAction(() => api("/admin/backup/import/preview", "POST", { content }) as Promise<BackupPreview>, { onSuccess: setPreview });
+  const changeContent = (value: string) => { setContent(value); setPreview(null); setStats(null); };
+  const save = useReauthAction(() => api("/admin/backup/import", "POST", { content, preview_token: preview?.preview_token, ...re }) as Promise<ImportStats>, {
     ok: "导入完成",
     fields: { invalid_backup: "content", invalid_inventory: "content" },
-    onSuccess: setStats,
+    onSuccess: (result) => { setStats(result); setPreview(null); setRe(emptyReauth); },
+    onError: () => setPreview(null),
   });
   const { run, isBusy, waitFor } = useRowAction();
   return (
-    <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
+    <Form busy={save.busy || parse.busy} errors={preview ? save.errors : parse.errors} onSubmit={async () => {
+      if (!preview) { await parse.submit(); return; }
+      if (await confirm({ title: "确认导入预览中的备份？", description: "按上述清单新增数据；执行失败会完整回滚。", confirmText: "确认导入" })) await save.submit();
+    }}>
       <div className="actions">
         <Button type="button" variant="outline" disabled={isBusy()} busy={isBusy("export")} busyText="正在导出…" onClick={() => void run("export", exportBackup, "已导出", { fail: "导出失败" })}>
           <Download />
@@ -258,17 +278,18 @@ function ImportExport() {
         </Button>
       </div>
       <Field label="导入备份" name="content" hint="粘贴备份文件内容，或在下方选择文件。" customError={content && !content.trim() ? "请输入备份内容" : ""}>
-        <Textarea required rows={4} className="font-mono text-meta" value={content} onChange={(e) => setContent(e.target.value)} />
+        <Textarea required rows={4} className="font-mono text-meta" value={content} onChange={(e) => changeContent(e.target.value)} />
       </Field>
       <Field label="选择备份文件" error={fileError}>
-        <FilePicker accept="application/json,.json" onError={setFileError} onFile={async (file) => { setFileError(""); setContent(await file.text()); }}>
+        <FilePicker accept="application/json,.json" onError={setFileError} onFile={async (file) => { setFileError(""); changeContent(await file.text()); }}>
           选择备份文件（.json），或拖到这里
         </FilePicker>
       </Field>
-      <Reauth value={re} onChange={setRe} />
+      {preview && <><BackupPreviewNotice value={preview} /><Reauth value={re} onChange={setRe} /></>}
       <div className="actions">
-        <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在导入…">导入</Button>
+        <Button type="submit" disabled={save.busy || parse.busy} busy={save.busy || parse.busy} busyText={preview ? "正在导入…" : "正在解析…"}>{preview ? "确认导入" : "解析预览"}</Button>
       </div>
+      {parse.error && <Notice tone="bad">{parse.error}</Notice>}
       {save.error && <Notice tone="bad">{save.error}</Notice>}
       {stats && <StatsNotice s={stats} />}
     </Form>
@@ -295,9 +316,13 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
   // 要导入的文件：用 ref 传给请求，避免读到上一次渲染的值；state 只用于按钮文案
   const target = useRef("");
   const [restoring, setRestoring] = useState("");
-  const restore = useReauthAction(() => api("/admin/backup/webdav/restore", "POST", { file: target.current, revision, ...re }) as Promise<ImportStats>, { ok: "导入完成", onSuccess: setStats });
+  const [preview, setPreview] = useState<BackupPreview | null>(null);
+  const parse = useFormAction(() => api("/admin/backup/webdav/restore/preview", "POST", { file: target.current, revision }) as Promise<BackupPreview>, { onSuccess: setPreview });
+  const restore = useReauthAction(() => api("/admin/backup/webdav/restore", "POST", { file: target.current, revision, preview_token: preview?.preview_token, ...re }) as Promise<ImportStats>, {
+    ok: "导入完成", onSuccess: (result) => { setStats(result); setPreview(null); setRe(emptyReauth); }, onError: () => setPreview(null),
+  });
   const { run, isBusy, waitFor } = useRowAction();
-  const busy = save.busy || restore.busy || isBusy();
+  const busy = save.busy || restore.busy || parse.busy || isBusy();
   return (
     <>
       <Form busy={busy} errors={save.errors} onSubmit={() => void save.submit()}>
@@ -337,8 +362,10 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
         (files.length === 0 ? (
           <State empty="目录里还没有备份" />
         ) : (
-          <Form ref={restoreForm} busy={restore.busy} errors={restore.errors} onSubmit={() => undefined}>
-            <Reauth value={re} onChange={setRe} reason="从备份导入要验证管理员身份。" />
+          <Form ref={restoreForm} busy={restore.busy || parse.busy} errors={restore.errors} onSubmit={async () => {
+            if (!preview || dirty) return;
+            if (await confirm({ title: `从 ${target.current} 导入？`, description: "将按预览清单新增数据，执行失败会完整回滚。", confirmText: "确认导入" })) await restore.submit();
+          }}>
             <ul className="stack">
               {files.map((file) => (
                 <li key={file.name} className="flex items-center justify-between gap-2">
@@ -349,21 +376,26 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
                     variant="outline"
                     disabled={busy || dirty || !revision}
                     onClick={async () => {
-                      // 导入需要当前密码：未填写时在密码栏下提示，不弹确认框
-                      if (!restoreForm.current?.reportValidity()) return;
-                      if (!(await confirm({ title: `从 ${file.name} 导入？`, description: "只新增，不删除现有数据。", confirmText: "导入" }))) return;
                       target.current = file.name;
                       setRestoring(file.name);
-                      void restore.submit();
+                      setPreview(null);
+                      setStats(null);
+                      void parse.submit();
                     }}
-                    busy={restore.busy && restoring === file.name}
-                    busyText="正在导入…"
+                    busy={parse.busy && restoring === file.name}
+                    busyText="正在解析…"
                   >
-                    导入这份
+                    预览这份
                   </Button>
                 </li>
               ))}
             </ul>
+            {parse.error && <Notice tone="bad">{parse.error}</Notice>}
+            {preview && <>
+              <BackupPreviewNotice value={preview} />
+              <Reauth value={re} onChange={setRe} reason="确认导入前验证管理员身份。" />
+              <Button type="submit" disabled={busy || dirty} busy={restore.busy} busyText="正在导入…">确认导入</Button>
+            </>}
             {restore.error && <Notice tone="bad">{restore.error}</Notice>}
             {stats && <StatsNotice s={stats} />}
           </Form>

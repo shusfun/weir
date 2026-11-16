@@ -2,7 +2,7 @@
 // 用法：node apps/console/scan/scan.mjs [--routes /system,/gates] [--checks tap,contrast] [--widths 390] [--themes light]
 //       [--popups 0] [--tabs 0] [--base http://127.0.0.1:22340]
 // 检查项：tokens type tap contrast press motion cls frames overflow scroll keyboard（页面错误总是记录）
-import { inEgo, relay, parseArgs, loadConfig, openSpace, ensureLogin, ensureProbe, transient, outRoot, scanDir, stamp, api } from "./lib.mjs";
+import { inEgo, relay, parseArgs, loadConfig, openSpace, ensureLogin, navigateConsole, ensureProbe, transient, outRoot, scanDir, stamp, api } from "./lib.mjs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { readFile, writeFile, mkdir, appendFile } from "node:fs/promises";
@@ -11,7 +11,7 @@ if (!inEgo) process.exit(await relay(fileURLToPath(import.meta.url), parseArgs(p
 
 const { writeSummary } = await import(new URL("./summary.mjs?t=" + Date.now(), import.meta.url).href);
 const cfg = await loadConfig();
-const allChecks = ["tokens", "type", "tap", "contrast", "press", "motion", "cls", "frames", "overflow", "scroll", "keyboard"];
+const allChecks = ["tokens", "type", "tap", "contrast", "press", "motion", "cls", "frames", "overflow", "spacing", "scroll", "keyboard"];
 const checks = cfg.checks ? String(cfg.checks).split(",").map((s) => s.trim()).filter((c) => allChecks.includes(c)) : allChecks;
 const has = (c) => checks.includes(c);
 const base = (cfg.base || "http://127.0.0.1:22340").replace(/\/$/, "");
@@ -45,7 +45,7 @@ const normRoute = (r) => {
 const routes = cfg.routes ? String(cfg.routes).split(",").map(normRoute).filter(Boolean) : [...(await routesFromApp()), "/p/demo"];
 
 const report = {
-  meta: { started: new Date().toISOString(), base, routes, checks, widths, themes, popups: doPopups, tabs: doTabs },
+  meta: { runId: cfg['run-id'] || stamp(), started: new Date().toISOString(), base, routes, checks, widths, themes, popups: doPopups, tabs: doTabs },
   violations: [],
   typeCombos: {},
   states: [],
@@ -241,7 +241,7 @@ async function scanCombos(stateUrl, popupOnly, keyboard = true) {
       report.coverage.stateLost.push(`${ctx.route} ${ctx.state} ${ctx.width} ${theme}`);
       return false;
     }
-    if (!report.tokens) report.tokens = { count: r.tokenCount, typeTokens: r.typeTokens, durations: r.durations, radii: r.radii };
+    if (!report.tokens && r.tokenCount) report.tokens = { count: r.tokenCount, typeTokens: r.typeTokens, durations: r.durations, radii: r.radii };
     for (const [k, v] of Object.entries(r.combos)) report.typeCombos[k] = (report.typeCombos[k] || 0) + v;
     for (const k of ["contrastChecked", "contrastUnknown", "occluded", "inlineLinks", "tapTargets", "gradients"]) report.coverage[k] += r.stats[k] || 0;
     await record(r.items);
@@ -259,7 +259,7 @@ async function scanCombos(stateUrl, popupOnly, keyboard = true) {
 async function openUrl(url, full) {
   await framed("切换页面", async () => {
     if (full) {
-      await page.goto(base + url);
+      await navigateConsole(page, base + url);
       await ensureProbe(page);
     } else await ev((u) => window.__weirScan.navigate(u), url);
     await settle();
@@ -268,7 +268,7 @@ async function openUrl(url, full) {
   if (!url.startsWith("/p/") && (await page.evaluate(() => !!document.querySelector('input[autocomplete~="username"]')))) {
     log("会话失效，重新登录");
     await ensureLogin(page, base, cfg.email || "admin@dev.test", cfg.password || "WeirDev2026");
-    await page.goto(base + url);
+    await navigateConsole(page, base + url);
     await ensureProbe(page);
     await settle();
   }
@@ -353,6 +353,22 @@ async function scanRoute(route, first) {
   await openUrl(route, first || route.startsWith("/p/"));
   const baseUrl = await currentUrl();
   if (!(await scanCombos(baseUrl, false))) return;
+  if (cfg['layout-states'] === '1') {
+    if (route === '/gates') {
+      const id = await page.evaluate(() => document.querySelector('.weir-folder-cell[data-folder-cell]:not([data-folder-cell="add"])')?.getAttribute('data-folder-cell'));
+      if (id) {
+        await openUrl('/gates?expand=' + encodeURIComponent(id), false);
+        ctx.state = 'VPS 展开';
+        await scanCombos(await currentUrl(), false);
+        await scanSections();
+      }
+      await openUrl('/gates?center=1', false);
+      ctx.state = '中心详情';
+      await scanCombos(await currentUrl(), true);
+      await openUrl(baseUrl, false);
+    } else await scanSections();
+    ctx.state = '页面';
+  }
   if (doPopups) await scanPopups(baseUrl, "页面", first);
   if (!doTabs || fixed) return;
   const tabs = await listTabs();
@@ -363,6 +379,21 @@ async function scanRoute(route, first) {
     const url = await currentUrl();
     if (!(await scanCombos(url, false))) continue;
     if (doPopups) await scanPopups(url, `标签：${t.text}`, false);
+  }
+}
+async function scanSections() {
+  const count = await page.evaluate(() => {
+    const triggers = [...document.querySelectorAll('[data-slot="collapsible-trigger"][aria-expanded="false"]')].filter(el => window.__weirScan.visible(el));
+    triggers.forEach((el, i) => el.setAttribute('data-spacing-trigger', String(i)));
+    return triggers.length;
+  });
+  for (let i = 0; i < count; i++) {
+    await clickMarked(`[data-spacing-trigger="${i}"]`, '展开分区检查间距');
+  }
+  if (count) {
+    await settle();
+    ctx.state = '分区展开';
+    await scanCombos(await currentUrl(), false);
   }
 }
 // ---------- 主流程 ----------
@@ -402,6 +433,7 @@ try {
   await writeSummary(outDir, report);
   log(`报告：${join(outDir, "report.json")}`);
   log(`摘要：${join(outDir, "summary.md")}`);
+  log(`WEIR_UI_SCAN_END run_id=${report.meta.runId} states=${report.states.length} findings=${report.violations.length} aborted=${!!failed}`);
 }
 if (failed) process.exitCode = 1;
 await task.finish({ keep: [] });

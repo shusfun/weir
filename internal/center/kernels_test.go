@@ -10,7 +10,7 @@ import (
 func TestNewKernelDownloadDoesNotReplaceRunningVersion(t *testing.T) {
 	s, admin, g := setupGate(t)
 	mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": g.id, "preset": "vless-reality", "skip_probe": true}, 200)
-	if code, _ := g.call("POST", "/api/v1/agent/heartbeat", contracts.Heartbeat{Version: "test", Hostname: "hk", Arch: "amd64", Kernels: map[string]string{"xray": "26.3.27"}}); code != 200 {
+	if code, _ := g.sendHeartbeat(contracts.Heartbeat{Version: "test", Hostname: "hk", Arch: "amd64", Kernels: map[string]string{"xray": "26.3.27"}}); code != 200 {
 		t.Fatalf("heartbeat = %d", code)
 	}
 	if _, err := s.kernelCache().Put("xray", "26.10.21", "amd64", []byte("newer-xray")); err != nil {

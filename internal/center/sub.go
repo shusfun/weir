@@ -140,6 +140,13 @@ func shareLink(n *ent.Node, host string, cred *ent.Credential, name string, cert
 			q.Set("spki", spki)
 		}
 		return "hysteria2://" + url.PathEscape(cred.Password) + "@" + addr + "?" + q.Encode() + frag, nil
+	case "anytls":
+		q.Set("sni", nodeSetting(st, "tls_sni"))
+		if pin != "" {
+			q.Set("pinSHA256", pin)
+			q.Set("spki", spki)
+		}
+		return "anytls://" + url.PathEscape(cred.Password) + "@" + addr + "?" + q.Encode() + frag, nil
 	case "socks", "http":
 		// 本地代理：用户名密码认证、不加密。
 		scheme := "socks5"
@@ -193,7 +200,12 @@ func (s *Server) linkEntries(ctx context.Context, u *ent.User, l *ent.Link) ([]E
 		return nil, err
 	}
 	s.nameSubscriptionEntries(ctx, es)
-	return s.renderSubscriptionEntries(ctx, es), nil
+	entries := s.renderSubscriptionEntries(ctx, es)
+	external, err := s.catalogEntries(ctx, u, l)
+	if err != nil {
+		return nil, err
+	}
+	return append(entries, external...), nil
 }
 
 func (s *Server) linkByToken(ctx context.Context, token string) (*ent.Link, *ent.User, bool) {

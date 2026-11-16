@@ -63,7 +63,7 @@ func (s *Server) PruneSamples(ctx context.Context, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	cutoff := now.Add(-time.Duration(doc.Policy.SampleHours)*time.Hour)
+	cutoff := now.Add(-time.Duration(doc.Policy.SampleHours) * time.Hour)
 	ids, err := s.Store.Ent.Sample.Query().Where(sample.AtLT(cutoff)).Order(sample.ByAt()).Limit(s.Config.Store.Maintenance.Effective().RecordBatch).IDs(ctx)
 	if err == nil && len(ids) > 0 {
 		_, err = s.Store.Ent.Sample.Delete().Where(sample.IDIn(ids...), sample.AtLT(cutoff)).Exec(ctx)
@@ -72,6 +72,9 @@ func (s *Server) PruneSamples(ctx context.Context, now time.Time) error {
 		err = perr
 	}
 	if rerr := s.pruneRates(ctx, now); err == nil {
+		err = rerr
+	}
+	if rerr := s.pruneDailyUsage(ctx, now, doc.Policy.PullDays); err == nil {
 		err = rerr
 	}
 	// 链路页每 30 秒续一次实时上报：这类动作只在当时有用，一小时后删掉，不留在动作记录里。

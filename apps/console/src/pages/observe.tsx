@@ -1,3 +1,4 @@
+import { useSources } from "../lib/subscription-sources";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ActionGroup, Badge, Button, Checkbox, Collapsible, SectionHeader, Tabs, TabsList, TabsPanel, TabsTab, Timeline, TimelineItem, TraceSheet, useToast } from "@weir/ui";
@@ -18,7 +19,6 @@ type WorkerTask = { task: { id: string; kind: string; trace_id: string; attempt:
 type Gate = { id: number; name: string; online: boolean; last_seen_at?: string; version?: string; host?: Record<string, unknown> };
 type SecurityEvent = { id: number; kind: string; severity: string; status: string; created_at: string; trace_id?: string; laya?: { outcome: string; category: string; confidence: number; code?: string } };
 type Audit = { id: number; action: string; action_label: string; target_name: string; result: string; created_at: string };
-type Source = { id: number; name: string; enabled: boolean; last_error?: string; fetched_at?: string };
 type SubscriptionRun = { id: string; trace_id: string; profile_id: number; started: string; finished: string; outcome: string; complete: boolean; stages?: { profile_id: number; source_id?: number; operation: string; started: string; finished: string; outcome: string; error_code?: string; origin: string; cache_fallback?: boolean }[] };
 type Timeline = { records: { task_id: string; trace_id: string; kind: string; attempt: number; stage: string; started: string; finished: string; outcome: string; error_code?: string; origin: string }[]; collected_at: string; complete: boolean; missing_reason?: string };
 type Analysis = { id: string; trace_id: string; snapshot_id: string; profile_version: string; dsh_version: string; items: string[]; tool_calls: string[] | null; status: string; code?: string; created_at: string; external_data_not_instructions: { conclusion: string } };
@@ -35,7 +35,7 @@ const tabs = [
 ] as const;
 
 const label = (value?: string) => value || "未知";
-const taskKind: Record<string, string> = { "subscription.fetch": "订阅拉取", "release.query": "发布查询", "subscription.convert": "订阅转换", "laya.classify": "Laya 判断", "laya.install": "Laya 安装", "laya.remove": "Laya 移除", "trace.read": "读取 Gate 时间线", "core.restart": "重启内核", "core.install": "安装固定版本内核", "asset.fetch": "文件兜底中转" };
+const taskKind: Record<string, string> = { "subscription.fetch": "订阅拉取", "release.query": "发布查询", "laya.classify": "Laya 判断", "laya.install": "Laya 安装", "laya.remove": "Laya 移除", "trace.read": "读取 Gate 时间线", "core.restart": "重启内核", "core.install": "安装固定版本内核", "asset.fetch": "文件兜底中转" };
 const taskStatus: Record<string, string> = { pending: "等待执行", leased: "执行中", cancelling: "取消中", cancelled: "已取消", timed_out: "已超时", succeeded: "已完成", failed: "失败", unknown: "未知", expired: "已过期" };
 const analysisCode: Record<string, string> = { analysis_capacity: "后台分析正在占用，请稍后重新提交", analysis_unavailable: "dsh 分析失败", analysis_profile_changed: "分析配置已改变，请重新预览后提交", analysis_version_unverified: "dsh 版本未验证，后台分析暂停", analysis_dsh_not_running: "dsh 未运行或未配置", analysis_timeout: "分析超时，最终结果未知", analysis_incomplete: "dsh 未返回完整结果", completion_not_observed: "未取得完成回执，可能在中心重启时中断", analysis_cancelled: "已取消分析" };
 const pointLabel: Record<string, string> = { security: "安全", "subscription.health": "订阅源健康", "node.test": "节点实测", "gate.kernel": "VPS 与内核", "kernel.release": "内核更新说明", "content.spam": "内容审核" };
@@ -64,7 +64,7 @@ export function ObservePage() {
   const gates = useQuery({ queryKey: ["observe-gates"], queryFn: async () => (await api("/admin/gates")).items as Gate[], refetchInterval: 15000 });
   const events = useQuery({ queryKey: ["observe-events"], queryFn: async () => (await api("/admin/defense/events")).events as SecurityEvent[], refetchInterval: 15000 });
   const audits = useQuery({ queryKey: ["observe-account-audits"], queryFn: async () => (await api("/admin/audit?page=1&page_size=50&scope=accounts")).items as Audit[] });
-  const sources = useQuery({ queryKey: ["observe-subscription-sources"], queryFn: async () => (await api("/admin/subscriptions/sources")).items as Source[] });
+  const sources = useSources();
   const runs = useQuery({ queryKey: ["observe-subscription-runs"], enabled: tab === "subscriptions", queryFn: async () => (await api("/admin/subscriptions/runs")).items as SubscriptionRun[], refetchInterval: 15000 });
   const profile = useQuery({ queryKey: ["observe-ai-profile"], queryFn: () => api("/admin/ai/profile") as Promise<{ revision: string; effective: { observations?: Record<string, { enabled: boolean; confidence: number }> } }> });
   const accountPolicy = useQuery({ queryKey: ["observe-account-policy"], queryFn: () => api("/admin/settings/account-policy") as Promise<{ revision: string; sources: Record<string, string> }> });
@@ -101,7 +101,7 @@ export function ObservePage() {
 
   return <div className="stack">
     <OpsOverview />
-    <SectionHeader className="mt-[41px]" title="明细" actions={<span className="text-meta text-[var(--weir-ink-3)]">在线 VPS {gates.data ? `${gateItems.filter((gate) => gate.online).length} / ${gateItems.length}` : "未知"} · 进行中的任务 {activeTasks ?? "未知"} · 24 小时失败或未知 {taskFailures ?? "未知"}</span>} />
+    <SectionHeader flush className="mt-[var(--weir-gap-41)]" title="明细" actions={<span className="text-meta text-[var(--weir-ink-3)]">在线 VPS {gates.data ? `${gateItems.filter((gate) => gate.online).length} / ${gateItems.length}` : "未知"} · 进行中的任务 {activeTasks ?? "未知"} · 24 小时失败或未知 {taskFailures ?? "未知"}</span>} />
     <div className="flex flex-wrap items-center justify-between gap-3"><span>已选择 {selected.length} 项（最多 20 项），可跨分区选择。</span><div className="flex flex-wrap gap-2"><Button variant="ghost" disabled={!selected.length} onClick={() => setSelected([])}>清空选择</Button><DiagnosticExport items={selected} /></div></div>
     <Tabs value={tab} onValueChange={(value) => setParams((previous) => { previous.set("tab", String(value)); return previous; }, { replace: true })}>
       <TabsList aria-label="运行观测分区">{tabs.map((item) => <TabsTab key={item.key} value={item.key}>{item.label}</TabsTab>)}</TabsList>
@@ -127,7 +127,7 @@ export function ObservePage() {
       <TabsPanel value="subscriptions" className="stack">
         <h2>最近处理时间线</h2>
         {loadError(runs) ?? ((runs.data ?? []).length === 0 ? <State empty="尚无订阅处理时间线" detail="生成或预览订阅组后记录阶段；不保留订阅正文和节点凭据。" /> : runs.data!.map((run) => <div key={run.id} className="stack border-b border-[var(--weir-line)] py-2"><div className="flex flex-wrap items-center gap-3">{pick("subscription-run",run.id,`订阅处理 ${run.id}`)}<strong>{run.profile_id ? `订阅组 #${run.profile_id}` : "订阅源刷新"}</strong><Badge variant="status">{taskStatus[run.outcome] ?? "未知"}</Badge><small>{date(run.started)} · {Math.max(0,new Date(run.finished).getTime()-new Date(run.started).getTime())} ms</small></div><small className="break-all">trace {run.trace_id}{!run.complete ? " · 阶段记录不完整" : ""}</small><SubscriptionRunDetails id={run.id} /></div>))}
-        {loadError(sources) ?? <>{(sources.data ?? []).length === 0 ? <State empty="尚无订阅源" /> : (sources.data ?? []).map((source) => <div key={source.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--weir-line)] py-2">{pick("source", source.id, `订阅源 ${source.name}`)}<span className="min-w-0 flex-1"><strong>{source.name}</strong><small className="block">最近取得数据 {source.fetched_at ? date(source.fetched_at) : "未检测"}</small>{source.last_error && <small className="block break-words text-[var(--weir-danger)]">{source.last_error}</small>}</span><Badge variant="status">{source.enabled ? "启用" : "停用"}</Badge></div>)}</>}
+        {loadError(sources) ?? <>{(sources.data?.items ?? []).length === 0 ? <State empty="尚无订阅源" /> : (sources.data?.items ?? []).map((source) => <div key={source.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--weir-line)] py-2">{pick("source", source.id, `订阅源 ${source.name}`)}<span className="min-w-0 flex-1"><strong>{source.name}</strong><small className="block">最近取得数据 {source.fetched_at ? date(source.fetched_at) : "未检测"}</small>{source.last_error && <small className="block break-words text-[var(--weir-danger)]">{source.last_error}</small>}</span><Badge variant="status">{source.enabled ? "启用" : "停用"}</Badge></div>)}</>}
       </TabsPanel>
       <TabsPanel value="policy" className="stack">
         <label className="row-wrap">{pick("protection-policy","current","自动安全护栏")}自动安全护栏</label>

@@ -3,6 +3,7 @@ package subout
 import (
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/shusfun/weir/packages/contracts"
@@ -38,12 +39,13 @@ const SubscriptionProbeURL = "http://www.gstatic.com/generate_204"
 // Ref 对应节点默认线路或用户自建链式线路；名称变化不改变引用。
 type Item struct {
 	// nil means the exit capability has not been established.
-	UDP    *bool
-	Link   string
-	Type   string
-	Ref    string
-	Auto   bool
-	Direct bool
+	UDP           *bool
+	Link          string
+	Type          string
+	Ref           string
+	Auto          bool
+	Direct        bool
+	Deprioritized bool
 }
 
 type Rule struct {
@@ -162,6 +164,22 @@ func (p *Plan) layout(names []string, items []Item) layout {
 	if len(auto) == 0 {
 		auto, autoRefs = direct, directRefs
 	}
+	// Capacity only changes the built-in automatic candidate order. Explicit
+	// selections and user-defined fallback order retain their original meaning.
+	deprioritized := map[string]bool{}
+	for _, item := range items {
+		deprioritized[item.Ref] = item.Deprioritized
+	}
+	order := make([]int, len(auto))
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(i, j int) bool { return !deprioritized[autoRefs[order[i]]] && deprioritized[autoRefs[order[j]]] })
+	namesSorted, refsSorted := make([]string, len(auto)), make([]string, len(auto))
+	for i, from := range order {
+		namesSorted[i], refsSorted[i] = auto[from], autoRefs[from]
+	}
+	auto, autoRefs = namesSorted, refsSorted
 	var custom, automatic []group
 	automaticNames := p.automaticGroupNames(names)
 	grouped := map[string]bool{}

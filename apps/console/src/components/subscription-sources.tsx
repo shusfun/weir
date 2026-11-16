@@ -3,6 +3,7 @@ import { useFormGuard } from "../lib/dirty";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "../lib/query";
+import { useSources } from "../lib/subscription-sources";
 import { Badge, Button, Card, CardContent, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Meter, Notice, PageState, Readout, SectionHeader, SkeletonTable, SwitchField, TrafficUsage, trafficReading, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, useToast, useConfirm } from "@weir/ui";
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { api } from "../api";
@@ -12,17 +13,15 @@ import { bytes, date } from "../lib/models";
 import type { Source } from "../lib/subscriptions";
 import { OperatorEditor, type Operator } from "./operator-editor";
 import { State } from "./feedback";
-import { dataObject } from "./object-link";
+import { dataObject, ObjectLink, useDialogParam } from "./object-link";
 import { field, useConsoleContext } from "../lib/console-context";
-
-export function useSources() {
-  return useQuery({ queryKey: ["subscription-sources"], queryFn: () => api("/admin/subscriptions/sources") as Promise<{ items: Source[]; traffic: { used: number; total: number; sources: number } }> });
-}
+import { objectStatus } from "../lib/core";
 
 export function SourcesPanel() {
   const confirm = useConfirm();
   const toast = useToast();
   const q = useSources();
+  const detail = useDialogParam("source", q.data?.items, q.isSuccess);
   const [edit, setEdit] = useState<Source | "new" | null>(null);
   const [nodes, setNodes] = useState<{ name: string; list: string[]; error: string } | null>(null);
   const { run, isBusy, waitFor } = useRowAction<string>({ refetch: q.refetch });
@@ -39,7 +38,7 @@ export function SourcesPanel() {
   useConsoleContext({ tab: "订阅源", list: { total: q.data?.items.length ?? 0, items: (q.data?.items ?? []).slice(0, 20).map((s) => ({ type: "source", name: s.name, id: s.id })) } });
   return (
     <section className="stack">
-      <SectionHeader title="订阅源" description="机场订阅地址；节点数与用量来自最近一次拉取，没有报告时显示「未知」。" actions={<Button size="sm" onClick={() => setEdit("new")}><Plus />添加订阅源</Button>} />
+      <SectionHeader flush title="订阅源" description="机场订阅地址；节点数与用量来自最近一次拉取，没有报告时显示「未知」。" actions={<Button size="sm" onClick={() => setEdit("new")}><Plus />添加订阅源</Button>} />
       {q.isPending || q.error ? (
         <State
           loading={q.isPending}
@@ -66,10 +65,10 @@ export function SourcesPanel() {
                   <CardContent className="stack">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <strong>{s.name || s.title || "未命名"}</strong>
+                        <strong><ObjectLink to={{ type: "source", id: s.id, name: s.name || s.title || "未命名" }} /></strong>
                         <small className="block truncate text-[var(--weir-ink-3)]" title={s.url}>{s.url || "未知"}</small>
                       </div>
-                      {s.last_error ? <Badge variant="status" tone="bad">刷新失败</Badge> : !s.enabled ? <Badge variant="soft" tone="warn">停用</Badge> : null}
+                      {(() => { const [label, tone] = objectStatus(s.object_state); return <Badge variant="status" tone={tone === "bad" ? "bad" : tone === "warn" ? "warn" : tone === "off" ? "neutral" : tone === "ok" ? "ok" : "neutral"}>{label}</Badge>; })()}
                     </div>
                     <TrafficUsage used={used} quota={ui?.total} />
                     <small className="text-[var(--weir-ink-3)]">上次成功更新：{s.fetched_at ? date(s.fetched_at) : "未知"}{s.last_error && s.user_info ? " · 当前为上次成功值" : ""}</small>
@@ -88,6 +87,7 @@ export function SourcesPanel() {
           </div>
         </>
       )}
+      {detail.current && <Dialog open onOpenChange={o => !o && detail.close()}><DialogContent size="xl"><DialogTitle>{detail.current.name || detail.current.title || "订阅源"}</DialogTitle><DialogDescription>{objectStatus(detail.current.object_state)[2]}</DialogDescription><SourceDetail key={detail.current.id} id={String(detail.current.id)} /></DialogContent></Dialog>}
       {edit && <SourceForm value={edit} close={() => setEdit(null)} saved={() => { setEdit(null); toast("已保存", { tone: "ok" }); void q.refetch(); }} />}
       <Dialog open={!!nodes} onOpenChange={(o) => !o && setNodes(null)}>
         <DialogContent size="lg">
@@ -109,6 +109,7 @@ export function SourceDetail({ id }: { id: string }) {
   const [nodes, setNodes] = useState<{ name: string; list: string[]; error: string } | null>(null);
   const { run, isBusy, waitFor } = useRowAction<string>({ refetch: q.refetch });
   const item = q.data?.items.find((s) => String(s.id) === id);
+  useConsoleContext({ object: item ? { type: "source", id: item.id, name: item.name } : undefined, dialog: { title: "订阅源详情" } });
   if (q.isPending) return <State loading />;
   if (q.error) return <State error={q.error} onRetry={() => void q.refetch()} />;
   if (!item) return <PageState kind="empty" title="没有这个订阅源" detail="它可能已被删除，或你没有权限查看。" action={<Link to="/subscriptions?tab=sources">返回订阅源</Link>} />;
@@ -132,9 +133,9 @@ export function SourceDetail({ id }: { id: string }) {
         <Button size="sm" variant="destructive" disabled={isBusy()} busy={isBusy("del:" + source.id)} busyText="正在删除" onClick={() => void remove()}><Trash2 />删除</Button>
       </div>
       {waitFor("refresh:" + source.id) && <WaitText wait={waitFor("refresh:" + source.id)} />}
-      {source.last_error ? <Notice tone="bad">{source.last_error}</Notice> : null}
+      {source.object_state && source.object_state.status !== "ok" ? <Notice tone={source.object_state.status === "failed" ? "bad" : "warn"}>{source.object_state.reason}</Notice> : null}
       <div className="grid gap-3 sm:grid-cols-3">
-        <Readout label="状态" value={source.enabled ? "启用" : "已停用"} />
+        <Readout label="状态" value={objectStatus(source.object_state)[0]} caption={objectStatus(source.object_state)[2]} />
         <Readout label="节点" value={source.fetched_at ? source.node_count : null} />
         <Readout label="用量" value={trafficReading({ used, quota: ui?.total }).text} caption={ui?.expire ? `到期 ${date(ui.expire)}` : "到期未知"} />
         <Readout label="上次成功更新" value={source.fetched_at ? date(source.fetched_at) : null} />

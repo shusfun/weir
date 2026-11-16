@@ -66,7 +66,7 @@ export async function openSpace(kind = "scan") {
 
 // 走登录表单登录；已登录就直接返回。直接请求登录接口会被拒（origin_rejected）。
 export async function ensureLogin(page, base, email, password) {
-  await page.goto(base + "/");
+  await navigateConsole(page, base + "/");
   await page.waitForFunction(() => !!document.querySelector('input[autocomplete~="username"], .shell-main, [aria-label="主导航"], [aria-label="打开导航"]'), undefined, { timeout: 20_000 });
   const needLogin = await page.evaluate(() => !!document.querySelector('input[autocomplete~="username"]'));
   if (!needLogin) return false;
@@ -75,6 +75,13 @@ export async function ensureLogin(page, base, email, password) {
   await page.click('form button[type="submit"]', { label: "提交登录表单" });
   await page.waitForFunction(() => !!document.querySelector(".shell-main"), undefined, { timeout: 20_000 });
   return true;
+}
+
+// Vite cold starts can outlast the default navigation timeout. Wait for the
+// document and application shell, not unrelated background resources.
+export async function navigateConsole(page, url) {
+  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await page.waitForFunction(() => !!document.querySelector('input[autocomplete~="username"], .shell-main, [aria-label="主导航"], [aria-label="打开导航"], main'), undefined, { timeout: 30_000 });
 }
 
 // 在页面里同源调用 /api/v1；返回 { status, data }
@@ -109,7 +116,7 @@ export async function api(page, path, method = "GET", body) {
 }
 
 // 页面侧检查脚本：几个文件按顺序拼起来注入，定义 window.__weirScan
-const probeFiles = ["probe-core.js", "probe-static.js", "probe-a11y.js", "probe-interact.js"];
+const probeFiles = ["probe-core.js", "probe-static.js", "probe-spacing.js", "probe-a11y.js", "probe-interact.js"];
 let probeSource = null;
 export async function probeCode() {
   if (probeSource) return probeSource;

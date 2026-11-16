@@ -135,7 +135,7 @@ export function ClientCatalogEditor() {
   return (
     <Section title="客户端目录" description="下载入口、平台、格式与显示顺序。改完点保存目录后生效。">
       <div className="stack client-catalog-editor">
-        <SectionHeader
+        <SectionHeader flush
           level="h3"
           title="客户端目录"
           description="下载入口、平台、格式与显示顺序。改完点保存目录后生效。"

@@ -60,11 +60,11 @@ func TestCompleteNodeTestPayloadForDependentProtocols(t *testing.T) {
 		}
 	}
 	gate := s.Store.Ent.Gate.GetX(ctx, int(g.id))
-	host := gate.Host
-	host["node_test_version"] = 0
-	s.Store.Ent.Gate.UpdateOneID(gate.ID).SetHost(host).ExecX(ctx)
+	if err := s.Store.Tasks.SetCapabilities(ctx, gate.ID, contracts.CapabilityDocument{Protocol: contracts.AgentProtocol, Version: "test", Arch: "amd64", Tasks: map[string]int{}}); err != nil {
+		t.Fatal(err)
+	}
 	n := s.Store.Ent.Node.Query().FirstX(ctx)
 	if _, err := s.testNode(ctx, n, n.Settings); err == nil {
-		t.Fatal("old Gate accepted new test payload")
+		t.Fatal("Gate without declared capability accepted test payload")
 	}
 }

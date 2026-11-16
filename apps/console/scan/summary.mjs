@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 export const checkNames = {
   tokens: "设计变量", type: "字号层级", tap: "点击区域", contrast: "对比度", press: "按压反馈", motion: "动效",
-  cls: "布局跳动", frames: "掉帧", overflow: "横向溢出", scroll: "滚动条", keyboard: "键盘", error: "页面错误",
+  cls: "布局跳动", frames: "掉帧", overflow: "横向溢出", spacing: "留白与对齐", scroll: "滚动条", keyboard: "键盘", error: "页面错误",
 };
 // 同一问题：路由 + 状态 + 检查 + 属性 + 实测值 + 元素（不区分宽度与主题）
 export const issueKey = (v) => [v.route, v.state, v.check, v.prop, v.actual, v.el?.selector, v.el?.text].join("|");
@@ -23,7 +23,7 @@ const countBy = (rows, f) => {
 export function uncovered(report) {
   const c = report.coverage;
   const out = [
-    "需要 VPS 的页面状态：本地中心没有配对的 Gate，VPS 卡片、节点、内核推送、链路图里的 VPS 等状态未覆盖",
+    "仅检查本次实际打开且有数据的状态；无数据的节点行、未打开的对象详情与内核推送状态未覆盖",
     "未登录页面（登录、初始化）、普通用户视角与「无权限」状态未扫描；加载中、接口失败状态未模拟",
     "二级弹层（弹层里再打开的弹层）、删除 / 停用 / 保存等会改数据的按钮及其确认框没有点开",
     "按压反馈与键盘遍历只在最后一个主题（默认浅色）下检查；按压反馈按组件特征去重，同类元素只按第一个",

@@ -21,7 +21,7 @@ func TestSubscriptionFetchUsesWorkerAndChecksDigest(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	heartbeat(t, g, contracts.Heartbeat{Version: "test", Arch: "amd64"})
-	caps := contracts.CapabilityDocument{Protocol: 2, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.TaskSubscriptionFetch: 1}}
+	caps := contracts.CapabilityDocument{Protocol: 2, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.TaskCoreInstall: contracts.TaskVersion, contracts.TaskSubscriptionFetch: 1}}
 	code, body := g.call("POST", "/api/v1/agent/poll", contracts.AgentPoll{Protocol: 2, Capabilities: &caps, Resources: contracts.WorkerResources{Concurrency: 1}})
 	if code != 200 {
 		t.Fatalf("capabilities: %d %s", code, body)

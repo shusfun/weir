@@ -3,7 +3,6 @@ package center
 import (
 	"context"
 	"crypto/sha256"
-	dbsql "database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -92,8 +91,16 @@ func (r relaySession) validate() error {
 // Only the explicit fallback path stores binary chunks in the database. This
 // lets any center accept an upload without requiring shared local directories.
 // A single, bounded transfer avoids multiplying that exceptional storage load.
-func (s *Server) openRelay(ctx context.Context, gateID int, req contracts.AssetFetch) (relaySession, error) {
-	var session relaySession
+func (s *Server) openRelay(ctx context.Context, gateID int, req contracts.AssetFetch) (session relaySession, resultErr error) {
+	// Enqueue may fail after the session transaction commits. Release the slot
+	// even if the caller disconnected; an unleased session must not block others.
+	defer func() {
+		if resultErr != nil && session.ActionID > 0 {
+			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			defer cancel()
+			resultErr = errors.Join(resultErr, s.closeRelay(cleanup, session.ID, gateID, session.ConsumerToken))
+		}
+	}()
 	if req.MaxSize == 0 {
 		req.MaxSize = 256 << 20
 	}
@@ -145,7 +152,7 @@ func (s *Server) openRelay(ctx context.Context, gateID int, req contracts.AssetF
 			return err
 		}
 		defer tx.Rollback()
-		action, err := tx.GateAction.Create().SetGateID(gateID).SetKind(contracts.ActionAssetFetch).SetPayload(toMap(req)).SetStatus(gateaction.StatusPending).SetExpiresAt(session.ExpiresAt).Save(ctx)
+		action, err := tx.GateAction.Create().SetGateID(gateID).SetKind(contracts.ActionAssetFetch).SetPayload(map[string]any{"protocol": contracts.AgentProtocol}).SetStatus(gateaction.StatusRunning).SetExpiresAt(session.ExpiresAt).Save(ctx)
 		if err != nil {
 			return err
 		}
@@ -159,15 +166,19 @@ func (s *Server) openRelay(ctx context.Context, gateID int, req contracts.AssetF
 		return tx.Commit()
 	})
 	if err == nil {
-		if _, capErr := s.Store.Tasks.Capabilities(ctx, gateID); capErr == nil {
-			if err = s.migratePendingActions(ctx, gateID); err != nil {
-				return session, err
-			}
-		} else if !errors.Is(capErr, dbsql.ErrNoRows) {
-			return session, capErr
+		req.UploadID = session.ID
+		raw, marshalErr := json.Marshal(req)
+		if marshalErr != nil {
+			return session, marshalErr
 		}
-		// New workers migrate this row into the same durable task queue. Old
-		// workers see only the compatibility row, never a second task delivery.
+		sealed, sealErr := s.Crypto.Encrypt(string(raw))
+		if sealErr != nil {
+			return session, sealErr
+		}
+		_, err = s.Store.Tasks.Enqueue(ctx, taskqueue.Request{Kind: contracts.ActionAssetFetch, TraceID: session.TraceID, Key: "legacy:" + itoa(session.ActionID), Payload: raw, Requirements: contracts.TaskRequirements{TargetGateID: gateID}, Candidates: []int{gateID}, Deadline: session.ExpiresAt, LegacyID: session.ActionID}, sealed, time.Now())
+		if err != nil {
+			return session, err
+		}
 		_ = s.Store.Notifications.Publish(ctx, "gate:"+itoa(gateID))
 		s.actionWaiters.notify(gateID)
 	}

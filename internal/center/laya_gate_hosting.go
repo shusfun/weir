@@ -3,10 +3,11 @@ package center
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/shusfun/weir/internal/selfupdate"
+	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/taskqueue"
 	"github.com/shusfun/weir/packages/contracts"
 )
@@ -47,7 +48,7 @@ func (s *Server) getGateLaya(c *gin.Context) {
 		failInternal(c, 503, "laya_hosting_unavailable", err)
 		return
 	}
-	canPrepare, err := s.gateSupportsTask(c.Request.Context(), g, contracts.TaskLayaPrepare, 0)
+	canPrepare, err := s.gateSupportsTask(c.Request.Context(), g, contracts.TaskLayaPrepare)
 	if err != nil {
 		failInternal(c, 503, "capabilities_unavailable", err)
 		return
@@ -75,8 +76,62 @@ func (s *Server) getGateLaya(c *gin.Context) {
 			}
 		}
 	}
+	state := gateLayaState(g, observed, canPrepare, out["operation"])
+	for action, kind := range map[string]string{"install": contracts.TaskLayaInstall, "remove": contracts.TaskLayaRemove} {
+		supported, err := s.gateSupportsTask(c.Request.Context(), g, kind)
+		if err != nil {
+			failInternal(c, 503, "capabilities_unavailable", err)
+			return
+		}
+		if !supported {
+			state.Next = slices.DeleteFunc(state.Next, func(v string) bool { return v == action })
+		}
+	}
+	out["object_state"] = state
 	c.Header("Cache-Control", "no-store")
 	c.JSON(200, out)
+}
+
+func gateLayaState(g *ent.Gate, observed contracts.ComponentObservation, canPrepare bool, operation any) objectState {
+	v := gateObjectState(g)
+	v.Next = []string{}
+	if !gateOnline(g) || g.Status == "revoked" {
+		return v
+	}
+	if colocated(g) {
+		v.Status, v.Label, v.Reason, v.Next = "pending", "在中心管理", "本机执行端与中心共用 Laya 部署", []string{"center"}
+		return v
+	}
+	v.Status, v.Label, v.Reason = "unknown", "状态未知", "尚未收到 Laya 组件的有效观测"
+	if !observed.ObservedAt.IsZero() {
+		v.ObservedAt = &observed.ObservedAt
+	}
+	if canPrepare {
+		v.Next = append(v.Next, "prepare")
+		v.Status, v.Label, v.Reason = "pending", "待准备", "可通过固定宿主服务准备部署权限"
+	} else {
+		v.Reason = "VPS 未声明准备能力，请核对固定宿主服务及能力上报"
+	}
+	if !observed.ObservedAt.IsZero() && !freshObservation(observed.ObservedAt, time.Now(), 90*time.Second) {
+		v.Status, v.Label, v.Reason = "stale", "观测已过期", "Laya 组件状态需要新的 VPS 观测"
+	}
+	if freshObservation(observed.ObservedAt, time.Now(), 90*time.Second) && observed.ImageDigest != "" && observed.DeploymentVersion != "" {
+		v.Next = append(v.Next, "install", "remove")
+		v.Status, v.Label, v.Reason = "pending", "待验证", "部署权限已准备，运行状态待验证"
+		if observed.State == "available" {
+			v.Status, v.Label, v.Reason = "ok", "模型可用", "模型运行检查通过；启用后台分析仍需保存接入配置并确认"
+			v.Next = append(v.Next, "use")
+		}
+	}
+	if op, ok := operation.(gin.H); ok {
+		status, _ := op["status"].(string)
+		if slices.Contains([]string{"pending", "leased", "cancelling"}, status) {
+			v.Status, v.Label, v.Reason, v.Next = "pending", "正在部署", "等待 VPS 执行和验证回执", []string{}
+		} else if slices.Contains([]string{"failed", "expired"}, status) {
+			v.Status, v.Label, v.Reason = "failed", "部署未完成", "部署失败或超时，请查看任务阶段和原因后重试"
+		}
+	}
+	return v
 }
 
 func (s *Server) previewGateLaya(c *gin.Context) {
@@ -118,13 +173,13 @@ func (s *Server) previewGateLaya(c *gin.Context) {
 	if req.Operation == "remove" {
 		kind = contracts.TaskLayaRemove
 	}
-	supported, err := s.gateSupportsTask(c.Request.Context(), g, kind, 0)
+	supported, err := s.gateSupportsTask(c.Request.Context(), g, kind)
 	if err != nil {
 		failInternal(c, 503, "capabilities_unavailable", err)
 		return
 	}
 	if !supported {
-		failure(c, 409, "agent_upgrade_required")
+		failure(c, 409, "laya_capability_unavailable")
 		return
 	}
 	p := gateLayaPreview{c.GetInt("user_id"), g.ID, req.Operation, observed.ImageDigest, observed.DeploymentVersion, time.Now().Add(10 * time.Minute)}
@@ -195,10 +250,7 @@ func (s *Server) confirmGateLaya(c *gin.Context) {
 			return nil
 		}
 		kind := contracts.TaskLayaInstall
-		warmup := 0
-		if selfupdate.Compare(g.Version, "0.1.11") >= 0 {
-			warmup = layaWarmupSeconds(s.loadLaya(ctx))
-		}
+		warmup := layaWarmupSeconds(s.loadLaya(ctx))
 		var payload any = contracts.LayaInstallTask{WarmupSeconds: warmup, DeploymentVersion: p.Version, Manifest: json.RawMessage(jsonText(map[string]string{"image_digest": p.Digest}))}
 		if p.Operation == "prepare" {
 			kind, payload = contracts.TaskLayaPrepare, struct{}{}

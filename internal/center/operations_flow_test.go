@@ -18,7 +18,7 @@ func TestGateLayaDurableOperationTrace(t *testing.T) {
 	g := pairFakeGate(t, admin)
 	heartbeat(t, g, contracts.Heartbeat{Version: "test", Arch: "amd64"})
 	ctx := t.Context()
-	caps := contracts.CapabilityDocument{Protocol: contracts.AgentProtocol, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.TaskLayaInstall: contracts.TaskVersion, contracts.TaskLayaRemove: contracts.TaskVersion}}
+	caps := contracts.CapabilityDocument{Protocol: contracts.AgentProtocol, Version: "test", Arch: "amd64", Tasks: map[string]int{contracts.TaskCoreInstall: contracts.TaskVersion, contracts.TaskLayaInstall: contracts.TaskVersion, contracts.TaskLayaRemove: contracts.TaskVersion}}
 	if err := s.Store.Tasks.SetCapabilities(ctx, int(g.id), caps); err != nil {
 		t.Fatal(err)
 	}

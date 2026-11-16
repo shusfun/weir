@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shusfun/weir/internal/buildinfo"
 	"github.com/shusfun/weir/internal/store"
 )
 
@@ -49,6 +50,7 @@ func requestLog(c *gin.Context) {
 	if observation := c.GetString("observation_id"); observation != "" {
 		attrs = append(attrs, "observation", observation)
 	}
+	attrs = append(attrs, "service.version", buildinfo.Version, "vcs.ref.head.revision", buildinfo.Revision, "code.function.name", "center.requestLog", "code.file.path", "internal/center/reqlog.go")
 	if code != "" {
 		attrs = append(attrs, "code", code)
 	}
@@ -101,6 +103,9 @@ func validTraceHex(s string, n int) bool {
 
 // 成功记录只覆盖需要排查的操作；路由模板不包含令牌。
 func customTraceRoute(route string) bool {
+	if strings.Contains(route, "/backup/") || strings.Contains(route, "/subscriptions/") || strings.HasPrefix(route, "/sub/g/") {
+		return true
+	}
 	if strings.Contains(route, "/account-plans") || strings.Contains(route, "/access-codes") || route == "/api/v1/me/redeem" {
 		return true
 	}
@@ -128,7 +133,7 @@ func customTraceRoute(route string) bool {
 	if route == "/api/v1/node-test/download" {
 		return true
 	}
-	return strings.Contains(route, "/center/resources") || route == "/api/v1/admin/settings/logo" || route == "/api/v1/agent/heartbeat" || strings.Contains(route, "/proxy/") || strings.Contains(route, "/exits") || strings.Contains(route, "/nodes") || strings.Contains(route, "/chains") || strings.Contains(route, "/routes") || strings.Contains(route, "/users") || route == "/api/v1/setup/install" || route == "/api/v1/auth/reset" || route == "/api/v1/auth/register" || route == "/api/v1/auth/verify" || route == "/api/v1/security/password" || route == "/sub/:token/rules" || route == "/sub/:token" || route == "/api/v1/agent/pair"
+	return strings.Contains(route, "/center/resources") || route == "/api/v1/admin/settings/logo" || route == "/api/v1/agent/heartbeat/v2" || strings.Contains(route, "/proxy/") || strings.Contains(route, "/exits") || strings.Contains(route, "/nodes") || strings.Contains(route, "/chains") || strings.Contains(route, "/routes") || strings.Contains(route, "/users") || route == "/api/v1/setup/install" || route == "/api/v1/auth/reset" || route == "/api/v1/auth/register" || route == "/api/v1/auth/verify" || route == "/api/v1/security/password" || route == "/sub/:token/rules" || route == "/sub/:token" || route == "/api/v1/agent/pair"
 }
 
 // logged 排除正常流程里大量出现的状态：未登录（401）、找不到（404）、被封禁来源的重复访问、未初始化。

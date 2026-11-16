@@ -82,10 +82,25 @@ func (s *Server) compileGateConfig(ctx context.Context, g *ent.Gate) (contracts.
 	if err = s.compileRoutes(ctx, g, &cfg, nodes, chainKeys); err != nil {
 		return cfg, err
 	}
+	if err = s.compileUoTReceivers(ctx, g, &cfg, need); err != nil {
+		return cfg, err
+	}
+	if err = s.compileOutboundBridges(ctx, g, &cfg, need); err != nil {
+		return cfg, err
+	}
 	if cfg.Kernels, cfg.Drivers, err = s.gateKernels(ctx, g, need); err != nil {
 		return cfg, err
 	}
 	guardGroups(&cfg, need)
+	if err = s.compileDomainObservers(ctx, g, &cfg); err != nil {
+		return cfg, err
+	}
+	if caps, err := s.Store.Tasks.Capabilities(ctx, g.ID); err == nil && caps.ConfigFeatures[contracts.ConfigFirewall] >= 1 {
+		cfg.Firewall = contracts.InboundFirewall(cfg.Inbounds)
+	}
+	if err = s.compileBrowserTest(ctx, g, &cfg); err != nil {
+		return cfg, err
+	}
 	return cfg, nil
 }
 

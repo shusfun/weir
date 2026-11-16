@@ -24,7 +24,7 @@ func TestExitsAndRoutes(t *testing.T) {
 	ob := mustJSON(t, admin, "POST", exits, map[string]any{"gate_id": gid, "kind": "socks5", "remark": "家宽", "address": "203.0.113.20", "port": 1080, "username": "u", "password": "p"}, 200)
 	oid := int(ob["id"].(float64))
 	tag := "exit-" + itoa(oid)
-	if ob["password"] != "p" || ob["tag"] != tag {
+	if ob["password"] != nil || ob["has_password"] != true || ob["tag"] != tag {
 		t.Fatalf("exit view = %v", ob)
 	}
 	stored := s.Store.Ent.Exit.GetX(t.Context(), oid)
@@ -46,7 +46,7 @@ func TestExitsAndRoutes(t *testing.T) {
 		hasOut = hasOut || o.Tag == tag && o.Protocol == "socks" && o.Password == "p" && o.Port == 1080
 	}
 	for _, r := range cfg.Routes {
-		hasRoute = hasRoute || r.OutboundTag == tag && r.Priority == adminRouteBase+7
+		hasRoute = hasRoute || r.OutboundTag == "rule-"+itoa(int(rt["id"].(float64))) && r.Priority == adminRouteBase+7
 	}
 	if !hasOut || !hasRoute {
 		t.Fatalf("gate config outbounds=%+v routes=%+v", cfg.Outbounds, cfg.Routes)
@@ -54,7 +54,7 @@ func TestExitsAndRoutes(t *testing.T) {
 	mustJSON(t, admin, "PATCH", path, map[string]any{"enabled": false}, 409)
 	mustJSON(t, admin, "DELETE", path, nil, 409)
 	updated = mustJSON(t, admin, "PATCH", path, map[string]any{"remark": "新备注"}, 200)
-	if updated["address"] != "203.0.113.20" || updated["password"] != "p" || updated["tag"] != tag {
+	if updated["address"] != "203.0.113.20" || updated["password"] != nil || updated["has_password"] != true || updated["tag"] != tag {
 		t.Fatalf("partial exit update cleared fields: %v", updated)
 	}
 	mustJSON(t, admin, "DELETE", rpath, nil, 204)

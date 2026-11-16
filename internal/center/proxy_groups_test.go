@@ -330,7 +330,7 @@ func TestIdleMeterAndLiveUnknown(t *testing.T) {
 	mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "idle@example.test", "password": "Idle2026", "all_nodes": true}, 200)
 	report := func(seq int64, status string) {
 		t.Helper()
-		if code, b := g.call("POST", "/api/v1/agent/meter", contracts.MeterReport{Epoch: "idle", Seq: seq, Status: status}); code != 200 {
+		if code, b := g.call("POST", "/api/v1/agent/meter", contracts.MeterReport{Protocol: 2, Epoch: "idle", Seq: seq, Status: status}); code != 200 {
 			t.Fatalf("%d %s", code, b)
 		}
 	}
@@ -351,7 +351,7 @@ func TestIdleMeterAndLiveUnknown(t *testing.T) {
 	gate := s.Store.Ent.Gate.GetX(ctx, int(g.id))
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
-	if _, err := s.applyMeter(cancelled, gate, contracts.MeterReport{Epoch: "failure", Seq: 3, Status: "fresh", Usage: []contracts.MeterSample{{StatsKey: cred.StatsKey, Down: 1}}}); err == nil {
+	if _, err := s.applyMeter(cancelled, gate, contracts.MeterReport{Protocol: 2, Epoch: "failure", Seq: 3, Status: "fresh", Usage: []contracts.MeterSample{{StatsKey: cred.StatsKey, Down: 1}}}); err == nil {
 		t.Fatal("取消应失败")
 	}
 	if s.Store.Ent.Sample.Query().Where(sample.ScopeEQ(sample.ScopeUser)).CountX(ctx) != 0 {

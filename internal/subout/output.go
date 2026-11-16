@@ -65,6 +65,15 @@ func clashProxies(links []string, usedNames map[string]bool) ([]map[string]any, 
 			continue
 		}
 		switch n.Protocol {
+		case "ssr":
+			p["cipher"], p["password"] = settings.Method, n.Password
+			p["protocol"], p["obfs"] = settings.SSR.Protocol, settings.SSR.Obfs
+			if settings.SSR.ProtocolParam != "" {
+				p["protocol-param"] = settings.SSR.ProtocolParam
+			}
+			if settings.SSR.ObfsParam != "" {
+				p["obfs-param"] = settings.SSR.ObfsParam
+			}
 		case "vless", "vmess":
 			p["uuid"] = n.Username
 			if n.Protocol == "vmess" {
@@ -273,6 +282,12 @@ func singboxNodes(links []string, usedNames map[string]bool) ([]map[string]any, 
 }
 
 func supportedSubscriptionSettings(protocol string, s subscription.Settings) bool {
+	if protocol == "ssr" {
+		return s.SSR != nil && s.Snell == nil && s.WireGuard == nil && len(s.UnsupportedFields) == 0
+	}
+	if s.SSR != nil {
+		return false
+	}
 	if protocol == "snell" {
 		return s.Snell != nil && s.WireGuard == nil && len(s.UnsupportedFields) == 0
 	}

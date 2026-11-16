@@ -103,14 +103,14 @@ export function AuditPage() {
           </Button>
         }
       />
-      <Card className="px-[21px] py-[17px]">
+      <Card className="px-[var(--weir-gap-21)] py-[var(--weir-gap-17)]">
         <div className="mb-[11px] flex flex-wrap items-center justify-between gap-3">
           <span className="text-meta text-[var(--weir-ink-2)]">最近 {range === "1" ? "24 小时" : `${range} 天`} · 每一格是 {range === "30" ? "4 小时" : "1 小时"}，越亮操作越多；有涟漪的是重启了内核</span>
           <Segmented aria-label="热力范围" value={range} onValueChange={setRange} options={[["1", "今天"], ["7", "7 天"], ["30", "30 天"]] as const} />
         </div>
         {heat.isPending || heat.error ? <State loading={heat.isPending} error={heat.error} onRetry={() => heat.refetch()} /> : <AuditHeat summary={heat.data} days={Number(range)} />}
       </Card>
-      <div className="flex flex-wrap items-center gap-[9px]">
+      <div className="flex flex-wrap items-center gap-[var(--weir-gap-9)]">
         <Segmented aria-label="审计范围" value={kind} onValueChange={(v) => { setKind(v); setPage(1); }} options={[["human", "人的操作"], ["all", "含自动任务"], ["failed", "失败与拦下"], ["restart", "重启了内核"]] as const} />
         <span className="flex-1" />
         <SearchInput
@@ -240,7 +240,7 @@ function AuditHeat({ summary, days }: { summary: AuditSummary; days: number }) {
   const max = Math.max(1, ...summary.buckets.map(c => c.total));
   return <><div className="weir-heat" style={{ gridTemplateColumns: `repeat(${summary.buckets.length}, minmax(0, 1fr))` }} role="img" aria-label={`最近 ${days} 天的完整操作分布`}>
     {summary.buckets.map(c => <i key={c.at} title={`${date(c.at)} · ${c.total} 次操作 · ${c.restarts} 次重启`} data-restart={c.restarts > 0 || undefined} style={{ opacity: c.total ? 0.37 + c.total / max * 0.63 : undefined }} data-on={c.total ? "" : undefined} />)}
-  </div><div className="mt-[7px] flex justify-between text-fine text-[var(--weir-ink-3)]"><span>{date(summary.from)}</span><span>{date(summary.to)}</span></div></>;
+  </div><div className="mt-[var(--weir-gap-7)] flex justify-between text-fine text-[var(--weir-ink-3)]"><span>{date(summary.from)}</span><span>{date(summary.to)}</span></div></>;
 }
 
 // 结果可能带附加信息（如「ok chains=0」）：标签看第一个词，完整内容在详情里。

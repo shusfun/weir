@@ -3,6 +3,7 @@ package center
 import (
 	"context"
 	"crypto/x509"
+	"database/sql"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -13,12 +14,16 @@ import (
 	"sync"
 	"time"
 
+	entsql "entgo.io/ent/dialect/sql"
 	"github.com/gin-gonic/gin"
 
 	"github.com/shusfun/weir/internal/acme"
+	"github.com/shusfun/weir/internal/store"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/certificate"
+	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/node"
+	"github.com/shusfun/weir/internal/store/ent/predicate"
 	"github.com/shusfun/weir/internal/store/ent/setting"
 	"github.com/shusfun/weir/packages/contracts"
 )
@@ -185,7 +190,7 @@ func (s *Server) discoverGatePanel(c *gin.Context) {
 	if !ok {
 		return
 	}
-	supported, err := s.gateSupportsTask(c.Request.Context(), g, contracts.ActionPanelDiscover, 2)
+	supported, err := s.gateSupportsTask(c.Request.Context(), g, contracts.ActionPanelDiscover)
 	if err != nil {
 		failInternal(c, 503, "capabilities_unavailable", err)
 		return
@@ -434,7 +439,13 @@ func (s *Server) selfSignedFor(ctx context.Context, g *ent.Gate) (*ent.Certifica
 		for _, n := range nodes {
 			c, err := s.Store.Ent.Certificate.Query().Where(certificate.IDEQ(*n.CertID), certificate.SourceEQ(certificate.SourceSelfSigned), certificate.GateIDIsNil()).Only(ctx)
 			if err == nil {
-				return c.Update().SetGateID(g.ID).Save(ctx)
+				err = s.withCertificateGate(ctx, &g.ID, func(ctx context.Context) error {
+					return s.updateIssuedCertificate(ctx, c, func(u *ent.CertificateUpdate) { u.SetGateID(g.ID) })
+				})
+				if err != nil {
+					return nil, err
+				}
+				return s.Store.Ent.Certificate.Get(ctx, c.ID)
 			}
 		}
 	}
@@ -459,9 +470,101 @@ func (s *Server) storeCert(ctx context.Context, name, domain string, src certifi
 	if err != nil {
 		return nil, err
 	}
-	return s.Store.Ent.Certificate.Create().SetName(name).SetDomain(domain).SetSource(src).SetNillableGateID(gid).
-		SetCertPem(certPEM).SetKeyPem(sealed).SetSha256(contracts.CertSum(certPEM, keyPEM)).SetNotAfter(x.NotAfter).
-		SetStatus(certificate.StatusReady).Save(ctx)
+	var saved *ent.Certificate
+	err = s.withCertificateGate(ctx, gid, func(ctx context.Context) error {
+		var err error
+		saved, err = s.Store.Ent.Certificate.Create().SetName(name).SetDomain(domain).SetSource(src).SetNillableGateID(gid).
+			SetCertPem(certPEM).SetKeyPem(sealed).SetSha256(contracts.CertSum(certPEM, keyPEM)).SetNotAfter(x.NotAfter).
+			SetStatus(certificate.StatusReady).Save(ctx)
+		return err
+	})
+	return saved, err
+}
+
+var errCertificateChanged = errors.New("证书或所属 VPS 已变化，本次签发结果未写入，请重新检查")
+
+// Do not hold the device lock during CA or panel calls. Only the final write
+// shares the deletion lock; the row revision also fences concurrent renewals.
+func (s *Server) withCertificateGate(ctx context.Context, gid *int, write func(context.Context) error) error {
+	if gid == nil {
+		return write(ctx)
+	}
+	return s.Store.Lock.Do(ctx, "gate-network:"+itoa(*gid), func(ctx context.Context) error {
+		ok, err := s.Store.Ent.Gate.Query().Where(gate.IDEQ(*gid), gate.StatusEQ(gate.StatusActive)).Exist(ctx)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errCertificateChanged
+		}
+		return write(ctx)
+	})
+}
+
+func (s *Server) updateIssuedCertificate(ctx context.Context, old *ent.Certificate, change func(*ent.CertificateUpdate)) error {
+	finish := operationStage(ctx, "certificate.result.persist", "certificate_id", old.ID)
+	err := s.withCertificateGate(ctx, old.GateID, func(ctx context.Context) error {
+		revision, err := s.certificateRevision(ctx, old)
+		if err != nil {
+			return err
+		}
+		u := s.Store.Ent.Certificate.Update().Where(certificate.IDEQ(old.ID), revision, certificate.SourceEQ(old.Source), certificate.DomainEQ(old.Domain),
+			certificate.NameEQ(old.Name), certificate.StatusEQ(old.Status), certificate.CertPemEQ(old.CertPem), certificate.KeyPemEQ(old.KeyPem), certificate.Sha256EQ(old.Sha256), certificate.LastErrorEQ(old.LastError))
+		if old.GateID == nil {
+			u.Where(certificate.GateIDIsNil())
+		} else {
+			u.Where(certificate.GateIDEQ(*old.GateID))
+		}
+		change(u)
+		stamp := time.Now()
+		if !stamp.After(old.UpdatedAt.Add(time.Microsecond)) {
+			stamp = old.UpdatedAt.Add(time.Microsecond)
+		}
+		u.SetUpdatedAt(stamp)
+		n, err := u.Save(ctx)
+		if err == nil && n != 1 {
+			return errCertificateChanged
+		}
+		return err
+	})
+	finish(err)
+	return err
+}
+
+func (s *Server) certificateRevision(ctx context.Context, old *ent.Certificate) (predicate.Certificate, error) {
+	if s.Store.Driver != store.DriverSQLite {
+		return certificate.UpdatedAtEQ(old.UpdatedAt), nil
+	}
+	// SQLite stores a time's original zone spelling. A read preserves the instant
+	// but may lose that spelling, so compare the instant then CAS the exact stored
+	// text. The pair is read in one statement; later mutations still fail the CAS.
+	var instant time.Time
+	var expiry, renewed sql.NullTime
+	var expiryRaw, renewedRaw sql.NullString
+	var raw string
+	err := s.Store.DB.QueryRowContext(ctx, "SELECT updated_at, CAST(updated_at AS TEXT), not_after, CAST(not_after AS TEXT), renewed_at, CAST(renewed_at AS TEXT) FROM certificates WHERE id = ?", old.ID).Scan(&instant, &raw, &expiry, &expiryRaw, &renewed, &renewedRaw)
+	sameTime := func(a sql.NullTime, b *time.Time) bool {
+		return !a.Valid && b == nil || a.Valid && b != nil && a.Time.Equal(*b)
+	}
+	if errors.Is(err, sql.ErrNoRows) || err == nil && (!instant.Equal(old.UpdatedAt) || !sameTime(expiry, old.NotAfter) || !sameTime(renewed, old.RenewedAt)) {
+		return nil, errCertificateChanged
+	}
+	if err != nil {
+		return nil, err
+	}
+	return func(sel *entsql.Selector) {
+		sel.Where(entsql.EQ(sel.C(certificate.FieldUpdatedAt), raw))
+		for _, field := range []struct {
+			name  string
+			value sql.NullString
+		}{{certificate.FieldNotAfter, expiryRaw}, {certificate.FieldRenewedAt, renewedRaw}} {
+			if field.value.Valid {
+				sel.Where(entsql.EQ(sel.C(field.name), field.value.String))
+			} else {
+				sel.Where(entsql.IsNull(sel.C(field.name)))
+			}
+		}
+	}, nil
 }
 
 // port80Free：Gate 上报过端口且 80 没有被其他程序占用。
@@ -549,8 +652,17 @@ func (s *Server) certBlocker(ctx context.Context, g *ent.Gate) string {
 
 // panelCert 让 Gate 经本机 1Panel 申请 IP 证书；私钥留在 Gate，中心只记证书与指纹。
 func (s *Server) panelCert(ctx context.Context, g *ent.Gate, ip string) (*ent.Certificate, error) {
-	c, err := s.Store.Ent.Certificate.Create().SetName(g.Name + " 1Panel 证书").SetDomain(ip).SetSource(certificate.SourcePanel).SetGateID(g.ID).
-		SetCertPem("").SetKeyPem("").SetStatus(certificate.StatusPending).Save(ctx)
+	var c *ent.Certificate
+	err := s.withCertificateGate(ctx, &g.ID, func(ctx context.Context) error {
+		var err error
+		c, err = s.Store.Ent.Certificate.Create().SetName(g.Name + " 1Panel 证书").SetDomain(ip).SetSource(certificate.SourcePanel).SetGateID(g.ID).
+			SetCertPem("").SetKeyPem("").SetStatus(certificate.StatusPending).Save(ctx)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	c, err = s.Store.Ent.Certificate.Get(ctx, c.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -562,10 +674,19 @@ func (s *Server) panelCert(ctx context.Context, g *ent.Gate, ip string) (*ent.Ce
 		err = errors.New("1Panel 没有返回证书")
 	}
 	if err != nil {
-		_ = s.Store.Ent.Certificate.DeleteOne(c).Exec(ctx)
+		// A detached certificate can still be used by another device.
+		if revision, revisionErr := s.certificateRevision(ctx, c); revisionErr == nil {
+			_, _ = s.Store.Ent.Certificate.Delete().Where(certificate.IDEQ(c.ID), revision, certificate.GateIDEQ(g.ID)).Exec(ctx)
+		}
 		return nil, err
 	}
-	return c.Update().SetCertPem(certPEM).SetSha256(sum).SetNillableNotAfter(certExpiry(certPEM)).SetStatus(certificate.StatusReady).SetRenewedAt(time.Now()).Save(ctx)
+	err = s.updateIssuedCertificate(ctx, c, func(u *ent.CertificateUpdate) {
+		u.SetCertPem(certPEM).SetSha256(sum).SetNillableNotAfter(certExpiry(certPEM)).SetStatus(certificate.StatusReady).SetRenewedAt(time.Now())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.Store.Ent.Certificate.Get(ctx, c.ID)
 }
 
 // issueIPCert 由中心运行 ACME（shortlived profile），Gate 临时在 80 端口应答验证。
@@ -703,6 +824,9 @@ func (s *Server) RenewCerts(ctx context.Context, now time.Time) error {
 		return err
 	}
 	for _, c := range list {
+		if c.Source == certificate.SourceAcme && c.GateID == nil {
+			continue
+		}
 		if !renewDue(c, now) && (c.NotAfter == nil || now.Before(*c.NotAfter)) {
 			continue
 		}
@@ -753,8 +877,10 @@ func (s *Server) renewCert(ctx context.Context, c *ent.Certificate) error {
 		var sealed string
 		if x, err = parseCertPair(certPEM, keyPEM); err == nil {
 			if sealed, err = s.Crypto.Encrypt(keyPEM); err == nil {
-				err = c.Update().SetCertPem(certPEM).SetKeyPem(sealed).SetSha256(contracts.CertSum(certPEM, keyPEM)).SetNotAfter(x.NotAfter).
-					SetStatus(certificate.StatusReady).SetLastError("").SetRenewedAt(time.Now()).Exec(ctx)
+				err = s.updateIssuedCertificate(ctx, c, func(u *ent.CertificateUpdate) {
+					u.SetCertPem(certPEM).SetKeyPem(sealed).SetSha256(contracts.CertSum(certPEM, keyPEM)).SetNotAfter(x.NotAfter).
+						SetStatus(certificate.StatusReady).SetLastError("").SetRenewedAt(time.Now())
+				})
 			}
 		}
 	}
@@ -763,11 +889,18 @@ func (s *Server) renewCert(ctx context.Context, c *ent.Certificate) error {
 		return err
 	}
 	if err != nil {
+		if errors.Is(err, errCertificateChanged) {
+			return err
+		}
 		// 失败原因用不跟着取消的上下文写：调用方的时限到了也要记下来
 		ctx := context.WithoutCancel(ctx)
+		if writeErr := s.updateIssuedCertificate(ctx, c, func(u *ent.CertificateUpdate) {
+			u.SetStatus(certificate.StatusFailed).SetLastError(trimErr(err))
+		}); writeErr != nil {
+			return errors.Join(err, writeErr)
+		}
 		backoff := s.renewBackoff(ctx, c.ID)
 		_ = s.Store.KV.Set(ctx, fmt.Sprintf("cert-renew-wait:%d", c.ID), "1", backoff)
-		_ = c.Update().SetStatus(certificate.StatusFailed).SetLastError(trimErr(err)).Exec(ctx)
 		s.notifyOnce(ctx, fmt.Sprintf("cert-renew:%d:%s", c.ID, time.Now().Format("2006-01-02")), fmt.Sprintf("证书「%s」续签失败：%s。将在 %s 后重试。", c.Name, trimErr(err), backoff))
 		return err
 	}

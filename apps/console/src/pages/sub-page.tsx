@@ -64,7 +64,7 @@ export function SubPage() {
       {affected.length > 0 && (
         <Card>
           <CardContent className="stack">
-            <SectionHeader title="客户端兼容情况" description="仅导入目标客户端支持的节点；没有兼容节点的格式暂不可导入。" />
+            <SectionHeader flush title="客户端兼容情况" description="仅导入目标客户端支持的节点；没有兼容节点的格式暂不可导入。" />
             <ul className="grid gap-3">
               {affected.map((report) => (
                 <li key={report.target} className="stack">

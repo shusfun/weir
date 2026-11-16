@@ -1,52 +1,63 @@
 import { PendingExits } from "../components/pending-exits";
+import { DomainCandidates } from "../components/domain-candidates";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQueries } from "@tanstack/react-query";
 import { useQuery } from "../lib/query";
 import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, LaneMap, Notice, PageHeader, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField, Textarea, useConfirm } from "@weir/ui";
 import { api } from "../api";
-import type { ExitItem, ExitSpec, Gate, NodeItem } from "../lib/core";
+import { bytes } from "../lib/models";
+import { objectStatus, type ExitItem, type ExitSpec, type Gate, type NodeItem } from "../lib/core";
 import { exitInput, exitTitle, useExitCatalog } from "../lib/exits";
 import { useFormAction, useRowAction } from "../lib/action";
 import { useConsoleContext } from "../lib/console-context";
 import { ExitFields, exitErrorFields, probeText } from "../components/chain-exit";
-import { ObjectLink, dataObject } from "../components/object-link";
+import { ObjectLink, dataObject, useDialogParam } from "../components/object-link";
 import { State } from "../components/feedback";
 import { ExitSummary } from "../components/node-summary";
 import { WaitText } from "../components/wait";
+import { ExitCredentials } from "../components/exit-credentials";
 
-interface RouteItem {id:number;gate_id:number;exit_id:number;domain:string;ip:string;priority:number;enabled:boolean;node_id?:number;user_id?:number}
-export function ExitsPage() {
+interface RouteItem {id:number;gate_id:number;exit_id:number;domain:string;ip:string;priority:number;enabled:boolean;node_id?:number;user_id?:number;usage?:{bytes:number|null;observed_at:string|null;coverage:string;reason:string}}
+export function ExitsPage({ view = "all" }: { view?: "all" | "proxies" | "rules" }) {
   const [params,setParams]=useSearchParams(), gid=Number(params.get("gate"))||undefined;
   const exits=useExitCatalog(true,gid);
   const gates=useQuery({queryKey:["gates"],queryFn:async()=>(await api("/admin/gates")).items as Gate[]});
   const visible=(gates.data??[]).filter(g=>!gid||g.id===gid);
   const routeQueries=useQueries({queries:visible.map(g=>({queryKey:["routes",g.id],queryFn:async()=>(await api(`/admin/gates/${g.id}/routes`)).items as RouteItem[]}))});
   const routes=routeQueries.flatMap(q=>q.data??[]);
-  const routesKnown=visible.length===0||routeQueries.every(q=>q.isSuccess||q.isError);
+  const routesKnown=gates.isSuccess&&routeQueries.every(q=>q.isSuccess);
   const tcpOnly=(exits.data?.items??[]).filter(e=>e.kind==="http"||e.kind==="https").length;
   const nodes=useQuery({queryKey:["nodes"],queryFn:async()=>(await api("/admin/nodes")).items as NodeItem[]});
-  const [edit,setEdit]=useState<ExitItem|"new"|null>(null);
+  const detail=useDialogParam("exit",exits.data?.items,!!exits.data);
+  const [creating,setCreating]=useState(false);
+  const edit: ExitItem | "new" | null = creating ? "new" : detail.current;
+  const setEdit=(value:ExitItem|"new"|null)=>{setCreating(value==="new");if(value&&value!=="new")detail.open(value);else detail.close();};
   const confirm=useConfirm();
   const action=useRowAction<number>({invalidate:[["exits"]]});
-  useConsoleContext({page:"出口与分流",list:{total:exits.data?.items.length??0,items:(exits.data?.items??[]).slice(0,20).map(e=>({type:"exit",id:e.id,name:exitTitle(e)}))}});
-  return <div className="stack"><PageHeader size="data" title="出口与分流" description={<span className="weir-sum"><span><b>{exits.data ? exits.data.items.length : "未知"}</b> 个出口</span><span><b>{routesKnown ? routes.length : "未知"}</b> 条分流规则</span><span>{exits.data ? `${tcpOnly} 个只能走 TCP` : "TCP 限制未知"}</span></span>} actions={<><Select value={gid?String(gid):"all"} onValueChange={v=>setParams(v==="all"?{}:{gate:String(v)})}><SelectTrigger aria-label="入口 VPS" className="min-w-[161px]"><SelectValue>{gates.data?.find(g=>g.id===gid)?.name??"全部 VPS"}</SelectValue></SelectTrigger><SelectContent><SelectItem value="all">全部 VPS</SelectItem>{gates.data?.map(g=><SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>)}</SelectContent></Select><Button onClick={()=>setEdit("new")} disabled={!gates.data?.length}>新建出口</Button></>}/>
-    <ExitLanes routes={routes} exits={exits.data?.items??[]} known={routesKnown} failed={routeQueries.some(q=>q.isError)} onRetry={()=>routeQueries.forEach(q=>void q.refetch())}/>
-    {!exits.data ? <State loading={exits.isPending} error={exits.error} onRetry={()=>exits.refetch()}/> : !exits.data.items.length ? <State empty="还没有出口"/> : <div className="exit-grid">{exits.data.items.map(e=><Card key={e.id} className="px-[21px] py-[19px]" {...dataObject({type:"exit",id:e.id})}>
-      <div className="flex items-start justify-between gap-3"><b className="truncate text-name">{exitTitle(e)}</b>{e.udp==="unsupported"?<Badge variant="soft" tone="neutral">仅 TCP</Badge>:<span className="text-meta text-[var(--weir-ink-3)]">{e.udp==="supported"?"支持 UDP":"UDP 未知"}</span>}</div>
-      <div className="mt-[3px] truncate font-[family-name:var(--weir-mono)] text-fine text-[var(--weir-ink-3)]">{[gates.data?.find(g=>g.id===e.gate_id)?.name ?? "VPS 未知", e.address ? `${e.address}${e.port?`:${e.port}`:""}` : null, e.owner_user_id ? `用户 ${e.owner_user_id}` : "公共出口"].filter(Boolean).join(" · ")}</div>
-      <p className="mt-[13px] mb-0 text-meta text-[var(--weir-ink-2)]">{e.references.length ? `${e.references.length} 处在用：${e.references.slice(0,3).map((r)=>r.name).join("、")}${e.references.length>3?" 等":""}。` : "暂无引用。"}{probeText(e.probe)}{!e.enabled && "（已停用）"}</p>
-      <div className="mt-[13px] flex flex-wrap gap-1"><Button size="sm" variant="ghost" onClick={()=>setEdit(e)} disabled={e.tag==="direct"}>编辑</Button>{!["freedom","blackhole"].includes(e.kind)&&<Button size="sm" variant="ghost" busy={action.isBusy(e.id)} onClick={()=>void action.run(e.id,()=>api(`/admin/exits/${e.id}/probe`,"POST",{}),"实测完成")}>实测</Button>}{e.tag!=="direct"&&<Button size="sm" variant="ghost" className="text-[var(--weir-bad-ink)]" disabled={action.isBusy()} onClick={async()=>{if(await confirm({title:`删除出口「${exitTitle(e)}」？`,description:e.references.length?"此出口仍有引用，需先切换或删除引用对象。":"删除后无法恢复。",tone:"danger",confirmText:"删除"}))void action.run(e.id,()=>api(`/admin/exits/${e.id}`,"DELETE"),"已删除");}}>删除</Button>}</div>
-    </Card>)}</div>}
-    <PendingExits all />
-    <SectionHeader title="分流"/><p>哪些网站走哪个出口。规则按优先级从小到大匹配；用户链路优先，不匹配时使用节点出口。</p>
-    {(gates.data??[]).filter(g=>!gid||g.id===gid).map(g=><Routes key={g.id} gate={g} exits={exits.data?.items.filter(e=>e.gate_id===g.id&&e.owner_user_id==null)??[]}/>)}
+  useConsoleContext({page:view === "rules" ? "规则" : view === "proxies" ? "代理" : "出口与分流",list:{total:exits.data?.items.length??0,items:(exits.data?.items??[]).slice(0,20).map(e=>({type:"exit",id:e.id,name:exitTitle(e)}))}});
+  return <div className="stack"><PageHeader size="data" title={view === "rules" ? "规则" : view === "proxies" ? "代理" : "出口与分流"} description={<span className="weir-sum"><span><b>{exits.data ? exits.data.items.length : "未知"}</b> 个出口</span><span><b>{routesKnown ? routes.length : "未知"}</b> 条分流规则</span><span>{exits.data ? `${tcpOnly} 个只能走 TCP` : "TCP 限制未知"}</span></span>} actions={<><Select value={gid?String(gid):"all"} onValueChange={v=>setParams(v==="all"?{}:{gate:String(v)})}><SelectTrigger aria-label="入口 VPS" className="min-w-[161px]"><SelectValue>{gates.data?.find(g=>g.id===gid)?.name??"全部 VPS"}</SelectValue></SelectTrigger><SelectContent><SelectItem value="all">全部 VPS</SelectItem>{gates.data?.map(g=><SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>)}</SelectContent></Select>{view !== "rules" && <Button onClick={()=>setEdit("new")} disabled={!gates.data?.length}>新建代理</Button>}</>}/>
+    {view !== "proxies" && <ExitLanes routes={routes} exits={exits.data?.items??[]} known={routesKnown} failed={routeQueries.some(q=>q.isError)} onRetry={()=>routeQueries.forEach(q=>void q.refetch())}/>}
+    {view !== "rules" && <>{!exits.data ? <State loading={exits.isPending} error={exits.error} onRetry={()=>exits.refetch()}/> : !exits.data.directory.length ? <State empty="还没有代理"/> : <div className="exit-grid">{exits.data.directory.map(group=><Card key={group.id}><CardContent className="stack">
+      <SectionHeader flush title={group.address ? `${group.address}:${group.port}` : exitTitle(group.deployments[0])} description={`${group.owner_user_id ? `用户 ${group.owner_user_id}` : "系统代理"} · ${group.deployments.length} 处部署`}/>
+      {group.conflict&&<Notice tone="warn">{group.reason}</Notice>}
+      {group.deployments.map(e=><div className="stack" key={e.id} {...dataObject({type:"exit",id:e.id})}>
+        <div><ObjectLink to={{type:"gate",id:e.gate_id}}>{gates.data?.find(g=>g.id===e.gate_id)?.name??`VPS ${e.gate_id}`}</ObjectLink> · {e.username || "无用户名"} · {e.references.length} 处引用 <Badge variant="soft" tone="neutral">{e.kind==="blackhole"?"拦截 TCP 与 UDP":e.udp==="supported"?"支持 UDP":e.udp==="unsupported"?"仅 TCP":"UDP 未知"}</Badge></div>
+        <p>{objectStatus(e.object_state)[2]}</p>
+        <div className="actions"><Button size="sm" variant="outline" onClick={()=>setEdit(e)}>详情与编辑</Button>{e.kind!=="blackhole"&&<Button size="sm" variant="ghost" busy={action.isBusy(e.id)} onClick={()=>void action.run(e.id,()=>api(`/admin/exits/${e.id}/probe`,"POST",{}),"实测完成")}>实测</Button>}<Button size="sm" variant="ghost" disabled={action.isBusy()} onClick={async()=>{if(await confirm({title:`删除出口「${exitTitle(e)}」？`,description:e.references.length?"此出口仍有引用，需先切换或删除引用对象。":"删除后无法恢复。",tone:"danger",confirmText:"删除"}))void action.run(e.id,()=>api(`/admin/exits/${e.id}`,"DELETE"),"已删除");}}>删除</Button></div>
+      </div>)}
+    </CardContent></Card>)}</div>}
+    <PendingExits all /></>
+    }
+    {view !== "proxies" && <><SectionHeader flush title="分流"/><p>哪些网站走哪个出口。规则按优先级从小到大匹配；用户链路优先，不匹配时使用节点出口。</p>
+    {(gates.data??[]).filter(g=>!gid||g.id===gid).map(g=><Routes key={g.id} gate={g} exits={exits.data?.items.filter(e=>e.gate_id===g.id&&e.owner_user_id==null)??[]}/>)}</>}
+    {view === "rules" && <DomainCandidates gateId={gid} />}
     {edit&&<ExitEditor key={edit==="new"?"new":edit.id} value={edit} gateId={gid} gates={gates.data??[]} nodes={nodes.data??[]} close={()=>setEdit(null)} saved={()=>{setEdit(null);void exits.refetch();}}/>}
   </div>;
 }
 function ExitLanes({ routes, exits, known, failed, onRetry }: { routes: RouteItem[]; exits: ExitItem[]; known: boolean; failed: boolean; onRetry: () => void }) {
-  if (!known) return <Card><CardContent><State loading /></CardContent></Card>;
   if (failed) return <Card><CardContent><State error="分流规则没有读全" onRetry={onRetry} /></CardContent></Card>;
+  if (!known) return <Card><CardContent><State loading /></CardContent></Card>;
   const lanes = routes.filter((r) => r.enabled).map((r) => {
     const found = exits.find((e) => e.id === r.exit_id);
     return { id: String(r.id), from: (r.domain || r.ip || "未命名规则").split("\n")[0], to: found ? exitTitle(found) : "出口 " + r.exit_id };
@@ -66,14 +77,14 @@ function ExitEditor({value,gateId,gates,nodes,close,saved}:{value:ExitItem|"new"
   const [enabled,setEnabled]=useState(old?.enabled??true), confirm=useConfirm();
   const save=useFormAction(async track=>{if(old?.references.length && !await confirm({title:"确认修改共享出口？",description:"以下对象都会受影响："+old.references.map(r=>r.name).join("、"),confirmText:"保存并影响全部引用"}))return false;return api(old?`/admin/exits/${old.id}`:"/admin/exits",old?"PATCH":"POST",{...spec,gate_id:gid,enabled},track);},{fields:{...exitErrorFields(spec.kind),invalid_remark:"remark"},onSuccess:r=>{if(r!==false)saved();}});
   useConsoleContext({dialog:{title:old?"编辑出口":"添加出口"}});
-  return <Dialog open onOpenChange={o=>!o&&!save.busy&&close()}><DialogContent size="lg"><DialogTitle>{old?"编辑出口":"添加出口"}</DialogTitle><DialogDescription>修改共享出口会影响全部引用者。出口编号与入口 VPS 保存后固定。</DialogDescription><Form busy={save.busy} errors={save.errors} onSubmit={()=>void save.submit()}><Field label="入口 VPS" required><Select disabled={!!old} value={String(gid)} onValueChange={v=>setGid(Number(v))}><SelectTrigger><SelectValue>{gates.find(g=>g.id===gid)?.name}</SelectValue></SelectTrigger><SelectContent>{gates.map(g=><SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>)}</SelectContent></Select></Field><ExitFields admin={!old?.owner_user_id} sourcePath={old?.owner_user_id?`/admin/users/${old.owner_user_id}/chain-sources`:"/admin/chain-sources"} value={spec} onChange={setSpec} nodes={nodes.filter(n=>n.gate_id!==gid)} nodeHint="需要另一台 VPS 的节点"/><SwitchField label="启用" checked={enabled} onCheckedChange={setEnabled}/>{old?.references.length? <Notice>影响：{old.references.map(r=>r.name).join("、")}</Notice>:null}<DialogFooter error={save.error} status={<WaitText wait={save.wait}/>}><Button type="button" variant="outline" onClick={close} disabled={save.busy}>取消</Button><Button type="submit" busy={save.busy} busyText="正在保存…">保存</Button></DialogFooter></Form></DialogContent></Dialog>;
+  return <Dialog open onOpenChange={o=>!o&&!save.busy&&close()}><DialogContent size="lg"><DialogTitle>{old?"编辑出口":"添加出口"}</DialogTitle><DialogDescription>修改共享出口会影响全部引用者。出口编号与入口 VPS 保存后固定。</DialogDescription><Form busy={save.busy} errors={save.errors} onSubmit={()=>void save.submit()}><Field label="入口 VPS" required><Select disabled={!!old} value={String(gid)} onValueChange={v=>setGid(Number(v))}><SelectTrigger><SelectValue>{gates.find(g=>g.id===gid)?.name}</SelectValue></SelectTrigger><SelectContent>{gates.map(g=><SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>)}</SelectContent></Select></Field><ExitFields savedSecrets={old?.kind===spec.kind ? {password:old.has_password,link:old.has_link} : undefined} admin={!old?.owner_user_id} sourcePath={old?.owner_user_id?`/admin/users/${old.owner_user_id}/chain-sources`:"/admin/chain-sources"} value={spec} onChange={setSpec} nodes={nodes.filter(n=>n.gate_id!==gid)} nodeHint="需要另一台 VPS 的节点"/>{old&&<ExitCredentials exit={old}/>}<SwitchField label="启用" checked={enabled} onCheckedChange={setEnabled}/>{old?.references.length? <Notice>影响：{old.references.map(r=>r.name).join("、")}</Notice>:null}<DialogFooter error={save.error} status={<WaitText wait={save.wait}/>}><Button type="button" variant="outline" onClick={close} disabled={save.busy}>取消</Button><Button type="submit" busy={save.busy} busyText="正在保存…">保存</Button></DialogFooter></Form></DialogContent></Dialog>;
 }
 function Routes({gate,exits}:{gate:Gate;exits:ExitItem[]}) {
   const base=`/admin/gates/${gate.id}/routes`;
   const q=useQuery({queryKey:["routes",gate.id],queryFn:async()=>(await api(base)).items as RouteItem[]});
   const [edit,setEdit]=useState<RouteItem|"new"|null>(null), confirm=useConfirm();
   const action=useRowAction<number>({refetch:()=>q.refetch(),invalidate:[["exits"]]});
-  return <Card><CardContent className="stack"><SectionHeader title={gate.name} actions={<Button variant="outline" onClick={()=>setEdit("new")}>添加规则</Button>}/>{!q.data?<State loading={q.isPending} error={q.error} onRetry={()=>q.refetch()}/>:!q.data.length?<State empty="还没有分流规则"/>:q.data.map(r=><div key={r.id} {...dataObject({type:"route",id:r.id})} className="flex flex-wrap justify-between gap-2"><div className="min-w-0 break-words">#{r.priority} {r.domain} {r.ip} → {exits.find(e=>e.id===r.exit_id)?exitTitle(exits.find(e=>e.id===r.exit_id)!):`出口 ${r.exit_id}`}{!r.enabled&&"（停用）"}</div><div className="actions"><Button variant="outline" onClick={()=>setEdit(r)}>编辑</Button><Button variant="destructive" onClick={async()=>{if(await confirm({title:"删除分流规则？",tone:"danger",confirmText:"删除"}))void action.run(r.id,()=>api(`${base}/${r.id}`,"DELETE"),"已删除");}}>删除</Button></div></div>)}{edit&&<RouteEditor value={edit} base={base} exits={exits} close={()=>setEdit(null)} saved={()=>{setEdit(null);void q.refetch();}}/>}</CardContent></Card>;
+  return <Card><CardContent className="stack"><SectionHeader flush title={gate.name} actions={<Button variant="outline" onClick={()=>setEdit("new")}>添加规则</Button>}/>{!q.data?<State loading={q.isPending} error={q.error} onRetry={()=>q.refetch()}/>:!q.data.length?<State empty="还没有分流规则"/>:q.data.map(r=><div key={r.id} {...dataObject({type:"route",id:r.id})} className="flex flex-wrap justify-between gap-2"><div className="min-w-0 break-words">#{r.priority} {r.domain} {r.ip} → {exits.find(e=>e.id===r.exit_id)?exitTitle(exits.find(e=>e.id===r.exit_id)!):`出口 ${r.exit_id}`}{!r.enabled&&"（停用）"}<p className="text-[var(--weir-ink-3)]" title={r.usage?.reason}>近 30 天 {r.usage?.bytes == null ? "用量未知" : bytes(r.usage.bytes)} · {r.usage?.coverage === "native" ? "原生计数" : r.usage?.coverage === "partial" ? "部分覆盖 / 观测过期" : "尚无观测"}{r.usage?.observed_at && ` · ${new Date(r.usage.observed_at).toLocaleString()}`}</p></div><div className="actions"><Button variant="outline" onClick={()=>setEdit(r)}>编辑</Button><Button variant="destructive" onClick={async()=>{if(await confirm({title:"删除分流规则？",tone:"danger",confirmText:"删除"}))void action.run(r.id,()=>api(`${base}/${r.id}`,"DELETE"),"已删除");}}>删除</Button></div></div>)}{edit&&<RouteEditor value={edit} base={base} exits={exits} close={()=>setEdit(null)} saved={()=>{setEdit(null);void q.refetch();}}/>}</CardContent></Card>;
 }
 function RouteEditor({value,base,exits,close,saved}:{value:RouteItem|"new";base:string;exits:ExitItem[];close:()=>void;saved:()=>void}) {
   const old=value==="new"?undefined:value;

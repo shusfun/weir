@@ -115,6 +115,13 @@ func (s *Server) agentChallenge(c *gin.Context) {
 		return
 	}
 	g, err := s.Store.Ent.Gate.Get(c.Request.Context(), req.GateID)
+	if ent.IsNotFound(err) && s.rejectDeletedGate(c, req.GateID) {
+		return
+	}
+	if err == nil && g.Status == gate.StatusRevoked {
+		failure(c, 403, "gate_revoked")
+		return
+	}
 	if err != nil || g.Status != gate.StatusActive {
 		failure(c, 403, "device_not_active")
 		return
@@ -142,10 +149,21 @@ func (s *Server) agentAuthenticate(c *gin.Context) {
 		return
 	}
 	g, err := s.Store.Ent.Gate.Get(ctx, req.GateID)
+	if ent.IsNotFound(err) && s.rejectDeletedGate(c, req.GateID) {
+		return
+	}
+	if err != nil {
+		failure(c, 401, "signature_invalid")
+		return
+	}
 	pub, keyErr := base64.StdEncoding.DecodeString(g.PublicKey)
 	sig, sigErr := base64.StdEncoding.DecodeString(req.Signature)
-	if err != nil || g.Status != gate.StatusActive || keyErr != nil || sigErr != nil || len(pub) != ed25519.PublicKeySize || !ed25519.Verify(pub, []byte(req.Challenge), sig) {
+	if keyErr != nil || sigErr != nil || len(pub) != ed25519.PublicKeySize || !ed25519.Verify(pub, []byte(req.Challenge), sig) {
 		failure(c, 401, "signature_invalid")
+		return
+	}
+	if g.Status == gate.StatusRevoked {
+		failure(c, 403, "gate_revoked")
 		return
 	}
 	token := randomToken(32)
@@ -166,6 +184,13 @@ func (s *Server) agentAuth(c *gin.Context) {
 		return
 	}
 	g, err := s.Store.Ent.Gate.Get(c.Request.Context(), id)
+	if ent.IsNotFound(err) && s.rejectDeletedGate(c, id) {
+		return
+	}
+	if err == nil && g.Status == gate.StatusRevoked {
+		failure(c, 403, "gate_revoked")
+		return
+	}
 	if err != nil || g.Status != gate.StatusActive {
 		failure(c, 401, "device_not_active")
 		return

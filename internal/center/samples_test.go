@@ -2,6 +2,7 @@ package center
 
 import (
 	"testing"
+	"time"
 
 	"github.com/shusfun/weir/packages/contracts"
 )
@@ -30,7 +31,7 @@ func TestHistoryRecordsKnownZeroAndLeavesGapsUnknown(t *testing.T) {
 	}
 	// 计数不可用的上报不记；可用的上报即使没有增量也记为 0，之后的增量累加。
 	meter := func(seq int64, status string, down int64) {
-		rep := contracts.MeterReport{Epoch: "e1", Seq: seq, Status: status, Usage: []contracts.MeterSample{{StatsKey: key, Down: down}}}
+		rep := contracts.MeterReport{Protocol: 2, Epoch: "e1", Seq: seq, Status: status, Usage: []contracts.MeterSample{{StatsKey: key, Down: down}}}
 		if code, _ := g.call("POST", "/api/v1/agent/meter", rep); code != 200 {
 			t.Fatalf("meter = %d", code)
 		}
@@ -57,7 +58,7 @@ func TestHistoryRecordsKnownZeroAndLeavesGapsUnknown(t *testing.T) {
 	}
 	// 心跳的主机观测：读到的字段记下，读不到的保持未知。
 	cpu, total, used := 12.5, uint64(4<<30), uint64(1<<30)
-	heartbeat(t, g, contracts.Heartbeat{Host: &contracts.HostSample{CPUPercent: &cpu, MemTotal: &total, MemUsed: &used}})
+	heartbeat(t, g, contracts.Heartbeat{Host: &contracts.HostSample{ObservedAt: time.Now(), CPUPercent: &cpu, MemTotal: &total, MemUsed: &used}})
 	p := last("/api/v1/admin/gates/" + itoa(int(g.id)) + "/history")
 	if p["cpu"] != 12.5 || p["mem_used"] != float64(1<<30) || p["disk_used"] != nil {
 		t.Fatalf("host point = %v", p)

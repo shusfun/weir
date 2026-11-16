@@ -118,7 +118,20 @@ func (s *Server) compileRoutes(ctx context.Context, g *ent.Gate, cfg *contracts.
 		if e == nil {
 			return fmt.Errorf("分流规则 %d 的出口不可用", r.ID)
 		}
-		base := contracts.Route{OutboundTag: e.Tag, Domain: r.Domain, IP: r.IP, Priority: adminRouteBase + r.Priority}
+		// Each rule owns an execution outlet, including direct and group members.
+		// Reusing the exit tag would charge its full traffic to every referencing rule.
+		metered := contracts.Outbound{Protocol: "freedom"}
+		if e.Tag != "direct" {
+			for _, ob := range cfg.Outbounds {
+				if ob.Tag == e.Tag {
+					metered = ob
+					break
+				}
+			}
+		}
+		metered.ID, metered.Tag, metered.RuleID = (1<<40)+int64(r.ID), "rule-"+itoa(r.ID), int64(r.ID)
+		cfg.Outbounds = append(cfg.Outbounds, metered)
+		base := contracts.Route{OutboundTag: metered.Tag, Domain: r.Domain, IP: r.IP, Priority: adminRouteBase + r.Priority}
 		if r.NodeID != nil {
 			base.InboundTag = nodeTag(*r.NodeID)
 		}

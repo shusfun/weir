@@ -80,10 +80,11 @@ type PanelCert struct {
 // FirewallStatus 是 Gate 本机的防火墙：Tool 为 ufw / firewalld / iptables / none（没有防火墙）；
 // Active 为假表示未启用（全部放行）；Rules 是放行的端口，形如 443/tcp、20000:20100/udp、8443（不分协议）。
 type FirewallStatus struct {
-	Tool   string   `json:"tool"`
-	Active bool     `json:"active"`
-	Rules  []string `json:"rules,omitempty"`
-	Error  string   `json:"error,omitempty"`
+	ManagedVersion int      `json:"managed_version,omitempty"`
+	Tool           string   `json:"tool"`
+	Active         bool     `json:"active"`
+	Rules          []string `json:"rules,omitempty"`
+	Error          string   `json:"error,omitempty"`
 }
 
 // HeartbeatReply 是中心对心跳的回复。Center 为中心记录的公共地址；与 Gate 当前连接的不同时，
@@ -105,6 +106,7 @@ type ListeningPort struct {
 
 // HostSample 只读主机观测；读取失败的字段保持为空，中心显示为「未知」。
 type HostSample struct {
+	BootID        string                   `json:"boot_id,omitempty"`
 	Processes     map[string]ProcessSample `json:"processes,omitempty"`
 	ObservationID string                   `json:"observation_id,omitempty"`
 	ObservedAt    time.Time                `json:"observed_at"`
@@ -149,13 +151,27 @@ type ProcessSample struct {
 // MeterReport 上报每个凭据自开机以来的累计字节数（单调递增，带纪元以识别内核重启）。
 // 中心按差值记账；累计值回退或纪元变化时只按新纪元重新起算，不重复扣减。
 type MeterReport struct {
-	Protocol int           `json:"protocol,omitempty"`
-	Partial  bool          `json:"partial,omitempty"`
-	Revision int64         `json:"revision"`
-	Epoch    string        `json:"epoch"`
-	Seq      int64         `json:"seq"`
-	Usage    []MeterSample `json:"usage"`
-	Status   string        `json:"status"` // fresh / unavailable
+	Protocol       int                 `json:"protocol,omitempty"`
+	Partial        bool                `json:"partial,omitempty"`
+	Revision       int64               `json:"revision"`
+	Epoch          string              `json:"epoch"`
+	Seq            int64               `json:"seq"`
+	Usage          []MeterSample       `json:"usage"`
+	Rules          []RuleMeterSample   `json:"rules,omitempty"`
+	Domains        []DomainObservation `json:"domains,omitempty"`
+	DomainCoverage []DomainCoverage    `json:"domain_coverage,omitempty"`
+	Status         string              `json:"status"` // fresh / unavailable
+}
+
+// RuleMeterSample is native outbound observation, independent of billed credentials.
+// Engine baselines are separate so restarting one engine cannot replay another.
+type RuleMeterSample struct {
+	RuleID     int64     `json:"rule_id"`
+	Engine     string    `json:"engine"`
+	Up         int64     `json:"up"`
+	Down       int64     `json:"down"`
+	ObservedAt time.Time `json:"observed_at"`
+	Status     string    `json:"status"`
 }
 
 type MeterAck struct {
