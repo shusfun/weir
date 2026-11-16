@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sort"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/shusfun/weir/internal/buildinfo"
+	"github.com/shusfun/weir/internal/ghrelease"
 	"github.com/shusfun/weir/internal/selfupdate"
 )
 
@@ -153,9 +155,30 @@ func (s *Server) checkUpdates(parent context.Context, source string, done chan s
 func (s *Server) queryUpdateReleases(ctx context.Context) (out []weirRelease, err error) {
 	finish := operationStage(ctx, "update.releases.select")
 	defer func() { finish(err) }()
-	list, err := s.weirGitHub().ListAll(ctx, weirRepo())
+	client := s.weirGitHub()
+	list, err := client.ListAll(ctx, weirRepo())
 	if err != nil {
 		return nil, err
+	}
+	// GitHub's anonymous list index can lag behind its latest-release endpoint.
+	// Merge only complete successful queries; latest is not a numeric ordering rule.
+	latest, _, latestErr := client.Latest(ctx, weirRepo())
+	if latestErr != nil && !errors.Is(latestErr, ghrelease.ErrNotFound) {
+		return nil, fmt.Errorf("核对最新发布失败：%w", latestErr)
+	}
+	if latestErr == nil {
+		found := false
+		for i := range list {
+			if list[i].Tag == latest.Tag {
+				list[i] = latest
+				found = true
+				break
+			}
+		}
+		if !found {
+			list = append(list, latest)
+			slog.Info("update.releases reconciled", "trace", traceOf(ctx), "tag", latest.Tag, "source", "latest", "code.function.name", "center.queryUpdateReleases")
+		}
 	}
 	out = []weirRelease{}
 	for _, r := range list {
@@ -165,6 +188,9 @@ func (s *Server) queryUpdateReleases(ctx context.Context) (out []weirRelease, er
 		}
 		if _, ok := buildinfo.ParseScheme(v); !ok || selfupdate.Compare(v, selfupdate.MinVersion) < 0 {
 			continue
+		}
+		if errors.Is(latestErr, ghrelease.ErrNotFound) {
+			return nil, errors.New("发布列表与最新发布查询不一致，请重试")
 		}
 		item := weirRelease{Version: v, PublishedAt: r.Published, Notes: r.Body, URL: r.HTMLURL}
 		if err := selfupdate.ValidateRelease(r, v); err != nil {

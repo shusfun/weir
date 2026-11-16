@@ -26,6 +26,7 @@ func completeUpdateRelease(version string) ghrelease.Release {
 
 func TestUpdateNoticeUsesLatestValidSnapshot(t *testing.T) {
 	s, _ := newInstalledServer(t)
+	cacheUpdateNoticeRecommendations(t, s)
 	old := buildinfo.Version
 	buildinfo.Version = "0.1.16"
 	t.Cleanup(func() { buildinfo.Version = old })
@@ -45,6 +46,16 @@ func TestUpdateNoticeUsesLatestValidSnapshot(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("missing cross-version update notice")
+	}
+}
+
+func cacheUpdateNoticeRecommendations(t *testing.T, s *Server) {
+	t.Helper()
+	// These tests exercise Weir notices without unrelated upstream kernel queries.
+	for _, kernel := range []string{"xray", "sing-box", "mihomo"} {
+		if err := s.Store.KV.Set(t.Context(), "kernel-recommend:"+kernel, `{}`, time.Hour); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -86,6 +97,12 @@ func TestUpdateCheckTraceCrossVersionAndRecovery(t *testing.T) {
 				}
 			}
 			return nil, ghrelease.ErrNotFound
+		}
+		if count == 0 {
+			if len(list) == 0 {
+				return nil, ghrelease.ErrNotFound
+			}
+			return list[:1], nil
 		}
 		return list, nil
 	}}
@@ -181,7 +198,10 @@ func TestUpdateCheckStartsSchedulesAndRejectsUser(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	queried := make(chan struct{}, 8)
-	s.GitHub = &ghrelease.Client{Query: func(context.Context, string, string, int, int) ([]ghrelease.Release, error) {
+	s.GitHub = &ghrelease.Client{Query: func(_ context.Context, _, _ string, count, _ int) ([]ghrelease.Release, error) {
+		if count == 0 {
+			return nil, ghrelease.ErrNotFound
+		}
 		queried <- struct{}{}
 		return nil, nil
 	}}
@@ -291,4 +311,66 @@ func TestUpdateCheckRestoresLastSuccessAndStopsBeforeStoreClose(t *testing.T) {
 	if blocked.updateCheckSnapshot().Checking {
 		t.Fatal("shutdown returned while check was running")
 	}
+}
+
+func TestUpdateCheckTraceReconcilesLaggingReleaseList(t *testing.T) {
+	s, admin := newInstalledServer(t)
+	cacheUpdateNoticeRecommendations(t, s)
+	old := buildinfo.Version
+	buildinfo.Version = "0.1.16"
+	t.Cleanup(func() { buildinfo.Version = old })
+	s.updates.ctx = t.Context()
+	list := []ghrelease.Release{completeUpdateRelease("0.1.17")}
+	latest := completeUpdateRelease("0.1.18")
+	var latestErr error
+	s.GitHub = &ghrelease.Client{Query: func(_ context.Context, _, tag string, count, _ int) ([]ghrelease.Release, error) {
+		if count > 0 {
+			return list, nil
+		}
+		if tag != "" && tag != "v0.1.18" {
+			t.Fatalf("unexpected intermediate target: %s", tag)
+		}
+		return []ghrelease.Release{latest}, latestErr
+	}}
+	logs := captureLog(t)
+	waitUpdateCheck(t, s)
+	view := mustJSON(t, admin, "GET", "/api/v1/admin/system/update/status", nil, 200)
+	if view["latest"].(map[string]any)["version"] != "0.1.18" || view["update_status"] != "available" {
+		t.Fatalf("lagging list hid update: %v", view)
+	}
+	found := false
+	for _, notice := range s.notices(t.Context()) {
+		if notice.ID == "weir-update:0.1.18" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("notice did not use reconciled snapshot")
+	}
+	if ok, err := s.releaseKnown(t.Context(), "0.1.18"); !ok || err != nil {
+		t.Fatalf("reconciled target rejected: %v", err)
+	}
+	for _, failure := range []error{errors.New("latest endpoint offline"), ghrelease.ErrNotFound} {
+		latestErr = failure
+		waitUpdateCheck(t, s)
+		got := s.updateCheckSnapshot()
+		if !got.Stale || got.Error == "" || got.Releases[0].Version != "0.1.18" || s.updateCheckView()["update_status"] != "failed" {
+			t.Fatalf("partial query replaced last success: %+v", got)
+		}
+	}
+	latestErr = nil
+	// GitHub's designated latest may have a lower numeric version than the list.
+	list = []ghrelease.Release{completeUpdateRelease("0.1.20"), completeUpdateRelease("0.1.18")}
+	latest.Assets = nil
+	waitUpdateCheck(t, s)
+	got := s.updateCheckSnapshot()
+	if got.Stale || got.Error != "" || len(got.Releases) != 2 || got.Releases[0].Version != "0.1.20" || got.Releases[1].Unavailable == "" {
+		t.Fatalf("numeric ordering or fresh asset replacement failed: %+v", got)
+	}
+	for _, want := range []string{"update.releases reconciled", "tag=v0.1.18", "trace=11223344556677889900aabbccddeeff", "update.check finished"} {
+		if !strings.Contains(logs.String(), want) {
+			t.Fatalf("missing evidence %q", want)
+		}
+	}
+	t.Log(logs.String())
 }
