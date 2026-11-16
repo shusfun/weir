@@ -218,7 +218,10 @@ func TestKernelJobsArchesRecommendationAndNotices(t *testing.T) {
 func TestSelfUpdateEndpointsInDevelopmentBuild(t *testing.T) {
 	s, admin, _ := setupGate(t)
 	s.updates.ctx = t.Context()
-	s.GitHub = &ghrelease.Client{Query: func(context.Context, string, string, int, int) ([]ghrelease.Release, error) {
+	s.GitHub = &ghrelease.Client{Query: func(_ context.Context, _, _ string, count, _ int) ([]ghrelease.Release, error) {
+		if count == 0 {
+			return []ghrelease.Release{completeUpdateRelease("0.1.20")}, nil
+		}
 		return []ghrelease.Release{completeUpdateRelease("0.1.20"), completeUpdateRelease("0.1.0")}, nil
 	}}
 	waitUpdateCheck(t, s)
