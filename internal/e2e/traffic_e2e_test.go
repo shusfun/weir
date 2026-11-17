@@ -245,15 +245,14 @@ func TestUDPExitRealKernels(t *testing.T) {
 	})
 	t.Run("socks-measured", func(t *testing.T) {
 		bindSub(e, t)
-		good := e.post("/api/v1/admin/exits", map[string]any{"gate_id": e.gateID, "kind": "socks5", "address": "127.0.0.1", "port": udpSocks.port, "remark": "udp-yes"}, nil)
-		bad := e.post("/api/v1/admin/exits", map[string]any{"gate_id": e.gateID, "kind": "socks5", "address": "127.0.0.1", "port": tcpSocks.port, "remark": "udp-no"}, nil)
-		e.applied("socks probes")
-		if udpOf(good) != "supported" || udpOf(bad) != "unsupported" {
-			t.Fatalf("measured socks udp = %v / %v", udpOf(good), udpOf(bad))
-		}
+		good := e.post("/api/v1/admin/exits", map[string]any{"kind": "socks5", "address": "127.0.0.1", "port": udpSocks.port, "remark": "udp-yes"}, nil)
+		bad := e.post("/api/v1/admin/exits", map[string]any{"kind": "socks5", "address": "127.0.0.1", "port": tcpSocks.port, "remark": "udp-no"}, nil)
 		yes := e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "ss2022", "name": "udp-socks", "skip_probe": true, "exit_id": int(good["id"].(float64))}, nil)
 		no := e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "vless-reality", "name": "udp-socks-no", "skip_probe": true, "settings": reality, "exit_id": int(bad["id"].(float64))}, nil)
 		e.applied("socks nodes")
+		if udpOf(yes["exit"].(map[string]any)) != "supported" || udpOf(no["exit"].(map[string]any)) != "unsupported" {
+			t.Fatalf("measured socks udp = %v / %v", udpOf(yes["exit"].(map[string]any)), udpOf(no["exit"].(map[string]any)))
+		}
 		yesClient := e.runSingboxClient(sb, e.subOutbound(uid, int(yes["id"].(float64))))
 		waitListen(t, yesClient)
 		nonce := []byte("udp-socks-" + strconv.FormatInt(time.Now().UnixNano(), 10))
@@ -279,12 +278,6 @@ func TestUDPExitRealKernels(t *testing.T) {
 	t.Run("chain-and-group", func(t *testing.T) {
 		bindSub(e, t)
 		entry := int(direct["gate_id"].(float64))
-		probedYes := e.post("/api/v1/admin/exits", map[string]any{"gate_id": entry, "kind": "socks5", "address": "127.0.0.1", "port": udpSocks.port, "remark": "group-yes"}, nil)
-		probedNo := e.post("/api/v1/admin/exits", map[string]any{"gate_id": entry, "kind": "socks5", "address": "127.0.0.1", "port": tcpSocks.port, "remark": "group-no"}, nil)
-		e.applied("group member probes")
-		if udpOf(probedYes) != "supported" || udpOf(probedNo) != "unsupported" {
-			t.Fatalf("group member probes = %v / %v", udpOf(probedYes), udpOf(probedNo))
-		}
 		e.startGate("udp-hop")
 		hop := e.gateID
 		e.s.Store.Ent.Gate.UpdateOneID(hop).SetPublicHost("127.0.0.1").ExecX(e.ctx)

@@ -23,7 +23,7 @@ func TestExitPartialUpdateEncryptionAndAtomicBinding(t *testing.T) {
 			return contracts.ActionResult{OK: true}
 		},
 	})
-	ex := mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"gate_id": int(g.id), "kind": "socks5", "address": "203.0.113.5", "port": 1080, "password": "private-password"}, 200)
+	ex := mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"kind": "socks5", "address": "203.0.113.5", "port": 1080, "password": "private-password"}, 200)
 	id := int(ex["id"].(float64))
 	stored := s.Store.Ent.Exit.GetX(ctx, id)
 	if stored.Password == "" || stored.Password == "private-password" || strings.Contains(stored.String(), "private-password") {
@@ -41,7 +41,7 @@ func TestExitPartialUpdateEncryptionAndAtomicBinding(t *testing.T) {
 	if unchanged["address"] != ex["address"] || probes.Load() != before {
 		t.Fatalf("null PATCH field changed connection or probed: %v", unchanged)
 	}
-	link := mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"gate_id": int(g.id), "kind": "link", "link": ss2022Link}, 200)
+	link := mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"kind": "link", "link": ss2022Link}, 200)
 	sealed := s.Store.Ent.Exit.GetX(ctx, int(link["id"].(float64)))
 	if sealed.Link == ss2022Link || sealed.Link == "" || sealed.Remark != "SS-HK" {
 		t.Fatal("link encryption or parsed default remark missing")
@@ -70,7 +70,7 @@ func TestExitSharingOwnershipAndTrace(t *testing.T) {
 	direct := int(n["exit_id"].(float64))
 	logs := captureLog(t)
 	trace := "0123456789abcdef0123456789abcdef"
-	w := admin.do("POST", "/api/v1/admin/exits", map[string]any{"gate_id": int(g.id), "kind": "blackhole", "remark": "拦截"}, map[string]string{"traceparent": "00-" + trace + "-1111111111111111-01"})
+	w := admin.do("POST", "/api/v1/admin/exits", map[string]any{"kind": "blackhole", "remark": "拦截"}, map[string]string{"traceparent": "00-" + trace + "-1111111111111111-01"})
 	if w.Code != 200 || w.Header().Get("X-Trace-Id") != trace || w.Header().Get("X-Request-Id") == "" {
 		t.Fatalf("create trace: %d %v", w.Code, w.Header())
 	}
@@ -113,7 +113,7 @@ func TestUserExitIsolationAndReuse(t *testing.T) {
 	u2 := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "other@example.test", "allow_chain": true, "all_nodes": true}, 200)
 	owner := login(t, s, "owner@example.test", u["password"].(string))
 	other := login(t, s, "other@example.test", u2["password"].(string))
-	ex := mustJSON(t, owner, "POST", "/api/v1/me/exits", map[string]any{"gate_id": int(g.id), "kind": "https", "address": "203.0.113.5", "port": 443, "username": "u", "password": "secret"}, 200)
+	ex := mustJSON(t, owner, "POST", "/api/v1/me/exits", map[string]any{"kind": "https", "address": "203.0.113.5", "port": 443, "username": "u", "password": "secret"}, 200)
 	id := int(ex["id"].(float64))
 	if ex["owner_user_id"] != u["id"] {
 		t.Fatalf("owner=%v", ex)
@@ -124,8 +124,8 @@ func TestUserExitIsolationAndReuse(t *testing.T) {
 	if items := mustJSON(t, other, "GET", "/api/v1/me/exits", nil, 200)["items"].([]any); len(items) != 0 {
 		t.Fatalf("leaked exits=%v", items)
 	}
-	mustJSON(t, owner, "POST", "/api/v1/me/exits", map[string]any{"gate_id": int(g.id), "kind": "blackhole"}, 422)
-	mustJSON(t, owner, "POST", "/api/v1/me/exits", map[string]any{"gate_id": int(g.id), "kind": "socks5", "address": "127.0.0.1", "port": 1080}, 422)
+	mustJSON(t, owner, "POST", "/api/v1/me/exits", map[string]any{"kind": "blackhole"}, 422)
+	mustJSON(t, owner, "POST", "/api/v1/me/exits", map[string]any{"kind": "socks5", "address": "127.0.0.1", "port": 1080}, 422)
 	for i := 0; i < 2; i++ {
 		mustJSON(t, owner, "POST", "/api/v1/me/chains", map[string]any{"name": "共用", "entry_node_id": n["id"], "exit_id": id}, 200)
 	}

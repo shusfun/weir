@@ -15,6 +15,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/shusfun/weir/internal/store/ent/chain"
 	"github.com/shusfun/weir/internal/store/ent/exit"
+	"github.com/shusfun/weir/internal/store/ent/exitbinding"
 	"github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/predicate"
 	"github.com/shusfun/weir/internal/store/ent/route"
@@ -23,14 +24,15 @@ import (
 // ExitQuery is the builder for querying Exit entities.
 type ExitQuery struct {
 	config
-	ctx        *QueryContext
-	order      []exit.OrderOption
-	inters     []Interceptor
-	predicates []predicate.Exit
-	withNodes  *NodeQuery
-	withChains *ChainQuery
-	withRoutes *RouteQuery
-	modifiers  []func(*sql.Selector)
+	ctx          *QueryContext
+	order        []exit.OrderOption
+	inters       []Interceptor
+	predicates   []predicate.Exit
+	withNodes    *NodeQuery
+	withChains   *ChainQuery
+	withRoutes   *RouteQuery
+	withBindings *ExitBindingQuery
+	modifiers    []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -126,6 +128,28 @@ func (_q *ExitQuery) QueryRoutes() *RouteQuery {
 			sqlgraph.From(exit.Table, exit.FieldID, selector),
 			sqlgraph.To(route.Table, route.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, exit.RoutesTable, exit.RoutesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryBindings chains the current query on the "bindings" edge.
+func (_q *ExitQuery) QueryBindings() *ExitBindingQuery {
+	query := (&ExitBindingClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(exit.Table, exit.FieldID, selector),
+			sqlgraph.To(exitbinding.Table, exitbinding.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, exit.BindingsTable, exit.BindingsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -320,14 +344,15 @@ func (_q *ExitQuery) Clone() *ExitQuery {
 		return nil
 	}
 	return &ExitQuery{
-		config:     _q.config,
-		ctx:        _q.ctx.Clone(),
-		order:      append([]exit.OrderOption{}, _q.order...),
-		inters:     append([]Interceptor{}, _q.inters...),
-		predicates: append([]predicate.Exit{}, _q.predicates...),
-		withNodes:  _q.withNodes.Clone(),
-		withChains: _q.withChains.Clone(),
-		withRoutes: _q.withRoutes.Clone(),
+		config:       _q.config,
+		ctx:          _q.ctx.Clone(),
+		order:        append([]exit.OrderOption{}, _q.order...),
+		inters:       append([]Interceptor{}, _q.inters...),
+		predicates:   append([]predicate.Exit{}, _q.predicates...),
+		withNodes:    _q.withNodes.Clone(),
+		withChains:   _q.withChains.Clone(),
+		withRoutes:   _q.withRoutes.Clone(),
+		withBindings: _q.withBindings.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -364,6 +389,17 @@ func (_q *ExitQuery) WithRoutes(opts ...func(*RouteQuery)) *ExitQuery {
 		opt(query)
 	}
 	_q.withRoutes = query
+	return _q
+}
+
+// WithBindings tells the query-builder to eager-load the nodes that are connected to
+// the "bindings" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *ExitQuery) WithBindings(opts ...func(*ExitBindingQuery)) *ExitQuery {
+	query := (&ExitBindingClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withBindings = query
 	return _q
 }
 
@@ -445,10 +481,11 @@ func (_q *ExitQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Exit, e
 	var (
 		nodes       = []*Exit{}
 		_spec       = _q.querySpec()
-		loadedTypes = [3]bool{
+		loadedTypes = [4]bool{
 			_q.withNodes != nil,
 			_q.withChains != nil,
 			_q.withRoutes != nil,
+			_q.withBindings != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -490,6 +527,13 @@ func (_q *ExitQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Exit, e
 		if err := _q.loadRoutes(ctx, query, nodes,
 			func(n *Exit) { n.Edges.Routes = []*Route{} },
 			func(n *Exit, e *Route) { n.Edges.Routes = append(n.Edges.Routes, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withBindings; query != nil {
+		if err := _q.loadBindings(ctx, query, nodes,
+			func(n *Exit) { n.Edges.Bindings = []*ExitBinding{} },
+			func(n *Exit, e *ExitBinding) { n.Edges.Bindings = append(n.Edges.Bindings, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -571,6 +615,36 @@ func (_q *ExitQuery) loadRoutes(ctx context.Context, query *RouteQuery, nodes []
 	}
 	query.Where(predicate.Route(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(exit.RoutesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.ExitID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "exit_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *ExitQuery) loadBindings(ctx context.Context, query *ExitBindingQuery, nodes []*Exit, init func(*Exit), assign func(*Exit, *ExitBinding)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Exit)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(exitbinding.FieldExitID)
+	}
+	query.Where(predicate.ExitBinding(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(exit.BindingsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

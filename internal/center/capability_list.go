@@ -171,12 +171,11 @@ func loadGate(ctx context.Context, s *Server, args map[string]any) (map[string]a
 // —— 出口与分流规则 ——
 
 func exitParams(update bool) []Param {
-	first := Param{Key: "gate_id", Label: "VPS", Kind: "ref", Ref: "gate", Required: true}
+	first := Param{Key: "remark", Label: "备注", Kind: "string"}
 	if update {
 		first = Param{Key: "exit_id", Label: "出口", Kind: "ref", Ref: "exit", Required: true}
 	}
 	ps := []Param{first,
-		{Key: "remark", Label: "备注", Kind: "string"},
 		{Key: "kind", Label: "类型", Kind: "enum", Required: !update, Options: exitKindOptions()},
 		{Key: "address", Label: "地址", Kind: "string", Hint: "代理类填写"},
 		{Key: "port", Label: "端口", Kind: "int", Min: num(1), Max: num(65535)},
@@ -188,7 +187,7 @@ func exitParams(update bool) []Param {
 		{Key: "match", Label: "节点名称或筛选", Kind: "string", Hint: "指定节点时填完整名称；筛选时填正则，如 ^HK"},
 	}
 	if update {
-		ps = append(ps, Param{Key: "enabled", Label: "启用", Kind: "bool"})
+		ps = append(ps, Param{Key: "remark", Label: "备注", Kind: "string"}, Param{Key: "enabled", Label: "启用", Kind: "bool"})
 	}
 	return ps
 }
@@ -433,11 +432,11 @@ var opDraftCaps = []Capability{
 			{Key: "kernel_pins", Label: "内核版本锁定", Kind: "object", Hint: "如 {\"xray\": \"26.3.27\"}；不写某个内核表示跟随默认版本"}},
 		op: &opSpec{kind: "update", method: "PATCH", handler: h(func(s *Server) gin.HandlerFunc { return s.updateGate }), path: keys("gate_id", "id"), pathKeys: []string{"gate_id"}, self: "gate_id", load: loadGate}},
 
-	{Name: "exit.create", Title: "新建出口", Purpose: "在入口 VPS 上新建公共出口，供节点与分流规则共用。类型包括代理、节点链接、订阅源、另一台 VPS 和拦截；直连由系统创建。保存前实测并检查全部入口内核。",
+	{Name: "exit.create", Title: "新建出口", Purpose: "单独保存公共出口资料，不选择入口 VPS，也不要求实测通过。类型包括代理、节点链接、订阅源、另一台 VPS 和拦截；直连由系统创建。某台 VPS 引用它时才检查是否支持、是否连通。",
 		Kind: "draft", Risk: "normal", Object: "exit", Creates: true, Params: exitParams(false),
 		op: &opSpec{kind: "create", method: "POST", handler: h(func(s *Server) gin.HandlerFunc { return func(c *gin.Context) { s.saveExit(c, true) } }), path: noPath, body: exitBody,
 			needs: exitNeeds, secrets: exitSecrets, undo: "exit.delete", idKey: "exit_id"}},
-	{Name: "exit.update", Title: "修改出口", Purpose: "修改共享出口会影响全部引用者；没给的字段保持原样。标签固定；仍被启用对象引用时不能停用。只改备注不实测，连接配置变化才实测。",
+	{Name: "exit.update", Title: "修改出口", Purpose: "修改出口资料；没给的字段保持原样。标签固定；仍被启用对象引用时不能停用。只改备注不验证。连接参数变化后，每台正在使用的 VPS 验证通过才替换生效配置，失败的保留原配置并写明原因。",
 		Kind: "draft", Risk: "normal", Object: "exit", Params: exitParams(true),
 		op: &opSpec{kind: "update", method: "PATCH", handler: h(func(s *Server) gin.HandlerFunc { return func(c *gin.Context) { s.saveExit(c, true) } }), path: exitPath, body: exitBody, pathKeys: []string{"exit_id"},
 			self: "exit_id", load: loadExit, full: true, needs: exitNeeds, secrets: exitSecrets}},
@@ -649,14 +648,21 @@ var opReadCaps = []Capability{
 		read: func(ctx context.Context, s *Server, args map[string]any) (any, error) {
 			return s.readVia(ctx, s.testNodeHandler, "POST", pathOf("id", itoa(intArg(args, "node_id"))), nil, nil)
 		}},
-	{Name: "probe_exit", Title: "出口实测", Purpose: "让出口所在 VPS 经这个出口真连一次，返回实际出口 IP 与延迟（代理与节点链接类出口）。会让 VPS 实际发起连接，记审计。", Kind: "read", Probe: true,
-		Params: []Param{{Key: "exit_id", Label: "出口", Kind: "ref", Ref: "exit", Required: true}},
+	{Name: "probe_exit", Title: "出口实测", Purpose: "从中心或指定 VPS 经这个出口真连一次。必须且只能指定 location=center 或 gate_id。同一次结果包含连通、落地 IP、地区和下载速率；下载未完成或没有定位时对应项为未知。结果只代表所选位置，不建立使用关系。中心测通不代表某台 VPS 可用。会实际发起连接，记审计。", Kind: "read", Probe: true,
+		Params: []Param{{Key: "exit_id", Label: "出口", Kind: "ref", Ref: "exit", Required: true}, {Key: "location", Label: "位置", Kind: "enum", Options: [][2]string{{"center", "中心"}}}, {Key: "gate_id", Label: "VPS", Kind: "ref", Ref: "gate"}},
 		read: func(ctx context.Context, s *Server, args map[string]any) (any, error) {
 			p, err := exitPath(ctx, s, args)
 			if err != nil {
 				return nil, err
 			}
-			return s.readVia(ctx, func(c *gin.Context) { s.probeSavedExit(c, true) }, "POST", p, nil, nil)
+			body := map[string]any{}
+			if args["location"] == "center" {
+				body["location"] = "center"
+			}
+			if id := intArg(args, "gate_id"); id > 0 {
+				body["gate_id"] = id
+			}
+			return s.readVia(ctx, func(c *gin.Context) { s.probeSavedExit(c, true) }, "POST", p, nil, body)
 		}},
 	{Name: "host.repair", Title: "宿主修复", Purpose: "按白名单修改一台 VPS 的系统参数或把被污染的系统 DNS 改到公网解析器。执行前备份，执行后按体检同样的方法复测，没有改善就回退，不重启代理内核。只能在管理员确认并且 Laya 复判通过后执行。", Kind: "draft", Risk: "normal", Object: "gate", Sources: []string{"dsh", "analysis"},
 		Params: []Param{
@@ -706,10 +712,25 @@ var opReadCaps = []Capability{
 			k, _ := args["kernel"].(string)
 			return s.readVia(ctx, s.kernelReleases, "GET", pathOf("kernel", k), nil, nil)
 		}},
-	{Name: "list_exits", Title: "出口", Purpose: "列出一台 VPS 上的出口：编号、标签、备注、类型、地址与端口、用户名、是否有密码、是否启用、订阅源出口当前用的节点、最近一次实测（出口 IP、延迟）。", Kind: "read",
-		Params: []Param{{Key: "gate_id", Label: "VPS", Kind: "ref", Ref: "gate", Required: true}},
+	{Name: "list_exits", Title: "出口", Purpose: "列出出口资料。可按 gate_id 只看某台 VPS 正在引用的出口。返回每台 VPS 的生效状态和分位置实测；没有实测时是未知。", Kind: "read",
+		Params: []Param{{Key: "gate_id", Label: "VPS", Kind: "ref", Ref: "gate"}},
 		read: func(ctx context.Context, s *Server, args map[string]any) (any, error) {
-			items, err := s.Store.Ent.Exit.Query().Where(entexit.GateIDEQ(intArg(args, "gate_id"))).Order(ent.Asc(entexit.FieldID)).All(ctx)
+			q := s.Store.Ent.Exit.Query()
+			if gid := intArg(args, "gate_id"); gid > 0 {
+				used, err := s.exitsUsedOnGate(ctx, gid)
+				if err != nil {
+					return nil, err
+				}
+				ids := []int{}
+				for id := range used {
+					ids = append(ids, id)
+				}
+				if len(ids) == 0 {
+					return []any{}, nil
+				}
+				q.Where(entexit.IDIn(ids...))
+			}
+			items, err := q.Order(ent.Asc(entexit.FieldID)).All(ctx)
 			return listOf(items, func(o *ent.Exit) any {
 				v, err := s.exitResourceView(ctx, o)
 				if err != nil {

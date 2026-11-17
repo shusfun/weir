@@ -8,12 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/shusfun/weir/internal/db"
+	"github.com/shusfun/weir/internal/nodeprobe"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/subout"
 	"github.com/shusfun/weir/internal/subscription"
@@ -206,11 +209,27 @@ func (s *Server) probeTarget(ctx context.Context) string {
 	return "https://www.gstatic.com/generate_204"
 }
 
+// probePayload 是公开的固定下载，不带令牌，只用于经代理测量速率。
+func (s *Server) probePayload(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	c.Data(http.StatusOK, "application/octet-stream", nodeprobe.Payload("weir-exit-probe"))
+}
+
+// probeDownload 是与节点实测同长度的固定下载。没有公网地址时不编造下载点。
+func (s *Server) probeDownload(ctx context.Context) string {
+	if o := s.centerOrigin(ctx); o != "" {
+		return strings.TrimRight(o, "/") + "/api/v1/probe/payload"
+	}
+	return ""
+}
+
 // clientOutbound 与订阅复用同一个 mihomo 单代理条目。
 func clientOutbound(link string) (map[string]any, error) { return subout.ClashProxy(link) }
 
 // exitProbe 是一次实测的结果；保存在 exit-probe:<所属对象>，链路页据此显示实际出口 IP 与延迟。
 type exitProbe struct {
+	resolved json.RawMessage
+
 	OK        bool      `json:"ok"`
 	Mode      string    `json:"mode"` // proxy：按协议完成真实请求
 	LatencyMS int64     `json:"latency_ms,omitempty"`
@@ -220,16 +239,28 @@ type exitProbe struct {
 	At        time.Time `json:"at"`
 	// UDP 是 SOCKS5 等出口的实测结果。没有测过时为空，页面显示未知。
 	UDP *bool `json:"udp,omitempty"`
+	// Location 是实测位置：center 或 gate。缺省不代表某一台 VPS 可用。
+	Location string `json:"location,omitempty"`
+	GateID   int    `json:"gate_id,omitempty"`
+	// 下载与落地只属于这一次、这一个测试位置。缺省表示未知，不是 0。
+	Bytes         int64     `json:"download_bytes,omitempty"`
+	DownloadMS    int64     `json:"download_ms,omitempty"`
+	RateBps       *int64    `json:"rate_bps,omitempty"`
+	DownloadError string    `json:"download_error,omitempty"`
+	Place         *geoPlace `json:"place,omitempty"`
 }
 
 func exitProbeKey(owner string) string { return "exit-probe:" + owner }
 
-func (s *Server) saveExitProbe(ctx context.Context, owner string, p *exitProbe) {
+func (s *Server) saveExitProbe(ctx context.Context, owner string, p *exitProbe) error {
 	if p == nil || owner == "" {
-		return
+		return nil
 	}
-	b, _ := json.Marshal(p)
-	_ = s.Store.KV.Set(ctx, exitProbeKey(owner), string(b), 0)
+	b, err := json.Marshal(p)
+	if err != nil {
+		return err
+	}
+	return s.Store.KV.Set(ctx, exitProbeKey(owner), string(b), 0)
 }
 
 func (s *Server) loadExitProbe(ctx context.Context, owner string) (exitProbe, bool) {
@@ -252,6 +283,7 @@ func (s *Server) probeExit(ctx context.Context, entry *ent.Gate, ex resolvedExit
 	}
 	members := ex.members()
 	var last error
+	var first *exitProbe
 	for i, m := range members {
 		if i >= 5 {
 			break
@@ -264,6 +296,9 @@ func (s *Server) probeExit(ctx context.Context, entry *ent.Gate, ex resolvedExit
 			return nil, fmt.Errorf("出口客户端配置无法生成：%w", err)
 		}
 		payload := map[string]any{"address": m.Address, "port": m.Port, "public_only": publicOnly, "target": s.probeTarget(ctx)}
+		if download := s.probeDownload(ctx); download != "" {
+			payload["download"] = download
+		}
 		raw, _ := json.Marshal(map[string]any{"kernels": kernels, "drivers": profiles, "client": client})
 		var config map[string]any
 		_ = json.Unmarshal(raw, &config)
@@ -272,22 +307,111 @@ func (s *Server) probeExit(ctx context.Context, entry *ent.Gate, ex resolvedExit
 		}
 		// 第一次实测要先把 mihomo 拉到 Gate，不能把下载时间算进短连接时限里。
 		jobStep(ctx, fmt.Sprintf("正在经出口实测（第 %d/%d 个成员）", i+1, min(len(members), 5)), 3*time.Minute)
+		finish := operationStage(ctx, "exit.probe.connect", "gate.id", entry.ID, "echo", probeHost(s.probeTarget(ctx)))
 		res, err := s.gateProbe(ctx, entry, contracts.ActionChainProbe, payload, 3*time.Minute)
+		finish(err)
 		if err != nil {
 			last = err
 			continue
 		}
 		p := &exitProbe{OK: true, Mode: "proxy", At: time.Now().UTC()}
-		if v, ok := res["latency_ms"].(float64); ok {
-			p.LatencyMS = int64(v)
+		applyProbeFields(p, res)
+		s.finishProbe(ctx, p)
+		if ex.Outbound.Protocol != "group" {
+			return p, nil
 		}
-		if v, ok := res["exit_ip"].(string); ok {
-			p.ExitIP = v
+		if first == nil {
+			first = p
 		}
-		if v, ok := res["udp"].(bool); ok {
-			p.UDP = &v
+		if p.UDP != nil {
+			if members[i].Settings == nil {
+				members[i].Settings = map[string]any{}
+			}
+			members[i].Settings["udp"] = *p.UDP
 		}
-		return p, nil
+	}
+	if first != nil {
+		// 仅把这次 VPS 实测得到的能力写入本次解析快照。
+		if ex.Outbound.Settings == nil {
+			ex.Outbound.Settings = map[string]any{}
+		}
+		ex.Outbound.Settings["udp_members"] = len(udpMembers(members))
+		delete(ex.Outbound.Settings, "udp_supported")
+		if allUDPKnown(members) && len(udpMembers(members)) == 0 {
+			ex.Outbound.Settings["udp_supported"] = false
+		}
+		return first, nil
 	}
 	return nil, fmt.Errorf("chain_probe_failed: %w", last)
+}
+
+func probeHost(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return u.Host
+}
+
+func applyProbeFields(p *exitProbe, res map[string]any) {
+	if p == nil || res == nil {
+		return
+	}
+	if v, ok := res["latency_ms"].(float64); ok {
+		p.LatencyMS = int64(v)
+	}
+	if v, ok := res["exit_ip"].(string); ok {
+		p.ExitIP = v
+	}
+	if v, ok := res["udp"].(bool); ok {
+		p.UDP = &v
+	}
+	if v, ok := res["download_bytes"].(float64); ok {
+		p.Bytes = int64(v)
+	}
+	if v, ok := res["download_ms"].(float64); ok {
+		p.DownloadMS = int64(v)
+	}
+	if v, ok := res["download_error"].(string); ok {
+		p.DownloadError = v
+	}
+}
+
+// finishProbe 把这一次实测的落地和速率写全。下载没完成时保留连通结果，速率留空。
+func (s *Server) finishProbe(ctx context.Context, p *exitProbe) {
+	if p == nil || !p.OK {
+		return
+	}
+	finish := operationStage(ctx, "exit.probe.place", "exit_ip", p.ExitIP)
+	if net.ParseIP(p.ExitIP) == nil {
+		why := "回显没有给出可解析的出口 IP"
+		if s.centerOrigin(ctx) == "" {
+			why = "中心没有记录公网地址，测不到落地 IP"
+		}
+		p.ExitIP = ""
+		place := geoPlace{Why: why}
+		p.Place = &place
+	} else {
+		place := s.locate(ctx, p.ExitIP)
+		p.Place = &place
+	}
+	finish(nil)
+	if p.DownloadError == "" && p.Bytes == 0 && s.probeDownload(ctx) == "" {
+		p.DownloadError = "中心没有记录公网地址，测不到下载速率"
+	}
+	if p.DownloadError == "" && p.Bytes == 0 && s.probeDownload(ctx) != "" {
+		p.DownloadError = "没有返回下载结果"
+	}
+	if p.DownloadError == "" && p.Bytes > 0 && p.Bytes != int64(contracts.ProbePayloadSize) {
+		p.DownloadError = "下载没有完成"
+	}
+	if p.DownloadError == "" && p.Bytes == int64(contracts.ProbePayloadSize) && p.DownloadMS <= 0 {
+		p.DownloadError = "下载耗时不可用"
+	}
+	p.RateBps = nil
+	if p.DownloadError != "" || p.Bytes != int64(contracts.ProbePayloadSize) || p.DownloadMS <= 0 {
+		return
+	}
+	rate := p.Bytes * 1000 / p.DownloadMS
+	p.RateBps = &rate
 }

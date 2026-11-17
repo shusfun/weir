@@ -14,6 +14,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/chain"
 	entexit "github.com/shusfun/weir/internal/store/ent/exit"
+	"github.com/shusfun/weir/internal/store/ent/exitbinding"
 	"github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/route"
 	"github.com/shusfun/weir/packages/contracts"
@@ -86,7 +87,10 @@ func (s *Server) directExit(ctx context.Context, db *ent.Client, gid int) (*ent.
 
 // persistExit 只负责持久化；调用方先校验、实测，再在同一事务中绑定引用。
 func (s *Server) persistExit(ctx context.Context, db *ent.Client, gid int, owner *int, policy string, spec ExitSpec, old *ent.Exit) (*ent.Exit, error) {
-	gateIDs := []int{gid}
+	gateIDs := []int{}
+	if gid > 0 {
+		gateIDs = append(gateIDs, gid)
+	}
 	if spec.Kind == "node" {
 		n, err := db.Node.Get(ctx, spec.NodeID)
 		if err != nil {
@@ -94,8 +98,10 @@ func (s *Server) persistExit(ctx context.Context, db *ent.Client, gid int, owner
 		}
 		gateIDs = append(gateIDs, n.GateID)
 	}
-	if err := lockActiveGates(ctx, db, gateIDs...); err != nil {
-		return nil, err
+	if len(gateIDs) > 0 {
+		if err := lockActiveGates(ctx, db, gateIDs...); err != nil {
+			return nil, err
+		}
 	}
 	spec.Remark = strings.TrimSpace(spec.Remark)
 	if utf8.RuneCountInString(spec.Remark) > 100 {
@@ -124,7 +130,11 @@ func (s *Server) persistExit(ctx context.Context, db *ent.Client, gid int, owner
 	}
 	var id int
 	if old == nil {
-		e, err := db.Exit.Create().SetGateID(gid).SetNillableOwnerUserID(owner).SetKind(entexit.Kind(spec.Kind)).SetTag("pending-" + randomToken(12)).SetPolicyType(policy).Save(ctx)
+		create := db.Exit.Create().SetNillableOwnerUserID(owner).SetKind(entexit.Kind(spec.Kind)).SetTag("pending-" + randomToken(12)).SetPolicyType(policy)
+		if spec.Kind == "freedom" && gid > 0 {
+			create.SetGateID(gid)
+		}
+		e, err := create.Save(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -133,6 +143,9 @@ func (s *Server) persistExit(ctx context.Context, db *ent.Client, gid int, owner
 		id = old.ID
 	}
 	m := db.Exit.UpdateOneID(id).SetRemark(spec.Remark).SetKind(entexit.Kind(spec.Kind)).SetAddress(strings.Trim(strings.TrimSpace(spec.Address), "[]")).SetPort(spec.Port).SetUsername(spec.Username).SetPassword(pw).SetLink(link).SetTag("exit-" + itoa(id))
+	if spec.Kind != "freedom" {
+		m.ClearGateID()
+	}
 	if spec.Kind == "node" {
 		m.SetExitNodeID(spec.NodeID)
 	} else {
@@ -166,7 +179,10 @@ func (s *Server) validateExitSelection(ctx context.Context, g *ent.Gate, self in
 		if err != nil {
 			return nil, v, nil, errors.New("exit_not_found")
 		}
-		if e.GateID != g.ID || !reflect.DeepEqual(e.OwnerUserID, owner) || !e.Enabled {
+		if exitGateID(e) != 0 && exitGateID(e) != g.ID || !reflect.DeepEqual(e.OwnerUserID, owner) || !e.Enabled {
+			return nil, v, nil, errors.New("exit_not_allowed")
+		}
+		if e.Tag == "direct" && exitGateID(e) != g.ID {
 			return nil, v, nil, errors.New("exit_not_allowed")
 		}
 		if e.PolicyType != "" && self != 0 {
@@ -230,16 +246,11 @@ func (s *Server) refreshExit(ctx context.Context, e *ent.Exit, p *exitProbe) err
 	if err := s.invalidateExitDependents(ctx, e.ID); err != nil {
 		return err
 	}
-	if e.Kind == entexit.KindSource {
-		if err := s.refreshSourceExit(ctx, exitOwner(e.ID), e.GateID, specOf(e.Source), e.OwnerUserID != nil, false); err != nil {
-			return err
-		}
-	}
-	if p == nil {
+
+	if p == nil || !p.OK {
 		return s.Store.KV.Del(ctx, exitProbeKey(exitOwner(e.ID)))
 	}
-	s.saveExitProbe(ctx, exitOwner(e.ID), p)
-	return nil
+	return s.saveLocatedProbe(ctx, exitOwner(e.ID), p.Location, p.GateID, p)
 }
 
 func (s *Server) exitReferences(ctx context.Context, id int) ([]gin.H, error) {
@@ -282,6 +293,17 @@ func (s *Server) checkExitSourceDeletion(c *gin.Context, sourceID, profileID int
 			refs = append(refs, gin.H{"type": "exit", "id": e.ID, "name": firstNonEmpty(e.Remark, e.Tag)})
 		}
 	}
+	bindings, err := s.Store.Ent.ExitBinding.Query().Where(exitbinding.KindEQ(exitbinding.KindSource)).All(c.Request.Context())
+	if err != nil {
+		failInternal(c, 503, "query_failed", err)
+		return false
+	}
+	for _, b := range bindings {
+		sp := specOf(b.Source)
+		if sourceID > 0 && sp.SourceID == sourceID || profileID > 0 && sp.ProfileID == profileID {
+			refs = append(refs, gin.H{"type": "exit", "id": b.ExitID, "gate_id": b.GateID})
+		}
+	}
 	if len(refs) > 0 {
 		failDetail(c, 409, "source_in_use", "先切换或删除引用此来源的出口", gin.H{"references": refs})
 		return false
@@ -310,13 +332,14 @@ func (s *Server) exitResourceView(ctx context.Context, e *ent.Exit) (gin.H, erro
 		v["source"] = e.Source
 		v["resolved"] = s.exitView(ctx, exitOwner(e.ID))
 	}
-	if p, ok := s.loadExitProbe(ctx, exitOwner(e.ID)); ok {
-		v["probe"] = p
+	uses, probes, state, err := s.exitUsageView(ctx, e)
+	if err != nil {
+		return nil, err
 	}
+	v["uses"] = uses
+	v["probes"] = probes
 	v["place"] = s.exitPlace(ctx, e)
-	g, _ := s.Store.Ent.Gate.Get(ctx, e.GateID)
-	p, hasProbe := s.loadExitProbe(ctx, exitOwner(e.ID))
-	v["object_state"] = exitObjectState(e, g, p, hasProbe)
+	v["object_state"] = state
 	v["summary"] = s.exitSummary(ctx, e, "")
 	supported, known := s.exitUDP(ctx, e.ID, map[int]bool{})
 	switch {
@@ -379,7 +402,20 @@ func (s *Server) listExits(c *gin.Context, admin bool) {
 		q.Where(entexit.OwnerUserIDEQ(c.GetInt("user_id")))
 	}
 	if gid, err := strconv.Atoi(c.Query("gate_id")); err == nil && gid > 0 {
-		q.Where(entexit.GateIDEQ(gid))
+		used, err := s.exitsUsedOnGate(ctx, gid)
+		if err != nil {
+			failInternal(c, 503, "query_failed", err)
+			return
+		}
+		ids := []int{}
+		for id := range used {
+			ids = append(ids, id)
+		}
+		if len(ids) == 0 {
+			c.JSON(200, gin.H{"items": []gin.H{}, "kinds": []exitKindInfo{}, "directory": []gin.H{}})
+			return
+		}
+		q.Where(entexit.IDIn(ids...))
 	}
 	es, err := q.Order(ent.Asc(entexit.FieldGateID), ent.Asc(entexit.FieldID)).All(ctx)
 	if err != nil {
@@ -412,50 +448,55 @@ func (s *Server) listExits(c *gin.Context, admin bool) {
 func (s *Server) saveExitNow(c *gin.Context, admin bool) {
 	defer s.auditExitFailure(c, "exit.save")
 	ctx := c.Request.Context()
+	var outcome error
+	finish := operationStage(ctx, "exit.save", "actor", c.GetInt("user_id"))
+	defer func() { finish(outcome) }()
 	var old *ent.Exit
 	if c.Param("eid") != "" {
 		var ok bool
 		old, ok = s.exitParam(c, admin)
 		if !ok {
+			outcome = errors.New("exit_not_found")
 			return
 		}
 		if old.Tag == "direct" {
+			outcome = errors.New("system_exit")
 			failure(c, 409, "system_exit")
 			return
 		}
 	}
 	var req map[string]json.RawMessage
 	if !bind(c, &req) {
+		outcome = errors.New("invalid_body")
+		return
+	}
+	if _, ok := req["gate_id"]; ok {
+		outcome = errors.New("exit_gate_rejected")
+		failDetail(c, 400, "exit_gate_rejected", "添加或修改出口不选择入口 VPS；要在某台 VPS 上使用时再验证", nil)
 		return
 	}
 	var spec ExitSpec
-	gid := 0
 	var owner *int
 	enabled := true
 	if old != nil {
 		var err error
 		spec, err = s.exitSpec(old)
 		if err != nil {
+			outcome = err
 			failInternal(c, 500, "decrypt_failed", err)
 			return
 		}
-		gid, owner, enabled = old.GateID, old.OwnerUserID, old.Enabled
+		owner, enabled = old.OwnerUserID, old.Enabled
 	}
 	raw, _ := json.Marshal(req)
 	if err := json.Unmarshal(raw, &spec); err != nil {
+		outcome = err
 		failure(c, 400, "invalid_chain")
 		return
 	}
-	if b, ok := req["gate_id"]; ok {
-		var id int
-		if json.Unmarshal(b, &id) != nil || old != nil && id != gid {
-			failure(c, 400, "exit_not_allowed")
-			return
-		}
-		gid = id
-	}
 	if b, ok := req["enabled"]; ok {
 		if json.Unmarshal(b, &enabled) != nil {
+			outcome = errors.New("invalid_chain")
 			failure(c, 400, "invalid_chain")
 			return
 		}
@@ -465,38 +506,22 @@ func (s *Server) saveExitNow(c *gin.Context, admin bool) {
 		owner = &uid
 		u, err := s.Store.Ent.User.Get(ctx, uid)
 		if err != nil || !u.AllowChain {
+			outcome = errors.New("chain_disabled")
 			failure(c, 403, "chain_disabled")
-			return
-		}
-		allowed, err := s.userNodeIDs(ctx, u)
-		if err != nil {
-			failInternal(c, 503, "query_failed", err)
-			return
-		}
-		found := false
-		for _, n := range allowed {
-			if n.GateID == gid && n.Enabled {
-				found = true
-			}
-		}
-		if !found {
-			failure(c, 403, "entry_not_allowed")
 			return
 		}
 	}
 	if spec.Kind == "freedom" {
+		outcome = errors.New("system_exit")
 		failure(c, 409, "system_exit")
 		return
 	}
-	g, err := s.Store.Ent.Gate.Get(ctx, gid)
-	if err != nil {
-		failure(c, 404, "gate_not_found")
-		return
-	}
+	var err error
 	refs := []gin.H{}
 	if old != nil {
 		refs, err = s.exitReferences(ctx, old.ID)
 		if err != nil {
+			outcome = err
 			failInternal(c, 503, "query_failed", err)
 			return
 		}
@@ -504,14 +529,16 @@ func (s *Server) saveExitNow(c *gin.Context, admin bool) {
 	if !enabled {
 		for _, r := range refs {
 			if r["enabled"] == true {
+				outcome = errors.New("exit_in_use")
 				failDetail(c, 409, "exit_in_use", "先停用或切换引用它的对象", gin.H{"references": refs})
 				return
 			}
 		}
 	}
 	if old != nil && spec.Kind == "source" && spec.Mode == "node" && spec.Identity == "" && reflect.DeepEqual(spec.source(), specOf(old.Source)) {
-		bound, e := s.bindStoredSourceIdentity(ctx, exitOwner(old.ID), gid, spec.source())
+		bound, e := s.bindStoredSourceIdentity(ctx, exitOwner(old.ID), 0, spec.source())
 		if e != nil {
+			outcome = e
 			failDetail(c, 422, "invalid_chain", e.Error(), nil)
 			return
 		}
@@ -521,6 +548,7 @@ func (s *Server) saveExitNow(c *gin.Context, admin bool) {
 	if old != nil {
 		prev, e := s.exitSpec(old)
 		if e != nil {
+			outcome = e
 			failInternal(c, 500, "decrypt_failed", e)
 			return
 		}
@@ -529,66 +557,47 @@ func (s *Server) saveExitNow(c *gin.Context, admin bool) {
 		next.Remark = ""
 		changed = !reflect.DeepEqual(prev, next)
 	}
-	var p *exitProbe
 	if changed {
-		if owner != nil {
+		if owner != nil && spec.Kind == "node" {
 			u, e := s.Store.Ent.User.Get(ctx, *owner)
 			if e != nil {
+				outcome = e
 				failure(c, 404, "user_not_found")
 				return
 			}
 			allowed, e := s.userNodeIDs(ctx, u)
 			if e != nil {
+				outcome = e
 				failInternal(c, 503, "query_failed", e)
 				return
 			}
-			if spec.Kind == "node" && allowed[spec.NodeID] == nil {
+			if allowed[spec.NodeID] == nil {
+				outcome = errors.New("exit_not_allowed")
 				failure(c, 403, "exit_not_allowed")
 				return
 			}
 		}
-		_, _, p, err = s.validateExitSelection(ctx, g, 0, owner, 0, &spec, false, admin, "")
-		if err == nil {
-			err = s.checkGateKernels(ctx, g, spec)
-		}
-		if err == nil {
-			for _, r := range refs {
-				entryID := 0
-				switch r["type"] {
-				case "node":
-					entryID = r["id"].(int)
-				case "chain":
-					var ch *ent.Chain
-					ch, err = s.Store.Ent.Chain.Get(ctx, r["id"].(int))
-					if err != nil {
-						break
-					}
-					entryID = ch.EntryNodeID
-				}
-				if err != nil {
-					break
-				}
-				if entryID != 0 {
-					_, _, _, err = s.validateExitSelection(ctx, g, entryID, owner, 0, &spec, true, admin, "")
-					if err != nil {
-						break
-					}
-				}
-			}
-		}
-		if err != nil {
-			if s.deferExitChange(c, err) {
+		if spec.Kind == "source" {
+			bound, e := s.bindSourceIdentity(ctx, spec.source())
+			if e != nil {
+				outcome = e
+				failErr(c, 422, e)
 				return
 			}
+			spec.Identity = bound.Identity
+		}
+		if err = s.catalogSpec(ctx, spec, owner, admin); err != nil {
+			outcome = err
 			failErr(c, 422, err)
 			return
 		}
 	}
 	if utf8.RuneCountInString(spec.Remark) > 100 {
+		outcome = errors.New("invalid_remark")
 		failure(c, 400, "invalid_remark")
 		return
 	}
-	if dryRun(c, dryResult{Preview: []string{"保存出口；影响 " + itoa(len(refs)) + " 个引用对象"}}) {
+	if dryRun(c, dryResult{Preview: []string{"保存出口资料；已使用的 VPS 验证通过后才替换生效配置"}}) {
 		return
 	}
 	if !jobCommit(c) {
@@ -596,11 +605,12 @@ func (s *Server) saveExitNow(c *gin.Context, admin bool) {
 	}
 	tx, err := s.Store.Ent.Tx(ctx)
 	if err != nil {
+		outcome = err
 		failInternal(c, 500, "save_failed", err)
 		return
 	}
 	defer tx.Rollback()
-	e, err := s.persistExit(ctx, tx.Client(), gid, owner, "", spec, old)
+	e, err := s.persistExit(ctx, tx.Client(), 0, owner, "", spec, old)
 	if err == nil {
 		e, err = tx.Exit.UpdateOne(e).SetEnabled(enabled).Save(ctx)
 	}
@@ -608,28 +618,46 @@ func (s *Server) saveExitNow(c *gin.Context, admin bool) {
 		err = tx.Commit()
 	}
 	if err != nil {
+		outcome = err
 		failInternal(c, 500, "save_failed", err)
 		return
 	}
-	if changed {
-		if err = s.refreshExit(ctx, e, p); err != nil {
-			failInternal(c, 500, "source_exit_failed", err)
+	applications := []exitApplyResult{}
+	needApply := changed && len(refs) > 0
+	if !needApply {
+		needApply, err = s.bindingsNeedApply(ctx, e, spec)
+		if err != nil {
+			outcome = err
+			failInternal(c, 500, "query_failed", err)
 			return
 		}
 	}
-	if err = s.SyncAll(ctx); err == nil {
-		_, err = s.bumpGate(ctx, gid)
-	}
-	if err != nil {
-		failInternal(c, 500, "sync_failed", err)
-		return
+	if needApply {
+		applications, err = s.applyExitToUsers(ctx, e, spec, admin)
+		if err != nil {
+			outcome = err
+			failInternal(c, 500, "sync_failed", err)
+			return
+		}
+		for _, item := range applications {
+			if item.Status == "waiting" {
+				if err := s.noteExitApplyRetry(c, e.ID); err != nil {
+					outcome = err
+					failInternal(c, 500, "save_failed", err)
+					return
+				}
+				break
+			}
+		}
 	}
 	s.audit(c, "exit.save", exitOwner(e.ID), "ok")
 	v, err := s.exitResourceView(ctx, e)
 	if err != nil {
+		outcome = err
 		failInternal(c, 503, "query_failed", err)
 		return
 	}
+	v["applications"] = applications
 	c.JSON(200, v)
 }
 
@@ -656,16 +684,27 @@ func (s *Server) deleteExit(c *gin.Context, admin bool) {
 	if dryRun(c, dryResult{Preview: []string{"删除出口 " + firstNonEmpty(e.Remark, e.Tag)}}) {
 		return
 	}
+	gates, err := s.referencingGates(ctx, e.ID)
+	if err != nil {
+		failInternal(c, 503, "query_failed", err)
+		return
+	}
+	if _, err = s.Store.Ent.ExitBinding.Delete().Where(exitbinding.ExitIDEQ(e.ID)).Exec(ctx); err != nil {
+		failInternal(c, 500, "delete_failed", err)
+		return
+	}
 	if err = s.Store.Ent.Exit.DeleteOne(e).Exec(ctx); err != nil {
 		failInternal(c, 500, "delete_failed", err)
 		return
 	}
-	_ = s.Store.KV.Del(ctx, exitProbeKey(exitOwner(e.ID)), sourceExitKey(exitOwner(e.ID)))
+	keys, _ := s.Store.KV.Keys(ctx, exitProbeKey(exitOwner(e.ID)), 100)
+	keys = append(keys, sourceExitKey(exitOwner(e.ID)))
+	_ = s.Store.KV.Del(ctx, keys...)
 	if err = s.SyncAll(ctx); err != nil {
 		failInternal(c, 500, "sync_failed", err)
 		return
 	}
-	_, _ = s.bumpGate(ctx, e.GateID)
+	_ = s.bumpGates(ctx, gates)
 	s.audit(c, "exit.delete", exitOwner(e.ID), "ok")
 	c.Status(204)
 }
@@ -677,37 +716,82 @@ func (s *Server) probeSavedExit(c *gin.Context, admin bool) {
 		return
 	}
 	ctx := c.Request.Context()
+	var req struct {
+		Location string `json:"location"`
+		GateID   int    `json:"gate_id"`
+	}
+	if !bind(c, &req) {
+		return
+	}
+	center := req.Location == "center"
+	loc := req.Location
+	if req.GateID > 0 {
+		loc = "gate"
+	}
+	var outcome error
+	finish := operationStage(ctx, "exit.probe", "exit.id", e.ID, "location", loc, "gate.id", req.GateID, "binding_created", false)
+	defer func() { finish(outcome) }()
+	if center == (req.GateID > 0) || req.Location != "" && req.Location != "center" {
+		outcome = errors.New("invalid_probe_location")
+		failure(c, 400, "invalid_probe_location")
+		return
+	}
 	spec, err := s.exitSpec(e)
 	if err != nil {
+		outcome = err
 		failInternal(c, 500, "decrypt_failed", err)
 		return
 	}
 	if spec.Kind == "freedom" || spec.Kind == "blackhole" {
+		outcome = errors.New("probe_unsupported")
 		failure(c, 400, "probe_unsupported")
 		return
 	}
-	g, err := s.Store.Ent.Gate.Get(ctx, e.GateID)
-	if err != nil {
-		failure(c, 404, "gate_not_found")
-		return
+	var p *exitProbe
+	if center {
+		p, err = s.probeExitFromCenter(ctx, spec, e.OwnerUserID != nil)
+	} else {
+		if !admin {
+			if err = s.userMayProbeGate(ctx, c.GetInt("user_id"), req.GateID); err != nil {
+				outcome = err
+				failErr(c, 403, err)
+				return
+			}
+		}
+		g, gerr := s.Store.Ent.Gate.Get(ctx, req.GateID)
+		if gerr != nil {
+			outcome = gerr
+			failure(c, 404, "gate_not_found")
+			return
+		}
+		p, err = s.verifyExitOnGate(ctx, g, 0, e.OwnerUserID, spec, admin, true, "")
 	}
-	_, _, p, err := s.validateExitSelection(ctx, g, 0, e.OwnerUserID, 0, &spec, false, admin, "")
 	if err != nil {
+		outcome = err
 		failErr(c, 422, err)
 		return
 	}
-	s.saveExitProbe(ctx, exitOwner(e.ID), p)
-	// 实测结果会改变 UDP 路由。配置正文没变时 Gate 不重启内核。
-	if err = s.SyncAll(ctx); err != nil {
-		failInternal(c, 500, "sync_failed", err)
+	location := "gate"
+	if center {
+		location = "center"
+	}
+	if err = s.saveLocatedProbe(ctx, exitOwner(e.ID), location, req.GateID, p); err != nil {
+		outcome = err
+		failInternal(c, 500, "save_failed", err)
 		return
 	}
-	if _, err = s.bumpGate(ctx, e.GateID); err != nil {
-		failInternal(c, 500, "sync_failed", err)
-		return
-	}
+	s.noteProbeResult(ctx, p)
 	s.audit(c, "exit.probe", exitOwner(e.ID), "ok")
 	c.JSON(200, p)
+}
+
+func (s *Server) noteProbeResult(ctx context.Context, p *exitProbe) {
+	if p == nil {
+		return
+	}
+	known := p.Place != nil && p.Place.Known
+	finish := operationStage(ctx, "exit.probe.result", "location", p.Location, "gate.id", p.GateID, "exit_ip", p.ExitIP, "place_known", known, "rate_known", p.RateBps != nil, "download_bytes", p.Bytes)
+	finish(nil)
 }
 
 func (s *Server) auditExitFailure(c *gin.Context, action string) {
@@ -727,8 +811,7 @@ func (s *Server) compileExit(ctx context.Context, e *ent.Exit) (contracts.Outbou
 	case entexit.KindFreedom, entexit.KindBlackhole:
 		o.Protocol = string(e.Kind)
 	case entexit.KindSource:
-		o, _ = s.exitFromStore(ctx, exitOwner(e.ID), e.Tag, int64(e.ID))
-		s.stampGroupUDP(ctx, &o)
+		return o, errors.New("订阅源出口必须指定 VPS 生效快照")
 	case entexit.KindNode:
 		if e.ExitNodeID == nil {
 			return o, errors.New("出口节点缺失")
@@ -745,4 +828,43 @@ func (s *Server) compileExit(ctx context.Context, e *ent.Exit) (contracts.Outbou
 	}
 	o.ID, o.Tag = int64(e.ID), e.Tag
 	return o, err
+}
+
+// compileExitForGate 使用这台 VPS 已验证的快照。没有快照时不把尚未验证的期望参数下发。
+func (s *Server) compileExitForGate(ctx context.Context, e *ent.Exit, gateID int) (contracts.Outbound, error) {
+	if e.Tag == "direct" {
+		return s.compileExit(ctx, e)
+	}
+	b, err := s.exitBinding(ctx, e.ID, gateID)
+	if err != nil {
+		return contracts.Outbound{}, err
+	}
+	if b == nil {
+		return contracts.Outbound{}, fmt.Errorf("出口 %d 在这台 VPS 上还没有验证通过的生效配置", e.ID)
+	}
+	applied := appliedExit(e, b)
+	if applied.Kind == entexit.KindSource {
+		var v storedExit
+		if err := json.Unmarshal(b.Resolved, &v); err != nil || v.Outbound.Protocol == "" {
+			return contracts.Outbound{}, fmt.Errorf("出口 %d 在这台 VPS 上缺少有效的已验证订阅快照", e.ID)
+		}
+		v.Outbound.ID, v.Outbound.Tag = int64(e.ID), e.Tag
+		return v.Outbound, nil
+	}
+	return s.compileExit(ctx, applied)
+}
+
+func appliedExit(e *ent.Exit, b *ent.ExitBinding) *ent.Exit {
+	applied := *e
+	applied.Kind = entexit.Kind(b.Kind)
+	applied.Remark = b.Remark
+	applied.Address = b.Address
+	applied.Port = b.Port
+	applied.Username = b.Username
+	applied.Password = b.Password
+	applied.Link = b.Link
+	applied.ExitNodeID = b.ExitNodeID
+	applied.Source = b.Source
+	applied.Enabled = true
+	return &applied
 }

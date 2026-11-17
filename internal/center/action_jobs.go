@@ -91,6 +91,11 @@ func jobCommit(c *gin.Context) bool {
 // cancelMsg 是取消后显示的说明。
 func (s *Server) asJob(title, cancelMsg string, h gin.HandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if c.GetBool(dryRunKey) {
+			markPreview(c)
+			h(c)
+			return
+		}
 		body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20))
 		if err != nil {
 			failure(c, 400, "invalid_request")

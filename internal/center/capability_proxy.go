@@ -134,7 +134,7 @@ var proxyDraftCaps = []Capability{
 		},
 		op: &opSpec{kind: "update", method: "PUT", handler: func(s *Server) gin.HandlerFunc { return func(c *gin.Context) { s.putCustomRules(c, true) } }, path: userPath, pathKeys: []string{"user_id"},
 			self: "user_id", load: loadCustomRules, full: true, body: customRulesBody}},
-	{Name: "proxy.type_exit", Title: "给类型加出口", Purpose: "给一个用户某个类型的全部节点统一加同一个出口：每个节点生成一条链式代理，由入口 VPS 逐个实测。未通过时保留加密候选和原有配置，全部通过才整体替换。需要这个用户开放了链式代理。不能撤回（要去掉用 proxy.type_exit_delete），只能是最后一步。",
+	{Name: "proxy.type_exit", Title: "给类型加出口", Purpose: "给一个用户某个类型的全部节点统一加同一个出口：每个节点生成一条链式代理，由各自的入口 VPS 实测。未通过的不挂上，并保留原有配置。需要这个用户开放了链式代理。不能撤回（要去掉用 proxy.type_exit_delete），只能是最后一步。",
 		Kind: "draft", Risk: "normal", Object: "user", Last: true, Params: typeExitParams(),
 		op: &opSpec{kind: "action", method: "PUT", handler: func(s *Server) gin.HandlerFunc { return func(c *gin.Context) { s.putTypeExit(c, true) } }, path: typeExitPath, pathKeys: []string{"user_id", "type_key"},
 			self: "user_id", body: typeExitBody, probe: true, needs: func(args map[string]any) []string {

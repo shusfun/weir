@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/shusfun/weir/internal/kernelconf"
+	"github.com/shusfun/weir/internal/nodeprobe"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -193,6 +194,9 @@ func (a *Agent) clientProbe(ctx context.Context, p map[string]any) (result map[s
 		if json.Unmarshal(body, &echo) == nil && net.ParseIP(echo.IP) != nil {
 			out["exit_ip"] = echo.IP
 		}
+		if download := str(p, "download"); download != "" {
+			recordProbeDownload(runCtx, hc, download, out)
+		}
 		// 测上游 SOCKS 自己的 UDP 关联。本地 mihomo 端口总是接受关联，不能当成出口能力。
 		if typ, _ := client["type"].(string); typ == "socks5" || typ == "socks" {
 			user, _ := client["username"].(string)
@@ -205,6 +209,26 @@ func (a *Agent) clientProbe(ctx context.Context, p map[string]any) (result map[s
 	}
 	diagnostic := maskIPs(lastLines(logs.String(), 20))
 	return map[string]any{"mode": "proxy", "client_log": diagnostic}, fmt.Errorf("经出口连接失败：%v；%s：%s", trimProxyError(last), engine, diagnostic)
+}
+
+// recordProbeDownload 在回显成功后测量固定下载。失败只记原因，不推翻连通结果。
+func recordProbeDownload(ctx context.Context, echo *http.Client, raw string, out map[string]any) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		out["download_error"] = "下载地址无效"
+		return
+	}
+	client := &http.Client{Timeout: 20 * time.Second, Transport: echo.Transport, CheckRedirect: echo.CheckRedirect}
+	n, ms, err := nodeprobe.ReadDownload(ctx, client, raw)
+	if n > 0 {
+		out["download_bytes"] = n
+	}
+	if ms > 0 {
+		out["download_ms"] = ms
+	}
+	if err != nil {
+		out["download_error"] = trimProxyError(err)
+	}
 }
 
 // socksUDP 对上游 SOCKS5 做一次 UDP 关联。关联被拒绝就是不支持；握手失败则结果未知。

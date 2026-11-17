@@ -223,8 +223,9 @@ func TestNodeTestBrowserFixture(t *testing.T) {
 	e.post("/api/v1/admin/nodes", map[string]any{"gate_id": e.gateID, "preset": "ss2022", "name": "跨 VPS 成员", "skip_probe": true}, nil)
 	e.applied("second gate browser fixture")
 	e.s.StartBackground(e.ctx)
+	proxyPort, _ := socksServerAt(t, host)
 	if out := os.Getenv("WEIR_E2E_BROWSER_DIR"); out != "" {
-		data, err := json.Marshal(map[string]any{"run_id": os.Getenv("WEIR_E2E_RUN_ID"), "gate_id": browserGateID, "origin": browserOrigin, "endpoint": "https://127.0.0.1:22443", "source_url": sourceURL, "webdav_url": davURL})
+		data, err := json.Marshal(map[string]any{"run_id": os.Getenv("WEIR_E2E_RUN_ID"), "gate_id": browserGateID, "origin": browserOrigin, "endpoint": "https://127.0.0.1:22443", "source_url": sourceURL, "webdav_url": davURL, "proxy_host": host, "proxy_port": proxyPort})
 		if err != nil {
 			t.Fatal(err)
 		}

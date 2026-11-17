@@ -212,7 +212,7 @@ var (
 	// ExitsColumns holds the columns for the "exits" table.
 	ExitsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "gate_id", Type: field.TypeInt},
+		{Name: "gate_id", Type: field.TypeInt, Nullable: true},
 		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
 		{Name: "remark", Type: field.TypeString, Size: 100, Default: ""},
 		{Name: "kind", Type: field.TypeEnum, Enums: []string{"socks5", "http", "https", "link", "node", "source", "freedom", "blackhole"}},
@@ -243,6 +243,53 @@ var (
 				Name:    "exit_owner_user_id_policy_type",
 				Unique:  false,
 				Columns: []*schema.Column{ExitsColumns[2], ExitsColumns[14]},
+			},
+		},
+	}
+	// ExitBindingsColumns holds the columns for the "exit_bindings" table.
+	ExitBindingsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "gate_id", Type: field.TypeInt},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"applied", "failed", "waiting"}, Default: "applied"},
+		{Name: "reason", Type: field.TypeString, Size: 500, Default: ""},
+		{Name: "desired_digest", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "verified_at", Type: field.TypeTime, Nullable: true},
+		{Name: "kind", Type: field.TypeEnum, Enums: []string{"socks5", "http", "https", "link", "node", "source", "freedom", "blackhole"}},
+		{Name: "remark", Type: field.TypeString, Size: 100, Default: ""},
+		{Name: "address", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "username", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "password", Type: field.TypeString, Default: ""},
+		{Name: "link", Type: field.TypeString, Default: ""},
+		{Name: "port", Type: field.TypeInt, Default: 0},
+		{Name: "exit_node_id", Type: field.TypeInt, Nullable: true},
+		{Name: "source", Type: field.TypeJSON, Nullable: true},
+		{Name: "resolved", Type: field.TypeJSON, Nullable: true},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "exit_id", Type: field.TypeInt},
+	}
+	// ExitBindingsTable holds the schema information for the "exit_bindings" table.
+	ExitBindingsTable = &schema.Table{
+		Name:       "exit_bindings",
+		Columns:    ExitBindingsColumns,
+		PrimaryKey: []*schema.Column{ExitBindingsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "exit_bindings_exits_bindings",
+				Columns:    []*schema.Column{ExitBindingsColumns[17]},
+				RefColumns: []*schema.Column{ExitsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "exitbinding_exit_id_gate_id",
+				Unique:  true,
+				Columns: []*schema.Column{ExitBindingsColumns[17], ExitBindingsColumns[1]},
+			},
+			{
+				Name:    "exitbinding_gate_id",
+				Unique:  false,
+				Columns: []*schema.Column{ExitBindingsColumns[1]},
 			},
 		},
 	}
@@ -793,6 +840,7 @@ var (
 		ChainsTable,
 		CredentialsTable,
 		ExitsTable,
+		ExitBindingsTable,
 		GatesTable,
 		GateActionsTable,
 		KernelDriversTable,
@@ -817,6 +865,7 @@ var (
 
 func init() {
 	ChainsTable.ForeignKeys[0].RefTable = ExitsTable
+	ExitBindingsTable.ForeignKeys[0].RefTable = ExitsTable
 	NodesTable.ForeignKeys[0].RefTable = ExitsTable
 	RoutesTable.ForeignKeys[0].RefTable = ExitsTable
 }

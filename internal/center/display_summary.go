@@ -21,15 +21,27 @@ func (s *Server) exitPlace(ctx context.Context, e *ent.Exit) geoPlace {
 		return geoPlace{Why: "没有出口"}
 	}
 	if e.Kind == "freedom" {
-		if g, err := s.Store.Ent.Gate.Get(ctx, e.GateID); err == nil {
+		if g, err := s.Store.Ent.Gate.Get(ctx, exitGateID(e)); err == nil {
 			return s.locate(ctx, g.PublicHost)
 		}
 		return geoPlace{Why: "VPS 不存在"}
 	}
-	if p, ok := s.loadExitProbe(ctx, exitOwner(e.ID)); ok && p.OK && p.Mode == "proxy" && !p.At.IsZero() && net.ParseIP(p.ExitIP) != nil {
-		return s.locate(ctx, p.ExitIP)
+	return geoPlace{Why: "落地位置按测试位置分别记录"}
+}
+
+// observedExitPlace 只读取指定入口 VPS 的实测落地，不用中心或其他 VPS 的结果填。
+func (s *Server) observedExitPlace(ctx context.Context, e *ent.Exit, gateID int) (geoPlace, bool) {
+	if e == nil || gateID == 0 {
+		return geoPlace{}, false
 	}
-	return geoPlace{Why: "还没有有效的实际出口 IP"}
+	p, ok := s.loadLocatedProbe(ctx, exitOwner(e.ID), "gate", gateID)
+	if !ok || !p.OK || p.Mode != "proxy" || net.ParseIP(p.ExitIP) == nil {
+		return geoPlace{}, false
+	}
+	if p.Place != nil {
+		return *p.Place, true
+	}
+	return s.locate(ctx, p.ExitIP), true
 }
 
 func (s *Server) exitSummary(ctx context.Context, e *ent.Exit, chainName string) DisplaySummary {
@@ -48,13 +60,34 @@ func (s *Server) exitSummary(ctx context.Context, e *ent.Exit, chainName string)
 	return DisplaySummary{Name: name, Kind: kind, Region: subscriptionPlace(p)}
 }
 
+func (s *Server) exitSummaryOnGate(ctx context.Context, e *ent.Exit, chainName string, gateID int) DisplaySummary {
+	summary := s.exitSummary(ctx, e, chainName)
+	if e == nil || e.Kind == "freedom" || gateID == 0 {
+		return summary
+	}
+	place, ok := s.observedExitPlace(ctx, e, gateID)
+	if !ok {
+		return summary
+	}
+	region := subscriptionPlace(place)
+	summary.Region = region
+	if strings.TrimSpace(summary.Name) == "" || summary.Name == "地区未知" {
+		summary.Name = region
+	}
+	return summary
+}
+
 func (s *Server) nodeDisplayName(ctx context.Context, n *ent.Node, g *ent.Gate, e *ent.Exit, ch *ent.Chain) string {
 	if e != nil && e.Kind != "freedom" {
 		fallback := ""
 		if ch != nil && e.PolicyType == "" {
 			fallback = ch.Name
 		}
-		return s.exitSummary(ctx, e, fallback).Name
+		gid := 0
+		if g != nil {
+			gid = g.ID
+		}
+		return s.exitSummaryOnGate(ctx, e, fallback, gid).Name
 	}
 	if n != nil && strings.TrimSpace(n.Name) != "" {
 		return strings.TrimSpace(n.Name)
@@ -80,7 +113,11 @@ func (s *Server) nodeChoice(ctx context.Context, n *ent.Node, g *ent.Gate, ch *e
 		if ch != nil && e.PolicyType == "" {
 			fallback = ch.Name
 		}
-		v["exit_summary"] = s.exitSummary(ctx, e, fallback)
+		gid := 0
+		if g != nil {
+			gid = g.ID
+		}
+		v["exit_summary"] = s.exitSummaryOnGate(ctx, e, fallback, gid)
 	}
 	return v
 }

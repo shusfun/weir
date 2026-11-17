@@ -115,7 +115,7 @@ func (s *Server) selectSubscriptionEntries(ctx context.Context, u *ent.User, l *
 			e.Ref = "chain:" + itoa(e.ChainID)
 		}
 		e.exit = ex
-		supported, known := s.exitUDP(ctx, eid, map[int]bool{})
+		supported, known := s.exitUDPOnGate(ctx, eid, n.GateID, map[int]bool{})
 		if e.chain == nil {
 			supported, known = s.nodeRouteUDP(ctx, n, &u.ID, false, map[int]bool{})
 		}

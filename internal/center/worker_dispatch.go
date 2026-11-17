@@ -275,6 +275,12 @@ func networkTaskSource(kind string, payload any) string {
 }
 
 func (s *Server) fetchSubscription(ctx context.Context, raw, ua string) (subgroup.Response, error) {
+	// 草稿解析不创建 Gate 任务，也不与会持久化任务的后台刷新合并。
+	if isPreview(ctx) {
+		response, err := (subgroup.Fetcher{AllowPrivate: s.AllowPrivateSources}).Get(ctx, raw, ua)
+		response.Location = "center-preview"
+		return response, err
+	}
 	key := digest(raw + "\x00" + ua)
 	started := time.Now().UTC()
 	ch := s.sourceFetches.DoChan(key, func() (any, error) {

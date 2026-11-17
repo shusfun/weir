@@ -17,6 +17,9 @@ func TestUDPPathIncludesRoutingAndUserChains(t *testing.T) {
 	}
 	n := s.Store.Ent.Node.Create().SetGateID(gid).SetExitID(direct.ID).SetName("UDP paths").SetKernel("sing-box").SetProtocol("shadowsocks").SetPort(31101).SaveX(ctx)
 	http := s.Store.Ent.Exit.Create().SetGateID(gid).SetTag("tcp-only").SetKind(exit.KindHTTP).SetAddress("203.0.113.20").SetPort(8080).SaveX(ctx)
+	if err := s.bindApplied(ctx, s.Store.Ent, http.ID, gid, ExitSpec{Kind: "http", Address: http.Address, Port: http.Port}, nil); err != nil {
+		t.Fatal(err)
+	}
 	u := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "udp-path@example.test"}, 200)
 	uid := int(u["id"].(float64))
 	r := s.Store.Ent.Route.Create().SetGateID(gid).SetNodeID(n.ID).SetUserID(uid).SetExitID(http.ID).SetDomain("tcp.example.test").SaveX(ctx)

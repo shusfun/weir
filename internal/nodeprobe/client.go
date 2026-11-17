@@ -21,7 +21,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"golang.org/x/net/dns/dnsmessage"
@@ -29,7 +28,7 @@ import (
 	"github.com/shusfun/weir/packages/contracts"
 )
 
-const PayloadSize = 256 << 10
+const PayloadSize = contracts.ProbePayloadSize
 
 type Check = contracts.NodeProbeCheck
 type Result = contracts.NodeProbeResult
@@ -301,26 +300,11 @@ func download(ctx context.Context, addr string, o Options) Check {
 	req.Header.Set("Authorization", "Bearer "+o.Token)
 	req.Header.Set("traceparent", o.Traceparent)
 	start := time.Now()
-	// mihomo 先监听 SOCKS，再启用转发；启动窗口内完成 SOCKS 握手仍可能被断开。
-	// 只重试传输层提前断开，HTTP 拒绝、证书错误和内容校验失败保持原结果。
-	readyUntil := start.Add(5 * time.Second)
-	var resp *http.Response
-	for {
-		resp, err = hc.Do(req.Clone(ctx))
-		if err == nil || time.Now().After(readyUntil) || !(errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, syscall.ECONNRESET)) {
-			break
-		}
+	resp, err := requestAfterStartup(hc, req, func() {
 		if o.Step != nil {
 			o.Step("测试客户端连接提前断开，正在重试")
 		}
-		timer := time.NewTimer(100 * time.Millisecond)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return Check{Status: "failed", Why: "经节点访问测试端点失败：" + ctx.Err().Error()}
-		case <-timer.C:
-		}
-	}
+	})
 	if err != nil {
 		return Check{Status: "failed", Why: "经节点访问测试端点失败：" + err.Error()}
 	}

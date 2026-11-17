@@ -200,9 +200,9 @@ func TestOutboundUpdateKeepsPasswordAndHidesIt(t *testing.T) {
 	g.serveActions(t, s, nil)
 	m, _ := s.ensureMCP()
 	h := s.mcpHandler(m)
-	o := mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"gate_id": int(g.id), "kind": "socks5", "address": "203.0.113.9", "port": 1080, "username": "u", "password": "PW-SECRET"}, 200)
+	o := mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"kind": "socks5", "address": "203.0.113.9", "port": 1080, "username": "u", "password": "PW-SECRET"}, 200)
 	oid := int(o["id"].(float64))
-	if text, _ := toolText(t, h, m.webToken, "list_exits", map[string]any{"gate_id": g.id}); strings.Contains(text, "PW-SECRET") || !strings.Contains(text, `"has_password": true`) {
+	if text, _ := toolText(t, h, m.webToken, "list_exits", map[string]any{}); strings.Contains(text, "PW-SECRET") || !strings.Contains(text, `"has_password": true`) {
 		t.Fatalf("list_exits = %s", text)
 	}
 	if text, isErr := toolText(t, h, m.webToken, "submit_draft", map[string]any{"explain": "改备注", "steps": []any{map[string]any{"action": "exit.update", "args": map[string]any{"exit_id": oid, "remark": "家宽"}}}}); isErr {
@@ -227,7 +227,7 @@ func TestOpDraftDryRunsWriteNothing(t *testing.T) {
 	h := s.mcpHandler(m)
 	ctx := t.Context()
 	gid := itoa(int(g.id))
-	out := mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"gate_id": int(g.id), "kind": "socks5", "address": "203.0.113.9", "port": 1080}, 200)
+	out := mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"kind": "socks5", "address": "203.0.113.9", "port": 1080}, 200)
 	rt := mustJSON(t, admin, "POST", "/api/v1/admin/gates/"+gid+"/routes", map[string]any{"exit_id": out["id"], "domain": "domain:a.com"}, 200)
 	src := mustJSON(t, admin, "POST", "/api/v1/admin/subscriptions/sources", map[string]any{"name": "A", "url": "https://sub.example.com/x"}, 200)
 	prof := mustJSON(t, admin, "POST", "/api/v1/admin/subscriptions/profiles", map[string]any{"name": "P"}, 200)
@@ -245,7 +245,7 @@ func TestOpDraftDryRunsWriteNothing(t *testing.T) {
 	before := snapshot()
 	steps := []map[string]any{
 		{"action": "gate.update", "args": map[string]any{"gate_id": g.id, "name": "HK-2"}},
-		{"action": "exit.create", "args": map[string]any{"gate_id": g.id, "remark": "拦截", "kind": "blackhole"}},
+		{"action": "exit.create", "args": map[string]any{"remark": "拦截", "kind": "blackhole"}},
 		{"action": "exit.update", "args": map[string]any{"exit_id": out["id"], "remark": "x"}},
 		{"action": "route.create", "args": map[string]any{"gate_id": g.id, "exit_id": out["id"], "domain": "domain:b.com"}},
 		{"action": "route.update", "args": map[string]any{"route_id": rt["id"], "priority": 5}},

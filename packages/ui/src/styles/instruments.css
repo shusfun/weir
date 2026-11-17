@@ -84,6 +84,12 @@
     line-height: var(--weir-leading-meta);
     color: var(--weir-ink-3);
   }
+  .weir-probe-readouts .weir-readout-value {
+    height: calc(2 * var(--weir-leading-display)); overflow: auto;
+  }
+  .weir-probe-readouts .weir-readout-caption {
+    height: calc(3 * var(--weir-leading-meta)); overflow: auto; overflow-wrap: anywhere;
+  }
 
   .weir-meter {
     position: relative;

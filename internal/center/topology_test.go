@@ -12,7 +12,7 @@ func TestGateTopologyUsersNodesRoutesExits(t *testing.T) {
 	gid := itoa(int(g.id))
 	n := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "ss2022", "skip_probe": true}, 200)
 	u := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "topo@example.test", "name": "小明"}, 200)
-	ex := mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"gate_id": int(g.id), "kind": "blackhole", "remark": "拦截"}, 200)
+	ex := mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"kind": "blackhole", "remark": "拦截"}, 200)
 	mustJSON(t, admin, "POST", "/api/v1/admin/gates/"+gid+"/routes", map[string]any{"exit_id": ex["id"], "domain": "example.org", "priority": 10}, 200)
 
 	v := mustJSON(t, admin, "GET", "/api/v1/admin/gates/"+gid+"/topology", nil, 200)

@@ -474,7 +474,7 @@ function LinkForm({
 }
 
 // ChainPanel：用户自建链式代理 = 一个新节点（入口节点 → 订阅组里的节点、SOCKS5 / HTTP(S) 代理、另一节点或一条节点链接）。
-// 出口只允许公网地址，不接受订阅地址；保存前由入口 VPS 实测，记下实际出口 IP。
+// 出口只允许公网地址，不接受订阅地址；在入口 VPS 上使用时由该 VPS 实测。
 // SourceSummary：订阅源出口一行说明（单个节点 / 一组，及当前用的节点）。
 export function SourceSummary({ choice, resolved }: { choice?: { mode?: string; match?: string } | null; resolved?: SourceResolved }) {
   const names = resolved?.resolved ?? null;
@@ -647,7 +647,7 @@ function ChainForm({
     <Dialog open onOpenChange={(o) => { if (!o) void requestClose(); }}>
       <DialogContent size="md">
         <DialogTitle>新建链式代理</DialogTitle>
-        <DialogDescription>会作为一个新节点出现在订阅里。保存前由入口 VPS 实测出口是否可用。</DialogDescription>
+        <DialogDescription>会作为一个新节点出现在订阅里。由所选入口所在的 VPS 实测，不通就不会建这条链。</DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
           <Field label="名称" required>
             <Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />

@@ -114,7 +114,7 @@ func TestOutboundAndRouteInOneDraft(t *testing.T) {
 
 	steps := func(addr string) map[string]any {
 		return map[string]any{"explain": "流媒体走家宽", "steps": []any{
-			map[string]any{"action": "exit.create", "as": "home", "args": map[string]any{"gate_id": g.id, "remark": "家宽", "kind": "http", "address": addr, "port": 8080, "username": "u"}},
+			map[string]any{"action": "exit.create", "as": "home", "args": map[string]any{"remark": "家宽", "kind": "http", "address": addr, "port": 8080, "username": "u"}},
 			map[string]any{"action": "route.create", "args": map[string]any{"gate_id": g.id, "exit_id": "$home", "domain": "geosite:netflix"}},
 		}}
 	}

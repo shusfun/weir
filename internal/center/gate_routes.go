@@ -56,29 +56,39 @@ func (s *Server) fixedExit(kind, address string, port int, username, sealedPassw
 
 // compileRoutes 的优先级是用户链路、管理员选择性分流、节点默认出口。
 func (s *Server) compileRoutes(ctx context.Context, g *ent.Gate, cfg *contracts.GateConfig, nodes []*ent.Node, chainKeys map[int][]string) error {
-	es, err := s.Store.Ent.Exit.Query().Where(entexit.GateIDEQ(g.ID), entexit.EnabledEQ(true)).Order(ent.Asc(entexit.FieldID)).All(ctx)
+	used, err := s.exitsUsedOnGate(ctx, g.ID)
 	if err != nil {
 		return err
+	}
+	ids := []int{}
+	for id := range used {
+		ids = append(ids, id)
+	}
+	es := []*ent.Exit{}
+	if len(ids) > 0 {
+		es, err = s.Store.Ent.Exit.Query().Where(entexit.IDIn(ids...)).Order(ent.Asc(entexit.FieldID)).All(ctx)
+		if err != nil {
+			return err
+		}
 	}
 	byID := map[int]*ent.Exit{}
 	broken := map[int]error{}
 	for _, e := range es {
+		if !e.Enabled {
+			broken[e.ID] = fmt.Errorf("出口 %d 已停用", e.ID)
+			continue
+		}
 		byID[e.ID] = e
 		if e.Tag == "direct" {
 			continue
 		}
-		ob, err := s.compileExit(ctx, e)
+		ob, err := s.compileExitForGate(ctx, e, g.ID)
 		if err != nil {
 			broken[e.ID] = err
 			cfg.Meta[e.Tag] = err.Error()
 			ob = contracts.Outbound{ID: int64(e.ID), Tag: e.Tag, Protocol: "blackhole"}
 		}
 		cfg.Outbounds = append(cfg.Outbounds, ob)
-		if e.Kind == entexit.KindSource {
-			if _, ok := s.loadExit(ctx, exitOwner(e.ID)); !ok {
-				cfg.Meta[e.Tag] = "订阅源节点出口还没有解析成功，暂时丢弃经这个出口的流量"
-			}
-		}
 	}
 	add := func(r contracts.Route) { r.ID = int64(len(cfg.Routes) + 1); cfg.Routes = append(cfg.Routes, r) }
 	drop := map[string]bool{}

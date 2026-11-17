@@ -96,7 +96,7 @@ func validateTaskRequest(value any) error {
 	case *NodeTestTask:
 		valid = len(req.Config.Inbounds) == 1 && taskKernelRefs(req.Config.Kernels) && req.Client.Target != "" && len(req.Client.Target) <= 256 && len(req.Client.Proxies) == 1
 	case *OutboundProbeTask:
-		valid = req.Address != "" && len(req.Address) <= 253 && !strings.ContainsAny(req.Address, "/\\\x00\r\n") && req.Port > 0 && req.Port <= 65535 && taskURL(req.Target) && taskKernelRefs(req.Kernels) && (req.Native != nil || len(req.Client) > 0 && !bytes.Equal(bytes.TrimSpace(req.Client), []byte("null")))
+		valid = req.Address != "" && len(req.Address) <= 253 && !strings.ContainsAny(req.Address, "/\\\x00\r\n") && req.Port > 0 && req.Port <= 65535 && taskURL(req.Target) && (req.Download == "" || taskURL(req.Download)) && taskKernelRefs(req.Kernels) && (req.Native != nil || len(req.Client) > 0 && !bytes.Equal(bytes.TrimSpace(req.Client), []byte("null")))
 		if req.Native != nil {
 			o := req.Native
 			valid = valid && o.Protocol == "shadowsocks" && o.Address == req.Address && o.Port == req.Port && o.Username == "2022-blake3-aes-128-gcm" && o.Settings["udp_over_tcp"] == true && len(o.Password) <= 128 && len(o.Client) == 0 && len(o.Members) == 0

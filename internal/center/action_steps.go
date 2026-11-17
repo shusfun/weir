@@ -25,7 +25,7 @@ func invoke(x *execCtx, handler gin.HandlerFunc, method string, params gin.Param
 	return call(x.actor, handler, method, params, nil, body, false)
 }
 
-// call 在进程内调用处理函数。dry 为真时是试运行：处理函数做完全部校验与实测，在第一次写入之前
+// call 在进程内调用处理函数。dry 为真时只校验并预演；需要持久任务的实测留到确认时，第一次写入之前
 // 用 dryRun 返回预演并停下（没接入试运行的处理函数不能登记成草稿能力，见 capability_ops.go）。
 func call(actor *gin.Context, handler gin.HandlerFunc, method string, params gin.Params, query url.Values, body any, dry bool) (int, map[string]any) {
 	b, _ := json.Marshal(body)
@@ -48,7 +48,7 @@ func call(actor *gin.Context, handler gin.HandlerFunc, method string, params gin
 		}
 	}
 	if dry {
-		c.Set(dryRunKey, true)
+		markPreview(c)
 	}
 	handler(c)
 	c.Writer.WriteHeaderNow()
@@ -92,6 +92,18 @@ func (s *Server) systemActor(ctx context.Context) (*gin.Context, error) {
 }
 
 const dryRunKey = "weir_dry_run"
+
+type previewKey struct{}
+
+func markPreview(c *gin.Context) {
+	c.Set(dryRunKey, true)
+	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), previewKey{}, true))
+}
+
+func isPreview(ctx context.Context) bool {
+	v, _ := ctx.Value(previewKey{}).(bool)
+	return v
+}
 
 // dryResult 是试运行的预演：Pin 是系统这次替草稿定下的值（自动分配的端口、实测选中的伪装目标），
 // 写回草稿参数，确认时原样使用、不再重新挑选；Preview 是给人看的预演；Result 是实测结果（如延迟）。

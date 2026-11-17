@@ -2,6 +2,9 @@ package gate
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/shusfun/weir/packages/contracts"
@@ -27,5 +30,22 @@ func TestExitProbeBoundaryErrors(t *testing.T) {
 				t.Fatalf("invalid failure metadata: %+v", detail)
 			}
 		})
+	}
+}
+
+func TestRecordProbeDownloadKeepsEchoResult(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("short"))
+	}))
+	defer srv.Close()
+	out := map[string]any{"mode": "proxy"}
+	recordProbeDownload(t.Context(), srv.Client(), srv.URL, out)
+	if out["mode"] != "proxy" || out["download_bytes"] != int64(5) || !strings.Contains(out["download_error"].(string), "下载没有完成") {
+		t.Fatalf("download = %v", out)
+	}
+	out = map[string]any{}
+	recordProbeDownload(t.Context(), srv.Client(), "http://example.com/probe", out)
+	if out["download_error"] != "下载地址无效" || out["download_bytes"] != nil {
+		t.Fatalf("invalid download = %v", out)
 	}
 }

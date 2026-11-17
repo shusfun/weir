@@ -96,7 +96,7 @@ func TestUnifiedExitsAndSelectiveRouting(t *testing.T) {
 	if err := fetchVia(pd, target.URL, 4); err != nil || hits.Load() <= before {
 		t.Fatalf("selective route did not use shared exit: %v", err)
 	}
-	block := e.post("/api/v1/admin/exits", map[string]any{"gate_id": gid, "kind": "blackhole", "remark": "blocked"}, nil)
+	block := e.post("/api/v1/admin/exits", map[string]any{"kind": "blackhole", "remark": "blocked"}, nil)
 	e.patch(base+"/"+strconv.Itoa(int(rule["id"].(float64))), map[string]any{"exit_id": block["id"]})
 	e.applied("selective block")
 	if err := fetchVia(pd, target.URL, 4); err == nil {

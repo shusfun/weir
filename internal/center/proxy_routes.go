@@ -260,6 +260,9 @@ func (s *Server) chainExitView(ctx context.Context, ch *ent.Chain) gin.H {
 	if err != nil {
 		return gin.H{"error": "出口未知"}
 	}
+	if entry, err := s.Store.Ent.Node.Get(ctx, ch.EntryNodeID); err == nil {
+		s.attachMatchingProbe(ctx, v, e.ID, entry.GateID)
+	}
 	return v
 }
 
@@ -477,26 +480,32 @@ func (s *Server) putTypeExitNow(c *gin.Context, admin bool) {
 		return
 	}
 	defer tx.Rollback()
-	exits := map[int]*ent.Exit{}
-	previous := map[int]*ent.Exit{}
+	var shared, previous *ent.Exit
 	for _, ch := range existing {
 		e, eerr := tx.Exit.Get(ctx, ch.ExitID)
 		if eerr != nil {
 			failInternal(c, 500, "query_failed", eerr)
 			return
 		}
-		previous[e.GateID] = e
+		previous = e
 	}
 	keep := map[int]bool{}
 	for _, p := range ok2 {
-		e := exits[p.node.GateID]
+		e := shared
 		if e == nil {
-			e, err = s.persistExit(ctx, tx.Client(), p.node.GateID, &u.ID, t.Key, req.Exit, previous[p.node.GateID])
+			e, err = s.persistExit(ctx, tx.Client(), 0, &u.ID, t.Key, req.Exit, previous)
 			if err != nil {
 				failInternal(c, 500, "save_failed", err)
 				return
 			}
-			exits[p.node.GateID] = e
+			shared = e
+		}
+		if err == nil {
+			err = s.bindApplied(ctx, tx.Client(), e.ID, p.node.GateID, req.Exit, p.probe)
+		}
+		if err != nil {
+			failInternal(c, 500, "save_failed", err)
+			return
 		}
 		var ch *ent.Chain
 		if prev := byEntry[p.node.ID]; prev != nil {
@@ -531,12 +540,10 @@ func (s *Server) putTypeExitNow(c *gin.Context, admin bool) {
 		failInternal(c, 500, "save_failed", err)
 		return
 	}
-	for _, p := range ok2 {
-		if e := exits[p.node.GateID]; e != nil {
-			if err = s.refreshExit(ctx, e, p.probe); err != nil {
-				failInternal(c, 500, "source_exit_failed", err)
-				return
-			}
+	if shared != nil {
+		if err = s.refreshExit(ctx, shared, nil); err != nil {
+			failInternal(c, 500, "source_exit_failed", err)
+			return
 		}
 	}
 	if err = s.afterChainChange(ctx, u.ID); err != nil {

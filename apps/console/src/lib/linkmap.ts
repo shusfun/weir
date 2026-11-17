@@ -264,7 +264,7 @@ export function rateText(v: number | null | undefined) {
 const regionNames = typeof Intl !== "undefined" && "DisplayNames" in Intl ? new Intl.DisplayNames(["zh-CN"], { type: "region" }) : null;
 
 // placeText：城市 · 国家（国家按代码显示中文名）；不知道位置时给出原因。
-export function placeText(p?: GeoPlace) {
+export function placeText(p?: Pick<GeoPlace, "known" | "why" | "country" | "city"> | null) {
   if (!p || !p.known) return p?.why ? `位置未知（${p.why}）` : "位置未知";
   let country = p.country ?? "";
   try {

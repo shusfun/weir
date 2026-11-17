@@ -19,7 +19,7 @@ type Exit struct {
 	// ID of the ent.
 	ID int `json:"id,omitempty"`
 	// GateID holds the value of the "gate_id" field.
-	GateID int `json:"gate_id,omitempty"`
+	GateID *int `json:"gate_id,omitempty"`
 	// OwnerUserID holds the value of the "owner_user_id" field.
 	OwnerUserID *int `json:"owner_user_id,omitempty"`
 	// Remark holds the value of the "remark" field.
@@ -62,9 +62,11 @@ type ExitEdges struct {
 	Chains []*Chain `json:"chains,omitempty"`
 	// Routes holds the value of the routes edge.
 	Routes []*Route `json:"routes,omitempty"`
+	// Bindings holds the value of the bindings edge.
+	Bindings []*ExitBinding `json:"bindings,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [3]bool
+	loadedTypes [4]bool
 }
 
 // NodesOrErr returns the Nodes value or an error if the edge
@@ -92,6 +94,15 @@ func (e ExitEdges) RoutesOrErr() ([]*Route, error) {
 		return e.Routes, nil
 	}
 	return nil, &NotLoadedError{edge: "routes"}
+}
+
+// BindingsOrErr returns the Bindings value or an error if the edge
+// was not loaded in eager-loading.
+func (e ExitEdges) BindingsOrErr() ([]*ExitBinding, error) {
+	if e.loadedTypes[3] {
+		return e.Bindings, nil
+	}
+	return nil, &NotLoadedError{edge: "bindings"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -134,7 +145,8 @@ func (_m *Exit) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field gate_id", values[i])
 			} else if value.Valid {
-				_m.GateID = int(value.Int64)
+				_m.GateID = new(int)
+				*_m.GateID = int(value.Int64)
 			}
 		case exit.FieldOwnerUserID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -252,6 +264,11 @@ func (_m *Exit) QueryRoutes() *RouteQuery {
 	return NewExitClient(_m.config).QueryRoutes(_m)
 }
 
+// QueryBindings queries the "bindings" edge of the Exit entity.
+func (_m *Exit) QueryBindings() *ExitBindingQuery {
+	return NewExitClient(_m.config).QueryBindings(_m)
+}
+
 // Update returns a builder for updating this Exit.
 // Note that you need to call Exit.Unwrap() before calling this method if this Exit
 // was returned from a transaction, and the transaction was committed or rolled back.
@@ -275,8 +292,10 @@ func (_m *Exit) String() string {
 	var builder strings.Builder
 	builder.WriteString("Exit(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
-	builder.WriteString("gate_id=")
-	builder.WriteString(fmt.Sprintf("%v", _m.GateID))
+	if v := _m.GateID; v != nil {
+		builder.WriteString("gate_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	if v := _m.OwnerUserID; v != nil {
 		builder.WriteString("owner_user_id=")

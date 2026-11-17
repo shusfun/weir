@@ -103,7 +103,7 @@ func (s *Server) syncUoT(ctx context.Context, exits []*ent.Exit) ([]int, error) 
 			continue
 		}
 		e := active[p.ExitID]
-		if e != nil && e.ExitNodeID != nil && *e.ExitNodeID == p.NodeID && e.GateID == p.EntryID {
+		if e != nil && e.ExitNodeID != nil && *e.ExitNodeID == p.NodeID && (exitGateID(e) == p.EntryID || s.exitBound(ctx, e.ID, p.EntryID)) {
 			continue
 		}
 		if err = s.Store.Ent.Resource.DeleteOne(row).Exec(ctx); err != nil {
@@ -123,7 +123,20 @@ func (s *Server) syncUoT(ctx context.Context, exits []*ent.Exit) ([]int, error) 
 		if err != nil {
 			return nil, err
 		}
-		if !n.Enabled || !s.uotCapability(ctx, e.GateID) || !s.uotCapability(ctx, n.GateID) {
+		entryID := exitGateID(e)
+		if entryID == 0 {
+			gates, err := s.referencingGates(ctx, e.ID)
+			if err != nil {
+				return nil, err
+			}
+			for _, gid := range gates {
+				if s.exitBound(ctx, e.ID, gid) {
+					entryID = gid
+					break
+				}
+			}
+		}
+		if entryID == 0 || !n.Enabled || !s.uotCapability(ctx, entryID) || !s.uotCapability(ctx, n.GateID) {
 			continue
 		}
 		p, err := readUoT(ctx, s.Store.Ent, e.ID)
@@ -150,7 +163,7 @@ func (s *Server) syncUoT(ctx context.Context, exits []*ent.Exit) ([]int, error) 
 		}
 		err = func() error {
 			defer tx.Rollback()
-			if err := lockActiveGates(ctx, tx.Client(), e.GateID, n.GateID); err != nil {
+			if err := lockActiveGates(ctx, tx.Client(), entryID, n.GateID); err != nil {
 				return err
 			}
 			if existing, err := readUoT(ctx, tx.Client(), e.ID); err != nil {
@@ -185,7 +198,7 @@ func (s *Server) syncUoT(ctx context.Context, exits []*ent.Exit) ([]int, error) 
 			if err != nil {
 				return err
 			}
-			p := uotEndpoint{ExitID: e.ID, NodeID: n.ID, EntryID: e.GateID, GateID: n.GateID, Port: port, ServerKey: server, UserKey: user, ReceiverRevision: g.ConfigRevision + 1}
+			p := uotEndpoint{ExitID: e.ID, NodeID: n.ID, EntryID: entryID, GateID: n.GateID, Port: port, ServerKey: server, UserKey: user, ReceiverRevision: g.ConfigRevision + 1}
 			if err = tx.Resource.Create().SetKind(uotResourceKind).SetKey(itoa(e.ID)).SetOwnerID(n.GateID).SetData(toMap(p)).Exec(ctx); err != nil {
 				return err
 			}
@@ -194,7 +207,7 @@ func (s *Server) syncUoT(ctx context.Context, exits []*ent.Exit) ([]int, error) 
 		if err != nil {
 			return nil, err
 		}
-		touched = append(touched, e.GateID, n.GateID)
+		touched = append(touched, entryID, n.GateID)
 	}
 	slices.Sort(touched)
 	return slices.Compact(touched), nil
@@ -205,7 +218,7 @@ func (s *Server) uotOutbound(ctx context.Context, e *ent.Exit) (contracts.Outbou
 	if err != nil {
 		return contracts.Outbound{}, err
 	}
-	if p == nil || e.ExitNodeID == nil || p.NodeID != *e.ExitNodeID || p.EntryID != e.GateID {
+	if p == nil || e.ExitNodeID == nil || p.NodeID != *e.ExitNodeID || !s.exitServes(ctx, e, p.EntryID) {
 		return contracts.Outbound{}, errors.New("自有 VPS 的加密 UDP 中转尚未准备")
 	}
 	if !p.Ready {
@@ -307,7 +320,7 @@ func (s *Server) compileUoTReceivers(ctx context.Context, g *ent.Gate, cfg *cont
 			if err != nil {
 				return err
 			}
-			if !e.Enabled || e.Kind != entexit.KindNode || e.ExitNodeID == nil || *e.ExitNodeID != p.NodeID || e.GateID != p.EntryID {
+			if !e.Enabled || e.Kind != entexit.KindNode || e.ExitNodeID == nil || *e.ExitNodeID != p.NodeID || !s.exitServes(ctx, e, p.EntryID) {
 				continue
 			}
 		}
@@ -476,16 +489,17 @@ func (s *Server) probeUoT(ctx context.Context, entry *ent.Gate, nid int, publicO
 	}
 	ob := contracts.Outbound{ID: 1, Tag: "probe-exit", Protocol: "shadowsocks", Address: target.PublicHost, Port: port, Username: uotMethod, Password: server + ":" + user, Settings: map[string]any{"udp_over_tcp": true}}
 	payload := map[string]any{"address": ob.Address, "port": ob.Port, "public_only": publicOnly, "target": s.probeTarget(ctx), "native": toMap(ob), "kernels": kernels, "drivers": drivers}
+	if download := s.probeDownload(ctx); download != "" {
+		payload["download"] = download
+	}
+	finishConnect := operationStage(ctx, "exit.probe.connect", "gate.id", entry.ID, "echo", probeHost(s.probeTarget(ctx)))
 	response, err := s.gateProbe(ctx, entry, contracts.ActionChainProbe, payload, 3*time.Minute)
+	finishConnect(err)
 	if err != nil {
 		return nil, err
 	}
 	probe := &exitProbe{OK: true, Mode: "proxy", At: time.Now().UTC(), Note: "已通过加密 TCP 内部链路实测；UDP 往返需独立测试"}
-	if v, ok := response["latency_ms"].(float64); ok {
-		probe.LatencyMS = int64(v)
-	}
-	if v, ok := response["exit_ip"].(string); ok {
-		probe.ExitIP = v
-	}
+	applyProbeFields(probe, response)
+	s.finishProbe(ctx, probe)
 	return probe, nil
 }

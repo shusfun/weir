@@ -3,7 +3,9 @@ package center
 import (
 	"context"
 	"fmt"
+	"net"
 	"strconv"
+	"strings"
 
 	"github.com/shusfun/weir/internal/store/ent"
 )
@@ -14,7 +16,7 @@ func (s *Server) fillExit(ctx context.Context, e *mapExit, address, probeOwner, 
 		e.Label = exitKindLabel(map[string]string{"direct": "freedom", "block": "blackhole"}[e.Kind])
 	}
 	if sourceOwner != "" {
-		if v, ok := s.loadExit(ctx, sourceOwner); ok {
+		if v, ok := s.loadGateExit(ctx, atoiOr(strings.TrimPrefix(sourceOwner, "exit:")), e.FromGate); ok {
 			e.Members, e.Skipped, e.Group = v.Names, len(v.Skipped), v.Outbound.Protocol == "group"
 			if ms := v.Outbound.Members; len(ms) > 0 {
 				address = ms[0].Address
@@ -31,13 +33,22 @@ func (s *Server) fillExit(ctx context.Context, e *mapExit, address, probeOwner, 
 		}
 	}
 	e.Address = address
-	if p, ok := s.loadExitProbe(ctx, probeOwner); ok && probeOwner != "" {
-		e.Probe = &p
-		if p.ExitIP != "" {
-			address = p.ExitIP
+	e.Place = geoPlace{Why: "还没有这台 VPS 的落地实测"}
+	if probeOwner == "" {
+		return
+	}
+	p, ok := s.loadLocatedProbe(ctx, probeOwner, "gate", e.FromGate)
+	if !ok {
+		return
+	}
+	e.Probe = &p
+	if p.OK && p.Mode == "proxy" && net.ParseIP(p.ExitIP) != nil {
+		if p.Place != nil {
+			e.Place = *p.Place
+		} else {
+			e.Place = s.locate(ctx, p.ExitIP)
 		}
 	}
-	e.Place = s.locate(ctx, address)
 }
 
 // redactExit：普通用户看到管理员配的出口时，只留类型与地区（地图上的点仍按城市放），不显示地址与运营商。
@@ -55,7 +66,7 @@ func redactExit(e *mapExit) {
 func (s *Server) chainExit(ctx context.Context, ch *ent.Chain, entryGate int, gates map[int]*mapGate, nodes map[int]*ent.Node) *mapExit {
 	out := s.mapStoredExit(ctx, ch.ExitID, entryGate, gates, nodes)
 	if e, err := s.Store.Ent.Exit.Get(ctx, ch.ExitID); err == nil && e.PolicyType == "" {
-		out.Label = s.exitSummary(ctx, e, ch.Name).Name
+		out.Label = s.exitSummaryOnGate(ctx, e, ch.Name, entryGate).Name
 	}
 	return out
 }
@@ -68,7 +79,14 @@ func (s *Server) mapStoredExit(ctx context.Context, id, gid int, gates map[int]*
 	if err != nil {
 		return &mapExit{ID: exitOwner(id), Kind: "unknown", Label: "出口未知", FromGate: gid, Place: geoPlace{Why: "出口不可用"}}
 	}
-	out := &mapExit{ID: exitOwner(id), Kind: string(e.Kind), Label: s.exitSummary(ctx, e, "").Name, FromGate: gid, Owner: "admin", Link: "/exits?gate=" + itoa(gid) + "&focus=exit:" + itoa(id), tag: e.Tag}
+	if e.Tag != "direct" {
+		b, err := s.exitBinding(ctx, id, gid)
+		if err != nil || b == nil {
+			return &mapExit{ID: exitOwner(id), Kind: "unknown", Label: "出口未知", FromGate: gid, Place: geoPlace{Why: "缺少这台 VPS 的生效配置"}}
+		}
+		e = appliedExit(e, b)
+	}
+	out := &mapExit{ID: exitOwner(id), Kind: string(e.Kind), Label: s.exitSummaryOnGate(ctx, e, "", gid).Name, FromGate: gid, Owner: "admin", Link: "/exits?gate=" + itoa(gid) + "&focus=exit:" + itoa(id), tag: e.Tag}
 	if e.OwnerUserID != nil {
 		out.Owner = "self"
 	}
@@ -97,9 +115,9 @@ func (s *Server) mapStoredExit(ctx context.Context, id, gid int, gates map[int]*
 		n := nodes[*e.ExitNodeID]
 		out.ToGate, out.Sub = n.GateID, n.Name
 		if g := gates[n.GateID]; g != nil {
-			out.Place, out.Address = s.exitPlace(ctx, e), g.Place.IP
+			out.Address = g.Place.IP
 		}
-		out.Place = s.exitPlace(ctx, e)
+		s.fillExit(ctx, out, out.Address, exitOwner(id), "")
 		return out
 	case "source":
 		s.fillExit(ctx, out, "", exitOwner(id), exitOwner(id))
@@ -107,6 +125,5 @@ func (s *Server) mapStoredExit(ctx context.Context, id, gid int, gates map[int]*
 		s.fillExit(ctx, out, e.Address, exitOwner(id), "")
 		out.Sub = e.Address + ":" + strconv.Itoa(e.Port)
 	}
-	out.Place = s.exitPlace(ctx, e)
 	return out
 }

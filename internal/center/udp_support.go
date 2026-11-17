@@ -84,7 +84,7 @@ func (s *Server) nodeRouteUDP(ctx context.Context, n *ent.Node, uid *int, includ
 	}
 	first, support := true, false
 	for id := range ids {
-		v, known := s.exitUDP(ctx, id, seen)
+		v, known := s.exitUDPOnGate(ctx, id, n.GateID, seen)
 		if !known || !first && v != support {
 			return false, false
 		}
@@ -93,7 +93,31 @@ func (s *Server) nodeRouteUDP(ctx context.Context, n *ent.Node, uid *int, includ
 	return support, true
 }
 
+// The catalog reports a capability only when every using VPS agrees.
 func (s *Server) exitUDP(ctx context.Context, id int, seen map[int]bool) (bool, bool) {
+	e, err := s.Store.Ent.Exit.Get(ctx, id)
+	if err != nil {
+		return false, false
+	}
+	if e.Tag == "direct" {
+		return true, true
+	}
+	gates, err := s.referencingGates(ctx, id)
+	if err != nil || len(gates) == 0 {
+		return false, false
+	}
+	var supported bool
+	for i, gid := range gates {
+		value, known := s.exitUDPOnGate(ctx, id, gid, seen)
+		if !known || i > 0 && value != supported {
+			return false, false
+		}
+		supported = value
+	}
+	return supported, true
+}
+
+func (s *Server) exitUDPOnGate(ctx context.Context, id, gateID int, seen map[int]bool) (bool, bool) {
 	if id == 0 || seen[id] || len(seen) > 8 {
 		return false, false
 	}
@@ -103,18 +127,25 @@ func (s *Server) exitUDP(ctx context.Context, id int, seen map[int]bool) (bool, 
 	if err != nil || !e.Enabled {
 		return false, false
 	}
+	if e.Tag != "direct" {
+		b, err := s.exitBinding(ctx, id, gateID)
+		if err != nil || b == nil {
+			return false, false
+		}
+		e = appliedExit(e, b)
+	}
 	switch e.Kind {
 	case entexit.KindFreedom, entexit.KindHTTP, entexit.KindHTTPS, entexit.KindBlackhole:
 		return udpKind(string(e.Kind), nil)
 	case entexit.KindSocks5:
-		p, ok := s.loadExitProbe(ctx, exitOwner(e.ID))
+		p, ok := s.loadLocatedProbe(ctx, exitOwner(e.ID), "gate", gateID)
 		var measured *bool
 		if ok {
 			measured = p.UDP
 		}
 		return udpKind(string(e.Kind), measured)
 	case entexit.KindSource:
-		stored, ok := s.loadExit(ctx, exitOwner(id))
+		stored, ok := s.loadGateExit(ctx, id, gateID)
 		if !ok {
 			return false, false
 		}
@@ -133,7 +164,7 @@ func (s *Server) exitUDP(ctx context.Context, id int, seen map[int]bool) (bool, 
 		internalUser := 0
 		return s.nodeRouteUDP(ctx, next, &internalUser, false, seen)
 	default:
-		p, ok := s.loadExitProbe(ctx, exitOwner(e.ID))
+		p, ok := s.loadLocatedProbe(ctx, exitOwner(e.ID), "gate", gateID)
 		var measured *bool
 		if ok {
 			measured = p.UDP

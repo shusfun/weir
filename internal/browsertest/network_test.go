@@ -54,18 +54,11 @@ func networkFixture(t *testing.T) (*Server, ed25519.PrivateKey, *tls.Config) {
 	for plan.Port == plan.RTCPort {
 		plan.RTCPort = port()
 	}
-	s, err := Start(plan, tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key})
+	s, err := StartLoopback(plan, tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(s.Close)
-	// Loopback candidates are enabled only in this isolated test fixture.
-	var settings webrtc.SettingEngine
-	settings.SetLite(true)
-	settings.SetIncludeLoopbackCandidate(true)
-	settings.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4})
-	settings.SetICEUDPMux(s.udpMux)
-	s.rtc = webrtc.NewAPI(webrtc.WithSettingEngine(settings))
 	return s, key, &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS13}
 }
 
@@ -130,6 +123,7 @@ func TestNetworkProtocolsAndSessionRevocation(t *testing.T) {
 	token = tokenFor("webrtc")
 	var settings webrtc.SettingEngine
 	settings.SetIncludeLoopbackCandidate(true)
+	settings.SetIPFilter(func(ip net.IP) bool { return ip.IsLoopback() })
 	settings.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4})
 	peer, err := webrtc.NewAPI(webrtc.WithSettingEngine(settings)).NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
@@ -159,8 +153,14 @@ func TestNetworkProtocolsAndSessionRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	gathered := webrtc.GatheringCompletePromise(peer)
 	if err = peer.SetLocalDescription(offer); err != nil {
 		t.Fatal(err)
+	}
+	select {
+	case <-gathered:
+	case <-ctx.Done():
+		t.Fatal("ICE candidate gathering timed out", ctx.Err())
 	}
 	raw, err := json.Marshal(peer.LocalDescription())
 	if err != nil {
@@ -182,7 +182,7 @@ func TestNetworkProtocolsAndSessionRevocation(t *testing.T) {
 			t.Fatal(got)
 		}
 	case <-ctx.Done():
-		t.Fatal("UDP echo timed out", ctx.Err())
+		t.Fatalf("UDP echo timed out: %v; ICE=%s connection=%s", ctx.Err(), peer.ICEConnectionState(), peer.ConnectionState())
 	}
 	if s.Observation().Sessions[0].Bytes != 16 {
 		t.Fatal("RTC payload accounting")

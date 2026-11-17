@@ -105,6 +105,18 @@ func (f ExitFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error)
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ExitMutation", m)
 }
 
+// The ExitBindingFunc type is an adapter to allow the use of ordinary
+// function as ExitBinding mutator.
+type ExitBindingFunc func(context.Context, *ent.ExitBindingMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ExitBindingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ExitBindingMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ExitBindingMutation", m)
+}
+
 // The GateFunc type is an adapter to allow the use of ordinary
 // function as Gate mutator.
 type GateFunc func(context.Context, *ent.GateMutation) (ent.Value, error)

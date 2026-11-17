@@ -160,6 +160,16 @@ func GateIDLTE(v int) predicate.Exit {
 	return predicate.Exit(sql.FieldLTE(FieldGateID, v))
 }
 
+// GateIDIsNil applies the IsNil predicate on the "gate_id" field.
+func GateIDIsNil() predicate.Exit {
+	return predicate.Exit(sql.FieldIsNull(FieldGateID))
+}
+
+// GateIDNotNil applies the NotNil predicate on the "gate_id" field.
+func GateIDNotNil() predicate.Exit {
+	return predicate.Exit(sql.FieldNotNull(FieldGateID))
+}
+
 // OwnerUserIDEQ applies the EQ predicate on the "owner_user_id" field.
 func OwnerUserIDEQ(v int) predicate.Exit {
 	return predicate.Exit(sql.FieldEQ(FieldOwnerUserID, v))
@@ -896,6 +906,29 @@ func HasRoutes() predicate.Exit {
 func HasRoutesWith(preds ...predicate.Route) predicate.Exit {
 	return predicate.Exit(func(s *sql.Selector) {
 		step := newRoutesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasBindings applies the HasEdge predicate on the "bindings" edge.
+func HasBindings() predicate.Exit {
+	return predicate.Exit(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, BindingsTable, BindingsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasBindingsWith applies the HasEdge predicate on the "bindings" edge with a given conditions (other predicates).
+func HasBindingsWith(preds ...predicate.ExitBinding) predicate.Exit {
+	return predicate.Exit(func(s *sql.Selector) {
+		step := newBindingsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

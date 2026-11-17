@@ -82,6 +82,7 @@ type OutboundProbeTask struct {
 	Port       int               `json:"port"`
 	PublicOnly bool              `json:"public_only"`
 	Target     string            `json:"target"`
+	Download   string            `json:"download,omitempty"`
 	Client     json.RawMessage   `json:"client"`
 	Kernels    map[string]Kernel `json:"kernels"`
 	Drivers    map[string]string `json:"drivers"`

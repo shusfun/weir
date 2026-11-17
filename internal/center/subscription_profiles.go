@@ -554,7 +554,11 @@ func (s *Server) groupNodesAt(ctx context.Context, p *ent.SubProfile, ua string,
 	path[p.ID] = true
 	defer delete(path, p.ID)
 	ctx = s.subscriptionContext(ctx, p.ID)
-	generation, generationErr := s.Store.SubscriptionCacheVersion(ctx)
+	var generation string
+	var generationErr error
+	if !isPreview(ctx) {
+		generation, generationErr = s.Store.SubscriptionCacheVersion(ctx)
+	}
 	sources, manual, o, tpl, g, err := s.groupInput(ctx, p, ua)
 	if err != nil {
 		return "", nil, tpl, g, err
@@ -604,7 +608,7 @@ func (s *Server) groupNodesAt(ctx context.Context, p *ent.SubProfile, ua string,
 		Template   subgroup.Template
 		Settings   SubscriptionSettings
 	}{generation, "directional-v2", dependencies, manual, o, tpl, g})
-	cacheable := g.CacheMinutes > 0 && generationErr == nil
+	cacheable := !isPreview(ctx) && g.CacheMinutes > 0 && generationErr == nil
 	for _, result := range nestedResults {
 		if result.Error != "" {
 			cacheable = false
@@ -635,7 +639,7 @@ func (s *Server) groupNodesAt(ctx context.Context, p *ent.SubProfile, ua string,
 			cacheable = false
 		}
 	}
-	if cacheable {
+	if cacheable && !isPreview(ctx) {
 		current, err := s.Store.SubscriptionCacheVersion(ctx)
 		if err == nil && current == generation {
 			limits := s.Config.Subscriptions.effective()

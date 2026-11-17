@@ -86,6 +86,9 @@ func (s *Server) subscriptionSettings(ctx context.Context) (SubscriptionSettings
 				if n, ok := sourceRefreshValue(raw); ok {
 					out.SourceRefresh = int(n)
 				}
+				if isPreview(ctx) {
+					return out, nil
+				}
 				value := map[string]any{}
 				bb, _ := json.Marshal(out)
 				_ = json.Unmarshal(bb, &value)
@@ -582,6 +585,9 @@ func (k sourceIdentityCache) Load(ctx context.Context, _ int) ([]string, bool) {
 }
 
 func (k sourceIdentityCache) Store(ctx context.Context, _ int, nodes []string) {
+	if isPreview(ctx) {
+		return
+	}
 	b, _ := json.Marshal(nodes)
 	limits := k.s.Config.Subscriptions.effective()
 	if len(b) > limits.CacheItemBytes {
@@ -601,6 +607,9 @@ func toSource(v *ent.SubSource) subgroup.Source {
 
 // recordResults 保存订阅源本次的节点数、用量、标题与错误。
 func (s *Server) recordResults(ctx context.Context, results []subgroup.SourceResult) {
+	if isPreview(ctx) {
+		return
+	}
 	for _, r := range results {
 		started := time.Now().UTC()
 		err := s.Store.Lock.Do(ctx, "subscription-source:"+itoa(r.SourceID), func(ctx context.Context) error {

@@ -64,6 +64,15 @@ def browser_tls_mount():
     return [*mounts, "-e", "WEIR_E2E_BROWSER_TLS_DIR=/browser-tls"]
 
 
+def browser_requirements():
+    scenario = os.environ.get("WEIR_E2E_BROWSER_SCENARIO", "full")
+    if scenario == "exits":
+        return ["exit-admin", "exit-user", "exit-probe", "exit-errors", "exit-permissions", "exit-layout", "exit-cleanup"]
+    if scenario != "full":
+        raise ValueError("Unknown browser scenario: " + scenario)
+    return ["https", "webrtc", "webtransport", "source-grant", "chain-subscription", "restore", "settings", "unauthorized"]
+
+
 def main(argv, run):
     network = os.environ.get("WEIR_E2E_NETWORK", "")
     owned_network = ""
@@ -201,7 +210,7 @@ def run_scenarios(argv, run, network):
         import json
         receipt = browser_dir / "result.json"
         result = json.loads(receipt.read_text(encoding="utf-8")) if receipt.is_file() else {}
-        required = ["https", "webrtc", "webtransport", "source-grant", "chain-subscription", "restore", "settings", "unauthorized"]
+        required = browser_requirements()
         checks = result.get("checks", {})
         valid_receipt = result.get("run_id") == run.id and isinstance(checks, dict)
         for name in required:

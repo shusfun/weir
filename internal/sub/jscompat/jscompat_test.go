@@ -70,3 +70,12 @@ func TestRegExpJSSemantics(t *testing.T) {
 		t.Error("JS 不支持内联标志，应当报错")
 	}
 }
+
+func TestURLPathCaretMatchesNode24(t *testing.T) {
+	for _, input := range []string{"https://example.com/^x", "https://example.com/%5Ex"} {
+		u, err := ParseURL(input)
+		if err != nil || u.Href() != "https://example.com/%5Ex" {
+			t.Fatalf("path encoding for %q: %v %v", input, u, err)
+		}
+	}
+}

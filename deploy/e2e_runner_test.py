@@ -9,6 +9,15 @@ from scenario_run import ScenarioRun
 
 
 class E2ERunnerTests(unittest.TestCase):
+    def test_browser_receipt_requirements_are_scoped(self):
+        with patch.dict(e2e.os.environ, {}, clear=True):
+            self.assertIn("webtransport", e2e.browser_requirements())
+            e2e.os.environ["WEIR_E2E_BROWSER_SCENARIO"] = "exits"
+            self.assertEqual(e2e.browser_requirements(), ["exit-admin", "exit-user", "exit-probe", "exit-errors", "exit-permissions", "exit-layout", "exit-cleanup"])
+            e2e.os.environ["WEIR_E2E_BROWSER_SCENARIO"] = "unknown"
+            with self.assertRaises(ValueError):
+                e2e.browser_requirements()
+
     def test_browser_tls_exposes_only_leaf_key_and_public_chain(self):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)

@@ -16,7 +16,7 @@ import (
 	"github.com/shusfun/weir/internal/db"
 	"github.com/shusfun/weir/internal/kernelconf"
 	"github.com/shusfun/weir/internal/store/ent"
-	entexit "github.com/shusfun/weir/internal/store/ent/exit"
+	"github.com/shusfun/weir/internal/store/ent/exitbinding"
 	entnode "github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/subgrant"
 	"github.com/shusfun/weir/internal/subscription"
@@ -38,20 +38,6 @@ type sourceSpec struct {
 	Match              string   `json:"match"`
 	Identity           string   `json:"identity,omitempty"`
 	InsecureIdentities []string `json:"insecure_identities,omitempty"`
-}
-
-// measuredSocksUDP 把已经实测过的同一 SOCKS5 地址结果用到分组成员上。没测过保持未知，不当成支持。
-func (s *Server) measuredSocksUDP(ctx context.Context, address string, port int) *bool {
-	rows, err := s.Store.Ent.Exit.Query().Where(entexit.KindEQ(entexit.KindSocks5), entexit.AddressEQ(address), entexit.PortEQ(port)).All(ctx)
-	if err != nil {
-		return nil
-	}
-	for _, e := range rows {
-		if p, ok := s.loadExitProbe(ctx, exitOwner(e.ID)); ok && p.UDP != nil {
-			return p.UDP
-		}
-	}
-	return nil
 }
 
 func specOf(m map[string]any) sourceSpec {
@@ -152,7 +138,6 @@ func (s *Server) resolveSpec(ctx context.Context, g *ent.Gate, kernels []string,
 			ex.Skipped = append(ex.Skipped, n.Remark+"："+err.Error())
 			continue
 		}
-		s.stampMeasuredUDP(ctx, &o)
 		if supported, known := outboundKnownUDP(o); known {
 			if o.Settings == nil {
 				o.Settings = map[string]any{}
@@ -245,7 +230,7 @@ func firstN(list []string, n int) []string {
 	return list
 }
 
-// 解析结果只以出口身份 exit:<id> 保存，所有引用者共用。
+// owner 包含出口身份与测试位置；命名空间仅在这里追加。
 func sourceExitKey(owner string) string { return "source-exit:" + owner }
 
 type storedExit struct {
@@ -263,60 +248,97 @@ func (s *Server) refreshSourceExit(ctx context.Context, owner string, gid int, s
 	if err != nil {
 		return err
 	}
-	g, err := s.Store.Ent.Gate.Get(ctx, gid)
-	if err != nil {
-		return err
-	}
-	kernels, err := s.gateExitKernels(ctx, gid)
-	if err != nil {
-		return err
+	var g *ent.Gate
+	var kernels []string
+	if gid > 0 {
+		g, err = s.Store.Ent.Gate.Get(ctx, gid)
+		if err != nil {
+			return err
+		}
+		kernels, err = s.gateExitKernels(ctx, gid)
+		if err != nil {
+			return err
+		}
 	}
 	ex, err := s.resolveSpec(ctx, g, kernels, sp, publicOnly)
 	if err != nil {
 		return err
 	}
-	prev, _ := s.loadExit(ctx, owner)
+	if g != nil && ex.Outbound.Protocol == "group" {
+		if err := s.checkGroupSupport(ctx, g, kernels...); err != nil {
+			return err
+		}
+	}
+	cacheOwner := owner
+	if gid > 0 {
+		cacheOwner = sourceExitGateOwner(owner, gid)
+	}
+	prev, _ := s.loadExit(ctx, cacheOwner)
+	var binding *ent.ExitBinding
+	if gid > 0 {
+		binding, err = s.exitBinding(ctx, atoiOr(strings.TrimPrefix(owner, "exit:")), gid)
+		if err != nil {
+			return err
+		}
+		if binding != nil && len(binding.Resolved) > 0 {
+			if err := json.Unmarshal(binding.Resolved, &prev); err != nil {
+				return fmt.Errorf("读取已验证订阅快照：%w", err)
+			}
+		}
+	}
 	a, _ := json.Marshal(ex.Outbound)
 	b, _ := json.Marshal(prev.Outbound)
 	if string(a) == string(b) && slices.Equal(ex.Skipped, prev.Skipped) && slices.Equal(ex.Names, prev.Names) {
 		return nil
 	}
 	var measured *exitProbe
-	if probe && publicOnly && string(a) != string(b) {
-		if measured, err = s.probeExit(ctx, g, ex, true); err != nil {
+	if probe && gid > 0 && string(a) != string(b) {
+		if measured, err = s.probeExit(ctx, g, ex, publicOnly); err != nil {
 			return fmt.Errorf("订阅源出口成员变化后实测未通过，保留上一次可用的出口：%w", err)
 		}
 	}
-	// A changed member set invalidates the previously observed egress IP.
-	if err := s.Store.KV.Del(ctx, exitProbeKey(owner)); err != nil {
+	raw, err := json.Marshal(storedExit{Outbound: ex.Outbound, Names: ex.Names, Skipped: ex.Skipped, At: time.Now().UTC()})
+	if err != nil {
+		return err
+	}
+	if binding != nil {
+		tx, err := s.Store.Ent.Tx(ctx)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		if err = tx.ExitBinding.UpdateOneID(binding.ID).SetResolved(raw).SetSource(sp.toMap()).Exec(ctx); err != nil {
+			return err
+		}
+		if err = tx.Gate.UpdateOneID(gid).AddConfigRevision(1).Exec(ctx); err != nil {
+			return err
+		}
+		if err = tx.Commit(); err != nil {
+			return err
+		}
+		s.recordRevision(ctx, gid, g.ConfigRevision, g.ConfigRevision+1)
+		s.waiters.notify(gid)
+		if err := s.Store.Notifications.Publish(ctx, "gate:"+itoa(gid)); err != nil {
+			s.tasks.note("source-notify-"+itoa(gid), err)
+		}
+	}
+	if err := s.Store.KV.Set(ctx, sourceExitKey(cacheOwner), string(raw), 0); err != nil {
+		return err
+	}
+	location := "center"
+	if gid > 0 {
+		location = "gate"
+	}
+	if err := s.Store.KV.Del(ctx, exitProbeKey(exitProbeLocationOwner(owner, location, gid))); err != nil {
 		return err
 	}
 	if err := s.invalidateExitDependents(ctx, atoiOr(strings.TrimPrefix(owner, "exit:"))); err != nil {
 		return err
 	}
-	raw, _ := json.Marshal(storedExit{Outbound: ex.Outbound, Names: ex.Names, Skipped: ex.Skipped, At: time.Now().UTC()})
-	if err = s.Store.KV.Set(ctx, sourceExitKey(owner), string(raw), 0); err != nil {
-		return err
+	if measured != nil {
+		return s.saveLocatedProbe(ctx, owner, location, gid, measured)
 	}
-	s.saveExitProbe(ctx, owner, measured)
-	_, err = s.bumpGate(ctx, gid)
-	return err
-}
-
-// stampMeasuredUDP 把同一地址已有的 SOCKS5 实测写到成员上。编译时再写一次，避免保存时还没测完就一直把 UDP 发给未知成员。
-func (s *Server) stampMeasuredUDP(ctx context.Context, o *contracts.Outbound) {
-	if o == nil || (o.Protocol != "socks" && o.Protocol != "socks5") {
-		return
-	}
-	measured := s.measuredSocksUDP(ctx, o.Address, o.Port)
-	supported, known := udpKind(o.Protocol, measured)
-	if !known {
-		return
-	}
-	if o.Settings == nil {
-		o.Settings = map[string]any{}
-	}
-	o.Settings["udp"] = supported
+	return nil
 }
 
 func outboundKnownUDP(o contracts.Outbound) (supported, known bool) {
@@ -329,23 +351,6 @@ func outboundKnownUDP(o contracts.Outbound) (supported, known bool) {
 	return udpKind(o.Protocol, measured)
 }
 
-func (s *Server) stampGroupUDP(ctx context.Context, o *contracts.Outbound) {
-	if o == nil || o.Protocol != "group" {
-		return
-	}
-	for i := range o.Members {
-		s.stampMeasuredUDP(ctx, &o.Members[i])
-	}
-	udp := udpMembers(o.Members)
-	if o.Settings == nil {
-		o.Settings = map[string]any{}
-	}
-	o.Settings["udp_members"] = len(udp)
-	if len(o.Members) > 0 && allUDPKnown(o.Members) && len(udp) == 0 {
-		o.Settings["udp_supported"] = false
-	}
-}
-
 func (s *Server) loadExit(ctx context.Context, owner string) (storedExit, bool) {
 	raw, ok, _ := s.Store.KV.Get(ctx, sourceExitKey(owner))
 	var v storedExit
@@ -355,14 +360,16 @@ func (s *Server) loadExit(ctx context.Context, owner string) (storedExit, bool) 
 	return v, true
 }
 
-// exitFromStore 是编译 Gate 配置时用的出口：上一次解析成功的结果；从没成功过则为丢弃。
-func (s *Server) exitFromStore(ctx context.Context, owner, tag string, id int64) (contracts.Outbound, string) {
-	v, ok := s.loadExit(ctx, owner)
-	if !ok {
-		return contracts.Outbound{ID: id, Tag: tag, Protocol: "blackhole"}, "订阅源节点出口还没有解析成功，暂时丢弃经这个出口的流量"
+func (s *Server) loadGateExit(ctx context.Context, exitID, gateID int) (storedExit, bool) {
+	b, err := s.exitBinding(ctx, exitID, gateID)
+	if err != nil || b == nil || b.Kind != exitbinding.KindSource {
+		return storedExit{}, false
 	}
-	v.Outbound.ID, v.Outbound.Tag = id, tag
-	return v.Outbound, ""
+	var v storedExit
+	if json.Unmarshal(b.Resolved, &v) != nil || v.Outbound.Protocol == "" {
+		return storedExit{}, false
+	}
+	return v, true
 }
 
 // exitView 给页面显示当前用的是哪些节点。
@@ -371,6 +378,10 @@ func (s *Server) exitView(ctx context.Context, owner string) map[string]any {
 	if !ok {
 		return map[string]any{"resolved": nil}
 	}
+	return storedExitView(v)
+}
+
+func storedExitView(v storedExit) map[string]any {
 	return map[string]any{"resolved": v.Names, "group": v.Outbound.Protocol == "group", "skipped": v.Skipped, "at": v.At}
 }
 
@@ -450,13 +461,22 @@ func (s *Server) checkSourceAccess(ctx context.Context, sp sourceSpec, cc chainC
 
 // RefreshSourceExits 在订阅源刷新后更新全部订阅源节点出口（维护任务每分钟调用；失败的保持上一次）。
 func (s *Server) RefreshSourceExits(ctx context.Context) {
-	es, err := s.Store.Ent.Exit.Query().Where(entexit.KindEQ(entexit.KindSource), entexit.EnabledEQ(true)).All(ctx)
+	bindings, err := s.Store.Ent.ExitBinding.Query().Where(exitbinding.KindEQ(exitbinding.KindSource)).All(ctx)
 	if err != nil {
 		s.tasks.note("refresh-source-exits", err)
 		return
 	}
-	for _, e := range es {
-		s.tasks.note("source-exit-"+itoa(e.ID), s.refreshSourceExit(ctx, exitOwner(e.ID), e.GateID, specOf(e.Source), e.OwnerUserID != nil, true))
+	for _, binding := range bindings {
+		e, err := s.Store.Ent.Exit.Get(ctx, binding.ExitID)
+		if err != nil {
+			s.tasks.note("source-exit-"+itoa(binding.ExitID), err)
+			continue
+		}
+		if !e.Enabled {
+			continue
+		}
+		// 刷新该 VPS 正在使用的来源；未通过的新期望配置不能借周期刷新替换旧快照。
+		s.tasks.note("source-exit-"+itoa(e.ID)+"-"+itoa(binding.GateID), s.refreshSourceExit(ctx, exitOwner(e.ID), binding.GateID, specOf(binding.Source), e.OwnerUserID != nil, true))
 	}
 }
 

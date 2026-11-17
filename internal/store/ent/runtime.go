@@ -13,6 +13,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/chain"
 	"github.com/shusfun/weir/internal/store/ent/credential"
 	"github.com/shusfun/weir/internal/store/ent/exit"
+	"github.com/shusfun/weir/internal/store/ent/exitbinding"
 	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/gateaction"
 	"github.com/shusfun/weir/internal/store/ent/kerneldriver"
@@ -269,6 +270,56 @@ func init() {
 	exitDescCreatedAt := exitFields[14].Descriptor()
 	// exit.DefaultCreatedAt holds the default value on creation for the created_at field.
 	exit.DefaultCreatedAt = exitDescCreatedAt.Default.(func() time.Time)
+	exitbindingFields := schema.ExitBinding{}.Fields()
+	_ = exitbindingFields
+	// exitbindingDescReason is the schema descriptor for reason field.
+	exitbindingDescReason := exitbindingFields[3].Descriptor()
+	// exitbinding.DefaultReason holds the default value on creation for the reason field.
+	exitbinding.DefaultReason = exitbindingDescReason.Default.(string)
+	// exitbinding.ReasonValidator is a validator for the "reason" field. It is called by the builders before save.
+	exitbinding.ReasonValidator = exitbindingDescReason.Validators[0].(func(string) error)
+	// exitbindingDescDesiredDigest is the schema descriptor for desired_digest field.
+	exitbindingDescDesiredDigest := exitbindingFields[4].Descriptor()
+	// exitbinding.DefaultDesiredDigest holds the default value on creation for the desired_digest field.
+	exitbinding.DefaultDesiredDigest = exitbindingDescDesiredDigest.Default.(string)
+	// exitbinding.DesiredDigestValidator is a validator for the "desired_digest" field. It is called by the builders before save.
+	exitbinding.DesiredDigestValidator = exitbindingDescDesiredDigest.Validators[0].(func(string) error)
+	// exitbindingDescRemark is the schema descriptor for remark field.
+	exitbindingDescRemark := exitbindingFields[7].Descriptor()
+	// exitbinding.DefaultRemark holds the default value on creation for the remark field.
+	exitbinding.DefaultRemark = exitbindingDescRemark.Default.(string)
+	// exitbinding.RemarkValidator is a validator for the "remark" field. It is called by the builders before save.
+	exitbinding.RemarkValidator = exitbindingDescRemark.Validators[0].(func(string) error)
+	// exitbindingDescAddress is the schema descriptor for address field.
+	exitbindingDescAddress := exitbindingFields[8].Descriptor()
+	// exitbinding.DefaultAddress holds the default value on creation for the address field.
+	exitbinding.DefaultAddress = exitbindingDescAddress.Default.(string)
+	// exitbinding.AddressValidator is a validator for the "address" field. It is called by the builders before save.
+	exitbinding.AddressValidator = exitbindingDescAddress.Validators[0].(func(string) error)
+	// exitbindingDescUsername is the schema descriptor for username field.
+	exitbindingDescUsername := exitbindingFields[9].Descriptor()
+	// exitbinding.DefaultUsername holds the default value on creation for the username field.
+	exitbinding.DefaultUsername = exitbindingDescUsername.Default.(string)
+	// exitbinding.UsernameValidator is a validator for the "username" field. It is called by the builders before save.
+	exitbinding.UsernameValidator = exitbindingDescUsername.Validators[0].(func(string) error)
+	// exitbindingDescPassword is the schema descriptor for password field.
+	exitbindingDescPassword := exitbindingFields[10].Descriptor()
+	// exitbinding.DefaultPassword holds the default value on creation for the password field.
+	exitbinding.DefaultPassword = exitbindingDescPassword.Default.(string)
+	// exitbindingDescLink is the schema descriptor for link field.
+	exitbindingDescLink := exitbindingFields[11].Descriptor()
+	// exitbinding.DefaultLink holds the default value on creation for the link field.
+	exitbinding.DefaultLink = exitbindingDescLink.Default.(string)
+	// exitbindingDescPort is the schema descriptor for port field.
+	exitbindingDescPort := exitbindingFields[12].Descriptor()
+	// exitbinding.DefaultPort holds the default value on creation for the port field.
+	exitbinding.DefaultPort = exitbindingDescPort.Default.(int)
+	// exitbindingDescUpdatedAt is the schema descriptor for updated_at field.
+	exitbindingDescUpdatedAt := exitbindingFields[16].Descriptor()
+	// exitbinding.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	exitbinding.DefaultUpdatedAt = exitbindingDescUpdatedAt.Default.(func() time.Time)
+	// exitbinding.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	exitbinding.UpdateDefaultUpdatedAt = exitbindingDescUpdatedAt.UpdateDefault.(func() time.Time)
 	gateFields := schema.Gate{}.Fields()
 	_ = gateFields
 	// gateDescName is the schema descriptor for name field.

@@ -28,6 +28,8 @@ type Tx struct {
 	Credential *CredentialClient
 	// Exit is the client for interacting with the Exit builders.
 	Exit *ExitClient
+	// ExitBinding is the client for interacting with the ExitBinding builders.
+	ExitBinding *ExitBindingClient
 	// Gate is the client for interacting with the Gate builders.
 	Gate *GateClient
 	// GateAction is the client for interacting with the GateAction builders.
@@ -205,6 +207,7 @@ func (tx *Tx) init() {
 	tx.Chain = NewChainClient(tx.config)
 	tx.Credential = NewCredentialClient(tx.config)
 	tx.Exit = NewExitClient(tx.config)
+	tx.ExitBinding = NewExitBindingClient(tx.config)
 	tx.Gate = NewGateClient(tx.config)
 	tx.GateAction = NewGateActionClient(tx.config)
 	tx.KernelDriver = NewKernelDriverClient(tx.config)

@@ -21,6 +21,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/chain"
 	"github.com/shusfun/weir/internal/store/ent/credential"
 	"github.com/shusfun/weir/internal/store/ent/exit"
+	"github.com/shusfun/weir/internal/store/ent/exitbinding"
 	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/gateaction"
 	"github.com/shusfun/weir/internal/store/ent/kerneldriver"
@@ -108,6 +109,7 @@ func checkColumn(t, c string) error {
 			chain.Table:          chain.ValidColumn,
 			credential.Table:     credential.ValidColumn,
 			exit.Table:           exit.ValidColumn,
+			exitbinding.Table:    exitbinding.ValidColumn,
 			gate.Table:           gate.ValidColumn,
 			gateaction.Table:     gateaction.ValidColumn,
 			kerneldriver.Table:   kerneldriver.ValidColumn,

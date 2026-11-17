@@ -51,6 +51,8 @@ const (
 	EdgeChains = "chains"
 	// EdgeRoutes holds the string denoting the routes edge name in mutations.
 	EdgeRoutes = "routes"
+	// EdgeBindings holds the string denoting the bindings edge name in mutations.
+	EdgeBindings = "bindings"
 	// Table holds the table name of the exit in the database.
 	Table = "exits"
 	// NodesTable is the table that holds the nodes relation/edge.
@@ -74,6 +76,13 @@ const (
 	RoutesInverseTable = "routes"
 	// RoutesColumn is the table column denoting the routes relation/edge.
 	RoutesColumn = "exit_id"
+	// BindingsTable is the table that holds the bindings relation/edge.
+	BindingsTable = "exit_bindings"
+	// BindingsInverseTable is the table name for the ExitBinding entity.
+	// It exists in this package in order to avoid circular dependency with the "exitbinding" package.
+	BindingsInverseTable = "exit_bindings"
+	// BindingsColumn is the table column denoting the bindings relation/edge.
+	BindingsColumn = "exit_id"
 )
 
 // Columns holds all SQL columns for exit fields.
@@ -285,6 +294,20 @@ func ByRoutes(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newRoutesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByBindingsCount orders the results by bindings count.
+func ByBindingsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newBindingsStep(), opts...)
+	}
+}
+
+// ByBindings orders the results by bindings terms.
+func ByBindings(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newBindingsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newNodesStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -304,5 +327,12 @@ func newRoutesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(RoutesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, RoutesTable, RoutesColumn),
+	)
+}
+func newBindingsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(BindingsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, BindingsTable, BindingsColumn),
 	)
 }

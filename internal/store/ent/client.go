@@ -23,6 +23,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/chain"
 	"github.com/shusfun/weir/internal/store/ent/credential"
 	"github.com/shusfun/weir/internal/store/ent/exit"
+	"github.com/shusfun/weir/internal/store/ent/exitbinding"
 	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/gateaction"
 	"github.com/shusfun/weir/internal/store/ent/kerneldriver"
@@ -65,6 +66,8 @@ type Client struct {
 	Credential *CredentialClient
 	// Exit is the client for interacting with the Exit builders.
 	Exit *ExitClient
+	// ExitBinding is the client for interacting with the ExitBinding builders.
+	ExitBinding *ExitBindingClient
 	// Gate is the client for interacting with the Gate builders.
 	Gate *GateClient
 	// GateAction is the client for interacting with the GateAction builders.
@@ -122,6 +125,7 @@ func (c *Client) init() {
 	c.Chain = NewChainClient(c.config)
 	c.Credential = NewCredentialClient(c.config)
 	c.Exit = NewExitClient(c.config)
+	c.ExitBinding = NewExitBindingClient(c.config)
 	c.Gate = NewGateClient(c.config)
 	c.GateAction = NewGateActionClient(c.config)
 	c.KernelDriver = NewKernelDriverClient(c.config)
@@ -241,6 +245,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Chain:        NewChainClient(cfg),
 		Credential:   NewCredentialClient(cfg),
 		Exit:         NewExitClient(cfg),
+		ExitBinding:  NewExitBindingClient(cfg),
 		Gate:         NewGateClient(cfg),
 		GateAction:   NewGateActionClient(cfg),
 		KernelDriver: NewKernelDriverClient(cfg),
@@ -287,6 +292,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		Chain:        NewChainClient(cfg),
 		Credential:   NewCredentialClient(cfg),
 		Exit:         NewExitClient(cfg),
+		ExitBinding:  NewExitBindingClient(cfg),
 		Gate:         NewGateClient(cfg),
 		GateAction:   NewGateActionClient(cfg),
 		KernelDriver: NewKernelDriverClient(cfg),
@@ -336,10 +342,10 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.AccessCode, c.AccountPlan, c.Audit, c.Budget, c.Certificate, c.Chain,
-		c.Credential, c.Exit, c.Gate, c.GateAction, c.KernelDriver, c.Link, c.Node,
-		c.Passkey, c.RateSample, c.RecoveryCode, c.Resource, c.Route, c.RuleTemplate,
-		c.Sample, c.Setting, c.SubGrant, c.SubNode, c.SubProfile, c.SubPull,
-		c.SubSource, c.User,
+		c.Credential, c.Exit, c.ExitBinding, c.Gate, c.GateAction, c.KernelDriver,
+		c.Link, c.Node, c.Passkey, c.RateSample, c.RecoveryCode, c.Resource, c.Route,
+		c.RuleTemplate, c.Sample, c.Setting, c.SubGrant, c.SubNode, c.SubProfile,
+		c.SubPull, c.SubSource, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -350,10 +356,10 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.AccessCode, c.AccountPlan, c.Audit, c.Budget, c.Certificate, c.Chain,
-		c.Credential, c.Exit, c.Gate, c.GateAction, c.KernelDriver, c.Link, c.Node,
-		c.Passkey, c.RateSample, c.RecoveryCode, c.Resource, c.Route, c.RuleTemplate,
-		c.Sample, c.Setting, c.SubGrant, c.SubNode, c.SubProfile, c.SubPull,
-		c.SubSource, c.User,
+		c.Credential, c.Exit, c.ExitBinding, c.Gate, c.GateAction, c.KernelDriver,
+		c.Link, c.Node, c.Passkey, c.RateSample, c.RecoveryCode, c.Resource, c.Route,
+		c.RuleTemplate, c.Sample, c.Setting, c.SubGrant, c.SubNode, c.SubProfile,
+		c.SubPull, c.SubSource, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -378,6 +384,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Credential.mutate(ctx, m)
 	case *ExitMutation:
 		return c.Exit.mutate(ctx, m)
+	case *ExitBindingMutation:
+		return c.ExitBinding.mutate(ctx, m)
 	case *GateMutation:
 		return c.Gate.mutate(ctx, m)
 	case *GateActionMutation:
@@ -1524,6 +1532,22 @@ func (c *ExitClient) QueryRoutes(_m *Exit) *RouteQuery {
 	return query
 }
 
+// QueryBindings queries the bindings edge of a Exit.
+func (c *ExitClient) QueryBindings(_m *Exit) *ExitBindingQuery {
+	query := (&ExitBindingClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(exit.Table, exit.FieldID, id),
+			sqlgraph.To(exitbinding.Table, exitbinding.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, exit.BindingsTable, exit.BindingsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *ExitClient) Hooks() []Hook {
 	return c.hooks.Exit
@@ -1546,6 +1570,155 @@ func (c *ExitClient) mutate(ctx context.Context, m *ExitMutation) (Value, error)
 		return (&ExitDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown Exit mutation op: %q", m.Op())
+	}
+}
+
+// ExitBindingClient is a client for the ExitBinding schema.
+type ExitBindingClient struct {
+	config
+}
+
+// NewExitBindingClient returns a client for the ExitBinding from the given config.
+func NewExitBindingClient(c config) *ExitBindingClient {
+	return &ExitBindingClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `exitbinding.Hooks(f(g(h())))`.
+func (c *ExitBindingClient) Use(hooks ...Hook) {
+	c.hooks.ExitBinding = append(c.hooks.ExitBinding, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `exitbinding.Intercept(f(g(h())))`.
+func (c *ExitBindingClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ExitBinding = append(c.inters.ExitBinding, interceptors...)
+}
+
+// Create returns a builder for creating a ExitBinding entity.
+func (c *ExitBindingClient) Create() *ExitBindingCreate {
+	mutation := newExitBindingMutation(c.config, OpCreate)
+	return &ExitBindingCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ExitBinding entities.
+func (c *ExitBindingClient) CreateBulk(builders ...*ExitBindingCreate) *ExitBindingCreateBulk {
+	return &ExitBindingCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ExitBindingClient) MapCreateBulk(slice any, setFunc func(*ExitBindingCreate, int)) *ExitBindingCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ExitBindingCreateBulk{err: fmt.Errorf("calling to ExitBindingClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ExitBindingCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ExitBindingCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ExitBinding.
+func (c *ExitBindingClient) Update() *ExitBindingUpdate {
+	mutation := newExitBindingMutation(c.config, OpUpdate)
+	return &ExitBindingUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ExitBindingClient) UpdateOne(_m *ExitBinding) *ExitBindingUpdateOne {
+	mutation := newExitBindingMutation(c.config, OpUpdateOne, withExitBinding(_m))
+	return &ExitBindingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ExitBindingClient) UpdateOneID(id int) *ExitBindingUpdateOne {
+	mutation := newExitBindingMutation(c.config, OpUpdateOne, withExitBindingID(id))
+	return &ExitBindingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ExitBinding.
+func (c *ExitBindingClient) Delete() *ExitBindingDelete {
+	mutation := newExitBindingMutation(c.config, OpDelete)
+	return &ExitBindingDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ExitBindingClient) DeleteOne(_m *ExitBinding) *ExitBindingDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ExitBindingClient) DeleteOneID(id int) *ExitBindingDeleteOne {
+	builder := c.Delete().Where(exitbinding.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ExitBindingDeleteOne{builder}
+}
+
+// Query returns a query builder for ExitBinding.
+func (c *ExitBindingClient) Query() *ExitBindingQuery {
+	return &ExitBindingQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeExitBinding},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ExitBinding entity by its id.
+func (c *ExitBindingClient) Get(ctx context.Context, id int) (*ExitBinding, error) {
+	return c.Query().Where(exitbinding.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ExitBindingClient) GetX(ctx context.Context, id int) *ExitBinding {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryExit queries the exit edge of a ExitBinding.
+func (c *ExitBindingClient) QueryExit(_m *ExitBinding) *ExitQuery {
+	query := (&ExitClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(exitbinding.Table, exitbinding.FieldID, id),
+			sqlgraph.To(exit.Table, exit.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, exitbinding.ExitTable, exitbinding.ExitColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *ExitBindingClient) Hooks() []Hook {
+	return c.hooks.ExitBinding
+}
+
+// Interceptors returns the client interceptors.
+func (c *ExitBindingClient) Interceptors() []Interceptor {
+	return c.inters.ExitBinding
+}
+
+func (c *ExitBindingClient) mutate(ctx context.Context, m *ExitBindingMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ExitBindingCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ExitBindingUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ExitBindingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ExitBindingDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ExitBinding mutation op: %q", m.Op())
 	}
 }
 
@@ -4112,14 +4285,14 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 type (
 	hooks struct {
 		AccessCode, AccountPlan, Audit, Budget, Certificate, Chain, Credential, Exit,
-		Gate, GateAction, KernelDriver, Link, Node, Passkey, RateSample, RecoveryCode,
-		Resource, Route, RuleTemplate, Sample, Setting, SubGrant, SubNode, SubProfile,
-		SubPull, SubSource, User []ent.Hook
+		ExitBinding, Gate, GateAction, KernelDriver, Link, Node, Passkey, RateSample,
+		RecoveryCode, Resource, Route, RuleTemplate, Sample, Setting, SubGrant,
+		SubNode, SubProfile, SubPull, SubSource, User []ent.Hook
 	}
 	inters struct {
 		AccessCode, AccountPlan, Audit, Budget, Certificate, Chain, Credential, Exit,
-		Gate, GateAction, KernelDriver, Link, Node, Passkey, RateSample, RecoveryCode,
-		Resource, Route, RuleTemplate, Sample, Setting, SubGrant, SubNode, SubProfile,
-		SubPull, SubSource, User []ent.Interceptor
+		ExitBinding, Gate, GateAction, KernelDriver, Link, Node, Passkey, RateSample,
+		RecoveryCode, Resource, Route, RuleTemplate, Sample, Setting, SubGrant,
+		SubNode, SubProfile, SubPull, SubSource, User []ent.Interceptor
 	}
 )

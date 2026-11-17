@@ -69,7 +69,7 @@ export interface GateSelfUpdate {
   at: string;
 }
 
-// ExitProbe 是入口 VPS 实测出口的结果：proxy 为按协议真连并拿到实际出口 IP，tcp 为只测了端口。
+// ExitProbe 是一次出口实测。location 为 center 或 gate；中心测通不代表某台 VPS 可用。
 export interface ExitProbe {
   ok: boolean;
   mode: "proxy" | "tcp";
@@ -79,6 +79,13 @@ export interface ExitProbe {
   error?: string;
   udp?: boolean;
   at: string;
+  location?: "center" | "gate";
+  gate_id?: number;
+  download_bytes?: number;
+  download_ms?: number;
+  rate_bps?: number;
+  download_error?: string;
+  place?: { known: boolean; city?: string; country?: string; region?: string; ip?: string; why?: string };
 }
 
 // PortNeed 是节点要放行的端口与本机防火墙的对照；Reach 是中心从外部连接的结果。
@@ -495,14 +502,16 @@ export function relativeTime(value?: string | null) {
 }
 
 export interface ExitReference { type: "node" | "chain" | "route"; id: number; name: string; owner?: number; enabled: boolean }
+export interface ExitUse { gate_id: number; name?: string; status: string; reason?: string; verified_at?: string; probe?: ExitProbe }
 export interface ExitItem extends ExitSpec {
  object_state?: ObjectState;
  has_password?: boolean; has_link?: boolean;
  summary?: DisplaySummary;
- id: number; gate_id: number; owner_user_id: number | null; tag: string; label: string; enabled: boolean; policy_type: string;
- references: ExitReference[]; probe?: ExitProbe; udp?: "supported" | "unsupported" | "unknown";
+ id: number; gate_id?: number | null; owner_user_id: number | null; tag: string; label: string; enabled: boolean; policy_type: string;
+ references: ExitReference[]; probe?: ExitProbe; probes?: ExitProbe[]; uses?: ExitUse[]; udp?: "supported" | "unsupported" | "unknown";
  source?: {source_id?:number;profile_id?:number;mode?:"node"|"filter";match?:string;identity?:string;insecure_identities?:string[]};
  resolved?: SourceResolved; place?: {known:boolean;country?:string;city?:string;ip?:string;why?:string};
+ applications?: { gate_id: number; name?: string; status: string; reason?: string }[];
 }
 export interface ExitKindInfo {kind:ExitKind;label:string;group:string;description:string;admin_only:boolean}
 export interface ExitDirectoryItem {id:number;owner_user_id:number|null;address:string;port:number;kind:ExitKind;conflict:boolean;reason:string;deployments:ExitItem[]}

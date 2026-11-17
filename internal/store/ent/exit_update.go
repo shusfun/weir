@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/shusfun/weir/internal/store/ent/chain"
 	"github.com/shusfun/weir/internal/store/ent/exit"
+	"github.com/shusfun/weir/internal/store/ent/exitbinding"
 	"github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/predicate"
 	"github.com/shusfun/weir/internal/store/ent/route"
@@ -48,6 +49,12 @@ func (_u *ExitUpdate) SetNillableGateID(v *int) *ExitUpdate {
 // AddGateID adds value to the "gate_id" field.
 func (_u *ExitUpdate) AddGateID(v int) *ExitUpdate {
 	_u.mutation.AddGateID(v)
+	return _u
+}
+
+// ClearGateID clears the value of the "gate_id" field.
+func (_u *ExitUpdate) ClearGateID() *ExitUpdate {
+	_u.mutation.ClearGateID()
 	return _u
 }
 
@@ -309,6 +316,21 @@ func (_u *ExitUpdate) AddRoutes(v ...*Route) *ExitUpdate {
 	return _u.AddRouteIDs(ids...)
 }
 
+// AddBindingIDs adds the "bindings" edge to the ExitBinding entity by IDs.
+func (_u *ExitUpdate) AddBindingIDs(ids ...int) *ExitUpdate {
+	_u.mutation.AddBindingIDs(ids...)
+	return _u
+}
+
+// AddBindings adds the "bindings" edges to the ExitBinding entity.
+func (_u *ExitUpdate) AddBindings(v ...*ExitBinding) *ExitUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddBindingIDs(ids...)
+}
+
 // Mutation returns the ExitMutation object of the builder.
 func (_u *ExitUpdate) Mutation() *ExitMutation {
 	return _u.mutation
@@ -375,6 +397,27 @@ func (_u *ExitUpdate) RemoveRoutes(v ...*Route) *ExitUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveRouteIDs(ids...)
+}
+
+// ClearBindings clears all "bindings" edges to the ExitBinding entity.
+func (_u *ExitUpdate) ClearBindings() *ExitUpdate {
+	_u.mutation.ClearBindings()
+	return _u
+}
+
+// RemoveBindingIDs removes the "bindings" edge to ExitBinding entities by IDs.
+func (_u *ExitUpdate) RemoveBindingIDs(ids ...int) *ExitUpdate {
+	_u.mutation.RemoveBindingIDs(ids...)
+	return _u
+}
+
+// RemoveBindings removes "bindings" edges to ExitBinding entities.
+func (_u *ExitUpdate) RemoveBindings(v ...*ExitBinding) *ExitUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveBindingIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -456,6 +499,9 @@ func (_u *ExitUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedGateID(); ok {
 		_spec.AddField(exit.FieldGateID, field.TypeInt, value)
+	}
+	if _u.mutation.GateIDCleared() {
+		_spec.ClearField(exit.FieldGateID, field.TypeInt)
 	}
 	if value, ok := _u.mutation.OwnerUserID(); ok {
 		_spec.SetField(exit.FieldOwnerUserID, field.TypeInt, value)
@@ -649,6 +695,51 @@ func (_u *ExitUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.BindingsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   exit.BindingsTable,
+			Columns: []string{exit.BindingsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(exitbinding.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedBindingsIDs(); len(nodes) > 0 && !_u.mutation.BindingsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   exit.BindingsTable,
+			Columns: []string{exit.BindingsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(exitbinding.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.BindingsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   exit.BindingsTable,
+			Columns: []string{exit.BindingsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(exitbinding.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{exit.Label}
@@ -687,6 +778,12 @@ func (_u *ExitUpdateOne) SetNillableGateID(v *int) *ExitUpdateOne {
 // AddGateID adds value to the "gate_id" field.
 func (_u *ExitUpdateOne) AddGateID(v int) *ExitUpdateOne {
 	_u.mutation.AddGateID(v)
+	return _u
+}
+
+// ClearGateID clears the value of the "gate_id" field.
+func (_u *ExitUpdateOne) ClearGateID() *ExitUpdateOne {
+	_u.mutation.ClearGateID()
 	return _u
 }
 
@@ -948,6 +1045,21 @@ func (_u *ExitUpdateOne) AddRoutes(v ...*Route) *ExitUpdateOne {
 	return _u.AddRouteIDs(ids...)
 }
 
+// AddBindingIDs adds the "bindings" edge to the ExitBinding entity by IDs.
+func (_u *ExitUpdateOne) AddBindingIDs(ids ...int) *ExitUpdateOne {
+	_u.mutation.AddBindingIDs(ids...)
+	return _u
+}
+
+// AddBindings adds the "bindings" edges to the ExitBinding entity.
+func (_u *ExitUpdateOne) AddBindings(v ...*ExitBinding) *ExitUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddBindingIDs(ids...)
+}
+
 // Mutation returns the ExitMutation object of the builder.
 func (_u *ExitUpdateOne) Mutation() *ExitMutation {
 	return _u.mutation
@@ -1014,6 +1126,27 @@ func (_u *ExitUpdateOne) RemoveRoutes(v ...*Route) *ExitUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveRouteIDs(ids...)
+}
+
+// ClearBindings clears all "bindings" edges to the ExitBinding entity.
+func (_u *ExitUpdateOne) ClearBindings() *ExitUpdateOne {
+	_u.mutation.ClearBindings()
+	return _u
+}
+
+// RemoveBindingIDs removes the "bindings" edge to ExitBinding entities by IDs.
+func (_u *ExitUpdateOne) RemoveBindingIDs(ids ...int) *ExitUpdateOne {
+	_u.mutation.RemoveBindingIDs(ids...)
+	return _u
+}
+
+// RemoveBindings removes "bindings" edges to ExitBinding entities.
+func (_u *ExitUpdateOne) RemoveBindings(v ...*ExitBinding) *ExitUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveBindingIDs(ids...)
 }
 
 // Where appends a list predicates to the ExitUpdate builder.
@@ -1125,6 +1258,9 @@ func (_u *ExitUpdateOne) sqlSave(ctx context.Context) (_node *Exit, err error) {
 	}
 	if value, ok := _u.mutation.AddedGateID(); ok {
 		_spec.AddField(exit.FieldGateID, field.TypeInt, value)
+	}
+	if _u.mutation.GateIDCleared() {
+		_spec.ClearField(exit.FieldGateID, field.TypeInt)
 	}
 	if value, ok := _u.mutation.OwnerUserID(); ok {
 		_spec.SetField(exit.FieldOwnerUserID, field.TypeInt, value)
@@ -1311,6 +1447,51 @@ func (_u *ExitUpdateOne) sqlSave(ctx context.Context) (_node *Exit, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(route.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.BindingsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   exit.BindingsTable,
+			Columns: []string{exit.BindingsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(exitbinding.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedBindingsIDs(); len(nodes) > 0 && !_u.mutation.BindingsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   exit.BindingsTable,
+			Columns: []string{exit.BindingsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(exitbinding.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.BindingsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   exit.BindingsTable,
+			Columns: []string{exit.BindingsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(exitbinding.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

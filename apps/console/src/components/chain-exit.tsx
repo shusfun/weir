@@ -4,8 +4,9 @@ import { api } from "../api";
 import type { NodeChoice } from "../lib/core";
 // 链式代理出口的填写：建节点第 ③ 步（管理员）与用户自建链式代理共用。
 // 代理文本由用户点击解析；节点链接只接受单个节点，订阅地址会被拒绝。
-import { CheckboxField, Field, FormGrid, Input, Notice, PasswordInput, ChoiceCard, Radio, RadioGroup, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea } from "@weir/ui";
+import { CheckboxField, Field, FormGrid, Input, Notice, PasswordInput, ChoiceCard, Radio, RadioGroup, Readout, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea } from "@weir/ui";
 import type { ExitSpec, ExitKind, ExitProbe } from "../lib/core";
+import { placeText, rateText } from "../lib/linkmap";
 import { parseExitText, type ProxyKind } from "../lib/exit-parse";
 import { useExitCatalog } from "../lib/exits";
 import { State } from "./feedback";
@@ -33,15 +34,29 @@ export function exitErrorFields(kind: ExitKind): Record<string, string> {
   return {};
 }
 
-// probeText 说明实测结果：按协议真连时给出实际出口 IP 与延迟；只测了端口时如实写明。
+// probeText 说明一次实测：位置、连通、落地、地区和速率都只属于这次结果。
 export function probeText(p?: ExitProbe | null) {
   if (!p) return "还没有实测";
-  if (!p.ok) return p.error ? `实测失败：${p.error}` : "实测失败：原因未知";
-  const parts = [p.mode === "proxy" ? "已按协议实测" : "只测了端口"];
-  if (p.exit_ip) parts.push("出口 IP " + p.exit_ip);
-  if (p.latency_ms !== undefined) parts.push(p.latency_ms + " ms");
+  const where = p.location === "center" ? "中心" : p.location === "gate" ? `VPS ${p.gate_id ?? ""}`.trim() : "";
+  if (!p.ok) return [where, p.error ? `实测失败：${p.error}` : "实测失败：原因未知"].filter(Boolean).join(" · ");
+  const parts = [where, p.mode === "proxy" ? "已连通" : "只测了端口"].filter(Boolean);
+  parts.push(p.exit_ip ? `落地 ${p.exit_ip}` : "落地未知");
+  parts.push(placeText(p.place));
+  if (p.latency_ms !== undefined) parts.push(`${p.latency_ms} ms`);
+  parts.push(`速率 ${rateText(p.rate_bps)}`);
   if (p.note && p.mode !== "proxy") parts.push(p.note);
   return parts.join(" · ");
+}
+
+export function ProbeReadouts({ result, location }: { result: ExitProbe | null | undefined; location: string }) {
+  return (
+    <div className="stack weir-probe-readouts">
+      <Readout label="测试位置" value={location} />
+      <Readout label="连通" value={result ? (result.ok ? "已连通" : "未连通") : null} caption={result?.latency_ms != null ? `${result.latency_ms} ms` : "延迟未知"} />
+      <Readout label="落地" value={result?.exit_ip ?? null} caption={result ? placeText(result.place) : "位置未知"} />
+      <Readout label="速率" value={result ? rateText(result.rate_bps) : null} caption={result?.download_error || (result?.rate_bps == null ? "速率未知" : "本次下载")} />
+    </div>
+  );
 }
 
 export function ExitFields({ value, onChange, admin, sourcePath, nodes, nodeHint, savedSecrets }: {
@@ -85,7 +100,7 @@ export function ExitFields({ value, onChange, admin, sourcePath, nodes, nodeHint
             </Select>
           </Field>
         ))}
-      {top !== "freedom" && top !== "blackhole" && <Notice role="status">保存前由入口 VPS 实测：代理、节点链接与订阅节点按协议真连一次并记下实际出口 IP；流量只在入口计量一次。</Notice>}
+      {top !== "freedom" && top !== "blackhole" && <Notice role="status">这里只保存出口资料。在某台 VPS 上使用时，才由那台 VPS 检查是否支持、是否连通。流量只在入口计量一次。</Notice>}
     </>
   );
 }

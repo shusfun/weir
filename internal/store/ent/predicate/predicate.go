@@ -30,6 +30,9 @@ type Credential func(*sql.Selector)
 // Exit is the predicate function for exit builders.
 type Exit func(*sql.Selector)
 
+// ExitBinding is the predicate function for exitbinding builders.
+type ExitBinding func(*sql.Selector)
+
 // Gate is the predicate function for gate builders.
 type Gate func(*sql.Selector)
 

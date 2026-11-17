@@ -56,7 +56,7 @@ func TestSourceStableSelectionAndLegacyBinding(t *testing.T) {
 	const raw = "trojan://original@203.0.113.17:443?sni=fixture.example#same"
 	cache := kvCache{s}
 	cache.Store(ctx, src.ID, []string{raw})
-	v := mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"gate_id": int(g.id), "kind": "source", "source_id": src.ID, "mode": "node", "match": "same"}, 200)
+	v := mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"kind": "source", "source_id": src.ID, "mode": "node", "match": "same"}, 200)
 	eid := int(v["id"].(float64))
 	e := s.Store.Ent.Exit.GetX(ctx, eid)
 	id := subscription.InventoryIdentity(raw)
@@ -67,12 +67,12 @@ func TestSourceStableSelectionAndLegacyBinding(t *testing.T) {
 	if err := s.refreshSourceExit(ctx, exitOwner(eid), int(g.id), specOf(e.Source), false, false); err != nil {
 		t.Fatal("rename broke selection", err)
 	}
-	prev, _ := s.loadExit(ctx, exitOwner(eid))
+	prev, _ := s.loadExit(ctx, sourceExitGateOwner(exitOwner(eid), int(g.id)))
 	cache.Store(ctx, src.ID, []string{strings.Replace(raw, "original", "substitute", 1)})
 	if err := s.refreshSourceExit(ctx, exitOwner(eid), int(g.id), specOf(e.Source), false, false); err == nil {
 		t.Fatal("replaced by same-name connection")
 	}
-	after, _ := s.loadExit(ctx, exitOwner(eid))
+	after, _ := s.loadExit(ctx, sourceExitGateOwner(exitOwner(eid), int(g.id)))
 	a, _ := json.Marshal(prev)
 	b, _ := json.Marshal(after)
 	if string(a) != string(b) {
@@ -82,19 +82,19 @@ func TestSourceStableSelectionAndLegacyBinding(t *testing.T) {
 	if _, err := s.bindSourceIdentity(ctx, sourceSpec{SourceID: src.ID, Mode: "node", Match: "same"}); err == nil {
 		t.Fatal("ambiguous legacy name accepted")
 	}
-	// A pre-migration reference is bound durably before another refresh.
+	// Resolving a legacy selection must not mutate the desired configuration.
 	cache.Store(ctx, src.ID, []string{raw})
 	legacy := sourceSpec{SourceID: src.ID, Mode: "node", Match: "same"}
 	s.Store.Ent.Exit.UpdateOneID(eid).SetSource(legacy.toMap()).ExecX(ctx)
 	o, _, _ := parseExitLink(raw)
 	buf, _ := json.Marshal(storedExit{Outbound: o, Names: []string{"same"}, At: time.Now().UTC()})
-	if err := s.Store.KV.Set(ctx, sourceExitKey(exitOwner(eid)), string(buf), 0); err != nil {
+	if err := s.Store.KV.Set(ctx, sourceExitKey(sourceExitGateOwner(exitOwner(eid), int(g.id))), string(buf), 0); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.refreshSourceExit(ctx, exitOwner(eid), int(g.id), legacy, false, false); err != nil {
 		t.Fatal("legacy binding failed", err)
 	}
-	if got := specOf(s.Store.Ent.Exit.GetX(ctx, eid).Source).Identity; got != id {
-		t.Fatal("legacy binding was not durable", got)
+	if got := specOf(s.Store.Ent.Exit.GetX(ctx, eid).Source).Identity; got != "" {
+		t.Fatal("legacy resolution mutated desired configuration", got)
 	}
 }

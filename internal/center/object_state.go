@@ -119,6 +119,28 @@ func userObjectState(u *ent.User) objectState {
 	return v
 }
 
+func exitUsageState(e *ent.Exit, applied, kept, unknown int, centerOK bool, centerAt *time.Time) objectState {
+	if e != nil && !e.Enabled {
+		return objectState{Status: "disabled", Label: "已停用", Reason: "出口已停用", Next: []string{"enable", "details"}}
+	}
+	if applied+kept+unknown == 0 {
+		if centerOK {
+			return objectState{Status: "partial", Label: "仅中心测通", Reason: "中心实测通过，尚未在 VPS 上验证", ObservedAt: centerAt, Next: []string{"probe", "details"}}
+		}
+		return objectState{Status: "unknown", Label: "未知", Reason: "尚未在 VPS 上使用，也没有实测", Next: []string{"probe", "details"}}
+	}
+	switch {
+	case kept > 0:
+		return objectState{Status: "partial", Label: "部分未替换", Reason: "有 VPS 仍使用上一次生效配置，详情里写明原因", Next: []string{"probe", "details"}}
+	case unknown > 0:
+		return objectState{Status: "unknown", Label: "部分未知", Reason: "有 VPS 还没有验证结果", Next: []string{"probe", "details"}}
+	case applied > 0:
+		return objectState{Status: "ok", Label: "已生效", Reason: "引用它的 VPS 都在使用当前连接参数", Next: []string{"details"}}
+	default:
+		return objectState{Status: "unknown", Label: "未知", Reason: "还没有可确认的使用结果", Next: []string{"details"}}
+	}
+}
+
 func exitObjectState(e *ent.Exit, g *ent.Gate, p exitProbe, hasProbe bool) objectState {
 	if !e.Enabled {
 		return objectState{Status: "disabled", Label: "已停用", Reason: "出口已停用", Next: []string{"enable", "details"}}

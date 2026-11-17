@@ -309,7 +309,7 @@ func (s *Server) promoteInstalled(ctx context.Context) error {
 }
 
 func (s *Server) audit(c *gin.Context, action, target, result string) {
-	if s.Store == nil {
+	if s.Store == nil || c.GetBool(dryRunKey) || isPreview(c.Request.Context()) {
 		return
 	}
 	q := s.Store.Ent.Audit.Create().SetActor(c.GetInt("user_id")).SetAction(action).SetTarget(target).SetResult(result).SetIP(c.ClientIP())
@@ -402,6 +402,7 @@ func (s *Server) Router() *gin.Engine {
 	ready.GET("/public", s.publicSettings)
 	// 回显来源 IP：链式代理实测时经出口访问它，得到实际出口 IP（只信任本机回环反代的转发头）。
 	ready.GET("/ip", func(c *gin.Context) { c.Header("Cache-Control", "no-store"); c.JSON(200, gin.H{"ip": c.ClientIP()}) })
+	ready.GET("/probe/payload", s.probePayload)
 	ready.GET("/node-test/download", s.nodeTestDownload)
 	ready.POST("/auth/login", s.login)
 	ready.GET("/auth/human/challenge", s.humanChallenge)
@@ -410,7 +411,7 @@ func (s *Server) Router() *gin.Engine {
 	auth.Use(s.authenticate)
 	auth.Use(func(c *gin.Context) {
 		if c.Query("dryRun") == "true" {
-			c.Set(dryRunKey, true)
+			markPreview(c)
 		}
 		c.Next()
 	})

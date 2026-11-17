@@ -15,6 +15,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/chain"
 	"github.com/shusfun/weir/internal/store/ent/credential"
 	entexit "github.com/shusfun/weir/internal/store/ent/exit"
+	"github.com/shusfun/weir/internal/store/ent/exitbinding"
 	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/gateaction"
 	"github.com/shusfun/weir/internal/store/ent/node"
@@ -89,13 +90,20 @@ func gateDeletionPlan(ctx context.Context, db *ent.Client, gid int) (*gateDelete
 		if name == "" {
 			name = exitKindLabel(string(e.Kind)) + " #" + itoa(e.ID)
 		}
-		if e.GateID == gid {
+		if exitGateID(e) == gid {
 			p.Exits = append(p.Exits, gateDeleteObject{e.ID, name})
 			p.exitIDs = append(p.exitIDs, e.ID)
-		} else {
+		} else if e.ExitNodeID != nil {
 			p.BlockedExits = append(p.BlockedExits, gateDeleteObject{e.ID, name})
-			if !slices.Contains(p.affectedGates, e.GateID) {
-				p.affectedGates = append(p.affectedGates, e.GateID)
+			bound, berr := db.ExitBinding.Query().Where(exitbinding.ExitIDEQ(e.ID)).All(ctx)
+			if berr != nil {
+				return nil, berr
+			}
+			for _, b := range bound {
+				id := b.GateID
+				if id != gid && !slices.Contains(p.affectedGates, id) {
+					p.affectedGates = append(p.affectedGates, id)
+				}
 			}
 		}
 	}
@@ -410,6 +418,9 @@ func (s *Server) applyGateDeletion(ctx context.Context, tx *ent.Tx, p *gateDelet
 		return err
 	}
 	if _, err := tx.Node.Delete().Where(node.IDIn(p.nodeIDs...)).Exec(ctx); err != nil {
+		return err
+	}
+	if _, err := tx.ExitBinding.Delete().Where(exitbinding.Or(exitbinding.GateIDEQ(gid), exitbinding.ExitIDIn(p.exitIDs...))).Exec(ctx); err != nil {
 		return err
 	}
 	if _, err := tx.Exit.Delete().Where(entexit.IDIn(p.exitIDs...)).Exec(ctx); err != nil {

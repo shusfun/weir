@@ -162,6 +162,9 @@ func (s *Server) nodeView(ctx context.Context, n *ent.Node) gin.H {
 	view["display_name"], view["exit_summary"] = choice["display_name"], choice["exit_summary"]
 	if e, err := s.Store.Ent.Exit.Get(ctx, n.ExitID); err == nil {
 		view["exit"], _ = s.exitResourceView(ctx, e)
+		if exit, ok := view["exit"].(gin.H); ok {
+			s.attachMatchingProbe(ctx, exit, e.ID, n.GateID)
+		}
 	}
 	if g != nil {
 		applied := "applied"
@@ -376,13 +379,31 @@ func (s *Server) validateExitSpec(ctx context.Context, entry *ent.Gate, self int
 	if err = s.checkOutboundKernel(ctx, entry, cc.kernel, ex.members()); err != nil {
 		return nil, fmt.Errorf("exit_unsupported: %v", err)
 	}
-	if !probe {
+	var resolved json.RawMessage
+	if spec.Kind == "source" {
+		resolved, err = json.Marshal(storedExit{Outbound: ex.Outbound, Names: ex.Names, Skipped: ex.Skipped, At: time.Now().UTC()})
+		if err != nil {
+			return nil, err
+		}
+	}
+	if !probe || isPreview(ctx) {
+		if resolved != nil {
+			return &exitProbe{resolved: resolved}, nil
+		}
 		return nil, nil
 	}
 	result, err := s.probeExit(ctx, entry, ex, publicOnly)
 	if err != nil {
 		return result, exitVerificationError{err}
 	}
+	if spec.Kind == "source" {
+		resolved, err = json.Marshal(storedExit{Outbound: ex.Outbound, Names: ex.Names, Skipped: ex.Skipped, At: time.Now().UTC()})
+		if err != nil {
+			return nil, err
+		}
+	}
+	result.resolved = resolved
+	result.Location, result.GateID = "gate", entry.ID
 	return result, nil
 }
 
@@ -642,6 +663,9 @@ func (s *Server) createNodeNow(c *gin.Context) {
 	if selected == nil {
 		selected, err = s.persistExit(ctx, tx.Client(), g.ID, nil, "", spec, nil)
 	}
+	if err == nil {
+		err = s.bindApplied(ctx, tx.Client(), selected.ID, g.ID, spec, probe)
+	}
 	if err != nil {
 		failInternal(c, 500, "save_failed", err)
 		return
@@ -744,7 +768,14 @@ func (s *Server) afterNodeChange(ctx context.Context, n *ent.Node) error {
 		return err
 	}
 	for _, e := range deps {
-		gates = append(gates, e.GateID)
+		if id := exitGateID(e); id != 0 {
+			gates = append(gates, id)
+		}
+		bound, err := s.referencingGates(ctx, e.ID)
+		if err != nil {
+			return err
+		}
+		gates = append(gates, bound...)
 	}
 	return s.bumpGates(ctx, gates)
 }
@@ -942,6 +973,7 @@ func (s *Server) updateNodeNow(c *gin.Context) {
 	}
 	if err == nil && exitChanged {
 		exitID = selected.ID
+		err = s.bindApplied(ctx, tx.Client(), selected.ID, g.ID, spec, probe)
 	}
 	if err == nil {
 		m := tx.Node.UpdateOneID(n.ID).SetPort(port).SetSettings(st).SetExitID(exitID)

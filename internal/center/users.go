@@ -896,8 +896,14 @@ func (s *Server) chainViews(ctx context.Context, u *ent.User) ([]gin.H, error) {
 		if err != nil {
 			return nil, err
 		}
-		ev["summary"] = s.exitSummary(ctx, e, ch.Name)
-		v := gin.H{"display_name": s.exitSummary(ctx, e, ch.Name).Name, "id": ch.ID, "name": ch.Name, "entry_node_id": ch.EntryNodeID, "exit_id": ch.ExitID, "exit": ev, "enabled": ch.Enabled, "created_at": ch.CreatedAt}
+		entry, err := s.Store.Ent.Node.Get(ctx, ch.EntryNodeID)
+		if err != nil {
+			return nil, err
+		}
+		s.attachMatchingProbe(ctx, ev, e.ID, entry.GateID)
+		summary := s.exitSummaryOnGate(ctx, e, ch.Name, entry.GateID)
+		ev["summary"] = summary
+		v := gin.H{"display_name": summary.Name, "id": ch.ID, "name": ch.Name, "entry_node_id": ch.EntryNodeID, "exit_id": ch.ExitID, "exit": ev, "enabled": ch.Enabled, "created_at": ch.CreatedAt}
 		out = append(out, v)
 	}
 	return out, nil
@@ -1013,6 +1019,13 @@ func (s *Server) createChainNow(c *gin.Context, admin bool) {
 			return
 		}
 		eid = e.ID
+		if err = s.bindApplied(ctx, tx.Client(), eid, entry.GateID, req.Exit, probe); err != nil {
+			failInternal(c, 500, "save_failed", err)
+			return
+		}
+	} else if err = s.bindApplied(ctx, tx.Client(), eid, entry.GateID, ExitSpec{}, probe); err != nil {
+		failInternal(c, 500, "save_failed", err)
+		return
 	}
 	ch, err := tx.Chain.Create().SetUserID(u.ID).SetEntryNodeID(entry.ID).SetName(name).SetExitID(eid).Save(ctx)
 	if err == nil {
@@ -1183,6 +1196,16 @@ func (s *Server) updateChainNow(c *gin.Context, admin bool) {
 			return
 		}
 		eid = ex.ID
+	}
+	if changed && entry != nil {
+		spec := ExitSpec{}
+		if req.Exit != nil {
+			spec = *req.Exit
+		}
+		if err = s.bindApplied(ctx, tx.Client(), eid, entry.GateID, spec, probe); err != nil {
+			failInternal(c, 500, "save_failed", err)
+			return
+		}
 	}
 	_, err = tx.Chain.UpdateOneID(ch.ID).SetName(name).SetEntryNodeID(entryID).SetExitID(eid).SetEnabled(enabled).Save(ctx)
 	if err == nil {

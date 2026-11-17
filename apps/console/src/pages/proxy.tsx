@@ -22,6 +22,7 @@ import { field, useConsoleContext } from "../lib/console-context";
 import type { ExitSpec, Health, NodeItem, ProxyType, ProxyView, UserItem } from "../lib/core";
 import { ExitFields, exitErrorFields, exitKindName } from "../components/chain-exit";
 import { ChainPanel, SourceSummary, type NodeOption } from "../components/link-panel";
+import { MyExits } from "../components/my-exits";
 import { State } from "../components/feedback";
 import { useStringDialogParam, dataObject, ObjectLink } from "../components/object-link";
 import { objectHref } from "../lib/objects";
@@ -85,6 +86,7 @@ export function ProxyPage({ admin }: { admin: boolean }) {
         <TypesCard base={base} view={v} nodes={nodes} admin={admin} onSaved={() => void view.refetch()} onUpdated={updateView} />
         <PolicyCard key={base + v.policy.revision} base={base} view={v} onUpdated={updateView} />
         <RankingCard view={v} admin={admin} />
+        {!admin && <MyExits />}
         <ChainPanel key={base} base={base} admin={!!uid} />
       </TabsPanel>
       </Tabs>

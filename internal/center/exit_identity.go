@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"reflect"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -121,7 +120,11 @@ func (s *Server) bindStoredSourceIdentity(ctx context.Context, owner string, gid
 	if err != nil || sp.Mode != "node" || sp.Identity != "" {
 		return bound, err
 	}
-	if prev, ok := s.loadExit(ctx, owner); ok {
+	cacheOwner := owner
+	if gid > 0 {
+		cacheOwner = sourceExitGateOwner(owner, gid)
+	}
+	if prev, ok := s.loadExit(ctx, cacheOwner); ok {
 		links, e := s.specLinks(ctx, bound)
 		if e != nil {
 			return bound, e
@@ -155,27 +158,5 @@ func (s *Server) bindStoredSourceIdentity(ctx context.Context, owner string, gid
 			return bound, errors.New("旧节点的连接参数已变化，请重新选择；保留上次可用出口")
 		}
 	}
-	id := atoiOr(strings.TrimPrefix(owner, "exit:"))
-	if id <= 0 {
-		return bound, errors.New("出口身份无效")
-	}
-	tx, e := s.Store.Ent.Tx(ctx)
-	if e != nil {
-		return bound, e
-	}
-	defer tx.Rollback()
-	if e = lockActiveGates(ctx, tx.Client(), gid); e != nil {
-		return bound, e
-	}
-	current, e := tx.Exit.Get(ctx, id)
-	if e != nil {
-		return bound, e
-	}
-	if current.GateID != gid || !reflect.DeepEqual(specOf(current.Source), sp) {
-		return bound, errors.New("出口已变化，请刷新后重试")
-	}
-	if e = tx.Exit.UpdateOneID(id).SetSource(bound.toMap()).Exec(ctx); e != nil {
-		return bound, e
-	}
-	return bound, tx.Commit()
+	return bound, nil
 }

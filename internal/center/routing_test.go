@@ -18,10 +18,10 @@ func TestExitsAndRoutes(t *testing.T) {
 	})
 	base := fmt.Sprintf("/api/v1/admin/gates/%d", gid)
 	exits := "/api/v1/admin/exits"
-	mustJSON(t, admin, "POST", exits, map[string]any{"gate_id": gid, "kind": "freedom"}, 409)
-	mustJSON(t, admin, "POST", exits, map[string]any{"gate_id": gid, "kind": "wireguard"}, 422)
-	mustJSON(t, admin, "POST", exits, map[string]any{"gate_id": gid, "kind": "socks5"}, 422)
-	ob := mustJSON(t, admin, "POST", exits, map[string]any{"gate_id": gid, "kind": "socks5", "remark": "家宽", "address": "203.0.113.20", "port": 1080, "username": "u", "password": "p"}, 200)
+	mustJSON(t, admin, "POST", exits, map[string]any{"kind": "freedom"}, 409)
+	mustJSON(t, admin, "POST", exits, map[string]any{"kind": "wireguard"}, 422)
+	mustJSON(t, admin, "POST", exits, map[string]any{"kind": "socks5"}, 422)
+	ob := mustJSON(t, admin, "POST", exits, map[string]any{"kind": "socks5", "remark": "家宽", "address": "203.0.113.20", "port": 1080, "username": "u", "password": "p"}, 200)
 	oid := int(ob["id"].(float64))
 	tag := "exit-" + itoa(oid)
 	if ob["password"] != nil || ob["has_password"] != true || ob["tag"] != tag {

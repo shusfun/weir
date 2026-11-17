@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/shusfun/weir/internal/store/ent/chain"
 	"github.com/shusfun/weir/internal/store/ent/exit"
+	"github.com/shusfun/weir/internal/store/ent/exitbinding"
 	"github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/route"
 )
@@ -28,6 +29,14 @@ type ExitCreate struct {
 // SetGateID sets the "gate_id" field.
 func (_c *ExitCreate) SetGateID(v int) *ExitCreate {
 	_c.mutation.SetGateID(v)
+	return _c
+}
+
+// SetNillableGateID sets the "gate_id" field if the given value is not nil.
+func (_c *ExitCreate) SetNillableGateID(v *int) *ExitCreate {
+	if v != nil {
+		_c.SetGateID(*v)
+	}
 	return _c
 }
 
@@ -248,6 +257,21 @@ func (_c *ExitCreate) AddRoutes(v ...*Route) *ExitCreate {
 	return _c.AddRouteIDs(ids...)
 }
 
+// AddBindingIDs adds the "bindings" edge to the ExitBinding entity by IDs.
+func (_c *ExitCreate) AddBindingIDs(ids ...int) *ExitCreate {
+	_c.mutation.AddBindingIDs(ids...)
+	return _c
+}
+
+// AddBindings adds the "bindings" edges to the ExitBinding entity.
+func (_c *ExitCreate) AddBindings(v ...*ExitBinding) *ExitCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddBindingIDs(ids...)
+}
+
 // Mutation returns the ExitMutation object of the builder.
 func (_c *ExitCreate) Mutation() *ExitMutation {
 	return _c.mutation
@@ -323,9 +347,6 @@ func (_c *ExitCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *ExitCreate) check() error {
-	if _, ok := _c.mutation.GateID(); !ok {
-		return &ValidationError{Name: "gate_id", err: errors.New(`ent: missing required field "Exit.gate_id"`)}
-	}
 	if _, ok := _c.mutation.Remark(); !ok {
 		return &ValidationError{Name: "remark", err: errors.New(`ent: missing required field "Exit.remark"`)}
 	}
@@ -418,7 +439,7 @@ func (_c *ExitCreate) createSpec() (*Exit, *sqlgraph.CreateSpec) {
 	_spec.OnConflict = _c.conflict
 	if value, ok := _c.mutation.GateID(); ok {
 		_spec.SetField(exit.FieldGateID, field.TypeInt, value)
-		_node.GateID = value
+		_node.GateID = &value
 	}
 	if value, ok := _c.mutation.OwnerUserID(); ok {
 		_spec.SetField(exit.FieldOwnerUserID, field.TypeInt, value)
@@ -524,6 +545,22 @@ func (_c *ExitCreate) createSpec() (*Exit, *sqlgraph.CreateSpec) {
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
+	if nodes := _c.mutation.BindingsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   exit.BindingsTable,
+			Columns: []string{exit.BindingsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(exitbinding.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
 	return _node, _spec
 }
 
@@ -591,6 +628,12 @@ func (u *ExitUpsert) UpdateGateID() *ExitUpsert {
 // AddGateID adds v to the "gate_id" field.
 func (u *ExitUpsert) AddGateID(v int) *ExitUpsert {
 	u.Add(exit.FieldGateID, v)
+	return u
+}
+
+// ClearGateID clears the value of the "gate_id" field.
+func (u *ExitUpsert) ClearGateID() *ExitUpsert {
+	u.SetNull(exit.FieldGateID)
 	return u
 }
 
@@ -849,6 +892,13 @@ func (u *ExitUpsertOne) AddGateID(v int) *ExitUpsertOne {
 func (u *ExitUpsertOne) UpdateGateID() *ExitUpsertOne {
 	return u.Update(func(s *ExitUpsert) {
 		s.UpdateGateID()
+	})
+}
+
+// ClearGateID clears the value of the "gate_id" field.
+func (u *ExitUpsertOne) ClearGateID() *ExitUpsertOne {
+	return u.Update(func(s *ExitUpsert) {
+		s.ClearGateID()
 	})
 }
 
@@ -1305,6 +1355,13 @@ func (u *ExitUpsertBulk) AddGateID(v int) *ExitUpsertBulk {
 func (u *ExitUpsertBulk) UpdateGateID() *ExitUpsertBulk {
 	return u.Update(func(s *ExitUpsert) {
 		s.UpdateGateID()
+	})
+}
+
+// ClearGateID clears the value of the "gate_id" field.
+func (u *ExitUpsertBulk) ClearGateID() *ExitUpsertBulk {
+	return u.Update(func(s *ExitUpsert) {
+		s.ClearGateID()
 	})
 }
 

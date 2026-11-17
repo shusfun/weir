@@ -137,7 +137,7 @@ func (s *Server) saveRoute(c *gin.Context) {
 		return
 	}
 	e, err := s.Store.Ent.Exit.Get(ctx, req.ExitID)
-	if err != nil || e.GateID != g.ID || e.OwnerUserID != nil || !e.Enabled {
+	if err != nil || e.OwnerUserID != nil || !e.Enabled || e.Tag == "direct" && exitGateID(e) != g.ID {
 		failure(c, 400, "exit_not_allowed")
 		return
 	}
@@ -163,16 +163,42 @@ func (s *Server) saveRoute(c *gin.Context) {
 			return
 		}
 	}
-	var saved *ent.Route
-	err = nil
-	if rid == 0 {
-		if dryRun(c, dryResult{Preview: []string{"在 " + g.Name + " 上新建分流规则：匹配的流量走 " + itoa(req.ExitID)}}) {
+	var routeSpec ExitSpec
+	var measured *exitProbe
+	if e.Tag != "direct" {
+		spec, specErr := s.exitSpec(e)
+		if specErr != nil {
+			failInternal(c, 500, "decrypt_failed", specErr)
 			return
 		}
-		saved, err = s.Store.Ent.Route.Create().SetGateID(g.ID).SetNillableNodeID(req.NodeID).SetNillableUserID(req.UserID).
+		if err := s.checkGateKernels(ctx, g, spec); err != nil {
+			failErr(c, 422, err)
+			return
+		}
+		p, probeErr := s.verifyExitOnGate(ctx, g, 0, nil, spec, true, true, "")
+		if probeErr != nil {
+			failErr(c, 422, probeErr)
+			return
+		}
+		routeSpec, measured = spec, p
+	}
+	if dryRun(c, dryResult{Preview: []string{"确认时在 " + g.Name + " 实测出口，通过后保存并重新生成配置"}}) {
+		return
+	}
+	var saved *ent.Route
+	err = nil
+	tx, err := s.Store.Ent.Tx(ctx)
+	if err != nil {
+		failInternal(c, 500, "save_failed", err)
+		return
+	}
+	defer tx.Rollback()
+	txdb := tx.Client()
+	if rid == 0 {
+		saved, err = txdb.Route.Create().SetGateID(g.ID).SetNillableNodeID(req.NodeID).SetNillableUserID(req.UserID).
 			SetExitID(req.ExitID).SetDomain(domain).SetIP(ip).SetPriority(req.Priority).SetNillableEnabled(req.Enabled).Save(ctx)
 	} else {
-		old, gerr := s.Store.Ent.Route.Query().Where(route.IDEQ(rid), route.GateIDEQ(g.ID)).Only(ctx)
+		old, gerr := txdb.Route.Query().Where(route.IDEQ(rid), route.GateIDEQ(g.ID)).Only(ctx)
 		if gerr != nil {
 			failure(c, 404, "route_not_found")
 			return
@@ -182,16 +208,31 @@ func (s *Server) saveRoute(c *gin.Context) {
 		if req.Enabled != nil {
 			upd.SetEnabled(*req.Enabled)
 		}
-		if dryRun(c, dryResult{Preview: []string{"保存后 " + g.Name + " 重新生成配置"}}) {
-			return
-		}
 		saved, err = upd.Save(ctx)
 	}
 	if err != nil {
 		failInternal(c, 500, "save_failed", err)
 		return
 	}
-	_, _ = s.bumpGate(ctx, g.ID)
+	if e.Tag != "direct" {
+		if err = s.bindApplied(ctx, txdb, e.ID, g.ID, routeSpec, measured); err != nil {
+			failInternal(c, 500, "save_failed", err)
+			return
+		}
+	}
+	if err = tx.Gate.UpdateOneID(g.ID).AddConfigRevision(1).Exec(ctx); err != nil {
+		failInternal(c, 500, "sync_failed", err)
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		failInternal(c, 500, "save_failed", err)
+		return
+	}
+	s.recordRevision(ctx, g.ID, g.ConfigRevision, g.ConfigRevision+1)
+	s.waiters.notify(g.ID)
+	if err = s.Store.Notifications.Publish(ctx, "gate:"+itoa(g.ID)); err != nil {
+		s.tasks.note("route-notify-"+itoa(g.ID), err)
+	}
 	s.audit(c, "route.save", "route:"+itoa(saved.ID), "ok")
 	c.JSON(200, routeView(saved))
 }

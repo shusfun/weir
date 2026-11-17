@@ -4,6 +4,7 @@ package ent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -20,6 +21,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/chain"
 	"github.com/shusfun/weir/internal/store/ent/credential"
 	"github.com/shusfun/weir/internal/store/ent/exit"
+	"github.com/shusfun/weir/internal/store/ent/exitbinding"
 	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/gateaction"
 	"github.com/shusfun/weir/internal/store/ent/kerneldriver"
@@ -60,6 +62,7 @@ const (
 	TypeChain        = "Chain"
 	TypeCredential   = "Credential"
 	TypeExit         = "Exit"
+	TypeExitBinding  = "ExitBinding"
 	TypeGate         = "Gate"
 	TypeGateAction   = "GateAction"
 	TypeKernelDriver = "KernelDriver"
@@ -6833,6 +6836,9 @@ type ExitMutation struct {
 	routes           map[int]struct{}
 	removedroutes    map[int]struct{}
 	clearedroutes    bool
+	bindings         map[int]struct{}
+	removedbindings  map[int]struct{}
+	clearedbindings  bool
 	done             bool
 	oldValue         func(context.Context) (*Exit, error)
 	predicates       []predicate.Exit
@@ -6954,7 +6960,7 @@ func (m *ExitMutation) GateID() (r int, exists bool) {
 // OldGateID returns the old "gate_id" field's value of the Exit entity.
 // If the Exit object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ExitMutation) OldGateID(ctx context.Context) (v int, err error) {
+func (m *ExitMutation) OldGateID(ctx context.Context) (v *int, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldGateID is only allowed on UpdateOne operations")
 	}
@@ -6986,10 +6992,24 @@ func (m *ExitMutation) AddedGateID() (r int, exists bool) {
 	return *v, true
 }
 
+// ClearGateID clears the value of the "gate_id" field.
+func (m *ExitMutation) ClearGateID() {
+	m.gate_id = nil
+	m.addgate_id = nil
+	m.clearedFields[exit.FieldGateID] = struct{}{}
+}
+
+// GateIDCleared returns if the "gate_id" field was cleared in this mutation.
+func (m *ExitMutation) GateIDCleared() bool {
+	_, ok := m.clearedFields[exit.FieldGateID]
+	return ok
+}
+
 // ResetGateID resets all changes to the "gate_id" field.
 func (m *ExitMutation) ResetGateID() {
 	m.gate_id = nil
 	m.addgate_id = nil
+	delete(m.clearedFields, exit.FieldGateID)
 }
 
 // SetOwnerUserID sets the "owner_user_id" field.
@@ -7759,6 +7779,60 @@ func (m *ExitMutation) ResetRoutes() {
 	m.removedroutes = nil
 }
 
+// AddBindingIDs adds the "bindings" edge to the ExitBinding entity by ids.
+func (m *ExitMutation) AddBindingIDs(ids ...int) {
+	if m.bindings == nil {
+		m.bindings = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.bindings[ids[i]] = struct{}{}
+	}
+}
+
+// ClearBindings clears the "bindings" edge to the ExitBinding entity.
+func (m *ExitMutation) ClearBindings() {
+	m.clearedbindings = true
+}
+
+// BindingsCleared reports if the "bindings" edge to the ExitBinding entity was cleared.
+func (m *ExitMutation) BindingsCleared() bool {
+	return m.clearedbindings
+}
+
+// RemoveBindingIDs removes the "bindings" edge to the ExitBinding entity by IDs.
+func (m *ExitMutation) RemoveBindingIDs(ids ...int) {
+	if m.removedbindings == nil {
+		m.removedbindings = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.bindings, ids[i])
+		m.removedbindings[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedBindings returns the removed IDs of the "bindings" edge to the ExitBinding entity.
+func (m *ExitMutation) RemovedBindingsIDs() (ids []int) {
+	for id := range m.removedbindings {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// BindingsIDs returns the "bindings" edge IDs in the mutation.
+func (m *ExitMutation) BindingsIDs() (ids []int) {
+	for id := range m.bindings {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetBindings resets all changes to the "bindings" edge.
+func (m *ExitMutation) ResetBindings() {
+	m.bindings = nil
+	m.clearedbindings = false
+	m.removedbindings = nil
+}
+
 // Where appends a list predicates to the ExitMutation builder.
 func (m *ExitMutation) Where(ps ...predicate.Exit) {
 	m.predicates = append(m.predicates, ps...)
@@ -8111,6 +8185,9 @@ func (m *ExitMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *ExitMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(exit.FieldGateID) {
+		fields = append(fields, exit.FieldGateID)
+	}
 	if m.FieldCleared(exit.FieldOwnerUserID) {
 		fields = append(fields, exit.FieldOwnerUserID)
 	}
@@ -8134,6 +8211,9 @@ func (m *ExitMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *ExitMutation) ClearField(name string) error {
 	switch name {
+	case exit.FieldGateID:
+		m.ClearGateID()
+		return nil
 	case exit.FieldOwnerUserID:
 		m.ClearOwnerUserID()
 		return nil
@@ -8202,7 +8282,7 @@ func (m *ExitMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *ExitMutation) AddedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.nodes != nil {
 		edges = append(edges, exit.EdgeNodes)
 	}
@@ -8211,6 +8291,9 @@ func (m *ExitMutation) AddedEdges() []string {
 	}
 	if m.routes != nil {
 		edges = append(edges, exit.EdgeRoutes)
+	}
+	if m.bindings != nil {
+		edges = append(edges, exit.EdgeBindings)
 	}
 	return edges
 }
@@ -8237,13 +8320,19 @@ func (m *ExitMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case exit.EdgeBindings:
+		ids := make([]ent.Value, 0, len(m.bindings))
+		for id := range m.bindings {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *ExitMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.removednodes != nil {
 		edges = append(edges, exit.EdgeNodes)
 	}
@@ -8252,6 +8341,9 @@ func (m *ExitMutation) RemovedEdges() []string {
 	}
 	if m.removedroutes != nil {
 		edges = append(edges, exit.EdgeRoutes)
+	}
+	if m.removedbindings != nil {
+		edges = append(edges, exit.EdgeBindings)
 	}
 	return edges
 }
@@ -8278,13 +8370,19 @@ func (m *ExitMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case exit.EdgeBindings:
+		ids := make([]ent.Value, 0, len(m.removedbindings))
+		for id := range m.removedbindings {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *ExitMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.clearednodes {
 		edges = append(edges, exit.EdgeNodes)
 	}
@@ -8293,6 +8391,9 @@ func (m *ExitMutation) ClearedEdges() []string {
 	}
 	if m.clearedroutes {
 		edges = append(edges, exit.EdgeRoutes)
+	}
+	if m.clearedbindings {
+		edges = append(edges, exit.EdgeBindings)
 	}
 	return edges
 }
@@ -8307,6 +8408,8 @@ func (m *ExitMutation) EdgeCleared(name string) bool {
 		return m.clearedchains
 	case exit.EdgeRoutes:
 		return m.clearedroutes
+	case exit.EdgeBindings:
+		return m.clearedbindings
 	}
 	return false
 }
@@ -8332,8 +8435,1454 @@ func (m *ExitMutation) ResetEdge(name string) error {
 	case exit.EdgeRoutes:
 		m.ResetRoutes()
 		return nil
+	case exit.EdgeBindings:
+		m.ResetBindings()
+		return nil
 	}
 	return fmt.Errorf("unknown Exit edge %s", name)
+}
+
+// ExitBindingMutation represents an operation that mutates the ExitBinding nodes in the graph.
+type ExitBindingMutation struct {
+	config
+	op              Op
+	typ             string
+	id              *int
+	gate_id         *int
+	addgate_id      *int
+	status          *exitbinding.Status
+	reason          *string
+	desired_digest  *string
+	verified_at     *time.Time
+	kind            *exitbinding.Kind
+	remark          *string
+	address         *string
+	username        *string
+	password        *string
+	link            *string
+	port            *int
+	addport         *int
+	exit_node_id    *int
+	addexit_node_id *int
+	source          *map[string]interface{}
+	resolved        *json.RawMessage
+	appendresolved  json.RawMessage
+	updated_at      *time.Time
+	clearedFields   map[string]struct{}
+	exit            *int
+	clearedexit     bool
+	done            bool
+	oldValue        func(context.Context) (*ExitBinding, error)
+	predicates      []predicate.ExitBinding
+}
+
+var _ ent.Mutation = (*ExitBindingMutation)(nil)
+
+// exitbindingOption allows management of the mutation configuration using functional options.
+type exitbindingOption func(*ExitBindingMutation)
+
+// newExitBindingMutation creates new mutation for the ExitBinding entity.
+func newExitBindingMutation(c config, op Op, opts ...exitbindingOption) *ExitBindingMutation {
+	m := &ExitBindingMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeExitBinding,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withExitBindingID sets the ID field of the mutation.
+func withExitBindingID(id int) exitbindingOption {
+	return func(m *ExitBindingMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *ExitBinding
+		)
+		m.oldValue = func(ctx context.Context) (*ExitBinding, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().ExitBinding.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withExitBinding sets the old ExitBinding of the mutation.
+func withExitBinding(node *ExitBinding) exitbindingOption {
+	return func(m *ExitBindingMutation) {
+		m.oldValue = func(context.Context) (*ExitBinding, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ExitBindingMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ExitBindingMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ExitBindingMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ExitBindingMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().ExitBinding.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetExitID sets the "exit_id" field.
+func (m *ExitBindingMutation) SetExitID(i int) {
+	m.exit = &i
+}
+
+// ExitID returns the value of the "exit_id" field in the mutation.
+func (m *ExitBindingMutation) ExitID() (r int, exists bool) {
+	v := m.exit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExitID returns the old "exit_id" field's value of the ExitBinding entity.
+// If the ExitBinding object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExitBindingMutation) OldExitID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExitID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExitID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExitID: %w", err)
+	}
+	return oldValue.ExitID, nil
+}
+
+// ResetExitID resets all changes to the "exit_id" field.
+func (m *ExitBindingMutation) ResetExitID() {
+	m.exit = nil
+}
+
+// SetGateID sets the "gate_id" field.
+func (m *ExitBindingMutation) SetGateID(i int) {
+	m.gate_id = &i
+	m.addgate_id = nil
+}
+
+// GateID returns the value of the "gate_id" field in the mutation.
+func (m *ExitBindingMutation) GateID() (r int, exists bool) {
+	v := m.gate_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGateID returns the old "gate_id" field's value of the ExitBinding entity.
+// If the ExitBinding object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExitBindingMutation) OldGateID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGateID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGateID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGateID: %w", err)
+	}
+	return oldValue.GateID, nil
+}
+
+// AddGateID adds i to the "gate_id" field.
+func (m *ExitBindingMutation) AddGateID(i int) {
+	if m.addgate_id != nil {
+		*m.addgate_id += i
+	} else {
+		m.addgate_id = &i
+	}
+}
+
+// AddedGateID returns the value that was added to the "gate_id" field in this mutation.
+func (m *ExitBindingMutation) AddedGateID() (r int, exists bool) {
+	v := m.addgate_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetGateID resets all changes to the "gate_id" field.
+func (m *ExitBindingMutation) ResetGateID() {
+	m.gate_id = nil
+	m.addgate_id = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *ExitBindingMutation) SetStatus(e exitbinding.Status) {
+	m.status = &e
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *ExitBindingMutation) Status() (r exitbinding.Status, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the ExitBinding entity.
+// If the ExitBinding object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExitBindingMutation) OldStatus(ctx context.Context) (v exitbinding.Status, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *ExitBindingMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetReason sets the "reason" field.
+func (m *ExitBindingMutation) SetReason(s string) {
+	m.reason = &s
+}
+
+// Reason returns the value of the "reason" field in the mutation.
+func (m *ExitBindingMutation) Reason() (r string, exists bool) {
+	v := m.reason
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReason returns the old "reason" field's value of the ExitBinding entity.
+// If the ExitBinding object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExitBindingMutation) OldReason(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReason is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReason requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReason: %w", err)
+	}
+	return oldValue.Reason, nil
+}
+
+// ResetReason resets all changes to the "reason" field.
+func (m *ExitBindingMutation) ResetReason() {
+	m.reason = nil
+}
+
+// SetDesiredDigest sets the "desired_digest" field.
+func (m *ExitBindingMutation) SetDesiredDigest(s string) {
+	m.desired_digest = &s
+}
+
+// DesiredDigest returns the value of the "desired_digest" field in the mutation.
+func (m *ExitBindingMutation) DesiredDigest() (r string, exists bool) {
+	v := m.desired_digest
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDesiredDigest returns the old "desired_digest" field's value of the ExitBinding entity.
+// If the ExitBinding object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExitBindingMutation) OldDesiredDigest(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDesiredDigest is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDesiredDigest requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDesiredDigest: %w", err)
+	}
+	return oldValue.DesiredDigest, nil
+}
+
+// ResetDesiredDigest resets all changes to the "desired_digest" field.
+func (m *ExitBindingMutation) ResetDesiredDigest() {
+	m.desired_digest = nil
+}
+
+// SetVerifiedAt sets the "verified_at" field.
+func (m *ExitBindingMutation) SetVerifiedAt(t time.Time) {
+	m.verified_at = &t
+}
+
+// VerifiedAt returns the value of the "verified_at" field in the mutation.
+func (m *ExitBindingMutation) VerifiedAt() (r time.Time, exists bool) {
+	v := m.verified_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldVerifiedAt returns the old "verified_at" field's value of the ExitBinding entity.
+// If the ExitBinding object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExitBindingMutation) OldVerifiedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldVerifiedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldVerifiedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldVerifiedAt: %w", err)
+	}
+	return oldValue.VerifiedAt, nil
+}
+
+// ClearVerifiedAt clears the value of the "verified_at" field.
+func (m *ExitBindingMutation) ClearVerifiedAt() {
+	m.verified_at = nil
+	m.clearedFields[exitbinding.FieldVerifiedAt] = struct{}{}
+}
+
+// VerifiedAtCleared returns if the "verified_at" field was cleared in this mutation.
+func (m *ExitBindingMutation) VerifiedAtCleared() bool {
+	_, ok := m.clearedFields[exitbinding.FieldVerifiedAt]
+	return ok
+}
+
+// ResetVerifiedAt resets all changes to the "verified_at" field.
+func (m *ExitBindingMutation) ResetVerifiedAt() {
+	m.verified_at = nil
+	delete(m.clearedFields, exitbinding.FieldVerifiedAt)
+}
+
+// SetKind sets the "kind" field.
+func (m *ExitBindingMutation) SetKind(e exitbinding.Kind) {
+	m.kind = &e
+}
+
+// Kind returns the value of the "kind" field in the mutation.
+func (m *ExitBindingMutation) Kind() (r exitbinding.Kind, exists bool) {
+	v := m.kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKind returns the old "kind" field's value of the ExitBinding entity.
+// If the ExitBinding object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExitBindingMutation) OldKind(ctx context.Context) (v exitbinding.Kind, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKind: %w", err)
+	}
+	return oldValue.Kind, nil
+}
+
+// ResetKind resets all changes to the "kind" field.
+func (m *ExitBindingMutation) ResetKind() {
+	m.kind = nil
+}
+
+// SetRemark sets the "remark" field.
+func (m *ExitBindingMutation) SetRemark(s string) {
+	m.remark = &s
+}
+
+// Remark returns the value of the "remark" field in the mutation.
+func (m *ExitBindingMutation) Remark() (r string, exists bool) {
+	v := m.remark
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRemark returns the old "remark" field's value of the ExitBinding entity.
+// If the ExitBinding object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExitBindingMutation) OldRemark(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRemark is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRemark requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRemark: %w", err)
+	}
+	return oldValue.Remark, nil
+}
+
+// ResetRemark resets all changes to the "remark" field.
+func (m *ExitBindingMutation) ResetRemark() {
+	m.remark = nil
+}
+
+// SetAddress sets the "address" field.
+func (m *ExitBindingMutation) SetAddress(s string) {
+	m.address = &s
+}
+
+// Address returns the value of the "address" field in the mutation.
+func (m *ExitBindingMutation) Address() (r string, exists bool) {
+	v := m.address
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAddress returns the old "address" field's value of the ExitBinding entity.
+// If the ExitBinding object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExitBindingMutation) OldAddress(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAddress is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAddress requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAddress: %w", err)
+	}
+	return oldValue.Address, nil
+}
+
+// ResetAddress resets all changes to the "address" field.
+func (m *ExitBindingMutation) ResetAddress() {
+	m.address = nil
+}
+
+// SetUsername sets the "username" field.
+func (m *ExitBindingMutation) SetUsername(s string) {
+	m.username = &s
+}
+
+// Username returns the value of the "username" field in the mutation.
+func (m *ExitBindingMutation) Username() (r string, exists bool) {
+	v := m.username
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUsername returns the old "username" field's value of the ExitBinding entity.
+// If the ExitBinding object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExitBindingMutation) OldUsername(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUsername is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUsername requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUsername: %w", err)
+	}
+	return oldValue.Username, nil
+}
+
+// ResetUsername resets all changes to the "username" field.
+func (m *ExitBindingMutation) ResetUsername() {
+	m.username = nil
+}
+
+// SetPassword sets the "password" field.
+func (m *ExitBindingMutation) SetPassword(s string) {
+	m.password = &s
+}
+
+// Password returns the value of the "password" field in the mutation.
+func (m *ExitBindingMutation) Password() (r string, exists bool) {
+	v := m.password
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPassword returns the old "password" field's value of the ExitBinding entity.
+// If the ExitBinding object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExitBindingMutation) OldPassword(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPassword is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPassword requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPassword: %w", err)
+	}
+	return oldValue.Password, nil
+}
+
+// ResetPassword resets all changes to the "password" field.
+func (m *ExitBindingMutation) ResetPassword() {
+	m.password = nil
+}
+
+// SetLink sets the "link" field.
+func (m *ExitBindingMutation) SetLink(s string) {
+	m.link = &s
+}
+
+// Link returns the value of the "link" field in the mutation.
+func (m *ExitBindingMutation) Link() (r string, exists bool) {
+	v := m.link
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLink returns the old "link" field's value of the ExitBinding entity.
+// If the ExitBinding object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExitBindingMutation) OldLink(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLink is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLink requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLink: %w", err)
+	}
+	return oldValue.Link, nil
+}
+
+// ResetLink resets all changes to the "link" field.
+func (m *ExitBindingMutation) ResetLink() {
+	m.link = nil
+}
+
+// SetPort sets the "port" field.
+func (m *ExitBindingMutation) SetPort(i int) {
+	m.port = &i
+	m.addport = nil
+}
+
+// Port returns the value of the "port" field in the mutation.
+func (m *ExitBindingMutation) Port() (r int, exists bool) {
+	v := m.port
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPort returns the old "port" field's value of the ExitBinding entity.
+// If the ExitBinding object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExitBindingMutation) OldPort(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPort is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPort requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPort: %w", err)
+	}
+	return oldValue.Port, nil
+}
+
+// AddPort adds i to the "port" field.
+func (m *ExitBindingMutation) AddPort(i int) {
+	if m.addport != nil {
+		*m.addport += i
+	} else {
+		m.addport = &i
+	}
+}
+
+// AddedPort returns the value that was added to the "port" field in this mutation.
+func (m *ExitBindingMutation) AddedPort() (r int, exists bool) {
+	v := m.addport
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPort resets all changes to the "port" field.
+func (m *ExitBindingMutation) ResetPort() {
+	m.port = nil
+	m.addport = nil
+}
+
+// SetExitNodeID sets the "exit_node_id" field.
+func (m *ExitBindingMutation) SetExitNodeID(i int) {
+	m.exit_node_id = &i
+	m.addexit_node_id = nil
+}
+
+// ExitNodeID returns the value of the "exit_node_id" field in the mutation.
+func (m *ExitBindingMutation) ExitNodeID() (r int, exists bool) {
+	v := m.exit_node_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExitNodeID returns the old "exit_node_id" field's value of the ExitBinding entity.
+// If the ExitBinding object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExitBindingMutation) OldExitNodeID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExitNodeID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExitNodeID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExitNodeID: %w", err)
+	}
+	return oldValue.ExitNodeID, nil
+}
+
+// AddExitNodeID adds i to the "exit_node_id" field.
+func (m *ExitBindingMutation) AddExitNodeID(i int) {
+	if m.addexit_node_id != nil {
+		*m.addexit_node_id += i
+	} else {
+		m.addexit_node_id = &i
+	}
+}
+
+// AddedExitNodeID returns the value that was added to the "exit_node_id" field in this mutation.
+func (m *ExitBindingMutation) AddedExitNodeID() (r int, exists bool) {
+	v := m.addexit_node_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearExitNodeID clears the value of the "exit_node_id" field.
+func (m *ExitBindingMutation) ClearExitNodeID() {
+	m.exit_node_id = nil
+	m.addexit_node_id = nil
+	m.clearedFields[exitbinding.FieldExitNodeID] = struct{}{}
+}
+
+// ExitNodeIDCleared returns if the "exit_node_id" field was cleared in this mutation.
+func (m *ExitBindingMutation) ExitNodeIDCleared() bool {
+	_, ok := m.clearedFields[exitbinding.FieldExitNodeID]
+	return ok
+}
+
+// ResetExitNodeID resets all changes to the "exit_node_id" field.
+func (m *ExitBindingMutation) ResetExitNodeID() {
+	m.exit_node_id = nil
+	m.addexit_node_id = nil
+	delete(m.clearedFields, exitbinding.FieldExitNodeID)
+}
+
+// SetSource sets the "source" field.
+func (m *ExitBindingMutation) SetSource(value map[string]interface{}) {
+	m.source = &value
+}
+
+// Source returns the value of the "source" field in the mutation.
+func (m *ExitBindingMutation) Source() (r map[string]interface{}, exists bool) {
+	v := m.source
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSource returns the old "source" field's value of the ExitBinding entity.
+// If the ExitBinding object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExitBindingMutation) OldSource(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSource is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSource requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSource: %w", err)
+	}
+	return oldValue.Source, nil
+}
+
+// ClearSource clears the value of the "source" field.
+func (m *ExitBindingMutation) ClearSource() {
+	m.source = nil
+	m.clearedFields[exitbinding.FieldSource] = struct{}{}
+}
+
+// SourceCleared returns if the "source" field was cleared in this mutation.
+func (m *ExitBindingMutation) SourceCleared() bool {
+	_, ok := m.clearedFields[exitbinding.FieldSource]
+	return ok
+}
+
+// ResetSource resets all changes to the "source" field.
+func (m *ExitBindingMutation) ResetSource() {
+	m.source = nil
+	delete(m.clearedFields, exitbinding.FieldSource)
+}
+
+// SetResolved sets the "resolved" field.
+func (m *ExitBindingMutation) SetResolved(jm json.RawMessage) {
+	m.resolved = &jm
+	m.appendresolved = nil
+}
+
+// Resolved returns the value of the "resolved" field in the mutation.
+func (m *ExitBindingMutation) Resolved() (r json.RawMessage, exists bool) {
+	v := m.resolved
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResolved returns the old "resolved" field's value of the ExitBinding entity.
+// If the ExitBinding object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExitBindingMutation) OldResolved(ctx context.Context) (v json.RawMessage, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResolved is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResolved requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResolved: %w", err)
+	}
+	return oldValue.Resolved, nil
+}
+
+// AppendResolved adds jm to the "resolved" field.
+func (m *ExitBindingMutation) AppendResolved(jm json.RawMessage) {
+	m.appendresolved = append(m.appendresolved, jm...)
+}
+
+// AppendedResolved returns the list of values that were appended to the "resolved" field in this mutation.
+func (m *ExitBindingMutation) AppendedResolved() (json.RawMessage, bool) {
+	if len(m.appendresolved) == 0 {
+		return nil, false
+	}
+	return m.appendresolved, true
+}
+
+// ClearResolved clears the value of the "resolved" field.
+func (m *ExitBindingMutation) ClearResolved() {
+	m.resolved = nil
+	m.appendresolved = nil
+	m.clearedFields[exitbinding.FieldResolved] = struct{}{}
+}
+
+// ResolvedCleared returns if the "resolved" field was cleared in this mutation.
+func (m *ExitBindingMutation) ResolvedCleared() bool {
+	_, ok := m.clearedFields[exitbinding.FieldResolved]
+	return ok
+}
+
+// ResetResolved resets all changes to the "resolved" field.
+func (m *ExitBindingMutation) ResetResolved() {
+	m.resolved = nil
+	m.appendresolved = nil
+	delete(m.clearedFields, exitbinding.FieldResolved)
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *ExitBindingMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *ExitBindingMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the ExitBinding entity.
+// If the ExitBinding object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExitBindingMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *ExitBindingMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// ClearExit clears the "exit" edge to the Exit entity.
+func (m *ExitBindingMutation) ClearExit() {
+	m.clearedexit = true
+	m.clearedFields[exitbinding.FieldExitID] = struct{}{}
+}
+
+// ExitCleared reports if the "exit" edge to the Exit entity was cleared.
+func (m *ExitBindingMutation) ExitCleared() bool {
+	return m.clearedexit
+}
+
+// ExitIDs returns the "exit" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// ExitID instead. It exists only for internal usage by the builders.
+func (m *ExitBindingMutation) ExitIDs() (ids []int) {
+	if id := m.exit; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetExit resets all changes to the "exit" edge.
+func (m *ExitBindingMutation) ResetExit() {
+	m.exit = nil
+	m.clearedexit = false
+}
+
+// Where appends a list predicates to the ExitBindingMutation builder.
+func (m *ExitBindingMutation) Where(ps ...predicate.ExitBinding) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the ExitBindingMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *ExitBindingMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.ExitBinding, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *ExitBindingMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *ExitBindingMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (ExitBinding).
+func (m *ExitBindingMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *ExitBindingMutation) Fields() []string {
+	fields := make([]string, 0, 17)
+	if m.exit != nil {
+		fields = append(fields, exitbinding.FieldExitID)
+	}
+	if m.gate_id != nil {
+		fields = append(fields, exitbinding.FieldGateID)
+	}
+	if m.status != nil {
+		fields = append(fields, exitbinding.FieldStatus)
+	}
+	if m.reason != nil {
+		fields = append(fields, exitbinding.FieldReason)
+	}
+	if m.desired_digest != nil {
+		fields = append(fields, exitbinding.FieldDesiredDigest)
+	}
+	if m.verified_at != nil {
+		fields = append(fields, exitbinding.FieldVerifiedAt)
+	}
+	if m.kind != nil {
+		fields = append(fields, exitbinding.FieldKind)
+	}
+	if m.remark != nil {
+		fields = append(fields, exitbinding.FieldRemark)
+	}
+	if m.address != nil {
+		fields = append(fields, exitbinding.FieldAddress)
+	}
+	if m.username != nil {
+		fields = append(fields, exitbinding.FieldUsername)
+	}
+	if m.password != nil {
+		fields = append(fields, exitbinding.FieldPassword)
+	}
+	if m.link != nil {
+		fields = append(fields, exitbinding.FieldLink)
+	}
+	if m.port != nil {
+		fields = append(fields, exitbinding.FieldPort)
+	}
+	if m.exit_node_id != nil {
+		fields = append(fields, exitbinding.FieldExitNodeID)
+	}
+	if m.source != nil {
+		fields = append(fields, exitbinding.FieldSource)
+	}
+	if m.resolved != nil {
+		fields = append(fields, exitbinding.FieldResolved)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, exitbinding.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *ExitBindingMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case exitbinding.FieldExitID:
+		return m.ExitID()
+	case exitbinding.FieldGateID:
+		return m.GateID()
+	case exitbinding.FieldStatus:
+		return m.Status()
+	case exitbinding.FieldReason:
+		return m.Reason()
+	case exitbinding.FieldDesiredDigest:
+		return m.DesiredDigest()
+	case exitbinding.FieldVerifiedAt:
+		return m.VerifiedAt()
+	case exitbinding.FieldKind:
+		return m.Kind()
+	case exitbinding.FieldRemark:
+		return m.Remark()
+	case exitbinding.FieldAddress:
+		return m.Address()
+	case exitbinding.FieldUsername:
+		return m.Username()
+	case exitbinding.FieldPassword:
+		return m.Password()
+	case exitbinding.FieldLink:
+		return m.Link()
+	case exitbinding.FieldPort:
+		return m.Port()
+	case exitbinding.FieldExitNodeID:
+		return m.ExitNodeID()
+	case exitbinding.FieldSource:
+		return m.Source()
+	case exitbinding.FieldResolved:
+		return m.Resolved()
+	case exitbinding.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ExitBindingMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case exitbinding.FieldExitID:
+		return m.OldExitID(ctx)
+	case exitbinding.FieldGateID:
+		return m.OldGateID(ctx)
+	case exitbinding.FieldStatus:
+		return m.OldStatus(ctx)
+	case exitbinding.FieldReason:
+		return m.OldReason(ctx)
+	case exitbinding.FieldDesiredDigest:
+		return m.OldDesiredDigest(ctx)
+	case exitbinding.FieldVerifiedAt:
+		return m.OldVerifiedAt(ctx)
+	case exitbinding.FieldKind:
+		return m.OldKind(ctx)
+	case exitbinding.FieldRemark:
+		return m.OldRemark(ctx)
+	case exitbinding.FieldAddress:
+		return m.OldAddress(ctx)
+	case exitbinding.FieldUsername:
+		return m.OldUsername(ctx)
+	case exitbinding.FieldPassword:
+		return m.OldPassword(ctx)
+	case exitbinding.FieldLink:
+		return m.OldLink(ctx)
+	case exitbinding.FieldPort:
+		return m.OldPort(ctx)
+	case exitbinding.FieldExitNodeID:
+		return m.OldExitNodeID(ctx)
+	case exitbinding.FieldSource:
+		return m.OldSource(ctx)
+	case exitbinding.FieldResolved:
+		return m.OldResolved(ctx)
+	case exitbinding.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown ExitBinding field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ExitBindingMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case exitbinding.FieldExitID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExitID(v)
+		return nil
+	case exitbinding.FieldGateID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGateID(v)
+		return nil
+	case exitbinding.FieldStatus:
+		v, ok := value.(exitbinding.Status)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case exitbinding.FieldReason:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReason(v)
+		return nil
+	case exitbinding.FieldDesiredDigest:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDesiredDigest(v)
+		return nil
+	case exitbinding.FieldVerifiedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetVerifiedAt(v)
+		return nil
+	case exitbinding.FieldKind:
+		v, ok := value.(exitbinding.Kind)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKind(v)
+		return nil
+	case exitbinding.FieldRemark:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRemark(v)
+		return nil
+	case exitbinding.FieldAddress:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAddress(v)
+		return nil
+	case exitbinding.FieldUsername:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUsername(v)
+		return nil
+	case exitbinding.FieldPassword:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPassword(v)
+		return nil
+	case exitbinding.FieldLink:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLink(v)
+		return nil
+	case exitbinding.FieldPort:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPort(v)
+		return nil
+	case exitbinding.FieldExitNodeID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExitNodeID(v)
+		return nil
+	case exitbinding.FieldSource:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSource(v)
+		return nil
+	case exitbinding.FieldResolved:
+		v, ok := value.(json.RawMessage)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResolved(v)
+		return nil
+	case exitbinding.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ExitBinding field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *ExitBindingMutation) AddedFields() []string {
+	var fields []string
+	if m.addgate_id != nil {
+		fields = append(fields, exitbinding.FieldGateID)
+	}
+	if m.addport != nil {
+		fields = append(fields, exitbinding.FieldPort)
+	}
+	if m.addexit_node_id != nil {
+		fields = append(fields, exitbinding.FieldExitNodeID)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *ExitBindingMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case exitbinding.FieldGateID:
+		return m.AddedGateID()
+	case exitbinding.FieldPort:
+		return m.AddedPort()
+	case exitbinding.FieldExitNodeID:
+		return m.AddedExitNodeID()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ExitBindingMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case exitbinding.FieldGateID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGateID(v)
+		return nil
+	case exitbinding.FieldPort:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPort(v)
+		return nil
+	case exitbinding.FieldExitNodeID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddExitNodeID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ExitBinding numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *ExitBindingMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(exitbinding.FieldVerifiedAt) {
+		fields = append(fields, exitbinding.FieldVerifiedAt)
+	}
+	if m.FieldCleared(exitbinding.FieldExitNodeID) {
+		fields = append(fields, exitbinding.FieldExitNodeID)
+	}
+	if m.FieldCleared(exitbinding.FieldSource) {
+		fields = append(fields, exitbinding.FieldSource)
+	}
+	if m.FieldCleared(exitbinding.FieldResolved) {
+		fields = append(fields, exitbinding.FieldResolved)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *ExitBindingMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *ExitBindingMutation) ClearField(name string) error {
+	switch name {
+	case exitbinding.FieldVerifiedAt:
+		m.ClearVerifiedAt()
+		return nil
+	case exitbinding.FieldExitNodeID:
+		m.ClearExitNodeID()
+		return nil
+	case exitbinding.FieldSource:
+		m.ClearSource()
+		return nil
+	case exitbinding.FieldResolved:
+		m.ClearResolved()
+		return nil
+	}
+	return fmt.Errorf("unknown ExitBinding nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *ExitBindingMutation) ResetField(name string) error {
+	switch name {
+	case exitbinding.FieldExitID:
+		m.ResetExitID()
+		return nil
+	case exitbinding.FieldGateID:
+		m.ResetGateID()
+		return nil
+	case exitbinding.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case exitbinding.FieldReason:
+		m.ResetReason()
+		return nil
+	case exitbinding.FieldDesiredDigest:
+		m.ResetDesiredDigest()
+		return nil
+	case exitbinding.FieldVerifiedAt:
+		m.ResetVerifiedAt()
+		return nil
+	case exitbinding.FieldKind:
+		m.ResetKind()
+		return nil
+	case exitbinding.FieldRemark:
+		m.ResetRemark()
+		return nil
+	case exitbinding.FieldAddress:
+		m.ResetAddress()
+		return nil
+	case exitbinding.FieldUsername:
+		m.ResetUsername()
+		return nil
+	case exitbinding.FieldPassword:
+		m.ResetPassword()
+		return nil
+	case exitbinding.FieldLink:
+		m.ResetLink()
+		return nil
+	case exitbinding.FieldPort:
+		m.ResetPort()
+		return nil
+	case exitbinding.FieldExitNodeID:
+		m.ResetExitNodeID()
+		return nil
+	case exitbinding.FieldSource:
+		m.ResetSource()
+		return nil
+	case exitbinding.FieldResolved:
+		m.ResetResolved()
+		return nil
+	case exitbinding.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown ExitBinding field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *ExitBindingMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.exit != nil {
+		edges = append(edges, exitbinding.EdgeExit)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *ExitBindingMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case exitbinding.EdgeExit:
+		if id := m.exit; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *ExitBindingMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *ExitBindingMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *ExitBindingMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.clearedexit {
+		edges = append(edges, exitbinding.EdgeExit)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *ExitBindingMutation) EdgeCleared(name string) bool {
+	switch name {
+	case exitbinding.EdgeExit:
+		return m.clearedexit
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *ExitBindingMutation) ClearEdge(name string) error {
+	switch name {
+	case exitbinding.EdgeExit:
+		m.ClearExit()
+		return nil
+	}
+	return fmt.Errorf("unknown ExitBinding unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *ExitBindingMutation) ResetEdge(name string) error {
+	switch name {
+	case exitbinding.EdgeExit:
+		m.ResetExit()
+		return nil
+	}
+	return fmt.Errorf("unknown ExitBinding edge %s", name)
 }
 
 // GateMutation represents an operation that mutates the Gate nodes in the graph.

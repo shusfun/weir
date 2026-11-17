@@ -291,6 +291,11 @@ func (s *Server) exitChange(c *gin.Context, kind string, admin bool, h gin.Handl
 		failure(c, 403, "forbidden")
 		return
 	}
+	if c.GetBool(dryRunKey) {
+		markPreview(c)
+		h(c)
+		return
+	}
 	p := pendingExit{ID: randomToken(18), Revision: 1, Kind: kind, Actor: actor.ID, Subject: subject, Admin: admin, Params: append(gin.Params{}, c.Params...), Method: c.Request.Method, Query: c.Request.URL.RawQuery, Body: body, Trace: c.GetString("trace_id"), At: time.Now().UTC()}
 	var references struct {
 		GateID      int `json:"gate_id"`
@@ -315,7 +320,7 @@ func (s *Server) exitChange(c *gin.Context, kind string, admin bool, h gin.Handl
 		p.ExitID = pendingID(c.Param("eid"))
 		if p.ExitID > 0 {
 			if e, err := s.Store.Ent.Exit.Get(c.Request.Context(), p.ExitID); err == nil {
-				p.GateID = e.GateID
+				p.GateID = exitGateID(e)
 			}
 		}
 	}
@@ -447,6 +452,13 @@ func (s *Server) retryPendingExit(c *gin.Context) {
 		failure(c, 409, "candidate_revision_conflict")
 		return
 	}
+	if p.Status == "applied" || p.Status == "discarded" || p.Status == "stale" {
+		failure(c, 409, "candidate_closed")
+		return
+	}
+	if dryRun(c, dryResult{Preview: []string{"重新验证出口，通过后应用候选配置"}}) {
+		return
+	}
 	err := s.Store.Lock.Do(c.Request.Context(), "exit-changes", func(ctx context.Context) error {
 		current, e := s.readPendingExit(ctx, p.ID)
 		if e != nil {
@@ -457,9 +469,6 @@ func (s *Server) retryPendingExit(c *gin.Context) {
 		}
 		if current.Status == "applied" || current.Status == "discarded" || current.Status == "stale" {
 			return errors.New("candidate_closed")
-		}
-		if dryRun(c, dryResult{Preview: []string{"重新验证出口，通过后应用候选配置"}}) {
-			return nil
 		}
 		current.Status = "waiting"
 		current.Revision++
@@ -495,6 +504,13 @@ func (s *Server) discardPendingExit(c *gin.Context) {
 		failure(c, 409, "candidate_revision_conflict")
 		return
 	}
+	if p.Status == "applied" || p.Status == "discarded" {
+		failure(c, 409, "candidate_revision_conflict")
+		return
+	}
+	if dryRun(c, dryResult{Preview: []string{"放弃候选，保留原有出口"}}) {
+		return
+	}
 	err := s.Store.Lock.Do(c.Request.Context(), "exit-changes", func(ctx context.Context) error {
 		current, e := s.readPendingExit(ctx, p.ID)
 		if e != nil {
@@ -502,9 +518,6 @@ func (s *Server) discardPendingExit(c *gin.Context) {
 		}
 		if current.Revision != *req.Revision || current.Status == "applied" || current.Status == "discarded" {
 			return errors.New("candidate_revision_conflict")
-		}
-		if dryRun(c, dryResult{Preview: []string{"放弃候选，保留原有出口"}}) {
-			return nil
 		}
 		current.Status = "discarded"
 		current.Revision++
@@ -601,9 +614,10 @@ func (s *Server) resumePendingExits(ctx context.Context) {
 					}
 				}
 				if w.Code >= 200 && w.Code < 300 {
-					p.Status = "applied"
-					p.Reason = "验证通过，候选已应用"
-					p.Body = nil
+					p.Status, p.Reason = pendingApplyOutcome(w.Body.Bytes(), p.Kind == "exit.save")
+					if p.Status == "applied" {
+						p.Body = nil
+					}
 				} else {
 					var result map[string]any
 					_ = json.Unmarshal(w.Body.Bytes(), &result)
@@ -685,4 +699,46 @@ func pendingID(raw string) int { id, _ := strconv.Atoi(raw); return id }
 
 func (s *Server) deleteTypeExit(c *gin.Context, admin bool) {
 	s.exitChange(c, "type.delete", admin, func(c *gin.Context) { s.deleteTypeExitNow(c, admin) })
+}
+
+// pendingApplyOutcome 解析处理函数的执行回执；资料保存成功不等于每台 VPS 均已应用。
+func pendingApplyOutcome(body []byte, requireApplications bool) (string, string) {
+	var result struct {
+		Applications *[]exitApplyResult `json:"applications"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "failed", "应用回执无法解析：" + redact(err.Error())
+	}
+	if result.Applications == nil {
+		if requireApplications {
+			return "failed", "应用回执缺少 VPS 结果"
+		}
+		return "applied", "验证通过，候选已应用"
+	}
+	waiting, failed := false, false
+	reasons := []string{}
+	for _, item := range *result.Applications {
+		switch item.Status {
+		case "applied":
+			continue
+		case "waiting":
+			waiting = true
+		case "kept", "failed":
+			failed = true
+		default:
+			failed = true
+		}
+		reason := item.Reason
+		if reason == "" {
+			reason = "尚未应用（" + item.Status + "）"
+		}
+		reasons = append(reasons, firstNonEmpty(item.Name, "VPS "+itoa(item.GateID))+"："+reason)
+	}
+	if failed {
+		return "failed", strings.Join(reasons, "；")
+	}
+	if waiting {
+		return "waiting", strings.Join(reasons, "；")
+	}
+	return "applied", "验证通过，候选已应用"
 }

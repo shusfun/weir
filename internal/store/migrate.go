@@ -18,14 +18,14 @@ import (
 // Atlas remains responsible for schema planning and application. This metadata
 // joins its startup entry with the existing data backfill and worker schemas;
 // it is not a downgrade authorization or a replacement SQL migration engine.
-const schemaVersion = "2026111601"
+const schemaVersion = "2026111701"
 
-//go:embed ent/migrate/schema.go user_quota.go subscription_cache.go
+//go:embed ent/migrate/schema.go user_quota.go subscription_cache.go exit_binding_migration.go
 var schemaInputs embed.FS
 
 func schemaChecksum() string {
 	h := sha256.New()
-	for _, path := range []string{"ent/migrate/schema.go", "user_quota.go", "subscription_cache.go"} {
+	for _, path := range []string{"ent/migrate/schema.go", "user_quota.go", "subscription_cache.go", "exit_binding_migration.go"} {
 		b, _ := schemaInputs.ReadFile(path)
 		h.Write([]byte(path))
 		h.Write([]byte(strings.ReplaceAll(string(b), "\r\n", "\n")))
@@ -72,6 +72,7 @@ func (s *Store) migrate(ctx context.Context, sqlitePath string) error {
 			}},
 			{"workers", s.Tasks.MigrateWithHostLock},
 			{"subscription-cache", s.migrateSubscriptionCache},
+			{"exit-bindings", s.migrateExitBindings},
 		}
 		record := func(ctx context.Context, stage, status string) error {
 			_, err := s.DB.ExecContext(ctx, `INSERT INTO schema_migrations(version,checksum,stage,status,updated_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT(version) DO UPDATE SET stage=excluded.stage,status=excluded.status,updated_at=excluded.updated_at`, schemaVersion, schemaChecksum(), stage, status, time.Now().UnixMilli())

@@ -58,7 +58,11 @@ func fetchVia(port int, target string, size int) error {
 
 // socksServer 是一个最小的无认证 SOCKS5 服务（模拟家宽出口），记录经过它的连接数。
 func socksServer(t *testing.T, forward ...string) (int, *atomic.Int64) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+	return socksServerAt(t, "127.0.0.1", forward...)
+}
+
+func socksServerAt(t *testing.T, host string, forward ...string) (int, *atomic.Int64) {
+	l, err := net.Listen("tcp", net.JoinHostPort(host, "0"))
 	if err != nil {
 		t.Fatal(err)
 	}

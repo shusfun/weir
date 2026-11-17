@@ -37,6 +37,10 @@ func runOracle(t *testing.T, cases []oracleCase) {
 	if err != nil {
 		t.Skip("未找到 node，跳过与原 JS 版的对照测试")
 	}
+	version, err := exec.Command(node, "--version").Output()
+	if err != nil || !strings.HasPrefix(strings.TrimSpace(string(version)), "v24.") {
+		t.Fatalf("上游对照需要 Node v24，请调整 PATH；当前 %s (%v)", strings.TrimSpace(string(version)), err)
+	}
 	if _, err := os.Stat(filepath.Join("testdata", "upstream", "node_modules", "js-yaml")); err != nil {
 		t.Skip("缺少对照依赖：在 internal/sub/testdata/upstream 执行 npm install --no-save js-yaml@4.1.1")
 	}

@@ -73,6 +73,9 @@ func (s *Server) startSubscriptionRun(ctx context.Context, profile int) (context
 			}
 			data := toMap(r.run)
 			r.mu.Unlock()
+			if isPreview(ctx) {
+				return
+			}
 			storeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
 			defer cancel()
 			_, saveErr := s.Store.Ent.Resource.Create().SetKind(subscriptionRunKind).SetKey(r.run.ID).SetData(data).Save(storeCtx)

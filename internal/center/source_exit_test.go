@@ -21,10 +21,12 @@ func TestSourceNodeAsExitFollowsRefreshAndKeepsLastGood(t *testing.T) {
 	}
 	g.serveActions(t, s, nil)
 	// 从未解析成功的出口不能保存；已有出口刷新失败则保留上次结果。
-	mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"gate_id": int(g.id), "kind": "source", "source_id": src.ID, "mode": "filter", "match": "^HK"}, 422)
+	mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"kind": "source", "source_id": src.ID, "mode": "filter", "match": "^HK"}, 422)
 	cache := kvCache{s}
 	cache.Store(ctx, src.ID, []string{"trojan://pw1@198.51.100.10:443?sni=b.example.com#HK-01"})
-	o := mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"gate_id": int(g.id), "kind": "source", "source_id": src.ID, "mode": "filter", "match": "^HK"}, 200)
+	o := mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"kind": "source", "source_id": src.ID, "mode": "filter", "match": "^HK"}, 200)
+	node := mustJSON(t, admin, "GET", "/api/v1/admin/nodes", nil, 200)["items"].([]any)[0].(map[string]any)
+	mustJSON(t, admin, "PATCH", "/api/v1/admin/nodes/"+itoa(int(node["id"].(float64))), map[string]any{"exit_id": o["id"]}, 200)
 	tag := o["tag"].(string)
 	find := func(tag string) contracts.Outbound {
 		for _, ob := range g.config(0).Outbounds {
@@ -34,7 +36,7 @@ func TestSourceNodeAsExitFollowsRefreshAndKeepsLastGood(t *testing.T) {
 		}
 		return contracts.Outbound{}
 	}
-	mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"gate_id": int(g.id), "kind": "source", "source_id": src.ID, "mode": "filter", "match": "("}, 422)
+	mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"kind": "source", "source_id": src.ID, "mode": "filter", "match": "("}, 422)
 
 	// 订阅源刷新后：一组的全部可用成员都下发，由内核自动选择与切换（跳过不能作出口的协议）。
 	cache.Store(ctx, src.ID, []string{
@@ -55,7 +57,8 @@ func TestSourceNodeAsExitFollowsRefreshAndKeepsLastGood(t *testing.T) {
 		t.Fatalf("must keep last good = %+v", ob)
 	}
 	// 单个节点：名称完全一致，得到普通出口。
-	jp := mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"gate_id": int(g.id), "kind": "source", "source_id": src.ID, "mode": "node", "match": "JP-02"}, 200)
+	jp := mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"kind": "source", "source_id": src.ID, "mode": "node", "match": "JP-02"}, 200)
+	mustJSON(t, admin, "PATCH", "/api/v1/admin/nodes/"+itoa(int(node["id"].(float64))), map[string]any{"exit_id": jp["id"]}, 200)
 	if ob := find(jp["tag"].(string)); ob.Protocol != "trojan" || ob.Address != "198.51.100.13" {
 		t.Fatalf("single node exit = %+v", ob)
 	}
@@ -65,7 +68,7 @@ func TestSourceNodeAsExitFollowsRefreshAndKeepsLastGood(t *testing.T) {
 		many = append(many, "trojan://p@198.51.100.20:"+itoa(1000+i)+"?sni=x.example.com#BIG-"+itoa(i))
 	}
 	cache.Store(ctx, src.ID, many)
-	mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"gate_id": int(g.id), "kind": "source", "source_id": src.ID, "mode": "filter", "match": "^BIG"}, 422)
+	mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"kind": "source", "source_id": src.ID, "mode": "filter", "match": "^BIG"}, 422)
 	// 管理页面与 extapi 的共用删除入口拒绝留下悬空出口。
 	mustJSON(t, admin, "DELETE", "/api/v1/admin/subscriptions/sources/"+itoa(src.ID), nil, 409)
 }
@@ -79,12 +82,14 @@ func TestSourceGroupNeedsKernelSupport(t *testing.T) {
 	g.serveActions(t, s, nil)
 	// 保存一个驱动：去掉 features，表示这个 Xray 版本不支持自动切换。
 	saveDriver(t, s, "xray-26.3", func(m map[string]any) { m["features"] = []any{} })
-	w := admin.do("POST", "/api/v1/admin/exits", map[string]any{"gate_id": int(g.id), "kind": "source", "source_id": src.ID, "mode": "filter", "match": "."}, nil)
-	if body := decode(t, w); w.Code != 422 || body["error"].(map[string]any)["code"] != "group_unsupported" {
+	saved := mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"kind": "source", "source_id": src.ID, "mode": "filter", "match": "."}, 200)
+	node := mustJSON(t, admin, "GET", "/api/v1/admin/nodes", nil, 200)["items"].([]any)[0].(map[string]any)
+	w := admin.do("PATCH", "/api/v1/admin/nodes/"+itoa(int(node["id"].(float64))), map[string]any{"exit_id": saved["id"]}, nil)
+	if body := decode(t, w); w.Code != 422 || !strings.Contains(w.Body.String(), "group_unsupported") {
 		t.Fatalf("unsupported kernel = %d %v", w.Code, body)
 	}
 	// 单个节点不需要自动切换，照常保存。
-	mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"gate_id": int(g.id), "kind": "source", "source_id": src.ID, "mode": "node", "match": "HK-01"}, 200)
+	mustJSON(t, admin, "POST", "/api/v1/admin/exits", map[string]any{"kind": "source", "source_id": src.ID, "mode": "node", "match": "HK-01"}, 200)
 }
 
 func TestChainStepThreeSourceAndUserRestriction(t *testing.T) {
