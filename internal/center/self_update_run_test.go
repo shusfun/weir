@@ -38,7 +38,7 @@ func writeRootStatus(t *testing.T, st selfupdate.Status) {
 func TestUpdateRunPrefetchHidesFinishedStatus(t *testing.T) {
 	updateDir(t)
 	done := time.Now().Add(-time.Hour)
-	writeRootStatus(t, selfupdate.Status{ID: "web-old", State: "done", Version: "0.1.1", Started: done, Finished: &done})
+	writeRootStatus(t, selfupdate.Status{ID: "web-old", Action: "update", State: "done", Version: "0.1.1", Started: done, Finished: &done})
 	s := &Server{}
 	release := make(chan struct{})
 	entered := make(chan struct{})
@@ -70,27 +70,30 @@ func TestUpdateRunHandoffAndRestart(t *testing.T) {
 	updateDir(t)
 	s := &Server{}
 	now := time.Now().UTC()
-	h := selfupdate.Handoff{ID: "web-1", Action: "update", From: "0.1.1", Version: "0.1.2", Source: "VPS 东京", Started: now.Add(-20 * time.Second), At: now,
+	h := selfupdate.Handoff{ID: "web-update-1", Action: "update", From: "0.1.21", Version: "0.1.22", Source: "VPS 东京", Started: now.Add(-20 * time.Second), At: now,
 		Logs: []selfupdate.HandoffLog{{At: now, Text: "从 VPS 东京 下载"}}}
 	if err := selfupdate.WriteHandoff(h); err != nil {
 		t.Fatal(err)
 	}
+	if err := selfupdate.WriteRequest(selfupdate.Request{ID: h.ID, Action: h.Action, Version: h.Version}); err != nil {
+		t.Fatal(err)
+	}
 	r := s.currentUpdateRun(now)
-	if r.Phase != updateWaiting || r.Status != jobRunning || r.Source != "VPS 东京" || len(r.Logs) != 1 {
+	if r.Phase != updateWaiting || r.Status != jobRunning || r.Version != h.Version || r.Source != "VPS 东京" || len(r.Logs) != 1 {
 		t.Fatalf("waiting = %+v", r)
 	}
 	late := s.currentUpdateRun(now.Add(updatePickup + time.Second))
 	if late.Phase != updateFailed || late.Status != jobFailed || !late.Stalled || !strings.Contains(late.Error, "weir-update.path") || late.Finished == nil {
 		t.Fatalf("stalled = %+v", late)
 	}
-	writeRootStatus(t, selfupdate.Status{ID: "web-1", Action: "update", From: "0.1.1", Version: "0.1.2", State: "installing", Started: now,
+	writeRootStatus(t, selfupdate.Status{ID: h.ID, Action: h.Action, From: h.From, Version: h.Version, State: "installing", Started: now,
 		Logs: []string{now.Format(time.RFC3339) + " 使用中心预下载的发布包"}})
 	r = s.currentUpdateRun(now.Add(time.Minute))
 	if r.Phase != updateInstalling || r.Status != jobRunning || len(r.Logs) != 2 || r.Logs[0].Text != "从 VPS 东京 下载" || r.Logs[1].Text != "使用中心预下载的发布包" || r.Source != "VPS 东京" {
 		t.Fatalf("installing = %+v", r)
 	}
 	finished := now.Add(time.Minute)
-	writeRootStatus(t, selfupdate.Status{ID: "web-1", Action: "update", From: "0.1.1", Version: "0.1.2", State: "done", Started: now, Finished: &finished})
+	writeRootStatus(t, selfupdate.Status{ID: h.ID, Action: h.Action, From: h.From, Version: h.Version, State: "done", Started: now, Finished: &finished})
 	if r = s.currentUpdateRun(now.Add(2 * time.Minute)); r.Phase != updateDone || r.Status != jobDone || r.Source != "VPS 东京" {
 		t.Fatalf("done = %+v", r)
 	}
@@ -116,6 +119,56 @@ func TestUpdateStatusDoesNotTouchGitHub(t *testing.T) {
 	body := mustJSON(t, admin, "GET", "/api/v1/admin/system/update/status", nil, 200)
 	if hit || body["current"] == nil || body["run"] != nil {
 		t.Fatalf("status = %v hit=%v", body, hit)
+	}
+}
+
+func TestUpdateStatusExcludesHostOperations(t *testing.T) {
+	server, admin, _ := setupGate(t)
+	updateDir(t)
+	now := time.Now().UTC()
+	for _, action := range []string{"prepare-laya", "enable-local-gate"} {
+		for _, state := range []string{"installing", "done", "failed"} {
+			t.Run(action+"/"+state, func(t *testing.T) {
+				status := selfupdate.Status{ID: "host-operation", Action: action, State: state, From: "0.1.22", Started: now}
+				if state != "installing" {
+					status.Finished = &now
+				}
+				writeRootStatus(t, status)
+				body := mustJSON(t, admin, "GET", "/api/v1/admin/system/update/status", nil, 200)
+				if body["current"] == nil || body["run"] != nil {
+					t.Fatalf("host %s/%s leaked into version status: %v", action, state, body["run"])
+				}
+				for _, notice := range server.notices(t.Context()) {
+					if notice.ID == "update-failed:"+status.ID {
+						t.Fatalf("host operation emitted version update notice: %+v", notice)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestUpdateRunKeepsReceiptAfterHostOperation(t *testing.T) {
+	updateDir(t)
+	now := time.Now().UTC()
+	h := selfupdate.Handoff{ID: "web-update-1", Action: "update", From: "0.1.21", Version: "0.1.22", Started: now.Add(-time.Minute), At: now}
+	if err := selfupdate.WriteHandoff(h); err != nil {
+		t.Fatal(err)
+	}
+	writeRootStatus(t, selfupdate.Status{ID: "host-operation", Action: "prepare-laya", State: "done", Started: now})
+	s := &Server{}
+	if run := s.currentUpdateRun(now); run != nil {
+		t.Fatalf("unverified handoff was treated as active: %+v", run)
+	}
+	receipt, err := json.Marshal(selfupdate.Status{ID: h.ID, Action: h.Action, State: "done", From: h.From, Version: h.Version, Started: now, Finished: &now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(selfupdate.Dir, "operation-"+h.ID+".json"), receipt, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if run := s.currentUpdateRun(now); run == nil || run.Status != jobDone || run.Version != h.Version {
+		t.Fatalf("version receipt = %+v", run)
 	}
 }
 

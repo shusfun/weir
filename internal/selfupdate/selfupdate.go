@@ -306,7 +306,7 @@ func ReadStatus() (Status, bool) {
 	var req Request
 	pending, err := os.ReadFile(filepath.Join(Dir, "request.json"))
 	if err == nil && json.Unmarshal(pending, &req) == nil && req.Valid() == nil && (!valid || st.ID != req.ID) {
-		return Status{ID: req.ID, Action: req.Action, TraceID: req.TraceID, State: "queued", Logs: []string{}}, true
+		return Status{ID: req.ID, Action: req.Action, TraceID: req.TraceID, From: buildinfo.Version, Version: req.Version, State: "queued", Logs: []string{}}, true
 	}
 	return st, valid
 }
@@ -342,7 +342,7 @@ func ReadOperation(id string) (Status, bool) {
 	b, e = os.ReadFile(filepath.Join(Dir, "request.json"))
 	var req Request
 	if e == nil && json.Unmarshal(b, &req) == nil && req.ID == id {
-		return Status{ID: id, Action: req.Action, TraceID: req.TraceID, State: "queued", Logs: []string{}}, true
+		return Status{ID: id, Action: req.Action, TraceID: req.TraceID, From: buildinfo.Version, Version: req.Version, State: "queued", Logs: []string{}}, true
 	}
 	return Status{}, false
 }

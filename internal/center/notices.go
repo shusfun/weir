@@ -204,7 +204,8 @@ func (s *Server) notices(ctx context.Context) []Notice {
 			}
 		}
 	}
-	if st, ok := selfupdate.ReadStatus(); ok && st.State == "failed" && st.Finished != nil && time.Since(*st.Finished) < 7*24*time.Hour {
+	handoff, hasHandoff := selfupdate.ReadHandoff()
+	if st, ok := readVersionOperation(handoff, hasHandoff); ok && st.State == "failed" && st.Finished != nil && time.Since(*st.Finished) < 7*24*time.Hour {
 		out = append(out, Notice{ID: "update-failed:" + st.ID, Level: "warn", Title: "上次更新没有成功", Detail: st.Error, Action: &NoticeAction{Kind: "update", Label: "查看"}})
 	}
 	check := s.updateCheckSnapshot()

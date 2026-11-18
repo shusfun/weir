@@ -125,10 +125,27 @@ func handoffLogs(h selfupdate.Handoff) []JobLog {
 	return out
 }
 
+func isVersionOperation(action string) bool {
+	return action == "update" || action == "rollback"
+}
+
+func readVersionOperation(handoff selfupdate.Handoff, hasHandoff bool) (selfupdate.Status, bool) {
+	if status, ok := selfupdate.ReadStatus(); ok && isVersionOperation(status.Action) {
+		return status, true
+	}
+	if hasHandoff {
+		if receipt, ok := selfupdate.ReadOperation(handoff.ID); ok && receipt.Action == handoff.Action {
+			return receipt, true
+		}
+	}
+	return selfupdate.Status{}, false
+}
+
 // currentUpdateRun 读最近一次更新的记录：只读本机，不访问 GitHub，页面轮询靠它不被网络拖住。
 func (s *Server) currentUpdateRun(now time.Time) *updateRun {
-	st, hasStatus := selfupdate.ReadStatus()
 	h, hasHandoff := selfupdate.ReadHandoff()
+	hasHandoff = hasHandoff && isVersionOperation(h.Action)
+	st, hasStatus := readVersionOperation(h, hasHandoff)
 	if j, ok := s.jobs.Get(selfUpdateJob); ok {
 		switch {
 		case j.Status == jobRunning:
@@ -148,10 +165,18 @@ func (s *Server) currentUpdateRun(now time.Time) *updateRun {
 			return r
 		}
 	}
-	if hasHandoff && (!hasStatus || st.ID != h.ID && h.At.After(st.Started)) {
-		r := newUpdateRun(updateWaiting, jobRunning, h.Action, h.From, h.Version, h.Started)
-		r.Logs, r.Source = handoffLogs(h), h.Source
+	if !hasStatus {
+		return nil
+	}
+	if st.State == "queued" {
+		r := newUpdateRun(updateWaiting, jobRunning, st.Action, st.From, st.Version, st.Started)
+		r.Trace = st.TraceID
 		r.Step = "等更新服务接手"
+		if !hasHandoff || h.ID != st.ID {
+			return r
+		}
+		r.From, r.Version, r.Started = h.From, h.Version, h.Started
+		r.Title, r.Logs, r.Source = updateTitle(h.Action, h.From, h.Version), handoffLogs(h), h.Source
 		if now.Sub(h.At) > updatePickup {
 			r.Phase, r.Status, r.Step, r.Stalled = updateFailed, jobFailed, "", true
 			r.Error = "更新服务超过 60 秒没有接手：请在服务器上检查 weir-update.path 是否在运行（systemctl status weir-update.path）"
@@ -160,10 +185,8 @@ func (s *Server) currentUpdateRun(now time.Time) *updateRun {
 		}
 		return r
 	}
-	if !hasStatus {
-		return nil
-	}
 	r := newUpdateRun(st.State, jobRunning, st.Action, st.From, st.Version, st.Started)
+	r.Trace = st.TraceID
 	if hasHandoff && h.ID == st.ID {
 		r.Logs, r.Source, r.Started = handoffLogs(h), h.Source, h.Started
 	}
@@ -202,8 +225,14 @@ func (s *Server) updateBase() gin.H {
 
 // getSelfUpdateStatus 给页面轮询：本机版本与这次更新的进度。
 func (s *Server) getSelfUpdateStatus(c *gin.Context) {
+	var action, phase string
+	finish := operationStage(c.Request.Context(), "update.status.resolve",
+		"action", stageValue(func() slog.Value { return slog.StringValue(action) }),
+		"phase", stageValue(func() slog.Value { return slog.StringValue(phase) }))
+	defer finish(nil)
 	out := s.updateBase()
 	if r := s.currentUpdateRun(time.Now()); r != nil {
+		action, phase = r.Action, r.Phase
 		out["run"] = r
 	}
 	c.JSON(200, out)
@@ -242,6 +271,10 @@ func (s *Server) postSelfUpdate(c *gin.Context) {
 	}
 	if why := selfUpdateBlocker(); why != "" {
 		failDetail(c, 409, "self_update_unavailable", why, nil)
+		return
+	}
+	if status, ok := selfupdate.ReadStatus(); ok && !isVersionOperation(status.Action) && status.Finished == nil && status.State != "done" && status.State != "failed" {
+		failDetail(c, 409, "self_update_running", "已有宿主操作正在执行", nil)
 		return
 	}
 	if r := s.currentUpdateRun(time.Now()); r != nil {
