@@ -52,28 +52,35 @@ function CodeBlock({ className, ...props }: ComponentProps<"code">) {
   );
 }
 
-// ---- 可选卡片：几张卡片里选一张（客户端、下载来源） ----
-// 可点的卡片（render 成按钮 / 链接，或带 onClick）按下缩小并叠填充色
+// ---- 可选卡片：几张卡片里选一张（客户端、下载来源、协议、出口） ----
+// 可点的卡片（render 成按钮 / label / 链接，带 onClick，或内含单选框）按下缩小并叠填充色
 function ChoiceCard({
   selected = false,
   featured = false,
   render,
   className,
   children,
+  onClick,
   ...props
 }: useRender.ComponentProps<"div"> & { selected?: boolean; featured?: boolean }) {
-  const pressable = !!render || !!props.onClick;
+  const pressable = !!render || !!onClick;
   return useRender({
     defaultTagName: "div",
     render,
     props: mergeProps<"div">(
       {
         children,
+        onClick: (e) => {
+          onClick?.(e);
+          if (e.defaultPrevented || render || onClick) return;
+          const radio = e.currentTarget.querySelector<HTMLElement>('[data-slot="radio"]:not([data-disabled]), input[type="radio"]:not(:disabled)');
+          if (radio && !radio.contains(e.target as Node)) radio.click();
+        },
         className: cn(
-          "relative flex min-w-0 flex-col gap-2 rounded-[var(--weir-radius-card)] border border-[var(--weir-line-soft)] bg-[var(--weir-panel)] p-4",
+          "relative flex min-w-0 flex-col gap-1.5 rounded-[var(--weir-radius-17)] border border-[var(--weir-line-soft)] bg-[var(--weir-panel)] px-[var(--weir-space-4)] py-[15px] shadow-[var(--weir-highlight)] [corner-shape:squircle] has-[[data-slot=radio]:not([data-disabled])]:cursor-pointer",
           pressable && "weir-press cursor-pointer",
-          featured && "gap-3 border-[var(--weir-accent-text)] bg-[var(--weir-accent-soft)] p-5",
-          selected && "border-[var(--weir-accent-text)] shadow-[0_0_0_1px_var(--weir-accent-text)]",
+          featured && "gap-3 border-[var(--weir-accent)] bg-[var(--weir-accent-soft)] p-5",
+          selected && "border-[var(--weir-accent)] shadow-[0_0_0_3px_var(--weir-accent-soft)]",
           className,
         ),
         "data-selected": selected || undefined,

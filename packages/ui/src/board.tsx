@@ -34,15 +34,15 @@ function FlowBoard({
   );
 }
 
-// 流水线（设计稿 CSources）：每一步一张小卡，写数量和说明，底下一个点代表一个对象（最多 41 个）；数量缺失写未知。
-function PipelineBoard({ label, steps, className }: { label: string; steps: { name: string; value: number | null | undefined; note?: ReactNode }[]; className?: string }) {
+// 流水线（设计稿 CSources）：每一步一张小卡，写数量和说明，底下一个点代表一个对象（最多 41 个）；数量缺失写未知。可传 onSelect 点击切换对应分区。
+function PipelineBoard({ label, steps, className }: { label: string; steps: { name: string; value: number | null | undefined; note?: ReactNode; active?: boolean; onSelect?: () => void }[]; className?: string }) {
   return (
     <ol data-slot="pipeline-board" className={cn("weir-pipeline", className)} aria-label={label}>
       {steps.map((step, i) => {
         const known = typeof step.value === "number" && Number.isFinite(step.value);
         const dots = known ? Math.min(41, step.value as number) : 0;
-        return (
-          <li key={step.name}>
+        const inner = (
+          <>
             <small>{i + 1}</small>
             <b>{step.name}</b>
             <strong>{known ? step.value : "未知"}</strong>
@@ -50,6 +50,11 @@ function PipelineBoard({ label, steps, className }: { label: string; steps: { na
             <span className="weir-pipeline-dots" aria-hidden>
               {Array.from({ length: 41 }, (_, k) => <i key={k} data-on={k < dots ? "" : undefined} />)}
             </span>
+          </>
+        );
+        return (
+          <li key={step.name} data-active={step.active ? "" : undefined}>
+            {step.onSelect ? <button type="button" className="weir-pipeline-btn weir-press" aria-current={step.active ? "step" : undefined} onClick={step.onSelect}>{inner}</button> : inner}
           </li>
         );
       })}
@@ -134,10 +139,12 @@ function Ticket({
         </div>
         {meta && <div className="mt-[var(--weir-gap-3)] truncate text-fine text-[var(--weir-ink-3)]">{meta}</div>}
         <div className="weir-ticket-url">{url ?? "地址未知"}</div>
-        <div className="weir-ticket-days" role="img" aria-label={days ? "最近 21 天的拉取" : "最近 21 天的拉取：未知"}>
-          {Array.from({ length: 21 }, (_, k) => <i key={k} data-day={days ? days[k] ?? "none" : "unknown"} />)}
-        </div>
-        <div className="mt-[var(--weir-gap-5)] text-fine text-[var(--weir-ink-3)]">{note}</div>
+        {days && days.length > 0 && (
+          <div className="weir-ticket-days" role="img" aria-label="最近 21 天的拉取">
+            {Array.from({ length: 21 }, (_, k) => <i key={k} data-day={days[k] ?? "none"} />)}
+          </div>
+        )}
+        {note && <div className="mt-[var(--weir-gap-5)] text-fine text-[var(--weir-ink-3)]">{note}</div>}
         {actions && <div className="weir-ticket-actions">{actions}</div>}
       </div>
       <div className="weir-ticket-stub">

@@ -15,6 +15,8 @@ type FolderFile = {
   /** 端口等等宽小字 */
   meta?: ReactNode | null;
   tone?: LampTone | null;
+  /** 链式 / 中转出口标记：使用强调描边与标题色区分直连节点 */
+  chained?: boolean;
 };
 
 type FolderStatus = { tone: "ok" | "warn" | "bad" | "neutral"; text: ReactNode };
@@ -72,7 +74,7 @@ function GlassFolder({
     <>
       <span className="weir-folder-back" data-hue={hue} aria-hidden />
       {shown.map((file, i) => (
-        <span key={file.id} className="weir-folder-file" style={{ "--i": String(i), "--tilt": `${tilts[i]}deg` } as CSSProperties} aria-hidden>
+        <span key={file.id} className="weir-folder-file" data-chained={file.chained || undefined} style={{ "--i": String(i), "--tilt": `${tilts[i]}deg` } as CSSProperties} aria-hidden>
           <span className="weir-folder-file-kind">{file.kind ?? "节点"}</span>
           <span className="weir-folder-file-title">{file.title == null || file.title === "" ? "未知" : file.title}</span>
           {file.meta != null && file.meta !== "" && <span className="weir-folder-file-meta">{file.meta}</span>}

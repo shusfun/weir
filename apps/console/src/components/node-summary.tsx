@@ -1,9 +1,40 @@
-import type { DisplaySummary, ExitItem, NodeChoice } from "../lib/core";
+import type { DisplaySummary, ExitItem, Gate, NodeChoice, NodeItem } from "../lib/core";
+import type { ObjectRef } from "../lib/objects";
 
 export const nodeTitle = (node: NodeChoice) => node.display_name || node.name?.trim() || "地区未知";
 export const exitTitle = (exit: Partial<ExitItem>) => exit.summary?.name || exit.remark?.trim() || "地区未知";
 
 const kindText: Record<string, string> = { freedom: "直连", blackhole: "拦截", socks5: "SOCKS5", http: "HTTP", https: "HTTPS", link: "节点链接", node: "节点", source: "订阅节点" };
+
+export interface NodeChainInfo {
+  isRelay: boolean;
+  tag: string;
+  target: string;
+  ref?: ObjectRef;
+}
+
+export function nodeChainRoute(node: NodeItem, allNodes: NodeItem[] = [], gates: Gate[] = []): NodeChainInfo | null {
+  const ex = node.exit;
+  if (!ex || ex.kind === "freedom") return null;
+  if (ex.kind === "node") {
+    const targetNode = ex.node_id ? allNodes.find((x) => x.id === ex.node_id) : undefined;
+    const targetGate = targetNode ? (targetNode.gate_name || gates.find((g) => g.id === targetNode.gate_id)?.name) : undefined;
+    const target = targetGate || targetNode?.name || ex.summary?.name || ex.label || "另一台 VPS";
+    return {
+      isRelay: true,
+      tag: "中转",
+      target,
+      ref: targetNode ? { type: "node", id: targetNode.id, name: targetNode.name } : undefined,
+    };
+  }
+  const target = ex.summary?.name || ex.remark?.trim() || ex.label || kindText[ex.kind] || "外部代理";
+  return {
+    isRelay: false,
+    tag: ex.kind === "blackhole" ? "拦截" : "代理",
+    target,
+    ref: ex.id ? { type: "exit", id: ex.id, name: target } : undefined,
+  };
+}
 
 export function ExitSummary({ exit, summary, expanded = false }: { exit?: Partial<ExitItem>; summary?: DisplaySummary; expanded?: boolean }) {
   const s = summary ?? exit?.summary;

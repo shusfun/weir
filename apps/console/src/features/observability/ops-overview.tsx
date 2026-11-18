@@ -87,28 +87,29 @@ export function OpsOverview() {
   const today = (observations.data ?? []).filter((o) => new Date(o.created_at).toDateString() === new Date().toDateString());
   const needed = today.filter((o) => o.verdict?.outcome === "needed");
   const normal = (observations.data ?? []).filter((o) => o.verdict?.outcome === "not_needed");
-  const shown = (observations.data ?? []).filter((o) => o.verdict?.outcome !== "not_needed").slice(0, 4);
+  const nonNormal = (observations.data ?? []).filter((o) => o.verdict?.outcome !== "not_needed");
+  const shown = nonNormal.slice(0, 4);
+  const hasMoreObservations = (observations.data ?? []).length > shown.length && (normal.length > 0 || nonNormal.length > shown.length);
   // 进度环：一件事的五步里走到了第几步；有待确认的草稿就在第 3 步（等你确认）
   const done = drafts.isPending ? null : pending.length > 0 ? 2 : recordList.some((r) => r.status === "drafting") ? 1 : recordList.some((r) => r.status === "judging") ? 0 : null;
   const title = drafts.isPending ? "运行观测" : pending.length > 0 ? <>{pending.length} 份草稿<br />等你确认</> : "没有要你确认的事";
-  const lead = observations.isPending ? "正在读取 Laya 的判断。" : observations.error ? "Laya 的判断读取失败，结果未知。" : `最近取得的观测中，今天 ${today.length} 条，${needed.length} 条判断需要处理。是否已起草或执行，请查看对应记录。`;
+  const lead = observations.isPending ? "正在读取 Laya 的判断…" : observations.error ? "Laya 的判断读取失败，结果未知。" : `今天共采集 ${today.length} 条观测，其中 ${needed.length} 条需要处理。`;
   const recordOf = (d: Draft) => recordList.find((r) => r.draft_id === d.id);
   const stack = column === "pending" ? [] : (column === "blocked" ? blocked : applied).slice(0, 5);
   return (
     <>
-      <section className="grid items-center gap-[var(--weir-gap-41)] lg:grid-cols-[minmax(0,1fr)_381px]">
+      <section className="grid items-center gap-[var(--weir-gap-33)] lg:grid-cols-[minmax(0,1fr)_auto]">
         <div>
-          <div className="mb-[var(--weir-gap-9)] text-fine font-bold tracking-[0.09em] text-[var(--weir-ink-3)]">运行观测</div>
           <h1 className="m-0 text-hero font-bold tracking-[-0.035em]">{title}</h1>
           <p className="mt-[var(--weir-gap-13)] mb-0 max-w-[521px] text-lead text-[var(--weir-ink-2)]">{lead}</p>
         </div>
-        <DotRing className="max-lg:hidden" done={done} total={5} caption="处理进度" label={pending.length > 0 ? "等你确认" : done == null ? "处理状态未知" : "处理中"} />
+        {done != null && <DotRing className="max-lg:hidden" done={done} total={5} caption="处理进度" label={pending.length > 0 ? "等你确认" : "处理中"} />}
       </section>
-      <section className="weir-observe-columns">
+      <section className="weir-observe-columns items-start">
         <div>
           <SectionHeader title="草稿" actions={<Segmented aria-label="草稿状态" value={column} onValueChange={setColumn} options={[["pending", `待确认 ${pending.length}`], ["blocked", `已拦下 ${blocked.length}`], ["applied", `已生效 ${applied.length}`]]} />} />
           {drafts.isPending || drafts.error ? <State loading={drafts.isPending} error={drafts.error} onRetry={() => void drafts.refetch()} /> : column === "pending" ? (
-            pending.length === 0 ? <State empty="没有待确认的草稿" detail="Laya 判断需要处理时会自动交给 dsh 起草，草稿出现在这里。" /> : (
+            pending.length === 0 ? <State empty="没有待确认的草稿" detail="Laya 判断需要处理时会自动交给 dsh 起草。" /> : (
               <div className="weir-draft-stack" data-count={Math.min(3, pending.length)}>
                 {pending.slice(1, 3).reverse().map((d, i) => (
                   <div key={d.id} className="weir-draft-peek" data-depth={i}>
@@ -129,15 +130,15 @@ export function OpsOverview() {
           )}
         </div>
         <div>
-          <SectionHeader title="Laya 的判断" actions={<span className="text-meta text-[var(--weir-ink-3)]">正常的已折叠 {normal.length} 条</span>} />
+          <SectionHeader title="Laya 的判断" actions={normal.length > 0 ? <span className="text-meta text-[var(--weir-ink-3)]">正常的已折叠 {normal.length} 条</span> : undefined} />
           {observations.isPending || observations.error ? <State loading={observations.isPending} error={observations.error} onRetry={() => void observations.refetch()} /> : (
             <Card><CardContent><InsetRows>
 
-                {shown.length === 0 && <SetRow title="最近没有需要处理的观测" description="正常的判断已折叠" />}
+                {shown.length === 0 && <SetRow title="最近没有需要处理的观测" description={normal.length > 0 ? `${normal.length} 条正常判断已折叠` : "尚无异常判断"} />}
                 {shown.map((o) => (
                   <SetRow key={o.id} title={(o.external_data_not_instructions.text || pointLabel[o.point] || o.point).split("\n")[0].slice(0, 41)} description={`${shortTime(o.created_at)} · ${o.resource || "未知"} · ${pointLabel[o.point] ?? o.point}`} end={o.verdict?.outcome === "needed" ? <Badge variant="soft" tone="info">需要处理</Badge> : <Badge variant="soft" tone="neutral" className="border-dashed bg-transparent">未知</Badge>} />
                 ))}
-                <InsetRow><a className="inline-flex items-center text-meta text-[var(--weir-accent-text)] no-underline active:opacity-60 touch:min-h-11" href="?tab=overview#observations">展开全部 {(observations.data ?? []).length} 条</a></InsetRow>
+                {hasMoreObservations && <InsetRow><a className="inline-flex items-center text-meta text-[var(--weir-accent-text)] no-underline active:opacity-60 touch:min-h-11" href="?tab=overview#observations">查看全部 {(observations.data ?? []).length} 条记录</a></InsetRow>}
 
             </InsetRows></CardContent></Card>
           )}

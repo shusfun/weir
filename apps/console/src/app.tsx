@@ -78,6 +78,7 @@ const consolePages: Record<string, Loader> = {
   "/gates": GatesPage.loader,
   "/exits": ExitsPage.loader,
   "/users": UsersPage.loader,
+  "/codes": AccountsPage.loader,
   "/accounts": AccountsPage.loader,
   "/kernels": KernelsPage.loader,
   "/system": SystemPage.loader,
@@ -172,13 +173,14 @@ function Console() {
               <Route path="/proxies" element={guard(<ExitsPage view="proxies" />)} />
               <Route path="/rules" element={guard(<ExitsPage view="rules" />)} />
               <Route path="/groups" element={guard(<SubscriptionsPage groups />)} />
-              <Route path="/exits" element={admin ? <ExitsPage /> : <Navigate to="/proxy" replace />} />
+              <Route path="/exits" element={<Navigate to={admin ? (location.search.includes("exit") ? "/proxies" + location.search : "/rules" + location.search) : "/proxy"} replace />} />
               <Route path="/gates" element={guard(<GatesPage />)} />
               <Route path="/gates/:id" element={guard(<GateDetailPage />)} />
               <Route path="/nodes/:id" element={guard(<NodeDetailPage />)} />
               <Route path="/users" element={guard(<UsersPage />)} />
               <Route path="/users/:id" element={guard(<UserDetailPage />)} />
-              <Route path="/accounts" element={guard(<AccountsPage />)} />
+              <Route path="/codes" element={guard(<AccountsPage />)} />
+              <Route path="/accounts" element={<Navigate to={"/codes" + location.search} replace />} />
               <Route path="/kernels" element={guard(<KernelsPage />)} />
               <Route path="/system" element={guard(<SystemPage />)} />
               <Route path="/subscriptions" element={guard(<SubscriptionsPage />)} />

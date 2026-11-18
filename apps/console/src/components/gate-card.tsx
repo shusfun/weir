@@ -92,7 +92,7 @@ const navigate=useNavigate();
                 </div>
                 <span className="flex flex-wrap gap-1.5">
                   <Button size="sm" variant="outline" onClick={() => onDetail(g)}>详情</Button>
-                  <Button size="sm" variant="outline" onClick={() => navigate(`/exits?gate=${g.id}`)}><Route />出口与分流</Button>
+                  <Button size="sm" variant="outline" onClick={() => navigate(`/rules?gate=${g.id}`)}><Route />分流规则</Button>
                   <Button size="sm" variant="outline" onClick={() => onEdit(g)}><Pencil />编辑</Button>
                 </span>
               </div>

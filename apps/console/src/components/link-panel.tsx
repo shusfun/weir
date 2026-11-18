@@ -27,6 +27,8 @@ import {
   DialogTitle,
   Field,
   Form,
+  FormGrid,
+  FormSection,
   Input,
   InsetRow,
   InsetRows,
@@ -41,6 +43,7 @@ import {
   SkeletonList,
   Switch,
   SwitchField,
+  SwitchGroup,
   Table,
   TableBody,
   TableCell,
@@ -280,8 +283,8 @@ function LinkRow({ base, link: l, stats, showCredentials, inlineQr, ticket, onEd
           last={stats?.last_pull ? new Date(stats.last_pull.at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false }) : l.last_used_at ? date(l.last_used_at) : "未拉取"}
           tone={!l.enabled ? "unknown" : stats && stats.pulls_24h > 0 ? "ok" : "warn"}
           qr={l.enabled ? <QRCodeSVG value={l.url} size={77} bgColor="transparent" fgColor="currentColor" title={(l.name || "订阅链接") + " 二维码"} /> : undefined}
-          note={stats ? `最近 21 天的拉取 · 24 小时 ${stats.pulls_24h} 次` : "最近 21 天的拉取"}
-          actions={<><Button size="sm" variant="ghost" onClick={onEdit}>编辑</Button><Button size="sm" variant="ghost" onClick={() => setPulls(true)}>拉取记录</Button></>}
+          note={stats ? `近 24 小时拉取 ${stats.pulls_24h} 次 · 30 天 ${stats.pulls_30d} 次` : "暂无拉取统计"}
+          actions={<><Button size="sm" variant="ghost" onClick={() => window.open(l.url, "_blank", "noopener,noreferrer")}>导入页</Button><Button size="sm" variant="ghost" onClick={onEdit}>编辑</Button><Button size="sm" variant="ghost" onClick={() => setPulls(true)}>拉取记录</Button></>}
         />
         {pulls && <PullsDialog base={base} link={l} close={() => setPulls(false)} />}
       </div>
@@ -373,8 +376,8 @@ function LinkForm({
   const rotate = async (credentials: boolean) => {
     const ok = await confirm(
       credentials
-        ? { title: "更换该链接在所有节点上的凭据？", description: "已导入的客户端需要重新更新订阅。", confirmText: "更换", tone: "danger" }
-        : { title: "更换订阅地址？", description: "旧地址立即失效，已导入的客户端节点仍可用。", confirmText: "更换", tone: "danger" },
+        ? { title: "更换该链接在所有节点上的凭据？", description: "现有连接会断开，已导入的客户端需要重新更新订阅。", confirmText: "按住 1 秒更换", tone: "danger", hold: true }
+        : { title: "更换订阅地址？", description: "旧地址立即失效，已导入的客户端节点仍可用。", confirmText: "更换地址", tone: "danger" },
     );
     if (ok) void run(credentials ? "credentials" : "address", () => api(`${base}/links/${l!.id}/rotate`, "POST", credentials ? { credentials: true } : {}), credentials ? "凭据已更换" : "订阅地址已更换");
   };
@@ -412,59 +415,66 @@ function LinkForm({
         <DialogTitle>{l ? "编辑链接" : "新链接"}</DialogTitle>
         <DialogDescription>默认包含全部可用节点与链式代理；也可只选其中几个，例如给某台设备单独一条。</DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
-          <Field label="名称" hint="例如：手机、电脑。">
-            <Input maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
-          </Field>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="开始时间" name="starts_at" hint="不填为现在就能用。">
-              <Input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} />
+          <FormSection title="基本与生效时段">
+            <Field label="链接名称" hint="例如：iPhone、公司 MacBook">
+              <Input maxLength={100} placeholder="默认链接" value={name} onChange={(e) => setName(e.target.value)} />
             </Field>
-            <Field label="结束时间" name="ends_at" hint={planEnds ? `不填为到套餐到期（${date(planEnds)}）。` : "不填为不限。"} customError={order || overPlan}>
-              <Input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} />
-            </Field>
-          </div>
-          <small className="-mt-2 text-[var(--weir-ink-3)]">不在这段时间里拉不到节点，VPS 也停用这条链接的凭据，已导入的客户端随之不能用。</small>
-          <SwitchField label="全部节点与链式代理" description="以后新增的自动加入。" checked={all} onCheckedChange={setAll} />
-          {!all && (
-            <>
-              <fieldset className="grid gap-2">
-                <legend className="mb-1 text-meta font-medium text-[var(--weir-ink-2)]">节点</legend>
-                {nodes.map((n) => (
-                  <CheckboxField
-                    key={n.id}
-                    label={<NodeSummary node={n} />}
-                    checked={picked.includes(n.id)}
-                    onCheckedChange={(v) => setPicked(toggle(picked, n.id, v))}
-                  />
-                ))}
-              </fieldset>
-              {chains.length > 0 && (
-                <fieldset className="grid gap-2">
-                  <legend className="mb-1 text-meta font-medium text-[var(--weir-ink-2)]">链式代理</legend>
-                  {chains.map((c) => (
-                    <CheckboxField key={c.id} label={<ExitSummary exit={c.exit} expanded />} checked={pickedChains.includes(c.id)} onCheckedChange={(v) => setPickedChains(toggle(pickedChains, c.id, v))} />
-                  ))}
-                </fieldset>
-              )}
-              <fieldset className="grid gap-2">
-                <legend className="mb-1 text-meta font-medium text-[var(--weir-ink-2)]">机场与手动节点</legend>
-                {catalog.isPending || catalog.error ? <State loading={catalog.isPending} error={catalog.error} onRetry={() => catalog.refetch()} /> : catalog.data.filter((item) => (item.kind === "source" || item.kind === "manual") && item.selected && item.authorized).map((item) => <CheckboxField key={item.ref} label={item.name || item.ref} description={item.state.reason} checked={pickedCatalog.includes(item.ref)} onCheckedChange={(on) => setPickedCatalog((old) => on ? [...old, item.ref] : old.filter((ref) => ref !== item.ref))} />)}
-              </fieldset>
-            </>
-          )}
-          {l && <SwitchField label="启用" checked={enabled} onCheckedChange={setEnabled} />}
-          {l && (
-            <div className="stack border-t border-[var(--weir-line)] pt-3">
-              <small className="text-[var(--weir-ink-3)]">地址或凭据泄露时使用；这几项立即生效，不用点保存。</small>
-              <div className="flex flex-wrap gap-1.5">
-                <Button type="button" size="sm" variant="outline" disabled={isBusy() || save.busy} busy={isBusy("address")} busyText="正在更换…" onClick={() => void rotate(false)}><RefreshCw />换地址</Button>
-                <Button type="button" size="sm" variant="outline" disabled={isBusy() || save.busy} busy={isBusy("credentials")} busyText="正在更换…" onClick={() => void rotate(true)}><KeyRound />换凭据</Button>
-                <Button type="button" size="sm" variant="destructive" disabled={isBusy() || save.busy} busy={isBusy("delete")} busyText="正在删除…" onClick={async () => { if (await confirm({ title: `删除链接「${l.name || "未命名"}」？`, confirmText: "删除", tone: "danger" })) void run("delete", () => api(`${base}/links/${l.id}`, "DELETE"), "链接已删除"); }}><Trash2 />删除</Button>
+            <FormGrid>
+              <Field label="生效开始时间" name="starts_at" hint="留空立即生效">
+                <Input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} />
+              </Field>
+              <Field label="失效结束时间" name="ends_at" hint={planEnds ? `留空跟随套餐（${date(planEnds)}）` : "留空长期有效"} customError={order || overPlan}>
+                <Input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} />
+              </Field>
+            </FormGrid>
+          </FormSection>
+
+          <FormSection title="包含范围与状态">
+            <SwitchGroup>
+              <SwitchField placement="end" label="包含全部节点与链式代理" description="后续新增节点自动加入；关闭后按列表勾选" checked={all} onCheckedChange={setAll} />
+              {l && <SwitchField placement="end" label="启用此订阅链接" description="关闭后客户端无法拉取，且对应凭据立即暂停" checked={enabled} onCheckedChange={setEnabled} />}
+            </SwitchGroup>
+            {!all && (
+              <div className="grid gap-2.5">
+                <div className="rounded-[var(--weir-radius)] border border-[var(--weir-line-soft)] bg-[var(--weir-well)] px-[var(--weir-space-4)] py-[var(--weir-space-3)]">
+                  <div className="mb-2 text-fine font-semibold text-[var(--weir-ink-2)]">自有节点</div>
+                  <div className="grid max-h-40 gap-2 overflow-y-auto">
+                    {nodes.map((n) => (
+                      <CheckboxField key={n.id} label={<NodeSummary node={n} />} checked={picked.includes(n.id)} onCheckedChange={(v) => setPicked(toggle(picked, n.id, v))} />
+                    ))}
+                  </div>
+                </div>
+                {chains.length > 0 && (
+                  <div className="rounded-[var(--weir-radius)] border border-[var(--weir-line-soft)] bg-[var(--weir-well)] px-[var(--weir-space-4)] py-[var(--weir-space-3)]">
+                    <div className="mb-2 text-fine font-semibold text-[var(--weir-ink-2)]">链式代理</div>
+                    <div className="grid max-h-36 gap-2 overflow-y-auto">
+                      {chains.map((c) => (
+                        <CheckboxField key={c.id} label={<ExitSummary exit={c.exit} expanded />} checked={pickedChains.includes(c.id)} onCheckedChange={(v) => setPickedChains(toggle(pickedChains, c.id, v))} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="rounded-[var(--weir-radius)] border border-[var(--weir-line-soft)] bg-[var(--weir-well)] px-[var(--weir-space-4)] py-[var(--weir-space-3)]">
+                  <div className="mb-2 text-fine font-semibold text-[var(--weir-ink-2)]">外部机场与手动节点</div>
+                  <div className="grid max-h-36 gap-2 overflow-y-auto">
+                    {catalog.isPending || catalog.error ? <State loading={catalog.isPending} error={catalog.error} onRetry={() => catalog.refetch()} /> : catalog.data.filter((item) => (item.kind === "source" || item.kind === "manual") && item.selected && item.authorized).map((item) => <CheckboxField key={item.ref} label={item.name || item.ref} description={item.state.reason} checked={pickedCatalog.includes(item.ref)} onCheckedChange={(on) => setPickedCatalog((old) => on ? [...old, item.ref] : old.filter((ref) => ref !== item.ref))} />)}
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
+          </FormSection>
+
+          {l && (
+            <FormSection title="安全与轮换" description="地址或凭据泄露时立即轮换，无需点保存">
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant="outline" disabled={isBusy() || save.busy} busy={isBusy("address")} busyText="正在更换…" onClick={() => void rotate(false)}><RefreshCw />更换订阅地址</Button>
+                <Button type="button" size="sm" variant="outline" disabled={isBusy() || save.busy} busy={isBusy("credentials")} busyText="正在更换…" onClick={() => void rotate(true)}><KeyRound />重签节点凭据</Button>
+                <Button type="button" size="sm" variant="destructive" disabled={isBusy() || save.busy} busy={isBusy("delete")} busyText="正在删除…" onClick={async () => { if (await confirm({ title: `删除链接「${l.name || "未命名"}」？`, confirmText: "删除", tone: "danger" })) void run("delete", () => api(`${base}/links/${l.id}`, "DELETE"), "链接已删除"); }}><Trash2 />删除链接</Button>
+              </div>
+            </FormSection>
           )}
           <DialogFooter error={save.error}>
-            <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
+            <Button type="button" variant="ghost" disabled={save.busy} onClick={close}>取消</Button>
             <Button type="submit" disabled={save.busy || !!order || !!overPlan} busy={save.busy} busyText="正在保存…">保存</Button>
           </DialogFooter>
         </Form>
@@ -625,7 +635,7 @@ function ChainForm({
   const dirty = !!name || entry !== (nodes[0]?.id ?? 0) || !!exitId || !!exit;
   const markSaved = useUnsavedChanges(dirty);
   const save = useFormAction((track) => api(base + "/chains", "POST", { name: name.trim(), entry_node_id: entry, ...(exitId?{exit_id:exitId}:{exit:current}) }, track), {
-    fields: { entry_not_allowed: "entry", exit_not_allowed:"exit_id", ...exitErrorFields(current.kind) },
+    fields: { entry_not_allowed: "entry", exit_not_allowed:"exit_id", ...(exitId ? {} : exitErrorFields(current.kind)) },
     onSuccess: () => { markSaved(); saved(); },
     wait: () => ({ label: `正在让入口 VPS 经出口实测（${nodes.find((n) => n.id === entry)?.name ?? "入口节点"}）`, max: 45 }),
   });
@@ -645,27 +655,29 @@ function ChainForm({
   });
   return (
     <Dialog open onOpenChange={(o) => { if (!o) void requestClose(); }}>
-      <DialogContent size="md">
+        <DialogContent size="lg">
         <DialogTitle>新建链式代理</DialogTitle>
-        <DialogDescription>会作为一个新节点出现在订阅里。由所选入口所在的 VPS 实测，不通就不会建这条链。</DialogDescription>
+        <DialogDescription>作为一条新节点加入订阅；由所选入口所在的 VPS 实测连通后生效。</DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
-          <Field label="名称" required>
-            <Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
-          </Field>
-          <Field label="入口节点" name="entry" required>
-            <Select required value={entry ? String(entry) : ""} onValueChange={(v) => {setEntry(Number(v));setExitId(undefined);}}>
-              <SelectTrigger>
-                <SelectValue>{nodes.find(n => n.id === entry) ? <NodeSummary node={nodes.find(n => n.id === entry)!} compact /> : "请选择"}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {nodes.map((n) => (
-                  <SelectItem key={n.id} value={String(n.id)}>
-                    <NodeSummary node={n} />
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
+          <FormGrid>
+            <Field label="显示名称" required>
+              <Input required maxLength={100} placeholder="例如：东京 ⇢ 住宅代理" value={name} onChange={(e) => setName(e.target.value)} />
+            </Field>
+            <Field label="入口节点" name="entry" required>
+              <Select required value={entry ? String(entry) : ""} onValueChange={(v) => {setEntry(Number(v));setExitId(undefined);}}>
+                <SelectTrigger>
+                  <SelectValue>{nodes.find(n => n.id === entry) ? <NodeSummary node={nodes.find(n => n.id === entry)!} compact /> : "请选择"}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {nodes.map((n) => (
+                    <SelectItem key={n.id} value={String(n.id)}>
+                      <NodeSummary node={n} />
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </FormGrid>
           {groups.isPending || groups.error ? (
             <State loading={groups.isPending} error={groups.error} onRetry={() => groups.refetch()} />
           ) : (
@@ -684,7 +696,7 @@ function ChainForm({
             />
           )}
           <DialogFooter error={save.error} status={save.wait && <WaitText wait={save.wait} />}>
-            <Button type="button" variant="outline" disabled={save.busy} onClick={() => void requestClose()}>
+            <Button type="button" variant="ghost" disabled={save.busy} onClick={() => void requestClose()}>
               取消
             </Button>
             <Button type="submit" disabled={save.busy || !groups.data} busy={save.busy} busyText="正在实测并保存…">保存</Button>

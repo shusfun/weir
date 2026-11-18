@@ -145,8 +145,8 @@
   /* 需要处理的白字角标：两种主题都用深红，白字 5.7 */
   --weir-badge-bad: #c4281f;
   --weir-badge-ink: #ffffff;
-  --weir-scrim: rgb(39 39 35 / 0.33);
-  --weir-scrim-soft: rgb(39 39 35 / 0.17);
+  --weir-scrim: rgb(27 28 31 / 0.41);
+  --weir-scrim-soft: rgb(27 28 31 / 0.21);
 
   --weir-lamp-bezel-top: transparent;
   --weir-lamp-bezel-bottom: transparent;
@@ -261,7 +261,7 @@
   --weir-radius: var(--weir-radius-13); /* 原 10：按钮、输入框、下拉 */
   --weir-radius-card: var(--weir-radius-13); /* 原 12：旧卡片继续用这个名字 */
   --weir-radius-lg: var(--weir-radius-card); /* 旧名：等同卡片 */
-  --weir-radius-dialog: var(--weir-radius-15); /* 原 14：桌面弹窗 */
+  --weir-radius-dialog: var(--weir-radius-25); /* 桌面弹窗（同 .v-dlg 25px 超椭圆） */
   --weir-radius-sheet: var(--weir-radius-17); /* 原 16：底部抽屉的圆角顶 */
   --weir-radius-surface: var(--weir-radius-21); /* 新范式大卡片 */
   --weir-radius-stage: var(--weir-radius-25); /* 弹窗、玻璃文件夹 */

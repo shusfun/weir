@@ -1,13 +1,14 @@
 import { useUpdateStatus, updateSummary } from "../components/update-watcher";
 // 设置页的行：开关立刻保存，要填的项显示当前值并打开原有弹窗。
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Notice, SwitchField, useConfirm } from "@weir/ui";
 import { api, formError } from "../api";
 import { useQuery } from "../lib/query";
 import { useQueryClient } from "@tanstack/react-query";
 import { pushAccountAppearance, readAppearance, writeAppearance } from "../appearance";
 import { useLogo } from "../components/brand-mark";
-import type { DshSettings } from "../components/dsh";
+import type { DshView } from "../components/dsh";
 
 type Open = (key: string) => void;
 
@@ -148,37 +149,30 @@ export function NotifyRows({ open }: { open: Open }) {
 }
 
 export function DefenseRows({ open }: { open: Open }) {
-  const client = useQueryClient();
-  const q = useQuery({ queryKey: ["laya"], queryFn: () => api("/admin/defense/laya") as Promise<{ enabled: boolean; verified?: boolean; mode?: string; gate_id?: number; url: string; model: string; warmup_seconds?: number }> });
-  const policy = useQuery({ queryKey: ["protection-policy"], queryFn: () => api("/admin/defense/policy") as Promise<{ revision?: string }> });
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  async function toggle(on: boolean) {
-    if (!q.data) return;
-    setBusy(true);
-    setError("");
-    try {
-      await api("/admin/defense/laya", "PUT", { mode: q.data.mode, gate_id: q.data.gate_id, enabled: on, url: q.data.url, model: q.data.model, warmup_seconds: q.data.warmup_seconds ?? 300, key: "" });
-      await client.invalidateQueries({ queryKey: ["laya"] });
-    } catch (e) {
-      setError(formError(e, {}).message);
-    } finally {
-      setBusy(false);
-    }
-  }
+  const navigate = useNavigate();
+  const policy = useQuery({ queryKey: ["protection-policy"], queryFn: () => api("/admin/defense/policy") as Promise<{ policy?: { revision?: string; effective?: { enabled?: boolean } }; hourly_used?: number; hourly_limit?: number }> });
+  const events = useQuery({ queryKey: ["defense-events"], queryFn: () => api("/admin/defense/events") as Promise<{ events: { status: string }[] }> });
+  const pendingEvents = (events.data?.events ?? []).filter((e) => e.status === "new").length;
+  const guardrailText = policy.data?.policy
+    ? policy.data.policy.effective?.enabled
+      ? `自动收紧开启 · 本小时 ${policy.data.hourly_used ?? 0}/${policy.data.hourly_limit ?? 0} 次`
+      : "仅生成草稿确认"
+    : "未配置";
   return <>
-    {error && <Notice tone="bad">{error}</Notice>}
-    <SwitchField placement="end" label="启用 Laya 判断" description={q.data && !q.data.verified && !q.data.enabled ? "需要先通过实测" : "缺条件时保存会失败并说明原因"} checked={!!q.data?.enabled} disabled={busy || !q.data || (!q.data.enabled && !q.data.verified)} onCheckedChange={(on) => void toggle(on)} />
-    <ValueRow label="防御策略" value={text(policy.isPending, policy.error, policy.data?.revision ? "已保存" : "未配置")} onOpen={() => open("protection")} />
+    <ValueRow label="自动安全处置护栏" detail="临时收紧总开关、每小时次数上限与保护网段" value={text(policy.isPending, policy.error, guardrailText)} onOpen={() => open("protection")} />
+    <ValueRow label="安全事件与封禁名单" detail="查看连续登录失败、限流触发与已封禁来源" value={text(events.isPending, events.error, pendingEvents > 0 ? `${pendingEvents} 条待处理` : "去查看")} onOpen={() => navigate("/ops/observe?tab=security")} />
   </>;
 }
 
 export function AIRows({ open }: { open: Open }) {
   const client = useQueryClient();
-  const q = useQuery({ queryKey: ["dsh"], queryFn: () => api("/admin/dsh") as Promise<{ settings: DshSettings }> });
+  const q = useQuery({ queryKey: ["dsh"], queryFn: () => api("/admin/dsh") as Promise<DshView> });
+  const laya = useQuery({ queryKey: ["laya"], queryFn: () => api("/admin/defense/laya") as Promise<{ enabled: boolean; verified?: boolean; mode?: string; gate_id?: number; url: string; model: string; warmup_seconds?: number }> });
+  const gates = useQuery({ queryKey: ["gates"], queryFn: async () => (await api("/admin/gates")).items as { id: number; name: string }[] });
+  const profile = useQuery({ queryKey: ["ai-profile"], queryFn: () => api("/admin/ai/profile") as Promise<{ effective?: { observations?: Record<string, { enabled: boolean }> } }> });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  async function toggle(patch: Partial<DshSettings>) {
+  async function toggleDsh(patch: Partial<DshView["settings"]>) {
     if (!q.data) return;
     setBusy(true);
     setError("");
@@ -191,13 +185,44 @@ export function AIRows({ open }: { open: Open }) {
       setBusy(false);
     }
   }
+  async function toggleLaya(on: boolean) {
+    if (!laya.data) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api("/admin/defense/laya", "PUT", { mode: laya.data.mode, gate_id: laya.data.gate_id, enabled: on, url: laya.data.url, model: laya.data.model, warmup_seconds: laya.data.warmup_seconds ?? 300, key: "" });
+      await client.invalidateQueries({ queryKey: ["laya"] });
+    } catch (e) {
+      setError(formError(e, {}).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   const settings = q.data?.settings;
+  const dshSummary = q.data?.ready
+    ? `运行中 ${settings?.version ?? ""}`.trim()
+    : settings?.enabled
+      ? `${q.data?.status.state === "failed" ? "启动失败" : "正在启动"} ${settings.version || ""}`.trim()
+      : settings?.version
+        ? `已下载 ${settings.version} · 未启用`
+        : "未下载 · 点此配置";
+  const gateName = laya.data?.mode === "gate" ? (gates.data?.find((g) => g.id === laya.data?.gate_id)?.name || (laya.data?.gate_id ? `VPS #${laya.data.gate_id}` : "")) : "";
+  const layaSummary = laya.data?.enabled
+    ? laya.data.mode === "gate" ? `${gateName || "指定 VPS"} 推理中` : "中心推理中"
+    : laya.data?.verified
+      ? `${gateName ? gateName + " · " : ""}已实测待开启`
+      : gateName
+        ? `已选 ${gateName} · 待实测`
+        : "未启用 · 点此配置";
+  const enabledObs = Object.values(profile.data?.effective?.observations ?? {}).filter((o) => o.enabled).length;
   return <>
     {error && <Notice tone="bad">{error}</Notice>}
-    <SwitchField placement="end" label="启用 dsh" description={settings?.domain ? settings.domain : "需要先在弹窗里填写地址"} checked={!!settings?.enabled} disabled={busy || !settings} onCheckedChange={(on) => void toggle({ enabled: on })} />
-    <SwitchField placement="end" label="可疑事件自动交给 dsh 分析" checked={!!settings?.auto_analyze} disabled={busy || !settings} onCheckedChange={(on) => void toggle({ auto_analyze: on })} />
-    <ValueRow label="dsh 地址与版本" value={text(q.isPending, q.error, settings?.domain || "未配置")} onOpen={() => open("dsh")} />
-    <ValueRow label="AI 偏好" value="在弹窗中查看" onOpen={() => open("ai-profile")} />
+    <SwitchField placement="end" label="启用 dsh" description={settings?.domain ? `网关地址 ${settings.domain}` : "需要先在下方「dsh 服务与版本」里下载并填写地址"} checked={!!settings?.enabled} disabled={busy || !settings || (!settings.enabled && !settings.domain)} onCheckedChange={(on) => void toggleDsh({ enabled: on })} />
+    <ValueRow label="dsh 服务与版本" detail="子域名地址、反代连通检查与版本下载/回退" value={text(q.isPending, q.error, dshSummary)} onOpen={() => open("dsh")} />
+    <SwitchField placement="end" label="Laya 判为可疑的事件自动交给 dsh 分析" checked={!!settings?.auto_analyze} disabled={busy || !settings} onCheckedChange={(on) => void toggleDsh({ auto_analyze: on })} />
+    <SwitchField placement="end" label="启用 Laya 判断" description={laya.data && !laya.data.verified && !laya.data.enabled ? "需要先在下方「Laya 推理与部署」保存并通过实测" : "自动初筛安全事件与 VPS 运维异常"} checked={!!laya.data?.enabled} disabled={busy || !laya.data || (!laya.data.enabled && !laya.data.verified)} onCheckedChange={(on) => void toggleLaya(on)} />
+    <ValueRow label="Laya 推理与部署" detail="选择中心或指定 VPS 推理、一键实测启用与查看运维草稿记录" value={text(laya.isPending, laya.error, layaSummary)} onOpen={() => open("laya")} />
+    <ValueRow label="AI 偏好与观察点" detail="每日汇总时区、Laya 兼容策略与各观察点置信度阈值" value={text(profile.isPending, profile.error, profile.data ? `${enabledObs} 个观察点已启用` : "查看")} onOpen={() => open("ai-profile")} />
   </>;
 }
 

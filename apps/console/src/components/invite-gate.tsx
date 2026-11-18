@@ -4,8 +4,8 @@ import { hasUnsavedChanges, useUnsavedChanges } from "../lib/dirty";
 import { useId, useState } from "react";
 import { useQuery } from "../lib/query";
 import {
-  Button, CheckboxField, CodeBlock, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, FilePicker, Form, Input, Notice, PasswordInput, Segmented, Step, Steps,
-  Tabs, TabsList, TabsPanel, TabsTab, Textarea, useConfirm,
+  Button, CodeBlock, CopyButton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, FilePicker, Form, Input, Notice, PasswordInput, Segmented, Step, Steps,
+  SwitchField, SwitchGroup, Textarea, useConfirm,
 } from "@weir/ui";
 import { ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -37,15 +37,19 @@ export function InviteGate({ open, close, done }: { open: boolean; close: () => 
     <Dialog open={open} onOpenChange={(o) => !o && void requestClose()}>
       <DialogContent size="lg">
         <DialogTitle>添加 VPS</DialogTitle>
-        <DialogDescription>装好后 VPS 主动连接中心。可以只安装 Laya，也可以创建节点，不要求先建节点。</DialogDescription>
-        <Tabs data-tour="vps-install" value={mode} onValueChange={async (v) => {if (!hasUnsavedChanges() || await confirm({title:"切换安装方式并放弃当前填写？",confirmText:"切换"})) setMode(v as Mode);}}>
-          <TabsList aria-label="安装方式">
-            <TabsTab value="ssh">SSH 一次装好</TabsTab>
-            <TabsTab value="command">复制安装命令</TabsTab>
-          </TabsList>
-          <TabsPanel value="ssh">{open && mode === "ssh" && <SSHInstall name={name} setName={setName} close={() => void requestClose()} done={done} />}</TabsPanel>
-          <TabsPanel value="command">{open && mode === "command" && <CommandInstall name={name} setName={setName} close={() => void requestClose()} done={done} />}</TabsPanel>
-        </Tabs>
+        <DialogDescription>装好后 VPS 主动连接中心，不开放公网管理端口；登录信息只用于本次安装，不落库保存。</DialogDescription>
+        <div data-tour="vps-install">
+          <Segmented
+            aria-label="安装方式"
+            value={mode}
+            onValueChange={async (v) => {
+              if (!hasUnsavedChanges() || await confirm({ title: "切换安装方式并放弃当前填写？", confirmText: "切换" })) setMode(v as Mode);
+            }}
+            options={[["ssh", "SSH 自动部署"], ["command", "复制一次性命令"]]}
+          />
+        </div>
+        {open && mode === "ssh" && <SSHInstall name={name} setName={setName} close={() => void requestClose()} done={done} />}
+        {open && mode === "command" && <CommandInstall name={name} setName={setName} close={() => void requestClose()} done={done} />}
       </DialogContent>
     </Dialog>
   );
@@ -127,7 +131,7 @@ export function SSHInstall({ name, setName, close, done, gateId = 0, initialHost
           <small className="mt-1 block">在 VPS 控制台或已登录的终端里运行 <code>ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</code> 可以核对。指纹对得上再安装；安装时指纹变了会立即中止。</small>
         </Notice>
         <DialogFooter error={install.error}>
-          <Button type="button" variant="outline" disabled={install.busy} onClick={() => setProbe(null)}>上一步</Button>
+          <Button type="button" variant="ghost" disabled={install.busy} onClick={() => setProbe(null)}>上一步</Button>
           <Button type="submit" form={formId} busy={install.busy} busyText="正在启动…">指纹无误，开始安装</Button>
         </DialogFooter>
       </Form>
@@ -136,19 +140,30 @@ export function SSHInstall({ name, setName, close, done, gateId = 0, initialHost
   return (
     <Form id={formId} busy={check.busy} errors={check.errors} onSubmit={() => void check.submit()}>
       {steps}
-      {gateId ? <Notice>只准备「{name}」的 Laya 部署权限；先核对设备身份，不重新配对。SSH 信息只用于本次操作。</Notice> : <><NameField name={name} setName={setName} /><CheckboxField label="同时准备 Laya 部署（可不创建节点）" checked={prepareLaya} onCheckedChange={setPrepareLaya}/></>}
-      <div className="grid gap-3 sm:grid-cols-[1fr_96px_140px]">
-        <Field label="VPS 地址" name="host" required hint="公网 IP 或域名。">
+      {gateId ? (
+        <Notice>只准备「{name}」的 Laya 部署权限；先核对设备身份，不重新配对。</Notice>
+      ) : (
+        <>
+          <NameField name={name} setName={setName} />
+          <SwitchGroup>
+            <SwitchField placement="end" label="同时准备 Laya 部署环境" description="上线后可直接作推理节点，不要求先建代理节点" checked={prepareLaya} onCheckedChange={setPrepareLaya} />
+          </SwitchGroup>
+        </>
+      )}
+      <div className="grid min-w-0 gap-x-[var(--weir-space-3)] gap-y-[var(--weir-gap-9)] sm:grid-cols-[minmax(0,1fr)_101px_141px]">
+        <Field label="VPS 地址" name="host" required hint="公网 IP 或域名">
           <Input required value={host} placeholder="203.0.113.10" onChange={(e) => setHost(e.target.value)} autoComplete="off" />
         </Field>
-        <Field label="SSH 端口" name="port" required>
+        <Field label="端口" name="port" required>
           <Input inputMode="numeric" value={port} onChange={(e) => setPort(e.target.value.replace(/\D/g, ""))} />
         </Field>
-        <Field label="用户名" name="user" required hint="不是 root 时用 sudo。">
+        <Field label="用户名" name="user" required hint="非 root 走 sudo">
           <Input required value={user} onChange={(e) => setUser(e.target.value)} autoComplete="off" />
         </Field>
       </div>
-      <Segmented aria-label="登录方式" value={auth} onValueChange={setAuth} options={[["password", "密码"], ["key", "私钥"]]} />
+      <Field label="认证方式">
+        <Segmented size="sm" aria-label="登录方式" value={auth} onValueChange={setAuth} options={[["password", "SSH 密码"], ["key", "SSH 私钥"]]} />
+      </Field>
       {auth === "password" ? (
         <Field label="登录密码" name="password" required>
           <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="off" />
@@ -156,7 +171,7 @@ export function SSHInstall({ name, setName, close, done, gateId = 0, initialHost
       ) : (
         <>
           {/* 选文件时的问题马上显示（error 是外部错误，不等失焦）；不能用的文件不填进私钥框 */}
-          <Field label="私钥文件" name="keyfile" error={fileError} hint="云厂商下载的 .pem，或 ~/.ssh/id_ed25519 这类 OpenSSH 私钥。只在浏览器里读出内容填进下面的框，不单独上传。">
+          <Field label="导入私钥文件" name="keyfile" error={fileError} hint="仅在浏览器本地读取内容填入下方输入框，不单独上传文件">
             <FilePicker accept=".pem,.key,.txt" anyType maxBytes={16 * 1024} onError={setFileError}
               onFile={async (f) => {
                 const text = await f.text();
@@ -167,17 +182,16 @@ export function SSHInstall({ name, setName, close, done, gateId = 0, initialHost
               选择私钥文件，或拖到这里
             </FilePicker>
           </Field>
-          <Field label="私钥" name="key" required customError={keyProblem(key)} hint="也可以直接粘贴私钥全文（-----BEGIN … PRIVATE KEY-----）。支持 OpenSSH、RSA、EC、PKCS#8；不支持 PuTTY 的 .ppk。">
-            <Textarea rows={5} className="font-mono text-meta" value={key} onChange={(e) => setKey(e.target.value)} spellCheck={false} />
+          <Field label="私钥全文" name="key" required customError={keyProblem(key)} hint="支持 OpenSSH、RSA、EC、PKCS#8；不支持 PuTTY .ppk">
+            <Textarea rows={4} className="font-mono text-meta" value={key} onChange={(e) => setKey(e.target.value)} spellCheck={false} />
           </Field>
-          <Field label="私钥密码" name="passphrase" hint="私钥没有设密码就留空。">
+          <Field label="私钥口令（可选）" name="passphrase" hint="私钥未加密可留空">
             <PasswordInput value={passphrase} onChange={(e) => setPassphrase(e.target.value)} autoComplete="off" />
           </Field>
         </>
       )}
-      <small className="text-[var(--weir-ink-3)]">登录信息只用于这一次安装：不保存、不写日志，也不会交给 AI。中心只执行固定的安装命令，装完断开。</small>
       <DialogFooter error={check.error} status={check.wait && <WaitText wait={check.wait} />}>
-        <Button type="button" variant="outline" disabled={check.busy} onClick={close}>取消</Button>
+        <Button type="button" variant="ghost" disabled={check.busy} onClick={close}>取消</Button>
         <Button type="submit" form={formId} busy={check.busy} busyText="正在连接…">连接并核对指纹</Button>
       </DialogFooter>
     </Form>
@@ -201,12 +215,12 @@ function CommandInstall({ name, setName, close, done }: { name: string; setName:
     return (
       <div className="stack">
         <CodeBlock className="block whitespace-pre-wrap break-all">{command}</CodeBlock>
-        <small className="text-[var(--weir-ink-3)]">在 VPS 上以 root 执行。命令 1 小时内有效且只能使用一次。</small>
+        <small className="text-[var(--weir-ink-3)]">在目标 VPS 上以 root 执行；凭证 1 小时内有效且一次性使用。</small>
         {pairing && <PairingProgress digest={pairing} command={command} close={close} done={done} />}
         <DialogFooter error={copyError}>
+          <Button variant="ghost" onClick={close}>关闭</Button>
           <Button variant="outline" onClick={() => { setCommand(""); setPairing(""); invite.reset(); }}>重新生成</Button>
           <CopyButton value={command} onError={() => setCopyError("复制失败，请手动选择命令复制。")}>复制命令</CopyButton>
-          <Button variant="outline" onClick={close}>完成</Button>
         </DialogFooter>
       </div>
     );
@@ -214,7 +228,7 @@ function CommandInstall({ name, setName, close, done }: { name: string; setName:
     <Form id={formId} busy={invite.busy} errors={invite.errors} onSubmit={() => void invite.submit()}>
       <NameField name={name} setName={setName} />
       <DialogFooter error={invite.error}>
-        <Button type="button" variant="outline" disabled={invite.busy} onClick={close}>取消</Button>
+        <Button type="button" variant="ghost" disabled={invite.busy} onClick={close}>取消</Button>
         <Button type="submit" form={formId} busy={invite.busy} busyText="正在生成…">生成安装命令</Button>
       </DialogFooter>
     </Form>

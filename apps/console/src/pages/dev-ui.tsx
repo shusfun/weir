@@ -12,6 +12,7 @@ import {
   Field,
   Form,
   FormGrid,
+  FormSection,
   Input,
   Notice,
   PasswordInput,
@@ -23,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
   SwitchField,
+  SwitchGroup,
   useConfirm,
   usePrompt,
   Card,
@@ -75,7 +77,7 @@ import {
   GlassFolder,
   GlobeBackground,
   HealthList,
-  BulkBar, ChoiceBoard, DraftRecheck, FlowBoard, HoldButton, TrafficUsage, TrafficRing, LaneMap, PhoneFrame, Ticket, TraceSheet, VersionCell,
+  BulkBar, ChoiceBoard, DraftRecheck, FlowBoard, HoldButton, PipelineBoard, TrafficUsage, TrafficRing, LaneMap, PhoneFrame, Ticket, TraceSheet, VersionCell,
   InsightBanner,
   MetricStrip,
   MotionProvider,
@@ -153,11 +155,12 @@ export function DevUiPage() {
     <>
     <GlobeBackground
       nodes={[
-        { id: "sh", lat: 31.2, lon: 121.5, tone: "ok" },
-        { id: "la", lat: 34.05, lon: -118.2, tone: "bad" },
+        { id: "sh", lat: 31.2, lon: 121.5, tone: "ok", label: "样例 A" },
+        { id: "sg", lat: 1.35, lon: 103.82, tone: "info", label: "样例 B" },
+        { id: "la", lat: 34.05, lon: -118.2, tone: "bad", label: "样例 C" },
         { id: "gap", lat: Number.NaN, lon: 139.7, tone: "unknown" },
       ]}
-      links={[{ from: "sh", to: "la", tone: "info" }]}
+      links={[{ from: "sh", to: "sg", tone: "info" }, { from: "sh", to: "la", tone: "warn" }]}
     />
     <div className="weir-above-globe stack">
         <ThemeControl />
@@ -462,7 +465,7 @@ function MaterialDemos() {
           metric={null}
           metricUnit="ms"
           metricLabel="国内延迟"
-          files={[{ id: "a", title: "VLESS", meta: "43512", tone: "ok" }, { id: "b", title: null, tone: "unknown" }]}
+          files={[{ id: "a", title: "VLESS", meta: "43512", tone: "ok" }, { id: "b", chained: true, kind: "中转 ⇢", title: "Shadowsocks", meta: "→ 另一台", tone: "ok" }]}
           onClick={() => toast("打开样例详情")}
         />
         <GlassFolder name="另一台" hue={1} address="203.0.113.9" cpu={null} caption="CPU 未知 · 0 个节点" files={[]} />
@@ -512,9 +515,10 @@ function MaterialDemos() {
       </Demo>
 
       <Demo index={22} title="画板部件" description="流水线、轨道、票据、预览框、批量条和版本格。样例只在这一页。">
-        <FlowBoard label="样例流水线" steps={[{ label: "订阅源", value: 2, caption: "上游" }, { label: "订阅组", value: null, caption: "数量未知" }]} />
+        <FlowBoard label="样例步骤条" steps={[{ label: "Laya 判断", value: "96%", status: "complete" }, { label: "你确认", value: "待确认", status: "current" }]} />
+        <PipelineBoard label="样例流水线" steps={[{ name: "订阅源", value: 2, note: "点击跳转", active: true, onSelect: () => toast("已切到订阅源") }, { name: "订阅组", value: null, note: "数量未知", onSelect: () => toast("已切到订阅组") }]} />
         <LaneMap label="样例轨道" lanes={[{ id: "1", from: "样例规则", to: "样例出口" }]} />
-        <ChoiceBoard label="样例选择"><Ticket name="样例链接" meta="使用者未知" url={null} note="最近 21 天未知" /></ChoiceBoard>
+        <ChoiceBoard label="样例选择"><Ticket name="样例链接" meta="使用者未知" url={null} note="近 24 小时拉取未知" /></ChoiceBoard>
         <PhoneFrame title="样例预览" fallback={<p>没有公开地址</p>} />
         <BulkBar count={2}><Button size="sm" variant="outline">样例操作</Button></BulkBar>
         <p className="m-0">版本 <VersionCell version="" /> / <VersionCell version={null} /></p>
@@ -575,15 +579,19 @@ function FormDemo() {
             <PasswordInput required autoComplete="new-password" value={repeat} onChange={(e) => setRepeat(e.target.value)} />
           </Field>
         </FormGrid>
-        <RadioGroup aria-label="套餐" className="flex flex-wrap gap-4" value={plan} onValueChange={(v) => setPlan(String(v))}>
-          {[["basic", "基础"], ["pro", "专业"], ["team", "团队"]].map(([v, n]) => (
-            <label key={v} className="weir-press-fill flex min-h-11 items-center gap-3 rounded-[var(--weir-radius-sm)] px-2 text-body"><Radio value={v} />{n}</label>
-          ))}
-        </RadioGroup>
-        <SwitchField label="接收通知" description="开关与说明整行可点。" checked={notify} onCheckedChange={setNotify} />
-        <Field customError={agree ? "" : "请先阅读并同意"}>
-          <CheckboxField label="我已阅读使用说明" checked={agree} onCheckedChange={setAgree} />
-        </Field>
+        <FormSection title="偏好与协议">
+          <RadioGroup aria-label="套餐" className="flex flex-wrap gap-4" value={plan} onValueChange={(v) => setPlan(String(v))}>
+            {[["basic", "基础"], ["pro", "专业"], ["team", "团队"]].map(([v, n]) => (
+              <label key={v} className="weir-press-fill flex min-h-11 items-center gap-3 rounded-[var(--weir-radius-sm)] px-2 text-body"><Radio value={v} />{n}</label>
+            ))}
+          </RadioGroup>
+          <SwitchGroup>
+            <SwitchField placement="end" label="接收通知" description="开关与说明整行可点，SwitchGroup 提供凹面分组。" checked={notify} onCheckedChange={setNotify} />
+          </SwitchGroup>
+          <Field customError={agree ? "" : "请先阅读并同意"}>
+            <CheckboxField label="我已阅读使用说明" checked={agree} onCheckedChange={setAgree} />
+          </Field>
+        </FormSection>
         <Collapsible title="高级选项">
           <Notice>折叠区内容。展开 / 收起有高度过渡。</Notice>
         </Collapsible>
@@ -597,6 +605,7 @@ function FormDemo() {
         <div className="actions">
           <Button type="submit">提交</Button>
           <Button type="button" variant="outline" onClick={async () => toast((await confirm({ title: "删除这个节点？", description: "使用它的订阅会立即失效。", confirmText: "删除", tone: "danger" })) ? "已确认" : "已取消")}>确认框</Button>
+          <Button type="button" variant="outline" onClick={async () => toast((await confirm({ title: "修改端口并重启内核？", description: "现有连接会短暂断开一次。", confirmText: "按住 1 秒确认", tone: "danger", hold: true })) ? "已按住确认" : "已取消")}>按住确认框</Button>
           <Button type="button" variant="outline" onClick={async () => { const v = await prompt({ title: "重命名分组", label: "新分组名", defaultValue: "香港", required: true }); toast(v === null ? "已取消" : "新名称：" + v); }}>输入框</Button>
         </div>
       </Form>

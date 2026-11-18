@@ -225,8 +225,25 @@ func (s *Server) agentHeartbeatV2(c *gin.Context, h contracts.Heartbeat) {
 				return err
 			}
 			if g.PublicHost == "" {
-				if ip := publicAddress(c.ClientIP()); ip != "" {
-					g, err = g.Update().SetPublicHost(ip).Save(ctx)
+				ip := publicAddress(c.ClientIP())
+				// 同机 Gate 经回环配对；只对直接回环请求读取中心网卡，
+				// 不让远端上报的 Center 字段借用中心地址。
+				if directLoopback(c) && colocated(g) {
+					ip, err = localPublicHost()
+					if err != nil {
+						return err
+					}
+				}
+				if ip != "" {
+					var count int
+					count, err = s.Store.Ent.Gate.Update().Where(gate.IDEQ(g.ID), gate.PublicHostEQ("")).SetPublicHost(ip).Save(ctx)
+					if err != nil {
+						return err
+					}
+					if count > 0 {
+						s.audit(c, "gate.address.initialize", itoa(g.ID), "ok")
+					}
+					g, err = s.Store.Ent.Gate.Get(ctx, g.ID)
 					if err != nil {
 						return err
 					}

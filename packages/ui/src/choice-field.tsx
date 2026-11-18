@@ -1,7 +1,7 @@
 // 开关 / 勾选项：整行可点。替代各页手写的 <Label className="actions"><Switch aria-label=…/>…</Label>。
 // 文字即控件的可访问名称（不含说明），不必再重复 aria-label；description 显示在文字下方并关联为控件说明。
-// placement="end"：设置行样式，文字在左、控件靠右（系统设置、安装向导里的策略开关）。
-import { useId, type ReactNode } from "react";
+// placement="end"：设置行样式，文字在左、控件靠右；SwitchGroup 把一组开关收进凹面分组框并自动以细分隔线隔开。
+import { useId, type ComponentProps, type ReactNode } from "react";
 import { cn } from "cn";
 import { Checkbox } from "./checkbox";
 import { Switch } from "./switch";
@@ -95,4 +95,17 @@ function CheckboxField({
   );
 }
 
-export { SwitchField, CheckboxField };
+function SwitchGroup({ className, ...props }: ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="switch-group"
+      className={cn(
+        "divide-y divide-[var(--weir-line-soft)] rounded-[var(--weir-radius)] border border-[var(--weir-line-soft)] bg-[var(--weir-fill-4)] px-[var(--weir-space-4)] [corner-shape:squircle] [&>[data-slot=choice-field]]:py-2.5",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export { SwitchField, CheckboxField, SwitchGroup };

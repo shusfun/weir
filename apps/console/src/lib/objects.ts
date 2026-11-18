@@ -19,11 +19,11 @@ export interface ObjectRef {
 }
 
 export const objectLabels: Record<ObjectType, string> = {
-  account_plan: "套餐",
-  access_code: "账户码",
+  account_plan: "套餐预设",
+  access_code: "兑换码",
   center: "中心",
   proxy_group: "我的分组",
-  exit: "出口",
+  exit: "代理",
   route: "分流规则",
   gate: "VPS",
   node: "节点",
@@ -55,8 +55,8 @@ export function objectHref(ref: ObjectRef): string {
   const k = encodeURIComponent(objectKey(ref));
   const focus = "focus=" + encodeURIComponent(focusValue(ref));
   switch (ref.type) {
-    case "account_plan": return `/accounts?tab=plans&plan=${k}`;
-    case "access_code": return `/accounts?tab=codes&code=${k}&${focus}`;
+    case "account_plan": return `/codes?tab=plans&plan=${k}`;
+    case "access_code": return `/codes?tab=codes&code=${k}&${focus}`;
     case "proxy_group": {
       const [owner, local] = (ref.key ?? `${ref.owner}:${ref.id}`).split(":");
       return `/proxy?user=${owner}&proxy_group=${local}`;
@@ -85,7 +85,7 @@ export function objectHref(ref: ObjectRef): string {
     case "source":
       return `/subscriptions?tab=sources&source=${k}`;
     case "profile":
-      return `/subscriptions?tab=profiles&profile_detail=${k}`;
+      return `/groups?tab=profiles&profile_detail=${k}`;
     case "page":
       return `/pages?tab=pages&page=${k}`;
     case "cert":

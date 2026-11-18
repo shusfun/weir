@@ -2,10 +2,9 @@
 // 以及 dsh 的启用 / 子域名设置与版本管理。DeepSeek 的 Key 在 dsh 自己的设置里填写，Weir 不保存。
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { reopenDrafts, useDrafts } from "./draft-confirm";
-import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "../lib/query";
-import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Form, FormGrid, Input, Notice, ScrollArea, SkeletonList, StatusLamp, SwitchField, TextLink, useConfirm } from "@weir/ui";
+import { Badge, Button, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Form, Input, Notice, ScrollArea, SkeletonList, StatusLamp, SwitchField, useConfirm } from "@weir/ui";
 import { Bot, CircleHelp, Download, Maximize2, Minimize2, Minus, RotateCcw, Star, Trash2, X } from "lucide-react";
 import { api, ApiError } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -356,7 +355,6 @@ export function DshSetup({ view }: { view?: DshView }) {
   ];
   return (
     <ol className="m-0 list-none space-y-3 p-0" aria-label="dsh 配置步骤">
-      <li className="text-body text-[var(--weir-ink-2)]">dsh 是 Weir 的 AI 助手：在任何页面都知道你正在看什么，帮你建节点、开用户、配出口与分流、管订阅、写驱动、研判安全事件；它做的每件事都先交给你确认。用之前还差下面几步。</li>
       {view.unsupported && <li><Notice tone="warn">{view.unsupported}。</Notice></li>}
       <SetupStep n={1} title={steps[0][0]} state={steps[0][1]} done={set.version ? `已下载 ${set.version}` : ""}>
         <DshFetchStep blocked={!!view.unsupported} />
@@ -394,6 +392,7 @@ function DshFetchStep({ blocked }: { blocked: boolean }) {
   const started = useStartedJob();
   const client = useQueryClient();
   const [job, setJob] = useState<string | null>(null);
+  const [releases, setReleases] = useState(false);
   const { run, isBusy } = useRowAction<string>();
   const pick = q.data?.find((r) => r.verified) ?? q.data?.[0];
   return (
@@ -403,12 +402,60 @@ function DshFetchStep({ blocked }: { blocked: boolean }) {
           <Button size="sm" disabled={blocked || !pick || isBusy()} busy={isBusy()} busyText="正在开始…" onClick={() => pick && void run("fetch", async () => setJob(started((await api("/admin/dsh/fetch", "POST", { version: pick.version })).job.id)), `开始下载 dsh ${pick.version}`, { fail: "下载没有开始" })}>
             <Download />{pick ? `下载 dsh ${pick.version}` : "正在读取版本…"}
           </Button>
+          <Button size="sm" variant="outline" disabled={blocked} onClick={() => setReleases(true)}>选择其他版本</Button>
           {pick && <small className="text-[var(--weir-ink-3)]">{pick.verified ? "Weir 插件已验证这个版本" : "这个版本超出 Weir 插件已验证的范围：只启用基础预设"}；首次下载还会装 Node.js，约需几分钟。</small>}
         </div>
       )}
       <JobLine id={job} job={latestJob(jobs.data, "dsh:")} idle="下载进度显示在这里" onFinish={() => void client.invalidateQueries({ queryKey: ["dsh"] })} />
-      {/* 行内链接触屏下命中区扩到 44：上下各留 12，免得伸进上方的任务进度行 */}
-      <small className="py-3 text-[var(--weir-ink-3)]">想装别的版本：<Link className="weir-hit relative text-[var(--weir-accent-text)] underline-offset-4 transition-opacity hover:underline active:opacity-60" to="/kernels?tab=dsh">内核 → dsh</Link>。</small>
+      {releases && <DshReleases close={() => setReleases(false)} fetched={() => void client.invalidateQueries({ queryKey: ["dsh"] })} />}
+    </div>
+  );
+}
+
+// DshGatewayCheck：通过一次性票据与隐藏 iframe 验证浏览器经反代子域名能否连通中心 dsh 网关。
+function DshGatewayCheck({ view }: { view: DshView }) {
+  const [probeSrc, setProbeSrc] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  async function check() {
+    if (!view.ready) {
+      setResult({ ok: false, text: `中心侧 dsh 尚未就绪（${notReady(view)}），请等待上方状态变为「运行中」后再检查反代连通。` });
+      return;
+    }
+    setChecking(true);
+    setResult(null);
+    setProbeSrc("");
+    try {
+      const { url } = (await api("/admin/dsh/ticket", "POST", { drawer: drawerId(true) })) as { url: string };
+      const t = new URL(url).searchParams.get("t") || "";
+      setProbeSrc(url);
+      let reached = false;
+      for (let i = 0; i < 10; i++) {
+        await new Promise((r) => window.setTimeout(r, 500));
+        const checkRes = (await api(`/admin/dsh/ticket-check?t=${encodeURIComponent(t)}`)) as { reached?: boolean };
+        if (checkRes.reached) {
+          reached = true;
+          break;
+        }
+      }
+      setResult(reached
+        ? { ok: true, text: `反代连通正常：浏览器已成功经「${view.settings.domain}」连通中心 dsh 网关，可打开右下角窗口使用。` }
+        : { ok: false, text: `中心侧 dsh 进程正常，但浏览器未能经「${view.settings.domain}」连回中心网关。请核对 DNS 解析、泛域名 HTTPS 证书，以及反代是否已把该地址（含 Host 与 X-Forwarded-Proto）转发到中心。` });
+    } catch (e) {
+      setResult({ ok: false, text: e instanceof Error ? e.message : "无法发起反代连通检查" });
+    } finally {
+      setProbeSrc("");
+      setChecking(false);
+    }
+  }
+  return (
+    <div className="stack">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" disabled={checking || !view.settings.domain} busy={checking} busyText="正在检查反代…" onClick={() => void check()}>检查反代连通</Button>
+        {view.ready && <Button size="sm" variant="outline" onClick={() => openDsh()}><Bot />打开 dsh 窗口</Button>}
+      </div>
+      {probeSrc && <iframe title="dsh-gateway-probe" src={probeSrc} aria-hidden tabIndex={-1} className="pointer-events-none fixed -top-10 -left-10 h-px w-px border-0 opacity-0" sandbox="allow-scripts allow-same-origin" referrerPolicy="no-referrer" />}
+      {result && <Notice tone={result.ok ? "ok" : "warn"}>{result.text}</Notice>}
     </div>
   );
 }
@@ -423,11 +470,12 @@ function DshStartStep({ view }: { view: DshView }) {
     <div className="stack">
       <div className="flex flex-wrap items-center gap-2">
         <StatusLamp tone={tone} />
-        <span>{label}</span>
+        <span>中心进程：{label}</span>
         {st.error && <small className="min-w-0 flex-1 truncate text-[var(--weir-bad-ink)]" title={st.error}>{st.error}</small>}
         <Button className="ml-auto" size="sm" variant="outline" disabled={isBusy()} busy={isBusy()} busyText="正在重启…" onClick={() => void run("restart", () => api("/admin/dsh/restart", "POST"), "正在重启 dsh")}><RotateCcw />重启</Button>
       </div>
       {view.waiting && !st.error && <small className="text-[var(--weir-ink-3)]">{view.waiting}</small>}
+      {view.settings.enabled && view.settings.domain && <DshGatewayCheck view={view} />}
       <Collapsible title={`运行日志（最近 ${st.logs.length} 行，令牌已隐藏）`} defaultOpen={st.state === "failed"}>
         <CodeBlock className="block h-48 overflow-auto whitespace-pre text-meta">{st.logs.join("\n") || "（还没有日志）"}</CodeBlock>
       </Collapsible>
@@ -469,19 +517,21 @@ function DshAddressForm({ view, turnOn }: { view: DshView; turnOn?: boolean }) {
   );
 }
 
-// DshSettingsCard：系统设置里的 dsh：没配好时就是同一份步骤清单；配好后显示运行状态与地址、开关。
+// DshSettingsCard：系统设置里的 dsh：没配好时就是同一份步骤清单；配好后显示运行状态与地址、开关，并直接内嵌版本管理。
 export function DshSettingsCard() {
   const q = useDsh();
   return (
-    <Section title="dsh（DeepSeek Harness）" description="dsh 由中心托管，只监听本机回环。浏览器只能从控制台右下角的 dsh 窗口里打开它；其他途径访问 dsh 地址只会得到一个空的 404，看起来就像这个地址不存在。DeepSeek 的 Key 在 dsh 自己的设置里填写，Weir 不保存。">
-      {q.isPending || q.error || !q.data ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : !q.data.settings.version || !q.data.settings.enabled || !q.data.settings.domain ? <DshSetup view={q.data} /> : (
-        <div className="stack">
-          <DshStartStep view={q.data} />
-          <DshAddressForm view={q.data} />
-          <small className="text-[var(--weir-ink-3)]">下载、切换版本在 <TextLink render={<Link to="/kernels?tab=dsh" />}>内核 → dsh</TextLink>。</small>
-        </div>
-      )}
-    </Section>
+    <div className="stack">
+      <Section title="dsh（DeepSeek Harness）" description="dsh 由中心托管，只监听本机回环。浏览器只能从控制台右下角的 dsh 窗口里打开它；其他途径访问 dsh 地址只会得到一个空的 404，看起来就像这个地址不存在。DeepSeek 的 Key 在 dsh 自己的设置里填写，Weir 不保存。">
+        {q.isPending || q.error || !q.data ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : !q.data.settings.version || !q.data.settings.enabled || !q.data.settings.domain ? <DshSetup view={q.data} /> : (
+          <div className="stack">
+            <DshStartStep view={q.data} />
+            <DshAddressForm view={q.data} />
+          </div>
+        )}
+      </Section>
+      <DshVersions />
+    </div>
   );
 }
 
@@ -540,7 +590,7 @@ export function DshVersions() {
   const { run: act, isBusy, waitFor } = useRowAction<string>({ refetch: q.refetch });
   const set = q.data?.settings;
   return (
-    <Section title="dsh" description="DeepSeek Harness 官方 npm 包，与内核一样由中心下载：Node.js 运行环境按 nodejs.org 的官方摘要校验，dsh 按 npm 官方源的 sha512 摘要校验，镜像只用来加速。切换版本前会备份 dsh 的会话与设置。">
+    <Section sub title="已安装版本">
       {q.isPending || q.error || !q.data ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : (
         <div className="stack">
           <div className="flex flex-wrap items-center gap-2">

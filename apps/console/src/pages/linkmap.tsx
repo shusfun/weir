@@ -34,9 +34,8 @@ export function LinkMapPage({ admin }: { admin: boolean }) {
   const header = (
     <PageHeader
       size="hero"
-      eyebrow={admin ? "链路" : "我的链路"}
       title={m ? (() => { const paths = m.paths.filter(p => (user === undefined || p.user_id === user) && (gate === undefined || p.gate_id === gate)); const unknown = paths.some(p => store.stale(p.gate_id) || store.smooth(store.paths.get(p.id)) == null); const active = paths.filter((p) => !store.stale(p.gate_id) && (store.smooth(store.paths.get(p.id)) ?? 0) > 0).length; return active > 0 ? <>{active} 条链路<br />正在使用</> : <>{paths.length} 条链路<br />{unknown ? "实时流量未知" : "此刻没有流量"}</>; })() : (admin ? "链路" : "我的链路")}
-      description="背景的地球显示此刻的节点和链路。下面每一条是一个用户经入口 VPS 到出口的链路，从左到右：用户 → VPS → 出口。"
+      description="从左到右：用户 → 入口 VPS → 实际出口；点击任一链路可查看节点与流量明细。"
     />
   );
   if (!m) return <div className="stack">{header}<State loading={!error} error={error} onRetry={() => void reload()} /></div>;

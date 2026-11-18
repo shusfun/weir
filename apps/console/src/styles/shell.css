@@ -14,7 +14,7 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: var(--weir-gap-17) var(--weir-gap-13);
+  padding: var(--weir-gap-13);
   background: var(--weir-base);
   z-index: 20;
 }
@@ -22,7 +22,7 @@
   display: flex;
   align-items: center;
   gap: var(--weir-gap-9);
-  padding: var(--weir-gap-3) var(--weir-gap-9) var(--weir-gap-17);
+  padding: var(--weir-gap-3) var(--weir-gap-9) var(--weir-gap-9);
   border-radius: var(--weir-radius);
   text-decoration: none;
   color: var(--weir-ink);
@@ -54,8 +54,11 @@
   display: grid;
   gap: 0;
 }
+.rail-group + .rail-group[data-headless] {
+  margin-top: var(--weir-gap-9);
+}
 .rail-group-label {
-  padding: var(--weir-gap-17) var(--weir-gap-13) var(--weir-gap-5);
+  padding: var(--weir-gap-9) var(--weir-gap-13) var(--weir-gap-3);
   font-size: var(--weir-text-caption2);
   line-height: var(--weir-leading-caption2);
   color: var(--weir-ink-3);
@@ -381,10 +384,14 @@
   .rail {
     display: none;
   }
-  /* 窄屏：左右留白 16（iOS 的系统边距） */
+  /* 窄屏：按钮自身 44×44 已带内边距，收紧外层间距给 5 字页面标题留足宽度 */
   .topbar {
-    padding: 0 var(--weir-space-2) 0 var(--weir-space-2);
+    gap: var(--weir-space-1);
+    padding: 0 var(--weir-space-1);
     min-height: 52px;
+  }
+  .topbar-tools {
+    gap: 0;
   }
   .shell-main {
     padding: var(--weir-space-4) var(--weir-space-4) var(--weir-space-8);
@@ -392,6 +399,8 @@
   /* 窄屏标题在顶栏：页头不再重复，h1 留给读屏 */
   .topbar-title > span {
     display: block;
+    font-size: var(--weir-text-body);
+    line-height: var(--weir-leading-body);
   }
   .topbar-title {
     flex: 1;

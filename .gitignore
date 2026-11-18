@@ -2,6 +2,7 @@
 Thumbs.db
 .env
 .env.*
+.task-env-*.json
 !.env.example
 *.pem
 *.key

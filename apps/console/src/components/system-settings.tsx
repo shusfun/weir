@@ -1,6 +1,6 @@
 // 系统设置卡片：安全策略、邮件服务、通知、WebDAV 备份、订阅备份导入导出、API 令牌。
 // 设置保存直接生效；导入或恢复备份、创建 API 令牌要重新输入密码。
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "../lib/query";
 import { Button, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, FilePicker, Form, FormGrid, Input, Notice, PasswordInput, SwitchField, Textarea, useConfirm, InsetGroup } from "@weir/ui";
 import { Download, Trash2 } from "lucide-react";
@@ -35,7 +35,14 @@ export function useReauthAction<T>(fn: Parameters<typeof useFormAction<T>>[0], o
   return useFormAction<T>(fn, { ...opts, fields: { ...reauthFields, ...opts.fields } });
 }
 
-export function Section({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+const SettingsDialogContext = createContext(false);
+export const SettingsDialogProvider = SettingsDialogContext.Provider;
+
+export function Section({ title, description, sub = false, children }: { title?: string; description?: string; sub?: boolean; children: ReactNode }) {
+  const inDialog = useContext(SettingsDialogContext);
+  if (inDialog && !sub) {
+    return <div className="stack">{children}</div>;
+  }
   return (
     <InsetGroup title={title} description={description}>
       {children}

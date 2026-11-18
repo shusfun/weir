@@ -1,7 +1,7 @@
 // 手动节点：按分组展示；可批量导入（链接 / Base64 / Clash YAML / sing-box JSON），分组可重命名或解散（节点保留）。
 import { useState } from "react";
 import { useQuery } from "../lib/query";
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, SectionHeader, SkeletonList, Switch, SwitchField, Textarea, useToast, useConfirm, usePrompt } from "@weir/ui";
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, InsetGroup, InsetRow, InsetRows, Notice, SkeletonList, Switch, SwitchField, Textarea, useToast, useConfirm, usePrompt } from "@weir/ui";
 import { Plus, Trash2, Upload } from "lucide-react";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -42,43 +42,46 @@ export function NodesPanel() {
   const groups = q.data ? Object.keys(q.data.groups).sort((a, b) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b, "zh-CN"))) : [];
   return (
     <section className="stack">
-      <SectionHeader flush title="手动节点" description="单独添加的节点链接，可加入任意订阅组。" actions={<>
-        <Button size="sm" variant="outline" onClick={() => setImporting(true)}><Upload />批量导入</Button>
-        <Button size="sm" onClick={() => setEdit("new")}><Plus />添加节点</Button>
-      </>} />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-meta text-[var(--weir-ink-3)]">{q.data ? `共 ${q.data.items.length} 个手动节点` : "单独导入的节点链接，可加入任意外部订阅组"}</span>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={() => setImporting(true)}><Upload />批量导入</Button>
+          <Button size="sm" onClick={() => setEdit("new")}><Plus />添加节点</Button>
+        </div>
+      </div>
       {q.isPending || q.error ? (
         <State
           loading={q.isPending}
           error={q.error}
           onRetry={() => q.refetch()}
-          skeleton={<SkeletonList rows={3} lines={2} className="stack rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3" rowClassName="flex items-center justify-between gap-2" />}
+          skeleton={<SkeletonList rows={3} lines={2} className="stack" rowClassName="flex items-center justify-between gap-2" />}
         />
       ) : q.data.items.length === 0 ? (
-        <State empty="还没有手动节点" detail="手动节点是不来自订阅的单条节点，可以和订阅源一起放进订阅组。" />
+        <State empty="还没有手动节点" detail="可粘贴单条节点链接、Base64 或 Clash 配置导入，与订阅源一起放进外部订阅组。" />
       ) : (
         groups.map((g) => (
-          <div key={g || "_"} className="stack rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3">
-            <div className="flex items-center justify-between gap-2">
-              <strong>{g || "未分组"} <small className="text-[var(--weir-ink-3)]">（{q.data.groups[g]}）</small></strong>
-              {g && <Button size="sm" variant="outline" disabled={isBusy()} busy={isBusy("rename")} busyText="正在处理…" onClick={() => renameGroup(g)}>重命名 / 解散</Button>}
-            </div>
-            <ul className="stack">
+          <InsetGroup
+            key={g || "_"}
+            title={<>{g || "未分组"} <span className="font-normal text-[var(--weir-ink-3)]">（{q.data.groups[g]}）</span></>}
+            actions={g ? <Button size="xs" variant="outline" disabled={isBusy()} busy={isBusy("rename")} busyText="正在处理…" onClick={() => renameGroup(g)}>重命名 / 解散</Button> : undefined}
+          >
+            <InsetRows>
               {q.data.items.filter((n) => n.group === g).map((n) => (
-                <li key={n.id} className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                <InsetRow key={n.id} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="flex min-w-0 flex-1 items-center gap-2">
                     <Badge variant="soft" tone="neutral">{protocolOf(n.url)}</Badge>
                     <span className="min-w-0 truncate" title={nodeName(n)}>{nodeName(n)}</span>
                     {!n.enabled && <Badge variant="soft" tone="warn">停用</Badge>}
                   </span>
-                  <span className="flex flex-nowrap gap-1.5">
+                  <span className="flex flex-nowrap items-center gap-2">
                     <Switch aria-label={"启用 " + (n.name || n.id)} checked={n.enabled} disabled={isBusy("toggle:" + n.id) || isBusy("del:" + n.id)} onCheckedChange={(v) => run("toggle:" + n.id, () => api("/admin/subscriptions/nodes/" + n.id, "PATCH", { enabled: v }), v ? "已启用" : "已停用")} />
                     <Button size="sm" variant="outline" onClick={() => setEdit(n)}>编辑</Button>
                     <Button size="icon-sm" variant="destructive" aria-label={"删除 " + (n.name || n.id)} disabled={isBusy()} busy={isBusy("del:" + n.id)} busyText="正在删除" onClick={async () => (await confirm({ title: "删除这个节点？", confirmText: "删除", tone: "danger" })) && run("del:" + n.id, () => api("/admin/subscriptions/nodes/" + n.id, "DELETE"), "已删除")}><Trash2 /></Button>
                   </span>
-                </li>
+                </InsetRow>
               ))}
-            </ul>
-          </div>
+            </InsetRows>
+          </InsetGroup>
         ))
       )}
       {edit && <NodeForm value={edit} close={() => setEdit(null)} saved={() => { setEdit(null); toast("已保存", { tone: "ok" }); void q.refetch(); }} />}

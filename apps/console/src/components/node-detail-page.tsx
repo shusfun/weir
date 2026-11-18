@@ -109,7 +109,7 @@ export function NodeDetailPage({ node: n, gate: g, onEdit, onToggle, onDelete, b
           <div className="text-body"><ExitSummary exit={n.exit} expanded /></div>
           {n.exit.kind !== "freedom" && <p className="m-0 text-meta text-[var(--weir-ink-3)]">{probeText(n.exit.probe)}</p>}
           <PendingExits all nodeId={n.id} />
-          <div><Button variant="outline" onClick={() => navigate(`/exits?gate=${n.gate_id}`)}>去出口与分流</Button></div>
+          <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => navigate(`/proxies?gate=${n.gate_id}`)}>管理代理</Button><Button variant="outline" onClick={() => navigate(`/rules?gate=${n.gate_id}`)}>服务端分流规则</Button></div>
         </TabsPanel>
         <TabsPanel value="ports" className="stack"><NodeAccess ports={n.ports} reach={n.reach} /></TabsPanel>
         <TabsPanel value="traffic" className="stack"><UsageRanking path={`/admin/nodes/${n.id}/usage`} byUser /></TabsPanel>

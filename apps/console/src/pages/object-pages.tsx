@@ -17,5 +17,5 @@ export function GateDetailPage() { return <ObjectRedirect path="/gates" param="g
 export function NodeDetailPage() { return <ObjectRedirect path="/gates" param="node" />; }
 export function UserDetailPage() { return <ObjectRedirect path="/users" param="user" />; }
 export function SourceDetailPage() { return <ObjectRedirect path="/subscriptions" param="source" section="sources" />; }
-export function ProfileDetailPage() { return <ObjectRedirect path="/subscriptions" param="profile_detail" section="profiles" />; }
+export function ProfileDetailPage() { return <ObjectRedirect path="/groups" param="profile_detail" section="profiles" />; }
 export function PublicPageDetail() { return <ObjectRedirect path="/pages" param="page" section="pages" />; }

@@ -1,7 +1,7 @@
 // 规则模板（6 个内置 + 自定义 ini / Clash YAML）与订阅源页的默认设置。
 import { useState } from "react";
 import { useQuery } from "../lib/query";
-import { Badge, Button, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, SectionHeader, Segmented, SwitchField, Textarea, useToast, useConfirm } from "@weir/ui";
+import { Badge, Button, Card, CardContent, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, InsetGroup, InsetRow, InsetRows, Notice, Segmented, SwitchField, Textarea, useToast, useConfirm } from "@weir/ui";
 import { Plus, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -26,33 +26,43 @@ export function TemplatesPanel() {
   useConsoleContext({ tab: "输出模板" });
   return (
     <section className="stack">
-      <SectionHeader flush title="规则模板" description="决定策略组与分流规则。内置模板可直接使用；也可以粘贴 ini 模板或完整的 Clash YAML 配置。" actions={<Button size="sm" onClick={() => setEdit("new")}><Plus />新建模板</Button>} />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-meta text-[var(--weir-ink-3)]">内置模板可直接在订阅组里选用；也可粘贴自定义 ini 或 Clash YAML 模板</span>
+        <Button size="sm" onClick={() => setEdit("new")}><Plus />新建自定义模板</Button>
+      </div>
       {t.isPending || t.error ? (
         <State loading={t.isPending} error={t.error} onRetry={() => t.refetch()} />
       ) : (
         <>
-          <ul className="grid gap-2 sm:grid-cols-2">
+          <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2">
             {t.data.builtin.map((b) => (
-              <li key={b.id} className="rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3">
-                <strong>{b.name}</strong> <Badge variant="soft" tone="neutral">内置</Badge>
-                <small className="block text-[var(--weir-ink-3)]">{b.description}</small>
+              <li key={b.id}>
+                <Card className="h-full">
+                  <CardContent className="stack gap-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <strong>{b.name}</strong>
+                      <Badge variant="soft" tone="neutral">内置</Badge>
+                    </div>
+                    <small className="block text-[var(--weir-ink-3)]">{b.description}</small>
+                  </CardContent>
+                </Card>
               </li>
             ))}
           </ul>
-          {t.data.custom.length === 0 ? (
-            <State empty="还没有自定义模板" detail="内置模板够用时不需要；要自定义策略组和规则时再加。" />
-          ) : (
-            <ul className="stack">
-              {t.data.custom.map((c) => (
-                <li key={c.id} className="flex items-center justify-between gap-2">
-                  <span><strong>{c.name}</strong> <Badge variant="soft" tone="neutral">{c.format === "ini" ? "ini" : "Clash YAML"}</Badge></span>
-                  <span className="flex flex-nowrap gap-1.5">
-                    <Button size="sm" variant="outline" onClick={() => setEdit(c)}>编辑</Button>
-                    <Button size="icon-sm" variant="destructive" aria-label={"删除 " + c.name} disabled={isBusy()} busy={isBusy(c.id)} busyText="正在删除" onClick={() => void remove(c)}><Trash2 /></Button>
-                  </span>
-                </li>
-              ))}
-            </ul>
+          {t.data.custom.length > 0 && (
+            <InsetGroup title={`自定义模板（${t.data.custom.length}）`}>
+              <InsetRows>
+                {t.data.custom.map((c) => (
+                  <InsetRow key={c.id} className="flex items-center justify-between gap-2">
+                    <span><strong>{c.name}</strong> <Badge variant="soft" tone="neutral">{c.format === "ini" ? "ini" : "Clash YAML"}</Badge></span>
+                    <span className="flex flex-nowrap gap-1.5">
+                      <Button size="sm" variant="outline" onClick={() => setEdit(c)}>编辑</Button>
+                      <Button size="icon-sm" variant="destructive" aria-label={"删除 " + c.name} disabled={isBusy()} busy={isBusy(c.id)} busyText="正在删除" onClick={() => void remove(c)}><Trash2 /></Button>
+                    </span>
+                  </InsetRow>
+                ))}
+              </InsetRows>
+            </InsetGroup>
           )}
         </>
       )}
@@ -123,8 +133,7 @@ function SettingsForm({ value, saved }: { value: SubscriptionSettings; saved: ()
   });
   return (
     <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
-      <Field name="engine" label="转换方式"><span>内置转换</span>{s.engine === "external" && <Notice tone="warn">外部转换已移除，当前配置待修正。<Button type="button" variant="outline" onClick={() => set({ engine: "builtin" })}>改用内置转换</Button></Notice>}</Field>
-      <SectionHeader title="默认设置" description="订阅组未单独设置的项使用这里的值。" />
+      {s.engine === "external" && <Notice tone="warn">外部转换已移除，当前配置待修正。<Button type="button" variant="outline" onClick={() => set({ engine: "builtin" })}>改用内置转换</Button></Notice>}
       <FormGrid>
         <Field label="默认规则模板" name="template"><TemplatePicker value={s.template} onChange={(v) => set({ template: v ?? "" })} /></Field>
         <Field label="规则等级"><Segmented aria-label="规则等级" value={s.rule_level || "std"} onValueChange={(v) => set({ rule_level: v })} options={ruleLevels} /></Field>

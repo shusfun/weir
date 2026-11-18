@@ -1,6 +1,6 @@
 // 系统设置 · 外观。选择先在本页预览，保存后写入这台浏览器并同步到账号；撤销回到上次保存的值。
 import { useEffect, useState } from "react";
-import { Button, ChoiceBoard, ChoiceCard, SectionHeader, SwitchField, ThemeSwatch, useConfirm } from "@weir/ui";
+import { Button, ChoiceBoard, ChoiceCard, InsetGroup, SectionHeader, SwitchField, ThemeSwatch, useConfirm } from "@weir/ui";
 import { useUnsavedChanges } from "../lib/dirty";
 import { markStutterPrompted, pushAccountAppearance, readAppearance, readMotion, saveAppearance, stutterPromptDue, writeAppearance, type Appearance } from "../appearance";
 
@@ -76,7 +76,7 @@ export function AppearancePanel() {
         <Button type="button" variant="ghost" disabled={!dirty || busy} onClick={() => setDraft(saved)}>撤销</Button>
         <Button type="button" disabled={!dirty} busy={busy} busyText="正在保存" onClick={() => void commit(draft)}>保存</Button>
       </div>
-      <SectionHeader flush title="主题" description="以后会加入更多主题" />
+      <SectionHeader flush title="主题" />
       <ChoiceBoard label="主题">
         {themes.map(([key, label, caption]) => (
           <ChoiceCard key={key} selected={draft.theme === key} render={<button type="button" aria-pressed={draft.theme === key} />} onClick={() => setDraft({ ...draft, theme: key })}>
@@ -86,7 +86,7 @@ export function AppearancePanel() {
           </ChoiceCard>
         ))}
       </ChoiceBoard>
-      <SectionHeader flush title="动效" description="电脑卡的时候选「省电」，显卡占用会明显下降" />
+      <SectionHeader flush title="动效档位" />
       <ChoiceBoard label="动效">
         {motions.map(([key, label, caption]) => (
           <ChoiceCard key={key} selected={draft.motion === key} render={<button type="button" aria-pressed={draft.motion === key} />} onClick={() => setDraft({ ...draft, motion: key })}>
@@ -95,11 +95,13 @@ export function AppearancePanel() {
           </ChoiceCard>
         ))}
       </ChoiceBoard>
-      <div className="stack rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3">
-        <SwitchField label="跟随系统的「减少动态效果」" description="系统开启时自动进入省电" checked={draft.followReduce} onCheckedChange={(followReduce) => setDraft({ ...draft, followReduce })} />
-        <SwitchField label="检测到卡顿时提示切换" description="同一浏览器 7 天内最多提示一次" checked={draft.stutter} onCheckedChange={(stutter) => setDraft({ ...draft, stutter })} />
-        <SwitchField label="背景地球" description="右下角显示节点状态；不可点击；手机上不显示" checked={draft.globe} onCheckedChange={(globe) => setDraft({ ...draft, globe })} />
-      </div>
+      <InsetGroup>
+        <div className="settings-group">
+          <SwitchField placement="end" label="跟随系统的「减少动态效果」" description="系统开启时自动进入省电档" checked={draft.followReduce} onCheckedChange={(followReduce) => setDraft({ ...draft, followReduce })} />
+          <SwitchField placement="end" label="检测到卡顿时提示切换" description="同一浏览器 7 天内最多提示一次" checked={draft.stutter} onCheckedChange={(stutter) => setDraft({ ...draft, stutter })} />
+          <SwitchField placement="end" label="背景点阵地球" description="右下角显示节点与链路；手机宽度不显示" checked={draft.globe} onCheckedChange={(globe) => setDraft({ ...draft, globe })} />
+        </div>
+      </InsetGroup>
     </div>
   );
 }

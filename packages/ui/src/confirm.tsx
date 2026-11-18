@@ -15,8 +15,9 @@ type ConfirmOptions = {
   description?: ReactNode;
   confirmText?: string;
   cancelText?: string;
-  // danger：确认按钮为红色（删除、撤销、换凭据等不可撤回的操作）
+  // danger：确认按钮为红色描边（删除、清零等不可撤回操作）；hold：按住 1 秒确认（重启内核、断连等高影响操作）
   tone?: "default" | "danger";
+  hold?: boolean;
 };
 type PromptOptions = Omit<ConfirmOptions, "tone"> & {
   label?: string;
@@ -56,6 +57,7 @@ function ConfirmProvider({ children }: { children: ReactNode }) {
   };
   const o = request?.options;
   const danger = request?.kind === "confirm" && request.options.tone === "danger";
+  const hold = request?.kind === "confirm" && Boolean(request.options.hold);
   return (
     <ConfirmContext.Provider value={ask}>
       {children}
@@ -80,8 +82,12 @@ function ConfirmProvider({ children }: { children: ReactNode }) {
                 </Field>
               )}
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => finish(false)}>{o.cancelText ?? "取消"}</Button>
-                {danger ? <HoldButton variant="destructive" size="default" onHold={() => finish(true)}>{o.confirmText ?? "按住确认"}</HoldButton> : <Button type="submit" autoFocus={request.kind === "confirm"}>{o.confirmText ?? "确定"}</Button>}
+                <Button type="button" variant="ghost" onClick={() => finish(false)}>{o.cancelText ?? "取消"}</Button>
+                {hold ? (
+                  <HoldButton variant={danger ? "destructive" : "default"} size="default" onHold={() => finish(true)}>{o.confirmText ?? "按住 1 秒确认"}</HoldButton>
+                ) : (
+                  <Button type="submit" variant={danger ? "destructive" : "default"} autoFocus={request.kind === "confirm"}>{o.confirmText ?? (danger ? "删除" : "确定")}</Button>
+                )}
               </DialogFooter>
             </Form>
           </DialogContent>

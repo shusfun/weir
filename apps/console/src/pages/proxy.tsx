@@ -1,7 +1,7 @@
 import { PendingExits } from "../components/pending-exits";
 import { hasUnsavedChanges, useUnsavedChanges } from "../lib/dirty";
 import { ProxyGroups, ProxyMigration } from "../components/proxy-groups";
-import { proxyURL } from "../lib/proxy-targets";
+import { proxyTargets, proxyURL } from "../lib/proxy-targets";
 import { CustomRulesCard } from "../components/custom-rules";
 import { NodeSummary, ExitSummary } from "../components/node-summary";
 import { useEffect, useState } from "react";
@@ -11,26 +11,25 @@ import { useQuery } from "../lib/query";
 import { useNodeChoices } from "../lib/node-choices";
 import {
   Badge, Button, Card, CardContent, CheckboxField, Chip, ChipLabel, ChoiceBoard, ChoiceCard, CodeBlock, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, InsetGroup, InsetRow, InsetRows, Notice, Segmented,
-  PageHeader, Radio, RadioGroup, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SkeletonCards, Switch, Tabs, TabsList, TabsPanel, TabsTab,
+  PageHeader, Radio, RadioGroup, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SkeletonCards, Tabs, TabsList, TabsPanel, TabsTab,
   TextLink, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useConfirm, type LampTone,
 } from "@weir/ui";
-import { Plus, Route, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { api, ApiError } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
 import { WaitText } from "../components/wait";
 import { field, useConsoleContext } from "../lib/console-context";
-import type { ExitSpec, Health, NodeItem, ProxyType, ProxyView, UserItem } from "../lib/core";
+import type { CustomRuleKind, ExitSpec, Health, ProxyType, ProxyView, UserItem } from "../lib/core";
 import { ExitFields, exitErrorFields, exitKindName } from "../components/chain-exit";
-import { ChainPanel, SourceSummary, type NodeOption } from "../components/link-panel";
+import { ChainPanel, type NodeOption } from "../components/link-panel";
 import { MyExits } from "../components/my-exits";
 import { State } from "../components/feedback";
 import { useStringDialogParam, dataObject, ObjectLink } from "../components/object-link";
-import { objectHref } from "../lib/objects";
 import { rateText } from "../lib/linkmap";
-import type { RateStat } from "../lib/core";
 
 const healthTone: Record<Health, LampTone> = { ok: "ok", down: "bad", unknown: "unknown" };
 const healthText: Record<Health, string> = { ok: "可用", down: "不可用", unknown: "未知" };
+const ruleKindShort: Record<CustomRuleKind, string> = { domain: "完整域名", domain_suffix: "域名后缀", domain_keyword: "关键词", ip_cidr: "IP 段" };
 
 
 export function ProxyPage({ admin }: { admin: boolean }) {
@@ -39,8 +38,18 @@ export function ProxyPage({ admin }: { admin: boolean }) {
   const uid = admin ? Number(params.get("user")) || null : null;
   const base = uid ? `/admin/users/${uid}` : "/me";
   const tab = ["clients", "rules", "nodes"].includes(params.get("tab") ?? "") ? params.get("tab")! : "clients";
-  const confirm = useConfirm();
   const changeParams = async (next: URLSearchParams) => { setParams(next); };
+  const jumpTab = (nextTab: string) => {
+    const p = new URLSearchParams(params);
+    p.set("tab", nextTab);
+    p.delete("proxy_group");
+    p.delete("new_group");
+    p.delete("type_exit");
+    void changeParams(p);
+    window.requestAnimationFrame(() => {
+      document.getElementById("proxy-tabs")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
   const view = useQuery({ queryKey: ["proxy", base], queryFn: () => api(proxyURL(base)) as Promise<ProxyView>, refetchInterval: 30_000 });
   const updateView = (updated: ProxyView) => {
     void client.cancelQueries({ queryKey: ["proxy", base], exact: true });
@@ -48,8 +57,8 @@ export function ProxyPage({ admin }: { admin: boolean }) {
   };
   const nodes = useNodeOptions(admin, uid);
   useConsoleContext({
-    page: "代理",
-    tab: ({clients:"客户端选择",rules:"全局清单",nodes:"节点与出口"})[tab],
+    page: admin ? "客户端分流" : "我的代理",
+    tab: ({ clients: "客户端选择", rules: "全局清单", nodes: "个人链式与测速" })[tab],
     list: {
       filters: admin ? { 用户: uid ? String(uid) : "自己" } : undefined,
       total: view.data?.types.length ?? 0,
@@ -59,9 +68,9 @@ export function ProxyPage({ admin }: { admin: boolean }) {
   const header = (
     <PageHeader
       size="data"
-      title="代理"
+      title={admin ? "客户端分流" : "我的代理"}
       description={proxyLead(view.data)}
-      actions={admin ? <div className="flex flex-wrap items-center gap-2"><span>查看用户</span><UserPick value={uid} onChange={(id) => { const p = new URLSearchParams(params); if (id) p.set("user", String(id)); else p.delete("user"); p.delete("proxy_group"); p.delete("new_group"); p.delete("type_exit"); void changeParams(p); }} /></div> : undefined}
+      actions={admin ? <div className="flex flex-wrap items-center gap-2"><span className="text-meta text-[var(--weir-ink-3)]">当前配置用户</span><UserPick value={uid} onChange={(id) => { const p = new URLSearchParams(params); if (id) p.set("user", String(id)); else p.delete("user"); p.delete("proxy_group"); p.delete("new_group"); p.delete("type_exit"); void changeParams(p); }} /></div> : undefined}
     />
   );
   if (view.isPending || view.error)
@@ -75,71 +84,132 @@ export function ProxyPage({ admin }: { admin: boolean }) {
   return (
     <div className="stack">
       {header}
-      <ProxyBoard view={v} admin={admin} />
+      <ProxyBoard base={base} view={v} admin={admin} onSaved={() => void view.refetch()} onUpdated={updateView} onJumpTab={jumpTab} />
       <ProxyMigration base={base} view={v} onSaved={() => view.refetch()} />
-      <Tabs value={tab} onValueChange={(value) => { const p = new URLSearchParams(params); p.set("tab", String(value)); p.delete("proxy_group"); p.delete("new_group"); p.delete("type_exit"); void changeParams(p); }}>
-        <TabsList className="flex flex-wrap h-auto"><TabsTab value="clients">客户端选择</TabsTab><TabsTab value="rules">全局清单</TabsTab><TabsTab value="nodes">节点与出口</TabsTab></TabsList>
-        <TabsPanel value="clients"><ProxyGroups key={base} base={base} view={v} admin={admin} onUpdated={updateView} /></TabsPanel>
-      <TabsPanel value="rules" className="stack"><CustomRulesCard key={base} base={base} view={v} onSaved={() => view.refetch({ throwOnError: true })} /><InsetGroup title="后续内置规则" description="清单从上到下优先匹配，随后依次匹配以下规则。"><InsetRows>{["局域网与本机 → 直连", "国内域名与国内 IP → 直连", "其余流量 → PROXY"].map((text) => <InsetRow key={text}>{text}</InsetRow>)}</InsetRows></InsetGroup></TabsPanel>
-      <TabsPanel value="nodes" className="stack">
-        {!v.types.length && <State empty="还没有可用的节点" detail="请先分配节点，再设置协议类型和出口。" />}
-        <TypesCard base={base} view={v} nodes={nodes} admin={admin} onSaved={() => void view.refetch()} onUpdated={updateView} />
-        <PolicyCard key={base + v.policy.revision} base={base} view={v} onUpdated={updateView} />
-        <RankingCard view={v} admin={admin} />
-        {!admin && <MyExits />}
-        <ChainPanel key={base} base={base} admin={!!uid} />
-      </TabsPanel>
-      </Tabs>
+      <div id="proxy-tabs" className="scroll-mt-[calc(var(--weir-gap-41)*2)]">
+        <Tabs value={tab} onValueChange={(value) => { const p = new URLSearchParams(params); p.set("tab", String(value)); p.delete("proxy_group"); p.delete("new_group"); p.delete("type_exit"); void changeParams(p); }}>
+          <TabsList className="flex flex-wrap h-auto"><TabsTab value="clients">客户端选择</TabsTab><TabsTab value="rules">全局清单</TabsTab><TabsTab value="nodes">个人链式与测速</TabsTab></TabsList>
+          <TabsPanel value="clients"><ProxyGroups key={base} base={base} view={v} admin={admin} onUpdated={updateView} /></TabsPanel>
+          <TabsPanel value="rules" className="stack"><CustomRulesCard key={base} base={base} view={v} onSaved={() => view.refetch({ throwOnError: true })} /></TabsPanel>
+          <TabsPanel value="nodes" className="stack">
+            {admin && <Notice role="status">此处出口与链式代理仅对当前所选用户的订阅生效；若要给所有用户共用的节点挂出口，请前往 <Link className="underline" to="/gates">节点</Link> 页面设置。</Notice>}
+            {!v.types.length ? <State empty="还没有可用的节点" detail="请先分配节点，再设置个人链式出口。" /> : <TypesCard base={base} view={v} nodes={nodes} admin={admin} onSaved={() => void view.refetch()} />}
+            <PolicyCard key={base + v.policy.revision} base={base} view={v} onUpdated={updateView} />
+            <RankingCard view={v} admin={admin} />
+            {!admin && <MyExits canSave={v.allow_chain} />}
+            <ChainPanel key={base} base={base} admin={!!uid} />
+          </TabsPanel>
+        </Tabs>
+      </div>
       <PendingExits base={base} />
     </div>
   );
 }
 
 function proxyLead(view?: ProxyView) {
-  if (!view) return "订阅结构未知。客户端下次更新订阅时生效。";
+  if (!view) return "客户端下次更新订阅时生效。";
   const nodes = view.types.reduce((n, t) => n + t.nodes.length, 0);
-  return <span className="weir-sum"><span>订阅里 <b>{nodes}</b> 个节点</span><span><b>{view.custom.active_count}</b> 条分流</span><span>自动选择：客户端测延迟</span><span>保存后，客户端下次更新订阅时生效</span></span>;
+  return <span className="weir-sum"><span>订阅含 <b>{nodes}</b> 个自有节点</span><span><b>{view.custom.active_count}</b> 条自定义分流</span><span>客户端下次更新订阅时生效</span></span>;
 }
 
-function ProxyBoard({ view, admin }: { view: ProxyView; admin: boolean }) {
+function ProxyBoard({ base, view, admin, onSaved, onUpdated, onJumpTab }: { base: string; view: ProxyView; admin: boolean; onSaved: () => void; onUpdated: (view: ProxyView) => void; onJumpTab: (tab: string) => void }) {
   const [fmt, setFmt] = useState("clash");
+  const [expandFlows, setExpandFlows] = useState(false);
   const preview = useQuery({ queryKey: ["proxy-preview", view, fmt], queryFn: () => api(`/proxy/preview?user=${view.user_id}&target=${fmt}`) as Promise<{ body: string; link_name: string }> });
-  const flows = [
-    ...view.custom.entries.filter((entry) => entry.enabled).slice(0, 8).map((entry) => ({ label: entry.value, target: entry.effective_target || entry.target || "未知" })),
+  const typeAction = useRowAction<string>();
+  const disabled = new Set(view.policy.disabled ?? []);
+  const toggleType = (key: string, on: boolean) => {
+    const next = on ? [...disabled].filter((k) => k !== key) : [...disabled, key];
+    return typeAction.run(key, async () => {
+      try {
+        const updated = await api(proxyURL(base), "PUT", { ...view.policy, disabled: next }) as ProxyView;
+        onUpdated(updated);
+        return updated;
+      } catch (error) {
+        if (error instanceof ApiError && error.code === "proxy_revision_conflict") onSaved();
+        throw error;
+      }
+    }, on ? "已放进订阅" : "已从订阅里拿掉");
+  };
+  const targetMap = new Map(proxyTargets(view));
+  const formatTarget = (raw?: string) => {
+    if (!raw) return "未知";
+    if (targetMap.has(raw)) return targetMap.get(raw)!;
+    if (raw === "direct" || raw === "DIRECT") return "直连";
+    if (raw === "proxy" || raw === "PROXY") return "PROXY";
+    if (raw === "reject" || raw === "REJECT") return "拒绝";
+    return raw;
+  };
+  const activeCustom = view.custom.entries.filter((entry) => entry.enabled);
+  const shownCustom = expandFlows ? activeCustom : activeCustom.slice(0, 4);
+  const builtinFlows = [
     { label: "局域网与本机", target: "直连" },
     { label: "国内域名与国内 IP", target: "直连" },
     { label: "其余流量", target: "PROXY" },
   ];
   return (
-    <div className="grid items-start gap-[var(--weir-gap-29)] lg:grid-cols-[minmax(0,1.61fr)_minmax(0,1fr)]">
+    <div className="grid items-start gap-[var(--weir-gap-29)] lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
       <div className="stack">
         <Card className="px-[var(--weir-gap-25)] py-[var(--weir-gap-21)]">
-          <div className="mb-[var(--weir-gap-17)] flex items-center justify-between gap-3"><b>节点类型</b><span className="text-meta text-[var(--weir-ink-3)]">拨下去的类型不进订阅</span></div>
+          <div className="mb-[var(--weir-gap-17)] flex items-center justify-between gap-3"><b>订阅包含的协议</b><span className="text-meta text-[var(--weir-ink-3)]">点击拨杆纳入或移出</span></div>
           {!view.types.length ? <State empty="还没有可用的节点" /> : (
             <div className="grid gap-[var(--weir-gap-21)] sm:grid-cols-3">
               {view.types.map((type) => (
-                <div key={type.key} className="flex items-center gap-[var(--weir-gap-15)]">
-                  <span className="weir-lever" data-on={type.enabled || undefined} role="img" aria-label={`${type.label}：${type.enabled ? "在订阅里" : "已从订阅拿掉"}`}><i /></span>
-                  <div className="min-w-0"><b className="block truncate">{type.label}</b><div className="text-fine text-[var(--weir-ink-3)]">{type.nodes.length} 个节点 · {type.enabled ? (type.exit ? "经出口" : "直接从 VPS 出去") : "已拿掉"}</div></div>
+                <div key={type.key} className="flex items-center gap-[var(--weir-gap-13)]">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={type.enabled}
+                    aria-label={`${type.label} 放进订阅`}
+                    disabled={typeAction.isBusy()}
+                    onClick={() => void toggleType(type.key, !type.enabled)}
+                    className="weir-lever weir-press cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                    data-on={type.enabled || undefined}
+                  ><i /></button>
+                  <div className="min-w-0"><b className="block truncate">{type.label}</b><div className="text-fine text-[var(--weir-ink-3)]">{type.nodes.length} 个节点 · {type.enabled ? (type.exit ? "个人链式出口" : "直连 VPS") : "已移出"}</div></div>
                 </div>
               ))}
             </div>
           )}
-          <p className="mt-[var(--weir-gap-13)] mb-0 text-fine text-[var(--weir-ink-3)]">开关在下方「节点与出口」里改</p>
+          <p className="mt-[var(--weir-gap-13)] mb-0 text-fine text-[var(--weir-ink-3)]">按协议给当前用户单独挂载出口可在下方 <TextLink render={<button type="button" onClick={() => onJumpTab("nodes")} />}>个人链式与测速</TextLink> 中设置</p>
         </Card>
         <Card className="overflow-hidden p-0">
-          <div className="weir-set-row"><b>流量怎么走</b><TextLink render={<Link to={admin ? "/exits" : "?tab=rules"} />}>{admin ? "在出口与分流里编辑" : "编辑全局清单"}</TextLink></div>
-          {flows.map((flow) => (
-            <div key={flow.label + flow.target} className="weir-set-row"><span>{flow.label}</span><Badge variant="soft" tone={flow.target.includes("TCP") ? "info" : "neutral"}>{flow.target}</Badge></div>
+          <div className="weir-set-row"><b>客户端流量走向</b><span className="flex flex-wrap items-center gap-1"><Button size="sm" variant="ghost" onClick={() => onJumpTab("rules")}>编辑全局清单（{activeCustom.length}）</Button>{admin && <Button size="sm" variant="ghost" render={<Link to="/rules" />}>服务端规则</Button>}</span></div>
+          {shownCustom.map((entry) => {
+            const label = formatTarget(entry.effective_target || entry.target);
+            const isDirect = label === "直连";
+            return (
+              <div key={entry.id} className="weir-set-row">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="truncate font-mono text-meta">{entry.value}</span>
+                  <span className="shrink-0 text-fine text-[var(--weir-ink-3)]">{ruleKindShort[entry.kind]}</span>
+                </span>
+                <Badge variant="soft" tone={isDirect ? "neutral" : "info"}>{label}</Badge>
+              </div>
+            );
+          })}
+          {activeCustom.length > 4 && (
+            <div className="weir-set-row py-2">
+              <TextLink render={<button type="button" onClick={() => setExpandFlows((v) => !v)} />}>{expandFlows ? "收起自定义规则" : `展开其余 ${activeCustom.length - 4} 条自定义规则`}</TextLink>
+            </div>
+          )}
+          {builtinFlows.map((flow) => (
+            <div key={flow.label} className="weir-set-row">
+              <span className="text-[var(--weir-ink-2)]">{flow.label}</span>
+              <Badge variant="soft" tone={flow.target === "直连" ? "neutral" : "info"}>{flow.target}</Badge>
+            </div>
           ))}
         </Card>
       </div>
       <div>
-        <div className="mb-[var(--weir-gap-13)] flex flex-wrap items-center justify-between gap-2">
-          <b>订阅预览</b>
-          <Segmented aria-label="预览格式" value={fmt} onValueChange={setFmt} options={[["clash", "Clash"], ["base64", "小火箭"], ["singbox", "sing-box"]] as const} />
+        <div className="mb-[var(--weir-gap-9)] flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <b>订阅预览</b>
+            {preview.data && <small className="ml-2 text-[var(--weir-ink-3)]">{preview.data.link_name || "默认"} · 不计拉取统计</small>}
+          </div>
+          <Segmented size="sm" aria-label="预览格式" value={fmt} onValueChange={setFmt} options={[["clash", "Clash"], ["base64", "小火箭"], ["singbox", "sing-box"]] as const} />
         </div>
-        {preview.isPending || preview.error ? <State loading={preview.isPending} error={preview.error} onRetry={() => preview.refetch()} /> : <><small>链接：{preview.data.link_name || "默认链接"} · 预览不计入拉取统计</small><pre tabIndex={0} role="region" aria-label="代理配置预览" className="weir-paper max-h-[621px] overflow-auto">{preview.data.body}</pre></>}
+        {preview.isPending || preview.error ? <State loading={preview.isPending} error={preview.error} onRetry={() => preview.refetch()} /> : <pre tabIndex={0} role="region" aria-label="代理配置预览" className="weir-paper max-h-[421px] overflow-auto">{preview.data.body}</pre>}
       </div>
     </div>
   );
@@ -165,52 +235,27 @@ function UserPick({ value, onChange }: { value: number | null; onChange: (id: nu
   );
 }
 
-// TypesCard：每个类型一块。开关决定放不放进订阅；出口给这一类的全部节点统一加（每个节点由入口 VPS 实测）。
-function TypesCard({ base, view, nodes, admin, onSaved, onUpdated }: { base: string; view: ProxyView; nodes: NodeOption[]; admin: boolean; onSaved: () => void; onUpdated: (view: ProxyView) => void }) {
+// TypesCard：按协议类型给当前用户统一加出口（协议是否放入订阅已由顶部拨杆控制，此处不再重复放置开关）。
+function TypesCard({ base, view, nodes, admin, onSaved }: { base: string; view: ProxyView; nodes: NodeOption[]; admin: boolean; onSaved: () => void }) {
   const confirm = useConfirm();
-  const navigate = useNavigate();
   const exitParam = useStringDialogParam("type_exit");
   const exitFor = view.types.find((t) => t.key === exitParam.value);
   const { run, isBusy } = useRowAction<string>({ refetch: async () => onSaved() });
-  const typeAction = useRowAction<string>();
-  const disabled = new Set(view.policy.disabled ?? []);
-  const toggle = (key: string, on: boolean) => {
-    const next = on ? [...disabled].filter((k) => k !== key) : [...disabled, key];
-    return typeAction.run(key, async () => {
-      try {
-        const updated = await api(proxyURL(base), "PUT", { ...view.policy, disabled: next }) as ProxyView;
-        onUpdated(updated);
-        return updated;
-      } catch (error) {
-        if (error instanceof ApiError && error.code === "proxy_revision_conflict") onSaved();
-        throw error;
-      }
-    }, on ? "已放进订阅" : "已从订阅里拿掉");
-  };
   return (
-    <InsetGroup title="节点类型" description="同一种协议方案的节点归为一类。关掉的类型不放进订阅；加了出口的类型，订阅里换成经出口的版本。">
+    <InsetGroup title="按协议挂个人出口" description="给当前用户的整类协议节点统一挂载链式出口（每个节点由入口 VPS 实测通过后切换）。">
         <InsetRows>
           {view.types.map((t) => (
             <InsetRow key={t.key} className="stack" data-disabled={!t.enabled || undefined}>
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <strong className="flex min-w-0 items-center gap-2">
                   <span className="truncate">{t.label}</span>
                   <TypeCount type={t} />
+                  {!t.enabled && <Badge variant="soft" tone="neutral">已从订阅移出</Badge>}
                 </strong>
-                <Switch aria-label={`${t.label} 放进订阅`} checked={t.enabled} disabled={typeAction.isBusy() || isBusy(t.key) || isBusy("exit:" + t.key)} onCheckedChange={(on) => void toggle(t.key, on)} />
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {/* 管理员点节点打开它的详情；普通用户只看状况 */}
-                {t.nodes.map((n) => {
-                  const meta = n.health === "down" ? healthText.down : n.rate.minutes ? rateText(n.rate.p90_bps) : healthText[n.health];
-                  return <ChipLabel key={n.id} tone={healthTone[n.health]} meta={meta} title={n.why}><ObjectLink to={{ type: "node", id: n.id, name: n.name }} href={admin ? undefined : `/proxy?tab=nodes&focus=${encodeURIComponent(`node:${n.id}`)}`}><NodeSummary node={n} compact /></ObjectLink></ChipLabel>;
-                })}
-              </div>
-              <div className="flex flex-wrap items-center justify-between gap-2 text-meta">
-                <span className="min-w-0 text-[var(--weir-ink-2)]">
-                  出口：{t.exit ? <ExitSummary exit={t.exit} /> : "直接从 VPS 出去"}
-                </span>
-                <span className="flex gap-1.5">
+                <span className="flex items-center gap-2 text-meta">
+                  <span className="text-[var(--weir-ink-2)]">
+                    {t.exit ? <>出口：<ExitSummary exit={t.exit} /></> : "直接从 VPS 出站"}
+                  </span>
                   {view.allow_chain && (
                     <Button size="sm" variant="outline" onClick={() => exitParam.open(t.key)}>
                       {t.exit ? "改出口" : <><Plus />加出口</>}
@@ -223,6 +268,12 @@ function TypesCard({ base, view, nodes, admin, onSaved, onUpdated }: { base: str
                     </Button>
                   )}
                 </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {t.nodes.map((n) => {
+                  const meta = n.health === "down" ? healthText.down : n.rate.minutes ? rateText(n.rate.p90_bps) : healthText[n.health];
+                  return <ChipLabel key={n.id} tone={healthTone[n.health]} meta={meta} title={n.why}><ObjectLink to={{ type: "node", id: n.id, name: n.name }} href={admin ? undefined : `/proxy?tab=nodes&focus=${encodeURIComponent(`node:${n.id}`)}`}><NodeSummary node={n} compact /></ObjectLink></ChipLabel>;
+                })}
               </div>
               {(t.missing_exit ?? []).length > 0 && (
                 <Notice tone="warn">新加的节点还没有经出口：{t.missing_exit!.join("、")}。点「改出口」再保存一次即可。</Notice>
@@ -303,7 +354,7 @@ function PolicyCard({ base, view, onUpdated }: { base: string; view: ProxyView; 
   useUnsavedChanges(dirty);
   const save = useFormAction<ProxyView>(() => api(proxyURL(base), "PUT", { ...view.policy, auto: { refresh_minutes: Number(refresh) } }) as Promise<ProxyView>, { fields: { invalid_refresh: "refresh" }, onSuccess: onUpdated, ok: "已保存刷新间隔" });
   useConsoleContext({form:[field("refresh", "节点列表刷新间隔", refresh)]});
-  return <InsetGroup title="节点列表刷新"><Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}><Field name="refresh" label="节点列表刷新间隔（分钟）" required hint="30–1440 分钟。与分组探测间隔分开；分组结构变化需更新完整订阅。"><Input type="number" min={30} max={1440} step={1} required value={refresh} onChange={(e) => setRefresh(e.target.value)} /></Field><Button type="submit" disabled={!dirty} busy={save.busy} busyText="正在保存">保存</Button><div className="min-h-6" role="status">{save.error}</div></Form></InsetGroup>;
+  return <InsetGroup title="节点列表刷新"><Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}><div className="flex flex-wrap items-end gap-2"><Field name="refresh" label="节点列表刷新间隔（分钟）" required hint="30–1440 分钟；分组结构变化需更新完整订阅。" className="min-w-0 flex-1 basis-56"><Input type="number" min={30} max={1440} step={1} required value={refresh} onChange={(e) => setRefresh(e.target.value)} /></Field><Button type="submit" disabled={!dirty} busy={save.busy} busyText="正在保存">保存</Button></div>{save.error && <Notice tone="bad" role="status">{save.error}</Notice>}</Form></InsetGroup>;
 }
 
 // 速度排名只供展示；客户端成员顺序由统一订阅计划决定。

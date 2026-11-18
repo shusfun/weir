@@ -336,19 +336,34 @@ func (s *Server) CheckReachabilityAll(ctx context.Context, now time.Time) {
 	}()
 }
 
-// publicHostHint 是单机安装时建议的公网地址：本机网卡上的公网 IP（Gate 经回环连接中心，记录不到来源地址）。
+var localInterfaceAddrs = net.InterfaceAddrs
+
+// 多个公网 IPv4 无法确定客户端应连接哪一个，留给管理员选择。
+func localPublicHost() (string, error) {
+	addrs, err := localInterfaceAddrs()
+	if err != nil {
+		return "", err
+	}
+	host := ""
+	for _, a := range addrs {
+		ipn, ok := a.(*net.IPNet)
+		if !ok || ipn.IP.To4() == nil || !publicAddr(ipn.IP) {
+			continue
+		}
+		ip := ipn.IP.String()
+		if host != "" && host != ip {
+			return "", nil
+		}
+		host = ip
+	}
+	return host, nil
+}
+
+// publicHostHint 是单机安装时建议的公网地址：本机网卡上的唯一公网 IPv4。
 func publicHostHint(g *ent.Gate) string {
 	if g.PublicHost != "" || !colocated(g) {
 		return ""
 	}
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return ""
-	}
-	for _, a := range addrs {
-		if ipn, ok := a.(*net.IPNet); ok && ipn.IP.To4() != nil && publicAddr(ipn.IP) {
-			return ipn.IP.String()
-		}
-	}
-	return ""
+	host, _ := localPublicHost()
+	return host
 }

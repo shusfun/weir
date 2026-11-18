@@ -266,6 +266,8 @@ func (s *Server) serveSub(c *gin.Context) {
 		s.spa(c)
 		return
 	}
+	delivery := beginSubscriptionDelivery(c, l.ID, loadPolicy(u).Revision, "main")
+	defer delivery.finish()
 	target := c.Query("target")
 	if target == "" {
 		target = subout.TargetForUA(c.GetHeader("User-Agent"))
@@ -275,6 +277,7 @@ func (s *Server) serveSub(c *gin.Context) {
 		failure(c, 403, "subscription_"+state)
 		return
 	}
+	delivery.stage = "plan"
 	entries, err := s.linkEntries(ctx, u, l)
 	if err != nil {
 		s.recordPull(c, l, target, "failed")
@@ -287,11 +290,13 @@ func (s *Server) serveSub(c *gin.Context) {
 		failInternal(c, 503, "subscription_unavailable", err)
 		return
 	}
+	delivery.setRevision(p.Policy.Revision)
 	if len(p.Entries) == 0 {
 		s.recordPull(c, l, target, "failed")
 		failDetail(c, 422, "subscription_no_nodes", "没有可输出的代理节点", nil)
 		return
 	}
+	delivery.stage = "render"
 	body, contentType, report, err := s.renderSubscriptionDetailed(c, u, l, p, target)
 	if err != nil {
 		recordSubscriptionCompatibility(withTrace(ctx, c.GetString("request_id")), report)
@@ -316,6 +321,7 @@ func (s *Server) serveSub(c *gin.Context) {
 	_ = l.Update().SetLastUsedAt(time.Now()).Exec(ctx)
 	s.recordPull(c, l, target, "ok")
 	s.recordSubCheck(withTrace(ctx, c.GetString("request_id")), "link-"+itoa(l.ID), firstNonEmpty(l.Name, "订阅")+" · "+u.Email, target, body)
+	delivery.members, delivery.stage = report.IncludedNodes, "delivered"
 	c.Data(200, contentType, body)
 }
 
@@ -332,10 +338,13 @@ func (s *Server) serveProvider(c *gin.Context) {
 		failure(c, 404, "subscription_not_found")
 		return
 	}
+	delivery := beginSubscriptionDelivery(c, l.ID, loadPolicy(u).Revision, "unknown")
+	defer delivery.finish()
 	if state := windowState(u, l, time.Now()); state != "active" {
 		failure(c, 403, "subscription_"+state)
 		return
 	}
+	delivery.stage = "plan"
 	entries, err := s.linkEntries(ctx, u, l)
 	if err != nil {
 		failInternal(c, 503, "subscription_unavailable", err)
@@ -346,6 +355,7 @@ func (s *Server) serveProvider(c *gin.Context) {
 		failInternal(c, 503, "subscription_unavailable", err)
 		return
 	}
+	delivery.setRevision(p.Policy.Revision)
 	plan, items := s.subPlan(ctx, p)
 	key := c.Param("key")
 	found := key == subout.AutoProvider || key == subout.SingleProvider
@@ -357,11 +367,13 @@ func (s *Server) serveProvider(c *gin.Context) {
 		failure(c, 404, "provider_not_found")
 		return
 	}
-	body, err := subout.ClashProvider(items, plan, key)
+	delivery.provider, delivery.stage = key, "render"
+	body, count, err := subout.ClashProviderDetailed(items, plan, key)
 	if err != nil {
 		failDetail(c, 422, "format_conversion_failed", err.Error(), nil)
 		return
 	}
+	delivery.members, delivery.stage = count, "delivered"
 	c.Data(200, "application/yaml; charset=utf-8", body)
 }
 

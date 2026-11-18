@@ -27,7 +27,7 @@ func clashOutput(links []string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return yaml.Marshal(map[string]any{"mixed-port": 7890, "mode": "rule", "proxies": proxies, "proxy-groups": []any{map[string]any{"name": "PROXY", "type": "select", "proxies": names}}, "rules": []string{"MATCH,PROXY"}})
+	return yaml.Marshal(map[string]any{"mixed-port": 7890, "mode": "rule", "proxies": proxies, "proxy-groups": []any{map[string]any{"name": "PROXY", "type": "select", "proxies": names, "empty-fallback": "REJECT"}}, "rules": []string{"MATCH,PROXY"}})
 }
 
 // clashProxies 把链接转成 Clash 的 proxies，names 与 links 一一对应（重名时加序号）。

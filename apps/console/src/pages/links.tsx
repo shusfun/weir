@@ -143,8 +143,8 @@ function MyLinks({ admin, stats, query, attention }: { admin: boolean; stats: Ma
       <Card>
         <CardContent className="grid gap-4 sm:grid-cols-3">
           <Readout label="已用流量" value={bytes(s.used)} caption={s.unlimited ? "不限额度" : `共 ${bytes(s.quota)}`} />
-          <Readout label="套餐到期" value={s.expires_at ? date(s.expires_at) : "长期有效"} caption="链接的结束时间不能晚于它" />
-          <Readout label="用量重置" value={s.monthly_reset ? date(s.next_reset ?? undefined) : "不重置"} caption={s.monthly_reset ? "每月自动清零" : undefined} />
+          <Readout label="套餐到期" value={s.expires_at ? date(s.expires_at).split(" ")[0] : "长期有效"} caption="链接的结束时间不能晚于它" />
+          <Readout label="用量重置" value={s.monthly_reset ? (s.next_reset ? date(s.next_reset).split(" ")[0] : "未知") : "不重置"} caption={s.monthly_reset ? "每月自动清零" : undefined} />
           {!s.unlimited && s.quota > 0 && <Meter className="sm:col-span-3" label="流量使用" value={s.used} max={s.quota} />}
         </CardContent>
       </Card>
@@ -153,8 +153,8 @@ function MyLinks({ admin, stats, query, attention }: { admin: boolean; stats: Ma
           你的套餐有流量额度，以下 WireGuard 节点没有放进订阅：{s.withheld!.map((w) => w.name).join("、")}。WireGuard 没有按用户的流量统计，无法执行额度，只发给不限额度的用户。
         </Notice>
       )}
-      {nodes.data.length === 0 && <State empty="暂无可用节点" detail={admin ? "到「VPS 与节点」建好节点后，会自动进入你的订阅。" : "请联系管理员分配节点。"} />}
-      <LinkPanel base="/me" planEnds={s.expires_at} stats={stats} variant="tickets" query={query} attention={attention} title="订阅链接" />
+      {nodes.data.length === 0 && <State empty="暂无可用节点" detail={admin ? "到「节点」建好节点后，会自动进入你的订阅。" : "请联系管理员分配节点。"} />}
+      <LinkPanel base="/me" planEnds={s.expires_at} stats={stats} variant="tickets" query={query} attention={attention} title="可用链接" description="每条链接凭据独立、共用同一份额度（最多 10 条）" />
       <GroupsCard />
       <RedeemCard />
       <ClientsCard />

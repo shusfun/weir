@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strconv"
 	"strings"
@@ -320,7 +321,7 @@ func (s *Server) writeProxyGroup(c *gin.Context, admin bool) {
 				result.ToleranceMS = *req.ToleranceMS
 			}
 			if result.IntervalSeconds == 0 {
-				result.IntervalSeconds = 60
+				result.IntervalSeconds = contracts.DefaultGroupIntervalSeconds
 			}
 			lines, e := s.proxyLines(ctx, latest)
 			targets := map[string]bool{}
@@ -376,6 +377,11 @@ func (s *Server) writeProxyGroup(c *gin.Context, admin bool) {
 	if c.Writer.Written() {
 		return
 	}
+	slog.InfoContext(ctx, "proxy group saved",
+		"trace", taskTrace(ctx), "operation", "proxy.group."+strings.ToLower(c.Request.Method),
+		"user_id", u.ID, "group_id", result.ID, "policy_revision", loadPolicy(u).Revision,
+		"member_count", len(result.Members), "result", "ok",
+		"code.function.name", "writeProxyGroup", "code.file.path", "internal/center/proxy_groups.go")
 	s.audit(c, "proxy.group."+strings.ToLower(c.Request.Method), "proxy_group:"+itoa(u.ID)+":"+itoa(result.ID), "ok")
 	v, err := s.proxyView(ctx, u)
 	if err != nil {

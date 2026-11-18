@@ -1,23 +1,20 @@
 import { PendingExits } from "../components/pending-exits";
 // 版本档案与中心二进制缓存分开显示，VPS 优先按固定档案直接下载。
-// 分区记在地址栏 ?tab=（版本 / 驱动 / 订阅检查 / dsh）。
+// 分区记在地址栏 ?tab=（版本 / 驱动 / 订阅检查）。
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "../lib/query";
-import { useSearchParams } from "react-router-dom";
-import { Badge, Button, Card, CodeBlock, InsightBanner, Dialog, DialogContent, DialogDescription, DialogTitle, InsetGroup, InsetRow, InsetRows, JobPlaceholder, PageHeader, SkeletonCards, SkeletonList, Table, VersionCell, TableBody, TableCell, TableHead, TableHeader, TableRow, Tabs, TabsList, TabsPanel, TabsTab, useConfirm } from "@weir/ui";
+import { Navigate, useSearchParams } from "react-router-dom";
+import { ActionGroup, Badge, Button, Card, CodeBlock, InsightBanner, Dialog, DialogContent, DialogDescription, DialogTitle, InsetGroup, InsetRow, InsetRows, PageHeader, SkeletonCards, SkeletonList, Table, VersionCell, TableBody, TableCell, TableHead, TableHeader, TableRow, Tabs, TabsList, TabsPanel, TabsTab, useConfirm } from "@weir/ui";
 import { Download, Star, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { useRowAction } from "../lib/action";
 import { State } from "../components/feedback";
-import { DshVersions } from "../components/dsh";
 import { SubCheckBadge, type SubCheck } from "../components/sub-check";
 import { JobLine, latestJob, useJobs, useStartedJob, type Job } from "../components/job";
 import { DriversPanel } from "../components/drivers";
 import { date } from "../lib/models";
 import { ObjectLink, dataObject } from "../components/object-link";
-import { Link } from "react-router-dom";
-import { TextLink } from "@weir/ui";
 import { useConsoleContext } from "../lib/console-context";
 
 interface KernelVersion {
@@ -53,20 +50,21 @@ interface Release {
   incompatible?: string;
 }
 
-export const kernelNames: Record<string, string> = { xray: "Xray", "sing-box": "sing-box", mihomo: "mihomo（连接实测与订阅检查）" };
-const kernelUses: Record<string, string> = { xray: "运行 VLESS 类节点，创建这类节点时自动下载。", "sing-box": "运行 SS2022、Hysteria2、TUIC、ShadowTLS 节点，创建这类节点时自动下载；中心还用它检查 sing-box 订阅。", mihomo: "中心检查 Clash 订阅、实测节点；按需自动下发到 VPS，只在测试时临时运行。" };
+export const kernelNames: Record<string, string> = { xray: "Xray", "sing-box": "sing-box", mihomo: "mihomo" };
+const kernelUses: Record<string, string> = { xray: "运行 VLESS 类节点", "sing-box": "运行 SS2022、Hysteria2、TUIC 与 ShadowTLS 节点", mihomo: "中心订阅语法校验与连接实测" };
 const order = ["xray", "sing-box", "mihomo"];
 const tabs = [
-  { key: "versions", label: "版本" },
+  { key: "versions", label: "版本缓存" },
   { key: "drivers", label: "驱动" },
   { key: "checks", label: "订阅检查" },
-  { key: "dsh", label: "dsh" },
 ] as const;
 
 export function KernelsPage() {
   const [params, setParams] = useSearchParams();
-  const tab = tabs.some((t) => t.key === params.get("tab")) ? params.get("tab")! : "versions";
+  const rawTab = params.get("tab");
+  const tab = tabs.some((t) => t.key === rawTab) ? rawTab! : "versions";
   useConsoleContext({ page: "内核", tab: tabs.find((t) => t.key === tab)?.label });
+  if (rawTab === "dsh") return <Navigate to="/system?tab=ai&setting=dsh" replace />;
   return (
     <div className="stack">
       <KernelHeader />
@@ -79,7 +77,6 @@ export function KernelsPage() {
         <TabsPanel value="versions" className="stack"><Versions /></TabsPanel>
         <TabsPanel value="drivers" className="stack"><DriversPanel /></TabsPanel>
         <TabsPanel value="checks" className="stack"><SubChecks /></TabsPanel>
-        <TabsPanel value="dsh" className="stack"><TextLink render={<Link to="/system?tab=ai" />}>返回系统设置的「AI 与 dsh」</TextLink><DshVersions /></TabsPanel>
       </Tabs>
       <PendingExits all />
     </div>
@@ -182,7 +179,7 @@ function Versions() {
     run("del:" + kernel + version, () => api(`/admin/kernels/${kernel}/versions/${encodeURIComponent(version)}`, "DELETE"), "已删除");
   if (q.isPending || q.error) return <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} skeleton={<SkeletonCards count={3} lines={3} />} />;
   return (
-    <>
+    <div className="grid items-start gap-[var(--weir-space-4)] xl:grid-cols-2">
       {Object.entries(q.data).sort(([a], [b]) => order.indexOf(a) - order.indexOf(b)).map(([kernel, k]) => {
         const job = latestJob(jobs.data, `kernel:${kernel}:`);
         return (
@@ -190,30 +187,36 @@ function Versions() {
             key={kernel}
             {...dataObject({ type: "kernel", key: kernel })}
             title={kernelNames[kernel] ?? kernel}
-            description={`${kernelUses[kernel] ?? ""} ${k.default ? `默认版本 ${k.default}。` : "首次准备稳定版的发行档案；已有版本继续遵循锁定、默认与运行版本规则。"} 需要的架构：${k.arches.join("、")}。中心自用与过渡期旧 VPS 才预下载二进制，新 VPS 自行下载并完成实际检查。`}
+            description={`${kernelUses[kernel] ?? ""}${k.default ? ` · 默认 ${k.default}` : ""} · ${k.arches.join(" / ")}`}
             actions={<Button size="sm" variant="outline" onClick={() => setReleases(kernel)}><Download />拉取版本</Button>}
           >
-              <JobLine job={job} idle="没有进行中的下载" onFinish={() => void q.refetch()} />
+              {job && <JobLine job={job} idle="" onFinish={() => void q.refetch()} />}
               {k.versions.length > 0 && <UpdateAdvice kernel={kernel} onSetDefault={setDefault} busy={isBusy} />}
-              {k.versions.length === 0 ? <small>尚未准备版本</small> : (
+              {k.versions.length === 0 ? <small className="text-[var(--weir-ink-3)]">尚未缓存版本，点右上角「拉取版本」或创建对应协议节点时自动准备。</small> : (
                 <InsetRows as="ul">
                   {k.versions.map((v) => {
                     const users = [...(v.pinned_refs ?? []).map((g) => ({ ...g, how: "锁定" })), ...(v.running_refs ?? []).map((g) => ({ ...g, how: "运行中" }))];
                     const missing = k.arches.filter((a) => !v.arches[a]);
+                    const cachedArches = v.center_binaries ? Object.entries(v.center_binaries).filter(([, cached]) => cached).map(([arch]) => arch) : [];
                     return (
-                      <InsetRow as="li" key={v.version} {...dataObject({ type: "kernel", key: `${kernel}@${v.version}` })} className="flex flex-wrap items-center gap-2">
-                        <code className="text-meta">{v.version}</code>
-                        {v.default && <Badge variant="soft" tone="ok">默认</Badge>}
-                        {missing.length > 0 && <Badge variant="soft" tone="warn">缺 {missing.join("、")}</Badge>}
-                        {missing.length === 0 && <Badge variant="soft" tone="neutral">版本已就绪</Badge>}
-                        <small className="text-[var(--weir-ink-3)]">中心二进制：{v.center_binaries ? Object.entries(v.center_binaries).filter(([, cached]) => cached).map(([arch]) => arch).join("、") || "未缓存" : "未知"}</small>
-                        {kernel !== "mihomo" && (v.driver ? <Badge variant="soft" tone="neutral">驱动 <ObjectLink to={{ type: "driver", key: v.driver, name: v.driver }} /></Badge> : <Badge variant="soft" tone="bad" title={v.driver_error}>没有驱动 · <ObjectLink to={{ type: "driver", key: "new", name: "新增驱动" }} /></Badge>)}
-                        {users.length > 0 && <small className="text-[var(--weir-ink-3)]">{users.map((g, i) => <span key={g.how + g.id}>{i > 0 && "、"}<ObjectLink to={{ type: "gate", id: g.id, name: g.name }} />（{g.how}）</span>)}</small>}
-                        <span className="ml-auto flex gap-1">
-                          {missing.length > 0 && <Button size="xs" variant="ghost" disabled={isBusy()} busy={isBusy("fetch:" + kernel + v.version)} busyText="正在开始…" onClick={() => void run("fetch:" + kernel + v.version, async () => started((await api(`/admin/kernels/${kernel}/fetch`, "POST", { version: v.version })).job.id), `开始下载 ${missing.join("、")}`)}><Download />补下</Button>}
-                          {!v.default && <Button size="xs" variant="ghost" disabled={isBusy() || (kernel !== "mihomo" && !v.driver)} busy={isBusy("default:" + kernel + v.version)} busyText="正在设置…" onClick={() => void setDefault(kernel, v.version)}><Star />设为默认</Button>}
-                          {!v.default && users.length === 0 && <Button size="xs" variant="ghost" aria-label={`删除 ${v.version}`} disabled={isBusy()} busy={isBusy("del:" + kernel + v.version)} busyText="正在删除" onClick={() => void remove(kernel, v.version)}><Trash2 /></Button>}
-                        </span>
+                      <InsetRow as="li" key={v.version} {...dataObject({ type: "kernel", key: `${kernel}@${v.version}` })} className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="min-w-0 space-y-0.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <code className="font-mono text-body font-semibold">{v.version}</code>
+                            {v.default && <Badge variant="status" tone="ok">当前默认</Badge>}
+                            {missing.length > 0 && <Badge variant="soft" tone="warn">缺 {missing.join("、")}</Badge>}
+                            {kernel !== "mihomo" && (v.driver ? <span className="text-meta text-[var(--weir-ink-3)]">驱动 <ObjectLink to={{ type: "driver", key: v.driver, name: v.driver }} /></span> : <Badge variant="soft" tone="bad" title={v.driver_error}>缺驱动 · <ObjectLink to={{ type: "driver", key: "new", name: "新增" }} /></Badge>)}
+                          </div>
+                          <small className="block text-fine text-[var(--weir-ink-3)]">
+                            {cachedArches.length > 0 ? `已缓存 ${cachedArches.join("/")}` : "按摘要直拉"}
+                            {users.length > 0 && <> · {users.map((g, i) => <span key={g.how + g.id}>{i > 0 && "、"}<ObjectLink to={{ type: "gate", id: g.id, name: g.name }} />（{g.how}）</span>)}</>}
+                          </small>
+                        </div>
+                        <ActionGroup wrap={false}>
+                          {missing.length > 0 && <Button size="xs" variant="outline" disabled={isBusy()} busy={isBusy("fetch:" + kernel + v.version)} busyText="正在开始…" onClick={() => void run("fetch:" + kernel + v.version, async () => started((await api(`/admin/kernels/${kernel}/fetch`, "POST", { version: v.version })).job.id), `开始下载 ${missing.join("、")}`)}><Download />补下</Button>}
+                          {!v.default && <Button size="xs" variant="outline" disabled={isBusy() || (kernel !== "mihomo" && !v.driver)} busy={isBusy("default:" + kernel + v.version)} busyText="正在设置…" onClick={() => void setDefault(kernel, v.version)}><Star />设为默认</Button>}
+                          {!v.default && users.length === 0 && <Button size="icon-sm" variant="ghost" aria-label={`删除 ${v.version}`} disabled={isBusy()} busy={isBusy("del:" + kernel + v.version)} onClick={() => void remove(kernel, v.version)}><Trash2 /></Button>}
+                        </ActionGroup>
                       </InsetRow>
                     );
                   })}
@@ -223,12 +226,11 @@ function Versions() {
         );
       })}
       {releases && <ReleasesDialog kernel={releases} info={q.data[releases]} jobs={jobs.data} close={() => setReleases(null)} fetched={() => void q.refetch()} onSetDefault={setDefault} />}
-    </>
+    </div>
   );
 }
 
-// UpdateAdvice：更新建议，固定一行。规则与「上游版本」里的「推荐」相同；单独请求，GitHub 慢或连不上不拖累内核页。
-// 升级会切换 VPS 上的内核，只建议：点了再确认才做。读不到时写「未知」，不当成已是最新。
+// UpdateAdvice：只在检测到推荐新版本时展示升级建议条，避免空闲态常驻灰色占位框。
 function UpdateAdvice({ kernel, onSetDefault, busy }: { kernel: string; onSetDefault: (kernel: string, version: string) => Promise<unknown>; busy: (key?: string) => boolean }) {
   const q = useQuery({ queryKey: ["kernel-recommended", kernel], queryFn: () => api(`/admin/kernels/${kernel}/recommended`) as Promise<Recommended>, retry: false, staleTime: 5 * 60_000 });
   const started = useStartedJob();
@@ -237,23 +239,17 @@ function UpdateAdvice({ kernel, onSetDefault, busy }: { kernel: string; onSetDef
   const confirm = useConfirm();
   const r = q.data?.recommended;
   const name = kernelNames[kernel] ?? kernel;
+  if (!q.data?.update || !r?.version) return null;
   const apply = async () => {
-    if (!r) return;
     const yes = await confirm({ title: `把 ${name} 默认版本换成 ${r.version}？`, description: q.data!.cached ? "未锁定版本的 VPS 会在数秒内切换。" : "先下载这个版本，下载成功后设为默认，未锁定版本的 VPS 随之切换；下载失败时默认版本不变。", confirmText: q.data!.cached ? "设为默认" : "下载并设为默认" });
     if (!yes) return;
     if (q.data!.cached) return onSetDefault(kernel, r.version).then(() => client.invalidateQueries({ queryKey: ["kernel-recommended", kernel] }));
     return run("apply", async () => started((await api(`/admin/kernels/${kernel}/fetch`, "POST", { version: r.version, set_default: true })).job.id), `开始下载 ${name} ${r.version}`, { fail: "下载没有开始" });
   };
-  const muted = "min-w-0 flex-1 truncate text-meta text-[var(--weir-ink-3)]";
-  if (q.isPending) return <JobPlaceholder text="正在查询推荐版本…" />;
-  if (q.error) return <JobPlaceholder text={"推荐版本未知：" + (q.error as Error).message} />;
-  if (!r?.version) return <JobPlaceholder text={"推荐版本未知" + (r?.reason ? "：" + r.reason : "")} />;
-  const latest = r.latest && r.latest !== r.version && r.latest !== q.data.current ? `最新 ${r.latest} 发布不满 14 天或没有适用驱动，暂不建议。` : "";
-  if (!q.data.update) return <JobPlaceholder text={(q.data.current === r.version ? `已是推荐版本 ${r.version}。` : `当前 ${q.data.current} 比推荐版本 ${r.version} 新。`) + latest} />;
   return (
-    <div className="flex min-h-9 min-w-0 flex-wrap items-center gap-2">
-      <Badge variant="soft" tone="warn">建议更新到 {r.version}</Badge>
-      <small className={muted} title={r.reason}>{r.reason}</small>
+    <div className="flex min-h-9 min-w-0 flex-wrap items-center gap-2 rounded-[var(--weir-radius-9)] border border-[var(--weir-warn)] bg-[var(--weir-warn-soft)] px-3 py-2">
+      <Badge variant="soft" tone="warn">建议升级 {r.version}</Badge>
+      <small className="min-w-0 flex-1 truncate text-meta text-[var(--weir-ink-2)]" title={r.reason}>{r.reason}</small>
       <Button size="xs" variant="outline" disabled={isBusy() || busy()} busy={isBusy("apply")} busyText="正在开始…" onClick={() => void apply()}>{q.data.cached ? "设为默认" : "下载并设为默认"}</Button>
     </div>
   );
@@ -263,7 +259,7 @@ function UpdateAdvice({ kernel, onSetDefault, busy }: { kernel: string; onSetDef
 function SubChecks() {
   const q = useQuery({ queryKey: ["sub-checks"], queryFn: () => api("/admin/sub-checks") as Promise<{ kernels: Record<string, { available: boolean; version?: string; error?: string }>; items: SubCheck[] }>, refetchInterval: 60000 });
   return (
-    <InsetGroup title="订阅检查" description="客户端拉取 Clash / sing-box 订阅后，中心在后台用 mihomo -t 与 sing-box check 检查生成的内容（同一内容 24 小时内只检查一次）。检查不影响订阅输出；内核尚未下载或中心不是 Linux 时显示「未知」。">
+    <InsetGroup title="订阅语法检查" description="客户端拉取 Clash / sing-box 订阅后，中心后台校验配置合法性（非 Linux 环境显示未知）。">
         {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} skeleton={<SkeletonList rows={2} />} /> : (
           <div className="stack">
             <div className="flex flex-wrap gap-3 text-body">

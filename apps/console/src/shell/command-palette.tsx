@@ -3,9 +3,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "../lib/query";
 import { PageState, ScrollArea, Dialog, DialogContent, DialogTitle, Kbd, Button } from "@weir/ui";
-import { Search, Server, User, CornerDownLeft, type LucideIcon } from "lucide-react";
+import { Search, Server, Settings2, User, Waypoints, Rss, CornerDownLeft, type LucideIcon } from "lucide-react";
 import { api } from "../api";
-import { navigation, visibleFor } from "./navigation";
+import { navigation, systemSections, systemSettingItems, visibleFor } from "./navigation";
 import { reopenDrafts } from "../components/draft-confirm";
 
 interface Entry {
@@ -24,6 +24,8 @@ export function CommandPalette({ open, onOpenChange, admin }: { open: boolean; o
   const [active, setActive] = useState(0);
   // 快速跳转只要名称：查询键与列表页分开（列表页缓存的是数组，这里是 { items }，同一个键会互相覆盖、让列表页崩掉）
   const devices = useQuery({ queryKey: ["palette", "gates"], queryFn: async () => (await api("/admin/gates")) as { items: { id: number; name: string }[] }, enabled: open && admin });
+  const nodeList = useQuery({ queryKey: ["palette", "nodes"], queryFn: async () => (await api("/admin/nodes")) as { items: { id: number; name: string; port?: number; gate_name?: string }[] }, enabled: open && admin });
+  const sourceList = useQuery({ queryKey: ["palette", "sources"], queryFn: async () => (await api("/admin/subscriptions/sources")) as { items: { id: number; name: string }[] }, enabled: open && admin });
   const users = useQuery({ queryKey: ["palette", "users"], queryFn: async () => (await api("/admin/users")) as { items: { id: number; email: string; name: string }[] }, enabled: open && admin });
   const drafts = useQuery({ queryKey: ["ai-drafts"], queryFn: async () => (await api("/admin/ai/drafts")).drafts as { id: string; explain: string; steps?: { title: string }[] | null }[], enabled: open && admin });
 
@@ -40,21 +42,35 @@ export function CommandPalette({ open, onOpenChange, admin }: { open: boolean; o
     const text = actionsOnly ? q.slice(1).trim() : q;
     const match = (value: string) => !text || value.toLowerCase().includes(text);
     const list: Entry[] = navigation
-      .filter((item) => (admin || visibleFor(item, false)) && match(item.label))
-      .map((item) => ({ id: "nav:" + item.key, group: "操作", label: item.label, hint: item.group, to: item.path, icon: item.icon }));
+      .filter((item) => visibleFor(item, admin) && match(`${item.label} ${item.group}`))
+      .map((item) => ({ id: "nav:" + item.key, group: "页面", label: item.label, hint: item.group, to: item.path, icon: item.icon }));
+    if (admin) {
+      for (const s of systemSettingItems) {
+        const sectionName = systemSections.find((sec) => sec.key === s.section)?.label ?? "设置";
+        if (text ? match(`${s.title} ${s.description} ${s.keywords} ${sectionName}`) : ["laya", "dsh", "backup", "update"].includes(s.key)) {
+          list.push({ id: "setting:" + s.key, group: "系统设置", label: s.title, hint: sectionName, to: `/system?tab=${s.section}&setting=${s.key}`, icon: Settings2 });
+        }
+      }
+    }
     if (!actionsOnly) {
       for (const d of devices.data?.items ?? [])
         if (match(d.name || "") || text === String(d.id))
-          list.push({ id: "gate:" + d.id, group: "对象", label: d.name || "未命名 VPS", hint: "VPS", to: "/gates/" + d.id, icon: Server });
+          list.push({ id: "gate:" + d.id, group: "对象", label: d.name || "未命名 VPS", hint: "VPS", to: "/gates?gate=" + d.id, icon: Server });
+      for (const n of nodeList.data?.items ?? [])
+        if (text && (match(n.name || "") || (n.port != null && String(n.port) === text)))
+          list.push({ id: "node:" + n.id, group: "对象", label: n.name || `节点 #${n.id}`, hint: [n.gate_name, n.port ? String(n.port) : ""].filter(Boolean).join(" · ") || "节点", to: "/gates?node=" + n.id, icon: Waypoints });
+      for (const s of sourceList.data?.items ?? [])
+        if (text && match(s.name || ""))
+          list.push({ id: "source:" + s.id, group: "对象", label: s.name, hint: "订阅源", to: `/subscriptions?tab=sources&source=${s.id}`, icon: Rss });
       for (const u of users.data?.items ?? [])
         if (text && (match(u.email) || match(u.name || "")))
-          list.push({ id: "user:" + u.id, group: "对象", label: u.email, hint: u.name || "用户", to: "/users/" + u.id, icon: User });
+          list.push({ id: "user:" + u.id, group: "对象", label: u.email, hint: u.name || "用户", to: "/users?user=" + u.id, icon: User });
       for (const draft of drafts.data ?? [])
         if (match(draft.explain || draft.id))
           list.push({ id: "draft:" + draft.id, group: "待处理", label: draft.steps?.[0]?.title || "确认草稿", hint: "运行观测", run: reopenDrafts, icon: Search });
     }
     return list.slice(0, 40);
-  }, [query, admin, devices.data, users.data, drafts.data]);
+  }, [query, admin, devices.data, nodeList.data, sourceList.data, users.data, drafts.data]);
 
   useEffect(() => setActive(0), [query]);
 

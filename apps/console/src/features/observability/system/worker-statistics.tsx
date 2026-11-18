@@ -19,7 +19,7 @@ export function WorkerStatistics({ data, loading, error, onRetry, labels }: {
   onRetry: () => void; labels: Record<string, string>;
 }) {
   return <section className="stack" data-tour="worker-statistics">
-    <SectionHeader flush title="任务统计" description="按 VPS 和任务类型汇总数据库中的执行尝试，包含重试。失败率以已知成功和失败为分母，取消及未知另列。" />
+    <SectionHeader flush title="任务统计" description="按 VPS 与任务类型汇总执行耗时与成功率。" />
     {loading || error ? <State loading={loading} error={error} onRetry={onRetry} /> : !data ? <State empty="任务统计未知" /> : <>
       <small>执行开始时间：{date(data.from)} — {date(data.until)}。结果正文大小为解压后、中心加密前的测量值；缺测记录不计为 0。</small>
       {data.items.length === 0 ? <State empty="此时间段尚无执行尝试" /> : data.items.map((item) => <Card key={`${item.gate_id}-${item.kind}`}>

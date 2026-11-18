@@ -129,14 +129,24 @@ func TestDSHGatewayOnlyOpensFromConsoleDrawer(t *testing.T) {
 	if u.Host != "dsh.example.com" || u.Path != dshOpenPath {
 		t.Fatalf("ticket url = %s", ticket)
 	}
+	tParam := u.Query().Get("t")
+	if mustJSON(t, admin, "GET", "/api/v1/admin/dsh/ticket-check?t="+tParam, nil, 200)["reached"] != false {
+		t.Fatal("ticket must not be marked reached before iframe navigation")
+	}
 	open := "https://dsh.example.com" + u.RequestURI()
 	// 票据只能在 iframe 里使用。
 	if w := b.get(open, map[string]string{"Sec-Fetch-Site": "same-site", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "document"}); w.Code != 404 {
 		t.Fatalf("top-level open = %d", w.Code)
 	}
+	if mustJSON(t, admin, "GET", "/api/v1/admin/dsh/ticket-check?t="+tParam, nil, 200)["reached"] != false {
+		t.Fatal("rejected top-level navigation must not mark ticket reached")
+	}
 	w := b.get(open, iframeNav)
 	if w.Code != 303 || b.cookies["dsh-auth-x"] != "v1" || len(b.cookies[dshGateCookie]) != 64 {
 		t.Fatalf("open = %d %v", w.Code, b.cookies)
+	}
+	if mustJSON(t, admin, "GET", "/api/v1/admin/dsh/ticket-check?t="+tParam, nil, 200)["reached"] != true {
+		t.Fatal("iframe navigation must mark ticket reached for the issuing session")
 	}
 	if strings.Contains(w.Header().Get("Location"), "token") || f.last().Host != "dsh.example.com" {
 		t.Fatalf("launch token must stay server side; host = %s", f.last().Host)

@@ -13,9 +13,6 @@ import (
 	"github.com/shusfun/weir/packages/contracts"
 )
 
-// urlTestSec 是 url-test 组测延迟的间隔；与节点列表刷新（Plan.IntervalSec）无关。
-const urlTestSec = 60
-
 // RenderPlan 按计划输出带分组与分流的订阅；plan 为空时与 Render 相同。
 func RenderPlan(items []Item, target string, plan *Plan) ([]byte, string, error) {
 	body, contentType, _, err := RenderPlanDetailed(items, target, plan)
@@ -78,6 +75,12 @@ func RenderPlanDetailed(items []Item, target string, plan *Plan) ([]byte, string
 
 // ClashProvider 先为全部节点统一分配名称，再按用途截取，避免子集里的重名编号漂移。
 func ClashProvider(items []Item, plan *Plan, key string) ([]byte, error) {
+	body, _, err := ClashProviderDetailed(items, plan, key)
+	return body, err
+}
+
+// ClashProviderDetailed reports the number of members actually emitted after compatibility filtering.
+func ClashProviderDetailed(items []Item, plan *Plan, key string) ([]byte, int, error) {
 	var report CompatibilityReport
 	items, report = compatibleItems(items, "clash")
 	if plan != nil {
@@ -89,12 +92,12 @@ func ClashProvider(items []Item, plan *Plan, key string) ([]byte, error) {
 	}
 	proxies, names, err := clashProxies(linksOf(items), reservedNames(plan))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	applyClashUDP(proxies, items)
 	lay := plan.layout(names, items)
 	if len(lay.Groups[0].Members) == 0 {
-		return nil, fmt.Errorf("PROXY 没有可输出成员")
+		return nil, 0, fmt.Errorf("PROXY 没有可输出成员")
 	}
 	var wanted []string
 	if key == AllProvider {
@@ -114,7 +117,7 @@ func ClashProvider(items []Item, plan *Plan, key string) ([]byte, error) {
 		}
 	}
 	if len(wanted) == 0 {
-		return nil, fmt.Errorf("节点列表 %s 没有可用成员", key)
+		return nil, 0, fmt.Errorf("节点列表 %s 没有可用成员", key)
 	}
 	picked := make([]map[string]any, 0, len(wanted))
 	for _, name := range wanted {
@@ -124,7 +127,8 @@ func ClashProvider(items []Item, plan *Plan, key string) ([]byte, error) {
 			}
 		}
 	}
-	return yaml.Marshal(map[string]any{"proxies": picked})
+	body, err := yaml.Marshal(map[string]any{"proxies": picked})
+	return body, len(picked), err
 }
 
 func itemsForTarget(items []Item, target string) []Item {
@@ -261,7 +265,7 @@ func clashPlan(items []Item, plan *Plan) ([]byte, error) {
 	var groups []any
 	providers := map[string]any{}
 	for _, g := range lay.Groups {
-		m := map[string]any{"name": g.Name, "type": g.Kind, "hidden": g.Hidden}
+		m := map[string]any{"name": g.Name, "type": g.Kind, "hidden": g.Hidden, "empty-fallback": "REJECT"}
 		if plan.Providers == nil {
 			m["proxies"] = g.Members
 		} else {
@@ -280,7 +284,7 @@ func clashPlan(items []Item, plan *Plan) ([]byte, error) {
 				key := "p-" + g.Provider
 				health := map[string]any{"enable": false}
 				if g.Kind != "select" {
-					health = map[string]any{"enable": true, "url": g.testURL(), "interval": g.interval(), "lazy": false}
+					health = map[string]any{"enable": true, "url": g.testURL(), "interval": g.interval(), "lazy": false, "timeout": SubscriptionProbeTimeoutMS, "expected-status": SubscriptionProbeExpectedStatus}
 				}
 				// 可见选择组与内部自动组共用列表，健康检查由自动组决定。
 				if providers[key] == nil || g.Kind != "select" {
@@ -291,6 +295,7 @@ func clashPlan(items []Item, plan *Plan) ([]byte, error) {
 		}
 		if g.Kind != "select" {
 			m["url"], m["interval"], m["lazy"] = g.testURL(), g.interval(), false
+			m["timeout"], m["expected-status"] = SubscriptionProbeTimeoutMS, SubscriptionProbeExpectedStatus
 			if g.Kind == "url-test" {
 				m["tolerance"] = g.ToleranceMS
 			}

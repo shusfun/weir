@@ -604,6 +604,7 @@ func (s *Server) dshRoutes(admin *gin.RouterGroup) {
 	admin.DELETE("/dsh/versions/:version", s.removeDSHVersion)
 	admin.POST("/dsh/restart", s.restartDSH)
 	admin.POST("/dsh/ticket", s.dshTicket)
+	admin.GET("/dsh/ticket-check", s.dshTicketCheck)
 }
 
 // dshStatus 返回设置、管理进程报告的状态（不含启动令牌）与已下载的版本。
@@ -883,6 +884,21 @@ func (s *Server) dshTicket(c *gin.Context) {
 	}
 	s.audit(c, "dsh.open", "", "ok")
 	c.JSON(200, gin.H{"url": requestScheme(c.Request) + "://" + domain + dshOpenPath + "?t=" + t})
+}
+
+// dshTicketCheck 检查当前管理员刚签发的一次性票据是否已通过浏览器 iframe 抵达 dsh 子域名网关（用于前端反代连通自检）。
+func (s *Server) dshTicketCheck(c *gin.Context) {
+	t := c.Query("t")
+	if len(t) != 64 {
+		failure(c, 400, "invalid_ticket")
+		return
+	}
+	sess, ok, err := s.Store.KV.Get(c.Request.Context(), "dsh-opened:"+digest(t))
+	if err != nil {
+		failInternal(c, 503, "dsh_ticket_unavailable", err)
+		return
+	}
+	c.JSON(200, gin.H{"reached": ok && sess == c.GetString("session_key")})
 }
 
 //go:embed dshskills

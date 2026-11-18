@@ -306,16 +306,9 @@ html:has(.weir-page-scroll) body {
   .weir-scroll-root[data-gutter="stable"]:not([data-orientation="horizontal"]) { padding-inline-end: var(--weir-scrollbar-gutter); }
   .weir-scroll-root[data-gutter="stable"]:not([data-orientation="vertical"]) { padding-block-end: var(--weir-scrollbar-gutter); }
   .weir-dialog { --weir-dialog-padding: var(--weir-space-6); }
-  .weir-dialog > [data-slot="dialog-pinned-header"] { padding-inline-end: calc(var(--weir-tap-sm) + var(--weir-space-3)); }
-  .weir-dialog-close { top: var(--weir-space-2); right: var(--weir-space-2); }
+  .weir-dialog > [data-slot="dialog-pinned-header"] { padding-inline-end: calc(var(--weir-tap-sm) + var(--weir-space-2)); }
+  .weir-dialog-close { top: var(--weir-space-4); right: var(--weir-space-4); color: var(--weir-ink-3); }
   .weir-dialog-footer { margin-inline: calc(-1 * var(--weir-dialog-padding)); margin-bottom: calc(-1 * var(--weir-dialog-padding)); padding: var(--weir-space-4) var(--weir-dialog-padding); }
-  /* 实测结果和阶段提示异步到达，操作区始终留在同一位置。 */
-  .weir-probe-dialog { bottom: var(--weir-space-6); }
-  .weir-probe-dialog .weir-dialog-footer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .weir-probe-dialog .weir-dialog-footer > :is([role="status"], [role="alert"]) {
-    grid-column: 1 / -1; grid-row: 1; margin: 0;
-    height: var(--weir-tap-touch); overflow: auto; overflow-wrap: anywhere;
-  }
   .weir-module-toggle { min-height: var(--weir-tap-sm); }
   @media (pointer: coarse), (max-width: 767.98px) {
     .weir-button { --weir-button-height: var(--weir-tap-touch); min-width: var(--weir-tap-touch); }

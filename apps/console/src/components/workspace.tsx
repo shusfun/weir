@@ -90,26 +90,26 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // 管理员的个人页面收进左下角个人中心；代理与订阅链接是共用页面，两种账户都在导航里
-  const nav = (compact: boolean) =>
-    navGroups.map((group) => {
-      const items = navigation.filter((item) => item.group === group && visibleFor(item, admin));
-      if (!items.length) return null;
-      return (
-        <div className="rail-group" key={group}>
-          <span className="rail-group-label weir-engraved">{group}</span>
-          {items.map(({ key, path, label, icon: Icon }) => {
-            const link = (
-              <NavLink key={key} to={path} className={({ isActive }) => "weir-key weir-key-ghost rail-item" + (isActive ? " active" : "")}>
-                <Icon />
-                <span className="rail-label">{label}</span>
-              </NavLink>
-            );
-            return compact ? <Tooltip key={key} content={label}>{link}</Tooltip> : link;
-          })}
-        </div>
-      );
-    });
+  // 管理员的个人页面收进左下角个人中心；单个条目的收尾组（如系统 → 设置）不重复打印组头小字
+  const nav = (compact: boolean) => {
+    const visibleGroups = navGroups
+      .map((group) => ({ group, items: navigation.filter((item) => item.group === group && visibleFor(item, admin)) }))
+      .filter((g) => g.items.length > 0);
+    return visibleGroups.map(({ group, items }, idx) => (
+      <div className="rail-group" key={group} data-headless={items.length === 1 || visibleGroups.length === 1 || undefined}>
+        {items.length > 1 && visibleGroups.length > 1 && idx > 0 && <span className="rail-group-label weir-engraved">{group}</span>}
+        {items.map(({ key, path, label, icon: Icon }) => {
+          const link = (
+            <NavLink key={key} to={path} className={({ isActive }) => "weir-key weir-key-ghost rail-item" + (isActive ? " active" : "")}>
+              <Icon />
+              <span className="rail-label">{label}</span>
+            </NavLink>
+          );
+          return compact ? <Tooltip key={key} content={label}>{link}</Tooltip> : link;
+        })}
+      </div>
+    ));
+  };
 
   const map = useQuery({
     queryKey: ["globe", admin],
@@ -117,22 +117,32 @@ export function Workspace({ admin, email, children, onLogout }: { admin: boolean
     refetchInterval: 60_000,
   });
   const globeNodes = useMemo(() => {
-    const gates = (map.data?.gates ?? []).flatMap((g) => g.place?.known && g.place.lat != null && g.place.lon != null ? [{ id: `g${g.id}`, lat: g.place.lat, lon: g.place.lon, tone: g.online ? "ok" as const : "unknown" as const, label: g.name }] : []);
+    const gates = (map.data?.gates ?? []).flatMap((g) => g.place?.known && g.place.lat != null && g.place.lon != null ? [{ id: `g${g.id}`, lat: g.place.lat, lon: g.place.lon, tone: !g.online ? "bad" as const : g.state === "failed" || g.state === "pending" ? "warn" as const : "ok" as const, label: g.name || g.place.city }] : []);
     // 出口在别处时也画一个点：航线从入口 VPS 飞到实际出口的位置
-    const exits = (map.data?.exits ?? []).flatMap((e) => e.place?.known && e.place.lat != null && e.place.lon != null ? [{ id: `e${e.id}`, lat: e.place.lat, lon: e.place.lon, tone: "info" as const, label: e.label }] : []);
+    const exits = (map.data?.exits ?? []).flatMap((e) => !e.to_gate && e.kind !== "direct" && e.kind !== "block" && e.place?.known && e.place.lat != null && e.place.lon != null ? [{ id: `e${e.id}`, lat: e.place.lat, lon: e.place.lon, tone: e.probe?.ok === false ? "warn" as const : "info" as const, label: e.label }] : []);
     return [...gates, ...exits];
   }, [map.data]);
-  // 航线只来自真实链路：入口 VPS → 出口所在地；同一对只画一条
+  // 航线来自真实中转与用户链路：入口 VPS → 落地 VPS 或外部代理；同一对只画一条
   const globeLinks = useMemo(() => {
     const seen = new Set<string>();
-    const out: { from: string; to: string }[] = [];
+    const out: { from: string; to: string; tone?: "warn" | "ok" | "info" }[] = [];
+    const add = (from: string, to: string, warn = false) => {
+      if (from === to) return;
+      const key = `${from}>${to}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ from, to, tone: warn ? "warn" : undefined });
+    };
+    for (const e of map.data?.exits ?? []) {
+      if (e.kind === "direct" || e.kind === "block") continue;
+      if (e.to_gate) add(`g${e.from_gate}`, `g${e.to_gate}`, e.probe?.ok === false);
+      else if (e.place?.known) add(`g${e.from_gate}`, `e${e.id}`, e.probe?.ok === false);
+    }
     for (const p of map.data?.paths ?? []) {
       const exit = map.data?.exits.find((e) => e.id === p.exit_id);
-      if (!exit?.place?.known) continue;
-      const key = `g${p.gate_id}>e${exit.id}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push({ from: `g${p.gate_id}`, to: `e${exit.id}` });
+      if (!exit || exit.kind === "direct" || exit.kind === "block") continue;
+      if (exit.to_gate) add(`g${p.gate_id}`, `g${exit.to_gate}`, exit.probe?.ok === false);
+      else if (exit.place?.known) add(`g${p.gate_id}`, `e${exit.id}`, exit.probe?.ok === false);
     }
     return out;
   }, [map.data]);

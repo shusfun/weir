@@ -7,7 +7,6 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { MotionTier } from "./motion";
 
 const RAD = Math.PI / 180;
-const TILT = 13 * RAD;
 
 type Point = { lat: number; lon: number };
 type Route = { id: string; from: Point; to: Point; tone?: "accent" | "warn" | "ok" };
@@ -18,7 +17,7 @@ function unit(p: Point): [number, number, number] {
   return [Math.cos(f) * Math.cos(l), Math.cos(f) * Math.sin(l), Math.sin(f)];
 }
 
-function project(v: [number, number, number], lift: number, lon0: number, cx: number, cy: number, r: number) {
+function project(v: [number, number, number], lift: number, lon0: number, tilt: number, cx: number, cy: number, r: number) {
   const lat = Math.asin(Math.max(-1, Math.min(1, v[2])));
   const lon = Math.atan2(v[1], v[0]);
   const d = lon - lon0;
@@ -28,13 +27,13 @@ function project(v: [number, number, number], lift: number, lon0: number, cx: nu
   const R = r * lift;
   return {
     x: cx + R * cosf * Math.sin(d),
-    y: cy - R * (Math.cos(TILT) * sinf - Math.sin(TILT) * cosf * cosd),
-    z: Math.sin(TILT) * sinf + Math.cos(TILT) * cosf * cosd,
+    y: cy - R * (Math.cos(tilt) * sinf - Math.sin(tilt) * cosf * cosd),
+    z: Math.sin(tilt) * sinf + Math.cos(tilt) * cosf * cosd,
   };
 }
 
 // 大圆插值：按弧长决定采样数，弧顶抬高与距离成正比（越远飞得越高），近距离也保留一点弧度
-function arcPoints(route: Route, lon0: number, cx: number, cy: number, r: number) {
+function arcPoints(route: Route, lon0: number, tilt: number, cx: number, cy: number, r: number) {
   const a = unit(route.from);
   const b = unit(route.to);
   const angle = Math.acos(Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2])));
@@ -47,7 +46,7 @@ function arcPoints(route: Route, lon0: number, cx: number, cy: number, r: number
     const k1 = Math.sin((1 - t) * angle) / Math.sin(angle);
     const k2 = Math.sin(t * angle) / Math.sin(angle);
     const v: [number, number, number] = [k1 * a[0] + k2 * b[0], k1 * a[1] + k2 * b[1], k1 * a[2] + k2 * b[2]];
-    out.push(project(v, 1 + peak * Math.sin(Math.PI * t), lon0, cx, cy, r));
+    out.push(project(v, 1 + peak * Math.sin(Math.PI * t), lon0, tilt, cx, cy, r));
   }
   return out;
 }
@@ -97,6 +96,7 @@ function FlightRoutes({
   routes,
   size,
   centerLon,
+  tiltDeg = 13,
   rotation = 0,
   tier,
   className,
@@ -105,6 +105,7 @@ function FlightRoutes({
   /** 画布边长（与背景地球同尺寸，正方形） */
   size: number;
   centerLon: number;
+  tiltDeg?: number;
   rotation?: number;
   tier: MotionTier;
   className?: string;
@@ -115,7 +116,8 @@ function FlightRoutes({
   const cy = size / 2;
   const r = size * 0.46;
   const lon0 = (centerLon + rotation) * RAD;
-  const arcs = useMemo(() => routes.map((route) => ({ route, pts: arcPoints(route, lon0, cx, cy, r) })), [routes, lon0, cx, cy, r]);
+  const tilt = tiltDeg * RAD;
+  const arcs = useMemo(() => routes.map((route) => ({ route, pts: arcPoints(route, lon0, tilt, cx, cy, r) })), [routes, lon0, tilt, cx, cy, r]);
   const lite = tier === "lite";
   return (
     <svg className={className} viewBox={`0 0 ${size} ${size}`} width={size} height={size} aria-hidden data-tier={tier}>
@@ -145,7 +147,7 @@ function FlightRoutes({
         return (
           <g key={route.id} className="weir-flight">
             {/* 背面淡出：只画朝向我们的部分，整条航线先画一条细虚线作为航路 */}
-            <path d={pathOf(front)} fill="none" stroke={color} strokeOpacity="0.45" strokeWidth="1" strokeDasharray="2 5" strokeLinecap="round" />
+            <path d={pathOf(front)} fill="none" stroke={color} strokeOpacity="0.61" strokeWidth="1.25" strokeDasharray="3 5" strokeLinecap="round" />
             {flown.length > 1 && <path d={pathOf(flown)} fill="none" stroke={route.tone ? color : `url(#${gid}-trail)`} strokeWidth="1.5" strokeLinecap="round" style={{ filter: "var(--weir-glow)" }} />}
             {ends.map((p, k) => p.z > 0 && (
               <g key={k} transform={`translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`} opacity={Math.min(1, p.z + 0.21)}>

@@ -2,11 +2,11 @@
 // 协议写成小标签，UDP 写实测结果，状态正常时只是一句灰字，有事才用状态标签。
 import { Fragment, useState } from "react";
 import { Badge, Card, Segmented, SectionHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@weir/ui";
-import { exitKindName } from "./chain-exit";
 import { nodeStatus, protocolNames, type Gate, type NodeItem } from "../lib/core";
 import { rateText } from "../lib/linkmap";
+import { nodeChainRoute } from "./node-summary";
 
-type Filter = "all" | "attention" | "tcp";
+type Filter = "all" | "chained" | "attention" | "tcp";
 
 const securityNames: Record<string, string> = { reality: "REALITY", tls: "TLS" };
 
@@ -24,11 +24,13 @@ export function GateNodeTable({ gates, nodes, openNode }: { gates: Gate[]; nodes
     const g = gates.find((item) => item.id === n.gate_id);
     const [label, tone] = nodeStatus(n, g);
     const udp = udpOf(n);
-    return { n, g, label, tone, udp, attention: tone === "bad" || tone === "warn", tcpOnly: udp.text === "出口不支持" || udp.text === "不支持" };
+    const chain = nodeChainRoute(n, nodes, gates);
+    return { n, g, label, tone, udp, chain, attention: tone === "bad" || tone === "warn", tcpOnly: udp.text === "出口不支持" || udp.text === "不支持" };
   });
+  const chained = rows.filter((r) => !!r.chain);
   const attention = rows.filter((r) => r.attention);
   const tcp = rows.filter((r) => r.tcpOnly);
-  const shown = filter === "attention" ? attention : filter === "tcp" ? tcp : rows;
+  const shown = filter === "chained" ? chained : filter === "attention" ? attention : filter === "tcp" ? tcp : rows;
   const groups = [
     { key: "attention", title: "需要注意", list: shown.filter((r) => r.attention) },
     { key: "ok", title: "其他节点", list: shown.filter((r) => !r.attention) },
@@ -38,12 +40,12 @@ export function GateNodeTable({ gates, nodes, openNode }: { gates: Gate[]; nodes
       <SectionHeader flush
         className="mt-[var(--weir-gap-33)]"
         title="节点"
-        actions={<Segmented aria-label="筛选节点" value={filter} onValueChange={setFilter} options={[["all", `全部 ${rows.length}`], ["attention", `需要注意 ${attention.length}`], ["tcp", `仅 TCP ${tcp.length}`]]} />}
+        actions={<Segmented aria-label="筛选节点" value={filter} onValueChange={setFilter} options={[["all", `全部 ${rows.length}`], ["chained", `链式 ${chained.length}`], ["attention", `需要注意 ${attention.length}`], ["tcp", `仅 TCP ${tcp.length}`]]} />}
       />
       <Card className="overflow-hidden p-0">
         <Table>
           <TableHeader>
-            <TableRow><TableHead>节点</TableHead><TableHead>协议</TableHead><TableHead>出口</TableHead><TableHead>速率</TableHead><TableHead>UDP</TableHead><TableHead>状态</TableHead></TableRow>
+            <TableRow><TableHead>节点</TableHead><TableHead>协议</TableHead><TableHead>出口走向</TableHead><TableHead>速率</TableHead><TableHead>UDP</TableHead><TableHead>状态</TableHead></TableRow>
           </TableHeader>
           <TableBody>
             {groups.length === 0 && <TableRow><TableCell colSpan={6} className="text-[var(--weir-ink-3)]">没有符合条件的节点</TableCell></TableRow>}
@@ -52,7 +54,7 @@ export function GateNodeTable({ gates, nodes, openNode }: { gates: Gate[]; nodes
                 <TableRow data-group-row="">
                   <TableCell colSpan={6}>{group.title} · {group.list.length}</TableCell>
                 </TableRow>
-                {group.list.map(({ n, g, label, tone, udp }) => (
+                {group.list.map(({ n, g, label, tone, udp, chain }) => (
                   <TableRow key={n.id} onClick={() => openNode(n)}>
                     <TableCell>
                       <b>{n.name}</b>
@@ -64,7 +66,7 @@ export function GateNodeTable({ gates, nodes, openNode }: { gates: Gate[]; nodes
                         {securityNames[n.security] && <Badge variant="tag">{securityNames[n.security]}</Badge>}
                       </span>
                     </TableCell>
-                    <TableCell className="text-[var(--weir-ink-2)]">{!n.exit || n.exit.kind === "freedom" ? "直连" : n.exit.summary?.name || n.exit.label || exitKindName[n.exit.kind] || "未知"}</TableCell>
+                    <TableCell>{chain ? <Badge variant="soft" tone="info">{chain.tag} ⇢ {chain.target}</Badge> : <span className="text-meta text-[var(--weir-ink-3)]">直连</span>}</TableCell>
                     <TableCell className="font-[family-name:var(--weir-mono)]">{n.rate?.minutes ? rateText(n.rate.p90_bps) : <span className="text-[var(--weir-ink-3)]">未知</span>}</TableCell>
                     <TableCell>{udp.pill ? <Badge variant="soft" tone="neutral" className="border-dashed bg-transparent">{udp.text}</Badge> : <span className="text-meta text-[var(--weir-ink-3)]">{udp.text}</span>}</TableCell>
                     <TableCell>

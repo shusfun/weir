@@ -1,17 +1,23 @@
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Trash2 } from "lucide-react";
-import { Button, CheckboxField, Collapsible, Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter, Field, Form, Input, InsetGroup, InsetRow, InsetRows, Notice, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SortableList, Switch, useConfirm } from "@weir/ui";
+import { ActionGroup, Badge, Button, CheckboxField, ChoiceCard, Collapsible, Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter, Field, Form, FormGrid, Input, InsetGroup, InsetRow, InsetRows, Notice, Radio, RadioGroup, SortableList, Switch, useConfirm } from "@weir/ui";
 import { api, ApiError } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
 import { field, useConsoleContext } from "../lib/console-context";
 import { useUnsavedChanges } from "../lib/dirty";
 import { proxyURL } from "../lib/proxy-targets";
-import type { ProxyGroup, ProxyGroupView, ProxyLine, ProxyView } from "../lib/core";
+import type { ProxyGroup, ProxyView } from "../lib/core";
 import { dataObject, ObjectLink, useDialogParam, useStringDialogParam } from "./object-link";
 import { State } from "./feedback";
 
-const ways = { "url-test": "延迟最低", fallback: "主备切换", select: "手动选择" };
+const ways = { "url-test": "自动测速", fallback: "主备容灾", select: "手动切换" };
+const wayHints: Record<ProxyGroup["kind"], string> = {
+  "url-test": "客户端自动选延迟最低节点",
+  fallback: "按顺序优先首节点，故障才切换",
+  select: "在客户端面板里手动点选",
+};
+const quickNames = ["AI 专线", "流媒体", "主力节点", "备用线路"];
 const gateText = { online: "在线", offline: "离线", unknown: "未知" };
 const healthText = { ok: "可用", down: "不可用", unknown: "未知" };
 
@@ -22,6 +28,7 @@ export function ProxyGroups({ base, view, onUpdated, admin }: { base: string; vi
   const client = useQueryClient();
   const action = useRowAction<string>();
   const root = view.layout.find((g) => g.ref === "proxy");
+  const autoGroup = view.layout.find((g) => g.ref === "auto");
   const hidden = new Set(view.policy.hidden_lines ?? []);
   const top = new Set(root?.member_refs ?? []);
   const grouped = new Set(view.groups.flatMap((g) => g.group.members));
@@ -39,64 +46,91 @@ export function ProxyGroups({ base, view, onUpdated, admin }: { base: string; vi
     }
   };
   const toggle = (ref: string, on: boolean) => action.run(ref, () => apply(api(proxyURL(base), "PUT", { ...view.policy, hidden_lines: on ? [...hidden].filter((x) => x !== ref) : [...hidden, ref] }) as Promise<ProxyView>));
-  const toggleMember = (group: ProxyGroup, ref: string, on: boolean) => {
-    const members = group.members.filter((member) => member !== ref && byRef.get(member)?.available);
-    if (on) members.push(ref);
-    return action.run("member:" + group.id + ":" + ref, () => apply(api(proxyURL(base, "/groups/" + group.id), "PUT", { revision: view.policy.revision, name: group.name, kind: group.kind, members, interval_seconds: group.interval_seconds, tolerance_ms: group.tolerance_ms }) as Promise<ProxyView>));
-  };
   useConsoleContext({ list: { total: root?.members?.length ?? 0, items: view.groups.map(({ group: g }) => ({ type: "proxy_group", key: `${view.user_id}:${g.id}`, name: g.name, owner: view.user_id })) } });
-  const groupActions = (g: ProxyGroup) => <span className="flex gap-1">
-    <Button size="icon-sm" variant="ghost" aria-label={`编辑${g.name}`} onClick={() => edit.open(g)}><Pencil /></Button>
-    <Button size="icon-sm" variant="destructive" aria-label={`删除${g.name}`} disabled={action.isBusy()} busy={action.isBusy(`group:${g.id}`)} busyText="正在删除" onClick={async () => {
-      if (await confirm({ title: `删除「${g.name}」？`, description: "成员恢复各自原有的单独显示偏好。", confirmText: "删除", tone: "danger" })) await action.run(`group:${g.id}`, () => apply(api(proxyURL(base, "/groups/" + g.id), "DELETE", { revision: view.policy.revision }) as Promise<ProxyView>));
+  const groupActions = (g: ProxyGroup) => <ActionGroup wrap={false}>
+    <Button size="sm" variant="outline" aria-label={`编辑${g.name}`} onClick={() => edit.open(g)}><Pencil />配置成员</Button>
+    <Button size="icon-sm" variant="ghost" aria-label={`删除${g.name}`} disabled={action.isBusy()} busy={action.isBusy(`group:${g.id}`)} onClick={async () => {
+      if (await confirm({ title: `删除分组「${g.name}」？`, description: "组内节点恢复各自原有的单独显示状态。", confirmText: "删除", tone: "danger" })) await action.run(`group:${g.id}`, () => apply(api(proxyURL(base, "/groups/" + g.id), "DELETE", { revision: view.policy.revision }) as Promise<ProxyView>));
     }}><Trash2 /></Button>
-  </span>;
+  </ActionGroup>;
   return <>
-    <div className="grid items-start gap-4 lg:grid-cols-2">
-      <InsetGroup title="客户端 PROXY" description="按客户端的实际顺序展示。自动选择只使用直连线路，固定每 60 秒探测，容差 50 毫秒。" actions={<Button size="sm" disabled={view.groups.length >= 20} onClick={() => create.open("1")}><Plus />新建分组</Button>}>
-        {!root?.members?.length ? <State empty="PROXY 没有可输出成员" detail="请开启单独节点，或为分组添加有效成员。" /> : <InsetRows>
+    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+      <InsetGroup title="客户端 PROXY 选项" description="决定客户端主代理组里出现哪些分组与单节点。" actions={<Button size="sm" disabled={view.groups.length >= 20} onClick={() => create.open("1")}><Plus />新建分组</Button>}>
+        {!root?.members?.length ? <State empty="PROXY 没有可输出成员" detail="请开启单独节点，或新建包含有效节点的自定义分组。" /> : <InsetRows>
           {root.member_refs.map((ref, index) => {
             const group = view.groups.find((g) => `group:${g.group.id}` === ref);
             const line = view.lines.find((l) => l.ref === ref);
-            return <InsetRow key={ref} className="stack" {...(group ? dataObject({ type: "proxy_group", key: view.user_id + ":" + group.group.id, owner: view.user_id }) : line ? dataObject({ type: line.chain_id ? "chain" : "node", id: line.chain_id || line.node_id, owner: view.user_id }) : {})}>
-              <div className="flex items-center justify-between gap-2"><span className="min-w-0 break-words"><span className="mr-2 text-meta">{index + 1}</span>{group ? <ObjectLink to={{ type: "proxy_group", key: view.user_id + ":" + group.group.id, owner: view.user_id, name: group.group.name }} /> : line ? <ObjectLink href={admin ? undefined : "/proxy?tab=nodes&focus=" + encodeURIComponent((line.chain_id ? "chain:" : "node:") + (line.chain_id || line.node_id))} to={{ type: line.chain_id ? "chain" : "node", id: line.chain_id || line.node_id, owner: view.user_id, name: line.name }} /> : "自动选择"}</span>{group ? groupActions(group.group) : line ? <Switch aria-label={line.name + " 单独显示"} checked disabled={action.isBusy()} onCheckedChange={(on) => void toggle(line.ref, on)} /> : null}</div>
-              <p className="text-meta text-[var(--weir-ink-2)]">{group ? ways[group.group.kind] + " · " + group.valid_members + " 条有效成员" : line ? (line.chained ? "链式" : "直连") + " · 节点" + healthText[line.health] + " · VPS " + gateText[line.gate_status] : (view.layout.find((g) => g.ref === "auto")?.members.length ?? 0) + " 条直连线路"}</p>
-              {group ? <GroupMembers group={group} lines={view.lines} busy={action.isBusy()} admin={admin} owner={view.user_id} onToggle={(member, on) => void toggleMember(group.group, member, on)} /> : ref === "auto" ? <Collapsible title="自动选择成员" defaultOpen><InsetRows>{(view.layout.find((g) => g.ref === "auto")?.member_refs ?? []).map((member) => <InsetRow key={member}><LineStatus line={byRef.get(member)} refName={member} admin={admin} owner={view.user_id} /></InsetRow>)}</InsetRows></Collapsible> : null}
-            </InsetRow>;
+            if (group) {
+              const memberNames = group.group.members.map((m) => byRef.get(m)?.name ?? "失效线路");
+              return (
+                <InsetRow key={ref} className="space-y-1.5" {...dataObject({ type: "proxy_group", key: view.user_id + ":" + group.group.id, owner: view.user_id })}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="font-mono text-meta text-[var(--weir-ink-3)]">{index + 1}</span>
+                      <ObjectLink className="font-semibold" to={{ type: "proxy_group", key: view.user_id + ":" + group.group.id, owner: view.user_id, name: group.group.name }} />
+                      <Badge variant="soft" tone="info">{ways[group.group.kind]} · {group.valid_members} 节点</Badge>
+                    </span>
+                    {groupActions(group.group)}
+                  </div>
+                  <p className="m-0 truncate text-meta text-[var(--weir-ink-3)]" title={memberNames.join("、")}>成员：{memberNames.join("、")}</p>
+                </InsetRow>
+              );
+            }
+            if (line) {
+              return (
+                <InsetRow key={ref} className="flex items-center justify-between gap-3" {...dataObject({ type: line.chain_id ? "chain" : "node", id: line.chain_id || line.node_id, owner: view.user_id })}>
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-meta text-[var(--weir-ink-3)]">{index + 1}</span>
+                      <ObjectLink href={admin ? undefined : "/proxy?tab=nodes&focus=" + encodeURIComponent((line.chain_id ? "chain:" : "node:") + (line.chain_id || line.node_id))} to={{ type: line.chain_id ? "chain" : "node", id: line.chain_id || line.node_id, owner: view.user_id, name: line.name }} />
+                      {line.chained && <Badge variant="soft" tone="info">链式</Badge>}
+                    </div>
+                    <small className="block text-[var(--weir-ink-3)]">{line.gate_name} · 节点{healthText[line.health]} · VPS {gateText[line.gate_status]}</small>
+                  </div>
+                  <label className="inline-flex min-h-[var(--weir-tap-touch)] shrink-0 cursor-pointer items-center gap-2 text-meta text-[var(--weir-ink-3)]">
+                    <span className="max-sm:sr-only">单独显示</span>
+                    <Switch aria-label={line.name + " 单独显示"} checked disabled={action.isBusy()} onCheckedChange={(on) => void toggle(line.ref, on)} />
+                  </label>
+                </InsetRow>
+              );
+            }
+            return (
+              <InsetRow key={ref} className="space-y-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="flex items-center gap-2">
+                    <span className="font-mono text-meta text-[var(--weir-ink-3)]">{index + 1}</span>
+                    <strong>自动选择</strong>
+                    <Badge variant="soft" tone="neutral">自动测速 · {autoGroup?.members.length ?? 0} 条直连</Badge>
+                  </span>
+                </div>
+                {(autoGroup?.member_refs?.length ?? 0) > 0 && (
+                  <Collapsible title={`查看自动测速池（${autoGroup?.member_refs.length}）`}>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {(autoGroup?.member_refs ?? []).map((member) => {
+                        const m = byRef.get(member);
+                        return <Badge key={member} variant="outline" tone="neutral">{m ? `${m.name}（${m.gate_name}）` : member}</Badge>;
+                      })}
+                    </div>
+                  </Collapsible>
+                )}
+              </InsetRow>
+            );
           })}
         </InsetRows>}
       </InsetGroup>
-      <InsetGroup title="未出现在 PROXY" description="仅列出真正未输出的线路和没有有效成员的分组；移出分组后恢复单独显示偏好。">
-        <InsetRows>
-          {emptyGroups.map((g) => <InsetRow key={g.group.id} className="stack" {...dataObject({ type: "proxy_group", key: view.user_id + ":" + g.group.id, owner: view.user_id })}><div className="flex items-center justify-between gap-2"><ObjectLink to={{ type: "proxy_group", key: view.user_id + ":" + g.group.id, owner: view.user_id, name: g.group.name }} />{groupActions(g.group)}</div><Notice tone="warn">没有可输出成员：{g.members.map((m) => m.reason).filter(Boolean).join("；") || "成员已失效"}</Notice><GroupMembers group={g} lines={view.lines} busy={action.isBusy()} admin={admin} owner={view.user_id} onToggle={(member, on) => void toggleMember(g.group, member, on)} /></InsetRow>)}
-          {omitted.map((l) => <InsetRow key={l.ref} className="stack" {...dataObject({ type: l.chain_id ? "chain" : "node", id: l.chain_id || l.node_id, owner: view.user_id })}><div className="flex items-center justify-between gap-2"><ObjectLink href={admin ? undefined : "/proxy?tab=nodes&focus=" + encodeURIComponent((l.chain_id ? "chain:" : "node:") + (l.chain_id || l.node_id))} to={{ type: l.chain_id ? "chain" : "node", id: l.chain_id || l.node_id, owner: view.user_id, name: l.name }} /><Switch aria-label={l.name + " 单独显示"} checked={!hidden.has(l.ref)} disabled={action.isBusy() || !l.available} onCheckedChange={(on) => void toggle(l.ref, on)} /></div><p className="text-meta text-[var(--weir-ink-2)]">{!l.available ? l.why || "线路不可输出" : "已关闭单独显示"}</p></InsetRow>)}
-        </InsetRows>
-        {!omitted.length && !emptyGroups.length && <State empty="没有未输出项目" />}
+      <InsetGroup title="未单独显示与待补齐项" description="隐藏的单节点仍可加入自定义分组或参与自动选择。">
+        {!omitted.length && !emptyGroups.length ? (
+          <p className="m-0 text-meta text-[var(--weir-ink-3)]">当前没有隐藏节点或失效分组。若觉得客户端节点列表太长，可在左侧关闭单节点的「单独显示」，只保留分组入口。</p>
+        ) : (
+          <InsetRows>
+            {emptyGroups.map((g) => <InsetRow key={g.group.id} className="space-y-2" {...dataObject({ type: "proxy_group", key: view.user_id + ":" + g.group.id, owner: view.user_id })}><div className="flex items-center justify-between gap-2"><ObjectLink to={{ type: "proxy_group", key: view.user_id + ":" + g.group.id, owner: view.user_id, name: g.group.name }} />{groupActions(g.group)}</div><Notice tone="warn">暂无可用成员：{g.members.map((m) => m.reason).filter(Boolean).join("；") || "原成员已失效"}</Notice></InsetRow>)}
+            {omitted.map((l) => <InsetRow key={l.ref} className="flex items-center justify-between gap-3" {...dataObject({ type: l.chain_id ? "chain" : "node", id: l.chain_id || l.node_id, owner: view.user_id })}><div className="min-w-0 space-y-0.5"><ObjectLink href={admin ? undefined : "/proxy?tab=nodes&focus=" + encodeURIComponent((l.chain_id ? "chain:" : "node:") + (l.chain_id || l.node_id))} to={{ type: l.chain_id ? "chain" : "node", id: l.chain_id || l.node_id, owner: view.user_id, name: l.name }} /><small className="block text-[var(--weir-ink-3)]">{!l.available ? l.why || "线路不可输出" : `${l.gate_name} · 已隐藏单独显示`}</small></div><label className="inline-flex min-h-[var(--weir-tap-touch)] shrink-0 cursor-pointer items-center"><Switch aria-label={l.name + " 单独显示"} checked={!hidden.has(l.ref)} disabled={action.isBusy() || !l.available} onCheckedChange={(on) => void toggle(l.ref, on)} /></label></InsetRow>)}
+          </InsetRows>
+        )}
       </InsetGroup>
     </div>
     {(edit.current || create.value) && <GroupDialog key={`${base}:${edit.current?.id ?? "new"}`} base={base} view={view} value={edit.current} close={() => { if (edit.current) edit.close(); else create.close(); }} saved={(updated) => { onUpdated(updated); if (edit.current) edit.close(); else create.close(); }} />}
   </>;
-}
-
-function LineStatus({ line, refName, admin, owner }: { line?: ProxyLine; refName: string; admin?: boolean; owner?: number }) {
-  if (!line) return <p className="text-meta text-[var(--weir-ink-2)]">线路已删除或取消授权 · {refName}</p>;
-  return <p className="text-meta text-[var(--weir-ink-2)]"><ObjectLink href={admin ? undefined : "/proxy?tab=nodes&focus=" + encodeURIComponent(line.ref)} to={{ type: line.chain_id ? "chain" : "node", id: line.chain_id || line.node_id, owner, name: line.name }} /> · {admin ? <ObjectLink to={{ type: "gate", id: line.gate_id, name: line.gate_name }} /> : line.gate_name} · {line.chained ? "链式" : "直连"} · 节点{healthText[line.health]} · VPS {gateText[line.gate_status]}{line.why ? " · " + line.why : ""}</p>;
-}
-
-function GroupMembers({ group, lines, busy, onToggle, admin, owner }: { group: ProxyGroupView; lines: ProxyLine[]; busy: boolean; onToggle: (ref: string, on: boolean) => void; admin?: boolean; owner?: number }) {
-  const selected = new Set(group.group.members);
-  const byRef = new Map(lines.map((line) => [line.ref, line]));
-  const valid = group.group.members.filter((ref) => byRef.get(ref)?.available).length;
-  const choices = lines.filter((line) => line.available || selected.has(line.ref));
-  const gates = [...new Set(choices.map((line) => line.gate_id))];
-  return <Collapsible title={"成员与可选节点（" + group.group.members.length + "）"} defaultOpen>
-    <InsetRows>
-      {group.group.members.filter((ref) => !byRef.has(ref)).map((ref) => <InsetRow key={ref} className="stack"><CheckboxField label="失效线路" checked disabled={busy || valid === 0} description="添加可用节点后可移除" onCheckedChange={() => onToggle(ref, false)} /><LineStatus refName={ref} /></InsetRow>)}
-    </InsetRows>
-    {group.group.members.some((ref) => !byRef.get(ref)?.available) && <Notice tone="warn">下次修改成员时将清理失效线路。</Notice>}
-    {gates.map((id) => <InsetGroup key={id} title={lines.find((line) => line.gate_id === id)?.gate_name ?? "VPS 未知"} description="勾选后立即保存；按 VPS 固定排列，主备顺序可在编辑中调整。"><InsetRows>{choices.filter((line) => line.gate_id === id).map((line) => <InsetRow key={line.ref} className="stack" {...dataObject({ type: line.chain_id ? "chain" : "node", id: line.chain_id || line.node_id, owner })}><CheckboxField label={line.name} checked={selected.has(line.ref)} disabled={busy || (selected.has(line.ref) ? valid <= 1 && line.available || valid === 0 : valid >= 50)} description={!line.available ? "不可输出；添加可用节点后可移除" : selected.has(line.ref) ? "已在分组 · " + (group.group.members.indexOf(line.ref) + 1) + " · 取消勾选即移出" : "可添加 · " + (line.chained ? "链式" : "直连")} onCheckedChange={(on) => onToggle(line.ref, on)} /><LineStatus line={line} refName={line.ref} admin={admin} owner={owner} /></InsetRow>)}</InsetRows></InsetGroup>)}
-    {!choices.some((line) => !selected.has(line.ref)) && <p className="text-meta text-[var(--weir-ink-2)]">没有其他可添加的线路。</p>}
-  </Collapsible>;
 }
 
 function GroupDialog({ base, view, value, close, saved }: { base: string; view: ProxyView; value: ProxyGroup | null; close: () => void; saved: (updated: ProxyView) => void }) {
@@ -106,12 +140,12 @@ function GroupDialog({ base, view, value, close, saved }: { base: string; view: 
   const [kind, setKind] = useState<ProxyGroup["kind"]>(value?.kind ?? "url-test");
   const [members, setMembers] = useState(value?.members ?? []);
   const membersControl = useRef<HTMLDivElement>(null);
-  const [interval, setInterval] = useState(String(value?.interval_seconds ?? 60));
+  const [interval, setInterval] = useState(String(value?.interval_seconds ?? 30));
   const [tolerance, setTolerance] = useState(String(value?.tolerance_ms ?? 50));
   const [memberError, setMemberError] = useState("");
   const [conflicted, setConflicted] = useState(false);
   const confirm = useConfirm();
-  const dirty = name !== (value?.name ?? "") || kind !== (value?.kind ?? "url-test") || JSON.stringify(members) !== JSON.stringify(value?.members ?? []) || interval !== String(value?.interval_seconds ?? 60) || tolerance !== String(value?.tolerance_ms ?? 50);
+  const dirty = name !== (value?.name ?? "") || kind !== (value?.kind ?? "url-test") || JSON.stringify(members) !== JSON.stringify(value?.members ?? []) || interval !== String(value?.interval_seconds ?? 30) || tolerance !== String(value?.tolerance_ms ?? 50);
   const markSaved = useUnsavedChanges(dirty);
   const save = useFormAction<ProxyView>(() => api(proxyURL(base, `/groups${value ? `/${value.id}` : ""}`), value ? "PUT" : "POST", { revision, name, kind, members, interval_seconds: Number(interval), tolerance_ms: Number(tolerance) }) as Promise<ProxyView>, {
     fields: { invalid_group_name: "name", invalid_group_members: "members", invalid_group_kind: "kind", invalid_group_interval_seconds: "interval_seconds", invalid_group_tolerance_ms: "tolerance_ms" }, onSuccess: (updated) => { markSaved(); saved(updated); },
@@ -122,21 +156,82 @@ function GroupDialog({ base, view, value, close, saved }: { base: string; view: 
   const byRef = new Map(view.lines.map((l) => [l.ref, l]));
   useConsoleContext({ dialog: { title: value ? "编辑分组" : "新建分组" }, form: [field("name", "名称", name), field("kind", "选法", ways[kind]), field("members", "成员", members.map((m) => byRef.get(m)?.name ?? "失效线路").join("、")), field("interval_seconds", "探测间隔", interval), field("tolerance_ms", "容差", tolerance)] });
   return <Dialog open onOpenChange={(o) => { if (!o) void requestClose(); }}><DialogContent size="lg">
-    <DialogTitle>{value ? "编辑分组" : "新建分组"}</DialogTitle><DialogDescription>起名、勾选节点，然后保存。默认由客户端选择延迟最低的节点。</DialogDescription>
-    <Form busy={save.busy} errors={{ ...save.errors, ...(memberError ? { members: memberError } : {}) }} onSubmit={() => { if (!members.length) { setMemberError("请至少选择一条线路"); membersControl.current?.focus(); return; } void save.submit(); }}>
-      <Field name="name" label="名称" required><Input name="name" required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} /></Field>
-      <Field name="members" label="选节点" required hint="最多 50 条。节点按 VPS 固定排列，勾选不改变位置。"><div ref={membersControl} className="stack" tabIndex={-1}>
-        {gates.map((id) => <InsetGroup key={id} title={view.lines.find((l) => l.gate_id === id)?.gate_name}><InsetRows>{view.lines.filter((l) => l.gate_id === id).map((l) => <InsetRow key={l.ref} className="stack"><CheckboxField label={l.name} checked={members.includes(l.ref)} disabled={!l.available || (!members.includes(l.ref) && members.length >= 50)} onCheckedChange={(on) => { setMembers(on ? [...members, l.ref] : members.filter((m) => m !== l.ref)); setMemberError(""); }} /><p className="text-meta text-[var(--weir-ink-2)]">{l.chained ? "链式" : "直连"} · 节点{healthText[l.health]} · VPS {gateText[l.gate_status]}{l.why ? ` · ${l.why}` : ""}</p></InsetRow>)}</InsetRows></InsetGroup>)}
+    <DialogTitle>{value ? `配置分组「${value.name}」` : "新建客户端分组"}</DialogTitle><DialogDescription>把同一地区或用途的节点编成一组，出现在客户端的 PROXY 选择列表里。</DialogDescription>
+    <Form busy={save.busy} errors={{ ...save.errors, ...(memberError ? { members: memberError } : {}) }} onSubmit={() => { if (!members.length) { setMemberError("请至少勾选一条节点线路"); membersControl.current?.focus(); return; } void save.submit(); }}>
+      <div className="space-y-2">
+        <Field name="name" label="分组名称" required><Input name="name" required maxLength={80} placeholder="例如：AI 专线、流媒体、日本组" value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        {!value && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <small className="text-[var(--weir-ink-3)]">常用名称：</small>
+            {quickNames.filter((q) => !view.groups.some((g) => g.group.name === q)).map((q) => (
+              <Button key={q} type="button" size="xs" variant="outline" onClick={() => setName(q)}>{q}</Button>
+            ))}
+          </div>
+        )}
+      </div>
+      <Field name="kind" label="组内选路方式">
+        <RadioGroup className="grid gap-[var(--weir-space-2)] sm:grid-cols-3" value={kind} onValueChange={(v) => setKind(v as ProxyGroup["kind"])} aria-label="组内选路方式">
+          {(["url-test", "fallback", "select"] as const).map((k) => (
+            <ChoiceCard key={k} render={<label />} selected={kind === k} className="cursor-pointer p-3">
+              <span className="flex items-center gap-2"><Radio value={k} /><strong className="text-body">{ways[k]}</strong></span>
+              <small className="block text-[var(--weir-ink-3)]">{wayHints[k]}</small>
+            </ChoiceCard>
+          ))}
+        </RadioGroup>
+      </Field>
+      <Field name="members" label={`勾选节点（已选 ${members.length}）`} required><div ref={membersControl} className="stack" tabIndex={-1}>
+        {gates.map((id) => {
+          const gateLines = view.lines.filter((l) => l.gate_id === id);
+          const availableRefs = gateLines.filter((l) => l.available).map((l) => l.ref);
+          const allPicked = availableRefs.length > 0 && availableRefs.every((r) => members.includes(r));
+          return (
+            <InsetGroup
+              key={id}
+              title={gateLines[0]?.gate_name ?? "VPS"}
+              actions={availableRefs.length > 1 ? (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  onClick={() => {
+                    setMemberError("");
+                    if (allPicked) setMembers(members.filter((m) => !availableRefs.includes(m)));
+                    else setMembers([...new Set([...members, ...availableRefs])].slice(0, 50));
+                  }}
+                >
+                  {allPicked ? "取消本机全选" : "全选本机"}
+                </Button>
+              ) : undefined}
+            >
+              <InsetRows>
+                {gateLines.map((l) => (
+                  <InsetRow key={l.ref} className="py-2">
+                    <CheckboxField
+                      label={l.name}
+                      description={`${l.chained ? "链式" : "直连"} · 节点${healthText[l.health]} · VPS ${gateText[l.gate_status]}${l.why ? ` · ${l.why}` : ""}`}
+                      checked={members.includes(l.ref)}
+                      disabled={!l.available || (!members.includes(l.ref) && members.length >= 50)}
+                      onCheckedChange={(on) => { setMembers(on ? [...members, l.ref] : members.filter((m) => m !== l.ref)); setMemberError(""); }}
+                    />
+                  </InsetRow>
+                ))}
+              </InsetRows>
+            </InsetGroup>
+          );
+        })}
         {members.filter((m) => !byRef.has(m)).map((m) => <CheckboxField key={m} label="已失效线路，取消勾选以移除" checked onCheckedChange={() => setMembers(members.filter((ref) => ref !== m))} />)}
         {!gates.length && <State empty="没有可选择的节点" />}
       </div></Field>
-      <Collapsible title="高级设置">
-        <Field name="kind" label="选法"><Select value={kind} onValueChange={(v) => setKind(v as ProxyGroup["kind"])}><SelectTrigger aria-label="分组选法"><SelectValue>{ways[kind]}</SelectValue></SelectTrigger><SelectContent>{Object.entries(ways).map(([k, label]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}</SelectContent></Select></Field>
-        <Field name="interval_seconds" label="探测间隔（秒）" required><Input type="number" min={30} max={86400} step={1} required value={interval} onChange={(e) => setInterval(e.target.value)} /></Field>
-        {kind === "url-test" && <Field name="tolerance_ms" label="延迟容差（毫秒）" required><Input type="number" min={0} max={10000} step={1} required value={tolerance} onChange={(e) => setTolerance(e.target.value)} /></Field>}
-      </Collapsible>
-      {kind === "fallback" && <InsetGroup title="主备顺序" description="优先使用靠前的可用节点，可使用上移、下移或键盘调整。"><SortableList items={members} getId={(m) => m} label="主备顺序" itemLabel={(m) => byRef.get(m)?.name ?? "失效线路"} onReorder={setMembers} renderItem={(m, { reorder, index }) => <div className="flex min-w-0 items-center gap-2"><span>{index + 1}</span><span className="min-w-0 flex-1 break-words">{byRef.get(m)?.name ?? "失效线路"}</span>{reorder}</div>} /></InsetGroup>}
-      <DialogFooter error={conflicted ? "代理设置已有新版本，请关闭弹窗后重新编辑。" : save.error}><Button type="button" variant="outline" disabled={save.busy} onClick={() => void requestClose()}>取消</Button><Button type="submit" disabled={conflicted} busy={save.busy} busyText="正在保存">保存</Button></DialogFooter>
+      {kind === "fallback" && members.length > 1 && <InsetGroup title="主备优先顺序" description="靠前的节点优先使用，断连时自动切到下一条。"><SortableList items={members} getId={(m) => m} label="主备顺序" itemLabel={(m) => byRef.get(m)?.name ?? "失效线路"} onReorder={setMembers} renderItem={(m, { reorder, index }) => <div className="flex min-w-0 items-center gap-2"><span className="font-mono text-meta text-[var(--weir-ink-3)]">{index + 1}</span><span className="min-w-0 flex-1 break-words">{byRef.get(m)?.name ?? "失效线路"}</span>{reorder}</div>} /></InsetGroup>}
+      {kind !== "select" && (
+        <Collapsible title={`探测参数（当前 ${interval} 秒${kind === "url-test" ? ` · 容差 ${tolerance} ms` : ""}）`}>
+          <FormGrid>
+            <Field name="interval_seconds" label="探测间隔（秒）" required><Input type="number" min={30} max={86400} step={1} required value={interval} onChange={(e) => setInterval(e.target.value)} /></Field>
+            {kind === "url-test" && <Field name="tolerance_ms" label="延迟容差（毫秒）" required><Input type="number" min={0} max={10000} step={1} required value={tolerance} onChange={(e) => setTolerance(e.target.value)} /></Field>}
+          </FormGrid>
+        </Collapsible>
+      )}
+      <DialogFooter error={conflicted ? "分流配置已有新版本，请关闭弹窗后重试。" : save.error}><Button type="button" variant="outline" disabled={save.busy} onClick={() => void requestClose()}>取消</Button><Button type="submit" disabled={conflicted} busy={save.busy} busyText="正在保存">{value ? "保存修改" : "创建分组"}</Button></DialogFooter>
     </Form>
   </DialogContent></Dialog>;
 }

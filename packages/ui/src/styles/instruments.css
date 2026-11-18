@@ -84,12 +84,6 @@
     line-height: var(--weir-leading-meta);
     color: var(--weir-ink-3);
   }
-  .weir-probe-readouts .weir-readout-value {
-    height: calc(2 * var(--weir-leading-display)); overflow: auto;
-  }
-  .weir-probe-readouts .weir-readout-caption {
-    height: calc(3 * var(--weir-leading-meta)); overflow: auto; overflow-wrap: anywhere;
-  }
 
   .weir-meter {
     position: relative;
@@ -187,7 +181,6 @@
     height: var(--weir-globe-size);
     transform: translate(50%, 50%);
     pointer-events: none;
-    opacity: var(--weir-globe);
   }
   .weir-globe canvas { display: block; width: 100%; height: 100%; }
   .weir-globe-routes { position: absolute; inset: 0; overflow: visible; }
@@ -275,8 +268,10 @@
   .weir-folder, .weir-folder-slot, .weir-route-card { transition: scale var(--weir-press) var(--weir-ease); }
   .weir-folder:active, .weir-folder-slot:active, .weir-route-card:active { scale: var(--weir-press-scale); }
   .weir-folder-file-kind { font-size: var(--weir-text-caption2); line-height: var(--weir-leading-caption2); color: var(--weir-ink-3); }
+  .weir-folder-file[data-chained="true"] { border-color: var(--weir-accent); box-shadow: inset 0 1px 0 var(--weir-accent-soft), 0 9px 21px var(--weir-shade-paper); }
+  .weir-folder-file[data-chained="true"] .weir-folder-file-kind { color: var(--weir-accent-text); font-weight: var(--weir-weight-semibold); }
   .weir-folder-file-title { font-weight: var(--weir-weight-bold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .weir-folder-file-meta { font-family: var(--weir-mono); font-size: var(--weir-text-caption2); line-height: var(--weir-leading-caption2); color: var(--weir-ink-3); }
+  .weir-folder-file-meta { font-family: var(--weir-mono); font-size: var(--weir-text-caption2); line-height: var(--weir-leading-caption2); color: var(--weir-ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .weir-folder-front {
     position: absolute;
     right: 0;
@@ -324,7 +319,7 @@
   .weir-folder-caption { display: block; margin-top: 5px; font-size: var(--weir-text-caption2); line-height: var(--weir-leading-caption2); color: var(--weir-ink-3); }
   .weir-folder-metric { text-align: right; }
   .weir-folder-metric .weir-digits { font-size: var(--weir-text-headline); line-height: 21px; font-weight: var(--weir-weight-bold); }
-  .weir-folder-metric small { font-size: var(--weir-text-caption2); color: var(--weir-ink-3); font-weight: var(--weir-weight-regular); }
+  .weir-folder-metric small { font-size: var(--weir-text-caption2); line-height: var(--weir-leading-caption2); color: var(--weir-ink-3); font-weight: var(--weir-weight-regular); }
   /* 详情页右上的文件夹（稿子 281 高，前板 57%） */
   .weir-folder-compact { height: 281px; cursor: default; }
   .weir-folder-compact .weir-folder-front { height: 57%; }
@@ -547,9 +542,9 @@
   .weir-lever i { position: absolute; left: 7px; right: 7px; bottom: 7px; height: 43px; border-radius: var(--weir-radius); background: var(--weir-raised); box-shadow: 0 5px 13px var(--weir-shade-lift), var(--weir-highlight); corner-shape: squircle; transition: top var(--weir-mid) var(--weir-spring), bottom var(--weir-mid) var(--weir-spring); }
   .weir-lever[data-on] i { top: 7px; bottom: auto; background: linear-gradient(var(--weir-raised), var(--weir-panel)); }
   .weir-lever[data-on] i::after { content: ""; position: absolute; left: 23px; top: 17px; width: 7px; height: 7px; border-radius: 50%; background: var(--weir-ok); box-shadow: 0 0 9px var(--weir-ok); }
-  /* 纸面预览（稿子代理页 .paper）：带横线的纸，微微倾斜 */
-  .weir-paper { margin: 0; padding: var(--weir-gap-25) var(--weir-gap-29); overflow: auto; border-radius: var(--weir-radius-5); background: var(--weir-paper); background-image: repeating-linear-gradient(transparent 0 20px, var(--weir-line-soft) 20px 21px); box-shadow: 0 1px 0 var(--weir-line), 0 17px 41px var(--weir-shade-lift); color: var(--weir-ink-2); font-family: var(--weir-mono); font-size: var(--weir-text-body); line-height: 21px; white-space: pre-wrap; transform: rotate(-1deg); }
-  [data-motion="lite"] .weir-paper { transform: none; box-shadow: 0 0 0 1px var(--weir-line); }
+  /* 纸面预览：带横线的端正代码面板，避免倾斜导致原生滚动条锯齿与右缘裁切 */
+  .weir-paper { margin: 0; padding: var(--weir-gap-17) var(--weir-gap-21); overflow: auto; scrollbar-width: thin; border: 1px solid var(--weir-line-soft); border-radius: var(--weir-radius-card); background: var(--weir-paper); background-image: repeating-linear-gradient(transparent 0 20px, var(--weir-line-soft) 20px 21px); box-shadow: var(--weir-shadow-card); color: var(--weir-ink-2); font-family: var(--weir-mono); font-size: var(--weir-text-body); line-height: 21px; white-space: pre-wrap; }
+  [data-motion="lite"] .weir-paper { box-shadow: none; }
   /* 链路卡（稿子 ALinkmap）：用户 → VPS → 出口，中间是表示流量的点线，速率越高越亮；不做持续动画 */
   .weir-route-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(61px, 1fr) minmax(0, 1fr) minmax(61px, 1fr) minmax(0, 1fr); align-items: center; gap: var(--weir-gap-17); padding: 17px var(--weir-gap-21); border: 1px solid var(--weir-line-soft); border-radius: var(--weir-radius-17); background: var(--weir-panel); box-shadow: var(--weir-highlight), var(--weir-shadow-card); color: var(--weir-ink); font: inherit; cursor: pointer; corner-shape: squircle; }
   .weir-route-card[aria-pressed="true"] { border-color: var(--weir-accent); }
@@ -736,6 +731,9 @@
   .weir-flow small { font-size: var(--weir-text-caption2); line-height: var(--weir-leading-caption2); color: var(--weir-ink-3); font-weight: var(--weir-weight-regular); }
   .weir-pipeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(161px, 1fr)); gap: var(--weir-gap-9); margin: 0; padding: 0; list-style: none; }
   .weir-pipeline li { display: flex; flex-direction: column; padding: var(--weir-gap-13) 15px; border: 1px solid var(--weir-line-soft); border-radius: var(--weir-radius-17); background: var(--weir-well); corner-shape: squircle; }
+  .weir-pipeline li[data-active] { border-color: var(--weir-accent); }
+  .weir-pipeline li:has(.weir-pipeline-btn) { padding: 0; }
+  .weir-pipeline-btn { display: flex; width: 100%; height: 100%; flex-direction: column; padding: var(--weir-gap-13) 15px; border: 0; border-radius: inherit; background: transparent; color: inherit; text-align: left; cursor: pointer; corner-shape: squircle; }
   .weir-pipeline small { color: var(--weir-ink-3); font-size: var(--weir-text-caption2); line-height: var(--weir-leading-caption2); }
   .weir-pipeline strong { margin-top: 5px; font-family: var(--weir-mono); font-size: var(--weir-text-title2); line-height: var(--weir-leading-title2); font-weight: var(--weir-weight-bold); }
   .weir-pipeline-dots { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 11px; }

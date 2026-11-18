@@ -3,10 +3,10 @@ import { useSearchParams } from "react-router-dom";
 import { proxyTargets, proxyURL } from "../lib/proxy-targets";
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, CirclePause, CirclePlay, Pencil, Plus, Route, Search, Trash2, Unplug } from "lucide-react";
+import { ArrowDown, ArrowUp, Pencil, Plus, Route, Search, Trash2, Unplug } from "lucide-react";
 import {
   ActionButton, Badge, Button, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle,
-  Field, Form, Input, InsetGroup, InsetRow, InsetRows, Notice, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea, useConfirm,
+  Field, Form, Input, InsetGroup, InsetRow, InsetRows, Notice, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField, Textarea, useConfirm,
   type ActionState,
 } from "@weir/ui";
 import { api, ApiError } from "../api";
@@ -123,7 +123,7 @@ export function CustomRulesCard({ base, view, onSaved }: { base: string; view: P
     setTestRow(e?.id ?? "all"); setResult(null); setResultStale(false); setErrorField(undefined);
     setTestTarget(e && (e.kind === "domain" || e.kind === "domain_suffix") ? e.value : e?.kind === "ip_cidr" && /\/(32|128)$/.test(e.value) ? e.value.split("/")[0] : "");
   };
-  const testForm = (entry: CustomEntry | null, draft = false) => <Form errors={errorField} busy={busy} className="stack gap-2" onSubmit={async () => {
+  const testForm = (entry: CustomEntry | null, draft = false) => <Form errors={errorField} busy={busy} className="stack gap-2 rounded-[var(--weir-radius)] bg-[var(--weir-well)] p-3" onSubmit={async () => {
     setResult(null); setResultStale(false);
     const response = await run("test:" + (draft ? "draft" : entry?.id ?? "all"), entry ? root + "/entries/" + encodeURIComponent(entry.id) + "/test" : root + "/test", "POST", { target: testTarget, revision: draft ? editingRevision : c.revision, ...(draft ? { entry } : {}) });
     if (response) setResult(response);
@@ -133,63 +133,90 @@ export function CustomRulesCard({ base, view, onSaved }: { base: string; view: P
         <Input value={testTarget} onChange={(e) => { setTestTarget(e.target.value); if (result) setResultStale(true); setResult(null); }} placeholder="输入具体网址、域名或 IP" />
       </Field>
       <ActionButton type="submit" variant="outline" className="sm:mt-7" disabled={busy || !testTarget.trim()} state={state("test:" + (draft ? "draft" : entry?.id ?? "all"))} busyText="正在计算…"><Search />测试</ActionButton>
+      {!draft && <Button type="button" variant="ghost" className="sm:mt-7" onClick={() => setTestRow(null)}>收起</Button>}
     </div>
-    <div className="h-40 overflow-y-auto">{result ? <TestOutput result={result} /> : resultStale ? <p className="text-meta text-[var(--weir-warn-ink)]">设置或测试目标已变化，旧结果已失效，请重新测试。</p> : <p className="text-meta text-[var(--weir-ink-3)]">{draft ? "测试尚未保存的本条修改；" : ""}只计算规则，不连接网站。</p>}</div>
+    {result ? <TestOutput result={result} /> : resultStale ? <p className="m-0 text-meta text-[var(--weir-warn-ink)]">设置或测试目标已变化，旧结果已失效，请重新测试。</p> : <p className="m-0 text-meta text-[var(--weir-ink-3)]">{draft ? "测试尚未保存的本条修改；" : ""}只计算规则，不连接网站。</p>}
   </Form>;
 
-  return <InsetGroup title="全局清单" description="清单按顺序优先匹配，未命中再依次匹配局域网、国内域名与国内 IP，最后走 PROXY。由客户端执行，下次定时或手动更新完整订阅时生效；只接收节点列表的客户端用不上。">
-    <div className="flex flex-wrap gap-2">
-      <Button disabled={busy} onClick={() => { setParams((p)=>{p.set("rule","new");return p;}); setDialog("add"); setParsed(null); setEditingRevision(c.revision); setErrorField(undefined); setMessage(""); }}><Plus />批量添加</Button>
-      <Button variant="outline" disabled={busy} onClick={() => openTest(null)}><Search />测试整份清单</Button>
-    </div>
-    <div className="flex flex-wrap gap-2">{view.presets.map((p)=><Button key={p.key} size="sm" variant="outline" disabled={busy} onClick={()=>{setSource(p.domains.join("\n"));setAddTarget("proxy");setDialog("add");setEditingRevision(c.revision);setParams((q)=>{q.set("rule","new");return q;});}}>添加{p.label}</Button>)}</div>
+  const globalStatus = pending ? <WaitText wait={pending} /> : message ? <span className={tone === "bad" ? "text-[var(--weir-bad-ink)]" : tone === "warn" ? "text-[var(--weir-warn-ink)]" : "text-[var(--weir-ink-2)]"}>{message}</span> : c.check && c.check.status !== "passed" ? <span className="text-[var(--weir-warn-ink)]">{c.check.status === "failed" ? "内核配置检查未通过，仍使用上一份有效清单。" : "内核配置检查未知；清单已保存。"}{c.check.detail ? " " + c.check.detail : ""}</span> : null;
+
+  return <InsetGroup
+    title="全局清单"
+    description="按顺序优先匹配；未命中时依次走局域网直连、国内域名/IP 直连、其余走 PROXY。"
+    actions={
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => testRow === "all" ? setTestRow(null) : openTest(null)}><Search />测试清单</Button>
+        <Button size="sm" disabled={busy} onClick={() => { setParams((p)=>{p.set("rule","new");return p;}); setDialog("add"); setParsed(null); setEditingRevision(c.revision); setErrorField(undefined); setMessage(""); }}><Plus />批量添加</Button>
+      </div>
+    }
+  >
+    {view.presets.length > 0 && (
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-fine text-[var(--weir-ink-3)]">快速导入：</span>
+          {view.presets.map((p)=><Button key={p.key} size="xs" variant="outline" disabled={busy} onClick={()=>{setSource(p.domains.join("\n"));setDialog("add");setEditingRevision(c.revision);setParams((q)=>{q.set("rule","new");return q;});}}>+{p.label}</Button>)}
+        </div>
+        <Segmented size="sm" aria-label="默认导入走向" value={addTarget} onValueChange={setAddTarget} options={targets} />
+      </div>
+    )}
     {c.migration && <Notice tone="warn">{c.migration}</Notice>}
-    <p className="text-meta text-[var(--weir-ink-3)]">已保存 {c.entries.length} 条，已启用 {c.entries.filter((e) => e.enabled).length} 条。列表靠前的规则先匹配。</p>
-    <InsetRows>
-      {c.entries.length === 0 && <p className="text-meta text-[var(--weir-ink-3)]">清单为空，使用后续内置规则。可以一次粘贴多个网站。</p>}
-      {c.entries.map((e, index) => <InsetRow key={e.id} data-entry-id={e.id} data-removing={removing === e.id || undefined} data-disabled={!e.enabled || undefined} className="weir-rule-row stack gap-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="text-meta tabular-nums text-[var(--weir-ink-3)]">{index + 1}</span>
-          <span className="min-w-0 flex-1 break-all font-mono text-meta">{e.value}</span>
-          <Badge variant="soft" tone={e.enabled ? "info" : "neutral"}>{e.enabled ? targetText(e.target) : "已停用"}</Badge>
-          {(e.warning || e.notice) && <Notice tone="warn">{e.warning || e.notice}</Notice>}
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <small className="text-[var(--weir-ink-3)]">{kinds[e.kind]}</small>
-          <div className="flex flex-wrap gap-1" role="group" aria-label={e.value + " 的操作"}>
-            <ActionButton size="icon-sm" variant="ghost" disabled={busy} state={state("route:" + e.id)} title={e.target === "direct" ? "改走代理" : "改为直连"} aria-label={e.value + (e.target === "direct" ? " 改走代理" : " 改为直连")} onClick={() => void change(e, "route:" + e.id, { target: e.target === "direct" ? "proxy" : "direct" })}>{e.target === "direct" ? <Unplug /> : <Route />}</ActionButton>
-            <ActionButton size="icon-sm" variant="ghost" disabled={busy || e.target === "reject"} state={state("enabled:" + e.id)} title={e.enabled ? "停用" : "启用"} aria-label={(e.enabled ? "停用 " : "启用 ") + e.value} onClick={() => void change(e, "enabled:" + e.id, { enabled: !e.enabled })}>{e.enabled ? <CirclePause /> : <CirclePlay />}</ActionButton>
-            <Button size="icon-sm" variant="ghost" disabled={busy} title="测试本条" aria-label={"测试 " + e.value} onClick={() => openTest(e)}><Search /></Button>
-            <Button size="icon-sm" variant="ghost" disabled={busy} title="修改" aria-label={"修改 " + e.value} onClick={() => { setParams((p)=>{p.set("rule",e.id);return p;}); setDialog(e); setEditing({ ...e }); setEditingRevision(c.revision); setTestRow(null); setResult(null); setErrorField(undefined); setMessage(""); }}><Pencil /></Button>
-            <ActionButton size="icon-sm" variant="ghost" disabled={busy || index === 0} state={state("up:" + e.id)} title="上移" aria-label={"上移 " + e.value} onClick={() => void change(e, "up:" + e.id, { position: index - 1 })}><ArrowUp /></ActionButton>
-            <ActionButton size="icon-sm" variant="ghost" disabled={busy || index === c.entries.length - 1} state={state("down:" + e.id)} title="下移" aria-label={"下移 " + e.value} onClick={() => void change(e, "down:" + e.id, { position: index + 1 })}><ArrowDown /></ActionButton>
-            <ActionButton size="icon-sm" variant="destructive" disabled={busy} state={state("delete:" + e.id)} title="删除" aria-label={"删除 " + e.value} onClick={async () => {
-              if (await confirm({ title: "删除这条清单规则？", description: e.value, confirmText: "删除", tone: "danger" })) await run("delete:" + e.id, root + "/entries/" + encodeURIComponent(e.id), "DELETE", { revision: c.revision }, { save: true, remove: e.id });
-            }}><Trash2 /></ActionButton>
-          </div>
-        </div>
-        <div className="h-12 overflow-y-auto text-meta" role="status">{Object.keys(states).some((key) => key.endsWith(":" + e.id)) && (pending ? <WaitText wait={pending} /> : message ? <span className={tone === "bad" ? "text-[var(--weir-bad-ink)]" : tone === "warn" ? "text-[var(--weir-warn-ink)]" : "text-[var(--weir-ink-3)]"}>{message}{tone === "bad" && " 再点该操作可重试。"}</span> : null)}</div>
-        {testRow === e.id && <div className="weir-rule-test">{testForm(e)}</div>}
-      </InsetRow>)}
-    </InsetRows>
-    <div className="mt-2 h-16 overflow-y-auto text-meta" role="status" aria-live="polite">
-      {pending ? <WaitText wait={pending} /> : message ? <span className={tone === "bad" ? "text-[var(--weir-bad-ink)]" : tone === "warn" ? "text-[var(--weir-warn-ink)]" : "text-[var(--weir-ink-2)]"}>{message}</span> : c.check ? <span>{c.check.status === "passed" ? "内核配置检查通过；不代表客户端已经更新。" : c.check.status === "failed" ? "内核配置检查未通过，仍使用上一份有效清单。" : "内核配置检查未知；清单已保存。"}{c.check.status !== "passed" && c.check.detail ? " " + c.check.detail : ""}</span> : null}
-    </div>
+    {testRow === "all" && testForm(null)}
+    {globalStatus && <div className="text-meta" role="status" aria-live="polite">{globalStatus}</div>}
+    {c.entries.length === 0 ? (
+      <p className="m-0 py-2 text-meta text-[var(--weir-ink-3)]">尚未添加自定义规则，当前全部走内置规则。点右上角「批量添加」可一次粘贴多条域名或 IP 段。</p>
+    ) : (
+      <InsetRows>
+        {c.entries.map((e, index) => {
+          const rowActive = Object.keys(states).some((key) => key.endsWith(":" + e.id));
+          return (
+            <InsetRow key={e.id} data-entry-id={e.id} data-removing={removing === e.id || undefined} data-disabled={!e.enabled || undefined} className="weir-rule-row stack gap-1.5">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                  <span className="w-5 shrink-0 text-right font-mono text-fine tabular-nums text-[var(--weir-ink-3)]">{index + 1}</span>
+                  <span className="min-w-0 truncate font-mono text-body" title={e.value}>{e.value}</span>
+                  <span className="shrink-0 text-fine text-[var(--weir-ink-3)]">{kinds[e.kind]}</span>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5" role="group" aria-label={e.value + " 的操作"}>
+                  <Badge variant="soft" tone={!e.enabled ? "neutral" : e.target === "direct" ? "neutral" : "info"}>{e.enabled ? targetText(e.target) : "已停用"}</Badge>
+                  <ActionButton size="icon-sm" variant="ghost" disabled={busy} state={state("route:" + e.id)} title={e.target === "direct" ? "改走代理" : "改为直连"} aria-label={e.value + (e.target === "direct" ? " 改走代理" : " 改为直连")} onClick={() => void change(e, "route:" + e.id, { target: e.target === "direct" ? "proxy" : "direct" })}>{e.target === "direct" ? <Unplug /> : <Route />}</ActionButton>
+                  {c.entries.length > 1 && (
+                    <>
+                      <ActionButton size="icon-sm" variant="ghost" disabled={busy || index === 0} state={state("up:" + e.id)} title="上移" aria-label={"上移 " + e.value} onClick={() => void change(e, "up:" + e.id, { position: index - 1 })}><ArrowUp /></ActionButton>
+                      <ActionButton size="icon-sm" variant="ghost" disabled={busy || index === c.entries.length - 1} state={state("down:" + e.id)} title="下移" aria-label={"下移 " + e.value} onClick={() => void change(e, "down:" + e.id, { position: index + 1 })}><ArrowDown /></ActionButton>
+                    </>
+                  )}
+                  <Button size="icon-sm" variant="ghost" disabled={busy} title="编辑或测试" aria-label={"修改 " + e.value} onClick={() => { setParams((p)=>{p.set("rule",e.id);return p;}); setDialog(e); setEditing({ ...e }); setEditingRevision(c.revision); setTestRow(null); setResult(null); setErrorField(undefined); setMessage(""); }}><Pencil /></Button>
+                  <ActionButton size="icon-sm" variant="destructive" disabled={busy} state={state("delete:" + e.id)} title="删除" aria-label={"删除 " + e.value} onClick={async () => {
+                    if (await confirm({ title: "删除这条清单规则？", description: e.value, confirmText: "删除", tone: "danger" })) await run("delete:" + e.id, root + "/entries/" + encodeURIComponent(e.id), "DELETE", { revision: c.revision }, { save: true, remove: e.id });
+                  }}><Trash2 /></ActionButton>
+                </div>
+              </div>
+              {(e.warning || e.notice) && <Notice tone="warn">{e.warning || e.notice}</Notice>}
+              {rowActive && (pending || message) && (
+                <div className="text-fine" role="status">
+                  {pending ? <WaitText wait={pending} /> : <span className={tone === "bad" ? "text-[var(--weir-bad-ink)]" : tone === "warn" ? "text-[var(--weir-warn-ink)]" : "text-[var(--weir-ink-3)]"}>{message}{tone === "bad" && " 再点该操作可重试。"}</span>}
+                </div>
+              )}
+              {testRow === e.id && <div className="weir-rule-test">{testForm(e)}</div>}
+            </InsetRow>
+          );
+        })}
+      </InsetRows>
+    )}
     {c.pending && <div className="stack gap-2">
       <Notice tone="bad">上次修改未通过内核检查，当前列表仍是有效版本。失败候选已保留，可以重试。</Notice>
       <Collapsible title="查看未通过的候选清单"><ul className="text-meta">{c.pending.entries.map((e) => <li key={e.id} className="break-all">{e.value} → {targetText(e.target)}{!e.enabled && "（停用）"}</li>)}</ul>{c.pending.source && <pre className="whitespace-pre-wrap break-all text-meta">{c.pending.source}</pre>}</Collapsible>
       <ActionButton variant="outline" state={state("retry")} disabled={busy} onClick={() => void run("retry", root, "PUT", { revision: c.revision, entries: c.pending!.entries, source: c.pending!.source }, { save: true })}>重试上次修改</ActionButton>
     </div>}
-    {testRow === "all" && <div className="mt-4">{testForm(null)}</div>}
     <Dialog open={dialog !== null} onOpenChange={(open) => { if (!open) void closeDialog(); }}>
-      <DialogContent size="md" className="sm:h-[min(680px,80vh)]"><DialogTitle>{dialog === "add" ? "批量添加清单" : "修改清单规则"}</DialogTitle>
+      <DialogContent size="md"><DialogTitle>{dialog === "add" ? "批量添加清单" : "修改清单规则"}</DialogTitle>
         <DialogDescription>{dialog === "add" ? "每行一项，识别后追加到末尾；重复项保留已有走向。" : "保存本条改动时，会检查包含其他规则的完整候选订阅。"}</DialogDescription>
         <Form busy={busy} errors={errorField} onSubmit={async () => {
           const key = dialog === "add" ? "append" : "edit";
-          const response = dialog === "add" ? await run(key, root + "/append", "POST", { revision: editingRevision, source, target: addTarget }, { save: true }) : editing ? await run(key, root + "/entries/" + encodeURIComponent(editing.id), "PATCH", { revision: editingRevision, kind: editing.kind, value: editing.value, target: editing.target }, { save: true }) : null;
+          const response = dialog === "add" ? await run(key, root + "/append", "POST", { revision: editingRevision, source, target: addTarget }, { save: true }) : editing ? await run(key, root + "/entries/" + encodeURIComponent(editing.id), "PATCH", { revision: editingRevision, kind: editing.kind, value: editing.value, target: editing.target, enabled: editing.enabled }) : null;
           if (response) {
             if (dialog === "add") { setParsed(response.parsed ?? null); setSource(""); }
-            await wait(450);
+            await wait(350);
             if (mounted.current) {markSaved();setDialog(null);setEditing(null);setParams((p)=>{p.delete("rule");return p;});}
           } else if (mounted.current) {
             const latest = client.getQueryData<ProxyView>(["proxy", base]);
@@ -205,9 +232,10 @@ export function CustomRulesCard({ base, view, onSaved }: { base: string; view: P
             <Field label="类型"><Select value={editing.kind} onValueChange={(kind) => { setEditing({ ...editing, kind: kind as CustomRuleKind }); invalidateTest(); }}><SelectTrigger><SelectValue>{kinds[editing.kind]}</SelectValue></SelectTrigger><SelectContent>{Object.entries(kinds).map(([key, text]) => <SelectItem key={key} value={key}>{text}</SelectItem>)}</SelectContent></Select></Field>
             <Field label="规则" name="value" required><Input value={editing.value} onChange={(e) => { setEditing({ ...editing, value: e.target.value }); invalidateTest(); }} /></Field>
             <Field label="走向"><TargetSelect value={editing.target} onChange={(target) => { setEditing({ ...editing, target }); invalidateTest(); }} targets={targets} disabled={busy} /></Field>
-            <Button type="button" variant="outline" disabled={busy} onClick={() => { openTest(editing); setTestRow("draft"); }}><Search />测试本条修改</Button>
+            <SwitchField placement="end" label="启用本条规则" checked={editing.enabled} disabled={editing.target === "reject"} onCheckedChange={(on) => { setEditing({ ...editing, enabled: on }); invalidateTest(); }} />
+            <div><Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => { openTest(editing); setTestRow("draft"); }}><Search />测试本条修改</Button></div>
           </>}
-          <DialogFooter error={tone === "bad" ? <span className="block h-16 overflow-y-auto text-meta">{message}</span> : undefined} status={tone !== "bad" ? <span className="block h-16 overflow-y-auto text-meta">{pending ? <WaitText wait={pending} /> : message}</span> : undefined}>
+          <DialogFooter error={tone === "bad" && message ? <span className="text-meta">{message}</span> : undefined} status={tone !== "bad" && (pending || message) ? <span className="text-meta">{pending ? <WaitText wait={pending} /> : message}</span> : undefined}>
             <Button type="button" variant="ghost" disabled={busy} onClick={() => void closeDialog()}>取消</Button>
             <ActionButton type="submit" disabled={busy || (dialog === "add" ? !source.trim() : !editing?.value.trim())} state={state(dialog === "add" ? "append" : "edit")} busyText="正在检查并保存…">{dialog === "add" ? "添加到清单" : "保存本条"}</ActionButton>
           </DialogFooter>

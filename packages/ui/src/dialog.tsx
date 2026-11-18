@@ -242,7 +242,7 @@ function DialogLayer({
         style={{ "--weir-dialog-depth": depth, ...(style as CSSProperties) } as CSSProperties}
         className={cn(
           layer === "top" ? "z-[57]" : "z-50",
-          "weir-dialog group/dialog fixed inset-x-0 mx-auto flex w-full max-w-[calc(100%-var(--weir-space-8))] flex-col gap-[var(--weir-space-4)] overflow-hidden rounded-[var(--weir-radius-dialog)] border border-[var(--weir-line-soft)] bg-[var(--weir-raised)] p-[var(--weir-dialog-padding)] text-body text-card-foreground shadow-[var(--weir-shadow-float)] outline-none [transition:opacity_var(--weir-mid)_var(--weir-ease),scale_var(--weir-spring-dur)_var(--weir-spring)] data-[starting-style]:scale-[0.96] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.96] data-[ending-style]:opacity-0 data-[ending-style]:[transition-duration:var(--weir-fast)]",
+          "weir-dialog group/dialog fixed inset-x-0 mx-auto flex w-full max-w-[calc(100%-var(--weir-space-8))] flex-col gap-[var(--weir-space-4)] overflow-hidden rounded-[var(--weir-radius-dialog)] border border-[var(--weir-line)] bg-[var(--weir-raised)] p-[var(--weir-dialog-padding)] text-body text-card-foreground shadow-[var(--weir-highlight),var(--weir-shadow-float)] outline-none [corner-shape:squircle] [transition:opacity_var(--weir-mid)_var(--weir-ease),scale_var(--weir-spring-dur)_var(--weir-spring)] data-[starting-style]:scale-[0.96] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.96] data-[ending-style]:opacity-0 data-[ending-style]:[transition-duration:var(--weir-fast)]",
           placement === "palette" ? "top-[var(--weir-dialog-palette-top)] max-h-[calc(100dvh-var(--weir-dialog-palette-top)-var(--weir-space-4))]" : cn(anchored, sheetBase, size === "sm" ? sheetFit : sheetFull),
           dialogSizes[size],
           className,
@@ -252,7 +252,7 @@ function DialogLayer({
         {/* 底部抽屉的把手：只是提示可以下滑关闭的样子，关闭仍用右上角关闭键、Esc 与点遮罩 */}
         {sheet && <div aria-hidden data-slot="dialog-handle" className="weir-sheet-handle mb-0 hidden max-sm:block" />}
         {header.length > 0 && (
-          <div data-slot="dialog-pinned-header" className="flex shrink-0 flex-col gap-[var(--weir-space-2)]">
+          <div data-slot="dialog-pinned-header" className="flex shrink-0 flex-col gap-[var(--weir-gap-5)]">
             {header}
           </div>
         )}

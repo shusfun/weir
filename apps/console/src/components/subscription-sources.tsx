@@ -38,7 +38,14 @@ export function SourcesPanel() {
   useConsoleContext({ tab: "订阅源", list: { total: q.data?.items.length ?? 0, items: (q.data?.items ?? []).slice(0, 20).map((s) => ({ type: "source", name: s.name, id: s.id })) } });
   return (
     <section className="stack">
-      <SectionHeader flush title="订阅源" description="机场订阅地址；节点数与用量来自最近一次拉取，没有报告时显示「未知」。" actions={<Button size="sm" onClick={() => setEdit("new")}><Plus />添加订阅源</Button>} />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-meta text-[var(--weir-ink-3)]">
+          {q.data && q.data.items.length > 0
+            ? `上游流量合计 · ${q.data.traffic.sources} / ${q.data.items.filter((s) => s.enabled && !s.exclude_traffic).length} 个来源已报告流量`
+            : "节点数与用量取自最近一次拉取，缺失时显示未知"}
+        </span>
+        <Button size="sm" onClick={() => setEdit("new")}><Plus />添加订阅源</Button>
+      </div>
       {q.isPending || q.error ? (
         <State
           loading={q.isPending}
@@ -47,14 +54,11 @@ export function SourcesPanel() {
           skeleton={<SkeletonTable card={false} columns={["名称", "节点", "用量", "最近拉取", ""]} rows={4} lines={2} />}
         />
       ) : q.data.items.length === 0 ? (
-        <State empty="还没有订阅源" detail="想把机场订阅合并进来时才需要。填上订阅地址后，可在订阅组里处理并分给用户。" />
+        <State empty="还没有订阅源" detail="填上第三方机场订阅地址后，可在「外部订阅组」里筛选合并并分给用户。" />
       ) : (
         <>
-          {(
-            <div className="stack">
-              <small>上游流量合计 · {q.data.traffic.sources} / {q.data.items.filter((s) => s.enabled && !s.exclude_traffic).length} 个来源报告完整流量；失败来源保留上次成功值</small>
-              <TrafficUsage used={q.data.traffic.sources ? q.data.traffic.used : null} quota={q.data.traffic.sources ? q.data.traffic.total : null} />
-            </div>
+          {q.data.traffic.sources > 0 && (
+            <TrafficUsage used={q.data.traffic.used} quota={q.data.traffic.total} />
           )}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {[...q.data.items].sort((a, b) => Number(!!b.last_error) - Number(!!a.last_error)).map((s) => {

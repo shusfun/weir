@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
-import { Button, Card, CardContent, CardHeader, InsetGroup, InsetRow, InsetRows, MetricStrip, PageHeader, StatusLamp } from "@weir/ui";
+import { ArrowUpRight } from "lucide-react";
+import { InsetGroup, InsetRow, InsetRows, MetricStrip, PageHeader, StatusLamp } from "@weir/ui";
 import { api } from "../api";
 import { useQuery } from "../lib/query";
 import { objectStatus, type Gate, type NodeItem, type ObjectState, type UserItem } from "../lib/core";
@@ -29,18 +30,18 @@ export function OverviewPage() {
     .sort((a, b) => (priority[a.state?.status ?? "unknown"] ?? 5) - (priority[b.state?.status ?? "unknown"] ?? 5));
   useConsoleContext({ page: "概览", list: { total: attention.length, items: attention.slice(0, 20).map(item => item.object) } });
   return <div className="stack">
-    <PageHeader size="hero" eyebrow="概览" title={complete ? attention.length ? `${attention.length} 项需要核对` : "当前没有待处理项" : "正在核对运行状态"} description="状态由中心提供；配置生效、端口可达与整条路径实测分别展示。" />
+    <PageHeader size="hero" title={complete ? attention.length ? `${attention.length} 项需要核对` : "运行正常" : "正在核对运行状态"} />
     <MetricStrip items={[
       { label: "VPS 在线", value: gates.data ? `${gates.data.filter(g => g.object_state?.status === "ok").length} / ${gates.data.length}` : null },
-      { label: "节点", value: nodes.data?.length ?? null, caption: "连通性见各节点实测" },
+      { label: "自有节点", value: nodes.data?.length ?? null },
       { label: "用户", value: users.data?.length ?? null },
-      { label: "订阅源", value: sources.data?.items.length ?? null, caption: "缓存不代表节点连通" },
+      { label: "外部订阅源", value: sources.data?.items.length ?? null },
     ]} />
-    <div className="grid gap-[var(--weir-space-5)] lg:grid-cols-[minmax(0,1fr)_minmax(0,361px)]">
-      <InsetGroup title="待处理与观测缺口" description="先处理失败，再核对等待结果和缺少的观测。" data-tour="overview-attention">
+    <div className="grid items-start gap-[var(--weir-space-5)] lg:grid-cols-[minmax(0,1fr)_minmax(0,321px)]">
+      <InsetGroup title="待处理事项" data-tour="overview-attention">
         {queries.map((q, i) => q.isPending || q.error ? <State key={i} loading={q.isPending} error={q.error} onRetry={() => void q.refetch()} /> : null)}
         <InsetRows>
-          {complete && attention.length === 0 && <InsetRow>当前状态没有待处理项。</InsetRow>}
+          {complete && attention.length === 0 && <InsetRow>当前没有异常或待核对项。</InsetRow>}
           {attention.map(({ object, state }) => <InsetRow key={`${object.type}:${object.id}`} className="flex items-start gap-[var(--weir-space-3)]">
             <StatusLamp tone={objectStatus(state)[1]} label={objectStatus(state)[0]} />
             <div className="stack-tight min-w-0">
@@ -51,11 +52,13 @@ export function OverviewPage() {
           </InsetRow>)}
         </InsetRows>
       </InsetGroup>
-      <div className="stack">
-        <Card size="sm"><CardHeader title="链路与用量" description="查看授权入口、实际出口及已观测流量。" /><CardContent><Button variant="outline" render={<Link to="/linkmap" />}>打开链路图</Button></CardContent></Card>
-        <Card size="sm"><CardHeader title="后台运行" description="查看中心、VPS、Laya、dsh 的各自状态和任务回执。" /><CardContent><Button variant="outline" render={<Link to="/ops/observe?tab=system" />}>查看运行观测</Button></CardContent></Card>
-        <Card size="sm"><CardHeader title="操作记录" description="核对操作人、关联编号及异步结果。" /><CardContent><Button variant="outline" render={<Link to="/ops/audit" />}>打开审计</Button></CardContent></Card>
-      </div>
+      <InsetGroup title="快捷查看">
+        <InsetRows>
+          <InsetRow className="p-0"><Link to="/linkmap" className="weir-press flex min-h-[var(--weir-tap-touch)] items-center justify-between px-[var(--weir-space-4)] py-[var(--weir-space-3)] text-body text-[var(--weir-ink)] no-underline hover:text-[var(--weir-accent-text)]"><span>实时链路与流向</span><ArrowUpRight className="size-4 text-[var(--weir-ink-3)]" /></Link></InsetRow>
+          <InsetRow className="p-0"><Link to="/ops/observe?tab=system" className="weir-press flex min-h-[var(--weir-tap-touch)] items-center justify-between px-[var(--weir-space-4)] py-[var(--weir-space-3)] text-body text-[var(--weir-ink)] no-underline hover:text-[var(--weir-accent-text)]"><span>中心、Laya 与任务状态</span><ArrowUpRight className="size-4 text-[var(--weir-ink-3)]" /></Link></InsetRow>
+          <InsetRow className="p-0"><Link to="/ops/audit" className="weir-press flex min-h-[var(--weir-tap-touch)] items-center justify-between px-[var(--weir-space-4)] py-[var(--weir-space-3)] text-body text-[var(--weir-ink)] no-underline hover:text-[var(--weir-accent-text)]"><span>操作审计记录</span><ArrowUpRight className="size-4 text-[var(--weir-ink-3)]" /></Link></InsetRow>
+        </InsetRows>
+      </InsetGroup>
     </div>
   </div>;
 }

@@ -1,4 +1,4 @@
-import { Button, InsetGroup, InsetRow, InsetRows, useConfirm } from "@weir/ui";
+import { ActionGroup, Badge, Button, InsetGroup, InsetRow, InsetRows, useConfirm } from "@weir/ui";
 import { api } from "../api";
 import { useQuery } from "../lib/query";
 import { useRowAction } from "../lib/action";
@@ -38,16 +38,21 @@ export function PendingExits({ base = "/me", candidate, all = false, gateId, nod
   if (list.data && !items.length) return null;
   return <InsetGroup title="出口验证任务" description="验证通过后自动应用。等待期间保留原出口，新资源不会进入订阅。">
     {(list.isPending || list.error) && <State loading={list.isPending} error={list.error} onRetry={() => list.refetch()} />}
-    <InsetRows>{items.map((p) => <InsetRow key={p.id} className="stack">
-      <strong>{kinds[p.kind] ?? "出口"} · {labels[p.status] ?? "未知"}</strong>
-      <p className="text-meta break-words">{p.reason}</p>
-      <p className="text-meta break-all">任务 {p.id}</p>
-      {!["applied", "discarded"].includes(p.status) && <div className="flex flex-wrap gap-2">
+    <InsetRows>{items.map((p) => <InsetRow key={p.id} className="flex flex-wrap items-center justify-between gap-3">
+      <div className="min-w-0 flex-1 basis-[221px] space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <strong>{kinds[p.kind] ?? "出口"}</strong>
+          <Badge variant="soft" tone={p.status === "failed" ? "bad" : p.status === "stale" ? "warn" : "info"}>{labels[p.status] ?? "未知"}</Badge>
+          <code className="font-mono text-fine text-[var(--weir-ink-3)]" title={`任务 ${p.id}`}>#{p.id.slice(0, 8)}</code>
+        </div>
+        <div className="text-meta text-[var(--weir-ink-2)] break-words">{p.reason}</div>
+      </div>
+      {!["applied", "discarded"].includes(p.status) && <ActionGroup wrap={false}>
         <Button size="sm" variant="outline" disabled={action.isBusy() || p.status === "stale" || p.status === "waiting"} busy={action.isBusy(p.id)} busyText="正在重试" onClick={() => action.run(p.id, () => api(proxyURL(base, `/pending-exits/${p.id}/retry`), "POST", { revision: p.revision }))}>重试</Button>
         <Button size="sm" variant="outline" disabled={action.isBusy()} onClick={async () => {
           if (await confirm({ title: "放弃候选出口？", description: "当前生效配置保持不变。", confirmText: "放弃" })) await action.run(p.id, () => api(proxyURL(base, `/pending-exits/${p.id}`), "DELETE", { revision: p.revision }));
         }}>放弃</Button>
-      </div>}
+      </ActionGroup>}
     </InsetRow>)}</InsetRows>
   </InsetGroup>;
 }

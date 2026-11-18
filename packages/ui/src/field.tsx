@@ -94,6 +94,7 @@ function Field({
   const [message, setMessage] = useState("");
   const [dismissed, setDismissed] = useState(false);
   const [needed, setNeeded] = useState(false);
+  const [hasControl, setHasControl] = useState(true);
   const [, rerender] = useState(0);
   const external = error || (name ? form?.errors[name] : null) || null;
   useEffect(() => setDismissed(false), [external]);
@@ -126,6 +127,7 @@ function Field({
   // 每次渲染后：同步自定义规则与必填标记；已校验过的字段随值变化实时更新错误；控件与标签、说明、错误关联
   useLayoutEffect(() => {
     const v = validityTarget();
+    setHasControl(Boolean(v));
     if (v) {
       if (customError !== undefined) v.setCustomValidity(customError);
       setNeeded(v.required);
@@ -180,12 +182,14 @@ function Field({
     </span>
   ) : null;
 
+  const reserveSlot = Boolean(form && (hasControl || name || hint || external || customError !== undefined));
+
   return (
     <div
       ref={box}
       data-slot="field"
       data-invalid={invalid || undefined}
-      className={cn("grid min-w-0 content-start gap-2", className)}
+      className={cn("grid min-w-0 content-start gap-[var(--weir-gap-5)]", form && !reserveSlot && "pb-[var(--weir-gap-5)]", className)}
       onBlur={(e) => {
         onBlur?.(e);
         if (!dirty || e.currentTarget.contains(e.relatedTarget as Node | null)) return;
@@ -214,9 +218,9 @@ function Field({
         </Label>
       )}
       {content}
-      {form ? (
-        // 表单内：说明 / 错误共用一行并始终占位（错误优先），错误出现不推动下面的内容
-        <div data-slot="field-message" className="-mt-1 min-h-[var(--weir-leading-meta)]">
+      {reserveSlot ? (
+        // 表单内有可校验控件或说明时：说明 / 错误共用一行并始终占位，错误出现不推动下面的内容
+        <div data-slot="field-message" className="min-h-[var(--weir-leading-meta)]">
           {errorNode ?? hintNode}
         </div>
       ) : (

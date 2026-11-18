@@ -1,61 +1,68 @@
-// 订阅源：订阅源 → 手动节点 → 订阅组 → 规则模板 → 默认设置。
+// 订阅编排流水线：「订阅源」（订阅源 + 手动节点）管输入，「订阅组与模板」（订阅组 + 规则模板 + 默认设置）管组合与输出。
 import { Card, CardContent, PipelineBoard, PageHeader, Tabs, TabsList, TabsPanel, TabsTab } from "@weir/ui";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "../lib/query";
 import { api } from "../api";
 import { SourcesPanel } from "../components/subscription-sources";
 import { useSources } from "../lib/subscription-sources";
-import { useManualNodes } from "../components/subscription-nodes";
-import { useTemplates } from "../components/subscription-profiles";
-import { NodesPanel } from "../components/subscription-nodes";
-import { ProfilesPanel } from "../components/subscription-profiles";
+import { useManualNodes, NodesPanel } from "../components/subscription-nodes";
+import { useTemplates, ProfilesPanel } from "../components/subscription-profiles";
 import { SettingsPanel, TemplatesPanel } from "../components/subscription-settings";
-import { field, useConsoleContext } from "../lib/console-context";
+import { useConsoleContext } from "../lib/console-context";
 
-const tabs = [["sources", "订阅源"], ["nodes", "手动节点"], ["profiles", "订阅组"], ["templates", "规则模板"], ["settings", "默认设置"]] as const;
+const sourceTabs = [["sources", "订阅源"], ["nodes", "手动节点"]] as const;
+const groupTabs = [["profiles", "订阅组"], ["templates", "规则模板"], ["settings", "默认设置"]] as const;
+const sourceTabKeys = new Set<string>(sourceTabs.map(([k]) => k));
+const groupTabKeys = new Set<string>(groupTabs.map(([k]) => k));
 
-function SourcePipeline() {
+function SourcePipeline({ activeTab }: { activeTab: string }) {
+  const navigate = useNavigate();
   const sources = useSources();
   const nodes = useManualNodes();
   const profiles = useQuery({ queryKey: ["subscription-profiles"], queryFn: async () => (await api("/admin/subscriptions/profiles")).items as unknown[] });
   const templates = useTemplates();
   const steps = [
-    { name: "订阅源", value: sources.data?.items.length, note: "上游与用量" },
-    { name: "节点", value: nodes.data?.items.length, note: "导入与去重" },
-    { name: "处理链", value: sources.data?.items.reduce((n, s) => n + (s.operators?.length ?? 0), 0), note: "筛选与重命名" },
-    { name: "输出模板", value: (templates.data?.builtin.length ?? 0) + (templates.data?.custom.length ?? 0) || null, note: "按格式与规则" },
-    { name: "订阅组", value: profiles.data?.length, note: "组合与分享" },
+    { name: "订阅源", value: sources.data?.items.length, note: "上游与用量", active: activeTab === "sources", onSelect: () => navigate("/subscriptions?tab=sources") },
+    { name: "手动节点", value: nodes.data?.items.length, note: "导入与去重", active: activeTab === "nodes", onSelect: () => navigate("/subscriptions?tab=nodes") },
+    { name: "处理链", value: sources.data?.items.reduce((n, s) => n + (s.operators?.length ?? 0), 0), note: "筛选与重命名", active: false, onSelect: () => navigate("/subscriptions?tab=sources") },
+    { name: "输出模板", value: (templates.data?.builtin.length ?? 0) + (templates.data?.custom.length ?? 0) || null, note: "按格式与规则", active: activeTab === "templates", onSelect: () => navigate("/groups?tab=templates") },
+    { name: "订阅组", value: profiles.data?.length, note: "组合与分享", active: activeTab === "profiles", onSelect: () => navigate("/groups?tab=profiles") },
   ];
   return (
     <Card className="px-[var(--weir-gap-25)] py-[var(--weir-gap-21)]">
-      <p className="m-0 mb-[15px] text-meta text-[var(--weir-ink-2)]">节点从左往右流过每一步，每个点是一个对象；数量缺失时显示未知</p>
-      <PipelineBoard label="订阅源流水线" steps={steps} />
+      <PipelineBoard label="外部订阅流水线" steps={steps} />
     </Card>
   );
 }
 
 export function SubscriptionsPage({ groups = false }: { groups?: boolean }) {
   const [params, setParams] = useSearchParams();
-  const tab = tabs.some(([k]) => k === params.get("tab")) ? params.get("tab")! : groups ? "profiles" : "sources";
+  const rawTab = params.get("tab") ?? "";
+  const tabs = groups ? groupTabs : sourceTabs;
+  const fallback = groups ? "profiles" : "sources";
+  const tab = tabs.some(([k]) => k === rawTab) ? rawTab : fallback;
   const sources = useSources();
-  useConsoleContext({ page: groups ? "订阅组与模板" : "订阅源", tab: tabs.find(([k]) => k === tab)?.[1] });
+  const failedCount = (sources.data?.items ?? []).filter((s) => s.last_error).length;
+  useConsoleContext({ page: groups ? "外部订阅组" : "外部订阅源", tab: tabs.find(([k]) => k === tab)?.[1] });
+  if (!groups && groupTabKeys.has(rawTab)) return <Navigate to={`/groups?${params.toString()}`} replace />;
+  if (groups && sourceTabKeys.has(rawTab)) return <Navigate to={`/subscriptions?${params.toString()}`} replace />;
   return (
     <div className="stack">
-      <PageHeader size="data" title={groups ? "订阅组与模板" : "订阅源"} description={sources.data?.items.some((s) => s.last_error) ? "有订阅源最近一次拉取失败。" : "汇集机场订阅与手动节点，按订阅组处理后分配给用户或分享。"} />
-      <SourcePipeline />
+      <PageHeader
+        size="data"
+        title={groups ? "外部订阅组" : "外部订阅源"}
+        description={groups ? "合并第三方订阅源与手动节点，套用规则模板生成独立订阅链接（不计入 VPS 流量额度）。" : failedCount > 0 ? `${failedCount} 个订阅源最近一次拉取失败。` : "导入第三方机场订阅与零散节点链接，供外部订阅组聚合转发。"}
+      />
+      <SourcePipeline activeTab={tab} />
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: String(v) }, { replace: true })}>
-        <TabsList aria-label="订阅源">
+        <TabsList aria-label={groups ? "外部订阅组" : "外部订阅源"}>
           {tabs.map(([k, label]) => <TabsTab key={k} value={k}>{label}</TabsTab>)}
         </TabsList>
-        <Card>
-          <CardContent>
-            <TabsPanel value="sources"><SourcesPanel /></TabsPanel>
-            <TabsPanel value="nodes"><NodesPanel /></TabsPanel>
-            <TabsPanel value="profiles"><ProfilesPanel /></TabsPanel>
-            <TabsPanel value="templates"><TemplatesPanel /></TabsPanel>
-            <TabsPanel value="settings"><SettingsPanel /></TabsPanel>
-          </CardContent>
-        </Card>
+        {!groups && <TabsPanel value="sources"><SourcesPanel /></TabsPanel>}
+        {!groups && <TabsPanel value="nodes"><NodesPanel /></TabsPanel>}
+        {groups && <TabsPanel value="profiles"><ProfilesPanel /></TabsPanel>}
+        {groups && <TabsPanel value="templates"><TemplatesPanel /></TabsPanel>}
+        {groups && <TabsPanel value="settings"><Card><CardContent><SettingsPanel /></CardContent></Card></TabsPanel>}
       </Tabs>
     </div>
   );

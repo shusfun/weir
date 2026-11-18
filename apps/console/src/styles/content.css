@@ -58,11 +58,10 @@
 
 .public-guestbook, .guestbook-manager { min-width: 0; }
 
-/* 手机预览可以与列表并排；较宽的预览始终使用整行。 */
-.public-page-board { display: grid; align-items: start; gap: var(--weir-space-4); grid-template-columns: minmax(0, 1fr); }
-.public-page-select { width: calc(100% + var(--weir-button-padding) * 2); margin-inline: calc(-1 * var(--weir-button-padding)); flex-wrap: wrap; justify-content: space-between; text-align: start; white-space: normal; }
+/* 手机预览与左侧页面卡片并排（左窄卡列 + 右预览舞台）；桌面宽预览占整行。 */
+.public-page-board { display: grid; align-items: start; gap: var(--weir-space-5); grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 1025px) {
-  .public-page-board[data-device="phone"] { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+  .public-page-board[data-device="phone"] { grid-template-columns: minmax(321px, 421px) minmax(0, 1fr); }
 }
 
 .weir-user-traffic-aside { display: flex; justify-content: end; width: 100%; }

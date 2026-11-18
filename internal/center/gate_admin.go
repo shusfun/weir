@@ -215,6 +215,12 @@ func (s *Server) updateGate(c *gin.Context) {
 	s.waiters.notify(g.ID)
 	_ = s.Store.Notifications.Publish(c.Request.Context(), "gate:"+itoa(g.ID))
 	s.audit(c, "gate.update", strconv.Itoa(g.ID), "ok")
+	// 写入返回的是持久化字段；重新查询才能合并瞬时心跳和主机观测。
+	g, err = s.Store.Ent.Gate.Get(c.Request.Context(), g.ID)
+	if err != nil {
+		failInternal(c, 503, "query_failed", err)
+		return
+	}
 	c.JSON(200, gateView(g))
 }
 

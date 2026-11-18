@@ -10,14 +10,14 @@ import { date } from "../lib/models";
 import { useConsoleContext } from "../lib/console-context";
 import { DiagnosticExport, selectionKey, type DiagnosticSelection } from "../components/diagnostic-export";
 import { ProtectionActions } from "../features/observability/security/protection-actions";
-import { BlocksCard } from "../components/defense";
+import { BlocksCard, EventsCard } from "../components/defense";
+import { useDsh } from "../components/dsh";
 import { SystemHealth } from "../features/observability/system/system-health";
 import { WorkerPolicy } from "../features/observability/system/worker-policy";
 import { WorkerStatistics, type WorkerStatisticsData } from "../features/observability/system/worker-statistics";
 
 type WorkerTask = { task: { id: string; kind: string; trace_id: string; attempt: number; deadline: string }; status: string; gate_id: number; candidates: number[]; error?: { code: string; origin: string } };
 type Gate = { id: number; name: string; online: boolean; last_seen_at?: string; version?: string; host?: Record<string, unknown> };
-type SecurityEvent = { id: number; kind: string; severity: string; status: string; created_at: string; trace_id?: string; laya?: { outcome: string; category: string; confidence: number; code?: string } };
 type Audit = { id: number; action: string; action_label: string; target_name: string; result: string; created_at: string };
 type SubscriptionRun = { id: string; trace_id: string; profile_id: number; started: string; finished: string; outcome: string; complete: boolean; stages?: { profile_id: number; source_id?: number; operation: string; started: string; finished: string; outcome: string; error_code?: string; origin: string; cache_fallback?: boolean }[] };
 type Timeline = { records: { task_id: string; trace_id: string; kind: string; attempt: number; stage: string; started: string; finished: string; outcome: string; error_code?: string; origin: string }[]; collected_at: string; complete: boolean; missing_reason?: string };
@@ -62,7 +62,7 @@ export function ObservePage() {
   const tasks = useQuery({ queryKey: ["observe-tasks"], queryFn: async () => (await api("/admin/workers/tasks")).items as WorkerTask[], refetchInterval: 10000 });
   const statistics = useQuery({ queryKey: ["observe-task-statistics"], queryFn: () => api("/admin/workers/statistics?range=24h") as Promise<WorkerStatisticsData>, refetchInterval: 15000 });
   const gates = useQuery({ queryKey: ["observe-gates"], queryFn: async () => (await api("/admin/gates")).items as Gate[], refetchInterval: 15000 });
-  const events = useQuery({ queryKey: ["observe-events"], queryFn: async () => (await api("/admin/defense/events")).events as SecurityEvent[], refetchInterval: 15000 });
+  const dsh = useDsh();
   const audits = useQuery({ queryKey: ["observe-account-audits"], queryFn: async () => (await api("/admin/audit?page=1&page_size=50&scope=accounts")).items as Audit[] });
   const sources = useSources();
   const runs = useQuery({ queryKey: ["observe-subscription-runs"], enabled: tab === "subscriptions", queryFn: async () => (await api("/admin/subscriptions/runs")).items as SubscriptionRun[], refetchInterval: 15000 });
@@ -114,12 +114,9 @@ export function ObservePage() {
         <section className="stack"><div className="flex flex-wrap items-center justify-between gap-3"><h2>最近观察点判断</h2><label className="flex items-center gap-2 touch:min-h-11"><Checkbox aria-label="只看无需分析" checked={Boolean(observationFilter)} onCheckedChange={(value) => setParams((previous) => { if (value) previous.set("outcome", "not_needed"); else previous.delete("outcome"); return previous; }, { replace: true })} />只看无需分析</label></div><small>最近最多 100 条。勾选记录后可预览并人工重新分析；外部文字不作为指令。</small>{loadError(observations) ?? ((observations.data ?? []).length === 0 ? <State empty="没有匹配的观察点记录" /> : observations.data!.map((item) => <div key={item.id} className="stack border-b border-[var(--weir-line)] py-2"><div className="flex flex-wrap items-center gap-3">{pick("observation", item.id, `观察记录 ${item.id}`)}<strong>{pointLabel[item.point] ?? item.point}</strong><span className="min-w-0 flex-1 break-all">{item.resource}</span><Badge variant="status">{item.verdict ? decisionLabel[item.verdict.outcome] ?? "未知" : "未检测"}</Badge></div><small className="break-all">{date(item.created_at)} · trace {item.trace_id} · 配置 {item.profile_version}</small><small className="break-all">模型 {label(item.verdict?.model)} · 模型版本 {item.verdict?.model_version && item.verdict.model_version !== "unknown" ? item.verdict.model_version : "未知"} · 运行时版本 {item.verdict?.runtime_version && item.verdict.runtime_version !== "unknown" ? item.verdict.runtime_version : "未知"} · 执行位置 {item.verdict?.execution === "gate" ? `VPS ${item.verdict.gate_id}` : item.verdict?.execution === "center" ? "中心" : "未知"}</small><small>置信度 {item.verdict && item.verdict.attempts > 0 ? item.verdict.confidence : "未知"} · 下限 {item.verdict?.threshold ?? "未知"} · dsh {dshStatusLabel[item.dsh_status] ?? "未知"} {item.dsh_code ? analysisCode[item.dsh_code] ?? item.dsh_code : ""}</small>{item.verdict?.code && <small>判定原因：{item.verdict.code}</small>}<p className="whitespace-pre-wrap break-words">{item.external_data_not_instructions.text}</p>{item.external_data_not_instructions.conclusion && <p className="whitespace-pre-wrap break-words">{item.external_data_not_instructions.conclusion}</p>}</div>))}</section>
       </TabsPanel>
       <TabsPanel value="security" className="stack">
-        <ProtectionActions pick={(id,name)=>pick("protection-action",id,name)} />
+        <ProtectionActions pick={(id, name) => pick("protection-action", id, name)} />
         <BlocksCard />
-        {loadError(events) ?? <>
-          <p>勾选安全事件后，使用上方的预览检查上下文，再交给 dsh。</p>
-          {(events.data ?? []).length === 0 ? <State empty="尚无安全事件" /> : (events.data ?? []).map((event) => <label key={event.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--weir-line)] py-2">{pick("event", event.id, `安全事件 ${event.id}`)}<span className="min-w-0 flex-1"><strong>#{event.id} · {event.kind}</strong><small className="block">{date(event.created_at)} · {event.status} · Laya {event.laya?.outcome ?? "未知"} · 置信度 {event.laya?.confidence ?? "未知"}</small><small className="block break-all">trace {event.trace_id ?? "未知"}</small></span></label>)}
-        </>}
+        <EventsCard dshReady={!!dsh.data?.ready} pick={(id, name) => pick("event", id, name)} />
       </TabsPanel>
       <TabsPanel value="accounts" className="stack">
         {loadError(audits) ?? <>{(audits.data ?? []).length === 0 ? <State empty="没有匹配的账户审计记录" /> : (audits.data ?? []).map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--weir-line)] py-2">{pick("audit", item.id, `账户审计 ${item.id}`)}<span className="min-w-0 flex-1"><strong>{item.action_label}</strong><small className="block">{item.target_name || "未知"} · {date(item.created_at)}</small></span><Badge variant="status">{item.result || "未知"}</Badge></div>)}</>}

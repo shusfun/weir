@@ -179,6 +179,9 @@ func (s *Server) openDSH(w http.ResponseWriter, r *http.Request) {
 	b, _ := json.Marshal(g)
 	s.state.RLock()
 	err = s.Store.KV.Set(r.Context(), "dsh-gw:"+digest(session), string(b), dshGateTTL)
+	if err == nil {
+		_ = s.Store.KV.Set(r.Context(), "dsh-opened:"+digest(t), g.SessionKey, time.Minute)
+	}
 	s.state.RUnlock()
 	if err != nil {
 		dshDeny(w)

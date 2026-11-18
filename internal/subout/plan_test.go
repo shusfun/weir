@@ -26,7 +26,7 @@ func TestPlanLayout(t *testing.T) {
 	if len(l.Groups) != 4 || l.Groups[0].Name != "PROXY" || l.Groups[0].Kind != "select" || !reflect.DeepEqual(l.Groups[0].Members, []string{"自动选择", "主备", "HK"}) {
 		t.Fatalf("布局=%+v", l.Groups)
 	}
-	if !reflect.DeepEqual(l.Groups[1].Members, []string{"HK", "US"}) || !l.Groups[1].Hidden || l.Groups[1].IntervalSec != 60 || l.Groups[1].ToleranceMS != 50 {
+	if !reflect.DeepEqual(l.Groups[1].Members, []string{"HK", "US"}) || !l.Groups[1].Hidden || l.Groups[1].IntervalSec != 30 || l.Groups[1].ToleranceMS != 50 {
 		t.Fatalf("自动选择=%+v", l.Groups[1])
 	}
 	if l.Groups[2].Hidden || l.Groups[2].Kind != "select" || !reflect.DeepEqual(l.Groups[2].MemberRefs, []string{"group:1:auto", "chain:2", "node:3"}) {

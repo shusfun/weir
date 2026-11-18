@@ -60,7 +60,7 @@ function Form({
         }}
         {...props}
       >
-        <fieldset disabled={busy} className={cn("m-0 grid min-w-0 gap-[var(--weir-space-3)] border-0 p-0", className)}>
+        <fieldset disabled={busy} className={cn("m-0 grid min-w-0 gap-[var(--weir-gap-9)] border-0 p-0", className)}>
           {children}
         </fieldset>
       </form>
@@ -73,10 +73,39 @@ function FormGrid({ cols = 2, className, ...props }: ComponentProps<"div"> & { c
   return (
     <div
       data-slot="form-grid"
-      className={cn("grid min-w-0 gap-[var(--weir-space-3)]", cols === 2 ? "sm:grid-cols-2" : "sm:grid-cols-2 lg:grid-cols-3", className)}
+      className={cn("grid min-w-0 gap-x-[var(--weir-space-3)] gap-y-[var(--weir-gap-9)]", cols === 2 ? "sm:grid-cols-2" : "sm:grid-cols-2 lg:grid-cols-3", className)}
       {...props}
     />
   );
 }
 
-export { Form, FormGrid, FormBoundary, useFormContext };
+// 表单内的分区（稿子 DForm 的分区小标题 + 分组内容）：长弹窗按业务拆成 2–3 段，替代从头堆到底或老式 <fieldset><legend> 线框。
+function FormSection({
+  title,
+  description,
+  actions,
+  className,
+  children,
+  ...props
+}: Omit<ComponentProps<"div">, "title"> & { title?: ReactNode; description?: ReactNode; actions?: ReactNode }) {
+  return (
+    <div
+      data-slot="form-section"
+      className={cn("grid min-w-0 gap-[var(--weir-gap-9)] not-first:border-t not-first:border-[var(--weir-line-soft)] not-first:pt-[var(--weir-space-3)]", className)}
+      {...props}
+    >
+      {(title != null || actions != null) && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            {title != null && <div className="text-fine font-semibold tracking-[0.05em] text-[var(--weir-ink-3)]">{title}</div>}
+            {description != null && <div className="mt-[var(--weir-gap-3)] text-meta text-[var(--weir-ink-3)]">{description}</div>}
+          </div>
+          {actions}
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
+
+export { Form, FormGrid, FormSection, FormBoundary, useFormContext };

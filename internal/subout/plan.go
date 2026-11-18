@@ -32,9 +32,10 @@ const SingleProvider = "single"
 const AutoProvider = "auto"
 const AllProvider = "all"
 
-// SubscriptionProbeURL 使用固定的无敏感 204 地址。订阅客户端刚加载 provider 时，
-// HTTP 探测避免首轮 TLS 握手与 provider 加载并发导致 FlClash 显示超时。
-const SubscriptionProbeURL = "http://www.gstatic.com/generate_204"
+// SubscriptionProbeURL requires an authenticated HTTPS response from the probe target.
+const SubscriptionProbeURL = "https://www.gstatic.com/generate_204"
+const SubscriptionProbeTimeoutMS = 5000
+const SubscriptionProbeExpectedStatus = "204"
 
 // Ref 对应节点默认线路或用户自建链式线路；名称变化不改变引用。
 type Item struct {
@@ -218,7 +219,7 @@ func (p *Plan) layout(names []string, items []Item) layout {
 	out := layout{Final: GroupProxy}
 	root := group{Ref: "proxy", Name: GroupProxy, Kind: "select", Provider: SingleProvider, Root: true, Members: []string{}, MemberRefs: []string{}}
 	if len(auto) > 0 {
-		out.Groups = append(out.Groups, group{Ref: "auto", Name: GroupAuto, Kind: "url-test", Hidden: true, Members: auto, MemberRefs: autoRefs, Provider: AutoProvider, TestURL: p.testURL(), IntervalSec: 60, ToleranceMS: 50})
+		out.Groups = append(out.Groups, group{Ref: "auto", Name: GroupAuto, Kind: "url-test", Hidden: true, Members: auto, MemberRefs: autoRefs, Provider: AutoProvider, TestURL: p.testURL(), IntervalSec: contracts.DefaultGroupIntervalSeconds, ToleranceMS: 50})
 		root.Members, root.MemberRefs = append(root.Members, GroupAuto), append(root.MemberRefs, "auto")
 	}
 	out.Groups = append(out.Groups, custom...)
@@ -268,5 +269,5 @@ func (g group) interval() int {
 	if g.IntervalSec > 0 {
 		return g.IntervalSec
 	}
-	return 60
+	return contracts.DefaultGroupIntervalSeconds
 }

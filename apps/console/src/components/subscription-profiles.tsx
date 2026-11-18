@@ -3,7 +3,7 @@ import { useFormGuard } from "../lib/dirty";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "../lib/query";
-import { Badge, Button, CheckboxField, CodeBlock, Collapsible, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, PageState, Readout, SectionHeader, Segmented, SkeletonList, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SortableList, SwitchField, Textarea, useToast, useConfirm, ScrollArea } from "@weir/ui";
+import { Badge, Button, CheckboxField, CodeBlock, Collapsible, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, InsetGroup, InsetRow, InsetRows, Notice, PageState, Readout, Segmented, SkeletonList, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SortableList, SwitchField, Textarea, useToast, useConfirm, ScrollArea } from "@weir/ui";
 import { Eye, Plus, Share2, Trash2, Users } from "lucide-react";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -76,37 +76,42 @@ export function ProfilesPanel() {
   useConsoleContext({ tab: "订阅组", list: { total: q.data?.length ?? 0, items: (q.data ?? []).slice(0, 20).map((p) => ({ type: "profile", name: p.name, id: p.id })) } });
   return (
     <section className="stack">
-      <SectionHeader flush title="订阅组" description="把订阅源与手动节点组合成一份订阅；可分配给用户（各自独立地址）或匿名分享。外部节点的流量不计入用户额度。" actions={<Button size="sm" onClick={() => setEdit("new")}><Plus />新建订阅组</Button>} />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-meta text-[var(--weir-ink-3)]">{q.data ? `共 ${q.data.length} 个订阅组 · 可分配给用户或生成匿名分享链接` : "正在读取订阅组…"}</span>
+        <Button size="sm" onClick={() => setEdit("new")}><Plus />新建订阅组</Button>
+      </div>
       {q.isPending || q.error ? (
         <State
           loading={q.isPending}
           error={q.error}
           onRetry={() => q.refetch()}
-          skeleton={<SkeletonList rows={3} lines={2} className="stack" rowClassName="flex items-center justify-between gap-2 rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3" />}
+          skeleton={<SkeletonList rows={3} lines={2} className="stack" />}
         />
       ) : q.data.length === 0 ? (
-        <State empty="还没有订阅组" detail="订阅组把订阅源和手动节点组合、筛选后分给用户或公开分享。" />
+        <State empty="还没有订阅组" detail="点右上角「新建订阅组」，把外部订阅源和手动节点组合筛选后分给用户。" />
       ) : (
-        <ul className="stack">
-          {q.data.map((p) => (
-            <li key={p.id} {...dataObject({ type: "profile", id: p.id })} className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--weir-radius)] border border-[var(--weir-line)] p-3">
-              <span className="min-w-0">
-                <strong><ObjectLink to={{ type: "profile", id: p.id, name: p.name }} /></strong> {!p.enabled && <Badge variant="soft" tone="warn">停用</Badge>} {p.shared && <Badge variant="soft" tone="ok">已分享</Badge>}
-                <small className="block text-[var(--weir-ink-3)]">
-                  {p.all_sources ? "全部订阅源与手动节点" : p.members ? `${p.members.length} 个有序成员（含 ${p.members.filter((m) => m.kind === "profile").length} 个子组）` : `${p.source_ids?.length ?? 0} 个订阅源 · ${p.node_ids?.length ?? 0} 个手动节点`} · {p.user_ids.length} 个用户 · 下载 {p.downloads} 次{p.expires_at ? ` · 到期 ${date(p.expires_at)}` : ""}
-                </small>
-              </span>
-              <span className="flex flex-wrap gap-1.5">
-                <Button size="sm" variant="outline" onClick={() => setPreview(p)}><Eye />预览</Button>
-                <Button size="sm" variant="outline" onClick={() => setProbe(p)}>实测</Button>
-                <Button size="sm" variant="outline" onClick={() => setGrants(p)}><Users />用户</Button>
-                <Button size="sm" variant="outline" onClick={() => setShare(p)}><Share2 />分享</Button>
-                <Button size="sm" variant="outline" onClick={() => setEdit(p)}>编辑</Button>
-                <Button size="icon-sm" variant="destructive" aria-label={"删除 " + p.name} disabled={isBusy()} busy={isBusy(p.id)} busyText="正在删除" onClick={() => void remove(p)}><Trash2 /></Button>
-              </span>
-            </li>
-          ))}
-        </ul>
+        <InsetGroup>
+          <InsetRows>
+            {q.data.map((p) => (
+              <InsetRow key={p.id} {...dataObject({ type: "profile", id: p.id })} className="flex flex-wrap items-center justify-between gap-3">
+                <span className="min-w-0">
+                  <strong className="flex flex-wrap items-center gap-1.5"><ObjectLink to={{ type: "profile", id: p.id, name: p.name }} /> {!p.enabled && <Badge variant="soft" tone="warn">停用</Badge>} {p.shared && <Badge variant="soft" tone="ok">已分享</Badge>}</strong>
+                  <small className="mt-0.5 block text-[var(--weir-ink-3)]">
+                    {p.all_sources ? "全部订阅源与手动节点" : p.members ? `${p.members.length} 个有序成员（含 ${p.members.filter((m) => m.kind === "profile").length} 个子组）` : `${p.source_ids?.length ?? 0} 个订阅源 · ${p.node_ids?.length ?? 0} 个手动节点`} · {p.user_ids.length} 个用户 · 下载 {p.downloads} 次{p.expires_at ? ` · 到期 ${date(p.expires_at)}` : ""}
+                  </small>
+                </span>
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <Button size="sm" variant="outline" onClick={() => setPreview(p)}><Eye />预览</Button>
+                  <Button size="sm" variant="outline" onClick={() => setGrants(p)}><Users />分配</Button>
+                  <Button size="sm" variant="outline" onClick={() => setShare(p)}><Share2 />分享</Button>
+                  <Button size="sm" variant="outline" onClick={() => setEdit(p)}>编辑</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setProbe(p)}>实测</Button>
+                  <Button size="icon-sm" variant="destructive" aria-label={"删除 " + p.name} disabled={isBusy()} busy={isBusy(p.id)} busyText="正在删除" onClick={() => void remove(p)}><Trash2 /></Button>
+                </span>
+              </InsetRow>
+            ))}
+          </InsetRows>
+        </InsetGroup>
       )}
       {detail.current && <Dialog open onOpenChange={o => !o && detail.close()}><DialogContent size="xl"><DialogTitle>{detail.current.name}</DialogTitle><DialogDescription>管理订阅组的预览、实测、分配与分享。</DialogDescription><ProfileDetail key={detail.current.id} id={String(detail.current.id)} tab={params.get("detail_tab") || "overview"} /></DialogContent></Dialog>}
       {edit && <ProfileForm value={edit} close={() => setEdit(null)} saved={() => { setEdit(null); done("已保存"); }} />}
@@ -133,11 +138,11 @@ export function ProfileDetail({ id, tab }: { id: string; tab: string }) {
   useConsoleContext({ object: item ? { type: "profile", id: item.id, name: item.name } : undefined, dialog: { title: "订阅组详情" } });
   if (q.isPending) return <State loading />;
   if (q.error) return <State error={q.error} onRetry={() => void q.refetch()} />;
-  if (!item) return <PageState kind="empty" title="没有这个订阅组" detail="它可能已被删除，或你没有权限查看。" action={<Link to="/subscriptions?tab=profiles">返回订阅组</Link>} />;
+  if (!item) return <PageState kind="empty" title="没有这个订阅组" detail="它可能已被删除，或你没有权限查看。" action={<Link to="/groups?tab=profiles">返回订阅组</Link>} />;
   async function remove() {
     if (!(await confirm({ title: `删除订阅组「${item!.name}」？`, description: "分配给用户的地址与分享地址都会失效。", confirmText: "删除", tone: "danger" }))) return;
     const removed = await run(item!.id, () => api("/admin/subscriptions/profiles/" + item!.id, "DELETE"), "订阅组已删除");
-    if (removed) navigate("/subscriptions?tab=profiles");
+    if (removed) navigate("/groups?tab=profiles");
   }
   const members = item.members?.length ?? ((item.source_ids?.length ?? 0) + (item.node_ids?.length ?? 0));
   return (

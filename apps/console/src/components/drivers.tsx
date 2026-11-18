@@ -3,7 +3,7 @@
 // 每个方案的样例配置用对应版本内核检查 → 改的是在用驱动时在一台 VPS 上实测。
 import { useState } from "react";
 import { useQuery } from "../lib/query";
-import { Badge, Button, Card, CardContent, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, Notice, SectionHeader, SkeletonList, Textarea, useConfirm, ScrollArea } from "@weir/ui";
+import { Badge, Button, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input, InsetGroup, InsetRow, InsetRows, Notice, SectionHeader, SkeletonList, Textarea, useConfirm, ScrollArea } from "@weir/ui";
 import { Bot, ChevronRight, Plus, RotateCcw } from "lucide-react";
 import { api, ApiError } from "../api";
 import { useRowAction } from "../lib/action";
@@ -58,41 +58,40 @@ export function DriversPanel() {
   const creating = param.value === "new";
   useConsoleContext({ list: { total: q.data?.length ?? 0, items: (q.data ?? []).slice(0, 20).map((d) => ({ type: "driver", name: d.name, key: d.name })) } });
   return (
-    <Card>
-      <CardContent className="stack">
-        <SectionHeader flush
-          title="内核驱动"
-          description="每个内核版本怎么运行、支持哪些协议、建节点的方案、怎么生成配置，都写在驱动里；新版本用 extends 继承上一版本、只写变化。引擎强制检查统计端口只监听回环、证书只用托管目录，驱动写错也绕不过。"
-          actions={
-            <span className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => openDsh({ notice: "dsh 会用 weir-driver skill：读内核更新说明，为新版本起草驱动；草稿检查通过后会弹窗给你看差异。直接说要为哪个内核的哪个版本写驱动即可。" })}><Bot />让 dsh 起草</Button>
-              <Button size="sm" variant="outline" onClick={() => param.open("new")}><Plus />新增驱动</Button>
-            </span>
-          }
-        />
-        {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} skeleton={<SkeletonList rows={4} lines={1} />} /> : (
-          <ul className="group-list">
-            {q.data.map((d) => (
-              <li key={d.name} {...dataObject({ type: "driver", key: d.name })}>
-                <button type="button" className="group-row-button weir-press-fill" onClick={() => param.open(d.name)}>
-                  <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                    <code className="text-meta">{d.name}</code>
+    <InsetGroup
+      title="内核驱动"
+      description="按内核版本区间定义协议方案与配置模板；新版本用 extends 继承上一版，可由 dsh 起草驱动。"
+      actions={
+        <span className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={() => openDsh({ notice: "dsh 会用 weir-driver skill：读内核更新说明，为新版本起草驱动；草稿检查通过后会弹窗给你看差异。直接说要为哪个内核的哪个版本写驱动即可。" })}><Bot />让 dsh 起草</Button>
+          <Button size="sm" variant="outline" onClick={() => param.open("new")}><Plus />新增驱动</Button>
+        </span>
+      }
+    >
+      {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} skeleton={<SkeletonList rows={4} lines={1} />} /> : (
+        <InsetRows>
+          {q.data.map((d) => (
+            <InsetRow key={d.name} {...dataObject({ type: "driver", key: d.name })} className="p-0">
+              <button type="button" className="weir-press flex min-h-[var(--weir-tap-touch)] w-full cursor-pointer items-center justify-between gap-3 border-0 bg-transparent px-[var(--weir-space-4)] py-[var(--weir-space-3)] text-left text-inherit" onClick={() => param.open(d.name)}>
+                <span className="min-w-0 flex-1 space-y-0.5">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <code className="font-mono text-body font-semibold">{d.name}</code>
                     <Badge variant="soft" tone={sourceLabel[d.source][1]}>{sourceLabel[d.source][0]}</Badge>
                     {d.disabled && <Badge variant="soft" tone="bad">已停用</Badge>}
                     {d.error && <Badge variant="soft" tone="bad">无法展开</Badge>}
-                    <small className="basis-full text-[var(--weir-ink-3)]">{d.kernel} {d.min_version} – {d.max_version || "最新"}{d.extends ? ` · 继承 ${d.extends}` : ""}</small>
                   </span>
-                  <small className="shrink-0 text-right text-[var(--weir-ink-3)] max-sm:hidden">{d.versions.length > 0 ? `已下载 ${d.versions.join("、")}` : "没有已下载的版本"}{d.gates.length > 0 ? ` · ${d.gates.length} 台 VPS 在用` : ""}</small>
-                  <ChevronRight className="group-row-chevron" aria-hidden />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardContent>
+                  <small className="block font-mono text-fine text-[var(--weir-ink-3)]">{d.kernel} {d.min_version} – {d.max_version || "最新"}{d.extends ? ` · 继承 ${d.extends}` : ""}</small>
+                </span>
+                <small className="shrink-0 text-right text-[var(--weir-ink-3)] max-sm:hidden">{d.versions.length > 0 ? `已缓存 ${d.versions.join("、")}` : "暂无本地版本"}{d.gates.length > 0 ? ` · ${d.gates.length} 台 VPS 在用` : ""}</small>
+                <ChevronRight className="size-4 shrink-0 text-[var(--weir-ink-3)]" aria-hidden />
+              </button>
+            </InsetRow>
+          ))}
+        </InsetRows>
+      )}
       {open && <DriverDialog name={open} close={param.close} changed={() => void q.refetch()} />}
       {creating && <NewDriverDialog close={param.close} created={(n) => { param.open(n); void q.refetch(); }} />}
-    </Card>
+    </InsetGroup>
   );
 }
 

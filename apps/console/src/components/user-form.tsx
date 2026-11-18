@@ -2,7 +2,7 @@ import { useFormGuard } from "../lib/dirty";
 import { NodeSummary, nodeTitle } from "./node-summary";
 // 一个窗口建 / 改用户：账号、额度、周期、按月重置、节点范围、是否允许自建链式代理。
 import { useState } from "react";
-import { Button, CheckboxField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, Notice, PasswordInput, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField } from "@weir/ui";
+import { Button, CheckboxField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, FormSection, Input, PasswordInput, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField, SwitchGroup } from "@weir/ui";
 import { api } from "../api";
 import { useFormAction } from "../lib/action";
 import { field, useConsoleContext } from "../lib/console-context";
@@ -62,55 +62,80 @@ function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new
         <DialogTitle>{isNew ? "创建用户" : "编辑用户"}</DialogTitle>
         <DialogDescription>{isNew ? "保存后自动生成一条包含所选节点的订阅链接。" : "修改后相关 VPS 会在数秒内应用新的套餐。"}</DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
-          <FormGrid>
-            <Field label="邮箱" name="email">
-              <Input type="email" required disabled={!isNew} value={email} onChange={(e) => setEmail(e.target.value)} />
+          <FormSection title="账号信息">
+            <FormGrid>
+              <Field label="邮箱" name="email">
+                <Input type="email" required disabled={!isNew} placeholder="user@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </Field>
+              <Field label="备注名">
+                <Input maxLength={100} placeholder="例如：朋友 MacBook" value={name} onChange={(e) => setName(e.target.value)} />
+              </Field>
+            </FormGrid>
+            <Field label={isNew ? "初始密码（可选）" : "重设密码（可选）"} name="password" hint={isNew ? "留空自动生成并只显示一次" : "至少 6 个字符；修改后该用户需重新登录"}>
+              <PasswordInput autoComplete="new-password" minLength={6} maxLength={72} value={password} onChange={(e) => setPassword(e.target.value)} />
             </Field>
-            <Field label="备注名">
-              <Input maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
-            </Field>
-          </FormGrid>
-          <Field label={isNew ? "初始密码（可选）" : "重设密码（可选）"} name="password" hint={isNew ? "留空时自动生成，只显示一次。" : "至少 6 个字符；修改后该用户需重新登录。"}>
-            <PasswordInput autoComplete="new-password" minLength={6} maxLength={72} value={password} onChange={(e) => setPassword(e.target.value)} />
-          </Field>
-          <SwitchField data-tour="user-plan" label="不限额度" description="关闭时按流量额度执行，0 表示没有可用流量。" checked={unlimited} onCheckedChange={setUnlimited} />
-          <FormGrid>
-            <Field label="流量额度" htmlFor="u-quota" name="quota" hint={unlimited ? "当前不限额度；关闭后使用此额度。" : "0 表示没有可用流量。"}>
-              <div className="quota-input">
-                <Input id="u-quota" type="number" min="0" step="any" required disabled={unlimited} value={quota} onChange={(e) => setQuota(e.target.value)} />
-                <Select value={unit} onValueChange={(v) => setUnit(v as Unit)}>
-                  <SelectTrigger aria-label="容量单位"><SelectValue>{unit}</SelectValue></SelectTrigger>
-                  <SelectContent>{Object.keys(units).map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
-                </Select>
+          </FormSection>
+
+          <FormSection title="额度与周期">
+            <SwitchGroup data-tour="user-plan">
+              <SwitchField placement="end" label="不限流量额度" description="关闭后按下方额度执行；0 表示没有可用流量" checked={unlimited} onCheckedChange={setUnlimited} />
+              <SwitchField placement="end" label="每月自动重置用量" description="按本周期起始日每月归零" checked={monthly} onCheckedChange={setMonthly} />
+            </SwitchGroup>
+            <FormGrid>
+              <Field label="流量额度" htmlFor="u-quota" name="quota" hint={unlimited ? "已开启不限额度" : "0 表示没有可用流量"}>
+                <div className="quota-input">
+                  <Input id="u-quota" type="number" min="0" step="any" required disabled={unlimited} value={quota} onChange={(e) => setQuota(e.target.value)} />
+                  <Select value={unit} onValueChange={(v) => setUnit(v as Unit)}>
+                    <SelectTrigger aria-label="容量单位"><SelectValue>{unit}</SelectValue></SelectTrigger>
+                    <SelectContent>{Object.keys(units).map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              </Field>
+              <Field label="到期时间" name="expiry" hint="留空为长期有效">
+                <Input type="datetime-local" value={expiry} onChange={(e) => setExpiry(e.target.value)} />
+              </Field>
+            </FormGrid>
+          </FormSection>
+
+          <FormSection title="节点与权限">
+            {u?.role === "admin" && <small className="text-[var(--weir-ink-3)]">管理员账户固定包含全部节点，新建节点自动进入订阅。</small>}
+            <SwitchGroup>
+              {u?.role !== "admin" && (
+                <SwitchField placement="end" label="授权全部节点" description="后续新建节点自动加入；关闭后按列表勾选" checked={all} onCheckedChange={setAll} />
+              )}
+              <SwitchField placement="end" label="允许自建链式代理" description="允许该用户在「我的代理」中挂载自己的落地代理" checked={chain} onCheckedChange={setChain} />
+              {!isNew && <SwitchField placement="end" label="账户启用" description="停用后所有订阅链接与连接立即暂停" checked={enabled} onCheckedChange={setEnabled} />}
+            </SwitchGroup>
+            {!all && u?.role !== "admin" && (
+              <div className="rounded-[var(--weir-radius)] border border-[var(--weir-line-soft)] bg-[var(--weir-well)] px-[var(--weir-space-4)] py-[var(--weir-space-3)]">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="text-fine font-semibold text-[var(--weir-ink-2)]">可用节点（已选 {picked.length} / {nodes.length}）</span>
+                  {nodes.length > 0 && (
+                    <button
+                      type="button"
+                      className="weir-press cursor-pointer border-0 bg-transparent p-0 text-fine font-semibold text-[var(--weir-accent-text)] hover:underline"
+                      onClick={() => setPicked(picked.length === nodes.length ? [] : nodes.map((n) => n.id))}
+                    >
+                      {picked.length === nodes.length ? "清空" : "全选"}
+                    </button>
+                  )}
+                </div>
+                <div className="grid max-h-44 gap-2 overflow-y-auto">
+                  {nodes.length === 0 ? <small className="text-[var(--weir-ink-3)]">还没有节点。</small> : nodes.map((n) => (
+                    <CheckboxField
+                      key={n.id}
+                      label={<NodeSummary node={n} />}
+                      checked={picked.includes(n.id)}
+                      onCheckedChange={(v) => setPicked(v ? [...picked, n.id] : picked.filter((x) => x !== n.id))}
+                    />
+                  ))}
+                </div>
               </div>
-            </Field>
-            <Field label="到期时间" name="expiry" hint="留空为长期有效。">
-              <Input type="datetime-local" value={expiry} onChange={(e) => setExpiry(e.target.value)} />
-            </Field>
-          </FormGrid>
-          <SwitchField label="每月重置用量" description="以本周期开始日为准。" checked={monthly} onCheckedChange={setMonthly} />
-          {u?.role === "admin" ? (
-            <small className="text-[var(--weir-ink-3)]">管理员固定包含全部节点，新节点自动进入订阅。</small>
-          ) : (
-            <SwitchField label="全部节点" description="以后新建的节点自动加入；关闭后单个勾选。" checked={all} onCheckedChange={setAll} />
-          )}
-          {!all && u?.role !== "admin" && (
-            <fieldset className="grid gap-2">
-              <legend className="mb-1 text-meta font-medium text-[var(--weir-ink-2)]">可用节点</legend>
-              {nodes.length === 0 ? <small>还没有节点。</small> : nodes.map((n) => (
-                <CheckboxField
-                  key={n.id}
-                  label={<NodeSummary node={n} />}
-                  checked={picked.includes(n.id)}
-                  onCheckedChange={(v) => setPicked(v ? [...picked, n.id] : picked.filter((x) => x !== n.id))}
-                />
-              ))}
-            </fieldset>
-          )}
-          <SwitchField label="允许用户自建链式代理" checked={chain} onCheckedChange={setChain} />
-          {!isNew && <SwitchField label="账户启用" checked={enabled} onCheckedChange={setEnabled} />}
+            )}
+          </FormSection>
+
           <DialogFooter error={save.error}>
-            <Button type="button" variant="outline" disabled={save.busy} onClick={() => { if (!save.busy) void guard.close(); }}>取消</Button>
+            <Button type="button" variant="ghost" disabled={save.busy} onClick={() => { if (!save.busy) void guard.close(); }}>取消</Button>
             <Button data-tour="user-submit" type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">{isNew ? "创建用户" : "保存"}</Button>
           </DialogFooter>
         </Form>

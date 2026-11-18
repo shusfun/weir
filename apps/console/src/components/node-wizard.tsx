@@ -71,7 +71,7 @@ function NodeWizardForm({ open, close, done, gates, nodes, gateId: initialGate }
   const chosen = presets.data?.find((p) => p.id === preset);
   const chainExit = new Set((presets.data ?? []).filter((p) => p.chain_exit).map((p) => p.id));
   const exits = nodes.filter((n) => n.enabled && n.gate_id !== gateId && chainExit.has(n.preset));
-  const exitFields = exitErrorFields(chain.kind);
+  const exitFields = exitId ? { exit_not_allowed: "exit_id" } : exitErrorFields(chain.kind);
   const errorFields: Record<string, string> = { port_in_use: "port", invalid_port: "port", no_free_port: "port", invalid_reality_target: "target", reality_probe_failed: "target", invalid_node_settings: "advanced", cert_unavailable: "cert",
     gate_no_public_host: "gate", ...exitFields };
   // 错误落在「高级」里的字段时自动展开，否则看不到。
@@ -217,23 +217,25 @@ function NodeWizardForm({ open, close, done, gates, nodes, gateId: initialGate }
             <PresetChoice presets={presets} value={preset} onChange={(v) => { setPreset(v); setAdvanced({}); }} />
           </Field>
           {chosen?.note && <Notice tone="warn">{chosen.note}</Notice>}
-          <ExitSelector gateId={gateId ?? 0} exitId={exitId} onExitId={id=>setExitId(id??0)} value={chain} onChange={setChain} admin sourcePath="/admin/chain-sources" nodes={exits} nodeHint="出口需要另一台 VPS 上能作出口的节点（VLESS / VMess / Trojan 方案）。" />
-          <small className="text-[var(--weir-ink-3)]">这里的出口管这个节点的全部流量。按网站分流在 VPS 的「出口与分流」，按协议类型统一加出口在 <Link className="underline" to="/proxy">代理</Link>。</small>
+          <ExitSelector gateId={gateId ?? 0} exitId={exitId} onExitId={id=>setExitId(id??0)} value={chain} onChange={setChain} admin sourcePath="/admin/chain-sources" nodes={exits} nodeHint="先在另一台 VPS 上创建 VLESS / VMess / Trojan 节点后即可选作中转落地。" />
+          <small className="text-[var(--weir-ink-3)]">按网站分流在 <Link className="underline" to={gateId ? `/rules?gate=${gateId}` : "/rules"}>规则</Link> 配置；单个用户自己的链式出口在 <Link className="underline" to="/proxy">客户端分流</Link>。</small>
           <div data-tour="node-options"><Collapsible key={more ? "more" : "less"} title="高级：名称、端口、证书" defaultOpen={more}>
-            <div className="stack">
-              <Field label="节点名称" hint="留空时自动命名。">
-                <Input maxLength={100} value={name} placeholder={gate && chosen ? `${gate.name} ${chosen.name}` : ""} onChange={(e) => setName(e.target.value)} />
-              </Field>
-              <Field label="端口" name="port" hint="留空时自动选择 VPS 上未被占用的端口。">
-                <Input inputMode="numeric" value={port} onChange={(e) => setPort(e.target.value.replace(/\D/g, ""))} />
-              </Field>
+            <div className="grid gap-[var(--weir-gap-9)] pt-1">
+              <FormGrid>
+                <Field label="节点名称" hint="留空自动命名">
+                  <Input maxLength={100} value={name} placeholder={gate && chosen ? `${gate.name} ${chosen.name}` : ""} onChange={(e) => setName(e.target.value)} />
+                </Field>
+                <Field label="监听端口" name="port" hint="留空自动分配空闲端口">
+                  <Input inputMode="numeric" placeholder="自动分配" value={port} onChange={(e) => setPort(e.target.value.replace(/\D/g, ""))} />
+                </Field>
+              </FormGrid>
               {chosen?.id === "vless-reality" && (
-                <Field label="伪装目标" name="target" hint="留空时由这台 VPS 用 DoH 解析候选站点，再选 TLS 1.3、h2 且握手最快的。DoH 失败的候选不算合适。">
+                <Field label="伪装目标" name="target" hint="留空由这台 VPS 用 DoH 探测 TLS 1.3 / h2 最快目标站点">
                   <Input value={target} placeholder="www.microsoft.com" onChange={(e) => setTarget(e.target.value)} />
                 </Field>
               )}
               {chosen && chosen.cert !== "none" && (
-                <Field label="证书" name="cert" hint={chosen.cert === "required" ? "默认由系统准备：有 1Panel 时经 1Panel 申请 IP 证书，否则 80 端口空闲时由中心申请；都不可用时用「系统设置 → 节点证书」里的域名。" : "默认这台 VPS 的 Hysteria2 / TUIC 节点共用一张自签证书，订阅中固定指纹。"}>
+                <Field label="证书" name="cert" hint={chosen.cert === "required" ? "默认由系统准备或复用「系统设置 → 节点证书」域名" : "默认共用本机自签证书并固定订阅指纹"}>
                   <Select value={String(certId)} onValueChange={(v) => setCertId(Number(v))}>
                     <SelectTrigger><SelectValue>{certs.data?.find((c) => c.id === certId)?.domain ?? "由系统准备"}</SelectValue></SelectTrigger>
                     <SelectContent>
@@ -246,14 +248,14 @@ function NodeWizardForm({ open, close, done, gates, nodes, gateId: initialGate }
                 </Field>
               )}
               {chosen && !!chosen.fields?.length && (
-                <Field label="方案字段" name="advanced" hint="留空的字段使用方案的默认值。">
+                <Field label="方案字段" name="advanced" hint="留空使用方案默认值">
                   <AdvancedFields fields={chosen.fields} value={advanced} onChange={setAdvanced} />
                 </Field>
               )}
             </div>
           </Collapsible></div>
           <DialogFooter error={address.error || save.error} status={save.wait && <WaitText wait={save.wait} />}>
-            <Button type="button" variant="outline" disabled={save.busy || address.busy} onClick={() => void requestClose()}>取消</Button>
+            <Button type="button" variant="ghost" disabled={save.busy || address.busy} onClick={() => void requestClose()}>取消</Button>
             {addressNeeded
               ? <Button data-tour="node-address-submit" type="submit" disabled={!host.trim()} busy={address.busy} busyText="正在保存地址…">保存地址并继续</Button>
               : <Button data-tour="node-submit" type="submit" disabled={blocked} busy={save.busy} busyText="正在保存并下发…">创建节点</Button>}
@@ -364,13 +366,13 @@ function PresetChoice({ presets, value, onChange }: { presets: ReturnType<typeof
   const card = (p: Preset) => {
     const off = p.available === false;
     return (
-      <ChoiceCard key={p.id} selected={p.id === value} render={<label />} className={off ? "opacity-60" : "cursor-pointer"}>
-        <span className="flex items-center gap-2">
-          <Radio value={p.id} disabled={off} />
-          <strong>{p.name}</strong>
-          {p.id === recommended[0] && !off && <Badge variant="soft" tone="ok">推荐</Badge>}
+      <ChoiceCard key={p.id} selected={p.id === value} render={<label />} className={off ? "opacity-55" : "cursor-pointer"}>
+        <Radio value={p.id} disabled={off} className="sr-only" />
+        <span className="flex items-center justify-between gap-2">
+          <strong className="truncate">{p.name}</strong>
+          {off ? <Badge variant="soft" tone="neutral">不可用</Badge> : p.id === recommended[0] ? <Badge variant="soft" tone="info">推荐</Badge> : null}
         </span>
-        <small className={off ? "text-[var(--weir-warn-ink)]" : "text-[var(--weir-ink-3)]"}>{off ? "这台 VPS 现在用不了：" + p.why : p.summary.replace("（推荐）", "")}</small>
+        <small className={off ? "text-fine text-[var(--weir-warn-ink)]" : "text-fine text-[var(--weir-ink-3)]"}>{off ? p.why : p.summary.replace("（推荐）", "")}</small>
       </ChoiceCard>
     );
   };

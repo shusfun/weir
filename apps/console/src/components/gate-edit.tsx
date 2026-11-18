@@ -1,32 +1,11 @@
 // VPS 与节点：每台 VPS 一张卡片，最上面是在不在线，直接显示主机观测；它上面的每个节点一行，点开看细节；
 // 「＋ 协议」直接在这台 VPS 上建节点。VPS 用 SSH 一次装好，或复制安装命令自己执行。
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { useQuery } from "../lib/query";
-import {
-  Badge, Button, Card, CardContent, Chip, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input,
-  Notice, PageHeader, Readout, SkeletonCards, StatusLamp, SwitchField, useToast, useConfirm, type LampTone,
-} from "@weir/ui";
-import { Pencil, Plus, Route, Server, Sparkles, Trash2 } from "lucide-react";
-import { openDsh } from "./dsh";
-import { ObjectLink, dataObject, useDialogParam } from "./object-link";
-import { exitKindName, probeText } from "./chain-exit";
-import { NodeAccess } from "./node-access";
-
-import { GateDetail, pct, size } from "./gate-detail";
+import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, Input } from "@weir/ui";
 import { api } from "../api";
-import { useFormAction, useRowAction } from "../lib/action";
-import { WaitText } from "./wait";
-import { GateUpdateLine, GateVersion } from "./gate-version";
-import { State } from "./feedback";
-import { InviteGate } from "./invite-gate";
-import { CertManager } from "./cert-manager";
-import { NodeWizard } from "./node-wizard";
-import { date } from "../lib/models";
-import { rateText } from "../lib/linkmap";
+import { useFormAction } from "../lib/action";
 import { field, useConsoleContext } from "../lib/console-context";
-import { nodeStatus, protocolNames, relativeTime, type Gate, type NodeItem } from "../lib/core";
-import { GettingStarted } from "./getting-started";
+import { type Gate } from "../lib/core";
 
 export function GateEdit({ gate, close, saved }: { gate: Gate; close: () => void; saved: () => void }) {
   const [name, setName] = useState(gate.name);
@@ -39,16 +18,27 @@ export function GateEdit({ gate, close, saved }: { gate: Gate; close: () => void
   return (
     <Dialog open onOpenChange={(o) => !o && !save.busy && close()}>
       <DialogContent size="md">
-        <DialogTitle>编辑 VPS</DialogTitle>
-        <DialogDescription>公网地址会写进订阅；改动后用户更新订阅即可生效。</DialogDescription>
+        <DialogTitle>编辑 {gate.name}</DialogTitle>
+        <DialogDescription>改名称与公网地址不会重启内核；客户端更新订阅后生效。</DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
           <Field label="名称"><Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} /></Field>
-          <Field label="公网地址" name="public_host" hint={gate.public_host_hint && !host ? `IP 或解析到这台 VPS 的域名，粘贴网址也可以；本机网卡上的公网 IP 是 ${gate.public_host_hint}。域名开了 CDN 代理时节点连不上，请填 IP。` : "IP 或解析到这台 VPS 的域名，粘贴网址也可以；域名开了 CDN 代理时节点连不上，请填 IP。"}>
+          <Field
+            label="公网地址"
+            name="public_host"
+            hint={
+              gate.public_host_hint && !host ? (
+                <span>
+                  本机识别 IP 为 <code className="font-mono">{gate.public_host_hint}</code>（
+                  <button type="button" className="weir-press cursor-pointer border-0 bg-transparent p-0 font-semibold text-[var(--weir-accent-text)] hover:underline" onClick={() => setHost(gate.public_host_hint ?? "")}>点击填入</button>
+                  ）；域名开了 CDN 代理时请改填直连 IP。
+                </span>
+              ) : "填写公网 IP 或直连域名；域名开启 CDN 代理时节点端口无法直连。"
+            }
+          >
             <Input value={host} placeholder={gate.public_host_hint} onChange={(e) => setHost(e.target.value)} />
           </Field>
-          {gate.public_host_hint && !host && <Button type="button" size="sm" variant="outline" onClick={() => setHost(gate.public_host_hint ?? "")}>填入 {gate.public_host_hint}</Button>}
           <DialogFooter error={save.error}>
-            <Button type="button" variant="outline" disabled={save.busy} onClick={close}>取消</Button>
+            <Button type="button" variant="ghost" disabled={save.busy} onClick={close}>取消</Button>
             <Button type="submit" disabled={save.busy} busy={save.busy} busyText="正在保存…">保存</Button>
           </DialogFooter>
         </Form>

@@ -278,7 +278,7 @@ func TestProxyGroupCapabilities(t *testing.T) {
 		t.Fatal(err)
 	}
 	g := loadPolicy(s.Store.Ent.User.GetX(ctx, uid)).Groups[0]
-	if g.Name != "草稿主备" || g.IntervalSeconds != 60 || !reflect.DeepEqual(g.Members, p.Groups[0].Members) {
+	if g.Name != "草稿主备" || g.IntervalSeconds != contracts.DefaultGroupIntervalSeconds || !reflect.DeepEqual(g.Members, p.Groups[0].Members) {
 		t.Fatalf("更新撤回=%+v", g)
 	}
 	create, _ := findOpCap("proxy.group_create")

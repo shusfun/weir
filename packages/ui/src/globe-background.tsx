@@ -33,7 +33,6 @@ const toneVar: Record<GlobeTone, string> = {
 };
 
 const RAD = Math.PI / 180;
-const TILT = 13 * RAD;
 const phoneQuery = "(max-width: 767.98px)";
 
 let landPromise: Promise<ReadonlyArray<readonly [number, number]>> | null = null;
@@ -64,7 +63,12 @@ function readMs(name: string, fallback: number) {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-function project(lat: number, lon: number, lon0: number, cx: number, cy: number, r: number) {
+function readFloat(name: string, fallback: number) {
+  const n = parseFloat(cssVar(name));
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+function project(lat: number, lon: number, lon0: number, tilt: number, cx: number, cy: number, r: number) {
   const f = lat * RAD;
   const d = lon * RAD - lon0;
   const cosf = Math.cos(f);
@@ -72,8 +76,8 @@ function project(lat: number, lon: number, lon0: number, cx: number, cy: number,
   const cosd = Math.cos(d);
   return {
     x: cx + r * cosf * Math.sin(d),
-    y: cy - r * (Math.cos(TILT) * sinf - Math.sin(TILT) * cosf * cosd),
-    z: Math.sin(TILT) * sinf + Math.cos(TILT) * cosf * cosd,
+    y: cy - r * (Math.cos(tilt) * sinf - Math.sin(tilt) * cosf * cosd),
+    z: Math.sin(tilt) * sinf + Math.cos(tilt) * cosf * cosd,
   };
 }
 
@@ -96,12 +100,32 @@ function finiteNode(node: GlobeNode) {
   return Number.isFinite(node.lat) && Number.isFinite(node.lon);
 }
 
+function autoFocus(nodes: readonly GlobeNode[], explicitLon?: number): { lon: number; tiltDeg: number } {
+  if (explicitLon !== undefined) return { lon: explicitLon, tiltDeg: 13 };
+  const valid = nodes.filter(finiteNode);
+  if (!valid.length) return { lon: 151, tiltDeg: -7 };
+  let sx = 0;
+  let sy = 0;
+  let sumLat = 0;
+  for (const n of valid) {
+    sx += Math.cos(n.lon * RAD);
+    sy += Math.sin(n.lon * RAD);
+    sumLat += n.lat;
+  }
+  const meanLon = Math.atan2(sy, sx) / RAD;
+  const meanLat = sumLat / valid.length;
+  // 球心在视口右下角，只有左上象限可见：中心经度向右偏移 33°、倾角随平均纬度调整，让真实节点落在可见扇区
+  const tiltDeg = Math.max(-13, Math.min(13, meanLat - 23));
+  return { lon: meanLon + 33, tiltDeg };
+}
+
 function paint(
   canvas: HTMLCanvasElement,
   land: ReadonlyArray<readonly [number, number]>,
   rot: number,
   nodes: readonly GlobeNode[],
   centerLon: number,
+  tiltDeg: number,
 ) {
   const cssW = canvas.clientWidth;
   const cssH = canvas.clientHeight;
@@ -121,11 +145,25 @@ function paint(
   const cy = cssH / 2;
   const radius = Math.min(cssW, cssH) * 0.46;
   const lon0 = (centerLon + rot) * RAD;
+  const tilt = tiltDeg * RAD;
+  const baseAlpha = readFloat("--weir-globe", 0.45);
   const panel = cssVar("--weir-panel");
   const line = cssVar("--weir-line");
+  const accentSoft = cssVar("--weir-accent-soft");
   const dot = cssVar("--weir-dot");
   const dotLine = cssVar("--weir-dot-line");
+  const ink2 = cssVar("--weir-ink-2");
   const ink3 = cssVar("--weir-ink-3");
+  const font = cssVar("--weir-font") || "system-ui, sans-serif";
+  if (accentSoft) {
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius + 4, 0, Math.PI * 2);
+    ctx.strokeStyle = accentSoft;
+    ctx.lineWidth = 7;
+    ctx.stroke();
+  }
+  ctx.globalAlpha = baseAlpha;
   ctx.beginPath();
   ctx.arc(cx, cy, radius, 0, Math.PI * 2);
   if (panel) {
@@ -133,6 +171,7 @@ function paint(
     ctx.fill();
   }
   if (line) {
+    ctx.globalAlpha = Math.min(1, baseAlpha * 1.45);
     ctx.strokeStyle = line;
     ctx.lineWidth = 1;
     ctx.stroke();
@@ -147,41 +186,45 @@ function paint(
       const n = Math.max(1, Math.round(41 * Math.cos(lat * RAD)));
       for (let i = 0; i < n; i++) {
         const lon = -180 + (i * 360) / n;
-        const p = project(lat, lon, lon0, cx, cy, radius);
+        const p = project(lat, lon, lon0, tilt, cx, cy, radius);
         if (p.z <= 0.03) continue;
-        ctx.globalAlpha = p.z * (0.21 + 0.33 * illumination(lat, lon, sun));
+        ctx.globalAlpha = baseAlpha * p.z * (0.25 + 0.39 * illumination(lat, lon, sun));
         ctx.fillStyle = dot;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 0.5 + 0.5 * p.z, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, 0.6 + 0.5 * p.z, 0, Math.PI * 2);
         ctx.fill();
       }
     }
   }
   if (dotLine || ink3) {
     for (const [lat, lon] of land) {
-      const p = project(lat, lon, lon0, cx, cy, radius);
+      const p = project(lat, lon, lon0, tilt, cx, cy, radius);
       if (p.z <= 0.02) continue;
       const lit = illumination(lat, lon, sun);
-      ctx.globalAlpha = p.z * (0.29 + 0.71 * lit);
+      ctx.globalAlpha = baseAlpha * p.z * (0.37 + 0.79 * lit);
       ctx.fillStyle = lit > 0.5 ? dotLine || ink3 : ink3 || dotLine;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 0.9 + 1.1 * p.z, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, 1.0 + 1.15 * p.z, 0, Math.PI * 2);
       ctx.fill();
     }
   }
+  ctx.restore();
   ctx.globalAlpha = 1;
-  // 航线由 FlightRoutes 用 SVG 叠在上面画（各档位都显示），这里只画节点
+  const labelBoxes: { l: number; r: number; t: number; b: number }[] = [];
+  ctx.font = `500 11px ${font}`;
+  ctx.textBaseline = "middle";
+  // 航线由 FlightRoutes 用 SVG 叠在上面画（各档位都显示），这里画前景高亮节点与微标签
   for (const node of nodes) {
     if (!finiteNode(node)) continue;
-    const p = project(node.lat, node.lon, lon0, cx, cy, radius);
+    const p = project(node.lat, node.lon, lon0, tilt, cx, cy, radius);
     if (p.z <= 0.05) continue;
     const tone = node.tone ?? "unknown";
     const color = cssVar(toneVar[tone]);
     if (!color) continue;
     if (tone === "unknown") {
-      ctx.globalAlpha = p.z;
+      ctx.globalAlpha = 0.85 * p.z;
       ctx.strokeStyle = color;
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.25;
       ctx.setLineDash([3, 3]);
       ctx.beginPath();
       ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
@@ -189,20 +232,32 @@ function paint(
       ctx.setLineDash([]);
       continue;
     }
-    if (tone === "bad" || tone === "warn") {
-      ctx.globalAlpha = p.z * 0.29;
+    const alert = tone === "bad" || tone === "warn";
+    if (tone !== "off") {
+      ctx.globalAlpha = p.z * (alert ? 0.31 : 0.21);
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 11, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, alert ? 13 : 9, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.globalAlpha = p.z;
+    ctx.globalAlpha = Math.min(1, 0.25 + 0.85 * p.z);
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, tone === "off" ? 3.5 : 4.5, 0, Math.PI * 2);
     ctx.fill();
+    if (node.label && p.x < cx - 15 && p.y < cy - 15 && p.x > 65 && p.y > 21) {
+      const text = node.label.length > 22 ? node.label.slice(0, 21) + "…" : node.label;
+      const w = ctx.measureText(text).width;
+      const box = { l: p.x - 11 - w, r: p.x - 9, t: p.y - 8, b: p.y + 8 };
+      if (box.l > 12 && !labelBoxes.some((b) => !(box.r < b.l || box.l > b.r || box.b < b.t || box.t > b.b))) {
+        labelBoxes.push(box);
+        ctx.globalAlpha = Math.min(0.85, 0.35 + 0.55 * p.z);
+        ctx.fillStyle = ink2 || color;
+        ctx.textAlign = "right";
+        ctx.fillText(text, p.x - 10, p.y);
+      }
+    }
   }
-  ctx.restore();
   ctx.globalAlpha = 1;
 }
 
@@ -241,7 +296,7 @@ function useDemoLinks(on: boolean) {
 function GlobeBackground({
   nodes: givenNodes = [],
   links: givenLinks = [],
-  centerLon = 121,
+  centerLon,
   demo = false,
   className,
 }: {
@@ -255,6 +310,7 @@ function GlobeBackground({
   const demoLinks = useDemoLinks(demo);
   const nodes = demo ? DATACENTERS : givenNodes;
   const links = demo ? demoLinks : givenLinks;
+  const focus = useMemo(() => (demo && centerLon === undefined ? { lon: 151, tiltDeg: -5 } : autoFocus(nodes, centerLon)), [demo, nodes, centerLon]);
   const tier = useMotionTier();
   const phone = usePhone();
   const hostRef = useRef<HTMLDivElement>(null);
@@ -263,8 +319,8 @@ function GlobeBackground({
   const [side, setSide] = useState(0);
   const [rotation, setRotation] = useState(0);
   const rot = useRef(0);
-  const live = useRef({ nodes, links, tier, centerLon });
-  live.current = { nodes, links, tier, centerLon };
+  const live = useRef({ nodes, links, tier, lon: focus.lon, tiltDeg: focus.tiltDeg });
+  live.current = { nodes, links, tier, lon: focus.lon, tiltDeg: focus.tiltDeg };
 
   useEffect(() => {
     const el = hostRef.current;
@@ -295,7 +351,7 @@ function GlobeBackground({
     const draw = () => {
       if (!alive || document.visibilityState === "hidden") return;
       const cur = live.current;
-      paint(canvas, land, rot.current, cur.nodes, cur.centerLon);
+      paint(canvas, land, rot.current, cur.nodes, cur.lon, cur.tiltDeg);
       setRotation(rot.current);
     };
     const stop = () => {
@@ -342,7 +398,7 @@ function GlobeBackground({
       canvas.width = 0;
       canvas.height = 0;
     };
-  }, [phone, near, tier, nodes, links, centerLon]);
+  }, [phone, near, tier, nodes, links, focus.lon, focus.tiltDeg]);
 
   const routes = useMemo(() => {
     const byId = new Map(nodes.filter(finiteNode).map((node) => [node.id, node]));
@@ -356,7 +412,7 @@ function GlobeBackground({
   return (
     <div ref={hostRef} data-slot="globe-background" className={cn("weir-globe", className)} aria-hidden="true">
       {near && <canvas ref={canvasRef} />}
-      {near && side > 0 && routes.length > 0 && <FlightRoutes className="weir-globe-routes" routes={routes} size={side} centerLon={centerLon} rotation={rotation} tier={tier} />}
+      {near && side > 0 && routes.length > 0 && <FlightRoutes className="weir-globe-routes" routes={routes} size={side} centerLon={focus.lon} tiltDeg={focus.tiltDeg} rotation={rotation} tier={tier} />}
     </div>
   );
 }

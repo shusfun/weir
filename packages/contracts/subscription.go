@@ -23,6 +23,7 @@ type ProxyPolicy struct {
 }
 
 const MaxProxyGroups = 20
+const DefaultGroupIntervalSeconds = 30
 
 // ProxyGroup 的创建顺序与 Members 顺序稳定，不受观测变化影响。
 type ProxyGroup struct {

@@ -4,7 +4,7 @@ import { api } from "../api";
 import type { NodeChoice } from "../lib/core";
 // 链式代理出口的填写：建节点第 ③ 步（管理员）与用户自建链式代理共用。
 // 代理文本由用户点击解析；节点链接只接受单个节点，订阅地址会被拒绝。
-import { CheckboxField, Field, FormGrid, Input, Notice, PasswordInput, ChoiceCard, Radio, RadioGroup, Readout, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea } from "@weir/ui";
+import { CheckboxField, Field, FormGrid, Input, Notice, PasswordInput, ChoiceCard, Radio, RadioGroup, Segmented, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SkeletonCards, StatusLamp, Textarea } from "@weir/ui";
 import type { ExitSpec, ExitKind, ExitProbe } from "../lib/core";
 import { placeText, rateText } from "../lib/linkmap";
 import { parseExitText, type ProxyKind } from "../lib/exit-parse";
@@ -48,18 +48,55 @@ export function probeText(p?: ExitProbe | null) {
   return parts.join(" · ");
 }
 
-export function ProbeReadouts({ result, location }: { result: ExitProbe | null | undefined; location: string }) {
+export function ProbeReadouts({ result, location, historical = false }: { result: ExitProbe | null | undefined; location: string; historical?: boolean }) {
+  const latencyKnown = result?.latency_ms != null;
+  const udpCaption = !result ? "等待测试" : result.udp === true ? "UDP 可用" : result.udp === false ? "仅 TCP 可通" : result.mode === "proxy" ? "代理协议往返" : "TCP 端口握手";
   return (
-    <div className="stack weir-probe-readouts">
-      <Readout label="测试位置" value={location} />
-      <Readout label="连通" value={result ? (result.ok ? "已连通" : "未连通") : null} caption={result?.latency_ms != null ? `${result.latency_ms} ms` : "延迟未知"} />
-      <Readout label="落地" value={result?.exit_ip ?? null} caption={result ? placeText(result.place) : "位置未知"} />
-      <Readout label="速率" value={result ? rateText(result.rate_bps) : null} caption={result?.download_error || (result?.rate_bps == null ? "速率未知" : "本次下载")} />
+    <div className="rounded-[var(--weir-radius-17)] border border-[var(--weir-line-soft)] bg-[var(--weir-well)] p-[var(--weir-space-4)] [corner-shape:squircle]">
+      <div className="mb-[var(--weir-space-3)] flex flex-wrap items-center justify-between gap-2 border-b border-[var(--weir-line-soft)] pb-[var(--weir-space-3)]">
+        <span className="flex items-center gap-2">
+          <StatusLamp tone={!result ? "unknown" : result.ok ? "ok" : "bad"} />
+          <strong className="text-body font-semibold">
+            {!result ? "尚未实测" : result.ok ? (result.mode === "proxy" ? "代理握手已连通" : "端口可达") : "实测未连通"}
+          </strong>
+        </span>
+        <span className="font-mono text-fine text-[var(--weir-ink-3)]">
+          {!result ? `${location} · 点下方开始实测` : `${historical ? "上次记录" : "本次结果"} · ${location}`}
+        </span>
+      </div>
+      <div className="grid gap-[var(--weir-space-3)] sm:grid-cols-3 sm:divide-x sm:divide-[var(--weir-line-soft)]">
+        <div className="grid content-start gap-1">
+          <span className="text-fine text-[var(--weir-ink-3)]">延迟与协议</span>
+          <span className={latencyKnown ? "font-mono text-title3 font-semibold text-[var(--weir-ink)]" : "text-headline font-semibold text-[var(--weir-ink-3)]"}>
+            {latencyKnown ? <>{result!.latency_ms}<span className="ml-1 font-sans text-meta font-normal text-[var(--weir-ink-3)]">ms</span></> : "未知"}
+          </span>
+          <span className="text-fine text-[var(--weir-ink-3)]">{udpCaption}</span>
+        </div>
+        <div className="grid content-start gap-1 sm:pl-[var(--weir-space-3)]">
+          <span className="text-fine text-[var(--weir-ink-3)]">落地出口</span>
+          <span className={result?.exit_ip ? "font-mono text-subheadline font-semibold break-all text-[var(--weir-ink)]" : "text-headline font-semibold text-[var(--weir-ink-3)]"}>
+            {result?.exit_ip ?? "未知"}
+          </span>
+          <span className="text-fine text-[var(--weir-ink-3)]">{result ? placeText(result.place) : "位置未知"}</span>
+        </div>
+        <div className="grid content-start gap-1 sm:pl-[var(--weir-space-3)]">
+          <span className="text-fine text-[var(--weir-ink-3)]">下载吞吐</span>
+          <span className={result?.rate_bps != null ? "font-mono text-subheadline font-semibold text-[var(--weir-ink)]" : "text-headline font-semibold text-[var(--weir-ink-3)]"}>
+            {result ? rateText(result.rate_bps) : "未知"}
+          </span>
+          <span className="text-fine text-[var(--weir-ink-3)] break-words">{result?.download_error || (result?.rate_bps == null ? "速率未知" : "测试下载")}</span>
+        </div>
+      </div>
+      {result && !result.ok && result.error && (
+        <div className="mt-[var(--weir-space-3)] rounded-[var(--weir-radius-9)] bg-[var(--weir-bad-soft)] px-3 py-2 text-meta text-[var(--weir-bad-ink)] break-words">
+          {result.error}
+        </div>
+      )}
     </div>
   );
 }
 
-export function ExitFields({ value, onChange, admin, sourcePath, nodes, nodeHint, savedSecrets }: {
+export function ExitFields({ value, onChange, admin, sourcePath, nodes, nodeHint, savedSecrets, hideNodeOption }: {
   value: ExitSpec;
   onChange: (v: ExitSpec) => void;
   admin: boolean;
@@ -67,31 +104,42 @@ export function ExitFields({ value, onChange, admin, sourcePath, nodes, nodeHint
   nodes: NodeChoice[];
   nodeHint: string;
   savedSecrets?: { password?: boolean; link?: boolean };
+  hideNodeOption?: boolean;
 }) {
   const top = topOf(value.kind);
   const set = (patch: Partial<ExitSpec>) => onChange({ ...value, ...patch });
   const catalog = useExitCatalog(admin);
-  const options = (catalog.data?.kinds ?? []).filter((v,i,a) => v.kind !== "freedom" && a.findIndex(x=>x.group===v.group)===i);
+  const options = (catalog.data?.kinds ?? []).filter((v, i, a) =>
+    v.kind !== "freedom"
+    && (!hideNodeOption || (v.group !== "node" && v.group !== "blackhole"))
+    && a.findIndex(x => x.group === v.group) === i,
+  );
 
-  const pick = (t: Top) => onChange(t === "proxy" ? { kind: "socks5",remark:value.remark } : t === "source" ? { kind: "source", mode: "filter",remark:value.remark } : { kind: t,remark:value.remark });
+  const pick = (t: Top) => onChange(t === "proxy" ? { kind: "socks5", remark: value.remark } : t === "source" ? { kind: "source", mode: "filter", remark: value.remark } : { kind: t, remark: value.remark });
+  if (!catalog.data) return <State loading={catalog.isPending} error={catalog.error} onRetry={() => catalog.refetch()} skeleton={<SkeletonCards count={3} lines={1} />} />;
   return (
     <>
-      <RadioGroup aria-label="出口类型" value={top} onValueChange={v=>pick(String(v) as Top)} className="grid gap-2 sm:grid-cols-2">
-        {options.map(k=><ChoiceCard key={k.group} selected={top===k.group} className="min-w-0"><Radio value={k.group}/><span className="min-w-0"><strong className="block">{k.group==="proxy"?"代理":k.label}</strong><small>{k.description}</small></span></ChoiceCard>)}
+      <RadioGroup aria-label="出口类型" value={top} onValueChange={v => pick(String(v) as Top)} className="grid gap-2 sm:grid-cols-3">
+        {options.map(k => (
+          <ChoiceCard key={k.group} selected={top === k.group} render={<label />} className="min-w-0 py-3">
+            <Radio value={k.group} className="sr-only" />
+            <strong className="truncate text-body font-semibold">{k.group === "proxy" ? "SOCKS5 / HTTP" : k.label}</strong>
+            <small className="text-fine text-[var(--weir-ink-3)]">{k.description}</small>
+          </ChoiceCard>
+        ))}
       </RadioGroup>
-      {!catalog.data && <State loading={catalog.isPending} error={catalog.error} onRetry={()=>catalog.refetch()}/>}
-      {top !== "freedom" && <Field label="备注（可选）" name="remark" hint="会显示在订阅的节点名里"><Input maxLength={100} value={value.remark ?? ""} onChange={e=>set({remark:e.target.value})}/></Field>}
-      {top === "freedom" && <p className="text-[var(--weir-ink-3)]">流量从这台 VPS 直接访问目标网站。</p>}
+      {top !== "freedom" && <Field label="备注（可选）" name="remark" hint="显示在管理列表与订阅节点名里"><Input maxLength={100} placeholder="例如：美东住宅 SOCKS5" value={value.remark ?? ""} onChange={e => set({ remark: e.target.value })} /></Field>}
+      {top === "freedom" && <p className="m-0 text-meta text-[var(--weir-ink-3)]">流量从这台 VPS 直接访问目标网站。</p>}
       {top === "source" && <SourcePicker path={sourcePath} value={value} onChange={(v) => onChange({ ...value, ...v, kind: "source" })} />}
       {top === "proxy" && <ProxyFields value={value} set={set} savedPassword={savedSecrets?.password} />}
-      {top === "link" && <LinkField value={value.link ?? ""} onChange={(link) => set({ link, insecure_identities: [] })} confirmations={value.insecure_identities ?? []} onConfirm={(insecure_identities) => set({insecure_identities})} saved={savedSecrets?.link && value.link === undefined} />}
+      {top === "link" && <LinkField value={value.link ?? ""} onChange={(link) => set({ link, insecure_identities: [] })} confirmations={value.insecure_identities ?? []} onConfirm={(insecure_identities) => set({ insecure_identities })} saved={savedSecrets?.link && value.link === undefined} />}
       {top === "node" &&
         (nodes.length === 0 ? (
           <State empty="没有可作出口的节点" detail={nodeHint} />
         ) : (
-          <Field label="出口节点" name="exitNode" required>
+          <Field label="落地节点" name="exitNode" required>
             <Select required value={value.node_id ? String(value.node_id) : ""} onValueChange={(v) => set({ node_id: Number(v) })}>
-              <SelectTrigger><SelectValue>{nodes.find(n => n.id === value.node_id) ? <NodeSummary node={nodes.find(n => n.id === value.node_id)!} compact /> : "请选择"}</SelectValue></SelectTrigger>
+              <SelectTrigger><SelectValue>{nodes.find(n => n.id === value.node_id) ? <NodeSummary node={nodes.find(n => n.id === value.node_id)!} compact /> : "请选择落地节点"}</SelectValue></SelectTrigger>
               <SelectContent>
                 {nodes.map((n) => (
                   <SelectItem key={n.id} value={String(n.id)}><NodeSummary node={n} /></SelectItem>
@@ -100,7 +148,7 @@ export function ExitFields({ value, onChange, admin, sourcePath, nodes, nodeHint
             </Select>
           </Field>
         ))}
-      {top !== "freedom" && top !== "blackhole" && <Notice role="status">这里只保存出口资料。在某台 VPS 上使用时，才由那台 VPS 检查是否支持、是否连通。流量只在入口计量一次。</Notice>}
+      {top !== "freedom" && top !== "blackhole" && <small className="block text-fine text-[var(--weir-ink-3)]">在节点上启用时由入口 VPS 实测连通后生效；用户流量只在入口计量一次。</small>}
     </>
   );
 }
@@ -108,19 +156,23 @@ export function ExitFields({ value, onChange, admin, sourcePath, nodes, nodeHint
 function ProxyFields({ value, set, savedPassword }: { value: ExitSpec; set: (p: Partial<ExitSpec>) => void; savedPassword?: boolean }) {
   return (
     <>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Segmented aria-label="代理协议" size="sm" value={value.kind as ProxyKind} onValueChange={(kind) => set({ kind })} options={(["socks5","http","https"] as const).map(k=>[k,k.toUpperCase()] as const)} />
+      </div>
       <ProxyPaste onApply={p => set({ kind: p.kind, address: p.address, port: p.port, username: p.username ?? "", password: p.password ?? "" })} />
-      <Segmented aria-label="代理协议" size="sm" value={value.kind as ProxyKind} onValueChange={(kind) => set({ kind })} options={(["socks5","http","https"] as const).map(k=>[k,k.toUpperCase()] as const)} />
-      <FormGrid>
-        <Field label="地址" name="address" required hint={value.kind === "https" ? "按这个地址校验证书" : "只能是公网地址"}>
-          <Input required autoComplete="off" value={value.address ?? ""} onChange={(e) => set({ address: e.target.value.trim() })} />
+      <div className="grid min-w-0 gap-x-[var(--weir-space-3)] gap-y-[var(--weir-gap-9)] sm:grid-cols-[minmax(0,1fr)_131px]">
+        <Field label="服务器地址" name="address" required hint={value.kind === "https" ? "按这个地址校验证书" : "填写公网 IP 或域名"}>
+          <Input required autoComplete="off" placeholder="203.0.113.10" value={value.address ?? ""} onChange={(e) => set({ address: e.target.value.trim() })} />
         </Field>
         <Field label="端口" name="port" required customError={value.port && value.port > 65535 ? "端口须在 1–65535 之间" : ""}>
-          <Input inputMode="numeric" required value={value.port ? String(value.port) : ""} onChange={(e) => set({ port: Number(e.target.value.replace(/\D/g, "")) || undefined })} />
+          <Input inputMode="numeric" required placeholder="1080" value={value.port ? String(value.port) : ""} onChange={(e) => set({ port: Number(e.target.value.replace(/\D/g, "")) || undefined })} />
         </Field>
+      </div>
+      <FormGrid>
         <Field label="用户名（可选）" name="username">
           <Input autoComplete="off" value={value.username ?? ""} onChange={(e) => set({ username: e.target.value })} />
         </Field>
-        <Field label="密码（可选）" name="password" hint={savedPassword ? "已保存密码；不修改则保留，输入后清空则删除" : undefined}>
+        <Field label="密码（可选）" name="password" hint={savedPassword ? "已保存；留空保留原密码" : undefined}>
           <PasswordInput autoComplete="new-password" placeholder={savedPassword ? "已保存" : undefined} value={value.password ?? ""} onChange={(e) => set({ password: e.target.value })} />
         </Field>
       </FormGrid>

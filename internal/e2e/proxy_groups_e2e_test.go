@@ -45,9 +45,21 @@ func TestProxyGroupsRealKernels(t *testing.T) {
 	if os.Getenv("WEIR_E2E_GEOIP") == "" {
 		t.Fatal("需要有效的 GeoIP 缓存，不能删除国内规则")
 	}
-	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "primary") }))
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			w.WriteHeader(204)
+			return
+		}
+		fmt.Fprint(w, "primary")
+	}))
 	defer primary.Close()
-	secondary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "secondary") }))
+	secondary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			w.WriteHeader(204)
+			return
+		}
+		fmt.Fprint(w, "secondary")
+	}))
 	defer secondary.Close()
 	a, _ := socksServer(t, strings.TrimPrefix(primary.URL, "http://"))
 	b, _ := socksServer(t, strings.TrimPrefix(secondary.URL, "http://"))

@@ -9,7 +9,7 @@ body:has(.guide-in-dialog) .dsh-fab { visibility:hidden; }
 .guide-text strong { display:block; font-size:var(--weir-text-heading); }
 .guide-text p { margin:8px 0 0; line-height:1.7; overflow-wrap:anywhere; }
 .guide-footer > span { white-space:nowrap; color:var(--weir-ink-3); font-size:12px; }
-.guide-dialog-entry { position:absolute; top:var(--weir-space-2); right:calc(var(--weir-space-2) * 2 + var(--weir-tap-sm)); z-index:2; }
+.guide-dialog-entry { position:absolute; top:var(--weir-space-4); right:calc(var(--weir-space-4) + var(--weir-tap-sm) + var(--weir-space-1)); z-index:2; }
 .guide-public-entry { position:fixed; right:12px; top:12px; z-index:40; }
 .guide-welcome { margin:16px 24px 0; }
 .guide-welcome-content { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:16px; }
@@ -17,7 +17,8 @@ body:has(.guide-in-dialog) .dsh-fab { visibility:hidden; }
 .guide-update-dot { width:6px; height:6px; border-radius:50%; background:var(--weir-accent-text); }
 @media(max-width:640px) { .guide-popover { left:12px; right:12px; bottom:max(12px,env(safe-area-inset-bottom)); width:auto; max-height:45dvh; } .guide-card-content { gap:8px; padding:12px; } .guide-welcome { margin:12px 14px 0; } .guide-trigger { padding-inline:8px; } .guide-in-dialog { inset:auto; width:100%; max-height:40dvh; } .guide-text p { font-size:13px; } .guide-footer { flex-wrap:wrap; } }
 
-.weir-dialog:has(> .guide-dialog-entry) > [data-slot="dialog-pinned-header"] { padding-inline-end: calc(var(--weir-tap-touch) * 2 + var(--weir-space-6)); }
+.weir-dialog:has(> .guide-dialog-entry) > [data-slot="dialog-pinned-header"] { padding-inline-end: calc(var(--weir-tap-sm) * 2 + var(--weir-space-3)); }
 @media (pointer: coarse), (max-width: 767.98px) {
-  .guide-dialog-entry { right: calc(var(--weir-space-2) * 2 + var(--weir-tap-touch)); }
+  .guide-dialog-entry { right: calc(var(--weir-space-4) + var(--weir-tap-touch) + var(--weir-space-1)); }
+  .weir-dialog:has(> .guide-dialog-entry) > [data-slot="dialog-pinned-header"] { padding-inline-end: calc(var(--weir-tap-touch) * 2 + var(--weir-space-3)); }
 }
