@@ -29,7 +29,7 @@ func (q *Queue) PruneObservations(ctx context.Context, now time.Time, retention 
 		for _, query := range []string{
 			`DELETE FROM worker_activity WHERE id IN (SELECT id FROM worker_activity WHERE at<$1 ORDER BY at,id LIMIT $2)`,
 			`DELETE FROM worker_communication WHERE (bucket,gate_id,route) IN (SELECT bucket,gate_id,route FROM worker_communication WHERE bucket<$1 ORDER BY bucket,gate_id,route LIMIT $2)`,
-			`DELETE FROM worker_tasks WHERE id IN (SELECT id FROM worker_tasks WHERE status IN ('succeeded','failed','cancelled','expired','unknown') AND deadline<$1 ORDER BY deadline,id LIMIT $2)`,
+			`DELETE FROM worker_tasks WHERE id IN (SELECT id FROM worker_tasks WHERE status IN ('succeeded','failed','cancelled','expired','unknown') AND NOT (` + projectionFilter + `) AND deadline<$1 ORDER BY deadline,id LIMIT $2)`,
 		} {
 			if _, err = tx.ExecContext(ctx, query, cutoff, batch); err != nil {
 				return err
@@ -38,7 +38,7 @@ func (q *Queue) PruneObservations(ctx context.Context, now time.Time, retention 
 		for _, query := range []string{
 			`DELETE FROM worker_activity WHERE id IN (SELECT id FROM worker_activity ORDER BY at DESC,id DESC LIMIT $2 OFFSET $1)`,
 			`DELETE FROM worker_communication WHERE (bucket,gate_id,route) IN (SELECT bucket,gate_id,route FROM worker_communication ORDER BY bucket DESC,gate_id,route LIMIT $2 OFFSET $1)`,
-			`DELETE FROM worker_tasks WHERE id IN (SELECT id FROM worker_tasks WHERE status IN ('succeeded','failed','cancelled','expired','unknown') ORDER BY created_at DESC,id DESC LIMIT $2 OFFSET $1)`,
+			`DELETE FROM worker_tasks WHERE id IN (SELECT id FROM worker_tasks WHERE status IN ('succeeded','failed','cancelled','expired','unknown') AND NOT (` + projectionFilter + `) ORDER BY created_at DESC,id DESC LIMIT $2 OFFSET $1)`,
 		} {
 			if _, err = tx.ExecContext(ctx, query, maxRecords, batch); err != nil {
 				return err

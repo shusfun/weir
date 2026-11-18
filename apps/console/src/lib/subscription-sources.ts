@@ -8,6 +8,11 @@ export type SourcesResponse = {
 };
 
 // All consumers cache the response envelope; selecting items must not change the cache shape.
-export function useSources() {
-  return useQuery({ queryKey: ["subscription-sources"], queryFn: () => api("/admin/subscriptions/sources") as Promise<SourcesResponse> });
+export const sourcesQuery = {
+  queryKey: ["subscription-sources"],
+  queryFn: ({ signal }: { signal: AbortSignal }) => api("/admin/subscriptions/sources", "GET", undefined, { signal }) as Promise<SourcesResponse>,
+};
+
+export function useSources(enabled = true) {
+  return useQuery({ ...sourcesQuery, enabled });
 }

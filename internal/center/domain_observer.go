@@ -3,8 +3,10 @@ package center
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/netip"
 	"time"
 
@@ -131,8 +133,12 @@ func (s *Server) compileDomainObservers(ctx context.Context, g *ent.Gate, cfg *c
 }
 
 func (s *Server) agentCountryNetworks(c *gin.Context) {
-	ctx := c.Request.Context()
-	finish := operationStage(ctx, "traffic.domains.country-data", "gate_id", gateFrom(c).ID)
+	ctx := s.hotspotContext(c.Request.Context())
+	var version string
+	var buildMS int64
+	finish := operationStage(ctx, "traffic.domains.country-data", "gate_id", gateFrom(c).ID,
+		"snapshot_version", stageValue(func() slog.Value { return slog.StringValue(version) }),
+		"snapshot_build_ms", stageValue(func() slog.Value { return slog.Int64Value(buildMS) }))
 	db, ok := s.geoDB().(interface {
 		CountryNetworks(string) ([]netip.Prefix, geoip.Status, error)
 	})
@@ -147,7 +153,16 @@ func (s *Server) agentCountryNetworks(c *gin.Context) {
 		failure(c, 503, "country_data_unavailable")
 		return
 	}
-	finish(nil)
+	version, buildMS = status.Fetched.UTC().Format(time.RFC3339Nano), status.PrefixBuildMS
+	body, err := json.Marshal(contracts.CountryNetworks{Built: status.Built, Fetched: status.Fetched, Prefixes: prefixes})
+	if err != nil {
+		finish(err)
+		failInternal(c, 500, "country_data_encode_failed", err)
+		return
+	}
 	c.Header("Cache-Control", "private, max-age=21600")
-	c.JSON(200, contracts.CountryNetworks{Built: status.Built, Fetched: status.Fetched, Prefixes: prefixes})
+	c.Header("Content-Type", "application/json")
+	c.Status(200)
+	_, err = c.Writer.Write(body)
+	finish(errors.Join(err, ctx.Err()))
 }

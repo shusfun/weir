@@ -23,7 +23,7 @@ func (s *Server) geoDB() geoLocator {
 	if s.GeoDB != nil {
 		return s.GeoDB
 	}
-	s.geoOnce.Do(func() { s.geo = geoip.Open(filepath.Join(s.dataDir(), "geoip")) })
+	s.geoOnce.Do(func() { s.geo = geoip.OpenBackground(filepath.Join(s.dataDir(), "geoip")) })
 	return s.geo
 }
 

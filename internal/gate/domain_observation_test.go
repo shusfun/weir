@@ -8,12 +8,51 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/shusfun/weir/internal/kernelconf"
 	"github.com/shusfun/weir/packages/contracts"
 )
+
+func TestCountrySnapshotAppliedByConcurrentGates(t *testing.T) {
+	version := time.Now().UTC().Truncate(time.Second)
+	prefix := netip.MustParsePrefix("203.0.113.0/24")
+	traces := make(chan string, 4)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/api/v1/agent/country-networks" {
+			http.NotFound(w, request)
+			return
+		}
+		traces <- request.Header.Get("traceparent")
+		_ = json.NewEncoder(w).Encode(contracts.CountryNetworks{Built: version, Fetched: version, Prefixes: []netip.Prefix{prefix}})
+	}))
+	t.Cleanup(server.Close)
+	var gates sync.WaitGroup
+	for range 4 {
+		gates.Go(func() {
+			client := &centerClient{http: &http.Client{Timeout: 30 * time.Second}, center: server.URL, token: "fixture", until: time.Now().Add(time.Hour)}
+			agent := &Agent{center: client}
+			agent.collectDomains(t.Context(), contracts.GateConfig{Observers: map[string]contracts.ConnectionObserver{"fixture": {}}})
+			if !agent.domains.Fetched.Equal(version) || !agent.domains.Prefixes[24][prefix.Addr()] {
+				t.Error("gate did not apply the snapshot")
+			}
+		})
+	}
+	gates.Wait()
+	close(traces)
+	seen := map[string]bool{}
+	for trace := range traces {
+		if len(trace) != 55 || seen[trace] {
+			t.Fatalf("invalid or duplicate traceparent %q", trace)
+		}
+		seen[trace] = true
+	}
+	if len(seen) != 4 {
+		t.Fatalf("received %d GeoIP requests", len(seen))
+	}
+}
 
 func TestDomainObservationPrivacyBaselinesAndUnknown(t *testing.T) {
 	now := time.Now().UTC()

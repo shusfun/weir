@@ -7,7 +7,8 @@ import {
   ArrowRight,
   ShieldCheck,
 } from "lucide-react";
-import { Field, Form, GlobeBackground, Notice, Button, Card, CardContent, Input, PasswordInput } from "@weir/ui";
+import { Field, Form, GlobeBackground, Notice, Button, Card, CardContent, Input, PasswordInput, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@weir/ui";
+import laneAccounts from "../../scan/lane-accounts.json";
 import { api, ApiError, fieldErrors, formError, type FormError } from "../api";
 import { HumanVerification, type HumanVerificationHandle } from "../components/human-verification";
 import { BrandMark } from "../components/brand-mark";
@@ -55,6 +56,7 @@ const loginFields = {
   second_factor_required: "code",
 } as const;
 type LoginField = (typeof loginFields)[keyof typeof loginFields];
+const developmentAccounts = import.meta.env.DEV ? Object.values(laneAccounts) : [];
 
 export function LoginPage({ done }: { done: () => void }) {
   const id = useId(),
@@ -72,6 +74,9 @@ export function LoginPage({ done }: { done: () => void }) {
   const [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
     [confirmation, setConfirmation] = useState("");
+  const developmentAccount = import.meta.env.DEV
+    ? developmentAccounts.find((account) => account.email === email && account.password === password)
+    : undefined;
   const [challenge, setChallenge] = useState(""),
     [code, setCode] = useState("");
   const [inviteCode,setInviteCode]=useState("");
@@ -264,6 +269,37 @@ export function LoginPage({ done }: { done: () => void }) {
                   <label htmlFor={id + "website"}>网站</label>
                   <Input id={id + "website"} name="website" autoComplete="off" tabIndex={-1} value={website} onChange={(e) => setWebsite(e.target.value)} />
                 </div>
+                {import.meta.env.DEV && mode === "login" && !challenge && (
+                  <Field
+                    label="开发泳道账号"
+                    htmlFor={id + "lane-account"}
+                    hint="选定账号后，点击「登录」继续。"
+                    data-tour="dev-lane-account"
+                  >
+                    <Select
+                      disabled={busy}
+                      value={developmentAccount?.email ?? null}
+                      onValueChange={(selectedEmail) => {
+                        const account = developmentAccounts.find((item) => item.email === selectedEmail);
+                        if (!account) return;
+                        setEmail(account.email);
+                        setPassword(account.password);
+                        setError(null);
+                      }}
+                    >
+                      <SelectTrigger id={id + "lane-account"}>
+                        <SelectValue>{developmentAccount?.label ?? "选择测试账号"}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {developmentAccounts.map((account) => (
+                          <SelectItem key={account.email} value={account.email}>
+                            {account.label} · {account.email}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                )}
                 {!challenge && (
                   <Field label="邮箱" htmlFor={id + "email"} name="email">
                     <Input

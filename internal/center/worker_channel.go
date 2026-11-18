@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -311,6 +312,19 @@ func (s *Server) agentTaskUpdate(c *gin.Context) {
 // GateAction rows retain stable business operation IDs. They project durable
 // task results and are never a second delivery source.
 func (s *Server) projectLegacyTask(ctx context.Context, id string) error {
+	return s.Store.Lock.Do(ctx, "worker-projection:"+id, func(ctx context.Context) error {
+		pending, err := s.Store.Tasks.NeedsProjection(ctx, id)
+		if err != nil || !pending {
+			return err
+		}
+		if err = s.applyWorkerProjection(ctx, id); err != nil {
+			return errors.Join(err, s.Store.Tasks.ResolveProjection(ctx, id, time.Now().Add(time.Minute)))
+		}
+		return s.Store.Tasks.ResolveProjection(ctx, id, time.Time{})
+	})
+}
+
+func (s *Server) applyWorkerProjection(ctx context.Context, id string) error {
 	r, err := s.Store.Tasks.Get(ctx, id)
 	if err != nil {
 		return err
@@ -419,46 +433,60 @@ func (s *Server) workerMaintenance(ctx context.Context) {
 		case <-ticker.C:
 			s.state.RLock()
 			if s.Store != nil {
+				ctx := s.hotspotContext(ctx)
+				candidates, projected := 0, 0
+				finish := operationStage(ctx, "worker.maintenance",
+					"projection_candidates", stageValue(func() slog.Value { return slog.IntValue(candidates) }),
+					"projected", stageValue(func() slog.Value { return slog.IntValue(projected) }))
+				var maintenanceErr error
+				note := func(name string, err error) {
+					maintenanceErr = errors.Join(maintenanceErr, err)
+					s.tasks.note(name, err)
+				}
 				if time.Since(lastPrune) >= time.Minute {
 					doc, policyErr := s.retentionPolicy(ctx)
-					s.tasks.note("retention-policy", policyErr)
+					note("retention-policy", policyErr)
 					if policyErr == nil {
-						s.tasks.note("worker-retention", s.Store.Tasks.PruneObservations(ctx, time.Now(), time.Duration(doc.Policy.TaskDays)*24*time.Hour, doc.Policy.MaxRecords))
-						s.tasks.note("observation-analysis-retention", s.pruneObservationAnalyses(ctx, time.Now(), time.Duration(doc.Policy.ObservationDays)*24*time.Hour, doc.Policy.MaxRecords))
-						s.tasks.note("audit-retention", s.pruneAudit(ctx, time.Now(), doc.Policy))
+						note("worker-retention", s.Store.Tasks.PruneObservations(ctx, time.Now(), time.Duration(doc.Policy.TaskDays)*24*time.Hour, doc.Policy.MaxRecords))
+						note("observation-analysis-retention", s.pruneObservationAnalyses(ctx, time.Now(), time.Duration(doc.Policy.ObservationDays)*24*time.Hour, doc.Policy.MaxRecords))
+						note("audit-retention", s.pruneAudit(ctx, time.Now(), doc.Policy))
 					}
-					s.tasks.note("subscription-cache-retention", s.Store.PruneSubscriptionCacheReservations(ctx, s.Config.Store.Maintenance.Effective().RecordBatch))
-					s.tasks.note("laya-host-retention", s.maintainLayaHosting(ctx, time.Now()))
-					s.tasks.note("asset-relay-retention", s.pruneRelaySessions(ctx, time.Now()))
+					note("subscription-cache-retention", s.Store.PruneSubscriptionCacheReservations(ctx, s.Config.Store.Maintenance.Effective().RecordBatch))
+					note("laya-host-retention", s.maintainLayaHosting(ctx, time.Now()))
+					note("asset-relay-retention", s.pruneRelaySessions(ctx, time.Now()))
 					cacheCtx, cancelCache := context.WithTimeout(ctx, time.Second)
 					err := s.Store.Lock.Do(cacheCtx, "center-file-distribution", func(ctx context.Context) error {
 						return s.pruneKernelArchives(ctx, 0, "", time.Now())
 					})
 					cancelCache()
 					if !errors.Is(err, context.DeadlineExceeded) {
-						s.tasks.note("kernel-archive-retention", err)
+						note("kernel-archive-retention", err)
 					}
-					s.tasks.note("observation-text-retention", s.pruneTextObservations(ctx, time.Now()))
+					note("observation-text-retention", s.pruneTextObservations(ctx, time.Now()))
 					lastPrune = time.Now()
 				}
-				s.tasks.note("worker-communication", s.flushCommunication(ctx, time.Now(), false))
+				note("worker-communication", s.flushCommunication(ctx, time.Now(), false))
 				_, expireErr := s.Store.Ent.GateAction.Update().Where(gateaction.StatusEQ(gateaction.StatusPending), gateaction.ExpiresAtLT(time.Now())).SetStatus(gateaction.StatusExpired).Save(ctx)
-				s.tasks.note("legacy-action-expiry", expireErr)
-				changed, err := s.Store.Tasks.SweepChanged(ctx, time.Now())
-				s.tasks.note("worker-leases", err)
-				if err == nil {
-					if changed > 0 {
-						_ = s.Store.Notifications.Publish(ctx, "workers")
-					}
-					rs, e := s.Store.Tasks.List(ctx, 500)
-					if e == nil {
-						for _, r := range rs {
-							if r.LegacyID != 0 || r.Task.Kind == contracts.TaskLayaPrepare || r.Task.Kind == contracts.TaskLayaInstall || r.Task.Kind == contracts.TaskLayaRemove {
-								_ = s.projectLegacyTask(ctx, r.Task.ID)
-							}
-						}
+				note("legacy-action-expiry", expireErr)
+				changed, err := s.Store.Tasks.SweepTransitions(ctx, time.Now())
+				note("worker-leases", err)
+				if len(changed) > 0 {
+					_ = s.Store.Notifications.Publish(ctx, "workers")
+					for _, id := range changed {
+						_ = s.Store.Notifications.Publish(ctx, "task:"+id)
 					}
 				}
+				ids, projectionErr := s.Store.Tasks.PendingProjections(ctx, time.Now())
+				candidates = len(ids)
+				for _, id := range ids {
+					if applyErr := s.projectLegacyTask(ctx, id); applyErr != nil {
+						projectionErr = errors.Join(projectionErr, applyErr)
+					} else {
+						projected++
+					}
+				}
+				note("worker-projection", projectionErr)
+				finish(maintenanceErr)
 			}
 			s.state.RUnlock()
 		}

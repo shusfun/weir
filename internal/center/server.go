@@ -32,6 +32,7 @@ import (
 
 // Server 持有中心的配置与存储。初始化完成前 Store 为空，只开放初始化接口。
 type Server struct {
+	hotspots         hotspotMetrics
 	sourceFetches    singleflight.Group
 	sourceFetchOnce  sync.Once
 	sourceFetchSlots chan struct{}
@@ -203,6 +204,7 @@ func (s *Server) Close() {
 
 // StartBackground 未初始化时监视磁盘配置：终端完成初始化后，运行中的服务自动切换为已安装。
 func (s *Server) StartBackground(ctx context.Context) {
+	_ = s.geoDB()
 	s.startUpdateChecks(ctx, updateCheckInterval)
 	go func() {
 		s.releaseFilesMu.Lock()

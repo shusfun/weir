@@ -24,11 +24,12 @@ const catalogGrantKind = "catalog-grants"
 const catalogRefreshKind = "catalog-refresh"
 
 type objectState struct {
-	Status     string     `json:"status"`
-	Label      string     `json:"label,omitempty"`
-	Reason     string     `json:"reason"`
-	ObservedAt *time.Time `json:"observed_at"`
-	Next       []string   `json:"next"`
+	BlockedByGate bool       `json:"blocked_by_gate,omitempty"`
+	Status        string     `json:"status"`
+	Label         string     `json:"label,omitempty"`
+	Reason        string     `json:"reason"`
+	ObservedAt    *time.Time `json:"observed_at"`
+	Next          []string   `json:"next"`
 }
 
 type catalogNode struct {

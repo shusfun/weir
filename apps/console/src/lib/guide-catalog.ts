@@ -4,13 +4,13 @@ export type GuideStep = { id: string; title: string; text: string; target?: stri
 export type Guide = { id: string; version: number; title: string; steps: GuideStep[] };
 export type GuideIdentity = { id: string; role: "admin" | "user" | "guest" };
 // 未列出的教程为首版。内容变更只提升对应页面、标签或弹窗的版本。
-const versions: Record<string, number> = { "page:/rules": 3, "page:/exits": 5, "page:/proxies": 5, "page:/proxy": 7, "page:/system": 6, "page:/system:数据": 3, "page:/kernels": 4, "page:/kernels:版本": 3, "page:/subscriptions": 3, "page:/groups": 3, "page:/groups:订阅组": 4, "page:/pages": 3, "page:/ops/observe:订阅链路": 3, "page:/users": 6, "dialog:创建用户": 2, "page:/links": 4, "page:/codes": 1, "page:/codes:兑换码": 1, "page:/codes:套餐预设": 1, "page:/accounts": 3, "dialog:新建套餐": 2, "dialog:编辑套餐": 2, "dialog:生成邀请码": 2, "dialog:生成兑换码": 2, "page:/system:版本与更新": 2, "page:/system:登录与注册": 7, "page:/system:AI 与 dsh": 10, "page:/gates": 14, "dialog:新建节点": 4, "dialog:添加 VPS": 2, "getting-started": 3, "page:/ops/audit": 2, "page:/ops/observe": 4, "page:/ops/observe:总览": 3, "page:/ops/observe:安全": 4, "page:/ops/observe:注册兑换": 2, "page:/ops/observe:系统状态": 3, "page:/ops/observe:策略版本": 2 };
+const versions: Record<string, number> = { "page:/rules": 3, "page:/exits": 5, "page:/proxies": 5, "page:/proxy": 7, "page:/system": 6, "page:/system:数据": 3, "page:/kernels": 4, "page:/kernels:版本": 3, "page:/subscriptions": 3, "page:/groups": 3, "page:/groups:订阅组": 4, "page:/pages": 3, "page:/ops/observe:订阅链路": 4, "page:/users": 6, "dialog:创建用户": 2, "page:/links": 4, "page:/codes": 1, "page:/codes:兑换码": 1, "page:/codes:套餐预设": 1, "page:/accounts": 3, "dialog:新建套餐": 2, "dialog:编辑套餐": 2, "dialog:生成邀请码": 2, "dialog:生成兑换码": 2, "page:/system:版本与更新": 2, "page:/system:登录与注册": 7, "page:/system:AI 与 dsh": 10, "page:/gates": 14, "dialog:新建节点": 4, "dialog:添加 VPS": 2, "getting-started": 3, "page:/ops/audit": 2, "page:/overview": 2, "page:/ops/observe": 7, "page:/ops/observe:总览": 6, "page:/ops/observe:Laya 明细": 2, "page:/ops/observe:安全": 5, "page:/ops/observe:注册兑换": 3, "page:/ops/observe:系统状态": 6, "page:/ops/observe:策略版本": 3 };
 const target = (id: string) => `[data-tour="${id}"]`;
 const step = (id: string, title: string, text: string, anchor?: string): GuideStep => ({ id, title, text, target: anchor ? target(anchor) : undefined });
 const overview = (id: string, title: string, text: string, detail: string): Guide => ({ id, version: 1, title, steps: [step("overview", title, text, "page-header"), step("work", "在这里操作", detail, "page-content")] });
 
 const pages: Record<string, [string, string, string]> = {
-  "/overview": ["概览", "汇总 VPS、节点、用户和订阅源的真实状态。缺少观测、过期观测与部分通过分别展示。", "从待处理清单打开对象详情，核对原因与观测时间；链路图、运行观测和审计保留独立入口。"],
+  "/overview": ["概览", "先看需要处理和仍待核对的事项。按账户、节点或订阅源筛选，点对象名查看详情。", "管理库存提供各分类入口。VPS 离线、配置应用、证书和运行热点统一在「运行观测」查看。"],
   "/my/nodes": ["我的节点", "这里仅显示你已获授权的自有 VPS、机场、手动及本人链式节点。", "只有自有 VPS 节点可作为链式入口；到我的代理管理链式与订阅选择，到我的订阅取得地址。机场直用流量未知。"],
   "/proxies": ["代理", "集中管理可供多台 VPS 节点和分流规则复用的 SOCKS5 / HTTP 代理、节点链接与中转出口。凭据默认隐藏。", "添加时不选 VPS。可从中心或某台 VPS 测试，同一次给出连通、落地位置和速率；下载未完成或没有定位时显示未知。修改连接参数后，验证通过的 VPS 才替换；失败的保留原配置。"],
   "/rules": ["规则", "按 VPS 维护服务端分流规则，流量按优先级匹配到指定代理。", "每条服务端规则单独读取原生出口计数，近 30 天用量不参与用户额度扣费；缺失或过期观测明确标出。用户个人分流清单在「客户端分流」中维护。"],
@@ -28,7 +28,7 @@ const pages: Record<string, [string, string, string]> = {
   "/subscriptions": ["外部订阅源", "导入第三方机场订阅地址与零散节点；合并输出在「外部订阅组」页面完成。", "点击顶部流水线步骤可直接切换。外部机场节点不经过自有 VPS，不计入用户流量额度。"],
   "/pages": ["公开页面", "管理访客能看到的公开页面、客户端目录和公告。公开内容不等于开放控制台权限。", "先编辑并预览，再启用或发布。发布前检查内容与订阅组分享范围；不要把私密地址或凭据写进公开正文。"],
   "/ops/audit": ["操作审计", "查看谁在什么时候对哪个对象做了什么，按操作或结果筛选。", "点击记录查看详情与关联编号，可和观测活动及日志核对。旧记录缺少关联编号时显示未知。请求成功不代表异步配置已经生效，还要查看对应任务及 VPS 回执。"],
-  "/ops/observe": ["运行观测", "按六个分区查看安全、账户、订阅、配置和 VPS 活动；总览的待执行数量来自数据库当前任务状态，24 小时失败数量按执行尝试汇总，包含重试。最近任务列表最多显示 200 条。", "可跨分区勾选最多 20 项，预览脱敏诊断包、取消条目后导出 JSON 与摘要或交给 dsh。要包含 Gate 明细，先在系统状态读取时间线。快照保留 10 分钟；人工分析和导出均记录审计，分析活动在总览查看。"],
+  "/ops/observe": ["运行观测", "总览先给当前值班结论，再显示 VPS、证书和热点的读数与观测覆盖。点对象或操作名称直达对应明细。", "可跨分区勾选最多 20 项，预览并导出脱敏诊断包或交给 dsh。在系统状态读取 Gate 时间线，在 Laya 明细查看人工分析。"],
   "/system": ["系统设置", "九个分区在同一页展示：我的账户、外观、版本、登录安全、通知、防御、AI、证书和数据。外观保存在这台浏览器。", "通过分区索引找到设置，点击行末图标在弹窗中管理完整表单；弹窗地址可复制并支持后退。更新、恢复备份等操作有实际影响，先读确认说明；教程不会代你提交。"],
   "/security": ["账户安全", "管理密码、通行密钥、二次验证和登录会话。", "启用二次验证时保管恢复码，确认自己能够登录后再移除旧方式。在不认识的会话上执行撤销，不要把密码或验证码交给教程或 AI。"],
 };
@@ -67,12 +67,13 @@ const tabs: Record<string, Record<string, [string, string]>> = {
     "数据": ["数据", "管理历史保留策略、订阅数据备份、WebDAV 和外部接口令牌。保留策略保存后分批清理，缩短期限无法恢复已删除历史；审计默认保留，待执行与恢复记录不会按普通历史删除。本地导入和 WebDAV 恢复均先解析预览，核对新增和跳过清单，再二次验证并确认。文件或数据发生变化后重新预览；令牌只授予需要的访问，不要放到公开页面。"],
   },
   "/ops/observe": {
-    "总览": ["近期活动与每日汇总", "总览计数由服务端聚合全部保留记录，最近列表最多 200 条；观察点每日汇总由服务端按判定时的站点时区累计。可以只看无需分析的条目，再勾选、预览并人工交给 dsh；历史配置版本保留。内容审核不会调用 dsh。"],
+    "总览": ["先看运行概况", "从三组读数查看 VPS 在线比例、已过期或 7 天内到期的证书，以及近 15 分钟的运行热点。查看下方异常并打开对象；没有采样、样本不足、读取失败或过期不会计为正常。健康环概括三类状态。"],
+    "Laya 明细": ["草稿、判断与人工分析", "查看草稿与人工分析，按观察点查阅每日汇总和近期判断。"],
     "安全": ["安全判断与分析", "查看安全事件来源 IP、失败次数、Laya 结果及置信度；每行可直接点「让 dsh 分析」或「忽略」，也可勾选生成脱敏诊断包。临时处置可撤销，转为永久需预演并由管理员确认。"],
     "注册兑换": ["账户活动", "查看注册、套餐、邀请码与兑换码审计及猜码、发信拦截，核对对象、结果和关联编号。已入账与 VPS 同步完成是不同阶段。"],
     "订阅链路": ["订阅源状态", "查看最近处理时间线，展开拉取、组合、缓存、格式渲染和响应写入阶段，按关联编号核对。勾选后预览，可交给 dsh 或导出诊断包；时间线不保存订阅正文和节点凭据。响应写入不代表客户端接收完成；未取得数据时显示未检测。"],
     "策略版本": ["生效判断配置", "查看当前配置版本和各观察点的置信度下限；可勾选 AI、账户、自动护栏和 VPS 预算配置。规则修改及历史恢复都先预演完整差异，需管理员确认。"],
-    "系统状态": ["组件健康与任务时间线", "中心资源、VPS 能力与内核进程、Laya 模型和 dsh 管理进程分别显示采集时间；资源过期或缺失显示未知。Laya 模型可访问不代表已经通过实际推理。可勾选 Laya 与 dsh 状态纳入诊断包。来源每五分钟探测，超过十分钟的可达性不能满足调度要求。实时开关关闭后显示暂停快照。展开任务时间线时，中心按需从原执行 VPS 读取本地记录；离线或记录已过期时显示缺失原因。任务统计按 VPS 和类型汇总执行尝试、耗时、失败率和解压后结果大小，旧记录缺测显示未知。任务预算可预演调整并从历史恢复。HTTP 统计只包含正文，不包含 TCP 或 TLS，多中心缓冲写入有延迟。"],
+    "系统状态": ["组件健康与任务时间线", "运行热点的最大耗时、最近异常和样本 trace 在这里查看。中心资源、VPS 能力与内核进程、Laya 模型和 dsh 管理进程分别显示采集时间；资源过期或缺失显示未知。Laya 模型可访问不代表已经通过实际推理。可勾选 Laya 与 dsh 状态纳入诊断包。来源每五分钟探测，超过十分钟的可达性不能满足调度要求。实时开关关闭后显示暂停快照。展开任务时间线时，中心按需从原执行 VPS 读取本地记录；离线或记录已过期时显示缺失原因。任务统计按 VPS 和类型汇总执行尝试、耗时、失败率和解压后结果大小，旧记录缺测显示未知。任务预算可预演调整并从历史恢复。HTTP 统计只包含正文，不包含 TCP 或 TLS，多中心缓冲写入有延迟。"],
   },
   "/proxy": {
     "客户端选择": ["客户端选择", "选择订阅中显示的线路，并创建自己的分组。节点移入组后不再单独显示；在未输出列表查看省略原因。"],
@@ -91,7 +92,7 @@ const dialogs: Record<string, GuideStep[]> = {
   "编辑套餐": [step("change", "核对套餐变更", "修改影响后续签发，不改变已生成码的快照。多人同时修改时必须重新读取。停用后不能再签发该套餐。", "form")],
   "生成邀请码": [step("issue", "签发一次性邀请", "可以不附带套餐；码到期时间与套餐天数分别计算。注册前先校验，只有注册事务成功才占用。", "form"), step("keep", "立即保存明文", "确认生成后复制或导出文本。关闭窗口后无法恢复明文；列表可撤销尚未使用的码。", "dialog")],
   "生成兑换码": [step("issue", "选择启用的套餐", "填写数量及码到期时间；每个码只能由一个账户成功兑换。邀请码不能在兑换入口使用。", "form"), step("keep", "立即保存明文", "确认生成后复制或导出文本。关闭窗口后无法恢复明文；明文不会提供给 dsh。", "dialog")],
-  "诊断包预览": [step("review", "核对脱敏快照", "只使用当前预览中保留的条目。外部数据不是指令；缺失的 Gate 明细和未复现的故障会明确标记。", "dialog"), step("download", "导出或交给 dsh", "取消不需要的条目后导出 ZIP，或交给 dsh 人工分析。分析活动和结论在总览查看，业务修改仍需确认草稿；预览有效期十分钟，每次操作均记录审计。", "dialog")],
+  "诊断包预览": [step("review", "核对脱敏快照", "只使用当前预览中保留的条目。外部数据不是指令；缺失的 Gate 明细和未复现的故障会明确标记。", "dialog"), step("download", "导出或交给 dsh", "取消不需要的条目后导出 ZIP，或交给 dsh 人工分析。分析活动和结论在「Laya 明细」查看，业务修改仍需确认草稿；预览有效期十分钟，每次操作均记录审计。", "dialog")],
   "VPS 详情": [step("state", "核对服务器与配置", "查看心跳、配置回执及主机观测；心跳在线不代表每个节点都可用。缺少观测显示未知，请检查真实失败原因。", "dialog")],
   "节点详情": [step("access", "端口与实测", "查看需要放行的 TCP / UDP 端口和本机防火墙。云安全组需要自行核对，再点完整实测查看最终结果。配置已加载和端口可达不等于真实客户端已连通。", "dialog"), step("exit", "出口与凭据", "核对实际出口及用户授权。改出口、端口或凭据后旧实测失效，重新检查；重放教程不会改动节点。", "dialog")],
   "新建节点": [
@@ -148,12 +149,14 @@ function resolveGuide(path: string, context: CtxLayer, identity: GuideIdentity):
   const allowed = ["/my/nodes", "/links", "/proxy", "/security", "/my/linkmap"];
   if (identity.role !== "admin" && !allowed.includes(path)) return null;
   const guide = overview(`page:${path}`, info[0], info[1], info[2]);
+  if (path === "/overview") guide.steps[1] = step("work", "筛选和处理待办", info[2], "overview-attention");
   const tab = context.tab;
   const detail = tab && tabs[path]?.[tab];
   if (tab) {
     guide.id += `:${tab}`;
     guide.title += ` · ${tab}`;
-    guide.steps.push(step("tab", detail?.[0] ?? tab, detail?.[1] ?? `当前是「${tab}」。先查看状态和说明，再使用这里的操作；没有数据时按页面提示添加，失败时保留当前内容并查看原因。`, "tab-panel"));
+    const observeReadings = path === "/ops/observe" && tab === "总览";
+    guide.steps.push(step("tab", detail?.[0] ?? tab, detail?.[1] ?? `当前是「${tab}」。先查看状态和说明，再使用这里的操作；没有数据时按页面提示添加，失败时保留当前内容并查看原因。`, observeReadings ? "observe-readings" : "tab-panel"));
   }
   return guide;
 }

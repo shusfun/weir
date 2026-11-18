@@ -38,6 +38,7 @@ func (s *Server) nodeObjectState(ctx context.Context, n *ent.Node, g *ent.Gate) 
 	}
 	v := gateObjectState(g)
 	if v.Status != "ok" {
+		v.BlockedByGate = true
 		return v
 	}
 	state, why := s.nodeReadiness(ctx, n, g)

@@ -323,13 +323,35 @@ func (a *Agent) collectDomains(ctx context.Context, cfg contracts.GateConfig) {
 		a.st.DomainCoverage = map[string]contracts.DomainCoverage{}
 	}
 	if now.After(a.domains.Retry) {
+		requestCtx := releasefiles.WithTrace(ctx, "")
+		started := time.Now()
 		a.domains.Retry = now.Add(10 * time.Minute)
 		var data contracts.CountryNetworks
-		if _, err := a.center.call(ctx, "GET", "/agent/country-networks", nil, &data); err == nil {
-			if a.domains.setNetworks(data, now) == nil {
+		status, err := a.center.call(requestCtx, "GET", "/agent/country-networks", nil, &data)
+		stage, outcome := "receive", "failed"
+		if err == nil {
+			stage = "apply"
+			err = a.domains.setNetworks(data, now)
+			if err == nil {
+				outcome = "succeeded"
 				a.domains.Retry = now.Add(6 * time.Hour)
 			}
 		}
+		reason := ""
+		if err != nil {
+			reason = "request_failed"
+			switch {
+			case stage == "apply":
+				reason = "invalid_snapshot"
+			case errors.Is(err, context.DeadlineExceeded):
+				reason = "timeout"
+			case errors.Is(err, context.Canceled):
+				reason = "cancelled"
+			case status >= 400:
+				reason = "http_error"
+			}
+		}
+		log.Printf("operation=traffic.domains.country-data.gate trace=%s stage=%s outcome=%s reason=%s http_status=%d snapshot_version=%s duration_ms=%d", releasefiles.Trace(requestCtx), stage, outcome, reason, status, data.Fetched.UTC().Format(time.RFC3339Nano), time.Since(started).Milliseconds())
 	}
 	for engine, plan := range cfg.Observers {
 		started := time.Now()

@@ -2,6 +2,7 @@
 // 可重复运行：按邮箱 / 名称 / 地址 / slug 查重，已存在的不再创建。VPS 要真实 Gate 配对，这里不造。
 // 用法：node apps/console/scan/seed.mjs [--base http://127.0.0.1:22340]
 import { inEgo, relay, parseArgs, loadConfig, openSpace, ensureLogin, api } from "./lib.mjs";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 if (!inEgo) {
@@ -9,6 +10,7 @@ if (!inEgo) {
 }
 
 const cfg = await loadConfig();
+const laneAccounts = JSON.parse(await readFile(new URL("./lane-accounts.json", import.meta.url), "utf8"));
 const base = cfg.base || "http://127.0.0.1:22340";
 const { task, page } = await openSpace("seed");
 const items = (d) => (Array.isArray(d) ? d : d?.items ?? []);
@@ -19,11 +21,12 @@ const must = (r, what) => {
 };
 
 try {
-  await ensureLogin(page, base, cfg.email || "admin@dev.test", cfg.password || "WeirDev2026");
+  await ensureLogin(page, base, cfg.email || laneAccounts.admin.email, cfg.password || laneAccounts.admin.password);
 
   // 用户：只用于本机演示，密码满足「大写 + 小写 + 数字、至少 6 位」
   const users = items((await api(page, "/admin/users")).data);
   const wantUsers = [
+    { email: laneAccounts.member.email, name: "泳道普通用户", password: laneAccounts.member.password },
     { email: "alice@dev.test", name: "Alice 演示", quota: 100 * 2 ** 30, monthly_reset: true },
     { email: "bob@dev.test", name: "Bob 演示", expires_at: new Date(Date.now() + 20 * 86400e3).toISOString() },
     { email: "carol@dev.test", name: "Carol（已停用）", disabled: true },
@@ -33,8 +36,8 @@ try {
   for (const u of wantUsers) {
     let row = users.find((x) => x.email === u.email);
     if (!row) {
-      const { disabled, ...body } = u;
-      row = must(await api(page, "/admin/users", "POST", { ...body, password: "WeirDemo2026" }), "创建用户 " + u.email);
+      const { disabled, password = "WeirDemo2026", ...body } = u;
+      row = must(await api(page, "/admin/users", "POST", { ...body, password }), "创建用户 " + u.email);
       row = row.user ?? row;
       log.push("新建用户 " + u.email);
       if (disabled && row?.id) must(await api(page, `/admin/users/${row.id}`, "PATCH", { enabled: false }), "停用用户");
@@ -124,7 +127,7 @@ try {
     };
     let r = await api(page, "/admin/announcement", "PUT", body);
     // 旧版中心保存公告要重新验证密码；新版不再要求且拒绝多余字段，所以只在被要求时才带上
-    if (r.status === 401 && r.data?.error?.code === "password_required") r = await api(page, "/admin/announcement", "PUT", { ...body, password: cfg.password || "WeirDev2026", code: "" });
+    if (r.status === 401 && r.data?.error?.code === "password_required") r = await api(page, "/admin/announcement", "PUT", { ...body, password: cfg.password || laneAccounts.admin.password, code: "" });
     must(r, "写入全局公告");
     log.push("启用全局公告");
   }

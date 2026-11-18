@@ -16,10 +16,10 @@ type Column = "pending" | "blocked" | "applied";
 
 const pointLabel: Record<string, string> = { security: "安全", "subscription.health": "订阅源", "node.test": "节点实测", "gate.kernel": "体检", "kernel.release": "内核更新", "content.spam": "内容审核" };
 // 卡片里的一行（稿子 .v-set）：左边标题加一行等宽小字，右边状态
-function SetRow({ title, description, end }: { title: ReactNode; description?: ReactNode; end?: ReactNode }) {
+export function SetRow({ title, description, end, id }: { title: ReactNode; description?: ReactNode; end?: ReactNode; id?: string }) {
   return (
-    <InsetRow className="weir-observe-row">
-      <div className="min-w-0"><b className="block truncate">{title}</b>{description && <div className="font-[family-name:var(--weir-mono)] text-fine text-[var(--weir-ink-3)]">{description}</div>}</div>
+    <InsetRow className="weir-observe-row" id={id} tabIndex={id ? -1 : undefined}>
+      <div className="min-w-0"><b className="block truncate">{title}</b>{description && <div className="font-[family-name:var(--weir-mono)] text-fine text-[var(--weir-ink-2)]">{description}</div>}</div>
       {end}
     </InsetRow>
   );

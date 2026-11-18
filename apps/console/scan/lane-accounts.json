@@ -1,0 +1,12 @@
+{
+  "admin": {
+    "label": "管理员",
+    "email": "admin@dev.test",
+    "password": "WeirDev2026"
+  },
+  "member": {
+    "label": "普通用户",
+    "email": "member@dev.test",
+    "password": "FixtureMember2026"
+  }
+}

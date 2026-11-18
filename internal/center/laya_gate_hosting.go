@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/audit"
 	"github.com/shusfun/weir/internal/taskqueue"
 	"github.com/shusfun/weir/packages/contracts"
 )
@@ -321,7 +322,17 @@ func (s *Server) auditGateLayaTask(ctx context.Context, record taskqueue.Record)
 		if record.Error != nil {
 			detail["code"] = record.Error.Code
 		}
-		if _, err = s.Store.Ent.Audit.Create().SetActor(operation.Actor).SetAction("laya." + operation.Operation).SetTarget("gate:" + itoa(operation.GateID)).SetResult(result).SetDetail(detail).Save(ctx); err != nil {
+		action, target := "laya."+operation.Operation, "gate:"+itoa(operation.GateID)
+		previous, err := s.Store.Ent.Audit.Query().Where(audit.ActionEQ(action), audit.TargetEQ(target), audit.ResultEQ(result)).Select(audit.FieldDetail).All(ctx)
+		if err != nil {
+			return err
+		}
+		for _, entry := range previous {
+			if entry.Detail["task_id"] == record.Task.ID {
+				return s.Store.KV.Set(ctx, key, "1", 0)
+			}
+		}
+		if _, err = s.Store.Ent.Audit.Create().SetActor(operation.Actor).SetAction(action).SetTarget(target).SetResult(result).SetDetail(detail).Save(ctx); err != nil {
 			return err
 		}
 		return s.Store.KV.Set(ctx, key, "1", 0)

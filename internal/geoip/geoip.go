@@ -34,10 +34,11 @@ type Location struct {
 
 // Status 是数据库的状态：Ready 为假时 Error 写明原因。
 type Status struct {
-	Ready   bool      `json:"ready"`
-	Built   time.Time `json:"built,omitempty"`
-	Error   string    `json:"error,omitempty"`
-	Fetched time.Time `json:"fetched,omitempty"`
+	Ready         bool      `json:"ready"`
+	Built         time.Time `json:"built,omitempty"`
+	Error         string    `json:"error,omitempty"`
+	Fetched       time.Time `json:"fetched,omitempty"`
+	PrefixBuildMS int64     `json:"-"`
 }
 
 const (
@@ -55,28 +56,61 @@ type DB struct {
 	// BaseURL 默认 https://download.db-ip.com/free（测试中替换）。
 	BaseURL string
 
-	mu      sync.RWMutex
-	city    *maxminddb.Reader
-	asn     *maxminddb.Reader
-	status  Status
-	tried   time.Time
-	fetchMu sync.Mutex
+	mu       sync.RWMutex
+	city     *maxminddb.Reader
+	prefixes []netip.Prefix
+	asn      *maxminddb.Reader
+	status   Status
+	tried    time.Time
+	fetchMu  sync.Mutex
 }
 
 // Open 打开已下载的数据库（没有也返回可用的 DB，Lookup 返回未就绪）。
 func Open(dir string) *DB {
+	return open(dir, false)
+}
+
+func OpenBackground(dir string) *DB {
+	return open(dir, true)
+}
+
+func open(dir string, background bool) *DB {
 	d := &DB{Dir: dir, BaseURL: "https://download.db-ip.com/free", HTTP: &http.Client{Timeout: 10 * time.Minute}}
-	d.reload()
+	if background {
+		d.fetchMu.Lock()
+		go func() {
+			defer d.fetchMu.Unlock()
+			_ = d.reload()
+		}()
+	} else {
+		_ = d.reload()
+	}
 	return d
 }
 
-func (d *DB) reload() {
+func (d *DB) reload() error {
+	return d.reloadSnapshot(nil, 0)
+}
+
+func (d *DB) reloadSnapshot(prefixes []netip.Prefix, buildMS int64) error {
 	city, err := maxminddb.Open(filepath.Join(d.Dir, cityFile))
 	if err != nil {
 		d.mu.Lock()
-		d.status = Status{Error: "IP 定位数据还没有下载", Fetched: d.status.Fetched}
+		d.status.Error = "IP 定位数据还没有下载"
 		d.mu.Unlock()
-		return
+		return err
+	}
+	if prefixes == nil {
+		started := time.Now()
+		prefixes, err = countryPrefixes(city)
+		if err != nil {
+			_ = city.Close()
+			d.mu.Lock()
+			d.status.Error = err.Error()
+			d.mu.Unlock()
+			return err
+		}
+		buildMS = time.Since(started).Milliseconds()
 	}
 	asn, _ := maxminddb.Open(filepath.Join(d.Dir, asnFile))
 	d.mu.Lock()
@@ -87,13 +121,15 @@ func (d *DB) reload() {
 		_ = d.asn.Close()
 	}
 	d.city, d.asn = city, asn
+	d.prefixes = prefixes
 	// 是否过期看本机下载的时间（文件修改时间）：DB-IP 当月的文件可能是上个月构建的。
 	fetched := d.status.Fetched
 	if fi, err := os.Stat(filepath.Join(d.Dir, cityFile)); err == nil {
 		fetched = fi.ModTime()
 	}
-	d.status = Status{Ready: true, Built: city.Metadata.BuildTime(), Fetched: fetched}
+	d.status = Status{Ready: true, Built: city.Metadata.BuildTime(), Fetched: fetched, PrefixBuildMS: buildMS}
 	d.mu.Unlock()
+	return nil
 }
 
 // Status 返回数据库状态。
@@ -111,18 +147,32 @@ func (d *DB) CountryNetworks(country string) ([]netip.Prefix, Status, error) {
 	if d.city == nil {
 		return nil, d.status, errors.New("IP 定位数据还没有下载")
 	}
+	if country != "CN" {
+		return nil, d.status, errors.New("unsupported country prefix snapshot")
+	}
+	return append([]netip.Prefix(nil), d.prefixes...), d.status, nil
+}
+
+func countryPrefixes(city *maxminddb.Reader) ([]netip.Prefix, error) {
 	var prefixes []netip.Prefix
-	for result := range d.city.Networks() {
-		var rec cityRecord
-		if err := result.Decode(&rec); err != nil {
-			return nil, d.status, err
+	for result := range city.Networks() {
+		var rec struct {
+			Country struct {
+				ISOCode string `maxminddb:"iso_code"`
+			} `maxminddb:"country"`
 		}
-		if rec.Country.ISOCode == country {
+		if err := result.Decode(&rec); err != nil {
+			return nil, err
+		}
+		if rec.Country.ISOCode == "CN" {
 			prefix := result.Prefix()
 			prefixes = append(prefixes, prefix)
 		}
 	}
-	return prefixes, d.status, nil
+	if len(prefixes) == 0 {
+		return nil, errors.New("中国网段为空")
+	}
+	return prefixes, nil
 }
 
 type cityRecord struct {
@@ -199,28 +249,42 @@ func (d *DB) Refresh(ctx context.Context, now time.Time) error {
 		return nil
 	}
 	d.tried = now
-	err := d.download(ctx, now)
+	var prefixes []netip.Prefix
+	var buildMS int64
+	err := d.download(ctx, now, func(city *maxminddb.Reader) error {
+		started := time.Now()
+		var err error
+		prefixes, err = countryPrefixes(city)
+		buildMS = time.Since(started).Milliseconds()
+		return err
+	})
+	if err == nil {
+		err = d.reloadSnapshot(prefixes, buildMS)
+	}
 	d.mu.Lock()
 	if err != nil {
 		d.status.Error = "IP 定位数据下载失败：" + err.Error()
 	}
 	d.mu.Unlock()
-	if err == nil {
-		d.reload()
-	}
 	return err
 }
 
 // download 依次试本月与上月的文件（月初新文件可能还没发布）。
-func (d *DB) download(ctx context.Context, now time.Time) error {
+func (d *DB) download(ctx context.Context, now time.Time, validateCity func(*maxminddb.Reader) error) error {
 	if err := os.MkdirAll(d.Dir, 0o755); err != nil {
 		return err
 	}
-	for _, f := range []struct{ kind, file, dbType string }{{"city-lite", cityFile, "City"}, {"asn-lite", asnFile, "ASN"}} {
+	cityPath, asnPath := filepath.Join(d.Dir, cityFile), filepath.Join(d.Dir, asnFile)
+	defer os.Remove(cityPath + ".next")
+	defer os.Remove(asnPath + ".next")
+	for _, f := range []struct {
+		kind, path, dbType string
+		validate           func(*maxminddb.Reader) error
+	}{{"city-lite", cityPath, "City", validateCity}, {"asn-lite", asnPath, "ASN", nil}} {
 		var last error
 		for _, month := range []time.Time{now, now.AddDate(0, -1, 0)} {
 			u := fmt.Sprintf("%s/dbip-%s-%s.mmdb.gz", strings.TrimRight(d.BaseURL, "/"), f.kind, month.Format("2006-01"))
-			if last = d.fetch(ctx, u, filepath.Join(d.Dir, f.file), f.dbType); last == nil {
+			if last = d.fetch(ctx, u, f.path+".next", f.dbType, f.validate); last == nil {
 				break
 			}
 		}
@@ -228,10 +292,13 @@ func (d *DB) download(ctx context.Context, now time.Time) error {
 			return last
 		}
 	}
-	return nil
+	if err := os.Rename(asnPath+".next", asnPath); err != nil {
+		return err
+	}
+	return os.Rename(cityPath+".next", cityPath)
 }
 
-func (d *DB) fetch(ctx context.Context, u, dest, dbType string) error {
+func (d *DB) fetch(ctx context.Context, u, dest, dbType string, validate func(*maxminddb.Reader) error) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return err
@@ -267,7 +334,14 @@ func (d *DB) fetch(ctx context.Context, u, dest, dbType string) error {
 		return errors.New("下载的文件不是有效的 mmdb")
 	}
 	ok := strings.Contains(r.Metadata.DatabaseType, dbType)
+	if ok && validate != nil {
+		err = validate(r)
+	}
 	_ = r.Close()
+	if err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
 	if !ok {
 		_ = os.Remove(tmp)
 		return fmt.Errorf("库类型不对：需要 %s", dbType)

@@ -21,6 +21,7 @@ func (s *Server) opsRoutes(admin *gin.RouterGroup) {
 	admin.GET("/audit", s.listAudit)
 	admin.GET("/audit/summary", s.auditSummary)
 	admin.GET("/ops/records", s.listOpsRecords)
+	admin.GET("/ops/hotspots", s.listHotspots)
 	admin.POST("/gates/:id/host/repair", s.repairGateHost)
 	admin.POST("/gates/:id/kernels/:kernel/diagnostics", s.gateKernelAction(contracts.ActionDiagnostics))
 	admin.POST("/gates/:id/kernels/:kernel/restart", s.gateKernelAction(contracts.ActionCoreRestart))

@@ -18,7 +18,7 @@ import (
 // Atlas remains responsible for schema planning and application. This metadata
 // joins its startup entry with the existing data backfill and worker schemas;
 // it is not a downgrade authorization or a replacement SQL migration engine.
-const schemaVersion = "2026111701"
+const schemaVersion = "2026111801"
 
 //go:embed ent/migrate/schema.go user_quota.go subscription_cache.go exit_binding_migration.go
 var schemaInputs embed.FS

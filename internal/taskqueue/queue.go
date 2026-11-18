@@ -109,6 +109,9 @@ func (q *Queue) MigrateWithHostLock(ctx context.Context) error {
 	if _, err = q.DB.ExecContext(ctx, `UPDATE worker_attempts SET outcome='failed' WHERE outcome='pending' AND finished_at>0`); err != nil {
 		return err
 	}
+	if err = q.initProjections(ctx); err != nil {
+		return err
+	}
 	_, err = q.DB.ExecContext(ctx, `UPDATE worker_tasks SET candidate_at=created_at WHERE candidate_at=0`)
 	return err
 }
@@ -116,8 +119,11 @@ func (q *Queue) MigrateWithHostLock(ctx context.Context) error {
 //go:embed queue.go
 var workerSchemaSource string
 
+//go:embed projection.go
+var projectionSchemaSource string
+
 func MigrationChecksum() string {
-	sum := sha256.Sum256([]byte(strings.ReplaceAll(workerSchemaSource, "\r\n", "\n")))
+	sum := sha256.Sum256([]byte(strings.ReplaceAll(workerSchemaSource+projectionSchemaSource, "\r\n", "\n")))
 	return hex.EncodeToString(sum[:])
 }
 
@@ -196,6 +202,7 @@ func (q *Queue) Enqueue(ctx context.Context, req Request, encrypted string, now 
 }
 
 const columns = `id,kind,version,trace_id,idem,body,requirements,candidates,deadline,created_at,status,gate_id,attempt,lease_token,lease_until,result,error,legacy_id,candidate_at,progress`
+const summaryColumns = `id,kind,version,trace_id,idem,'',requirements,candidates,deadline,created_at,status,gate_id,attempt,'',lease_until,'',error,legacy_id,candidate_at,progress`
 
 func scan(row interface{ Scan(...any) error }) (r Record, err error) {
 	var body, req, candidates, result, failure, progress string

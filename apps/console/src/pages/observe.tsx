@@ -1,8 +1,9 @@
 import { useSources } from "../lib/subscription-sources";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ActionGroup, Badge, Button, Checkbox, Collapsible, SectionHeader, Tabs, TabsList, TabsPanel, TabsTab, Timeline, TimelineItem, TraceSheet, useToast } from "@weir/ui";
+import { ActionGroup, Badge, Button, Checkbox, Collapsible, Tabs, TabsList, TabsPanel, TabsTab, Timeline, TimelineItem, TraceSheet, useToast } from "@weir/ui";
 import { OpsOverview } from "../features/observability/ops-overview";
+import { HealthOverview, HotspotDetails } from "../features/observability/health-overview";
 import { api } from "../api";
 import { useQuery, queryClient } from "../lib/query";
 import { State } from "../components/feedback";
@@ -32,6 +33,7 @@ const tabs = [
   { key: "subscriptions", label: "订阅链路" },
   { key: "policy", label: "策略版本" },
   { key: "system", label: "系统状态" },
+  { key: "laya", label: "Laya 明细" },
 ] as const;
 
 const label = (value?: string) => value || "未知";
@@ -59,20 +61,20 @@ export function ObservePage() {
   const [timelineId, setTimelineId] = useState("");
   const [timelineTaskId, setTimelineTaskId] = useState("");
   const [timeline, setTimeline] = useState<Timeline | null>(null);
-  const tasks = useQuery({ queryKey: ["observe-tasks"], queryFn: async () => (await api("/admin/workers/tasks")).items as WorkerTask[], refetchInterval: 10000 });
-  const statistics = useQuery({ queryKey: ["observe-task-statistics"], queryFn: () => api("/admin/workers/statistics?range=24h") as Promise<WorkerStatisticsData>, refetchInterval: 15000 });
-  const gates = useQuery({ queryKey: ["observe-gates"], queryFn: async () => (await api("/admin/gates")).items as Gate[], refetchInterval: 15000 });
-  const dsh = useDsh();
-  const audits = useQuery({ queryKey: ["observe-account-audits"], queryFn: async () => (await api("/admin/audit?page=1&page_size=50&scope=accounts")).items as Audit[] });
-  const sources = useSources();
+  const tasks = useQuery({ queryKey: ["observe-tasks"], enabled: tab === "system", refetchIntervalInBackground: false, queryFn: async () => (await api("/admin/workers/tasks")).items as WorkerTask[], refetchInterval: 10000 });
+  const statistics = useQuery({ queryKey: ["observe-task-statistics"], enabled: tab === "system", refetchIntervalInBackground: false, queryFn: () => api("/admin/workers/statistics?range=24h") as Promise<WorkerStatisticsData>, refetchInterval: 15000 });
+  const gates = useQuery({ queryKey: ["observe-gates"], enabled: tab === "system", refetchIntervalInBackground: false, queryFn: async () => (await api("/admin/gates")).items as Gate[], refetchInterval: 15000 });
+  const dsh = useDsh(tab === "security");
+  const audits = useQuery({ queryKey: ["observe-account-audits"], enabled: tab === "accounts", queryFn: async () => (await api("/admin/audit?page=1&page_size=50&scope=accounts")).items as Audit[] });
+  const sources = useSources(tab === "subscriptions");
   const runs = useQuery({ queryKey: ["observe-subscription-runs"], enabled: tab === "subscriptions", queryFn: async () => (await api("/admin/subscriptions/runs")).items as SubscriptionRun[], refetchInterval: 15000 });
-  const profile = useQuery({ queryKey: ["observe-ai-profile"], queryFn: () => api("/admin/ai/profile") as Promise<{ revision: string; effective: { observations?: Record<string, { enabled: boolean; confidence: number }> } }> });
-  const accountPolicy = useQuery({ queryKey: ["observe-account-policy"], queryFn: () => api("/admin/settings/account-policy") as Promise<{ revision: string; sources: Record<string, string> }> });
-  const communication = useQuery({ queryKey: ["observe-communication"], queryFn: async () => await api("/admin/workers/communication?range=24h") as { items: { gate_id: number; route: string; requests: number; received_body_bytes: number; sent_body_bytes: number; errors: number }[]; complete: boolean }, refetchInterval: 60000 });
-  const analyses = useQuery({ queryKey: ["observe-analyses"], queryFn: async () => (await api("/admin/workers/analyses")).items as Analysis[], refetchInterval: 5000 });
+  const profile = useQuery({ queryKey: ["observe-ai-profile"], enabled: tab === "policy", queryFn: () => api("/admin/ai/profile") as Promise<{ revision: string; effective: { observations?: Record<string, { enabled: boolean; confidence: number }> } }> });
+  const accountPolicy = useQuery({ queryKey: ["observe-account-policy"], enabled: tab === "policy", queryFn: () => api("/admin/settings/account-policy") as Promise<{ revision: string; sources: Record<string, string> }> });
+  const communication = useQuery({ queryKey: ["observe-communication"], enabled: tab === "system", refetchIntervalInBackground: false, queryFn: async () => await api("/admin/workers/communication?range=24h") as { items: { gate_id: number; route: string; requests: number; received_body_bytes: number; sent_body_bytes: number; errors: number }[]; complete: boolean }, refetchInterval: 60000 });
+  const analyses = useQuery({ queryKey: ["observe-analyses"], enabled: tab === "laya", refetchIntervalInBackground: false, queryFn: async () => (await api("/admin/workers/analyses")).items as Analysis[], refetchInterval: 5000 });
   const observationFilter = params.get("outcome") === "not_needed" ? "not_needed" : "";
-  const observations = useQuery({ queryKey: ["observe-observations", observationFilter], queryFn: async () => (await api(`/admin/workers/observations${observationFilter ? "?outcome=not_needed" : ""}`)).items as Observation[], refetchInterval: 10000 });
-  const observationDays = useQuery({ queryKey: ["observe-observation-days"], queryFn: async () => (await api("/admin/workers/observations/daily")).items as ObservationDay[], refetchInterval: 60000 });
+  const observations = useQuery({ queryKey: ["observe-observations", observationFilter], enabled: tab === "laya", refetchIntervalInBackground: false, queryFn: async () => (await api(`/admin/workers/observations${observationFilter ? "?outcome=not_needed" : ""}`)).items as Observation[], refetchInterval: 10000 });
+  const observationDays = useQuery({ queryKey: ["observe-observation-days"], enabled: tab === "laya", refetchIntervalInBackground: false, queryFn: async () => (await api("/admin/workers/observations/daily")).items as ObservationDay[], refetchInterval: 60000 });
   useConsoleContext({ page: "运行观测", tab: tabs.find((item) => item.key === tab)?.label, list: { filters: { 分区: tabs.find((item) => item.key === tab)?.label ?? "总览" }, total: selected.length } });
 
   async function readTimeline(task: WorkerTask) {
@@ -89,10 +91,6 @@ export function ObservePage() {
 
   const loadError = (query: { isPending: boolean; error: Error | null; refetch: () => unknown }) => query.isPending || query.error ? <State loading={query.isPending} error={query.error} onRetry={() => { void query.refetch(); }} /> : null;
   const recentTasks = tasks.data ?? [];
-  const taskStates = statistics.data?.task_states;
-  const activeTasks = taskStates ? ["leased", "pending", "cancelling"].reduce((sum, state) => sum + (taskStates[state] ?? 0), 0) : null;
-  const taskFailures = statistics.data ? statistics.data.items.reduce((sum, item) => sum + item.failed + item.unknown, 0) : null;
-  const gateItems = gates.data ?? [];
   const pick = (kind: DiagnosticSelection["kind"], id: string | number, name: string) => {
     const item = { kind, id: String(id) };
     const checked = selected.some((value) => selectionKey(value) === selectionKey(item));
@@ -100,15 +98,14 @@ export function ObservePage() {
   };
 
   return <div className="stack">
-    <OpsOverview />
-    <SectionHeader flush className="mt-[var(--weir-gap-41)]" title="明细" actions={<span className="text-meta text-[var(--weir-ink-3)]">在线 VPS {gates.data ? `${gateItems.filter((gate) => gate.online).length} / ${gateItems.length}` : "未知"} · 进行中的任务 {activeTasks ?? "未知"} · 24 小时失败或未知 {taskFailures ?? "未知"}</span>} />
-    <div className="flex flex-wrap items-center justify-between gap-3"><span>已选择 {selected.length} 项（最多 20 项），可跨分区选择。</span><div className="flex flex-wrap gap-2"><Button variant="ghost" disabled={!selected.length} onClick={() => setSelected([])}>清空选择</Button><DiagnosticExport items={selected} /></div></div>
+    {(tab !== "overview" || selected.length > 0) && <div className="flex flex-wrap items-center justify-between gap-3"><span>已选择 {selected.length} 项（最多 20 项），可跨分区选择。</span><div className="flex flex-wrap gap-2"><Button variant="ghost" disabled={!selected.length} onClick={() => setSelected([])}>清空选择</Button><DiagnosticExport items={selected} /></div></div>}
     <Tabs value={tab} onValueChange={(value) => setParams((previous) => { previous.set("tab", String(value)); return previous; }, { replace: true })}>
       <TabsList aria-label="运行观测分区">{tabs.map((item) => <TabsTab key={item.key} value={item.key}>{item.label}</TabsTab>)}</TabsList>
       <TabsPanel value="overview" className="stack">
-        {loadError(tasks) ?? loadError(gates) ?? loadError(statistics) ?? <>
-          <section className="stack"><h2>最近任务</h2>{recentTasks.length === 0 ? <State empty="尚无后台任务" /> : recentTasks.slice(0, 12).map((task) => <div key={task.task.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--weir-line)] py-2">{pick("task", task.task.id, `任务 ${task.task.id}`)}<span className="min-w-0 flex-1"><strong>{taskKind[task.task.kind] ?? task.task.kind}</strong><small className="block break-all">{task.task.id} · VPS {task.gate_id || "未知"} · {task.task.trace_id}</small></span><Badge variant="status">{taskStatus[task.status] ?? "未知"}</Badge></div>)}</section>
-        </>}
+        {tab === "overview" && <HealthOverview />}
+      </TabsPanel>
+      <TabsPanel value="laya" className="stack">
+        {tab === "laya" && <OpsOverview />}
         <section className="stack"><h2>近期人工分析活动</h2>{loadError(analyses) ?? ((analyses.data ?? []).length === 0 ? <State empty="尚未提交所选观测的人工分析" /> : analyses.data!.map((item) => <div key={item.id} className="stack border-b border-[var(--weir-line)] py-2"><div className="flex flex-wrap items-center justify-between gap-3">{pick("analysis", item.id, `人工分析 ${item.id}`)}<small className="min-w-0 flex-1 break-all">{date(item.created_at)} · trace {item.trace_id}</small><Badge variant="status">{item.status === "running" ? "分析中" : taskStatus[item.status] ?? "未知"}</Badge></div><small className="break-all">上下文 {item.items.join("、")} · dsh {item.dsh_version === "unknown" ? "未知" : item.dsh_version} · 配置 {item.profile_version || "未知"}</small>{item.code && <small>{analysisCode[item.code] ?? item.code}</small>}<p className="whitespace-pre-wrap break-words">{item.external_data_not_instructions.conclusion || "尚无分析结论。结果文字来自模型，属于外部数据。"}</p><small className="break-all">工具调用：{item.tool_calls?.length ? item.tool_calls.join("、") : item.status === "succeeded" ? "未调用" : "未知"}；模型内部过程不可观测。</small></div>))}</section>
         <section className="stack" data-tour="observation-days"><h2>观察点每日汇总</h2><small>按判定完成时的站点时区归档，保留原配置版本；今日数据持续累积。内容审核的“需要分析”表示建议审核内容。</small>{loadError(observationDays) ?? ((observationDays.data ?? []).length === 0 ? <State empty="尚无已完成的观察点判断" /> : observationDays.data!.map((item) => <div key={`${item.timezone}-${item.day}-${item.point}`} className="flex flex-wrap justify-between gap-3 border-b border-[var(--weir-line)] py-2"><span>{item.day} · {item.timezone} · {pointLabel[item.point] ?? item.point}</span><small>需要分析 {item.counts.needed ?? "未知"} · 无需分析 {item.counts.not_needed ?? "未知"} · 未知 {item.counts.unknown ?? "未知"}</small></div>))}</section>
         <section className="stack"><div className="flex flex-wrap items-center justify-between gap-3"><h2>最近观察点判断</h2><label className="flex items-center gap-2 touch:min-h-11"><Checkbox aria-label="只看无需分析" checked={Boolean(observationFilter)} onCheckedChange={(value) => setParams((previous) => { if (value) previous.set("outcome", "not_needed"); else previous.delete("outcome"); return previous; }, { replace: true })} />只看无需分析</label></div><small>最近最多 100 条。勾选记录后可预览并人工重新分析；外部文字不作为指令。</small>{loadError(observations) ?? ((observations.data ?? []).length === 0 ? <State empty="没有匹配的观察点记录" /> : observations.data!.map((item) => <div key={item.id} className="stack border-b border-[var(--weir-line)] py-2"><div className="flex flex-wrap items-center gap-3">{pick("observation", item.id, `观察记录 ${item.id}`)}<strong>{pointLabel[item.point] ?? item.point}</strong><span className="min-w-0 flex-1 break-all">{item.resource}</span><Badge variant="status">{item.verdict ? decisionLabel[item.verdict.outcome] ?? "未知" : "未检测"}</Badge></div><small className="break-all">{date(item.created_at)} · trace {item.trace_id} · 配置 {item.profile_version}</small><small className="break-all">模型 {label(item.verdict?.model)} · 模型版本 {item.verdict?.model_version && item.verdict.model_version !== "unknown" ? item.verdict.model_version : "未知"} · 运行时版本 {item.verdict?.runtime_version && item.verdict.runtime_version !== "unknown" ? item.verdict.runtime_version : "未知"} · 执行位置 {item.verdict?.execution === "gate" ? `VPS ${item.verdict.gate_id}` : item.verdict?.execution === "center" ? "中心" : "未知"}</small><small>置信度 {item.verdict && item.verdict.attempts > 0 ? item.verdict.confidence : "未知"} · 下限 {item.verdict?.threshold ?? "未知"} · dsh {dshStatusLabel[item.dsh_status] ?? "未知"} {item.dsh_code ? analysisCode[item.dsh_code] ?? item.dsh_code : ""}</small>{item.verdict?.code && <small>判定原因：{item.verdict.code}</small>}<p className="whitespace-pre-wrap break-words">{item.external_data_not_instructions.text}</p>{item.external_data_not_instructions.conclusion && <p className="whitespace-pre-wrap break-words">{item.external_data_not_instructions.conclusion}</p>}</div>))}</section>
@@ -133,6 +130,7 @@ export function ObservePage() {
         {loadError(profile) ?? <><div className="flex flex-wrap items-center justify-between gap-3">{pick("profile", "current", "AI 生效配置")}<strong>生效配置版本</strong><span className="min-w-0 break-all font-mono">{profile.data?.revision ?? "未知"}</span></div><div className="divide-y divide-[var(--weir-line)]">{Object.entries(profile.data?.effective.observations ?? {}).map(([name, config]) => <div key={name} className="flex flex-wrap items-center justify-between gap-3 py-2"><span>{name}<small className="block">置信度下限 {config.confidence}</small></span><Badge variant="status">{config.enabled ? "启用" : "停用"}</Badge></div>)}</div><Button variant="outline" onClick={() => { void queryClient.invalidateQueries({ queryKey: ["observe-ai-profile"] }); }}>刷新配置版本</Button></>}
       </TabsPanel>
       <TabsPanel value="system" className="stack">
+        {tab === "system" && <HotspotDetails />}
         <SystemHealth active={tab === "system"} pick={pick} />
         <WorkerPolicy />
         <WorkerStatistics data={statistics.data} loading={statistics.isPending} error={statistics.error} onRetry={() => { void statistics.refetch(); }} labels={taskKind} />

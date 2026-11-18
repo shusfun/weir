@@ -1,13 +1,67 @@
 package center
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/shusfun/weir/internal/nodeprobe"
+	"github.com/shusfun/weir/internal/store"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/gate"
 )
+
+func TestAdminNodeStateDistinguishesGateBlockFromProbeFailure(t *testing.T) {
+	s, admin, node := readyDeployedNode(t, "ss2022")
+	ctx := t.Context()
+	device := s.Store.Ent.Gate.GetX(ctx, node.GateID)
+	binding, err := s.probeFingerprint(ctx, node, device)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.storeNodeTest(ctx, node.ID, nodeTestResult{Status: "failed", At: time.Now(), Binding: binding, TCP: nodeprobe.Check{Status: "failed"}}); err != nil {
+		t.Fatal(err)
+	}
+	read := func(want string, blocked bool) {
+		t.Helper()
+		response := admin.do("GET", "/api/v1/admin/nodes", nil, map[string]string{"traceparent": "00-123456789012345678901234567890ab-1234567890123456-01"})
+		if response.Code != 200 || response.Header().Get("X-Trace-Id") != "123456789012345678901234567890ab" {
+			t.Fatalf("nodes = %d, trace = %q", response.Code, response.Header().Get("X-Trace-Id"))
+		}
+		var list struct {
+			Items []struct {
+				ID    int `json:"id"`
+				State struct {
+					Status  string `json:"status"`
+					Blocked *bool  `json:"blocked_by_gate"`
+				} `json:"object_state"`
+			} `json:"items"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &list); err != nil {
+			t.Fatal(err)
+		}
+		for _, item := range list.Items {
+			if item.ID != node.ID {
+				continue
+			}
+			if item.State.Status != want || blocked && (item.State.Blocked == nil || !*item.State.Blocked) || !blocked && item.State.Blocked != nil {
+				t.Fatalf("want %s, blocked=%t; got %+v", want, blocked, item.State)
+			}
+			return
+		}
+		t.Fatalf("node %d not found in list", node.ID)
+	}
+	offline := time.Now().Add(-time.Hour)
+	s.Store.Ent.Gate.UpdateOne(device).SetLastSeenAt(offline).ExecX(ctx)
+	if err := s.Store.SetGateObservation(ctx, device.ID, store.GateObservation{SeenAt: offline}); err != nil {
+		t.Fatal(err)
+	}
+	read("stale", true)
+	if err := s.Store.SetGateObservation(ctx, device.ID, store.GateObservation{SeenAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	read("failed", false)
+}
 
 func TestObjectStateMissingStaleRevokedAndFailed(t *testing.T) {
 	g := &ent.Gate{Status: gate.StatusActive, ConfigRevision: 1, AppliedRevision: 1}

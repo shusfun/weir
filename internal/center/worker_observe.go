@@ -118,7 +118,10 @@ func (s *Server) workerObservationRoutes(admin *gin.RouterGroup) {
 			failure(c, 400, "invalid_statistics_range")
 			return
 		}
-		stats, err := s.Store.Tasks.Statistics(c.Request.Context(), now.Add(-window), now)
+		ctx := s.hotspotContext(c.Request.Context())
+		finish := operationStage(ctx, "worker.tasks.statistics")
+		stats, err := s.Store.Tasks.Statistics(ctx, now.Add(-window), now)
+		finish(err)
 		if err != nil {
 			failInternal(c, 503, "task_statistics_unavailable", err)
 			return
@@ -126,13 +129,13 @@ func (s *Server) workerObservationRoutes(admin *gin.RouterGroup) {
 		c.JSON(200, stats)
 	})
 	admin.GET("/workers/tasks", func(c *gin.Context) {
-		rs, err := s.Store.Tasks.List(c.Request.Context(), 200)
+		ctx := s.hotspotContext(c.Request.Context())
+		finish := operationStage(ctx, "worker.tasks.list")
+		rs, err := s.Store.Tasks.List(ctx, 200)
+		finish(err)
 		if err != nil {
 			failInternal(c, 503, "tasks_unavailable", err)
 			return
-		}
-		for i := range rs {
-			rs[i].Result = nil
 		}
 		c.JSON(200, gin.H{"items": rs})
 	})

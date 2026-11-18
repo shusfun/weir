@@ -192,8 +192,13 @@ func (q *Queue) Sweep(ctx context.Context, now time.Time) error {
 }
 
 func (q *Queue) SweepChanged(ctx context.Context, now time.Time) (changed int, err error) {
+	ids, err := q.SweepTransitions(ctx, now)
+	return len(ids), err
+}
+
+func (q *Queue) SweepTransitions(ctx context.Context, now time.Time) (changed []string, err error) {
 	err = q.Lock.Do(ctx, "worker-dispatch", func(ctx context.Context) error {
-		rows, err := q.DB.QueryContext(ctx, `SELECT `+columns+` FROM worker_tasks WHERE (status IN ('leased','cancelling') AND lease_until<=$1) OR (status='pending' AND (deadline<=$1 OR COALESCE(NULLIF(candidate_at,0),created_at)<=$2))`, now.UnixMilli(), now.Add(-contracts.TaskLease).UnixMilli())
+		rows, err := q.DB.QueryContext(ctx, `SELECT `+summaryColumns+` FROM worker_tasks WHERE (status IN ('leased','cancelling') AND lease_until<=$1) OR (status='pending' AND (deadline<=$1 OR COALESCE(NULLIF(candidate_at,0),created_at)<=$2))`, now.UnixMilli(), now.Add(-contracts.TaskLease).UnixMilli())
 		if err != nil {
 			return err
 		}
@@ -265,7 +270,9 @@ func (q *Queue) SweepChanged(ctx context.Context, now time.Time) (changed int, e
 			if e = tx.Commit(); e != nil {
 				return e
 			}
-			changed += int(n)
+			if n == 1 {
+				changed = append(changed, r.Task.ID)
+			}
 		}
 		return nil
 	})
@@ -276,7 +283,7 @@ func (q *Queue) List(ctx context.Context, limit int) (out []Record, err error) {
 	if limit < 1 || limit > 500 {
 		return nil, errors.New("invalid task list limit")
 	}
-	rows, err := q.DB.QueryContext(ctx, `SELECT `+columns+` FROM worker_tasks ORDER BY created_at DESC,id LIMIT $1`, limit)
+	rows, err := q.DB.QueryContext(ctx, `SELECT `+summaryColumns+` FROM worker_tasks ORDER BY created_at DESC,id LIMIT $1`, limit)
 	if err != nil {
 		return nil, err
 	}

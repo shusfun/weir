@@ -27,7 +27,35 @@
 .weir-observe-row { display: flex; align-items: center; justify-content: space-between; gap: var(--weir-gap-13); }
 .weir-observe-row > :last-child { flex-shrink: 0; }
 .weir-observe-row > div { overflow-wrap: anywhere; }
+.weir-observe-row[id], #runtime-hotspots { scroll-margin-block-start: var(--weir-gap-21); }
+.weir-observe-row:target { background: var(--weir-fill-4); }
+.weir-observe-dashboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "readings" "inventory" "hotspots" "health";
+  align-items: start;
+  gap: var(--weir-gap-29);
+}
+.weir-observe-dashboard > [data-tour="observe-readings"] { grid-area: readings; align-self: center; }
+.weir-workbench-heading [data-slot="page-title"] { letter-spacing: 0; }
+.weir-observe-metrics { gap: var(--weir-gap-13) var(--weir-gap-17); }
+.weir-observe-metrics .weir-readout { flex-direction: column; justify-content: flex-start; }
+.weir-observe-metrics .weir-readout-value { order: -1; }
+.weir-observe-inventory { grid-area: inventory; }
+.weir-observe-hotspots { grid-area: hotspots; }
+.weir-observe-health {
+  grid-area: health;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--weir-gap-13);
+}
+.weir-observe-legend { flex: 1 1 0; }
 @media (min-width: 1025px) {
+  .weir-observe-dashboard {
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+    grid-template-areas: "readings health" "inventory hotspots";
+  }
   .weir-observe-columns { grid-template-columns: minmax(0, 1.61fr) minmax(0, 1fr); grid-template-rows: auto auto; }
   .weir-observe-columns > div { display: grid; grid-template-rows: subgrid; grid-row: span 2; gap: 0; }
   .weir-observe-columns [data-slot="section-header"] { min-height: var(--weir-tap); }

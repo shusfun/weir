@@ -1,7 +1,7 @@
 // 新中心接口的类型与通用换算（Gate、节点、用户、链接、链式代理、订阅）。
 import type { LampTone } from "@weir/ui";
 
-export interface ObjectState { status: string; label?: string; reason: string; observed_at?: string | null; next: string[] }
+export interface ObjectState { status: string; label?: string; reason: string; observed_at?: string | null; next: string[]; blocked_by_gate?: boolean }
 export function objectStatus(state?: ObjectState): [string, Exclude<LampTone, "active">, string] {
   if (!state) return ["未知", "unknown", "中心尚未提供状态结论"];
   const tone: Record<string, Exclude<LampTone, "active">> = { ok: "ok", partial: "warn", failed: "bad", warning: "warn", pending: "warn", stale: "warn", disabled: "off", revoked: "off", unavailable: "off" };

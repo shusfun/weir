@@ -420,7 +420,7 @@
   .shell-main [data-slot="page-header"] {
     min-height: 0;
   }
-  .shell-main [data-slot="page-header"] [data-slot="page-title"] {
+  .shell-main [data-slot="page-header"]:not(.weir-workbench-heading) [data-slot="page-title"] {
     position: absolute;
     width: 1px;
     height: 1px;

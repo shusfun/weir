@@ -39,6 +39,42 @@ func update(r taskqueue.Record) contracts.TaskUpdate {
 	return contracts.TaskUpdate{Attempt: r.Task.Attempt, LeaseToken: r.Task.LeaseToken, Result: json.RawMessage(`{"ok":true}`)}
 }
 
+func TestProjectionFollowsCommittedTransition(t *testing.T) {
+	queue := queue(t)
+	ctx := t.Context()
+	now := time.Now()
+	input := request(contracts.ActionCoreRestart, "projection", now)
+	input.LegacyID = 7
+	input.Deadline = now.Add(time.Minute)
+	record, err := queue.Enqueue(ctx, input, "sealed", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed, err := queue.SweepTransitions(ctx, now.Add(2*time.Minute))
+	if err != nil || len(changed) != 1 || changed[0] != record.Task.ID {
+		t.Fatalf("sweep transitions=%v err=%v", changed, err)
+	}
+	pending, err := queue.PendingProjections(ctx, now.Add(2*time.Minute))
+	if err != nil || len(pending) != 1 || pending[0] != record.Task.ID {
+		t.Fatalf("projection backlog=%v err=%v", pending, err)
+	}
+	if err = queue.ResolveProjection(ctx, record.Task.ID, now.Add(3*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if pending, err = queue.PendingProjections(ctx, now.Add(2*time.Minute)); err != nil || len(pending) != 0 {
+		t.Fatalf("projection retry ran early: %v %v", pending, err)
+	}
+	if pending, err = queue.PendingProjections(ctx, now.Add(4*time.Minute)); err != nil || len(pending) != 1 {
+		t.Fatalf("projection retry was lost: %v %v", pending, err)
+	}
+	if err = queue.ResolveProjection(ctx, record.Task.ID, time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if pending, err = queue.PendingProjections(ctx, now.Add(4*time.Minute)); err != nil || len(pending) != 0 {
+		t.Fatalf("completed projection reappeared: %v %v", pending, err)
+	}
+}
+
 func TestLeaseFailoverFencesOldWorker(t *testing.T) {
 	q := queue(t)
 	ctx := context.Background()
