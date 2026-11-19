@@ -1,1 +1,0 @@
-import{l as r,m as u}from"./index-DLCLPYse.js";const e={queryKey:["subscription-sources"],queryFn:({signal:s})=>u("/admin/subscriptions/sources","GET",void 0,{signal:s})};function i(s=!0){return r({...e,enabled:s})}export{e as s,i as u};

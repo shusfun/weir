@@ -1,18 +1,18 @@
-import { PendingExits } from "../components/pending-exits";
-import { DomainCandidates } from "../components/domain-candidates";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQueries } from "@tanstack/react-query";
-import { useQuery } from "../lib/query";
-import { ActionGroup, Badge, Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, InsetGroup, InsetRow, InsetRows, LaneMap, Notice, PageHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField, SwitchGroup, Textarea, useConfirm } from "@weir/ui";
+import { ActionGroup, Badge, Button, Card, CardContent, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, InsetGroup, InsetRow, InsetRows, LaneMap, Notice, PageHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField, SwitchGroup, Textarea, useConfirm } from "@weir/ui";
 import { Activity, Pencil, Plus, Trash2 } from "lucide-react";
-import { api } from "../api";
+import { api, ApiError } from "../api";
+import { useQuery } from "../lib/query";
 import { bytes } from "../lib/models";
-import { objectStatus, type ExitItem, type ExitSpec, type Gate, type NodeItem } from "../lib/core";
+import type { ExitItem, ExitSpec, Gate, NodeItem } from "../lib/core";
 import { exitChoices, exitInput, exitTitle, useExitCatalog } from "../lib/exits";
 import { useFormAction, useRowAction } from "../lib/action";
 import { useConsoleContext } from "../lib/console-context";
-import { ExitFields, exitErrorFields, exitKindName, probeText } from "../components/chain-exit";
+import { PendingExits } from "../components/pending-exits";
+import { DomainCandidates } from "../components/domain-candidates";
+import { ExitFields, exitErrorFields } from "../components/chain-exit";
 import { ObjectLink, dataObject, useDialogParam } from "../components/object-link";
 import { State } from "../components/feedback";
 import { ExitSummary } from "../components/node-summary";
@@ -21,119 +21,135 @@ import { ExitProbe } from "../components/exit-probe";
 import { ExitCredentials } from "../components/exit-credentials";
 
 interface RouteItem {id:number;gate_id:number;exit_id:number;domain:string;ip:string;priority:number;enabled:boolean;node_id?:number;user_id?:number;usage?:{bytes:number|null;observed_at:string|null;coverage:string;reason:string}}
-export function ExitsPage({ view = "all" }: { view?: "all" | "proxies" | "rules" }) {
-  const [params,setParams]=useSearchParams(), gid=Number(params.get("gate"))||undefined;
-  const exits=useExitCatalog(true,gid);
-  const gates=useQuery({queryKey:["gates"],queryFn:async()=>(await api("/admin/gates")).items as Gate[]});
-  const visible=(gates.data??[]).filter(g=>!gid||g.id===gid);
-  const routeQueries=useQueries({queries:visible.map(g=>({queryKey:["routes",g.id],queryFn:async()=>(await api(`/admin/gates/${g.id}/routes`)).items as RouteItem[]}))});
-  const routes=routeQueries.flatMap(q=>q.data??[]);
-  const routesKnown=gates.isSuccess&&routeQueries.every(q=>q.isSuccess);
-  const externalItems = (exits.data?.items ?? []).filter(e => e.kind !== "freedom" && e.kind !== "blackhole");
-  const tcpOnly = externalItems.filter(e => e.kind === "http" || e.kind === "https").length;
-  const nodes=useQuery({queryKey:["nodes"],queryFn:async()=>(await api("/admin/nodes")).items as NodeItem[]});
-  const detail=useDialogParam("exit",exits.data?.items,!!exits.data);
-  const [creating,setCreating]=useState(false);
-  const [probe,setProbe]=useState<ExitItem|null>(null);
-  const edit: ExitItem | "new" | null = creating ? "new" : detail.current;
-  const setEdit=(value:ExitItem|"new"|null)=>{setCreating(value==="new");if(value&&value!=="new")detail.open(value);else detail.close();};
-  const confirm=useConfirm();
-  const action=useRowAction<number>({invalidate:[["exits"]]});
-  const pageTitle = view === "rules" ? "规则" : view === "proxies" ? "代理" : "出口与分流";
-  useConsoleContext({page:pageTitle,list:{total:externalItems.length,items:externalItems.slice(0,20).map(e=>({type:"exit",id:e.id,name:exitTitle(e)}))}});
-  return <div className="stack"><PageHeader size="data" title={pageTitle} description={<span className="weir-sum"><span><b>{exits.data ? externalItems.length : "未知"}</b> 个代理</span>{view !== "proxies" && <span><b>{routesKnown ? routes.length : "未知"}</b> 条分流规则</span>}{tcpOnly > 0 && <span>{tcpOnly} 个仅支持 TCP</span>}</span>} actions={<><Select value={gid?String(gid):"all"} onValueChange={v=>setParams(v==="all"?{}:{gate:String(v)})}><SelectTrigger aria-label="入口 VPS" className="min-w-[161px]"><SelectValue>{gates.data?.find(g=>g.id===gid)?.name??"全部 VPS"}</SelectValue></SelectTrigger><SelectContent><SelectItem value="all">全部 VPS</SelectItem>{gates.data?.map(g=><SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>)}</SelectContent></Select>{view !== "rules" && <Button onClick={()=>setEdit("new")}><Plus />添加代理</Button>}</>}/>
-    {(gates.isPending || gates.error) ? <State loading={gates.isPending && !gates.error} error={gates.error} onRetry={()=>void gates.refetch()}/> : view !== "proxies" && routes.length > 0 && <ExitLanes routes={routes} exits={exits.data?.items??[]} known={routesKnown} failed={routeQueries.some(q=>q.isError)} onRetry={()=>routeQueries.forEach(q=>void q.refetch())}/>}
-    {view !== "rules" && <>{!exits.data ? <State loading={exits.isPending} error={exits.error} onRetry={()=>exits.refetch()}/> : !exits.data.directory.length ? <State empty="还没有代理" detail="添加 SOCKS5 / HTTP 代理、节点链接或中转节点后，可供多台 VPS 节点与分流规则复用。"/> : <div className="grid gap-[var(--weir-space-4)] xl:grid-cols-2">{exits.data.directory.map(group=>{
-      const primary = group.deployments[0];
-      const relayNode = group.kind === "node" && primary?.node_id ? (nodes.data ?? []).find((n) => n.id === primary.node_id) : undefined;
-      const relayGate = relayNode ? (relayNode.gate_name || (gates.data ?? []).find((g) => g.id === relayNode.gate_id)?.name) : undefined;
-      const addrPort = group.address ? (group.port ? `${group.address}:${group.port}` : group.address) : "";
-      const title = primary?.remark?.trim() || (relayNode ? `中转 · ${relayNode.name}` : addrPort || exitTitle(primary));
-      const scopeLabel = group.owner_user_id ? `用户 #${group.owner_user_id}` : "系统共享";
-      const kindLabel = relayNode ? "VPS 中转" : group.kind === "socks5" ? "SOCKS5 代理" : group.kind === "http" ? "HTTP 代理" : group.kind === "https" ? "HTTPS 代理" : (exitKindName[group.kind] ?? group.kind);
-      return <Card key={group.id} className="flex flex-col">
-        <CardContent className="flex flex-1 flex-col justify-between gap-[var(--weir-space-4)] p-[var(--weir-space-5)]">
-          {group.conflict && <Notice tone="warn">{group.reason}</Notice>}
-          {group.deployments.map((e, idx) => {
-            const [, stateTone, stateReason] = objectStatus(e.object_state);
-            const centerProbe = (e.probes ?? []).find((p) => p.location === "center");
-            const udpLabel = e.kind === "blackhole" ? "拦截流量" : e.udp === "supported" ? "支持 UDP" : e.udp === "unsupported" ? "仅 TCP" : "UDP 未知";
-            const itemNode = e.kind === "node" && e.node_id ? (nodes.data ?? []).find((n) => n.id === e.node_id) : undefined;
-            const itemGate = itemNode ? (itemNode.gate_name || (gates.data ?? []).find((g) => g.id === itemNode.gate_id)?.name) : relayGate;
-            const itemAddr = e.address ? (e.port ? `${e.address}:${e.port}` : e.address) : addrPort;
-            const itemTitle = e.remark?.trim() || (itemNode ? `中转 · ${itemNode.name}` : title);
-            const regionText = !itemNode && e.summary?.region && e.summary.region !== "地区未知" && e.summary.region !== itemTitle ? e.summary.region : null;
-            const metaLine = [
-              kindLabel,
-              itemNode ? `落地 ${itemGate || "另一台 VPS"}` : (itemAddr && itemAddr !== itemTitle ? itemAddr : null),
-              regionText,
-              scopeLabel,
-              e.username ? `账号 ${e.username}` : null,
-            ].filter(Boolean).join(" · ");
-            const uses = e.uses ?? [];
-            return <div key={e.id} {...dataObject({ type: "exit", id: e.id })} className={idx > 0 ? "flex flex-1 flex-col justify-between gap-[var(--weir-space-4)] border-t border-[var(--weir-line)] pt-[var(--weir-space-4)]" : "flex flex-1 flex-col justify-between gap-[var(--weir-space-4)]"}>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 flex-1 basis-[201px] space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <strong className="break-all text-headline font-semibold">{itemTitle}</strong>
-                    <Badge variant="soft" tone={e.udp === "supported" ? "ok" : e.udp === "unsupported" ? "warn" : "neutral"}>{udpLabel}</Badge>
-                    {!e.enabled && <Badge variant="soft" tone="neutral">已停用</Badge>}
-                    {stateTone === "bad" && <Badge variant="soft" tone="bad">异常</Badge>}
-                  </div>
-                  <div className="break-words text-meta text-[var(--weir-ink-3)]">{metaLine}</div>
-                </div>
-                <ActionGroup wrap={false}>
-                  <Button size="sm" variant="outline" onClick={() => setEdit(e)}><Pencil />编辑</Button>
-                  {e.kind !== "blackhole" && e.kind !== "freedom" && <Button size="sm" variant="outline" onClick={() => setProbe(e)}><Activity />实测</Button>}
-                  <Button size="icon-sm" variant="ghost" aria-label={`删除 ${itemTitle}`} disabled={action.isBusy()} onClick={async () => {
-                    if (await confirm({ title: `删除代理「${itemTitle}」？`, description: e.references.length ? "此代理仍被节点或规则引用，请先切换或移除引用对象。" : "删除后无法恢复。", tone: "danger", confirmText: "删除" })) void action.run(e.id, () => api(`/admin/exits/${e.id}`, "DELETE"), "已删除");
-                  }}><Trash2 /></Button>
-                </ActionGroup>
-              </div>
-              <div className="border-t border-[var(--weir-line-soft)] pt-[var(--weir-space-3)]">
-                <InsetRows>
-                  <InsetRow className="flex min-h-[29px] flex-wrap items-center justify-between gap-2 py-2">
-                    <span className="text-meta text-[var(--weir-ink-3)]">引用对象</span>
-                    {e.references.length === 0 ? (
-                      <span className="text-meta text-[var(--weir-ink-3)]">暂未引用</span>
-                    ) : (
-                      <span className="flex flex-wrap items-center justify-end gap-1.5">
-                        {e.references.map((ref) => (
-                          <Badge key={`${ref.type}:${ref.id}`} variant="soft" tone={ref.enabled ? "info" : "neutral"}>
-                            <ObjectLink to={{ type: ref.type, id: ref.id, name: ref.name, owner: ref.owner }} />
-                          </Badge>
-                        ))}
-                      </span>
-                    )}
-                  </InsetRow>
-                  <InsetRow className="flex min-h-[29px] flex-wrap items-center justify-between gap-2 py-2">
-                    <span className="text-meta text-[var(--weir-ink-3)]">连通与下发</span>
-                    {uses.length > 0 ? (
-                      <span className="flex flex-wrap items-center justify-end gap-1.5">
-                        {uses.map((use) => (
-                          <Badge key={use.gate_id} variant="soft" tone={use.status === "applied" ? "ok" : use.status === "kept" ? "warn" : "neutral"}>
-                            {use.name ?? `VPS #${use.gate_id}`} · {use.status === "applied" ? "已生效" : use.status === "kept" ? "保留原配置" : "待验证"}{use.probe?.latency_ms != null ? ` · ${use.probe.latency_ms} ms` : use.probe && !use.probe.ok ? " · 实测未通" : ""}
-                          </Badge>
-                        ))}
-                      </span>
-                    ) : (
-                      <span className="text-meta text-[var(--weir-ink-3)]">{centerProbe ? probeText(centerProbe) : (stateReason || "尚未在 VPS 上使用")}</span>
-                    )}
-                  </InsetRow>
-                </InsetRows>
-              </div>
-            </div>;
-          })}
-        </CardContent>
-      </Card>;
-    })}</div>}
-    <PendingExits all /></>
-    }
-    {view !== "proxies" && <>
-    {(gates.data??[]).filter(g=>!gid||g.id===gid).map(g=><Routes key={g.id} gate={g} exits={exits.data?.items.filter(e=>e.owner_user_id==null&&(e.gate_id==null||e.gate_id===g.id))??[]}/>)}</>}
-    {view === "rules" && <DomainCandidates gateId={gid} />}
-    {edit&&<ExitEditor key={edit==="new"?"new":edit.id} value={edit} nodes={nodes.data??[]} close={()=>setEdit(null)} saved={()=>{setEdit(null);void exits.refetch();}}/>}
-    {probe&&<ExitProbe exit={probe} base="/admin" gates={gates.data??[]} loading={gates.isPending} error={gates.error} retry={()=>void gates.refetch()} close={()=>setProbe(null)} saved={()=>void exits.refetch()}/>}
+
+export function ProxiesPage() {
+  const catalog = useExitCatalog(true);
+  const items = catalog.data?.items.filter((exit) => exit.kind !== "freedom");
+  const detail = useDialogParam("exit", items, catalog.isSuccess);
+  const [creating, setCreating] = useState(false);
+  const [probe, setProbe] = useState<ExitItem | null>(null);
+  const edit = creating ? "new" : detail.current;
+  const nodes = useQuery({ queryKey: ["nodes"], enabled: !!edit, queryFn: async () => (await api("/admin/nodes")).items as NodeItem[] });
+  const gates = useQuery({ queryKey: ["gates"], enabled: !!probe, queryFn: async () => (await api("/admin/gates")).items as Gate[] });
+  const owners = new Map<number | null, NonNullable<typeof catalog.data>["directory"]>();
+  for (const group of catalog.data?.directory ?? []) {
+    const groups = owners.get(group.owner_user_id) ?? [];
+    groups.push(group);
+    owners.set(group.owner_user_id, groups);
+  }
+  const refresh = async () => (await catalog.refetch()).isSuccess;
+  const closeEditor = () => {
+    setCreating(false);
+    detail.close();
+  };
+
+  useConsoleContext({ page: "代理", list: { total: items?.length ?? 0, items: (items ?? []).slice(0, 20).map((exit) => ({ type: "exit", id: exit.id, name: exitTitle(exit) })) } });
+
+  return <div className="stack">
+    <PageHeader size="data" title="代理" description={<span className="weir-sum"><span><b>{items?.length ?? "未知"}</b> 条代理记录</span></span>} actions={<Button data-tour="add-proxy" onClick={() => setCreating(true)}><Plus aria-hidden />添加代理</Button>} />
+    <div className="stack" data-tour="proxy-library">
+      {catalog.isError && <State error={catalog.error} onRetry={refresh} />}
+      {!catalog.data ? !catalog.isError && <State loading /> : !owners.size ? <State empty="还没有代理" /> :
+        [...owners.entries()].sort(([left], [right]) => (left ?? 0) - (right ?? 0)).map(([owner, groups]) => (
+          <InsetGroup key={owner ?? "system"} title={owner == null ? "系统共享" : <ObjectLink to={{ type: "user", id: owner, name: `用户 #${owner}` }} />}>
+            <InsetRows as="ul">
+              {groups.flatMap((group) => group.deployments.map((exit) => (
+                <ProxyRow key={exit.id} exit={exit} conflict={group.conflict ? group.reason : undefined} refresh={refresh} onEdit={() => detail.open(exit)} onProbe={() => setProbe(exit)} />
+              )))}
+            </InsetRows>
+          </InsetGroup>
+        ))}
+    </div>
+    <PendingExits all />
+    {edit && <ExitEditor key={edit === "new" ? "new" : edit.id} value={edit} nodes={nodes.data ?? []} close={closeEditor} saved={closeEditor} />}
+    {probe && <ExitProbe exit={probe} base="/admin" gates={gates.data ?? []} loading={gates.isPending} error={gates.error} retry={() => void gates.refetch()} close={() => setProbe(null)} saved={() => void refresh()} />}
+  </div>;
+}
+
+function ProxyRow({ exit, conflict, refresh, onEdit, onProbe }: { exit: ExitItem; conflict?: string; refresh: () => Promise<boolean>; onEdit: () => void; onProbe: () => void }) {
+  const confirm = useConfirm();
+  const action = useRowAction<number>({ invalidate: [["exits"]] });
+  const [referencesOpen, setReferencesOpen] = useState(false);
+  const [refreshNeeded, setRefreshNeeded] = useState(false);
+  const title = exit.remark?.trim() || exitTitle(exit);
+  const referenceCount = exit.references.length;
+  const uses = exit.uses ?? [];
+  const busy = action.isBusy(exit.id);
+  const address = exit.address && exit.port ? `${exit.address.includes(":") ? `[${exit.address.replace(/^\[|\]$/g, "")}]` : exit.address}:${exit.port}` : exit.address;
+  const metadata = [exit.label, address === title ? undefined : address, exit.udp === "unsupported" ? "仅 TCP" : undefined].filter(Boolean).join(" · ");
+
+  async function remove() {
+    if (busy || referenceCount || refreshNeeded || !await confirm({ title: `删除代理「${title}」？`, description: "删除后无法恢复。", tone: "danger", confirmText: "删除" })) return;
+    await action.run(exit.id, async () => {
+      try {
+        return await api(`/admin/exits/${exit.id}`, "DELETE");
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 409) {
+          setReferencesOpen(true);
+          setRefreshNeeded(!await refresh());
+        }
+        throw error;
+      }
+    }, "已删除");
+  }
+
+  return <InsetRow as="li" {...dataObject({ type: "exit", id: exit.id })} className="grid gap-[var(--weir-space-2)]">
+    <div className="flex flex-wrap items-start justify-between gap-[var(--weir-space-2)]">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-[var(--weir-space-2)]">
+          <strong className="min-w-0 break-all text-body">{title}</strong>
+          {!exit.enabled && <Badge variant="soft" tone="neutral">已停用</Badge>}
+        </div>
+        <div className="break-all text-meta text-[var(--weir-ink-3)]">{metadata}</div>
+      </div>
+      <ActionGroup wrap={false}>
+        <Button size="icon-sm" variant="ghost" title="编辑" aria-label={`编辑 ${title}`} disabled={busy} onClick={onEdit}><Pencil aria-hidden /></Button>
+        {exit.kind !== "blackhole" && <Button size="icon-sm" variant="ghost" title="实测" aria-label={`实测 ${title}`} disabled={busy} onClick={onProbe}><Activity aria-hidden /></Button>}
+        <Button size="icon-sm" variant="ghost" title="删除" aria-label={`删除 ${title}`} disabled={referenceCount > 0 || refreshNeeded} busy={busy} busyText="正在删除" onClick={() => void remove()}><Trash2 aria-hidden /></Button>
+      </ActionGroup>
+    </div>
+    {conflict && <div className="text-meta text-[var(--weir-warn-ink)]">{conflict}</div>}
+    <div className="flex min-w-0 flex-wrap items-center gap-x-[var(--weir-space-3)] gap-y-[var(--weir-space-1)] text-meta">
+      <span className="text-[var(--weir-ink-3)]">引用 VPS</span>
+      {uses.length ? uses.map((use) => <ObjectLink key={use.gate_id} to={{ type: "gate", id: use.gate_id, name: use.name ?? `VPS #${use.gate_id}` }} className="max-w-full" />) :
+        <span className="text-[var(--weir-ink-3)]">{refreshNeeded || referenceCount ? "未知" : "未引用"}</span>}
+    </div>
+    {refreshNeeded && <div className="flex flex-wrap items-center gap-[var(--weir-space-2)] text-meta text-[var(--weir-warn-ink)]">
+      <span>删除受阻，引用读取失败。</span>
+      <Button variant="link" size="sm" onClick={async () => setRefreshNeeded(!await refresh())}>重读引用</Button>
+    </div>}
+    {referenceCount > 0 && <Collapsible title={`先解除引用 · ${referenceCount} 个对象`} open={referencesOpen} onOpenChange={setReferencesOpen}>
+      <div className="flex flex-wrap gap-[var(--weir-space-2)]">
+        {exit.references.map((ref) => <Badge key={`${ref.type}:${ref.id}`} variant="soft" tone="neutral" className="max-w-full">
+          <ObjectLink to={{ type: ref.type, id: ref.id, name: ref.name.split("\n")[0], owner: ref.owner }} className="max-w-full" />
+        </Badge>)}
+      </div>
+    </Collapsible>}
+  </InsetRow>;
+}
+
+export function RulesPage() {
+  const [params, setParams] = useSearchParams();
+  const gateId = Number(params.get("gate")) || undefined;
+  const exits = useExitCatalog(true, gateId);
+  const gates = useQuery({ queryKey: ["gates"], queryFn: async () => (await api("/admin/gates")).items as Gate[] });
+  const visible = (gates.data ?? []).filter((gate) => !gateId || gate.id === gateId);
+  const routeQueries = useQueries({ queries: visible.map((gate) => ({ queryKey: ["routes", gate.id], queryFn: async () => (await api(`/admin/gates/${gate.id}/routes`)).items as RouteItem[] })) });
+  const routes = routeQueries.flatMap((query) => query.data ?? []);
+  const routesKnown = gates.isSuccess && routeQueries.every((query) => query.isSuccess);
+  useConsoleContext({ page: "规则", list: { total: routes.length, items: routes.slice(0, 20).map((route) => ({ type: "route", id: route.id, name: route.domain || route.ip })) } });
+
+  return <div className="stack">
+    <PageHeader size="data" title="规则" description={<span className="weir-sum"><span><b>{routesKnown ? routes.length : "未知"}</b> 条分流规则</span></span>} actions={
+      <Select value={gateId ? String(gateId) : "all"} onValueChange={(value) => setParams(value === "all" ? {} : { gate: String(value) })}>
+        <SelectTrigger aria-label="入口 VPS" className="min-w-[161px]"><SelectValue>{gates.data?.find((gate) => gate.id === gateId)?.name ?? "全部 VPS"}</SelectValue></SelectTrigger>
+        <SelectContent><SelectItem value="all">全部 VPS</SelectItem>{gates.data?.map((gate) => <SelectItem key={gate.id} value={String(gate.id)}>{gate.name}</SelectItem>)}</SelectContent>
+      </Select>
+    } />
+    {gates.isPending || gates.error ? <State loading={gates.isPending && !gates.error} error={gates.error} onRetry={() => void gates.refetch()} /> : routes.length > 0 &&
+      <ExitLanes routes={routes} exits={exits.data?.items ?? []} known={routesKnown} failed={routeQueries.some((query) => query.isError)} onRetry={() => routeQueries.forEach((query) => void query.refetch())} />}
+    {visible.map((gate) => <Routes key={gate.id} gate={gate} exits={exits.data?.items.filter((exit) => exit.owner_user_id == null && (exit.gate_id == null || exit.gate_id === gate.id)) ?? []} />)}
+    <DomainCandidates gateId={gateId} />
   </div>;
 }
 function ExitLanes({ routes, exits, known, failed, onRetry }: { routes: RouteItem[]; exits: ExitItem[]; known: boolean; failed: boolean; onRetry: () => void }) {

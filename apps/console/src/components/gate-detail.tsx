@@ -169,7 +169,7 @@ export function GateDetail({ gate, nodes, close, layout = "sheet" }: { gate: Gat
             <TabsPanel value="nodes" className="stack">
           <PendingExits all gateId={gate.id} />
           <div className="flex flex-wrap justify-end gap-1.5">
-            <Button size="sm" variant="outline" onClick={() => navigate(`/proxies?gate=${gate.id}`)}>代理池</Button>
+            <Button size="sm" variant="outline" onClick={() => navigate("/proxies")}>管理代理</Button>
             <Button size="sm" variant="outline" onClick={() => navigate(`/rules?gate=${gate.id}`)}>分流规则</Button>
           </div>
           <GateManagement gate={gate} nodes={nodes} compact />

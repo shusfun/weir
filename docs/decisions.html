@@ -36,6 +36,7 @@
 <tr><td><a href="#d0027">0027</a></td><td>更新发现与直接跨版本升级</td><td>自更新、发布</td><td><span class="tag">已接受</span></td><td>2026-11-16</td></tr>
 <tr><td><a href="#d0028">0028</a></td><td>出口独立添加，使用时按 VPS 验证</td><td>出口、代理、VPS、实测</td><td><span class="tag pass">已接受</span></td><td>2026-11-16</td></tr>
 <tr><td><a href="#d0029">0029</a></td><td>链式客户端探测与空组拒绝</td><td>代理分组、订阅输出</td><td><span class="tag pass">已接受</span></td><td>2026-11-18</td></tr>
+<tr><td><a href="#d0031">0031</a></td><td>代理库独立，删除前解除引用</td><td>代理、VPS、引用</td><td><span class="tag pass">已接受</span></td><td>2026-11-19</td></tr>
 </tbody></table></div></section>
 
 <section><h2>记录</h2>
@@ -289,5 +290,12 @@
 <dt>放弃的方案</dt><dd>合并两个路由，或在两个页面都放基础设施告警；靠提示文案识别继承状态。</dd>
 <dt>影响</dt><dd>两个路由及管理员权限不变，节点状态新增可选字段，无存储迁移。</dd>
 <dt>依据</dt><dd>用户确认并要求实施「重做管理概览与运行观测」。</dd>
+</dl></div>
+<div class="card" id="d0031"><h3>0031 代理库独立，删除前解除引用 <span class="tag pass">已接受</span></h3><dl>
+<dt>日期</dt><dd>2026-11-19</dd><dt>flows</dt><dd>exit.save、exit.probe、exit.delete</dd>
+<dt>背景</dt><dd>按 VPS 浏览代理会隐藏未使用的记录，影响清理和维护。</dd>
+<dt>决定</dt><dd>管理员在全量代理库按归属管理代理，以链接查看引用该记录的 VPS、节点、链式节点和规则。未引用的代理在行内确认即可删除，已有引用时先切换或删除引用对象。服务器在删除时核对引用。</dd>
+<dt>影响</dt><dd>VPS 和节点详情进入同一代理库。按 VPS 管理分流仍在规则页。代理 ID、凭据和引用继续保留。</dd>
+<dt>依据</dt><dd>用户要求独立管理 Proxies、查看引用它的 VPS 和快速删除，并确认已有引用时先解除引用。</dd>
 </dl></div>
 </main></body></html>

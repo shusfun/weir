@@ -105,6 +105,65 @@ func TestExitSharingOwnershipAndTrace(t *testing.T) {
 	mustJSON(t, admin, "PATCH", "/api/v1/admin/nodes/"+itoa(int(n["id"].(float64))), map[string]any{"exit_id": other.ID, "skip_probe": true}, 422)
 }
 
+func TestProxyLibraryDeleteAndReferences(t *testing.T) {
+	s, admin, firstGate := setupGate(t)
+	secondGate := pairFakeGate(t, admin)
+	ctx := t.Context()
+	base := "/api/v1/admin/exits"
+	newProxy := func(remark string) int {
+		exit := mustJSON(t, admin, "POST", base, map[string]any{"kind": "socks5", "remark": remark, "address": "203.0.113.20", "port": 1080}, 200)
+		return int(exit["id"].(float64))
+	}
+	unused, used := newProxy("待删除"), newProxy("同址保留")
+	listItem := func(path string, id int) map[string]any {
+		for _, value := range mustJSON(t, admin, "GET", path, nil, 200)["items"].([]any) {
+			item := value.(map[string]any)
+			if item["id"] == float64(id) {
+				return item
+			}
+		}
+		return nil
+	}
+	if item := listItem(base, unused); item == nil || len(item["references"].([]any)) != 0 {
+		t.Fatalf("unused exit missing or in use: %v", item)
+	}
+	for _, gid := range []int{int(firstGate.id), int(secondGate.id)} {
+		s.Store.Ent.Route.Create().SetGateID(gid).SetExitID(used).SetDomain("domain:example.com").SaveX(ctx)
+	}
+	item := listItem(base, used)
+	if item == nil || len(item["references"].([]any)) != 2 || len(item["uses"].([]any)) != 2 {
+		t.Fatalf("references across both VPSs: %v", item)
+	}
+	for _, use := range item["uses"].([]any) {
+		if use.(map[string]any)["status"] != "unknown" {
+			t.Fatalf("unverified reference reported as applied: %v", use)
+		}
+	}
+	if item := listItem(base+"?gate_id="+itoa(int(firstGate.id)), unused); item != nil {
+		t.Fatalf("gate-scoped catalog includes unused proxy: %v", item)
+	}
+	logs := captureLog(t)
+	traceDelete := func(id int, trace string, status int, outcome string) {
+		t.Helper()
+		res := admin.do("DELETE", base+"/"+itoa(id), nil, map[string]string{"traceparent": "00-" + trace + "-1111111111111111-01"})
+		if res.Code != status || res.Header().Get("X-Trace-Id") != trace {
+			t.Fatalf("delete status=%d trace=%s body=%s", res.Code, res.Header().Get("X-Trace-Id"), res.Body.String())
+		}
+		if status == 409 && !strings.Contains(res.Body.String(), `"code":"exit_in_use"`) {
+			t.Fatalf("missing conflict: %s", res.Body.String())
+		}
+		record := s.Store.Ent.Audit.Query().Where(audit.ActionEQ("exit.delete"), audit.TargetEQ(exitOwner(id)), audit.ResultEQ(outcome)).OnlyX(ctx)
+		if record.Detail["trace_id"] != trace || !strings.Contains(logs.String(), "operation=exit.delete trace="+trace) {
+			t.Fatalf("delete trace missing from operation or audit: %v", record.Detail)
+		}
+	}
+	traceDelete(unused, "0123456789abcdef0123456789abcdef", 204, "ok")
+	traceDelete(used, "abcdef0123456789abcdef0123456789", 409, "failed")
+	if listItem(base, unused) != nil || listItem(base, used) == nil {
+		t.Fatal("delete must remove only the selected, unreferenced proxy")
+	}
+}
+
 func TestUserExitIsolationAndReuse(t *testing.T) {
 	s, admin, g := setupGate(t)
 	n := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "ss2022", "skip_probe": true}, 200)

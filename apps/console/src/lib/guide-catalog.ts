@@ -4,7 +4,7 @@ export type GuideStep = { id: string; title: string; text: string; target?: stri
 export type Guide = { id: string; version: number; title: string; steps: GuideStep[] };
 export type GuideIdentity = { id: string; role: "admin" | "user" | "guest" };
 // 未列出的教程为首版。内容变更只提升对应页面、标签或弹窗的版本。
-const versions: Record<string, number> = { "page:/rules": 3, "page:/exits": 5, "page:/proxies": 5, "page:/proxy": 7, "page:/system": 6, "page:/system:数据": 3, "page:/kernels": 4, "page:/kernels:版本": 3, "page:/subscriptions": 3, "page:/groups": 3, "page:/groups:订阅组": 4, "page:/pages": 3, "page:/ops/observe:订阅链路": 4, "page:/users": 6, "dialog:创建用户": 2, "page:/links": 4, "page:/codes": 1, "page:/codes:兑换码": 1, "page:/codes:套餐预设": 1, "page:/accounts": 3, "dialog:新建套餐": 2, "dialog:编辑套餐": 2, "dialog:生成邀请码": 2, "dialog:生成兑换码": 2, "page:/system:版本与更新": 2, "page:/system:登录与注册": 7, "page:/system:AI 与 dsh": 10, "page:/gates": 14, "dialog:新建节点": 4, "dialog:添加 VPS": 2, "getting-started": 3, "page:/ops/audit": 2, "page:/overview": 2, "page:/ops/observe": 7, "page:/ops/observe:总览": 6, "page:/ops/observe:Laya 明细": 2, "page:/ops/observe:安全": 5, "page:/ops/observe:注册兑换": 3, "page:/ops/observe:系统状态": 6, "page:/ops/observe:策略版本": 3 };
+const versions: Record<string, number> = { "page:/rules": 3, "page:/exits": 5, "page:/proxies": 6, "page:/proxy": 7, "page:/system": 6, "page:/system:数据": 3, "page:/kernels": 4, "page:/kernels:版本": 3, "page:/subscriptions": 3, "page:/groups": 3, "page:/groups:订阅组": 4, "page:/pages": 3, "page:/ops/observe:订阅链路": 4, "page:/users": 6, "dialog:创建用户": 2, "page:/links": 4, "page:/codes": 1, "page:/codes:兑换码": 1, "page:/codes:套餐预设": 1, "page:/accounts": 3, "dialog:新建套餐": 2, "dialog:编辑套餐": 2, "dialog:生成邀请码": 2, "dialog:生成兑换码": 2, "page:/system:版本与更新": 2, "page:/system:登录与注册": 7, "page:/system:AI 与 dsh": 10, "page:/gates": 14, "dialog:新建节点": 4, "dialog:添加 VPS": 2, "getting-started": 3, "page:/ops/audit": 2, "page:/overview": 2, "page:/ops/observe": 7, "page:/ops/observe:总览": 6, "page:/ops/observe:Laya 明细": 2, "page:/ops/observe:安全": 5, "page:/ops/observe:注册兑换": 3, "page:/ops/observe:系统状态": 6, "page:/ops/observe:策略版本": 3 };
 const target = (id: string) => `[data-tour="${id}"]`;
 const step = (id: string, title: string, text: string, anchor?: string): GuideStep => ({ id, title, text, target: anchor ? target(anchor) : undefined });
 const overview = (id: string, title: string, text: string, detail: string): Guide => ({ id, version: 1, title, steps: [step("overview", title, text, "page-header"), step("work", "在这里操作", detail, "page-content")] });
@@ -12,7 +12,7 @@ const overview = (id: string, title: string, text: string, detail: string): Guid
 const pages: Record<string, [string, string, string]> = {
   "/overview": ["概览", "先看需要处理和仍待核对的事项。按账户、节点或订阅源筛选，点对象名查看详情。", "管理库存提供各分类入口。VPS 离线、配置应用、证书和运行热点统一在「运行观测」查看。"],
   "/my/nodes": ["我的节点", "这里仅显示你已获授权的自有 VPS、机场、手动及本人链式节点。", "只有自有 VPS 节点可作为链式入口；到我的代理管理链式与订阅选择，到我的订阅取得地址。机场直用流量未知。"],
-  "/proxies": ["代理", "集中管理可供多台 VPS 节点和分流规则复用的 SOCKS5 / HTTP 代理、节点链接与中转出口。凭据默认隐藏。", "添加时不选 VPS。可从中心或某台 VPS 测试，同一次给出连通、落地位置和速率；下载未完成或没有定位时显示未知。修改连接参数后，验证通过的 VPS 才替换；失败的保留原配置。"],
+  "/proxies": ["代理", "集中管理全量代理资料，按归属查看。每条记录列出引用它的 VPS，展开可跳到具体节点、链式节点或规则。", "添加时直接保存，可从中心或指定 VPS 测试。未引用的代理可在列表确认删除，已引用的先切换或移除引用。"],
   "/rules": ["规则", "按 VPS 维护服务端分流规则，流量按优先级匹配到指定代理。", "每条服务端规则单独读取原生出口计数，近 30 天用量不参与用户额度扣费；缺失或过期观测明确标出。用户个人分流清单在「客户端分流」中维护。"],
   "/groups": ["外部订阅组", "将第三方订阅源与手动节点组合成独立订阅组，套用规则模板后分配给用户或匿名分享。", "成员可以是来源、手动节点或子组；顶部流水线可点击切换各步骤。先预览与实测，再分配或分享；到期后拒绝下载并返回 403。"],
   "/gates": ["VPS 与节点", "VPS 是运行代理的服务器，节点是它提供的一种连接方式。上方切换「VPS」与「全部节点」两个视图。", "在「VPS」视图点击文件夹展开紧凑节点行与供应商流量额度，链式与中转节点直接标出落地方向；「全部节点」视图统一筛选自有节点并浏览跨来源目录。VPS 详情弹窗分概览、节点与出口、内核、证书、体检、Laya 与断线时间线标签页。"],
@@ -149,6 +149,7 @@ function resolveGuide(path: string, context: CtxLayer, identity: GuideIdentity):
   const allowed = ["/my/nodes", "/links", "/proxy", "/security", "/my/linkmap"];
   if (identity.role !== "admin" && !allowed.includes(path)) return null;
   const guide = overview(`page:${path}`, info[0], info[1], info[2]);
+  if (path === "/proxies") guide.steps = [step("library", "查看代理与引用", info[1], "proxy-library"), step("add", "添加和管理代理", info[2], "add-proxy")];
   if (path === "/overview") guide.steps[1] = step("work", "筛选和处理待办", info[2], "overview-attention");
   const tab = context.tab;
   const detail = tab && tabs[path]?.[tab];

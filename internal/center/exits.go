@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"strconv"
 	"strings"
@@ -663,11 +664,20 @@ func (s *Server) saveExitNow(c *gin.Context, admin bool) {
 
 func (s *Server) deleteExit(c *gin.Context, admin bool) {
 	defer s.auditExitFailure(c, "exit.delete")
+	ctx := c.Request.Context()
+	exitID, _ := strconv.Atoi(c.Param("eid"))
+	finish := operationStage(ctx, "exit.delete", "actor", c.GetInt("user_id"), "exit.id", exitID, "code", stageValue(func() slog.Value { return slog.StringValue(c.GetString("error_code")) }))
+	defer func() {
+		if c.Writer.Status() >= 400 {
+			finish(errors.New(c.GetString("error_code")))
+			return
+		}
+		finish(nil)
+	}()
 	e, ok := s.exitParam(c, admin)
 	if !ok {
 		return
 	}
-	ctx := c.Request.Context()
 	if e.Tag == "direct" {
 		failure(c, 409, "system_exit")
 		return
@@ -684,16 +694,30 @@ func (s *Server) deleteExit(c *gin.Context, admin bool) {
 	if dryRun(c, dryResult{Preview: []string{"删除出口 " + firstNonEmpty(e.Remark, e.Tag)}}) {
 		return
 	}
-	gates, err := s.referencingGates(ctx, e.ID)
+	tx, err := s.Store.Ent.Tx(ctx)
 	if err != nil {
-		failInternal(c, 503, "query_failed", err)
-		return
-	}
-	if _, err = s.Store.Ent.ExitBinding.Delete().Where(exitbinding.ExitIDEQ(e.ID)).Exec(ctx); err != nil {
 		failInternal(c, 500, "delete_failed", err)
 		return
 	}
-	if err = s.Store.Ent.Exit.DeleteOne(e).Exec(ctx); err != nil {
+	if _, err = tx.ExitBinding.Delete().Where(exitbinding.ExitIDEQ(e.ID)).Exec(ctx); err == nil {
+		err = tx.Exit.DeleteOne(e).Exec(ctx)
+	}
+	if err == nil {
+		err = tx.Commit()
+	}
+	if err != nil {
+		_ = tx.Rollback()
+		if ent.IsConstraintError(err) {
+			refs, queryErr := s.exitReferences(ctx, e.ID)
+			if queryErr != nil {
+				failInternal(c, 503, "query_failed", queryErr)
+				return
+			}
+			if len(refs) > 0 {
+				failDetail(c, 409, "exit_in_use", "请先切换或删除引用对象", gin.H{"references": refs})
+				return
+			}
+		}
 		failInternal(c, 500, "delete_failed", err)
 		return
 	}
@@ -704,7 +728,6 @@ func (s *Server) deleteExit(c *gin.Context, admin bool) {
 		failInternal(c, 500, "sync_failed", err)
 		return
 	}
-	_ = s.bumpGates(ctx, gates)
 	s.audit(c, "exit.delete", exitOwner(e.ID), "ok")
 	c.Status(204)
 }

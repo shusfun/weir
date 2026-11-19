@@ -37,7 +37,8 @@ class LoadBoundary extends Component<{ children: ReactNode }, { error: Error | n
     );
   }
 }
-const ExitsPage = page(() => import("./pages/exits"), "ExitsPage");
+const ProxiesPage = page(() => import("./pages/exits"), "ProxiesPage");
+const RulesPage = page(() => import("./pages/exits"), "RulesPage");
 const OverviewPage = page(() => import("./pages/overview"), "OverviewPage");
 const MyNodesPage = page(() => import("./pages/my-nodes"), "MyNodesPage");
 const GatesPage = page(() => import("./pages/gates"), "GatesPage");
@@ -72,11 +73,11 @@ const ProtoApp = import.meta.env.DEV ? page(() => import("./proto"), "ProtoApp")
 const consolePages: Record<string, Loader> = {
   "/overview": OverviewPage.loader,
   "/my/nodes": MyNodesPage.loader,
-  "/proxies": ExitsPage.loader,
-  "/rules": ExitsPage.loader,
+  "/proxies": ProxiesPage.loader,
+  "/rules": RulesPage.loader,
   "/groups": SubscriptionsPage.loader,
   "/gates": GatesPage.loader,
-  "/exits": ExitsPage.loader,
+  "/exits": ProxiesPage.loader,
   "/users": UsersPage.loader,
   "/codes": AccountsPage.loader,
   "/accounts": AccountsPage.loader,
@@ -170,8 +171,8 @@ function Console() {
               <Route path="/" element={<Navigate to={home} replace />} />
               <Route path="/overview" element={guard(<OverviewPage />)} />
               <Route path="/my/nodes" element={<MyNodesPage />} />
-              <Route path="/proxies" element={guard(<ExitsPage view="proxies" />)} />
-              <Route path="/rules" element={guard(<ExitsPage view="rules" />)} />
+              <Route path="/proxies" element={guard(<ProxiesPage />)} />
+              <Route path="/rules" element={guard(<RulesPage />)} />
               <Route path="/groups" element={guard(<SubscriptionsPage groups />)} />
               <Route path="/exits" element={<Navigate to={admin ? (location.search.includes("exit") ? "/proxies" + location.search : "/rules" + location.search) : "/proxy"} replace />} />
               <Route path="/gates" element={guard(<GatesPage />)} />
