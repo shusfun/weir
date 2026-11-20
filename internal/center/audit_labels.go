@@ -43,7 +43,7 @@ var auditLabels = map[string]string{
 	"proxy.group.post": "新建我的分组", "proxy.group.put": "修改我的分组", "proxy.group.delete": "删除我的分组", "proxy.denied": "拒绝越权访问代理设置", "proxy.migration.ack": "确认分流目标迁移",
 	"route.delete": "删除分流规则", "route.save": "保存分流规则",
 	"settings.announcement": "修改全局公告", "settings.logo": "修改 Logo", "settings.notify": "修改通知设置", "settings.security": "修改安全设置", "settings.smtp": "修改邮件设置", "settings.turnstile": "修改人机验证密钥",
-	"subscription.nodes.import": "导入手动节点", "subscription.profile.delete": "删除订阅组", "subscription.profile.grants": "分配订阅组", "subscription.profile.save": "保存订阅组",
+	"subscription.nodes.import": "导入手动节点", "subscription.profile.delete": "删除订阅组", "subscription.profile.grants": "分配订阅组", "subscription.user.groups": "调整用户的订阅组", "subscription.profile.save": "保存订阅组",
 	"subscription.profile.share": "分享订阅组", "subscription.profile.unshare": "取消分享订阅组", "subscription.settings": "修改订阅默认设置", "subscription.source.delete": "删除订阅源", "subscription.source.save": "保存订阅源",
 	"system.install": "安装系统", "system.rollback": "回退版本", "system.update": "更新版本",
 	"user.create": "新建用户", "user.delete": "删除用户", "user.reset_usage": "清零用量", "user.update": "修改用户",

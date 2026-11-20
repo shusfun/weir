@@ -486,7 +486,8 @@
   @media (min-width: 96rem) { .weir-folder-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
   .weir-node-folders { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--weir-node-folder-min)), 1fr)); gap: var(--weir-space-5); }
   .weir-folder-front { transform-origin: center bottom; transition: transform var(--weir-mid) var(--weir-ease); }
-  button.weir-folder:is(:hover, :focus-visible) .weir-folder-front { transform: perspective(var(--weir-folder-perspective)) rotateX(-5deg); }
+  /* 悬停只亮边框：前盖倾斜会改变卡片下沿的命中区域，鼠标停在边缘时会反复进出悬停而闪动；倾斜留给展开与按下。 */
+  button.weir-folder:is(:hover, :focus-visible) .weir-folder-front { border-color: var(--weir-focus); }
   button.weir-folder[aria-expanded="true"] .weir-folder-front { transform: perspective(var(--weir-folder-perspective)) rotateX(-15deg); }
   button.weir-folder:active .weir-folder-front { transform: perspective(var(--weir-folder-perspective)) rotateX(-9deg); }
   button.weir-folder:focus-visible .weir-folder-file { transform: rotate(var(--tilt, 0deg)) translateY(-5px); }

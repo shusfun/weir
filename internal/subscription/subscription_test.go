@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shusfun/weir/internal/db"
+	"github.com/shusfun/weir/internal/kernelconf/model"
 )
 
 func TestDecodeBodyBase64AndPlain(t *testing.T) {
@@ -80,9 +80,9 @@ func TestMaterializeKeepsStableTags(t *testing.T) {
 	if len(nodes) != 2 || len(ids) != 2 {
 		t.Fatalf("unexpected materialized nodes: %+v ids=%+v", nodes, ids)
 	}
-	existing := []db.Outbound{
-		{ID: 10, Tag: "kept-identity", Source: db.OutboundSourceSubscription, SubscriptionID: 7, SubscriptionIdentity: ids[1], Sort: 50001},
-		{ID: 11, Tag: "kept-position", Source: db.OutboundSourceSubscription, SubscriptionID: 7, SubscriptionIdentity: "old", Sort: 50000},
+	existing := []model.Outbound{
+		{ID: 10, Tag: "kept-identity", Source: model.OutboundSourceSubscription, SubscriptionID: 7, SubscriptionIdentity: ids[1], Sort: 50001},
+		{ID: 11, Tag: "kept-position", Source: model.OutboundSourceSubscription, SubscriptionID: 7, SubscriptionIdentity: "old", Sort: 50000},
 	}
 	nextNodes, _ := Materialize(7, []ParsedLink{first, second}, existing, "sub1-")
 	if nextNodes[0].Tag != "kept-position" || nextNodes[1].Tag != "kept-identity" {

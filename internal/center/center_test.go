@@ -110,6 +110,7 @@ func decode(t *testing.T, w *httptest.ResponseRecorder) map[string]any {
 func newInstalledServer(t *testing.T) (*Server, *testClient) {
 	t.Helper()
 	dir := t.TempDir()
+	storage := testStore(t, dir)
 	path := filepath.Join(dir, "center.json")
 	cfg, err := LoadConfig(path)
 	if err != nil {
@@ -132,7 +133,7 @@ func newInstalledServer(t *testing.T) (*Server, *testClient) {
 	if w := tc.do("POST", "/api/v1/auth/login", map[string]string{"email": "a@b.c", "password": "x"}, nil); w.Code != 503 {
 		t.Fatalf("login before install = %d", w.Code)
 	}
-	install := map[string]any{"store": testStore(t, dir), "email": "Admin@Example.test", "password": "Passw0rd"}
+	install := map[string]any{"store": storage, "email": "Admin@Example.test", "password": "Passw0rd"}
 	if w := tc.do("POST", "/api/v1/setup/install", install, map[string]string{"Authorization": "Bearer wrong"}); w.Code != 401 {
 		t.Fatalf("install with wrong token = %d", w.Code)
 	}

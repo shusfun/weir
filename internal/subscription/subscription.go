@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shusfun/weir/internal/db"
+	"github.com/shusfun/weir/internal/kernelconf/model"
 	"github.com/shusfun/weir/internal/publicnet"
 )
 
@@ -326,15 +326,15 @@ func StableIdentity(raw string, parsed ParsedLink) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func Materialize(subscriptionID int64, links []ParsedLink, existing []db.Outbound, tagPrefix string) ([]db.MaterializedSubscriptionOutbound, []string) {
-	byIdentity := map[string]db.Outbound{}
-	subscriptionOutbounds := []db.Outbound{}
+func Materialize(subscriptionID int64, links []ParsedLink, existing []model.Outbound, tagPrefix string) ([]model.MaterializedSubscriptionOutbound, []string) {
+	byIdentity := map[string]model.Outbound{}
+	subscriptionOutbounds := []model.Outbound{}
 	usedTags := map[string]bool{}
 	for _, outbound := range existing {
 		if strings.TrimSpace(outbound.Tag) != "" {
 			usedTags[outbound.Tag] = true
 		}
-		if outbound.SubscriptionID == subscriptionID && outbound.Source == db.OutboundSourceSubscription {
+		if outbound.SubscriptionID == subscriptionID && outbound.Source == model.OutboundSourceSubscription {
 			subscriptionOutbounds = append(subscriptionOutbounds, outbound)
 			if strings.TrimSpace(outbound.SubscriptionIdentity) != "" {
 				byIdentity[outbound.SubscriptionIdentity] = outbound
@@ -347,7 +347,7 @@ func Materialize(subscriptionID int64, links []ParsedLink, existing []db.Outboun
 		}
 		return subscriptionOutbounds[i].Sort < subscriptionOutbounds[j].Sort
 	})
-	nodes := make([]db.MaterializedSubscriptionOutbound, 0, len(links))
+	nodes := make([]model.MaterializedSubscriptionOutbound, 0, len(links))
 	identities := make([]string, 0, len(links))
 	for i, link := range links {
 		identity := strings.TrimSpace(link.Identity)
@@ -369,7 +369,7 @@ func Materialize(subscriptionID int64, links []ParsedLink, existing []db.Outboun
 			tag = uniqueTag(tagPrefix+slug(link.Remark), usedTags)
 		}
 		usedTags[tag] = true
-		nodes = append(nodes, db.MaterializedSubscriptionOutbound{
+		nodes = append(nodes, model.MaterializedSubscriptionOutbound{
 			ID: existingID, Tag: tag, Remark: firstNonEmpty(link.Remark, link.Address), Protocol: link.Protocol, Address: link.Address, Port: link.Port,
 			Username: link.Username, Password: link.Password, SubscriptionIdentity: identity, RawLink: link.RawLink, SettingsJSON: link.SettingsJSON, Position: i,
 		})

@@ -3,7 +3,6 @@ package center
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -21,6 +20,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/audit"
 	"github.com/shusfun/weir/internal/store/ent/resource"
+	"github.com/shusfun/weir/internal/taskqueue"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -74,7 +74,7 @@ func (s *Server) previewDiagnostic(c *gin.Context) {
 	for _, item := range req.Items {
 		entry, e := s.diagnosticEntry(ctx, item)
 		if e != nil {
-			if ent.IsNotFound(e) || errors.Is(e, sql.ErrNoRows) {
+			if ent.IsNotFound(e) || errors.Is(e, taskqueue.ErrNotFound) {
 				failure(c, 404, "diagnostic_item_not_found")
 			} else {
 				failInternal(c, 503, "diagnostic_unavailable", e)
@@ -356,7 +356,7 @@ func (s *Server) diagnosticEntry(ctx context.Context, item diagnostic.Selection)
 			e.Evidence["protocol"] = caps.Protocol
 			// Component identifiers and model versions are reported data too.
 			e.ExternalData["reported_components"] = diagnostic.Text(jsonText(caps.Components))
-		} else if !errors.Is(err, sql.ErrNoRows) {
+		} else if !errors.Is(err, taskqueue.ErrNotFound) {
 			return e, err
 		} else {
 			e.Limitations = append(e.Limitations, "能力文档未知。")
@@ -390,7 +390,7 @@ func (s *Server) diagnosticEntry(ctx context.Context, item diagnostic.Selection)
 		if v.LastError != "" {
 			e.Actual = "failed"
 		}
-		e.Evidence = map[string]any{"source_id": id, "fetched_at": v.FetchedAt, "node_count": v.NodeCount, "known_nodes": v.KnownNodes, "configuration": map[string]any{"enabled": v.Enabled, "node_cache": v.NodeCache, "plus_as_space": v.PlusAsSpace, "exclude_traffic": v.ExcludeTraffic}}
+		e.Evidence = map[string]any{"source_id": id, "fetched_at": v.FetchedAt, "node_count": v.NodeCount, "configuration": map[string]any{"enabled": v.Enabled, "node_cache": v.NodeCache, "plus_as_space": v.PlusAsSpace, "exclude_traffic": v.ExcludeTraffic}}
 		e.ExternalData = map[string]string{"name": diagnostic.Text(v.Name), "upstream_error": diagnostic.Text(v.LastError)}
 		if v.LastError == "source_content_invalid" || v.LastError == "source_no_supported_nodes" {
 			e.Evidence["error_code"] = v.LastError
@@ -507,8 +507,8 @@ func (s *Server) diagnosticTask(ctx context.Context, e diagnostic.Entry) (diagno
 		e.Limitations = append(e.Limitations, "错误位置由执行端报告，需对照对应版本源码核实。")
 	}
 	var resultID string
-	err = s.Store.DB.QueryRowContext(ctx, `SELECT id FROM worker_tasks WHERE kind=$1 AND trace_id=$2 AND gate_id=$3 AND status='succeeded' ORDER BY created_at DESC,id DESC LIMIT 1`, contracts.TaskTraceRead, r.Task.TraceID, r.GateID).Scan(&resultID)
-	if errors.Is(err, sql.ErrNoRows) {
+	resultID, err = s.Store.Tasks.LatestSucceeded(ctx, contracts.TaskTraceRead, r.Task.TraceID, r.GateID)
+	if errors.Is(err, taskqueue.ErrNotFound) {
 		e.Limitations = append(e.Limitations, "Gate 明细未取得：先在系统状态读取时间线再预览；离线或过期时无法补全。")
 	} else if err != nil {
 		return e, err

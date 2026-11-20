@@ -3,17 +3,19 @@ import { NodeSummary, nodeTitle } from "./node-summary";
 // 一个窗口建 / 改用户：账号、额度、周期、按月重置、节点范围、是否允许自建链式代理。
 import { useState } from "react";
 import { Button, CheckboxField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, FormSection, Input, PasswordInput, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SwitchField, SwitchGroup } from "@weir/ui";
-import { api } from "../api";
+import { api, clause } from "../api";
 import { useFormAction } from "../lib/action";
 import { field, useConsoleContext } from "../lib/console-context";
 import { fromLocalInput, fromUnits, localInput, toUnits, units, type NodeItem, type Unit, type UserItem } from "../lib/core";
 
-export function UserForm({ value, nodes, close, saved }: { value: UserItem | "new" | null; nodes: NodeItem[]; close: () => void; saved: (u: UserItem) => void }) {
+// nodesState：节点列表还在读取或读取失败时写明原因，不能显示成「还没有节点」
+export type NodesState = { loading: boolean; error?: unknown };
+export function UserForm({ value, nodes, nodesState, close, saved }: { value: UserItem | "new" | null; nodes: NodeItem[]; nodesState: NodesState; close: () => void; saved: (u: UserItem) => void }) {
   if (!value) return null;
-  return <UserFormDialog key={value === "new" ? "new" : value.id} value={value} nodes={nodes} close={close} saved={saved} />;
+  return <UserFormDialog key={value === "new" ? "new" : value.id} value={value} nodes={nodes} nodesState={nodesState} close={close} saved={saved} />;
 }
 
-function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new"; nodes: NodeItem[]; close: () => void; saved: (u: UserItem) => void }) {
+function UserFormDialog({ value, nodes, nodesState, close, saved }: { value: UserItem | "new"; nodes: NodeItem[]; nodesState: NodesState; close: () => void; saved: (u: UserItem) => void }) {
   const isNew = value === "new";
   const u = isNew ? undefined : value;
   const [initQuota, initUnit] = toUnits(u?.quota ?? 0);
@@ -109,7 +111,7 @@ function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new
             {!all && u?.role !== "admin" && (
               <div className="rounded-[var(--weir-radius)] border border-[var(--weir-line-soft)] bg-[var(--weir-well)] px-[var(--weir-space-4)] py-[var(--weir-space-3)]">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="text-fine font-semibold text-[var(--weir-ink-2)]">可用节点（已选 {picked.length} / {nodes.length}）</span>
+                  <span className="text-fine font-semibold text-[var(--weir-ink-2)]">可用节点（已选 {picked.length}{nodesState.loading ? "" : ` / ${nodes.length}`}）</span>
                   {nodes.length > 0 && (
                     <button
                       type="button"
@@ -121,7 +123,7 @@ function UserFormDialog({ value, nodes, close, saved }: { value: UserItem | "new
                   )}
                 </div>
                 <div className="grid max-h-44 gap-2 overflow-y-auto">
-                  {nodes.length === 0 ? <small className="text-[var(--weir-ink-3)]">还没有节点。</small> : nodes.map((n) => (
+                  {nodesState.error ? <small className="text-[var(--weir-bad-ink)]">读取节点失败：{clause(nodesState.error)}</small> : nodesState.loading ? <small className="text-[var(--weir-ink-3)]">正在读取节点…</small> : nodes.length === 0 ? <small className="text-[var(--weir-ink-3)]">还没有节点。</small> : nodes.map((n) => (
                     <CheckboxField
                       key={n.id}
                       label={<NodeSummary node={n} />}

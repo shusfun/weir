@@ -278,8 +278,9 @@ func (_q *RouteQuery) Clone() *RouteQuery {
 		predicates: append([]predicate.Route{}, _q.predicates...),
 		withExit:   _q.withExit.Clone(),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -552,6 +553,12 @@ func (_q *RouteQuery) ForShare(opts ...sql.LockOption) *RouteQuery {
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *RouteQuery) Modify(modifiers ...func(s *sql.Selector)) *RouteSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // RouteGroupBy is the group-by builder for Route entities.
 type RouteGroupBy struct {
 	selector
@@ -640,4 +647,10 @@ func (_s *RouteSelect) sqlScan(ctx context.Context, root *RouteQuery, v any) err
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *RouteSelect) Modify(modifiers ...func(s *sql.Selector)) *RouteSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

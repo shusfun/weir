@@ -509,3 +509,17 @@ func SanitizeNodeForYaml(nodeURL string) string {
 	}
 	return nodeURL
 }
+
+// LinkName 取节点链接里的显示名：vmess 读载荷里的 ps，其余协议读 # 之后的部分。
+// 订阅源统计地区与倍率、订阅组按属性挑选都用它。
+func LinkName(link string) string {
+	if rest, ok := strings.CutPrefix(strings.TrimSpace(link), "vmess://"); ok {
+		if o, ok := decodeVmessPayload(rest).(*js.Object); ok {
+			if ps, ok := o.Get("ps").(string); ok {
+				return ps
+			}
+		}
+		return ""
+	}
+	return extractName(link)
+}

@@ -12,6 +12,7 @@ import { queryClient } from "./lib/query";
 import { watchSystemTheme } from "./theme";
 import { bootAppearance } from "./appearance";
 import { hasUnsavedChanges } from "./lib/dirty";
+import { Favicon } from "./components/brand-mark";
 function UnsavedGuard() {
   const confirm = useConfirm();
   const blocker = useBlocker(() => hasUnsavedChanges());
@@ -28,4 +29,4 @@ function UnsavedGuard() {
 const router = createBrowserRouter([{path:"*",element:<><UnsavedGuard /><PageScrollArea viewportProps={{tabIndex:-1}}><QueryStatus /><Application /></PageScrollArea></>}]);
 watchSystemTheme();
 bootAppearance();
-createRoot(document.getElementById("root")!).render(<StrictMode><QueryClientProvider client={queryClient}><ToastProvider><ConfirmProvider><RouterProvider router={router} /></ConfirmProvider></ToastProvider></QueryClientProvider></StrictMode>);
+createRoot(document.getElementById("root")!).render(<StrictMode><QueryClientProvider client={queryClient}><Favicon /><ToastProvider><ConfirmProvider><RouterProvider router={router} /></ConfirmProvider></ToastProvider></QueryClientProvider></StrictMode>);

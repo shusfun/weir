@@ -46,11 +46,9 @@ func fetchSource(ctx context.Context, f Fetcher, cache Cache, s Source, o Option
 		return nodes
 	}
 	ua := SourceUserAgent(s, o.UserAgent)
+	res.UserAgent = ua
 	if scoped, ok := cache.(interface{ ForSource(Source, string) Cache }); ok {
 		cache = scoped.ForSource(s, ua)
-		// The shared runtime count can describe another client's representation.
-		// A scoped cache supplies its own baseline for sharp-drop protection.
-		s.KnownNodes = 0
 	}
 	finish := beginStage(ctx, "subscription.source", s.ID)
 	defer func() { finish(res.Error, res.FromCache) }()
@@ -62,17 +60,31 @@ func fetchSource(ctx context.Context, f Fetcher, cache Cache, s Source, o Option
 		if ok {
 			res.FromCache = true
 			res.Nodes = rawNodeCount(nodes)
+			res.basis = nodes
 		}
 		return process(nodes), ok
 	}
-	resp, err := f.Get(ctx, s.URL, ua)
+	if o.CacheOnly {
+		var nodes []string
+		ok := false
+		if cache != nil {
+			nodes, ok = cache.Load(ctx, s.ID)
+		}
+		if !ok {
+			res.Error = "source_not_cached"
+			return nil, res
+		}
+		res.FromCache, res.Nodes, res.basis = true, rawNodeCount(nodes), nodes
+		return process(nodes), res
+	}
+	resp, err := f.Get(WithSourceID(ctx, s.ID), s.URL, ua)
+	res.Location, res.RouteReason = resp.Location, resp.RouteReason
 	if err != nil {
 		res.Error = err.Error()
 		nodes, _ := cached()
 		return nodes, res
 	}
 	res.UserInfo, res.Title = resp.UserInfo, resp.Title
-	res.Location = resp.Location
 	nodes, err := parseSourceContent(string(resp.Body), s.PlusAsSpace)
 	if err != nil {
 		res.Error = err.Error()
@@ -86,28 +98,19 @@ func fetchSource(ctx context.Context, f Fetcher, cache Cache, s Source, o Option
 		res.Error = "source_empty_rejected"
 		if cache != nil {
 			if old, ok := cache.Load(ctx, s.ID); ok {
-				res.FromCache, res.Nodes = true, rawNodeCount(old)
+				res.FromCache, res.Nodes, res.basis = true, rawNodeCount(old), old
 				return process(old), res
 			}
 		}
 		return nil, res
 	}
-	if s.NodeCache && real > 0 && suspiciousDrop(s.KnownNodes, real) {
-		res.Error = "node_count_drop_rejected"
-		if fallback, ok := cached(); ok {
-			return fallback, res
-		}
-	}
-	if cache != nil {
-		if old, ok := cache.Load(ctx, s.ID); s.NodeCache && real > 0 && ok && suspiciousDrop(rawNodeCount(old), real) {
-			res.Error, res.FromCache, res.Nodes = "node_count_drop_rejected", true, rawNodeCount(old)
-			processed := process(old)
-			return processed, res
-		}
+	// 机场节点经常增减：节点数变化直接采用新结果，变化量由调用方展示，不再拦截骤减。
+	if cache != nil && !o.DeferCacheWrite {
 		cache.Store(ctx, s.ID, nodes)
 	}
 	res.Nodes = real
 	res.RawNodes = append([]string{}, nodes...)
+	res.basis = res.RawNodes
 	processed := process(nodes)
 	return processed, res
 }

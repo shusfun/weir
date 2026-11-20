@@ -253,8 +253,9 @@ func (_q *SubPullQuery) Clone() *SubPullQuery {
 		inters:     append([]Interceptor{}, _q.inters...),
 		predicates: append([]predicate.SubPull{}, _q.predicates...),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -473,6 +474,12 @@ func (_q *SubPullQuery) ForShare(opts ...sql.LockOption) *SubPullQuery {
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *SubPullQuery) Modify(modifiers ...func(s *sql.Selector)) *SubPullSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // SubPullGroupBy is the group-by builder for SubPull entities.
 type SubPullGroupBy struct {
 	selector
@@ -561,4 +568,10 @@ func (_s *SubPullSelect) sqlScan(ctx context.Context, root *SubPullQuery, v any)
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *SubPullSelect) Modify(modifiers ...func(s *sql.Selector)) *SubPullSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

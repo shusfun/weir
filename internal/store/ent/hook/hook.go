@@ -141,6 +141,18 @@ func (f GateActionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, 
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GateActionMutation", m)
 }
 
+// The KVFunc type is an adapter to allow the use of ordinary
+// function as KV mutator.
+type KVFunc func(context.Context, *ent.KVMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f KVFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.KVMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.KVMutation", m)
+}
+
 // The KernelDriverFunc type is an adapter to allow the use of ordinary
 // function as KernelDriver mutator.
 type KernelDriverFunc func(context.Context, *ent.KernelDriverMutation) (ent.Value, error)
@@ -333,6 +345,18 @@ func (f SubSourceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, e
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SubSourceMutation", m)
 }
 
+// The SubscriptionCacheEntryFunc type is an adapter to allow the use of ordinary
+// function as SubscriptionCacheEntry mutator.
+type SubscriptionCacheEntryFunc func(context.Context, *ent.SubscriptionCacheEntryMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SubscriptionCacheEntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SubscriptionCacheEntryMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SubscriptionCacheEntryMutation", m)
+}
+
 // The UserFunc type is an adapter to allow the use of ordinary
 // function as User mutator.
 type UserFunc func(context.Context, *ent.UserMutation) (ent.Value, error)
@@ -343,6 +367,66 @@ func (f UserFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error)
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserMutation", m)
+}
+
+// The WorkerActivityFunc type is an adapter to allow the use of ordinary
+// function as WorkerActivity mutator.
+type WorkerActivityFunc func(context.Context, *ent.WorkerActivityMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f WorkerActivityFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.WorkerActivityMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkerActivityMutation", m)
+}
+
+// The WorkerAttemptFunc type is an adapter to allow the use of ordinary
+// function as WorkerAttempt mutator.
+type WorkerAttemptFunc func(context.Context, *ent.WorkerAttemptMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f WorkerAttemptFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.WorkerAttemptMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkerAttemptMutation", m)
+}
+
+// The WorkerCapabilityFunc type is an adapter to allow the use of ordinary
+// function as WorkerCapability mutator.
+type WorkerCapabilityFunc func(context.Context, *ent.WorkerCapabilityMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f WorkerCapabilityFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.WorkerCapabilityMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkerCapabilityMutation", m)
+}
+
+// The WorkerCommunicationFunc type is an adapter to allow the use of ordinary
+// function as WorkerCommunication mutator.
+type WorkerCommunicationFunc func(context.Context, *ent.WorkerCommunicationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f WorkerCommunicationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.WorkerCommunicationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkerCommunicationMutation", m)
+}
+
+// The WorkerTaskFunc type is an adapter to allow the use of ordinary
+// function as WorkerTask mutator.
+type WorkerTaskFunc func(context.Context, *ent.WorkerTaskMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f WorkerTaskFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.WorkerTaskMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkerTaskMutation", m)
 }
 
 // Condition is a hook condition function.

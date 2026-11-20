@@ -21,8 +21,9 @@ import (
 // ExitBindingUpdate is the builder for updating ExitBinding entities.
 type ExitBindingUpdate struct {
 	config
-	hooks    []Hook
-	mutation *ExitBindingMutation
+	hooks     []Hook
+	mutation  *ExitBindingMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the ExitBindingUpdate builder.
@@ -391,6 +392,12 @@ func (_u *ExitBindingUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *ExitBindingUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *ExitBindingUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *ExitBindingUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -506,6 +513,7 @@ func (_u *ExitBindingUpdate) sqlSave(ctx context.Context) (_node int, err error)
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{exitbinding.Label}
@@ -521,9 +529,10 @@ func (_u *ExitBindingUpdate) sqlSave(ctx context.Context) (_node int, err error)
 // ExitBindingUpdateOne is the builder for updating a single ExitBinding entity.
 type ExitBindingUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *ExitBindingMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *ExitBindingMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetExitID sets the "exit_id" field.
@@ -899,6 +908,12 @@ func (_u *ExitBindingUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *ExitBindingUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *ExitBindingUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *ExitBindingUpdateOne) sqlSave(ctx context.Context) (_node *ExitBinding, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -1031,6 +1046,7 @@ func (_u *ExitBindingUpdateOne) sqlSave(ctx context.Context) (_node *ExitBinding
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &ExitBinding{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

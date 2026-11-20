@@ -14,6 +14,12 @@ func TestUserNodeSummaryUsesEffectiveExitAndKeepsAdminEndpointPrivate(t *testing
 	n := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "ss2022", "name": "入口备注", "skip_probe": true, "exit": map[string]any{"kind": "socks5", "remark": "管理员出口", "address": "203.0.113.99", "port": 1080, "password": "admin-private-password"}}, 200)
 	mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "summary@test.invalid", "password": "SummaryTest2026", "all_nodes": true, "allow_chain": true}, 200)
 	u := login(t, s, "summary@test.invalid", "SummaryTest2026")
+	gateName, err := s.Store.Ent.Gate.Get(t.Context(), int(g.id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 链式线路的显示名是「入口 VPS > 代理」，代理摘要本身只写代理名。
+	line := func(name string) string { return gateName.Name + " > " + name }
 	check := func(name string) {
 		t.Helper()
 		w := u.do("GET", "/api/v1/me/nodes", nil, nil)
@@ -21,7 +27,7 @@ func TestUserNodeSummaryUsesEffectiveExitAndKeepsAdminEndpointPrivate(t *testing
 			t.Fatalf("unsafe summary: %d %s", w.Code, w.Body)
 		}
 		v := decode(t, w)["items"].([]any)[0].(map[string]any)
-		if v["display_name"] != name || v["exit_summary"].(map[string]any)["name"] != name {
+		if v["display_name"] != line(name) || v["exit_summary"].(map[string]any)["name"] != name {
 			t.Fatalf("summary=%v", v)
 		}
 	}
@@ -35,7 +41,7 @@ func TestUserNodeSummaryUsesEffectiveExitAndKeepsAdminEndpointPrivate(t *testing
 		t.Helper()
 		info := mustJSON(t, u, "GET", "/api/v1/sub-info/"+token, nil, 200)
 		for _, item := range info["nodes"].([]any) {
-			if got := item.(map[string]any)["name"]; got != "[链式] "+name {
+			if got := item.(map[string]any)["name"]; got != "[链式] "+line(name) {
 				t.Fatalf("subscription=%v", got)
 			}
 		}

@@ -450,11 +450,6 @@ export function LoginPage({ done }: { done: () => void }) {
             </nav>
           </CardContent>
         </Card>
-        <p className="auth-footnote">背景是全球公开机房之间的随机航线，不代表任何真实节点或流量。</p>
-        <p className="auth-footer">
-          <ShieldCheck size={14} />
-          账户验证与设备配对独立管理
-        </p>
       </div>
     </main>
   );

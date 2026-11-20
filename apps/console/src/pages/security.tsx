@@ -6,7 +6,6 @@ import { QRCodeSVG } from "qrcode.react";
 import {
   Badge,
   CodeBlock,
-  InsightBanner,
   Notice,
   PageHeader,
   PageState,
@@ -21,7 +20,7 @@ import {
   DialogFooter,
   Form,
 } from "@weir/ui";
-import { api, fieldErrors, formError, reauthFields, type FormError } from "../api";
+import { api, clause, fieldErrors, formError, reauthFields, type FormError } from "../api";
 import { accountPasswordError } from "../password";
 import { passkey } from "../lib/passkey";
 import { date, type Account, type Items } from "../lib/models";
@@ -32,14 +31,14 @@ import { field, useConsoleContext } from "../lib/console-context";
 type Passkey = { id: number; created_at: string };
 type Action = "totp" | "passkey" | "password" | "disable" | "delete-key";
 type Field = "password" | "code" | "next";
-// 登录方式卡片：图标 + 当前状态 + 标题说明 + 操作
+// 登录方式卡片：标题 + 需要关注的状态 + 说明 + 操作。状态只在这里说一次，页头不再重复。
 function SecurityMethod({
-  status,
+  status = null,
   title,
   description,
   children,
 }: {
-  status: ReactNode;
+  status?: ReactNode;
   title: string;
   description: string;
   children: ReactNode;
@@ -82,11 +81,11 @@ export function SecurityPage({ loginRequired }: { loginRequired: () => void }) {
   const [enrollment, setEnrollment] = useState<{ secret?: string; url?: string; recovery?: string[] }>({});
   const errors = useMemo(() => fieldErrors(error), [error]);
   const titles: Record<Action, string> = {
-    totp: "绑定身份验证器",
-    passkey: "绑定 Passkey",
+    totp: "开启两步验证",
+    passkey: "添加通行密钥",
     password: "修改登录密码",
-    disable: "停用身份验证器",
-    "delete-key": "删除 Passkey",
+    disable: "停用两步验证",
+    "delete-key": "删除通行密钥",
   };
   function clearInputs() {
     setPassword("");
@@ -131,16 +130,16 @@ export function SecurityPage({ loginRequired }: { loginRequired: () => void }) {
         await passkey("register", undefined, password, code);
         await cache.invalidateQueries({ queryKey: ["self-passkeys"] });
         finish();
-        setNotice("Passkey 已绑定");
+        setNotice("通行密钥已添加");
       } else if (action === "password") {
         await api("/security/password", "POST", { password, code, new_password: next });
         finish("密码已更新，所有旧会话已撤销。");
       } else if (action === "disable") {
         await api("/security/totp/disable", "POST", { password, code });
-        finish("身份验证器已停用，原恢复码和旧会话已失效。");
+        finish("两步验证已停用，原恢复码和旧会话已失效。");
       } else if (action === "delete-key") {
         await api("/security/passkeys/" + keyId, "DELETE", { password, code });
-        finish("Passkey 已删除，所有旧会话已撤销。");
+        finish("通行密钥已删除，所有旧会话已撤销。");
       }
     } catch (e) {
       setError(formError(e, { ...reauthFields, weak_password: "next", invalid_password: "next" }));
@@ -151,7 +150,7 @@ export function SecurityPage({ loginRequired }: { loginRequired: () => void }) {
   useConsoleContext({ page: "账户安全", dialog: action ? { title: titles[action] } : undefined, form: action ? [field("password", "当前密码", password, true), field("code", "验证码", code, true), field("next", "新密码", next, true)] : undefined });
   return (
     <div className="stack security-page">
-      <PageHeader size="data" title="账户安全" description={account.data ? <span className="weir-sum"><span>通行密钥 <b>{keys.isPending || keys.error ? "未知" : (keys.data?.items.length ?? 0) > 0 ? "已启用" : "未绑定"}</b></span>{account.data.totp_enrolled ? <span>两步验证 <b>已启用</b></span> : <span className="text-[var(--weir-warn-ink)]">两步验证未开启</span>}</span> : "管理登录方式与有效会话。"} />
+      <PageHeader size="data" title="账户安全" description="管理登录方式与已登录设备。" />
       {notice && <Notice role="status">{notice}</Notice>}
       {account.isPending ? (
         <State loading />
@@ -159,12 +158,8 @@ export function SecurityPage({ loginRequired }: { loginRequired: () => void }) {
         <State error={account.error} onRetry={() => account.refetch()} />
       ) : (
         <>
-        {!account.data.totp_enrolled && (
-          <InsightBanner icon="!" laya={false} title="开启两步验证" progress="密码泄露了，别人也登不进来" action={<Button disabled={!policy.data?.totp_enabled} onClick={() => open("totp")}>开启</Button>} />
-        )}
         <div className="security-method-grid">
           <SecurityMethod
-            status={<span className="text-meta text-[var(--weir-ink-3)]">已设置</span>}
             title="登录密码"
             description="建议和通行密钥一起使用；修改后其他设备需要重新登录"
           >
@@ -175,11 +170,11 @@ export function SecurityPage({ loginRequired }: { loginRequired: () => void }) {
           <SecurityMethod
             status={account.data?.totp_enrolled ? <Badge variant="soft" tone="ok">已开启</Badge> : <Badge variant="soft" tone="warn">未开启</Badge>}
             title="两步验证"
-            description="验证器 App 的 6 位动态码"
+            description={account.data?.totp_enrolled ? "验证器 App 的 6 位动态码" : "开启后密码泄露了，别人也登不进来"}
           >
             <Button
               size="sm"
-              variant="ghost"
+              variant={account.data?.totp_enrolled ? "ghost" : "default"}
               disabled={!account.data?.totp_enrolled && !policy.data?.totp_enabled}
               onClick={() => open(account.data?.totp_enrolled ? "disable" : "totp")}
             >
@@ -190,7 +185,7 @@ export function SecurityPage({ loginRequired }: { loginRequired: () => void }) {
             )}
           </SecurityMethod>
           <SecurityMethod
-            status={keys.isPending || keys.error ? <span className="text-meta text-[var(--weir-ink-3)]">未知</span> : (keys.data?.items?.length ?? 0) > 0 ? <Badge variant="soft" tone="ok">已启用</Badge> : <span className="text-meta text-[var(--weir-ink-3)]">未绑定</span>}
+            status={keys.error ? <Badge variant="soft" tone="bad" title={clause(keys.error)}>读取失败</Badge> : (keys.data?.items?.length ?? 0) > 0 ? <Badge variant="soft" tone="ok">{keys.data!.items.length} 个</Badge> : null}
             title="通行密钥"
             description="用设备的指纹、面容或安全密钥登录"
           >
@@ -205,29 +200,30 @@ export function SecurityPage({ loginRequired }: { loginRequired: () => void }) {
       {policy.error && <State error={policy.error} onRetry={() => policy.refetch()} />}
       <Card>
         <CardContent>
-          <SectionHeader title="已绑定的 Passkey" description="删除需要验证身份，并撤销全部会话。" />
+          <SectionHeader title="已添加的通行密钥" description="删除需要验证身份，并撤销全部会话。" />
           {keys.isPending ? (
             <State loading />
           ) : keys.error ? (
             <State error={keys.error} onRetry={() => keys.refetch()} />
           ) : !keys.data?.items?.length ? (
-            <PageState size="sm" kind="empty" title="尚未绑定 Passkey，可添加此设备或安全密钥。" />
+            <PageState size="sm" kind="empty" title="还没有通行密钥，可添加此设备或安全密钥。" />
           ) : (
             keys.data.items.map((key, i) => (
               <div className="list-row" key={key.id}>
                 <div>
-                  <strong>Passkey {i + 1}</strong>
+                  <strong>通行密钥 {i + 1}</strong>
                   <small>绑定于 {date(key.created_at)}</small>
                 </div>
                 <Button
                   variant="destructive"
                   size="sm"
+                  aria-label={`删除通行密钥 ${i + 1}`}
                   onClick={() => {
                     setKeyId(key.id);
                     open("delete-key");
                   }}
                 >
-                  删除 Passkey {i + 1}
+                  删除
                 </Button>
               </div>
             ))
@@ -345,16 +341,16 @@ export function SecurityPage({ loginRequired }: { loginRequired: () => void }) {
                   busy={busy}
                 >
                   {enrollment.url
-                      ? "确认 TOTP"
+                      ? "确认开启"
                       : action === "totp"
                         ? "生成绑定二维码"
                         : action === "passkey"
-                          ? "继续绑定 Passkey"
+                          ? "继续添加通行密钥"
                           : action === "password"
                             ? "确认修改密码"
                             : action === "disable"
-                              ? "确认停用 TOTP"
-                              : "确认删除 Passkey"}
+                              ? "确认停用两步验证"
+                              : "确认删除通行密钥"}
                 </Button>
               </DialogFooter>
             </Form>

@@ -253,8 +253,9 @@ func (_q *GateActionQuery) Clone() *GateActionQuery {
 		inters:     append([]Interceptor{}, _q.inters...),
 		predicates: append([]predicate.GateAction{}, _q.predicates...),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -473,6 +474,12 @@ func (_q *GateActionQuery) ForShare(opts ...sql.LockOption) *GateActionQuery {
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *GateActionQuery) Modify(modifiers ...func(s *sql.Selector)) *GateActionSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // GateActionGroupBy is the group-by builder for GateAction entities.
 type GateActionGroupBy struct {
 	selector
@@ -561,4 +568,10 @@ func (_s *GateActionSelect) sqlScan(ctx context.Context, root *GateActionQuery, 
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *GateActionSelect) Modify(modifiers ...func(s *sql.Selector)) *GateActionSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

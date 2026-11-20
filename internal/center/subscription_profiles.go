@@ -22,7 +22,6 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/user"
 	"github.com/shusfun/weir/internal/sub"
 	"github.com/shusfun/weir/internal/subgroup"
-	"github.com/shusfun/weir/packages/contracts"
 )
 
 // profileSettings 是订阅组可覆盖的设置；缺省字段沿用全局默认。
@@ -46,6 +45,8 @@ type profileSettings struct {
 	DNSMode          *string `json:"dns_mode,omitempty"`
 	CustomDNS        *string `json:"custom_dns,omitempty"`
 	RegionOverrides  *[]any  `json:"region_overrides,omitempty"`
+	// Pick 是挑选条件：订阅组不保存固定节点清单，每次按最新节点重新挑选。
+	Pick *subgroup.Pick `json:"pick,omitempty"`
 }
 
 func decodeProfileSettings(m map[string]any) (profileSettings, error) {
@@ -61,6 +62,11 @@ func decodeProfileSettings(m map[string]any) (profileSettings, error) {
 	}
 	if ps.Engine != nil && !validSubscriptionEngine(*ps.Engine) {
 		return ps, errors.New("invalid_engine")
+	}
+	if ps.Pick != nil {
+		if err := ps.Pick.Validate(); err != nil {
+			return ps, fmt.Errorf("invalid_pick: %w", err)
+		}
 	}
 	var regions []any
 	for _, field := range []struct {
@@ -152,17 +158,7 @@ func (s *Server) saveProfileLocked(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var req struct {
-		Name       *string                         `json:"name"`
-		Enabled    *bool                           `json:"enabled"`
-		AllSources *bool                           `json:"all_sources"`
-		SourceIDs  *[]int                          `json:"source_ids"`
-		NodeIDs    *[]int                          `json:"node_ids"`
-		Members    *[]contracts.SubscriptionMember `json:"members"`
-		Operators  *[]any                          `json:"operators"`
-		Settings   *map[string]any                 `json:"settings"`
-		ExpiresAt  json.RawMessage                 `json:"expires_at"`
-	}
+	var req profileDraft
 	if !bind(c, &req) {
 		return
 	}
@@ -190,111 +186,40 @@ func (s *Server) saveProfileLocked(c *gin.Context) {
 		m = update.Mutation()
 		*candidate = *old
 	}
+	applied, bad := s.applyProfileDraft(ctx, candidate, req)
+	if bad != nil {
+		failDetail(c, bad.status, bad.code, bad.detail, nil)
+		return
+	}
 	if req.Name != nil {
-		name := strings.TrimSpace(*req.Name)
-		if name == "" || len(name) > 100 {
-			failure(c, 400, "invalid_name")
-			return
-		}
-		m.SetName(name)
+		m.SetName(candidate.Name)
 	}
 	if req.Enabled != nil {
-		m.SetEnabled(*req.Enabled)
+		m.SetEnabled(candidate.Enabled)
 	}
 	if req.AllSources != nil {
-		m.SetAllSources(*req.AllSources)
-		candidate.AllSources = *req.AllSources
+		m.SetAllSources(candidate.AllSources)
 	}
-	if req.Members != nil && (req.SourceIDs != nil || req.NodeIDs != nil) {
-		failure(c, 400, "invalid_profile_members")
-		return
-	}
-	// 选择的源与节点必须存在；保存顺序即输出顺序。
-	if req.SourceIDs != nil {
-		ids := dedupe(*req.SourceIDs)
-		if n, _ := s.Store.Ent.SubSource.Query().Where(subsource.IDIn(ids...)).Count(ctx); n != len(ids) {
-			failure(c, 400, "unknown_source")
-			return
-		}
-		m.SetSourceIds(ids)
-	}
-	if req.NodeIDs != nil {
-		ids := dedupe(*req.NodeIDs)
-		if n, _ := s.Store.Ent.SubNode.Query().Where(subnode.IDIn(ids...)).Count(ctx); n != len(ids) {
-			failure(c, 400, "unknown_node")
-			return
-		}
-		m.SetNodeIds(ids)
+	if req.SourceIDs != nil || req.NodeIDs != nil || req.Members != nil {
+		m.SetSourceIds(candidate.SourceIds)
+		m.SetNodeIds(candidate.NodeIds)
 	}
 	if req.Members != nil {
-		candidate.Members = append([]contracts.SubscriptionMember{}, (*req.Members)...)
 		m.SetMembers(candidate.Members)
-		var sources, nodes []int
-		for _, member := range candidate.Members {
-			switch member.Kind {
-			case "source":
-				sources = append(sources, member.ID)
-			case "node":
-				nodes = append(nodes, member.ID)
-			}
-		}
-		m.SetSourceIds(sources)
-		m.SetNodeIds(nodes)
-	} else if req.SourceIDs != nil || req.NodeIDs != nil || candidate.AllSources {
-		candidate.Members = nil
+	} else if applied.membersCleared {
 		m.ClearMembers()
 	}
-	if err := s.checkProfileGraph(ctx, candidate); err != nil {
-		failDetail(c, 400, "invalid_profile_members", err.Error(), nil)
-		return
-	}
 	if req.Operators != nil {
-		if err := checkOperators(*req.Operators); err != nil {
-			failDetail(c, 400, "invalid_operators", err.Error(), nil)
-			return
-		}
-		m.SetOperators(*req.Operators)
+		m.SetOperators(candidate.Operators)
 	}
 	if req.Settings != nil {
-		if (*req.Settings)["engine"] == "external" {
-			failure(c, 400, "external_conversion_removed")
-			return
-		}
-		ps, err := decodeProfileSettings(*req.Settings)
-		if err != nil {
-			code := "invalid_profile_settings"
-			if strings.HasPrefix(err.Error(), "invalid_filter_include:") {
-				code = "invalid_filter_include"
-			} else if strings.HasPrefix(err.Error(), "invalid_filter_exclude:") {
-				code = "invalid_filter_exclude"
-			} else if strings.HasPrefix(err.Error(), "invalid_") || strings.HasPrefix(err.Error(), "custom_dns_") || strings.HasPrefix(err.Error(), "too_many_region_") {
-				code = "invalid_" + subscriptionRenderingField(err)
-			}
-			failDetail(c, 400, code, err.Error(), nil)
-			return
-		}
-		if ps.RuleLevel != nil && !validRuleLevel(*ps.RuleLevel) {
-			failure(c, 400, "invalid_profile_settings")
-			return
-		}
-		if ps.Template != nil {
-			if _, err = s.resolveTemplate(ctx, *ps.Template); err != nil {
-				failDetail(c, 400, "invalid_template", err.Error(), nil)
-				return
-			}
-		}
-		m.SetSettings(*req.Settings)
+		m.SetSettings(candidate.Settings)
 	}
 	if len(req.ExpiresAt) > 0 {
-		if string(req.ExpiresAt) == "null" {
+		if candidate.ExpiresAt == nil {
 			m.ClearExpiresAt()
 		} else {
-			var t time.Time
-			if json.Unmarshal(req.ExpiresAt, &t) != nil {
-				failure(c, 400, "invalid_expires_at")
-				return
-			}
-			m.SetExpiresAt(t)
+			m.SetExpiresAt(*candidate.ExpiresAt)
 		}
 	}
 	if dryRun(c, dryResult{Preview: []string{"保存订阅组；分配了它的用户下次更新订阅时拿到新内容"}}) {
@@ -410,6 +335,13 @@ func (s *Server) groupInput(ctx context.Context, p *ent.SubProfile, ua string) (
 	}
 	if ps.ManualPrefix != nil && strings.TrimSpace(*ps.ManualPrefix) != "" {
 		o.ManualPrefix = *ps.ManualPrefix
+	}
+	if ps.Pick != nil {
+		o.Pick = *ps.Pick
+	}
+	o.CacheOnly = cacheOnly(ctx)
+	if o.Pick.OnlyAlive || o.CacheOnly {
+		o.Health = s.sourceHealthLookup
 	}
 	if ps.RuleLevel != nil && *ps.RuleLevel != "" {
 		g.RuleLevel = *ps.RuleLevel
@@ -532,7 +464,7 @@ func trafficNotices(sources []*ent.SubSource, profileExpires *time.Time) []strin
 func (s *Server) groupNodes(ctx context.Context, p *ent.SubProfile, ua string, refresh bool) (string, []subgroup.SourceResult, subgroup.Template, SubscriptionSettings, error) {
 	ctx, finish := s.startSubscriptionRun(ctx, p.ID)
 	remaining := maxSubscriptionMembers
-	body, results, tpl, settings, err := s.groupNodesAt(ctx, p, ua, refresh, map[int]bool{}, 0, &remaining)
+	body, results, tpl, settings, err := s.groupNodesAt(ctx, p, ua, refresh, map[int]bool{}, 0, &remaining, nil)
 	if err != nil {
 		now := time.Now().UTC()
 		recordSubscriptionStage(ctx, p.ID, subgroup.Stage{Operation: "subscription.resolve", Started: now, Finished: now, Error: err.Error()}, "center.groupNodesAt")
@@ -541,7 +473,8 @@ func (s *Server) groupNodes(ctx context.Context, p *ent.SubProfile, ua string, r
 	return body, results, tpl, settings, err
 }
 
-func (s *Server) groupNodesAt(ctx context.Context, p *ent.SubProfile, ua string, refresh bool, path map[int]bool, depth int, remaining *int) (string, []subgroup.SourceResult, subgroup.Template, SubscriptionSettings, error) {
+// report 不为 nil 时填入本组（不含嵌套组内部）的处理过程，供编辑预览。
+func (s *Server) groupNodesAt(ctx context.Context, p *ent.SubProfile, ua string, refresh bool, path map[int]bool, depth int, remaining *int, report *subgroup.Report) (string, []subgroup.SourceResult, subgroup.Template, SubscriptionSettings, error) {
 	if err := ctx.Err(); err != nil {
 		return "", nil, subgroup.Template{}, SubscriptionSettings{}, err
 	}
@@ -583,7 +516,7 @@ func (s *Server) groupNodesAt(ctx context.Context, p *ent.SubProfile, ua string,
 			if err != nil {
 				return "", nil, tpl, g, fmt.Errorf("unknown_profile")
 			}
-			body, results, _, _, err := s.groupNodesAt(ctx, child, ua, refresh, path, depth+1, remaining)
+			body, results, _, _, err := s.groupNodesAt(ctx, child, ua, refresh, path, depth+1, remaining, nil)
 			if err != nil {
 				return "", nil, tpl, g, err
 			}
@@ -596,9 +529,6 @@ func (s *Server) groupNodesAt(ctx context.Context, p *ent.SubProfile, ua string,
 		}
 	}
 	dependencies := append([]subgroup.Source(nil), sources...)
-	for i := range dependencies {
-		dependencies[i].KnownNodes = 0
-	}
 	key := "sub-group:" + itoa(p.ID) + ":" + version(struct {
 		Generation string
 		Semantics  string
@@ -625,14 +555,20 @@ func (s *Server) groupNodesAt(ctx context.Context, p *ent.SubProfile, ua string,
 			return raw, nil, tpl, g, nil
 		}
 	}
-	list, results, combineErr := subgroup.CombineBounded(ctx, s.subFetcher(), kvCache{s}, sources, manual, o, maxSubscriptionOutputBytes)
+	o.DeferCacheWrite = true
+	list, results, combined, combineErr := subgroup.CombineReport(ctx, s.subFetcher(), kvCache{s}, sources, manual, o, maxSubscriptionOutputBytes)
+	if report != nil {
+		*report = combined
+	}
 	if combineErr != nil {
 		return "", results, tpl, g, combineErr
 	}
 	if len(list) > maxSubscriptionOutputBytes {
 		return "", results, tpl, g, errors.New("profile_output_too_large")
 	}
-	s.recordResults(ctx, results)
+	if !o.CacheOnly {
+		s.recordResults(ctx, results)
+	}
 	results = append(results, nestedResults...)
 	for _, result := range results {
 		if result.Error != "" {
@@ -783,117 +719,6 @@ func (s *Server) unshareProfile(c *gin.Context) {
 	}
 	s.audit(c, "subscription.profile.unshare", "profile:"+itoa(id), "ok")
 	c.Status(204)
-}
-
-// setGrants 设定可使用该订阅组的用户（完整列表）。新增的用户各得一个独立令牌，移除的用户令牌立即失效。
-func (s *Server) setGrants(c *gin.Context) {
-	id, ok := idParam(c)
-	if !ok {
-		return
-	}
-	var req struct {
-		UserIDs []int `json:"user_ids"`
-	}
-	if !bind(c, &req) {
-		return
-	}
-	ctx := c.Request.Context()
-	if _, err := s.Store.Ent.SubProfile.Get(ctx, id); err != nil {
-		failure(c, 404, "profile_not_found")
-		return
-	}
-	want := dedupe(req.UserIDs)
-	if len(want) > 0 {
-		n, err := s.Store.Ent.User.Query().Where(userIDIn(want)).Count(ctx)
-		if err != nil {
-			failInternal(c, 503, "query_failed", err)
-			return
-		}
-		if n != len(want) {
-			failure(c, 400, "unknown_user")
-			return
-		}
-	}
-	existing, err := s.Store.Ent.SubGrant.Query().Where(subgrant.ProfileIDEQ(id)).All(ctx)
-	if err != nil {
-		failInternal(c, 503, "query_failed", err)
-		return
-	}
-	if c.GetBool(dryRunKey) {
-		removed := 0
-		for _, g := range existing {
-			if !contains(want, g.UserID) {
-				removed++
-			}
-		}
-		preview := []string{fmt.Sprintf("分配给 %d 个用户；新分配的用户各得到一个订阅地址", len(want))}
-		if removed > 0 {
-			preview = append(preview, fmt.Sprintf("取消 %d 个用户的分配，他们的这个订阅地址随即失效", removed))
-		}
-		dryRun(c, dryResult{Preview: preview})
-		return
-	}
-	if err = s.replaceProfileGrants(ctx, id, want); err != nil {
-		failInternal(c, 500, "save_failed", err)
-		return
-	}
-	s.audit(c, "subscription.profile.grants", "profile:"+itoa(id), fmt.Sprintf("ok users=%d", len(want)))
-	p, _ := s.Store.Ent.SubProfile.Get(ctx, id)
-	view, err := s.profileView(ctx, p)
-	if err != nil {
-		failInternal(c, 503, "query_failed", err)
-		return
-	}
-	c.JSON(200, view)
-}
-
-func (s *Server) replaceProfileGrants(ctx context.Context, id int, want []int) error {
-	return s.Store.Lock.Do(ctx, "subscription-profile-grants:"+itoa(id), func(ctx context.Context) error {
-		tx, err := s.Store.Ent.Tx(ctx)
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
-		if _, err = tx.SubProfile.Get(ctx, id); err != nil {
-			return err
-		}
-		want = dedupe(want)
-		if len(want) > 0 {
-			n, err := tx.User.Query().Where(user.IDIn(want...)).Count(ctx)
-			if err != nil {
-				return err
-			}
-			if n != len(want) {
-				return errors.New("unknown_user")
-			}
-		}
-		existing, err := tx.SubGrant.Query().Where(subgrant.ProfileIDEQ(id)).All(ctx)
-		if err != nil {
-			return err
-		}
-		have := make(map[int]bool, len(existing))
-		wanted := make(map[int]bool, len(want))
-		for _, uid := range want {
-			wanted[uid] = true
-		}
-		for _, grant := range existing {
-			if !wanted[grant.UserID] {
-				if err = tx.SubGrant.DeleteOne(grant).Exec(ctx); err != nil {
-					return err
-				}
-			} else {
-				have[grant.UserID] = true
-			}
-		}
-		for uid := range wanted {
-			if !have[uid] {
-				if _, err = tx.SubGrant.Create().SetProfileID(id).SetUserID(uid).SetToken(randomToken(24)).Save(ctx); err != nil {
-					return err
-				}
-			}
-		}
-		return tx.Commit()
-	})
 }
 
 // myGroups 列出分配给当前用户的订阅组与各自的订阅地址。

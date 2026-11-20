@@ -4,46 +4,32 @@ import (
 	"context"
 	"time"
 
+	"github.com/shusfun/weir/internal/store/ent/predicate"
+	"github.com/shusfun/weir/internal/store/ent/workertask"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
-const projectionFilter = `status IN ('succeeded','failed','expired','unknown','cancelled') AND projection_after>=0 AND (legacy_id<>0 OR kind IN ('` + contracts.TaskLayaPrepare + `','` + contracts.TaskLayaInstall + `','` + contracts.TaskLayaRemove + `'))`
+// terminalStatuses 是不会再变化的任务状态。
+var terminalStatuses = []string{"succeeded", "failed", "expired", "unknown", "cancelled"}
 
-func (q *Queue) initProjections(ctx context.Context) error {
-	rows, err := q.DB.QueryContext(ctx, `SELECT projection_after FROM worker_tasks LIMIT 0`)
-	if err == nil {
-		err = rows.Close()
-	} else {
-		_, err = q.DB.ExecContext(ctx, `ALTER TABLE worker_tasks ADD COLUMN projection_after BIGINT NOT NULL DEFAULT 0`)
-	}
-	if err != nil {
-		return err
-	}
-	_, err = q.DB.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS worker_tasks_projection ON worker_tasks(projection_after,id) WHERE `+projectionFilter)
-	return err
+// ProjectionPending 是仍需把结果投影回业务记录的任务：已结束、未标记完成（projection_after>=0），
+// 并且是旧动作的适配行或 Laya 托管任务。部分索引 worker_tasks_projection 的谓词与此一致，
+// 定义在 store/raw_worker_schema.go，两处必须同步修改。
+func ProjectionPending() predicate.WorkerTask {
+	return workertask.And(
+		workertask.StatusIn(terminalStatuses...),
+		workertask.ProjectionAfterGTE(0),
+		workertask.Or(workertask.LegacyIDNEQ(0), workertask.KindIn(contracts.TaskLayaPrepare, contracts.TaskLayaInstall, contracts.TaskLayaRemove)),
+	)
 }
 
 func (q *Queue) PendingProjections(ctx context.Context, now time.Time) ([]string, error) {
-	rows, err := q.DB.QueryContext(ctx, `SELECT id FROM worker_tasks WHERE `+projectionFilter+` AND projection_after<=$1 ORDER BY projection_after,id LIMIT 100`, now.UnixMilli())
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err = rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
+	return q.Ent.WorkerTask.Query().Where(ProjectionPending(), workertask.ProjectionAfterLTE(now.UnixMilli())).
+		Order(workertask.ByProjectionAfter(), workertask.ByID()).Limit(100).IDs(ctx)
 }
 
 func (q *Queue) NeedsProjection(ctx context.Context, id string) (bool, error) {
-	var pending bool
-	err := q.DB.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM worker_tasks WHERE id=$1 AND `+projectionFilter+`)`, id).Scan(&pending)
-	return pending, err
+	return q.Ent.WorkerTask.Query().Where(workertask.ID(id), ProjectionPending()).Exist(ctx)
 }
 
 func (q *Queue) ResolveProjection(ctx context.Context, id string, retryAt time.Time) error {
@@ -51,6 +37,5 @@ func (q *Queue) ResolveProjection(ctx context.Context, id string, retryAt time.T
 	if !retryAt.IsZero() {
 		after = retryAt.UnixMilli()
 	}
-	_, err := q.DB.ExecContext(ctx, `UPDATE worker_tasks SET projection_after=$1 WHERE id=$2 AND projection_after>=0`, after, id)
-	return err
+	return q.Ent.WorkerTask.Update().Where(workertask.ID(id), workertask.ProjectionAfterGTE(0)).SetProjectionAfter(after).Exec(ctx)
 }

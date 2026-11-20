@@ -18,7 +18,7 @@ export function MyNodesPage() {
     {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => void q.refetch()} /> : q.data.items.length === 0 ? <State empty="还没有获授权的节点" detail="请联系管理员分配节点，授权后可在订阅中选用。" /> : <InsetGroup data-tour="my-node-catalog"><InsetRows>
       {q.data.items.map(item => <InsetRow key={item.ref} className="flex items-start gap-[var(--weir-space-3)]">
         <StatusLamp tone={objectStatus(item.state)[1]} label={objectStatus(item.state)[0]} />
-        <div className="stack-tight min-w-0"><strong>{item.name || item.ref}</strong><span><Badge variant="soft" tone="neutral">{origins[item.kind]} · {protocolNames[item.protocol] || item.protocol || "协议未知"}</Badge></span><small>{item.state.reason}</small><small className="text-[var(--weir-ink-3)]">观测时间 {date(item.state.observed_at ?? undefined)} · {item.chain_entry ? "可作为链式入口" : "不能作为链式入口"}</small>{item.kind === "node" && <BrowserPathTest nodeId={item.id} />}</div>
+        <div className="stack-tight min-w-0"><strong>{item.name || origins[item.kind]}</strong><span><Badge variant="soft" tone="neutral">{origins[item.kind]} · {protocolNames[item.protocol] || item.protocol || "协议未知"}</Badge></span>{item.state.reason && <small>{item.state.reason}</small>}<small className="text-[var(--weir-ink-3)]">{[item.state.observed_at ? `${date(item.state.observed_at)} 更新` : null, item.chain_entry ? "可作为链式入口" : null].filter(Boolean).join(" · ")}</small>{item.kind === "node" && <BrowserPathTest nodeId={item.id} />}</div>
       </InsetRow>)}
     </InsetRows></InsetGroup>}
   </div>;

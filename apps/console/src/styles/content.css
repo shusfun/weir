@@ -90,6 +90,13 @@
  .weir-user-detail-columns [data-slot="section-header"] { min-height: var(--weir-tap-sm); }
 }
 
+/* 订阅组编辑：左侧表单，右侧实时节点预览；窄屏时预览排在表单下方。 */
+.weir-profile-editor { display: grid; gap: var(--weir-gap-21); grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 1025px) {
+ .weir-profile-editor { grid-template-columns: minmax(0, 1fr) minmax(0, 0.81fr); }
+ .weir-profile-preview { position: sticky; top: 0; padding-left: var(--weir-gap-21); border-left: 1px solid var(--weir-line-soft); }
+}
+
 
 .subscription-import-page { display: grid; width: 100%; max-width: var(--weir-public-width); margin-inline: auto; gap: var(--weir-gap-17); padding: var(--weir-gap-17); }
 

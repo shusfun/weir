@@ -19,8 +19,9 @@ import (
 // SubSourceUpdate is the builder for updating SubSource entities.
 type SubSourceUpdate struct {
 	config
-	hooks    []Hook
-	mutation *SubSourceMutation
+	hooks     []Hook
+	mutation  *SubSourceMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the SubSourceUpdate builder.
@@ -222,6 +223,48 @@ func (_u *SubSourceUpdate) AddPosition(v int) *SubSourceUpdate {
 	return _u
 }
 
+// SetGateID sets the "gate_id" field.
+func (_u *SubSourceUpdate) SetGateID(v int) *SubSourceUpdate {
+	_u.mutation.ResetGateID()
+	_u.mutation.SetGateID(v)
+	return _u
+}
+
+// SetNillableGateID sets the "gate_id" field if the given value is not nil.
+func (_u *SubSourceUpdate) SetNillableGateID(v *int) *SubSourceUpdate {
+	if v != nil {
+		_u.SetGateID(*v)
+	}
+	return _u
+}
+
+// AddGateID adds value to the "gate_id" field.
+func (_u *SubSourceUpdate) AddGateID(v int) *SubSourceUpdate {
+	_u.mutation.AddGateID(v)
+	return _u
+}
+
+// SetRefreshHours sets the "refresh_hours" field.
+func (_u *SubSourceUpdate) SetRefreshHours(v int) *SubSourceUpdate {
+	_u.mutation.ResetRefreshHours()
+	_u.mutation.SetRefreshHours(v)
+	return _u
+}
+
+// SetNillableRefreshHours sets the "refresh_hours" field if the given value is not nil.
+func (_u *SubSourceUpdate) SetNillableRefreshHours(v *int) *SubSourceUpdate {
+	if v != nil {
+		_u.SetRefreshHours(*v)
+	}
+	return _u
+}
+
+// AddRefreshHours adds value to the "refresh_hours" field.
+func (_u *SubSourceUpdate) AddRefreshHours(v int) *SubSourceUpdate {
+	_u.mutation.AddRefreshHours(v)
+	return _u
+}
+
 // SetNodeCount sets the "node_count" field.
 func (_u *SubSourceUpdate) SetNodeCount(v int) *SubSourceUpdate {
 	_u.mutation.ResetNodeCount()
@@ -326,6 +369,78 @@ func (_u *SubSourceUpdate) ClearFetchedAt() *SubSourceUpdate {
 	return _u
 }
 
+// SetLastAttemptAt sets the "last_attempt_at" field.
+func (_u *SubSourceUpdate) SetLastAttemptAt(v time.Time) *SubSourceUpdate {
+	_u.mutation.SetLastAttemptAt(v)
+	return _u
+}
+
+// SetNillableLastAttemptAt sets the "last_attempt_at" field if the given value is not nil.
+func (_u *SubSourceUpdate) SetNillableLastAttemptAt(v *time.Time) *SubSourceUpdate {
+	if v != nil {
+		_u.SetLastAttemptAt(*v)
+	}
+	return _u
+}
+
+// ClearLastAttemptAt clears the value of the "last_attempt_at" field.
+func (_u *SubSourceUpdate) ClearLastAttemptAt() *SubSourceUpdate {
+	_u.mutation.ClearLastAttemptAt()
+	return _u
+}
+
+// SetLastLocation sets the "last_location" field.
+func (_u *SubSourceUpdate) SetLastLocation(v string) *SubSourceUpdate {
+	_u.mutation.SetLastLocation(v)
+	return _u
+}
+
+// SetNillableLastLocation sets the "last_location" field if the given value is not nil.
+func (_u *SubSourceUpdate) SetNillableLastLocation(v *string) *SubSourceUpdate {
+	if v != nil {
+		_u.SetLastLocation(*v)
+	}
+	return _u
+}
+
+// SetLastRouteReason sets the "last_route_reason" field.
+func (_u *SubSourceUpdate) SetLastRouteReason(v string) *SubSourceUpdate {
+	_u.mutation.SetLastRouteReason(v)
+	return _u
+}
+
+// SetNillableLastRouteReason sets the "last_route_reason" field if the given value is not nil.
+func (_u *SubSourceUpdate) SetNillableLastRouteReason(v *string) *SubSourceUpdate {
+	if v != nil {
+		_u.SetLastRouteReason(*v)
+	}
+	return _u
+}
+
+// SetHealth sets the "health" field.
+func (_u *SubSourceUpdate) SetHealth(v map[string]interface{}) *SubSourceUpdate {
+	_u.mutation.SetHealth(v)
+	return _u
+}
+
+// ClearHealth clears the value of the "health" field.
+func (_u *SubSourceUpdate) ClearHealth() *SubSourceUpdate {
+	_u.mutation.ClearHealth()
+	return _u
+}
+
+// SetChange sets the "change" field.
+func (_u *SubSourceUpdate) SetChange(v map[string]interface{}) *SubSourceUpdate {
+	_u.mutation.SetChange(v)
+	return _u
+}
+
+// ClearChange clears the value of the "change" field.
+func (_u *SubSourceUpdate) ClearChange() *SubSourceUpdate {
+	_u.mutation.ClearChange()
+	return _u
+}
+
 // Mutation returns the SubSourceMutation object of the builder.
 func (_u *SubSourceUpdate) Mutation() *SubSourceMutation {
 	return _u.mutation
@@ -386,6 +501,12 @@ func (_u *SubSourceUpdate) check() error {
 		}
 	}
 	return nil
+}
+
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *SubSourceUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *SubSourceUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
 }
 
 func (_u *SubSourceUpdate) sqlSave(ctx context.Context) (_node int, err error) {
@@ -450,6 +571,18 @@ func (_u *SubSourceUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedPosition(); ok {
 		_spec.AddField(subsource.FieldPosition, field.TypeInt, value)
 	}
+	if value, ok := _u.mutation.GateID(); ok {
+		_spec.SetField(subsource.FieldGateID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedGateID(); ok {
+		_spec.AddField(subsource.FieldGateID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.RefreshHours(); ok {
+		_spec.SetField(subsource.FieldRefreshHours, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedRefreshHours(); ok {
+		_spec.AddField(subsource.FieldRefreshHours, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.NodeCount(); ok {
 		_spec.SetField(subsource.FieldNodeCount, field.TypeInt, value)
 	}
@@ -477,6 +610,31 @@ func (_u *SubSourceUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.FetchedAtCleared() {
 		_spec.ClearField(subsource.FieldFetchedAt, field.TypeTime)
 	}
+	if value, ok := _u.mutation.LastAttemptAt(); ok {
+		_spec.SetField(subsource.FieldLastAttemptAt, field.TypeTime, value)
+	}
+	if _u.mutation.LastAttemptAtCleared() {
+		_spec.ClearField(subsource.FieldLastAttemptAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.LastLocation(); ok {
+		_spec.SetField(subsource.FieldLastLocation, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.LastRouteReason(); ok {
+		_spec.SetField(subsource.FieldLastRouteReason, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Health(); ok {
+		_spec.SetField(subsource.FieldHealth, field.TypeJSON, value)
+	}
+	if _u.mutation.HealthCleared() {
+		_spec.ClearField(subsource.FieldHealth, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.Change(); ok {
+		_spec.SetField(subsource.FieldChange, field.TypeJSON, value)
+	}
+	if _u.mutation.ChangeCleared() {
+		_spec.ClearField(subsource.FieldChange, field.TypeJSON)
+	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{subsource.Label}
@@ -492,9 +650,10 @@ func (_u *SubSourceUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 // SubSourceUpdateOne is the builder for updating a single SubSource entity.
 type SubSourceUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *SubSourceMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *SubSourceMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetName sets the "name" field.
@@ -690,6 +849,48 @@ func (_u *SubSourceUpdateOne) AddPosition(v int) *SubSourceUpdateOne {
 	return _u
 }
 
+// SetGateID sets the "gate_id" field.
+func (_u *SubSourceUpdateOne) SetGateID(v int) *SubSourceUpdateOne {
+	_u.mutation.ResetGateID()
+	_u.mutation.SetGateID(v)
+	return _u
+}
+
+// SetNillableGateID sets the "gate_id" field if the given value is not nil.
+func (_u *SubSourceUpdateOne) SetNillableGateID(v *int) *SubSourceUpdateOne {
+	if v != nil {
+		_u.SetGateID(*v)
+	}
+	return _u
+}
+
+// AddGateID adds value to the "gate_id" field.
+func (_u *SubSourceUpdateOne) AddGateID(v int) *SubSourceUpdateOne {
+	_u.mutation.AddGateID(v)
+	return _u
+}
+
+// SetRefreshHours sets the "refresh_hours" field.
+func (_u *SubSourceUpdateOne) SetRefreshHours(v int) *SubSourceUpdateOne {
+	_u.mutation.ResetRefreshHours()
+	_u.mutation.SetRefreshHours(v)
+	return _u
+}
+
+// SetNillableRefreshHours sets the "refresh_hours" field if the given value is not nil.
+func (_u *SubSourceUpdateOne) SetNillableRefreshHours(v *int) *SubSourceUpdateOne {
+	if v != nil {
+		_u.SetRefreshHours(*v)
+	}
+	return _u
+}
+
+// AddRefreshHours adds value to the "refresh_hours" field.
+func (_u *SubSourceUpdateOne) AddRefreshHours(v int) *SubSourceUpdateOne {
+	_u.mutation.AddRefreshHours(v)
+	return _u
+}
+
 // SetNodeCount sets the "node_count" field.
 func (_u *SubSourceUpdateOne) SetNodeCount(v int) *SubSourceUpdateOne {
 	_u.mutation.ResetNodeCount()
@@ -794,6 +995,78 @@ func (_u *SubSourceUpdateOne) ClearFetchedAt() *SubSourceUpdateOne {
 	return _u
 }
 
+// SetLastAttemptAt sets the "last_attempt_at" field.
+func (_u *SubSourceUpdateOne) SetLastAttemptAt(v time.Time) *SubSourceUpdateOne {
+	_u.mutation.SetLastAttemptAt(v)
+	return _u
+}
+
+// SetNillableLastAttemptAt sets the "last_attempt_at" field if the given value is not nil.
+func (_u *SubSourceUpdateOne) SetNillableLastAttemptAt(v *time.Time) *SubSourceUpdateOne {
+	if v != nil {
+		_u.SetLastAttemptAt(*v)
+	}
+	return _u
+}
+
+// ClearLastAttemptAt clears the value of the "last_attempt_at" field.
+func (_u *SubSourceUpdateOne) ClearLastAttemptAt() *SubSourceUpdateOne {
+	_u.mutation.ClearLastAttemptAt()
+	return _u
+}
+
+// SetLastLocation sets the "last_location" field.
+func (_u *SubSourceUpdateOne) SetLastLocation(v string) *SubSourceUpdateOne {
+	_u.mutation.SetLastLocation(v)
+	return _u
+}
+
+// SetNillableLastLocation sets the "last_location" field if the given value is not nil.
+func (_u *SubSourceUpdateOne) SetNillableLastLocation(v *string) *SubSourceUpdateOne {
+	if v != nil {
+		_u.SetLastLocation(*v)
+	}
+	return _u
+}
+
+// SetLastRouteReason sets the "last_route_reason" field.
+func (_u *SubSourceUpdateOne) SetLastRouteReason(v string) *SubSourceUpdateOne {
+	_u.mutation.SetLastRouteReason(v)
+	return _u
+}
+
+// SetNillableLastRouteReason sets the "last_route_reason" field if the given value is not nil.
+func (_u *SubSourceUpdateOne) SetNillableLastRouteReason(v *string) *SubSourceUpdateOne {
+	if v != nil {
+		_u.SetLastRouteReason(*v)
+	}
+	return _u
+}
+
+// SetHealth sets the "health" field.
+func (_u *SubSourceUpdateOne) SetHealth(v map[string]interface{}) *SubSourceUpdateOne {
+	_u.mutation.SetHealth(v)
+	return _u
+}
+
+// ClearHealth clears the value of the "health" field.
+func (_u *SubSourceUpdateOne) ClearHealth() *SubSourceUpdateOne {
+	_u.mutation.ClearHealth()
+	return _u
+}
+
+// SetChange sets the "change" field.
+func (_u *SubSourceUpdateOne) SetChange(v map[string]interface{}) *SubSourceUpdateOne {
+	_u.mutation.SetChange(v)
+	return _u
+}
+
+// ClearChange clears the value of the "change" field.
+func (_u *SubSourceUpdateOne) ClearChange() *SubSourceUpdateOne {
+	_u.mutation.ClearChange()
+	return _u
+}
+
 // Mutation returns the SubSourceMutation object of the builder.
 func (_u *SubSourceUpdateOne) Mutation() *SubSourceMutation {
 	return _u.mutation
@@ -867,6 +1140,12 @@ func (_u *SubSourceUpdateOne) check() error {
 		}
 	}
 	return nil
+}
+
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *SubSourceUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *SubSourceUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
 }
 
 func (_u *SubSourceUpdateOne) sqlSave(ctx context.Context) (_node *SubSource, err error) {
@@ -948,6 +1227,18 @@ func (_u *SubSourceUpdateOne) sqlSave(ctx context.Context) (_node *SubSource, er
 	if value, ok := _u.mutation.AddedPosition(); ok {
 		_spec.AddField(subsource.FieldPosition, field.TypeInt, value)
 	}
+	if value, ok := _u.mutation.GateID(); ok {
+		_spec.SetField(subsource.FieldGateID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedGateID(); ok {
+		_spec.AddField(subsource.FieldGateID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.RefreshHours(); ok {
+		_spec.SetField(subsource.FieldRefreshHours, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedRefreshHours(); ok {
+		_spec.AddField(subsource.FieldRefreshHours, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.NodeCount(); ok {
 		_spec.SetField(subsource.FieldNodeCount, field.TypeInt, value)
 	}
@@ -975,6 +1266,31 @@ func (_u *SubSourceUpdateOne) sqlSave(ctx context.Context) (_node *SubSource, er
 	if _u.mutation.FetchedAtCleared() {
 		_spec.ClearField(subsource.FieldFetchedAt, field.TypeTime)
 	}
+	if value, ok := _u.mutation.LastAttemptAt(); ok {
+		_spec.SetField(subsource.FieldLastAttemptAt, field.TypeTime, value)
+	}
+	if _u.mutation.LastAttemptAtCleared() {
+		_spec.ClearField(subsource.FieldLastAttemptAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.LastLocation(); ok {
+		_spec.SetField(subsource.FieldLastLocation, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.LastRouteReason(); ok {
+		_spec.SetField(subsource.FieldLastRouteReason, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Health(); ok {
+		_spec.SetField(subsource.FieldHealth, field.TypeJSON, value)
+	}
+	if _u.mutation.HealthCleared() {
+		_spec.ClearField(subsource.FieldHealth, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.Change(); ok {
+		_spec.SetField(subsource.FieldChange, field.TypeJSON, value)
+	}
+	if _u.mutation.ChangeCleared() {
+		_spec.ClearField(subsource.FieldChange, field.TypeJSON)
+	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &SubSource{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

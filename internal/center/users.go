@@ -2,6 +2,7 @@ package center
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -37,6 +38,7 @@ const (
 func (s *Server) userRoutes(auth, admin *gin.RouterGroup) {
 	s.catalogRoutes(auth, admin)
 	s.usageRoutes(auth, admin)
+	s.credSyncRoutes(auth, admin)
 	admin.GET("/users", s.listUsers)
 	admin.POST("/users", s.createUser)
 	admin.GET("/users/:uid", s.getUser)
@@ -457,7 +459,7 @@ func (s *Server) deleteUser(c *gin.Context) {
 	}
 	s.dropSessions(ctx, u.ID)
 	// 用户链的内部出口凭据随之失效。
-	if err = s.SyncAll(ctx); err == nil {
+	if _, err = s.RequestCredSync(ctx); err == nil {
 		err = s.bumpGates(ctx, gates)
 	}
 	if err != nil {
@@ -1053,20 +1055,13 @@ func (s *Server) createChainNow(c *gin.Context, admin bool) {
 }
 
 // afterChainChange 维护出口节点上的内部凭据并同步该用户的凭据。
+// afterChainChange 立即同步这个用户自己的凭据（返回给页面的链接马上可用），
+// 链式代理需要的内部出口凭据与 Gate 版本交给后台合并同步，不在请求里占全局锁。
 func (s *Server) afterChainChange(ctx context.Context, uid int) error {
-	var gates []int
-	err := s.Store.Lock.Do(ctx, "cred-sync", func(ctx context.Context) error {
-		var err error
-		gates, err = s.syncInternalLocked(ctx)
+	if _, err := s.RequestCredSync(ctx); err != nil {
 		return err
-	})
-	if err == nil {
-		err = s.bumpGates(ctx, gates)
 	}
-	if err == nil {
-		err = s.SyncUser(ctx, uid)
-	}
-	return err
+	return s.SyncUser(ctx, uid)
 }
 
 func (s *Server) respondChain(c *gin.Context, u *ent.User, id int) {
@@ -1249,34 +1244,71 @@ func (s *Server) deleteChain(c *gin.Context, admin bool) {
 	if !ok {
 		return
 	}
-	ctx := c.Request.Context()
-	gates, _ := s.userGates(ctx, u.ID)
-	if _, err := s.Store.Ent.Credential.Delete().Where(credential.ChainIDEQ(ch.ID)).Exec(ctx); err != nil {
-		failInternal(c, 500, "delete_failed", err)
-		return
-	}
-	if err := s.Store.Ent.Chain.DeleteOne(ch).Exec(ctx); err != nil {
-		failInternal(c, 500, "delete_failed", err)
-		return
-	}
-	// 链接里引用这条链的记录一并移除。
-	links, _ := s.Store.Ent.Link.Query().Where(link.UserIDEQ(u.ID)).All(ctx)
-	for _, l := range links {
-		if contains(l.ChainIds, ch.ID) {
-			kept := []int{}
-			for _, id := range l.ChainIds {
-				if id != ch.ID {
-					kept = append(kept, id)
-				}
-			}
-			_ = l.Update().SetChainIds(kept).Exec(ctx)
+	ctx := WithRevisionCause(c.Request.Context(), "chain.delete", c.GetInt("user_id"))
+	var gates []int
+	err := s.Store.Lock.Do(ctx, "cred-sync", func(ctx context.Context) error {
+		tx, err := s.Store.Ent.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+		if err != nil {
+			return err
 		}
-	}
-	if err := s.afterChainChange(ctx, u.ID); err != nil {
-		failInternal(c, 500, "sync_failed", err)
+		defer tx.Rollback()
+		current, err := tx.Chain.Query().Where(chain.IDEQ(ch.ID), chain.UserIDEQ(u.ID)).Only(ctx)
+		if err != nil {
+			return err
+		}
+		entry, err := tx.Node.Get(ctx, current.EntryNodeID)
+		if err != nil && !ent.IsNotFound(err) {
+			return err
+		}
+		if entry != nil {
+			gates = []int{entry.GateID}
+		}
+		if err = removeChainTx(ctx, tx, current); err != nil {
+			return err
+		}
+		if err = advanceRevocations(ctx, tx, gates); err != nil {
+			return err
+		}
+		return tx.Commit()
+	})
+	if err != nil {
+		failInternal(c, 500, "delete_failed", err)
 		return
 	}
-	_ = s.bumpGates(ctx, gates)
+	s.notifyRevocations(ctx, gates)
+	s.logDeletionCleanup(ctx, "cred.user.reconcile", s.afterChainChange(ctx, u.ID))
+	_, err = s.pruneGroupMembers(ctx)
+	s.logDeletionCleanup(ctx, "proxy.group.prune", err)
 	s.audit(c, "chain.delete", "chain:"+itoa(ch.ID), "ok")
 	c.Status(204)
+}
+
+// removeChainTx 在事务里删除链式代理、它的凭据，并从用户的链接里摘掉它。
+// 删链式、删代理的级联都经这里；提交后再调用 pruneGroupMembers 清理客户端分组。
+func removeChainTx(ctx context.Context, tx *ent.Tx, ch *ent.Chain) error {
+	if _, err := tx.Credential.Delete().Where(credential.ChainIDEQ(ch.ID)).Exec(ctx); err != nil {
+		return err
+	}
+	if err := tx.Chain.DeleteOne(ch).Exec(ctx); err != nil {
+		return err
+	}
+	links, err := tx.Link.Query().Where(link.UserIDEQ(ch.UserID)).All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, l := range links {
+		if !contains(l.ChainIds, ch.ID) {
+			continue
+		}
+		kept := make([]int, 0, len(l.ChainIds))
+		for _, id := range l.ChainIds {
+			if id != ch.ID {
+				kept = append(kept, id)
+			}
+		}
+		if err = tx.Link.UpdateOne(l).SetChainIds(kept).Exec(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
 }

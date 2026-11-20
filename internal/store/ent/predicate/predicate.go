@@ -39,6 +39,9 @@ type Gate func(*sql.Selector)
 // GateAction is the predicate function for gateaction builders.
 type GateAction func(*sql.Selector)
 
+// KV is the predicate function for kv builders.
+type KV func(*sql.Selector)
+
 // KernelDriver is the predicate function for kerneldriver builders.
 type KernelDriver func(*sql.Selector)
 
@@ -87,5 +90,23 @@ type SubPull func(*sql.Selector)
 // SubSource is the predicate function for subsource builders.
 type SubSource func(*sql.Selector)
 
+// SubscriptionCacheEntry is the predicate function for subscriptioncacheentry builders.
+type SubscriptionCacheEntry func(*sql.Selector)
+
 // User is the predicate function for user builders.
 type User func(*sql.Selector)
+
+// WorkerActivity is the predicate function for workeractivity builders.
+type WorkerActivity func(*sql.Selector)
+
+// WorkerAttempt is the predicate function for workerattempt builders.
+type WorkerAttempt func(*sql.Selector)
+
+// WorkerCapability is the predicate function for workercapability builders.
+type WorkerCapability func(*sql.Selector)
+
+// WorkerCommunication is the predicate function for workercommunication builders.
+type WorkerCommunication func(*sql.Selector)
+
+// WorkerTask is the predicate function for workertask builders.
+type WorkerTask func(*sql.Selector)

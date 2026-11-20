@@ -253,8 +253,9 @@ func (_q *SettingQuery) Clone() *SettingQuery {
 		inters:     append([]Interceptor{}, _q.inters...),
 		predicates: append([]predicate.Setting{}, _q.predicates...),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -473,6 +474,12 @@ func (_q *SettingQuery) ForShare(opts ...sql.LockOption) *SettingQuery {
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *SettingQuery) Modify(modifiers ...func(s *sql.Selector)) *SettingSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // SettingGroupBy is the group-by builder for Setting entities.
 type SettingGroupBy struct {
 	selector
@@ -561,4 +568,10 @@ func (_s *SettingSelect) sqlScan(ctx context.Context, root *SettingQuery, v any)
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *SettingSelect) Modify(modifiers ...func(s *sql.Selector)) *SettingSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

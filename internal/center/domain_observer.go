@@ -2,7 +2,6 @@ package center
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +14,7 @@ import (
 	"github.com/shusfun/weir/internal/kernelconf"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/resource"
+	"github.com/shusfun/weir/internal/taskqueue"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -65,7 +65,7 @@ func (s *Server) compileDomainObservers(ctx context.Context, g *ent.Gate, cfg *c
 	finish := operationStage(ctx, "traffic.domains.plan", "gate_id", g.ID)
 	defer func() { finish(err) }()
 	caps, err := s.Store.Tasks.Capabilities(ctx, g.ID)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, taskqueue.ErrNotFound) {
 		return nil
 	}
 	if err != nil {

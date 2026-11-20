@@ -17,6 +17,9 @@ export function CodeList({ plans, filters, onChange, onCreatePlan }: { plans: Pl
   const query = new URLSearchParams({ page: String(filters.page) });
   for (const key of ["kind", "status", "plan_id", "id"] as const) if (filters[key]) query.set(key, filters[key]);
   const codes = useQuery({ queryKey: ["access-codes", query.toString()], queryFn: () => api(`/admin/access-codes?${query}`) as Promise<CodePage> });
+  // 领用人显示用户名：与用户页共用缓存；用户已删除时如实说明
+  const users = useQuery({ queryKey: ["users"], enabled: !!codes.data?.items.some((c) => c.used_by), queryFn: async () => (await api("/admin/users")).items as { id: number; name: string; email: string }[] });
+  const userName = (id: number) => { const u = users.data?.find((x) => x.id === id); return u ? u.name || u.email : users.isPending ? "正在读取用户" : "已删除的用户"; };
   const revoke = useRowAction<number>({ refetch: codes.refetch });
   const confirm = useConfirm();
   useConsoleContext({ list: { total: codes.data?.total, items: (codes.data?.items ?? []).map((c) => ({ type: "access_code", id: c.id, name: `${codeKinds[c.kind]} #${c.id}` })) } });
@@ -59,7 +62,7 @@ export function CodeList({ plans, filters, onChange, onCreatePlan }: { plans: Pl
         </TableCell>
         <TableCell>
           <div className="space-y-0.5">
-            {c.plan_id ? <span className="text-body font-medium"><ObjectLink to={{ type: "account_plan", id: c.plan_id, name: plans.find((p) => p.id === c.plan_id)?.name ?? `预设 #${c.plan_id}` }} /> <small className="font-mono text-[var(--weir-ink-3)]">v{c.plan_revision}</small></span> : <span className="text-meta text-[var(--weir-ink-3)]">仅注册资格（不附带套餐）</span>}
+            {c.plan_id ? <span className="text-body font-medium"><ObjectLink to={{ type: "account_plan", id: c.plan_id, name: plans.find((p) => p.id === c.plan_id)?.name ?? "已删除的套餐预设" }} />{(() => { const plan = plans.find((p) => p.id === c.plan_id); return plan && plan.revision !== c.plan_revision ? <small className="ml-1.5 text-[var(--weir-ink-3)]">签发后预设已修改，按签发时内容发放</small> : null; })()}</span> : <span className="text-meta text-[var(--weir-ink-3)]">仅注册资格（不附带套餐）</span>}
             <div className="text-meta text-[var(--weir-ink-3)]"><GrantSummary grant={c.grant} /></div>
           </div>
         </TableCell>
@@ -67,7 +70,7 @@ export function CodeList({ plans, filters, onChange, onCreatePlan }: { plans: Pl
           <div className="space-y-0.5">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="status" tone={c.status === "unused" ? "ok" : c.status === "expired" || c.status === "revoked" ? "warn" : "neutral"}>{statuses[c.status]}</Badge>
-              {c.used_by && <ObjectLink to={{ type: "user", id: c.used_by }} />}
+              {c.used_by && <ObjectLink to={{ type: "user", id: c.used_by, name: userName(c.used_by) }} />}
             </div>
             {c.used_at && <div className="text-fine text-[var(--weir-ink-3)]"><GrantSyncStatus value={c.synchronization} /></div>}
           </div>

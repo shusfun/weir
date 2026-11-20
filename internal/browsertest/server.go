@@ -23,7 +23,8 @@ import (
 	"github.com/pion/webrtc/v4"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 	"github.com/quic-go/webtransport-go"
 	"github.com/shusfun/weir/internal/buildinfo"
 	"github.com/shusfun/weir/packages/contracts"
@@ -122,54 +123,53 @@ func start(plan contracts.BrowserTestPlan, certificate tls.Certificate, bindAddr
 	settings.SetNAT1To1IPs(addresses, webrtc.ICECandidateTypeHost)
 	s.rtc = webrtc.NewAPI(webrtc.WithSettingEngine(settings))
 	tlsConfig := &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS13}
-	s.wt = &webtransport.Server{H3: http3.Server{TLSConfig: tlsConfig.Clone(), QUICConfig: &quic.Config{
+	s.wt = &webtransport.Server{H3: &http3.Server{TLSConfig: http3.ConfigureTLSConfig(tlsConfig.Clone()), QUICConfig: &quic.Config{
 		MaxIncomingStreams: 2, MaxIncomingUniStreams: 8, HandshakeIdleTimeout: 5 * time.Second,
 		MaxIdleTimeout: 10 * time.Second, EnableDatagrams: true,
-		Tracer: func(ctx context.Context, perspective logging.Perspective, connID logging.ConnectionID) *logging.ConnectionTracer {
-			traceID := ""
-			if id, ok := ctx.Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID); ok {
-				traceID = fmt.Sprint(id)
-			}
-			attrs := []any{"operation", "browser.test.measure", "phase", "quic.connection", "quic_connection_id", connID.String(), "connection_trace_id", traceID, "perspective", fmt.Sprint(perspective), "gate_id", plan.GateID, "code.file.path", "internal/browsertest/server.go", "vcs.ref.head.revision", buildinfo.Revision}
-			return &logging.ConnectionTracer{
-				StartedConnection: func(_, _ net.Addr, _, _ logging.ConnectionID) {
-					slog.Info("browser test QUIC connection", append(attrs, "outcome", "started")...)
-				},
-				ChoseALPN: func(protocol string) {
-					slog.Info("browser test QUIC connection", append(attrs, "outcome", "alpn", "protocol", protocol)...)
-				},
-				NegotiatedVersion: func(version logging.Version, _, _ []logging.Version) {
-					slog.Info("browser test QUIC connection", append(attrs, "outcome", "version", "version", fmt.Sprint(version))...)
-				},
-				ClosedConnection: func(err error) {
-					slog.Info("browser test QUIC connection", append(attrs, "outcome", "closed", "reason", quicCloseReason(err))...)
-				},
-			}
+		Tracer: func(_ context.Context, _ bool, connID quic.ConnectionID) qlogwriter.Trace {
+			return &browserQUICTrace{id: connID.String(), gateID: plan.GateID}
 		},
-	}, EnableDatagrams: true, Logger: slog.Default()}, CheckOrigin: func(r *http.Request) bool { return r.Header.Get("Origin") == plan.Origin }}
+	}, MaxHeaderBytes: 8192, Logger: slog.Default()}, CheckOrigin: func(r *http.Request) bool { return r.Header.Get("Origin") == plan.Origin }}
 	s.http = &http.Server{Handler: s, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 10 * time.Second, MaxHeaderBytes: 8192, TLSConfig: tlsConfig}
 	s.wt.H3.Handler = s
+	s.wt.H3.ConnContext = func(ctx context.Context, conn *quic.Conn) context.Context {
+		if trace, ok := conn.QlogTrace().(*browserQUICTrace); ok {
+			return context.WithValue(ctx, browserQUICTraceKey{}, trace.id)
+		}
+		return ctx
+	}
+	webtransport.ConfigureHTTP3Server(s.wt.H3)
 	s.wg.Go(func() { s.serveEnded("HTTPS", s.http.Serve(tls.NewListener(tcp, tlsConfig))) })
 	s.wg.Go(func() { s.serveEnded("QUIC", s.wt.Serve(q)) })
 	return s, nil
 }
 
-func quicCloseReason(err error) string {
-	var transport *quic.TransportError
-	var application *quic.ApplicationError
-	switch {
-	case err == nil:
-		return "closed"
-	case errors.As(err, &transport):
-		return fmt.Sprintf("transport_code=0x%x remote=%t", uint64(transport.ErrorCode), transport.Remote)
-	case errors.As(err, &application):
-		return fmt.Sprintf("application_code=0x%x remote=%t", uint64(application.ErrorCode), application.Remote)
-	case errors.Is(err, context.Canceled):
-		return "cancelled"
+type browserQUICTraceKey struct{}
+
+type browserQUICTrace struct {
+	id     string
+	gateID int
+}
+
+func (trace *browserQUICTrace) AddProducer() qlogwriter.Recorder { return trace }
+func (*browserQUICTrace) SupportsSchemas(schema string) bool     { return schema == qlog.EventSchema }
+func (*browserQUICTrace) Close() error                           { return nil }
+
+func (trace *browserQUICTrace) RecordEvent(event qlogwriter.Event) {
+	attrs := []any{"operation", "browser.test.measure", "phase", "quic.connection", "connection_trace_id", trace.id, "gate_id", trace.gateID, "code.file.path", "internal/browsertest/server.go", "vcs.ref.head.revision", buildinfo.Revision}
+	switch event := event.(type) {
+	case qlog.StartedConnection:
+		attrs = append(attrs, "outcome", "started")
+	case qlog.ALPNInformation:
+		attrs = append(attrs, "outcome", "alpn", "protocol", event.ChosenALPN)
+	case qlog.VersionInformation:
+		attrs = append(attrs, "outcome", "version", "version", fmt.Sprint(event.ChosenVersion))
+	case qlog.ConnectionClosed:
+		attrs = append(attrs, "outcome", "closed", "trigger", event.Trigger, "initiator", event.Initiator)
 	default:
-		// A peer can supply the text of a close error; never persist that text.
-		return fmt.Sprintf("%T", err)
+		return
 	}
+	slog.Info("browser test QUIC connection", attrs...)
 }
 
 func (s *Server) serveEnded(protocol string, err error) {
@@ -402,8 +402,8 @@ func browserTestPurpose(r *http.Request) string {
 
 func (s *Server) logBrowserRequest(r *http.Request, purpose, traceID, outcome, reason string) {
 	attrs := []any{"operation", "browser.test.measure", "phase", "gate.request", "outcome", outcome, "reason", reason, "trace_id", traceID, "gate_id", s.plan.GateID, "purpose", purpose, "method", r.Method, "protocol", r.Proto, "path", r.URL.Path, "origin_matches", r.Header.Get("Origin") == s.plan.Origin, "code.file.path", "internal/browsertest/server.go", "code.function.name", "ServeHTTP", "vcs.ref.head.revision", buildinfo.Revision}
-	if id, ok := r.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID); ok {
-		attrs = append(attrs, "connection_trace_id", fmt.Sprint(id))
+	if id, ok := r.Context().Value(browserQUICTraceKey{}).(string); ok {
+		attrs = append(attrs, "connection_trace_id", id)
 	}
 	slog.Info("browser test request stage", attrs...)
 }

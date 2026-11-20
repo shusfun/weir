@@ -17,6 +17,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/gateaction"
 	"github.com/shusfun/weir/internal/store/ent/kerneldriver"
+	"github.com/shusfun/weir/internal/store/ent/kv"
 	"github.com/shusfun/weir/internal/store/ent/link"
 	"github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/passkey"
@@ -34,6 +35,8 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/subpull"
 	"github.com/shusfun/weir/internal/store/ent/subsource"
 	"github.com/shusfun/weir/internal/store/ent/user"
+	"github.com/shusfun/weir/internal/store/ent/workerattempt"
+	"github.com/shusfun/weir/internal/store/ent/workertask"
 )
 
 // The init function reads all schema descriptors with runtime code
@@ -400,6 +403,12 @@ func init() {
 	gateactionDescCreatedAt := gateactionFields[7].Descriptor()
 	// gateaction.DefaultCreatedAt holds the default value on creation for the created_at field.
 	gateaction.DefaultCreatedAt = gateactionDescCreatedAt.Default.(func() time.Time)
+	kvFields := schema.KV{}.Fields()
+	_ = kvFields
+	// kvDescExpiresAt is the schema descriptor for expires_at field.
+	kvDescExpiresAt := kvFields[2].Descriptor()
+	// kv.DefaultExpiresAt holds the default value on creation for the expires_at field.
+	kv.DefaultExpiresAt = kvDescExpiresAt.Default.(int64)
 	kerneldriverFields := schema.KernelDriver{}.Fields()
 	_ = kerneldriverFields
 	// kerneldriverDescName is the schema descriptor for name field.
@@ -798,28 +807,44 @@ func init() {
 	subsourceDescPosition := subsourceFields[12].Descriptor()
 	// subsource.DefaultPosition holds the default value on creation for the position field.
 	subsource.DefaultPosition = subsourceDescPosition.Default.(int)
+	// subsourceDescGateID is the schema descriptor for gate_id field.
+	subsourceDescGateID := subsourceFields[13].Descriptor()
+	// subsource.DefaultGateID holds the default value on creation for the gate_id field.
+	subsource.DefaultGateID = subsourceDescGateID.Default.(int)
+	// subsourceDescRefreshHours is the schema descriptor for refresh_hours field.
+	subsourceDescRefreshHours := subsourceFields[14].Descriptor()
+	// subsource.DefaultRefreshHours holds the default value on creation for the refresh_hours field.
+	subsource.DefaultRefreshHours = subsourceDescRefreshHours.Default.(int)
 	// subsourceDescNodeCount is the schema descriptor for node_count field.
-	subsourceDescNodeCount := subsourceFields[13].Descriptor()
+	subsourceDescNodeCount := subsourceFields[15].Descriptor()
 	// subsource.DefaultNodeCount holds the default value on creation for the node_count field.
 	subsource.DefaultNodeCount = subsourceDescNodeCount.Default.(int)
 	// subsourceDescKnownNodes is the schema descriptor for known_nodes field.
-	subsourceDescKnownNodes := subsourceFields[14].Descriptor()
+	subsourceDescKnownNodes := subsourceFields[16].Descriptor()
 	// subsource.DefaultKnownNodes holds the default value on creation for the known_nodes field.
 	subsource.DefaultKnownNodes = subsourceDescKnownNodes.Default.(int)
 	// subsourceDescUserInfo is the schema descriptor for user_info field.
-	subsourceDescUserInfo := subsourceFields[15].Descriptor()
+	subsourceDescUserInfo := subsourceFields[17].Descriptor()
 	// subsource.DefaultUserInfo holds the default value on creation for the user_info field.
 	subsource.DefaultUserInfo = subsourceDescUserInfo.Default.(string)
 	// subsourceDescTitle is the schema descriptor for title field.
-	subsourceDescTitle := subsourceFields[16].Descriptor()
+	subsourceDescTitle := subsourceFields[18].Descriptor()
 	// subsource.DefaultTitle holds the default value on creation for the title field.
 	subsource.DefaultTitle = subsourceDescTitle.Default.(string)
 	// subsourceDescLastError is the schema descriptor for last_error field.
-	subsourceDescLastError := subsourceFields[17].Descriptor()
+	subsourceDescLastError := subsourceFields[19].Descriptor()
 	// subsource.DefaultLastError holds the default value on creation for the last_error field.
 	subsource.DefaultLastError = subsourceDescLastError.Default.(string)
+	// subsourceDescLastLocation is the schema descriptor for last_location field.
+	subsourceDescLastLocation := subsourceFields[22].Descriptor()
+	// subsource.DefaultLastLocation holds the default value on creation for the last_location field.
+	subsource.DefaultLastLocation = subsourceDescLastLocation.Default.(string)
+	// subsourceDescLastRouteReason is the schema descriptor for last_route_reason field.
+	subsourceDescLastRouteReason := subsourceFields[23].Descriptor()
+	// subsource.DefaultLastRouteReason holds the default value on creation for the last_route_reason field.
+	subsource.DefaultLastRouteReason = subsourceDescLastRouteReason.Default.(string)
 	// subsourceDescCreatedAt is the schema descriptor for created_at field.
-	subsourceDescCreatedAt := subsourceFields[19].Descriptor()
+	subsourceDescCreatedAt := subsourceFields[26].Descriptor()
 	// subsource.DefaultCreatedAt holds the default value on creation for the created_at field.
 	subsource.DefaultCreatedAt = subsourceDescCreatedAt.Default.(func() time.Time)
 	userFields := schema.User{}.Fields()
@@ -892,4 +917,52 @@ func init() {
 	user.DefaultUpdatedAt = userDescUpdatedAt.Default.(func() time.Time)
 	// user.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	user.UpdateDefaultUpdatedAt = userDescUpdatedAt.UpdateDefault.(func() time.Time)
+	workerattemptFields := schema.WorkerAttempt{}.Fields()
+	_ = workerattemptFields
+	// workerattemptDescFinishedAt is the schema descriptor for finished_at field.
+	workerattemptDescFinishedAt := workerattemptFields[4].Descriptor()
+	// workerattempt.DefaultFinishedAt holds the default value on creation for the finished_at field.
+	workerattempt.DefaultFinishedAt = workerattemptDescFinishedAt.Default.(int64)
+	workertaskFields := schema.WorkerTask{}.Fields()
+	_ = workertaskFields
+	// workertaskDescGateID is the schema descriptor for gate_id field.
+	workertaskDescGateID := workertaskFields[12].Descriptor()
+	// workertask.DefaultGateID holds the default value on creation for the gate_id field.
+	workertask.DefaultGateID = workertaskDescGateID.Default.(int)
+	// workertaskDescAttempt is the schema descriptor for attempt field.
+	workertaskDescAttempt := workertaskFields[13].Descriptor()
+	// workertask.DefaultAttempt holds the default value on creation for the attempt field.
+	workertask.DefaultAttempt = workertaskDescAttempt.Default.(int32)
+	// workertaskDescLeaseToken is the schema descriptor for lease_token field.
+	workertaskDescLeaseToken := workertaskFields[14].Descriptor()
+	// workertask.DefaultLeaseToken holds the default value on creation for the lease_token field.
+	workertask.DefaultLeaseToken = workertaskDescLeaseToken.Default.(string)
+	// workertaskDescLeaseUntil is the schema descriptor for lease_until field.
+	workertaskDescLeaseUntil := workertaskFields[15].Descriptor()
+	// workertask.DefaultLeaseUntil holds the default value on creation for the lease_until field.
+	workertask.DefaultLeaseUntil = workertaskDescLeaseUntil.Default.(int64)
+	// workertaskDescResult is the schema descriptor for result field.
+	workertaskDescResult := workertaskFields[16].Descriptor()
+	// workertask.DefaultResult holds the default value on creation for the result field.
+	workertask.DefaultResult = workertaskDescResult.Default.(string)
+	// workertaskDescError is the schema descriptor for error field.
+	workertaskDescError := workertaskFields[17].Descriptor()
+	// workertask.DefaultError holds the default value on creation for the error field.
+	workertask.DefaultError = workertaskDescError.Default.(string)
+	// workertaskDescLegacyID is the schema descriptor for legacy_id field.
+	workertaskDescLegacyID := workertaskFields[18].Descriptor()
+	// workertask.DefaultLegacyID holds the default value on creation for the legacy_id field.
+	workertask.DefaultLegacyID = workertaskDescLegacyID.Default.(int)
+	// workertaskDescCandidateAt is the schema descriptor for candidate_at field.
+	workertaskDescCandidateAt := workertaskFields[19].Descriptor()
+	// workertask.DefaultCandidateAt holds the default value on creation for the candidate_at field.
+	workertask.DefaultCandidateAt = workertaskDescCandidateAt.Default.(int64)
+	// workertaskDescProgress is the schema descriptor for progress field.
+	workertaskDescProgress := workertaskFields[20].Descriptor()
+	// workertask.DefaultProgress holds the default value on creation for the progress field.
+	workertask.DefaultProgress = workertaskDescProgress.Default.(string)
+	// workertaskDescProjectionAfter is the schema descriptor for projection_after field.
+	workertaskDescProjectionAfter := workertaskFields[21].Descriptor()
+	// workertask.DefaultProjectionAfter holds the default value on creation for the projection_after field.
+	workertask.DefaultProjectionAfter = workertaskDescProjectionAfter.Default.(int64)
 }

@@ -518,19 +518,31 @@ function DshAddressForm({ view, turnOn }: { view: DshView; turnOn?: boolean }) {
 }
 
 // DshSettingsCard：系统设置里的 dsh：没配好时就是同一份步骤清单；配好后显示运行状态与地址、开关，并直接内嵌版本管理。
+// 先回答「要不要用 AI 助手」：没开时只给一句说明和开关，打开后才展开配置步骤；
+// 已运行时显示状态与地址。反代片段、版本与插件收进高级选项。
 export function DshSettingsCard() {
   const q = useDsh();
+  const [want, setWant] = useState(false);
+  const set = q.data?.settings;
+  const configured = !!set?.version && !!set.enabled && !!set.domain;
+  const showSetup = configured || want || !!set?.version || !!set?.domain;
   return (
     <div className="stack">
-      <Section title="dsh（DeepSeek Harness）" description="dsh 由中心托管，只监听本机回环。浏览器只能从控制台右下角的 dsh 窗口里打开它；其他途径访问 dsh 地址只会得到一个空的 404，看起来就像这个地址不存在。DeepSeek 的 Key 在 dsh 自己的设置里填写，Weir 不保存。">
-        {q.isPending || q.error || !q.data ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : !q.data.settings.version || !q.data.settings.enabled || !q.data.settings.domain ? <DshSetup view={q.data} /> : (
+      <Section title="dsh 服务与版本" description="AI 助手 dsh 在控制台右下角的窗口里对话、分析事件并生成待确认草稿。DeepSeek 的 Key 在 dsh 自己的设置里填写，Weir 不保存。">
+        {q.isPending || q.error || !q.data ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : !showSetup ? (
+          <div className="settings-group">
+            <SwitchField placement="end" label="使用 AI 助手 dsh" description="打开后按步骤下载并填写地址；不用可以一直关着，基础功能不受影响" checked={false} onCheckedChange={(on) => setWant(on)} />
+          </div>
+        ) : !configured ? <DshSetup view={q.data} /> : (
           <div className="stack">
             <DshStartStep view={q.data} />
             <DshAddressForm view={q.data} />
           </div>
         )}
       </Section>
-      <DshVersions />
+      {q.data && (q.data.installed.length > 0 || showSetup) && <Collapsible variant="section" title="高级：版本与插件" summary={set?.version ? `当前 ${set.version}` : "尚未下载"}>
+        <DshVersions />
+      </Collapsible>}
     </div>
   );
 }
@@ -561,11 +573,11 @@ server {
     ssl_reject_handshake on;
 }`;
   return (
-    <Collapsible title="DNS、证书与反代（建议）">
+    <Collapsible title="高级：DNS、证书与反代片段">
       <ul className="m-0 list-disc space-y-1 pl-5 text-body text-[var(--weir-ink-2)]">
         <li>证书用泛域名证书（*.{site}），不要为这个子域名单独签证书：单独签发的名字会写进公开的证书透明日志。</li>
         <li>最好配泛解析（*.{site}），让 dsh 子域名和任意不存在的子域名解析结果一样。</li>
-        <li>dsh 子域名只出现在管理员页面里；登录页、公开页、订阅与错误信息里都不会出现。</li>
+        <li>dsh 子域名只出现在管理员页面里；登录页、公开页、订阅与错误信息里都不会出现。dsh 只监听本机回环，其他途径访问只会得到空的 404。</li>
         <li>可选：想让浏览器直接显示原生的连接错误，在反代的 dsh 站点里加入下面的配置（OpenResty / Nginx）。</li>
       </ul>
       <CodeBlock className="block overflow-auto whitespace-pre text-meta">{snippet}</CodeBlock>

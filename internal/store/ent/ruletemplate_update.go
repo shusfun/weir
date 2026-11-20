@@ -18,8 +18,9 @@ import (
 // RuleTemplateUpdate is the builder for updating RuleTemplate entities.
 type RuleTemplateUpdate struct {
 	config
-	hooks    []Hook
-	mutation *RuleTemplateMutation
+	hooks     []Hook
+	mutation  *RuleTemplateMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the RuleTemplateUpdate builder.
@@ -132,6 +133,12 @@ func (_u *RuleTemplateUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *RuleTemplateUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *RuleTemplateUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *RuleTemplateUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -156,6 +163,7 @@ func (_u *RuleTemplateUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(ruletemplate.FieldUpdatedAt, field.TypeTime, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{ruletemplate.Label}
@@ -171,9 +179,10 @@ func (_u *RuleTemplateUpdate) sqlSave(ctx context.Context) (_node int, err error
 // RuleTemplateUpdateOne is the builder for updating a single RuleTemplate entity.
 type RuleTemplateUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *RuleTemplateMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *RuleTemplateMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetName sets the "name" field.
@@ -293,6 +302,12 @@ func (_u *RuleTemplateUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *RuleTemplateUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *RuleTemplateUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *RuleTemplateUpdateOne) sqlSave(ctx context.Context) (_node *RuleTemplate, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -334,6 +349,7 @@ func (_u *RuleTemplateUpdateOne) sqlSave(ctx context.Context) (_node *RuleTempla
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(ruletemplate.FieldUpdatedAt, field.TypeTime, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &RuleTemplate{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

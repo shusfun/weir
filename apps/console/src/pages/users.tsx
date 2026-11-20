@@ -16,12 +16,13 @@ import { ObjectLink, dataObject, useDialogParam } from "../components/object-lin
 import { objectHref, type ObjectRef } from "../lib/objects";
 import { objectStatus, type NodeItem, type UserItem, type Withheld } from "../lib/core";
 
-function careLabel(u: UserItem): string | null {
-  return u.object_state?.status === "ok" ? null : objectStatus(u.object_state)[0];
+// 只有中心给出了非正常结论的用户才算「需要处理」；没有状态的用户归在正常组，状态列写「未知」
+function needsCare(u: UserItem) {
+  return !!u.object_state && u.object_state.status !== "ok";
 }
 
-function needsCare(u: UserItem) {
-  return u.object_state?.status !== "ok";
+function careLabel(u: UserItem): string | null {
+  return needsCare(u) ? objectStatus(u.object_state)[0] : null;
 }
 
 async function bulkExtend(ids: number[], users: UserItem[], act: (key: string, run: () => Promise<unknown>, ok: string) => Promise<unknown>) {
@@ -35,10 +36,23 @@ async function bulkExtend(ids: number[], users: UserItem[], act: (key: string, r
   }, `已为 ${dated.length} 人续期 30 天`);
 }
 
-async function bulkDisable(ids: number[], act: (key: string, run: () => Promise<unknown>, ok: string) => Promise<unknown>) {
+async function bulkDisable(ids: number[], users: UserItem[], confirm: ReturnType<typeof useConfirm>, act: (key: string, run: () => Promise<unknown>, ok: string) => Promise<unknown>) {
+  const names = users.filter((u) => ids.includes(u.id)).map((u) => u.name || u.email);
+  if (!(await confirm({ title: `停用 ${names.length} 个用户？`, description: `${names.slice(0, 5).join("、")}${names.length > 5 ? ` 等 ${names.length} 人` : ""}。停用后他们的所有链接立即不能使用，可以随时重新启用。`, confirmText: "停用", tone: "danger" }))) return false;
   await act("bulk-disable", async () => {
     for (const id of ids) await api(`/admin/users/${id}`, "PATCH", { enabled: false });
-  }, "已停用所选用户");
+  }, `已停用 ${names.length} 个用户`);
+  return true;
+}
+
+// 链接列显示链接名称：列表接口只给数量，名称按需从用户详情读取（与详情窗共用缓存）
+function LinkNames({ user }: { user: UserItem }) {
+  const q = useQuery({ queryKey: ["user", user.id], enabled: user.links > 0, queryFn: () => api(`/admin/users/${user.id}`) as Promise<{ link_items?: { id: number; name: string }[] }> });
+  if (!user.links) return <span className="text-meta text-[var(--weir-ink-3)]">没有链接</span>;
+  if (q.error) return <span className="text-meta text-[var(--weir-bad-ink)]" title={clause(q.error)}>读取失败</span>;
+  if (q.isPending) return <span className="text-meta text-[var(--weir-ink-3)]">正在读取</span>;
+  const names = (q.data.link_items ?? []).map((l) => l.name || "未命名链接");
+  return <span className="block max-w-[181px] truncate" title={names.join("、")}>{names.slice(0, 2).join("、")}{names.length > 2 ? ` 等 ${names.length} 条` : ""}</span>;
 }
 
 export function UsersPage() {
@@ -75,8 +89,7 @@ export function UsersPage() {
   useConsoleContext({ page: "用户", list: { total: users.data?.length ?? 0, items: (users.data ?? []).slice(0, 20).map((u) => ({ type: "user", name: u.name || u.email, id: u.id })) } });
   useConsoleContext(detail ? { object: { type: "user", name: detail.name || detail.email, id: detail.id }, dialog: { title: "用户详情" } } : null);
   const list = users.data ?? [];
-  const soon = list.filter((u) => ["即将到期", "已到期"].includes(u.object_state?.label || "")).length;
-  const heavy = list.filter((u) => ["临近额度", "额度已用完"].includes(u.object_state?.label || "")).length;
+  const careCount = list.filter(needsCare).length;
   const total = list.reduce((sum, u) => sum + u.used, 0);
   const header = (
     <PageHeader
@@ -85,8 +98,7 @@ export function UsersPage() {
         <span className="weir-sum">
           <span><b>{list.length}</b> 个用户</span>
           <span><b>{list.filter((u) => u.enabled).length}</b> 个启用</span>
-          {soon > 0 && <span className="text-[var(--weir-warn-ink)]">{soon} 个需要续期</span>}
-          {heavy > 0 && <span className="text-[var(--weir-warn-ink)]">{heavy} 个额度需处理</span>}
+          {careCount > 0 && <span className="text-[var(--weir-warn-ink)]">{careCount} 个需要处理</span>}
           <span>本月共 {bytes(total)}</span>
         </span>
       ) : "正在读取用户"}
@@ -115,7 +127,7 @@ export function UsersPage() {
           <span className="flex-1" />
           <BulkBar count={picked.length}>
             <Button size="sm" variant="outline" disabled={isBusy()} onClick={() => void bulkExtend(picked, users.data, act)}>续期 30 天</Button>
-            <Button size="sm" variant="outline" disabled={isBusy()} onClick={() => void bulkDisable(picked, act)}>停用</Button>
+            <Button size="sm" variant="outline" disabled={isBusy()} busy={isBusy("bulk-disable")} busyText="正在停用…" onClick={() => void bulkDisable(picked, users.data, confirm, act).then((done) => { if (done) setPicked([]); })}>停用</Button>
           </BulkBar>
         </div>
       )}
@@ -165,12 +177,12 @@ export function UsersPage() {
                       <TrafficUsage used={u.used} quota={u.quota} unlimited={u.unlimited} />
                     </TableCell>
                     <TableCell className="font-[family-name:var(--weir-mono)]">{u.all_nodes ? "全部" : u.node_ids?.length ?? 0}</TableCell>
-                    <TableCell className="font-[family-name:var(--weir-mono)]">{u.links}</TableCell>
+                    <TableCell><LinkNames user={u} /></TableCell>
                     <TableCell className="whitespace-nowrap">
-                      <span className={careLabel(u)?.includes("到期") ? "font-[family-name:var(--weir-mono)] text-[var(--weir-warn-ink)]" : "font-[family-name:var(--weir-mono)]"}>{u.expires_at ? date(u.expires_at).slice(0, 10) : "长期"}</span>
+                      <span className="font-[family-name:var(--weir-mono)]">{u.expires_at ? date(u.expires_at).slice(0, 10) : "长期"}</span>
                       <span className="ml-[var(--weir-gap-5)] text-meta text-[var(--weir-ink-3)]">{u.expires_at ? "到期" : u.monthly_reset ? "每月重置" : ""}</span>
                     </TableCell>
-                    <TableCell>{careLabel(u) ? <Badge variant="status" tone={objectStatus(u.object_state)[1] === "bad" ? "bad" : objectStatus(u.object_state)[1] === "warn" ? "warn" : "neutral"}>{careLabel(u)}</Badge> : <span className="text-meta text-[var(--weir-ink-3)]">可使用</span>}</TableCell>
+                    <TableCell>{careLabel(u) ? <Badge variant="status" tone={objectStatus(u.object_state)[1] === "bad" ? "bad" : objectStatus(u.object_state)[1] === "warn" ? "warn" : "neutral"}>{careLabel(u)}</Badge> : <span className="text-meta text-[var(--weir-ink-3)]">{u.object_state ? "可使用" : "未知"}</span>}</TableCell>
                     <TableCell>
                       <ActionGroup align="end" wrap={false}>
                         <Button size="sm" variant="ghost" onClick={() => detailParam.open(u.id)}>详情</Button>
@@ -190,6 +202,7 @@ export function UsersPage() {
       <UserForm
         value={form}
         nodes={nodes.data ?? []}
+        nodesState={{ loading: nodes.isPending, error: nodes.error }}
         close={() => setForm(null)}
         saved={(u) => {
           // 新建后直接打开详情：订阅链接与二维码就在那里，一次性密码也显示在顶部。
@@ -215,7 +228,7 @@ export function UsersPage() {
         {detail && (
           <DialogContent size="xl">
             <DialogTitle>{detail.name || detail.email}</DialogTitle>
-            <DialogDescription>{objectStatus(detail.object_state)[2]}</DialogDescription>
+            <DialogDescription className="sr-only">账户、链接、链式代理与流量</DialogDescription>
             <div className="stack">
               {created?.id === detail.id && (
                 <Notice role="status" tone="ok">

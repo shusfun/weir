@@ -213,6 +213,9 @@ export interface NodeItem extends NodeChoice {
   // 全部用户直连这个节点时的下载速率
   rate?: RateStat;
   rate_error?: string;
+  // 近 7 天已收到的用量计数；known 为 false 表示这段时间没有任何上报，不等于零流量
+  usage?: { known: boolean; bytes: string; users: number; observed_at: string | null; days: number };
+  usage_error?: string;
 }
 
 export interface Cert {

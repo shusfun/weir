@@ -1,7 +1,7 @@
 package kernelconf
 
 import (
-	"github.com/shusfun/weir/internal/db"
+	"github.com/shusfun/weir/internal/kernelconf/model"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -55,9 +55,9 @@ func RuleOutboundNames(cfg contracts.GateConfig) map[string]map[string]int64 {
 			}
 			core := engine
 			if core == "sing-box" {
-				core = db.CoreSingbox
+				core = model.CoreSingbox
 			}
-			out[engine][db.GeneratedOutboundTag(core, o.ID, o.Tag)] = o.RuleID
+			out[engine][model.GeneratedOutboundTag(core, o.ID, o.Tag)] = o.RuleID
 		}
 	}
 	return out

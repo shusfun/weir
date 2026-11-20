@@ -16,7 +16,7 @@ func TestProfileGrantReplacementIsAtomic(t *testing.T) {
 	a := s.Store.Ent.User.Create().SetEmail("grant-a@example.test").SetPasswordHash("fixture").SaveX(ctx)
 	b := s.Store.Ent.User.Create().SetEmail("grant-b@example.test").SetPasswordHash("fixture").SaveX(ctx)
 	p := s.Store.Ent.SubProfile.Create().SetName("atomic grants").SaveX(ctx)
-	if err := s.replaceProfileGrants(ctx, p.ID, []int{a.ID}); err != nil {
+	if _, err := s.SetProfileUsers(ctx, p.ID, []int{a.ID}, false); err != nil {
 		t.Fatal(err)
 	}
 	old := s.Store.Ent.SubGrant.Query().Where(subgrant.ProfileIDEQ(p.ID)).OnlyX(ctx)
@@ -29,7 +29,7 @@ func TestProfileGrantReplacementIsAtomic(t *testing.T) {
 			return next.Mutate(ctx, mutation)
 		})
 	})
-	if err := s.replaceProfileGrants(ctx, p.ID, []int{b.ID}); err == nil {
+	if _, err := s.SetProfileUsers(ctx, p.ID, []int{b.ID}, false); err == nil {
 		t.Fatal("persistence failure hidden")
 	}
 	got := s.Store.Ent.SubGrant.Query().Where(subgrant.ProfileIDEQ(p.ID)).OnlyX(ctx)
@@ -37,7 +37,7 @@ func TestProfileGrantReplacementIsAtomic(t *testing.T) {
 		t.Fatal("failed replacement revoked the existing grant")
 	}
 	failCreate = false
-	if err := s.replaceProfileGrants(ctx, p.ID, []int{a.ID, a.ID, b.ID}); err != nil {
+	if _, err := s.SetProfileUsers(ctx, p.ID, []int{a.ID, a.ID, b.ID}, false); err != nil {
 		t.Fatal(err)
 	}
 	if n := s.Store.Ent.SubGrant.Query().Where(subgrant.ProfileIDEQ(p.ID)).CountX(ctx); n != 2 {

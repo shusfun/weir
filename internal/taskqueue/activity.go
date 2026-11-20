@@ -3,6 +3,8 @@ package taskqueue
 import (
 	"context"
 	"time"
+
+	"github.com/shusfun/weir/internal/store/ent/workeractivity"
 )
 
 type Activity struct {
@@ -14,20 +16,14 @@ type Activity struct {
 }
 
 func (q *Queue) Activity(ctx context.Context, taskID string) ([]Activity, error) {
-	rows, err := q.DB.QueryContext(ctx, `SELECT task_id,gate_id,attempt,at,reason FROM worker_activity WHERE task_id=$1 ORDER BY at,id LIMIT 200`, taskID)
+	rows, err := q.Ent.WorkerActivity.Query().Where(workeractivity.TaskID(taskID)).
+		Order(workeractivity.ByAt(), workeractivity.ByID()).Limit(200).All(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	out := []Activity{}
-	for rows.Next() {
-		var a Activity
-		var at int64
-		if err = rows.Scan(&a.TaskID, &a.GateID, &a.Attempt, &at, &a.Reason); err != nil {
-			return nil, err
-		}
-		a.At = time.UnixMilli(at).UTC()
-		out = append(out, a)
+	out := make([]Activity, 0, len(rows))
+	for _, a := range rows {
+		out = append(out, Activity{TaskID: a.TaskID, GateID: a.GateID, Attempt: int(a.Attempt), At: time.UnixMilli(a.At).UTC(), Reason: a.Reason})
 	}
-	return out, rows.Err()
+	return out, nil
 }

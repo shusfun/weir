@@ -62,7 +62,7 @@ export function PublicPagesPage() {
   useConsoleContext({ page: "公开页面", tab: distributionSections.find((s) => s.key === tab)?.label, list: tab === "pages" ? { total: q.data?.length ?? 0, items: (q.data ?? []).slice(0, 20).map((p) => ({ type: "page", name: p.data.title, key: p.slug })) } : undefined });
   return (
     <div className="stack">
-      <PageHeader size="data" title="公开页面" description={tab === "pages" && q.data ? `${q.data.filter((p) => p.data.enabled).length} 个已发布 · ${q.data.filter((p) => !p.data.enabled).length} 个草稿 · 7 天访问未知` : "管理匿名介绍页、客户端目录和登录后显示的全局公告。"} actions={tab === "pages" ? <Button onClick={() => setEdit("new")}><Plus />新建公开页</Button> : undefined} />
+      <PageHeader size="data" title="公开页面" description={tab === "pages" && q.data ? `${q.data.filter((p) => p.data.enabled).length} 个已发布 · ${q.data.filter((p) => !p.data.enabled).length} 个草稿` : "管理匿名介绍页、客户端目录和登录后显示的全局公告。"} actions={tab === "pages" ? <Button onClick={() => setEdit("new")}><Plus />新建公开页</Button> : undefined} />
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: String(v) }, { replace: true })}>
         <TabsList aria-label="公开页面分区">{distributionSections.map((s) => <TabsTab key={s.key} value={s.key}>{s.label}</TabsTab>)}</TabsList>
         <TabsPanel value="pages" className="stack">
@@ -188,6 +188,9 @@ const themeNames: Record<string, string> = { violet: "紫罗兰", ocean: "海蓝
 
 function SectionPreview({ page, device, setDevice }: { page: PageItem; device: string; setDevice: (v: string) => void }) {
   const cards = page.data.cards ?? [];
+  // 卡片没写标题时显示所选订阅组的名称，与编辑窗共用订阅组缓存
+  const profiles = useQuery({ queryKey: ["subscription-profiles"], enabled: cards.some((c) => !c.title), queryFn: async () => (await api("/admin/subscriptions/profiles")).items as Profile[] });
+  const cardTitle = (c: { title?: string; profile_id: number }) => c.title || profiles.data?.find((x) => x.id === c.profile_id)?.name || (profiles.isPending ? "正在读取订阅组" : "已删除的订阅组");
   return (
     <>
       <SectionHeader flush title="实时预览" description={page.data.enabled ? "访客实际打开页面时的画面" : "草稿未对外公开，以下为排版预览"} actions={<Segmented size="sm" aria-label="预览宽度" value={device} onValueChange={setDevice} options={[["phone", "手机"], ["desktop", "电脑"]] as const} />} />
@@ -215,7 +218,7 @@ function SectionPreview({ page, device, setDevice }: { page: PageItem; device: s
               <div className="space-y-2">
                 {cards.slice(0, 4).map((c, i) => (
                   <div key={i} className="rounded-[var(--weir-radius)] border border-[var(--weir-line-soft)] bg-[var(--weir-panel)] px-3.5 py-3">
-                    <strong className="block text-body">{c.title || `订阅卡片 #${i + 1}`}</strong>
+                    <strong className="block text-body">{cardTitle(c)}</strong>
                     <small className="font-mono text-fine text-[var(--weir-ink-3)]">{targets.find(([k]) => k === c.target)?.[1] ?? c.target}</small>
                   </div>
                 ))}
@@ -312,7 +315,7 @@ function PageForm({ value, close, saved }: { value: PageItem | "new"; close: () 
                   <div key={i} className="grid items-start gap-x-2.5 gap-y-2 rounded-[var(--weir-radius)] border border-[var(--weir-line-soft)] bg-[var(--weir-well)] p-3 sm:grid-cols-[minmax(0,1fr)_125px_minmax(0,1fr)_auto]">
                     <Field label="订阅组">
                       <Select required value={c.profile_id ? String(c.profile_id) : ""} onValueChange={(v) => setCard(i, { profile_id: Number(v) })}>
-                        <SelectTrigger><SelectValue>{(profiles.data ?? []).find((x) => x.id === c.profile_id)?.name ?? "请选择"}</SelectValue></SelectTrigger>
+                        <SelectTrigger><SelectValue>{!c.profile_id ? "请选择" : (profiles.data ?? []).find((x) => x.id === c.profile_id)?.name ?? (profiles.isPending ? "正在读取订阅组" : "已删除的订阅组")}</SelectValue></SelectTrigger>
                         <SelectContent>{(profiles.data ?? []).map((x) => <SelectItem key={x.id} value={String(x.id)}>{x.name}{x.shared ? "" : "（未分享）"}</SelectItem>)}</SelectContent>
                       </Select>
                     </Field>

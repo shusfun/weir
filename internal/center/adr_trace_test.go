@@ -27,6 +27,7 @@ func TestADRTraceSmoke(t *testing.T) {
 	TestGateCapacityNoticesAndAutomaticPlan(t)
 	TestExitCredentialsRequireExplicitAuditedAdminReveal(t)
 	TestGateDeletionPreviewAndAtomicCleanup(t)
+	TestDeleteExitCascades(t)
 	TestXHTTPDeployedNodeUsesNativeClient(t)
 	TestIPCertViaACMEThenExpiryAndRenewal(t)
 	TestOutboundExecutionPlanAndStableSealedPorts(t)

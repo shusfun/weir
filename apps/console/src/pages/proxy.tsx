@@ -318,6 +318,7 @@ function TypeExitDialog({ base, type, nodes, admin, close, saved, revision }: { 
   const save = useFormAction((track) => api(proxyURL(base, `/types/${encodeURIComponent(type.key)}/exit`), "PUT", { exit, revision }, track), {
     fields: exitErrorFields(exit.kind),
     onSuccess: () => { markSaved(); saved(); },
+    onDetach: () => { markSaved(); close(); },
     wait: { label: `正在逐个实测「${type.label}」的 ${type.nodes.length} 个节点`, max: 45 * type.nodes.length },
   });
   const failed = save.raw instanceof ApiError && save.raw.code === "type_exit_failed" ? (save.raw.extra.nodes as { name: string; code: string; detail?: string }[] | undefined) : undefined;
@@ -333,7 +334,7 @@ function TypeExitDialog({ base, type, nodes, admin, close, saved, revision }: { 
     <Dialog open onOpenChange={(o) => { if (!o) void requestClose(); }}>
       <DialogContent size="md">
         <DialogTitle>{e ? "改" : "加"}出口：{type.label}</DialogTitle>
-        <DialogDescription>这一类的 {type.nodes.length} 个节点都经这个出口出去；由每个节点所在的 VPS 实测，全部通过后才切换；未通过的候选可重试或放弃。</DialogDescription>
+        <DialogDescription>这一类的 {type.nodes.length} 个节点都经这个出口出去；由每个节点所在的 VPS 实测，全部通过后才切换；没通过的会留在页面上的「出口验证」列表里，可以在那里重试或放弃。</DialogDescription>
         <Form busy={save.busy} errors={save.errors} onSubmit={() => void save.submit()}>
           <ExitFields value={exit} onChange={setExit} admin={false} sourcePath={base === "/me" ? "/me/chain-sources" : `${base}/chain-sources`} nodes={nodes} nodeHint="出口需要你可用的另一个节点；这个节点自己作入口时直接出去。" />
           <DialogFooter error={failed ? <span className="block max-h-24 overflow-y-auto">{failed.map((f) => <span className="block" key={f.name}><strong>{f.name}</strong>：{f.detail || f.code}</span>)}</span> : save.error} status={save.wait && <WaitText wait={save.wait} />}>

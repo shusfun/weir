@@ -4,8 +4,10 @@ package e2e
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -14,8 +16,14 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"testing/fstest"
 	"time"
+
+	"github.com/shusfun/weir/internal/center"
+	"github.com/shusfun/weir/internal/gate"
+	"github.com/shusfun/weir/internal/store"
 )
 
 func (e *env) patch(path string, body any) map[string]any {
@@ -140,5 +148,111 @@ func TestUnifiedExitsAndSelectiveRouting(t *testing.T) {
 	before = hits.Load()
 	if err := fetchVia(pc, target.URL, 4); err != nil || hits.Load() != before {
 		t.Fatalf("user link did not take precedence: %v", err)
+	}
+}
+
+type failingRevocationCleanup struct {
+	store.KV
+	calls int
+}
+
+func (kv *failingRevocationCleanup) Del(context.Context, ...string) error {
+	kv.calls++
+	return errors.New("injected deletion cache cleanup failure")
+}
+
+func TestExitRevocationSurvivesCenterRestart(t *testing.T) {
+	e := setup(t)
+	singbox := e.seedSingbox()
+	var gateRouter atomic.Value
+	gateRouter.Store(e.s.Router())
+	gateServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gateRouter.Load().(http.Handler).ServeHTTP(w, r)
+	}))
+	t.Cleanup(gateServer.Close)
+	e.gateCenter = gateServer.URL
+
+	var gates []int
+	var paths []gate.Paths
+	var stopAgents []context.CancelFunc
+	for _, name := range []string{"revoke-first", "revoke-second"} {
+		e.startGate(name)
+		e.s.Store.Ent.Gate.UpdateOneID(e.gateID).SetPublicHost("127.0.0.1").ExecX(e.ctx)
+		gates = append(gates, e.gateID)
+		paths = append(paths, e.paths)
+		stopAgents = append(stopAgents, e.stopAgent)
+	}
+	proxyPort, _ := socksServer(t)
+	exit := e.post("/api/v1/admin/exits", map[string]any{"kind": "socks5", "remark": "revocation fixture", "address": "127.0.0.1", "port": proxyPort}, nil)
+	node := func(gateID int, exitID any) int {
+		fields := map[string]any{"gate_id": gateID, "preset": "ss2022", "skip_probe": true}
+		if exitID != nil {
+			fields["exit_id"] = exitID
+		}
+		return int(e.post("/api/v1/admin/nodes", fields, nil)["id"].(float64))
+	}
+	first, second, kept := node(gates[0], exit["id"]), node(gates[1], exit["id"]), node(gates[1], nil)
+	user := e.post("/api/v1/admin/users", map[string]any{"unlimited": true, "email": "revoke@e2e.test"}, nil)
+	userID := int(user["id"].(float64))
+	for _, gateID := range gates {
+		e.appliedGate(gateID, "original credentials applied")
+	}
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("test")) }))
+	t.Cleanup(target.Close)
+	firstPort := e.runSingboxClient(singbox, e.subOutbound(userID, first))
+	secondPort := e.runSingboxClient(singbox, e.subOutbound(userID, second))
+	keptPort := e.runSingboxClient(singbox, e.subOutbound(userID, kept))
+	for _, port := range []int{firstPort, secondPort, keptPort} {
+		eventually(t, 15*time.Second, "original client connects", func() bool { return fetchVia(port, target.URL, 4) == nil })
+	}
+	for _, stop := range stopAgents {
+		stop()
+	}
+
+	path := e.url + "/api/v1/admin/exits/" + strconv.Itoa(int(exit["id"].(float64)))
+	status, preview := call(t, e.admin, "GET", path+"/delete-preview", nil)
+	if status != 200 {
+		t.Fatalf("delete preview status = %d", status)
+	}
+	kv := &failingRevocationCleanup{KV: e.s.Store.KV}
+	e.s.Store.KV = kv
+	status, _ = call(t, e.admin, "DELETE", path, map[string]any{"preview_token": preview["preview_token"]})
+	e.s.Store.KV = kv.KV
+	if status != 204 || kv.calls == 0 {
+		t.Fatalf("delete with cleanup failure = %d, cache cleanup calls = %d", status, kv.calls)
+	}
+	for _, gateID := range gates {
+		row := e.s.Store.Ent.Gate.GetX(e.ctx, gateID)
+		if row.ConfigRevision <= row.AppliedRevision {
+			t.Fatalf("revocation not pending for offline Gate %d", gateID)
+		}
+	}
+
+	configPath := e.s.Path
+	e.s.Close()
+	config, err := center.LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.s, err = center.New(config, configPath, fstest.MapFS{"index.html": {Data: []byte("ok")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(e.s.Close)
+	gateRouter.Store(e.s.Router())
+	for _, path := range paths {
+		e.paths = path
+		e.runAgent()
+	}
+	for _, gateID := range gates {
+		e.appliedGate(gateID, "revocation applied after center restart")
+	}
+	for _, port := range []int{firstPort, secondPort} {
+		if err := fetchVia(port, target.URL, 4); err == nil {
+			t.Fatal("removed credentials still pass traffic")
+		}
+	}
+	if err := fetchVia(keptPort, target.URL, 4); err != nil {
+		t.Fatalf("unrelated credential stopped working: %v", err)
 	}
 }

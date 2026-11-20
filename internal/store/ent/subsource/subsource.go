@@ -39,6 +39,10 @@ const (
 	FieldRemark = "remark"
 	// FieldPosition holds the string denoting the position field in the database.
 	FieldPosition = "position"
+	// FieldGateID holds the string denoting the gate_id field in the database.
+	FieldGateID = "gate_id"
+	// FieldRefreshHours holds the string denoting the refresh_hours field in the database.
+	FieldRefreshHours = "refresh_hours"
 	// FieldNodeCount holds the string denoting the node_count field in the database.
 	FieldNodeCount = "node_count"
 	// FieldKnownNodes holds the string denoting the known_nodes field in the database.
@@ -51,6 +55,16 @@ const (
 	FieldLastError = "last_error"
 	// FieldFetchedAt holds the string denoting the fetched_at field in the database.
 	FieldFetchedAt = "fetched_at"
+	// FieldLastAttemptAt holds the string denoting the last_attempt_at field in the database.
+	FieldLastAttemptAt = "last_attempt_at"
+	// FieldLastLocation holds the string denoting the last_location field in the database.
+	FieldLastLocation = "last_location"
+	// FieldLastRouteReason holds the string denoting the last_route_reason field in the database.
+	FieldLastRouteReason = "last_route_reason"
+	// FieldHealth holds the string denoting the health field in the database.
+	FieldHealth = "health"
+	// FieldChange holds the string denoting the change field in the database.
+	FieldChange = "change"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// Table holds the table name of the subsource in the database.
@@ -73,12 +87,19 @@ var Columns = []string{
 	FieldWebsite,
 	FieldRemark,
 	FieldPosition,
+	FieldGateID,
+	FieldRefreshHours,
 	FieldNodeCount,
 	FieldKnownNodes,
 	FieldUserInfo,
 	FieldTitle,
 	FieldLastError,
 	FieldFetchedAt,
+	FieldLastAttemptAt,
+	FieldLastLocation,
+	FieldLastRouteReason,
+	FieldHealth,
+	FieldChange,
 	FieldCreatedAt,
 }
 
@@ -125,6 +146,10 @@ var (
 	RemarkValidator func(string) error
 	// DefaultPosition holds the default value on creation for the "position" field.
 	DefaultPosition int
+	// DefaultGateID holds the default value on creation for the "gate_id" field.
+	DefaultGateID int
+	// DefaultRefreshHours holds the default value on creation for the "refresh_hours" field.
+	DefaultRefreshHours int
 	// DefaultNodeCount holds the default value on creation for the "node_count" field.
 	DefaultNodeCount int
 	// DefaultKnownNodes holds the default value on creation for the "known_nodes" field.
@@ -135,6 +160,10 @@ var (
 	DefaultTitle string
 	// DefaultLastError holds the default value on creation for the "last_error" field.
 	DefaultLastError string
+	// DefaultLastLocation holds the default value on creation for the "last_location" field.
+	DefaultLastLocation string
+	// DefaultLastRouteReason holds the default value on creation for the "last_route_reason" field.
+	DefaultLastRouteReason string
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 )
@@ -207,6 +236,16 @@ func ByPosition(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPosition, opts...).ToFunc()
 }
 
+// ByGateID orders the results by the gate_id field.
+func ByGateID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldGateID, opts...).ToFunc()
+}
+
+// ByRefreshHours orders the results by the refresh_hours field.
+func ByRefreshHours(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRefreshHours, opts...).ToFunc()
+}
+
 // ByNodeCount orders the results by the node_count field.
 func ByNodeCount(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldNodeCount, opts...).ToFunc()
@@ -235,6 +274,21 @@ func ByLastError(opts ...sql.OrderTermOption) OrderOption {
 // ByFetchedAt orders the results by the fetched_at field.
 func ByFetchedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldFetchedAt, opts...).ToFunc()
+}
+
+// ByLastAttemptAt orders the results by the last_attempt_at field.
+func ByLastAttemptAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLastAttemptAt, opts...).ToFunc()
+}
+
+// ByLastLocation orders the results by the last_location field.
+func ByLastLocation(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLastLocation, opts...).ToFunc()
+}
+
+// ByLastRouteReason orders the results by the last_route_reason field.
+func ByLastRouteReason(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLastRouteReason, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

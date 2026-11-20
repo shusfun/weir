@@ -188,6 +188,34 @@ func (_c *SubSourceCreate) SetNillablePosition(v *int) *SubSourceCreate {
 	return _c
 }
 
+// SetGateID sets the "gate_id" field.
+func (_c *SubSourceCreate) SetGateID(v int) *SubSourceCreate {
+	_c.mutation.SetGateID(v)
+	return _c
+}
+
+// SetNillableGateID sets the "gate_id" field if the given value is not nil.
+func (_c *SubSourceCreate) SetNillableGateID(v *int) *SubSourceCreate {
+	if v != nil {
+		_c.SetGateID(*v)
+	}
+	return _c
+}
+
+// SetRefreshHours sets the "refresh_hours" field.
+func (_c *SubSourceCreate) SetRefreshHours(v int) *SubSourceCreate {
+	_c.mutation.SetRefreshHours(v)
+	return _c
+}
+
+// SetNillableRefreshHours sets the "refresh_hours" field if the given value is not nil.
+func (_c *SubSourceCreate) SetNillableRefreshHours(v *int) *SubSourceCreate {
+	if v != nil {
+		_c.SetRefreshHours(*v)
+	}
+	return _c
+}
+
 // SetNodeCount sets the "node_count" field.
 func (_c *SubSourceCreate) SetNodeCount(v int) *SubSourceCreate {
 	_c.mutation.SetNodeCount(v)
@@ -269,6 +297,60 @@ func (_c *SubSourceCreate) SetNillableFetchedAt(v *time.Time) *SubSourceCreate {
 	if v != nil {
 		_c.SetFetchedAt(*v)
 	}
+	return _c
+}
+
+// SetLastAttemptAt sets the "last_attempt_at" field.
+func (_c *SubSourceCreate) SetLastAttemptAt(v time.Time) *SubSourceCreate {
+	_c.mutation.SetLastAttemptAt(v)
+	return _c
+}
+
+// SetNillableLastAttemptAt sets the "last_attempt_at" field if the given value is not nil.
+func (_c *SubSourceCreate) SetNillableLastAttemptAt(v *time.Time) *SubSourceCreate {
+	if v != nil {
+		_c.SetLastAttemptAt(*v)
+	}
+	return _c
+}
+
+// SetLastLocation sets the "last_location" field.
+func (_c *SubSourceCreate) SetLastLocation(v string) *SubSourceCreate {
+	_c.mutation.SetLastLocation(v)
+	return _c
+}
+
+// SetNillableLastLocation sets the "last_location" field if the given value is not nil.
+func (_c *SubSourceCreate) SetNillableLastLocation(v *string) *SubSourceCreate {
+	if v != nil {
+		_c.SetLastLocation(*v)
+	}
+	return _c
+}
+
+// SetLastRouteReason sets the "last_route_reason" field.
+func (_c *SubSourceCreate) SetLastRouteReason(v string) *SubSourceCreate {
+	_c.mutation.SetLastRouteReason(v)
+	return _c
+}
+
+// SetNillableLastRouteReason sets the "last_route_reason" field if the given value is not nil.
+func (_c *SubSourceCreate) SetNillableLastRouteReason(v *string) *SubSourceCreate {
+	if v != nil {
+		_c.SetLastRouteReason(*v)
+	}
+	return _c
+}
+
+// SetHealth sets the "health" field.
+func (_c *SubSourceCreate) SetHealth(v map[string]interface{}) *SubSourceCreate {
+	_c.mutation.SetHealth(v)
+	return _c
+}
+
+// SetChange sets the "change" field.
+func (_c *SubSourceCreate) SetChange(v map[string]interface{}) *SubSourceCreate {
+	_c.mutation.SetChange(v)
 	return _c
 }
 
@@ -365,6 +447,14 @@ func (_c *SubSourceCreate) defaults() {
 		v := subsource.DefaultPosition
 		_c.mutation.SetPosition(v)
 	}
+	if _, ok := _c.mutation.GateID(); !ok {
+		v := subsource.DefaultGateID
+		_c.mutation.SetGateID(v)
+	}
+	if _, ok := _c.mutation.RefreshHours(); !ok {
+		v := subsource.DefaultRefreshHours
+		_c.mutation.SetRefreshHours(v)
+	}
 	if _, ok := _c.mutation.NodeCount(); !ok {
 		v := subsource.DefaultNodeCount
 		_c.mutation.SetNodeCount(v)
@@ -384,6 +474,14 @@ func (_c *SubSourceCreate) defaults() {
 	if _, ok := _c.mutation.LastError(); !ok {
 		v := subsource.DefaultLastError
 		_c.mutation.SetLastError(v)
+	}
+	if _, ok := _c.mutation.LastLocation(); !ok {
+		v := subsource.DefaultLastLocation
+		_c.mutation.SetLastLocation(v)
+	}
+	if _, ok := _c.mutation.LastRouteReason(); !ok {
+		v := subsource.DefaultLastRouteReason
+		_c.mutation.SetLastRouteReason(v)
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := subsource.DefaultCreatedAt()
@@ -454,6 +552,12 @@ func (_c *SubSourceCreate) check() error {
 	if _, ok := _c.mutation.Position(); !ok {
 		return &ValidationError{Name: "position", err: errors.New(`ent: missing required field "SubSource.position"`)}
 	}
+	if _, ok := _c.mutation.GateID(); !ok {
+		return &ValidationError{Name: "gate_id", err: errors.New(`ent: missing required field "SubSource.gate_id"`)}
+	}
+	if _, ok := _c.mutation.RefreshHours(); !ok {
+		return &ValidationError{Name: "refresh_hours", err: errors.New(`ent: missing required field "SubSource.refresh_hours"`)}
+	}
 	if _, ok := _c.mutation.NodeCount(); !ok {
 		return &ValidationError{Name: "node_count", err: errors.New(`ent: missing required field "SubSource.node_count"`)}
 	}
@@ -468,6 +572,12 @@ func (_c *SubSourceCreate) check() error {
 	}
 	if _, ok := _c.mutation.LastError(); !ok {
 		return &ValidationError{Name: "last_error", err: errors.New(`ent: missing required field "SubSource.last_error"`)}
+	}
+	if _, ok := _c.mutation.LastLocation(); !ok {
+		return &ValidationError{Name: "last_location", err: errors.New(`ent: missing required field "SubSource.last_location"`)}
+	}
+	if _, ok := _c.mutation.LastRouteReason(); !ok {
+		return &ValidationError{Name: "last_route_reason", err: errors.New(`ent: missing required field "SubSource.last_route_reason"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "SubSource.created_at"`)}
@@ -551,6 +661,14 @@ func (_c *SubSourceCreate) createSpec() (*SubSource, *sqlgraph.CreateSpec) {
 		_spec.SetField(subsource.FieldPosition, field.TypeInt, value)
 		_node.Position = value
 	}
+	if value, ok := _c.mutation.GateID(); ok {
+		_spec.SetField(subsource.FieldGateID, field.TypeInt, value)
+		_node.GateID = value
+	}
+	if value, ok := _c.mutation.RefreshHours(); ok {
+		_spec.SetField(subsource.FieldRefreshHours, field.TypeInt, value)
+		_node.RefreshHours = value
+	}
 	if value, ok := _c.mutation.NodeCount(); ok {
 		_spec.SetField(subsource.FieldNodeCount, field.TypeInt, value)
 		_node.NodeCount = value
@@ -574,6 +692,26 @@ func (_c *SubSourceCreate) createSpec() (*SubSource, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.FetchedAt(); ok {
 		_spec.SetField(subsource.FieldFetchedAt, field.TypeTime, value)
 		_node.FetchedAt = &value
+	}
+	if value, ok := _c.mutation.LastAttemptAt(); ok {
+		_spec.SetField(subsource.FieldLastAttemptAt, field.TypeTime, value)
+		_node.LastAttemptAt = &value
+	}
+	if value, ok := _c.mutation.LastLocation(); ok {
+		_spec.SetField(subsource.FieldLastLocation, field.TypeString, value)
+		_node.LastLocation = value
+	}
+	if value, ok := _c.mutation.LastRouteReason(); ok {
+		_spec.SetField(subsource.FieldLastRouteReason, field.TypeString, value)
+		_node.LastRouteReason = value
+	}
+	if value, ok := _c.mutation.Health(); ok {
+		_spec.SetField(subsource.FieldHealth, field.TypeJSON, value)
+		_node.Health = value
+	}
+	if value, ok := _c.mutation.Change(); ok {
+		_spec.SetField(subsource.FieldChange, field.TypeJSON, value)
+		_node.Change = value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(subsource.FieldCreatedAt, field.TypeTime, value)
@@ -799,6 +937,42 @@ func (u *SubSourceUpsert) AddPosition(v int) *SubSourceUpsert {
 	return u
 }
 
+// SetGateID sets the "gate_id" field.
+func (u *SubSourceUpsert) SetGateID(v int) *SubSourceUpsert {
+	u.Set(subsource.FieldGateID, v)
+	return u
+}
+
+// UpdateGateID sets the "gate_id" field to the value that was provided on create.
+func (u *SubSourceUpsert) UpdateGateID() *SubSourceUpsert {
+	u.SetExcluded(subsource.FieldGateID)
+	return u
+}
+
+// AddGateID adds v to the "gate_id" field.
+func (u *SubSourceUpsert) AddGateID(v int) *SubSourceUpsert {
+	u.Add(subsource.FieldGateID, v)
+	return u
+}
+
+// SetRefreshHours sets the "refresh_hours" field.
+func (u *SubSourceUpsert) SetRefreshHours(v int) *SubSourceUpsert {
+	u.Set(subsource.FieldRefreshHours, v)
+	return u
+}
+
+// UpdateRefreshHours sets the "refresh_hours" field to the value that was provided on create.
+func (u *SubSourceUpsert) UpdateRefreshHours() *SubSourceUpsert {
+	u.SetExcluded(subsource.FieldRefreshHours)
+	return u
+}
+
+// AddRefreshHours adds v to the "refresh_hours" field.
+func (u *SubSourceUpsert) AddRefreshHours(v int) *SubSourceUpsert {
+	u.Add(subsource.FieldRefreshHours, v)
+	return u
+}
+
 // SetNodeCount sets the "node_count" field.
 func (u *SubSourceUpsert) SetNodeCount(v int) *SubSourceUpsert {
 	u.Set(subsource.FieldNodeCount, v)
@@ -886,6 +1060,84 @@ func (u *SubSourceUpsert) UpdateFetchedAt() *SubSourceUpsert {
 // ClearFetchedAt clears the value of the "fetched_at" field.
 func (u *SubSourceUpsert) ClearFetchedAt() *SubSourceUpsert {
 	u.SetNull(subsource.FieldFetchedAt)
+	return u
+}
+
+// SetLastAttemptAt sets the "last_attempt_at" field.
+func (u *SubSourceUpsert) SetLastAttemptAt(v time.Time) *SubSourceUpsert {
+	u.Set(subsource.FieldLastAttemptAt, v)
+	return u
+}
+
+// UpdateLastAttemptAt sets the "last_attempt_at" field to the value that was provided on create.
+func (u *SubSourceUpsert) UpdateLastAttemptAt() *SubSourceUpsert {
+	u.SetExcluded(subsource.FieldLastAttemptAt)
+	return u
+}
+
+// ClearLastAttemptAt clears the value of the "last_attempt_at" field.
+func (u *SubSourceUpsert) ClearLastAttemptAt() *SubSourceUpsert {
+	u.SetNull(subsource.FieldLastAttemptAt)
+	return u
+}
+
+// SetLastLocation sets the "last_location" field.
+func (u *SubSourceUpsert) SetLastLocation(v string) *SubSourceUpsert {
+	u.Set(subsource.FieldLastLocation, v)
+	return u
+}
+
+// UpdateLastLocation sets the "last_location" field to the value that was provided on create.
+func (u *SubSourceUpsert) UpdateLastLocation() *SubSourceUpsert {
+	u.SetExcluded(subsource.FieldLastLocation)
+	return u
+}
+
+// SetLastRouteReason sets the "last_route_reason" field.
+func (u *SubSourceUpsert) SetLastRouteReason(v string) *SubSourceUpsert {
+	u.Set(subsource.FieldLastRouteReason, v)
+	return u
+}
+
+// UpdateLastRouteReason sets the "last_route_reason" field to the value that was provided on create.
+func (u *SubSourceUpsert) UpdateLastRouteReason() *SubSourceUpsert {
+	u.SetExcluded(subsource.FieldLastRouteReason)
+	return u
+}
+
+// SetHealth sets the "health" field.
+func (u *SubSourceUpsert) SetHealth(v map[string]interface{}) *SubSourceUpsert {
+	u.Set(subsource.FieldHealth, v)
+	return u
+}
+
+// UpdateHealth sets the "health" field to the value that was provided on create.
+func (u *SubSourceUpsert) UpdateHealth() *SubSourceUpsert {
+	u.SetExcluded(subsource.FieldHealth)
+	return u
+}
+
+// ClearHealth clears the value of the "health" field.
+func (u *SubSourceUpsert) ClearHealth() *SubSourceUpsert {
+	u.SetNull(subsource.FieldHealth)
+	return u
+}
+
+// SetChange sets the "change" field.
+func (u *SubSourceUpsert) SetChange(v map[string]interface{}) *SubSourceUpsert {
+	u.Set(subsource.FieldChange, v)
+	return u
+}
+
+// UpdateChange sets the "change" field to the value that was provided on create.
+func (u *SubSourceUpsert) UpdateChange() *SubSourceUpsert {
+	u.SetExcluded(subsource.FieldChange)
+	return u
+}
+
+// ClearChange clears the value of the "change" field.
+func (u *SubSourceUpsert) ClearChange() *SubSourceUpsert {
+	u.SetNull(subsource.FieldChange)
 	return u
 }
 
@@ -1130,6 +1382,48 @@ func (u *SubSourceUpsertOne) UpdatePosition() *SubSourceUpsertOne {
 	})
 }
 
+// SetGateID sets the "gate_id" field.
+func (u *SubSourceUpsertOne) SetGateID(v int) *SubSourceUpsertOne {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.SetGateID(v)
+	})
+}
+
+// AddGateID adds v to the "gate_id" field.
+func (u *SubSourceUpsertOne) AddGateID(v int) *SubSourceUpsertOne {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.AddGateID(v)
+	})
+}
+
+// UpdateGateID sets the "gate_id" field to the value that was provided on create.
+func (u *SubSourceUpsertOne) UpdateGateID() *SubSourceUpsertOne {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.UpdateGateID()
+	})
+}
+
+// SetRefreshHours sets the "refresh_hours" field.
+func (u *SubSourceUpsertOne) SetRefreshHours(v int) *SubSourceUpsertOne {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.SetRefreshHours(v)
+	})
+}
+
+// AddRefreshHours adds v to the "refresh_hours" field.
+func (u *SubSourceUpsertOne) AddRefreshHours(v int) *SubSourceUpsertOne {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.AddRefreshHours(v)
+	})
+}
+
+// UpdateRefreshHours sets the "refresh_hours" field to the value that was provided on create.
+func (u *SubSourceUpsertOne) UpdateRefreshHours() *SubSourceUpsertOne {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.UpdateRefreshHours()
+	})
+}
+
 // SetNodeCount sets the "node_count" field.
 func (u *SubSourceUpsertOne) SetNodeCount(v int) *SubSourceUpsertOne {
 	return u.Update(func(s *SubSourceUpsert) {
@@ -1232,6 +1526,97 @@ func (u *SubSourceUpsertOne) UpdateFetchedAt() *SubSourceUpsertOne {
 func (u *SubSourceUpsertOne) ClearFetchedAt() *SubSourceUpsertOne {
 	return u.Update(func(s *SubSourceUpsert) {
 		s.ClearFetchedAt()
+	})
+}
+
+// SetLastAttemptAt sets the "last_attempt_at" field.
+func (u *SubSourceUpsertOne) SetLastAttemptAt(v time.Time) *SubSourceUpsertOne {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.SetLastAttemptAt(v)
+	})
+}
+
+// UpdateLastAttemptAt sets the "last_attempt_at" field to the value that was provided on create.
+func (u *SubSourceUpsertOne) UpdateLastAttemptAt() *SubSourceUpsertOne {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.UpdateLastAttemptAt()
+	})
+}
+
+// ClearLastAttemptAt clears the value of the "last_attempt_at" field.
+func (u *SubSourceUpsertOne) ClearLastAttemptAt() *SubSourceUpsertOne {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.ClearLastAttemptAt()
+	})
+}
+
+// SetLastLocation sets the "last_location" field.
+func (u *SubSourceUpsertOne) SetLastLocation(v string) *SubSourceUpsertOne {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.SetLastLocation(v)
+	})
+}
+
+// UpdateLastLocation sets the "last_location" field to the value that was provided on create.
+func (u *SubSourceUpsertOne) UpdateLastLocation() *SubSourceUpsertOne {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.UpdateLastLocation()
+	})
+}
+
+// SetLastRouteReason sets the "last_route_reason" field.
+func (u *SubSourceUpsertOne) SetLastRouteReason(v string) *SubSourceUpsertOne {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.SetLastRouteReason(v)
+	})
+}
+
+// UpdateLastRouteReason sets the "last_route_reason" field to the value that was provided on create.
+func (u *SubSourceUpsertOne) UpdateLastRouteReason() *SubSourceUpsertOne {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.UpdateLastRouteReason()
+	})
+}
+
+// SetHealth sets the "health" field.
+func (u *SubSourceUpsertOne) SetHealth(v map[string]interface{}) *SubSourceUpsertOne {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.SetHealth(v)
+	})
+}
+
+// UpdateHealth sets the "health" field to the value that was provided on create.
+func (u *SubSourceUpsertOne) UpdateHealth() *SubSourceUpsertOne {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.UpdateHealth()
+	})
+}
+
+// ClearHealth clears the value of the "health" field.
+func (u *SubSourceUpsertOne) ClearHealth() *SubSourceUpsertOne {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.ClearHealth()
+	})
+}
+
+// SetChange sets the "change" field.
+func (u *SubSourceUpsertOne) SetChange(v map[string]interface{}) *SubSourceUpsertOne {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.SetChange(v)
+	})
+}
+
+// UpdateChange sets the "change" field to the value that was provided on create.
+func (u *SubSourceUpsertOne) UpdateChange() *SubSourceUpsertOne {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.UpdateChange()
+	})
+}
+
+// ClearChange clears the value of the "change" field.
+func (u *SubSourceUpsertOne) ClearChange() *SubSourceUpsertOne {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.ClearChange()
 	})
 }
 
@@ -1642,6 +2027,48 @@ func (u *SubSourceUpsertBulk) UpdatePosition() *SubSourceUpsertBulk {
 	})
 }
 
+// SetGateID sets the "gate_id" field.
+func (u *SubSourceUpsertBulk) SetGateID(v int) *SubSourceUpsertBulk {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.SetGateID(v)
+	})
+}
+
+// AddGateID adds v to the "gate_id" field.
+func (u *SubSourceUpsertBulk) AddGateID(v int) *SubSourceUpsertBulk {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.AddGateID(v)
+	})
+}
+
+// UpdateGateID sets the "gate_id" field to the value that was provided on create.
+func (u *SubSourceUpsertBulk) UpdateGateID() *SubSourceUpsertBulk {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.UpdateGateID()
+	})
+}
+
+// SetRefreshHours sets the "refresh_hours" field.
+func (u *SubSourceUpsertBulk) SetRefreshHours(v int) *SubSourceUpsertBulk {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.SetRefreshHours(v)
+	})
+}
+
+// AddRefreshHours adds v to the "refresh_hours" field.
+func (u *SubSourceUpsertBulk) AddRefreshHours(v int) *SubSourceUpsertBulk {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.AddRefreshHours(v)
+	})
+}
+
+// UpdateRefreshHours sets the "refresh_hours" field to the value that was provided on create.
+func (u *SubSourceUpsertBulk) UpdateRefreshHours() *SubSourceUpsertBulk {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.UpdateRefreshHours()
+	})
+}
+
 // SetNodeCount sets the "node_count" field.
 func (u *SubSourceUpsertBulk) SetNodeCount(v int) *SubSourceUpsertBulk {
 	return u.Update(func(s *SubSourceUpsert) {
@@ -1744,6 +2171,97 @@ func (u *SubSourceUpsertBulk) UpdateFetchedAt() *SubSourceUpsertBulk {
 func (u *SubSourceUpsertBulk) ClearFetchedAt() *SubSourceUpsertBulk {
 	return u.Update(func(s *SubSourceUpsert) {
 		s.ClearFetchedAt()
+	})
+}
+
+// SetLastAttemptAt sets the "last_attempt_at" field.
+func (u *SubSourceUpsertBulk) SetLastAttemptAt(v time.Time) *SubSourceUpsertBulk {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.SetLastAttemptAt(v)
+	})
+}
+
+// UpdateLastAttemptAt sets the "last_attempt_at" field to the value that was provided on create.
+func (u *SubSourceUpsertBulk) UpdateLastAttemptAt() *SubSourceUpsertBulk {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.UpdateLastAttemptAt()
+	})
+}
+
+// ClearLastAttemptAt clears the value of the "last_attempt_at" field.
+func (u *SubSourceUpsertBulk) ClearLastAttemptAt() *SubSourceUpsertBulk {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.ClearLastAttemptAt()
+	})
+}
+
+// SetLastLocation sets the "last_location" field.
+func (u *SubSourceUpsertBulk) SetLastLocation(v string) *SubSourceUpsertBulk {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.SetLastLocation(v)
+	})
+}
+
+// UpdateLastLocation sets the "last_location" field to the value that was provided on create.
+func (u *SubSourceUpsertBulk) UpdateLastLocation() *SubSourceUpsertBulk {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.UpdateLastLocation()
+	})
+}
+
+// SetLastRouteReason sets the "last_route_reason" field.
+func (u *SubSourceUpsertBulk) SetLastRouteReason(v string) *SubSourceUpsertBulk {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.SetLastRouteReason(v)
+	})
+}
+
+// UpdateLastRouteReason sets the "last_route_reason" field to the value that was provided on create.
+func (u *SubSourceUpsertBulk) UpdateLastRouteReason() *SubSourceUpsertBulk {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.UpdateLastRouteReason()
+	})
+}
+
+// SetHealth sets the "health" field.
+func (u *SubSourceUpsertBulk) SetHealth(v map[string]interface{}) *SubSourceUpsertBulk {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.SetHealth(v)
+	})
+}
+
+// UpdateHealth sets the "health" field to the value that was provided on create.
+func (u *SubSourceUpsertBulk) UpdateHealth() *SubSourceUpsertBulk {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.UpdateHealth()
+	})
+}
+
+// ClearHealth clears the value of the "health" field.
+func (u *SubSourceUpsertBulk) ClearHealth() *SubSourceUpsertBulk {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.ClearHealth()
+	})
+}
+
+// SetChange sets the "change" field.
+func (u *SubSourceUpsertBulk) SetChange(v map[string]interface{}) *SubSourceUpsertBulk {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.SetChange(v)
+	})
+}
+
+// UpdateChange sets the "change" field to the value that was provided on create.
+func (u *SubSourceUpsertBulk) UpdateChange() *SubSourceUpsertBulk {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.UpdateChange()
+	})
+}
+
+// ClearChange clears the value of the "change" field.
+func (u *SubSourceUpsertBulk) ClearChange() *SubSourceUpsertBulk {
+	return u.Update(func(s *SubSourceUpsert) {
+		s.ClearChange()
 	})
 }
 

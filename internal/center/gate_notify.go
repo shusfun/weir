@@ -2,9 +2,13 @@ package center
 
 import (
 	"context"
+	"errors"
+	"slices"
 	"strconv"
 	"sync"
 
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/audit"
 	"github.com/shusfun/weir/internal/store/ent/gate"
 )
 
@@ -13,6 +17,55 @@ type revisionCauseKey struct{}
 type revisionCause struct {
 	Source string
 	Actor  int
+}
+
+func retryRevocationTransaction(ctx context.Context, run func() error) (err error) {
+	for range 4 {
+		err = run()
+		var state interface{ SQLState() string }
+		if !errors.As(err, &state) || state.SQLState() != "40001" || ctx.Err() != nil {
+			return err
+		}
+	}
+	return err
+}
+
+func advanceRevocations(ctx context.Context, tx *ent.Tx, ids []int) (err error) {
+	ids = dedupe(ids)
+	slices.Sort(ids)
+	finish := operationStage(ctx, "gate.revocation.record", "gates", ids)
+	defer func() { finish(err) }()
+	cause := causeFrom(ctx)
+	for _, id := range ids {
+		device, err := tx.Gate.UpdateOneID(id).AddConfigRevision(1).Save(ctx)
+		if err != nil {
+			return err
+		}
+		detail := map[string]any{"old_revision": device.ConfigRevision - 1, "new_revision": device.ConfigRevision, "source": cause.Source, "trace_id": taskTrace(ctx)}
+		if err := tx.Audit.Create().SetActor(cause.Actor).SetAction("config.revision").SetTarget("gate:" + itoa(id)).SetResult("ok").SetDetail(detail).Exec(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Server) notifyRevocations(ctx context.Context, ids []int) {
+	for _, id := range dedupe(ids) {
+		s.waiters.notify(id)
+		_ = s.Store.Notifications.Publish(ctx, "gate:"+itoa(id))
+	}
+}
+
+func (s *Server) configRevisionTrace(ctx context.Context, device *ent.Gate) string {
+	latest, err := s.Store.Ent.Audit.Query().Where(audit.ActionEQ("config.revision"), audit.TargetEQ("gate:"+itoa(device.ID))).Order(ent.Desc(audit.FieldID)).First(ctx)
+	if err == nil {
+		revision, registered := latest.Detail["new_revision"].(float64)
+		trace, _ := latest.Detail["trace_id"].(string)
+		if registered && int64(revision) == device.ConfigRevision && trace != "" {
+			return trace
+		}
+	}
+	return taskTrace(ctx)
 }
 
 // WithRevisionCause 让随后的配置版本推进记下触发来源和操作者。

@@ -179,7 +179,7 @@ func Check(ctx context.Context, c Config) error {
 		probe.Close()
 		return os.Remove(probe.Name())
 	}
-	db, err := sql.Open("pgx", postgresDSN(c.Postgres))
+	db, err := openPostgresProbe(c.Postgres)
 	if err != nil {
 		return err
 	}
@@ -202,50 +202,6 @@ var (
 	ErrExistingData = errors.New("store already holds Weir accounts")
 )
 
-// HasData 报告目标存储里是否已有 Weir 账户；只读，不建表。
-// 只有表结构、没有账户（上次安装中途失败）不算已有数据，可以继续安装。
-func HasData(ctx context.Context, c Config) (bool, error) {
-	if err := c.Validate(); err != nil {
-		return false, err
-	}
-	if c.Driver == DriverSQLite {
-		if _, err := os.Stat(c.SQLitePath); errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-		db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(c.SQLitePath)+"?mode=ro")
-		if err != nil {
-			return false, err
-		}
-		defer db.Close()
-		var tables int
-		if err = db.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'users'").Scan(&tables); err != nil || tables == 0 {
-			return false, err
-		}
-		var exists bool
-		err = db.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM users)").Scan(&exists)
-		return exists, err
-	}
-	db, err := sql.Open("pgx", postgresDSN(c.Postgres))
-	if err != nil {
-		return false, err
-	}
-	defer db.Close()
-	return postgresHasAccounts(ctx, db)
-}
-
-func postgresHasAccounts(ctx context.Context, db *sql.DB) (bool, error) {
-	var table bool
-	if err := db.QueryRowContext(ctx, "SELECT to_regclass('weir.users') IS NOT NULL").Scan(&table); err != nil {
-		return false, fmt.Errorf("%w: %w", ErrPostgresUnavailable, err)
-	}
-	if !table {
-		return false, nil
-	}
-	var exists bool
-	err := db.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM weir.users)").Scan(&exists)
-	return exists, err
-}
-
 func postgresDSN(p PostgresConfig) string {
 	if p.Port == 0 {
 		p.Port = 5432
@@ -265,8 +221,7 @@ func openSQLite(ctx context.Context, path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return nil, err
 	}
-	dsn := "file:" + filepath.ToSlash(path) + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)&_pragma=synchronous(NORMAL)"
-	db, err := sql.Open("sqlite", dsn)
+	db, err := openSQLiteDB(path)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +229,7 @@ func openSQLite(ctx context.Context, path string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	client := ent.NewClient(ent.Driver(measuredDriver{entsql.OpenDB(dialect.SQLite, db)}))
 	s := &Store{Driver: DriverSQLite, DB: db, Ent: client, Lock: newLocalLocker(), Transient: &memoryTransient{}, closer: db.Close}
-	s.Tasks = &taskqueue.Queue{DB: db, Lock: s.Lock}
+	s.Tasks = &taskqueue.Queue{Ent: client, Dialect: dialect.SQLite, Lock: s.Lock}
 	if err = s.migrate(ctx, path); err != nil {
 		s.Close()
 		return nil, err
@@ -305,7 +260,7 @@ func openPostgres(ctx context.Context, c Config) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("%w: %w", ErrPostgresUnavailable, err)
 	}
-	if _, err = db.ExecContext(ctx, "CREATE SCHEMA IF NOT EXISTS weir"); err != nil {
+	if err = createWeirSchema(ctx, db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("create weir schema: %w", err)
 	}
@@ -321,7 +276,7 @@ func openPostgres(ctx context.Context, c Config) (*Store, error) {
 		s.Close()
 		return nil, fmt.Errorf("%w: %w", ErrRedisUnavailable, err)
 	}
-	s.Tasks = &taskqueue.Queue{DB: db, Lock: s.Lock}
+	s.Tasks = &taskqueue.Queue{Ent: client, Dialect: dialect.Postgres, Lock: s.Lock}
 	if err = s.migrate(ctx, ""); err != nil {
 		s.Close()
 		return nil, err

@@ -18,8 +18,9 @@ import (
 // SubGrantUpdate is the builder for updating SubGrant entities.
 type SubGrantUpdate struct {
 	config
-	hooks    []Hook
-	mutation *SubGrantMutation
+	hooks     []Hook
+	mutation  *SubGrantMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the SubGrantUpdate builder.
@@ -136,6 +137,12 @@ func (_u *SubGrantUpdate) ExecX(ctx context.Context) {
 	}
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *SubGrantUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *SubGrantUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *SubGrantUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	_spec := sqlgraph.NewUpdateSpec(subgrant.Table, subgrant.Columns, sqlgraph.NewFieldSpec(subgrant.FieldID, field.TypeInt))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
@@ -166,6 +173,7 @@ func (_u *SubGrantUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.LastUsedAtCleared() {
 		_spec.ClearField(subgrant.FieldLastUsedAt, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{subgrant.Label}
@@ -181,9 +189,10 @@ func (_u *SubGrantUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 // SubGrantUpdateOne is the builder for updating a single SubGrant entity.
 type SubGrantUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *SubGrantMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *SubGrantMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetProfileID sets the "profile_id" field.
@@ -307,6 +316,12 @@ func (_u *SubGrantUpdateOne) ExecX(ctx context.Context) {
 	}
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *SubGrantUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *SubGrantUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *SubGrantUpdateOne) sqlSave(ctx context.Context) (_node *SubGrant, err error) {
 	_spec := sqlgraph.NewUpdateSpec(subgrant.Table, subgrant.Columns, sqlgraph.NewFieldSpec(subgrant.FieldID, field.TypeInt))
 	id, ok := _u.mutation.ID()
@@ -354,6 +369,7 @@ func (_u *SubGrantUpdateOne) sqlSave(ctx context.Context) (_node *SubGrant, err 
 	if _u.mutation.LastUsedAtCleared() {
 		_spec.ClearField(subgrant.FieldLastUsedAt, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &SubGrant{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

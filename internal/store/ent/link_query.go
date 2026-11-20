@@ -253,8 +253,9 @@ func (_q *LinkQuery) Clone() *LinkQuery {
 		inters:     append([]Interceptor{}, _q.inters...),
 		predicates: append([]predicate.Link{}, _q.predicates...),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -473,6 +474,12 @@ func (_q *LinkQuery) ForShare(opts ...sql.LockOption) *LinkQuery {
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *LinkQuery) Modify(modifiers ...func(s *sql.Selector)) *LinkSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // LinkGroupBy is the group-by builder for Link entities.
 type LinkGroupBy struct {
 	selector
@@ -561,4 +568,10 @@ func (_s *LinkSelect) sqlScan(ctx context.Context, root *LinkQuery, v any) error
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *LinkSelect) Modify(modifiers ...func(s *sql.Selector)) *LinkSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

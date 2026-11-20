@@ -18,8 +18,9 @@ import (
 // RateSampleUpdate is the builder for updating RateSample entities.
 type RateSampleUpdate struct {
 	config
-	hooks    []Hook
-	mutation *RateSampleMutation
+	hooks     []Hook
+	mutation  *RateSampleMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the RateSampleUpdate builder.
@@ -179,6 +180,12 @@ func (_u *RateSampleUpdate) ExecX(ctx context.Context) {
 	}
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *RateSampleUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *RateSampleUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *RateSampleUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	_spec := sqlgraph.NewUpdateSpec(ratesample.Table, ratesample.Columns, sqlgraph.NewFieldSpec(ratesample.FieldID, field.TypeInt))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
@@ -221,6 +228,7 @@ func (_u *RateSampleUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if value, ok := _u.mutation.AddedSeconds(); ok {
 		_spec.AddField(ratesample.FieldSeconds, field.TypeFloat64, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{ratesample.Label}
@@ -236,9 +244,10 @@ func (_u *RateSampleUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 // RateSampleUpdateOne is the builder for updating a single RateSample entity.
 type RateSampleUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *RateSampleMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *RateSampleMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUserID sets the "user_id" field.
@@ -405,6 +414,12 @@ func (_u *RateSampleUpdateOne) ExecX(ctx context.Context) {
 	}
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *RateSampleUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *RateSampleUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *RateSampleUpdateOne) sqlSave(ctx context.Context) (_node *RateSample, err error) {
 	_spec := sqlgraph.NewUpdateSpec(ratesample.Table, ratesample.Columns, sqlgraph.NewFieldSpec(ratesample.FieldID, field.TypeInt))
 	id, ok := _u.mutation.ID()
@@ -464,6 +479,7 @@ func (_u *RateSampleUpdateOne) sqlSave(ctx context.Context) (_node *RateSample, 
 	if value, ok := _u.mutation.AddedSeconds(); ok {
 		_spec.AddField(ratesample.FieldSeconds, field.TypeFloat64, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &RateSample{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

@@ -61,7 +61,8 @@ func TestStatisticsIsNotTruncatedToRecentList(t *testing.T) {
 		t.Fatal(err)
 	}
 	for attempt := 1; attempt <= 251; attempt++ {
-		_, err = q.DB.ExecContext(ctx, `INSERT INTO worker_attempts(task_id,attempt,gate_id,started_at,finished_at,outcome,result_bytes) VALUES($1,$2,1,$3,$4,'succeeded',10)`, r.Task.ID, attempt, now.UnixMilli(), now.Add(time.Second).UnixMilli())
+		err = q.Ent.WorkerAttempt.Create().SetID(r.Task.ID).SetAttempt(int32(attempt)).SetGateID(1).SetStartedAt(now.UnixMilli()).
+			SetFinishedAt(now.Add(time.Second).UnixMilli()).SetOutcome("succeeded").SetResultBytes(10).Exec(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}

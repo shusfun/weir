@@ -47,6 +47,23 @@ func TestSubscriptionNameFallbacksAndOrder(t *testing.T) {
 	}
 }
 
+func TestChainedNamesIncludeEntryGate(t *testing.T) {
+	s, _, _ := setupGate(t)
+	exit := &ent.Exit{Kind: "socks5", Remark: "落地", Address: "203.0.113.2"}
+	es := []subscriptionEntry{
+		{Entry: Entry{Chained: true}, gate: &ent.Gate{ID: 1, Name: "东京"}, exit: exit},
+		{Entry: Entry{Chained: true}, gate: &ent.Gate{ID: 2, Name: "洛杉矶"}, exit: exit},
+		{gate: &ent.Gate{ID: 1, Name: "东京"}, node: &ent.Node{Name: "直连节点"}, exit: &ent.Exit{Kind: "freedom"}},
+	}
+	s.nameSubscriptionEntries(t.Context(), es)
+	want := []string{"[链式] 东京 > 落地", "[链式] 洛杉矶 > 落地", "[直连] 直连节点"}
+	for i, e := range es {
+		if e.Name != want[i] {
+			t.Errorf("entry %d = %q want %q", i, e.Name, want[i])
+		}
+	}
+}
+
 func TestSubscriptionInfoLinksUseRemainingAndEffectiveExpiry(t *testing.T) {
 	userEnd := time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)
 	linkEnd := userEnd.Add(-24 * time.Hour)

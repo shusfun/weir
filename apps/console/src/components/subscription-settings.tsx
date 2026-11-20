@@ -1,7 +1,7 @@
 // 规则模板（6 个内置 + 自定义 ini / Clash YAML）与订阅源页的默认设置。
 import { useState } from "react";
 import { useQuery } from "../lib/query";
-import { Badge, Button, Card, CardContent, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, InsetGroup, InsetRow, InsetRows, Notice, Segmented, SwitchField, Textarea, useToast, useConfirm } from "@weir/ui";
+import { Badge, Button, Card, CardContent, Collapsible, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, Form, FormGrid, Input, InsetGroup, InsetRow, InsetRows, Notice, Segmented, SwitchField, Textarea, useToast, useConfirm , Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@weir/ui";
 import { Plus, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -12,6 +12,7 @@ import { State } from "./feedback";
 import { field, useConsoleContext } from "../lib/console-context";
 import { useDraft } from "../lib/dirty";
 import { RenderingSettingsFields, renderingErrorFields } from "../features/subscriptions/settings/rendering-settings";
+import { refreshChoices, refreshText, SourceGateSelect } from "./source-gate";
 
 export function TemplatesPanel() {
   const confirm = useConfirm();
@@ -140,7 +141,15 @@ function SettingsForm({ value, saved }: { value: SubscriptionSettings; saved: ()
         <Field label="手动节点前缀"><Input value={s.manual_prefix} onChange={(e) => set({ manual_prefix: e.target.value })} /></Field>
         <Field label="输出缓存（分钟）" hint="0 表示每次都实时拉取订阅源。"><Input inputMode="numeric" value={String(s.cache_minutes)} onChange={(e) => set({ cache_minutes: Number(e.target.value.replace(/\D/g, "")) || 0 })} /></Field>
         <Field label="客户端更新间隔（小时）"><Input inputMode="numeric" value={String(s.update_interval)} onChange={(e) => set({ update_interval: Number(e.target.value.replace(/\D/g, "")) || 24 })} /></Field>
-        <Field label="订阅源定时刷新（小时）" hint="0 表示只在访问订阅组时按缓存刷新。"><Input inputMode="numeric" value={String(s.source_refresh_hours)} onChange={(e) => set({ source_refresh_hours: Number(e.target.value.replace(/\D/g, "")) || 0 })} /></Field>
+        <Field label="订阅源自动刷新" hint="订阅源没有单独设置时使用；刷新时会重新检测节点。">
+          <Select value={String(s.source_refresh_hours)} onValueChange={(v) => set({ source_refresh_hours: Number(v) || 0 })}>
+            <SelectTrigger><SelectValue>{s.source_refresh_hours ? refreshText(s.source_refresh_hours) : "不自动刷新"}</SelectValue></SelectTrigger>
+            <SelectContent><SelectItem value="0">不自动刷新</SelectItem>{refreshChoices.map((h) => <SelectItem key={h} value={String(h)}>{refreshText(h)}</SelectItem>)}</SelectContent>
+          </Select>
+        </Field>
+        <Field label="默认拉取 VPS" hint="订阅源没有单独指定时先用这台；离线或拉不到时自动换其他在线 VPS，最后由中心直接下载。">
+          <SourceGateSelect value={s.default_gate_id ?? 0} onChange={(default_gate_id) => set({ default_gate_id })} autoLabel="自动挑在线的 VPS" />
+        </Field>
       </FormGrid>
       <FormGrid>
         {switches.map(([k, label]) => (

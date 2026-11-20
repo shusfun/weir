@@ -38,7 +38,7 @@ func TestSubscriptionRawCacheRoundTrip(t *testing.T) {
 func TestSubscriptionRawIdentityAndEmptyBaseline(t *testing.T) {
 	s, _ := newInstalledServer(t)
 	ctx := t.Context()
-	src := s.Store.Ent.SubSource.Create().SetURL("https://source.example/a").SetNodeCache(true).SetKnownNodes(12).SaveX(ctx)
+	src := s.Store.Ent.SubSource.Create().SetURL("https://source.example/a").SetNodeCache(true).SetNodeCount(12).SaveX(ctx)
 	a, b := toSource(src), toSource(src)
 	a.UserAgent, b.UserAgent = "format-a", "format-b"
 	fail, empty := false, false
@@ -79,8 +79,8 @@ func TestSubscriptionRawIdentityAndEmptyBaseline(t *testing.T) {
 	// This test changes the effective UA only in memory; the real result fence
 	// accepts the source snapshot, while the raw cache stays UA-specific.
 	s.recordResults(ctx, []subgroup.SourceResult{r})
-	if got := s.Store.Ent.SubSource.GetX(ctx, src.ID); got.KnownNodes != 12 || r.Error != "source_empty_rejected" || !r.FromCache {
-		t.Fatal("empty result replaced the old baseline", got.KnownNodes, r)
+	if got := s.Store.Ent.SubSource.GetX(ctx, src.ID); got.NodeCount != 12 || r.Error != "source_empty_rejected" || !r.FromCache {
+		t.Fatal("empty result replaced the old baseline", got.NodeCount, r)
 	}
 	empty = false
 	if body, r := read(a); body == "" || r.Error != "" || r.FromCache {

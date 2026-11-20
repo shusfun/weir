@@ -5,11 +5,12 @@ import { Badge, Button, Card, ObjectHeader, SwitchField, Tabs, TabsList, TabsPan
 import { ExitSummary } from "./node-summary";
 import { exitKindName, probeText } from "./chain-exit";
 import { NodeAccess } from "./node-access";
-import { NodeTestControl } from "./node-test";
+import { NodeTestControl, nodeTestBlocked, useNodeTest } from "./node-test";
 import { PendingExits } from "./pending-exits";
 import { UsageRanking } from "./usage-ranking";
 import { nodeStatus, protocolNames, type Gate, type NodeItem, type NodeTestCheck } from "../lib/core";
 import { rateText } from "../lib/linkmap";
+import { bytes, date } from "../lib/models";
 
 const securityNames: Record<string, string> = { reality: "REALITY", tls: "TLS" };
 
@@ -33,7 +34,7 @@ function TestCard({ node }: { node: NodeItem }) {
     <Card className="px-[var(--weir-gap-21)] py-[var(--weir-gap-21)]">
       <div className="flex items-center justify-between gap-3">
         <b>最近实测</b>
-        <span className="font-[family-name:var(--weir-mono)] text-fine text-[var(--weir-ink-3)]">{t ? `${new Date(t.at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })} · ${t.location === "gate" ? "VPS" : "中心"} · mihomo` : "还没有实测"}</span>
+        <span className="font-[family-name:var(--weir-mono)] text-fine text-[var(--weir-ink-3)]">{t ? `${new Date(t.at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })} · ${t.location === "gate" ? "在 VPS 上" : "在中心"}` : "还没有实测"}</span>
       </div>
       <svg viewBox="0 0 381 111" className="my-[var(--weir-gap-13)] block h-[111px] w-full" aria-hidden>
         {dots.map((d, i) => <circle key={i} cx={d.x} cy={d.y} r={1.5} opacity={t?.status === "passed" ? d.o : d.o * 0.37} fill={t?.status === "failed" ? "var(--weir-bad)" : "var(--weir-dot-line)"} />)}
@@ -65,17 +66,20 @@ export function NodeDetailPage({ node: n, gate: g, onEdit, onToggle, onDelete, b
   const tcpOnly = n.exit?.udp === "unsupported";
   const tags = [protocolNames[n.protocol] ?? n.protocol, securityNames[n.security], String(n.port)].filter(Boolean);
   const exitName = !n.exit || n.exit.kind === "freedom" ? "直连" : n.exit.summary?.name || n.exit.label || exitKindName[n.exit.kind] || "未知";
+  const test = useNodeTest(n, 0);
+  const testBlocked = nodeTestBlocked(n, g);
+  const usageLine = n.usage_error ? `用量${n.usage_error.replace(/^用量/, "")}。` : n.usage?.known ? `近 ${n.usage.days} 天 ${bytes(Number(n.usage.bytes))}，${n.usage.users} 人在用${n.usage.observed_at ? `，${date(n.usage.observed_at)} 最后上报` : ""}。` : "近 7 天尚无用量上报。";
   return (
     <div className="stack">
       <ObjectHeader
         back={<Link to="/gates">VPS 与节点</Link>}
         crumb={<><Link className="text-[var(--weir-accent-text)] no-underline" to={`/gates/${n.gate_id}`}>{g?.name ?? "未知 VPS"}</Link><span className="mx-[var(--weir-gap-7)] font-normal text-[var(--weir-ink-3)]">/</span>{n.name}</>}
-        actions={<><Button variant="outline" onClick={onEdit}>编辑</Button><Button onClick={() => setParams((p) => { p.set(tabKey, "chain"); return p; }, { replace: true })}>实测</Button></>}
+        actions={<><Button variant="outline" onClick={onEdit}>编辑</Button><Button busy={test.busy} busyText="正在实测" disabled={!!testBlocked} title={testBlocked || "实测这个节点"} onClick={() => { setParams((p) => { p.set(tabKey, "chain"); return p; }, { replace: true }); void test.run(); }}>实测</Button></>}
         tone={tone}
-        status={[label, tcpOnly ? "仅 TCP" : null, g ? `生效配置 r${g.applied_revision}` : null].filter(Boolean).join(" · ")}
+        status={[label, tcpOnly ? "仅 TCP" : null].filter(Boolean).join(" · ")}
         title={n.name}
         meta={<span className="weir-tags">{tags.map((t) => <span key={t}>{t}</span>)}</span>}
-        banner={<p className="m-0 max-w-[521px] text-lead text-[var(--weir-ink-2)]">客户端经 {g?.name ?? "未知 VPS"} 进来，{exitName === "直连" ? "直接出去" : `再从${exitName}出去`}。{tcpOnly ? "这条路径仅提供 TCP，服务端拒绝 UDP 请求。" : ""}</p>}
+        banner={<p className="m-0 max-w-[521px] text-lead text-[var(--weir-ink-2)]">客户端经 {g?.name ?? "未知 VPS"} 进来，{exitName === "直连" ? "直接出去" : `再从${exitName}出去`}。{usageLine}</p>}
         aside={<TestCard node={n} />}
       />
       <Tabs value={tab} onValueChange={(v) => setParams((p) => { p.set(tabKey, String(v)); return p; }, { replace: true })}>
@@ -93,12 +97,12 @@ export function NodeDetailPage({ node: n, gate: g, onEdit, onToggle, onDelete, b
             <span className="weir-chain-dots" aria-hidden><i /><i /><i /></span>
             <Segment index={1} kind="入口 VPS" title={g?.name ?? "未知"} sub={tags.join(" · ")} />
             <span className="weir-chain-dots" aria-hidden><i /><i /><i /></span>
-            <Segment index={2} kind="出口" title={exitName} sub={[n.exit?.address, n.exit?.place?.city, tcpOnly ? "仅 TCP" : null].filter(Boolean).join(" · ") || "地址未知"} tone={tcpOnly ? "warn" : undefined} />
+            <Segment index={2} kind="出口" title={exitName} sub={[n.exit?.address, n.exit?.place?.city].filter(Boolean).join(" · ") || "地址未知"} tone={tcpOnly ? "warn" : undefined} />
           </div>
           <Card className="overflow-hidden p-0">
             <div className="weir-set-row"><div><b>伪装目标</b><div className="text-meta text-[var(--weir-ink-3)]">{String(n.settings?.reality_dest ?? n.settings?.tls_sni ?? "未知")}</div></div><Button size="sm" variant="ghost" onClick={onEdit}>换一个</Button></div>
             <div className="weir-set-row"><div><b>实测</b><div className="text-meta text-[var(--weir-ink-3)]">短期内部凭据；不扣用户额度，配置变化后结果失效</div></div><div className="w-[341px] max-w-full"><NodeTestControl node={n} gate={g} /></div></div>
-            <div className="weir-set-row"><div><b>UDP 处理</b><div className="text-meta text-[var(--weir-ink-3)]">{tcpOnly ? "服务端拒绝 UDP，不退回入口直出" : n.exit?.udp === "supported" ? "出口支持 UDP" : "出口的 UDP 支持未知"}</div></div>{tcpOnly ? <Badge variant="soft" tone="neutral">仅 TCP</Badge> : null}</div>
+            <div className="weir-set-row"><div><b>UDP 处理</b><div className="text-meta text-[var(--weir-ink-3)]">{tcpOnly ? "服务端拒绝 UDP，不退回入口直出" : n.exit?.udp === "supported" ? "出口支持 UDP" : "出口的 UDP 支持未知"}</div></div></div>
             <div className="weir-set-row"><div><b>启用</b><div className="text-meta text-[var(--weir-ink-3)]">停用后这个节点不在任何订阅里，VPS 上也不再监听</div></div><SwitchField label="启用" className="[&_label]:sr-only" checked={n.enabled} disabled={busy} onCheckedChange={onToggle} /></div>
           </Card>
         </TabsPanel>

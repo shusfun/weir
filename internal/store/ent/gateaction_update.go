@@ -18,8 +18,9 @@ import (
 // GateActionUpdate is the builder for updating GateAction entities.
 type GateActionUpdate struct {
 	config
-	hooks    []Hook
-	mutation *GateActionMutation
+	hooks     []Hook
+	mutation  *GateActionMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the GateActionUpdate builder.
@@ -196,6 +197,12 @@ func (_u *GateActionUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *GateActionUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *GateActionUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *GateActionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -244,6 +251,7 @@ func (_u *GateActionUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if _u.mutation.FinishedAtCleared() {
 		_spec.ClearField(gateaction.FieldFinishedAt, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{gateaction.Label}
@@ -259,9 +267,10 @@ func (_u *GateActionUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 // GateActionUpdateOne is the builder for updating a single GateAction entity.
 type GateActionUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *GateActionMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *GateActionMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetGateID sets the "gate_id" field.
@@ -445,6 +454,12 @@ func (_u *GateActionUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *GateActionUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *GateActionUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *GateActionUpdateOne) sqlSave(ctx context.Context) (_node *GateAction, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -510,6 +525,7 @@ func (_u *GateActionUpdateOne) sqlSave(ctx context.Context) (_node *GateAction, 
 	if _u.mutation.FinishedAtCleared() {
 		_spec.ClearField(gateaction.FieldFinishedAt, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &GateAction{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

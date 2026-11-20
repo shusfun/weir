@@ -194,14 +194,15 @@ func setup(t *testing.T) *env {
 }
 
 // startGate 用「添加 Gate」生成的一次性凭证配对，然后运行辅助程序与 Agent（周期调短）。
-func (e *env) startGate(name string) {
+func (e *env) startGate(name string) *gate.Helper {
 	inv := e.post("/api/v1/admin/gates/invite", map[string]string{"name": name}, nil)
 	gd := filepath.Join(e.dir, name)
 	p := gate.Paths{Config: filepath.Join(gd, "agent.json"), Data: filepath.Join(gd, "data"), Socket: filepath.Join("/tmp", "weir-"+name+".sock"),
 		CoresDir: filepath.Join(gd, "cores"), CertsDir: filepath.Join(gd, "certs"), KernelsDir: filepath.Join(gd, "kernels"), Root: filepath.Join(gd, "root"), RunAs: e.runAs}
 	helperCtx, stopHelper := context.WithCancel(e.ctx)
 	helperDone := make(chan struct{})
-	go func() { defer close(helperDone); _ = gate.ServeHelper(helperCtx, gate.NewHelper(p)) }()
+	helper := gate.NewHelper(p)
+	go func() { defer close(helperDone); _ = gate.ServeHelper(helperCtx, helper) }()
 	e.t.Cleanup(func() { stopHelper(); <-helperDone })
 	eventually(e.t, 5*time.Second, "helper socket", func() bool { _, err := os.Stat(p.Socket); return err == nil })
 	center := e.url
@@ -221,6 +222,7 @@ func (e *env) startGate(name string) {
 		}
 		return false
 	})
+	return helper
 }
 
 // runAgent 按 e.paths 启动 Agent（周期调短）；e.stopAgent 只停这个 Agent。

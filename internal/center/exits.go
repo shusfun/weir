@@ -2,6 +2,7 @@ package center
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
@@ -379,16 +381,21 @@ func (s *Server) exitRoutes(auth, admin *gin.RouterGroup) {
 		g.POST(b, s.asJob("保存出口", "已取消，出口保持原样", func(c *gin.Context) { s.saveExit(c, a) }))
 		g.PATCH(b+"/:eid", s.asJob("保存出口", "已取消，出口保持原样", func(c *gin.Context) { s.saveExit(c, a) }))
 		g.DELETE(b+"/:eid", func(c *gin.Context) { s.deleteExit(c, a) })
+		g.GET(b+"/:eid/delete-preview", func(c *gin.Context) { s.exitDeletePreview(c, a) })
 		g.POST(b+"/:eid/probe", s.asJob("实测出口", "已取消实测", func(c *gin.Context) { s.probeSavedExit(c, a) }))
 	}
 }
 
 func (s *Server) exitParam(c *gin.Context, admin bool) (*ent.Exit, bool) {
+	return exitParamWith(c, s.Store.Ent, admin)
+}
+
+func exitParamWith(c *gin.Context, db *ent.Client, admin bool) (*ent.Exit, bool) {
 	id, ok := subParam(c, "eid")
 	if !ok {
 		return nil, false
 	}
-	e, err := s.Store.Ent.Exit.Get(c.Request.Context(), id)
+	e, err := db.Exit.Get(c.Request.Context(), id)
 	if err != nil || !admin && (e.OwnerUserID == nil || *e.OwnerUserID != c.GetInt("user_id")) {
 		failure(c, 404, "exit_not_found")
 		return nil, false
@@ -663,6 +670,10 @@ func (s *Server) saveExitNow(c *gin.Context, admin bool) {
 }
 
 func (s *Server) deleteExit(c *gin.Context, admin bool) {
+	s.deleteExitConfirmed(c, admin, false)
+}
+
+func (s *Server) deleteExitConfirmed(c *gin.Context, admin, draft bool) {
 	defer s.auditExitFailure(c, "exit.delete")
 	ctx := c.Request.Context()
 	exitID, _ := strconv.Atoi(c.Param("eid"))
@@ -682,54 +693,101 @@ func (s *Server) deleteExit(c *gin.Context, admin bool) {
 		failure(c, 409, "system_exit")
 		return
 	}
-	refs, err := s.exitReferences(ctx, e.ID)
-	if err != nil {
-		failInternal(c, 503, "query_failed", err)
-		return
-	}
-	if len(refs) > 0 {
-		failDetail(c, 409, "exit_in_use", "请先切换或删除引用对象", gin.H{"references": refs})
-		return
-	}
-	if dryRun(c, dryResult{Preview: []string{"删除出口 " + firstNonEmpty(e.Remark, e.Tag)}}) {
-		return
-	}
-	tx, err := s.Store.Ent.Tx(ctx)
-	if err != nil {
-		failInternal(c, 500, "delete_failed", err)
-		return
-	}
-	if _, err = tx.ExitBinding.Delete().Where(exitbinding.ExitIDEQ(e.ID)).Exec(ctx); err == nil {
-		err = tx.Exit.DeleteOne(e).Exec(ctx)
-	}
-	if err == nil {
-		err = tx.Commit()
-	}
-	if err != nil {
-		_ = tx.Rollback()
-		if ent.IsConstraintError(err) {
-			refs, queryErr := s.exitReferences(ctx, e.ID)
-			if queryErr != nil {
-				failInternal(c, 503, "query_failed", queryErr)
-				return
-			}
-			if len(refs) > 0 {
-				failDetail(c, 409, "exit_in_use", "请先切换或删除引用对象", gin.H{"references": refs})
-				return
-			}
+	var claim exitDeleteClaim
+	if !draft {
+		var request struct {
+			PreviewToken string `json:"preview_token"`
 		}
+		if c.Request.ContentLength != 0 && !bind(c, &request) {
+			return
+		}
+		raw, err := s.Crypto.Decrypt(request.PreviewToken)
+		if err != nil || json.Unmarshal([]byte(raw), &claim) != nil || claim.ExitID != e.ID || claim.Actor != c.GetInt("user_id") || !time.Now().Before(claim.Expires) {
+			staleExitDelete(c)
+			return
+		}
+	}
+	var plan *exitDeletion
+	committed := false
+	ctx = WithRevisionCause(ctx, "exit.delete", c.GetInt("user_id"))
+	err := s.Store.Lock.Do(ctx, "cred-sync", func(ctx context.Context) error {
+		return retryRevocationTransaction(ctx, func() error {
+			var txErr error
+			plan, committed, txErr = s.deleteExitTransaction(ctx, c, admin, draft, claim)
+			return txErr
+		})
+	})
+	if errors.Is(err, errExitDeleteStale) {
+		staleExitDelete(c)
+		return
+	}
+	if err != nil {
 		failInternal(c, 500, "delete_failed", err)
 		return
 	}
+	if !committed {
+		return
+	}
+	s.notifyRevocations(ctx, plan.gates())
+	s.reconcileDeletion(ctx)
+	for _, n := range plan.nodes {
+		s.logDeletionCleanup(ctx, "node.probe.cleanup", s.forgetNodeProbes(ctx, n.ID))
+	}
+	_, err = s.pruneGroupMembers(ctx)
+	s.logDeletionCleanup(ctx, "proxy.group.prune", err)
 	keys, _ := s.Store.KV.Keys(ctx, exitProbeKey(exitOwner(e.ID)), 100)
 	keys = append(keys, sourceExitKey(exitOwner(e.ID)))
 	_ = s.Store.KV.Del(ctx, keys...)
-	if err = s.SyncAll(ctx); err != nil {
-		failInternal(c, 500, "sync_failed", err)
-		return
-	}
-	s.audit(c, "exit.delete", exitOwner(e.ID), "ok")
+	s.audit(c, "exit.delete", exitOwner(e.ID), fmt.Sprintf("ok nodes=%d chains=%d routes=%d", len(plan.nodes), len(plan.chains), len(plan.routes)))
 	c.Status(204)
+}
+
+func (s *Server) deleteExitTransaction(ctx context.Context, c *gin.Context, admin, draft bool, claim exitDeleteClaim) (*exitDeletion, bool, error) {
+	tx, err := s.Store.Ent.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		return nil, false, err
+	}
+	defer tx.Rollback()
+	current, ok := exitParamWith(c, tx.Client(), admin)
+	if !ok {
+		return nil, false, nil
+	}
+	plan, err := exitDeletionPlan(ctx, tx.Client(), current)
+	if err != nil {
+		return nil, false, err
+	}
+	if !draft && (claim.Revision != plan.revision() || !time.Now().Before(claim.Expires)) {
+		return nil, false, errExitDeleteStale
+	}
+	if len(plan.blocked) > 0 || draft && len(plan.objects()) > 0 {
+		failDetail(c, 409, "exit_in_use", "请先解除引用，或在代理列表查看和确认级联删除", nil)
+		return nil, false, nil
+	}
+	if dryRun(c, dryResult{Preview: plan.preview(firstNonEmpty(current.Remark, current.Tag))}) {
+		return nil, false, nil
+	}
+	if err = plan.apply(ctx, tx); err != nil {
+		return nil, false, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, false, err
+	}
+	return plan, true, nil
+}
+
+func staleExitDelete(c *gin.Context) {
+	failDetail(c, 409, errExitDeleteStale.Error(), "删除影响已变化或预览已过期，请重新预览后确认", nil)
+}
+
+func (s *Server) logDeletionCleanup(ctx context.Context, stage string, err error) {
+	if err != nil {
+		slog.Warn("deletion follow-up", "stage", stage, "trace", taskTrace(ctx), "err", redact(err.Error()))
+	}
+}
+
+func (s *Server) reconcileDeletion(ctx context.Context) {
+	_, err := s.RequestCredSync(ctx)
+	s.logDeletionCleanup(ctx, "cred.sync", err)
 }
 
 func (s *Server) probeSavedExit(c *gin.Context, admin bool) {

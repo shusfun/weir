@@ -85,16 +85,15 @@ export const distributionSections = [
 ] as const;
 
 // 系统设置分区（?tab=）与设置弹窗目录（供设置页与快速跳转共用，不引入具体表单代码分块）
+// 设置按用户要办的事分组；key 是地址栏 ?tab= 的稳定值，旧的 appearance / notify / backup 由设置页映射到新分组。
 export const systemSections = [
-  { key: "me", label: "我的账户" },
-  { key: "appearance", label: "外观" },
-  { key: "update", label: "版本与更新" },
-  { key: "login", label: "登录与注册" },
-  { key: "notify", label: "通知" },
-  { key: "defense", label: "防御" },
-  { key: "ai", label: "AI 与 dsh" },
-  { key: "certs", label: "证书" },
-  { key: "data", label: "数据" },
+  { key: "me", label: "我的账号" },
+  { key: "login", label: "注册与账号" },
+  { key: "defense", label: "安全" },
+  { key: "certs", label: "节点与下载" },
+  { key: "ai", label: "AI" },
+  { key: "data", label: "备份与数据" },
+  { key: "update", label: "版本与通知" },
 ] as const;
 
 export interface SystemSettingItem {
@@ -106,16 +105,16 @@ export interface SystemSettingItem {
 }
 
 export const systemSettingItems: readonly SystemSettingItem[] = [
-  { key: "account", section: "me", title: "我的账户", description: "密码、二次验证、通行密钥与已登录设备", keywords: "passkey totp mfa 密码 会话 二步验证" },
-  { key: "appearance", section: "appearance", title: "外观与动效", description: "主题与省电档", keywords: "暗色 明亮 省电 地球 theme" },
+  { key: "account", section: "me", title: "账户安全", description: "密码、二次验证、通行密钥与已登录设备", keywords: "passkey totp mfa 密码 会话 二步验证" },
+  { key: "appearance", section: "me", title: "外观与动效", description: "主题与省电档", keywords: "暗色 明亮 省电 地球 theme" },
   { key: "update", section: "update", title: "版本与更新", description: "中心版本与升级", keywords: "upgrade 升级 自更新 版本" },
-  { key: "github", section: "update", title: "下载来源", description: "GitHub 来源与下载策略", keywords: "github 镜像 加速 proxy" },
+  { key: "github", section: "certs", title: "下载来源", description: "内核与更新包的 GitHub 来源与下载策略", keywords: "github 镜像 加速 proxy" },
   { key: "logo", section: "login", title: "登录页标识", description: "站点名称与图标", keywords: "logo 品牌 图标 名称" },
-  { key: "security", section: "login", title: "登录与注册", description: "全局登录方式与安全策略", keywords: "注册 验证 totp 登录" },
+  { key: "security", section: "defense", title: "登录方式", description: "二次验证、通行密钥与注册开关", keywords: "注册 验证 totp 登录" },
   { key: "accounts", section: "login", title: "注册与账号策略", description: "邀请码、兑换码、邮箱后缀与发信限额", keywords: "邀请码 兑换码 邮箱 后缀 altcha 发码" },
-  { key: "turnstile", section: "login", title: "人机验证", description: "Cloudflare Turnstile 配置", keywords: "turnstile captcha 验证码 cloudflare" },
+  { key: "turnstile", section: "defense", title: "人机验证", description: "Cloudflare Turnstile 配置", keywords: "turnstile captcha 验证码 cloudflare" },
   { key: "smtp", section: "login", title: "邮件服务", description: "登录与通知邮件发送（SMTP）", keywords: "smtp 邮箱 发信 邮件 mail" },
-  { key: "notify", section: "notify", title: "通知渠道", description: "Telegram 告警与运行通知", keywords: "telegram tg bot 通知 告警" },
+  { key: "notify", section: "update", title: "Telegram 通知", description: "Telegram 告警与运行通知", keywords: "telegram tg bot 通知 告警" },
   { key: "protection", section: "defense", title: "自动安全处置护栏", description: "临时收紧上限、保护网段与域名", keywords: "防御 封禁 护栏 限流 安全" },
   { key: "dsh", section: "ai", title: "dsh 服务与版本", description: "AI 助手地址、反代连通检查与版本管理", keywords: "dsh ai deepseek 助手 反代 版本" },
   { key: "laya", section: "ai", title: "Laya 推理与部署", description: "中心或 VPS 部署 Laya、一键实测启用与运维草稿记录", keywords: "laya ollaya 模型 推理 判断 运维" },

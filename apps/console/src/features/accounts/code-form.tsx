@@ -75,7 +75,7 @@ export function CodeForm({ initialKind = "redeem", initialPlanId, plans, onCreat
                   <SelectTrigger><SelectValue>{plan === "none" ? "不附带套餐" : chosenPlan?.name ?? "套餐未知"}</SelectValue></SelectTrigger>
                   <SelectContent>
                     {kind === "invite" && <SelectItem value="none">不附带套餐</SelectItem>}
-                    {enabledPlans.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.name} · v{p.revision}</SelectItem>)}
+                    {enabledPlans.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </Field>

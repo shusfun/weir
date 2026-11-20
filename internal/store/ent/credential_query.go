@@ -253,8 +253,9 @@ func (_q *CredentialQuery) Clone() *CredentialQuery {
 		inters:     append([]Interceptor{}, _q.inters...),
 		predicates: append([]predicate.Credential{}, _q.predicates...),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -473,6 +474,12 @@ func (_q *CredentialQuery) ForShare(opts ...sql.LockOption) *CredentialQuery {
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *CredentialQuery) Modify(modifiers ...func(s *sql.Selector)) *CredentialSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // CredentialGroupBy is the group-by builder for Credential entities.
 type CredentialGroupBy struct {
 	selector
@@ -561,4 +568,10 @@ func (_s *CredentialSelect) sqlScan(ctx context.Context, root *CredentialQuery, 
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *CredentialSelect) Modify(modifiers ...func(s *sql.Selector)) *CredentialSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

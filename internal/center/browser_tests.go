@@ -51,6 +51,7 @@ func (s *Server) browserTestRoutes(auth, admin *gin.RouterGroup) {
 	admin.PUT("/gates/:id/browser-test", s.putBrowserTestConfig)
 	admin.POST("/gates/:id/browser-tests", func(c *gin.Context) { s.createBrowserTest(c, true) })
 	auth.POST("/me/nodes/:id/browser-tests", func(c *gin.Context) { s.createBrowserTest(c, false) })
+	auth.GET("/me/nodes/:id/browser-test", s.myBrowserTestReadiness)
 	auth.GET("/browser-tests/:id", s.browserTestSession)
 	auth.POST("/browser-tests/:id", s.browserTestSession)
 	auth.DELETE("/browser-tests/:id", s.browserTestSession)
@@ -277,6 +278,53 @@ func browserNodeAccess(ctx context.Context, db *ent.Client, uid, nid int) (*ent.
 	return n, nil
 }
 
+// browserTestReadiness 是「现在能不能做浏览器测试」的唯一判定：创建会话与页面上的按钮都用它。
+// reason 为空表示就绪。
+func (s *Server) browserTestReadiness(ctx context.Context, db *ent.Client, gid int) (*browserConfig, *contracts.BrowserTestObservation, string, error) {
+	g, err := db.Gate.Get(ctx, gid)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	if !gateOnline(g) {
+		return nil, nil, "VPS 离线", nil
+	}
+	config, err := readBrowserConfig(ctx, db, gid)
+	if err != nil || config == nil {
+		return nil, nil, "管理员尚未启用浏览器测试服务", err
+	}
+	observed, err := s.browserObservation(ctx, gid)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	if observed == nil {
+		return config, nil, "等待 VPS 应用测试服务", nil
+	}
+	if !observed.Healthy {
+		return config, observed, "测试监听已停止，请重新应用测试服务配置", nil
+	}
+	return config, observed, "", nil
+}
+
+// myBrowserTestReadiness 告诉用户这个节点现在能不能做浏览器测试，不能时给出原因。
+func (s *Server) myBrowserTestReadiness(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		failure(c, 400, "invalid_id")
+		return
+	}
+	n, err := browserNodeAccess(c.Request.Context(), s.Store.Ent, c.GetInt("user_id"), id)
+	if err != nil {
+		failure(c, 403, "node_forbidden")
+		return
+	}
+	_, _, reason, err := s.browserTestReadiness(c.Request.Context(), s.Store.Ent, n.GateID)
+	if err != nil {
+		failInternal(c, 503, "query_failed", err)
+		return
+	}
+	c.JSON(200, gin.H{"ready": reason == "", "reason": reason})
+}
+
 func (s *Server) createBrowserTest(c *gin.Context, admin bool) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -310,29 +358,12 @@ func (s *Server) createBrowserTest(c *gin.Context, admin bool) {
 		if err = lockActiveGates(ctx, tx.Client(), gid); err != nil {
 			return err
 		}
-		g, err := tx.Gate.Get(ctx, gid)
+		config, observed, reason, err := s.browserTestReadiness(ctx, tx.Client(), gid)
 		if err != nil {
 			return err
 		}
-		if !gateOnline(g) {
-			return errors.New("VPS 离线")
-		}
-		config, err := readBrowserConfig(ctx, tx.Client(), gid)
-		if err != nil {
-			return err
-		}
-		if config == nil {
-			return errors.New("管理员尚未启用浏览器测试服务")
-		}
-		observed, err := s.browserObservation(ctx, gid)
-		if err != nil {
-			return err
-		}
-		if observed == nil {
-			return errors.New("测试服务尚无新鲜回执")
-		}
-		if !observed.Healthy {
-			return errors.New("测试监听已停止，请重新应用测试服务配置")
+		if reason != "" {
+			return errors.New(reason)
 		}
 		rows, err := tx.Resource.Query().Where(resource.KindEQ(browserSessionKind), resource.OwnerIDEQ(gid)).All(ctx)
 		if err != nil {

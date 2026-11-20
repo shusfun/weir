@@ -18,8 +18,9 @@ import (
 // SubPullUpdate is the builder for updating SubPull entities.
 type SubPullUpdate struct {
 	config
-	hooks    []Hook
-	mutation *SubPullMutation
+	hooks     []Hook
+	mutation  *SubPullMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the SubPullUpdate builder.
@@ -235,6 +236,12 @@ func (_u *SubPullUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *SubPullUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *SubPullUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *SubPullUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -280,6 +287,7 @@ func (_u *SubPullUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(subpull.FieldStatus, field.TypeString, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{subpull.Label}
@@ -295,9 +303,10 @@ func (_u *SubPullUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 // SubPullUpdateOne is the builder for updating a single SubPull entity.
 type SubPullUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *SubPullMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *SubPullMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetLinkID sets the "link_id" field.
@@ -520,6 +529,12 @@ func (_u *SubPullUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *SubPullUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *SubPullUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *SubPullUpdateOne) sqlSave(ctx context.Context) (_node *SubPull, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -582,6 +597,7 @@ func (_u *SubPullUpdateOne) sqlSave(ctx context.Context) (_node *SubPull, err er
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(subpull.FieldStatus, field.TypeString, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &SubPull{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

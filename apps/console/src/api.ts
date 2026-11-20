@@ -229,6 +229,8 @@ const messages: Record<string, string> = {
  invalid_profile_settings:"订阅组设置包含无效字段。",
  invalid_profile_members:"订阅组成员无效：检查重复、循环、停用成员及三层深度限制。",
  profile_in_use:"此订阅组仍被其他组引用，请先移除引用。",
+ invalid_pick:"挑选条件无效：倍率上限须在 0.01–100 之间，地区与关键词每项不超过 50 字。",
+ unknown_profile:"所选订阅组不存在。",
  unknown_source:"所选订阅源不存在。",
  unknown_user:"所选用户不存在。",
  preview_failed:"预览失败。",

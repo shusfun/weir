@@ -21,15 +21,18 @@ function SourcePipeline({ activeTab }: { activeTab: string }) {
   const nodes = useManualNodes();
   const profiles = useQuery({ queryKey: ["subscription-profiles"], queryFn: async () => (await api("/admin/subscriptions/profiles")).items as unknown[] });
   const templates = useTemplates();
+  // 可用节点合计：只算检测过的源；一个都没检测过时显示未知
+  const checked = sources.data?.items.filter((s) => s.health) ?? [];
+  const alive = checked.length ? checked.reduce((n, s) => n + (s.health?.alive ?? 0), 0) : null;
   const steps = [
-    { name: "订阅源", value: sources.data?.items.length, note: "上游与用量", active: activeTab === "sources", onSelect: () => navigate("/subscriptions?tab=sources") },
+    { name: "拉取", value: sources.data?.items.length, note: "用 VPS 拉订阅源", active: activeTab === "sources", onSelect: () => navigate("/subscriptions?tab=sources") },
     { name: "手动节点", value: nodes.data?.items.length, note: "导入与去重", active: activeTab === "nodes", onSelect: () => navigate("/subscriptions?tab=nodes") },
-    { name: "处理链", value: sources.data?.items.reduce((n, s) => n + (s.operators?.length ?? 0), 0), note: "筛选与重命名", active: false, onSelect: () => navigate("/subscriptions?tab=sources") },
+    { name: "检测", value: alive, note: "可用节点", active: false, onSelect: () => navigate("/subscriptions?tab=sources") },
     { name: "输出模板", value: (templates.data?.builtin.length ?? 0) + (templates.data?.custom.length ?? 0) || null, note: "按格式与规则", active: activeTab === "templates", onSelect: () => navigate("/groups?tab=templates") },
-    { name: "订阅组", value: profiles.data?.length, note: "组合与分享", active: activeTab === "profiles", onSelect: () => navigate("/groups?tab=profiles") },
+    { name: "挑选输出", value: profiles.data?.length, note: "按地区倍率组合", active: activeTab === "profiles", onSelect: () => navigate("/groups?tab=profiles") },
   ];
   return (
-    <Card className="px-[var(--weir-gap-25)] py-[var(--weir-gap-21)]">
+    <Card data-tour="subscription-pipeline" className="px-[var(--weir-gap-25)] py-[var(--weir-gap-21)]">
       <PipelineBoard label="外部订阅流水线" steps={steps} />
     </Card>
   );

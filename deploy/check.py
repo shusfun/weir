@@ -64,7 +64,7 @@ def execute_checks(run, args, root):
                 pending.discard(name)
     if not args.center_only and not args.linux:
         packages = (["./internal/store"] if args.postgres else
-                    ["./internal/gate", "./internal/browsertest/...", "./internal/nodeprobe", "./internal/hoststats", "./internal/sub", "./internal/subgroup", "./internal/subscription", "./internal/subout", "./internal/db", "./internal/kernelconf", "./internal/kernels", "./internal/store", "./packages/contracts"])
+                    ["./internal/gate", "./internal/browsertest/...", "./internal/nodeprobe", "./internal/hoststats", "./internal/sub", "./internal/subgroup", "./internal/subscription", "./internal/subout", "./internal/kernelconf", "./internal/kernelconf/model", "./internal/kernels", "./internal/store", "./packages/contracts"])
         if pending is None or "backend" in pending:
             # Center and store integration tests share an isolated Redis fixture;
             # finish the center batches before opening store test databases.

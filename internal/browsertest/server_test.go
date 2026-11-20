@@ -13,19 +13,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/qlog"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
 func TestQUICCloseReasonDoesNotLogPeerText(t *testing.T) {
-	for _, err := range []error{
-		&quic.TransportError{ErrorCode: 0x12e, Remote: true, ErrorMessage: "peer-token-secret"},
-		&quic.ApplicationError{ErrorCode: 7, Remote: true, ErrorMessage: "peer-token-secret"},
-	} {
-		reason := quicCloseReason(err)
-		if strings.Contains(reason, "peer-token-secret") || !strings.Contains(reason, "remote=true") {
-			t.Fatal(reason)
-		}
+	var logs bytes.Buffer
+	logger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(logger) })
+	trace := browserQUICTrace{id: "trace-test", gateID: 1}
+	trace.RecordEvent(qlog.ConnectionClosed{Initiator: qlog.InitiatorRemote, Reason: "peer-token-secret"})
+	if output := logs.String(); strings.Contains(output, "peer-token-secret") || !strings.Contains(output, "initiator=remote") || !strings.Contains(output, "connection_trace_id=trace-test") {
+		t.Fatal(output)
 	}
 }
 

@@ -3,6 +3,7 @@
 package migrate
 
 import (
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/dialect/sql/schema"
 	"entgo.io/ent/schema/field"
 )
@@ -779,12 +780,19 @@ var (
 		{Name: "website", Type: field.TypeString, Size: 2048, Default: ""},
 		{Name: "remark", Type: field.TypeString, Size: 500, Default: ""},
 		{Name: "position", Type: field.TypeInt, Default: 0},
+		{Name: "gate_id", Type: field.TypeInt, Default: 0},
+		{Name: "refresh_hours", Type: field.TypeInt, Default: 0},
 		{Name: "node_count", Type: field.TypeInt, Default: 0},
 		{Name: "known_nodes", Type: field.TypeInt, Default: 0},
 		{Name: "user_info", Type: field.TypeString, Default: ""},
 		{Name: "title", Type: field.TypeString, Default: ""},
 		{Name: "last_error", Type: field.TypeString, Default: ""},
 		{Name: "fetched_at", Type: field.TypeTime, Nullable: true},
+		{Name: "last_attempt_at", Type: field.TypeTime, Nullable: true},
+		{Name: "last_location", Type: field.TypeString, Default: ""},
+		{Name: "last_route_reason", Type: field.TypeString, Default: ""},
+		{Name: "health", Type: field.TypeJSON, Nullable: true},
+		{Name: "change", Type: field.TypeJSON, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 	}
 	// SubSourcesTable holds the schema information for the "sub_sources" table.
@@ -792,6 +800,25 @@ var (
 		Name:       "sub_sources",
 		Columns:    SubSourcesColumns,
 		PrimaryKey: []*schema.Column{SubSourcesColumns[0]},
+	}
+	// SubscriptionCacheEntriesColumns holds the columns for the "subscription_cache_entries" table.
+	SubscriptionCacheEntriesColumns = []*schema.Column{
+		{Name: "key", Type: field.TypeString, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "bytes", Type: field.TypeInt64},
+		{Name: "expires_at", Type: field.TypeInt64},
+	}
+	// SubscriptionCacheEntriesTable holds the schema information for the "subscription_cache_entries" table.
+	SubscriptionCacheEntriesTable = &schema.Table{
+		Name:       "subscription_cache_entries",
+		Columns:    SubscriptionCacheEntriesColumns,
+		PrimaryKey: []*schema.Column{SubscriptionCacheEntriesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "subscription_cache_entries_expiry",
+				Unique:  false,
+				Columns: []*schema.Column{SubscriptionCacheEntriesColumns[2]},
+			},
+		},
 	}
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
@@ -830,6 +857,88 @@ var (
 			},
 		},
 	}
+	// WorkerActivityColumns holds the columns for the "worker_activity" table.
+	WorkerActivityColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "task_id", Type: field.TypeString, Size: 2147483647},
+		{Name: "gate_id", Type: field.TypeInt},
+		{Name: "attempt", Type: field.TypeInt32},
+		{Name: "at", Type: field.TypeInt64},
+		{Name: "reason", Type: field.TypeString, Size: 2147483647},
+	}
+	// WorkerActivityTable holds the schema information for the "worker_activity" table.
+	WorkerActivityTable = &schema.Table{
+		Name:       "worker_activity",
+		Columns:    WorkerActivityColumns,
+		PrimaryKey: []*schema.Column{WorkerActivityColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "worker_activity_task",
+				Unique:  false,
+				Columns: []*schema.Column{WorkerActivityColumns[1], WorkerActivityColumns[4]},
+			},
+		},
+	}
+	// WorkerCapabilitiesColumns holds the columns for the "worker_capabilities" table.
+	WorkerCapabilitiesColumns = []*schema.Column{
+		{Name: "gate_id", Type: field.TypeInt},
+		{Name: "hash", Type: field.TypeString, Size: 2147483647},
+		{Name: "document", Type: field.TypeString, Size: 2147483647},
+	}
+	// WorkerCapabilitiesTable holds the schema information for the "worker_capabilities" table.
+	WorkerCapabilitiesTable = &schema.Table{
+		Name:       "worker_capabilities",
+		Columns:    WorkerCapabilitiesColumns,
+		PrimaryKey: []*schema.Column{WorkerCapabilitiesColumns[0]},
+	}
+	// WorkerTasksColumns holds the columns for the "worker_tasks" table.
+	WorkerTasksColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "kind", Type: field.TypeString, Size: 2147483647},
+		{Name: "version", Type: field.TypeInt32},
+		{Name: "trace_id", Type: field.TypeString, Size: 2147483647},
+		{Name: "idem", Type: field.TypeString, Unique: true, Size: 2147483647},
+		{Name: "payload_hash", Type: field.TypeString, Size: 2147483647},
+		{Name: "body", Type: field.TypeString, Size: 2147483647},
+		{Name: "requirements", Type: field.TypeString, Size: 2147483647},
+		{Name: "candidates", Type: field.TypeString, Size: 2147483647},
+		{Name: "deadline", Type: field.TypeInt64},
+		{Name: "created_at", Type: field.TypeInt64},
+		{Name: "status", Type: field.TypeString, Size: 2147483647},
+		{Name: "gate_id", Type: field.TypeInt, Default: 0},
+		{Name: "attempt", Type: field.TypeInt32, Default: 0},
+		{Name: "lease_token", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "lease_until", Type: field.TypeInt64, Default: 0},
+		{Name: "result", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "error", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "legacy_id", Type: field.TypeInt, Default: 0},
+		{Name: "candidate_at", Type: field.TypeInt64, Default: 0},
+		{Name: "progress", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "projection_after", Type: field.TypeInt64, Default: 0},
+	}
+	// WorkerTasksTable holds the schema information for the "worker_tasks" table.
+	WorkerTasksTable = &schema.Table{
+		Name:       "worker_tasks",
+		Columns:    WorkerTasksColumns,
+		PrimaryKey: []*schema.Column{WorkerTasksColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "worker_tasks_dispatch",
+				Unique:  false,
+				Columns: []*schema.Column{WorkerTasksColumns[11], WorkerTasksColumns[10]},
+			},
+			{
+				Name:    "worker_tasks_gate",
+				Unique:  false,
+				Columns: []*schema.Column{WorkerTasksColumns[12], WorkerTasksColumns[11]},
+			},
+			{
+				Name:    "worker_tasks_legacy",
+				Unique:  false,
+				Columns: []*schema.Column{WorkerTasksColumns[18]},
+			},
+		},
+	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		AccessCodesTable,
@@ -859,7 +968,11 @@ var (
 		SubProfilesTable,
 		SubPullsTable,
 		SubSourcesTable,
+		SubscriptionCacheEntriesTable,
 		UsersTable,
+		WorkerActivityTable,
+		WorkerCapabilitiesTable,
+		WorkerTasksTable,
 	}
 )
 
@@ -868,4 +981,16 @@ func init() {
 	ExitBindingsTable.ForeignKeys[0].RefTable = ExitsTable
 	NodesTable.ForeignKeys[0].RefTable = ExitsTable
 	RoutesTable.ForeignKeys[0].RefTable = ExitsTable
+	SubscriptionCacheEntriesTable.Annotation = &entsql.Annotation{
+		Table: "subscription_cache_entries",
+	}
+	WorkerActivityTable.Annotation = &entsql.Annotation{
+		Table: "worker_activity",
+	}
+	WorkerCapabilitiesTable.Annotation = &entsql.Annotation{
+		Table: "worker_capabilities",
+	}
+	WorkerTasksTable.Annotation = &entsql.Annotation{
+		Table: "worker_tasks",
+	}
 }

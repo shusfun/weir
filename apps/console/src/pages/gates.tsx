@@ -1,4 +1,5 @@
 import { recordFolderMotion } from "../lib/folder-motion";
+import { SyncLine } from "../components/sync-line";
 import { GateManagement } from "../components/gate-management";
 // VPS 与节点：上方切换「VPS」（玻璃文件夹 + 紧凑协议行）与「全部节点」（自有节点筛选表 + 跨来源统一目录）。
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
@@ -97,7 +98,7 @@ export function GatesPage() {
     <PageHeader
       size="hero"
       title={listed.length === 0 ? "还没有 VPS" : <>{onlineCount} 台 VPS 在线{attention > 0 && <><br />{attention} 件事要处理</>}</>}
-      description={attention > 0 ? (failed[0] || pending[0] || offline[0]) : listed.length === 0 ? "用 SSH 一键接入 VPS 后，建节点、配证书与托管 Laya 都在这里完成。" : undefined}
+      description={<>{attention > 0 ? (failed[0] || pending[0] || offline[0]) : listed.length === 0 ? "用 SSH 一键接入 VPS 后，建节点、配证书与托管 Laya 都在这里完成。" : null} <SyncLine /></>}
       actions={
         <>
           <Button data-tour="new-node" variant="outline" disabled={!gates.data?.some((g) => g.status === "active")} onClick={() => setWizard("any")}><Plus />新建节点</Button>

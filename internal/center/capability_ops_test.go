@@ -97,7 +97,7 @@ func TestComposedDraftCreatesNodeUserLinkAndRollsBack(t *testing.T) {
 		t.Fatalf("failing draft = %d %s", code, detail)
 	}
 	if c, _ := s.Store.Ent.Node.Query().Count(ctx); c != 1 {
-		t.Fatalf("nodes after rollback = %d", c)
+		t.Fatalf("nodes after rollback = %d: %s", c, detail)
 	}
 	if c, _ := s.Store.Ent.User.Query().Where(user.EmailEQ("twin2@example.test")).Count(ctx); c != 0 {
 		t.Fatalf("users after rollback = %d", c)

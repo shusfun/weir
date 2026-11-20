@@ -18,6 +18,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/shusfun/weir/internal/store"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/ruletemplate"
 	"github.com/shusfun/weir/internal/store/ent/setting"
@@ -138,7 +139,7 @@ func (s *Server) importSubscriptionsLocked(ctx context.Context, raw []byte, cont
 		return st, err
 	}
 	defer tx.Rollback()
-	revision, err := tx.LockSubscriptionRevision(ctx)
+	revision, err := store.LockSubscriptionRevision(ctx, tx)
 	if err != nil {
 		return st, err
 	}

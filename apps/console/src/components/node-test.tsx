@@ -11,7 +11,7 @@ import { ProbeLocation } from "./probe-location";
 
 type RequestState = { submitting?: boolean; jobId?: string; startedAt?: number; error?: string };
 
-function useNodeTest(n: NodeItem, gateID: number) {
+export function useNodeTest(n: NodeItem, gateID: number) {
   const [local, setLocal] = useState<RequestState>({});
   const running = n.test?.status === "running" ? n.test : undefined;
   const id = running && (!local.jobId || running.job_id !== local.jobId && Date.parse(running.at) > (local.startedAt ?? 0)) ? running.job_id : local.jobId;
@@ -47,10 +47,18 @@ function useNodeTest(n: NodeItem, gateID: number) {
 
 const checkText = (c: NodeTestCheck) => ({ passed: "通过", failed: "失败", unknown: "未知", not_applicable: "不适用" })[c.status];
 
+// nodeTestBlocked 返回现在不能实测的原因；VPS 数据还没取到时写「VPS 状态未知」，不当作离线。
+export function nodeTestBlocked(node: NodeItem, gate?: Gate) {
+  if (!node.enabled) return "节点已停用";
+  if (!gate) return "VPS 状态未知";
+  if (gate.status !== "active") return "VPS 已撤销";
+  return gate.online ? "" : "VPS 离线";
+}
+
 export function NodeTestControl({ node, gate, detail = false }: { node: NodeItem; gate?: Gate; detail?: boolean }) {
   const [executionGate, setExecutionGate] = useState(0);
   const t = useNodeTest(node, executionGate);
-  const disabledReason = !node.enabled ? "节点已停用" : !gate?.online ? "VPS 离线" : gate.status !== "active" ? "VPS 已撤销" : "";
+  const disabledReason = nodeTestBlocked(node, gate);
   const r = t.result;
   const tone = t.error || r?.status === "failed" ? "text-[var(--weir-bad-ink)]" : r?.status === "passed" ? "text-[var(--weir-ok-ink)]" : "text-[var(--weir-ink-3)]";
   return (
@@ -61,7 +69,7 @@ export function NodeTestControl({ node, gate, detail = false }: { node: NodeItem
         {detail && <ProbeLocation value={executionGate} change={setExecutionGate} disabled={t.busy} />}
         <span className="block truncate">{t.busy ? "正在实测…" : t.error ? "实测未完成" : !r ? "尚未实测" : r.status === "pending" ? "已保存 · 待实测" : r.status === "passed" ? "实测通过" : r.status === "failed" ? "实测失败" : "实测未知"}
           {!t.busy && r && ` · TCP ${checkText(r.tcp)} · UDP ${r.udp.status === "not_applicable" && r.udp.why ? r.udp.why : checkText(r.udp)}`}</span>
-        <span className="block truncate text-[var(--weir-ink-3)]">{t.busy ? t.step || "正在提交，等候中心任务" : r ? `${date(r.at)} · ${r.location === "gate" ? `VPS ${r.execution_gate_id ?? "未知"}` : r.location === "colocated" ? "同机实测，外部可达性未知" : "中心"}` : "点击图标测试真实连接"}</span>
+        <span className="block truncate text-[var(--weir-ink-3)]">{t.busy ? t.step || "正在提交，等候中心任务" : r ? `${date(r.at)} · ${r.location === "gate" ? (r.execution_gate_id === gate?.id ? `在 ${gate?.name} 上实测` : "在其他 VPS 上实测") : r.location === "colocated" ? "同机实测，外部可达性未知" : "中心"}` : "点击图标测试真实连接"}</span>
         <span className="block h-12 overflow-y-auto whitespace-pre-wrap break-words text-[var(--weir-ink-3)]">{t.error || r?.why || disabledReason || "使用短时内部凭据实测，不计用户用量或速度样本"}</span>
         {detail && <JobLine job={t.job} idle="尚未开始实测" note="内部测试不计用户用量" />}
       </div>

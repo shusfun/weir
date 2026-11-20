@@ -19,8 +19,9 @@ import (
 // AccessCodeUpdate is the builder for updating AccessCode entities.
 type AccessCodeUpdate struct {
 	config
-	hooks    []Hook
-	mutation *AccessCodeMutation
+	hooks     []Hook
+	mutation  *AccessCodeMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the AccessCodeUpdate builder.
@@ -292,6 +293,12 @@ func (_u *AccessCodeUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *AccessCodeUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *AccessCodeUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *AccessCodeUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -361,6 +368,7 @@ func (_u *AccessCodeUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if value, ok := _u.mutation.TraceID(); ok {
 		_spec.SetField(accesscode.FieldTraceID, field.TypeString, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{accesscode.Label}
@@ -376,9 +384,10 @@ func (_u *AccessCodeUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 // AccessCodeUpdateOne is the builder for updating a single AccessCode entity.
 type AccessCodeUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *AccessCodeMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *AccessCodeMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetKind sets the "kind" field.
@@ -657,6 +666,12 @@ func (_u *AccessCodeUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *AccessCodeUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *AccessCodeUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *AccessCodeUpdateOne) sqlSave(ctx context.Context) (_node *AccessCode, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -743,6 +758,7 @@ func (_u *AccessCodeUpdateOne) sqlSave(ctx context.Context) (_node *AccessCode, 
 	if value, ok := _u.mutation.TraceID(); ok {
 		_spec.SetField(accesscode.FieldTraceID, field.TypeString, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &AccessCode{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

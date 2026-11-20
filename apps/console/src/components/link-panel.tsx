@@ -507,7 +507,7 @@ export function ChainPanel({ base, admin }: { base: string; admin?: boolean }) {
   useConsoleContext({ list: { total: chains.data?.items.length ?? 0, items: (chains.data?.items ?? []).map((c) => ({ type: "chain", id: c.id, name: c.name })) } });
   if (chains.isPending || choices.isPending || chains.error || choices.error)
     return <State loading={chains.isPending || choices.isPending} error={chains.error ?? choices.error} onRetry={() => { void chains.refetch(); void choices.refetch(); }} />;
-  const name = (id?: number | null) => { const n = nodes.find((n) => n.id === id); return n ? nodeTitle(n) : "节点"; };
+  const name = (id?: number | null) => { const n = nodes.find((n) => n.id === id); return n ? nodeTitle(n) : "节点已删除"; };
   return (
     <InsetGroup
         title="链式代理"
@@ -637,6 +637,7 @@ function ChainForm({
   const save = useFormAction((track) => api(base + "/chains", "POST", { name: name.trim(), entry_node_id: entry, ...(exitId?{exit_id:exitId}:{exit:current}) }, track), {
     fields: { entry_not_allowed: "entry", exit_not_allowed:"exit_id", ...(exitId ? {} : exitErrorFields(current.kind)) },
     onSuccess: () => { markSaved(); saved(); },
+    onDetach: () => { markSaved(); close(); },
     wait: () => ({ label: `正在让入口 VPS 经出口实测（${nodes.find((n) => n.id === entry)?.name ?? "入口节点"}）`, max: 45 }),
   });
   const requestClose = async () => {

@@ -278,8 +278,9 @@ func (_q *ExitBindingQuery) Clone() *ExitBindingQuery {
 		predicates: append([]predicate.ExitBinding{}, _q.predicates...),
 		withExit:   _q.withExit.Clone(),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -552,6 +553,12 @@ func (_q *ExitBindingQuery) ForShare(opts ...sql.LockOption) *ExitBindingQuery {
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *ExitBindingQuery) Modify(modifiers ...func(s *sql.Selector)) *ExitBindingSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // ExitBindingGroupBy is the group-by builder for ExitBinding entities.
 type ExitBindingGroupBy struct {
 	selector
@@ -640,4 +647,10 @@ func (_s *ExitBindingSelect) sqlScan(ctx context.Context, root *ExitBindingQuery
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *ExitBindingSelect) Modify(modifiers ...func(s *sql.Selector)) *ExitBindingSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

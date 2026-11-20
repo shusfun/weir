@@ -44,6 +44,10 @@ type SubSource struct {
 	Remark string `json:"remark,omitempty"`
 	// Position holds the value of the "position" field.
 	Position int `json:"position,omitempty"`
+	// GateID holds the value of the "gate_id" field.
+	GateID int `json:"gate_id,omitempty"`
+	// RefreshHours holds the value of the "refresh_hours" field.
+	RefreshHours int `json:"refresh_hours,omitempty"`
 	// NodeCount holds the value of the "node_count" field.
 	NodeCount int `json:"node_count,omitempty"`
 	// KnownNodes holds the value of the "known_nodes" field.
@@ -56,6 +60,16 @@ type SubSource struct {
 	LastError string `json:"last_error,omitempty"`
 	// FetchedAt holds the value of the "fetched_at" field.
 	FetchedAt *time.Time `json:"fetched_at,omitempty"`
+	// LastAttemptAt holds the value of the "last_attempt_at" field.
+	LastAttemptAt *time.Time `json:"last_attempt_at,omitempty"`
+	// LastLocation holds the value of the "last_location" field.
+	LastLocation string `json:"last_location,omitempty"`
+	// LastRouteReason holds the value of the "last_route_reason" field.
+	LastRouteReason string `json:"last_route_reason,omitempty"`
+	// Health holds the value of the "health" field.
+	Health map[string]interface{} `json:"health,omitempty"`
+	// Change holds the value of the "change" field.
+	Change map[string]interface{} `json:"change,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt    time.Time `json:"created_at,omitempty"`
 	selectValues sql.SelectValues
@@ -66,15 +80,15 @@ func (*SubSource) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case subsource.FieldOperators:
+		case subsource.FieldOperators, subsource.FieldHealth, subsource.FieldChange:
 			values[i] = new([]byte)
 		case subsource.FieldEnabled, subsource.FieldPlusAsSpace, subsource.FieldNodeCache, subsource.FieldExcludeTraffic:
 			values[i] = new(sql.NullBool)
-		case subsource.FieldID, subsource.FieldPosition, subsource.FieldNodeCount, subsource.FieldKnownNodes:
+		case subsource.FieldID, subsource.FieldPosition, subsource.FieldGateID, subsource.FieldRefreshHours, subsource.FieldNodeCount, subsource.FieldKnownNodes:
 			values[i] = new(sql.NullInt64)
-		case subsource.FieldName, subsource.FieldURL, subsource.FieldUserAgent, subsource.FieldFilterInclude, subsource.FieldFilterExclude, subsource.FieldWebsite, subsource.FieldRemark, subsource.FieldUserInfo, subsource.FieldTitle, subsource.FieldLastError:
+		case subsource.FieldName, subsource.FieldURL, subsource.FieldUserAgent, subsource.FieldFilterInclude, subsource.FieldFilterExclude, subsource.FieldWebsite, subsource.FieldRemark, subsource.FieldUserInfo, subsource.FieldTitle, subsource.FieldLastError, subsource.FieldLastLocation, subsource.FieldLastRouteReason:
 			values[i] = new(sql.NullString)
-		case subsource.FieldFetchedAt, subsource.FieldCreatedAt:
+		case subsource.FieldFetchedAt, subsource.FieldLastAttemptAt, subsource.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -177,6 +191,18 @@ func (_m *SubSource) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Position = int(value.Int64)
 			}
+		case subsource.FieldGateID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field gate_id", values[i])
+			} else if value.Valid {
+				_m.GateID = int(value.Int64)
+			}
+		case subsource.FieldRefreshHours:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field refresh_hours", values[i])
+			} else if value.Valid {
+				_m.RefreshHours = int(value.Int64)
+			}
 		case subsource.FieldNodeCount:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field node_count", values[i])
@@ -213,6 +239,41 @@ func (_m *SubSource) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.FetchedAt = new(time.Time)
 				*_m.FetchedAt = value.Time
+			}
+		case subsource.FieldLastAttemptAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field last_attempt_at", values[i])
+			} else if value.Valid {
+				_m.LastAttemptAt = new(time.Time)
+				*_m.LastAttemptAt = value.Time
+			}
+		case subsource.FieldLastLocation:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field last_location", values[i])
+			} else if value.Valid {
+				_m.LastLocation = value.String
+			}
+		case subsource.FieldLastRouteReason:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field last_route_reason", values[i])
+			} else if value.Valid {
+				_m.LastRouteReason = value.String
+			}
+		case subsource.FieldHealth:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field health", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Health); err != nil {
+					return fmt.Errorf("unmarshal field health: %w", err)
+				}
+			}
+		case subsource.FieldChange:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field change", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Change); err != nil {
+					return fmt.Errorf("unmarshal field change: %w", err)
+				}
 			}
 		case subsource.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -295,6 +356,12 @@ func (_m *SubSource) String() string {
 	builder.WriteString("position=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Position))
 	builder.WriteString(", ")
+	builder.WriteString("gate_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.GateID))
+	builder.WriteString(", ")
+	builder.WriteString("refresh_hours=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RefreshHours))
+	builder.WriteString(", ")
 	builder.WriteString("node_count=")
 	builder.WriteString(fmt.Sprintf("%v", _m.NodeCount))
 	builder.WriteString(", ")
@@ -314,6 +381,23 @@ func (_m *SubSource) String() string {
 		builder.WriteString("fetched_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
+	builder.WriteString(", ")
+	if v := _m.LastAttemptAt; v != nil {
+		builder.WriteString("last_attempt_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("last_location=")
+	builder.WriteString(_m.LastLocation)
+	builder.WriteString(", ")
+	builder.WriteString("last_route_reason=")
+	builder.WriteString(_m.LastRouteReason)
+	builder.WriteString(", ")
+	builder.WriteString("health=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Health))
+	builder.WriteString(", ")
+	builder.WriteString("change=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Change))
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

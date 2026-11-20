@@ -27,6 +27,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/gateaction"
 	"github.com/shusfun/weir/internal/store/ent/kerneldriver"
+	"github.com/shusfun/weir/internal/store/ent/kv"
 	"github.com/shusfun/weir/internal/store/ent/link"
 	"github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/passkey"
@@ -41,8 +42,16 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/subnode"
 	"github.com/shusfun/weir/internal/store/ent/subprofile"
 	"github.com/shusfun/weir/internal/store/ent/subpull"
+	"github.com/shusfun/weir/internal/store/ent/subscriptioncacheentry"
 	"github.com/shusfun/weir/internal/store/ent/subsource"
 	"github.com/shusfun/weir/internal/store/ent/user"
+	"github.com/shusfun/weir/internal/store/ent/workeractivity"
+	"github.com/shusfun/weir/internal/store/ent/workerattempt"
+	"github.com/shusfun/weir/internal/store/ent/workercapability"
+	"github.com/shusfun/weir/internal/store/ent/workercommunication"
+	"github.com/shusfun/weir/internal/store/ent/workertask"
+
+	stdsql "database/sql"
 )
 
 // Client is the client that holds all ent builders.
@@ -72,6 +81,8 @@ type Client struct {
 	Gate *GateClient
 	// GateAction is the client for interacting with the GateAction builders.
 	GateAction *GateActionClient
+	// KV is the client for interacting with the KV builders.
+	KV *KVClient
 	// KernelDriver is the client for interacting with the KernelDriver builders.
 	KernelDriver *KernelDriverClient
 	// Link is the client for interacting with the Link builders.
@@ -104,8 +115,20 @@ type Client struct {
 	SubPull *SubPullClient
 	// SubSource is the client for interacting with the SubSource builders.
 	SubSource *SubSourceClient
+	// SubscriptionCacheEntry is the client for interacting with the SubscriptionCacheEntry builders.
+	SubscriptionCacheEntry *SubscriptionCacheEntryClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
+	// WorkerActivity is the client for interacting with the WorkerActivity builders.
+	WorkerActivity *WorkerActivityClient
+	// WorkerAttempt is the client for interacting with the WorkerAttempt builders.
+	WorkerAttempt *WorkerAttemptClient
+	// WorkerCapability is the client for interacting with the WorkerCapability builders.
+	WorkerCapability *WorkerCapabilityClient
+	// WorkerCommunication is the client for interacting with the WorkerCommunication builders.
+	WorkerCommunication *WorkerCommunicationClient
+	// WorkerTask is the client for interacting with the WorkerTask builders.
+	WorkerTask *WorkerTaskClient
 }
 
 // NewClient creates a new client configured with the given options.
@@ -128,6 +151,7 @@ func (c *Client) init() {
 	c.ExitBinding = NewExitBindingClient(c.config)
 	c.Gate = NewGateClient(c.config)
 	c.GateAction = NewGateActionClient(c.config)
+	c.KV = NewKVClient(c.config)
 	c.KernelDriver = NewKernelDriverClient(c.config)
 	c.Link = NewLinkClient(c.config)
 	c.Node = NewNodeClient(c.config)
@@ -144,7 +168,13 @@ func (c *Client) init() {
 	c.SubProfile = NewSubProfileClient(c.config)
 	c.SubPull = NewSubPullClient(c.config)
 	c.SubSource = NewSubSourceClient(c.config)
+	c.SubscriptionCacheEntry = NewSubscriptionCacheEntryClient(c.config)
 	c.User = NewUserClient(c.config)
+	c.WorkerActivity = NewWorkerActivityClient(c.config)
+	c.WorkerAttempt = NewWorkerAttemptClient(c.config)
+	c.WorkerCapability = NewWorkerCapabilityClient(c.config)
+	c.WorkerCommunication = NewWorkerCommunicationClient(c.config)
+	c.WorkerTask = NewWorkerTaskClient(c.config)
 }
 
 type (
@@ -235,36 +265,43 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:          ctx,
-		config:       cfg,
-		AccessCode:   NewAccessCodeClient(cfg),
-		AccountPlan:  NewAccountPlanClient(cfg),
-		Audit:        NewAuditClient(cfg),
-		Budget:       NewBudgetClient(cfg),
-		Certificate:  NewCertificateClient(cfg),
-		Chain:        NewChainClient(cfg),
-		Credential:   NewCredentialClient(cfg),
-		Exit:         NewExitClient(cfg),
-		ExitBinding:  NewExitBindingClient(cfg),
-		Gate:         NewGateClient(cfg),
-		GateAction:   NewGateActionClient(cfg),
-		KernelDriver: NewKernelDriverClient(cfg),
-		Link:         NewLinkClient(cfg),
-		Node:         NewNodeClient(cfg),
-		Passkey:      NewPasskeyClient(cfg),
-		RateSample:   NewRateSampleClient(cfg),
-		RecoveryCode: NewRecoveryCodeClient(cfg),
-		Resource:     NewResourceClient(cfg),
-		Route:        NewRouteClient(cfg),
-		RuleTemplate: NewRuleTemplateClient(cfg),
-		Sample:       NewSampleClient(cfg),
-		Setting:      NewSettingClient(cfg),
-		SubGrant:     NewSubGrantClient(cfg),
-		SubNode:      NewSubNodeClient(cfg),
-		SubProfile:   NewSubProfileClient(cfg),
-		SubPull:      NewSubPullClient(cfg),
-		SubSource:    NewSubSourceClient(cfg),
-		User:         NewUserClient(cfg),
+		ctx:                    ctx,
+		config:                 cfg,
+		AccessCode:             NewAccessCodeClient(cfg),
+		AccountPlan:            NewAccountPlanClient(cfg),
+		Audit:                  NewAuditClient(cfg),
+		Budget:                 NewBudgetClient(cfg),
+		Certificate:            NewCertificateClient(cfg),
+		Chain:                  NewChainClient(cfg),
+		Credential:             NewCredentialClient(cfg),
+		Exit:                   NewExitClient(cfg),
+		ExitBinding:            NewExitBindingClient(cfg),
+		Gate:                   NewGateClient(cfg),
+		GateAction:             NewGateActionClient(cfg),
+		KV:                     NewKVClient(cfg),
+		KernelDriver:           NewKernelDriverClient(cfg),
+		Link:                   NewLinkClient(cfg),
+		Node:                   NewNodeClient(cfg),
+		Passkey:                NewPasskeyClient(cfg),
+		RateSample:             NewRateSampleClient(cfg),
+		RecoveryCode:           NewRecoveryCodeClient(cfg),
+		Resource:               NewResourceClient(cfg),
+		Route:                  NewRouteClient(cfg),
+		RuleTemplate:           NewRuleTemplateClient(cfg),
+		Sample:                 NewSampleClient(cfg),
+		Setting:                NewSettingClient(cfg),
+		SubGrant:               NewSubGrantClient(cfg),
+		SubNode:                NewSubNodeClient(cfg),
+		SubProfile:             NewSubProfileClient(cfg),
+		SubPull:                NewSubPullClient(cfg),
+		SubSource:              NewSubSourceClient(cfg),
+		SubscriptionCacheEntry: NewSubscriptionCacheEntryClient(cfg),
+		User:                   NewUserClient(cfg),
+		WorkerActivity:         NewWorkerActivityClient(cfg),
+		WorkerAttempt:          NewWorkerAttemptClient(cfg),
+		WorkerCapability:       NewWorkerCapabilityClient(cfg),
+		WorkerCommunication:    NewWorkerCommunicationClient(cfg),
+		WorkerTask:             NewWorkerTaskClient(cfg),
 	}, nil
 }
 
@@ -282,36 +319,43 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:          ctx,
-		config:       cfg,
-		AccessCode:   NewAccessCodeClient(cfg),
-		AccountPlan:  NewAccountPlanClient(cfg),
-		Audit:        NewAuditClient(cfg),
-		Budget:       NewBudgetClient(cfg),
-		Certificate:  NewCertificateClient(cfg),
-		Chain:        NewChainClient(cfg),
-		Credential:   NewCredentialClient(cfg),
-		Exit:         NewExitClient(cfg),
-		ExitBinding:  NewExitBindingClient(cfg),
-		Gate:         NewGateClient(cfg),
-		GateAction:   NewGateActionClient(cfg),
-		KernelDriver: NewKernelDriverClient(cfg),
-		Link:         NewLinkClient(cfg),
-		Node:         NewNodeClient(cfg),
-		Passkey:      NewPasskeyClient(cfg),
-		RateSample:   NewRateSampleClient(cfg),
-		RecoveryCode: NewRecoveryCodeClient(cfg),
-		Resource:     NewResourceClient(cfg),
-		Route:        NewRouteClient(cfg),
-		RuleTemplate: NewRuleTemplateClient(cfg),
-		Sample:       NewSampleClient(cfg),
-		Setting:      NewSettingClient(cfg),
-		SubGrant:     NewSubGrantClient(cfg),
-		SubNode:      NewSubNodeClient(cfg),
-		SubProfile:   NewSubProfileClient(cfg),
-		SubPull:      NewSubPullClient(cfg),
-		SubSource:    NewSubSourceClient(cfg),
-		User:         NewUserClient(cfg),
+		ctx:                    ctx,
+		config:                 cfg,
+		AccessCode:             NewAccessCodeClient(cfg),
+		AccountPlan:            NewAccountPlanClient(cfg),
+		Audit:                  NewAuditClient(cfg),
+		Budget:                 NewBudgetClient(cfg),
+		Certificate:            NewCertificateClient(cfg),
+		Chain:                  NewChainClient(cfg),
+		Credential:             NewCredentialClient(cfg),
+		Exit:                   NewExitClient(cfg),
+		ExitBinding:            NewExitBindingClient(cfg),
+		Gate:                   NewGateClient(cfg),
+		GateAction:             NewGateActionClient(cfg),
+		KV:                     NewKVClient(cfg),
+		KernelDriver:           NewKernelDriverClient(cfg),
+		Link:                   NewLinkClient(cfg),
+		Node:                   NewNodeClient(cfg),
+		Passkey:                NewPasskeyClient(cfg),
+		RateSample:             NewRateSampleClient(cfg),
+		RecoveryCode:           NewRecoveryCodeClient(cfg),
+		Resource:               NewResourceClient(cfg),
+		Route:                  NewRouteClient(cfg),
+		RuleTemplate:           NewRuleTemplateClient(cfg),
+		Sample:                 NewSampleClient(cfg),
+		Setting:                NewSettingClient(cfg),
+		SubGrant:               NewSubGrantClient(cfg),
+		SubNode:                NewSubNodeClient(cfg),
+		SubProfile:             NewSubProfileClient(cfg),
+		SubPull:                NewSubPullClient(cfg),
+		SubSource:              NewSubSourceClient(cfg),
+		SubscriptionCacheEntry: NewSubscriptionCacheEntryClient(cfg),
+		User:                   NewUserClient(cfg),
+		WorkerActivity:         NewWorkerActivityClient(cfg),
+		WorkerAttempt:          NewWorkerAttemptClient(cfg),
+		WorkerCapability:       NewWorkerCapabilityClient(cfg),
+		WorkerCommunication:    NewWorkerCommunicationClient(cfg),
+		WorkerTask:             NewWorkerTaskClient(cfg),
 	}, nil
 }
 
@@ -342,10 +386,12 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.AccessCode, c.AccountPlan, c.Audit, c.Budget, c.Certificate, c.Chain,
-		c.Credential, c.Exit, c.ExitBinding, c.Gate, c.GateAction, c.KernelDriver,
-		c.Link, c.Node, c.Passkey, c.RateSample, c.RecoveryCode, c.Resource, c.Route,
-		c.RuleTemplate, c.Sample, c.Setting, c.SubGrant, c.SubNode, c.SubProfile,
-		c.SubPull, c.SubSource, c.User,
+		c.Credential, c.Exit, c.ExitBinding, c.Gate, c.GateAction, c.KV,
+		c.KernelDriver, c.Link, c.Node, c.Passkey, c.RateSample, c.RecoveryCode,
+		c.Resource, c.Route, c.RuleTemplate, c.Sample, c.Setting, c.SubGrant,
+		c.SubNode, c.SubProfile, c.SubPull, c.SubSource, c.SubscriptionCacheEntry,
+		c.User, c.WorkerActivity, c.WorkerAttempt, c.WorkerCapability,
+		c.WorkerCommunication, c.WorkerTask,
 	} {
 		n.Use(hooks...)
 	}
@@ -356,10 +402,12 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.AccessCode, c.AccountPlan, c.Audit, c.Budget, c.Certificate, c.Chain,
-		c.Credential, c.Exit, c.ExitBinding, c.Gate, c.GateAction, c.KernelDriver,
-		c.Link, c.Node, c.Passkey, c.RateSample, c.RecoveryCode, c.Resource, c.Route,
-		c.RuleTemplate, c.Sample, c.Setting, c.SubGrant, c.SubNode, c.SubProfile,
-		c.SubPull, c.SubSource, c.User,
+		c.Credential, c.Exit, c.ExitBinding, c.Gate, c.GateAction, c.KV,
+		c.KernelDriver, c.Link, c.Node, c.Passkey, c.RateSample, c.RecoveryCode,
+		c.Resource, c.Route, c.RuleTemplate, c.Sample, c.Setting, c.SubGrant,
+		c.SubNode, c.SubProfile, c.SubPull, c.SubSource, c.SubscriptionCacheEntry,
+		c.User, c.WorkerActivity, c.WorkerAttempt, c.WorkerCapability,
+		c.WorkerCommunication, c.WorkerTask,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -390,6 +438,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Gate.mutate(ctx, m)
 	case *GateActionMutation:
 		return c.GateAction.mutate(ctx, m)
+	case *KVMutation:
+		return c.KV.mutate(ctx, m)
 	case *KernelDriverMutation:
 		return c.KernelDriver.mutate(ctx, m)
 	case *LinkMutation:
@@ -422,8 +472,20 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.SubPull.mutate(ctx, m)
 	case *SubSourceMutation:
 		return c.SubSource.mutate(ctx, m)
+	case *SubscriptionCacheEntryMutation:
+		return c.SubscriptionCacheEntry.mutate(ctx, m)
 	case *UserMutation:
 		return c.User.mutate(ctx, m)
+	case *WorkerActivityMutation:
+		return c.WorkerActivity.mutate(ctx, m)
+	case *WorkerAttemptMutation:
+		return c.WorkerAttempt.mutate(ctx, m)
+	case *WorkerCapabilityMutation:
+		return c.WorkerCapability.mutate(ctx, m)
+	case *WorkerCommunicationMutation:
+		return c.WorkerCommunication.mutate(ctx, m)
+	case *WorkerTaskMutation:
+		return c.WorkerTask.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
 	}
@@ -1985,6 +2047,139 @@ func (c *GateActionClient) mutate(ctx context.Context, m *GateActionMutation) (V
 		return (&GateActionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown GateAction mutation op: %q", m.Op())
+	}
+}
+
+// KVClient is a client for the KV schema.
+type KVClient struct {
+	config
+}
+
+// NewKVClient returns a client for the KV from the given config.
+func NewKVClient(c config) *KVClient {
+	return &KVClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `kv.Hooks(f(g(h())))`.
+func (c *KVClient) Use(hooks ...Hook) {
+	c.hooks.KV = append(c.hooks.KV, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `kv.Intercept(f(g(h())))`.
+func (c *KVClient) Intercept(interceptors ...Interceptor) {
+	c.inters.KV = append(c.inters.KV, interceptors...)
+}
+
+// Create returns a builder for creating a KV entity.
+func (c *KVClient) Create() *KVCreate {
+	mutation := newKVMutation(c.config, OpCreate)
+	return &KVCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of KV entities.
+func (c *KVClient) CreateBulk(builders ...*KVCreate) *KVCreateBulk {
+	return &KVCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *KVClient) MapCreateBulk(slice any, setFunc func(*KVCreate, int)) *KVCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &KVCreateBulk{err: fmt.Errorf("calling to KVClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*KVCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &KVCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for KV.
+func (c *KVClient) Update() *KVUpdate {
+	mutation := newKVMutation(c.config, OpUpdate)
+	return &KVUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *KVClient) UpdateOne(_m *KV) *KVUpdateOne {
+	mutation := newKVMutation(c.config, OpUpdateOne, withKV(_m))
+	return &KVUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *KVClient) UpdateOneID(id string) *KVUpdateOne {
+	mutation := newKVMutation(c.config, OpUpdateOne, withKVID(id))
+	return &KVUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for KV.
+func (c *KVClient) Delete() *KVDelete {
+	mutation := newKVMutation(c.config, OpDelete)
+	return &KVDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *KVClient) DeleteOne(_m *KV) *KVDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *KVClient) DeleteOneID(id string) *KVDeleteOne {
+	builder := c.Delete().Where(kv.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &KVDeleteOne{builder}
+}
+
+// Query returns a query builder for KV.
+func (c *KVClient) Query() *KVQuery {
+	return &KVQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeKV},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a KV entity by its id.
+func (c *KVClient) Get(ctx context.Context, id string) (*KV, error) {
+	return c.Query().Where(kv.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *KVClient) GetX(ctx context.Context, id string) *KV {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *KVClient) Hooks() []Hook {
+	return c.hooks.KV
+}
+
+// Interceptors returns the client interceptors.
+func (c *KVClient) Interceptors() []Interceptor {
+	return c.inters.KV
+}
+
+func (c *KVClient) mutate(ctx context.Context, m *KVMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&KVCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&KVUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&KVUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&KVDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown KV mutation op: %q", m.Op())
 	}
 }
 
@@ -4148,6 +4343,139 @@ func (c *SubSourceClient) mutate(ctx context.Context, m *SubSourceMutation) (Val
 	}
 }
 
+// SubscriptionCacheEntryClient is a client for the SubscriptionCacheEntry schema.
+type SubscriptionCacheEntryClient struct {
+	config
+}
+
+// NewSubscriptionCacheEntryClient returns a client for the SubscriptionCacheEntry from the given config.
+func NewSubscriptionCacheEntryClient(c config) *SubscriptionCacheEntryClient {
+	return &SubscriptionCacheEntryClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `subscriptioncacheentry.Hooks(f(g(h())))`.
+func (c *SubscriptionCacheEntryClient) Use(hooks ...Hook) {
+	c.hooks.SubscriptionCacheEntry = append(c.hooks.SubscriptionCacheEntry, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `subscriptioncacheentry.Intercept(f(g(h())))`.
+func (c *SubscriptionCacheEntryClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SubscriptionCacheEntry = append(c.inters.SubscriptionCacheEntry, interceptors...)
+}
+
+// Create returns a builder for creating a SubscriptionCacheEntry entity.
+func (c *SubscriptionCacheEntryClient) Create() *SubscriptionCacheEntryCreate {
+	mutation := newSubscriptionCacheEntryMutation(c.config, OpCreate)
+	return &SubscriptionCacheEntryCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SubscriptionCacheEntry entities.
+func (c *SubscriptionCacheEntryClient) CreateBulk(builders ...*SubscriptionCacheEntryCreate) *SubscriptionCacheEntryCreateBulk {
+	return &SubscriptionCacheEntryCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SubscriptionCacheEntryClient) MapCreateBulk(slice any, setFunc func(*SubscriptionCacheEntryCreate, int)) *SubscriptionCacheEntryCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SubscriptionCacheEntryCreateBulk{err: fmt.Errorf("calling to SubscriptionCacheEntryClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SubscriptionCacheEntryCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SubscriptionCacheEntryCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SubscriptionCacheEntry.
+func (c *SubscriptionCacheEntryClient) Update() *SubscriptionCacheEntryUpdate {
+	mutation := newSubscriptionCacheEntryMutation(c.config, OpUpdate)
+	return &SubscriptionCacheEntryUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SubscriptionCacheEntryClient) UpdateOne(_m *SubscriptionCacheEntry) *SubscriptionCacheEntryUpdateOne {
+	mutation := newSubscriptionCacheEntryMutation(c.config, OpUpdateOne, withSubscriptionCacheEntry(_m))
+	return &SubscriptionCacheEntryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SubscriptionCacheEntryClient) UpdateOneID(id string) *SubscriptionCacheEntryUpdateOne {
+	mutation := newSubscriptionCacheEntryMutation(c.config, OpUpdateOne, withSubscriptionCacheEntryID(id))
+	return &SubscriptionCacheEntryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SubscriptionCacheEntry.
+func (c *SubscriptionCacheEntryClient) Delete() *SubscriptionCacheEntryDelete {
+	mutation := newSubscriptionCacheEntryMutation(c.config, OpDelete)
+	return &SubscriptionCacheEntryDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SubscriptionCacheEntryClient) DeleteOne(_m *SubscriptionCacheEntry) *SubscriptionCacheEntryDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SubscriptionCacheEntryClient) DeleteOneID(id string) *SubscriptionCacheEntryDeleteOne {
+	builder := c.Delete().Where(subscriptioncacheentry.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SubscriptionCacheEntryDeleteOne{builder}
+}
+
+// Query returns a query builder for SubscriptionCacheEntry.
+func (c *SubscriptionCacheEntryClient) Query() *SubscriptionCacheEntryQuery {
+	return &SubscriptionCacheEntryQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSubscriptionCacheEntry},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SubscriptionCacheEntry entity by its id.
+func (c *SubscriptionCacheEntryClient) Get(ctx context.Context, id string) (*SubscriptionCacheEntry, error) {
+	return c.Query().Where(subscriptioncacheentry.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SubscriptionCacheEntryClient) GetX(ctx context.Context, id string) *SubscriptionCacheEntry {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SubscriptionCacheEntryClient) Hooks() []Hook {
+	return c.hooks.SubscriptionCacheEntry
+}
+
+// Interceptors returns the client interceptors.
+func (c *SubscriptionCacheEntryClient) Interceptors() []Interceptor {
+	return c.inters.SubscriptionCacheEntry
+}
+
+func (c *SubscriptionCacheEntryClient) mutate(ctx context.Context, m *SubscriptionCacheEntryMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SubscriptionCacheEntryCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SubscriptionCacheEntryUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SubscriptionCacheEntryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SubscriptionCacheEntryDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SubscriptionCacheEntry mutation op: %q", m.Op())
+	}
+}
+
 // UserClient is a client for the User schema.
 type UserClient struct {
 	config
@@ -4281,18 +4609,711 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 	}
 }
 
+// WorkerActivityClient is a client for the WorkerActivity schema.
+type WorkerActivityClient struct {
+	config
+}
+
+// NewWorkerActivityClient returns a client for the WorkerActivity from the given config.
+func NewWorkerActivityClient(c config) *WorkerActivityClient {
+	return &WorkerActivityClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `workeractivity.Hooks(f(g(h())))`.
+func (c *WorkerActivityClient) Use(hooks ...Hook) {
+	c.hooks.WorkerActivity = append(c.hooks.WorkerActivity, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `workeractivity.Intercept(f(g(h())))`.
+func (c *WorkerActivityClient) Intercept(interceptors ...Interceptor) {
+	c.inters.WorkerActivity = append(c.inters.WorkerActivity, interceptors...)
+}
+
+// Create returns a builder for creating a WorkerActivity entity.
+func (c *WorkerActivityClient) Create() *WorkerActivityCreate {
+	mutation := newWorkerActivityMutation(c.config, OpCreate)
+	return &WorkerActivityCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of WorkerActivity entities.
+func (c *WorkerActivityClient) CreateBulk(builders ...*WorkerActivityCreate) *WorkerActivityCreateBulk {
+	return &WorkerActivityCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *WorkerActivityClient) MapCreateBulk(slice any, setFunc func(*WorkerActivityCreate, int)) *WorkerActivityCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &WorkerActivityCreateBulk{err: fmt.Errorf("calling to WorkerActivityClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*WorkerActivityCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &WorkerActivityCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for WorkerActivity.
+func (c *WorkerActivityClient) Update() *WorkerActivityUpdate {
+	mutation := newWorkerActivityMutation(c.config, OpUpdate)
+	return &WorkerActivityUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *WorkerActivityClient) UpdateOne(_m *WorkerActivity) *WorkerActivityUpdateOne {
+	mutation := newWorkerActivityMutation(c.config, OpUpdateOne, withWorkerActivity(_m))
+	return &WorkerActivityUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *WorkerActivityClient) UpdateOneID(id string) *WorkerActivityUpdateOne {
+	mutation := newWorkerActivityMutation(c.config, OpUpdateOne, withWorkerActivityID(id))
+	return &WorkerActivityUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for WorkerActivity.
+func (c *WorkerActivityClient) Delete() *WorkerActivityDelete {
+	mutation := newWorkerActivityMutation(c.config, OpDelete)
+	return &WorkerActivityDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *WorkerActivityClient) DeleteOne(_m *WorkerActivity) *WorkerActivityDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *WorkerActivityClient) DeleteOneID(id string) *WorkerActivityDeleteOne {
+	builder := c.Delete().Where(workeractivity.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &WorkerActivityDeleteOne{builder}
+}
+
+// Query returns a query builder for WorkerActivity.
+func (c *WorkerActivityClient) Query() *WorkerActivityQuery {
+	return &WorkerActivityQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeWorkerActivity},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a WorkerActivity entity by its id.
+func (c *WorkerActivityClient) Get(ctx context.Context, id string) (*WorkerActivity, error) {
+	return c.Query().Where(workeractivity.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *WorkerActivityClient) GetX(ctx context.Context, id string) *WorkerActivity {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *WorkerActivityClient) Hooks() []Hook {
+	return c.hooks.WorkerActivity
+}
+
+// Interceptors returns the client interceptors.
+func (c *WorkerActivityClient) Interceptors() []Interceptor {
+	return c.inters.WorkerActivity
+}
+
+func (c *WorkerActivityClient) mutate(ctx context.Context, m *WorkerActivityMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&WorkerActivityCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&WorkerActivityUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&WorkerActivityUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&WorkerActivityDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown WorkerActivity mutation op: %q", m.Op())
+	}
+}
+
+// WorkerAttemptClient is a client for the WorkerAttempt schema.
+type WorkerAttemptClient struct {
+	config
+}
+
+// NewWorkerAttemptClient returns a client for the WorkerAttempt from the given config.
+func NewWorkerAttemptClient(c config) *WorkerAttemptClient {
+	return &WorkerAttemptClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `workerattempt.Hooks(f(g(h())))`.
+func (c *WorkerAttemptClient) Use(hooks ...Hook) {
+	c.hooks.WorkerAttempt = append(c.hooks.WorkerAttempt, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `workerattempt.Intercept(f(g(h())))`.
+func (c *WorkerAttemptClient) Intercept(interceptors ...Interceptor) {
+	c.inters.WorkerAttempt = append(c.inters.WorkerAttempt, interceptors...)
+}
+
+// Create returns a builder for creating a WorkerAttempt entity.
+func (c *WorkerAttemptClient) Create() *WorkerAttemptCreate {
+	mutation := newWorkerAttemptMutation(c.config, OpCreate)
+	return &WorkerAttemptCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of WorkerAttempt entities.
+func (c *WorkerAttemptClient) CreateBulk(builders ...*WorkerAttemptCreate) *WorkerAttemptCreateBulk {
+	return &WorkerAttemptCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *WorkerAttemptClient) MapCreateBulk(slice any, setFunc func(*WorkerAttemptCreate, int)) *WorkerAttemptCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &WorkerAttemptCreateBulk{err: fmt.Errorf("calling to WorkerAttemptClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*WorkerAttemptCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &WorkerAttemptCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for WorkerAttempt.
+func (c *WorkerAttemptClient) Update() *WorkerAttemptUpdate {
+	mutation := newWorkerAttemptMutation(c.config, OpUpdate)
+	return &WorkerAttemptUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *WorkerAttemptClient) UpdateOne(_m *WorkerAttempt) *WorkerAttemptUpdateOne {
+	mutation := newWorkerAttemptMutation(c.config, OpUpdateOne, withWorkerAttempt(_m))
+	return &WorkerAttemptUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *WorkerAttemptClient) UpdateOneID(id string) *WorkerAttemptUpdateOne {
+	mutation := newWorkerAttemptMutation(c.config, OpUpdateOne, withWorkerAttemptID(id))
+	return &WorkerAttemptUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for WorkerAttempt.
+func (c *WorkerAttemptClient) Delete() *WorkerAttemptDelete {
+	mutation := newWorkerAttemptMutation(c.config, OpDelete)
+	return &WorkerAttemptDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *WorkerAttemptClient) DeleteOne(_m *WorkerAttempt) *WorkerAttemptDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *WorkerAttemptClient) DeleteOneID(id string) *WorkerAttemptDeleteOne {
+	builder := c.Delete().Where(workerattempt.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &WorkerAttemptDeleteOne{builder}
+}
+
+// Query returns a query builder for WorkerAttempt.
+func (c *WorkerAttemptClient) Query() *WorkerAttemptQuery {
+	return &WorkerAttemptQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeWorkerAttempt},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a WorkerAttempt entity by its id.
+func (c *WorkerAttemptClient) Get(ctx context.Context, id string) (*WorkerAttempt, error) {
+	return c.Query().Where(workerattempt.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *WorkerAttemptClient) GetX(ctx context.Context, id string) *WorkerAttempt {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *WorkerAttemptClient) Hooks() []Hook {
+	return c.hooks.WorkerAttempt
+}
+
+// Interceptors returns the client interceptors.
+func (c *WorkerAttemptClient) Interceptors() []Interceptor {
+	return c.inters.WorkerAttempt
+}
+
+func (c *WorkerAttemptClient) mutate(ctx context.Context, m *WorkerAttemptMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&WorkerAttemptCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&WorkerAttemptUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&WorkerAttemptUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&WorkerAttemptDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown WorkerAttempt mutation op: %q", m.Op())
+	}
+}
+
+// WorkerCapabilityClient is a client for the WorkerCapability schema.
+type WorkerCapabilityClient struct {
+	config
+}
+
+// NewWorkerCapabilityClient returns a client for the WorkerCapability from the given config.
+func NewWorkerCapabilityClient(c config) *WorkerCapabilityClient {
+	return &WorkerCapabilityClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `workercapability.Hooks(f(g(h())))`.
+func (c *WorkerCapabilityClient) Use(hooks ...Hook) {
+	c.hooks.WorkerCapability = append(c.hooks.WorkerCapability, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `workercapability.Intercept(f(g(h())))`.
+func (c *WorkerCapabilityClient) Intercept(interceptors ...Interceptor) {
+	c.inters.WorkerCapability = append(c.inters.WorkerCapability, interceptors...)
+}
+
+// Create returns a builder for creating a WorkerCapability entity.
+func (c *WorkerCapabilityClient) Create() *WorkerCapabilityCreate {
+	mutation := newWorkerCapabilityMutation(c.config, OpCreate)
+	return &WorkerCapabilityCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of WorkerCapability entities.
+func (c *WorkerCapabilityClient) CreateBulk(builders ...*WorkerCapabilityCreate) *WorkerCapabilityCreateBulk {
+	return &WorkerCapabilityCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *WorkerCapabilityClient) MapCreateBulk(slice any, setFunc func(*WorkerCapabilityCreate, int)) *WorkerCapabilityCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &WorkerCapabilityCreateBulk{err: fmt.Errorf("calling to WorkerCapabilityClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*WorkerCapabilityCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &WorkerCapabilityCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for WorkerCapability.
+func (c *WorkerCapabilityClient) Update() *WorkerCapabilityUpdate {
+	mutation := newWorkerCapabilityMutation(c.config, OpUpdate)
+	return &WorkerCapabilityUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *WorkerCapabilityClient) UpdateOne(_m *WorkerCapability) *WorkerCapabilityUpdateOne {
+	mutation := newWorkerCapabilityMutation(c.config, OpUpdateOne, withWorkerCapability(_m))
+	return &WorkerCapabilityUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *WorkerCapabilityClient) UpdateOneID(id int) *WorkerCapabilityUpdateOne {
+	mutation := newWorkerCapabilityMutation(c.config, OpUpdateOne, withWorkerCapabilityID(id))
+	return &WorkerCapabilityUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for WorkerCapability.
+func (c *WorkerCapabilityClient) Delete() *WorkerCapabilityDelete {
+	mutation := newWorkerCapabilityMutation(c.config, OpDelete)
+	return &WorkerCapabilityDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *WorkerCapabilityClient) DeleteOne(_m *WorkerCapability) *WorkerCapabilityDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *WorkerCapabilityClient) DeleteOneID(id int) *WorkerCapabilityDeleteOne {
+	builder := c.Delete().Where(workercapability.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &WorkerCapabilityDeleteOne{builder}
+}
+
+// Query returns a query builder for WorkerCapability.
+func (c *WorkerCapabilityClient) Query() *WorkerCapabilityQuery {
+	return &WorkerCapabilityQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeWorkerCapability},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a WorkerCapability entity by its id.
+func (c *WorkerCapabilityClient) Get(ctx context.Context, id int) (*WorkerCapability, error) {
+	return c.Query().Where(workercapability.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *WorkerCapabilityClient) GetX(ctx context.Context, id int) *WorkerCapability {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *WorkerCapabilityClient) Hooks() []Hook {
+	return c.hooks.WorkerCapability
+}
+
+// Interceptors returns the client interceptors.
+func (c *WorkerCapabilityClient) Interceptors() []Interceptor {
+	return c.inters.WorkerCapability
+}
+
+func (c *WorkerCapabilityClient) mutate(ctx context.Context, m *WorkerCapabilityMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&WorkerCapabilityCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&WorkerCapabilityUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&WorkerCapabilityUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&WorkerCapabilityDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown WorkerCapability mutation op: %q", m.Op())
+	}
+}
+
+// WorkerCommunicationClient is a client for the WorkerCommunication schema.
+type WorkerCommunicationClient struct {
+	config
+}
+
+// NewWorkerCommunicationClient returns a client for the WorkerCommunication from the given config.
+func NewWorkerCommunicationClient(c config) *WorkerCommunicationClient {
+	return &WorkerCommunicationClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `workercommunication.Hooks(f(g(h())))`.
+func (c *WorkerCommunicationClient) Use(hooks ...Hook) {
+	c.hooks.WorkerCommunication = append(c.hooks.WorkerCommunication, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `workercommunication.Intercept(f(g(h())))`.
+func (c *WorkerCommunicationClient) Intercept(interceptors ...Interceptor) {
+	c.inters.WorkerCommunication = append(c.inters.WorkerCommunication, interceptors...)
+}
+
+// Create returns a builder for creating a WorkerCommunication entity.
+func (c *WorkerCommunicationClient) Create() *WorkerCommunicationCreate {
+	mutation := newWorkerCommunicationMutation(c.config, OpCreate)
+	return &WorkerCommunicationCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of WorkerCommunication entities.
+func (c *WorkerCommunicationClient) CreateBulk(builders ...*WorkerCommunicationCreate) *WorkerCommunicationCreateBulk {
+	return &WorkerCommunicationCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *WorkerCommunicationClient) MapCreateBulk(slice any, setFunc func(*WorkerCommunicationCreate, int)) *WorkerCommunicationCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &WorkerCommunicationCreateBulk{err: fmt.Errorf("calling to WorkerCommunicationClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*WorkerCommunicationCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &WorkerCommunicationCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for WorkerCommunication.
+func (c *WorkerCommunicationClient) Update() *WorkerCommunicationUpdate {
+	mutation := newWorkerCommunicationMutation(c.config, OpUpdate)
+	return &WorkerCommunicationUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *WorkerCommunicationClient) UpdateOne(_m *WorkerCommunication) *WorkerCommunicationUpdateOne {
+	mutation := newWorkerCommunicationMutation(c.config, OpUpdateOne, withWorkerCommunication(_m))
+	return &WorkerCommunicationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *WorkerCommunicationClient) UpdateOneID(id int64) *WorkerCommunicationUpdateOne {
+	mutation := newWorkerCommunicationMutation(c.config, OpUpdateOne, withWorkerCommunicationID(id))
+	return &WorkerCommunicationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for WorkerCommunication.
+func (c *WorkerCommunicationClient) Delete() *WorkerCommunicationDelete {
+	mutation := newWorkerCommunicationMutation(c.config, OpDelete)
+	return &WorkerCommunicationDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *WorkerCommunicationClient) DeleteOne(_m *WorkerCommunication) *WorkerCommunicationDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *WorkerCommunicationClient) DeleteOneID(id int64) *WorkerCommunicationDeleteOne {
+	builder := c.Delete().Where(workercommunication.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &WorkerCommunicationDeleteOne{builder}
+}
+
+// Query returns a query builder for WorkerCommunication.
+func (c *WorkerCommunicationClient) Query() *WorkerCommunicationQuery {
+	return &WorkerCommunicationQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeWorkerCommunication},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a WorkerCommunication entity by its id.
+func (c *WorkerCommunicationClient) Get(ctx context.Context, id int64) (*WorkerCommunication, error) {
+	return c.Query().Where(workercommunication.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *WorkerCommunicationClient) GetX(ctx context.Context, id int64) *WorkerCommunication {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *WorkerCommunicationClient) Hooks() []Hook {
+	return c.hooks.WorkerCommunication
+}
+
+// Interceptors returns the client interceptors.
+func (c *WorkerCommunicationClient) Interceptors() []Interceptor {
+	return c.inters.WorkerCommunication
+}
+
+func (c *WorkerCommunicationClient) mutate(ctx context.Context, m *WorkerCommunicationMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&WorkerCommunicationCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&WorkerCommunicationUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&WorkerCommunicationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&WorkerCommunicationDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown WorkerCommunication mutation op: %q", m.Op())
+	}
+}
+
+// WorkerTaskClient is a client for the WorkerTask schema.
+type WorkerTaskClient struct {
+	config
+}
+
+// NewWorkerTaskClient returns a client for the WorkerTask from the given config.
+func NewWorkerTaskClient(c config) *WorkerTaskClient {
+	return &WorkerTaskClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `workertask.Hooks(f(g(h())))`.
+func (c *WorkerTaskClient) Use(hooks ...Hook) {
+	c.hooks.WorkerTask = append(c.hooks.WorkerTask, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `workertask.Intercept(f(g(h())))`.
+func (c *WorkerTaskClient) Intercept(interceptors ...Interceptor) {
+	c.inters.WorkerTask = append(c.inters.WorkerTask, interceptors...)
+}
+
+// Create returns a builder for creating a WorkerTask entity.
+func (c *WorkerTaskClient) Create() *WorkerTaskCreate {
+	mutation := newWorkerTaskMutation(c.config, OpCreate)
+	return &WorkerTaskCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of WorkerTask entities.
+func (c *WorkerTaskClient) CreateBulk(builders ...*WorkerTaskCreate) *WorkerTaskCreateBulk {
+	return &WorkerTaskCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *WorkerTaskClient) MapCreateBulk(slice any, setFunc func(*WorkerTaskCreate, int)) *WorkerTaskCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &WorkerTaskCreateBulk{err: fmt.Errorf("calling to WorkerTaskClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*WorkerTaskCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &WorkerTaskCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for WorkerTask.
+func (c *WorkerTaskClient) Update() *WorkerTaskUpdate {
+	mutation := newWorkerTaskMutation(c.config, OpUpdate)
+	return &WorkerTaskUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *WorkerTaskClient) UpdateOne(_m *WorkerTask) *WorkerTaskUpdateOne {
+	mutation := newWorkerTaskMutation(c.config, OpUpdateOne, withWorkerTask(_m))
+	return &WorkerTaskUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *WorkerTaskClient) UpdateOneID(id string) *WorkerTaskUpdateOne {
+	mutation := newWorkerTaskMutation(c.config, OpUpdateOne, withWorkerTaskID(id))
+	return &WorkerTaskUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for WorkerTask.
+func (c *WorkerTaskClient) Delete() *WorkerTaskDelete {
+	mutation := newWorkerTaskMutation(c.config, OpDelete)
+	return &WorkerTaskDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *WorkerTaskClient) DeleteOne(_m *WorkerTask) *WorkerTaskDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *WorkerTaskClient) DeleteOneID(id string) *WorkerTaskDeleteOne {
+	builder := c.Delete().Where(workertask.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &WorkerTaskDeleteOne{builder}
+}
+
+// Query returns a query builder for WorkerTask.
+func (c *WorkerTaskClient) Query() *WorkerTaskQuery {
+	return &WorkerTaskQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeWorkerTask},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a WorkerTask entity by its id.
+func (c *WorkerTaskClient) Get(ctx context.Context, id string) (*WorkerTask, error) {
+	return c.Query().Where(workertask.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *WorkerTaskClient) GetX(ctx context.Context, id string) *WorkerTask {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *WorkerTaskClient) Hooks() []Hook {
+	return c.hooks.WorkerTask
+}
+
+// Interceptors returns the client interceptors.
+func (c *WorkerTaskClient) Interceptors() []Interceptor {
+	return c.inters.WorkerTask
+}
+
+func (c *WorkerTaskClient) mutate(ctx context.Context, m *WorkerTaskMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&WorkerTaskCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&WorkerTaskUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&WorkerTaskUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&WorkerTaskDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown WorkerTask mutation op: %q", m.Op())
+	}
+}
+
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
 		AccessCode, AccountPlan, Audit, Budget, Certificate, Chain, Credential, Exit,
-		ExitBinding, Gate, GateAction, KernelDriver, Link, Node, Passkey, RateSample,
-		RecoveryCode, Resource, Route, RuleTemplate, Sample, Setting, SubGrant,
-		SubNode, SubProfile, SubPull, SubSource, User []ent.Hook
+		ExitBinding, Gate, GateAction, KV, KernelDriver, Link, Node, Passkey,
+		RateSample, RecoveryCode, Resource, Route, RuleTemplate, Sample, Setting,
+		SubGrant, SubNode, SubProfile, SubPull, SubSource, SubscriptionCacheEntry,
+		User, WorkerActivity, WorkerAttempt, WorkerCapability, WorkerCommunication,
+		WorkerTask []ent.Hook
 	}
 	inters struct {
 		AccessCode, AccountPlan, Audit, Budget, Certificate, Chain, Credential, Exit,
-		ExitBinding, Gate, GateAction, KernelDriver, Link, Node, Passkey, RateSample,
-		RecoveryCode, Resource, Route, RuleTemplate, Sample, Setting, SubGrant,
-		SubNode, SubProfile, SubPull, SubSource, User []ent.Interceptor
+		ExitBinding, Gate, GateAction, KV, KernelDriver, Link, Node, Passkey,
+		RateSample, RecoveryCode, Resource, Route, RuleTemplate, Sample, Setting,
+		SubGrant, SubNode, SubProfile, SubPull, SubSource, SubscriptionCacheEntry,
+		User, WorkerActivity, WorkerAttempt, WorkerCapability, WorkerCommunication,
+		WorkerTask []ent.Interceptor
 	}
 )
+
+// ExecContext allows calling the underlying ExecContext method of the driver if it is supported by it.
+// See, database/sql#DB.ExecContext for more information.
+func (c *config) ExecContext(ctx context.Context, query string, args ...any) (stdsql.Result, error) {
+	ex, ok := c.driver.(interface {
+		ExecContext(context.Context, string, ...any) (stdsql.Result, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("Driver.ExecContext is not supported")
+	}
+	return ex.ExecContext(ctx, query, args...)
+}
+
+// QueryContext allows calling the underlying QueryContext method of the driver if it is supported by it.
+// See, database/sql#DB.QueryContext for more information.
+func (c *config) QueryContext(ctx context.Context, query string, args ...any) (*stdsql.Rows, error) {
+	q, ok := c.driver.(interface {
+		QueryContext(context.Context, string, ...any) (*stdsql.Rows, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("Driver.QueryContext is not supported")
+	}
+	return q.QueryContext(ctx, query, args...)
+}

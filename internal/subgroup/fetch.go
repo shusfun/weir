@@ -103,6 +103,21 @@ type Response struct {
 	UserInfo string // Subscription-Userinfo 原文
 	Title    string // Profile-Title（已解码）
 	Location string
+	// RouteReason 说明没用上首选 Gate 的原因（如「首选 VPS 离线，改用 东京」）；用上了为空。
+	RouteReason string
+}
+
+type sourceIDKey struct{}
+
+// WithSourceID 把订阅源编号带给 Fetcher.Fetch：中心据此按这个源的首选 Gate 拉取。
+func WithSourceID(ctx context.Context, id int) context.Context {
+	return context.WithValue(ctx, sourceIDKey{}, id)
+}
+
+// SourceIDFrom 取出 WithSourceID 放入的订阅源编号；不经具体订阅源的拉取返回 0。
+func SourceIDFrom(ctx context.Context) int {
+	id, _ := ctx.Value(sourceIDKey{}).(int)
+	return id
 }
 
 // Get 拉取订阅源；User-Agent 只允许可见 ASCII，防止头注入。
@@ -111,12 +126,12 @@ func (f Fetcher) Get(ctx context.Context, raw, userAgent string) (Response, erro
 		return f.Fetch(ctx, raw, userAgent)
 	}
 	u, err := CheckURL(raw)
-	if err != nil && !f.AllowPrivate {
+	if err != nil && !(f.AllowPrivate && err.Error() == "source_url_private") {
 		return Response{}, err
 	}
 	if u == nil {
 		if u, err = url.Parse(raw); err != nil {
-			return Response{}, err
+			return Response{}, errors.New("invalid_source_url")
 		}
 	}
 	for _, r := range userAgent {
@@ -126,7 +141,7 @@ func (f Fetcher) Get(ctx context.Context, raw, userAgent string) (Response, erro
 	}
 	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
 	if err != nil {
-		return Response{}, err
+		return Response{}, errors.New("invalid_source_url")
 	}
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept-Encoding", "gzip")
@@ -134,7 +149,7 @@ func (f Fetcher) Get(ctx context.Context, raw, userAgent string) (Response, erro
 	defer client.CloseIdleConnections()
 	resp, err := client.Do(req)
 	if err != nil {
-		return Response{}, err
+		return Response{}, sourceTransportError(err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
@@ -145,6 +160,29 @@ func (f Fetcher) Get(ctx context.Context, raw, userAgent string) (Response, erro
 		return Response{}, err
 	}
 	return Response{Body: body, UserInfo: resp.Header.Get("Subscription-Userinfo"), Title: profileTitle(resp.Header)}, nil
+}
+
+func sourceTransportError(err error) error {
+	if errors.Is(err, context.Canceled) {
+		return context.Canceled
+	}
+	var transportErr *url.Error
+	if errors.As(err, &transportErr) {
+		if transportErr.Timeout() {
+			return errors.New("source_request_timeout")
+		}
+		switch transportErr.Err.Error() {
+		case "public_address_private", "public_url_private", "source_url_private":
+			return errors.New("source_url_private")
+		case "public_address_unresolvable", "source_unresolvable":
+			return errors.New("source_unresolvable")
+		case "public_redirect_limit", "too_many_redirects":
+			return errors.New("too_many_redirects")
+		case "public_url_invalid", "invalid_redirect":
+			return errors.New("invalid_redirect")
+		}
+	}
+	return errors.New("source_request_failed")
 }
 
 func profileTitle(h http.Header) string {

@@ -21,8 +21,9 @@ import (
 // ExitUpdate is the builder for updating Exit entities.
 type ExitUpdate struct {
 	config
-	hooks    []Hook
-	mutation *ExitMutation
+	hooks     []Hook
+	mutation  *ExitMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the ExitUpdate builder.
@@ -482,6 +483,12 @@ func (_u *ExitUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *ExitUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *ExitUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *ExitUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -740,6 +747,7 @@ func (_u *ExitUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{exit.Label}
@@ -755,9 +763,10 @@ func (_u *ExitUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 // ExitUpdateOne is the builder for updating a single Exit entity.
 type ExitUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *ExitMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *ExitMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetGateID sets the "gate_id" field.
@@ -1224,6 +1233,12 @@ func (_u *ExitUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *ExitUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *ExitUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *ExitUpdateOne) sqlSave(ctx context.Context) (_node *Exit, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -1499,6 +1514,7 @@ func (_u *ExitUpdateOne) sqlSave(ctx context.Context) (_node *Exit, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &Exit{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

@@ -4,8 +4,8 @@ import { PendingExits } from "../components/pending-exits";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "../lib/query";
-import { Navigate, useSearchParams } from "react-router-dom";
-import { ActionGroup, Badge, Button, Card, CodeBlock, InsightBanner, Dialog, DialogContent, DialogDescription, DialogTitle, InsetGroup, InsetRow, InsetRows, PageHeader, SkeletonCards, SkeletonList, Table, VersionCell, TableBody, TableCell, TableHead, TableHeader, TableRow, Tabs, TabsList, TabsPanel, TabsTab, useConfirm } from "@weir/ui";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
+import { ActionGroup, Badge, Button, Card, CodeBlock, Collapsible, InsightBanner, Dialog, DialogContent, DialogDescription, DialogTitle, InsetGroup, InsetRow, InsetRows, PageHeader, SkeletonCards, SkeletonList, Table, VersionCell, TableBody, TableCell, TableHead, TableHeader, TableRow, Tabs, TabsList, TabsPanel, TabsTab, useConfirm } from "@weir/ui";
 import { Download, Star, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { useRowAction } from "../lib/action";
@@ -83,17 +83,14 @@ export function KernelsPage() {
   );
 }
 
-// 页头摘要（稿子 CKernels）：几台 VPS、几个内核、几个可升级
+// 页头摘要：几台 VPS；可升级的内核由下方横幅说一次，不在页头重复
 function KernelHeader() {
   const gates = useQuery({ queryKey: ["gates"], queryFn: async () => (await api("/admin/gates")).items as { id: number }[] });
-  const kernels = useQuery({ queryKey: ["kernels"], queryFn: async () => (await api("/admin/kernels")).kernels as Record<string, KernelInfo> });
-  const recs = useQueries(order);
-  const ups = recs.filter((r) => r.data?.update).length;
   return (
     <PageHeader
       size="data"
       title="内核"
-      description={<span className="weir-sum"><span><b>{gates.data?.length ?? "未知"}</b> 台 VPS</span><span><b>{kernels.data ? Object.keys(kernels.data).length : "未知"}</b> 个内核</span>{ups > 0 && <span className="text-[var(--weir-warn-ink)]">{ups} 个可升级</span>}<span>升级内核不需要更新 Weir</span></span>}
+      description={<span className="weir-sum"><span><b>{gates.data?.length ?? "未知"}</b> 台 VPS</span><span>升级内核不需要更新 Weir</span></span>}
     />
   );
 }
@@ -124,38 +121,35 @@ function KernelUpgrade() {
   );
 }
 
+// 每台 VPS 一行：运行版本与默认版本不同才给升级入口（去这台 VPS 的内核页确认重启）；一致时行尾留空
 function KernelMatrix() {
   const gates = useQuery({ queryKey: ["gates"], queryFn: async () => (await api("/admin/gates")).items as { id: number; name: string; version?: string; arch?: string; public_host?: string; kernels_running?: Record<string, string> }[] });
   const kernels = useQuery({ queryKey: ["kernels"], queryFn: async () => (await api("/admin/kernels")).kernels as Record<string, KernelInfo> });
   if (gates.isPending) return <State loading />;
   if (gates.error) return <State error={gates.error} onRetry={() => void gates.refetch()} />;
+  if (!gates.data.length) return null;
   const def = (k: string) => kernels.data?.[k]?.default;
-  // 运行版本与默认版本不同、且默认更新时，标成可升级；升级影响写会重启哪个内核
   const upgrade = (k: string, running?: string) => (running && def(k) && def(k) !== running ? def(k) : null);
   return (
     <Card className="overflow-hidden p-0">
       <Table>
-        <TableHeader><TableRow><TableHead className="w-[251px]">VPS</TableHead><TableHead>Xray</TableHead><TableHead>sing-box</TableHead><TableHead>mihomo（中心）</TableHead><TableHead>升级影响</TableHead></TableRow></TableHeader>
+        <TableHeader><TableRow><TableHead className="w-[251px]">VPS</TableHead><TableHead>Xray</TableHead><TableHead>sing-box</TableHead><TableHead><span className="sr-only">升级</span></TableHead></TableRow></TableHeader>
         <TableBody>
-          {(gates.data ?? []).map((g) => {
+          {gates.data.map((g) => {
             const run = g.kernels_running;
             const ups = (["xray", "sing-box"] as const).filter((k) => upgrade(k, run?.[k]));
             return (
-              <TableRow key={g.id}>
-                <TableCell><b>{g.name}</b><div className="font-[family-name:var(--weir-mono)] text-fine text-[var(--weir-ink-3)]">{g.public_host || "地址未知"} · Gate {g.version || "未知"}</div></TableCell>
+              <TableRow key={g.id} {...dataObject({ type: "gate", id: g.id })}>
+                <TableCell><ObjectLink className="font-bold" to={{ type: "gate", id: g.id, name: g.name }} /><div className="font-[family-name:var(--weir-mono)] text-fine text-[var(--weir-ink-3)]">{g.public_host || "地址未知"}</div></TableCell>
                 {(["xray", "sing-box"] as const).map((k) => <TableCell key={k}><VersionCell version={run ? (run[k] ?? "") : null} upgrade={upgrade(k, run?.[k])} /></TableCell>)}
-                <TableCell className="text-meta text-[var(--weir-ink-3)]">—</TableCell>
-                <TableCell className={ups.length ? "text-meta text-[var(--weir-warn-ink)]" : "text-meta text-[var(--weir-ink-3)]"}>{!run ? "未知" : ups.length ? `${ups.map((k) => kernelNames[k]).join("、")} 重启一次` : "无需升级"}</TableCell>
+                <TableCell className="text-right">
+                  {!run ? <span className="text-meta text-[var(--weir-ink-3)]">没有上报运行版本</span>
+                    : ups.length ? <Button size="sm" variant="outline" title={`${ups.map((k) => kernelNames[k]).join("、")} 会重启一次`} render={<Link to={`/gates?gate=${g.id}&detail_tab=kernels`} />}>升级</Button>
+                    : null}
+                </TableCell>
               </TableRow>
             );
           })}
-          <TableRow>
-            <TableCell><b>中心</b><div className="text-fine text-[var(--weir-ink-3)]">节点实测与订阅检查</div></TableCell>
-            <TableCell className="text-meta text-[var(--weir-ink-3)]">—</TableCell>
-            <TableCell className="text-meta text-[var(--weir-ink-3)]">—</TableCell>
-            <TableCell><VersionCell version={kernels.data ? def("mihomo") ?? "" : null} /></TableCell>
-            <TableCell className="text-meta text-[var(--weir-ink-3)]">不影响节点</TableCell>
-          </TableRow>
         </TableBody>
       </Table>
     </Card>
@@ -187,7 +181,7 @@ function Versions() {
             key={kernel}
             {...dataObject({ type: "kernel", key: kernel })}
             title={kernelNames[kernel] ?? kernel}
-            description={`${kernelUses[kernel] ?? ""}${k.default ? ` · 默认 ${k.default}` : ""} · ${k.arches.join(" / ")}`}
+            description={`${kernelUses[kernel] ?? ""}${k.default ? ` · 默认 ${k.default}` : ""}`}
             actions={<Button size="sm" variant="outline" onClick={() => setReleases(kernel)}><Download />拉取版本</Button>}
           >
               {job && <JobLine job={job} idle="" onFinish={() => void q.refetch()} />}
@@ -204,13 +198,17 @@ function Versions() {
                           <div className="flex flex-wrap items-center gap-2">
                             <code className="font-mono text-body font-semibold">{v.version}</code>
                             {v.default && <Badge variant="status" tone="ok">当前默认</Badge>}
-                            {missing.length > 0 && <Badge variant="soft" tone="warn">缺 {missing.join("、")}</Badge>}
-                            {kernel !== "mihomo" && (v.driver ? <span className="text-meta text-[var(--weir-ink-3)]">驱动 <ObjectLink to={{ type: "driver", key: v.driver, name: v.driver }} /></span> : <Badge variant="soft" tone="bad" title={v.driver_error}>缺驱动 · <ObjectLink to={{ type: "driver", key: "new", name: "新增" }} /></Badge>)}
+                            {missing.length > 0 && <Badge variant="soft" tone="warn">部分 VPS 架构缺安装包</Badge>}
+                            {kernel !== "mihomo" && !v.driver && <Badge variant="soft" tone="bad">暂不能用于节点</Badge>}
                           </div>
-                          <small className="block text-fine text-[var(--weir-ink-3)]">
-                            {cachedArches.length > 0 ? `已缓存 ${cachedArches.join("/")}` : "按摘要直拉"}
-                            {users.length > 0 && <> · {users.map((g, i) => <span key={g.how + g.id}>{i > 0 && "、"}<ObjectLink to={{ type: "gate", id: g.id, name: g.name }} />（{g.how}）</span>)}</>}
-                          </small>
+                          {users.length > 0 && <small className="block text-fine text-[var(--weir-ink-3)]">{users.map((g, i) => <span key={g.how + g.id}>{i > 0 && "、"}<ObjectLink to={{ type: "gate", id: g.id, name: g.name }} />（{g.how}）</span>)}</small>}
+                          <Collapsible title="详情">
+                            <ul className="m-0 list-none space-y-0.5 p-0 text-fine text-[var(--weir-ink-3)]">
+                              <li>中心缓存：{cachedArches.length > 0 ? cachedArches.join("、") : "没有缓存，VPS 按发行摘要直接下载"}</li>
+                              {missing.length > 0 && <li>缺少架构：{missing.join("、")}</li>}
+                              {kernel !== "mihomo" && <li>配置驱动：{v.driver ? <ObjectLink to={{ type: "driver", key: v.driver, name: v.driver }} /> : <>没有匹配的驱动{v.driver_error ? `（${v.driver_error}）` : ""}，<ObjectLink to={{ type: "driver", key: "new", name: "新增驱动" }} /></>}</li>}
+                            </ul>
+                          </Collapsible>
                         </div>
                         <ActionGroup wrap={false}>
                           {missing.length > 0 && <Button size="xs" variant="outline" disabled={isBusy()} busy={isBusy("fetch:" + kernel + v.version)} busyText="正在开始…" onClick={() => void run("fetch:" + kernel + v.version, async () => started((await api(`/admin/kernels/${kernel}/fetch`, "POST", { version: v.version })).job.id), `开始下载 ${missing.join("、")}`)}><Download />补下</Button>}
@@ -303,7 +301,7 @@ function ReleasesDialog({ kernel, info, jobs, close, fetched, onSetDefault }: { 
         <DialogTitle>{kernelNames[kernel] ?? kernel} · 上游版本</DialogTitle>
         <DialogDescription>
           {kernel === "sing-box" ? "sing-box 来自本项目 CI 跟随上游标签编译（带 with_v2ray_api，按用户统计流量需要）；下载量取上游 SagerNet/sing-box。" : "来自上游 GitHub 正式发布。"}
-          为 {arches.join("、") || "需要的架构"} 固定发行来源、大小和摘要；VPS 按 GitHub 加速来源直接下载，失败才使用中心缓存。中心自用及旧 VPS 所需二进制会预下载。关掉窗口任务照常进行。
+          下载后 VPS 优先直接从 GitHub 来源获取，失败才用中心缓存。关掉窗口任务照常进行。
         </DialogDescription>
         <JobLine id={job} job={latestJob(jobs, `kernel:${kernel}:`)} idle="点版本右侧的「下载」开始；进度显示在这里" onFinish={fetched} />
         {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} skeleton={<SkeletonList rows={5} lines={1} className="stack" rowClassName="flex items-center justify-between gap-2" />} /> : q.data.releases.length === 0 ? <State empty="没有可用版本" /> : (
@@ -317,10 +315,10 @@ function ReleasesDialog({ kernel, info, jobs, close, fetched, onSetDefault }: { 
                   <code>{r.version}</code>
                   {r.recommended && <Badge variant="soft" tone="ok" title={q.data.recommended?.reason}>推荐</Badge>}
                   {have?.default && <Badge variant="soft" tone="ok">默认</Badge>}
-                  {kernel !== "mihomo" && (r.driver ? <Badge variant="soft" tone="neutral">驱动 <ObjectLink to={{ type: "driver", key: r.driver, name: r.driver }} /></Badge> : <Badge variant="soft" tone="warn">没有驱动</Badge>)}
+                  {kernel !== "mihomo" && !r.driver && <Badge variant="soft" tone="warn">暂不能用于节点</Badge>}
                   {r.incompatible && <Badge variant="soft" tone="warn" title={r.incompatible}>有不兼容</Badge>}
                   {r.young && <small className="text-[var(--weir-ink-3)]">发布不满 14 天</small>}
-                  <small className="tabular-nums text-[var(--weir-ink-3)]">{date(r.published_at)}{r.downloads ? ` · ${q.data.arches.join("+")} 下载 ${q.data.arches.reduce((n, a) => n + (r.downloads?.[a] ?? 0), 0)}` : ""}</small>
+                  <small className="tabular-nums text-[var(--weir-ink-3)]">{date(r.published_at)}{r.downloads ? ` · 下载 ${q.data.arches.reduce((n, a) => n + (r.downloads?.[a] ?? 0), 0)} 次` : ""}</small>
                 </span>
                 {!complete ? <Button size="sm" variant="outline" disabled={isBusy()} busy={isBusy(r.version)} busyText="正在开始…" onClick={() => void download(r.version)}>{have ? "补下" : "下载"}</Button>
                   : have.default ? <small className="text-[var(--weir-ink-3)]">版本已就绪</small>

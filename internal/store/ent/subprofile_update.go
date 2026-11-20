@@ -20,8 +20,9 @@ import (
 // SubProfileUpdate is the builder for updating SubProfile entities.
 type SubProfileUpdate struct {
 	config
-	hooks    []Hook
-	mutation *SubProfileMutation
+	hooks     []Hook
+	mutation  *SubProfileMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the SubProfileUpdate builder.
@@ -294,6 +295,12 @@ func (_u *SubProfileUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *SubProfileUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *SubProfileUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *SubProfileUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -392,6 +399,7 @@ func (_u *SubProfileUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if value, ok := _u.mutation.AddedPosition(); ok {
 		_spec.AddField(subprofile.FieldPosition, field.TypeInt, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{subprofile.Label}
@@ -407,9 +415,10 @@ func (_u *SubProfileUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 // SubProfileUpdateOne is the builder for updating a single SubProfile entity.
 type SubProfileUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *SubProfileMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *SubProfileMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetName sets the "name" field.
@@ -689,6 +698,12 @@ func (_u *SubProfileUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *SubProfileUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *SubProfileUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *SubProfileUpdateOne) sqlSave(ctx context.Context) (_node *SubProfile, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -804,6 +819,7 @@ func (_u *SubProfileUpdateOne) sqlSave(ctx context.Context) (_node *SubProfile, 
 	if value, ok := _u.mutation.AddedPosition(); ok {
 		_spec.AddField(subprofile.FieldPosition, field.TypeInt, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &SubProfile{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

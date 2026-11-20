@@ -18,8 +18,9 @@ import (
 // RecoveryCodeUpdate is the builder for updating RecoveryCode entities.
 type RecoveryCodeUpdate struct {
 	config
-	hooks    []Hook
-	mutation *RecoveryCodeMutation
+	hooks     []Hook
+	mutation  *RecoveryCodeMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the RecoveryCodeUpdate builder.
@@ -115,6 +116,12 @@ func (_u *RecoveryCodeUpdate) ExecX(ctx context.Context) {
 	}
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *RecoveryCodeUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *RecoveryCodeUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *RecoveryCodeUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	_spec := sqlgraph.NewUpdateSpec(recoverycode.Table, recoverycode.Columns, sqlgraph.NewFieldSpec(recoverycode.FieldID, field.TypeInt))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
@@ -139,6 +146,7 @@ func (_u *RecoveryCodeUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if _u.mutation.UsedAtCleared() {
 		_spec.ClearField(recoverycode.FieldUsedAt, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{recoverycode.Label}
@@ -154,9 +162,10 @@ func (_u *RecoveryCodeUpdate) sqlSave(ctx context.Context) (_node int, err error
 // RecoveryCodeUpdateOne is the builder for updating a single RecoveryCode entity.
 type RecoveryCodeUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *RecoveryCodeMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *RecoveryCodeMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUserID sets the "user_id" field.
@@ -259,6 +268,12 @@ func (_u *RecoveryCodeUpdateOne) ExecX(ctx context.Context) {
 	}
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *RecoveryCodeUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *RecoveryCodeUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *RecoveryCodeUpdateOne) sqlSave(ctx context.Context) (_node *RecoveryCode, err error) {
 	_spec := sqlgraph.NewUpdateSpec(recoverycode.Table, recoverycode.Columns, sqlgraph.NewFieldSpec(recoverycode.FieldID, field.TypeInt))
 	id, ok := _u.mutation.ID()
@@ -300,6 +315,7 @@ func (_u *RecoveryCodeUpdateOne) sqlSave(ctx context.Context) (_node *RecoveryCo
 	if _u.mutation.UsedAtCleared() {
 		_spec.ClearField(recoverycode.FieldUsedAt, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &RecoveryCode{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

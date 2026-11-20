@@ -7,7 +7,7 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/shusfun/weir/internal/db"
+	"github.com/shusfun/weir/internal/kernelconf/model"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -17,11 +17,11 @@ func NativeOutbound(d Driver, o contracts.Outbound) bool {
 	if o.Settings["udp_over_tcp"] == true && (d.Kernel != "sing-box" || !d.Has("udp-over-tcp")) {
 		return false
 	}
-	if o.ClientOnly || !db.OutboundSupportsCore(db.Outbound{Protocol: o.Protocol}, d.Kernel) {
+	if o.ClientOnly || !model.OutboundSupportsCore(model.Outbound{Protocol: o.Protocol}, d.Kernel) {
 		return false
 	}
 	network, _ := o.Settings["network"].(string)
-	return d.OutboundAllows(db.NormalizeOutboundProtocol(o.Protocol), network) == nil
+	return d.OutboundAllows(model.NormalizeOutboundProtocol(o.Protocol), network) == nil
 }
 
 func ClientOutbound(d Driver, o contracts.Outbound) bool {
@@ -29,7 +29,7 @@ func ClientOutbound(d Driver, o contracts.Outbound) bool {
 		return false
 	}
 	network, _ := o.Settings["network"].(string)
-	return d.OutboundAllows(db.NormalizeOutboundProtocol(o.Protocol), network) == nil
+	return d.OutboundAllows(model.NormalizeOutboundProtocol(o.Protocol), network) == nil
 }
 
 // ExpandedOutbounds uses the same deterministic group member tags as Build.

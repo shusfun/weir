@@ -25,6 +25,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/gateaction"
 	"github.com/shusfun/weir/internal/store/ent/kerneldriver"
+	"github.com/shusfun/weir/internal/store/ent/kv"
 	"github.com/shusfun/weir/internal/store/ent/link"
 	"github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/passkey"
@@ -39,8 +40,14 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/subnode"
 	"github.com/shusfun/weir/internal/store/ent/subprofile"
 	"github.com/shusfun/weir/internal/store/ent/subpull"
+	"github.com/shusfun/weir/internal/store/ent/subscriptioncacheentry"
 	"github.com/shusfun/weir/internal/store/ent/subsource"
 	"github.com/shusfun/weir/internal/store/ent/user"
+	"github.com/shusfun/weir/internal/store/ent/workeractivity"
+	"github.com/shusfun/weir/internal/store/ent/workerattempt"
+	"github.com/shusfun/weir/internal/store/ent/workercapability"
+	"github.com/shusfun/weir/internal/store/ent/workercommunication"
+	"github.com/shusfun/weir/internal/store/ent/workertask"
 )
 
 // ent aliases to avoid import conflicts in user's code.
@@ -101,34 +108,41 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			accesscode.Table:     accesscode.ValidColumn,
-			entaccountplan.Table: entaccountplan.ValidColumn,
-			audit.Table:          audit.ValidColumn,
-			budget.Table:         budget.ValidColumn,
-			certificate.Table:    certificate.ValidColumn,
-			chain.Table:          chain.ValidColumn,
-			credential.Table:     credential.ValidColumn,
-			exit.Table:           exit.ValidColumn,
-			exitbinding.Table:    exitbinding.ValidColumn,
-			gate.Table:           gate.ValidColumn,
-			gateaction.Table:     gateaction.ValidColumn,
-			kerneldriver.Table:   kerneldriver.ValidColumn,
-			link.Table:           link.ValidColumn,
-			node.Table:           node.ValidColumn,
-			passkey.Table:        passkey.ValidColumn,
-			ratesample.Table:     ratesample.ValidColumn,
-			recoverycode.Table:   recoverycode.ValidColumn,
-			resource.Table:       resource.ValidColumn,
-			route.Table:          route.ValidColumn,
-			ruletemplate.Table:   ruletemplate.ValidColumn,
-			sample.Table:         sample.ValidColumn,
-			setting.Table:        setting.ValidColumn,
-			subgrant.Table:       subgrant.ValidColumn,
-			subnode.Table:        subnode.ValidColumn,
-			subprofile.Table:     subprofile.ValidColumn,
-			subpull.Table:        subpull.ValidColumn,
-			subsource.Table:      subsource.ValidColumn,
-			user.Table:           user.ValidColumn,
+			accesscode.Table:             accesscode.ValidColumn,
+			entaccountplan.Table:         entaccountplan.ValidColumn,
+			audit.Table:                  audit.ValidColumn,
+			budget.Table:                 budget.ValidColumn,
+			certificate.Table:            certificate.ValidColumn,
+			chain.Table:                  chain.ValidColumn,
+			credential.Table:             credential.ValidColumn,
+			exit.Table:                   exit.ValidColumn,
+			exitbinding.Table:            exitbinding.ValidColumn,
+			gate.Table:                   gate.ValidColumn,
+			gateaction.Table:             gateaction.ValidColumn,
+			kv.Table:                     kv.ValidColumn,
+			kerneldriver.Table:           kerneldriver.ValidColumn,
+			link.Table:                   link.ValidColumn,
+			node.Table:                   node.ValidColumn,
+			passkey.Table:                passkey.ValidColumn,
+			ratesample.Table:             ratesample.ValidColumn,
+			recoverycode.Table:           recoverycode.ValidColumn,
+			resource.Table:               resource.ValidColumn,
+			route.Table:                  route.ValidColumn,
+			ruletemplate.Table:           ruletemplate.ValidColumn,
+			sample.Table:                 sample.ValidColumn,
+			setting.Table:                setting.ValidColumn,
+			subgrant.Table:               subgrant.ValidColumn,
+			subnode.Table:                subnode.ValidColumn,
+			subprofile.Table:             subprofile.ValidColumn,
+			subpull.Table:                subpull.ValidColumn,
+			subsource.Table:              subsource.ValidColumn,
+			subscriptioncacheentry.Table: subscriptioncacheentry.ValidColumn,
+			user.Table:                   user.ValidColumn,
+			workeractivity.Table:         workeractivity.ValidColumn,
+			workerattempt.Table:          workerattempt.ValidColumn,
+			workercapability.Table:       workercapability.ValidColumn,
+			workercommunication.Table:    workercommunication.ValidColumn,
+			workertask.Table:             workertask.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

@@ -278,8 +278,9 @@ func (_q *NodeQuery) Clone() *NodeQuery {
 		predicates: append([]predicate.Node{}, _q.predicates...),
 		withExit:   _q.withExit.Clone(),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -552,6 +553,12 @@ func (_q *NodeQuery) ForShare(opts ...sql.LockOption) *NodeQuery {
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *NodeQuery) Modify(modifiers ...func(s *sql.Selector)) *NodeSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // NodeGroupBy is the group-by builder for Node entities.
 type NodeGroupBy struct {
 	selector
@@ -640,4 +647,10 @@ func (_s *NodeSelect) sqlScan(ctx context.Context, root *NodeQuery, v any) error
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *NodeSelect) Modify(modifiers ...func(s *sql.Selector)) *NodeSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

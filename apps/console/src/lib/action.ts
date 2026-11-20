@@ -47,6 +47,18 @@ function useSlow<P extends Pending>(p: P | null) {
   return p && slow && (p.label || p.job) ? p : null;
 }
 
+// useNow 在 active 时每秒刷新一次，供多行等待提示判断「已超过 2 秒」。
+function useNow(active: boolean) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [active]);
+  return now;
+}
+
 function useMounted() {
   const mounted = useRef(true);
   useEffect(() => {
@@ -58,17 +70,23 @@ function useMounted() {
   return mounted;
 }
 
+// 每行各自记忙碌状态：一行在等后台任务时，其他行照常可以操作。
 export function useRowAction<K extends string | number = string>(opts: Refresh = {}) {
   const toast = useToast();
   const client = useQueryClient();
-  const [busy, setBusy] = useState<K | null>(null);
-  const [pending, setPending] = useState<(Pending & { key: K }) | null>(null);
+  const [busyKeys, setBusyKeys] = useState<ReadonlyMap<K, Pending>>(new Map());
+  const update = (key: K, next: Pending | null) => setBusyKeys((prev) => {
+    const map = new Map(prev);
+    if (next) map.set(key, next);
+    else map.delete(key);
+    return map;
+  });
   const mutation = useMutation({
     mutationFn: ({ key, fn, extra }: { key: K; fn: (track: Track) => Promise<unknown>; ok?: RowOk; extra?: RowExtra }) => {
-      setPending({ key, label: extra?.wait?.label ?? "", max: extra?.wait?.max, since: Date.now() });
-      return fn({ onJob: (j) => setPending((p) => (p && p.key === key ? { ...p, job: j } : p)) });
+      const start: Pending = { label: extra?.wait?.label ?? "", max: extra?.wait?.max, since: Date.now() };
+      update(key, start);
+      return fn({ onJob: (j) => setBusyKeys((prev) => (prev.has(key) ? new Map(prev).set(key, { ...prev.get(key)!, job: j }) : prev)) });
     },
-    onMutate: ({ key }) => setBusy(key),
     onSuccess: async (r, { ok, extra }) => {
       if (r && typeof r === "object" && "pending" in r) {
         toast("候选出口已保存，等待验证", { tone: "ok", description: "验证通过后自动应用，可在出口验证任务中查看。" });
@@ -80,24 +98,26 @@ export function useRowAction<K extends string | number = string>(opts: Refresh =
       await refresh(client, opts);
     },
     onError: (e, { extra }) => toast(extra?.fail ?? "操作未完成", { description: messageOf(e), tone: "bad" }),
-    onSettled: () => {
-      setBusy(null);
-      setPending(null);
-    },
+    onSettled: (_r, _e, { key }) => update(key, null),
   });
-  const slow = useSlow(pending);
+  const now = useNow(busyKeys.size > 0);
   // 返回是否成功；失败已提示，调用方不必再 catch
   const run = (key: K, fn: (track: Track) => Promise<unknown>, ok?: RowOk, extra?: RowExtra) =>
     mutation.mutateAsync({ key, fn, ok, extra }).then(
       () => true,
       () => false,
     );
+  const first = busyKeys.keys().next();
   return {
     run,
-    busy,
-    isBusy: (key?: K) => (key === undefined ? busy !== null : busy === key),
+    // 兼容只关心「有没有行在忙」的调用方：返回任意一个正在忙的 key
+    busy: first.done ? null : first.value,
+    isBusy: (key?: K) => (key === undefined ? busyKeys.size > 0 : busyKeys.has(key)),
     // 这一行正在等的事（超过 2 秒才有），交给 <WaitText>
-    waitFor: (key: K) => (slow && slow.key === key ? slow : null),
+    waitFor: (key: K) => {
+      const p = busyKeys.get(key);
+      return p && now - p.since >= 2000 && (p.label || p.job) ? p : null;
+    },
   };
 }
 
@@ -114,6 +134,8 @@ export function useFormAction<T = unknown, F extends string = string>(
     onJob?: (j: Job) => void;
     // 等待提示；按提交时的输入生成时传函数
     wait?: WaitSpec | (() => WaitSpec);
+    // 中心把操作转成后台任务时立即调用（通常用来关掉弹窗）：之后的结果改用提示告诉人，不再占着窗口
+    onDetach?: () => void;
   } = {},
 ) {
   const toast = useToast();
@@ -125,12 +147,16 @@ export function useFormAction<T = unknown, F extends string = string>(
   const left = useRef(false);
   const onJob = useRef(opts.onJob);
   onJob.current = opts.onJob;
+  const onDetach = useRef(opts.onDetach);
+  onDetach.current = opts.onDetach;
   const away = () => !mounted.current || left.current;
   const track = (p: Pending | null) => {
     last.current = p;
     setPending(p);
   };
   const mutation = useMutation({
+    // 成功文案放进 meta，供设置弹窗底部的保存状态读取
+    meta: { ok: opts.ok },
     mutationFn: () => {
       const spec = typeof opts.wait === "function" ? opts.wait() : opts.wait;
       left.current = false;
@@ -139,6 +165,11 @@ export function useFormAction<T = unknown, F extends string = string>(
         onJob: (j) => {
           if (last.current) track({ ...last.current, job: j });
           onJob.current?.(j);
+          if (onDetach.current && !left.current) {
+            left.current = true;
+            toast(`${j.title ?? "操作"}：已转到后台`, { description: "可以继续做别的，完成后会提示结果。" });
+            onDetach.current();
+          }
         },
       });
     },

@@ -2,7 +2,6 @@ package center
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +16,7 @@ import (
 	"github.com/shusfun/weir/internal/kernels"
 	"github.com/shusfun/weir/internal/store/ent/gateaction"
 	"github.com/shusfun/weir/internal/store/ent/resource"
+	"github.com/shusfun/weir/internal/taskqueue"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -189,7 +189,7 @@ func (s *Server) relayCaller(c *gin.Context) (relaySession, error) {
 
 func (s *Server) checkRelayLease(ctx context.Context, session relaySession, id, attemptText, token string) error {
 	task, err := s.Store.Tasks.Legacy(ctx, session.ActionID)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, taskqueue.ErrNotFound) {
 		return errors.New("task_lease_lost")
 	}
 	if err != nil {

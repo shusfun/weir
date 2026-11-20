@@ -16,12 +16,18 @@ import (
 
 func queue(t *testing.T) *taskqueue.Queue {
 	t.Helper()
+	return openStore(t).Tasks
+}
+
+// openStore 返回完整存储，测试用它的 Ent 客户端或连接准备队列之外的数据。
+func openStore(t *testing.T) *store.Store {
+	t.Helper()
 	s, e := store.Open(context.Background(), store.Config{Driver: store.DriverSQLite, SQLitePath: filepath.Join(t.TempDir(), "queue.db")})
 	if e != nil {
 		t.Fatal(e)
 	}
 	t.Cleanup(func() { s.Close() })
-	return s.Tasks
+	return s
 }
 func request(kind, key string, now time.Time) taskqueue.Request {
 	r := taskqueue.Request{Kind: kind, Key: key, TraceID: "012345678901234567890123456789ab", Candidates: []int{1, 2}, Deadline: now.Add(time.Hour), Payload: json.RawMessage(`{"url":"https://github.com/example/repo","bytes":1024}`)}

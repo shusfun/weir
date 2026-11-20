@@ -124,6 +124,7 @@ func TestSnellSSRNative(t *testing.T) {
 				Routes:      []contracts.Route{{ID: 1, InboundTag: "entry", OutboundTag: "exit"}},
 				Bridges:     []contracts.OutboundBridge{{FromKernel: "xray", OutboundTag: "exit", Kernel: "mihomo", Port: bridge, Username: "bridge-user", Password: "bridge-password-at-least-24-characters"}}}
 			helper := gate.NewHelper(paths)
+			var renderedXray, renderedMihomo []byte
 			defer helper.Sup.Stop("xray")
 			defer helper.Sup.Stop("mihomo")
 			defer func() {
@@ -140,12 +141,20 @@ func TestSnellSSRNative(t *testing.T) {
 					}
 					t.Logf("native %s diagnostic: %s", engine, text)
 				}
+				redactConfig := strings.NewReplacer(password, "[redacted]", "entry-password", "[redacted]", "bridge-password-at-least-24-characters", "[redacted]")
+				if len(renderedXray) > 0 {
+					t.Logf("native xray rendered config: %s", redactConfig.Replace(string(renderedXray)))
+				}
+				if len(renderedMihomo) > 0 {
+					t.Logf("native mihomo rendered config: %s", redactConfig.Replace(string(renderedMihomo)))
+				}
 			}()
 			apply := func() {
 				out, err := kernelconf.Build(cfg, kernelconf.Options{})
 				if err != nil {
 					t.Fatal(err)
 				}
+				renderedXray, renderedMihomo = out.Xray, out.Mihomo
 				result := helper.Apply(t.Context(), gate.ApplyRequest{Kernels: map[string]string{"xray": "fixture", "mihomo": "fixture"}, Configs: map[string][]byte{"xray": out.Xray, "mihomo": out.Mihomo}, Args: out.Args, HealthPorts: map[string][]int{"xray": {stats}, "mihomo": {bridge}}})
 				if !result.OK {
 					t.Fatal(result.Error)

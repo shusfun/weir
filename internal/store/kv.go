@@ -9,7 +9,12 @@ import (
 	"sync"
 	"time"
 
+	entsql "entgo.io/ent/dialect/sql"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/kv"
+	"github.com/shusfun/weir/internal/store/ent/predicate"
 )
 
 // KV 是会话、限速、一次性凭证等短期数据的存储。ttl 为 0 表示不过期。
@@ -116,23 +121,14 @@ func escapeGlob(s string) string {
 }
 
 // sqliteKV 是单机模式的内置缓存：数据库里一张 kv 表，重启不丢会话。
-// 过期在读取时判断，后台维护按批清理。
+// 过期在读取时判断，后台维护按批清理。条件写入与计数在 raw_kv.go。
 type sqliteKV struct {
+	ent       *ent.Client
 	db        *sql.DB
 	mu        sync.Mutex
 	lastPurge time.Time
 	interval  time.Duration
 	batch     int
-}
-
-func newSQLiteKV(ctx context.Context, db *sql.DB) (*sqliteKV, error) {
-	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL, expires_at INTEGER NOT NULL DEFAULT 0)`); err != nil {
-		return nil, err
-	}
-	if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS kv_expires ON kv(expires_at) WHERE expires_at > 0`); err != nil {
-		return nil, err
-	}
-	return &sqliteKV{db: db}, nil
 }
 
 func expiry(ttl time.Duration) int64 {
@@ -142,90 +138,69 @@ func expiry(ttl time.Duration) int64 {
 	return time.Now().Add(ttl).UnixMilli()
 }
 
-const liveRow = `(expires_at = 0 OR expires_at > ?)`
+// live 是未过期的键：不过期，或到期时间晚于现在。
+func live() predicate.KV {
+	return kv.Or(kv.ExpiresAt(0), kv.ExpiresAtGT(time.Now().UnixMilli()))
+}
 
 func (s *sqliteKV) Get(ctx context.Context, key string) (string, bool, error) {
-	var v string
-	err := s.db.QueryRowContext(ctx, `SELECT value FROM kv WHERE key = ? AND `+liveRow, key, time.Now().UnixMilli()).Scan(&v)
-	if errors.Is(err, sql.ErrNoRows) {
+	row, err := s.ent.KV.Query().Where(kv.ID(key), live()).Only(ctx)
+	if ent.IsNotFound(err) {
 		return "", false, nil
 	}
-	return v, err == nil, err
+	if err != nil {
+		return "", false, err
+	}
+	return row.Value, true, nil
 }
 
 func (s *sqliteKV) Set(ctx context.Context, key, value string, ttl time.Duration) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO kv(key, value, expires_at) VALUES(?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at`, key, value, expiry(ttl))
-	return err
+	return s.ent.KV.Create().SetID(key).SetValue(value).SetExpiresAt(expiry(ttl)).
+		OnConflictColumns(kv.FieldID).UpdateNewValues().Exec(ctx)
 }
 
-func (s *sqliteKV) SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
-	// 已过期的旧值视为不存在，可被覆盖。
-	res, err := s.db.ExecContext(ctx, `INSERT INTO kv(key, value, expires_at) VALUES(?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at WHERE kv.expires_at > 0 AND kv.expires_at <= ?`, key, value, expiry(ttl), time.Now().UnixMilli())
+// GetDel 在一个事务里读出并删除；SQLite 只有一个写连接，读写之间不会插入其他写入。
+func (s *sqliteKV) GetDel(ctx context.Context, key string) (value string, found bool, err error) {
+	tx, err := s.ent.Tx(ctx)
 	if err != nil {
-		return false, err
+		return "", false, err
 	}
-	n, err := res.RowsAffected()
-	return n == 1, err
-}
-
-func (s *sqliteKV) GetDel(ctx context.Context, key string) (string, bool, error) {
-	var v string
-	err := s.db.QueryRowContext(ctx, `DELETE FROM kv WHERE key = ? AND `+liveRow+` RETURNING value`, key, time.Now().UnixMilli()).Scan(&v)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", false, nil
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, tx.Rollback())
+		}
+	}()
+	row, err := tx.KV.Query().Where(kv.ID(key), live()).Only(ctx)
+	if ent.IsNotFound(err) {
+		return "", false, tx.Commit()
 	}
-	return v, err == nil, err
+	if err != nil {
+		return "", false, err
+	}
+	if _, err = tx.KV.Delete().Where(kv.ID(key)).Exec(ctx); err != nil {
+		return "", false, err
+	}
+	return row.Value, true, tx.Commit()
 }
 
 func (s *sqliteKV) Del(ctx context.Context, keys ...string) error {
-	for _, k := range keys {
-		if _, err := s.db.ExecContext(ctx, `DELETE FROM kv WHERE key = ?`, k); err != nil {
-			return err
-		}
+	if len(keys) == 0 {
+		return nil
 	}
-	return nil
-}
-
-func (s *sqliteKV) Incr(ctx context.Context, key string, ttl time.Duration) (int64, error) {
-	// 键不存在或已过期时从 1 开始并设置 ttl；否则加一并保持原到期时间。
-	var n int64
-	err := s.db.QueryRowContext(ctx, `INSERT INTO kv(key, value, expires_at) VALUES(?, '1', ?)
-ON CONFLICT(key) DO UPDATE SET
-  value = CASE WHEN kv.expires_at > 0 AND kv.expires_at <= ? THEN '1' ELSE CAST(CAST(kv.value AS INTEGER) + 1 AS TEXT) END,
-  expires_at = CASE WHEN kv.expires_at > 0 AND kv.expires_at <= ? THEN excluded.expires_at ELSE kv.expires_at END
-RETURNING CAST(value AS INTEGER)`, key, expiry(ttl), time.Now().UnixMilli(), time.Now().UnixMilli()).Scan(&n)
-	return n, err
-}
-
-func (s *sqliteKV) IncrBy(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
-	var n int64
-	now := time.Now().UnixMilli()
-	err := s.db.QueryRowContext(ctx, `INSERT INTO kv(key, value, expires_at) VALUES(?, CAST(? AS TEXT), ?)
-ON CONFLICT(key) DO UPDATE SET
-  value = CASE WHEN kv.expires_at > 0 AND kv.expires_at <= ? THEN excluded.value ELSE CAST(CAST(kv.value AS INTEGER) + ? AS TEXT) END,
-  expires_at = CASE WHEN kv.expires_at > 0 AND kv.expires_at <= ? THEN excluded.expires_at ELSE kv.expires_at END
-RETURNING CAST(value AS INTEGER)`, key, delta, expiry(ttl), now, delta, now).Scan(&n)
-	return n, err
+	_, err := s.ent.KV.Delete().Where(kv.IDIn(keys...)).Exec(ctx)
+	return err
 }
 
 func (s *sqliteKV) Keys(ctx context.Context, prefix string, limit int) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT key FROM kv WHERE key >= ? AND key < ? AND `+liveRow+` ORDER BY key LIMIT ?`, prefix, prefix+"\U0010ffff", time.Now().UnixMilli(), limit+1)
+	out, err := s.ent.KV.Query().Where(kv.IDGTE(prefix), kv.IDLT(prefix+"\U0010ffff"), live()).
+		Order(kv.ByID()).Limit(limit + 1).IDs(ctx)
 	if err != nil {
 		return nil, err
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var k string
-		if err = rows.Scan(&k); err != nil {
-			return nil, err
-		}
-		out = append(out, k)
 	}
 	if len(out) > limit {
 		return nil, ErrTooMany
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s *sqliteKV) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
@@ -243,7 +218,15 @@ func (s *sqliteKV) purge(ctx context.Context) error {
 	if time.Since(s.lastPurge) < interval {
 		return nil
 	}
-	_, err := s.db.ExecContext(ctx, `DELETE FROM kv WHERE key IN (SELECT key FROM kv WHERE expires_at > 0 AND expires_at <= ? ORDER BY expires_at LIMIT ?)`, time.Now().UnixMilli(), batch)
+	now := time.Now().UnixMilli()
+	_, err := s.ent.KV.Delete().Where(func(sel *entsql.Selector) {
+		d := entsql.Dialect(sel.Dialect())
+		r := d.Table(kv.Table).As("r")
+		expired := d.Select(r.C(kv.FieldID)).From(r).
+			Where(entsql.And(entsql.GT(r.C(kv.FieldExpiresAt), 0), entsql.LTE(r.C(kv.FieldExpiresAt), now))).
+			OrderBy(r.C(kv.FieldExpiresAt)).Limit(batch)
+		sel.Where(entsql.In(sel.C(kv.FieldID), expired))
+	}).Exec(ctx)
 	if err == nil {
 		s.lastPurge = time.Now()
 	}

@@ -253,8 +253,9 @@ func (_q *ResourceQuery) Clone() *ResourceQuery {
 		inters:     append([]Interceptor{}, _q.inters...),
 		predicates: append([]predicate.Resource{}, _q.predicates...),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -473,6 +474,12 @@ func (_q *ResourceQuery) ForShare(opts ...sql.LockOption) *ResourceQuery {
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *ResourceQuery) Modify(modifiers ...func(s *sql.Selector)) *ResourceSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // ResourceGroupBy is the group-by builder for Resource entities.
 type ResourceGroupBy struct {
 	selector
@@ -561,4 +568,10 @@ func (_s *ResourceSelect) sqlScan(ctx context.Context, root *ResourceQuery, v an
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *ResourceSelect) Modify(modifiers ...func(s *sql.Selector)) *ResourceSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

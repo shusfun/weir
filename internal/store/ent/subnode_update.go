@@ -18,8 +18,9 @@ import (
 // SubNodeUpdate is the builder for updating SubNode entities.
 type SubNodeUpdate struct {
 	config
-	hooks    []Hook
-	mutation *SubNodeMutation
+	hooks     []Hook
+	mutation  *SubNodeMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the SubNodeUpdate builder.
@@ -212,6 +213,12 @@ func (_u *SubNodeUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *SubNodeUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *SubNodeUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *SubNodeUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -262,6 +269,7 @@ func (_u *SubNodeUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedPosition(); ok {
 		_spec.AddField(subnode.FieldPosition, field.TypeInt, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{subnode.Label}
@@ -277,9 +285,10 @@ func (_u *SubNodeUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 // SubNodeUpdateOne is the builder for updating a single SubNode entity.
 type SubNodeUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *SubNodeMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *SubNodeMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetName sets the "name" field.
@@ -479,6 +488,12 @@ func (_u *SubNodeUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *SubNodeUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *SubNodeUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *SubNodeUpdateOne) sqlSave(ctx context.Context) (_node *SubNode, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -546,6 +561,7 @@ func (_u *SubNodeUpdateOne) sqlSave(ctx context.Context) (_node *SubNode, err er
 	if value, ok := _u.mutation.AddedPosition(); ok {
 		_spec.AddField(subnode.FieldPosition, field.TypeInt, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &SubNode{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

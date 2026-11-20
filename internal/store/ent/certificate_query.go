@@ -253,8 +253,9 @@ func (_q *CertificateQuery) Clone() *CertificateQuery {
 		inters:     append([]Interceptor{}, _q.inters...),
 		predicates: append([]predicate.Certificate{}, _q.predicates...),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -473,6 +474,12 @@ func (_q *CertificateQuery) ForShare(opts ...sql.LockOption) *CertificateQuery {
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *CertificateQuery) Modify(modifiers ...func(s *sql.Selector)) *CertificateSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // CertificateGroupBy is the group-by builder for Certificate entities.
 type CertificateGroupBy struct {
 	selector
@@ -561,4 +568,10 @@ func (_s *CertificateSelect) sqlScan(ctx context.Context, root *CertificateQuery
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *CertificateSelect) Modify(modifiers ...func(s *sql.Selector)) *CertificateSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

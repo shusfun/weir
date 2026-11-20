@@ -19,8 +19,9 @@ import (
 // AccountPlanUpdate is the builder for updating AccountPlan entities.
 type AccountPlanUpdate struct {
 	config
-	hooks    []Hook
-	mutation *AccountPlanMutation
+	hooks     []Hook
+	mutation  *AccountPlanMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the AccountPlanUpdate builder.
@@ -159,6 +160,12 @@ func (_u *AccountPlanUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *AccountPlanUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *AccountPlanUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *AccountPlanUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -189,6 +196,7 @@ func (_u *AccountPlanUpdate) sqlSave(ctx context.Context) (_node int, err error)
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(entaccountplan.FieldUpdatedAt, field.TypeTime, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{entaccountplan.Label}
@@ -204,9 +212,10 @@ func (_u *AccountPlanUpdate) sqlSave(ctx context.Context) (_node int, err error)
 // AccountPlanUpdateOne is the builder for updating a single AccountPlan entity.
 type AccountPlanUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *AccountPlanMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *AccountPlanMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetName sets the "name" field.
@@ -352,6 +361,12 @@ func (_u *AccountPlanUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *AccountPlanUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *AccountPlanUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *AccountPlanUpdateOne) sqlSave(ctx context.Context) (_node *AccountPlan, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -399,6 +414,7 @@ func (_u *AccountPlanUpdateOne) sqlSave(ctx context.Context) (_node *AccountPlan
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(entaccountplan.FieldUpdatedAt, field.TypeTime, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &AccountPlan{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

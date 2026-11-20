@@ -4,27 +4,36 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"database/sql"
-	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"strings"
+	"fmt"
 	"time"
 
+	"entgo.io/ent/dialect"
+	entsql "entgo.io/ent/dialect/sql"
+
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/workertask"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
 var (
 	ErrLease    = errors.New("task lease is no longer current")
 	ErrConflict = errors.New("idempotency key already has different work")
+	// ErrNotFound 表示任务或 Gate 能力文档不存在，与存储故障区分。
+	ErrNotFound = errors.New("task queue record not found")
 )
 
 type Locker interface {
 	Do(context.Context, string, func(context.Context) error) error
 }
+
+// Queue 只经 Ent 访问 worker_* 表。Dialect 用来决定是否附加行锁：SQLite 是单写者，
+// 不支持 FOR UPDATE，靠单连接串行化。
 type Queue struct {
-	DB         *sql.DB
+	Ent        *ent.Client
+	Dialect    string
 	Lock       Locker
 	PruneBatch int
 }
@@ -54,85 +63,41 @@ type Record struct {
 	Ciphertext  string                  `json:"-"`
 }
 
-// Bodies are encrypted by the host. Dispatch metadata contains no task inputs.
-func (q *Queue) Migrate(ctx context.Context) error {
-	return q.Lock.Do(ctx, "worker-schema", q.MigrateWithHostLock)
-}
-
-// MigrateWithHostLock is used by the center's combined startup migration while
-// it holds its database-wide schema lock. It does not acquire another session.
-func (q *Queue) MigrateWithHostLock(ctx context.Context) error {
-	for _, s := range []string{
-		`CREATE TABLE IF NOT EXISTS worker_capabilities (gate_id BIGINT PRIMARY KEY,hash TEXT NOT NULL,document TEXT NOT NULL)`,
-		`CREATE TABLE IF NOT EXISTS worker_tasks (id TEXT PRIMARY KEY, kind TEXT NOT NULL, version INTEGER NOT NULL, trace_id TEXT NOT NULL, idem TEXT NOT NULL UNIQUE, payload_hash TEXT NOT NULL, body TEXT NOT NULL, requirements TEXT NOT NULL, candidates TEXT NOT NULL, deadline BIGINT NOT NULL, created_at BIGINT NOT NULL, status TEXT NOT NULL, gate_id BIGINT NOT NULL DEFAULT 0, attempt INTEGER NOT NULL DEFAULT 0, lease_token TEXT NOT NULL DEFAULT '', lease_until BIGINT NOT NULL DEFAULT 0, result TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT '', legacy_id BIGINT NOT NULL DEFAULT 0)`,
-		`CREATE INDEX IF NOT EXISTS worker_tasks_dispatch ON worker_tasks(status, created_at)`,
-		`CREATE INDEX IF NOT EXISTS worker_tasks_gate ON worker_tasks(gate_id, status)`,
-		`CREATE INDEX IF NOT EXISTS worker_tasks_legacy ON worker_tasks(legacy_id)`,
-		`CREATE TABLE IF NOT EXISTS worker_attempts (task_id TEXT NOT NULL, attempt INTEGER NOT NULL, gate_id BIGINT NOT NULL, started_at BIGINT NOT NULL, finished_at BIGINT NOT NULL DEFAULT 0, outcome TEXT NOT NULL, PRIMARY KEY(task_id, attempt))`,
-		`CREATE INDEX IF NOT EXISTS worker_attempts_window ON worker_attempts(started_at,gate_id)`,
-		`CREATE TABLE IF NOT EXISTS worker_activity (id TEXT PRIMARY KEY, task_id TEXT NOT NULL, gate_id BIGINT NOT NULL, attempt INTEGER NOT NULL, at BIGINT NOT NULL, reason TEXT NOT NULL)`,
-		`CREATE INDEX IF NOT EXISTS worker_activity_task ON worker_activity(task_id, at)`,
-		`CREATE TABLE IF NOT EXISTS worker_communication (bucket BIGINT NOT NULL,gate_id BIGINT NOT NULL,route TEXT NOT NULL,requests BIGINT NOT NULL,received BIGINT NOT NULL,sent BIGINT NOT NULL,errors BIGINT NOT NULL,PRIMARY KEY(bucket,gate_id,route))`,
-	} {
-		if _, err := q.DB.ExecContext(ctx, s); err != nil {
-			return err
-		}
-	}
-	rows, err := q.DB.QueryContext(ctx, `SELECT candidate_at FROM worker_tasks LIMIT 0`)
-	if err == nil {
-		if err = rows.Close(); err != nil {
-			return err
-		}
-	} else {
-		if _, err = q.DB.ExecContext(ctx, `ALTER TABLE worker_tasks ADD COLUMN candidate_at BIGINT NOT NULL DEFAULT 0`); err != nil {
-			return err
-		}
-	}
-	rows, err = q.DB.QueryContext(ctx, `SELECT progress FROM worker_tasks LIMIT 0`)
-	if err == nil {
-		err = rows.Close()
-	} else {
-		_, err = q.DB.ExecContext(ctx, `ALTER TABLE worker_tasks ADD COLUMN progress TEXT NOT NULL DEFAULT ''`)
-	}
-	if err != nil {
-		return err
-	}
-	rows, err = q.DB.QueryContext(ctx, `SELECT result_bytes FROM worker_attempts LIMIT 0`)
-	if err == nil {
-		err = rows.Close()
-	} else {
-		_, err = q.DB.ExecContext(ctx, `ALTER TABLE worker_attempts ADD COLUMN result_bytes BIGINT`)
-	}
-	if err != nil {
-		return err
-	}
-	if _, err = q.DB.ExecContext(ctx, `UPDATE worker_attempts SET outcome='failed' WHERE outcome='pending' AND finished_at>0`); err != nil {
-		return err
-	}
-	if err = q.initProjections(ctx); err != nil {
-		return err
-	}
-	_, err = q.DB.ExecContext(ctx, `UPDATE worker_tasks SET candidate_at=created_at WHERE candidate_at=0`)
-	return err
-}
-
-//go:embed queue.go
-var workerSchemaSource string
-
-//go:embed projection.go
-var projectionSchemaSource string
-
-func MigrationChecksum() string {
-	sum := sha256.Sum256([]byte(strings.ReplaceAll(workerSchemaSource+projectionSchemaSource, "\r\n", "\n")))
-	return hex.EncodeToString(sum[:])
-}
-
 func token() string {
 	b := make([]byte, 24)
 	if _, err := rand.Read(b); err != nil {
 		panic(err)
 	}
 	return hex.EncodeToString(b)
+}
+
+// notFound 把 Ent 的不存在错误收敛为 ErrNotFound，其余错误原样返回。
+func notFound(err error) error {
+	if ent.IsNotFound(err) {
+		return fmt.Errorf("%w: %w", ErrNotFound, err)
+	}
+	return err
+}
+
+// withTx 在一个 Ent 事务里执行 fn，出错回滚。
+func (q *Queue) withTx(ctx context.Context, fn func(*ent.Tx) error) error {
+	tx, err := q.Ent.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	if err = fn(tx); err != nil {
+		return errors.Join(err, tx.Rollback())
+	}
+	return tx.Commit()
+}
+
+// lockRow 在 PostgreSQL 上对选中的行加 FOR UPDATE SKIP LOCKED，让并发的中心实例跳过
+// 已被领取的行；SQLite 只有一个写连接，不需要也不支持行锁。
+func (q *Queue) lockRow(query *ent.WorkerTaskQuery) *ent.WorkerTaskQuery {
+	if q.Dialect == dialect.Postgres {
+		return query.ForUpdate(entsql.WithLockAction(entsql.SkipLocked))
+	}
+	return query
 }
 
 func (q *Queue) Enqueue(ctx context.Context, req Request, encrypted string, now time.Time) (r Record, err error) {
@@ -156,43 +121,41 @@ func (q *Queue) Enqueue(ctx context.Context, req Request, encrypted string, now 
 		return r, errors.New("task requires its resource's Gate")
 	}
 	err = q.Lock.Do(ctx, "worker-enqueue", func(ctx context.Context) error {
-		var id, kind, requirements, hash string
 		sum := sha256.Sum256(req.Payload)
 		wantHash := hex.EncodeToString(sum[:])
 		reqJSON, _ := json.Marshal(req.Requirements)
-		e := q.DB.QueryRowContext(ctx, `SELECT id, kind, requirements, payload_hash FROM worker_tasks WHERE idem=$1`, req.Key).Scan(&id, &kind, &requirements, &hash)
+		existing, e := q.Ent.WorkerTask.Query().Where(workertask.Idem(req.Key)).
+			Select(workertask.FieldID, workertask.FieldKind, workertask.FieldRequirements, workertask.FieldPayloadHash).Only(ctx)
 		if e == nil {
 			// Compare plaintext hashes, since encryption may be randomized.
-			if kind != req.Kind || requirements != string(reqJSON) || hash != wantHash {
+			if existing.Kind != req.Kind || existing.Requirements != string(reqJSON) || existing.PayloadHash != wantHash {
 				return ErrConflict
 			}
-			r, e = q.Get(ctx, id)
+			r, e = q.Get(ctx, existing.ID)
 			return e
 		}
-		if !errors.Is(e, sql.ErrNoRows) {
+		if !ent.IsNotFound(e) {
 			return e
 		}
-		id = token()
+		id := token()
 		candidates, _ := json.Marshal(req.Candidates)
-		tx, e := q.DB.BeginTx(ctx, nil)
-		if e != nil {
-			return e
-		}
-		defer tx.Rollback()
-		_, e = tx.ExecContext(ctx, `INSERT INTO worker_tasks(id,kind,version,trace_id,idem,payload_hash,body,requirements,candidates,deadline,created_at,status,legacy_id,candidate_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending',$12,$11)`, id, req.Kind, contracts.TaskSchemaVersion(req.Kind), req.TraceID, req.Key, wantHash, encrypted, string(reqJSON), string(candidates), req.Deadline.UnixMilli(), now.UnixMilli(), req.LegacyID)
-		if e != nil {
-			return e
-		}
 		reason := "capability_candidate_order"
 		if req.Requirements.TargetGateID != 0 {
 			reason = "resource_bound"
 		} else if req.Requirements.PreferredGateID == req.Candidates[0] {
 			reason = "preferred_gate"
 		}
-		if _, e = tx.ExecContext(ctx, `INSERT INTO worker_activity(id,task_id,gate_id,attempt,at,reason) VALUES($1,$2,$3,0,$4,$5)`, token(), id, req.Candidates[0], now.UnixMilli(), reason); e != nil {
-			return e
-		}
-		if e = tx.Commit(); e != nil {
+		e = q.withTx(ctx, func(tx *ent.Tx) error {
+			if err := tx.WorkerTask.Create().SetID(id).SetKind(req.Kind).SetVersion(int32(contracts.TaskSchemaVersion(req.Kind))).
+				SetTraceID(req.TraceID).SetIdem(req.Key).SetPayloadHash(wantHash).SetBody(encrypted).
+				SetRequirements(string(reqJSON)).SetCandidates(string(candidates)).SetDeadline(req.Deadline.UnixMilli()).
+				SetCreatedAt(now.UnixMilli()).SetStatus("pending").SetLegacyID(req.LegacyID).SetCandidateAt(now.UnixMilli()).
+				Exec(ctx); err != nil {
+				return err
+			}
+			return addActivity(ctx, tx, id, req.Candidates[0], 0, now, reason)
+		})
+		if e != nil {
 			return e
 		}
 		r, e = q.Get(ctx, id)
@@ -201,49 +164,89 @@ func (q *Queue) Enqueue(ctx context.Context, req Request, encrypted string, now 
 	return r, err
 }
 
-const columns = `id,kind,version,trace_id,idem,body,requirements,candidates,deadline,created_at,status,gate_id,attempt,lease_token,lease_until,result,error,legacy_id,candidate_at,progress`
-const summaryColumns = `id,kind,version,trace_id,idem,'',requirements,candidates,deadline,created_at,status,gate_id,attempt,'',lease_until,'',error,legacy_id,candidate_at,progress`
+func addActivity(ctx context.Context, tx *ent.Tx, taskID string, gate, attempt int, at time.Time, reason string) error {
+	return tx.WorkerActivity.Create().SetID(token()).SetTaskID(taskID).SetGateID(gate).SetAttempt(int32(attempt)).
+		SetAt(at.UnixMilli()).SetReason(reason).Exec(ctx)
+}
 
-func scan(row interface{ Scan(...any) error }) (r Record, err error) {
-	var body, req, candidates, result, failure, progress string
-	var deadline, created, lease, candidate int64
-	err = row.Scan(&r.Task.ID, &r.Task.Kind, &r.Task.Version, &r.Task.TraceID, &r.Task.IdempotencyKey, &body, &req, &candidates, &deadline, &created, &r.Status, &r.GateID, &r.Task.Attempt, &r.Task.LeaseToken, &lease, &result, &failure, &r.LegacyID, &candidate, &progress)
-	if err != nil {
-		return r, err
-	}
+// summaryFields 用于列表和清扫：不读取密文、租约令牌与结果正文。
+var summaryFields = []string{
+	workertask.FieldID, workertask.FieldKind, workertask.FieldVersion, workertask.FieldTraceID, workertask.FieldIdem,
+	workertask.FieldRequirements, workertask.FieldCandidates, workertask.FieldDeadline, workertask.FieldCreatedAt,
+	workertask.FieldStatus, workertask.FieldGateID, workertask.FieldAttempt, workertask.FieldLeaseUntil,
+	workertask.FieldError, workertask.FieldLegacyID, workertask.FieldCandidateAt, workertask.FieldProgress,
+}
+
+func record(t *ent.WorkerTask) (r Record, err error) {
+	r.Task.ID, r.Task.Kind, r.Task.Version, r.Task.TraceID = t.ID, t.Kind, int(t.Version), t.TraceID
+	r.Task.IdempotencyKey, r.Status, r.GateID, r.Task.Attempt = t.Idem, t.Status, t.GateID, int(t.Attempt)
+	r.Task.LeaseToken, r.LegacyID = t.LeaseToken, t.LegacyID
 	// Payload is ciphertext until the host has authenticated the worker.
-	r.Ciphertext = body
-	if err = json.Unmarshal([]byte(req), &r.Task.Requirements); err != nil {
+	r.Ciphertext = t.Body
+	if err = json.Unmarshal([]byte(t.Requirements), &r.Task.Requirements); err != nil {
 		return r, err
 	}
-	if err = json.Unmarshal([]byte(candidates), &r.Candidates); err != nil {
+	if err = json.Unmarshal([]byte(t.Candidates), &r.Candidates); err != nil {
 		return r, err
 	}
-	r.Task.Deadline = time.UnixMilli(deadline).UTC()
-	r.Task.LeaseUntil = time.UnixMilli(lease).UTC()
-	r.CreatedAt = time.UnixMilli(created).UTC()
+	r.Task.Deadline = time.UnixMilli(t.Deadline).UTC()
+	r.Task.LeaseUntil = time.UnixMilli(t.LeaseUntil).UTC()
+	r.CreatedAt = time.UnixMilli(t.CreatedAt).UTC()
+	candidate := t.CandidateAt
 	if candidate == 0 {
-		candidate = created
+		candidate = t.CreatedAt
 	}
 	r.CandidateAt = time.UnixMilli(candidate).UTC()
-	if result != "" {
-		r.Result = json.RawMessage(result)
+	if t.Result != "" {
+		r.Result = json.RawMessage(t.Result)
 	}
-	if failure != "" {
-		err = json.Unmarshal([]byte(failure), &r.Error)
+	if t.Error != "" {
+		err = json.Unmarshal([]byte(t.Error), &r.Error)
 	}
-	if err == nil && progress != "" {
-		err = json.Unmarshal([]byte(progress), &r.Progress)
+	if err == nil && t.Progress != "" {
+		err = json.Unmarshal([]byte(t.Progress), &r.Progress)
 	}
 	return r, err
 }
 
+func records(tasks []*ent.WorkerTask) ([]Record, error) {
+	out := make([]Record, 0, len(tasks))
+	for _, t := range tasks {
+		r, err := record(t)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, nil
+}
+
 func (q *Queue) Get(ctx context.Context, id string) (Record, error) {
-	return scan(q.DB.QueryRowContext(ctx, `SELECT `+columns+` FROM worker_tasks WHERE id=$1`, id))
+	t, err := q.Ent.WorkerTask.Get(ctx, id)
+	if err != nil {
+		return Record{}, notFound(err)
+	}
+	return record(t)
+}
+
+var activeStatuses = []string{"leased", "cancelling"}
+
+// ActiveCount 是 Gate 上已领取、尚未结束的任务数，供派发前的容量判断。
+func (q *Queue) ActiveCount(ctx context.Context, gate int) (int, error) {
+	return q.Ent.WorkerTask.Query().Where(workertask.GateID(gate), workertask.StatusIn(activeStatuses...)).Count(ctx)
+}
+
+// LatestSucceeded 返回同一 trace 下某 Gate 最近一次成功的指定任务。
+func (q *Queue) LatestSucceeded(ctx context.Context, kind, traceID string, gate int) (string, error) {
+	id, err := q.Ent.WorkerTask.Query().
+		Where(workertask.Kind(kind), workertask.TraceID(traceID), workertask.GateID(gate), workertask.Status("succeeded")).
+		Order(workertask.ByCreatedAt(entsql.OrderDesc()), workertask.ByID(entsql.OrderDesc())).
+		FirstID(ctx)
+	return id, notFound(err)
 }
 
 // Claim serializes capacity checks across center instances, not just requests
-// handled by the same process. The SQL predicate also fences stale readers.
+// handled by the same process. The row lock and status predicate also fence stale readers.
 func (q *Queue) Claim(ctx context.Context, gate int, caps contracts.CapabilityDocument, res contracts.WorkerResources, now time.Time) (out []Record, err error) {
 	if err = caps.Validate(); err != nil {
 		return nil, err
@@ -252,32 +255,24 @@ func (q *Queue) Claim(ctx context.Context, gate int, caps contracts.CapabilityDo
 		return nil, errors.New("invalid worker concurrency")
 	}
 	err = q.Lock.Do(ctx, "worker-dispatch", func(ctx context.Context) error {
-		var active int
-		if e := q.DB.QueryRowContext(ctx, `SELECT count(*) FROM worker_tasks WHERE gate_id=$1 AND status IN ('leased','cancelling')`, gate).Scan(&active); e != nil {
+		active, e := q.ActiveCount(ctx, gate)
+		if e != nil {
 			return e
 		}
 		if active >= res.Concurrency {
 			return nil
 		}
-		var downloads int
-		if err := q.DB.QueryRowContext(ctx, `SELECT count(*) FROM worker_tasks WHERE gate_id=$1 AND status IN ('leased','cancelling') AND kind IN ($2,$3,$4,$5,$6)`, gate, contracts.ActionAssetFetch, contracts.ActionReleaseReplace, contracts.TaskLayaInstall, contracts.TaskCoreInstall, contracts.TaskLayaPrepare).Scan(&downloads); err != nil {
-			return err
-		}
-		rows, e := q.DB.QueryContext(ctx, `SELECT `+columns+` FROM worker_tasks WHERE status='pending' AND deadline>$1 ORDER BY created_at,id LIMIT 100`, now.UnixMilli())
+		downloads, e := q.Ent.WorkerTask.Query().Where(workertask.GateID(gate), workertask.StatusIn(activeStatuses...),
+			workertask.KindIn(contracts.ActionAssetFetch, contracts.ActionReleaseReplace, contracts.TaskLayaInstall, contracts.TaskCoreInstall, contracts.TaskLayaPrepare)).Count(ctx)
 		if e != nil {
 			return e
 		}
-		var pending []Record
-		for rows.Next() {
-			r, e := scan(rows)
-			if e != nil {
-				rows.Close()
-				return e
-			}
-			pending = append(pending, r)
+		rows, e := q.Ent.WorkerTask.Query().Where(workertask.Status("pending"), workertask.DeadlineGT(now.UnixMilli())).
+			Order(workertask.ByCreatedAt(), workertask.ByID()).Limit(100).All(ctx)
+		if e != nil {
+			return e
 		}
-		e = rows.Err()
-		rows.Close()
+		pending, e := records(rows)
 		if e != nil {
 			return e
 		}
@@ -288,36 +283,12 @@ func (q *Queue) Claim(ctx context.Context, gate int, caps contracts.CapabilityDo
 			if contracts.LargeDownload(r.Task.Kind) && downloads > 0 {
 				continue
 			}
-			lease := now.Add(contracts.TaskLease)
-			if lease.After(r.Task.Deadline) {
-				lease = r.Task.Deadline
-			}
-			lt := token()
-			tx, e := q.DB.BeginTx(ctx, nil)
+			claimed, e := q.claim(ctx, r, gate, now)
 			if e != nil {
 				return e
 			}
-			v, e := tx.ExecContext(ctx, `UPDATE worker_tasks SET status='leased',gate_id=$1,attempt=attempt+1,lease_token=$2,lease_until=$3,progress='' WHERE id=$4 AND status='pending'`, gate, lt, lease.UnixMilli(), r.Task.ID)
-			if e != nil {
-				tx.Rollback()
-				return e
-			}
-			n, _ := v.RowsAffected()
-			if n != 1 {
-				tx.Rollback()
+			if !claimed {
 				continue
-			}
-			_, e = tx.ExecContext(ctx, `INSERT INTO worker_attempts(task_id,attempt,gate_id,started_at,outcome) VALUES($1,$2,$3,$4,'leased')`, r.Task.ID, r.Task.Attempt+1, gate, now.UnixMilli())
-			if e != nil {
-				tx.Rollback()
-				return e
-			}
-			if _, e = tx.ExecContext(ctx, `INSERT INTO worker_activity(id,task_id,gate_id,attempt,at,reason) VALUES($1,$2,$3,$4,$5,'lease_claimed')`, token(), r.Task.ID, gate, r.Task.Attempt+1, now.UnixMilli()); e != nil {
-				tx.Rollback()
-				return e
-			}
-			if e = tx.Commit(); e != nil {
-				return e
 			}
 			r, e = q.Get(ctx, r.Task.ID)
 			if e != nil {
@@ -335,6 +306,40 @@ func (q *Queue) Claim(ctx context.Context, gate int, caps contracts.CapabilityDo
 		return nil
 	})
 	return out, err
+}
+
+// claim 领取一行待派发任务；行已被别的实例锁住或状态已变时返回 false。
+func (q *Queue) claim(ctx context.Context, r Record, gate int, now time.Time) (claimed bool, err error) {
+	lease := now.Add(contracts.TaskLease)
+	if lease.After(r.Task.Deadline) {
+		lease = r.Task.Deadline
+	}
+	err = q.withTx(ctx, func(tx *ent.Tx) error {
+		_, e := q.lockRow(tx.WorkerTask.Query().Where(workertask.ID(r.Task.ID), workertask.Status("pending"))).OnlyID(ctx)
+		if ent.IsNotFound(e) {
+			return nil
+		}
+		if e != nil {
+			return e
+		}
+		n, e := tx.WorkerTask.Update().Where(workertask.ID(r.Task.ID), workertask.Status("pending")).
+			SetStatus("leased").SetGateID(gate).AddAttempt(1).SetLeaseToken(token()).SetLeaseUntil(lease.UnixMilli()).SetProgress("").
+			Save(ctx)
+		if e != nil || n != 1 {
+			return e
+		}
+		attempt := r.Task.Attempt + 1
+		if e = tx.WorkerAttempt.Create().SetID(r.Task.ID).SetAttempt(int32(attempt)).SetGateID(gate).
+			SetStartedAt(now.UnixMilli()).SetOutcome("leased").Exec(ctx); e != nil {
+			return e
+		}
+		if e = addActivity(ctx, tx, r.Task.ID, gate, attempt, now, "lease_claimed"); e != nil {
+			return e
+		}
+		claimed = true
+		return nil
+	})
+	return claimed, err
 }
 
 func eligible(r Record, gate int, c contracts.CapabilityDocument, res contracts.WorkerResources) bool {

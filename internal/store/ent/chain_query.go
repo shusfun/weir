@@ -278,8 +278,9 @@ func (_q *ChainQuery) Clone() *ChainQuery {
 		predicates: append([]predicate.Chain{}, _q.predicates...),
 		withExit:   _q.withExit.Clone(),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -552,6 +553,12 @@ func (_q *ChainQuery) ForShare(opts ...sql.LockOption) *ChainQuery {
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *ChainQuery) Modify(modifiers ...func(s *sql.Selector)) *ChainSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // ChainGroupBy is the group-by builder for Chain entities.
 type ChainGroupBy struct {
 	selector
@@ -640,4 +647,10 @@ func (_s *ChainSelect) sqlScan(ctx context.Context, root *ChainQuery, v any) err
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *ChainSelect) Modify(modifiers ...func(s *sql.Selector)) *ChainSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

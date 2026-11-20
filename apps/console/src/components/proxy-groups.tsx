@@ -61,7 +61,7 @@ export function ProxyGroups({ base, view, onUpdated, admin }: { base: string; vi
             const group = view.groups.find((g) => `group:${g.group.id}` === ref);
             const line = view.lines.find((l) => l.ref === ref);
             if (group) {
-              const memberNames = group.group.members.map((m) => byRef.get(m)?.name ?? "失效线路");
+              const memberNames = group.group.members.map((m) => byRef.get(m)?.name ?? "已删除的线路");
               return (
                 <InsetRow key={ref} className="space-y-1.5" {...dataObject({ type: "proxy_group", key: view.user_id + ":" + group.group.id, owner: view.user_id })}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -69,6 +69,7 @@ export function ProxyGroups({ base, view, onUpdated, admin }: { base: string; vi
                       <span className="font-mono text-meta text-[var(--weir-ink-3)]">{index + 1}</span>
                       <ObjectLink className="font-semibold" to={{ type: "proxy_group", key: view.user_id + ":" + group.group.id, owner: view.user_id, name: group.group.name }} />
                       <Badge variant="soft" tone="info">{ways[group.group.kind]} · {group.valid_members} 节点</Badge>
+                      {group.group.members.length > group.valid_members && <Badge variant="soft" tone="warn">{group.group.members.length - group.valid_members} 条不可用</Badge>}
                     </span>
                     {groupActions(group.group)}
                   </div>
@@ -154,10 +155,18 @@ function GroupDialog({ base, view, value, close, saved }: { base: string; view: 
   const requestClose = async () => { if (!save.busy && (!dirty || await confirm({ title: "放弃未保存修改？", description: "分组尚未保存。", confirmText: "放弃修改", tone: "danger" }))) { markSaved(); close(); } };
   const gates = [...new Set(view.lines.map((l) => l.gate_id))];
   const byRef = new Map(view.lines.map((l) => [l.ref, l]));
-  useConsoleContext({ dialog: { title: value ? "编辑分组" : "新建分组" }, form: [field("name", "名称", name), field("kind", "选法", ways[kind]), field("members", "成员", members.map((m) => byRef.get(m)?.name ?? "失效线路").join("、")), field("interval_seconds", "探测间隔", interval), field("tolerance_ms", "容差", tolerance)] });
+  // 已删除的线路（找不到对应节点或链式代理）与仍在但当前不可用的线路分开处理：前者只能移除，后者允许取消勾选。
+  const stale = members.filter((m) => !byRef.has(m));
+  const unusable = members.flatMap((m) => { const l = byRef.get(m); return l && !l.available ? [l] : []; });
+  const full = members.length >= 50;
+  useConsoleContext({ dialog: { title: value ? "编辑分组" : "新建分组" }, form: [field("name", "名称", name), field("kind", "选法", ways[kind]), field("members", "成员", members.map((m) => byRef.get(m)?.name ?? "已删除的线路").join("、")), field("interval_seconds", "探测间隔", interval), field("tolerance_ms", "容差", tolerance)] });
   return <Dialog open onOpenChange={(o) => { if (!o) void requestClose(); }}><DialogContent size="lg">
     <DialogTitle>{value ? `配置分组「${value.name}」` : "新建客户端分组"}</DialogTitle><DialogDescription>把同一地区或用途的节点编成一组，出现在客户端的 PROXY 选择列表里。</DialogDescription>
-    <Form busy={save.busy} errors={{ ...save.errors, ...(memberError ? { members: memberError } : {}) }} onSubmit={() => { if (!members.length) { setMemberError("请至少勾选一条节点线路"); membersControl.current?.focus(); return; } void save.submit(); }}>
+    <Form busy={save.busy} errors={{ ...save.errors, ...(memberError ? { members: memberError } : {}) }} onSubmit={() => {
+      const problem = !members.length ? "请至少勾选一条节点线路" : stale.length ? `还勾着 ${stale.length} 条已删除的线路，请先移除` : unusable.length ? `${unusable.map((l) => l.name).join("、")} 当前不可用，请取消勾选后再保存` : "";
+      if (problem) { setMemberError(problem); membersControl.current?.focus(); return; }
+      void save.submit();
+    }}>
       <div className="space-y-2">
         <Field name="name" label="分组名称" required><Input name="name" required maxLength={80} placeholder="例如：AI 专线、流媒体、日本组" value={name} onChange={(e) => setName(e.target.value)} /></Field>
         {!value && (
@@ -196,7 +205,11 @@ function GroupDialog({ base, view, value, close, saved }: { base: string; view: 
                   onClick={() => {
                     setMemberError("");
                     if (allPicked) setMembers(members.filter((m) => !availableRefs.includes(m)));
-                    else setMembers([...new Set([...members, ...availableRefs])].slice(0, 50));
+                    else {
+                      const next = [...new Set([...members, ...availableRefs])];
+                      if (next.length > 50) setMemberError(`一个分组最多 50 条线路，已选满，本机还有 ${next.length - 50} 条没有加入`);
+                      setMembers(next.slice(0, 50));
+                    }
                   }}
                 >
                   {allPicked ? "取消本机全选" : "全选本机"}
@@ -210,7 +223,7 @@ function GroupDialog({ base, view, value, close, saved }: { base: string; view: 
                       label={l.name}
                       description={`${l.chained ? "链式" : "直连"} · 节点${healthText[l.health]} · VPS ${gateText[l.gate_status]}${l.why ? ` · ${l.why}` : ""}`}
                       checked={members.includes(l.ref)}
-                      disabled={!l.available || (!members.includes(l.ref) && members.length >= 50)}
+                      disabled={!members.includes(l.ref) && (!l.available || full)}
                       onCheckedChange={(on) => { setMembers(on ? [...members, l.ref] : members.filter((m) => m !== l.ref)); setMemberError(""); }}
                     />
                   </InsetRow>
@@ -219,10 +232,13 @@ function GroupDialog({ base, view, value, close, saved }: { base: string; view: 
             </InsetGroup>
           );
         })}
-        {members.filter((m) => !byRef.has(m)).map((m) => <CheckboxField key={m} label="已失效线路，取消勾选以移除" checked onCheckedChange={() => setMembers(members.filter((ref) => ref !== m))} />)}
+        {stale.length > 0 && <InsetGroup title={`已删除的线路 · ${stale.length} 条`} description="对应的节点或链式代理已经删除，保存前需要移除。" actions={<Button type="button" size="xs" variant="outline" onClick={() => { setMembers(members.filter((m) => byRef.has(m))); setMemberError(""); }}>全部移除</Button>}>
+          <InsetRows>{stale.map((m) => <InsetRow key={m} className="py-2 text-meta text-[var(--weir-ink-3)]">{m.startsWith("chain:") ? "链式代理" : "节点"}（编号 {m.split(":")[1]}）</InsetRow>)}</InsetRows>
+        </InsetGroup>}
+        {full && <small className="text-[var(--weir-ink-3)]">已选满 50 条，取消一条后才能再勾选。</small>}
         {!gates.length && <State empty="没有可选择的节点" />}
       </div></Field>
-      {kind === "fallback" && members.length > 1 && <InsetGroup title="主备优先顺序" description="靠前的节点优先使用，断连时自动切到下一条。"><SortableList items={members} getId={(m) => m} label="主备顺序" itemLabel={(m) => byRef.get(m)?.name ?? "失效线路"} onReorder={setMembers} renderItem={(m, { reorder, index }) => <div className="flex min-w-0 items-center gap-2"><span className="font-mono text-meta text-[var(--weir-ink-3)]">{index + 1}</span><span className="min-w-0 flex-1 break-words">{byRef.get(m)?.name ?? "失效线路"}</span>{reorder}</div>} /></InsetGroup>}
+      {kind === "fallback" && members.length > 1 && <InsetGroup title="主备优先顺序" description="靠前的节点优先使用，断连时自动切到下一条。"><SortableList items={members} getId={(m) => m} label="主备顺序" itemLabel={(m) => byRef.get(m)?.name ?? "已删除的线路"} onReorder={setMembers} renderItem={(m, { reorder, index }) => <div className="flex min-w-0 items-center gap-2"><span className="font-mono text-meta text-[var(--weir-ink-3)]">{index + 1}</span><span className="min-w-0 flex-1 break-words">{byRef.get(m)?.name ?? "已删除的线路"}</span>{reorder}</div>} /></InsetGroup>}
       {kind !== "select" && (
         <Collapsible title={`探测参数（当前 ${interval} 秒${kind === "url-test" ? ` · 容差 ${tolerance} ms` : ""}）`}>
           <FormGrid>

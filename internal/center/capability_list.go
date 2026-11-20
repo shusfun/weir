@@ -309,7 +309,7 @@ func profileParams(update bool) []Param {
 		Param{Key: "source_ids", Label: "订阅源", Kind: "refs", Ref: "source", Hint: "按这个顺序输出"},
 		Param{Key: "node_ids", Label: "手动节点", Kind: "refs", Ref: "manual"},
 		Param{Key: "members", Label: "有序成员", Kind: "members", Hint: "数组，每项为 {kind:source/node/profile,id:数据库编号}；与 source_ids/node_ids 二选一，all_sources 必须为 false；嵌套最多向下三层"},
-		Param{Key: "settings", Label: "输出设置", Kind: "object", Hint: "可选键：template（builtin:编号 / custom:编号，见 list_templates）、rule_level、flag_emoji、prepend_manual、manual_prefix、prepend_sources、prepend_group_name、filter_include、filter_exclude、traffic_nodes；不给的沿用默认设置"},
+		Param{Key: "settings", Label: "输出设置", Kind: "object", Hint: "可选键：template（builtin:编号 / custom:编号，见 list_templates）、rule_level、flag_emoji、prepend_manual、manual_prefix、prepend_sources、prepend_group_name、filter_include、filter_exclude、traffic_nodes、pick（挑选条件 {regions:[地区名], max_multiplier:数字或 null, include_unlabeled_multiplier:布尔, keywords:[关键词], only_alive:布尔}，每次按最新节点重新挑选）；不给的沿用默认设置"},
 		Param{Key: "expires_days", Label: "有效天数", Kind: "days", Unit: "天", Min: num(0), Max: num(3650), Hint: "从确认时起算；0 为不到期"},
 	)
 }
@@ -442,7 +442,7 @@ var opDraftCaps = []Capability{
 			self: "exit_id", load: loadExit, full: true, needs: exitNeeds, secrets: exitSecrets}},
 	{Name: "exit.delete", Title: "删除出口", Purpose: "删除出口；仍被节点、用户链路或分流引用时返回占用对象。系统直连不能删除。不能撤回，只能是最后一步。",
 		Kind: "draft", Risk: "danger", Object: "exit", Last: true, Params: []Param{{Key: "exit_id", Label: "出口", Kind: "ref", Ref: "exit", Required: true}},
-		op: &opSpec{kind: "delete", method: "DELETE", handler: h(func(s *Server) gin.HandlerFunc { return func(c *gin.Context) { s.deleteExit(c, true) } }), path: exitPath, pathKeys: []string{"exit_id"}, self: "exit_id"}},
+		op: &opSpec{kind: "delete", method: "DELETE", handler: h(func(s *Server) gin.HandlerFunc { return func(c *gin.Context) { s.deleteExitConfirmed(c, true, true) } }), path: exitPath, pathKeys: []string{"exit_id"}, self: "exit_id"}},
 	{Name: "route.create", Title: "新建分流规则", Purpose: "在一台 VPS 上新建分流规则：匹配域名或 IP 的流量走指定出口；可以只对某个节点或某个用户生效。",
 		Kind: "draft", Risk: "normal", Object: "route", Creates: true, Params: routeParams(false),
 		op: &opSpec{kind: "create", method: "POST", handler: h(func(s *Server) gin.HandlerFunc { return s.saveRoute }), path: keys("gate_id", "id"), pathKeys: []string{"gate_id"},

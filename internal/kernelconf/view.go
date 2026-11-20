@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/shusfun/weir/internal/db"
+	"github.com/shusfun/weir/internal/kernelconf/model"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -58,7 +58,7 @@ func toAny(list []map[string]any) []any {
 }
 
 // inboundMap 把入站字段按 JSON 键名展开，再加上派生字段。
-func inboundMap(in db.Inbound) map[string]any {
+func inboundMap(in model.Inbound) map[string]any {
 	b, _ := json.Marshal(in)
 	m := map[string]any{}
 	_ = json.Unmarshal(b, &m)
@@ -71,8 +71,8 @@ func inboundMap(in db.Inbound) map[string]any {
 	return m
 }
 
-func enabled(clients []db.Client) []db.Client {
-	out := []db.Client{}
+func enabled(clients []model.Client) []model.Client {
+	out := []model.Client{}
 	for _, c := range clients {
 		if c.Enabled {
 			out = append(out, c)
@@ -81,7 +81,7 @@ func enabled(clients []db.Client) []db.Client {
 	return out
 }
 
-func statsName(c db.Client) string {
+func statsName(c model.Client) string {
 	if s := strings.TrimSpace(c.StatsKey); s != "" {
 		return s
 	}
@@ -89,7 +89,7 @@ func statsName(c db.Client) string {
 }
 
 // routeUser 是 Xray 分流规则 user 字段：SOCKS / HTTP 入站按登录用户名，其他协议按凭据的统计名。
-func routeUser(protocol string, c db.Client) string {
+func routeUser(protocol string, c model.Client) string {
 	switch strings.ToLower(strings.TrimSpace(protocol)) {
 	case "socks", "http":
 		return strings.TrimSpace(c.CredentialIDValue())
@@ -117,7 +117,7 @@ func ssPassword(method, seed string) string {
 // tuicUUID：TUIC 要求 uuid 是 UUID 格式；凭据 ID 不是时按它稳定派生一个。
 func tuicUUID(seed string) string {
 	seed = strings.TrimSpace(seed)
-	if db.IsUUID(seed) {
+	if model.IsUUID(seed) {
 		return seed
 	}
 	sum := sha256.Sum256([]byte(seed))
@@ -141,13 +141,13 @@ func wgPublic(priv string) string {
 }
 
 // outboundSettings 是出口设置的视图：按协议补齐默认（HTTPS 默认 TLS 与 http/1.1；Hysteria2 等必须 TLS）。
-func outboundSettings(ob db.Outbound, kernel string) (map[string]any, error) {
-	protocol := db.NormalizeOutboundProtocol(ob.Protocol)
-	s := db.ParseOutboundSettings(ob.SettingsJSON)
+func outboundSettings(ob model.Outbound, kernel string) (map[string]any, error) {
+	protocol := model.NormalizeOutboundProtocol(ob.Protocol)
+	s := model.ParseOutboundSettings(ob.SettingsJSON)
 	switch protocol {
 	case "http", "https":
 		https := protocol == "https"
-		if kernel == db.CoreXray {
+		if kernel == model.CoreXray {
 			https = ob.Protocol == "https"
 		}
 		if https && s.Security == "" {
@@ -157,7 +157,7 @@ func outboundSettings(ob db.Outbound, kernel string) (map[string]any, error) {
 			s.ALPN = []string{"http/1.1"}
 		}
 	case "hysteria2", "tuic", "shadowtls", "anytls":
-		managed, err := db.ManagedOutboundSettings(ob)
+		managed, err := model.ManagedOutboundSettings(ob)
 		if err != nil {
 			return nil, err
 		}
@@ -189,20 +189,20 @@ func outboundSettings(ob db.Outbound, kernel string) (map[string]any, error) {
 }
 
 // buildView 为一个内核整理视图。inbounds 只含这个内核的入站（sing-box 已去掉没有凭据的）。
-func buildView(kernel string, inbounds []db.Inbound, outbounds []db.Outbound, rules []db.RoutingRule, groups []group) (view, error) {
+func buildView(kernel string, inbounds []model.Inbound, outbounds []model.Outbound, rules []model.RoutingRule, groups []group) (view, error) {
 	var v view
 	groupOf := map[int64][]int64{}
 	for _, g := range groups {
 		groupOf[g.id] = g.members
 	}
 	for _, in := range inbounds {
-		if !in.Enabled || db.InboundCore(in) != kernel {
+		if !in.Enabled || model.InboundCore(in) != kernel {
 			continue
 		}
 		m := inboundMap(in)
-		m["tag"] = db.GeneratedInboundTag(in)
+		m["tag"] = model.GeneratedInboundTag(in)
 		m["stats_tag"] = statsTag(in)
-		if kernel == db.CoreXray {
+		if kernel == model.CoreXray {
 			method := in.SSMethod
 			if method == "" {
 				method = "2022-blake3-aes-128-gcm"
@@ -212,7 +212,7 @@ func buildView(kernel string, inbounds []db.Inbound, outbounds []db.Outbound, ru
 		clients := []any{}
 		for _, c := range enabled(in.Clients) {
 			cm := map[string]any{"id": c.ID, "stats_name": statsName(c), "credential": c.CredentialIDValue(), "password": c.PasswordValue()}
-			if kernel == db.CoreXray {
+			if kernel == model.CoreXray {
 				cm["route_user"] = routeUser(in.Protocol, c)
 			} else {
 				cm["tuic_uuid"] = tuicUUID(c.CredentialIDValue())
@@ -224,21 +224,21 @@ func buildView(kernel string, inbounds []db.Inbound, outbounds []db.Outbound, ru
 		m["clients"] = clients
 		v.Inbounds = append(v.Inbounds, m)
 	}
-	removed := func(ob db.Outbound) bool {
-		return kernel == db.CoreSingbox && db.NormalizeOutboundProtocol(ob.Protocol) == "dns"
+	removed := func(ob model.Outbound) bool {
+		return kernel == model.CoreSingbox && model.NormalizeOutboundProtocol(ob.Protocol) == "dns"
 	}
 	for _, ob := range outbounds {
-		if !ob.Enabled || !db.OutboundSupportsCore(ob, kernel) || removed(ob) {
+		if !ob.Enabled || !model.OutboundSupportsCore(ob, kernel) || removed(ob) {
 			continue
 		}
-		if err := db.ValidateOutboundProfile(ob); err != nil {
+		if err := model.ValidateOutboundProfile(ob); err != nil {
 			return v, err
 		}
 		s, err := outboundSettings(ob, kernel)
 		if err != nil {
 			return v, err
 		}
-		m := map[string]any{"id": ob.ID, "tag": db.GeneratedOutboundTag(kernel, ob.ID, ob.Tag), "protocol": db.NormalizeOutboundProtocol(ob.Protocol),
+		m := map[string]any{"id": ob.ID, "tag": model.GeneratedOutboundTag(kernel, ob.ID, ob.Tag), "protocol": model.NormalizeOutboundProtocol(ob.Protocol),
 			"address": ob.Address, "port": ob.Port, "username": ob.Username, "password": ob.Password, "s": s, "group": nil}
 		if members, ok := groupOf[ob.ID]; ok {
 			m["group"] = toStrings(tags(kernel, members))
@@ -246,7 +246,7 @@ func buildView(kernel string, inbounds []db.Inbound, outbounds []db.Outbound, ru
 		v.Outbounds = append(v.Outbounds, m)
 	}
 	for _, g := range groups {
-		v.Groups = append(v.Groups, map[string]any{"tag": db.GeneratedOutboundTag(kernel, g.id, ""), "members": toStrings(tags(kernel, g.members))})
+		v.Groups = append(v.Groups, map[string]any{"tag": model.GeneratedOutboundTag(kernel, g.id, ""), "members": toStrings(tags(kernel, g.members))})
 	}
 	routes, err := routeViews(kernel, inbounds, outbounds, rules, groupOf)
 	v.Routes = routes
@@ -264,26 +264,26 @@ func toStrings(list []string) []any {
 func tags(kernel string, ids []int64) []string {
 	out := make([]string, len(ids))
 	for i, id := range ids {
-		out[i] = db.GeneratedOutboundTag(kernel, id, "")
+		out[i] = model.GeneratedOutboundTag(kernel, id, "")
 	}
 	return out
 }
 
 // routeViews 解析分流规则：指向的出口、入站与用户；引用不到的规则跳过（该入站或用户此刻不在这个内核上）。
-func routeViews(kernel string, inbounds []db.Inbound, outbounds []db.Outbound, rules []db.RoutingRule, groupOf map[int64][]int64) ([]map[string]any, error) {
+func routeViews(kernel string, inbounds []model.Inbound, outbounds []model.Outbound, rules []model.RoutingRule, groupOf map[int64][]int64) ([]map[string]any, error) {
 	if len(rules) == 0 {
 		return nil, nil
 	}
 	byID, alias := map[int64]string{}, map[string]string{}
 	clientUser := map[int64]string{}
 	for _, in := range inbounds {
-		if !in.Enabled || db.InboundCore(in) != kernel {
+		if !in.Enabled || model.InboundCore(in) != kernel {
 			continue
 		}
-		tag := db.GeneratedInboundTag(in)
-		if kernel == db.CoreSingbox {
+		tag := model.GeneratedInboundTag(in)
+		if kernel == model.CoreSingbox {
 			tag = statsTag(in)
-			alias[db.GeneratedInboundTag(in)] = tag
+			alias[model.GeneratedInboundTag(in)] = tag
 		} else {
 			alias[tag] = tag
 		}
@@ -292,7 +292,7 @@ func routeViews(kernel string, inbounds []db.Inbound, outbounds []db.Outbound, r
 			alias[r] = tag
 		}
 		for _, c := range enabled(in.Clients) {
-			if kernel == db.CoreSingbox {
+			if kernel == model.CoreSingbox {
 				clientUser[c.ID] = statsName(c)
 			} else {
 				clientUser[c.ID] = routeUser(in.Protocol, c)
@@ -301,26 +301,26 @@ func routeViews(kernel string, inbounds []db.Inbound, outbounds []db.Outbound, r
 	}
 	var out []map[string]any
 	for _, rule := range rules {
-		if !rule.Enabled || !db.RoutingRuleAppliesToCore(rule, inbounds, kernel) {
+		if !rule.Enabled || !model.RoutingRuleAppliesToCore(rule, inbounds, kernel) {
 			continue
 		}
-		ob, ok := db.ResolveRuleOutbound(rule, outbounds)
+		ob, ok := model.ResolveRuleOutbound(rule, outbounds)
 		if !ok {
 			return nil, fmt.Errorf("routing rule %d targets missing outbound profile", rule.ID)
 		}
-		if !db.OutboundSupportsCore(ob, kernel) {
+		if !model.OutboundSupportsCore(ob, kernel) {
 			name := "xray"
-			if kernel == db.CoreSingbox {
+			if kernel == model.CoreSingbox {
 				name = "sing-box"
 			}
 			return nil, fmt.Errorf("routing rule %d targets outbound %q that does not support %s", rule.ID, ob.Tag, name)
 		}
-		r := map[string]any{"outbound": db.GeneratedOutboundTag(kernel, ob.ID, rule.OutboundTag), "balancer": false, "reject": false,
+		r := map[string]any{"outbound": model.GeneratedOutboundTag(kernel, ob.ID, rule.OutboundTag), "balancer": false, "reject": false,
 			"domain": rule.Domain, "ip": rule.IP, "protocol": rule.Protocol, "inbound": nil, "user": nil}
 		if _, isGroup := groupOf[ob.ID]; isGroup {
 			r["balancer"] = true
 		}
-		if kernel == db.CoreSingbox && db.NormalizeOutboundProtocol(ob.Protocol) == "dns" {
+		if kernel == model.CoreSingbox && model.NormalizeOutboundProtocol(ob.Protocol) == "dns" {
 			return nil, fmt.Errorf("unsupported route action")
 		}
 		if rule.ClientID > 0 {
@@ -349,7 +349,7 @@ func routeViews(kernel string, inbounds []db.Inbound, outbounds []db.Outbound, r
 }
 
 // statsTag 是 sing-box 入站的统计标签（Gate 按它读按入站的流量）；与改为驱动之前一致。
-func statsTag(in db.Inbound) string {
+func statsTag(in model.Inbound) string {
 	switch p := strings.ToLower(strings.TrimSpace(in.Protocol)); p {
 	case "hysteria2":
 		return fmt.Sprintf("hy2-inbound-%d", in.ID)

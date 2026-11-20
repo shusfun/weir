@@ -18,8 +18,9 @@ import (
 // PasskeyUpdate is the builder for updating Passkey entities.
 type PasskeyUpdate struct {
 	config
-	hooks    []Hook
-	mutation *PasskeyMutation
+	hooks     []Hook
+	mutation  *PasskeyMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the PasskeyUpdate builder.
@@ -145,6 +146,12 @@ func (_u *PasskeyUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *PasskeyUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *PasskeyUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *PasskeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -178,6 +185,7 @@ func (_u *PasskeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.LastUsedAtCleared() {
 		_spec.ClearField(passkey.FieldLastUsedAt, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{passkey.Label}
@@ -193,9 +201,10 @@ func (_u *PasskeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 // PasskeyUpdateOne is the builder for updating a single Passkey entity.
 type PasskeyUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *PasskeyMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *PasskeyMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUserID sets the "user_id" field.
@@ -328,6 +337,12 @@ func (_u *PasskeyUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *PasskeyUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *PasskeyUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *PasskeyUpdateOne) sqlSave(ctx context.Context) (_node *Passkey, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -378,6 +393,7 @@ func (_u *PasskeyUpdateOne) sqlSave(ctx context.Context) (_node *Passkey, err er
 	if _u.mutation.LastUsedAtCleared() {
 		_spec.ClearField(passkey.FieldLastUsedAt, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &Passkey{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

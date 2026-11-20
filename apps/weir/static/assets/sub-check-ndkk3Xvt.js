@@ -1,0 +1,1 @@
+import{o as s,B as t}from"./index-C91EyRyM.js";const a={passed:["通过","ok"],failed:["未通过","bad"],unknown:["未知","neutral"]};function i({check:o}){const[e,n]=a[o.status];return s.jsxs(t,{variant:"soft",tone:n,children:[o.kernel==="mihomo"?"mihomo -t":"sing-box check"," · ",e]})}export{i as S};

@@ -3,6 +3,9 @@ package taskqueue
 import (
 	"context"
 
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/workercapability"
+	"github.com/shusfun/weir/internal/store/ent/workertask"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -12,27 +15,31 @@ type WorkerSnapshot struct {
 }
 
 func (q *Queue) WorkerInventory(ctx context.Context) (map[int]WorkerSnapshot, error) {
-	rows, err := q.DB.QueryContext(ctx, `SELECT c.gate_id,c.document,COALESCE(a.active,0)
-		FROM worker_capabilities c LEFT JOIN
-		(SELECT gate_id,count(*) AS active FROM worker_tasks WHERE status IN ('leased','cancelling') GROUP BY gate_id) a
-		ON a.gate_id=c.gate_id ORDER BY c.gate_id`)
+	caps, err := q.Ent.WorkerCapability.Query().Order(workercapability.ByID()).All(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	out := map[int]WorkerSnapshot{}
-	for rows.Next() {
-		var id int
-		var raw string
-		var snapshot WorkerSnapshot
-		if err := rows.Scan(&id, &raw, &snapshot.Active); err != nil {
-			return nil, err
-		}
-		snapshot.Capabilities, err = decodeCapabilities(raw)
+	var counts []struct {
+		GateID int `json:"gate_id"`
+		Count  int `json:"count"`
+	}
+	err = q.Ent.WorkerTask.Query().Where(workertask.StatusIn(activeStatuses...)).
+		GroupBy(workertask.FieldGateID).Aggregate(ent.Count()).Scan(ctx, &counts)
+	if err != nil {
+		return nil, err
+	}
+	active := make(map[int]int, len(counts))
+	for _, c := range counts {
+		active[c.GateID] = c.Count
+	}
+	out := make(map[int]WorkerSnapshot, len(caps))
+	for _, c := range caps {
+		snapshot := WorkerSnapshot{Active: active[c.ID]}
+		snapshot.Capabilities, err = decodeCapabilities(c.Document)
 		if err != nil {
 			return nil, err
 		}
-		out[id] = snapshot
+		out[c.ID] = snapshot
 	}
-	return out, rows.Err()
+	return out, nil
 }

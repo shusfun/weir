@@ -253,8 +253,9 @@ func (_q *BudgetQuery) Clone() *BudgetQuery {
 		inters:     append([]Interceptor{}, _q.inters...),
 		predicates: append([]predicate.Budget{}, _q.predicates...),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -473,6 +474,12 @@ func (_q *BudgetQuery) ForShare(opts ...sql.LockOption) *BudgetQuery {
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *BudgetQuery) Modify(modifiers ...func(s *sql.Selector)) *BudgetSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // BudgetGroupBy is the group-by builder for Budget entities.
 type BudgetGroupBy struct {
 	selector
@@ -561,4 +568,10 @@ func (_s *BudgetSelect) sqlScan(ctx context.Context, root *BudgetQuery, v any) e
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *BudgetSelect) Modify(modifiers ...func(s *sql.Selector)) *BudgetSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

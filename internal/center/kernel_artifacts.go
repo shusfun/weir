@@ -2,7 +2,6 @@ package center
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"runtime"
@@ -12,6 +11,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/resource"
+	"github.com/shusfun/weir/internal/taskqueue"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -82,7 +82,7 @@ func (s *Server) kernelVersions(ctx context.Context, kernel string) ([]string, e
 
 func (s *Server) gateDownloadsKernels(ctx context.Context, id int) (bool, error) {
 	caps, err := s.Store.Tasks.Capabilities(ctx, id)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, taskqueue.ErrNotFound) {
 		return false, errors.New("VPS 尚未声明当前内核安装任务能力")
 	}
 	if err != nil {

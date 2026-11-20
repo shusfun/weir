@@ -253,8 +253,9 @@ func (_q *SubNodeQuery) Clone() *SubNodeQuery {
 		inters:     append([]Interceptor{}, _q.inters...),
 		predicates: append([]predicate.SubNode{}, _q.predicates...),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -473,6 +474,12 @@ func (_q *SubNodeQuery) ForShare(opts ...sql.LockOption) *SubNodeQuery {
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *SubNodeQuery) Modify(modifiers ...func(s *sql.Selector)) *SubNodeSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // SubNodeGroupBy is the group-by builder for SubNode entities.
 type SubNodeGroupBy struct {
 	selector
@@ -561,4 +568,10 @@ func (_s *SubNodeSelect) sqlScan(ctx context.Context, root *SubNodeQuery, v any)
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *SubNodeSelect) Modify(modifiers ...func(s *sql.Selector)) *SubNodeSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

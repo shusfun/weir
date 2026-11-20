@@ -3,6 +3,7 @@ package center
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,8 +17,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/shusfun/weir/internal/db"
 	"github.com/shusfun/weir/internal/kernelconf"
+	"github.com/shusfun/weir/internal/kernelconf/model"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/chain"
 	"github.com/shusfun/weir/internal/store/ent/credential"
@@ -208,11 +209,24 @@ func (s *Server) listNodes(c *gin.Context) {
 		failInternal(c, 503, "query_failed", err)
 		return
 	}
+	usage, usageErr := s.nodeUsages(c.Request.Context())
 	out := make([]gin.H, 0, len(items))
 	for _, n := range items {
-		out = append(out, s.nodeView(c.Request.Context(), n))
+		out = append(out, withNodeUsage(s.nodeView(c.Request.Context(), n), usage, usageErr, n.ID))
 	}
 	c.JSON(200, gin.H{"items": out})
+}
+
+// withNodeUsage 附上近 7 天用量；读取失败时给出原因，不当作没有用量。
+func withNodeUsage(view gin.H, usage map[int]nodeUsage, err error, id int) gin.H {
+	if err != nil {
+		view["usage_error"] = "用量读取失败"
+		return view
+	}
+	u := usage[id]
+	u.Days = nodeUsageDays
+	view["usage"] = u
+	return view
 }
 
 func (s *Server) nodeParam(c *gin.Context) (*ent.Node, bool) {
@@ -231,7 +245,8 @@ func (s *Server) nodeParam(c *gin.Context) (*ent.Node, bool) {
 
 func (s *Server) getNode(c *gin.Context) {
 	if n, ok := s.nodeParam(c); ok {
-		c.JSON(200, s.nodeView(c.Request.Context(), n))
+		usage, err := s.nodeUsages(c.Request.Context())
+		c.JSON(200, withNodeUsage(s.nodeView(c.Request.Context(), n), usage, err, n.ID))
 	}
 }
 
@@ -445,7 +460,7 @@ func (s *Server) checkSettings(ctx context.Context, g *ent.Gate, kernel, protoco
 	b, _ := json.Marshal(settings)
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.DisallowUnknownFields()
-	var probe db.Inbound
+	var probe model.Inbound
 	if err := dec.Decode(&probe); err != nil {
 		return fmt.Errorf("invalid settings: %w", err)
 	}
@@ -759,7 +774,7 @@ func probeHostPattern(host string) bool {
 
 // afterNodeChange 同步凭据，并让引用此节点作出口的入口 Gate 重新生成出口配置。
 func (s *Server) afterNodeChange(ctx context.Context, n *ent.Node) error {
-	if err := s.SyncAll(ctx); err != nil {
+	if _, err := s.RequestCredSync(ctx); err != nil {
 		return err
 	}
 	gates := []int{n.GateID}
@@ -1058,67 +1073,96 @@ func (s *Server) deleteNode(c *gin.Context) {
 	if !ok {
 		return
 	}
-	ctx := c.Request.Context()
-	if deps, err := s.Store.Ent.Exit.Query().Where(entexit.ExitNodeIDEQ(n.ID)).Count(ctx); err != nil {
-		failInternal(c, 503, "query_failed", err)
+	ctx := WithRevisionCause(c.Request.Context(), "node.delete", c.GetInt("user_id"))
+	var chains int
+	var committed bool
+	err := retryRevocationTransaction(ctx, func() error {
+		var txErr error
+		chains, committed, txErr = s.deleteNodeTransaction(ctx, c, n)
+		return txErr
+	})
+	if err != nil {
+		failInternal(c, 500, "delete_failed", err)
 		return
+	}
+	if !committed {
+		return
+	}
+	s.notifyRevocations(ctx, []int{n.GateID})
+	s.reconcileDeletion(ctx)
+	s.logDeletionCleanup(ctx, "node.probe.cleanup", s.forgetNodeProbes(ctx, n.ID))
+	_, err = s.pruneGroupMembers(ctx)
+	s.logDeletionCleanup(ctx, "proxy.group.prune", err)
+	s.audit(c, "node.delete", "node:"+itoa(n.ID), fmt.Sprintf("ok chains=%d", chains))
+	c.Status(204)
+}
+
+func (s *Server) deleteNodeTransaction(ctx context.Context, c *gin.Context, n *ent.Node) (int, bool, error) {
+	tx, err := s.Store.Ent.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		return 0, false, err
+	}
+	defer tx.Rollback()
+	if deps, err := tx.Exit.Query().Where(entexit.ExitNodeIDEQ(n.ID)).Count(ctx); err != nil {
+		return 0, false, err
 	} else if deps > 0 {
 		failDetail(c, 409, "node_in_use", "先修改引用此节点的出口", gin.H{"exits": deps})
-		return
+		return 0, false, nil
 	}
-	chains, err := s.Store.Ent.Chain.Query().Where(chain.EntryNodeIDEQ(n.ID)).All(ctx)
+	chains, err := tx.Chain.Query().Where(chain.EntryNodeIDEQ(n.ID)).All(ctx)
 	if err != nil {
-		failInternal(c, 503, "query_failed", err)
-		return
+		return 0, false, err
 	}
 	if c.GetBool(dryRunKey) {
-		creds, _ := s.Store.Ent.Credential.Query().Where(credential.NodeIDEQ(n.ID), credential.InternalEQ(false), credential.ProbeParentIDIsNil()).Count(ctx)
+		creds, err := tx.Credential.Query().Where(credential.NodeIDEQ(n.ID), credential.InternalEQ(false), credential.ProbeParentIDIsNil()).Count(ctx)
+		if err != nil {
+			return 0, false, err
+		}
 		preview := []string{fmt.Sprintf("删除节点「%s」：%d 份用户凭据随之删除，已导入客户端的这个节点随即失效", n.Name, creds)}
 		if len(chains) > 0 {
 			preview = append(preview, fmt.Sprintf("一并删除以它为入口或出口的 %d 条用户自建链式代理", len(chains)))
 		}
 		dryRun(c, dryResult{Preview: preview})
-		return
+		return 0, false, nil
 	}
+	if err = removeNodeTx(ctx, tx, n, chains); err == nil {
+		err = advanceRevocations(ctx, tx, []int{n.GateID})
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	if err = tx.Commit(); err != nil {
+		return 0, false, err
+	}
+	return len(chains), true, nil
+}
+
+// removeNodeTx 在事务里删除节点及随它失效的数据：以它为入口的链式代理、凭据和分流规则。
+// 删节点、删代理的级联与删 VPS 都经这里，事务提交后再调用 forgetNodeProbes、pruneGroupMembers。
+func removeNodeTx(ctx context.Context, tx *ent.Tx, n *ent.Node, chains []*ent.Chain) error {
 	for _, ch := range chains {
-		if _, err = s.Store.Ent.Credential.Delete().Where(credential.ChainIDEQ(ch.ID)).Exec(ctx); err == nil {
-			err = s.Store.Ent.Chain.DeleteOne(ch).Exec(ctx)
-		}
-		if err != nil {
-			failInternal(c, 500, "delete_failed", err)
-			return
+		if err := removeChainTx(ctx, tx, ch); err != nil {
+			return err
 		}
 	}
-	if _, err = s.Store.Ent.Credential.Delete().Where(credential.NodeIDEQ(n.ID)).Exec(ctx); err == nil {
-		if _, err = s.Store.Ent.Route.Delete().Where(route.NodeIDEQ(n.ID)).Exec(ctx); err == nil {
-			err = s.Store.Ent.Node.DeleteOne(n).Exec(ctx)
-		}
+	if _, err := tx.Credential.Delete().Where(credential.NodeIDEQ(n.ID)).Exec(ctx); err != nil {
+		return err
 	}
-	if err != nil {
-		failInternal(c, 500, "delete_failed", err)
-		return
+	if _, err := tx.Route.Delete().Where(route.NodeIDEQ(n.ID)).Exec(ctx); err != nil {
+		return err
 	}
+	return tx.Node.DeleteOne(n).Exec(ctx)
+}
+
+// forgetNodeProbes 取消已删除节点的实测任务并清掉排队与结果。
+func (s *Server) forgetNodeProbes(ctx context.Context, id int) error {
 	s.nodeProbes.Lock()
-	if jobID := s.nodeProbes.jobs[n.ID]; jobID != "" {
+	defer s.nodeProbes.Unlock()
+	if jobID := s.nodeProbes.jobs[id]; jobID != "" {
 		_ = s.jobs.Cancel(jobViewer{admin: true}, jobID)
-		delete(s.nodeProbes.jobs, n.ID)
+		delete(s.nodeProbes.jobs, id)
 	}
-	queueErr := s.Store.KV.Del(ctx, pendingNodeProbePrefix+itoa(n.ID))
-	resultErr := s.Store.KV.Del(ctx, nodeTestKey(n.ID))
-	s.nodeProbes.Unlock()
-	if queueErr != nil || resultErr != nil {
-		failInternal(c, 503, "probe_cleanup_failed", errors.Join(queueErr, resultErr))
-		return
-	}
-	if err = s.SyncAll(ctx); err == nil {
-		err = s.bumpGates(WithRevisionCause(ctx, "node.delete", c.GetInt("user_id")), []int{n.GateID})
-	}
-	if err != nil {
-		failInternal(c, 500, "sync_failed", err)
-		return
-	}
-	s.audit(c, "node.delete", "node:"+itoa(n.ID), fmt.Sprintf("ok chains=%d", len(chains)))
-	c.Status(204)
+	return errors.Join(s.Store.KV.Del(ctx, pendingNodeProbePrefix+itoa(id)), s.Store.KV.Del(ctx, nodeTestKey(id)))
 }
 
 // suitableTargets 取 REALITY 实测结果中合适的站点，按延迟从低到高。

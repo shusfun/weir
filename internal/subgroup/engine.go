@@ -15,6 +15,7 @@ import (
 
 	"github.com/shusfun/weir/internal/sub"
 	js "github.com/shusfun/weir/internal/sub/jscompat"
+	"github.com/shusfun/weir/internal/subscription"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -28,8 +29,7 @@ type Source struct {
 	FilterExclude string
 	Operators     []any // 本源的算子链（上游 operators，JSON 结构原样保留）
 	PlusAsSpace   bool
-	NodeCache     bool // 保护性缓存：拉取失败或节点骤减时回退到上次结果
-	KnownNodes    int  // 上次成功的节点数（骤减保护依据）
+	NodeCache     bool // 保护性缓存：拉取失败时回退到上次结果
 	AcceptEmpty   bool // 仅在操作者核对影响后允许覆盖为零节点
 	ConfigVersion string
 }
@@ -62,6 +62,12 @@ type Options struct {
 	Prepended        []string // 置顶的提示节点（流量 / 到期）
 	Members          []contracts.SubscriptionMember
 	Nested           map[int]string
+	Pick             Pick // 挑选条件：处理链第一步
+	// Health 查询订阅源节点的检测结果，供「只要可用」与预览使用；不参与缓存键。
+	Health HealthSource `json:"-"`
+	// CacheOnly 只用各源已有的缓存组合，不发起拉取（编辑草稿时的预览）。
+	CacheOnly       bool
+	DeferCacheWrite bool `json:"-"`
 }
 
 // Cache 保存订阅源的上次结果（保护性缓存）。
@@ -80,9 +86,29 @@ type SourceResult struct {
 	Title           string
 	Error           string
 	Location        string
+	RouteReason     string
 	ConfigVersion   string    `json:"-"`
+	UserAgent       string    `json:"-"`
 	Started         time.Time `json:"-"`
 	processingError error
+	basis           []string // 本次实际使用的原始节点（新拉取或缓存回退），检测结果按它对版本
+}
+
+// PreviewNode 是最终输出里的一个节点及其来源，供预览显示。
+type PreviewNode struct {
+	Link     string     `json:"-"`
+	Kind     string     `json:"kind"` // source / node / profile
+	SourceID int        `json:"source_id,omitempty"`
+	Health   NodeHealth `json:"health"`
+}
+
+// Report 是一次组合的处理过程：合并后的节点数、每一步去掉的数量与最终节点的来源。
+type Report struct {
+	Merged int           `json:"merged"`
+	Steps  []StepCount   `json:"steps"`
+	Nodes  []PreviewNode `json:"-"`
+	// Available 汇总挑选之前全部节点的属性，编辑挑选条件时据此列出可选的地区与倍率。
+	Available Available `json:"available"`
 }
 
 var realProtocols = []string{"ss://", "ssr://", "vmess://", "vless://", "trojan://", "hysteria://", "hysteria2://", "hy2://", "tuic://", "anytls://", "snell://", "wireguard://", "socks5://", "socks://", "http://", "https://", "naive+https://"}
@@ -101,11 +127,6 @@ func isRealProxyNode(node string) bool {
 		}
 	}
 	return false
-}
-
-// suspiciousDrop：之前至少 10 个节点、这次不足 30%，视为上游异常，保留旧结果。
-func suspiciousDrop(previous, next int) bool {
-	return previous >= 10 && next < previous && float64(next)/float64(previous) < 0.3
 }
 
 func decodeB64(s string) ([]byte, error) {
@@ -257,7 +278,7 @@ func legacyOperators(cfg map[string]any) []any {
 }
 
 // Combine 生成订阅组的节点列表：手动节点在前，订阅源按顺序并发拉取（最多 3 个同时），
-// 合并去重后依次执行：旗帜处理 → 算子链（组 → 全局默认 → 旧版转换）→ 组与全局筛选 → YAML 安全化。
+// 合并去重后依次执行：挑选条件 → 旗帜处理 → 算子链（组 → 全局默认 → 旧版转换）→ 组与全局筛选 → YAML 安全化。
 func Combine(ctx context.Context, f Fetcher, cache Cache, sources []Source, manual []ManualNode, o Options) (string, []SourceResult) {
 	out, results, _ := CombineBounded(ctx, f, cache, sources, manual, o, 16<<20)
 	return out, results
@@ -266,6 +287,21 @@ func Combine(ctx context.Context, f Fetcher, cache Cache, sources []Source, manu
 // CombineBounded enforces an aggregate limit while sources finish and members
 // are expanded, before allocating a joined subscription body.
 func CombineBounded(ctx context.Context, f Fetcher, cache Cache, sources []Source, manual []ManualNode, o Options, maxBytes int) (string, []SourceResult, error) {
+	out, results, _, err := CombineReport(ctx, f, cache, sources, manual, o, maxBytes)
+	return out, results, err
+}
+
+// CombineReport 与 CombineBounded 相同，另外返回处理过程，供编辑订阅组时预览。
+func CombineReport(ctx context.Context, f Fetcher, cache Cache, sources []Source, manual []ManualNode, o Options, maxBytes int) (string, []SourceResult, Report, error) {
+	var report Report
+	out, results, err := combine(ctx, f, cache, sources, manual, o, maxBytes, &report)
+	return out, results, report, err
+}
+
+func combine(ctx context.Context, f Fetcher, cache Cache, sources []Source, manual []ManualNode, o Options, maxBytes int, report *Report) (string, []SourceResult, error) {
+	if err := o.Pick.Validate(); err != nil {
+		return "", nil, fmt.Errorf("invalid_group_pick: %w", err)
+	}
 	if maxBytes < 1 || maxBytes > 64<<20 {
 		return "", nil, errors.New("profile_output_limit_invalid")
 	}
@@ -351,17 +387,19 @@ func CombineBounded(ctx context.Context, f Fetcher, cache Cache, sources []Sourc
 		}
 	}
 	assembled := 0
-	appendLines := func(next []string) bool {
+	var entries []nodeEntry
+	appendLines := func(next []string, kind string, sourceID int) bool {
 		n := countBytes(next)
 		if n > maxBytes-assembled {
 			return false
 		}
 		assembled += n
-		lines = append(lines, next...)
+		for _, line := range next {
+			entries = append(entries, nodeEntry{line: line, kind: kind, sourceID: sourceID})
+		}
 		return true
 	}
 	if o.Members != nil {
-		lines = nil
 		sourceParts := map[int][]string{}
 		for i, source := range sources {
 			sourceParts[source.ID] = parts[i]
@@ -378,11 +416,11 @@ func CombineBounded(ctx context.Context, f Fetcher, cache Cache, sources []Sourc
 		for _, member := range o.Members {
 			switch member.Kind {
 			case "source":
-				if !appendLines(sourceParts[member.ID]) {
+				if !appendLines(sourceParts[member.ID], "source", member.ID) {
 					return fail(results)
 				}
 			case "node":
-				if !appendLines(manualParts[member.ID]) {
+				if !appendLines(manualParts[member.ID], "node", 0) {
 					return fail(results)
 				}
 			case "profile":
@@ -390,32 +428,49 @@ func CombineBounded(ctx context.Context, f Fetcher, cache Cache, sources []Sourc
 				if len(body) > maxBytes-assembled {
 					return fail(results)
 				}
-				if !appendLines(strings.Split(body, "\n")) {
+				if !appendLines(strings.Split(body, "\n"), "profile", 0) {
 					return fail(results)
 				}
 			}
 		}
 	} else {
-		assembled = countBytes(lines)
-		for _, p := range parts {
-			if !appendLines(p) {
+		if !appendLines(lines, "node", 0) {
+			return fail(results)
+		}
+		for i, p := range parts {
+			if !appendLines(p, "source", sources[i].ID) {
 				return fail(results)
 			}
 		}
 	}
 	seen := map[string]bool{}
-	var current []string
-	for _, l := range lines {
-		l = strings.TrimSpace(l)
-		if l != "" && !seen[l] {
-			seen[l] = true
-			current = append(current, l)
+	merged := entries[:0:0]
+	for _, e := range entries {
+		e.line = strings.TrimSpace(e.line)
+		if e.line != "" && !seen[e.line] {
+			seen[e.line] = true
+			merged = append(merged, e)
 		}
 	}
-	if !o.FlagEmoji {
-		for i, l := range current {
-			current[i] = sub.RemoveFlagEmoji(l)
+	report.Steps = append(report.Steps, StepCount{Step: StepDedupe, Before: len(entries), Removed: len(entries) - len(merged)})
+	report.Merged = len(merged)
+	report.Available = summarize(merged)
+	attachHealth(ctx, merged, o.Health, sources, results)
+	picked, pickSteps := applyPick(merged, o.Pick)
+	report.Steps = append(report.Steps, pickSteps...)
+	// 算子链会改名、排序、去重，之后按连接身份找回节点来源。
+	origins := make(map[string]nodeEntry, len(picked))
+	current := make([]string, 0, len(picked))
+	for _, e := range picked {
+		if !o.FlagEmoji {
+			e.line = sub.RemoveFlagEmoji(e.line)
 		}
+		if id := subscription.InventoryIdentity(e.line); id != "" {
+			if _, ok := origins[id]; !ok {
+				origins[id] = e
+			}
+		}
+		current = append(current, e.line)
 	}
 	ops := o.Operators
 	if len(ops) == 0 {
@@ -424,14 +479,25 @@ func CombineBounded(ctx context.Context, f Fetcher, cache Cache, sources []Sourc
 	if len(ops) == 0 {
 		ops = legacyOperators(o.LegacyTransform)
 	}
+	before := len(current)
 	current, err = runOperators(current, ops, o.UserAgent)
 	if err != nil {
 		combinedError = "group_rules_invalid"
 		return "", results, fmt.Errorf("group_rules_invalid: %w", err)
 	}
+	report.Steps = append(report.Steps, StepCount{Step: StepOperators, Before: before, Removed: before - len(current)})
+	before = len(current)
 	current = filterRules(current, o.FilterInclude, o.FilterExclude)
+	report.Steps = append(report.Steps, StepCount{Step: StepFilter, Before: before, Removed: before - len(current)})
 	outputBytes := countBytes(o.Prepended)
+	report.Nodes = make([]PreviewNode, 0, len(current))
 	for i, l := range current {
+		origin, ok := origins[subscription.InventoryIdentity(l)]
+		node := PreviewNode{Kind: origin.kind, SourceID: origin.sourceID, Health: origin.health}
+		if !ok {
+			// 算子链新生成的节点没有来源可追。
+			node = PreviewNode{Kind: "node", Health: unchecked()}
+		}
 		current[i] = sub.SanitizeNodeForYaml(l)
 		if o.FlagEmoji {
 			current[i] = sub.AddFlagEmoji(current[i])
@@ -440,6 +506,8 @@ func CombineBounded(ctx context.Context, f Fetcher, cache Cache, sources []Sourc
 			return fail(results)
 		}
 		outputBytes += len(current[i]) + 1
+		node.Link = current[i]
+		report.Nodes = append(report.Nodes, node)
 	}
 	out := strings.Join(current, "\n")
 	if out != "" {

@@ -3,9 +3,10 @@ package store
 import (
 	"context"
 	"database/sql"
-	"entgo.io/ent/dialect"
 	"sync/atomic"
 	"time"
+
+	"entgo.io/ent/dialect"
 )
 
 type queryMetricsKey struct{}

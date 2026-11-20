@@ -240,7 +240,7 @@ function NodeWizardForm({ open, close, done, gates, nodes, gateId: initialGate }
                     <SelectTrigger><SelectValue>{certs.data?.find((c) => c.id === certId)?.domain ?? "由系统准备"}</SelectValue></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="0">由系统准备</SelectItem>
-                      {(certs.data ?? []).map((c) => (
+                      {(certs.data ?? []).filter((c) => !c.gate_id || c.gate_id === gateId).map((c) => (
                         <SelectItem key={c.id} value={String(c.id)}>{c.domain}（{c.name}）</SelectItem>
                       ))}
                     </SelectContent>

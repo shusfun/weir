@@ -63,14 +63,13 @@ func TestCombineSourcesManualFilterCacheAndRender(t *testing.T) {
 	if !strings.Contains(lines[0], "%E6%89%8B%E5%8A%A8%E8%8A%82%E7%82%B9") || !strings.Contains(list, "%E6%9C%BA%E5%9C%BAA") {
 		t.Fatalf("prefixes missing:\n%s", list)
 	}
-	// 上游骤减到 2 个：保护性缓存保留上次的 12 个。
+	// 上游骤减到 2 个：机场节点经常增减，直接采用新结果，不再拦截骤减。
 	mu.Lock()
 	count = 2
 	mu.Unlock()
-	src.KnownNodes = 12
 	list2, res2 := Combine(context.Background(), f, cache, []Source{src}, nil, opts)
-	if n := len(strings.Split(strings.TrimSpace(list2), "\n")); n != 12 || !res2[0].FromCache || res2[0].Error != "node_count_drop_rejected" {
-		t.Fatalf("protective cache: %d nodes %+v", n, res2)
+	if n := len(strings.Split(strings.TrimSpace(list2), "\n")); n != 2 || res2[0].FromCache || res2[0].Error != "" {
+		t.Fatalf("node drop must use the new result: %d nodes %+v", n, res2)
 	}
 	// 私网地址默认拒绝。
 	if _, err := (Fetcher{}).Get(context.Background(), srv.URL, "ua"); err == nil {

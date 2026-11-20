@@ -17,7 +17,7 @@ func TestInvalidCapabilityCacheCanBeReplaced(t *testing.T) {
 		t.Run(raw, func(t *testing.T) {
 			q := queue(t)
 			ctx := t.Context()
-			if _, err := q.DB.ExecContext(ctx, `INSERT INTO worker_capabilities(gate_id,hash,document) VALUES(1,'invalid',$1)`, raw); err != nil {
+			if err := q.Ent.WorkerCapability.Create().SetID(1).SetHash("invalid").SetDocument(raw).Exec(ctx); err != nil {
 				t.Fatal(err)
 			}
 			if c, err := q.Capabilities(ctx, 1); !errors.Is(err, taskqueue.ErrInvalidCapabilities) || c.Tasks != nil || c.Protocol != 0 {
@@ -40,8 +40,9 @@ func TestInvalidCapabilityCacheCanBeReplaced(t *testing.T) {
 }
 
 func TestCapabilityStorageFailureIsNotInvalidCache(t *testing.T) {
-	q := queue(t)
-	if _, err := q.DB.ExecContext(t.Context(), `DROP TABLE worker_capabilities`); err != nil {
+	s := openStore(t)
+	q := s.Tasks
+	if _, err := s.DB.ExecContext(t.Context(), `DROP TABLE worker_capabilities`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := q.Capabilities(t.Context(), 1); err == nil || errors.Is(err, taskqueue.ErrInvalidCapabilities) {

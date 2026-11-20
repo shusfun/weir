@@ -165,7 +165,7 @@ func TestSubscriptionNestedExpansionBudget(t *testing.T) {
 	child := s.Store.Ent.SubProfile.Create().SetName("empty child").SaveX(t.Context())
 	p := s.Store.Ent.SubProfile.Create().SetName("root").SetMembers([]contracts.SubscriptionMember{{Kind: "profile", ID: child.ID}}).SaveX(t.Context())
 	remaining := 0
-	if _, _, _, _, err := s.groupNodesAt(t.Context(), p, "", false, map[int]bool{}, 0, &remaining); err == nil || err.Error() != "profile_expansion_exceeded" {
+	if _, _, _, _, err := s.groupNodesAt(t.Context(), p, "", false, map[int]bool{}, 0, &remaining, nil); err == nil || err.Error() != "profile_expansion_exceeded" {
 		t.Fatal("runtime expansion budget not enforced", err)
 	}
 }

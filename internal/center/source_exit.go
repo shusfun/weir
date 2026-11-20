@@ -13,8 +13,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/shusfun/weir/internal/db"
 	"github.com/shusfun/weir/internal/kernelconf"
+	"github.com/shusfun/weir/internal/kernelconf/model"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/exitbinding"
 	entnode "github.com/shusfun/weir/internal/store/ent/node"
@@ -199,7 +199,7 @@ func (s *Server) outboundFilter(ctx context.Context, g *ent.Gate, kernels []stri
 	return func(o contracts.Outbound) error {
 		network, _ := o.Settings["network"].(string)
 		for _, d := range drivers {
-			if err := d.OutboundAllows(db.NormalizeOutboundProtocol(o.Protocol), network); err != nil {
+			if err := d.OutboundAllows(model.NormalizeOutboundProtocol(o.Protocol), network); err != nil {
 				return err
 			}
 		}

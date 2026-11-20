@@ -25,7 +25,7 @@ func TestObservationRetentionKeepsActiveWorkAndBoundsHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = q.DB.ExecContext(ctx, `UPDATE worker_tasks SET status='succeeded' WHERE id=$1`, terminal.Task.ID); err != nil {
+	if err = q.Ent.WorkerTask.UpdateOneID(terminal.Task.ID).SetStatus("succeeded").Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 105; i++ {
@@ -64,15 +64,14 @@ func TestRetentionBatchCountsAttemptsInsteadOfTasks(t *testing.T) {
 	q.PruneBatch = 2
 	ctx := t.Context()
 	for i := 1; i <= 5; i++ {
-		if _, err := q.DB.ExecContext(ctx, `INSERT INTO worker_attempts(task_id,attempt,gate_id,started_at,outcome) VALUES('orphan',$1,1,1,'failed')`, i); err != nil {
+		if err := q.Ent.WorkerAttempt.Create().SetID("orphan").SetAttempt(int32(i)).SetGateID(1).SetStartedAt(1).SetOutcome("failed").Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if err := q.PruneObservations(ctx, time.Now(), 14*24*time.Hour, 100); err != nil {
 		t.Fatal(err)
 	}
-	var count int
-	if err := q.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM worker_attempts`).Scan(&count); err != nil || count != 3 {
+	if count, err := q.Ent.WorkerAttempt.Query().Count(ctx); err != nil || count != 3 {
 		t.Fatalf("unbounded attempt cleanup: count=%d err=%v", count, err)
 	}
 }

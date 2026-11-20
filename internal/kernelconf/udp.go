@@ -3,7 +3,7 @@ package kernelconf
 import (
 	"encoding/json"
 
-	"github.com/shusfun/weir/internal/db"
+	"github.com/shusfun/weir/internal/kernelconf/model"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -11,11 +11,11 @@ import (
 // Xray 模板用 GeneratedInboundTag（inbound-<id>-协议），不是节点业务标签 node-<id>。
 // sing-box 模板用统计标签；Shadowsocks 两者相同，Hysteria2 / TUIC 不同。
 func rejectInboundTag(kernel string, in contracts.Inbound) string {
-	ib := db.Inbound{ID: in.ID, Protocol: in.Protocol}
+	ib := model.Inbound{ID: in.ID, Protocol: in.Protocol}
 	if kernel == "sing-box" {
 		return statsTag(ib)
 	}
-	return db.GeneratedInboundTag(ib)
+	return model.GeneratedInboundTag(ib)
 }
 
 // rejectUDP 让不支持 UDP 的入站在服务端直接拒绝 UDP，客户端才能退回 TCP。
@@ -133,7 +133,7 @@ func selectGroupUDP(body []byte, kernel string, groups []group) []byte {
 		if len(g.udp) == 0 || len(g.udp) == len(g.members) {
 			continue
 		}
-		want = append(want, picked{tag: db.GeneratedOutboundTag(kernel, g.id, ""), ids: g.udp})
+		want = append(want, picked{tag: model.GeneratedOutboundTag(kernel, g.id, ""), ids: g.udp})
 	}
 	if len(body) == 0 || len(want) == 0 {
 		return body
@@ -146,7 +146,7 @@ func selectGroupUDP(body []byte, kernel string, groups []group) []byte {
 	for _, g := range want {
 		tags := make([]any, len(g.ids))
 		for i, id := range g.ids {
-			tags[i] = db.GeneratedOutboundTag(kernel, id, "")
+			tags[i] = model.GeneratedOutboundTag(kernel, id, "")
 		}
 		udpTag := g.tag + "-udp"
 		switch kernel {

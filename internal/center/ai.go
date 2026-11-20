@@ -16,7 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/shusfun/weir/internal/ai"
-	"github.com/shusfun/weir/internal/db"
+	"github.com/shusfun/weir/internal/kernelconf/model"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/setting"
 	"github.com/shusfun/weir/internal/subout"
@@ -45,7 +45,7 @@ func (s *Server) aiRoutes(admin *gin.RouterGroup) {
 // editableFields 是草稿可以修改的入站字段：构建器认识的字段，去掉系统管理与机密字段。
 var editableFields = func() []string {
 	var out []string
-	t := reflect.TypeOf(db.Inbound{})
+	t := reflect.TypeOf(model.Inbound{})
 	for i := 0; i < t.NumField(); i++ {
 		name := strings.Split(t.Field(i).Tag.Get("json"), ",")[0]
 		if name == "" || name == "-" || lockedSettings[name] || ai.IsSecret(name) {

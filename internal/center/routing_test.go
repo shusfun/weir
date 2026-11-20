@@ -58,7 +58,8 @@ func TestExitsAndRoutes(t *testing.T) {
 		t.Fatalf("partial exit update cleared fields: %v", updated)
 	}
 	mustJSON(t, admin, "DELETE", rpath, nil, 204)
-	mustJSON(t, admin, "DELETE", path, nil, 204)
+	preview := mustJSON(t, admin, "GET", path+"/delete-preview", nil, 200)
+	mustJSON(t, admin, "DELETE", path, map[string]any{"preview_token": preview["preview_token"]}, 204)
 	for _, o := range g.config(0).Outbounds {
 		if o.Tag == tag {
 			t.Fatal("deleted exit still delivered")

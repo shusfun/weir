@@ -156,3 +156,53 @@ func (s *Server) respondDailyUsage(c *gin.Context, uid, nid int) {
 	finish(nil)
 	c.JSON(200, gin.H{"items": out, "days": days, "from": from, "timezone": "UTC", "coverage": "observed", "reason": "仅含已收到的自有 VPS 凭据计数；断线补报计入收到当天，机场直用及未观测时段未知"})
 }
+
+// nodeUsage 是节点列表上的近 7 天用量摘要。Known 为 false 表示这段时间没有收到任何计数，
+// 页面写「尚无用量上报」，不显示成 0。
+type nodeUsage struct {
+	Known      bool       `json:"known"`
+	Bytes      int64      `json:"bytes,string"`
+	Users      int        `json:"users"`
+	ObservedAt *time.Time `json:"observed_at"`
+	Days       int        `json:"days"`
+}
+
+const nodeUsageDays = 7
+
+// nodeUsages 一次读出近 7 天的日用量并按节点汇总，列表接口调用一次后分给各节点。
+func (s *Server) nodeUsages(ctx context.Context) (out map[int]nodeUsage, err error) {
+	finish := operationStage(ctx, "traffic.node_summary", "days", nodeUsageDays)
+	defer func() { finish(err) }()
+	from := time.Now().UTC().AddDate(0, 0, -(nodeUsageDays - 1)).Format("2006-01-02")
+	rows, err := s.Store.Ent.Resource.Query().Where(resource.KindEQ(dailyUsageKind), resource.KeyGTE(from+":")).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out = map[int]nodeUsage{}
+	users := map[int]map[int]bool{}
+	for _, row := range rows {
+		var v dailyUsage
+		if err = decodeResource(row, &v); err != nil {
+			return nil, err
+		}
+		u := out[v.NodeID]
+		u.Known, u.Days = true, nodeUsageDays
+		if u.Bytes > math.MaxInt64-v.Bytes {
+			return nil, fmt.Errorf("usage overflow")
+		}
+		u.Bytes += v.Bytes
+		if u.ObservedAt == nil || v.ObservedAt.After(*u.ObservedAt) {
+			at := v.ObservedAt
+			u.ObservedAt = &at
+		}
+		if users[v.NodeID] == nil {
+			users[v.NodeID] = map[int]bool{}
+		}
+		if v.Bytes > 0 {
+			users[v.NodeID][v.UserID] = true
+		}
+		u.Users = len(users[v.NodeID])
+		out[v.NodeID] = u
+	}
+	return out, nil
+}

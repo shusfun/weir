@@ -3,7 +3,6 @@ package center
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -47,15 +46,15 @@ func (s *Server) workerCandidatesFor(ctx context.Context, kind string, requireme
 			continue
 		}
 		caps, e := s.Store.Tasks.Capabilities(ctx, g.ID)
-		if errors.Is(e, sql.ErrNoRows) {
+		if errors.Is(e, taskqueue.ErrNotFound) {
 			continue
 		}
 		if e != nil {
 			return nil, e
 		}
 		if caps.Tasks[kind] == contracts.TaskSchemaVersion(kind) {
-			var active int
-			if e = s.Store.DB.QueryRowContext(ctx, `SELECT count(*) FROM worker_tasks WHERE gate_id=$1 AND status IN ('leased','cancelling')`, g.ID).Scan(&active); e != nil {
+			active, e := s.Store.Tasks.ActiveCount(ctx, g.ID)
+			if e != nil {
 				return nil, e
 			}
 			resource, e := s.workerResources(ctx, g.ID)
@@ -281,7 +280,9 @@ func (s *Server) fetchSubscription(ctx context.Context, raw, ua string) (subgrou
 		response.Location = "center-preview"
 		return response, err
 	}
-	key := digest(raw + "\x00" + ua)
+	// 同一订阅源、同一 UA 的并发拉取合并；不同源即便地址相同也各按自己的首选 Gate 拉取。
+	sourceID := subgroup.SourceIDFrom(ctx)
+	key := digest(raw + "\x00" + ua + "\x00" + itoa(sourceID))
 	started := time.Now().UTC()
 	ch := s.sourceFetches.DoChan(key, func() (any, error) {
 		work, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
@@ -293,34 +294,21 @@ func (s *Server) fetchSubscription(ctx context.Context, raw, ua string) (subgrou
 		case <-work.Done():
 			return nil, work.Err()
 		}
-		return s.fetchSubscriptionOnce(work, raw, ua)
+		route, err := s.sourceFetchRoute(work, sourceID)
+		if err != nil {
+			return nil, err
+		}
+		return s.fetchSubscriptionRouted(work, raw, ua, route)
 	})
 	select {
 	case <-ctx.Done():
 		return subgroup.Response{}, ctx.Err()
 	case result := <-ch:
 		recordSubscriptionStage(ctx, 0, subgroup.Stage{Operation: "subscription.fetch_shared", Started: started, Finished: time.Now().UTC()}, "center.fetchSubscription")
-		if result.Err != nil {
-			return subgroup.Response{}, result.Err
-		}
-		response := result.Val.(subgroup.Response)
+		response, _ := result.Val.(subgroup.Response)
 		response.Body = append([]byte(nil), response.Body...)
-		return response, nil
+		return response, result.Err
 	}
-}
-
-func (s *Server) fetchSubscriptionOnce(ctx context.Context, raw, ua string) (subgroup.Response, error) {
-	result, gid, err := s.dispatchNetwork(ctx, contracts.TaskSubscriptionFetch, contracts.SubscriptionFetchTask{Credentials: contracts.FetchSecrets{URL: raw}, UserAgent: ua, MaxBytes: 10 << 20}, 0)
-	if err == nil {
-		return subgroup.Response{Body: result.Body, UserInfo: result.UserInfo, Title: result.Title, Location: "gate:" + itoa(gid)}, nil
-	}
-	if ctx.Err() != nil {
-		return subgroup.Response{}, ctx.Err()
-	}
-	// The center remains the final fallback and explicitly reports its position.
-	fallback, e := (subgroup.Fetcher{AllowPrivate: s.AllowPrivateSources}).Get(ctx, raw, ua)
-	fallback.Location = "center-fallback"
-	return fallback, e
 }
 
 func (s *Server) validateNetworkResult(ctx context.Context, r taskqueue.Record, raw json.RawMessage) error {

@@ -4,7 +4,7 @@ import { useFormAction } from "../lib/action";
 import { api } from "../api";
 import { useQuery } from "../lib/query";
 import { browserSession, measureBrowserPath, type BrowserResult, type BrowserSession, type TestPurpose } from "../lib/browser-test";
-import { useConsoleContext } from "../lib/console-context";
+import { field, useConsoleContext } from "../lib/console-context";
 import { State } from "./feedback";
 
 function resultText(result: BrowserResult | undefined) {
@@ -15,7 +15,10 @@ function resultText(result: BrowserResult | undefined) {
 }
 
 const labels: Record<TestPurpose, string> = { https: "HTTPS 延迟与下载", webrtc: "UDP 往返", webtransport: "QUIC 往返" };
-export function BrowserPathTest({ gateId, nodeId }: { gateId?: number; nodeId?: number }) {
+// BrowserPathTest：blocked 是不能测的原因（由 GateBrowserTest 传入）；按节点测试时自己向中心查就绪状态。
+export function BrowserPathTest({ gateId, nodeId, blocked }: { gateId?: number; nodeId?: number; blocked?: string }) {
+  const readiness = useQuery({ queryKey: ["browser-test-ready", nodeId], enabled: !!nodeId && !gateId, queryFn: () => api(`/me/nodes/${nodeId}/browser-test`) as Promise<{ ready: boolean; reason: string }> });
+  const reason = gateId ? blocked : readiness.isPending ? "正在确认测试服务" : readiness.error ? "测试服务状态未知" : readiness.data?.reason;
   const [busy, setBusy] = useState<TestPurpose | null>(null);
   const [results, setResults] = useState<Partial<Record<TestPurpose, BrowserResult>>>({});
   const controller = useRef<AbortController | null>(null);
@@ -54,41 +57,61 @@ export function BrowserPathTest({ gateId, nodeId }: { gateId?: number; nodeId?: 
       if (controller.current === control) { controller.current = null; setBusy(null); }
     }
   }
-  return <Collapsible variant="section" title="浏览器 → VPS" summary={busy ? "实测中" : "按需实测"}>
-    <p className="text-meta">只测本次浏览器到 VPS 的路径。下载固定为 4 MiB，服务端限速，结果不代表线路带宽上限。代理协议及 VPS 到落地的可用性见节点实测；不能据此断言运营商限速。</p>
-    {(Object.keys(labels) as TestPurpose[]).map(purpose => <div className="stack-tight" key={purpose}>
-      <Button variant="outline" disabled={!!busy} busy={busy === purpose} busyText="等待与测试中" onClick={() => void run(purpose)}>{labels[purpose]}</Button>
-      <small role="status">{resultText(results[purpose])}</small>
-    </div>)}
+  const button = (purpose: TestPurpose, variant: "default" | "outline") => <div className="stack-tight" key={purpose}>
+    <Button variant={variant} disabled={!!busy} busy={busy === purpose} busyText="正在测试" onClick={() => void run(purpose)}>{labels[purpose]}</Button>
+    {results[purpose] && <small role="status">{resultText(results[purpose])}</small>}
+  </div>;
+  if (reason) return <p className="m-0 text-meta text-[var(--weir-ink-3)]">浏览器测试：{reason}</p>;
+  return <div className="stack-tight">
+    {button("https", "outline")}
+    <Collapsible title="更多：UDP 与 QUIC 往返">
+      <div className="stack-tight">{button("webrtc", "outline")}{button("webtransport", "outline")}</div>
+    </Collapsible>
     {busy && <Button variant="ghost" onClick={() => controller.current?.abort()}>取消测试</Button>}
-    <Notice>证书不受信任、浏览器能力不足或端口无法访问时，相关路径无法完成。请核对证书与厂商安全组中的测试端口。</Notice>
-  </Collapsible>;
+    <small className="text-[var(--weir-ink-3)]">只测这台浏览器到 VPS 的连接，下载 4 MiB 并限速，不代表线路带宽上限。</small>
+  </div>;
 }
 
 type TestConfig = { config: { host: string; cert_id: number; port: number; rtc_port: number } | null; observation: { observed_at: string; healthy: boolean; reason?: string } | null };
+type Cert = { id: number; name: string; domain: string; gate_id?: number; not_after?: string };
+// GateBrowserTest 按「现在能不能测」组织：未启用只给启用入口；已保存等 VPS 回执；就绪后才出现测试按钮。
 export function GateBrowserTest({ gateId }: { gateId: number }) {
-  const q = useQuery({ queryKey: ["browser-test-config", gateId], queryFn: () => api(`/admin/gates/${gateId}/browser-test`) as Promise<TestConfig> });
-  const certs = useQuery({ queryKey: ["browser-test-certs"], queryFn: () => api("/admin/certs") as Promise<{ items: { id: number; name: string; domain: string; gate_id?: number }[] }> });
+  const q = useQuery({ queryKey: ["browser-test-config", gateId], queryFn: () => api(`/admin/gates/${gateId}/browser-test`) as Promise<TestConfig>, refetchInterval: (query) => query.state.data?.config && !query.state.data.observation ? 5000 : false });
+  const certs = useQuery({ queryKey: ["browser-test-certs"], queryFn: () => api("/admin/certs") as Promise<{ items: Cert[] }> });
+  const [editing, setEditing] = useState(false);
   const [host, setHost] = useState<string | null>(null), [cert, setCert] = useState<string | null>(null);
-  const confirm = useConfirm();
   const requested = useRef(true);
-  const saveAction = useFormAction(() => api(`/admin/gates/${gateId}/browser-test`, "PUT", { enabled: requested.current, host: host ?? q.data?.config?.host ?? "", cert_id: Number(cert ?? q.data?.config?.cert_id ?? 0) }), { onSuccess: () => q.refetch(), fields: { browser_test_host_required: "host", browser_test_cert_required: "cert_id" } });
+  const confirm = useConfirm();
+  const usable = certs.data?.items.filter(c => !c.gate_id || c.gate_id === gateId) ?? [];
+  const certId = cert ?? (q.data?.config?.cert_id ? String(q.data.config.cert_id) : usable.length === 1 ? String(usable[0].id) : "");
+  const picked = usable.find(c => String(c.id) === certId);
+  const hostValue = host ?? q.data?.config?.host ?? picked?.domain ?? "";
+  useConsoleContext({ form: [field("host", "测试地址", hostValue), field("cert_id", "测试证书", picked ? `${picked.name} · ${picked.domain}` : "")] });
+  const saveAction = useFormAction(() => api(`/admin/gates/${gateId}/browser-test`, "PUT", { enabled: requested.current, host: hostValue, cert_id: Number(certId || 0) }), { onSuccess: () => { setEditing(false); return q.refetch(); }, fields: { browser_test_host_required: "host", browser_test_cert_required: "cert_id" } });
   const busy = saveAction.busy;
   async function save(enabled: boolean) {
-    if (!await confirm({ title: enabled ? "启用独立浏览器测试端点？" : "关闭测试端点？", description: enabled ? "只提供限流测试数据，使用选定证书并放行分配的本机测试端口。云安全组需按显示的端口手动设置。" : "关闭监听并取消当前测试会话。", confirmText: "确认" })) return;
+    if (!enabled && !await confirm({ title: "关闭浏览器测试？", description: "关闭监听并取消当前测试会话。", confirmText: "关闭", tone: "danger" })) return;
     requested.current = enabled;
     await saveAction.submit();
   }
-  return <Collapsible variant="section" title="浏览器测试服务" summary={q.data?.config ? "已配置" : "未启用"}>
-    {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : <>
-      <Form busy={busy} errors={saveAction.errors} onSubmit={() => void save(true)}><FormGrid>
-        <Field name="host" label="证书对应的 VPS 域名或 IP" required><Input value={host ?? q.data.config?.host ?? ""} onChange={e => setHost(e.target.value)} required /></Field>
-        <Field name="cert_id" label="测试证书" required><Select name="cert_id" required value={cert ?? String(q.data.config?.cert_id ?? "")} onValueChange={v => setCert(v ?? "")}><SelectTrigger><SelectValue placeholder="选择已有证书" /></SelectTrigger><SelectContent>{certs.data?.items.filter(c => !c.gate_id || c.gate_id === gateId).map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name} · {c.domain}</SelectItem>)}</SelectContent></Select></Field>
-      </FormGrid><div className="actions"><Button type="submit" busy={busy}>保存并启用</Button>{q.data.config && <Button variant="outline" disabled={busy} onClick={() => void save(false)}>关闭服务</Button>}</div></Form>
-      {certs.error && <State error={certs.error} onRetry={() => certs.refetch()} />}
+  const config = q.data?.config, observed = q.data?.observation;
+  const status = !config ? "未启用" : !observed ? "等待 VPS 应用" : observed.healthy ? "已就绪" : "监听已停止";
+  const blocked = !config ? "未启用" : !observed ? "等待 VPS 应用配置" : observed.healthy ? "" : observed.reason || "测试监听已停止，请重新保存配置";
+  const certLabel = (c: Cert) => `${c.domain}${c.name && c.name !== c.domain ? `（${c.name}）` : ""}${c.not_after ? ` · 到期 ${new Date(c.not_after).toLocaleDateString()}` : ""}`;
+  return <Collapsible variant="section" title="浏览器测试" summary={status}>
+    {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : !config && !editing ?
+      <div className="actions"><Button variant="outline" onClick={() => setEditing(true)}>启用测试</Button></div> : <>
+      {(editing || !config) && <Form busy={busy} errors={saveAction.errors} onSubmit={() => void save(true)}><FormGrid>
+        <Field name="cert_id" label="测试证书" required>{certs.error ? <State error={certs.error} onRetry={() => certs.refetch()} /> : !usable.length && certs.isSuccess ? <small>这台 VPS 还没有可用证书，请先在证书设置里申请。</small> :
+          <Select name="cert_id" required value={certId} onValueChange={v => { setCert(v ?? ""); setHost(null); }}><SelectTrigger><SelectValue placeholder="选择证书">{picked ? certLabel(picked) : undefined}</SelectValue></SelectTrigger><SelectContent>{usable.map(c => <SelectItem key={c.id} value={String(c.id)}>{certLabel(c)}</SelectItem>)}</SelectContent></Select>}</Field>
+        <Field name="host" label="测试地址" required><Input value={hostValue} onChange={e => setHost(e.target.value)} placeholder="证书里的域名" required /></Field>
+      </FormGrid><div className="actions"><Button type="submit" busy={busy} busyText="正在保存">{config ? "保存修改" : "启用"}</Button>{editing && config && <Button type="button" variant="outline" disabled={busy} onClick={() => setEditing(false)}>取消</Button>}</div></Form>}
       {saveAction.error && <Notice tone="bad">{saveAction.error}</Notice>}
-      {q.data.config && <Notice>HTTPS / QUIC：{q.data.config.port}（TCP / UDP）；WebRTC：{q.data.config.rtc_port}（UDP）。{q.data.observation ? `${q.data.observation.healthy ? "监听已就绪" : q.data.observation.reason || "监听已停止"} · ${new Date(q.data.observation.observed_at).toLocaleString()}` : "服务运行状态未知，等待 VPS 回执。"}</Notice>}
-      <BrowserPathTest gateId={gateId} />
+      {config && !editing && <div className="stack-tight">
+        <small className="text-[var(--weir-ink-3)]">{config.host} · 端口 {config.port}（TCP/UDP）、{config.rtc_port}（UDP），云安全组需放行。</small>
+        <BrowserPathTest gateId={gateId} blocked={blocked} />
+        <div className="actions"><Button variant="ghost" size="sm" onClick={() => setEditing(true)}>修改配置</Button><Button variant="ghost" size="sm" disabled={busy} onClick={() => void save(false)}>关闭测试</Button></div>
+      </div>}
     </>}
   </Collapsible>;
 }

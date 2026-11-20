@@ -19,8 +19,9 @@ import (
 // LinkUpdate is the builder for updating Link entities.
 type LinkUpdate struct {
 	config
-	hooks    []Hook
-	mutation *LinkMutation
+	hooks     []Hook
+	mutation  *LinkMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the LinkUpdate builder.
@@ -265,6 +266,12 @@ func (_u *LinkUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *LinkUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *LinkUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *LinkUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -341,6 +348,7 @@ func (_u *LinkUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.EndsAtCleared() {
 		_spec.ClearField(link.FieldEndsAt, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{link.Label}
@@ -356,9 +364,10 @@ func (_u *LinkUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 // LinkUpdateOne is the builder for updating a single Link entity.
 type LinkUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *LinkMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *LinkMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUserID sets the "user_id" field.
@@ -610,6 +619,12 @@ func (_u *LinkUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *LinkUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *LinkUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *LinkUpdateOne) sqlSave(ctx context.Context) (_node *Link, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -703,6 +718,7 @@ func (_u *LinkUpdateOne) sqlSave(ctx context.Context) (_node *Link, err error) {
 	if _u.mutation.EndsAtCleared() {
 		_spec.ClearField(link.FieldEndsAt, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &Link{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

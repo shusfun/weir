@@ -4,6 +4,8 @@ package ent
 
 import (
 	"context"
+	stdsql "database/sql"
+	"fmt"
 	"sync"
 
 	"entgo.io/ent/dialect"
@@ -34,6 +36,8 @@ type Tx struct {
 	Gate *GateClient
 	// GateAction is the client for interacting with the GateAction builders.
 	GateAction *GateActionClient
+	// KV is the client for interacting with the KV builders.
+	KV *KVClient
 	// KernelDriver is the client for interacting with the KernelDriver builders.
 	KernelDriver *KernelDriverClient
 	// Link is the client for interacting with the Link builders.
@@ -66,8 +70,20 @@ type Tx struct {
 	SubPull *SubPullClient
 	// SubSource is the client for interacting with the SubSource builders.
 	SubSource *SubSourceClient
+	// SubscriptionCacheEntry is the client for interacting with the SubscriptionCacheEntry builders.
+	SubscriptionCacheEntry *SubscriptionCacheEntryClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
+	// WorkerActivity is the client for interacting with the WorkerActivity builders.
+	WorkerActivity *WorkerActivityClient
+	// WorkerAttempt is the client for interacting with the WorkerAttempt builders.
+	WorkerAttempt *WorkerAttemptClient
+	// WorkerCapability is the client for interacting with the WorkerCapability builders.
+	WorkerCapability *WorkerCapabilityClient
+	// WorkerCommunication is the client for interacting with the WorkerCommunication builders.
+	WorkerCommunication *WorkerCommunicationClient
+	// WorkerTask is the client for interacting with the WorkerTask builders.
+	WorkerTask *WorkerTaskClient
 
 	// lazily loaded.
 	client     *Client
@@ -210,6 +226,7 @@ func (tx *Tx) init() {
 	tx.ExitBinding = NewExitBindingClient(tx.config)
 	tx.Gate = NewGateClient(tx.config)
 	tx.GateAction = NewGateActionClient(tx.config)
+	tx.KV = NewKVClient(tx.config)
 	tx.KernelDriver = NewKernelDriverClient(tx.config)
 	tx.Link = NewLinkClient(tx.config)
 	tx.Node = NewNodeClient(tx.config)
@@ -226,7 +243,13 @@ func (tx *Tx) init() {
 	tx.SubProfile = NewSubProfileClient(tx.config)
 	tx.SubPull = NewSubPullClient(tx.config)
 	tx.SubSource = NewSubSourceClient(tx.config)
+	tx.SubscriptionCacheEntry = NewSubscriptionCacheEntryClient(tx.config)
 	tx.User = NewUserClient(tx.config)
+	tx.WorkerActivity = NewWorkerActivityClient(tx.config)
+	tx.WorkerAttempt = NewWorkerAttemptClient(tx.config)
+	tx.WorkerCapability = NewWorkerCapabilityClient(tx.config)
+	tx.WorkerCommunication = NewWorkerCommunicationClient(tx.config)
+	tx.WorkerTask = NewWorkerTaskClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.
@@ -289,3 +312,27 @@ func (tx *txDriver) Query(ctx context.Context, query string, args, v any) error 
 }
 
 var _ dialect.Driver = (*txDriver)(nil)
+
+// ExecContext allows calling the underlying ExecContext method of the transaction if it is supported by it.
+// See, database/sql#Tx.ExecContext for more information.
+func (tx *txDriver) ExecContext(ctx context.Context, query string, args ...any) (stdsql.Result, error) {
+	ex, ok := tx.tx.(interface {
+		ExecContext(context.Context, string, ...any) (stdsql.Result, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("Tx.ExecContext is not supported")
+	}
+	return ex.ExecContext(ctx, query, args...)
+}
+
+// QueryContext allows calling the underlying QueryContext method of the transaction if it is supported by it.
+// See, database/sql#Tx.QueryContext for more information.
+func (tx *txDriver) QueryContext(ctx context.Context, query string, args ...any) (*stdsql.Rows, error) {
+	q, ok := tx.tx.(interface {
+		QueryContext(context.Context, string, ...any) (*stdsql.Rows, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("Tx.QueryContext is not supported")
+	}
+	return q.QueryContext(ctx, query, args...)
+}

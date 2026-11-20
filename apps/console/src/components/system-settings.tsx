@@ -2,7 +2,7 @@
 // 设置保存直接生效；导入或恢复备份、创建 API 令牌要重新输入密码。
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "../lib/query";
-import { Button, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, FilePicker, Form, FormGrid, Input, Notice, PasswordInput, SwitchField, Textarea, useConfirm, InsetGroup } from "@weir/ui";
+import { Button, Collapsible, CopyField, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Field, FilePicker, Form, FormGrid, Input, Notice, PasswordInput, SplitButton, SwitchField, Textarea, useConfirm, InsetGroup } from "@weir/ui";
 import { Download, Trash2 } from "lucide-react";
 import { api, reauthFields } from "../api";
 import { useFormAction, useRowAction } from "../lib/action";
@@ -226,12 +226,30 @@ function BackupPreviewNotice({ value }: { value: BackupPreview }) {
   </Notice>;
 }
 
+// 备份只有一个入口「立即备份」：已保存 WebDAV 时上传到 WebDAV，否则下载到本机；下载到本机始终在右侧菜单里。
+// 立即备份使用已保存的 WebDAV 设置，正在编辑的设置不影响它。
 export function BackupCard() {
   const q = useQuery({ queryKey: ["webdav"], queryFn: () => api("/admin/backup/webdav") as Promise<WebdavView> });
+  const { run, isBusy, waitFor } = useRowAction();
+  const remote = !!q.data?.url;
+  const download = () => void run("export", exportBackup, "备份文件已下载", { fail: "导出失败" });
+  const upload = () => void run("run", (track) => api("/admin/backup/webdav/run", "POST", {}, track), "备份已上传", { wait: { label: "正在上传备份到 WebDAV", max: 30 } }).then((ok) => { if (ok) void q.refetch(); });
+  const last = q.data ? (q.data.last_error ? `上次 WebDAV 备份失败：${q.data.last_error}` : q.data.last_run_at ? `上次 WebDAV 备份：${date(q.data.last_run_at)}` : remote ? "WebDAV 还没有备份过" : "未配置 WebDAV，立即备份会下载到本机") : "";
   return (
-    <Section title="备份与迁移" description="订阅源、手动节点、订阅组与规则模板。导入只新增，不删除现有数据；用户与 VPS 不在备份里。">
-      <ImportExport />
-      {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : <WebdavForm value={q.data} saved={() => q.refetch()} />}
+    <Section title="备份与恢复" description="订阅源、手动节点、订阅组与规则模板。导入只新增，不删除现有数据；用户与 VPS 不在备份里。">
+      <div className="actions">
+        <SplitButton size="default" variant="default" disabled={isBusy() || q.isPending} menuLabel="其他备份方式"
+          main={<Button disabled={isBusy() || q.isPending} busy={isBusy("run") || isBusy("export")} busyText="正在备份…" onClick={remote ? upload : download}><Download />立即备份</Button>}
+          items={[{ label: "下载备份文件到本机", icon: <Download />, onSelect: download, disabled: !remote }]} />
+        <ActionsWait wait={waitFor("run") || waitFor("export")} />
+      </div>
+      {q.error ? <Notice tone="bad">读取 WebDAV 设置失败：{q.error instanceof Error ? q.error.message : String(q.error)}</Notice> : last && <small className={q.data?.last_error ? "text-[var(--weir-bad-ink)]" : "text-[var(--weir-ink-3)]"}>{last}</small>}
+      <Collapsible variant="section" title="WebDAV 自动备份" summary={q.data ? (q.data.url ? (q.data.auto ? `每 ${q.data.hours} 小时` : "未开启自动") : "未配置") : undefined}>
+        {q.isPending || q.error ? <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} /> : <WebdavForm value={q.data} saved={() => q.refetch()} />}
+      </Collapsible>
+      <Collapsible variant="section" title="从文件恢复">
+        <ImportForm />
+      </Collapsible>
     </Section>
   );
 }
@@ -257,7 +275,7 @@ async function exportBackup() {
   saveBlob(await res.blob(), name);
 }
 
-function ImportExport() {
+function ImportForm() {
   const confirm = useConfirm();
   const [content, setContent] = useState("");
   const [fileError, setFileError] = useState("");
@@ -272,18 +290,11 @@ function ImportExport() {
     onSuccess: (result) => { setStats(result); setPreview(null); setRe(emptyReauth); },
     onError: () => setPreview(null),
   });
-  const { run, isBusy, waitFor } = useRowAction();
   return (
     <Form busy={save.busy || parse.busy} errors={preview ? save.errors : parse.errors} onSubmit={async () => {
       if (!preview) { await parse.submit(); return; }
       if (await confirm({ title: "确认导入预览中的备份？", description: "按上述清单新增数据；执行失败会完整回滚。", confirmText: "确认导入" })) await save.submit();
     }}>
-      <div className="actions">
-        <Button type="button" variant="outline" disabled={isBusy()} busy={isBusy("export")} busyText="正在导出…" onClick={() => void run("export", exportBackup, "已导出", { fail: "导出失败" })}>
-          <Download />
-          导出备份
-        </Button>
-      </div>
       <Field label="导入备份" name="content" hint="粘贴备份文件内容，或在下方选择文件。" customError={content && !content.trim() ? "请输入备份内容" : ""}>
         <Textarea required rows={4} className="font-mono text-meta" value={content} onChange={(e) => changeContent(e.target.value)} />
       </Field>
@@ -333,11 +344,6 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
   return (
     <>
       <Form busy={busy} errors={save.errors} onSubmit={() => void save.submit()}>
-        <h3 className="text-body font-semibold">WebDAV 备份</h3>
-        <small className="text-[var(--weir-ink-3)]">
-          最近一次：{date(value.last_run_at ?? undefined)}
-          {value.last_error ? ` · 失败：${value.last_error}` : ""}
-        </small>
         <FormGrid>
           <Field label="目录地址" name="url" hint="例如 https://dav.example.com/backup"><Input type="url" value={f.url} onChange={(e) => set({ url: e.target.value })} /></Field>
           <Field label="用户名"><Input autoComplete="off" value={f.username} onChange={(e) => set({ username: e.target.value })} /></Field>
@@ -350,21 +356,16 @@ function WebdavForm({ value, saved }: { value: WebdavView; saved: () => void }) 
         </div>
         {save.error && <Notice tone="bad">{save.error}</Notice>}
         <div className="actions">
-          <Button type="submit" disabled={busy} busy={save.busy} busyText="正在保存…">保存</Button>
-          {value.url && (
-            <Button type="button" variant="outline" disabled={busy || dirty} busy={isBusy("run")} busyText="正在备份…" onClick={() => void run("run", (track) => api("/admin/backup/webdav/run", "POST", {}, track), "备份已上传", { wait: { label: "正在上传备份到 WebDAV", max: 30 } }).then((ok) => ok && saved())}>
-              立即备份
-            </Button>
-          )}
+          <Button type="submit" disabled={busy || !dirty} busy={save.busy} busyText="正在保存…">保存</Button>
           {value.url && (
             <Button type="button" variant="outline" disabled={busy || dirty} busy={isBusy("files")} busyText="正在读取…" onClick={() => void run("files", async () => { const result = await api("/admin/backup/webdav/files"); setFiles(result.files); setRevision(result.revision); }, undefined, { wait: { label: "正在读取 WebDAV 目录", max: 30 } })}>
-              查看备份
+              从 WebDAV 恢复
             </Button>
           )}
-          <ActionsWait wait={waitFor("run") || waitFor("files")} />
+          <ActionsWait wait={waitFor("files")} />
         </div>
       </Form>
-      {dirty && <Notice>配置有未保存修改，请先保存再备份、读取目录或恢复。</Notice>}
+      {dirty && value.url && <small className="text-[var(--weir-ink-3)]">恢复读取的是已保存的目录；改了地址先保存。</small>}
       {files &&
         (files.length === 0 ? (
           <State empty="目录里还没有备份" />
@@ -431,7 +432,7 @@ export function APITokensCard() {
     },
   });
   return (
-    <Section title="外部接口" description="脚本可用 Authorization: Bearer <令牌> 调用 /api/ext/v1 管理订阅源、手动节点与订阅组；不能访问用户、VPS 与系统设置。">
+    <Section title="API 令牌" description="脚本可用 Authorization: Bearer <令牌> 调用 /api/ext/v1 管理订阅源、手动节点与订阅组；不能访问用户、VPS 与系统设置。">
       {q.isPending || q.error ? (
         <State loading={q.isPending} error={q.error} onRetry={() => q.refetch()} />
       ) : q.data.length === 0 ? (

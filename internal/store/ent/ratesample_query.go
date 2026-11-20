@@ -253,8 +253,9 @@ func (_q *RateSampleQuery) Clone() *RateSampleQuery {
 		inters:     append([]Interceptor{}, _q.inters...),
 		predicates: append([]predicate.RateSample{}, _q.predicates...),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -473,6 +474,12 @@ func (_q *RateSampleQuery) ForShare(opts ...sql.LockOption) *RateSampleQuery {
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *RateSampleQuery) Modify(modifiers ...func(s *sql.Selector)) *RateSampleSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // RateSampleGroupBy is the group-by builder for RateSample entities.
 type RateSampleGroupBy struct {
 	selector
@@ -561,4 +568,10 @@ func (_s *RateSampleSelect) sqlScan(ctx context.Context, root *RateSampleQuery, 
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *RateSampleSelect) Modify(modifiers ...func(s *sql.Selector)) *RateSampleSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

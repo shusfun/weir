@@ -18,8 +18,9 @@ import (
 // CredentialUpdate is the builder for updating Credential entities.
 type CredentialUpdate struct {
 	config
-	hooks    []Hook
-	mutation *CredentialMutation
+	hooks     []Hook
+	mutation  *CredentialMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the CredentialUpdate builder.
@@ -355,6 +356,12 @@ func (_u *CredentialUpdate) ExecX(ctx context.Context) {
 	}
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *CredentialUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *CredentialUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *CredentialUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	_spec := sqlgraph.NewUpdateSpec(credential.Table, credential.Columns, sqlgraph.NewFieldSpec(credential.FieldID, field.TypeInt))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
@@ -448,6 +455,7 @@ func (_u *CredentialUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if _u.mutation.MeterAtCleared() {
 		_spec.ClearField(credential.FieldMeterAt, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{credential.Label}
@@ -463,9 +471,10 @@ func (_u *CredentialUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 // CredentialUpdateOne is the builder for updating a single Credential entity.
 type CredentialUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *CredentialMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *CredentialMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetNodeID sets the "node_id" field.
@@ -808,6 +817,12 @@ func (_u *CredentialUpdateOne) ExecX(ctx context.Context) {
 	}
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *CredentialUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *CredentialUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *CredentialUpdateOne) sqlSave(ctx context.Context) (_node *Credential, err error) {
 	_spec := sqlgraph.NewUpdateSpec(credential.Table, credential.Columns, sqlgraph.NewFieldSpec(credential.FieldID, field.TypeInt))
 	id, ok := _u.mutation.ID()
@@ -918,6 +933,7 @@ func (_u *CredentialUpdateOne) sqlSave(ctx context.Context) (_node *Credential, 
 	if _u.mutation.MeterAtCleared() {
 		_spec.ClearField(credential.FieldMeterAt, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &Credential{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

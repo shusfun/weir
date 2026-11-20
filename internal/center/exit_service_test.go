@@ -88,7 +88,7 @@ func TestExitSharingOwnershipAndTrace(t *testing.T) {
 	if record.Detail["trace_id"] != trace || !strings.Contains(logs.String(), "trace="+trace) || !strings.Contains(logs.String(), "code=system_exit") {
 		t.Fatalf("rejection evidence audit=%v log=%s", record.Detail, logs.String())
 	}
-	// 两个节点引用同一个出口；停用与删除都返回占用，备注修改保持身份。
+	// 两个节点引用同一个出口：停用返回占用，删除预览列出两个会被一并删除的节点，备注修改保持身份。
 	for _, node := range []map[string]any{n, mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": int(g.id), "preset": "ss2022", "skip_probe": true}, 200)} {
 		mustJSON(t, admin, "PATCH", "/api/v1/admin/nodes/"+itoa(int(node["id"].(float64))), map[string]any{"exit_id": id, "skip_probe": true}, 200)
 	}
@@ -96,7 +96,9 @@ func TestExitSharingOwnershipAndTrace(t *testing.T) {
 		t.Fatalf("shared refs=%v err=%v", refs, err)
 	}
 	mustJSON(t, admin, "PATCH", "/api/v1/admin/exits/"+itoa(id), map[string]any{"enabled": false}, 409)
-	mustJSON(t, admin, "DELETE", "/api/v1/admin/exits/"+itoa(id), nil, 409)
+	if p := mustJSON(t, admin, "GET", "/api/v1/admin/exits/"+itoa(id)+"/delete-preview", nil, 200); len(p["removes"].([]any)) != 2 {
+		t.Fatalf("delete preview must list both nodes: %v", p)
+	}
 	mustJSON(t, admin, "PATCH", "/api/v1/admin/exits/"+itoa(id), map[string]any{"remark": "更新备注"}, 200)
 	// VPS 身份固定，不能引用另一台 VPS 的出口。
 	eg := pairFakeGate(t, admin)
@@ -145,22 +147,29 @@ func TestProxyLibraryDeleteAndReferences(t *testing.T) {
 	logs := captureLog(t)
 	traceDelete := func(id int, trace string, status int, outcome string) {
 		t.Helper()
-		res := admin.do("DELETE", base+"/"+itoa(id), nil, map[string]string{"traceparent": "00-" + trace + "-1111111111111111-01"})
+		path := base + "/" + itoa(id)
+		preview := mustJSON(t, admin, "GET", path+"/delete-preview", nil, 200)
+		res := admin.do("DELETE", path, map[string]any{"preview_token": preview["preview_token"]}, map[string]string{"traceparent": "00-" + trace + "-1111111111111111-01"})
 		if res.Code != status || res.Header().Get("X-Trace-Id") != trace {
 			t.Fatalf("delete status=%d trace=%s body=%s", res.Code, res.Header().Get("X-Trace-Id"), res.Body.String())
-		}
-		if status == 409 && !strings.Contains(res.Body.String(), `"code":"exit_in_use"`) {
-			t.Fatalf("missing conflict: %s", res.Body.String())
 		}
 		record := s.Store.Ent.Audit.Query().Where(audit.ActionEQ("exit.delete"), audit.TargetEQ(exitOwner(id)), audit.ResultEQ(outcome)).OnlyX(ctx)
 		if record.Detail["trace_id"] != trace || !strings.Contains(logs.String(), "operation=exit.delete trace="+trace) {
 			t.Fatalf("delete trace missing from operation or audit: %v", record.Detail)
 		}
 	}
-	traceDelete(unused, "0123456789abcdef0123456789abcdef", 204, "ok")
-	traceDelete(used, "abcdef0123456789abcdef0123456789", 409, "failed")
+	traceDelete(unused, "0123456789abcdef0123456789abcdef", 204, "ok nodes=0 chains=0 routes=0")
 	if listItem(base, unused) != nil || listItem(base, used) == nil {
-		t.Fatal("delete must remove only the selected, unreferenced proxy")
+		t.Fatal("delete must remove only the selected proxy and keep same-address records")
+	}
+	// 被引用的代理可以直接删除：预览列出要一起删除的两条规则，删除后规则随之消失。
+	preview := mustJSON(t, admin, "GET", base+"/"+itoa(used)+"/delete-preview", nil, 200)
+	if len(preview["removes"].([]any)) != 2 {
+		t.Fatalf("preview must list both routes: %v", preview)
+	}
+	traceDelete(used, "abcdef0123456789abcdef0123456789", 204, "ok nodes=0 chains=0 routes=2")
+	if n := s.Store.Ent.Route.Query().CountX(ctx); n != 0 || listItem(base, used) != nil {
+		t.Fatalf("cascade left routes=%d", n)
 	}
 }
 

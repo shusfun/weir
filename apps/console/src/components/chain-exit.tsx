@@ -37,7 +37,7 @@ export function exitErrorFields(kind: ExitKind): Record<string, string> {
 // probeText 说明一次实测：位置、连通、落地、地区和速率都只属于这次结果。
 export function probeText(p?: ExitProbe | null) {
   if (!p) return "还没有实测";
-  const where = p.location === "center" ? "中心" : p.location === "gate" ? `VPS ${p.gate_id ?? ""}`.trim() : "";
+  const where = p.location === "center" ? "中心" : p.location === "gate" ? "在 VPS 上" : "";
   if (!p.ok) return [where, p.error ? `实测失败：${p.error}` : "实测失败：原因未知"].filter(Boolean).join(" · ");
   const parts = [where, p.mode === "proxy" ? "已连通" : "只测了端口"].filter(Boolean);
   parts.push(p.exit_ip ? `落地 ${p.exit_ip}` : "落地未知");
@@ -64,7 +64,8 @@ export function ProbeReadouts({ result, location, historical = false }: { result
           {!result ? `${location} · 点下方开始实测` : `${historical ? "上次记录" : "本次结果"} · ${location}`}
         </span>
       </div>
-      <div className="grid gap-[var(--weir-space-3)] sm:grid-cols-3 sm:divide-x sm:divide-[var(--weir-line-soft)]">
+      {/* 还没实测时只留上面一行结论，不摆出三栏「未知」 */}
+      {result && <div className="grid gap-[var(--weir-space-3)] sm:grid-cols-3 sm:divide-x sm:divide-[var(--weir-line-soft)]">
         <div className="grid content-start gap-1">
           <span className="text-fine text-[var(--weir-ink-3)]">延迟与协议</span>
           <span className={latencyKnown ? "font-mono text-title3 font-semibold text-[var(--weir-ink)]" : "text-headline font-semibold text-[var(--weir-ink-3)]"}>
@@ -77,16 +78,16 @@ export function ProbeReadouts({ result, location, historical = false }: { result
           <span className={result?.exit_ip ? "font-mono text-subheadline font-semibold break-all text-[var(--weir-ink)]" : "text-headline font-semibold text-[var(--weir-ink-3)]"}>
             {result?.exit_ip ?? "未知"}
           </span>
-          <span className="text-fine text-[var(--weir-ink-3)]">{result ? placeText(result.place) : "位置未知"}</span>
+          <span className="text-fine text-[var(--weir-ink-3)]">{result ? placeText(result.place) : ""}</span>
         </div>
         <div className="grid content-start gap-1 sm:pl-[var(--weir-space-3)]">
           <span className="text-fine text-[var(--weir-ink-3)]">下载吞吐</span>
           <span className={result?.rate_bps != null ? "font-mono text-subheadline font-semibold text-[var(--weir-ink)]" : "text-headline font-semibold text-[var(--weir-ink-3)]"}>
             {result ? rateText(result.rate_bps) : "未知"}
           </span>
-          <span className="text-fine text-[var(--weir-ink-3)] break-words">{result?.download_error || (result?.rate_bps == null ? "速率未知" : "测试下载")}</span>
+          <span className="text-fine text-[var(--weir-ink-3)] break-words">{result?.download_error || (result?.rate_bps == null ? "这次没有测下载" : "测试下载")}</span>
         </div>
-      </div>
+      </div>}
       {result && !result.ok && result.error && (
         <div className="mt-[var(--weir-space-3)] rounded-[var(--weir-radius-9)] bg-[var(--weir-bad-soft)] px-3 py-2 text-meta text-[var(--weir-bad-ink)] break-words">
           {result.error}

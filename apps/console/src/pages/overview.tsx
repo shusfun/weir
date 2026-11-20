@@ -17,6 +17,7 @@ const routes = { user: "/users", node: "/gates?view=nodes", source: "/subscripti
 const readOptions = { refetchInterval: false, refetchOnWindowFocus: false, retry: false } as const;
 const rowLimit = 12;
 
+// rank 0 失败、1 警告或过期：都需要动手；2 是没有结论或观测不完整，只在页头计数，不进待办列表
 function workItem(object: WorkItem["object"], state?: ObjectState, rank?: number, label?: string): WorkItem {
   const [status, , reason] = objectStatus(state);
   const priority = state?.status === "failed" ? 0 : state?.status === "warning" ? 1 : 2;
@@ -35,7 +36,7 @@ export function OverviewPage() {
     { key: "source", label: "订阅源", manage: "管理订阅源", query: sources, count: sources.isSuccess ? sources.data.items.length : null },
   ] as const;
   const attention: WorkItem[] = [
-    ...(users.isSuccess ? users.data : []).flatMap(user => user.enabled && user.object_state?.status !== "ok"
+    ...(users.isSuccess ? users.data : []).flatMap(user => user.enabled && user.object_state && user.object_state.status !== "ok"
       ? [workItem({ type: "user", id: user.id, name: user.name || user.email }, user.object_state)] : []),
     ...(nodes.isSuccess ? nodes.data : []).flatMap(node => {
       const state = node.object_state;
@@ -53,13 +54,13 @@ export function OverviewPage() {
     }),
   ].sort((first, second) => first.rank - second.rank);
   const selected = category === "all" ? inventory : inventory.filter(item => item.key === category);
-  const visible = attention.filter(item => category === "all" || item.object.type === category);
+  const visible = attention.filter(item => item.rank < 2 && (category === "all" || item.object.type === category));
   const actionable = attention.filter(item => item.rank < 2).length;
   const unobserved = attention.length - actionable;
   const incomplete = inventory.filter(item => !item.query.isSuccess).length;
   const empty = inventory.every(item => item.count === 0);
-  const conclusion = actionable ? actionable + " 项需要处理" : unobserved ? unobserved + " 项待核对" : incomplete ? "待办尚未核对完整" : empty ? "还没有纳管对象" : "暂无待办";
-  const summary = [actionable > 0 && unobserved > 0 ? unobserved + " 项待核对" : "", incomplete ? incomplete + " 个分类尚未取得数据" : ""].filter(Boolean).join(" · ");
+  const conclusion = actionable ? actionable + " 项需要处理" : incomplete ? "待办尚未核对完整" : empty ? "还没有纳管对象" : "暂无需要处理的事";
+  const summary = [unobserved ? unobserved + " 项还没有观测结论，不算待办" : "", incomplete ? incomplete + " 个分类读取失败或仍在读取" : ""].filter(Boolean).join(" · ");
   useConsoleContext({ page: "概览", list: { filters: { 分类: categories.find(([key]) => key === category)![1] }, total: visible.length, items: visible.slice(0, 20).map(item => item.object) } });
   return <div className="stack">
     <PageHeader eyebrow="管理工作台" title={conclusion} description={summary || undefined} className="weir-workbench-heading" />
@@ -79,7 +80,7 @@ export function OverviewPage() {
             </div>
             <Badge variant="status" tone={rank === 0 ? "bad" : rank === 1 ? "warn" : "neutral"}>{label}</Badge>
           </InsetRow>)}
-        </InsetRows> : selected.every(item => item.query.isSuccess) && <State empty={selected.every(item => item.count === 0) ? "该范围尚无纳管对象" : "该范围暂无待办"} />}
+        </InsetRows> : selected.every(item => item.query.isSuccess) && <State empty={selected.every(item => item.count === 0) ? "该范围尚无纳管对象" : "该范围没有需要处理的事"} />}
         {visible.length > limit && <Button size="sm" variant="outline" className="w-fit" onClick={() => setLimit(limit + rowLimit)}>显示更多（还有 {visible.length - limit} 项）</Button>}
       </section>
       <aside className="stack min-w-0" data-tour="overview-inventory">

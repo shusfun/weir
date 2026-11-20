@@ -87,7 +87,12 @@ func (s *Server) nodeDisplayName(ctx context.Context, n *ent.Node, g *ent.Gate, 
 		if g != nil {
 			gid = g.ID
 		}
-		return s.exitSummaryOnGate(ctx, e, fallback, gid).Name
+		name := s.exitSummaryOnGate(ctx, e, fallback, gid).Name
+		// 链式线路写成「入口 VPS > 代理」：同一个代理挂在多台 VPS 上时，订阅和分组里能分清走哪台。
+		if g != nil && strings.TrimSpace(g.Name) != "" {
+			return strings.TrimSpace(g.Name) + " > " + name
+		}
+		return name
 	}
 	if n != nil && strings.TrimSpace(n.Name) != "" {
 		return strings.TrimSpace(n.Name)

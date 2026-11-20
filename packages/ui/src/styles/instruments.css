@@ -263,7 +263,7 @@
     corner-shape: squircle;
     transition: transform var(--weir-mid) var(--weir-spring);
   }
-  .weir-folder:hover .weir-folder-file { transform: rotate(var(--tilt, 0deg)) translateY(-5px); }
+  .weir-folder[aria-expanded="true"] .weir-folder-file { transform: rotate(var(--tilt, 0deg)) translateY(-5px); }
   /* 按下整块缩一点（与按钮同一套按压参数） */
   .weir-folder, .weir-folder-slot, .weir-route-card { transition: scale var(--weir-press) var(--weir-ease); }
   .weir-folder:active, .weir-folder-slot:active, .weir-route-card:active { scale: var(--weir-press-scale); }

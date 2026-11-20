@@ -3,6 +3,7 @@ package center
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -211,29 +212,51 @@ func (s *Server) CheckAlerts(ctx context.Context, now time.Time) error {
 	return nil
 }
 
-// RefreshSources 按设置的间隔重新拉取全部启用的订阅源（保护性缓存照常生效），并清除订阅组输出缓存。
-func (s *Server) RefreshSources(ctx context.Context, now time.Time) error {
+// RefreshSources 每分钟由 maintenance 调用：挑出到期的订阅源（各自的刷新间隔，未设置时跟随全局），
+// 逐个交给 refreshOneSource 按选路拉取并检测。每个源用 KV 占位防止上一轮还没跑完又被重复拉起。
+func (s *Server) RefreshSources(ctx context.Context, now time.Time) (err error) {
+	due := 0
+	finish := operationStage(ctx, "subscription.refresh.schedule", "due", stageValue(func() slog.Value { return slog.IntValue(due) }))
+	defer func() { finish(err) }()
 	st, err := s.subscriptionSettings(ctx)
-	if err != nil || st.SourceRefresh <= 0 {
+	if err != nil {
 		return err
-	}
-	if ok, _ := s.Store.KV.SetNX(ctx, "sources-refreshed", now.Format(time.RFC3339), time.Duration(st.SourceRefresh)*time.Hour); !ok {
-		return nil
 	}
 	rows, err := s.Store.Ent.SubSource.Query().Where(subsource.EnabledEQ(true)).All(ctx)
-	if err != nil || len(rows) == 0 {
+	if err != nil {
 		return err
 	}
-	sources := make([]subgroup.Source, 0, len(rows))
-	for _, r := range rows {
-		sources = append(sources, toSource(r))
+	for _, src := range rows {
+		hours := sourceRefreshHours(src, st)
+		next := sourceNextRefresh(src, hours)
+		if next == nil {
+			continue
+		}
+		if next.After(now) {
+			// 两次拉取之间补测一轮：间隔过半仍没测过就用缓存节点在上次的 Gate 上重新检测，不重新下载。
+			if s.reprobeDue(src, hours, now) {
+				if ok, e := s.Store.KV.SetNX(ctx, "source-refreshing:"+itoa(src.ID), now.Format(time.RFC3339), 10*time.Minute); e == nil && ok {
+					go func(src *ent.SubSource) {
+						defer func() { _ = s.Store.KV.Del(context.WithoutCancel(ctx), "source-refreshing:"+itoa(src.ID)) }()
+						if e := s.reprobeSource(withTrace(ctx, "source-reprobe:"+randomHex(6)), src); e != nil {
+							s.tasks.note("subscription-source-reprobe", e)
+						}
+					}(src)
+				}
+			}
+			continue
+		}
+		if ok, e := s.Store.KV.SetNX(ctx, "source-refreshing:"+itoa(src.ID), now.Format(time.RFC3339), 10*time.Minute); e != nil || !ok {
+			continue
+		}
+		due++
+		go func(src *ent.SubSource) {
+			defer func() { _ = s.Store.KV.Del(context.WithoutCancel(ctx), "source-refreshing:"+itoa(src.ID)) }()
+			if _, _, _, e := s.refreshOneSource(withTrace(ctx, "source-refresh:"+randomHex(6)), src); e != nil {
+				s.tasks.note("subscription-source-refresh", e)
+			}
+		}(src)
 	}
-	ctx, finish := s.startSubscriptionRun(ctx, 0)
-	defer finish(nil)
-	ctx = s.subscriptionContext(ctx, 0)
-	_, results := subgroup.Combine(ctx, s.subFetcher(), kvCache{s}, sources, nil, subgroup.Options{UserAgent: "clash-meta/2.5.0"})
-	s.recordResults(ctx, results)
-	s.invalidateGroups(ctx)
 	return nil
 }
 

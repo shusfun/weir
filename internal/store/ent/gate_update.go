@@ -19,8 +19,9 @@ import (
 // GateUpdate is the builder for updating Gate entities.
 type GateUpdate struct {
 	config
-	hooks    []Hook
-	mutation *GateMutation
+	hooks     []Hook
+	mutation  *GateMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the GateUpdate builder.
@@ -462,6 +463,12 @@ func (_u *GateUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *GateUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *GateUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *GateUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -593,6 +600,7 @@ func (_u *GateUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedMeterSeq(); ok {
 		_spec.AddField(gate.FieldMeterSeq, field.TypeInt64, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{gate.Label}
@@ -608,9 +616,10 @@ func (_u *GateUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 // GateUpdateOne is the builder for updating a single Gate entity.
 type GateUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *GateMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *GateMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetName sets the "name" field.
@@ -1059,6 +1068,12 @@ func (_u *GateUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *GateUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *GateUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *GateUpdateOne) sqlSave(ctx context.Context) (_node *Gate, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -1207,6 +1222,7 @@ func (_u *GateUpdateOne) sqlSave(ctx context.Context) (_node *Gate, err error) {
 	if value, ok := _u.mutation.AddedMeterSeq(); ok {
 		_spec.AddField(gate.FieldMeterSeq, field.TypeInt64, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &Gate{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

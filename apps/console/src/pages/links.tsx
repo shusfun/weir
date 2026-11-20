@@ -84,7 +84,7 @@ function RecentPulls({ stats }: { stats?: LinkStats[] }) {
         <Card className="overflow-hidden p-0">
           {rows.slice(0, 8).map((s) => (
             <div key={s.id} className="weir-set-row">
-              <div className="min-w-0"><b className="block truncate">{s.name || "未命名"} · {s.last_pull?.client || "未知客户端"}</b><div className="font-[family-name:var(--weir-mono)] text-fine text-[var(--weir-ink-3)]">{s.last_pull ? date(s.last_pull.at) : "未知"} · {s.last_pull?.ip || "来源未知"}</div></div>
+              <div className="min-w-0"><b className="block truncate">{s.name || "未命名"} · {s.last_pull?.client || "未知客户端"}</b><div className="font-[family-name:var(--weir-mono)] text-fine text-[var(--weir-ink-3)]">{s.last_pull ? date(s.last_pull.at) : "未知"}{s.last_pull?.ip ? ` · ${s.last_pull.ip}` : ""}</div></div>
               {s.last_pull?.status === "ok" ? <span className="text-meta text-[var(--weir-ink-3)]">返回 {s.last_pull.target || "订阅"}</span> : <Badge variant="soft" tone="warn">{s.last_pull?.status || "未知"}</Badge>}
             </div>
           ))}

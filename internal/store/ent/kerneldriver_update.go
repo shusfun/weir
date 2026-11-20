@@ -18,8 +18,9 @@ import (
 // KernelDriverUpdate is the builder for updating KernelDriver entities.
 type KernelDriverUpdate struct {
 	config
-	hooks    []Hook
-	mutation *KernelDriverMutation
+	hooks     []Hook
+	mutation  *KernelDriverMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the KernelDriverUpdate builder.
@@ -225,6 +226,12 @@ func (_u *KernelDriverUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *KernelDriverUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *KernelDriverUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *KernelDriverUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -270,6 +277,7 @@ func (_u *KernelDriverUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if value, ok := _u.mutation.CreatedAt(); ok {
 		_spec.SetField(kerneldriver.FieldCreatedAt, field.TypeTime, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{kerneldriver.Label}
@@ -285,9 +293,10 @@ func (_u *KernelDriverUpdate) sqlSave(ctx context.Context) (_node int, err error
 // KernelDriverUpdateOne is the builder for updating a single KernelDriver entity.
 type KernelDriverUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *KernelDriverMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *KernelDriverMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetName sets the "name" field.
@@ -500,6 +509,12 @@ func (_u *KernelDriverUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *KernelDriverUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *KernelDriverUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *KernelDriverUpdateOne) sqlSave(ctx context.Context) (_node *KernelDriver, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -562,6 +577,7 @@ func (_u *KernelDriverUpdateOne) sqlSave(ctx context.Context) (_node *KernelDriv
 	if value, ok := _u.mutation.CreatedAt(); ok {
 		_spec.SetField(kerneldriver.FieldCreatedAt, field.TypeTime, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &KernelDriver{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

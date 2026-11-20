@@ -37,8 +37,19 @@ func TestSubscriptionTrafficRefreshMetadataAndTrace(t *testing.T) {
 		}
 		trace := w.Header().Get("X-Trace-Id")
 		rows := mustJSON(t, admin, "GET", "/api/v1/admin/subscriptions/runs", nil, 200)["items"].([]any)
-		run, err := s.loadSubscriptionRun(t.Context(), rows[0].(map[string]any)["id"].(string))
-		if err != nil || trace == "" || run.TraceID != trace {
+		var run subscriptionRun
+		found := false
+		var err error
+		for _, item := range rows {
+			candidate, loadErr := s.loadSubscriptionRun(t.Context(), item.(map[string]any)["id"].(string))
+			if loadErr == nil && candidate.TraceID == trace {
+				run = candidate
+				found = true
+				break
+			}
+			err = loadErr
+		}
+		if err != nil || !found || trace == "" {
 			t.Fatal("refresh trace lost", run, err)
 		}
 		saved := false
@@ -81,11 +92,17 @@ func TestSubscriptionTrafficRefreshMetadataAndTrace(t *testing.T) {
 	settings.SourceRefresh = 1
 	mustJSON(t, admin, "PUT", "/api/v1/admin/subscriptions/settings", settings, 200)
 	mode.Store(1)
-	if err := s.RefreshSources(t.Context(), time.Now()); err != nil {
+	if err := s.RefreshSources(t.Context(), time.Now().Add(2*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	if got := s.Store.Ent.SubSource.GetX(t.Context(), id); got.UserInfo != "" {
-		t.Fatal("background result retained stale traffic")
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		got := s.Store.Ent.SubSource.GetX(t.Context(), id)
+		if got.UserInfo == "" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("background result retained stale traffic")
+		}
 	}
 	mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "traffic-viewer@example.test", "password": "Passw0rd"}, 200)
 	user := login(t, s, "traffic-viewer@example.test", "Passw0rd")

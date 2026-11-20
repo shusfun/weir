@@ -286,6 +286,7 @@ func (s *Server) deleteGate(c *gin.Context) {
 	ctx := c.Request.Context()
 	var outcome error
 	finish := operationStage(ctx, "gate.delete", "gate_id", gid, "actor_id", c.GetInt("user_id"))
+	ctx = WithRevisionCause(ctx, "gate.delete", c.GetInt("user_id"))
 	defer func() { finish(outcome) }()
 	raw, err := s.Crypto.Decrypt(req.PreviewToken)
 	var claim gateDeleteClaim
@@ -328,20 +329,15 @@ func (s *Server) deleteGate(c *gin.Context) {
 	// Invalidate pending probes only after commit. KV cleanup cannot roll back
 	// SQL; missing nodes already prevent late results from restoring references.
 	warnings := []string{}
-	s.nodeProbes.Lock()
+	s.reconcileDeletion(ctx)
 	for _, id := range plan.nodeIDs {
-		if job := s.nodeProbes.jobs[id]; job != "" {
-			_ = s.jobs.Cancel(jobViewer{admin: true}, job)
-			delete(s.nodeProbes.jobs, id)
-		}
-		if err := s.Store.KV.Del(ctx, pendingNodeProbePrefix+itoa(id)); err != nil {
-			warnings = append(warnings, "节点实测队列清理待重试")
-		}
-		if err := s.Store.KV.Del(ctx, nodeTestKey(id)); err != nil {
-			warnings = append(warnings, "节点实测缓存清理待重试")
+		if err := s.forgetNodeProbes(ctx, id); err != nil {
+			warnings = append(warnings, "节点实测记录清理待重试")
 		}
 	}
-	s.nodeProbes.Unlock()
+	if _, err := s.pruneGroupMembers(ctx); err != nil {
+		warnings = append(warnings, "客户端分组里的失效线路清理待重试")
+	}
 	for _, id := range append(plan.affectedGates, gid) {
 		s.waiters.notify(id)
 		if err := s.Store.Notifications.Publish(ctx, "gate:"+itoa(id)); err != nil {
@@ -458,13 +454,11 @@ func (s *Server) applyGateDeletion(ctx context.Context, tx *ent.Tx, p *gateDelet
 				return err
 			}
 			if transport.GateID != gid {
-				if err = tx.Gate.UpdateOneID(transport.GateID).AddConfigRevision(1).Exec(ctx); err != nil {
-					return err
-				}
+				p.affectedGates = append(p.affectedGates, transport.GateID)
 			}
 		}
 	}
-	if _, err := tx.Gate.Update().Where(gate.IDIn(p.affectedGates...)).AddConfigRevision(1).Save(ctx); err != nil {
+	if err := advanceRevocations(ctx, tx, p.affectedGates); err != nil {
 		return err
 	}
 	if err := tx.Gate.DeleteOneID(gid).Exec(ctx); err != nil {

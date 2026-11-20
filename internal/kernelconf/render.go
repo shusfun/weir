@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shusfun/weir/internal/db"
+	"github.com/shusfun/weir/internal/kernelconf/model"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -80,7 +80,7 @@ func Build(cfg contracts.GateConfig, opt Options) (Output, error) {
 	if err != nil {
 		return out, err
 	}
-	var xrayIn, singIn []db.Inbound
+	var xrayIn, singIn []model.Inbound
 	for _, in := range inbounds {
 		switch in.Core {
 		case "xray":
@@ -112,7 +112,7 @@ func Build(cfg contracts.GateConfig, opt Options) (Output, error) {
 	}
 	for _, k := range []struct {
 		name string
-		list []db.Inbound
+		list []model.Inbound
 	}{{"xray", xrayIn}, {"sing-box", singIn}} {
 		kernel, list := k.name, k.list
 		helper := false
@@ -173,7 +173,7 @@ func Build(cfg contracts.GateConfig, opt Options) (Output, error) {
 			kernelOutbounds = outbounds[:1]
 		}
 		for _, o := range kernelOutbounds {
-			if db.ParseOutboundSettings(o.SettingsJSON).UDPOverTCP && (kernel != "sing-box" || !d.Has("udp-over-tcp")) {
+			if model.ParseOutboundSettings(o.SettingsJSON).UDPOverTCP && (kernel != "sing-box" || !d.Has("udp-over-tcp")) {
 				return out, errors.New("UDP over TCP unsupported by driver")
 			}
 		}
@@ -480,8 +480,8 @@ func OutboundNames(cfg contracts.GateConfig) map[string]string {
 		return out
 	}
 	add := func(id int64, tag string) {
-		for _, k := range []string{db.CoreXray, db.CoreSingbox} {
-			out[db.GeneratedOutboundTag(k, id, tag)] = tag
+		for _, k := range []string{model.CoreXray, model.CoreSingbox} {
+			out[model.GeneratedOutboundTag(k, id, tag)] = tag
 		}
 	}
 	add(directID, "direct")

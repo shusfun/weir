@@ -18,8 +18,9 @@ import (
 // NodeUpdate is the builder for updating Node entities.
 type NodeUpdate struct {
 	config
-	hooks    []Hook
-	mutation *NodeMutation
+	hooks     []Hook
+	mutation  *NodeMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the NodeUpdate builder.
@@ -302,6 +303,12 @@ func (_u *NodeUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *NodeUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *NodeUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *NodeUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -391,6 +398,7 @@ func (_u *NodeUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{node.Label}
@@ -406,9 +414,10 @@ func (_u *NodeUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 // NodeUpdateOne is the builder for updating a single Node entity.
 type NodeUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *NodeMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *NodeMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetGateID sets the "gate_id" field.
@@ -698,6 +707,12 @@ func (_u *NodeUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *NodeUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *NodeUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *NodeUpdateOne) sqlSave(ctx context.Context) (_node *Node, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -804,6 +819,7 @@ func (_u *NodeUpdateOne) sqlSave(ctx context.Context) (_node *Node, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &Node{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

@@ -32,6 +32,8 @@ import (
 
 // Server 持有中心的配置与存储。初始化完成前 Store 为空，只开放初始化接口。
 type Server struct {
+	// creds 合并节点、代理、链式代理变化后的凭据同步，见 cred_syncer.go
+	creds            credSyncer
 	hotspots         hotspotMetrics
 	sourceFetches    singleflight.Group
 	sourceFetchOnce  sync.Once
@@ -45,8 +47,9 @@ type Server struct {
 	Assets           fs.FS
 
 	// state 保护 Config / Store 的切换：普通请求持读锁，安装完成的切换持写锁。
-	state     sync.RWMutex
-	installMu sync.Mutex
+	state      sync.RWMutex
+	installMu  sync.Mutex
+	storeReady chan struct{}
 	// waiters 唤醒配置长轮询；actionWaiters 唤醒动作长轮询；actionDone 唤醒等待动作结果的管理请求。
 	waiters       gateWaiters
 	actionWaiters gateWaiters
@@ -111,7 +114,7 @@ func NewWait(ctx context.Context, c Config, path string, assets fs.FS) (*Server,
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{Config: c, Path: path, Crypto: enc, Assets: assets}
+	s := &Server{Config: c, Path: path, Crypto: enc, Assets: assets, storeReady: make(chan struct{}, 1)}
 	if c.Installed {
 		if s.Store, err = waitStore(ctx, c); err != nil {
 			return nil, err
@@ -211,6 +214,8 @@ func (s *Server) StartBackground(ctx context.Context) {
 		defer s.releaseFilesMu.Unlock()
 		s.pruneReleaseCache(ctx, nil)
 	}()
+	go s.pruneGroupsWhenReady(ctx)
+	go s.runCredSync(ctx)
 	go s.observeResources(ctx)
 	go s.observeLayaHealth(ctx)
 	go s.workerMaintenance(ctx)
@@ -307,6 +312,7 @@ func (s *Server) promoteInstalled(ctx context.Context) error {
 		return err
 	}
 	s.Config, s.Store = cfg, st
+	s.signalStoreReady()
 	return nil
 }
 
@@ -441,6 +447,7 @@ func (s *Server) Router() *gin.Engine {
 	s.linkMapRoutes(auth, admin)
 	s.subRoutes(r, ready)
 	s.subscriptionRoutes(r, auth, admin)
+	s.profileEditRoutes(admin)
 	s.addonRoutes(ready, auth, admin)
 	s.githubSourceRoutes(auth, admin)
 	s.pageRoutes(ready, admin)
@@ -597,6 +604,7 @@ func (s *Server) install(c *gin.Context) {
 	}
 	cfg.Installed, cfg.SetupHash, cfg.SetupExpires = true, "", time.Time{}
 	s.Config, s.Store = cfg, st
+	s.signalStoreReady()
 	if err = s.storeSession(c, admin, false); err == nil {
 		s.audit(c, "auth.login", fmt.Sprint(admin.ID), "ok")
 	}

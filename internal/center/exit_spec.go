@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/shusfun/weir/internal/db"
+	"github.com/shusfun/weir/internal/kernelconf/model"
 	"github.com/shusfun/weir/internal/nodeprobe"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/subout"
@@ -145,14 +145,14 @@ func confirmedLinkOutbound(n subscription.ParsedLink, confirmations []string) (c
 			o.Username = strings.TrimSpace(n.Username)
 		}
 	}
-	set := db.OutboundSettings{Obfs: s.Obfs, ObfsPassword: s.ObfsPassword, CongestionControl: s.CongestionControl, ZeroRTT: s.ZeroRTT,
+	set := model.OutboundSettings{Obfs: s.Obfs, ObfsPassword: s.ObfsPassword, CongestionControl: s.CongestionControl, ZeroRTT: s.ZeroRTT,
 		Security: s.Security, Network: s.Network, TLS: s.TLS, Reality: s.Reality, SNI: s.SNI, Host: s.Host, Path: s.Path, Flow: s.Flow,
 		Fingerprint: s.Fingerprint, PublicKey: s.PublicKey, ShortID: s.ShortID, ALPN: s.ALPN, Method: s.Method, ServiceName: s.ServiceName, Mode: s.Mode}
 	if set.Security == "none" {
 		set.Security = ""
 	}
 	raw, _ := json.Marshal(set)
-	managed, err := db.ManagedOutboundSettings(db.Outbound{Protocol: o.Protocol, SettingsJSON: string(raw)})
+	managed, err := model.ManagedOutboundSettings(model.Outbound{Protocol: o.Protocol, SettingsJSON: string(raw)})
 	if err != nil {
 		return contracts.Outbound{}, fmt.Errorf("参数不能作出口：%v", err)
 	}

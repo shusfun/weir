@@ -27,13 +27,26 @@ func (SubSource) Fields() []ent.Field {
 		field.String("website").MaxLen(2048).Default(""),
 		field.String("remark").MaxLen(500).Default(""),
 		field.Int("position").Default(0),
+		// 拉取用哪台 Gate：0 表示自动（全局默认 → 其他在线 Gate → 中心直连）；试拉成功并保存后记为首选。
+		field.Int("gate_id").Default(0),
+		// 自动刷新间隔（小时）：0 表示跟随全局设置。
+		field.Int("refresh_hours").Default(0),
 		// 运行时信息：最近一次拉取的结果。
 		field.Int("node_count").Default(0),
+		// 已弃用：曾用于节点骤减保护，现在每次直接使用新结果；列保留以免丢历史数据。
 		field.Int("known_nodes").Default(0),
 		field.String("user_info").Default(""),
 		field.String("title").Default(""),
 		field.String("last_error").Default(""),
 		field.Time("fetched_at").Optional().Nillable(),
+		// 最近一次尝试拉取的时间（成功或失败都记），按源刷新的到期判断依据。
+		field.Time("last_attempt_at").Optional().Nillable(),
+		// 最近一次实际拉取的位置（gate:<id>、center-fallback）与没用上首选 Gate 的原因。
+		field.String("last_location").Default(""),
+		field.String("last_route_reason").Default(""),
+		// 检测摘要与本次相对上次的变化，见 internal/center/source_inspect.go 的 sourceHealthSummary、sourceChange。
+		field.JSON("health", map[string]any{}).Optional(),
+		field.JSON("change", map[string]any{}).Optional(),
 		field.Time("created_at").Default(time.Now).Immutable(),
 	}
 }

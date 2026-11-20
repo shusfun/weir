@@ -253,8 +253,9 @@ func (_q *SubGrantQuery) Clone() *SubGrantQuery {
 		inters:     append([]Interceptor{}, _q.inters...),
 		predicates: append([]predicate.SubGrant{}, _q.predicates...),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -473,6 +474,12 @@ func (_q *SubGrantQuery) ForShare(opts ...sql.LockOption) *SubGrantQuery {
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *SubGrantQuery) Modify(modifiers ...func(s *sql.Selector)) *SubGrantSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // SubGrantGroupBy is the group-by builder for SubGrant entities.
 type SubGrantGroupBy struct {
 	selector
@@ -561,4 +568,10 @@ func (_s *SubGrantSelect) sqlScan(ctx context.Context, root *SubGrantQuery, v an
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *SubGrantSelect) Modify(modifiers ...func(s *sql.Selector)) *SubGrantSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

@@ -253,8 +253,9 @@ func (_q *GateQuery) Clone() *GateQuery {
 		inters:     append([]Interceptor{}, _q.inters...),
 		predicates: append([]predicate.Gate{}, _q.predicates...),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -473,6 +474,12 @@ func (_q *GateQuery) ForShare(opts ...sql.LockOption) *GateQuery {
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *GateQuery) Modify(modifiers ...func(s *sql.Selector)) *GateSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // GateGroupBy is the group-by builder for Gate entities.
 type GateGroupBy struct {
 	selector
@@ -561,4 +568,10 @@ func (_s *GateSelect) sqlScan(ctx context.Context, root *GateQuery, v any) error
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *GateSelect) Modify(modifiers ...func(s *sql.Selector)) *GateSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

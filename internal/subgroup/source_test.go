@@ -41,7 +41,7 @@ func TestSourceMalformedContentPreservesCacheAndKnownEmpty(t *testing.T) {
 	for _, empty := range []string{"", " \n", "proxies: []", "Proxy: []", `{"outbounds":[]}`, base64.StdEncoding.EncodeToString([]byte("proxies: []\n"))} {
 		body = empty
 		cache := &memCache{m: map[int][]string{1: {good}}}
-		nodes, result := fetchSource(t.Context(), f, cache, Source{ID: 1, URL: "https://source.example", NodeCache: true, KnownNodes: 12}, Options{})
+		nodes, result := fetchSource(t.Context(), f, cache, Source{ID: 1, URL: "https://source.example", NodeCache: true}, Options{})
 		if result.Error != "source_empty_rejected" || !result.FromCache || len(nodes) != 1 {
 			t.Fatalf("empty response replaced good data: %q %+v", empty, result)
 		}
@@ -74,7 +74,6 @@ func TestRawCacheReappliesRulesAndAcceptsEmpty(t *testing.T) {
 		t.Fatal(r)
 	}
 	src.FilterInclude = "keep:node-01"
-	src.KnownNodes = 12
 	nodes, r := fetchSource(ctx, f, cache, src, Options{})
 	if len(nodes) != 1 || r.Nodes != 12 || r.FromCache || r.Error != "" {
 		t.Fatalf("filter: %v %+v", nodes, r)

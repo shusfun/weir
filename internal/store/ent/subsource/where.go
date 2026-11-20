@@ -114,6 +114,16 @@ func Position(v int) predicate.SubSource {
 	return predicate.SubSource(sql.FieldEQ(FieldPosition, v))
 }
 
+// GateID applies equality check predicate on the "gate_id" field. It's identical to GateIDEQ.
+func GateID(v int) predicate.SubSource {
+	return predicate.SubSource(sql.FieldEQ(FieldGateID, v))
+}
+
+// RefreshHours applies equality check predicate on the "refresh_hours" field. It's identical to RefreshHoursEQ.
+func RefreshHours(v int) predicate.SubSource {
+	return predicate.SubSource(sql.FieldEQ(FieldRefreshHours, v))
+}
+
 // NodeCount applies equality check predicate on the "node_count" field. It's identical to NodeCountEQ.
 func NodeCount(v int) predicate.SubSource {
 	return predicate.SubSource(sql.FieldEQ(FieldNodeCount, v))
@@ -142,6 +152,21 @@ func LastError(v string) predicate.SubSource {
 // FetchedAt applies equality check predicate on the "fetched_at" field. It's identical to FetchedAtEQ.
 func FetchedAt(v time.Time) predicate.SubSource {
 	return predicate.SubSource(sql.FieldEQ(FieldFetchedAt, v))
+}
+
+// LastAttemptAt applies equality check predicate on the "last_attempt_at" field. It's identical to LastAttemptAtEQ.
+func LastAttemptAt(v time.Time) predicate.SubSource {
+	return predicate.SubSource(sql.FieldEQ(FieldLastAttemptAt, v))
+}
+
+// LastLocation applies equality check predicate on the "last_location" field. It's identical to LastLocationEQ.
+func LastLocation(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldEQ(FieldLastLocation, v))
+}
+
+// LastRouteReason applies equality check predicate on the "last_route_reason" field. It's identical to LastRouteReasonEQ.
+func LastRouteReason(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldEQ(FieldLastRouteReason, v))
 }
 
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
@@ -694,6 +719,86 @@ func PositionLTE(v int) predicate.SubSource {
 	return predicate.SubSource(sql.FieldLTE(FieldPosition, v))
 }
 
+// GateIDEQ applies the EQ predicate on the "gate_id" field.
+func GateIDEQ(v int) predicate.SubSource {
+	return predicate.SubSource(sql.FieldEQ(FieldGateID, v))
+}
+
+// GateIDNEQ applies the NEQ predicate on the "gate_id" field.
+func GateIDNEQ(v int) predicate.SubSource {
+	return predicate.SubSource(sql.FieldNEQ(FieldGateID, v))
+}
+
+// GateIDIn applies the In predicate on the "gate_id" field.
+func GateIDIn(vs ...int) predicate.SubSource {
+	return predicate.SubSource(sql.FieldIn(FieldGateID, vs...))
+}
+
+// GateIDNotIn applies the NotIn predicate on the "gate_id" field.
+func GateIDNotIn(vs ...int) predicate.SubSource {
+	return predicate.SubSource(sql.FieldNotIn(FieldGateID, vs...))
+}
+
+// GateIDGT applies the GT predicate on the "gate_id" field.
+func GateIDGT(v int) predicate.SubSource {
+	return predicate.SubSource(sql.FieldGT(FieldGateID, v))
+}
+
+// GateIDGTE applies the GTE predicate on the "gate_id" field.
+func GateIDGTE(v int) predicate.SubSource {
+	return predicate.SubSource(sql.FieldGTE(FieldGateID, v))
+}
+
+// GateIDLT applies the LT predicate on the "gate_id" field.
+func GateIDLT(v int) predicate.SubSource {
+	return predicate.SubSource(sql.FieldLT(FieldGateID, v))
+}
+
+// GateIDLTE applies the LTE predicate on the "gate_id" field.
+func GateIDLTE(v int) predicate.SubSource {
+	return predicate.SubSource(sql.FieldLTE(FieldGateID, v))
+}
+
+// RefreshHoursEQ applies the EQ predicate on the "refresh_hours" field.
+func RefreshHoursEQ(v int) predicate.SubSource {
+	return predicate.SubSource(sql.FieldEQ(FieldRefreshHours, v))
+}
+
+// RefreshHoursNEQ applies the NEQ predicate on the "refresh_hours" field.
+func RefreshHoursNEQ(v int) predicate.SubSource {
+	return predicate.SubSource(sql.FieldNEQ(FieldRefreshHours, v))
+}
+
+// RefreshHoursIn applies the In predicate on the "refresh_hours" field.
+func RefreshHoursIn(vs ...int) predicate.SubSource {
+	return predicate.SubSource(sql.FieldIn(FieldRefreshHours, vs...))
+}
+
+// RefreshHoursNotIn applies the NotIn predicate on the "refresh_hours" field.
+func RefreshHoursNotIn(vs ...int) predicate.SubSource {
+	return predicate.SubSource(sql.FieldNotIn(FieldRefreshHours, vs...))
+}
+
+// RefreshHoursGT applies the GT predicate on the "refresh_hours" field.
+func RefreshHoursGT(v int) predicate.SubSource {
+	return predicate.SubSource(sql.FieldGT(FieldRefreshHours, v))
+}
+
+// RefreshHoursGTE applies the GTE predicate on the "refresh_hours" field.
+func RefreshHoursGTE(v int) predicate.SubSource {
+	return predicate.SubSource(sql.FieldGTE(FieldRefreshHours, v))
+}
+
+// RefreshHoursLT applies the LT predicate on the "refresh_hours" field.
+func RefreshHoursLT(v int) predicate.SubSource {
+	return predicate.SubSource(sql.FieldLT(FieldRefreshHours, v))
+}
+
+// RefreshHoursLTE applies the LTE predicate on the "refresh_hours" field.
+func RefreshHoursLTE(v int) predicate.SubSource {
+	return predicate.SubSource(sql.FieldLTE(FieldRefreshHours, v))
+}
+
 // NodeCountEQ applies the EQ predicate on the "node_count" field.
 func NodeCountEQ(v int) predicate.SubSource {
 	return predicate.SubSource(sql.FieldEQ(FieldNodeCount, v))
@@ -1017,6 +1122,206 @@ func FetchedAtIsNil() predicate.SubSource {
 // FetchedAtNotNil applies the NotNil predicate on the "fetched_at" field.
 func FetchedAtNotNil() predicate.SubSource {
 	return predicate.SubSource(sql.FieldNotNull(FieldFetchedAt))
+}
+
+// LastAttemptAtEQ applies the EQ predicate on the "last_attempt_at" field.
+func LastAttemptAtEQ(v time.Time) predicate.SubSource {
+	return predicate.SubSource(sql.FieldEQ(FieldLastAttemptAt, v))
+}
+
+// LastAttemptAtNEQ applies the NEQ predicate on the "last_attempt_at" field.
+func LastAttemptAtNEQ(v time.Time) predicate.SubSource {
+	return predicate.SubSource(sql.FieldNEQ(FieldLastAttemptAt, v))
+}
+
+// LastAttemptAtIn applies the In predicate on the "last_attempt_at" field.
+func LastAttemptAtIn(vs ...time.Time) predicate.SubSource {
+	return predicate.SubSource(sql.FieldIn(FieldLastAttemptAt, vs...))
+}
+
+// LastAttemptAtNotIn applies the NotIn predicate on the "last_attempt_at" field.
+func LastAttemptAtNotIn(vs ...time.Time) predicate.SubSource {
+	return predicate.SubSource(sql.FieldNotIn(FieldLastAttemptAt, vs...))
+}
+
+// LastAttemptAtGT applies the GT predicate on the "last_attempt_at" field.
+func LastAttemptAtGT(v time.Time) predicate.SubSource {
+	return predicate.SubSource(sql.FieldGT(FieldLastAttemptAt, v))
+}
+
+// LastAttemptAtGTE applies the GTE predicate on the "last_attempt_at" field.
+func LastAttemptAtGTE(v time.Time) predicate.SubSource {
+	return predicate.SubSource(sql.FieldGTE(FieldLastAttemptAt, v))
+}
+
+// LastAttemptAtLT applies the LT predicate on the "last_attempt_at" field.
+func LastAttemptAtLT(v time.Time) predicate.SubSource {
+	return predicate.SubSource(sql.FieldLT(FieldLastAttemptAt, v))
+}
+
+// LastAttemptAtLTE applies the LTE predicate on the "last_attempt_at" field.
+func LastAttemptAtLTE(v time.Time) predicate.SubSource {
+	return predicate.SubSource(sql.FieldLTE(FieldLastAttemptAt, v))
+}
+
+// LastAttemptAtIsNil applies the IsNil predicate on the "last_attempt_at" field.
+func LastAttemptAtIsNil() predicate.SubSource {
+	return predicate.SubSource(sql.FieldIsNull(FieldLastAttemptAt))
+}
+
+// LastAttemptAtNotNil applies the NotNil predicate on the "last_attempt_at" field.
+func LastAttemptAtNotNil() predicate.SubSource {
+	return predicate.SubSource(sql.FieldNotNull(FieldLastAttemptAt))
+}
+
+// LastLocationEQ applies the EQ predicate on the "last_location" field.
+func LastLocationEQ(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldEQ(FieldLastLocation, v))
+}
+
+// LastLocationNEQ applies the NEQ predicate on the "last_location" field.
+func LastLocationNEQ(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldNEQ(FieldLastLocation, v))
+}
+
+// LastLocationIn applies the In predicate on the "last_location" field.
+func LastLocationIn(vs ...string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldIn(FieldLastLocation, vs...))
+}
+
+// LastLocationNotIn applies the NotIn predicate on the "last_location" field.
+func LastLocationNotIn(vs ...string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldNotIn(FieldLastLocation, vs...))
+}
+
+// LastLocationGT applies the GT predicate on the "last_location" field.
+func LastLocationGT(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldGT(FieldLastLocation, v))
+}
+
+// LastLocationGTE applies the GTE predicate on the "last_location" field.
+func LastLocationGTE(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldGTE(FieldLastLocation, v))
+}
+
+// LastLocationLT applies the LT predicate on the "last_location" field.
+func LastLocationLT(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldLT(FieldLastLocation, v))
+}
+
+// LastLocationLTE applies the LTE predicate on the "last_location" field.
+func LastLocationLTE(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldLTE(FieldLastLocation, v))
+}
+
+// LastLocationContains applies the Contains predicate on the "last_location" field.
+func LastLocationContains(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldContains(FieldLastLocation, v))
+}
+
+// LastLocationHasPrefix applies the HasPrefix predicate on the "last_location" field.
+func LastLocationHasPrefix(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldHasPrefix(FieldLastLocation, v))
+}
+
+// LastLocationHasSuffix applies the HasSuffix predicate on the "last_location" field.
+func LastLocationHasSuffix(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldHasSuffix(FieldLastLocation, v))
+}
+
+// LastLocationEqualFold applies the EqualFold predicate on the "last_location" field.
+func LastLocationEqualFold(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldEqualFold(FieldLastLocation, v))
+}
+
+// LastLocationContainsFold applies the ContainsFold predicate on the "last_location" field.
+func LastLocationContainsFold(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldContainsFold(FieldLastLocation, v))
+}
+
+// LastRouteReasonEQ applies the EQ predicate on the "last_route_reason" field.
+func LastRouteReasonEQ(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldEQ(FieldLastRouteReason, v))
+}
+
+// LastRouteReasonNEQ applies the NEQ predicate on the "last_route_reason" field.
+func LastRouteReasonNEQ(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldNEQ(FieldLastRouteReason, v))
+}
+
+// LastRouteReasonIn applies the In predicate on the "last_route_reason" field.
+func LastRouteReasonIn(vs ...string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldIn(FieldLastRouteReason, vs...))
+}
+
+// LastRouteReasonNotIn applies the NotIn predicate on the "last_route_reason" field.
+func LastRouteReasonNotIn(vs ...string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldNotIn(FieldLastRouteReason, vs...))
+}
+
+// LastRouteReasonGT applies the GT predicate on the "last_route_reason" field.
+func LastRouteReasonGT(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldGT(FieldLastRouteReason, v))
+}
+
+// LastRouteReasonGTE applies the GTE predicate on the "last_route_reason" field.
+func LastRouteReasonGTE(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldGTE(FieldLastRouteReason, v))
+}
+
+// LastRouteReasonLT applies the LT predicate on the "last_route_reason" field.
+func LastRouteReasonLT(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldLT(FieldLastRouteReason, v))
+}
+
+// LastRouteReasonLTE applies the LTE predicate on the "last_route_reason" field.
+func LastRouteReasonLTE(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldLTE(FieldLastRouteReason, v))
+}
+
+// LastRouteReasonContains applies the Contains predicate on the "last_route_reason" field.
+func LastRouteReasonContains(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldContains(FieldLastRouteReason, v))
+}
+
+// LastRouteReasonHasPrefix applies the HasPrefix predicate on the "last_route_reason" field.
+func LastRouteReasonHasPrefix(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldHasPrefix(FieldLastRouteReason, v))
+}
+
+// LastRouteReasonHasSuffix applies the HasSuffix predicate on the "last_route_reason" field.
+func LastRouteReasonHasSuffix(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldHasSuffix(FieldLastRouteReason, v))
+}
+
+// LastRouteReasonEqualFold applies the EqualFold predicate on the "last_route_reason" field.
+func LastRouteReasonEqualFold(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldEqualFold(FieldLastRouteReason, v))
+}
+
+// LastRouteReasonContainsFold applies the ContainsFold predicate on the "last_route_reason" field.
+func LastRouteReasonContainsFold(v string) predicate.SubSource {
+	return predicate.SubSource(sql.FieldContainsFold(FieldLastRouteReason, v))
+}
+
+// HealthIsNil applies the IsNil predicate on the "health" field.
+func HealthIsNil() predicate.SubSource {
+	return predicate.SubSource(sql.FieldIsNull(FieldHealth))
+}
+
+// HealthNotNil applies the NotNil predicate on the "health" field.
+func HealthNotNil() predicate.SubSource {
+	return predicate.SubSource(sql.FieldNotNull(FieldHealth))
+}
+
+// ChangeIsNil applies the IsNil predicate on the "change" field.
+func ChangeIsNil() predicate.SubSource {
+	return predicate.SubSource(sql.FieldIsNull(FieldChange))
+}
+
+// ChangeNotNil applies the NotNil predicate on the "change" field.
+func ChangeNotNil() predicate.SubSource {
+	return predicate.SubSource(sql.FieldNotNull(FieldChange))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

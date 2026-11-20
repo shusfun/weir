@@ -3,7 +3,6 @@ package center
 import (
 	"context"
 	"crypto/x509"
-	"database/sql"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -538,28 +537,24 @@ func (s *Server) certificateRevision(ctx context.Context, old *ent.Certificate) 
 	// SQLite stores a time's original zone spelling. A read preserves the instant
 	// but may lose that spelling, so compare the instant then CAS the exact stored
 	// text. The pair is read in one statement; later mutations still fail the CAS.
-	var instant time.Time
-	var expiry, renewed sql.NullTime
-	var expiryRaw, renewedRaw sql.NullString
-	var raw string
-	err := s.Store.DB.QueryRowContext(ctx, "SELECT updated_at, CAST(updated_at AS TEXT), not_after, CAST(not_after AS TEXT), renewed_at, CAST(renewed_at AS TEXT) FROM certificates WHERE id = ?", old.ID).Scan(&instant, &raw, &expiry, &expiryRaw, &renewed, &renewedRaw)
-	sameTime := func(a sql.NullTime, b *time.Time) bool {
+	stored, found, err := s.Store.SQLiteCertificateStoredTimes(ctx, old.ID)
+	sameTime := func(a store.StoredTime, b *time.Time) bool {
 		return !a.Valid && b == nil || a.Valid && b != nil && a.Time.Equal(*b)
 	}
-	if errors.Is(err, sql.ErrNoRows) || err == nil && (!instant.Equal(old.UpdatedAt) || !sameTime(expiry, old.NotAfter) || !sameTime(renewed, old.RenewedAt)) {
+	if err == nil && (!found || !stored.UpdatedAt.Time.Equal(old.UpdatedAt) || !sameTime(stored.NotAfter, old.NotAfter) || !sameTime(stored.RenewedAt, old.RenewedAt)) {
 		return nil, errCertificateChanged
 	}
 	if err != nil {
 		return nil, err
 	}
 	return func(sel *entsql.Selector) {
-		sel.Where(entsql.EQ(sel.C(certificate.FieldUpdatedAt), raw))
+		sel.Where(entsql.EQ(sel.C(certificate.FieldUpdatedAt), stored.UpdatedAt.Text))
 		for _, field := range []struct {
 			name  string
-			value sql.NullString
-		}{{certificate.FieldNotAfter, expiryRaw}, {certificate.FieldRenewedAt, renewedRaw}} {
+			value store.StoredTime
+		}{{certificate.FieldNotAfter, stored.NotAfter}, {certificate.FieldRenewedAt, stored.RenewedAt}} {
 			if field.value.Valid {
-				sel.Where(entsql.EQ(sel.C(field.name), field.value.String))
+				sel.Where(entsql.EQ(sel.C(field.name), field.value.Text))
 			} else {
 				sel.Where(entsql.IsNull(sel.C(field.name)))
 			}

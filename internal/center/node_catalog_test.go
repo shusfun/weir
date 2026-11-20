@@ -206,6 +206,9 @@ func TestStaleCatalogRefreshDoesNotRestoreNodes(t *testing.T) {
 	if err != nil || record.Available {
 		t.Fatal("stale refresh restored a removed node", record, err)
 	}
+	if raw, ok := (kvCache{s}).Load(ctx, src.ID); !ok || len(raw) != 0 {
+		t.Fatal("stale refresh restored the old raw cache")
+	}
 }
 
 func TestRenewalOnlyMovesMatchingFiniteLinks(t *testing.T) {

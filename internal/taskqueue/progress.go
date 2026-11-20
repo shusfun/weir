@@ -17,11 +17,7 @@ func (q *Queue) Progress(ctx context.Context, id string, gate int, u contracts.T
 	if err != nil {
 		return err
 	}
-	v, err := q.DB.ExecContext(ctx, `UPDATE worker_tasks SET progress=$1 WHERE id=$2 AND gate_id=$3 AND attempt=$4 AND lease_token=$5 AND status='leased' AND lease_until>$6 AND deadline>$6`, string(b), id, gate, u.Attempt, u.LeaseToken, now.UnixMilli())
-	if err != nil {
-		return err
-	}
-	n, err := v.RowsAffected()
+	n, err := q.Ent.WorkerTask.Update().Where(currentLease(id, gate, u, now)...).SetProgress(string(b)).Save(ctx)
 	if err != nil {
 		return err
 	}

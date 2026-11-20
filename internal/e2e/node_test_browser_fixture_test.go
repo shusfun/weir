@@ -160,6 +160,11 @@ func TestNodeTestBrowserFixture(t *testing.T) {
 	e.s.SetOriginForTest(origin)
 	e.startGate("node-tests-browser")
 	browserGateID := e.gateID
+	eventually(t, 20*time.Second, "browser test capabilities received", func() bool {
+		capabilities, err := e.s.Store.Tasks.Capabilities(e.ctx, browserGateID)
+		return err == nil && capabilities.ConfigFeatures[contracts.ConfigBrowserTest] > 0 &&
+			capabilities.ConfigFeatures[contracts.ConfigFirewall] > 0
+	})
 	cert := e.post("/api/v1/admin/certs", map[string]any{"name": "Browser fixture certificate", "domain": "127.0.0.1", "cert_pem": string(certPEM), "key_pem": string(keyPEM)}, nil)
 	// Use the production configuration service, then pin only fixture ports to
 	// the Docker mappings. This keeps certificate and capability checks real.
@@ -178,11 +183,15 @@ func TestNodeTestBrowserFixture(t *testing.T) {
 	}
 	var configured struct {
 		Config contracts.BrowserTestPlan `json:"config"`
+		Error  struct {
+			Code   string `json:"code"`
+			Detail string `json:"detail"`
+		} `json:"error"`
 	}
 	decodeErr := json.NewDecoder(resp.Body).Decode(&configured)
 	resp.Body.Close()
 	if resp.StatusCode != 200 || decodeErr != nil {
-		t.Fatalf("browser configuration: %d %v", resp.StatusCode, decodeErr)
+		t.Fatalf("browser configuration: %d %s %s %v", resp.StatusCode, configured.Error.Code, configured.Error.Detail, decodeErr)
 	}
 	row := e.s.Store.Ent.Resource.Query().Where(resource.KindEQ("browser-test-config"), resource.KeyEQ(strconv.Itoa(browserGateID))).OnlyX(e.ctx)
 	var saved struct {

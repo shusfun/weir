@@ -7,8 +7,31 @@ import (
 	"errors"
 	"time"
 
+	entsql "entgo.io/ent/dialect/sql"
+
+	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/predicate"
+	"github.com/shusfun/weir/internal/store/ent/workerattempt"
+	"github.com/shusfun/weir/internal/store/ent/workertask"
 	"github.com/shusfun/weir/packages/contracts"
 )
+
+// Legacy locates the one authoritative task behind a rollout adapter row.
+func (q *Queue) Legacy(ctx context.Context, id int) (Record, error) {
+	t, err := q.Ent.WorkerTask.Query().Where(workertask.LegacyID(id)).Only(ctx)
+	if err != nil {
+		return Record{}, notFound(err)
+	}
+	return record(t)
+}
+
+// currentLease 是 Gate 仍持有该次领取的条件：同一 Gate、同一尝试、同一令牌，租约与截止时间都未过。
+func currentLease(id string, gate int, u contracts.TaskUpdate, now time.Time) []predicate.WorkerTask {
+	return []predicate.WorkerTask{
+		workertask.ID(id), workertask.GateID(gate), workertask.Attempt(int32(u.Attempt)), workertask.LeaseToken(u.LeaseToken),
+		workertask.Status("leased"), workertask.LeaseUntilGT(now.UnixMilli()), workertask.DeadlineGT(now.UnixMilli()),
+	}
+}
 
 func (q *Queue) Renew(ctx context.Context, id string, gate int, u contracts.TaskUpdate, now time.Time) (time.Time, error) {
 	until := now.Add(contracts.TaskLease)
@@ -19,11 +42,7 @@ func (q *Queue) Renew(ctx context.Context, id string, gate int, u contracts.Task
 	if until.After(r.Task.Deadline) {
 		until = r.Task.Deadline
 	}
-	v, err := q.DB.ExecContext(ctx, `UPDATE worker_tasks SET lease_until=$1 WHERE id=$2 AND gate_id=$3 AND attempt=$4 AND lease_token=$5 AND status='leased' AND lease_until>$6 AND deadline>$6`, until.UnixMilli(), id, gate, u.Attempt, u.LeaseToken, now.UnixMilli())
-	if err != nil {
-		return time.Time{}, err
-	}
-	n, err := v.RowsAffected()
+	n, err := q.Ent.WorkerTask.Update().Where(currentLease(id, gate, u, now)...).SetLeaseUntil(until.UnixMilli()).Save(ctx)
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -58,104 +77,117 @@ func (q *Queue) finish(ctx context.Context, id string, gate int, u contracts.Tas
 	if len(u.Result) > 0 && (bytes.Equal(bytes.TrimSpace(u.Result), []byte("null")) || !json.Valid(u.Result)) {
 		return errors.New("invalid task result")
 	}
-	tx, err := q.DB.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	r, err := scan(tx.QueryRowContext(ctx, `SELECT `+columns+` FROM worker_tasks WHERE id=$1`, id))
-	if err != nil {
-		return err
-	}
-	if r.GateID != gate || r.Task.Attempt != u.Attempt || r.Task.LeaseToken != u.LeaseToken || !r.Task.LeaseUntil.After(now) || !r.Task.Deadline.After(now) {
-		return ErrLease
-	}
-	if r.Status == "succeeded" || r.Status == "failed" {
-		return nil
-	}
-	if r.Status != "leased" {
-		return ErrLease
-	}
-	status := "succeeded"
-	failure := ""
-	result := string(u.Result)
-	if u.Error != nil {
-		status = "failed"
-		b, _ := json.Marshal(u.Error)
-		failure = string(b)
-	}
-	remaining := r.Candidates
-	attemptOutcome := status
-	if u.Error != nil && u.Error.Retryable && contracts.Relocatable(r.Task.Kind) && len(remaining) > 1 {
-		status = "pending"
-		remaining = remaining[1:]
-		result = ""
-	}
-	candidates, _ := json.Marshal(remaining)
-	v, err := tx.ExecContext(ctx, `UPDATE worker_tasks SET status=$1,result=$2,error=$3,candidates=$4,candidate_at=$8 WHERE id=$5 AND status='leased' AND attempt=$6 AND lease_token=$7 AND lease_until>$8`, status, result, failure, string(candidates), id, u.Attempt, u.LeaseToken, now.UnixMilli())
-	if err != nil {
-		return err
-	}
-	n, _ := v.RowsAffected()
-	if n != 1 {
-		return ErrLease
-	}
-	_, err = tx.ExecContext(ctx, `UPDATE worker_attempts SET finished_at=$1,outcome=$2,result_bytes=$5 WHERE task_id=$3 AND attempt=$4`, now.UnixMilli(), attemptOutcome, id, u.Attempt, resultBytes)
-	if err != nil {
-		return err
-	}
-	reason := status
-	if status == "pending" {
-		reason = "retryable_failure_reassigned"
-	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO worker_activity(id,task_id,gate_id,attempt,at,reason) VALUES($1,$2,$3,$4,$5,$6)`, token(), id, remaining[0], u.Attempt, now.UnixMilli(), reason); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return q.withTx(ctx, func(tx *ent.Tx) error {
+		t, err := tx.WorkerTask.Get(ctx, id)
+		if err != nil {
+			return notFound(err)
+		}
+		r, err := record(t)
+		if err != nil {
+			return err
+		}
+		if r.GateID != gate || r.Task.Attempt != u.Attempt || r.Task.LeaseToken != u.LeaseToken || !r.Task.LeaseUntil.After(now) || !r.Task.Deadline.After(now) {
+			return ErrLease
+		}
+		if r.Status == "succeeded" || r.Status == "failed" {
+			return nil
+		}
+		if r.Status != "leased" {
+			return ErrLease
+		}
+		status := "succeeded"
+		failure := ""
+		result := string(u.Result)
+		if u.Error != nil {
+			status = "failed"
+			b, _ := json.Marshal(u.Error)
+			failure = string(b)
+		}
+		remaining := r.Candidates
+		attemptOutcome := status
+		if u.Error != nil && u.Error.Retryable && contracts.Relocatable(r.Task.Kind) && len(remaining) > 1 {
+			status = "pending"
+			remaining = remaining[1:]
+			result = ""
+		}
+		candidates, _ := json.Marshal(remaining)
+		n, err := tx.WorkerTask.Update().
+			Where(workertask.ID(id), workertask.Status("leased"), workertask.Attempt(int32(u.Attempt)), workertask.LeaseToken(u.LeaseToken), workertask.LeaseUntilGT(now.UnixMilli())).
+			SetStatus(status).SetResult(result).SetError(failure).SetCandidates(string(candidates)).SetCandidateAt(now.UnixMilli()).
+			Save(ctx)
+		if err != nil {
+			return err
+		}
+		if n != 1 {
+			return ErrLease
+		}
+		attempt := tx.WorkerAttempt.Update().Where(workerattempt.ID(id), workerattempt.Attempt(int32(u.Attempt))).
+			SetFinishedAt(now.UnixMilli()).SetOutcome(attemptOutcome)
+		if resultBytes == nil {
+			attempt.ClearResultBytes()
+		} else {
+			attempt.SetResultBytes(*resultBytes)
+		}
+		if err = attempt.Exec(ctx); err != nil {
+			return err
+		}
+		reason := status
+		if status == "pending" {
+			reason = "retryable_failure_reassigned"
+		}
+		return addActivity(ctx, tx, id, remaining[0], u.Attempt, now, reason)
+	})
 }
 
 func (q *Queue) AcknowledgeCancel(ctx context.Context, id string, gate int, u contracts.TaskUpdate, now time.Time) error {
-	tx, err := q.DB.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	r, err := scan(tx.QueryRowContext(ctx, `SELECT `+columns+` FROM worker_tasks WHERE id=$1`, id))
-	if err != nil {
-		return err
-	}
-	if r.GateID != gate || r.Task.Attempt != u.Attempt || r.Task.LeaseToken != u.LeaseToken {
-		return ErrLease
-	}
-	if r.Status == "cancelled" {
-		return nil
-	}
-	if r.Status != "cancelling" || !r.Task.LeaseUntil.After(now) {
-		return ErrLease
-	}
-	v, err := tx.ExecContext(ctx, `UPDATE worker_tasks SET status='cancelled' WHERE id=$1 AND status='cancelling' AND attempt=$2 AND lease_token=$3 AND lease_until>$4`, id, u.Attempt, u.LeaseToken, now.UnixMilli())
-	if err != nil {
-		return err
-	}
-	n, err := v.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n != 1 {
-		return ErrLease
-	}
-	if _, err = tx.ExecContext(ctx, `UPDATE worker_attempts SET finished_at=$1,outcome='cancelled' WHERE task_id=$2 AND attempt=$3`, now.UnixMilli(), id, u.Attempt); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return q.withTx(ctx, func(tx *ent.Tx) error {
+		t, err := tx.WorkerTask.Get(ctx, id)
+		if err != nil {
+			return notFound(err)
+		}
+		r, err := record(t)
+		if err != nil {
+			return err
+		}
+		if r.GateID != gate || r.Task.Attempt != u.Attempt || r.Task.LeaseToken != u.LeaseToken {
+			return ErrLease
+		}
+		if r.Status == "cancelled" {
+			return nil
+		}
+		if r.Status != "cancelling" || !r.Task.LeaseUntil.After(now) {
+			return ErrLease
+		}
+		n, err := tx.WorkerTask.Update().
+			Where(workertask.ID(id), workertask.Status("cancelling"), workertask.Attempt(int32(u.Attempt)), workertask.LeaseToken(u.LeaseToken), workertask.LeaseUntilGT(now.UnixMilli())).
+			SetStatus("cancelled").Save(ctx)
+		if err != nil {
+			return err
+		}
+		if n != 1 {
+			return ErrLease
+		}
+		return tx.WorkerAttempt.Update().Where(workerattempt.ID(id), workerattempt.Attempt(int32(u.Attempt))).
+			SetFinishedAt(now.UnixMilli()).SetOutcome("cancelled").Exec(ctx)
+	})
 }
 
+// Cancel 把已领取的任务标为 cancelling 等 Gate 确认，未领取的直接取消；两步在同一事务里，
+// 状态只会按其中一条路径变化。
 func (q *Queue) Cancel(ctx context.Context, id string) error {
-	v, err := q.DB.ExecContext(ctx, `UPDATE worker_tasks SET status=CASE WHEN status='leased' THEN 'cancelling' ELSE 'cancelled' END WHERE id=$1 AND status IN ('pending','leased')`, id)
+	var n int
+	err := q.withTx(ctx, func(tx *ent.Tx) error {
+		leased, err := tx.WorkerTask.Update().Where(workertask.ID(id), workertask.Status("leased")).SetStatus("cancelling").Save(ctx)
+		if err != nil {
+			return err
+		}
+		pending, err := tx.WorkerTask.Update().Where(workertask.ID(id), workertask.Status("pending")).SetStatus("cancelled").Save(ctx)
+		n = leased + pending
+		return err
+	})
 	if err != nil {
 		return err
 	}
-	n, _ := v.RowsAffected()
 	if n == 0 {
 		r, e := q.Get(ctx, id)
 		if e != nil {
@@ -168,20 +200,8 @@ func (q *Queue) Cancel(ctx context.Context, id string) error {
 	return nil
 }
 
-func (q *Queue) Cancellations(ctx context.Context, gate int) (out []string, err error) {
-	rows, err := q.DB.QueryContext(ctx, `SELECT id FROM worker_tasks WHERE gate_id=$1 AND status='cancelling'`, gate)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		if err = rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		out = append(out, id)
-	}
-	return out, rows.Err()
+func (q *Queue) Cancellations(ctx context.Context, gate int) ([]string, error) {
+	return q.Ent.WorkerTask.Query().Where(workertask.GateID(gate), workertask.Status("cancelling")).IDs(ctx)
 }
 
 // Sweep runs outside the poll path. Side-effecting attempts whose result is
@@ -197,22 +217,22 @@ func (q *Queue) SweepChanged(ctx context.Context, now time.Time) (changed int, e
 }
 
 func (q *Queue) SweepTransitions(ctx context.Context, now time.Time) (changed []string, err error) {
+	at := now.UnixMilli()
+	pickup := now.Add(-contracts.TaskLease).UnixMilli()
 	err = q.Lock.Do(ctx, "worker-dispatch", func(ctx context.Context) error {
-		rows, err := q.DB.QueryContext(ctx, `SELECT `+summaryColumns+` FROM worker_tasks WHERE (status IN ('leased','cancelling') AND lease_until<=$1) OR (status='pending' AND (deadline<=$1 OR COALESCE(NULLIF(candidate_at,0),created_at)<=$2))`, now.UnixMilli(), now.Add(-contracts.TaskLease).UnixMilli())
+		rows, err := q.Ent.WorkerTask.Query().Select(summaryFields...).Where(workertask.Or(
+			workertask.And(workertask.StatusIn(activeStatuses...), workertask.LeaseUntilLTE(at)),
+			workertask.And(workertask.Status("pending"), workertask.Or(
+				workertask.DeadlineLTE(at),
+				// 未改派过的任务 candidate_at 为 0，按创建时间计算领取超时。
+				workertask.And(workertask.CandidateAtNEQ(0), workertask.CandidateAtLTE(pickup)),
+				workertask.And(workertask.CandidateAt(0), workertask.CreatedAtLTE(pickup)),
+			)),
+		)).All(ctx)
 		if err != nil {
 			return err
 		}
-		var all []Record
-		for rows.Next() {
-			r, e := scan(rows)
-			if e != nil {
-				rows.Close()
-				return e
-			}
-			all = append(all, r)
-		}
-		err = rows.Err()
-		rows.Close()
+		all, err := records(rows)
 		if err != nil {
 			return err
 		}
@@ -220,57 +240,11 @@ func (q *Queue) SweepTransitions(ctx context.Context, now time.Time) (changed []
 			if r.Status == "pending" && r.Task.Deadline.After(now) && (!contracts.Relocatable(r.Task.Kind) || len(r.Candidates) < 2) {
 				continue
 			}
-			status := "unknown"
-			candidates := r.Candidates
-			switch {
-			case r.Status == "cancelling":
-				status = "cancelled"
-			case !r.Task.Deadline.After(now):
-				status = "expired"
-			case contracts.Relocatable(r.Task.Kind) && len(candidates) > 1:
-				status = "pending"
-				candidates = candidates[1:]
-			}
-			b, _ := json.Marshal(candidates)
-			tx, e := q.DB.BeginTx(ctx, nil)
+			moved, e := q.sweepOne(ctx, r, now)
 			if e != nil {
 				return e
 			}
-			v, e := tx.ExecContext(ctx, `UPDATE worker_tasks SET status=$1,candidates=$2,candidate_at=$6 WHERE id=$3 AND status=$4 AND lease_until=$5 AND candidate_at=$7`, status, string(b), r.Task.ID, r.Status, r.Task.LeaseUntil.UnixMilli(), now.UnixMilli(), r.CandidateAt.UnixMilli())
-			if e != nil {
-				tx.Rollback()
-				return e
-			}
-			n, _ := v.RowsAffected()
-			if n == 1 {
-				reason := status
-				if status == "pending" {
-					reason = "lease_expired_reassigned"
-					if r.Status == "pending" {
-						reason = "pickup_timeout_reassigned"
-					}
-				}
-				_, e = tx.ExecContext(ctx, `INSERT INTO worker_activity(id,task_id,gate_id,attempt,at,reason) VALUES($1,$2,$3,$4,$5,$6)`, token(), r.Task.ID, candidates[0], r.Task.Attempt, now.UnixMilli(), reason)
-				if e != nil {
-					tx.Rollback()
-					return e
-				}
-			}
-			if n == 1 && r.Task.Attempt > 0 {
-				outcome := "lease_expired"
-				if r.Status == "cancelling" {
-					outcome = "cancelled"
-				}
-				_, e = tx.ExecContext(ctx, `UPDATE worker_attempts SET finished_at=$1,outcome=$2 WHERE task_id=$3 AND attempt=$4 AND finished_at=0`, now.UnixMilli(), outcome, r.Task.ID, r.Task.Attempt)
-			}
-			if e != nil {
-				tx.Rollback()
-				return e
-			}
-			if e = tx.Commit(); e != nil {
-				return e
-			}
-			if n == 1 {
+			if moved {
 				changed = append(changed, r.Task.ID)
 			}
 		}
@@ -279,23 +253,59 @@ func (q *Queue) SweepTransitions(ctx context.Context, now time.Time) (changed []
 	return changed, err
 }
 
-func (q *Queue) List(ctx context.Context, limit int) (out []Record, err error) {
+func (q *Queue) sweepOne(ctx context.Context, r Record, now time.Time) (moved bool, err error) {
+	status := "unknown"
+	candidates := r.Candidates
+	switch {
+	case r.Status == "cancelling":
+		status = "cancelled"
+	case !r.Task.Deadline.After(now):
+		status = "expired"
+	case contracts.Relocatable(r.Task.Kind) && len(candidates) > 1:
+		status = "pending"
+		candidates = candidates[1:]
+	}
+	b, _ := json.Marshal(candidates)
+	err = q.withTx(ctx, func(tx *ent.Tx) error {
+		n, e := tx.WorkerTask.Update().
+			Where(workertask.ID(r.Task.ID), workertask.Status(r.Status), workertask.LeaseUntil(r.Task.LeaseUntil.UnixMilli()), workertask.CandidateAt(r.CandidateAt.UnixMilli())).
+			SetStatus(status).SetCandidates(string(b)).SetCandidateAt(now.UnixMilli()).Save(ctx)
+		if e != nil || n != 1 {
+			return e
+		}
+		moved = true
+		reason := status
+		if status == "pending" {
+			reason = "lease_expired_reassigned"
+			if r.Status == "pending" {
+				reason = "pickup_timeout_reassigned"
+			}
+		}
+		if e = addActivity(ctx, tx, r.Task.ID, candidates[0], r.Task.Attempt, now, reason); e != nil {
+			return e
+		}
+		if r.Task.Attempt == 0 {
+			return nil
+		}
+		outcome := "lease_expired"
+		if r.Status == "cancelling" {
+			outcome = "cancelled"
+		}
+		return tx.WorkerAttempt.Update().
+			Where(workerattempt.ID(r.Task.ID), workerattempt.Attempt(int32(r.Task.Attempt)), workerattempt.FinishedAt(0)).
+			SetFinishedAt(now.UnixMilli()).SetOutcome(outcome).Exec(ctx)
+	})
+	return moved && err == nil, err
+}
+
+func (q *Queue) List(ctx context.Context, limit int) ([]Record, error) {
 	if limit < 1 || limit > 500 {
 		return nil, errors.New("invalid task list limit")
 	}
-	rows, err := q.DB.QueryContext(ctx, `SELECT `+summaryColumns+` FROM worker_tasks ORDER BY created_at DESC,id LIMIT $1`, limit)
+	rows, err := q.Ent.WorkerTask.Query().Select(summaryFields...).
+		Order(workertask.ByCreatedAt(entsql.OrderDesc()), workertask.ByID()).Limit(limit).All(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		r, e := scan(rows)
-		if e != nil {
-			return nil, e
-		}
-		r.Task.LeaseToken = ""
-		r.Ciphertext = ""
-		out = append(out, r)
-	}
-	return out, rows.Err()
+	return records(rows)
 }

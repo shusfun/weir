@@ -253,8 +253,9 @@ func (_q *SubProfileQuery) Clone() *SubProfileQuery {
 		inters:     append([]Interceptor{}, _q.inters...),
 		predicates: append([]predicate.SubProfile{}, _q.predicates...),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -473,6 +474,12 @@ func (_q *SubProfileQuery) ForShare(opts ...sql.LockOption) *SubProfileQuery {
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *SubProfileQuery) Modify(modifiers ...func(s *sql.Selector)) *SubProfileSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // SubProfileGroupBy is the group-by builder for SubProfile entities.
 type SubProfileGroupBy struct {
 	selector
@@ -561,4 +568,10 @@ func (_s *SubProfileSelect) sqlScan(ctx context.Context, root *SubProfileQuery, 
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *SubProfileSelect) Modify(modifiers ...func(s *sql.Selector)) *SubProfileSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

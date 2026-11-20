@@ -2,7 +2,6 @@ package center
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -64,7 +63,7 @@ func (s *Server) agentPoll(c *gin.Context) {
 			invalid := errors.Is(err, taskqueue.ErrInvalidCapabilities)
 			finished := operationStage(ctx, "worker.capabilities.refresh", "gate_id", g.ID, "previous_invalid", invalid)
 			defer func() { finished(err) }()
-			if err != nil && !errors.Is(err, sql.ErrNoRows) && !invalid {
+			if err != nil && !errors.Is(err, taskqueue.ErrNotFound) && !invalid {
 				return err
 			}
 			if invalid || previous.ConfigFeatures[contracts.ConfigDomainObservation] != req.Capabilities.ConfigFeatures[contracts.ConfigDomainObservation] {
@@ -123,6 +122,7 @@ func (s *Server) agentPoll(c *gin.Context) {
 				return
 			}
 			cfg.ExecutionSeq = execution.Seq
+			cfg.TraceID = s.configRevisionTrace(ctx, cur)
 			reply.Config = &cfg
 		} else if execution.Seq > req.ExecutionSeq {
 			reply.Config = &contracts.GateConfig{Revision: cur.ConfigRevision, TraceID: taskTrace(ctx), ExecutionOnly: true, ExecutionSeq: execution.Seq, Budgets: execution.Budgets, ForceDisconnect: execution.ForceDisconnect}

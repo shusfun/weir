@@ -16,6 +16,7 @@ import (
 
 	"github.com/shusfun/weir/internal/store"
 	"github.com/shusfun/weir/internal/store/ent"
+	"github.com/shusfun/weir/internal/store/ent/gate"
 	"github.com/shusfun/weir/internal/store/ent/ruletemplate"
 	"github.com/shusfun/weir/internal/store/ent/setting"
 	"github.com/shusfun/weir/internal/store/ent/subnode"
@@ -67,6 +68,8 @@ type SubscriptionSettings struct {
 	FilterExclude    string         `json:"filter_exclude"`
 	UpdateInterval   int            `json:"update_interval"`
 	SourceRefresh    int            `json:"source_refresh_hours"`
+	// DefaultGateID 是订阅源没有单独指定 Gate 时首选的拉取 Gate；0 表示自动挑在线的。
+	DefaultGateID int `json:"default_gate_id"`
 	// Disguise 是伪装页开关（默认关闭）：打开后浏览器访问订阅地址只看到伪装页，剩余流量与一键导入改为登录后
 	// 在「我的订阅」查看；客户端拉取订阅不受影响。
 	Disguise bool `json:"disguise"`
@@ -134,7 +137,8 @@ func (s *Server) subscriptionRoutes(r *gin.Engine, auth, admin *gin.RouterGroup)
 	admin.POST("/subscriptions/sources", s.saveSource)
 	admin.PATCH("/subscriptions/sources/:id", s.saveSource)
 	admin.DELETE("/subscriptions/sources/:id", s.deleteSource)
-	admin.POST("/subscriptions/sources/:id/refresh", s.refreshSource)
+	admin.POST("/subscriptions/sources/:id/refresh", s.asJob("刷新订阅源", "已取消，订阅源保持上次结果", s.refreshSource))
+	admin.POST("/subscriptions/sources/inspect", s.asJob("试拉订阅源", "已取消试拉", s.inspectSourceDraft))
 	admin.POST("/subscriptions/sources/order", s.orderSources)
 	admin.GET("/subscriptions/nodes", s.listManualNodes)
 	admin.POST("/subscriptions/nodes", s.saveManualNode)
@@ -201,6 +205,12 @@ func (s *Server) putSubscriptionSettings(c *gin.Context) {
 		failDetail(c, 400, "invalid_template", err.Error(), nil)
 		return
 	}
+	if st.DefaultGateID != 0 {
+		if ok, err := s.Store.Ent.Gate.Query().Where(gate.IDEQ(st.DefaultGateID)).Exist(c.Request.Context()); err != nil || !ok {
+			failure(c, 400, "invalid_default_gate")
+			return
+		}
+	}
 	var value map[string]any
 	b, _ := json.Marshal(st)
 	_ = json.Unmarshal(b, &value)
@@ -260,14 +270,44 @@ func idParam(c *gin.Context) (int, bool) {
 
 func (s *Server) subscriptionSourceView(ctx context.Context, v *ent.SubSource) gin.H {
 	settings, err := s.subscriptionSettings(ctx)
-	state := sourceObjectState(v, settings.SourceRefresh)
+	interval := sourceRefreshHours(v, settings)
+	state := sourceObjectState(v, interval)
 	if err != nil && state.Status == "partial" {
 		state.Status, state.Label, state.Reason = "unknown", "未知", "无法读取刷新周期，缓存时效未知"
+	}
+	var gateView gin.H
+	if v.GateID > 0 {
+		gateView = gin.H{"id": v.GateID, "name": s.gateLabel(ctx, v.GateID)}
 	}
 	return gin.H{"id": v.ID, "name": v.Name, "url": v.URL, "enabled": v.Enabled, "user_agent": v.UserAgent, "filter_include": v.FilterInclude,
 		"filter_exclude": v.FilterExclude, "operators": v.Operators, "plus_as_space": v.PlusAsSpace, "node_cache": v.NodeCache,
 		"exclude_traffic": v.ExcludeTraffic, "website": v.Website, "remark": v.Remark, "position": v.Position, "node_count": v.NodeCount,
-		"user_info": parseUserInfo(v.UserInfo), "title": v.Title, "last_error": v.LastError, "fetched_at": v.FetchedAt, "object_state": state}
+		"user_info": parseUserInfo(v.UserInfo), "title": v.Title, "last_error": v.LastError, "fetched_at": v.FetchedAt, "object_state": state,
+		"gate_id": v.GateID, "gate": gateView, "refresh_hours": v.RefreshHours, "effective_refresh_hours": interval,
+		"next_refresh_at": sourceNextRefresh(v, interval), "last_attempt_at": v.LastAttemptAt,
+		"last_location": v.LastLocation, "last_location_label": s.locationLabel(ctx, v.LastLocation), "last_route_reason": v.LastRouteReason,
+		"health": v.Health, "change": v.Change}
+}
+
+// sourceRefreshHours 是订阅源实际的自动刷新间隔：源自己设了就用源的，否则跟随全局；0 表示不自动刷新。
+func sourceRefreshHours(v *ent.SubSource, settings SubscriptionSettings) int {
+	if v.RefreshHours > 0 {
+		return v.RefreshHours
+	}
+	return settings.SourceRefresh
+}
+
+// sourceNextRefresh 是下次自动刷新的时间；不自动刷新或已停用时为 nil，从没尝试过时为现在。
+func sourceNextRefresh(v *ent.SubSource, hours int) *time.Time {
+	if hours <= 0 || !v.Enabled {
+		return nil
+	}
+	if v.LastAttemptAt == nil {
+		now := time.Now()
+		return &now
+	}
+	next := v.LastAttemptAt.Add(time.Duration(hours) * time.Hour)
+	return &next
 }
 
 // parseUserInfo 解析 Subscription-Userinfo；缺失为 nil（页面显示「未知」，不当作 0）。
@@ -350,9 +390,23 @@ func (s *Server) saveSourceLocked(c *gin.Context) {
 		ExcludeTraffic *bool   `json:"exclude_traffic"`
 		Website        *string `json:"website"`
 		Remark         *string `json:"remark"`
+		GateID         *int    `json:"gate_id"`
+		RefreshHours   *int    `json:"refresh_hours"`
+		// InspectionID 是试拉结果；参数匹配时保存直接套用，不再重拉。
+		InspectionID string `json:"inspection_id"`
 	}
 	if !bind(c, &req) {
 		return
+	}
+	if req.RefreshHours != nil && (*req.RefreshHours < 0 || *req.RefreshHours > 168) {
+		failure(c, 400, "invalid_refresh_hours")
+		return
+	}
+	if req.GateID != nil && *req.GateID != 0 {
+		if ok, err := s.Store.Ent.Gate.Query().Where(gate.IDEQ(*req.GateID)).Exist(c.Request.Context()); err != nil || !ok {
+			failure(c, 400, "invalid_source_gate")
+			return
+		}
 	}
 	if !checkSubscriptionFilters(c, req.FilterInclude, req.FilterExclude) {
 		return
@@ -427,14 +481,19 @@ func (s *Server) saveSourceLocked(c *gin.Context) {
 			set(*v)
 		}
 	}
-	if create != nil && dryRun(c, dryResult{Preview: []string{"新建订阅源；保存后到「订阅源」页点刷新拉取节点（或在草稿里加一步 source.refresh）"}}) ||
+	if req.GateID != nil {
+		m.SetGateID(*req.GateID)
+	}
+	if req.RefreshHours != nil {
+		m.SetRefreshHours(*req.RefreshHours)
+	}
+	if create != nil && dryRun(c, dryResult{Preview: []string{"新建订阅源；保存后立即拉取并检测节点"}}) ||
 		create == nil && dryRun(c, dryResult{Preview: []string{"修改订阅源「" + old.Name + "」；改了地址时清掉旧的节点缓存与用量"}}) {
 		return
 	}
 	// 更改 URL、UA 或名称修正方式后旧缓存与用量不再对应这个源：清除。
 	if old != nil && (req.URL != nil && *req.URL != old.URL || req.UserAgent != nil && *req.UserAgent != old.UserAgent || req.PlusAsSpace != nil && *req.PlusAsSpace != old.PlusAsSpace) {
 		m.SetNodeCount(0)
-		m.SetKnownNodes(0)
 		m.SetUserInfo("")
 		m.SetTitle("")
 		m.ClearFetchedAt()
@@ -451,9 +510,33 @@ func (s *Server) saveSourceLocked(c *gin.Context) {
 		failure(c, 400, "save_failed")
 		return
 	}
+	refetch := old == nil || saved.FetchedAt == nil || old.GateID != saved.GateID
+	if req.InspectionID != "" {
+		applied, e := s.applyInspection(ctx, req.InspectionID, saved)
+		if e != nil {
+			failInternal(c, 500, "inspection_apply_failed", e)
+			return
+		}
+		refetch = refetch && !applied
+	}
+	pending := false
+	if refetch && saved.Enabled {
+		pending = true
+		src := saved
+		s.jobs.Start("source-refresh:"+itoa(saved.ID), "action", "拉取订阅源「"+firstNonEmpty(saved.Name, "#"+itoa(saved.ID))+"」", func(bg context.Context, _ JobRun) (map[string]any, error) {
+			_, _, _, err := s.refreshOneSource(withTrace(bg, taskTrace(ctx)), src)
+			return nil, err
+		})
+	}
 	s.invalidateGroups(ctx)
 	s.audit(c, "subscription.source.save", "source:"+itoa(saved.ID), "ok")
-	c.JSON(200, s.subscriptionSourceView(c.Request.Context(), saved))
+	if saved, err = s.Store.Ent.SubSource.Get(ctx, saved.ID); err != nil {
+		failure(c, 404, "source_not_found")
+		return
+	}
+	view := s.subscriptionSourceView(c.Request.Context(), saved)
+	view["refreshing"] = pending
+	c.JSON(200, view)
 }
 
 func (s *Server) deleteSource(c *gin.Context) {
@@ -601,8 +684,8 @@ func (k sourceIdentityCache) Store(ctx context.Context, _ int, nodes []string) {
 
 func toSource(v *ent.SubSource) subgroup.Source {
 	return subgroup.Source{ID: v.ID, Name: v.Name, URL: v.URL, UserAgent: v.UserAgent, FilterInclude: v.FilterInclude, FilterExclude: v.FilterExclude,
-		Operators: v.Operators, PlusAsSpace: v.PlusAsSpace, NodeCache: v.NodeCache, KnownNodes: v.KnownNodes,
-		ConfigVersion: version([]any{v.URL, v.UserAgent, v.PlusAsSpace, v.NodeCache, v.FilterInclude, v.FilterExclude, v.Operators, v.Name})}
+		Operators: v.Operators, PlusAsSpace: v.PlusAsSpace, NodeCache: v.NodeCache,
+		ConfigVersion: version([]any{v.URL, v.UserAgent, v.PlusAsSpace, v.NodeCache, v.FilterInclude, v.FilterExclude, v.Operators, v.Name, v.GateID})}
 }
 
 // recordResults 保存订阅源本次的节点数、用量、标题与错误。
@@ -632,7 +715,7 @@ func (s *Server) recordResults(ctx context.Context, results []subgroup.SourceRes
 					return nil
 				}
 			}
-			return s.recordSourceResult(ctx, r)
+			return s.recordSourceResult(ctx, src, r)
 		})
 		stage := subgroup.Stage{SourceID: r.SourceID, Operation: "source.persist", Started: started, Finished: time.Now().UTC()}
 		if err != nil {
@@ -643,16 +726,17 @@ func (s *Server) recordResults(ctx context.Context, results []subgroup.SourceRes
 	}
 }
 
-func (s *Server) recordSourceResult(ctx context.Context, r subgroup.SourceResult) error {
+func (s *Server) recordSourceResult(ctx context.Context, src *ent.SubSource, r subgroup.SourceResult) error {
 	if r.Error == "" && r.RawNodes != nil {
 		if err := s.syncSourceCatalog(ctx, r.SourceID, r.RawNodes); err != nil {
 			return err
 		}
 	}
 	now := time.Now()
-	upd := s.Store.Ent.SubSource.UpdateOneID(r.SourceID).SetLastError(r.Error)
+	upd := s.Store.Ent.SubSource.UpdateOneID(r.SourceID).SetLastError(r.Error).SetLastAttemptAt(now).
+		SetLastLocation(r.Location).SetLastRouteReason(r.RouteReason)
 	if r.Error == "" {
-		upd.SetNodeCount(r.Nodes).SetKnownNodes(r.Nodes).SetFetchedAt(now)
+		upd.SetNodeCount(r.Nodes).SetFetchedAt(now)
 		upd.SetUserInfo(r.UserInfo)
 		if r.Title != "" {
 			upd.SetTitle(r.Title)
@@ -665,6 +749,11 @@ func (s *Server) recordSourceResult(ctx context.Context, r subgroup.SourceResult
 		if err := s.saveCatalogRefreshStarted(ctx, r.SourceID, r.Started); err != nil {
 			return err
 		}
+	}
+	if r.Error == "" && r.RawNodes != nil {
+		cacheSource := toSource(src)
+		ua := firstNonEmpty(r.UserAgent, subgroup.SourceUserAgent(cacheSource, "clash-meta/2.5.0"))
+		kvCache{s}.ForSource(cacheSource, ua).Store(ctx, src.ID, r.RawNodes)
 	}
 	if r.Error != "" && r.Error != "node_count_drop_rejected" {
 		_, err := s.enqueueObservation(ctx, observationInput{Point: "subscription.health", Resource: "source:" + itoa(r.SourceID), Text: r.Error, Origin: "center.recordResults"})
@@ -682,22 +771,22 @@ func (s *Server) refreshSource(c *gin.Context) {
 	if !ok {
 		return
 	}
-	ctx := s.subscriptionContext(c.Request.Context(), 0)
+	ctx := c.Request.Context()
 	src, err := s.Store.Ent.SubSource.Get(ctx, id)
 	if err != nil {
 		failure(c, 404, "source_not_found")
 		return
 	}
-	if dryRun(c, dryResult{Preview: []string{"重新拉取订阅源「" + src.Name + "」，更新节点缓存与用量"}}) {
+	if dryRun(c, dryResult{Preview: []string{"重新拉取订阅源「" + src.Name + "」并检测节点，更新节点缓存与用量"}}) {
 		return
 	}
-	ctx, finish := s.startSubscriptionRun(ctx, 0)
-	defer finish(nil)
-	list, results := subgroup.Combine(ctx, s.subFetcher(), kvCache{s}, []subgroup.Source{toSource(src)}, nil, subgroup.Options{UserAgent: "clash-meta/2.5.0"})
-	s.recordResults(ctx, results)
-	s.invalidateGroups(ctx)
-	src, _ = s.Store.Ent.SubSource.Get(ctx, id)
-	if src == nil {
+	jobTitle(ctx, "刷新订阅源「"+firstNonEmpty(src.Name, "#"+itoa(src.ID))+"」")
+	list, result, inspection, err := s.refreshOneSource(ctx, src)
+	if err != nil {
+		failInternal(c, 500, "source_refresh_failed", err)
+		return
+	}
+	if src, err = s.Store.Ent.SubSource.Get(ctx, id); err != nil {
 		failure(c, 404, "source_not_found")
 		return
 	}
@@ -707,7 +796,40 @@ func (s *Server) refreshSource(c *gin.Context) {
 			nodes = append(nodes, l)
 		}
 	}
-	c.JSON(200, gin.H{"source": s.subscriptionSourceView(c.Request.Context(), src), "result": results[0], "nodes": nodes})
+	c.JSON(200, gin.H{"source": s.subscriptionSourceView(ctx, src), "result": result, "nodes": nodes, "inspection": inspectionNodes(inspection)})
+}
+
+// refreshOneSource 是订阅源刷新的唯一流程（手动刷新、按源定时刷新、保存后补拉都经这里）：
+// 按选路拉取 → 写回结果 → 拉取成功时检测节点 → 让订阅组输出失效。
+func (s *Server) refreshOneSource(ctx context.Context, src *ent.SubSource) (string, subgroup.SourceResult, *sourceInspection, error) {
+	ctx = s.subscriptionContext(ctx, 0)
+	ctx, finish := s.startSubscriptionRun(ctx, 0)
+	defer finish(nil)
+	stage := operationStage(ctx, "subscription.source.inspect", "source_id", src.ID, "gate_id", src.GateID)
+	list, results := subgroup.Combine(ctx, s.subFetcher(), kvCache{s}, []subgroup.Source{toSource(src)}, nil, subgroup.Options{UserAgent: "clash-meta/2.5.0", DeferCacheWrite: true})
+	s.recordResults(ctx, results)
+	var r subgroup.SourceResult
+	if len(results) > 0 {
+		r = results[0]
+	}
+	var inspection *sourceInspection
+	var err error
+	if r.Error == "" && r.RawNodes != nil {
+		var in sourceInspection
+		if in, err = s.inspectAfterFetch(ctx, r); err == nil {
+			inspection = &in
+		}
+	}
+	s.invalidateGroups(ctx)
+	stage(err)
+	return list, r, inspection, err
+}
+
+func inspectionNodes(in *sourceInspection) []inspectedNode {
+	if in == nil {
+		return []inspectedNode{}
+	}
+	return in.Nodes
 }
 
 func (s *Server) subscriptionContext(ctx context.Context, profileID int) context.Context {

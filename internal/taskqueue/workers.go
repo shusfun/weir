@@ -3,11 +3,15 @@ package taskqueue
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 
+	entsql "entgo.io/ent/dialect/sql"
+
+	"github.com/shusfun/weir/internal/store/ent/workercapability"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -30,16 +34,25 @@ func (q *Queue) SetCapabilities(ctx context.Context, gate int, c contracts.Capab
 		return errors.New("capability document too large")
 	}
 	sum := sha256.Sum256(b)
-	_, err = q.DB.ExecContext(ctx, `INSERT INTO worker_capabilities(gate_id,hash,document) VALUES($1,$2,$3) ON CONFLICT(gate_id) DO UPDATE SET hash=excluded.hash,document=excluded.document WHERE worker_capabilities.hash<>excluded.hash`, gate, hex.EncodeToString(sum[:]), string(b))
+	// 文档未变时不改写行，避免每次心跳都产生写入。
+	err = q.Ent.WorkerCapability.Create().SetID(gate).SetHash(hex.EncodeToString(sum[:])).SetDocument(string(b)).
+		OnConflict(
+			entsql.ConflictColumns(workercapability.FieldID),
+			entsql.UpdateWhere(entsql.ColumnsNEQ(entsql.Dialect(q.Dialect).Table(workercapability.Table).C(workercapability.FieldHash), entsql.Dialect(q.Dialect).Table("excluded").C(workercapability.FieldHash))),
+		).
+		UpdateNewValues().Exec(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
 	return err
 }
-func (q *Queue) Capabilities(ctx context.Context, gate int) (c contracts.CapabilityDocument, err error) {
-	var raw string
-	err = q.DB.QueryRowContext(ctx, `SELECT document FROM worker_capabilities WHERE gate_id=$1`, gate).Scan(&raw)
+
+func (q *Queue) Capabilities(ctx context.Context, gate int) (contracts.CapabilityDocument, error) {
+	c, err := q.Ent.WorkerCapability.Get(ctx, gate)
 	if err != nil {
-		return c, err
+		return contracts.CapabilityDocument{}, notFound(err)
 	}
-	return decodeCapabilities(raw)
+	return decodeCapabilities(c.Document)
 }
 
 func decodeCapabilities(raw string) (contracts.CapabilityDocument, error) {

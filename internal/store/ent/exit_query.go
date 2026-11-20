@@ -354,8 +354,9 @@ func (_q *ExitQuery) Clone() *ExitQuery {
 		withRoutes:   _q.withRoutes.Clone(),
 		withBindings: _q.withBindings.Clone(),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -774,6 +775,12 @@ func (_q *ExitQuery) ForShare(opts ...sql.LockOption) *ExitQuery {
 	return _q
 }
 
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *ExitQuery) Modify(modifiers ...func(s *sql.Selector)) *ExitSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
+}
+
 // ExitGroupBy is the group-by builder for Exit entities.
 type ExitGroupBy struct {
 	selector
@@ -862,4 +869,10 @@ func (_s *ExitSelect) sqlScan(ctx context.Context, root *ExitQuery, v any) error
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *ExitSelect) Modify(modifiers ...func(s *sql.Selector)) *ExitSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

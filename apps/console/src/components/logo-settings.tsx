@@ -1,4 +1,4 @@
-// Logo 设置只负责上传与移除；展示组件负责固定尺寸占位，favicon 由应用根部统一提供。
+// Logo 设置只负责上传与移除；展示组件负责固定尺寸占位，网页图标由 brand-mark 的 Favicon 统一更新。
 import { useState } from "react";
 import { Button, Field, FilePicker, useConfirm } from "@weir/ui";
 import { Trash2 } from "lucide-react";
@@ -27,7 +27,7 @@ export function LogoSettings() {
   }
   return <Section title="Logo" description="登录页和控制台使用的标识。">
     {logo.isPending || logo.error || !logo.data ? <State loading={logo.isPending} error={logo.error} onRetry={() => logo.refetch()} /> : <div className="stack">
-      {logo.data.configured ? <img src="/api/v1/logo" alt="当前 Logo" width={64} height={64} className="object-contain" /> : <State empty="尚未设置 Logo" />}
+      {logo.data.configured ? <img src={logo.data.src} alt="当前 Logo" width={64} height={64} className="object-contain" /> : <State empty="尚未设置 Logo" />}
       <Field label="上传 Logo" error={error} hint="PNG、JPEG 或 GIF，最大 512 KiB，边长不超过 1024 像素。">
         <FilePicker accept="image/png,image/jpeg,image/gif" maxBytes={512 * 1024} disabled={isBusy()} onError={setError} onFile={(file) => void upload(file)}>选择图片，或拖到这里</FilePicker>
       </Field>

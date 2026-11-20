@@ -18,8 +18,9 @@ import (
 // RouteUpdate is the builder for updating Route entities.
 type RouteUpdate struct {
 	config
-	hooks    []Hook
-	mutation *RouteMutation
+	hooks     []Hook
+	mutation  *RouteMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the RouteUpdate builder.
@@ -231,6 +232,12 @@ func (_u *RouteUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *RouteUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *RouteUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *RouteUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -311,6 +318,7 @@ func (_u *RouteUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{route.Label}
@@ -326,9 +334,10 @@ func (_u *RouteUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 // RouteUpdateOne is the builder for updating a single Route entity.
 type RouteUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *RouteMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *RouteMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetGateID sets the "gate_id" field.
@@ -547,6 +556,12 @@ func (_u *RouteUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *RouteUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *RouteUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *RouteUpdateOne) sqlSave(ctx context.Context) (_node *Route, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -644,6 +659,7 @@ func (_u *RouteUpdateOne) sqlSave(ctx context.Context) (_node *Route, err error)
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &Route{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues
