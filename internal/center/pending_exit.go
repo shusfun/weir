@@ -326,6 +326,7 @@ func (s *Server) exitChange(c *gin.Context, kind string, admin bool, h gin.Handl
 	}
 	err = s.Store.Lock.Do(c.Request.Context(), "exit-changes", func(ctx context.Context) error {
 		return s.withExitPolicyLock(ctx, p, func(ctx context.Context) error {
+			c.Request = c.Request.WithContext(ctx)
 			binding, e := s.exitChangeBinding(ctx, p)
 			if e != nil {
 				return e
@@ -640,7 +641,9 @@ func (s *Server) resumePendingExits(ctx context.Context) {
 // 类型出口与分组、清单共用同一并发版本，按相同用户锁串行保存。
 func (s *Server) withExitPolicyLock(ctx context.Context, p pendingExit, f func(context.Context) error) error {
 	if strings.HasPrefix(p.Kind, "type.") {
-		return s.Store.Lock.Do(ctx, "proxy-policy:"+itoa(p.Subject), f)
+		return s.Store.Lock.Do(ctx, "proxy-policy:"+itoa(p.Subject), func(ctx context.Context) error {
+			return f(withProxyPolicyLock(ctx, p.Subject))
+		})
 	}
 	return f(ctx)
 }

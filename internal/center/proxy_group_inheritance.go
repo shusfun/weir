@@ -18,6 +18,17 @@ const (
 	groupRejected   = "rejected"
 )
 
+type proxyPolicyLockContextKey struct{}
+
+func withProxyPolicyLock(ctx context.Context, uid int) context.Context {
+	return context.WithValue(ctx, proxyPolicyLockContextKey{}, uid)
+}
+
+func proxyPolicyLockHeld(ctx context.Context, uid int) bool {
+	held, ok := ctx.Value(proxyPolicyLockContextKey{}).(int)
+	return ok && held == uid
+}
+
 func writeGroupVersion(ctx context.Context, tx *ent.Tx, ownerID int, group contracts.ProxyGroup, deleted bool) (err error) {
 	finish := operationStage(ctx, "proxy.group.version", "owner_id", ownerID, "group_id", group.ID, "deleted", deleted)
 	defer func() { finish(err) }()
@@ -55,6 +66,13 @@ func groupNameTaken(groups []contracts.ProxyGroup, name string) bool {
 }
 
 func (s *Server) refreshGroupInheritance(ctx context.Context, uid int) (account *ent.User, err error) {
+	if proxyPolicyLockHeld(ctx, uid) {
+		account, err = s.Store.Ent.User.Get(ctx, uid)
+		if err != nil {
+			return nil, err
+		}
+		return s.syncGroupInheritanceLocked(ctx, account, true)
+	}
 	err = s.Store.Lock.Do(ctx, "proxy-policy:"+itoa(uid), func(ctx context.Context) error {
 		var err error
 		account, err = s.Store.Ent.User.Get(ctx, uid)
