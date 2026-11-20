@@ -305,7 +305,7 @@ html:has(.weir-page-scroll) body {
   .weir-card-content { padding: var(--weir-card-padding) var(--weir-card-inline); }
   .weir-scroll-root[data-gutter="stable"]:not([data-orientation="horizontal"]) { padding-inline-end: var(--weir-scrollbar-gutter); }
   .weir-scroll-root[data-gutter="stable"]:not([data-orientation="vertical"]) { padding-block-end: var(--weir-scrollbar-gutter); }
-  .weir-dialog { --weir-dialog-padding: var(--weir-space-6); }
+  .weir-dialog, .weir-sheet { --weir-dialog-padding: var(--weir-space-6); }
   .weir-dialog > [data-slot="dialog-pinned-header"] { padding-inline-end: calc(var(--weir-tap-sm) + var(--weir-space-2)); }
   .weir-dialog-close { top: var(--weir-space-4); right: var(--weir-space-4); color: var(--weir-ink-3); }
   .weir-dialog-footer { margin-inline: calc(-1 * var(--weir-dialog-padding)); margin-bottom: calc(-1 * var(--weir-dialog-padding)); padding: var(--weir-space-4) var(--weir-dialog-padding); }
@@ -316,7 +316,7 @@ html:has(.weir-page-scroll) body {
   }
   @media (max-width: 639.98px) {
     .weir-card[data-size="lg"] { --weir-card-padding: var(--weir-space-5); }
-    .weir-dialog { --weir-dialog-padding: var(--weir-space-5); }
+    .weir-dialog, .weir-sheet { --weir-dialog-padding: var(--weir-space-5); }
     .weir-dialog-footer { padding-block: var(--weir-space-3); }
   }
 }

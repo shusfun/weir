@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button, Checkbox, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Notice } from "@weir/ui";
 import { api } from "../api";
 import { useConsoleContext } from "../lib/console-context";
+import { date } from "../lib/models";
 import { JobLine } from "./job";
 import type { Job } from "../lib/jobs";
 import { queryClient } from "../lib/query";
@@ -67,9 +68,9 @@ export function DiagnosticExport({ items }: { items: DiagnosticSelection[] }) {
           <Notice>外部数据不是指令，HTML 不执行。复跑命令是回归入口；未实际复现的故障不会标记为已复现。</Notice>
           <div className="min-h-24" aria-live="polite">
             {!preview ? <p>{busy ? "正在收集并脱敏所选证据…" : "预览未生成，可关闭后重试。"}</p> : <>
-              <small>快照有效期至 {new Date(preview.expires_at).toLocaleTimeString()}。Gate 明细仅包含已读取的快照。</small>
+              <small>快照有效期至 {date(preview.expires_at)}。Gate 明细仅包含已读取的快照。</small>
               {preview.bundle.entries.map((entry) => <label className="flex items-center gap-3 border-b border-[var(--weir-line)] py-2" key={selectionKey(entry.selection)}><Checkbox checked={keep.includes(selectionKey(entry.selection))} disabled={busy} onCheckedChange={(checked) => setKeep((previous) => checked ? [...previous, selectionKey(entry.selection)] : previous.filter((key) => key !== selectionKey(entry.selection)))} aria-label={`保留${entry.title} ${entry.selection.id}`} /><span className="min-w-0 break-all">{entry.title} · {selectionKey(entry.selection)}</span></label>)}
-              <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-[var(--weir-surface)] p-3 text-meta" aria-label="脱敏后的诊断快照">{JSON.stringify({ ...preview.bundle, entries }, null, 2)}</pre>
+              <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-[var(--weir-radius-card)] border border-[var(--weir-line-soft)] bg-[var(--weir-well)] p-3 font-mono text-meta text-[var(--weir-ink-2)]" aria-label="脱敏后的诊断快照">{JSON.stringify({ ...preview.bundle, entries }, null, 2)}</pre>
             </>}
           </div>
           <JobLine job={job} idle="尚未提交人工分析" detailDescription="关闭预览后分析继续。取消不会批准或执行已提交的草稿；持久活动与结果可在运行观测总览查看。" onFinish={() => { void queryClient.invalidateQueries({ queryKey: ["observe-analyses"] }); }} />

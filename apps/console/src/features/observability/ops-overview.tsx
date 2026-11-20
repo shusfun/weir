@@ -15,6 +15,7 @@ type Observation = { id: string; point: string; resource: string; created_at: st
 type Column = "pending" | "blocked" | "applied";
 
 const pointLabel: Record<string, string> = { security: "安全", "subscription.health": "订阅源", "node.test": "节点实测", "gate.kernel": "体检", "kernel.release": "内核更新", "content.spam": "内容审核" };
+const opsOriginLabel: Record<string, string> = { "gate.offline": "VPS 离线", "kernel.crash": "内核异常退出", "node.test": "节点实测失败", "host.health": "主机体检异常" };
 // 卡片里的一行（稿子 .v-set）：左边标题加一行等宽小字，右边状态
 export function SetRow({ title, description, end, id }: { title: ReactNode; description?: ReactNode; end?: ReactNode; id?: string }) {
   return (
@@ -123,7 +124,7 @@ export function OpsOverview() {
             <Card><CardContent><InsetRows>
 
                 {stack.map((r) => (
-                  <SetRow key={r.id} title={r.reason ?? r.origin} description={`${shortTime(r.created_at)} · ${r.gate} · trace ${r.trace_id.slice(0, 8)}`} end={<Badge variant="soft" tone={r.status === "applied" ? "ok" : "warn"}>{r.status === "applied" ? "已生效" : r.status === "rolled_back" ? "已回退" : "执行前被拦下"}</Badge>} />
+                  <SetRow key={r.id} title={r.reason || opsOriginLabel[r.origin] || r.origin || "自动运维"} description={`${shortTime(r.created_at)} · ${r.gate} · trace ${r.trace_id.slice(0, 8)}`} end={<Badge variant="soft" tone={r.status === "applied" ? "ok" : "warn"}>{r.status === "applied" ? "已生效" : r.status === "rolled_back" ? "已回退" : "执行前被拦下"}</Badge>} />
                 ))}
 
             </InsetRows></CardContent></Card>
@@ -138,7 +139,7 @@ export function OpsOverview() {
                 {shown.map((o) => (
                   <SetRow key={o.id} title={(o.external_data_not_instructions.text || pointLabel[o.point] || o.point).split("\n")[0].slice(0, 41)} description={`${shortTime(o.created_at)} · ${o.resource || "未知"} · ${pointLabel[o.point] ?? o.point}`} end={o.verdict?.outcome === "needed" ? <Badge variant="soft" tone="info">需要处理</Badge> : <Badge variant="soft" tone="neutral" className="border-dashed bg-transparent">未知</Badge>} />
                 ))}
-                {hasMoreObservations && <InsetRow><a className="inline-flex items-center text-meta text-[var(--weir-accent-text)] no-underline active:opacity-60 touch:min-h-11" href="?tab=overview#observations">查看全部 {(observations.data ?? []).length} 条记录</a></InsetRow>}
+                {hasMoreObservations && <InsetRow><a className="inline-flex items-center text-meta text-[var(--weir-accent-text)] no-underline active:opacity-60 touch:min-h-11" href="#observations">查看全部 {(observations.data ?? []).length} 条记录</a></InsetRow>}
 
             </InsetRows></CardContent></Card>
           )}

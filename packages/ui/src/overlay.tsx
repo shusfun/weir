@@ -107,7 +107,7 @@ function SheetContent({
         finalFocus={finalFocus}
         data-side={side}
         className={cn(
-          "fixed inset-y-0 z-50 flex w-[min(var(--weir-dialog-sm),var(--weir-sheet-width))] flex-col gap-[var(--weir-space-4)] overflow-hidden border-[var(--weir-line-soft)] bg-[var(--weir-panel)] p-[var(--weir-dialog-padding)] shadow-[0_0_30px_-10px_var(--weir-shade-strong)] outline-none transition-transform duration-[var(--weir-spring-dur)] ease-[var(--weir-spring)] data-[ending-style]:duration-[var(--weir-slow)] data-[ending-style]:ease-[var(--weir-ease-in)] data-[side=left]:left-0 data-[side=left]:border-r data-[side=right]:right-0 data-[side=right]:border-l data-[side=left]:data-[starting-style]:-translate-x-full data-[side=left]:data-[ending-style]:-translate-x-full data-[side=right]:data-[starting-style]:translate-x-full data-[side=right]:data-[ending-style]:translate-x-full",
+          "weir-sheet fixed inset-y-0 z-50 flex w-[min(var(--weir-dialog-sm),var(--weir-sheet-width))] flex-col gap-[var(--weir-space-4)] overflow-hidden border-[var(--weir-line-soft)] bg-[var(--weir-panel)] p-[var(--weir-dialog-padding)] text-body text-card-foreground shadow-[0_0_30px_-10px_var(--weir-shade-strong)] outline-none transition-transform duration-[var(--weir-spring-dur)] ease-[var(--weir-spring)] data-[ending-style]:duration-[var(--weir-slow)] data-[ending-style]:ease-[var(--weir-ease-in)] data-[side=left]:left-0 data-[side=left]:border-r data-[side=right]:right-0 data-[side=right]:border-l data-[side=left]:data-[starting-style]:-translate-x-full data-[side=left]:data-[ending-style]:-translate-x-full data-[side=right]:data-[starting-style]:translate-x-full data-[side=right]:data-[ending-style]:translate-x-full",
           className,
         )}
       >
@@ -121,7 +121,7 @@ function SheetContent({
           {close ?? (
             <DialogPrimitive.Close
               aria-label="关闭"
-              render={<Button variant="ghost" size="icon-sm" />}
+              render={<Button variant="ghost" size="icon-sm" className="shrink-0" />}
             >
               <XIcon />
             </DialogPrimitive.Close>

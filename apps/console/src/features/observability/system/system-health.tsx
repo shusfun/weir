@@ -56,7 +56,7 @@ function ResourceReadings({ host }: { host: Host | null }) {
   </div>;
 }
 
-export function SystemHealth({ active, pick }: { active: boolean; pick: (kind: DiagnosticSelection["kind"], id: string | number, name: string) => ReactNode }) {
+export function SystemHealth({ active, pick, taskLabels }: { active: boolean; pick: (kind: DiagnosticSelection["kind"], id: string | number, name: string) => ReactNode; taskLabels?: Record<string, string> }) {
   const [live, setLive] = useLiveSwitch("observe-system-health");
   const query = useQuery({
     queryKey: ["observe-system-health"], enabled: active && live,
@@ -90,7 +90,7 @@ export function SystemHealth({ active, pick }: { active: boolean; pick: (kind: D
             <InsetRow><strong>Laya</strong><HealthValue value={gate.laya} /></InsetRow>
             <InsetRow><small>地区 {gate.capabilities?.region || "未知"} · ASN {gate.capabilities?.asn ?? "未知"} · 带宽档位 {gate.capabilities?.bandwidth_bytes_per_second ?? "未知"} B/s</small></InsetRow>
             <InsetRow><strong>来源可达性</strong>{!Object.keys(gate.capabilities?.sources ?? {}).length ? <p>未知</p> : Object.entries(gate.capabilities!.sources!).map(([name, reachable]) => <p key={name}>{name}：{reachable ? "探测可访问" : "探测未通过"}</p>)}<small>采集于 {gate.sources_observed_at ? date(gate.sources_observed_at) : "未检测"}。每五分钟独立探测；可访问不保证下载成功，调度拒绝超过十分钟的探测。</small></InsetRow>
-            <InsetRow><strong>任务版本</strong>{!gate.capabilities ? <p>未知</p> : Object.entries(gate.capabilities.tasks).map(([kind, version]) => <p key={kind} className="break-all">{kind} · v{version}</p>)}</InsetRow>
+            <InsetRow><strong>任务版本</strong>{!gate.capabilities ? <p>未知</p> : Object.entries(gate.capabilities.tasks).map(([kind, version]) => <p key={kind} className="break-all" title={kind}>{taskLabels?.[kind] ?? kind} · v{version}</p>)}</InsetRow>
           </InsetRows>
         </Collapsible>
       </InsetRow>)}

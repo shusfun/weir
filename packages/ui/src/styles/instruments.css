@@ -443,7 +443,8 @@
   .weir-metric-delta.is-good { color: var(--weir-ok-ink); }
   .weir-metric-delta.is-bad { color: var(--weir-bad-ink); }
 
-  .weir-timeline { display: grid; margin: 0; padding: 0; list-style: none; }
+  /* 左侧预留圆点半径与故障光晕，避免在 overflow-x: hidden 的滚动视口里被裁切 */
+  .weir-timeline { display: grid; margin: 0; padding: 0 0 0 calc(var(--weir-gap-9) / 2 + var(--weir-tl-halo)); list-style: none; }
   .weir-tl-item {
     position: relative;
     display: grid;
@@ -715,9 +716,9 @@
   }
   @keyframes weir-dsh-breathe { to { opacity: 0.72; } }
 
-  /* 五步流程（稿子 .v-flow / .v-fs）：圆形序号连成一条线；完成是绿底勾，当前是墨色加强调光圈，失败是红圈叉 */
-  .weir-flow { position: relative; display: grid; grid-template-columns: repeat(var(--weir-flow-n, 5), minmax(0, 1fr)); margin: 0; padding: 0; list-style: none; }
-  .weir-flow::before { content: ""; position: absolute; top: 13px; left: calc(50% / var(--weir-flow-n, 5)); right: calc(50% / var(--weir-flow-n, 5)); height: 1px; background: var(--weir-line); }
+  /* 五步流程（稿子 .v-flow / .v-fs）：圆形序号连成一条线；完成是绿底勾，当前是墨色加强调光圈，失败是红圈叉；顶部预留 5px 光圈高度 */
+  .weir-flow { position: relative; display: grid; grid-template-columns: repeat(var(--weir-flow-n, 5), minmax(0, 1fr)); margin: 0; padding: var(--weir-gap-5) 0 0; list-style: none; }
+  .weir-flow::before { content: ""; position: absolute; top: calc(13px + var(--weir-gap-5)); left: calc(50% / var(--weir-flow-n, 5)); right: calc(50% / var(--weir-flow-n, 5)); height: 1px; background: var(--weir-line); }
   .weir-flow li { position: relative; display: flex; min-width: 0; flex-direction: column; align-items: center; gap: var(--weir-gap-7); text-align: center; color: var(--weir-ink-3); }
   .weir-flow b { position: relative; z-index: 1; display: flex; width: 27px; height: 27px; align-items: center; justify-content: center; border: 1px solid var(--weir-line); border-radius: 50%; background: var(--weir-well); font-size: var(--weir-text-caption2); line-height: var(--weir-leading-caption2); }
   .weir-flow b svg { width: 15px; height: 15px; }

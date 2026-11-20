@@ -18,7 +18,11 @@ body:has(.guide-in-dialog) .dsh-fab { visibility:hidden; }
 @media(max-width:640px) { .guide-popover { left:12px; right:12px; bottom:max(12px,env(safe-area-inset-bottom)); width:auto; max-height:45dvh; } .guide-card-content { gap:8px; padding:12px; } .guide-welcome { margin:12px 14px 0; } .guide-trigger { padding-inline:8px; } .guide-in-dialog { inset:auto; width:100%; max-height:40dvh; } .guide-text p { font-size:13px; } .guide-footer { flex-wrap:wrap; } }
 
 .weir-dialog:has(> .guide-dialog-entry) > [data-slot="dialog-pinned-header"] { padding-inline-end: calc(var(--weir-tap-sm) * 2 + var(--weir-space-3)); }
+.weir-sheet > .guide-dialog-entry { top: var(--weir-dialog-padding); right: calc(var(--weir-dialog-padding) + var(--weir-tap-sm) + var(--weir-space-2)); }
+.weir-sheet:has(> .guide-dialog-entry) > [data-slot="sheet-header"] { padding-inline-end: calc(var(--weir-tap-sm) + var(--weir-space-2)); }
 @media (pointer: coarse), (max-width: 767.98px) {
   .guide-dialog-entry { right: calc(var(--weir-space-4) + var(--weir-tap-touch) + var(--weir-space-1)); }
   .weir-dialog:has(> .guide-dialog-entry) > [data-slot="dialog-pinned-header"] { padding-inline-end: calc(var(--weir-tap-touch) * 2 + var(--weir-space-3)); }
+  .weir-sheet > .guide-dialog-entry { right: calc(var(--weir-dialog-padding) + var(--weir-tap-touch) + var(--weir-space-2)); }
+  .weir-sheet:has(> .guide-dialog-entry) > [data-slot="sheet-header"] { padding-inline-end: calc(var(--weir-tap-touch) + var(--weir-space-2)); }
 }

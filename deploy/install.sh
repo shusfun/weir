@@ -138,8 +138,8 @@ rollback_units="$all_units weir-update.service weir-gate-update@.service weir-la
 mkdir "$rollback_dir/units"
 for unit in $rollback_units; do
  if [ -e "$units_dir/$unit" ] || [ -L "$units_dir/$unit" ]; then cp -Pp "$units_dir/$unit" "$rollback_dir/units/$unit"; fi
- case "$unit" in *@.service) ;; *) if systemctl is-active --quiet "$unit"; then printf '%s\n' "$unit" >> "$rollback_dir/active"; fi;; esac
- if systemctl is-enabled --quiet "$unit"; then printf '%s\n' "$unit" >> "$rollback_dir/enabled"; fi
+ case "$unit" in *@.service) ;; *) if systemctl is-active --quiet "$unit" >/dev/null 2>&1; then printf '%s\n' "$unit" >> "$rollback_dir/active"; fi;; esac
+ if systemctl is-enabled --quiet "$unit" >/dev/null 2>&1; then printf '%s\n' "$unit" >> "$rollback_dir/enabled"; fi
 done
 if [ -f "$etc/role" ]; then cp -p "$etc/role" "$rollback_dir/role"; fi
 if [ -f /usr/local/lib/weir/install.sh ]; then cp -p /usr/local/lib/weir/install.sh "$rollback_dir/install.sh"; fi

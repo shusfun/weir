@@ -524,8 +524,11 @@ function MaterialDemos() {
         <p className="m-0">版本 <VersionCell version="" /> / <VersionCell version={null} /></p>
         <DraftRecheck blocked detail="样例：只有真的拦下才在业务页出现。" />
         <Button type="button" variant="outline" onClick={() => setTrace(true)}>打开断线侧栏</Button>
-        <TraceSheet open={trace} onOpenChange={setTrace}>
-          <Timeline><TimelineItem time={null} tone="unknown" title="环节未知" /></Timeline>
+        <TraceSheet open={trace} onOpenChange={setTrace} description="样例 VPS · 采集于 2026/11/20 12:38:17 · 不完整（仅保留 VPS 近期本地记录）">
+          <Timeline>
+            <TimelineItem time="2026/11/20 11:46:41" tone="fail" title="执行任务 · 失败" description="VPS 网络请求 · 查询发布版本失败" tags={<><span>用时 8535 ms</span><Badge variant="soft" tone="neutral">release_query_failed</Badge></>} />
+            <TimelineItem time={null} tone="unknown" title="环节未知" />
+          </Timeline>
         </TraceSheet>
       </Demo>
     </div>

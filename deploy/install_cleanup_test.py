@@ -25,7 +25,7 @@ class InstallCleanupTests(unittest.TestCase):
         for p in (self.root / "etc/systemd/system", self.root / "usr/local/bin", self.root / "bin"):
             p.mkdir(parents=True, exist_ok=True)
         systemctl = self.root / "bin/systemctl"
-        systemctl.write_text('#!/bin/sh\ncase "$*" in *restart*) [ "${FAIL_SERVICE:-0}" != 1 ] || exit 1;; esac\nexit 0\n', encoding="utf-8")
+        systemctl.write_text('#!/bin/sh\ncase "$*" in *is-active*|*is-enabled*) echo "Failed to get unit file state" >&2; exit 1;; *restart*) [ "${FAIL_SERVICE:-0}" != 1 ] || exit 1;; esac\nexit 0\n', encoding="utf-8")
         systemctl.chmod(0o755)
         self.env = dict(os.environ, PATH=str(systemctl.parent) + ":" + os.environ["PATH"], WEIR_UPDATE_ID="install-cleanup-test")
 
@@ -64,6 +64,7 @@ class InstallCleanupTests(unittest.TestCase):
         for version in ("1.0.0", "1.1.0", "1.2.0", "1.2.0"):
             result = self.install(version)
             self.assertIn("release cleanup update=install-cleanup-test", result.stdout)
+            self.assertNotIn("Failed to get unit file state", result.stderr)
         self.assertEqual(self.pointers(), ("releases/1.2.0", "releases/1.1.0"))
         self.assertEqual(sorted(p.name for p in (self.base / "releases").iterdir()), ["1.1.0", "1.2.0"])
         self.assertFalse(list((self.base / "releases").glob("*/weir-*-linux-*.tar.gz")))

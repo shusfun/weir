@@ -247,7 +247,7 @@ function AuditHeat({ summary, days }: { summary: AuditSummary; days: number }) {
   const restarts = summary.buckets.reduce((sum, c) => sum + c.restarts, 0);
   const busiest = summary.buckets.reduce<AuditSummary["buckets"][number] | null>((top, c) => c.total > (top?.total ?? 0) ? c : top, null);
   return <><p className="weir-sum m-0 mb-[var(--weir-gap-7)] text-meta"><span>共 <b>{total}</b> 次操作</span>{busiest && <span>最多在 {date(busiest.at)}：<b>{busiest.total}</b> 次</span>}<span>重启内核 <b>{restarts}</b> 次</span></p><div className="weir-heat" style={{ gridTemplateColumns: `repeat(${summary.buckets.length}, minmax(0, 1fr))` }} role="img" aria-label={`最近 ${days} 天的完整操作分布`}>
-    {summary.buckets.map(c => <i key={c.at} title={`${date(c.at)} · ${c.total} 次操作 · ${c.restarts} 次重启`} data-restart={c.restarts > 0 || undefined} style={{ opacity: c.total ? 0.37 + c.total / max * 0.63 : undefined }} data-on={c.total ? "" : undefined} />)}
+    {summary.buckets.map(c => <i key={c.at} title={`${date(c.at)} · ${c.total} 次操作 · ${c.restarts} 次重启`} data-restart={c.restarts > 0 || undefined} style={c.restarts > 0 ? undefined : { opacity: c.total ? 0.37 + c.total / max * 0.63 : undefined }} data-on={c.total ? "" : undefined} />)}
   </div><div className="mt-[var(--weir-gap-7)] flex justify-between text-fine text-[var(--weir-ink-3)]"><span>{date(summary.from)}</span><span>{date(summary.to)}</span></div></>;
 }
 

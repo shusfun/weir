@@ -4,21 +4,41 @@ import { GateTraffic } from "./gate-traffic";
 import { PendingExits } from "./pending-exits";
 import { GateLayaHosting } from "../features/ai/laya-gate-hosting";
 
+const kernelEventKind: Record<string, string> = {
+  start: "启动",
+  stop: "停止",
+  crash: "异常退出",
+  recover: "自动恢复",
+  hot_users: "热更新用户",
+};
+const kernelEventReason: Record<string, string> = {
+  hot_users: "热更新用户",
+  force_disconnect: "撤权强制断开",
+  restart: "配置变更重启",
+  crash: "进程异常退出",
+  recover: "自动拉起恢复",
+  start: "启动内核",
+  stop: "停止内核",
+};
+
 function KernelTimeline({ events }: { events?: KernelEvent[] }) {
   if (!events) return <small>断线记录未知</small>;
   if (!events.length) return <small>还没有内核启停记录</small>;
   return <Timeline label="断线时间线">{events.map((e, i) => {
     const tone = e.kind === "crash" || e.kind === "stop" ? "fail" : e.kind === "hot_users" ? "hot" : e.kind === "start" || e.kind === "recover" ? "restart" : "unknown";
     const pid = e.pid == null ? "进程号未知" : `PID ${e.pid}`;
-    const drops = e.disconnects == null ? "断连数未知" : `断开 ${e.disconnects}`;
-    return <TimelineItem key={`${e.at}-${i}`} time={e.at} tone={tone} title={`${e.kernel || "内核"} ${e.kind || "未知"}`} description={`${pid} · ${drops}${e.reason ? ` · ${e.reason}` : ""}`} trace={e.trace_id} />;
+    const drops = e.kind === "hot_users" && e.disconnects == null ? "未中断连接" : e.disconnects == null ? "断连数未知" : `断开 ${e.disconnects}`;
+    const kindText = (e.kind ? kernelEventKind[e.kind] : undefined) ?? (e.kind || "未知");
+    const reasonText = e.reason && e.reason !== e.kind ? (kernelEventReason[e.reason] ?? e.reason) : "";
+    const at = !e.at || e.at.startsWith("0001") ? null : date(e.at);
+    return <TimelineItem key={`${e.at}-${i}`} time={at} tone={tone} title={`${e.kernel || "内核"} · ${kindText}`} description={`${pid} · ${drops}${reasonText ? ` · ${reasonText}` : ""}`} trace={e.trace_id} />;
   })}</Timeline>;
 }
 // VPS 详情：主机观测（缺失显示「未知」）、本机其他程序占用的端口、内核版本锁定、内核诊断 / 重启、节点出口关系。
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useState } from "react";
 import { useQuery } from "../lib/query";
-import { Badge, Button, Card, Dialog, DialogContent, DialogTitle, DialogDescription, Field, GlassFolder, HealthRing, InsightBanner, Notice, ObjectHeader, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Sheet, SheetContent, Tabs, TabsList, TabsPanel, TabsTab, Timeline, TimelineItem, useConfirm } from "@weir/ui";
+import { Badge, Button, Card, Dialog, DialogContent, DialogTitle, DialogDescription, Field, GlassFolder, HealthRing, InsightBanner, Notice, ObjectHeader, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Tabs, TabsList, TabsPanel, TabsTab, Timeline, TimelineItem, useConfirm } from "@weir/ui";
 import { GateHealthList, healthItems } from "./gate-health";
 import { confidenceText, reopenDrafts, useDrafts } from "./draft-confirm";
 import { objectStatus, protocolNames, relativeTime } from "../lib/core";

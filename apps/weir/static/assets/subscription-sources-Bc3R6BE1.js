@@ -1,1 +1,0 @@
-import{m as r,l as u}from"./index-C29BBZeJ.js";const e={queryKey:["subscription-sources"],queryFn:({signal:s})=>r("/admin/subscriptions/sources","GET",void 0,{signal:s})};function i(s=!0){return u({...e,enabled:s})}export{e as s,i as u};

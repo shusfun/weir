@@ -190,7 +190,7 @@ export function GuideProvider({ children }: { children: ReactNode }) {
   const dialogRun = !!host;
   return <GuideContext.Provider value={value}>
     {children}
-    {host && host.getAttribute("role") !== "alertdialog" && !run && current && createPortal(<Button className="guide-dialog-entry rounded-full text-[var(--weir-ink-3)]" size="icon-sm" variant="ghost" title="当前弹窗教程" onClick={() => start()} aria-label="当前弹窗教程"><BookOpen /></Button>, host)}
+    {host && host.getAttribute("role") !== "alertdialog" && !run && current?.id.startsWith("dialog:") && createPortal(<Button className="guide-dialog-entry rounded-full text-[var(--weir-ink-3)]" size="icon-sm" variant="ghost" title="当前弹窗教程" onClick={() => start()} aria-label="当前弹窗教程"><BookOpen /></Button>, host)}
     {run && step && <>
       {rect && createPortal(<div className={"guide-highlight" + (host ? " guide-ring-only" : "")} aria-hidden style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }} />, document.body)}
       {createPortal(<Card className={"guide-popover" + (dialogRun ? " guide-in-dialog" : "")} tabIndex={-1} role="region" aria-label="新手教程" data-tour-running={run.guide.id}>
