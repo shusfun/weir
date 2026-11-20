@@ -310,7 +310,7 @@ func (s *Server) viewer(c *gin.Context) *ent.User {
 		return nil
 	}
 	u, err := s.Store.Ent.User.Get(c.Request.Context(), uid)
-	if err != nil || !u.Enabled {
+	if err != nil || !u.Enabled || !sessionValidFor(u, session) {
 		return nil
 	}
 	return u
@@ -333,6 +333,10 @@ func (s *Server) authenticate(c *gin.Context) {
 	u, err := s.Store.Ent.User.Get(c.Request.Context(), uid)
 	if err != nil || !u.Enabled {
 		failure(c, 401, "account_disabled")
+		return
+	}
+	if !sessionValidFor(u, session) {
+		failure(c, 401, "session_expired")
 		return
 	}
 	c.Set("user_id", u.ID)
@@ -361,6 +365,10 @@ func requireAdmin(c *gin.Context) {
 		return
 	}
 	c.Next()
+}
+
+func sessionValidFor(u *ent.User, session Session) bool {
+	return u.SessionsValidAfter == nil || !session.CreatedAt.Before(*u.SessionsValidAfter)
 }
 
 func (s *Server) me(c *gin.Context) { c.JSON(200, userView(c.MustGet("account").(*ent.User))) }

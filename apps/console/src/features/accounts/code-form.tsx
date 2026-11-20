@@ -7,8 +7,9 @@ import { fromLocalInput } from "../../lib/core";
 import { GrantSummary } from "./grant";
 import type { Plan, CodeKind } from "./types";
 
-export function CodeForm({ initialKind = "redeem", initialPlanId, plans, onCreatePlan, close, saved }: { initialKind?: CodeKind; initialPlanId?: number; plans: Plan[]; onCreatePlan?: () => void; close: () => void; saved: () => void }) {
-  const [kind, setKind] = useState<CodeKind>(initialKind);
+export function CodeForm({ initialKind = "redeem", initialPlanId, plans, onCreatePlan, close, saved, basePath = "/admin/access-codes" }: { initialKind?: CodeKind; initialPlanId?: number; plans: Plan[]; onCreatePlan?: () => void; close: () => void; saved: () => void; basePath?: string }) {
+  const issuerOnly = basePath !== "/admin/access-codes";
+  const [kind, setKind] = useState<CodeKind>(issuerOnly ? "redeem" : initialKind);
   const enabledPlans = plans.filter((p) => p.enabled);
   const firstEnabledId = enabledPlans[0]?.id;
   const [plan, setPlan] = useState(initialPlanId ? String(initialPlanId) : kind === "invite" ? "none" : String(firstEnabledId ?? "none"));
@@ -24,7 +25,7 @@ export function CodeForm({ initialKind = "redeem", initialPlanId, plans, onCreat
   const requestClose = async () => { if (!codes || acknowledged || await confirm({ title: "已保存生成的码？", description: "关闭后无法再次读取明文，请确认已经复制或导出。", confirmText: "我已保存" })) close(); };
   const [copyError, setCopyError] = useState("");
   const action = useFormAction(
-    () => api("/admin/access-codes", "POST", { kind, count, plan_id: plan === "none" ? null : Number(plan), expires_at: fromLocalInput(expiry) }),
+    () => api(basePath, "POST", { kind, count, plan_id: plan === "none" ? null : Number(plan), expires_at: fromLocalInput(expiry) }),
     { fields: { account_plan_not_available: "plan" }, onSuccess: (r) => { if (r) { setCodes(r.items.map((v: { code: string }) => v.code)); saved(); } } },
   );
   useConsoleContext({ dialog: { title: kind === "invite" ? "生成邀请码" : "生成兑换码" }, form: [{ key: "issued_codes", label: "生成的码", secret: true, filled: !!codes }, { key: "code_plan", label: "发放套餐", value: plan }] });
@@ -61,7 +62,7 @@ export function CodeForm({ initialKind = "redeem", initialPlanId, plans, onCreat
                   if (next === "redeem" && plan === "none") setPlan(String(enabledPlans[0]?.id ?? "none"));
                 }}
                 aria-label="码类型"
-                options={[["redeem", "兑换码（老用户充入）"], ["invite", "邀请码（新用户注册）"]]}
+                options={issuerOnly ? [["redeem", "兑换码（老用户充入）"]] : [["redeem", "兑换码（老用户充入）"], ["invite", "邀请码（新用户注册）"]]}
               />
             </Field>
             {kind === "redeem" && enabledPlans.length === 0 ? (

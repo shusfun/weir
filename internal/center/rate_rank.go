@@ -192,7 +192,7 @@ type planned struct {
 
 // planEntries 在输出前复核当前授权，速度只决定展示名次。
 func (s *Server) planEntries(ctx context.Context, u *ent.User, entries []Entry, _ bool) (planned, error) {
-	u, err := s.Store.Ent.User.Get(ctx, u.ID)
+	u, err := s.refreshGroupInheritance(ctx, u.ID)
 	if err != nil {
 		return planned{}, err
 	}

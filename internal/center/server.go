@@ -178,10 +178,9 @@ func openInstalled(ctx context.Context, c Config) (*store.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	ok, err := st.Ent.User.Query().Where(user.RoleEQ(user.RoleAdmin)).Exist(ctx)
-	if err != nil || !ok {
+	if err := migrateAdministrator(ctx, st); err != nil {
 		st.Close()
-		return nil, errors.New("installed store has no administrator; restore the configuration before starting")
+		return nil, err
 	}
 	return st, nil
 }

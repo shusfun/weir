@@ -31,6 +31,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/link"
 	"github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/passkey"
+	"github.com/shusfun/weir/internal/store/ent/proxygroupversion"
 	"github.com/shusfun/weir/internal/store/ent/ratesample"
 	"github.com/shusfun/weir/internal/store/ent/recoverycode"
 	"github.com/shusfun/weir/internal/store/ent/resource"
@@ -50,8 +51,6 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/workercapability"
 	"github.com/shusfun/weir/internal/store/ent/workercommunication"
 	"github.com/shusfun/weir/internal/store/ent/workertask"
-
-	stdsql "database/sql"
 )
 
 // Client is the client that holds all ent builders.
@@ -91,6 +90,8 @@ type Client struct {
 	Node *NodeClient
 	// Passkey is the client for interacting with the Passkey builders.
 	Passkey *PasskeyClient
+	// ProxyGroupVersion is the client for interacting with the ProxyGroupVersion builders.
+	ProxyGroupVersion *ProxyGroupVersionClient
 	// RateSample is the client for interacting with the RateSample builders.
 	RateSample *RateSampleClient
 	// RecoveryCode is the client for interacting with the RecoveryCode builders.
@@ -156,6 +157,7 @@ func (c *Client) init() {
 	c.Link = NewLinkClient(c.config)
 	c.Node = NewNodeClient(c.config)
 	c.Passkey = NewPasskeyClient(c.config)
+	c.ProxyGroupVersion = NewProxyGroupVersionClient(c.config)
 	c.RateSample = NewRateSampleClient(c.config)
 	c.RecoveryCode = NewRecoveryCodeClient(c.config)
 	c.Resource = NewResourceClient(c.config)
@@ -283,6 +285,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Link:                   NewLinkClient(cfg),
 		Node:                   NewNodeClient(cfg),
 		Passkey:                NewPasskeyClient(cfg),
+		ProxyGroupVersion:      NewProxyGroupVersionClient(cfg),
 		RateSample:             NewRateSampleClient(cfg),
 		RecoveryCode:           NewRecoveryCodeClient(cfg),
 		Resource:               NewResourceClient(cfg),
@@ -337,6 +340,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		Link:                   NewLinkClient(cfg),
 		Node:                   NewNodeClient(cfg),
 		Passkey:                NewPasskeyClient(cfg),
+		ProxyGroupVersion:      NewProxyGroupVersionClient(cfg),
 		RateSample:             NewRateSampleClient(cfg),
 		RecoveryCode:           NewRecoveryCodeClient(cfg),
 		Resource:               NewResourceClient(cfg),
@@ -387,11 +391,11 @@ func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.AccessCode, c.AccountPlan, c.Audit, c.Budget, c.Certificate, c.Chain,
 		c.Credential, c.Exit, c.ExitBinding, c.Gate, c.GateAction, c.KV,
-		c.KernelDriver, c.Link, c.Node, c.Passkey, c.RateSample, c.RecoveryCode,
-		c.Resource, c.Route, c.RuleTemplate, c.Sample, c.Setting, c.SubGrant,
-		c.SubNode, c.SubProfile, c.SubPull, c.SubSource, c.SubscriptionCacheEntry,
-		c.User, c.WorkerActivity, c.WorkerAttempt, c.WorkerCapability,
-		c.WorkerCommunication, c.WorkerTask,
+		c.KernelDriver, c.Link, c.Node, c.Passkey, c.ProxyGroupVersion, c.RateSample,
+		c.RecoveryCode, c.Resource, c.Route, c.RuleTemplate, c.Sample, c.Setting,
+		c.SubGrant, c.SubNode, c.SubProfile, c.SubPull, c.SubSource,
+		c.SubscriptionCacheEntry, c.User, c.WorkerActivity, c.WorkerAttempt,
+		c.WorkerCapability, c.WorkerCommunication, c.WorkerTask,
 	} {
 		n.Use(hooks...)
 	}
@@ -403,11 +407,11 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.AccessCode, c.AccountPlan, c.Audit, c.Budget, c.Certificate, c.Chain,
 		c.Credential, c.Exit, c.ExitBinding, c.Gate, c.GateAction, c.KV,
-		c.KernelDriver, c.Link, c.Node, c.Passkey, c.RateSample, c.RecoveryCode,
-		c.Resource, c.Route, c.RuleTemplate, c.Sample, c.Setting, c.SubGrant,
-		c.SubNode, c.SubProfile, c.SubPull, c.SubSource, c.SubscriptionCacheEntry,
-		c.User, c.WorkerActivity, c.WorkerAttempt, c.WorkerCapability,
-		c.WorkerCommunication, c.WorkerTask,
+		c.KernelDriver, c.Link, c.Node, c.Passkey, c.ProxyGroupVersion, c.RateSample,
+		c.RecoveryCode, c.Resource, c.Route, c.RuleTemplate, c.Sample, c.Setting,
+		c.SubGrant, c.SubNode, c.SubProfile, c.SubPull, c.SubSource,
+		c.SubscriptionCacheEntry, c.User, c.WorkerActivity, c.WorkerAttempt,
+		c.WorkerCapability, c.WorkerCommunication, c.WorkerTask,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -448,6 +452,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Node.mutate(ctx, m)
 	case *PasskeyMutation:
 		return c.Passkey.mutate(ctx, m)
+	case *ProxyGroupVersionMutation:
+		return c.ProxyGroupVersion.mutate(ctx, m)
 	case *RateSampleMutation:
 		return c.RateSample.mutate(ctx, m)
 	case *RecoveryCodeMutation:
@@ -2728,6 +2734,139 @@ func (c *PasskeyClient) mutate(ctx context.Context, m *PasskeyMutation) (Value, 
 		return (&PasskeyDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown Passkey mutation op: %q", m.Op())
+	}
+}
+
+// ProxyGroupVersionClient is a client for the ProxyGroupVersion schema.
+type ProxyGroupVersionClient struct {
+	config
+}
+
+// NewProxyGroupVersionClient returns a client for the ProxyGroupVersion from the given config.
+func NewProxyGroupVersionClient(c config) *ProxyGroupVersionClient {
+	return &ProxyGroupVersionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `proxygroupversion.Hooks(f(g(h())))`.
+func (c *ProxyGroupVersionClient) Use(hooks ...Hook) {
+	c.hooks.ProxyGroupVersion = append(c.hooks.ProxyGroupVersion, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `proxygroupversion.Intercept(f(g(h())))`.
+func (c *ProxyGroupVersionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ProxyGroupVersion = append(c.inters.ProxyGroupVersion, interceptors...)
+}
+
+// Create returns a builder for creating a ProxyGroupVersion entity.
+func (c *ProxyGroupVersionClient) Create() *ProxyGroupVersionCreate {
+	mutation := newProxyGroupVersionMutation(c.config, OpCreate)
+	return &ProxyGroupVersionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ProxyGroupVersion entities.
+func (c *ProxyGroupVersionClient) CreateBulk(builders ...*ProxyGroupVersionCreate) *ProxyGroupVersionCreateBulk {
+	return &ProxyGroupVersionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ProxyGroupVersionClient) MapCreateBulk(slice any, setFunc func(*ProxyGroupVersionCreate, int)) *ProxyGroupVersionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ProxyGroupVersionCreateBulk{err: fmt.Errorf("calling to ProxyGroupVersionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ProxyGroupVersionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ProxyGroupVersionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ProxyGroupVersion.
+func (c *ProxyGroupVersionClient) Update() *ProxyGroupVersionUpdate {
+	mutation := newProxyGroupVersionMutation(c.config, OpUpdate)
+	return &ProxyGroupVersionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ProxyGroupVersionClient) UpdateOne(_m *ProxyGroupVersion) *ProxyGroupVersionUpdateOne {
+	mutation := newProxyGroupVersionMutation(c.config, OpUpdateOne, withProxyGroupVersion(_m))
+	return &ProxyGroupVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ProxyGroupVersionClient) UpdateOneID(id int) *ProxyGroupVersionUpdateOne {
+	mutation := newProxyGroupVersionMutation(c.config, OpUpdateOne, withProxyGroupVersionID(id))
+	return &ProxyGroupVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ProxyGroupVersion.
+func (c *ProxyGroupVersionClient) Delete() *ProxyGroupVersionDelete {
+	mutation := newProxyGroupVersionMutation(c.config, OpDelete)
+	return &ProxyGroupVersionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ProxyGroupVersionClient) DeleteOne(_m *ProxyGroupVersion) *ProxyGroupVersionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ProxyGroupVersionClient) DeleteOneID(id int) *ProxyGroupVersionDeleteOne {
+	builder := c.Delete().Where(proxygroupversion.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ProxyGroupVersionDeleteOne{builder}
+}
+
+// Query returns a query builder for ProxyGroupVersion.
+func (c *ProxyGroupVersionClient) Query() *ProxyGroupVersionQuery {
+	return &ProxyGroupVersionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeProxyGroupVersion},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ProxyGroupVersion entity by its id.
+func (c *ProxyGroupVersionClient) Get(ctx context.Context, id int) (*ProxyGroupVersion, error) {
+	return c.Query().Where(proxygroupversion.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ProxyGroupVersionClient) GetX(ctx context.Context, id int) *ProxyGroupVersion {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ProxyGroupVersionClient) Hooks() []Hook {
+	return c.hooks.ProxyGroupVersion
+}
+
+// Interceptors returns the client interceptors.
+func (c *ProxyGroupVersionClient) Interceptors() []Interceptor {
+	return c.inters.ProxyGroupVersion
+}
+
+func (c *ProxyGroupVersionClient) mutate(ctx context.Context, m *ProxyGroupVersionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ProxyGroupVersionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ProxyGroupVersionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ProxyGroupVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ProxyGroupVersionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ProxyGroupVersion mutation op: %q", m.Op())
 	}
 }
 
@@ -5279,41 +5418,17 @@ type (
 	hooks struct {
 		AccessCode, AccountPlan, Audit, Budget, Certificate, Chain, Credential, Exit,
 		ExitBinding, Gate, GateAction, KV, KernelDriver, Link, Node, Passkey,
-		RateSample, RecoveryCode, Resource, Route, RuleTemplate, Sample, Setting,
-		SubGrant, SubNode, SubProfile, SubPull, SubSource, SubscriptionCacheEntry,
-		User, WorkerActivity, WorkerAttempt, WorkerCapability, WorkerCommunication,
-		WorkerTask []ent.Hook
+		ProxyGroupVersion, RateSample, RecoveryCode, Resource, Route, RuleTemplate,
+		Sample, Setting, SubGrant, SubNode, SubProfile, SubPull, SubSource,
+		SubscriptionCacheEntry, User, WorkerActivity, WorkerAttempt, WorkerCapability,
+		WorkerCommunication, WorkerTask []ent.Hook
 	}
 	inters struct {
 		AccessCode, AccountPlan, Audit, Budget, Certificate, Chain, Credential, Exit,
 		ExitBinding, Gate, GateAction, KV, KernelDriver, Link, Node, Passkey,
-		RateSample, RecoveryCode, Resource, Route, RuleTemplate, Sample, Setting,
-		SubGrant, SubNode, SubProfile, SubPull, SubSource, SubscriptionCacheEntry,
-		User, WorkerActivity, WorkerAttempt, WorkerCapability, WorkerCommunication,
-		WorkerTask []ent.Interceptor
+		ProxyGroupVersion, RateSample, RecoveryCode, Resource, Route, RuleTemplate,
+		Sample, Setting, SubGrant, SubNode, SubProfile, SubPull, SubSource,
+		SubscriptionCacheEntry, User, WorkerActivity, WorkerAttempt, WorkerCapability,
+		WorkerCommunication, WorkerTask []ent.Interceptor
 	}
 )
-
-// ExecContext allows calling the underlying ExecContext method of the driver if it is supported by it.
-// See, database/sql#DB.ExecContext for more information.
-func (c *config) ExecContext(ctx context.Context, query string, args ...any) (stdsql.Result, error) {
-	ex, ok := c.driver.(interface {
-		ExecContext(context.Context, string, ...any) (stdsql.Result, error)
-	})
-	if !ok {
-		return nil, fmt.Errorf("Driver.ExecContext is not supported")
-	}
-	return ex.ExecContext(ctx, query, args...)
-}
-
-// QueryContext allows calling the underlying QueryContext method of the driver if it is supported by it.
-// See, database/sql#DB.QueryContext for more information.
-func (c *config) QueryContext(ctx context.Context, query string, args ...any) (*stdsql.Rows, error) {
-	q, ok := c.driver.(interface {
-		QueryContext(context.Context, string, ...any) (*stdsql.Rows, error)
-	})
-	if !ok {
-		return nil, fmt.Errorf("Driver.QueryContext is not supported")
-	}
-	return q.QueryContext(ctx, query, args...)
-}

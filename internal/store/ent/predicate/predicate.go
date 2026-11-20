@@ -54,6 +54,9 @@ type Node func(*sql.Selector)
 // Passkey is the predicate function for passkey builders.
 type Passkey func(*sql.Selector)
 
+// ProxyGroupVersion is the predicate function for proxygroupversion builders.
+type ProxyGroupVersion func(*sql.Selector)
+
 // RateSample is the predicate function for ratesample builders.
 type RateSample func(*sql.Selector)
 

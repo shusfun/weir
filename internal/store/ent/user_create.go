@@ -90,6 +90,40 @@ func (_c *UserCreate) SetNillableEnabled(v *bool) *UserCreate {
 	return _c
 }
 
+// SetSessionsValidAfter sets the "sessions_valid_after" field.
+func (_c *UserCreate) SetSessionsValidAfter(v time.Time) *UserCreate {
+	_c.mutation.SetSessionsValidAfter(v)
+	return _c
+}
+
+// SetNillableSessionsValidAfter sets the "sessions_valid_after" field if the given value is not nil.
+func (_c *UserCreate) SetNillableSessionsValidAfter(v *time.Time) *UserCreate {
+	if v != nil {
+		_c.SetSessionsValidAfter(*v)
+	}
+	return _c
+}
+
+// SetCodeIssuerPlanIds sets the "code_issuer_plan_ids" field.
+func (_c *UserCreate) SetCodeIssuerPlanIds(v []int) *UserCreate {
+	_c.mutation.SetCodeIssuerPlanIds(v)
+	return _c
+}
+
+// SetCodeIssuerDailyLimit sets the "code_issuer_daily_limit" field.
+func (_c *UserCreate) SetCodeIssuerDailyLimit(v int) *UserCreate {
+	_c.mutation.SetCodeIssuerDailyLimit(v)
+	return _c
+}
+
+// SetNillableCodeIssuerDailyLimit sets the "code_issuer_daily_limit" field if the given value is not nil.
+func (_c *UserCreate) SetNillableCodeIssuerDailyLimit(v *int) *UserCreate {
+	if v != nil {
+		_c.SetCodeIssuerDailyLimit(*v)
+	}
+	return _c
+}
+
 // SetQuota sets the "quota" field.
 func (_c *UserCreate) SetQuota(v int64) *UserCreate {
 	_c.mutation.SetQuota(v)
@@ -317,6 +351,10 @@ func (_c *UserCreate) defaults() {
 		v := user.DefaultEnabled
 		_c.mutation.SetEnabled(v)
 	}
+	if _, ok := _c.mutation.CodeIssuerDailyLimit(); !ok {
+		v := user.DefaultCodeIssuerDailyLimit
+		_c.mutation.SetCodeIssuerDailyLimit(v)
+	}
 	if _, ok := _c.mutation.Quota(); !ok {
 		v := user.DefaultQuota
 		_c.mutation.SetQuota(v)
@@ -399,6 +437,9 @@ func (_c *UserCreate) check() error {
 	}
 	if _, ok := _c.mutation.Enabled(); !ok {
 		return &ValidationError{Name: "enabled", err: errors.New(`ent: missing required field "User.enabled"`)}
+	}
+	if _, ok := _c.mutation.CodeIssuerDailyLimit(); !ok {
+		return &ValidationError{Name: "code_issuer_daily_limit", err: errors.New(`ent: missing required field "User.code_issuer_daily_limit"`)}
 	}
 	if _, ok := _c.mutation.Quota(); !ok {
 		return &ValidationError{Name: "quota", err: errors.New(`ent: missing required field "User.quota"`)}
@@ -493,6 +534,18 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Enabled(); ok {
 		_spec.SetField(user.FieldEnabled, field.TypeBool, value)
 		_node.Enabled = value
+	}
+	if value, ok := _c.mutation.SessionsValidAfter(); ok {
+		_spec.SetField(user.FieldSessionsValidAfter, field.TypeTime, value)
+		_node.SessionsValidAfter = &value
+	}
+	if value, ok := _c.mutation.CodeIssuerPlanIds(); ok {
+		_spec.SetField(user.FieldCodeIssuerPlanIds, field.TypeJSON, value)
+		_node.CodeIssuerPlanIds = value
+	}
+	if value, ok := _c.mutation.CodeIssuerDailyLimit(); ok {
+		_spec.SetField(user.FieldCodeIssuerDailyLimit, field.TypeInt, value)
+		_node.CodeIssuerDailyLimit = value
 	}
 	if value, ok := _c.mutation.Quota(); ok {
 		_spec.SetField(user.FieldQuota, field.TypeInt64, value)
@@ -677,6 +730,60 @@ func (u *UserUpsert) SetEnabled(v bool) *UserUpsert {
 // UpdateEnabled sets the "enabled" field to the value that was provided on create.
 func (u *UserUpsert) UpdateEnabled() *UserUpsert {
 	u.SetExcluded(user.FieldEnabled)
+	return u
+}
+
+// SetSessionsValidAfter sets the "sessions_valid_after" field.
+func (u *UserUpsert) SetSessionsValidAfter(v time.Time) *UserUpsert {
+	u.Set(user.FieldSessionsValidAfter, v)
+	return u
+}
+
+// UpdateSessionsValidAfter sets the "sessions_valid_after" field to the value that was provided on create.
+func (u *UserUpsert) UpdateSessionsValidAfter() *UserUpsert {
+	u.SetExcluded(user.FieldSessionsValidAfter)
+	return u
+}
+
+// ClearSessionsValidAfter clears the value of the "sessions_valid_after" field.
+func (u *UserUpsert) ClearSessionsValidAfter() *UserUpsert {
+	u.SetNull(user.FieldSessionsValidAfter)
+	return u
+}
+
+// SetCodeIssuerPlanIds sets the "code_issuer_plan_ids" field.
+func (u *UserUpsert) SetCodeIssuerPlanIds(v []int) *UserUpsert {
+	u.Set(user.FieldCodeIssuerPlanIds, v)
+	return u
+}
+
+// UpdateCodeIssuerPlanIds sets the "code_issuer_plan_ids" field to the value that was provided on create.
+func (u *UserUpsert) UpdateCodeIssuerPlanIds() *UserUpsert {
+	u.SetExcluded(user.FieldCodeIssuerPlanIds)
+	return u
+}
+
+// ClearCodeIssuerPlanIds clears the value of the "code_issuer_plan_ids" field.
+func (u *UserUpsert) ClearCodeIssuerPlanIds() *UserUpsert {
+	u.SetNull(user.FieldCodeIssuerPlanIds)
+	return u
+}
+
+// SetCodeIssuerDailyLimit sets the "code_issuer_daily_limit" field.
+func (u *UserUpsert) SetCodeIssuerDailyLimit(v int) *UserUpsert {
+	u.Set(user.FieldCodeIssuerDailyLimit, v)
+	return u
+}
+
+// UpdateCodeIssuerDailyLimit sets the "code_issuer_daily_limit" field to the value that was provided on create.
+func (u *UserUpsert) UpdateCodeIssuerDailyLimit() *UserUpsert {
+	u.SetExcluded(user.FieldCodeIssuerDailyLimit)
+	return u
+}
+
+// AddCodeIssuerDailyLimit adds v to the "code_issuer_daily_limit" field.
+func (u *UserUpsert) AddCodeIssuerDailyLimit(v int) *UserUpsert {
+	u.Add(user.FieldCodeIssuerDailyLimit, v)
 	return u
 }
 
@@ -1005,6 +1112,69 @@ func (u *UserUpsertOne) SetEnabled(v bool) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateEnabled() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateEnabled()
+	})
+}
+
+// SetSessionsValidAfter sets the "sessions_valid_after" field.
+func (u *UserUpsertOne) SetSessionsValidAfter(v time.Time) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetSessionsValidAfter(v)
+	})
+}
+
+// UpdateSessionsValidAfter sets the "sessions_valid_after" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateSessionsValidAfter() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateSessionsValidAfter()
+	})
+}
+
+// ClearSessionsValidAfter clears the value of the "sessions_valid_after" field.
+func (u *UserUpsertOne) ClearSessionsValidAfter() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearSessionsValidAfter()
+	})
+}
+
+// SetCodeIssuerPlanIds sets the "code_issuer_plan_ids" field.
+func (u *UserUpsertOne) SetCodeIssuerPlanIds(v []int) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetCodeIssuerPlanIds(v)
+	})
+}
+
+// UpdateCodeIssuerPlanIds sets the "code_issuer_plan_ids" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateCodeIssuerPlanIds() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateCodeIssuerPlanIds()
+	})
+}
+
+// ClearCodeIssuerPlanIds clears the value of the "code_issuer_plan_ids" field.
+func (u *UserUpsertOne) ClearCodeIssuerPlanIds() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearCodeIssuerPlanIds()
+	})
+}
+
+// SetCodeIssuerDailyLimit sets the "code_issuer_daily_limit" field.
+func (u *UserUpsertOne) SetCodeIssuerDailyLimit(v int) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetCodeIssuerDailyLimit(v)
+	})
+}
+
+// AddCodeIssuerDailyLimit adds v to the "code_issuer_daily_limit" field.
+func (u *UserUpsertOne) AddCodeIssuerDailyLimit(v int) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.AddCodeIssuerDailyLimit(v)
+	})
+}
+
+// UpdateCodeIssuerDailyLimit sets the "code_issuer_daily_limit" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateCodeIssuerDailyLimit() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateCodeIssuerDailyLimit()
 	})
 }
 
@@ -1531,6 +1701,69 @@ func (u *UserUpsertBulk) SetEnabled(v bool) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateEnabled() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateEnabled()
+	})
+}
+
+// SetSessionsValidAfter sets the "sessions_valid_after" field.
+func (u *UserUpsertBulk) SetSessionsValidAfter(v time.Time) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetSessionsValidAfter(v)
+	})
+}
+
+// UpdateSessionsValidAfter sets the "sessions_valid_after" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateSessionsValidAfter() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateSessionsValidAfter()
+	})
+}
+
+// ClearSessionsValidAfter clears the value of the "sessions_valid_after" field.
+func (u *UserUpsertBulk) ClearSessionsValidAfter() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearSessionsValidAfter()
+	})
+}
+
+// SetCodeIssuerPlanIds sets the "code_issuer_plan_ids" field.
+func (u *UserUpsertBulk) SetCodeIssuerPlanIds(v []int) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetCodeIssuerPlanIds(v)
+	})
+}
+
+// UpdateCodeIssuerPlanIds sets the "code_issuer_plan_ids" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateCodeIssuerPlanIds() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateCodeIssuerPlanIds()
+	})
+}
+
+// ClearCodeIssuerPlanIds clears the value of the "code_issuer_plan_ids" field.
+func (u *UserUpsertBulk) ClearCodeIssuerPlanIds() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearCodeIssuerPlanIds()
+	})
+}
+
+// SetCodeIssuerDailyLimit sets the "code_issuer_daily_limit" field.
+func (u *UserUpsertBulk) SetCodeIssuerDailyLimit(v int) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetCodeIssuerDailyLimit(v)
+	})
+}
+
+// AddCodeIssuerDailyLimit adds v to the "code_issuer_daily_limit" field.
+func (u *UserUpsertBulk) AddCodeIssuerDailyLimit(v int) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.AddCodeIssuerDailyLimit(v)
+	})
+}
+
+// UpdateCodeIssuerDailyLimit sets the "code_issuer_daily_limit" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateCodeIssuerDailyLimit() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateCodeIssuerDailyLimit()
 	})
 }
 

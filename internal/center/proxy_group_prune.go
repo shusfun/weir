@@ -9,6 +9,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/chain"
 	"github.com/shusfun/weir/internal/store/ent/node"
+	"github.com/shusfun/weir/internal/store/ent/user"
 	"github.com/shusfun/weir/packages/contracts"
 )
 
@@ -68,6 +69,9 @@ func (s *Server) pruneUserGroupMembers(ctx context.Context, uid int, dropped map
 	removed := 0
 	err := s.Store.Lock.Do(ctx, "proxy-policy:"+itoa(uid), func(ctx context.Context) error {
 		u, err := s.Store.Ent.User.Get(ctx, uid)
+		if ent.IsNotFound(err) {
+			return nil
+		}
 		if err != nil {
 			return err
 		}
@@ -80,7 +84,9 @@ func (s *Server) pruneUserGroupMembers(ctx context.Context, uid int, dropped map
 			return err
 		}
 		groups := p.Groups[:0]
+		var edited, deleted []contracts.ProxyGroup
 		for _, g := range p.Groups {
+			originalCount := len(g.Members)
 			kept := g.Members[:0]
 			for _, ref := range g.Members {
 				if alive[ref] && !dropped[ref] {
@@ -92,6 +98,11 @@ func (s *Server) pruneUserGroupMembers(ctx context.Context, uid int, dropped map
 			g.Members = kept
 			if len(kept) > 0 {
 				groups = append(groups, g)
+				if len(kept) != originalCount {
+					edited = append(edited, g)
+				}
+			} else if originalCount > 0 {
+				deleted = append(deleted, g)
 			}
 		}
 		if removed == 0 {
@@ -99,12 +110,31 @@ func (s *Server) pruneUserGroupMembers(ctx context.Context, uid int, dropped map
 		}
 		p.Groups = groups
 		p.Revision++
-		if err = u.Update().SetProxyPolicy(policyMap(p)).Exec(ctx); err != nil {
+		tx, err := s.Store.Ent.Tx(ctx)
+		if err != nil {
 			return err
 		}
-		_, _ = s.Store.Ent.Audit.Create().SetActor(causeFrom(ctx).Actor).SetAction("proxy.group.prune").SetTarget("user:" + itoa(uid)).
-			SetResult("ok removed=" + itoa(removed)).SetDetail(map[string]any{"trace_id": taskTrace(ctx)}).Save(ctx)
-		return nil
+		defer tx.Rollback()
+		if u.Role == user.RoleAdmin {
+			for _, group := range edited {
+				if err := writeGroupVersion(ctx, tx, uid, group, false); err != nil {
+					return err
+				}
+			}
+			for _, group := range deleted {
+				if err := writeGroupVersion(ctx, tx, uid, group, true); err != nil {
+					return err
+				}
+			}
+		}
+		if err = tx.User.UpdateOneID(uid).SetProxyPolicy(policyMap(p)).Exec(ctx); err != nil {
+			return err
+		}
+		if err = tx.Audit.Create().SetActor(causeFrom(ctx).Actor).SetAction("proxy.group.prune").SetTarget("user:" + itoa(uid)).
+			SetResult("ok removed=" + itoa(removed)).SetDetail(map[string]any{"trace_id": taskTrace(ctx)}).Exec(ctx); err != nil {
+			return err
+		}
+		return tx.Commit()
 	})
 	return removed, err
 }

@@ -79,6 +79,16 @@ func Enabled(v bool) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldEnabled, v))
 }
 
+// SessionsValidAfter applies equality check predicate on the "sessions_valid_after" field. It's identical to SessionsValidAfterEQ.
+func SessionsValidAfter(v time.Time) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldSessionsValidAfter, v))
+}
+
+// CodeIssuerDailyLimit applies equality check predicate on the "code_issuer_daily_limit" field. It's identical to CodeIssuerDailyLimitEQ.
+func CodeIssuerDailyLimit(v int) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldCodeIssuerDailyLimit, v))
+}
+
 // Quota applies equality check predicate on the "quota" field. It's identical to QuotaEQ.
 func Quota(v int64) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldQuota, v))
@@ -437,6 +447,106 @@ func EnabledEQ(v bool) predicate.User {
 // EnabledNEQ applies the NEQ predicate on the "enabled" field.
 func EnabledNEQ(v bool) predicate.User {
 	return predicate.User(sql.FieldNEQ(FieldEnabled, v))
+}
+
+// SessionsValidAfterEQ applies the EQ predicate on the "sessions_valid_after" field.
+func SessionsValidAfterEQ(v time.Time) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldSessionsValidAfter, v))
+}
+
+// SessionsValidAfterNEQ applies the NEQ predicate on the "sessions_valid_after" field.
+func SessionsValidAfterNEQ(v time.Time) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldSessionsValidAfter, v))
+}
+
+// SessionsValidAfterIn applies the In predicate on the "sessions_valid_after" field.
+func SessionsValidAfterIn(vs ...time.Time) predicate.User {
+	return predicate.User(sql.FieldIn(FieldSessionsValidAfter, vs...))
+}
+
+// SessionsValidAfterNotIn applies the NotIn predicate on the "sessions_valid_after" field.
+func SessionsValidAfterNotIn(vs ...time.Time) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldSessionsValidAfter, vs...))
+}
+
+// SessionsValidAfterGT applies the GT predicate on the "sessions_valid_after" field.
+func SessionsValidAfterGT(v time.Time) predicate.User {
+	return predicate.User(sql.FieldGT(FieldSessionsValidAfter, v))
+}
+
+// SessionsValidAfterGTE applies the GTE predicate on the "sessions_valid_after" field.
+func SessionsValidAfterGTE(v time.Time) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldSessionsValidAfter, v))
+}
+
+// SessionsValidAfterLT applies the LT predicate on the "sessions_valid_after" field.
+func SessionsValidAfterLT(v time.Time) predicate.User {
+	return predicate.User(sql.FieldLT(FieldSessionsValidAfter, v))
+}
+
+// SessionsValidAfterLTE applies the LTE predicate on the "sessions_valid_after" field.
+func SessionsValidAfterLTE(v time.Time) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldSessionsValidAfter, v))
+}
+
+// SessionsValidAfterIsNil applies the IsNil predicate on the "sessions_valid_after" field.
+func SessionsValidAfterIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldSessionsValidAfter))
+}
+
+// SessionsValidAfterNotNil applies the NotNil predicate on the "sessions_valid_after" field.
+func SessionsValidAfterNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldSessionsValidAfter))
+}
+
+// CodeIssuerPlanIdsIsNil applies the IsNil predicate on the "code_issuer_plan_ids" field.
+func CodeIssuerPlanIdsIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldCodeIssuerPlanIds))
+}
+
+// CodeIssuerPlanIdsNotNil applies the NotNil predicate on the "code_issuer_plan_ids" field.
+func CodeIssuerPlanIdsNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldCodeIssuerPlanIds))
+}
+
+// CodeIssuerDailyLimitEQ applies the EQ predicate on the "code_issuer_daily_limit" field.
+func CodeIssuerDailyLimitEQ(v int) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldCodeIssuerDailyLimit, v))
+}
+
+// CodeIssuerDailyLimitNEQ applies the NEQ predicate on the "code_issuer_daily_limit" field.
+func CodeIssuerDailyLimitNEQ(v int) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldCodeIssuerDailyLimit, v))
+}
+
+// CodeIssuerDailyLimitIn applies the In predicate on the "code_issuer_daily_limit" field.
+func CodeIssuerDailyLimitIn(vs ...int) predicate.User {
+	return predicate.User(sql.FieldIn(FieldCodeIssuerDailyLimit, vs...))
+}
+
+// CodeIssuerDailyLimitNotIn applies the NotIn predicate on the "code_issuer_daily_limit" field.
+func CodeIssuerDailyLimitNotIn(vs ...int) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldCodeIssuerDailyLimit, vs...))
+}
+
+// CodeIssuerDailyLimitGT applies the GT predicate on the "code_issuer_daily_limit" field.
+func CodeIssuerDailyLimitGT(v int) predicate.User {
+	return predicate.User(sql.FieldGT(FieldCodeIssuerDailyLimit, v))
+}
+
+// CodeIssuerDailyLimitGTE applies the GTE predicate on the "code_issuer_daily_limit" field.
+func CodeIssuerDailyLimitGTE(v int) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldCodeIssuerDailyLimit, v))
+}
+
+// CodeIssuerDailyLimitLT applies the LT predicate on the "code_issuer_daily_limit" field.
+func CodeIssuerDailyLimitLT(v int) predicate.User {
+	return predicate.User(sql.FieldLT(FieldCodeIssuerDailyLimit, v))
+}
+
+// CodeIssuerDailyLimitLTE applies the LTE predicate on the "code_issuer_daily_limit" field.
+func CodeIssuerDailyLimitLTE(v int) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldCodeIssuerDailyLimit, v))
 }
 
 // QuotaEQ applies the EQ predicate on the "quota" field.

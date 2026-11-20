@@ -30,6 +30,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/passkey"
 	"github.com/shusfun/weir/internal/store/ent/predicate"
+	"github.com/shusfun/weir/internal/store/ent/proxygroupversion"
 	"github.com/shusfun/weir/internal/store/ent/ratesample"
 	"github.com/shusfun/weir/internal/store/ent/recoverycode"
 	"github.com/shusfun/weir/internal/store/ent/resource"
@@ -77,6 +78,7 @@ const (
 	TypeLink                   = "Link"
 	TypeNode                   = "Node"
 	TypePasskey                = "Passkey"
+	TypeProxyGroupVersion      = "ProxyGroupVersion"
 	TypeRateSample             = "RateSample"
 	TypeRecoveryCode           = "RecoveryCode"
 	TypeResource               = "Resource"
@@ -16944,6 +16946,693 @@ func (m *PasskeyMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown Passkey edge %s", name)
 }
 
+// ProxyGroupVersionMutation represents an operation that mutates the ProxyGroupVersion nodes in the graph.
+type ProxyGroupVersionMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *int
+	owner_id      *int
+	addowner_id   *int
+	group_id      *int
+	addgroup_id   *int
+	snapshot      *contracts.ProxyGroup
+	valid_from    *time.Time
+	valid_until   *time.Time
+	trace_id      *string
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*ProxyGroupVersion, error)
+	predicates    []predicate.ProxyGroupVersion
+}
+
+var _ ent.Mutation = (*ProxyGroupVersionMutation)(nil)
+
+// proxygroupversionOption allows management of the mutation configuration using functional options.
+type proxygroupversionOption func(*ProxyGroupVersionMutation)
+
+// newProxyGroupVersionMutation creates new mutation for the ProxyGroupVersion entity.
+func newProxyGroupVersionMutation(c config, op Op, opts ...proxygroupversionOption) *ProxyGroupVersionMutation {
+	m := &ProxyGroupVersionMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeProxyGroupVersion,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withProxyGroupVersionID sets the ID field of the mutation.
+func withProxyGroupVersionID(id int) proxygroupversionOption {
+	return func(m *ProxyGroupVersionMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *ProxyGroupVersion
+		)
+		m.oldValue = func(ctx context.Context) (*ProxyGroupVersion, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().ProxyGroupVersion.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withProxyGroupVersion sets the old ProxyGroupVersion of the mutation.
+func withProxyGroupVersion(node *ProxyGroupVersion) proxygroupversionOption {
+	return func(m *ProxyGroupVersionMutation) {
+		m.oldValue = func(context.Context) (*ProxyGroupVersion, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ProxyGroupVersionMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ProxyGroupVersionMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ProxyGroupVersionMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ProxyGroupVersionMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().ProxyGroupVersion.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetOwnerID sets the "owner_id" field.
+func (m *ProxyGroupVersionMutation) SetOwnerID(i int) {
+	m.owner_id = &i
+	m.addowner_id = nil
+}
+
+// OwnerID returns the value of the "owner_id" field in the mutation.
+func (m *ProxyGroupVersionMutation) OwnerID() (r int, exists bool) {
+	v := m.owner_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOwnerID returns the old "owner_id" field's value of the ProxyGroupVersion entity.
+// If the ProxyGroupVersion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProxyGroupVersionMutation) OldOwnerID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOwnerID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOwnerID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOwnerID: %w", err)
+	}
+	return oldValue.OwnerID, nil
+}
+
+// AddOwnerID adds i to the "owner_id" field.
+func (m *ProxyGroupVersionMutation) AddOwnerID(i int) {
+	if m.addowner_id != nil {
+		*m.addowner_id += i
+	} else {
+		m.addowner_id = &i
+	}
+}
+
+// AddedOwnerID returns the value that was added to the "owner_id" field in this mutation.
+func (m *ProxyGroupVersionMutation) AddedOwnerID() (r int, exists bool) {
+	v := m.addowner_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetOwnerID resets all changes to the "owner_id" field.
+func (m *ProxyGroupVersionMutation) ResetOwnerID() {
+	m.owner_id = nil
+	m.addowner_id = nil
+}
+
+// SetGroupID sets the "group_id" field.
+func (m *ProxyGroupVersionMutation) SetGroupID(i int) {
+	m.group_id = &i
+	m.addgroup_id = nil
+}
+
+// GroupID returns the value of the "group_id" field in the mutation.
+func (m *ProxyGroupVersionMutation) GroupID() (r int, exists bool) {
+	v := m.group_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupID returns the old "group_id" field's value of the ProxyGroupVersion entity.
+// If the ProxyGroupVersion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProxyGroupVersionMutation) OldGroupID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupID: %w", err)
+	}
+	return oldValue.GroupID, nil
+}
+
+// AddGroupID adds i to the "group_id" field.
+func (m *ProxyGroupVersionMutation) AddGroupID(i int) {
+	if m.addgroup_id != nil {
+		*m.addgroup_id += i
+	} else {
+		m.addgroup_id = &i
+	}
+}
+
+// AddedGroupID returns the value that was added to the "group_id" field in this mutation.
+func (m *ProxyGroupVersionMutation) AddedGroupID() (r int, exists bool) {
+	v := m.addgroup_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetGroupID resets all changes to the "group_id" field.
+func (m *ProxyGroupVersionMutation) ResetGroupID() {
+	m.group_id = nil
+	m.addgroup_id = nil
+}
+
+// SetSnapshot sets the "snapshot" field.
+func (m *ProxyGroupVersionMutation) SetSnapshot(cg contracts.ProxyGroup) {
+	m.snapshot = &cg
+}
+
+// Snapshot returns the value of the "snapshot" field in the mutation.
+func (m *ProxyGroupVersionMutation) Snapshot() (r contracts.ProxyGroup, exists bool) {
+	v := m.snapshot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSnapshot returns the old "snapshot" field's value of the ProxyGroupVersion entity.
+// If the ProxyGroupVersion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProxyGroupVersionMutation) OldSnapshot(ctx context.Context) (v contracts.ProxyGroup, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSnapshot is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSnapshot requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSnapshot: %w", err)
+	}
+	return oldValue.Snapshot, nil
+}
+
+// ResetSnapshot resets all changes to the "snapshot" field.
+func (m *ProxyGroupVersionMutation) ResetSnapshot() {
+	m.snapshot = nil
+}
+
+// SetValidFrom sets the "valid_from" field.
+func (m *ProxyGroupVersionMutation) SetValidFrom(t time.Time) {
+	m.valid_from = &t
+}
+
+// ValidFrom returns the value of the "valid_from" field in the mutation.
+func (m *ProxyGroupVersionMutation) ValidFrom() (r time.Time, exists bool) {
+	v := m.valid_from
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldValidFrom returns the old "valid_from" field's value of the ProxyGroupVersion entity.
+// If the ProxyGroupVersion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProxyGroupVersionMutation) OldValidFrom(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldValidFrom is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldValidFrom requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldValidFrom: %w", err)
+	}
+	return oldValue.ValidFrom, nil
+}
+
+// ResetValidFrom resets all changes to the "valid_from" field.
+func (m *ProxyGroupVersionMutation) ResetValidFrom() {
+	m.valid_from = nil
+}
+
+// SetValidUntil sets the "valid_until" field.
+func (m *ProxyGroupVersionMutation) SetValidUntil(t time.Time) {
+	m.valid_until = &t
+}
+
+// ValidUntil returns the value of the "valid_until" field in the mutation.
+func (m *ProxyGroupVersionMutation) ValidUntil() (r time.Time, exists bool) {
+	v := m.valid_until
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldValidUntil returns the old "valid_until" field's value of the ProxyGroupVersion entity.
+// If the ProxyGroupVersion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProxyGroupVersionMutation) OldValidUntil(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldValidUntil is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldValidUntil requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldValidUntil: %w", err)
+	}
+	return oldValue.ValidUntil, nil
+}
+
+// ClearValidUntil clears the value of the "valid_until" field.
+func (m *ProxyGroupVersionMutation) ClearValidUntil() {
+	m.valid_until = nil
+	m.clearedFields[proxygroupversion.FieldValidUntil] = struct{}{}
+}
+
+// ValidUntilCleared returns if the "valid_until" field was cleared in this mutation.
+func (m *ProxyGroupVersionMutation) ValidUntilCleared() bool {
+	_, ok := m.clearedFields[proxygroupversion.FieldValidUntil]
+	return ok
+}
+
+// ResetValidUntil resets all changes to the "valid_until" field.
+func (m *ProxyGroupVersionMutation) ResetValidUntil() {
+	m.valid_until = nil
+	delete(m.clearedFields, proxygroupversion.FieldValidUntil)
+}
+
+// SetTraceID sets the "trace_id" field.
+func (m *ProxyGroupVersionMutation) SetTraceID(s string) {
+	m.trace_id = &s
+}
+
+// TraceID returns the value of the "trace_id" field in the mutation.
+func (m *ProxyGroupVersionMutation) TraceID() (r string, exists bool) {
+	v := m.trace_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTraceID returns the old "trace_id" field's value of the ProxyGroupVersion entity.
+// If the ProxyGroupVersion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProxyGroupVersionMutation) OldTraceID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTraceID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTraceID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTraceID: %w", err)
+	}
+	return oldValue.TraceID, nil
+}
+
+// ResetTraceID resets all changes to the "trace_id" field.
+func (m *ProxyGroupVersionMutation) ResetTraceID() {
+	m.trace_id = nil
+}
+
+// Where appends a list predicates to the ProxyGroupVersionMutation builder.
+func (m *ProxyGroupVersionMutation) Where(ps ...predicate.ProxyGroupVersion) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the ProxyGroupVersionMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *ProxyGroupVersionMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.ProxyGroupVersion, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *ProxyGroupVersionMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *ProxyGroupVersionMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (ProxyGroupVersion).
+func (m *ProxyGroupVersionMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *ProxyGroupVersionMutation) Fields() []string {
+	fields := make([]string, 0, 6)
+	if m.owner_id != nil {
+		fields = append(fields, proxygroupversion.FieldOwnerID)
+	}
+	if m.group_id != nil {
+		fields = append(fields, proxygroupversion.FieldGroupID)
+	}
+	if m.snapshot != nil {
+		fields = append(fields, proxygroupversion.FieldSnapshot)
+	}
+	if m.valid_from != nil {
+		fields = append(fields, proxygroupversion.FieldValidFrom)
+	}
+	if m.valid_until != nil {
+		fields = append(fields, proxygroupversion.FieldValidUntil)
+	}
+	if m.trace_id != nil {
+		fields = append(fields, proxygroupversion.FieldTraceID)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *ProxyGroupVersionMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case proxygroupversion.FieldOwnerID:
+		return m.OwnerID()
+	case proxygroupversion.FieldGroupID:
+		return m.GroupID()
+	case proxygroupversion.FieldSnapshot:
+		return m.Snapshot()
+	case proxygroupversion.FieldValidFrom:
+		return m.ValidFrom()
+	case proxygroupversion.FieldValidUntil:
+		return m.ValidUntil()
+	case proxygroupversion.FieldTraceID:
+		return m.TraceID()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ProxyGroupVersionMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case proxygroupversion.FieldOwnerID:
+		return m.OldOwnerID(ctx)
+	case proxygroupversion.FieldGroupID:
+		return m.OldGroupID(ctx)
+	case proxygroupversion.FieldSnapshot:
+		return m.OldSnapshot(ctx)
+	case proxygroupversion.FieldValidFrom:
+		return m.OldValidFrom(ctx)
+	case proxygroupversion.FieldValidUntil:
+		return m.OldValidUntil(ctx)
+	case proxygroupversion.FieldTraceID:
+		return m.OldTraceID(ctx)
+	}
+	return nil, fmt.Errorf("unknown ProxyGroupVersion field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ProxyGroupVersionMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case proxygroupversion.FieldOwnerID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOwnerID(v)
+		return nil
+	case proxygroupversion.FieldGroupID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupID(v)
+		return nil
+	case proxygroupversion.FieldSnapshot:
+		v, ok := value.(contracts.ProxyGroup)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSnapshot(v)
+		return nil
+	case proxygroupversion.FieldValidFrom:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetValidFrom(v)
+		return nil
+	case proxygroupversion.FieldValidUntil:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetValidUntil(v)
+		return nil
+	case proxygroupversion.FieldTraceID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTraceID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ProxyGroupVersion field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *ProxyGroupVersionMutation) AddedFields() []string {
+	var fields []string
+	if m.addowner_id != nil {
+		fields = append(fields, proxygroupversion.FieldOwnerID)
+	}
+	if m.addgroup_id != nil {
+		fields = append(fields, proxygroupversion.FieldGroupID)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *ProxyGroupVersionMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case proxygroupversion.FieldOwnerID:
+		return m.AddedOwnerID()
+	case proxygroupversion.FieldGroupID:
+		return m.AddedGroupID()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ProxyGroupVersionMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case proxygroupversion.FieldOwnerID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddOwnerID(v)
+		return nil
+	case proxygroupversion.FieldGroupID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGroupID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ProxyGroupVersion numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *ProxyGroupVersionMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(proxygroupversion.FieldValidUntil) {
+		fields = append(fields, proxygroupversion.FieldValidUntil)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *ProxyGroupVersionMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *ProxyGroupVersionMutation) ClearField(name string) error {
+	switch name {
+	case proxygroupversion.FieldValidUntil:
+		m.ClearValidUntil()
+		return nil
+	}
+	return fmt.Errorf("unknown ProxyGroupVersion nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *ProxyGroupVersionMutation) ResetField(name string) error {
+	switch name {
+	case proxygroupversion.FieldOwnerID:
+		m.ResetOwnerID()
+		return nil
+	case proxygroupversion.FieldGroupID:
+		m.ResetGroupID()
+		return nil
+	case proxygroupversion.FieldSnapshot:
+		m.ResetSnapshot()
+		return nil
+	case proxygroupversion.FieldValidFrom:
+		m.ResetValidFrom()
+		return nil
+	case proxygroupversion.FieldValidUntil:
+		m.ResetValidUntil()
+		return nil
+	case proxygroupversion.FieldTraceID:
+		m.ResetTraceID()
+		return nil
+	}
+	return fmt.Errorf("unknown ProxyGroupVersion field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *ProxyGroupVersionMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *ProxyGroupVersionMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *ProxyGroupVersionMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *ProxyGroupVersionMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *ProxyGroupVersionMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *ProxyGroupVersionMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *ProxyGroupVersionMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown ProxyGroupVersion unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *ProxyGroupVersionMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown ProxyGroupVersion edge %s", name)
+}
+
 // RateSampleMutation represents an operation that mutates the RateSample nodes in the graph.
 type RateSampleMutation struct {
 	config
@@ -28337,37 +29026,42 @@ func (m *SubscriptionCacheEntryMutation) ResetEdge(name string) error {
 // UserMutation represents an operation that mutates the User nodes in the graph.
 type UserMutation struct {
 	config
-	op               Op
-	typ              string
-	id               *int
-	email            *string
-	normalized_email *string
-	name             *string
-	password_hash    *string
-	role             *user.Role
-	enabled          *bool
-	quota            *int64
-	addquota         *int64
-	unlimited        *bool
-	used             *int64
-	addused          *int64
-	expires_at       *time.Time
-	monthly_reset    *bool
-	usage_reset_at   *time.Time
-	all_nodes        *bool
-	node_ids         *[]int
-	appendnode_ids   []int
-	allow_chain      *bool
-	proxy_policy     *map[string]interface{}
-	totp_secret      *string
-	totp_step        *int64
-	addtotp_step     *int64
-	created_at       *time.Time
-	updated_at       *time.Time
-	clearedFields    map[string]struct{}
-	done             bool
-	oldValue         func(context.Context) (*User, error)
-	predicates       []predicate.User
+	op                         Op
+	typ                        string
+	id                         *int
+	email                      *string
+	normalized_email           *string
+	name                       *string
+	password_hash              *string
+	role                       *user.Role
+	enabled                    *bool
+	sessions_valid_after       *time.Time
+	code_issuer_plan_ids       *[]int
+	appendcode_issuer_plan_ids []int
+	code_issuer_daily_limit    *int
+	addcode_issuer_daily_limit *int
+	quota                      *int64
+	addquota                   *int64
+	unlimited                  *bool
+	used                       *int64
+	addused                    *int64
+	expires_at                 *time.Time
+	monthly_reset              *bool
+	usage_reset_at             *time.Time
+	all_nodes                  *bool
+	node_ids                   *[]int
+	appendnode_ids             []int
+	allow_chain                *bool
+	proxy_policy               *map[string]interface{}
+	totp_secret                *string
+	totp_step                  *int64
+	addtotp_step               *int64
+	created_at                 *time.Time
+	updated_at                 *time.Time
+	clearedFields              map[string]struct{}
+	done                       bool
+	oldValue                   func(context.Context) (*User, error)
+	predicates                 []predicate.User
 }
 
 var _ ent.Mutation = (*UserMutation)(nil)
@@ -28695,6 +29389,176 @@ func (m *UserMutation) OldEnabled(ctx context.Context) (v bool, err error) {
 // ResetEnabled resets all changes to the "enabled" field.
 func (m *UserMutation) ResetEnabled() {
 	m.enabled = nil
+}
+
+// SetSessionsValidAfter sets the "sessions_valid_after" field.
+func (m *UserMutation) SetSessionsValidAfter(t time.Time) {
+	m.sessions_valid_after = &t
+}
+
+// SessionsValidAfter returns the value of the "sessions_valid_after" field in the mutation.
+func (m *UserMutation) SessionsValidAfter() (r time.Time, exists bool) {
+	v := m.sessions_valid_after
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSessionsValidAfter returns the old "sessions_valid_after" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldSessionsValidAfter(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSessionsValidAfter is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSessionsValidAfter requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSessionsValidAfter: %w", err)
+	}
+	return oldValue.SessionsValidAfter, nil
+}
+
+// ClearSessionsValidAfter clears the value of the "sessions_valid_after" field.
+func (m *UserMutation) ClearSessionsValidAfter() {
+	m.sessions_valid_after = nil
+	m.clearedFields[user.FieldSessionsValidAfter] = struct{}{}
+}
+
+// SessionsValidAfterCleared returns if the "sessions_valid_after" field was cleared in this mutation.
+func (m *UserMutation) SessionsValidAfterCleared() bool {
+	_, ok := m.clearedFields[user.FieldSessionsValidAfter]
+	return ok
+}
+
+// ResetSessionsValidAfter resets all changes to the "sessions_valid_after" field.
+func (m *UserMutation) ResetSessionsValidAfter() {
+	m.sessions_valid_after = nil
+	delete(m.clearedFields, user.FieldSessionsValidAfter)
+}
+
+// SetCodeIssuerPlanIds sets the "code_issuer_plan_ids" field.
+func (m *UserMutation) SetCodeIssuerPlanIds(i []int) {
+	m.code_issuer_plan_ids = &i
+	m.appendcode_issuer_plan_ids = nil
+}
+
+// CodeIssuerPlanIds returns the value of the "code_issuer_plan_ids" field in the mutation.
+func (m *UserMutation) CodeIssuerPlanIds() (r []int, exists bool) {
+	v := m.code_issuer_plan_ids
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCodeIssuerPlanIds returns the old "code_issuer_plan_ids" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldCodeIssuerPlanIds(ctx context.Context) (v []int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCodeIssuerPlanIds is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCodeIssuerPlanIds requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCodeIssuerPlanIds: %w", err)
+	}
+	return oldValue.CodeIssuerPlanIds, nil
+}
+
+// AppendCodeIssuerPlanIds adds i to the "code_issuer_plan_ids" field.
+func (m *UserMutation) AppendCodeIssuerPlanIds(i []int) {
+	m.appendcode_issuer_plan_ids = append(m.appendcode_issuer_plan_ids, i...)
+}
+
+// AppendedCodeIssuerPlanIds returns the list of values that were appended to the "code_issuer_plan_ids" field in this mutation.
+func (m *UserMutation) AppendedCodeIssuerPlanIds() ([]int, bool) {
+	if len(m.appendcode_issuer_plan_ids) == 0 {
+		return nil, false
+	}
+	return m.appendcode_issuer_plan_ids, true
+}
+
+// ClearCodeIssuerPlanIds clears the value of the "code_issuer_plan_ids" field.
+func (m *UserMutation) ClearCodeIssuerPlanIds() {
+	m.code_issuer_plan_ids = nil
+	m.appendcode_issuer_plan_ids = nil
+	m.clearedFields[user.FieldCodeIssuerPlanIds] = struct{}{}
+}
+
+// CodeIssuerPlanIdsCleared returns if the "code_issuer_plan_ids" field was cleared in this mutation.
+func (m *UserMutation) CodeIssuerPlanIdsCleared() bool {
+	_, ok := m.clearedFields[user.FieldCodeIssuerPlanIds]
+	return ok
+}
+
+// ResetCodeIssuerPlanIds resets all changes to the "code_issuer_plan_ids" field.
+func (m *UserMutation) ResetCodeIssuerPlanIds() {
+	m.code_issuer_plan_ids = nil
+	m.appendcode_issuer_plan_ids = nil
+	delete(m.clearedFields, user.FieldCodeIssuerPlanIds)
+}
+
+// SetCodeIssuerDailyLimit sets the "code_issuer_daily_limit" field.
+func (m *UserMutation) SetCodeIssuerDailyLimit(i int) {
+	m.code_issuer_daily_limit = &i
+	m.addcode_issuer_daily_limit = nil
+}
+
+// CodeIssuerDailyLimit returns the value of the "code_issuer_daily_limit" field in the mutation.
+func (m *UserMutation) CodeIssuerDailyLimit() (r int, exists bool) {
+	v := m.code_issuer_daily_limit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCodeIssuerDailyLimit returns the old "code_issuer_daily_limit" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldCodeIssuerDailyLimit(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCodeIssuerDailyLimit is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCodeIssuerDailyLimit requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCodeIssuerDailyLimit: %w", err)
+	}
+	return oldValue.CodeIssuerDailyLimit, nil
+}
+
+// AddCodeIssuerDailyLimit adds i to the "code_issuer_daily_limit" field.
+func (m *UserMutation) AddCodeIssuerDailyLimit(i int) {
+	if m.addcode_issuer_daily_limit != nil {
+		*m.addcode_issuer_daily_limit += i
+	} else {
+		m.addcode_issuer_daily_limit = &i
+	}
+}
+
+// AddedCodeIssuerDailyLimit returns the value that was added to the "code_issuer_daily_limit" field in this mutation.
+func (m *UserMutation) AddedCodeIssuerDailyLimit() (r int, exists bool) {
+	v := m.addcode_issuer_daily_limit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCodeIssuerDailyLimit resets all changes to the "code_issuer_daily_limit" field.
+func (m *UserMutation) ResetCodeIssuerDailyLimit() {
+	m.code_issuer_daily_limit = nil
+	m.addcode_issuer_daily_limit = nil
 }
 
 // SetQuota sets the "quota" field.
@@ -29350,7 +30214,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 20)
+	fields := make([]string, 0, 23)
 	if m.email != nil {
 		fields = append(fields, user.FieldEmail)
 	}
@@ -29368,6 +30232,15 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.enabled != nil {
 		fields = append(fields, user.FieldEnabled)
+	}
+	if m.sessions_valid_after != nil {
+		fields = append(fields, user.FieldSessionsValidAfter)
+	}
+	if m.code_issuer_plan_ids != nil {
+		fields = append(fields, user.FieldCodeIssuerPlanIds)
+	}
+	if m.code_issuer_daily_limit != nil {
+		fields = append(fields, user.FieldCodeIssuerDailyLimit)
 	}
 	if m.quota != nil {
 		fields = append(fields, user.FieldQuota)
@@ -29431,6 +30304,12 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.Role()
 	case user.FieldEnabled:
 		return m.Enabled()
+	case user.FieldSessionsValidAfter:
+		return m.SessionsValidAfter()
+	case user.FieldCodeIssuerPlanIds:
+		return m.CodeIssuerPlanIds()
+	case user.FieldCodeIssuerDailyLimit:
+		return m.CodeIssuerDailyLimit()
 	case user.FieldQuota:
 		return m.Quota()
 	case user.FieldUnlimited:
@@ -29480,6 +30359,12 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldRole(ctx)
 	case user.FieldEnabled:
 		return m.OldEnabled(ctx)
+	case user.FieldSessionsValidAfter:
+		return m.OldSessionsValidAfter(ctx)
+	case user.FieldCodeIssuerPlanIds:
+		return m.OldCodeIssuerPlanIds(ctx)
+	case user.FieldCodeIssuerDailyLimit:
+		return m.OldCodeIssuerDailyLimit(ctx)
 	case user.FieldQuota:
 		return m.OldQuota(ctx)
 	case user.FieldUnlimited:
@@ -29558,6 +30443,27 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetEnabled(v)
+		return nil
+	case user.FieldSessionsValidAfter:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSessionsValidAfter(v)
+		return nil
+	case user.FieldCodeIssuerPlanIds:
+		v, ok := value.([]int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCodeIssuerPlanIds(v)
+		return nil
+	case user.FieldCodeIssuerDailyLimit:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCodeIssuerDailyLimit(v)
 		return nil
 	case user.FieldQuota:
 		v, ok := value.(int64)
@@ -29665,6 +30571,9 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *UserMutation) AddedFields() []string {
 	var fields []string
+	if m.addcode_issuer_daily_limit != nil {
+		fields = append(fields, user.FieldCodeIssuerDailyLimit)
+	}
 	if m.addquota != nil {
 		fields = append(fields, user.FieldQuota)
 	}
@@ -29682,6 +30591,8 @@ func (m *UserMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *UserMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case user.FieldCodeIssuerDailyLimit:
+		return m.AddedCodeIssuerDailyLimit()
 	case user.FieldQuota:
 		return m.AddedQuota()
 	case user.FieldUsed:
@@ -29697,6 +30608,13 @@ func (m *UserMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *UserMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case user.FieldCodeIssuerDailyLimit:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCodeIssuerDailyLimit(v)
+		return nil
 	case user.FieldQuota:
 		v, ok := value.(int64)
 		if !ok {
@@ -29729,6 +30647,12 @@ func (m *UserMutation) ClearedFields() []string {
 	if m.FieldCleared(user.FieldNormalizedEmail) {
 		fields = append(fields, user.FieldNormalizedEmail)
 	}
+	if m.FieldCleared(user.FieldSessionsValidAfter) {
+		fields = append(fields, user.FieldSessionsValidAfter)
+	}
+	if m.FieldCleared(user.FieldCodeIssuerPlanIds) {
+		fields = append(fields, user.FieldCodeIssuerPlanIds)
+	}
 	if m.FieldCleared(user.FieldExpiresAt) {
 		fields = append(fields, user.FieldExpiresAt)
 	}
@@ -29754,6 +30678,12 @@ func (m *UserMutation) ClearField(name string) error {
 	switch name {
 	case user.FieldNormalizedEmail:
 		m.ClearNormalizedEmail()
+		return nil
+	case user.FieldSessionsValidAfter:
+		m.ClearSessionsValidAfter()
+		return nil
+	case user.FieldCodeIssuerPlanIds:
+		m.ClearCodeIssuerPlanIds()
 		return nil
 	case user.FieldExpiresAt:
 		m.ClearExpiresAt()
@@ -29789,6 +30719,15 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldEnabled:
 		m.ResetEnabled()
+		return nil
+	case user.FieldSessionsValidAfter:
+		m.ResetSessionsValidAfter()
+		return nil
+	case user.FieldCodeIssuerPlanIds:
+		m.ResetCodeIssuerPlanIds()
+		return nil
+	case user.FieldCodeIssuerDailyLimit:
+		m.ResetCodeIssuerDailyLimit()
 		return nil
 	case user.FieldQuota:
 		m.ResetQuota()

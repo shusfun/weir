@@ -57,6 +57,7 @@ const SourceDetailPage = page(() => import("./pages/object-pages"), "SourceDetai
 const ProfileDetailPage = page(() => import("./pages/object-pages"), "ProfileDetailPage");
 const PublicPageDetail = page(() => import("./pages/object-pages"), "PublicPageDetail");
 const AccountsPage = page(() => import("./features/accounts/page"), "AccountsPage");
+const MyCodesPage = page(() => import("./pages/my-codes"), "MyCodesPage");
 const LinksPage = page(() => import("./pages/links"), "LinksPage");
 const ProxyPage = page(() => import("./pages/proxy"), "ProxyPage");
 const SecurityPage = page(() => import("./pages/security"), "SecurityPage");
@@ -80,6 +81,7 @@ const consolePages: Record<string, Loader> = {
   "/exits": ProxiesPage.loader,
   "/users": UsersPage.loader,
   "/codes": AccountsPage.loader,
+  "/my/codes": MyCodesPage.loader,
   "/accounts": AccountsPage.loader,
   "/kernels": KernelsPage.loader,
   "/system": SystemPage.loader,
@@ -181,6 +183,7 @@ function Console() {
               <Route path="/users" element={guard(<UsersPage />)} />
               <Route path="/users/:id" element={guard(<UserDetailPage />)} />
               <Route path="/codes" element={guard(<AccountsPage />)} />
+              <Route path="/my/codes" element={<MyCodesPage />} />
               <Route path="/accounts" element={<Navigate to={"/codes" + location.search} replace />} />
               <Route path="/kernels" element={guard(<KernelsPage />)} />
               <Route path="/system" element={guard(<SystemPage />)} />

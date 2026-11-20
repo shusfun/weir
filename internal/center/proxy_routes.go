@@ -112,7 +112,13 @@ func (s *Server) getProxy(c *gin.Context, admin bool) {
 	if !ok {
 		return
 	}
-	v, err := s.proxyView(c.Request.Context(), u)
+	ctx := WithRevisionCause(c.Request.Context(), "proxy.group", c.GetInt("user_id"))
+	u, err := s.refreshGroupInheritance(ctx, u.ID)
+	if err != nil {
+		failInternal(c, 503, "query_failed", err)
+		return
+	}
+	v, err := s.proxyView(ctx, u)
 	if err != nil {
 		failInternal(c, 503, "query_failed", err)
 		return

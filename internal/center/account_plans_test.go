@@ -179,6 +179,30 @@ func TestAccessCodeConcurrentRedeemAndRollback(t *testing.T) {
 	}
 }
 
+func TestUserAccessCodeIssuerAuthorization(t *testing.T) {
+	s, admin := newInstalledServer(t)
+	ctx := t.Context()
+	plan := mustJSON(t, admin, "POST", "/api/v1/admin/account-plans", map[string]any{"name": "可发放", "enabled": true, "grant": accountplan.Grant{Quota: 10}}, 200)
+	pid := int(plan["id"].(float64))
+	userJSON := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "issuer@example.test", "password": "Passw0rd"}, 200)
+	uid := int(userJSON["id"].(float64))
+	mustJSON(t, admin, "PATCH", "/api/v1/admin/users/"+itoa(uid), map[string]any{"code_issuer_plan_ids": []int{pid}, "code_issuer_daily_limit": 1}, 200)
+	client := &testClient{t: t, router: s.Router()}
+	mustJSON(t, client, "POST", "/api/v1/auth/login", map[string]any{"email": "issuer@example.test", "password": "Passw0rd"}, 200)
+	mustJSON(t, client, "GET", "/api/v1/me/access-code-plans", nil, 200)
+	issued := mustJSON(t, client, "POST", "/api/v1/me/access-codes", map[string]any{"kind": "redeem", "count": 1, "plan_id": pid}, 201)
+	codeID := int(issued["items"].([]any)[0].(map[string]any)["id"].(float64))
+	mustJSON(t, client, "POST", "/api/v1/me/access-codes", map[string]any{"kind": "redeem", "count": 1, "plan_id": pid}, 429)
+	mustJSON(t, client, "DELETE", "/api/v1/me/access-codes/"+itoa(codeID), nil, 200)
+	row := s.Store.Ent.AccessCode.GetX(ctx, codeID)
+	if row.CreatedBy != uid || !row.Revoked {
+		t.Fatalf("issuer ownership not preserved: %+v", row)
+	}
+	if _, err := s.Store.Ent.User.Get(ctx, uid); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestInvitationConcurrentClaimAndRevocation(t *testing.T) {
 	s, admin := newInstalledServer(t)
 	ctx := t.Context()

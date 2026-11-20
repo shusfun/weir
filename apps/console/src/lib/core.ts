@@ -442,6 +442,8 @@ export interface UserItem {
   all_nodes: boolean;
   node_ids?: number[] | null;
   allow_chain: boolean;
+  code_issuer_plan_ids?: number[];
+  code_issuer_daily_limit?: number;
   links: number;
   chains: number;
   created_at?: string;

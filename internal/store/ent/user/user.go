@@ -26,6 +26,12 @@ const (
 	FieldRole = "role"
 	// FieldEnabled holds the string denoting the enabled field in the database.
 	FieldEnabled = "enabled"
+	// FieldSessionsValidAfter holds the string denoting the sessions_valid_after field in the database.
+	FieldSessionsValidAfter = "sessions_valid_after"
+	// FieldCodeIssuerPlanIds holds the string denoting the code_issuer_plan_ids field in the database.
+	FieldCodeIssuerPlanIds = "code_issuer_plan_ids"
+	// FieldCodeIssuerDailyLimit holds the string denoting the code_issuer_daily_limit field in the database.
+	FieldCodeIssuerDailyLimit = "code_issuer_daily_limit"
 	// FieldQuota holds the string denoting the quota field in the database.
 	FieldQuota = "quota"
 	// FieldUnlimited holds the string denoting the unlimited field in the database.
@@ -67,6 +73,9 @@ var Columns = []string{
 	FieldPasswordHash,
 	FieldRole,
 	FieldEnabled,
+	FieldSessionsValidAfter,
+	FieldCodeIssuerPlanIds,
+	FieldCodeIssuerDailyLimit,
 	FieldQuota,
 	FieldUnlimited,
 	FieldUsed,
@@ -104,6 +113,8 @@ var (
 	NameValidator func(string) error
 	// DefaultEnabled holds the default value on creation for the "enabled" field.
 	DefaultEnabled bool
+	// DefaultCodeIssuerDailyLimit holds the default value on creation for the "code_issuer_daily_limit" field.
+	DefaultCodeIssuerDailyLimit int
 	// DefaultQuota holds the default value on creation for the "quota" field.
 	DefaultQuota int64
 	// QuotaValidator is a validator for the "quota" field. It is called by the builders before save.
@@ -196,6 +207,16 @@ func ByRole(opts ...sql.OrderTermOption) OrderOption {
 // ByEnabled orders the results by the enabled field.
 func ByEnabled(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEnabled, opts...).ToFunc()
+}
+
+// BySessionsValidAfter orders the results by the sessions_valid_after field.
+func BySessionsValidAfter(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSessionsValidAfter, opts...).ToFunc()
+}
+
+// ByCodeIssuerDailyLimit orders the results by the code_issuer_daily_limit field.
+func ByCodeIssuerDailyLimit(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCodeIssuerDailyLimit, opts...).ToFunc()
 }
 
 // ByQuota orders the results by the quota field.

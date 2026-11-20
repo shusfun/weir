@@ -143,6 +143,31 @@ func TestProxyGroupsHTTPFlow(t *testing.T) {
 	}
 }
 
+func TestAdminGroupsInheritAndUserOverride(t *testing.T) {
+	s, admin, gate := setupGate(t)
+	n := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": gate.id, "preset": "ss2022", "skip_probe": true}, 200)
+	nid := int(n["id"].(float64))
+	u := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": "inherited@example.test", "password": "Groups2026", "all_nodes": true}, 200)
+	uid := int(u["id"].(float64))
+	group := mustJSON(t, admin, "POST", "/api/v1/proxy/groups?user=1", map[string]any{"revision": 0, "name": "公共组", "kind": "select", "members": []string{"node:" + itoa(nid)}}, 200)
+	if len(s.Store.Ent.ProxyGroupVersion.Query().AllX(t.Context())) != 1 {
+		t.Fatal("管理员分组版本未写入")
+	}
+	view := mustJSON(t, admin, "GET", "/api/v1/proxy?user="+itoa(uid), nil, 200)
+	if len(view["groups"].([]any)) != 1 {
+		t.Fatalf("用户未继承管理员分组: %v", view["groups"])
+	}
+	local := view["groups"].([]any)[0].(map[string]any)["group"].(map[string]any)
+	rev := int(view["policy"].(map[string]any)["revision"].(float64))
+	mustJSON(t, admin, "PUT", "/api/v1/proxy/groups/"+itoa(int(local["id"].(float64)))+"?user="+itoa(uid), map[string]any{"revision": rev, "name": "用户组", "kind": "select", "members": []string{"node:" + itoa(nid)}}, 200)
+	mustJSON(t, admin, "PUT", "/api/v1/proxy/groups/1?user=1", map[string]any{"revision": 1, "name": "管理员改名", "kind": "select", "members": []string{"node:" + itoa(nid)}}, 200)
+	view = mustJSON(t, admin, "GET", "/api/v1/proxy?user="+itoa(uid), nil, 200)
+	if view["groups"].([]any)[0].(map[string]any)["group"].(map[string]any)["name"] != "用户组" {
+		t.Fatal("用户已修改的分组被管理员覆盖")
+	}
+	_ = group
+}
+
 func TestProxySameNameMembersInViewAndPlan(t *testing.T) {
 	s, admin, gate := setupGate(t)
 	ctx := t.Context()

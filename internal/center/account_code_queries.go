@@ -12,6 +12,7 @@ import (
 	"github.com/shusfun/weir/internal/accountplan"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/accesscode"
+	planrow "github.com/shusfun/weir/internal/store/ent/accountplan"
 	"github.com/shusfun/weir/internal/store/ent/audit"
 	"github.com/shusfun/weir/internal/store/ent/resource"
 )
@@ -104,6 +105,57 @@ func (s *Server) listAccessCodes(c *gin.Context) {
 		return
 	}
 	s.respondAccountCodes(c, q, page, false, now)
+}
+
+func (s *Server) listIssuerPlans(c *gin.Context) {
+	u := c.MustGet("account").(*ent.User)
+	if u.CodeIssuerDailyLimit < 1 {
+		failure(c, 403, "access_code_issuer_forbidden")
+		return
+	}
+	plans, err := s.Store.Ent.AccountPlan.Query().Where(planrow.IDIn(u.CodeIssuerPlanIds...), planrow.EnabledEQ(true)).All(c.Request.Context())
+	if err != nil {
+		failInternal(c, 503, "query_failed", err)
+		return
+	}
+	c.JSON(200, gin.H{"items": plans, "daily_limit": u.CodeIssuerDailyLimit})
+}
+
+func (s *Server) listIssuedAccessCodes(c *gin.Context) {
+	page, ok := accountCodePage(c)
+	if !ok {
+		return
+	}
+	q := s.Store.Ent.AccessCode.Query().Where(accesscode.CreatedByEQ(c.GetInt("user_id")))
+	s.respondAccountCodes(c, q, page, false, time.Now())
+}
+
+func (s *Server) revokeIssuedAccessCode(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id < 1 {
+		failure(c, 400, "invalid_id")
+		return
+	}
+	tx, err := s.Store.Ent.Tx(c.Request.Context())
+	if err != nil {
+		failInternal(c, 503, "access_code_unavailable", err)
+		return
+	}
+	defer tx.Rollback()
+	n, err := tx.AccessCode.Update().Where(accesscode.IDEQ(id), accesscode.CreatedByEQ(c.GetInt("user_id")), accesscode.UsedAtIsNil()).SetRevoked(true).Save(c.Request.Context())
+	if err != nil {
+		failInternal(c, 503, "access_code_unavailable", err)
+		return
+	}
+	if n != 1 {
+		failure(c, 409, "access_code_not_revocable")
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		failInternal(c, 503, "access_code_unavailable", err)
+		return
+	}
+	c.JSON(200, gin.H{"revoked": true})
 }
 
 func (s *Server) listRedemptions(c *gin.Context) {

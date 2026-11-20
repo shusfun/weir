@@ -29,6 +29,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/link"
 	"github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/passkey"
+	"github.com/shusfun/weir/internal/store/ent/proxygroupversion"
 	"github.com/shusfun/weir/internal/store/ent/ratesample"
 	"github.com/shusfun/weir/internal/store/ent/recoverycode"
 	"github.com/shusfun/weir/internal/store/ent/resource"
@@ -124,6 +125,7 @@ func checkColumn(t, c string) error {
 			link.Table:                   link.ValidColumn,
 			node.Table:                   node.ValidColumn,
 			passkey.Table:                passkey.ValidColumn,
+			proxygroupversion.Table:      proxygroupversion.ValidColumn,
 			ratesample.Table:             ratesample.ValidColumn,
 			recoverycode.Table:           recoverycode.ValidColumn,
 			resource.Table:               resource.ValidColumn,

@@ -21,6 +21,7 @@ import (
 	"github.com/shusfun/weir/internal/store/ent/link"
 	"github.com/shusfun/weir/internal/store/ent/node"
 	"github.com/shusfun/weir/internal/store/ent/passkey"
+	"github.com/shusfun/weir/internal/store/ent/proxygroupversion"
 	"github.com/shusfun/weir/internal/store/ent/ratesample"
 	"github.com/shusfun/weir/internal/store/ent/recoverycode"
 	"github.com/shusfun/weir/internal/store/ent/resource"
@@ -523,6 +524,18 @@ func init() {
 	passkeyDescCreatedAt := passkeyFields[4].Descriptor()
 	// passkey.DefaultCreatedAt holds the default value on creation for the created_at field.
 	passkey.DefaultCreatedAt = passkeyDescCreatedAt.Default.(func() time.Time)
+	proxygroupversionFields := schema.ProxyGroupVersion{}.Fields()
+	_ = proxygroupversionFields
+	// proxygroupversionDescValidFrom is the schema descriptor for valid_from field.
+	proxygroupversionDescValidFrom := proxygroupversionFields[3].Descriptor()
+	// proxygroupversion.DefaultValidFrom holds the default value on creation for the valid_from field.
+	proxygroupversion.DefaultValidFrom = proxygroupversionDescValidFrom.Default.(func() time.Time)
+	// proxygroupversionDescTraceID is the schema descriptor for trace_id field.
+	proxygroupversionDescTraceID := proxygroupversionFields[5].Descriptor()
+	// proxygroupversion.DefaultTraceID holds the default value on creation for the trace_id field.
+	proxygroupversion.DefaultTraceID = proxygroupversionDescTraceID.Default.(string)
+	// proxygroupversion.TraceIDValidator is a validator for the "trace_id" field. It is called by the builders before save.
+	proxygroupversion.TraceIDValidator = proxygroupversionDescTraceID.Validators[0].(func(string) error)
 	ratesampleFields := schema.RateSample{}.Fields()
 	_ = ratesampleFields
 	// ratesampleDescChainID is the schema descriptor for chain_id field.
@@ -867,52 +880,56 @@ func init() {
 	userDescEnabled := userFields[5].Descriptor()
 	// user.DefaultEnabled holds the default value on creation for the enabled field.
 	user.DefaultEnabled = userDescEnabled.Default.(bool)
+	// userDescCodeIssuerDailyLimit is the schema descriptor for code_issuer_daily_limit field.
+	userDescCodeIssuerDailyLimit := userFields[8].Descriptor()
+	// user.DefaultCodeIssuerDailyLimit holds the default value on creation for the code_issuer_daily_limit field.
+	user.DefaultCodeIssuerDailyLimit = userDescCodeIssuerDailyLimit.Default.(int)
 	// userDescQuota is the schema descriptor for quota field.
-	userDescQuota := userFields[6].Descriptor()
+	userDescQuota := userFields[9].Descriptor()
 	// user.DefaultQuota holds the default value on creation for the quota field.
 	user.DefaultQuota = userDescQuota.Default.(int64)
 	// user.QuotaValidator is a validator for the "quota" field. It is called by the builders before save.
 	user.QuotaValidator = userDescQuota.Validators[0].(func(int64) error)
 	// userDescUnlimited is the schema descriptor for unlimited field.
-	userDescUnlimited := userFields[7].Descriptor()
+	userDescUnlimited := userFields[10].Descriptor()
 	// user.DefaultUnlimited holds the default value on creation for the unlimited field.
 	user.DefaultUnlimited = userDescUnlimited.Default.(bool)
 	// userDescUsed is the schema descriptor for used field.
-	userDescUsed := userFields[8].Descriptor()
+	userDescUsed := userFields[11].Descriptor()
 	// user.DefaultUsed holds the default value on creation for the used field.
 	user.DefaultUsed = userDescUsed.Default.(int64)
 	// user.UsedValidator is a validator for the "used" field. It is called by the builders before save.
 	user.UsedValidator = userDescUsed.Validators[0].(func(int64) error)
 	// userDescMonthlyReset is the schema descriptor for monthly_reset field.
-	userDescMonthlyReset := userFields[10].Descriptor()
+	userDescMonthlyReset := userFields[13].Descriptor()
 	// user.DefaultMonthlyReset holds the default value on creation for the monthly_reset field.
 	user.DefaultMonthlyReset = userDescMonthlyReset.Default.(bool)
 	// userDescUsageResetAt is the schema descriptor for usage_reset_at field.
-	userDescUsageResetAt := userFields[11].Descriptor()
+	userDescUsageResetAt := userFields[14].Descriptor()
 	// user.DefaultUsageResetAt holds the default value on creation for the usage_reset_at field.
 	user.DefaultUsageResetAt = userDescUsageResetAt.Default.(func() time.Time)
 	// userDescAllNodes is the schema descriptor for all_nodes field.
-	userDescAllNodes := userFields[12].Descriptor()
+	userDescAllNodes := userFields[15].Descriptor()
 	// user.DefaultAllNodes holds the default value on creation for the all_nodes field.
 	user.DefaultAllNodes = userDescAllNodes.Default.(bool)
 	// userDescAllowChain is the schema descriptor for allow_chain field.
-	userDescAllowChain := userFields[14].Descriptor()
+	userDescAllowChain := userFields[17].Descriptor()
 	// user.DefaultAllowChain holds the default value on creation for the allow_chain field.
 	user.DefaultAllowChain = userDescAllowChain.Default.(bool)
 	// userDescTotpSecret is the schema descriptor for totp_secret field.
-	userDescTotpSecret := userFields[16].Descriptor()
+	userDescTotpSecret := userFields[19].Descriptor()
 	// user.DefaultTotpSecret holds the default value on creation for the totp_secret field.
 	user.DefaultTotpSecret = userDescTotpSecret.Default.(string)
 	// userDescTotpStep is the schema descriptor for totp_step field.
-	userDescTotpStep := userFields[17].Descriptor()
+	userDescTotpStep := userFields[20].Descriptor()
 	// user.DefaultTotpStep holds the default value on creation for the totp_step field.
 	user.DefaultTotpStep = userDescTotpStep.Default.(int64)
 	// userDescCreatedAt is the schema descriptor for created_at field.
-	userDescCreatedAt := userFields[18].Descriptor()
+	userDescCreatedAt := userFields[21].Descriptor()
 	// user.DefaultCreatedAt holds the default value on creation for the created_at field.
 	user.DefaultCreatedAt = userDescCreatedAt.Default.(func() time.Time)
 	// userDescUpdatedAt is the schema descriptor for updated_at field.
-	userDescUpdatedAt := userFields[19].Descriptor()
+	userDescUpdatedAt := userFields[22].Descriptor()
 	// user.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	user.DefaultUpdatedAt = userDescUpdatedAt.Default.(func() time.Time)
 	// user.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

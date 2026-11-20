@@ -41,6 +41,11 @@ var (
 				Unique:  false,
 				Columns: []*schema.Column{AccessCodesColumns[8]},
 			},
+			{
+				Name:    "accesscode_created_by_kind_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{AccessCodesColumns[10], AccessCodesColumns[1], AccessCodesColumns[12]},
+			},
 		},
 	}
 	// AccountPlansColumns holds the columns for the "account_plans" table.
@@ -471,6 +476,34 @@ var (
 			},
 		},
 	}
+	// ProxyGroupVersionsColumns holds the columns for the "proxy_group_versions" table.
+	ProxyGroupVersionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "owner_id", Type: field.TypeInt},
+		{Name: "group_id", Type: field.TypeInt},
+		{Name: "snapshot", Type: field.TypeJSON},
+		{Name: "valid_from", Type: field.TypeTime},
+		{Name: "valid_until", Type: field.TypeTime, Nullable: true},
+		{Name: "trace_id", Type: field.TypeString, Size: 32, Default: ""},
+	}
+	// ProxyGroupVersionsTable holds the schema information for the "proxy_group_versions" table.
+	ProxyGroupVersionsTable = &schema.Table{
+		Name:       "proxy_group_versions",
+		Columns:    ProxyGroupVersionsColumns,
+		PrimaryKey: []*schema.Column{ProxyGroupVersionsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "proxygroupversion_owner_id_group_id_valid_from",
+				Unique:  true,
+				Columns: []*schema.Column{ProxyGroupVersionsColumns[1], ProxyGroupVersionsColumns[2], ProxyGroupVersionsColumns[4]},
+			},
+			{
+				Name:    "proxygroupversion_owner_id_valid_until",
+				Unique:  false,
+				Columns: []*schema.Column{ProxyGroupVersionsColumns[1], ProxyGroupVersionsColumns[5]},
+			},
+		},
+	}
 	// RateSamplesColumns holds the columns for the "rate_samples" table.
 	RateSamplesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -829,6 +862,9 @@ var (
 		{Name: "password_hash", Type: field.TypeString},
 		{Name: "role", Type: field.TypeEnum, Enums: []string{"admin", "user"}, Default: "user"},
 		{Name: "enabled", Type: field.TypeBool, Default: true},
+		{Name: "sessions_valid_after", Type: field.TypeTime, Nullable: true},
+		{Name: "code_issuer_plan_ids", Type: field.TypeJSON, Nullable: true},
+		{Name: "code_issuer_daily_limit", Type: field.TypeInt, Default: 0},
 		{Name: "quota", Type: field.TypeInt64, Default: 0},
 		{Name: "unlimited", Type: field.TypeBool, Default: false},
 		{Name: "used", Type: field.TypeInt64, Default: 0},
@@ -956,6 +992,7 @@ var (
 		LinksTable,
 		NodesTable,
 		PasskeysTable,
+		ProxyGroupVersionsTable,
 		RateSamplesTable,
 		RecoveryCodesTable,
 		ResourcesTable,

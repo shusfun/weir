@@ -94,6 +94,7 @@ func (s *Server) adminUserView(ctx context.Context, u *ent.User) gin.H {
 	v["node_ids"], v["usage_reset_at"], v["updated_at"] = u.NodeIds, u.UsageResetAt, u.UpdatedAt
 	v["links"], _ = s.Store.Ent.Link.Query().Where(link.UserIDEQ(u.ID)).Count(ctx)
 	v["chains"], _ = s.Store.Ent.Chain.Query().Where(chain.UserIDEQ(u.ID), chain.HasExitWith(entexit.PolicyTypeEQ(""))).Count(ctx)
+	v["code_issuer_plan_ids"], v["code_issuer_daily_limit"] = u.CodeIssuerPlanIds, u.CodeIssuerDailyLimit
 	return v
 }
 
@@ -113,15 +114,17 @@ func (s *Server) listUsers(c *gin.Context) {
 
 // planRequest 是「一个窗口建用户」的套餐字段；更新时缺省字段保持不变。
 type planRequest struct {
-	Name         *string         `json:"name"`
-	Quota        *int64          `json:"quota"`
-	Unlimited    *bool           `json:"unlimited"`
-	ExpiresAt    json.RawMessage `json:"expires_at"`
-	MonthlyReset *bool           `json:"monthly_reset"`
-	AllNodes     *bool           `json:"all_nodes"`
-	NodeIDs      *[]int          `json:"node_ids"`
-	AllowChain   *bool           `json:"allow_chain"`
-	Enabled      *bool           `json:"enabled"`
+	Name                 *string         `json:"name"`
+	Quota                *int64          `json:"quota"`
+	Unlimited            *bool           `json:"unlimited"`
+	ExpiresAt            json.RawMessage `json:"expires_at"`
+	MonthlyReset         *bool           `json:"monthly_reset"`
+	AllNodes             *bool           `json:"all_nodes"`
+	NodeIDs              *[]int          `json:"node_ids"`
+	AllowChain           *bool           `json:"allow_chain"`
+	Enabled              *bool           `json:"enabled"`
+	CodeIssuerPlanIDs    []int           `json:"code_issuer_plan_ids"`
+	CodeIssuerDailyLimit *int            `json:"code_issuer_daily_limit"`
 }
 
 func (s *Server) applyPlan(ctx context.Context, m *ent.UserMutation, p planRequest) error {
@@ -173,6 +176,15 @@ func (s *Server) applyPlan(ctx context.Context, m *ent.UserMutation, p planReque
 	}
 	if p.AllowChain != nil {
 		m.SetAllowChain(*p.AllowChain)
+	}
+	if p.CodeIssuerPlanIDs != nil {
+		m.SetCodeIssuerPlanIds(dedupe(p.CodeIssuerPlanIDs))
+	}
+	if p.CodeIssuerDailyLimit != nil {
+		if *p.CodeIssuerDailyLimit < 0 || *p.CodeIssuerDailyLimit > 100000 {
+			return errors.New("invalid_code_issuer_daily_limit")
+		}
+		m.SetCodeIssuerDailyLimit(*p.CodeIssuerDailyLimit)
 	}
 	if p.Enabled != nil {
 		m.SetEnabled(*p.Enabled)
@@ -242,9 +254,9 @@ func (s *Server) createUser(c *gin.Context) {
 		failure(c, 400, "weak_password")
 		return
 	}
-	role := user.RoleUser
-	if req.Role == "admin" {
-		role = user.RoleAdmin
+	if req.Role != "" && req.Role != string(user.RoleUser) {
+		failure(c, 400, "invalid_user_role")
+		return
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
@@ -252,11 +264,7 @@ func (s *Server) createUser(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	if role == user.RoleAdmin && !req.keepsAllNodes(req.NodeIDs != nil) {
-		failure(c, 400, "admin_all_nodes")
-		return
-	}
-	create := s.Store.Ent.User.Create().SetEmail(email).SetPasswordHash(string(hash)).SetRole(role)
+	create := s.Store.Ent.User.Create().SetEmail(email).SetPasswordHash(string(hash)).SetRole(user.RoleUser)
 	if req.AllNodes == nil {
 		create.SetAllNodes(req.NodeIDs == nil)
 	}

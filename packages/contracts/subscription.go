@@ -10,16 +10,17 @@ type SubscriptionMember struct {
 
 // ProxyPolicy 是每个用户的客户端选择与有序清单。
 type ProxyPolicy struct {
-	Version            int          `json:"version"`
-	Revision           int          `json:"revision"`
-	HiddenLines        []string     `json:"hidden_lines,omitempty"`
-	Disabled           []string     `json:"disabled,omitempty"`
-	Auto               AutoPolicy   `json:"auto"`
-	Groups             []ProxyGroup `json:"groups,omitempty"`
-	NextGroupID        int          `json:"next_group_id,omitempty"`
-	TargetMigration    []string     `json:"target_migration,omitempty"`
-	MigrationConfirmed bool         `json:"migration_confirmed"`
-	Custom             CustomRules  `json:"custom"`
+	Version            int                     `json:"version"`
+	Revision           int                     `json:"revision"`
+	HiddenLines        []string                `json:"hidden_lines,omitempty"`
+	Disabled           []string                `json:"disabled,omitempty"`
+	Auto               AutoPolicy              `json:"auto"`
+	Groups             []ProxyGroup            `json:"groups,omitempty"`
+	NextGroupID        int                     `json:"next_group_id,omitempty"`
+	GroupInheritance   []ProxyGroupInheritance `json:"group_inheritance,omitempty"`
+	TargetMigration    []string                `json:"target_migration,omitempty"`
+	MigrationConfirmed bool                    `json:"migration_confirmed"`
+	Custom             CustomRules             `json:"custom"`
 }
 
 const MaxProxyGroups = 20
@@ -33,6 +34,13 @@ type ProxyGroup struct {
 	Members         []string `json:"members"`
 	IntervalSeconds int      `json:"interval_seconds"`
 	ToleranceMS     int      `json:"tolerance_ms"`
+}
+
+type ProxyGroupInheritance struct {
+	OwnerID int    `json:"owner_id"`
+	GroupID int    `json:"group_id"`
+	LocalID int    `json:"local_id"`
+	State   string `json:"state,omitempty"`
 }
 
 // Revision 记录清单的生效版本，写入使用 ProxyPolicy.Revision 校验并发。

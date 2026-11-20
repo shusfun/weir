@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -32,6 +33,10 @@ func (s *Server) accountPlanRoutes(auth, admin *gin.RouterGroup) {
 	auth.GET("/me/redemption", s.redemptionStatus)
 	auth.GET("/me/redemptions", s.listRedemptions)
 	auth.POST("/me/redeem", s.redeemAccessCode)
+	auth.GET("/me/access-code-plans", s.listIssuerPlans)
+	auth.GET("/me/access-codes", s.listIssuedAccessCodes)
+	auth.POST("/me/access-codes", s.issueUserAccessCodes)
+	auth.DELETE("/me/access-codes/:id", s.revokeIssuedAccessCode)
 }
 
 func validateGrantResources(ctx context.Context, client *ent.Client, g accountplan.Grant) error {
@@ -136,6 +141,14 @@ func (s *Server) putAccountPlan(c *gin.Context) {
 }
 
 func (s *Server) issueAccessCodes(c *gin.Context) {
+	s.issueCodes(c, true)
+}
+
+func (s *Server) issueUserAccessCodes(c *gin.Context) {
+	s.issueCodes(c, false)
+}
+
+func (s *Server) issueCodes(c *gin.Context, admin bool) {
 	var req struct {
 		Kind      accesscode.Kind `json:"kind"`
 		PlanID    *int            `json:"plan_id"`
@@ -143,6 +156,11 @@ func (s *Server) issueAccessCodes(c *gin.Context) {
 		ExpiresAt *time.Time      `json:"expires_at"`
 	}
 	if !bind(c, &req) {
+		return
+	}
+	issuer := c.MustGet("account").(*ent.User)
+	if !admin && (req.Kind != accesscode.KindRedeem || req.PlanID == nil || issuer.CodeIssuerDailyLimit < 1 || !slices.Contains(issuer.CodeIssuerPlanIds, *req.PlanID)) {
+		failure(c, 403, "access_code_issuer_forbidden")
 		return
 	}
 	if (req.Kind != accesscode.KindInvite && req.Kind != accesscode.KindRedeem) || req.Count < 1 || req.Count > 100 || (req.Kind == accesscode.KindRedeem && req.PlanID == nil) || (req.ExpiresAt != nil && (!req.ExpiresAt.After(time.Now()) || req.ExpiresAt.After(time.Now().AddDate(10, 0, 0)))) {
@@ -156,6 +174,21 @@ func (s *Server) issueAccessCodes(c *gin.Context) {
 		return
 	}
 	defer tx.Rollback()
+	if !admin {
+		issuerQuery := tx.User.Query().Where(user.IDEQ(issuer.ID))
+		if s.Store.Driver == store.DriverPostgres {
+			issuerQuery.ForUpdate()
+		}
+		issuer, err = issuerQuery.Only(ctx)
+		if err != nil || issuer.CodeIssuerDailyLimit < 1 || !slices.Contains(issuer.CodeIssuerPlanIds, *req.PlanID) {
+			failure(c, 403, "access_code_issuer_forbidden")
+			return
+		}
+		if err = enforceIssuerDailyLimit(ctx, tx, issuer, req.Count); err != nil {
+			failure(c, 429, "access_code_issuer_daily_limit")
+			return
+		}
+	}
 	grant, revision := accountplan.Grant{}, 0
 	if req.PlanID != nil {
 		plan, e := tx.AccountPlan.Get(ctx, *req.PlanID)
@@ -198,6 +231,17 @@ func (s *Server) issueAccessCodes(c *gin.Context) {
 	}
 	slog.InfoContext(ctx, "account codes issued", "trace", taskTrace(ctx), "count", req.Count, "kind", req.Kind, "plan_id", req.PlanID)
 	c.JSON(201, gin.H{"items": items})
+}
+
+func enforceIssuerDailyLimit(ctx context.Context, tx *ent.Tx, issuer *ent.User, requested int) error {
+	zone := time.FixedZone("CST", 8*60*60)
+	now := time.Now().In(zone)
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, zone).UTC()
+	count, err := tx.AccessCode.Query().Where(accesscode.CreatedByEQ(issuer.ID), accesscode.KindEQ(accesscode.KindRedeem), accesscode.CreatedAtGTE(start)).Count(ctx)
+	if err != nil || count+requested > issuer.CodeIssuerDailyLimit {
+		return errors.New("daily issuer limit")
+	}
+	return nil
 }
 
 func (s *Server) revokeAccessCode(c *gin.Context) {

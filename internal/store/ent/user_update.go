@@ -120,6 +120,65 @@ func (_u *UserUpdate) SetNillableEnabled(v *bool) *UserUpdate {
 	return _u
 }
 
+// SetSessionsValidAfter sets the "sessions_valid_after" field.
+func (_u *UserUpdate) SetSessionsValidAfter(v time.Time) *UserUpdate {
+	_u.mutation.SetSessionsValidAfter(v)
+	return _u
+}
+
+// SetNillableSessionsValidAfter sets the "sessions_valid_after" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableSessionsValidAfter(v *time.Time) *UserUpdate {
+	if v != nil {
+		_u.SetSessionsValidAfter(*v)
+	}
+	return _u
+}
+
+// ClearSessionsValidAfter clears the value of the "sessions_valid_after" field.
+func (_u *UserUpdate) ClearSessionsValidAfter() *UserUpdate {
+	_u.mutation.ClearSessionsValidAfter()
+	return _u
+}
+
+// SetCodeIssuerPlanIds sets the "code_issuer_plan_ids" field.
+func (_u *UserUpdate) SetCodeIssuerPlanIds(v []int) *UserUpdate {
+	_u.mutation.SetCodeIssuerPlanIds(v)
+	return _u
+}
+
+// AppendCodeIssuerPlanIds appends value to the "code_issuer_plan_ids" field.
+func (_u *UserUpdate) AppendCodeIssuerPlanIds(v []int) *UserUpdate {
+	_u.mutation.AppendCodeIssuerPlanIds(v)
+	return _u
+}
+
+// ClearCodeIssuerPlanIds clears the value of the "code_issuer_plan_ids" field.
+func (_u *UserUpdate) ClearCodeIssuerPlanIds() *UserUpdate {
+	_u.mutation.ClearCodeIssuerPlanIds()
+	return _u
+}
+
+// SetCodeIssuerDailyLimit sets the "code_issuer_daily_limit" field.
+func (_u *UserUpdate) SetCodeIssuerDailyLimit(v int) *UserUpdate {
+	_u.mutation.ResetCodeIssuerDailyLimit()
+	_u.mutation.SetCodeIssuerDailyLimit(v)
+	return _u
+}
+
+// SetNillableCodeIssuerDailyLimit sets the "code_issuer_daily_limit" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableCodeIssuerDailyLimit(v *int) *UserUpdate {
+	if v != nil {
+		_u.SetCodeIssuerDailyLimit(*v)
+	}
+	return _u
+}
+
+// AddCodeIssuerDailyLimit adds value to the "code_issuer_daily_limit" field.
+func (_u *UserUpdate) AddCodeIssuerDailyLimit(v int) *UserUpdate {
+	_u.mutation.AddCodeIssuerDailyLimit(v)
+	return _u
+}
+
 // SetQuota sets the "quota" field.
 func (_u *UserUpdate) SetQuota(v int64) *UserUpdate {
 	_u.mutation.ResetQuota()
@@ -438,6 +497,29 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Enabled(); ok {
 		_spec.SetField(user.FieldEnabled, field.TypeBool, value)
 	}
+	if value, ok := _u.mutation.SessionsValidAfter(); ok {
+		_spec.SetField(user.FieldSessionsValidAfter, field.TypeTime, value)
+	}
+	if _u.mutation.SessionsValidAfterCleared() {
+		_spec.ClearField(user.FieldSessionsValidAfter, field.TypeTime)
+	}
+	if value, ok := _u.mutation.CodeIssuerPlanIds(); ok {
+		_spec.SetField(user.FieldCodeIssuerPlanIds, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedCodeIssuerPlanIds(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, user.FieldCodeIssuerPlanIds, value)
+		})
+	}
+	if _u.mutation.CodeIssuerPlanIdsCleared() {
+		_spec.ClearField(user.FieldCodeIssuerPlanIds, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.CodeIssuerDailyLimit(); ok {
+		_spec.SetField(user.FieldCodeIssuerDailyLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCodeIssuerDailyLimit(); ok {
+		_spec.AddField(user.FieldCodeIssuerDailyLimit, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.Quota(); ok {
 		_spec.SetField(user.FieldQuota, field.TypeInt64, value)
 	}
@@ -609,6 +691,65 @@ func (_u *UserUpdateOne) SetNillableEnabled(v *bool) *UserUpdateOne {
 	if v != nil {
 		_u.SetEnabled(*v)
 	}
+	return _u
+}
+
+// SetSessionsValidAfter sets the "sessions_valid_after" field.
+func (_u *UserUpdateOne) SetSessionsValidAfter(v time.Time) *UserUpdateOne {
+	_u.mutation.SetSessionsValidAfter(v)
+	return _u
+}
+
+// SetNillableSessionsValidAfter sets the "sessions_valid_after" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableSessionsValidAfter(v *time.Time) *UserUpdateOne {
+	if v != nil {
+		_u.SetSessionsValidAfter(*v)
+	}
+	return _u
+}
+
+// ClearSessionsValidAfter clears the value of the "sessions_valid_after" field.
+func (_u *UserUpdateOne) ClearSessionsValidAfter() *UserUpdateOne {
+	_u.mutation.ClearSessionsValidAfter()
+	return _u
+}
+
+// SetCodeIssuerPlanIds sets the "code_issuer_plan_ids" field.
+func (_u *UserUpdateOne) SetCodeIssuerPlanIds(v []int) *UserUpdateOne {
+	_u.mutation.SetCodeIssuerPlanIds(v)
+	return _u
+}
+
+// AppendCodeIssuerPlanIds appends value to the "code_issuer_plan_ids" field.
+func (_u *UserUpdateOne) AppendCodeIssuerPlanIds(v []int) *UserUpdateOne {
+	_u.mutation.AppendCodeIssuerPlanIds(v)
+	return _u
+}
+
+// ClearCodeIssuerPlanIds clears the value of the "code_issuer_plan_ids" field.
+func (_u *UserUpdateOne) ClearCodeIssuerPlanIds() *UserUpdateOne {
+	_u.mutation.ClearCodeIssuerPlanIds()
+	return _u
+}
+
+// SetCodeIssuerDailyLimit sets the "code_issuer_daily_limit" field.
+func (_u *UserUpdateOne) SetCodeIssuerDailyLimit(v int) *UserUpdateOne {
+	_u.mutation.ResetCodeIssuerDailyLimit()
+	_u.mutation.SetCodeIssuerDailyLimit(v)
+	return _u
+}
+
+// SetNillableCodeIssuerDailyLimit sets the "code_issuer_daily_limit" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableCodeIssuerDailyLimit(v *int) *UserUpdateOne {
+	if v != nil {
+		_u.SetCodeIssuerDailyLimit(*v)
+	}
+	return _u
+}
+
+// AddCodeIssuerDailyLimit adds value to the "code_issuer_daily_limit" field.
+func (_u *UserUpdateOne) AddCodeIssuerDailyLimit(v int) *UserUpdateOne {
+	_u.mutation.AddCodeIssuerDailyLimit(v)
 	return _u
 }
 
@@ -959,6 +1100,29 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.Enabled(); ok {
 		_spec.SetField(user.FieldEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.SessionsValidAfter(); ok {
+		_spec.SetField(user.FieldSessionsValidAfter, field.TypeTime, value)
+	}
+	if _u.mutation.SessionsValidAfterCleared() {
+		_spec.ClearField(user.FieldSessionsValidAfter, field.TypeTime)
+	}
+	if value, ok := _u.mutation.CodeIssuerPlanIds(); ok {
+		_spec.SetField(user.FieldCodeIssuerPlanIds, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedCodeIssuerPlanIds(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, user.FieldCodeIssuerPlanIds, value)
+		})
+	}
+	if _u.mutation.CodeIssuerPlanIdsCleared() {
+		_spec.ClearField(user.FieldCodeIssuerPlanIds, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.CodeIssuerDailyLimit(); ok {
+		_spec.SetField(user.FieldCodeIssuerDailyLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCodeIssuerDailyLimit(); ok {
+		_spec.AddField(user.FieldCodeIssuerDailyLimit, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.Quota(); ok {
 		_spec.SetField(user.FieldQuota, field.TypeInt64, value)

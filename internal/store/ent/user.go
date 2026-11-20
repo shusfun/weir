@@ -30,6 +30,12 @@ type User struct {
 	Role user.Role `json:"role,omitempty"`
 	// Enabled holds the value of the "enabled" field.
 	Enabled bool `json:"enabled,omitempty"`
+	// SessionsValidAfter holds the value of the "sessions_valid_after" field.
+	SessionsValidAfter *time.Time `json:"sessions_valid_after,omitempty"`
+	// CodeIssuerPlanIds holds the value of the "code_issuer_plan_ids" field.
+	CodeIssuerPlanIds []int `json:"code_issuer_plan_ids,omitempty"`
+	// CodeIssuerDailyLimit holds the value of the "code_issuer_daily_limit" field.
+	CodeIssuerDailyLimit int `json:"code_issuer_daily_limit,omitempty"`
 	// Quota holds the value of the "quota" field.
 	Quota int64 `json:"quota,omitempty"`
 	// Unlimited holds the value of the "unlimited" field.
@@ -66,15 +72,15 @@ func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case user.FieldNodeIds, user.FieldProxyPolicy:
+		case user.FieldCodeIssuerPlanIds, user.FieldNodeIds, user.FieldProxyPolicy:
 			values[i] = new([]byte)
 		case user.FieldEnabled, user.FieldUnlimited, user.FieldMonthlyReset, user.FieldAllNodes, user.FieldAllowChain:
 			values[i] = new(sql.NullBool)
-		case user.FieldID, user.FieldQuota, user.FieldUsed, user.FieldTotpStep:
+		case user.FieldID, user.FieldCodeIssuerDailyLimit, user.FieldQuota, user.FieldUsed, user.FieldTotpStep:
 			values[i] = new(sql.NullInt64)
 		case user.FieldEmail, user.FieldNormalizedEmail, user.FieldName, user.FieldPasswordHash, user.FieldRole, user.FieldTotpSecret:
 			values[i] = new(sql.NullString)
-		case user.FieldExpiresAt, user.FieldUsageResetAt, user.FieldCreatedAt, user.FieldUpdatedAt:
+		case user.FieldSessionsValidAfter, user.FieldExpiresAt, user.FieldUsageResetAt, user.FieldCreatedAt, user.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -133,6 +139,27 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field enabled", values[i])
 			} else if value.Valid {
 				_m.Enabled = value.Bool
+			}
+		case user.FieldSessionsValidAfter:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field sessions_valid_after", values[i])
+			} else if value.Valid {
+				_m.SessionsValidAfter = new(time.Time)
+				*_m.SessionsValidAfter = value.Time
+			}
+		case user.FieldCodeIssuerPlanIds:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field code_issuer_plan_ids", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.CodeIssuerPlanIds); err != nil {
+					return fmt.Errorf("unmarshal field code_issuer_plan_ids: %w", err)
+				}
+			}
+		case user.FieldCodeIssuerDailyLimit:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field code_issuer_daily_limit", values[i])
+			} else if value.Valid {
+				_m.CodeIssuerDailyLimit = int(value.Int64)
 			}
 		case user.FieldQuota:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -274,6 +301,17 @@ func (_m *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Enabled))
+	builder.WriteString(", ")
+	if v := _m.SessionsValidAfter; v != nil {
+		builder.WriteString("sessions_valid_after=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("code_issuer_plan_ids=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CodeIssuerPlanIds))
+	builder.WriteString(", ")
+	builder.WriteString("code_issuer_daily_limit=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CodeIssuerDailyLimit))
 	builder.WriteString(", ")
 	builder.WriteString("quota=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Quota))

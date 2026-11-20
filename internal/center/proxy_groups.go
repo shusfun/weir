@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/shusfun/weir/internal/store/ent"
 	"github.com/shusfun/weir/internal/store/ent/chain"
+	"github.com/shusfun/weir/internal/store/ent/user"
 	"github.com/shusfun/weir/internal/subout"
 	"github.com/shusfun/weir/packages/contracts"
 )
@@ -288,13 +289,17 @@ func (s *Server) writeProxyGroup(c *gin.Context, admin bool) {
 	if !bind(c, &req) {
 		return
 	}
-	ctx := c.Request.Context()
+	ctx := WithRevisionCause(c.Request.Context(), "proxy.group", c.GetInt("user_id"))
 	var result contracts.ProxyGroup
 	var field, detail string
 	conflict := errors.New("proxy revision conflict")
 	notFound, invalid := errors.New("group not found"), errors.New("invalid group")
 	err = s.Store.Lock.Do(ctx, "proxy-policy:"+itoa(u.ID), func(ctx context.Context) error {
 		latest, e := s.Store.Ent.User.Get(ctx, u.ID)
+		if e != nil {
+			return e
+		}
+		latest, e = s.syncGroupInheritanceLocked(ctx, latest, !c.GetBool(dryRunKey))
 		if e != nil {
 			return e
 		}
@@ -343,20 +348,33 @@ func (s *Server) writeProxyGroup(c *gin.Context, admin bool) {
 		}
 		if c.Request.Method == "DELETE" {
 			p.Groups = slices.Delete(p.Groups, i, i+1)
+			markInheritedGroup(&p, id, groupRejected)
 		} else if id > 0 {
 			p.Groups[i] = result
+			markInheritedGroup(&p, id, groupCustomized)
 		} else {
-			next := max(p.NextGroupID, 1)
-			for _, g := range p.Groups {
-				next = max(next, g.ID+1)
-			}
-			result.ID = next
-			p.NextGroupID = next + 1
+			result.ID = allocateProxyGroupID(&p)
 			p.Groups = append(p.Groups, result)
 		}
 		p.Revision++
-		u, e = latest.Update().SetProxyPolicy(policyMap(p)).Save(ctx)
-		return e
+		tx, e := s.Store.Ent.Tx(ctx)
+		if e != nil {
+			return e
+		}
+		defer tx.Rollback()
+		if latest.Role == user.RoleAdmin {
+			if e = writeGroupVersion(ctx, tx, latest.ID, result, c.Request.Method == "DELETE"); e != nil {
+				return e
+			}
+		}
+		if e = tx.User.UpdateOneID(latest.ID).SetProxyPolicy(policyMap(p)).Exec(ctx); e != nil {
+			return e
+		}
+		if e = tx.Audit.Create().SetActor(c.GetInt("user_id")).SetAction("proxy.group." + strings.ToLower(c.Request.Method)).
+			SetTarget("proxy_group:" + itoa(latest.ID) + ":" + itoa(result.ID)).SetResult("ok").SetIP(c.ClientIP()).SetDetail(traceDetail(c)).Exec(ctx); e != nil {
+			return e
+		}
+		return tx.Commit()
 	})
 	if errors.Is(err, conflict) {
 		failure(c, 409, "proxy_revision_conflict")
@@ -377,12 +395,16 @@ func (s *Server) writeProxyGroup(c *gin.Context, admin bool) {
 	if c.Writer.Written() {
 		return
 	}
+	u, err = s.refreshGroupInheritance(ctx, u.ID)
+	if err != nil {
+		failInternal(c, 503, "query_failed", err)
+		return
+	}
 	slog.InfoContext(ctx, "proxy group saved",
 		"trace", taskTrace(ctx), "operation", "proxy.group."+strings.ToLower(c.Request.Method),
 		"user_id", u.ID, "group_id", result.ID, "policy_revision", loadPolicy(u).Revision,
 		"member_count", len(result.Members), "result", "ok",
 		"code.function.name", "writeProxyGroup", "code.file.path", "internal/center/proxy_groups.go")
-	s.audit(c, "proxy.group."+strings.ToLower(c.Request.Method), "proxy_group:"+itoa(u.ID)+":"+itoa(result.ID), "ok")
 	v, err := s.proxyView(ctx, u)
 	if err != nil {
 		failInternal(c, 503, "query_failed", err)

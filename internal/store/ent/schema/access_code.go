@@ -27,5 +27,5 @@ func (AccessCode) Fields() []ent.Field {
 	}
 }
 func (AccessCode) Indexes() []ent.Index {
-	return []ent.Index{index.Fields("kind", "created_at"), index.Fields("used_by")}
+	return []ent.Index{index.Fields("kind", "created_at"), index.Fields("used_by"), index.Fields("created_by", "kind", "created_at")}
 }

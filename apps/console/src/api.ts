@@ -298,6 +298,8 @@ const messages: Record<string, string> = {
  invalid_access_code:"码无效、已使用、已撤销或已过期。",
  access_code_not_revocable:"该码已使用或不存在，不能撤销。",
  access_code_cooldown:"用码尝试过多，请等待冷却结束后重试。",
+ access_code_issuer_forbidden:"当前账户没有获授权的兑换码套餐。",
+ access_code_issuer_daily_limit:"已达到今日兑换码发放上限。",
  redemption_disabled:"管理员未开放兑换入口。",
  redemption_unavailable:"兑换暂不可用，请稍后核对入账记录再重试。",
  registration_unavailable:"注册暂不可用，请稍后核对账户状态。",

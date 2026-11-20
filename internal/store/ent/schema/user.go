@@ -20,6 +20,9 @@ func (User) Fields() []ent.Field {
 		field.String("password_hash").Sensitive(),
 		field.Enum("role").Values("admin", "user").Default("user"),
 		field.Bool("enabled").Default(true),
+		field.Time("sessions_valid_after").Optional().Nillable(),
+		field.JSON("code_issuer_plan_ids", []int{}).Optional(),
+		field.Int("code_issuer_daily_limit").Default(0),
 		// 额度与不限标记独立；零额度不授予流量。expires_at 为空表示不限期限。
 		field.Int64("quota").NonNegative().Default(0),
 		field.Bool("unlimited").Default(false),

@@ -7,6 +7,7 @@ import { api, clause } from "../api";
 import { useFormAction } from "../lib/action";
 import { field, useConsoleContext } from "../lib/console-context";
 import { fromLocalInput, fromUnits, localInput, toUnits, units, type NodeItem, type Unit, type UserItem } from "../lib/core";
+import { useQuery } from "../lib/query";
 
 // nodesState：节点列表还在读取或读取失败时写明原因，不能显示成「还没有节点」
 export type NodesState = { loading: boolean; error?: unknown };
@@ -31,12 +32,16 @@ function UserFormDialog({ value, nodes, nodesState, close, saved }: { value: Use
   const [picked, setPicked] = useState<number[]>(u?.node_ids ?? []);
   const [chain, setChain] = useState(u?.allow_chain ?? true);
   const [enabled, setEnabled] = useState(u?.enabled ?? true);
+  const [issuerPlans, setIssuerPlans] = useState((u?.code_issuer_plan_ids ?? []).map(String));
+  const [issuerLimit, setIssuerLimit] = useState(String(u?.code_issuer_daily_limit ?? 0));
+  const plans = useQuery({ queryKey: ["account-plans"], queryFn: () => api("/admin/account-plans") as Promise<{ items: { id: number; name: string; enabled: boolean }[] }> });
   const guard = useFormGuard({ email, name, password, quota, unlimited, unit, expiry, monthly, all, picked, chain, enabled }, close);
   const save = useFormAction(
     () => {
       const plan = {
         name: name.trim(), quota: fromUnits(quota, unit), unlimited, expires_at: fromLocalInput(expiry), monthly_reset: monthly,
         all_nodes: all || u?.role === "admin", node_ids: all || u?.role === "admin" ? [] : picked, allow_chain: chain, enabled,
+        code_issuer_plan_ids: issuerPlans.map(Number).filter(Number.isFinite), code_issuer_daily_limit: Math.max(0, Number(issuerLimit) || 0),
       };
       return (isNew
         ? api("/admin/users", "POST", { ...plan, email: email.trim(), password })
@@ -77,6 +82,19 @@ function UserFormDialog({ value, nodes, nodesState, close, saved }: { value: Use
               <PasswordInput autoComplete="new-password" minLength={6} maxLength={72} value={password} onChange={(e) => setPassword(e.target.value)} />
             </Field>
           </FormSection>
+
+          {!isNew && u?.role === "user" && (
+            <FormSection title="兑换码发放">
+              <Field label="每日上限" hint="设为 0 表示关闭；按北京时间统计">
+                <Input type="number" min="0" max="100000" value={issuerLimit} onChange={(e) => setIssuerLimit(e.target.value)} />
+              </Field>
+              <Field label="可发放套餐">
+                <div className="grid gap-2">
+                  {plans.data?.items.filter((p) => p.enabled).map((p) => <CheckboxField key={p.id} label={p.name} checked={issuerPlans.includes(String(p.id))} onCheckedChange={(checked) => setIssuerPlans((old: string[]) => checked ? [...old, String(p.id)] : old.filter((id: string) => id !== String(p.id)))} />)}
+                </div>
+              </Field>
+            </FormSection>
+          )}
 
           <FormSection title="额度与周期">
             <SwitchGroup data-tour="user-plan">

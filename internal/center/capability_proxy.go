@@ -154,9 +154,9 @@ var proxyReadCaps = []Capability{
 	{Name: "get_proxy", Title: "代理设置与速率", Purpose: "读取一个用户代理页的内容：节点按类型（协议方案）归类，每类是否放进订阅、可用节点数、统一出口（密码与节点链接不给）、还没加出口的节点；自建分组（在支持隐藏的客户端中隐藏，只作为 PROXY 成员；groups：稳定编号、类型、选法、间隔、容差、有序具体线路和失效原因）；具体线路 lines；客户端 PROXY 布局 layout（有序分组和单独节点）；快捷添加预设 presets；自定义清单（custom：有序 entries 及稳定 id、逐条走向与启用状态、revision、失败候选 pending、迁移说明与内核检查结果）；节点列表刷新间隔；此刻的排序——每个节点的状况、下载速率（rate.p90_bps 是近 24 小时已完成且下载量至少 1 MiB 的有效分钟速度的第 90 百分位，按有效采样秒数计算，字节/秒；minutes 为 0 是没有数据，不是 0；from 是 self 自己的或 all 全部用户的）、是否在自动选择里。",
 		Kind: "read", Params: []Param{{Key: "user_id", Label: "用户", Kind: "ref", Ref: "user", Required: true}},
 		read: func(ctx context.Context, s *Server, args map[string]any) (any, error) {
-			u, err := s.Store.Ent.User.Get(ctx, intArg(args, "user_id"))
+			u, err := s.refreshGroupInheritance(ctx, intArg(args, "user_id"))
 			if err != nil {
-				return nil, errors.New("用户不存在")
+				return nil, err
 			}
 			v, err := s.proxyView(ctx, u)
 			if err != nil {
