@@ -100,7 +100,9 @@ func TestProxyGroupsRealKernels(t *testing.T) {
 		w.Write(body)
 	}))
 	defer providers.Close()
-	plan.Providers = func(key string) string { return providers.URL + "/" + key }
+	const providerHost = "provider.weir.test"
+	providerOrigin := strings.Replace(providers.URL, "127.0.0.1", providerHost, 1)
+	plan.Providers = func(key string) string { return providerOrigin + "/" + key }
 	body, _, err := subout.RenderPlan(items, "clash", plan)
 	if err != nil {
 		t.Fatal(err)
@@ -113,6 +115,8 @@ func TestProxyGroupsRealKernels(t *testing.T) {
 	seedSubscriptionGeoIP(t, dir)
 	controller := fmt.Sprintf("127.0.0.1:%d", freePort(t))
 	cfg["external-controller"], cfg["mixed-port"], cfg["log-level"] = controller, freePort(t), "warning"
+	cfg["hosts"] = map[string]string{providerHost: "127.0.0.1"}
+	cfg["rules"] = append([]any{"DOMAIN," + providerHost + ",REJECT"}, cfg["rules"].([]any)...)
 	// 只缩短内核的探测节拍，生成器本身仍受 30 秒下限约束。
 	for _, raw := range cfg["proxy-groups"].([]any) {
 		g := raw.(map[string]any)
@@ -179,6 +183,12 @@ func TestProxyGroupsRealKernels(t *testing.T) {
 	choose("手动", members[1].(string))
 	proxyURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", cfg["mixed-port"].(int)))
 	traffic := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}, Timeout: 5 * time.Second}
+	if rejected, err := traffic.Get(providerOrigin + "/group-1"); err == nil {
+		rejected.Body.Close()
+		if rejected.StatusCode < 400 {
+			t.Fatalf("普通流量未被测试规则拦截：HTTP %d", rejected.StatusCode)
+		}
+	}
 	resp, err := traffic.Get("http://probe.example.test/")
 	if err != nil {
 		t.Fatal(err)
@@ -247,6 +257,9 @@ func TestProxyGroupsRealKernels(t *testing.T) {
 	}
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("刷新 provider：HTTP %d", resp.StatusCode)
+	}
 	eventually(t, 10*time.Second, "集合刷新后成员重排", func() bool {
 		return reflect.DeepEqual(get("/proxies/" + url.PathEscape("主备"))["all"], []any{"主备 · 主备切换", "Secondary", "Primary"}) && reflect.DeepEqual(get("/proxies/" + url.PathEscape("主备 · 主备切换"))["all"], []any{"Secondary", "Primary"})
 	})

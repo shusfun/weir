@@ -288,7 +288,11 @@ func clashPlan(items []Item, plan *Plan) ([]byte, error) {
 				}
 				// 可见选择组与内部自动组共用列表，健康检查由自动组决定。
 				if providers[key] == nil || g.Kind != "select" {
-					providers[key] = map[string]any{"type": "http", "url": plan.Providers(g.Provider), "interval": plan.interval(), "health-check": health}
+					// 节点列表下载不能依赖列表里的节点。
+					providers[key] = map[string]any{
+						"type": "http", "url": plan.Providers(g.Provider), "proxy": "DIRECT",
+						"interval": plan.interval(), "health-check": health,
+					}
 				}
 				m["use"] = []string{key}
 			}

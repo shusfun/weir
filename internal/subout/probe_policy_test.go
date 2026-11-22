@@ -42,11 +42,20 @@ func TestProbePolicyAndEmptyGroups(t *testing.T) {
 			var cfg struct {
 				Groups    []map[string]any `yaml:"proxy-groups"`
 				Providers map[string]struct {
+					Proxy  string         `yaml:"proxy"`
 					Health map[string]any `yaml:"health-check"`
 				} `yaml:"proxy-providers"`
 			}
 			if err := yaml.Unmarshal(body, &cfg); err != nil {
 				t.Fatal(err)
+			}
+			if provider && len(cfg.Providers) == 0 {
+				t.Fatalf("%s did not render any providers", target)
+			}
+			for key, entry := range cfg.Providers {
+				if entry.Proxy != "DIRECT" {
+					t.Errorf("%s provider %s download proxy = %q, want DIRECT", target, key, entry.Proxy)
+				}
 			}
 			check := func(h map[string]any) {
 				t.Helper()
