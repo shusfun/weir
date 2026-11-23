@@ -10,7 +10,7 @@ import { field, useConsoleContext } from "../lib/console-context";
 import { bytes } from "../lib/models";
 import { placeText, rateText, useLinkMap } from "../lib/linkmap";
 
-export function LinkMapPage({ admin }: { admin: boolean }) {
+export function LinkMapPage({ admin, embedded = false }: { admin: boolean; embedded?: boolean }) {
   const { map: m, error, store, reload } = useLinkMap(admin);
   const [params, setParams] = useSearchParams();
   const selected = params.get("sel");
@@ -27,14 +27,15 @@ export function LinkMapPage({ admin }: { admin: boolean }) {
     setParams(next, { replace: true });
   };
   useConsoleContext({
-    page: admin ? "链路" : "我的链路",
+    page: embedded ? "我的节点" : "链路",
+    tab: embedded ? "链路" : undefined,
     notices: m ? [`${m.gates.length} 台 VPS，${m.paths.length} 条路径`, m.geo.ready ? "IP 定位数据已就绪" : `IP 定位：${m.geo.error ?? "未就绪"}`] : [],
     form: [field("user", "筛选用户", m?.users?.find((u) => u.id === user)?.name), field("gate", "筛选 VPS", m?.gates.find((g) => g.id === gate)?.name), field("sel", "选中", selected)],
   });
-  const header = (
+  const header = embedded ? null : (
     <PageHeader
       size="hero"
-      title={m ? (() => { const paths = m.paths.filter(p => (user === undefined || p.user_id === user) && (gate === undefined || p.gate_id === gate)); const unknown = paths.some(p => store.stale(p.gate_id) || store.smooth(store.paths.get(p.id)) == null); const active = paths.filter((p) => !store.stale(p.gate_id) && (store.smooth(store.paths.get(p.id)) ?? 0) > 0).length; return active > 0 ? <>{active} 条链路<br />正在使用</> : <>{paths.length} 条链路<br />{unknown ? "实时流量未知" : "此刻没有流量"}</>; })() : (admin ? "链路" : "我的链路")}
+      title={m ? (() => { const paths = m.paths.filter(p => (user === undefined || p.user_id === user) && (gate === undefined || p.gate_id === gate)); const unknown = paths.some(p => store.stale(p.gate_id) || store.smooth(store.paths.get(p.id)) == null); const active = paths.filter((p) => !store.stale(p.gate_id) && (store.smooth(store.paths.get(p.id)) ?? 0) > 0).length; return active > 0 ? <>{active} 条链路<br />正在使用</> : <>{paths.length} 条链路<br />{unknown ? "实时流量未知" : "此刻没有流量"}</>; })() : "链路"}
       description="从左到右：用户 → 入口 VPS → 实际出口；点击任一链路可查看节点与流量明细。"
     />
   );

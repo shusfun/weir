@@ -180,15 +180,19 @@ func FilterPlanForCompatibility(plan *Plan, report *CompatibilityReport) *Plan {
 			}
 			members = append(members, ref)
 		}
+		minimum := max(1, plan.InheritedGroupMinimums[group.ID])
+		removedGroup := len(members) < minimum
 		if removed {
-			removedGroup := len(members) == 0
 			reason := "已移除不兼容节点"
 			if removedGroup {
 				reason = "组内没有可导入节点，已移除该组"
+				if len(members) > 0 {
+					reason = "可导入节点不足两条，已移除继承分组"
+				}
 			}
 			report.AffectedGroups = append(report.AffectedGroups, GroupImpact{ID: group.ID, Name: group.Name, Removed: removedGroup, Reason: reason})
 		}
-		if len(members) == 0 {
+		if removedGroup {
 			excluded[fmt.Sprintf("group:%d", group.ID)] = true
 			excluded[fmt.Sprintf("group:%d:auto", group.ID)] = true
 			continue

@@ -62,6 +62,11 @@ const LinksPage = page(() => import("./pages/links"), "LinksPage");
 const ProxyPage = page(() => import("./pages/proxy"), "ProxyPage");
 const SecurityPage = page(() => import("./pages/security"), "SecurityPage");
 const LinkMapPage = page(() => import("./pages/linkmap"), "LinkMapPage");
+function linkMapTabSearch(search: string) {
+  const params = new URLSearchParams(search);
+  params.set("tab", "linkmap");
+  return "?" + params.toString();
+}
 const LoginPage = page(() => import("./pages/login"), "LoginPage");
 const SetupPage = page(() => import("./pages/setup"), "SetupPage");
 const PublicPage = page(() => import("./pages/public-page"), "PublicPage");
@@ -90,7 +95,7 @@ const consolePages: Record<string, Loader> = {
   "/ops/audit": AuditPage.loader,
   "/ops/observe": ObservePage.loader,
   "/linkmap": LinkMapPage.loader,
-  "/my/linkmap": LinkMapPage.loader,
+  "/my/linkmap": MyNodesPage.loader,
   "/links": LinksPage.loader,
   "/proxy": ProxyPage.loader,
   "/security": SecurityPage.loader,
@@ -172,7 +177,7 @@ function Console() {
             <Routes location={location}>
               <Route path="/" element={<Navigate to={home} replace />} />
               <Route path="/overview" element={guard(<OverviewPage />)} />
-              <Route path="/my/nodes" element={<MyNodesPage />} />
+              <Route path="/my/nodes" element={<MyNodesPage linkMap={<LinkMapPage admin={false} embedded />} />} />
               <Route path="/proxies" element={guard(<ProxiesPage />)} />
               <Route path="/rules" element={guard(<RulesPage />)} />
               <Route path="/groups" element={guard(<SubscriptionsPage groups />)} />
@@ -199,7 +204,7 @@ function Console() {
               <Route path="/proxy" element={<ProxyPage admin={admin} />} />
               {/* 旧地址：「我的订阅」并进了订阅链接 */}
               <Route path="/subscription" element={<Navigate to="/links" replace />} />
-              <Route path="/my/linkmap" element={<LinkMapPage admin={false} />} />
+              <Route path="/my/linkmap" element={<Navigate to={{ pathname: "/my/nodes", search: linkMapTabSearch(location.search), hash: location.hash }} replace />} />
               <Route path="/security" element={<SecurityPage loginRequired={loginRequired} />} />
               {DevUiPage && <Route path="/dev/ui" element={guard(<DevUiPage />)} />}
               <Route path="*" element={<Navigate to={home} replace />} />

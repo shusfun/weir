@@ -11,16 +11,17 @@ import (
 
 // Plan 让全部格式、匹配预览与结构化订阅使用同一份分组和规则。
 type Plan struct {
-	ExcludedNodes []NodeExclusion
-	Groups        []contracts.ProxyGroup
-	HiddenLines   []string
-	Rules         []Rule
-	TestURL       string
-	IntervalSec   int
-	Providers     func(key string) string
-	ManagedURL    string
-	UpdateSec     int
-	Custom        []Rule
+	ExcludedNodes          []NodeExclusion
+	Groups                 []contracts.ProxyGroup
+	InheritedGroupMinimums map[int]int // Minimum visible members for a group following the administrator.
+	HiddenLines            []string
+	Rules                  []Rule
+	TestURL                string
+	IntervalSec            int
+	Providers              func(key string) string
+	ManagedURL             string
+	UpdateSec              int
+	Custom                 []Rule
 }
 
 const CustomRuleSetSec = 300
@@ -191,11 +192,16 @@ func (p *Plan) layout(names []string, items []Item) layout {
 			if name, ok := refs[ref]; ok && (strings.HasPrefix(ref, "node:") || strings.HasPrefix(ref, "chain:")) && !seen[ref] {
 				members, memberRefs = append(members, name), append(memberRefs, ref)
 				seen[ref] = true
-				grouped[ref] = true
 			}
 		}
-		if len(members) == 0 {
+		minimum := p.InheritedGroupMinimums[g.ID]
+		if len(members) < max(1, minimum) {
 			continue
+		}
+		if minimum == 0 {
+			for _, ref := range memberRefs {
+				grouped[ref] = true
+			}
 		}
 		ref := fmt.Sprintf("group:%d", g.ID)
 		name := CleanLabel(g.Name)

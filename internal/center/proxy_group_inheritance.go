@@ -38,6 +38,9 @@ func writeGroupVersion(ctx context.Context, tx *ent.Tx, ownerID int, group contr
 	}
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	if active != nil {
+		if !deleted && sameProxyGroup(active.Snapshot, group) {
+			return nil
+		}
 		if !now.After(active.ValidFrom) {
 			now = active.ValidFrom.Add(time.Microsecond)
 		}
@@ -87,7 +90,7 @@ func (s *Server) refreshGroupInheritance(ctx context.Context, uid int) (account 
 
 func (s *Server) syncGroupInheritanceLocked(ctx context.Context, account *ent.User, persist bool) (out *ent.User, err error) {
 	policy := loadPolicy(account)
-	if account.Role != user.RoleUser || !account.AllNodes && len(policy.GroupInheritance) == 0 {
+	if account.Role != user.RoleUser || !account.AllNodes && len(account.NodeIds) == 0 && len(policy.GroupInheritance) == 0 {
 		return account, nil
 	}
 	sourceVersions, err := s.activeGroupVersions(ctx, account)
@@ -102,9 +105,10 @@ func (s *Server) syncGroupInheritanceLocked(ctx context.Context, account *ent.Us
 		}
 	}
 	policy.Groups = slices.DeleteFunc(policy.Groups, func(group contracts.ProxyGroup) bool { return tracked[group.ID] })
+	minimum := inheritedGroupMinMembers(account)
 	for _, source := range sourceVersions {
 		group := source.Snapshot
-		if len(group.Members) == 0 || len(policy.Groups) >= contracts.MaxProxyGroups || groupNameTaken(policy.Groups, group.Name) {
+		if len(group.Members) < minimum || len(policy.Groups) >= contracts.MaxProxyGroups || groupNameTaken(policy.Groups, group.Name) {
 			continue
 		}
 		index := slices.IndexFunc(policy.GroupInheritance, func(binding contracts.ProxyGroupInheritance) bool {
@@ -163,7 +167,7 @@ func sameProxyGroup(left, right contracts.ProxyGroup) bool {
 }
 
 func (s *Server) activeGroupVersions(ctx context.Context, account *ent.User) ([]*ent.ProxyGroupVersion, error) {
-	if !account.AllNodes {
+	if !account.AllNodes && len(account.NodeIds) == 0 {
 		return nil, nil
 	}
 	primary, err := s.Store.Ent.User.Query().Where(user.RoleEQ(user.RoleAdmin)).Order(ent.Asc(user.FieldCreatedAt, user.FieldID)).First(ctx)
@@ -175,18 +179,35 @@ func (s *Server) activeGroupVersions(ctx context.Context, account *ent.User) ([]
 	if err != nil || len(versions) == 0 {
 		return versions, err
 	}
-	ids, err := s.Store.Ent.Node.Query().IDs(ctx)
+	nodes, err := s.userNodeIDs(ctx, account)
 	if err != nil {
 		return nil, err
 	}
-	allowed := make(map[string]bool, len(ids))
-	for _, id := range ids {
+	allowed := make(map[string]bool, len(nodes))
+	for id := range nodes {
 		allowed["node:"+itoa(id)] = true
 	}
 	for _, version := range versions {
 		version.Snapshot.Members = slices.DeleteFunc(version.Snapshot.Members, func(ref string) bool { return !allowed[ref] })
 	}
 	return versions, nil
+}
+
+func inheritedGroupMinMembers(account *ent.User) int {
+	if account.AllNodes {
+		return 1
+	}
+	return 2
+}
+
+func groupInheritanceMinimums(account *ent.User, policy contracts.ProxyPolicy) map[int]int {
+	minimums := make(map[int]int, len(policy.GroupInheritance))
+	for _, binding := range policy.GroupInheritance {
+		if binding.State == "" {
+			minimums[binding.LocalID] = inheritedGroupMinMembers(account)
+		}
+	}
+	return minimums
 }
 
 func markInheritedGroup(policy *contracts.ProxyPolicy, id int, state string) {

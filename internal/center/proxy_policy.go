@@ -158,6 +158,7 @@ func (s *Server) subPlan(ctx context.Context, p planned) (*subout.Plan, []subout
 		items[i] = subout.Item{Link: e.URI, Type: e.Type, Ref: e.Ref, Auto: p.Ranked[i].Auto, Direct: !e.Chained, UDP: e.UDP, Deprioritized: p.Ranked[i].Deprioritized}
 	}
 	plan := &subout.Plan{Groups: p.Policy.Groups, HiddenLines: p.Policy.HiddenLines, IntervalSec: p.Policy.Auto.RefreshMinutes * 60, UpdateSec: p.Policy.Auto.RefreshMinutes * 60, TestURL: subout.SubscriptionProbeURL}
+	plan.InheritedGroupMinimums = p.InheritedGroupMinimums
 	available := make(map[string]bool, len(p.Entries))
 	for _, e := range p.Entries {
 		available[e.Ref] = true

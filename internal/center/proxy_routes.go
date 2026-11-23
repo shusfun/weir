@@ -242,7 +242,7 @@ func (s *Server) proxyView(ctx context.Context, u *ent.User) (gin.H, error) {
 		names = append(names, name)
 		planItems = append(planItems, subout.Item{Ref: line.Ref, Direct: !line.Chained, Auto: !line.Chained && line.Health != "down"})
 	}
-	plan := subout.Plan{Groups: pol.Groups, HiddenLines: pol.HiddenLines}
+	plan := subout.Plan{Groups: pol.Groups, InheritedGroupMinimums: groupInheritanceMinimums(u, pol), HiddenLines: pol.HiddenLines}
 	layout, _ := plan.Layout(names, planItems)
 	presets := []gin.H{}
 	for _, rc := range ruleCategories {

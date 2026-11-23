@@ -57,7 +57,6 @@ export const navigation: NavItem[] = [
   { key: "my-proxy", path: "/proxy", label: "我的代理", icon: Waypoints, group: "个人", roles: "user" },
   { key: "my-links", path: "/links", label: "我的订阅", icon: Link2, group: "个人", roles: "user" },
   { key: "my-codes", path: "/my/codes", label: "发放兑换码", icon: Ticket, group: "个人", roles: "user" },
-  { key: "my-linkmap", path: "/my/linkmap", label: "我的链路", icon: Globe, group: "个人", roles: "user" },
   { key: "security", path: "/security", label: "账户安全", icon: ShieldCheck, group: "个人", roles: "user" },
   // 开发环境专用：生产构建里 import.meta.env.DEV 为 false，菜单项和页面一起被剔除
   ...(import.meta.env.DEV

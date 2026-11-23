@@ -13,9 +13,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/shusfun/weir/internal/store/ent/audit"
 	"github.com/shusfun/weir/internal/store/ent/credential"
+	"github.com/shusfun/weir/internal/store/ent/proxygroupversion"
 	"github.com/shusfun/weir/internal/store/ent/ratesample"
 	"github.com/shusfun/weir/internal/store/ent/sample"
 	"github.com/shusfun/weir/packages/contracts"
+	"gopkg.in/yaml.v3"
 )
 
 func TestProxyTargetsMigration(t *testing.T) {
@@ -166,6 +168,99 @@ func TestAdminGroupsInheritAndUserOverride(t *testing.T) {
 		t.Fatal("用户已修改的分组被管理员覆盖")
 	}
 	_ = group
+}
+
+func TestPartialNodeGrantsFollowAdminGroupVersions(t *testing.T) {
+	s, admin, gate := setupGate(t)
+	ctx := t.Context()
+	ids := make([]int, 3)
+	refs := make([]string, 3)
+	for i, name := range []string{"授权甲", "授权乙", "未授权丙"} {
+		node := mustJSON(t, admin, "POST", "/api/v1/admin/nodes", map[string]any{"gate_id": gate.id, "preset": "ss2022", "name": name, "skip_probe": true}, 200)
+		ids[i] = int(node["id"].(float64))
+		refs[i] = "node:" + itoa(ids[i])
+	}
+	const email = "partial-groups@example.test"
+	const password = "GroupTest9v2Sec"
+	created := mustJSON(t, admin, "POST", "/api/v1/admin/users", map[string]any{"email": email, "password": password, "all_nodes": false, "node_ids": ids[:2]}, 200)
+	uid := int(created["id"].(float64))
+	owner := login(t, s, email, password)
+	buf := captureLog(t)
+	const trace = "01111111111111111111111111111111"
+	headers := map[string]string{"traceparent": "00-" + trace + "-1111111111111111-01"}
+	const proxy = "/api/v1/proxy"
+	const groups = proxy + "/groups"
+	adminGroup := map[string]any{"revision": 0, "name": "管理员主备", "kind": "fallback", "members": []string{refs[1], refs[2], refs[0]}}
+	mustJSON(t, admin, "POST", groups, adminGroup, 200)
+	mustJSON(t, admin, "POST", groups, map[string]any{"revision": 1, "name": "仅匹配一条", "members": refs[1:]}, 200)
+	viewResponse := owner.do("GET", proxy, nil, headers)
+	if viewResponse.Code != 200 || viewResponse.Header().Get("X-Trace-Id") != trace {
+		t.Fatalf("代理页交付失败：HTTP %d", viewResponse.Code)
+	}
+	view := decode(t, viewResponse)
+	policy := func() contracts.ProxyPolicy { return loadPolicy(s.Store.Ent.User.GetX(ctx, uid)) }
+	p := policy()
+	if len(p.Groups) != 1 || !reflect.DeepEqual(p.Groups[0].Members, []string{refs[1], refs[0]}) {
+		t.Fatalf("管理员组应按授权裁剪并保留成员顺序：%+v", p.Groups)
+	}
+	id := p.Groups[0].ID
+	root := view["layout"].([]any)[0].(map[string]any)["member_refs"]
+	if !reflect.DeepEqual(root, []any{"auto", "group:" + itoa(id), refs[0], refs[1]}) {
+		t.Fatalf("第一层缺少自动选择、继承组或单节点：%v", root)
+	}
+
+	links := mustJSON(t, owner, "GET", "/api/v1/me/links", nil, 200)["items"].([]any)
+	sub := "/sub/" + links[0].(map[string]any)["token"].(string)
+	main := owner.do("GET", sub+"?target=clash", nil, headers)
+	if main.Code != 200 || main.Header().Get("X-Trace-Id") != trace || strings.Contains(main.Body.String(), "仅匹配一条") || !strings.Contains(main.Body.String(), "管理员主备") {
+		t.Fatalf("主订阅没有应用继承策略：HTTP %d", main.Code)
+	}
+	for _, key := range []string{"auto", "single", "group-" + itoa(id)} {
+		res := owner.do("GET", sub+"/provider/"+key, nil, headers)
+		var cfg struct {
+			Proxies []struct{ Name string }
+		}
+		if res.Code != 200 || res.Header().Get("X-Weir-Policy-Revision") != itoa(p.Revision) || yaml.Unmarshal(res.Body.Bytes(), &cfg) != nil || len(cfg.Proxies) != 2 || strings.Contains(res.Body.String(), "未授权丙") {
+			t.Fatalf("provider %s 未按授权交付：HTTP %d", key, res.Code)
+		}
+	}
+	if !strings.Contains(buf.String(), "proxy.group.inherit") || !strings.Contains(buf.String(), "subscription delivery") || !strings.Contains(buf.String(), "trace="+trace) {
+		t.Fatal("缺少继承与订阅交付 trace")
+	}
+	if policy().Revision != p.Revision {
+		t.Fatal("重复拉取修改了策略版本")
+	}
+	single := mustJSON(t, owner, "POST", "/api/v1/me/links", map[string]any{"all_nodes": false, "node_ids": ids[:1]}, 200)
+	limited := owner.do("GET", "/sub/"+single["token"].(string)+"?target=clash", nil, headers)
+	if limited.Code != 200 || strings.Contains(limited.Body.String(), "管理员主备") || !strings.Contains(limited.Body.String(), "p-single") {
+		t.Fatalf("只含一个继承成员的链接应保留单节点：HTTP %d", limited.Code)
+	}
+
+	mustJSON(t, owner, "POST", groups, map[string]any{"revision": p.Revision, "name": "越权组", "members": refs[2:]}, 400)
+	mustJSON(t, owner, "POST", groups, map[string]any{"revision": p.Revision, "name": "我的组", "members": refs[:1]}, 200)
+	userPath := "/api/v1/admin/users/" + itoa(uid)
+	mustJSON(t, admin, "PATCH", userPath, map[string]any{"node_ids": ids[:1]}, 200)
+	if res := owner.do("GET", sub+"/provider/group-"+itoa(id), nil, headers); res.Code != 404 {
+		t.Fatalf("授权降到一条后旧 provider 未下线：HTTP %d", res.Code)
+	}
+	if p = policy(); len(p.Groups) != 1 || p.Groups[0].Name != "我的组" {
+		t.Fatalf("撤权后应保留用户自己的组：%+v", p.Groups)
+	}
+
+	adminGroup["revision"] = 2
+	adminGroup["name"] = "更新后的主备"
+	mustJSON(t, admin, "PUT", groups+"/1", adminGroup, 200)
+	adminGroup["revision"] = 3
+	mustJSON(t, admin, "PUT", groups+"/1", adminGroup, 200)
+	versions := s.Store.Ent.ProxyGroupVersion.Query().Where(proxygroupversion.GroupIDEQ(1)).Order(proxygroupversion.ByValidFrom()).AllX(ctx)
+	if len(versions) != 2 || versions[0].ValidUntil == nil || !versions[0].ValidUntil.Equal(versions[1].ValidFrom) || versions[1].ValidUntil != nil {
+		t.Fatalf("分组拉链没有准确记录变更：%+v", versions)
+	}
+	mustJSON(t, admin, "PATCH", userPath, map[string]any{"node_ids": ids[:2]}, 200)
+	mustJSON(t, owner, "GET", proxy, nil, 200)
+	if p = policy(); len(p.Groups) != 2 || p.Groups[0].ID != id || p.Groups[0].Name != "更新后的主备" || p.Groups[1].Name != "我的组" {
+		t.Fatalf("恢复授权后应按原编号跟随最新版：%+v", p.Groups)
+	}
 }
 
 func TestProxySameNameMembersInViewAndPlan(t *testing.T) {

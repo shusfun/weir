@@ -184,10 +184,11 @@ func rankEntries(in rankInput) []rankedEntry {
 
 // planned 保留线路的稳定顺序，Ranked 与 Entries 一一对应。
 type planned struct {
-	Source  []Entry
-	Entries []Entry
-	Ranked  []rankedEntry
-	Policy  contracts.ProxyPolicy
+	InheritedGroupMinimums map[int]int
+	Source                 []Entry
+	Entries                []Entry
+	Ranked                 []rankedEntry
+	Policy                 contracts.ProxyPolicy
 }
 
 // planEntries 在输出前复核当前授权，速度只决定展示名次。
@@ -312,7 +313,7 @@ func (s *Server) planEntries(ctx context.Context, u *ent.User, entries []Entry, 
 	if err != nil {
 		return planned{}, err
 	}
-	p := planned{Policy: pol, Source: entries}
+	p := planned{Policy: pol, Source: entries, InheritedGroupMinimums: groupInheritanceMinimums(u, pol)}
 	for i, entry := range kept {
 		ranked[i].Auto = !entry.Chained && ranked[i].Health.Status != "down"
 		ranked[i].Deprioritized = priorities[entryGates[entry.Ref]]
